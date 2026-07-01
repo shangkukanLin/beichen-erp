@@ -1,0 +1,101 @@
+-- 自动建表脚本（启动时由 spring.sql.init 自动执行）
+
+CREATE TABLE IF NOT EXISTS sys_user (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL COMMENT '登录账号',
+    password VARCHAR(100) NOT NULL COMMENT 'BCrypt加密密码',
+    phone VARCHAR(20) COMMENT '手机号',
+    dept VARCHAR(50) COMMENT '所属部门',
+    status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',
+    deleted TINYINT DEFAULT 0 COMMENT '0正常 1已删除',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+
+CREATE TABLE IF NOT EXISTS sys_role (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    role_name VARCHAR(50) NOT NULL COMMENT '角色名称',
+    role_code VARCHAR(50) NOT NULL COMMENT '角色编码',
+    status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',
+    remark VARCHAR(255) DEFAULT NULL COMMENT '备注',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_role_code(role_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色表';
+
+CREATE TABLE IF NOT EXISTS sys_user_role (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    role_id BIGINT NOT NULL COMMENT '角色ID',
+    UNIQUE KEY uk_user_role(user_id, role_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户角色关联表';
+
+CREATE TABLE IF NOT EXISTS material (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) NOT NULL COMMENT '物料编码',
+    name VARCHAR(100) NOT NULL COMMENT '物料名称',
+    category VARCHAR(30) COMMENT '分类(原料/辅料/半成品/成品)',
+    spec VARCHAR(100) COMMENT '规格型号',
+    unit VARCHAR(20) COMMENT '单位',
+    safety_stock DECIMAL(18,4) DEFAULT 0 COMMENT '安全库存',
+    current_stock DECIMAL(18,4) DEFAULT 0 COMMENT '当前库存',
+    status TINYINT DEFAULT 1,
+    remark VARCHAR(255),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_code(code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='物料主数据表';
+
+CREATE TABLE IF NOT EXISTS sys_menu (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    parent_id BIGINT DEFAULT 0 COMMENT '父菜单ID，0=一级',
+    menu_name VARCHAR(50) NOT NULL COMMENT '菜单名称',
+    menu_type VARCHAR(20) NOT NULL COMMENT '类型: catalog目录/menu菜单',
+    route_path VARCHAR(100) DEFAULT '' COMMENT '路由路径',
+    route_name VARCHAR(100) DEFAULT '' COMMENT '路由名称',
+    icon VARCHAR(50) DEFAULT '' COMMENT '图标',
+    sort_order INT DEFAULT 0 COMMENT '排序',
+    visible TINYINT DEFAULT 1 COMMENT '0隐藏 1显示',
+    status TINYINT DEFAULT 1 COMMENT '0禁用 1启用',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='菜单表';
+
+CREATE TABLE IF NOT EXISTS sys_role_menu (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    role_id BIGINT NOT NULL COMMENT '角色ID',
+    menu_id BIGINT NOT NULL COMMENT '菜单ID',
+    UNIQUE KEY uk_role_menu(role_id, menu_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色菜单关联表';
+
+CREATE TABLE IF NOT EXISTS supplier (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(50) NOT NULL COMMENT '供应商编码',
+    name VARCHAR(100) NOT NULL COMMENT '供应商名称',
+    supplier_type VARCHAR(20) NOT NULL COMMENT '类型: solution/factory/product/material',
+    contact VARCHAR(50) COMMENT '联系人',
+    phone VARCHAR(20) COMMENT '手机号',
+    address VARCHAR(200) COMMENT '地址',
+    status TINYINT DEFAULT 1 COMMENT '1合作中 0已停用',
+    has_display TINYINT DEFAULT 0 COMMENT '支持显示方案',
+    has_touch TINYINT DEFAULT 0 COMMENT '支持触摸方案',
+    related_supplier_id BIGINT DEFAULT NULL COMMENT '关联供应商ID',
+    process_type VARCHAR(50) COMMENT '加工类型',
+    brand VARCHAR(100) COMMENT '供应品牌',
+    material_type VARCHAR(100) COMMENT '供应类型',
+    remark VARCHAR(255) COMMENT '备注',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_code(code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='供应商表';
+
+CREATE TABLE IF NOT EXISTS supplier_product (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_id BIGINT NOT NULL COMMENT '供应商ID',
+    product_name VARCHAR(100) NOT NULL COMMENT '产品名称',
+    spec VARCHAR(100) COMMENT '规格型号',
+    unit VARCHAR(20) COMMENT '单位',
+    unit_price DECIMAL(18,4) COMMENT '参考单价',
+    remark VARCHAR(255) COMMENT '备注',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='供应商产品表';
