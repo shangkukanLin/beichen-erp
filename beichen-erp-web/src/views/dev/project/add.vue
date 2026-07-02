@@ -10,6 +10,7 @@ const router = useRouter()
 const STATUS_LIST = ['立项', '排线图纸', '排线打样', 'FOG打样', '显示调试', '触摸调试', '背贴盖板打样', '总成样品', '测试', '小批量', '结项']
 const bomTypes = ref<string[]>([])
 const solutionSuppliers = ref<{ id: number; name: string }[]>([])
+const allMaterials = ref<any[]>([])
 const saving = ref(false)
 
 const form = reactive<ProjectDTO>({
@@ -21,15 +22,12 @@ const form = reactive<ProjectDTO>({
 const bomInputs = reactive<Record<string, string>>({})
 
 async function loadData() {
-  try {
-    const res = await request.get<any, any>('/dev/bom-type/enabled')
-    bomTypes.value = (res || []).map((t:any) => t.typeName)
-  } catch { }
-  try {
-    const res = await getSupplierPage({ supplierType: 'solution', pageSize: 200 })
-    solutionSuppliers.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name }))
-  } catch { }
+  try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => t.typeName) } catch { }
+  try { const r = await getSupplierPage({ supplierType: 'solution', pageSize: 200 }); solutionSuppliers.value = (r?.records || []).map((s: any) => ({ id: s.id, name: s.name })) } catch { }
+  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch { }
 }
+
+function getMaterialsByType(type: string) { return allMaterials.value.filter((m:any) => m.materialType === type) }
 
 async function handleSubmit() {
   if (!form.name) { ElMessage.warning('请输入项目名称'); return }
@@ -85,7 +83,7 @@ onMounted(() => loadData())
       <el-form :model="bomInputs" label-width="100px">
         <el-row :gutter="16">
           <el-col :span="8" v-for="t in bomTypes" :key="t">
-            <el-form-item :label="t"><el-input v-model="bomInputs[t]" :placeholder="'请输入'+t" /></el-form-item>
+            <el-form-item :label="t"><el-select v-model="bomInputs[t]" filterable allow-create clearable style="width:100%" :placeholder="'选择'+t"><el-option v-for="m in getMaterialsByType(t)" :key="m.id" :label="m.materialName" :value="m.materialName" /></el-select></el-form-item>
           </el-col>
         </el-row>
       </el-form>

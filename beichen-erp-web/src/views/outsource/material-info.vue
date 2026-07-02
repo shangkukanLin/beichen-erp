@@ -9,12 +9,14 @@ const tableData = ref<any[]>([])
 const tableLoading = ref(false)
 const projectOptions = ref<any[]>([])
 const supplierOptions = ref<any[]>([])
+const warehouseOptions = ref<any[]>([])
 const MATERIAL_TYPES = ref<string[]>([])
 
 async function loadOptions() {
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); MATERIAL_TYPES.value = (r || []).map((t:any)=>t.typeName) } catch { }
   try { const r = await request.get<any, any>('/dev/project/page', { params: { pageSize: 200 } }); projectOptions.value = r?.records || [] } catch { }
   try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch { }
+  try { const r = await request.get<any, any>('/outsource/warehouse/page', { params: { pageSize: 500 } }); warehouseOptions.value = r?.records || [] } catch { }
 }
 
 async function loadData() {
@@ -32,7 +34,7 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.materialName = ''; query.projectId = undefined; query.materialType = ''; pagination.pageNum = 1; loadData() }
 
 const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoading = ref(false)
-const defForm = () => ({ id: undefined as any, projectIds: '', projectIdArr: [] as number[], materialName: '', materialType: '', supplierName: '', supplierIdArr: [] as number[], unit: 'PCS', remark: '' })
+const defForm = () => ({ id: undefined as any, projectIds: '', projectIdArr: [] as number[], warehouseId: undefined as any, materialName: '', materialType: '', supplierName: '', supplierIdArr: [] as number[], unit: 'PCS', remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
 function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dialogTitle.value = '新增物料'; dialogVisible.value = true }
@@ -40,6 +42,7 @@ function handleEdit(row: any) {
   Object.assign(form, defForm(), row)
   form.projectIdArr = (row.projectIds || '').split(',').filter(Boolean).map(Number)
   form.supplierIdArr = (row.supplierIds || '').split(',').filter(Boolean).map(Number)
+  form.warehouseId = row.warehouseId || undefined
   isEdit.value = true; dialogTitle.value = '编辑物料'; dialogVisible.value = true
 }
 
@@ -92,6 +95,7 @@ onMounted(() => { loadOptions(); loadData() })
         <el-form-item label="所属项目"><el-select v-model="form.projectIdArr" multiple filterable placeholder="可多选" style="width:100%"><el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" /></el-select></el-form-item>
         <el-form-item label="物料类型"><el-select v-model="form.materialType" style="width:100%"><el-option v-for="t in MATERIAL_TYPES" :key="t" :label="t" :value="t" /></el-select></el-form-item>
         <el-form-item label="物料名称" required><el-input v-model="form.materialName" /></el-form-item>
+        <el-form-item label="委外仓库"><el-select v-model="form.warehouseId" clearable filterable placeholder="可选" style="width:100%"><el-option v-for="w in warehouseOptions" :key="w.id" :label="`${w.factoryName} - ${w.warehouseName}`" :value="w.id" /></el-select></el-form-item>
         <el-form-item label="供应商"><el-select v-model="form.supplierIdArr" multiple filterable placeholder="可多选" style="width:100%"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /></el-select></el-form-item>
         <el-form-item label="单位"><el-input v-model="form.unit" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>

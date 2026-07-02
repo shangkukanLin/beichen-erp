@@ -30,11 +30,13 @@ public class OutsourceMaterialController {
             @RequestParam(defaultValue = "10") Integer pageSize,
             @RequestParam(required = false) String materialName,
             @RequestParam(required = false) String projectId,
-            @RequestParam(required = false) String materialType) {
+            @RequestParam(required = false) String materialType,
+            @RequestParam(required = false) Long warehouseId) {
         LambdaQueryWrapper<OutsourceMaterial> w = new LambdaQueryWrapper<OutsourceMaterial>()
                 .like(materialName != null && !materialName.isBlank(), OutsourceMaterial::getMaterialName, materialName)
                 .like(projectId != null && !projectId.isBlank(), OutsourceMaterial::getProjectIds, projectId)
                 .like(materialType != null && !materialType.isBlank(), OutsourceMaterial::getMaterialType, materialType)
+                .eq(warehouseId != null, OutsourceMaterial::getWarehouseId, warehouseId)
                 .orderByDesc(OutsourceMaterial::getId);
         Page<OutsourceMaterial> page = mapper.selectPage(new Page<>(pageNum, pageSize), w);
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, page.getTotal());
@@ -42,6 +44,7 @@ public class OutsourceMaterialController {
             Map<String, Object> map = new HashMap<>();
             map.put("id", m.getId());
             map.put("projectIds", m.getProjectIds());
+            map.put("warehouseId", m.getWarehouseId());
             map.put("projectName", idsToNames(m.getProjectIds(), projectMapper));
             map.put("materialName", m.getMaterialName());
             map.put("materialType", m.getMaterialType());
@@ -91,6 +94,7 @@ public class OutsourceMaterialController {
 
     private void fill(OutsourceMaterial m, Map<String, Object> body) {
         m.setProjectIds(body.get("projectIds") != null ? body.get("projectIds").toString() : null);
+        if (body.get("warehouseId") != null) m.setWarehouseId(Long.valueOf(body.get("warehouseId").toString()));
         m.setMaterialName((String) body.get("materialName"));
         m.setMaterialType((String) body.get("materialType"));
         m.setSupplierName((String) body.get("supplierName"));

@@ -133,7 +133,8 @@ async function handleLogout() {
 .layout-aside {
   background-color: #304156;
   transition: width 0.28s;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .logo {

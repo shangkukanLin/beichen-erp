@@ -33,9 +33,12 @@ const bomInputs = reactive<Record<string, string>>({})
 const solutionSuppliers = ref<{ id: number; name: string }[]>([])
 const allSuppliers = ref<any[]>([])
 const bomTypes = ref<string[]>([])
+const allMaterials = ref<any[]>([])
 async function loadBomTypes() {
   try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => t.typeName) } catch { }
+  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch { }
 }
+function getMaterialsByType(type: string) { return allMaterials.value.filter((m:any) => m.materialType === type) }
 async function loadSolutionSuppliers() {
   try { const res = await getSupplierPage({ supplierType: 'solution', pageSize: 200 }); solutionSuppliers.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name })) } catch { }
 }
@@ -209,7 +212,7 @@ function goBack() { router.push('/dev/project') }
           <el-form :model="bomInputs" label-width="100px" size="default">
             <el-row :gutter="16">
               <el-col :span="8" v-for="t in bomTypes" :key="t">
-                <el-form-item :label="t"><el-input v-model="bomInputs[t]" :placeholder="'请输入'+t" /></el-form-item>
+                <el-form-item :label="t"><el-select v-model="bomInputs[t]" filterable allow-create clearable style="width:100%" :placeholder="'选择'+t"><el-option v-for="m in getMaterialsByType(t)" :key="m.id" :label="m.materialName" :value="m.materialName" /></el-select></el-form-item>
               </el-col>
             </el-row>
           </el-form>
@@ -260,7 +263,7 @@ function goBack() { router.push('/dev/project') }
                 </el-select>
               </template>
             </el-table-column>
-            <el-table-column label="物料名称" min-width="110"><template #default="{row}"><el-input v-model="row.materialName" size="small" /></template></el-table-column>
+            <el-table-column label="物料名称" min-width="110"><template #default="{row}"><el-select v-model="row.materialName" size="small" filterable allow-create clearable style="width:100%" placeholder="选择"><el-option v-for="m in getMaterialsByType(row.materialType || '')" :key="m.id" :label="m.materialName" :value="m.materialName" /></el-select></template></el-table-column>
             <el-table-column label="供应商" width="110">
               <template #default="{row}">
                 <el-select v-model="row.supplierId" size="small" clearable filterable style="width:100%">

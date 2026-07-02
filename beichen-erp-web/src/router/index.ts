@@ -114,6 +114,19 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/outsource/warehouse.vue'),
         meta: { title: '委外仓库', requiresAuth: true }
       },
+      {
+        path: 'outsource/warehouse/detail/:id',
+        name: 'OutsourceWarehouseDetail',
+        component: () => import('@/views/outsource/warehouse-detail.vue'),
+        meta: { title: '仓库详情', requiresAuth: true }
+      },
+      // 物料收发
+      { path: 'outsource/delivery', name: 'OutsourceDelivery', component: () => import('@/views/outsource/delivery/index.vue'), meta: { title: '物料收发', requiresAuth: true } },
+      { path: 'outsource/delivery/add', name: 'OutsourceDeliveryAdd', component: () => import('@/views/outsource/delivery/add.vue'), meta: { title: '新增收发', requiresAuth: true } },
+      { path: 'outsource/delivery/detail/:id', name: 'OutsourceDeliveryDetail', component: () => import('@/views/outsource/delivery/detail.vue'), meta: { title: '收发详情', requiresAuth: true } },
+      { path: 'outsource/material-history/:wid/:mid', name: 'OutsourceMaterialHistory', component: () => import('@/views/outsource/warehouse-material-history.vue'), meta: { title: '收发历史', requiresAuth: true } },
+      // 进销存
+      { path: 'inventory/warehouse', name: 'InventoryWarehouse', component: () => import('@/views/inventory/warehouse.vue'), meta: { title: '仓库管理', requiresAuth: true } },
       // 占位路由：匹配菜单中有但尚未开发的路由
       {
         path: ':pathMatch(.*)*',
