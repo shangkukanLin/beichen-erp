@@ -177,7 +177,7 @@ onActivated(() => { loadOptions(); loadData() })
         <el-table-column prop="projectName" label="所属项目" width="150" show-overflow-tooltip />
         <el-table-column prop="materialType" label="物料类型" width="100" />
         <el-table-column prop="materialName" label="物料名称" min-width="130" show-overflow-tooltip />
-        <el-table-column prop="supplierName" label="供应商" width="160" show-overflow-tooltip />
+        <el-table-column prop="supplierName" label="供应商" width="180" show-overflow-tooltip />
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column label="操作" width="130" align="center" fixed="right">
           <template #default="{row}"><el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button><el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button></template>

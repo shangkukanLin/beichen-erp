@@ -304,13 +304,13 @@ export interface ProjectQueryParams {
 }
 
 export interface BomVO {
-  id?: number | string; projectId?: number; supplierId?: number; materialName: string
+  id?: number | string; projectId?: number; supplierId?: number; spec?: string; materialName: string
   unit?: string; quantityPerSet?: number; lossRate?: number
   materialType?: string; remark?: string
   parentId?: number; sortOrder?: number; children?: BomVO[]
 }
 
-export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialName: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; materialType?: string; remark?: string }
+export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialName: string; spec?: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; materialType?: string; remark?: string }
 
 export interface BugVO {
   id?: number | string; projectId?: number; code?: string; title: string

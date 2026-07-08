@@ -182,11 +182,6 @@ onMounted(() => {
   loadData()
 })
 onActivated(() => { loadData() })
-onActivated(() => {
-  loadData()
-})
-  loadData()
-})
 </script>
 
 <template>

@@ -30,7 +30,7 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.factoryId = undefined; loadData() }
 
 const deliveryTypeMap: Record<string, string> = { 'IN': '入库', 'OUT': '出库' }
-const statusTagMap: Record<string, string> = { '待确认': 'info', '已确认': 'success', '已取消': 'danger' }
+const statusTagMap: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = { '待确认': 'info', '已确认': 'success', '已取消': 'danger' }
 
 async function handleCancel(row: any) {
   try { await ElMessageBox.confirm('确定取消该收发单吗？', '提示', { type: 'warning' }); await request.put(`/outsource/delivery/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }

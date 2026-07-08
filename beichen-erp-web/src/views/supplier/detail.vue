@@ -164,7 +164,7 @@ onMounted(loadData)
             <el-table-column prop="planEndDate" label="计划完成" width="110" />
             <el-table-column prop="status" label="状态" width="80" align="center">
               <template #default="{row}">
-                <el-tag :type="row.status==='待确认'?'info':row.status==='生产中'?'':row.status==='已完成'?'success':'danger'" size="small">{{ row.status }}</el-tag>
+                <el-tag :type="row.status==='待确认'?'info':row.status==='生产中'?'primary':row.status==='已完成'?'success':'danger'" size="small">{{ row.status }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="80" align="center" fixed="right">
