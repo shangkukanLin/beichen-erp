@@ -6,6 +6,8 @@ import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.system.entity.Company;
+import com.beichen.erp.system.entity.Role;
+import com.beichen.erp.system.mapper.RoleMapper;
 import com.beichen.erp.system.service.CompanyService;
 import com.beichen.erp.system.service.RoleService;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ public class CompanyController {
 
     private final CompanyService companyService;
     private final UserMapper userMapper;
+    private final RoleMapper roleMapper;
     private final RoleService roleService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -37,7 +40,7 @@ public class CompanyController {
         if (!passwordEncoder.matches(password, user.getPassword())) throw new BusinessException("密码错误");
         if (user.getStatus() != null && user.getStatus() == 0) throw new BusinessException("账号已被禁用");
         List<Long> roleIds = roleService.getRoleIdsByUserId(user.getId());
-        if (!roleIds.contains(4L)) throw new BusinessException("无超级管理员权限");
+        if (!roleIds.contains(getSuperAdminRoleId())) throw new BusinessException("无超级管理员权限");
         // 登录超管
         StpUtil.login(user.getId());
         // 超管公司ID设为0，不受租户限制
@@ -87,6 +90,12 @@ public class CompanyController {
     private void checkSuperAdmin() {
         long userId = StpUtil.getLoginIdAsLong();
         List<Long> roleIds = roleService.getRoleIdsByUserId(userId);
-        if (!roleIds.contains(4L)) throw new BusinessException("仅超级管理员可操作");
+        if (!roleIds.contains(getSuperAdminRoleId())) throw new BusinessException("仅超级管理员可操作");
+    }
+
+    private Long getSuperAdminRoleId() {
+        Role superAdmin = roleMapper.selectOne(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Role>()
+                .eq(Role::getRoleCode, "super_admin"));
+        return superAdmin != null ? superAdmin.getId() : 1L;
     }
 }

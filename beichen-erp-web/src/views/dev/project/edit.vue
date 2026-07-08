@@ -112,8 +112,19 @@ async function saveTimeline() {
 
 // ===================== BOM =====================
 const bomList = ref<BomDTO[]>([])
-async function loadBom() { bomList.value = (await getProjectBom(projectId))?.map(b => ({ materialName: b.materialName, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })) || [] }
+async function loadBom() { bomList.value = (await getProjectBom(projectId))?.map(b => ({ materialName: b.materialName, supplierId: b.supplierId, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })) || [] }
 function addBomRow() { bomList.value.push({ materialName: '', spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialType: '', remark: '', supplierId: undefined }) }
+function onBomMaterialChange(materialName: string, row: any) {
+  if (!materialName || !row.materialType) return
+  const matched = getMaterialsByType(row.materialType).find((m: any) => m.materialName === materialName)
+  if (!matched) return
+  if (matched.spec) row.spec = matched.spec
+  if (matched.unit) row.unit = matched.unit
+  if (matched.supplierIds) {
+    const ids = String(matched.supplierIds).split(',').filter(Boolean).map(Number)
+    if (ids.length > 0) row.supplierId = ids[0]
+  }
+}
 function removeBomRow(i: number) { bomList.value.splice(i, 1) }
 async function saveBom() {
   const emptyType = bomList.value.find((b: any) => !b.materialType || !b.materialType.trim())
@@ -125,7 +136,7 @@ async function saveBom() {
   await saveProjectBom(projectId, bomList.value)
   ElMessage.success('BOM已保存')
   const items = await getProjectBom(projectId) || []
-  bomList.value = items.map(b => ({ materialName: b.materialName, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark }))
+  bomList.value = items.map(b => ({ materialName: b.materialName, supplierId: b.supplierId, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark }))
   loadBomInputs(items)
 }
 
@@ -309,7 +320,7 @@ function goBack() { router.push('/dev/project') }
                 </el-select>
               </template>
             </el-table-column>
-            <el-table-column label="物料名称" min-width="110"><template #default="{row}"><el-select v-model="row.materialName" size="small" filterable allow-create clearable style="width:100%" placeholder="选择"><el-option v-for="m in getMaterialsByType(row.materialType || '')" :key="m.id" :label="m.materialName" :value="m.materialName" /></el-select></template></el-table-column>
+            <el-table-column label="物料名称" min-width="110"><template #default="{row}"><el-select v-model="row.materialName" size="small" filterable allow-create clearable style="width:100%" placeholder="选择" @change="(v: string) => onBomMaterialChange(v, row)"><el-option v-for="m in getMaterialsByType(row.materialType || '')" :key="m.id" :label="m.materialName" :value="m.materialName" /></el-select></template></el-table-column>
             <el-table-column label="供应商" width="110">
               <template #default="{row}">
                 <el-select v-model="row.supplierId" size="small" clearable filterable style="width:100%">

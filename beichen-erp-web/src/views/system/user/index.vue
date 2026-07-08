@@ -86,7 +86,8 @@ const resetRules: FormRules = {
 async function loadRoles() {
   try {
     const res = await getEnabledRoles()
-    roleOptions.value = res || []
+    // 禁止通过用户管理分配超级管理员角色
+    roleOptions.value = (res || []).filter((r: Role) => r.roleCode !== 'super_admin')
   } catch {
     roleOptions.value = []
   }

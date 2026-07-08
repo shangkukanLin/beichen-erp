@@ -12,6 +12,7 @@ import com.beichen.erp.system.entity.dto.ResetPasswordDTO;
 import com.beichen.erp.system.entity.dto.UserDTO;
 import com.beichen.erp.system.entity.dto.UserQueryDTO;
 import com.beichen.erp.system.entity.vo.UserVO;
+import com.beichen.erp.system.mapper.RoleMapper;
 import com.beichen.erp.system.mapper.UserRoleMapper;
 import com.beichen.erp.system.service.RoleService;
 import com.beichen.erp.system.service.UserService;
@@ -30,6 +31,7 @@ import java.util.List;
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
     private final UserRoleMapper userRoleMapper;
+    private final RoleMapper roleMapper;
     private final RoleService roleService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -175,7 +177,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (roleIds == null || roleIds.isEmpty()) {
             return;
         }
+        // 查询超级管理员角色ID，禁止通过用户管理分配
+        Role superAdminRole = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
+                .eq(Role::getRoleCode, "super_admin"));
+        Long superAdminId = superAdminRole != null ? superAdminRole.getId() : null;
         for (Long roleId : roleIds) {
+            if (superAdminId != null && roleId.equals(superAdminId)) {
+                continue; // 跳过 super_admin
+            }
             UserRole ur = new UserRole();
             ur.setUserId(userId);
             ur.setRoleId(roleId);

@@ -3,6 +3,8 @@ package com.beichen.erp.config;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
+import com.beichen.erp.dev.entity.BomType;
+import com.beichen.erp.dev.mapper.BomTypeMapper;
 import com.beichen.erp.material.entity.Material;
 import com.beichen.erp.material.mapper.MaterialMapper;
 import com.beichen.erp.system.entity.Menu;
@@ -37,6 +39,7 @@ public class DataInitializer implements ApplicationRunner {
     private final UserRoleMapper userRoleMapper;
     private final MenuMapper menuMapper;
     private final RoleService roleService;
+    private final BomTypeMapper bomTypeMapper;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Override
@@ -45,6 +48,7 @@ public class DataInitializer implements ApplicationRunner {
         initMenus();
         initRoleMenus();
         initSuperAdmin();
+        initBomTypes();
         initMaterials();
     }
 
@@ -197,9 +201,9 @@ public class DataInitializer implements ApplicationRunner {
                 roleService.saveRoleMenus(superAdminRole.getId(), Arrays.asList(
                         1L, 2L, 3L, 4L, 5L, 6L, 7L,
                         8L, 9L, 10L, 11L, 12L, 13L, 14L,
-                        15L, 16L, 17L, 18L, 19L, 20L, 21L,
+                        15L, 16L, 18L, 19L, 20L, 21L,
                         22L, 23L, 24L, 25L, 26L, 27L, 28L,
-                        29L, 30L, 31L));
+                        29L, 30L, 31L, 33L, 35L, 36L, 37L));
                 log.info("初始化 super_admin 菜单权限完成");
             }
         }
@@ -209,9 +213,9 @@ public class DataInitializer implements ApplicationRunner {
                 roleService.saveRoleMenus(adminRole.getId(), Arrays.asList(
                         1L, 2L, 3L, 4L, 5L, 6L, 7L,
                         8L, 9L, 10L, 11L, 12L, 13L, 14L,
-                        15L, 16L, 17L, 18L, 19L, 20L, 21L,
+                        15L, 16L, 18L, 19L, 20L, 21L,
                         22L, 23L, 24L, 25L, 26L, 27L, 28L,
-                        29L, 30L));
+                        29L, 30L, 33L, 35L, 36L, 37L));
                 log.info("初始化 admin 菜单权限完成");
             }
         }
@@ -219,7 +223,7 @@ public class DataInitializer implements ApplicationRunner {
             List<Long> existingMenuIds = roleService.getMenuIdsByRoleId(userRole.getId());
             if (existingMenuIds == null || existingMenuIds.isEmpty()) {
                 roleService.saveRoleMenus(userRole.getId(), Arrays.asList(
-                        1L, 5L, 18L, 19L, 20L, 21L, 22L, 23L, 24L));
+                        1L, 5L, 18L, 19L, 20L, 21L, 22L, 23L, 24L, 36L));
                 log.info("初始化 user 菜单权限完成");
             }
         }
@@ -238,6 +242,24 @@ public class DataInitializer implements ApplicationRunner {
         saveMaterial("SCR-1001", "屏幕总成", "成品", "10.1寸", "套",
                 new BigDecimal("50"), new BigDecimal("120"));
         log.info("初始化示例物料数据完成（共 3 条）");
+    }
+
+    private void initBomTypes() {
+        Long count = bomTypeMapper.selectCount(null);
+        if (count != null && count > 0) {
+            log.info("BOM类型数据已存在，跳过初始化");
+            return;
+        }
+        String[] defaultTypes = {"玻璃", "驱动IC", "码片IC", "触摸IC", "排线", "背贴", "盖板"};
+        for (int i = 0; i < defaultTypes.length; i++) {
+            BomType bt = new BomType();
+            bt.setTypeName(defaultTypes[i]);
+            bt.setSortOrder(i + 1);
+            bt.setStatus(1);
+            bt.setCompanyId(1L);
+            bomTypeMapper.insert(bt);
+        }
+        log.info("初始化BOM类型数据完成（共 {} 条）", defaultTypes.length);
     }
 
     private void saveMaterial(String code, String name, String category, String spec, String unit,

@@ -3,6 +3,7 @@ package com.beichen.erp.dev.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.BomType;
 import com.beichen.erp.dev.mapper.BomTypeMapper;
 import com.beichen.erp.exception.BusinessException;
@@ -39,6 +40,7 @@ public class BomTypeController {
         }
         if (type.getStatus() == null) type.setStatus(1);
         if (type.getSortOrder() == null) type.setSortOrder(0);
+        type.setCompanyId(CompanyContext.get());
         bomTypeMapper.insert(type);
         return R.ok();
     }
