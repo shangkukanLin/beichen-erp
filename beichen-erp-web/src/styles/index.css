@@ -30,3 +30,66 @@ ul,
 ol {
   list-style: none;
 }
+
+/* ===================== 移动端适配 ===================== */
+/* 断点：宽度 <= 768px 视为手机/小平板 */
+@media (max-width: 768px) {
+  /* 表单栅格：所有 el-col 强制单列堆叠 */
+  .el-col {
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* 弹窗/确认框在手机上接近全宽 */
+  .el-dialog {
+    width: 92vw !important;
+    max-width: 92vw !important;
+    margin-top: 6vh !important;
+  }
+  .el-message-box {
+    width: 90vw !important;
+    max-width: 90vw !important;
+  }
+
+  /* 表格：充满容器，超出部分内部横向滚动（Element Plus 原生支持） */
+  .el-table {
+    width: 100% !important;
+  }
+
+  /* 卡片/页签间距收紧 */
+  .el-card {
+    margin-bottom: 8px !important;
+  }
+
+  /* 布局留白与头部收紧（覆盖 layout 内 scoped 样式） */
+  .layout-main {
+    padding: 8px !important;
+  }
+  .layout-header {
+    padding: 0 10px !important;
+  }
+  .header-title {
+    font-size: 15px !important;
+  }
+
+  /* 描述列表、步骤条等组件在窄屏更易读 */
+  .el-descriptions {
+    width: 100% !important;
+  }
+  .el-descriptions__label,
+  .el-descriptions__content {
+    white-space: normal !important;
+  }
+}
+
+/* 超小屏（<= 480px）：进一步压紧 */
+@media (max-width: 480px) {
+  .header-title {
+    font-size: 14px !important;
+  }
+  .layout-main {
+    padding: 6px !important;
+  }
+}
+

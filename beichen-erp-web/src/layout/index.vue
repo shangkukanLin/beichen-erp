@@ -1,29 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
-import {
-  Fold, Expand, User, ArrowDown, HomeFilled, Cpu, Shop, Setting,
-  Goods, Money, Tools, Notebook, Tickets, Files, Connection, OfficeBuilding,
-  GoodsFilled, Box, Document, Switch, Timer, TakeawayBox, ShoppingCart,
-  Download, Odometer, Sell, Upload, Wallet, CreditCard, Postcard,
-  TrendCharts, UserFilled, Avatar, Menu
-} from '@element-plus/icons-vue'
+import { Fold, Expand, User, ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useTabStore } from '@/stores/tabs'
 import { logout as logoutApi } from '@/api/auth'
-
-// 图标字符串名 → 组件映射（修复 <component :is="string"> 渲染警告）
-const iconMap: Record<string, any> = {
-  HomeFilled, Cpu, Shop, Setting, Goods, Money, Tools, Notebook, Tickets,
-  Files, Connection, OfficeBuilding, GoodsFilled, Box, Document, Switch,
-  Timer, TakeawayBox, ShoppingCart, Download, Odometer, Sell, Upload,
-  Wallet, CreditCard, Postcard, TrendCharts, UserFilled, Avatar, Menu
-}
-function resolveIcon(iconName: string): any {
-  if (!iconName) return Menu
-  return iconMap[iconName] || Menu
-}
+import SideMenu from './SideMenu.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -31,6 +14,9 @@ const userStore = useUserStore()
 const tabStore = useTabStore()
 
 const isCollapse = ref(false)
+const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
+const drawerOpen = ref(false)
+
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => (route.meta.title as string) || '')
 
@@ -42,8 +28,14 @@ watch(() => route.fullPath, (path) => {
   }
 }, { immediate: true })
 
+function toggleSidebar() {
+  if (isMobile.value) drawerOpen.value = !drawerOpen.value
+  else isCollapse.value = !isCollapse.value
+}
+
 function handleSelect(index: string) {
   router.push(index)
+  if (isMobile.value) drawerOpen.value = false
 }
 
 function switchTab(path: string) {
@@ -70,51 +62,45 @@ async function handleLogout() {
     userStore.logout()
   } catch {}
 }
+
+function checkMobile() {
+  const mobile = typeof window !== 'undefined' && window.innerWidth <= 768
+  isMobile.value = mobile
+  if (!mobile) drawerOpen.value = false
+}
+onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile) })
+onUnmounted(() => { window.removeEventListener('resize', checkMobile) })
 </script>
 
 <template>
-  <el-container class="layout-container">
-    <el-aside :width="isCollapse ? '64px' : '210px'" class="layout-aside">
+  <el-container class="layout-container" :class="{ 'is-mobile': isMobile }">
+    <el-aside v-if="!isMobile" :width="isCollapse ? '64px' : '210px'" class="layout-aside">
       <div class="logo">
         <span v-if="!isCollapse" class="logo-text">北辰ERP</span>
         <span v-else class="logo-text-mini">北辰</span>
       </div>
-      <el-menu
-        :default-active="activeMenu"
-        :collapse="isCollapse"
-        :collapse-transition="false"
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#409EFF"
-        @select="handleSelect"
-      >
-        <template v-for="item in userStore.menus" :key="item.id">
-          <el-sub-menu
-            v-if="item.menuType === 'catalog' && item.children && item.children.length > 0"
-            :index="String(item.routePath || item.id)"
-          >
-            <template #title>
-              <el-icon><component :is="resolveIcon(item.icon)" /></el-icon>
-              <span>{{ item.menuName }}</span>
-            </template>
-            <el-menu-item v-for="child in item.children" :key="child.id" :index="child.routePath">
-              <el-icon><component :is="resolveIcon(child.icon)" /></el-icon>
-              <template #title>{{ child.menuName }}</template>
-            </el-menu-item>
-          </el-sub-menu>
-          <el-menu-item v-else-if="item.menuType === 'menu'" :index="item.routePath">
-            <el-icon><component :is="resolveIcon(item.icon)" /></el-icon>
-            <template #title>{{ item.menuName }}</template>
-          </el-menu-item>
-        </template>
-      </el-menu>
+      <SideMenu :collapse="isCollapse" @select="handleSelect" />
     </el-aside>
+
+    <el-drawer
+      v-if="isMobile"
+      v-model="drawerOpen"
+      direction="ltr"
+      :with-header="false"
+      size="210px"
+      class="mobile-drawer"
+    >
+      <div class="logo">
+        <span class="logo-text">北辰ERP</span>
+      </div>
+      <SideMenu :collapse="false" @select="handleSelect" />
+    </el-drawer>
 
     <el-container>
       <el-header class="layout-header">
         <div class="header-left">
-          <el-icon class="collapse-btn" @click="isCollapse = !isCollapse">
-            <Fold v-if="!isCollapse" /><Expand v-else />
+          <el-icon class="collapse-btn" @click="toggleSidebar">
+            <Fold v-if="!isCollapse || isMobile" /><Expand v-else />
           </el-icon>
           <span class="header-title">{{ currentTitle }}</span>
         </div>
@@ -164,14 +150,10 @@ async function handleLogout() {
 .logo { height: 60px; display: flex; align-items: center; justify-content: center; color: #fff; background-color: #2b3a4d; }
 .logo-text { font-size: 18px; font-weight: 600; letter-spacing: 1px; }
 .logo-text-mini { font-size: 16px; font-weight: 600; }
-.layout-aside :deep(.el-menu) { border-right: none; }
-/* 禁用子菜单展开/折叠动画，解决菜单项多时卡顿 */
-.layout-aside :deep(.el-sub-menu .el-menu) { transition: none !important; }
-.layout-aside :deep(.el-sub-menu__title) { transition: none !important; }
 .layout-header { display: flex; align-items: center; justify-content: space-between; background-color: #fff; border-bottom: 1px solid #e6e6e6; padding: 0 16px; height: 48px; }
-.header-left { display: flex; align-items: center; gap: 12px; }
+.header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .collapse-btn { font-size: 20px; cursor: pointer; color: #5a5e66; }
-.header-title { font-size: 16px; font-weight: 500; color: #303133; }
+.header-title { font-size: 16px; font-weight: 500; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-right { display: flex; align-items: center; }
 .user-info { display: flex; align-items: center; gap: 6px; cursor: pointer; color: #5a5e66; }
 .username { font-size: 14px; }
@@ -186,4 +168,8 @@ async function handleLogout() {
 .tab-close:hover { background: #c0c4cc; color: #fff; }
 
 .layout-main { background-color: #f0f2f5; padding: 16px; }
+
+/* 移动端：抽屉内菜单与遮罩样式 */
+.mobile-drawer :deep(.el-drawer__body) { padding: 0; background-color: #304156; overflow-y: auto; }
+.mobile-drawer :deep(.el-drawer__body) .el-menu { border-right: none; }
 </style>
