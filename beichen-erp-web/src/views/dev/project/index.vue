@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
@@ -180,6 +180,7 @@ async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.co
 async function openDetail(row: ProjectVO) { detailProject.value = row; detailTab.value = 'bom'; detailVisible.value = true; loadBom(); loadBugs(); loadDrawings() }
 
 onMounted(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBomTypes() })
+onActivated(() => { loadData() })
 </script>
 
 <template>

@@ -393,6 +393,8 @@ CREATE TABLE IF NOT EXISTS dev_bom (
     material_type VARCHAR(50) COMMENT '物料类型',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    parent_id BIGINT DEFAULT 0 COMMENT '父BOM ID，0=根节点',
+    sort_order INT DEFAULT 0 COMMENT '同层排序',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_project_id (project_id),
     INDEX idx_supplier_id (supplier_id),

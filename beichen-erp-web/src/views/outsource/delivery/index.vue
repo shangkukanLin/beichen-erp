@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -35,6 +35,7 @@ async function handleCancel(row: any) {
 }
 
 onMounted(() => { loadOptions(); loadData() })
+onActivated(() => loadData())
 </script>
 
 <template>

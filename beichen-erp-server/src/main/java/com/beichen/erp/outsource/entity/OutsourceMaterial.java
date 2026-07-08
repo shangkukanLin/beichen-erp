@@ -13,12 +13,12 @@ public class OutsourceMaterial {
     private Long warehouseId;
     private String materialName;
     private String materialType;
-    private String spec;
     private String supplierName;
     private String supplierIds;
     private String unit;
     private Integer status;
     private String remark;
+    private Long parentMaterialId;
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;
     private LocalDateTime createTime;

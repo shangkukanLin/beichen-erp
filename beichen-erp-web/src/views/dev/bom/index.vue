@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 
@@ -32,6 +32,7 @@ async function loadProjects() {
 function goToBom(projectId: number) { router.push(`/dev/project/edit/${projectId}?tab=bom`) }
 
 onMounted(() => loadProjects())
+onActivated(() => loadProjects())
 </script>
 
 <template>

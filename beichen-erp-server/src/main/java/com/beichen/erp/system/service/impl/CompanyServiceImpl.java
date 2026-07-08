@@ -72,6 +72,7 @@ public class CompanyServiceImpl implements CompanyService {
             bt.setSortOrder(i + 1);
             bt.setStatus(1);
             bt.setCompanyId(company.getId());
+            bt.setBuiltIn(1);
             bomTypeMapper.insert(bt);
         }
     }

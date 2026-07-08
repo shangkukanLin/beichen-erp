@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getRolePage,
@@ -224,6 +224,7 @@ async function handleSavePerm() {
 onMounted(() => {
   loadData()
 })
+onActivated(() => { loadData() })
 </script>
 
 <template>

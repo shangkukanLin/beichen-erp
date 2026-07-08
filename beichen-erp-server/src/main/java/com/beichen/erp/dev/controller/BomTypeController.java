@@ -47,12 +47,22 @@ public class BomTypeController {
 
     @PutMapping
     public R<Void> update(@RequestBody BomType type) {
+        BomType old = bomTypeMapper.selectById(type.getId());
+        if (old != null && ("码片IC".equals(old.getTypeName()) || "触摸IC".equals(old.getTypeName()))) {
+            if (type.getTypeName() != null && !type.getTypeName().equals(old.getTypeName())) {
+                throw new BusinessException("码片IC和触摸IC不可改名");
+            }
+        }
         bomTypeMapper.updateById(type);
         return R.ok();
     }
 
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
+        BomType bt = bomTypeMapper.selectById(id);
+        if (bt != null && bt.getBuiltIn() != null && bt.getBuiltIn() == 1) {
+            throw new BusinessException("内置BOM类型不可删除");
+        }
         bomTypeMapper.deleteById(id);
         return R.ok();
     }

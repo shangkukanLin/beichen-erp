@@ -9,6 +9,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @TableName("dev_bom")
@@ -23,8 +24,6 @@ public class Bom {
 
     private String materialName;
 
-    private String spec;
-
     private String unit;
 
     private BigDecimal quantityPerSet;
@@ -35,7 +34,14 @@ public class Bom {
 
     private String remark;
 
+    private Long parentId;
+
+    private Integer sortOrder;
+
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;
     private LocalDateTime createTime;
+
+    @TableField(exist = false)
+    private List<Bom> children;
 }

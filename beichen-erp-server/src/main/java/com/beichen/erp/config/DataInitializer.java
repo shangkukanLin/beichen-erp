@@ -257,6 +257,7 @@ public class DataInitializer implements ApplicationRunner {
             bt.setSortOrder(i + 1);
             bt.setStatus(1);
             bt.setCompanyId(1L);
+            bt.setBuiltIn(1);
             bomTypeMapper.insert(bt);
         }
         log.info("初始化BOM类型数据完成（共 {} 条）", defaultTypes.length);

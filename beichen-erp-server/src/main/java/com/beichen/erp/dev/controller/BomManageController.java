@@ -55,7 +55,6 @@ public class BomManageController {
             map.put("supplierId", bom.getSupplierId());
             map.put("supplierName", supplier != null ? supplier.getName() : "");
             map.put("materialName", bom.getMaterialName());
-            map.put("spec", bom.getSpec());
             map.put("unit", bom.getUnit());
             map.put("quantityPerSet", bom.getQuantityPerSet());
             map.put("lossRate", bom.getLossRate());
@@ -72,7 +71,6 @@ public class BomManageController {
         bom.setProjectId(Long.valueOf(body.get("projectId").toString()));
         if (body.get("supplierId") != null) bom.setSupplierId(Long.valueOf(body.get("supplierId").toString()));
         bom.setMaterialName((String) body.get("materialName"));
-        bom.setSpec((String) body.get("spec"));
         bom.setUnit((String) body.get("unit"));
         if (body.get("quantityPerSet") != null) bom.setQuantityPerSet(new java.math.BigDecimal(body.get("quantityPerSet").toString()));
         if (body.get("lossRate") != null) bom.setLossRate(new java.math.BigDecimal(body.get("lossRate").toString()));
@@ -89,7 +87,6 @@ public class BomManageController {
         bom.setProjectId(Long.valueOf(body.get("projectId").toString()));
         if (body.get("supplierId") != null) bom.setSupplierId(Long.valueOf(body.get("supplierId").toString()));
         bom.setMaterialName((String) body.get("materialName"));
-        bom.setSpec((String) body.get("spec"));
         bom.setUnit((String) body.get("unit"));
         if (body.get("quantityPerSet") != null) bom.setQuantityPerSet(new java.math.BigDecimal(body.get("quantityPerSet").toString()));
         if (body.get("lossRate") != null) bom.setLossRate(new java.math.BigDecimal(body.get("lossRate").toString()));
