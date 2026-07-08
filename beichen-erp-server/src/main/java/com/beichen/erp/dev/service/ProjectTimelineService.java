@@ -15,4 +15,6 @@ public interface ProjectTimelineService extends IService<ProjectTimeline> {
     void updateTimeline(Long projectId, String statusName, LocalDate actualEnd);
 
     void updatePlanned(Long projectId, String statusName, LocalDate plannedEnd);
+
+    void updateStatus(Long projectId, String statusName, String status);
 }

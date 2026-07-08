@@ -26,6 +26,7 @@ public class User {
     private String dept;
 
     private Integer status;
+    private Long companyId;
 
     @TableLogic
     private Integer deleted;

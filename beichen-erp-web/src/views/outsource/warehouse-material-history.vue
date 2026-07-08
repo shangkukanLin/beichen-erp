@@ -41,17 +41,17 @@ onMounted(() => loadData())
     </el-card>
 
     <el-card shadow="never">
-      <el-table :data="records" border stripe v-loading="loading" size="small">
+      <el-table :data="records" border stripe v-loading="loading">
         <el-table-column prop="deliveryDate" label="日期" width="110" />
         <el-table-column prop="code" label="收发单号" width="170" />
         <el-table-column prop="deliveryType" label="类型" width="70">
-          <template #default="{row}"><el-tag :type="row.deliveryType==='发料'?'success':row.deliveryType==='收料'?'warning':'danger'" size="small">{{row.deliveryType}}</el-tag></template>
+          <template #default="{row}"><el-tag :type="row.deliveryType==='发料'?'success':row.deliveryType==='收料'?'warning':'danger'">{{row.deliveryType}}</el-tag></template>
         </el-table-column>
         <el-table-column prop="materialName" label="物料名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="materialType" label="物料类型" width="100" />
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column prop="quantity" label="数量" width="100" align="right" />
-        <el-table-column prop="status" label="状态" width="80"><template #default="{row}"><el-tag :type="row.status==='已确认'?'success':'info'" size="small">{{row.status}}</el-tag></template></el-table-column>
+        <el-table-column prop="status" label="状态" width="80"><template #default="{row}"><el-tag :type="row.status==='已确认'?'success':'info'">{{row.status}}</el-tag></template></el-table-column>
       </el-table>
       <div class="pagination"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleQuery" /></div>
     </el-card>

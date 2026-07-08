@@ -13,5 +13,6 @@ public class BomType {
     private Integer sortOrder;
     private Integer status;
     @TableField(fill = FieldFill.INSERT)
+    private Long companyId;
     private LocalDateTime createTime;
 }

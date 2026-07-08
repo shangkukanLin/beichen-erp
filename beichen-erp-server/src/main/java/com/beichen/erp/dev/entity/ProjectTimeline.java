@@ -27,6 +27,9 @@ public class ProjectTimeline {
 
     private LocalDate actualEnd;
 
+    private String status;
+
     @TableField(fill = FieldFill.INSERT)
+    private Long companyId;
     private LocalDateTime createTime;
 }

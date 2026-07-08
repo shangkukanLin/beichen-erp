@@ -5,3 +5,8 @@ node_modules/
 *.log
 uploads/
 
+# Playwright 测试产物与截图
+beichen-erp-web/.playwright-cli/
+beichen-erp-web/*.png
+beichen-erp-web/*.yaml
+

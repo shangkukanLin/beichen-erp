@@ -150,6 +150,14 @@ public class DeliveryServiceImpl implements DeliveryService {
         return deliveryMapper.selectById(id);
     }
 
+    @Override
+    public void clearAttachUrl(Long id) {
+        OutsourceDelivery update = new OutsourceDelivery();
+        update.setId(id);
+        update.setAttachUrl("");
+        deliveryMapper.updateById(update);
+    }
+
     // ==================== 私有方法 ====================
 
     /**

@@ -114,6 +114,12 @@ public class DeliveryController {
         return R.ok();
     }
 
+    @DeleteMapping("/{id}/attach")
+    public R<Void> deleteAttach(@PathVariable Long id) {
+        deliveryService.clearAttachUrl(id);
+        return R.ok();
+    }
+
     @PutMapping("/{id}/cancel")
     public R<Void> cancel(@PathVariable Long id) {
         deliveryService.cancel(id);

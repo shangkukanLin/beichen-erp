@@ -22,7 +22,8 @@ const tableLoading = ref(false)
 const allProjects = ref<ProjectVO[]>([])
 const timelineMap = ref<Record<number, TimelineItem[]>>({})
 
-interface TimelineItem { statusName: string; sortOrder: number; plannedEnd?: string; actualEnd?: string }
+interface TimelineItem { statusName: string; sortOrder: number; plannedEnd?: string; actualEnd?: string; status?: string }
+const timelineStatusOptions = ['未完成', '进行中', '已完成']
 
 const activeProjects = ref<ProjectVO[]>([])
 const finishedProjects = ref<ProjectVO[]>([])
@@ -52,7 +53,7 @@ async function loadTimelines(projects: ProjectVO[]) {
   try {
     const res = await request.post<unknown, Record<number, TimelineItem[]>>('/dev/project/timelines/batch', { projectIds: ids })
     if (res) timelineMap.value = { ...timelineMap.value, ...res }
-  } catch { }
+  } catch (e: any) { console.warn('加载时间线失败', e?.message || e) }
 }
 
 async function loadData() {
@@ -70,11 +71,18 @@ function handleReset() { query.name = ''; loadData() }
 
 // ===================== 方案公司下拉 =====================
 const solutionSuppliers = ref<{ id: number; name: string }[]>([])
+const factoryOptions = ref<{ id: number; name: string }[]>([])
 async function loadSolutionSuppliers() {
   try {
     const res = await getSupplierPage({ supplierType: 'solution', pageSize: 200 })
     solutionSuppliers.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name }))
-  } catch { }
+  } catch (e: any) { console.warn('加载方案商失败', e?.message || e) }
+}
+async function loadFactories() {
+  try {
+    const res = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } })
+    factoryOptions.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name }))
+  } catch (e: any) { console.warn('加载工厂失败', e?.message || e) }
 }
 
 // ===================== 新增/编辑 =====================
@@ -83,8 +91,9 @@ const dialogTitle = ref('')
 const formRef = ref<FormInstance>()
 const submitLoading = ref(false)
 const defForm = (): ProjectDTO => ({
-  name: '', displaySupplierName: '', touchSupplierName: '', glass: '', touchIc: '', displayDriverIc: '', chip: '', backPaste: '', coverPlate: '', flexCable: '', adaptModel: '',
-  originalSize: '', originalResolution: '', startDate: '', expectedEndDate: '', status: '立项', remark: ''
+  name: '', displaySupplierName: '', touchSupplierName: '', adaptModel: '',
+  originalSize: '', originalResolution: '', startDate: '', expectedEndDate: '', status: '立项', remark: '',
+  sampleFactoryId: undefined, outsourceFactoryId: undefined
 })
 const form = reactive<ProjectDTO>(defForm())
 const isEdit = ref(false)
@@ -107,7 +116,7 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row: ProjectVO) {
-  try { await ElMessageBox.confirm(`确定删除「${row.name}」吗？`, '提示', { type: 'warning' }); await deleteProject(row.id!); ElMessage.success('删除成功'); loadData() } catch { }
+  try { await ElMessageBox.confirm(`确定删除「${row.name}」吗？`, '提示', { type: 'warning' }); await deleteProject(row.id!); ElMessage.success('删除成功'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
 async function handleStatusChange(row: ProjectVO, newStatus: string) {
@@ -141,10 +150,17 @@ const detailVisible = ref(false)
 const detailProject = ref<ProjectVO | null>(null)
 const detailTab = ref('bom')
 const bomList = ref<BomDTO[]>([])
+const bomTypes = ref<string[]>([])
+const allMaterials = ref<any[]>([])
+async function loadBomTypes() {
+  try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => t.typeName) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料失败', e?.message || e) }
+}
+function getMaterialsByType(type: string) { return allMaterials.value.filter((m:any) => m.materialType === type) }
 async function loadBom() { if (detailProject.value) bomList.value = (await getProjectBom(detailProject.value.id!))?.map(b => ({ materialName: b.materialName, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })) || [] }
-function addBomRow() { bomList.value.push({ materialName: '', spec: '', unit: '', quantityPerSet: undefined, lossRate: undefined, materialType: '', remark: '' }) }
+function addBomRow() { bomList.value.push({ materialName: '', spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialType: '', remark: '' }) }
 function removeBomRow(i: number) { bomList.value.splice(i, 1) }
-async function saveBom() { if (detailProject.value) { await saveProjectBom(detailProject.value.id!, bomList.value); ElMessage.success('BOM已保存'); loadBom() } }
+async function saveBom() { if (detailProject.value) { const emptyType = bomList.value.find((b: any) => !b.materialType || !b.materialType.trim()); if (emptyType) { ElMessage.warning('物料类型不能为空'); return }; const emptyName = bomList.value.find((b: any) => !b.materialName || !b.materialName.trim()); if (emptyName) { ElMessage.warning('物料名称不能为空'); return }; const zeroQty = bomList.value.find((b: any) => !b.quantityPerSet || Number(b.quantityPerSet) <= 0); if (zeroQty) { ElMessage.warning('物料用量必须大于0'); return }; await saveProjectBom(detailProject.value.id!, bomList.value); ElMessage.success('BOM已保存'); loadBom() } }
 
 const bugList = ref<BugDTO[]>([]); const bugDialogVisible = ref(false)
 const bugForm = reactive<BugDTO>({ title: '', severity: '一般', status: '待处理', description: '', assignedTo: undefined }); const isBugEdit = ref(false)
@@ -152,18 +168,18 @@ async function loadBugs() { if (detailProject.value) bugList.value = (await getP
 function handleAddBug() { Object.assign(bugForm, { title: '', severity: '一般', status: '待处理', description: '', assignedTo: undefined }); isBugEdit.value = false; bugDialogVisible.value = true }
 function handleEditBug(row: BugDTO) { Object.assign(bugForm, row); isBugEdit.value = true; bugDialogVisible.value = true }
 async function handleBugSubmit() { if (!detailProject.value) return; if (isBugEdit.value && bugForm.id) { await updateProjectBug(detailProject.value.id!, bugForm); ElMessage.success('已更新') } else { await addProjectBug(detailProject.value.id!, bugForm); ElMessage.success('已添加') }; bugDialogVisible.value = false; loadBugs() }
-async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectBug(detailProject.value!.id!, row.id!); ElMessage.success('已删除'); loadBugs() } catch { } }
+async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectBug(detailProject.value!.id!, row.id!); ElMessage.success('已删除'); loadBugs() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
 const drawingList = ref<DrawingVO[]>([])
 async function loadDrawings() { if (detailProject.value) drawingList.value = (await getProjectDrawings(detailProject.value.id!)) || [] }
 const drawingForm = reactive({ docName: '', docType: '图纸', version: '', fileUrl: '' }); const drawingVisible = ref(false)
 function handleAddDrawing() { Object.assign(drawingForm, { docName: '', docType: '图纸', version: '', fileUrl: '' }); drawingVisible.value = true }
 async function handleDrawingSubmit() { if (detailProject.value) { await addProjectDrawing(detailProject.value.id!, drawingForm as any); ElMessage.success('已添加'); drawingVisible.value = false; loadDrawings() } }
-async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(detailProject.value!.id!, row.id!); ElMessage.success('已删除'); loadDrawings() } catch { } }
+async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(detailProject.value!.id!, row.id!); ElMessage.success('已删除'); loadDrawings() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
 async function openDetail(row: ProjectVO) { detailProject.value = row; detailTab.value = 'bom'; detailVisible.value = true; loadBom(); loadBugs(); loadDrawings() }
 
-onMounted(() => { loadData(); loadSolutionSuppliers() })
+onMounted(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBomTypes() })
 </script>
 
 <template>
@@ -222,8 +238,12 @@ onMounted(() => { loadData(); loadSolutionSuppliers() })
         <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
         <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
         <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag type="success" size="small">{{row.status}}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="80" align="center" fixed="right">
-          <template #default="{row}"><el-button type="danger" link size="small" @click="handleDelete(row as ProjectVO)">删除</el-button></template>
+        <el-table-column label="操作" width="200" align="center" fixed="right">
+          <template #default="{row}">
+            <el-button type="primary" link size="small" @click="openDetail(row as ProjectVO)">详情</el-button>
+            <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">编辑</el-button>
+            <el-button type="danger" link size="small" @click="handleDelete(row as ProjectVO)">删除</el-button>
+          </template>
         </el-table-column>
       </el-table>
     </el-card>
@@ -236,15 +256,15 @@ onMounted(() => { loadData(); loadSolutionSuppliers() })
           <el-col :span="10"><el-form-item label="状态"><el-select v-model="form.status" style="width:100%"><el-option v-for="s in STATUS_LIST" :key="s" :label="s" :value="s" /></el-select></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="显示方案"><el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /></el-select></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="触摸方案"><el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /></el-select></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="玻璃"><el-input v-model="form.glass" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="触摸IC"><el-input v-model="form.touchIc" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="显示驱动IC"><el-input v-model="form.displayDriverIc" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="码片"><el-input v-model="form.chip" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="背贴"><el-input v-model="form.backPaste" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="盖板"><el-input v-model="form.coverPlate" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="排线"><el-input v-model="form.flexCable" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="适配机型"><el-input v-model="form.adaptModel" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="原机尺寸"><el-input v-model="form.originalSize" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="原分辨率"><el-input v-model="form.originalResolution" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="打样工厂">
+            <el-select v-model="form.sampleFactoryId" clearable filterable style="width:100%" placeholder="选择工厂"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select>
+          </el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="委外工厂">
+            <el-select v-model="form.outsourceFactoryId" clearable filterable style="width:100%" placeholder="选择工厂"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select>
+          </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="立项日期"><el-input v-model="form.startDate" type="date" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="预计完成"><el-input v-model="form.expectedEndDate" type="date" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
@@ -258,11 +278,11 @@ onMounted(() => { loadData(); loadSolutionSuppliers() })
         <el-table-column prop="statusName" label="状态" width="140" />
         <el-table-column label="计划完成" width="160"><template #default="{row}"><el-input v-model="row.plannedEnd" type="date" size="small" /></template></el-table-column>
         <el-table-column label="实际完成" width="160"><template #default="{row}"><el-input v-model="row.actualEnd" type="date" size="small" /></template></el-table-column>
-        <el-table-column label="状态" width="80" align="center">
+        <el-table-column label="状态" width="120" align="center">
           <template #default="{row}">
-            <el-tag v-if="row.plannedEnd && row.plannedEnd < today && !row.actualEnd" type="danger" size="small">超期</el-tag>
-            <el-tag v-else-if="row.actualEnd" type="success" size="small">完成</el-tag>
-            <el-tag v-else type="info" size="small">待定</el-tag>
+            <el-select v-model="row.status" size="small" style="width:100%">
+              <el-option v-for="o in timelineStatusOptions" :key="o" :label="o" :value="o" />
+            </el-select>
           </template>
         </el-table-column>
       </el-table>
@@ -275,12 +295,18 @@ onMounted(() => { loadData(); loadSolutionSuppliers() })
           <el-button type="primary" size="small" @click="addBomRow" style="margin-bottom:8px">+ 添加物料</el-button>
           <el-button type="success" size="small" @click="saveBom" style="margin-left:8px">保存</el-button>
           <el-table :data="bomList" border size="small">
-            <el-table-column label="物料名称" min-width="130"><template #default="{row}"><el-input v-model="row.materialName" size="small" /></template></el-table-column>
+            <el-table-column label="类型" width="100">
+              <template #default="{row}">
+                <el-select v-model="row.materialType" size="small" style="width:100%" @change="row.materialName = ''">
+                  <el-option v-for="t in bomTypes" :key="t" :label="t" :value="t" />
+                </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="物料名称" min-width="130"><template #default="{row}"><el-select v-model="row.materialName" size="small" filterable allow-create clearable style="width:100%" placeholder="选择"><el-option v-for="m in getMaterialsByType(row.materialType || '')" :key="m.id" :label="m.materialName" :value="m.materialName" /></el-select></template></el-table-column>
             <el-table-column label="规格" width="100"><template #default="{row}"><el-input v-model="row.spec" size="small" /></template></el-table-column>
             <el-table-column label="单位" width="70"><template #default="{row}"><el-input v-model="row.unit" size="small" /></template></el-table-column>
             <el-table-column label="用量" width="80"><template #default="{row}"><el-input v-model="row.quantityPerSet" size="small" /></template></el-table-column>
             <el-table-column label="损耗率%" width="85"><template #default="{row}"><el-input v-model="row.lossRate" size="small" /></template></el-table-column>
-            <el-table-column label="类型" width="90"><template #default="{row}"><el-input v-model="row.materialType" size="small" /></template></el-table-column>
             <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeBomRow($index)">删除</el-button></template></el-table-column>
           </el-table>
         </el-tab-pane>

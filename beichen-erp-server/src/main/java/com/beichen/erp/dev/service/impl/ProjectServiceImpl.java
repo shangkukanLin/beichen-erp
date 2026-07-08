@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.entity.Bom;
 import com.beichen.erp.dev.entity.BomType;
+import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.dto.ProjectDTO;
 import com.beichen.erp.dev.entity.dto.ProjectQueryDTO;
 import com.beichen.erp.dev.mapper.ProjectMapper;
@@ -15,6 +16,7 @@ import com.beichen.erp.dev.service.ProjectService;
 import com.beichen.erp.dev.service.ProjectTimelineService;
 import com.beichen.erp.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -23,9 +25,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.stream.Collectors;
+import java.math.BigDecimal;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> implements ProjectService {
 
     private final ProjectMapper projectMapper;
@@ -77,6 +84,8 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         Project project = new Project();
         BeanUtils.copyProperties(dto, project);
         project.setId(null); // 强制自增
+        Long cid = CompanyContext.get();
+        if (cid != null && cid > 0) project.setCompanyId(cid);
         String code = generateCode();
         for (int i = 0; i < 3; i++) {
             try {
@@ -107,9 +116,36 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         project.setCode(exist.getCode());
         projectMapper.updateById(project);
 
-        // 如���带了 bomData，同步更新 BOM 物料
+        // 如果带了 bomData，upsert 更新 BOM 物料（只更新物料名，保留用量等字段）
         if (dto.getBomData() != null && !dto.getBomData().isEmpty()) {
-            initBom(dto, dto.getId());
+            List<Bom> existingBoms = bomMapper.selectList(
+                    new LambdaQueryWrapper<Bom>().eq(Bom::getProjectId, dto.getId()));
+            Map<String, Bom> existingMap = existingBoms.stream()
+                    .collect(Collectors.toMap(Bom::getMaterialType, b -> b, (a, b) -> a));
+            Long cid = CompanyContext.get();
+            for (Map.Entry<String, String> entry : dto.getBomData().entrySet()) {
+                String typeName = entry.getKey();
+                String materialName = entry.getValue();
+                if (materialName == null || materialName.isBlank()) continue;
+                Bom existBom = existingMap.get(typeName);
+                if (existBom != null) {
+                    // 已有记录：只更新物料名，保留 quantityPerSet/spec/unit/lossRate 等
+                    Bom upd = new Bom();
+                    upd.setId(existBom.getId());
+                    upd.setMaterialName(materialName);
+                    bomMapper.updateById(upd);
+                } else {
+                    // 新增记录：默认用量=1，损耗率=2%
+                    Bom bom = new Bom();
+                    bom.setProjectId(dto.getId());
+                    bom.setMaterialType(typeName);
+                    bom.setMaterialName(materialName);
+                    bom.setQuantityPerSet(BigDecimal.ONE);
+                    bom.setLossRate(new BigDecimal("2"));
+                    if (cid != null && cid > 0) bom.setCompanyId(cid);
+                    bomMapper.insert(bom);
+                }
+            }
         }
     }
 
@@ -141,6 +177,10 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
                 new LambdaQueryWrapper<BomType>()
                         .eq(BomType::getStatus, 1)
                         .orderByAsc(BomType::getSortOrder));
+        if (types.isEmpty()) {
+            log.warn("未找到启用的BOM类型（status=1），BOM未自动生成，projectId={}", projectId);
+            return;
+        }
         for (BomType bt : types) {
             String value = getMaterialValue(dto, bt.getTypeName());
             addBomIfNotNull(projectId, value, bt.getTypeName());
@@ -148,24 +188,11 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     }
 
     private String getMaterialValue(ProjectDTO dto, String typeName) {
-        // 优先从 bomData Map 取值（前端新增页用的通用方式）
+        // 从 bomData Map 取值（前端新增/编辑页用此方式传BOM物料）
         if (dto.getBomData() != null && dto.getBomData().containsKey(typeName)) {
             return dto.getBomData().get(typeName);
         }
-        // fallback 到固定字段映射
-        return switch (typeName) {
-            case "玻璃" -> dto.getGlass();
-            case "触摸IC" -> dto.getTouchIc();
-            case "显示驱动IC" -> dto.getDisplayDriverIc();
-            case "码片" -> dto.getChip();
-            case "背贴" -> dto.getBackPaste();
-            case "盖板" -> dto.getCoverPlate();
-            case "排线" -> dto.getFlexCable();
-            case "原机尺寸" -> dto.getOriginalSize();
-            case "原分辨率" -> dto.getOriginalResolution();
-            case "适配机型" -> dto.getAdaptModel();
-            default -> null;
-        };
+        return null;
     }
 
     private void addBomIfNotNull(Long projectId, String value, String materialType) {
@@ -174,6 +201,8 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
             bom.setProjectId(projectId);
             bom.setMaterialType(materialType);
             bom.setMaterialName(value);
+            Long cid = CompanyContext.get();
+            if (cid != null && cid > 0) bom.setCompanyId(cid);
             bomMapper.insert(bom);
         }
     }

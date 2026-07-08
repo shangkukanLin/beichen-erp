@@ -13,10 +13,10 @@ const warehouseOptions = ref<any[]>([])
 const MATERIAL_TYPES = ref<string[]>([])
 
 async function loadOptions() {
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); MATERIAL_TYPES.value = (r || []).map((t:any)=>t.typeName) } catch { }
-  try { const r = await request.get<any, any>('/dev/project/page', { params: { pageSize: 200 } }); projectOptions.value = r?.records || [] } catch { }
-  try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch { }
-  try { const r = await request.get<any, any>('/outsource/warehouse/page', { params: { pageSize: 500 } }); warehouseOptions.value = r?.records || [] } catch { }
+  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); MATERIAL_TYPES.value = (r || []).map((t:any)=>t.typeName) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/dev/project/page', { params: { pageSize: 200 } }); projectOptions.value = r?.records || [] } catch (e: any) { console.warn('加载项目失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch (e: any) { console.warn('加载供应商失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/outsource/warehouse/page', { params: { pageSize: 500 } }); warehouseOptions.value = r?.records || [] } catch (e: any) { console.warn('加载仓库失败', e?.message || e) }
 }
 
 async function loadData() {
@@ -59,7 +59,7 @@ async function handleSubmit() {
   try { if (isEdit.value) { await request.put('/outsource/material', body); ElMessage.success('修改成功') } else { await request.post('/outsource/material', body); ElMessage.success('新增成功') }
     dialogVisible.value = false; loadData() } finally { submitLoading.value = false }
 }
-async function handleDelete(row: any) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await request.delete(`/outsource/material/${row.id}`); ElMessage.success('已删除'); loadData() } catch { } }
+async function handleDelete(row: any) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await request.delete(`/outsource/material/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
 onMounted(() => { loadOptions(); loadData() })
 </script>

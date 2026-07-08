@@ -194,7 +194,6 @@ export interface SupplierVO {
   hasDisplay?: number
   hasTouch?: number
   relatedSupplierId?: number | string
-  processType?: string
   brand?: string
   materialType?: string
   remark?: string
@@ -214,7 +213,6 @@ export interface SupplierDTO {
   hasDisplay?: number
   hasTouch?: number
   relatedSupplierId?: number | string
-  processType?: string
   brand?: string
   materialType?: string
   remark?: string
@@ -284,9 +282,9 @@ export function saveSupplierProducts(id: number | string, products: SupplierProd
 export interface ProjectVO {
   id?: number | string; code: string; name: string
   displaySupplierName?: string; touchSupplierName?: string
-  glass?: string; touchIc?: string; displayDriverIc?: string; chip?: string
-  backPaste?: string; coverPlate?: string; flexCable?: string; adaptModel?: string
+  adaptModel?: string
   originalSize?: string; originalResolution?: string; projectLeaderId?: number
+  sampleFactoryId?: number; outsourceFactoryId?: number
   startDate?: string; expectedEndDate?: string; actualEndDate?: string
   status?: string; remark?: string; createTime?: string; updateTime?: string
 }
@@ -294,9 +292,9 @@ export interface ProjectVO {
 export interface ProjectDTO {
   id?: number | string; code?: string; name: string
   displaySupplierName?: string; touchSupplierName?: string
-  glass?: string; touchIc?: string; displayDriverIc?: string; chip?: string
-  backPaste?: string; coverPlate?: string; flexCable?: string; adaptModel?: string
+  adaptModel?: string
   originalSize?: string; originalResolution?: string; projectLeaderId?: number
+  sampleFactoryId?: number; outsourceFactoryId?: number
   startDate?: string; expectedEndDate?: string; actualEndDate?: string
   status?: string; remark?: string
 }

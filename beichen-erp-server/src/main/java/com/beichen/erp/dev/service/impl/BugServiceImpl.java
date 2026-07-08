@@ -2,6 +2,7 @@ package com.beichen.erp.dev.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.Bug;
 import com.beichen.erp.dev.entity.dto.BugDTO;
 import com.beichen.erp.dev.mapper.BugMapper;
@@ -68,6 +69,8 @@ public class BugServiceImpl extends ServiceImpl<BugMapper, Bug> implements BugSe
         bug.setDescription(dto.getDescription());
         bug.setAssignedTo(dto.getAssignedTo());
         bug.setFoundTime(LocalDateTime.now());
+        Long cid = CompanyContext.get();
+        if (cid != null && cid > 0) bug.setCompanyId(cid);
 
         String code = generateCode();
         for (int i = 0; i < 3; i++) {

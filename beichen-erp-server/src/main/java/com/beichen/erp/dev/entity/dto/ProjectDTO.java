@@ -20,20 +20,6 @@ public class ProjectDTO {
 
     private String touchSupplierName;
 
-    private String glass;
-
-    private String touchIc;
-
-    private String displayDriverIc;
-
-    private String chip;
-
-    private String backPaste;
-
-    private String coverPlate;
-
-    private String flexCable;
-
     private String adaptModel;
 
     private String originalSize;
@@ -41,6 +27,10 @@ public class ProjectDTO {
     private String originalResolution;
 
     private Long projectLeaderId;
+
+    private Long sampleFactoryId;
+
+    private Long outsourceFactoryId;
 
     private LocalDate startDate;
 

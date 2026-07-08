@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 
 const route = useRoute(); const router = useRouter()
@@ -15,10 +15,10 @@ const factoryOptions = ref<any[]>([]); const supplierOptions = ref<any[]>([])
 const outsourceWarehouses = ref<any[]>([]); const inventoryWarehouses = ref<any[]>([]); const materialOptions = ref<any[]>([])
 
 async function loadOptions() {
-  try { const r=await request.get<any,any>('/supplier/page',{params:{supplierType:'factory',pageSize:200}}); factoryOptions.value=r?.records||[] } catch {}
-  try { const r=await request.get<any,any>('/supplier/page',{params:{pageSize:500}}); supplierOptions.value=r?.records||[] } catch {}
-  try { const r=await request.get<any,any>('/outsource/delivery/warehouses/inventory'); inventoryWarehouses.value=r||[] } catch {}
-  try { const r=await request.get<any,any>('/outsource/material/page',{params:{pageSize:500}}); materialOptions.value=r?.records||[] } catch {}
+  try { const r=await request.get<any,any>('/supplier/page',{params:{supplierType:'factory',pageSize:200}}); factoryOptions.value=r?.records||[] } catch (e: any) { console.warn('加载工厂失败', e?.message || e) }
+  try { const r=await request.get<any,any>('/supplier/page',{params:{pageSize:500}}); supplierOptions.value=r?.records||[] } catch (e: any) { console.warn('加载供应商失败', e?.message || e) }
+  try { const r=await request.get<any,any>('/outsource/delivery/warehouses/inventory'); inventoryWarehouses.value=r||[] } catch (e: any) { console.warn('加载进销存仓库失败', e?.message || e) }
+  try { const r=await request.get<any,any>('/outsource/material/page',{params:{pageSize:500}}); materialOptions.value=r?.records||[] } catch (e: any) { console.warn('加载物料失败', e?.message || e) }
 }
 
 async function loadData() {
@@ -35,7 +35,7 @@ async function loadData() {
   loading.value = false
 }
 
-async function loadOutsourceWarehouses(fid:number){ try{const r=await request.get<any,any>('/outsource/delivery/warehouses/by-factory/'+fid);outsourceWarehouses.value=r||[]}catch{} }
+async function loadOutsourceWarehouses(fid:number){ try{const r=await request.get<any,any>('/outsource/delivery/warehouses/by-factory/'+fid);outsourceWarehouses.value=r||[]}catch(e: any){ console.warn('加载委外仓库失败', e?.message || e) } }
 async function onFactoryChange(fid:number){ form.fromWarehouseId=undefined;form.toWarehouseId=undefined;loadOutsourceWarehouses(fid) }
 
 function addItem(){ items.value.push({material_id:undefined,material_name:'',material_type:'',unit:'',quantity:undefined}) }
@@ -53,11 +53,20 @@ async function handleSave() {
   } finally { saving.value = false }
 }
 
-function openAttach(url:string){ window.open(url) }
+function openAttach(url:string){ window.open(url + '?inline=true') }
 
 function handleDragOver(e: DragEvent) { e.preventDefault() }
 function handleDrop(e: DragEvent) { e.preventDefault(); const file = e.dataTransfer?.files?.[0]; if (file) uploadFile.value = file }
 function handleFileSelect(e: Event) { const file = (e.target as HTMLInputElement).files?.[0]; if (file) uploadFile.value = file }
+function handleRemoveUploadFile() { uploadFile.value = null }
+async function handleDeleteAttach() {
+  try {
+    await ElMessageBox.confirm('确定删除附件吗？删除后将无法恢复。', '删除附件', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
+    await request.delete(`/outsource/delivery/${form.id}/attach`)
+    ElMessage.success('附件已删除')
+    await loadData()
+  } catch (e: any) { /* 取消 */ }
+}
 
 onMounted(()=>{ loadOptions(); loadData() })
 </script>
@@ -97,10 +106,10 @@ onMounted(()=>{ loadOptions(); loadData() })
         </el-row>
       </el-form>
       <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'#67c23a':'#dcdfe6', background: uploadFile?'#f0f9eb':'#fafafa' }">
-        <template v-if="uploadFile"><p style="color:#67c23a;font-weight:600;margin:0">📎 {{ uploadFile.name }}</p></template>
-        <template v-else-if="form.attachUrl"><div style="display:flex;align-items:center;gap:8px"><span style="color:#409eff">📎 已有附件</span><el-button type="primary" size="small" @click="openAttach(form.attachUrl)">查看</el-button><el-button type="success" size="small"><a :href="form.attachUrl" download style="color:inherit;text-decoration:none">下载</a></el-button></div></template>
-        <template v-else><p style="color:#909399;margin:0">拖拽文件到此处，或点击选择新附件</p></template>
-        <input type="file" @change="handleFileSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
+        <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:#67c23a;font-weight:600">📎 {{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
+        <template v-else-if="form.attachUrl"><div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap"><span style="color:#409eff">📎 已有附件</span><el-button type="primary" size="small" @click.stop="openAttach(form.attachUrl)">查看</el-button><el-button type="success" size="small"><a :href="form.attachUrl" download style="color:inherit;text-decoration:none">下载</a></el-button><el-button type="danger" size="small" @click.stop="handleDeleteAttach">删除</el-button><span style="color:#909399;font-size:12px">可拖拽新文件替换</span></div></template>
+        <template v-else><p style="color:#909399;margin:0">拖拽文件到此处，或点击选择</p></template>
+        <input v-if="!form.attachUrl && !uploadFile" type="file" @change="handleFileSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
       </div>
     </el-card>
 

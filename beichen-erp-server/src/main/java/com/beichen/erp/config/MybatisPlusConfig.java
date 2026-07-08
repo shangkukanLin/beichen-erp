@@ -8,10 +8,12 @@ import org.apache.ibatis.reflection.MetaObject;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
+
 import java.time.LocalDateTime;
 
 /**
- * MyBatis-Plus 配置：分页插件 + 自动填充字段
+ * MyBatis-Plus 配置：分页插件 + 多租户 + 自动填充字段
  */
 @Configuration
 public class MybatisPlusConfig {
@@ -19,6 +21,9 @@ public class MybatisPlusConfig {
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+        // 多租户插件
+        interceptor.addInnerInterceptor(new TenantLineInnerInterceptor(new CompanyTenantHandler()));
+        // 分页插件（必须在租户插件之后）
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
         return interceptor;
     }

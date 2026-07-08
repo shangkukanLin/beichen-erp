@@ -14,7 +14,7 @@ const activeData = computed(() => allData.value.filter(v => v.status === 1))
 const stoppedData = computed(() => allData.value.filter(v => v.status === 0))
 
 async function loadFactories() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } }); factoryOptions.value = r?.records || [] } catch { }
+  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } }); factoryOptions.value = r?.records || [] } catch (e: any) { console.warn('加载工厂选项失败', e?.message || e) }
 }
 
 async function loadData() {
@@ -68,25 +68,25 @@ onMounted(() => { loadFactories(); loadData() })
         <el-tab-pane label="停用" name="stopped" />
       </el-tabs>
 
-      <el-table v-if="activeTab==='active'" :data="activeData" border stripe v-loading="tableLoading" style="width:100%" size="small">
+      <el-table v-if="activeTab==='active'" :data="activeData" border stripe v-loading="tableLoading" style="width:100%">
         <el-table-column prop="factoryName" label="所属加工厂" width="140" show-overflow-tooltip />
         <el-table-column prop="warehouseName" label="仓库名称" min-width="140" />
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="80" />
         <el-table-column prop="phone" label="电话" width="120" />
         <el-table-column label="操作" width="180" align="center">
-          <template #default="{row}"><el-button type="primary" link size="small" @click="handleDetail(row)">详情</el-button><el-button type="success" link size="small" @click="handleEdit(row)">编辑</el-button><el-button type="warning" link size="small" @click="handleToggleStatus(row)">停用</el-button></template>
+          <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button type="success" link @click="handleEdit(row)">编辑</el-button><el-button type="warning" link @click="handleToggleStatus(row)">停用</el-button></template>
         </el-table-column>
       </el-table>
 
-      <el-table v-if="activeTab==='stopped'" :data="stoppedData" border stripe size="small" style="width:100%">
+      <el-table v-if="activeTab==='stopped'" :data="stoppedData" border stripe style="width:100%">
         <el-table-column prop="factoryName" label="所属加工厂" width="140" show-overflow-tooltip />
         <el-table-column prop="warehouseName" label="仓库名称" min-width="140" />
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="80" />
         <el-table-column prop="phone" label="电话" width="120" />
         <el-table-column label="操作" width="180" align="center">
-          <template #default="{row}"><el-button type="primary" link size="small" @click="handleDetail(row)">详情</el-button><el-button type="success" link size="small" @click="handleEdit(row)">编辑</el-button><el-button type="success" link size="small" @click="handleToggleStatus(row)">启用</el-button></template>
+          <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button type="success" link @click="handleEdit(row)">编辑</el-button><el-button type="success" link @click="handleToggleStatus(row)">启用</el-button></template>
         </el-table-column>
       </el-table>
     </el-card>

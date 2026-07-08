@@ -39,5 +39,6 @@ public class Bug {
     private LocalDateTime resolvedTime;
 
     @TableField(fill = FieldFill.INSERT)
+    private Long companyId;
     private LocalDateTime createTime;
 }

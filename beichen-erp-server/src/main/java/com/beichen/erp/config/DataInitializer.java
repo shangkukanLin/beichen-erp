@@ -141,8 +141,7 @@ public class DataInitializer implements ApplicationRunner {
         saveMenu(14L, 3L, "辅料商", "menu", "/supplier/material-supplier", "SupplierMaterialSupplier", "Box", 4);
         // 委外加工子菜单
         saveMenu(15L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1);
-        saveMenu(16L, 4L, "物料收发", "menu", "/outsource/material", "OutsourceMaterial", "Switch", 2);
-        saveMenu(17L, 4L, "损耗时效", "menu", "/outsource/loss", "OutsourceLoss", "Timer", 3);
+        saveMenu(16L, 4L, "物料信息", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 2);
         // 进销存子菜单
         saveMenu(18L, 5L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 1);
         saveMenu(19L, 5L, "物料主数据", "menu", "/inventory/material", "InventoryMaterial", "TakeawayBox", 2);
@@ -160,7 +159,12 @@ public class DataInitializer implements ApplicationRunner {
         saveMenu(29L, 7L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 1);
         saveMenu(30L, 7L, "角色管理", "menu", "/system/role", "SystemRole", "Avatar", 2);
         saveMenu(31L, 7L, "菜单管理", "menu", "/system/menu", "SystemMenu", "Menu", 3);
-        log.info("初始化菜单数据完成（共 31 条）");
+        // 额外菜单（不在固定ID范围）
+        saveMenu(33L, 2L, "BOM类型", "menu", "/dev/bom-type", "DevBomType", "Tickets", 4);
+        saveMenu(35L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 5);
+        saveMenu(36L, 5L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 1);
+        saveMenu(37L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 6);
+        log.info("初始化菜单数据完成（共 34 条）");
     }
 
     private void saveMenu(Long id, Long parentId, String menuName, String menuType,

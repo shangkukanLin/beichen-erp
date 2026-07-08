@@ -37,6 +37,8 @@ public class BomTypeController {
                 .eq(BomType::getTypeName, type.getTypeName())) > 0) {
             throw new BusinessException("类型名称已存在");
         }
+        if (type.getStatus() == null) type.setStatus(1);
+        if (type.getSortOrder() == null) type.setSortOrder(0);
         bomTypeMapper.insert(type);
         return R.ok();
     }

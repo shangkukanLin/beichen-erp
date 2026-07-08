@@ -3,6 +3,7 @@ import request from '@/utils/request'
 export interface LoginParams {
   username: string
   password: string
+  companyId?: number
 }
 
 export interface LoginResult {

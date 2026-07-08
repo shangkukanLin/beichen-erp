@@ -18,6 +18,7 @@ public class InventoryWarehouse {
     private Integer status;
     private String remark;
     @TableField(fill = FieldFill.INSERT)
+    private Long companyId;
     private LocalDateTime createTime;
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;

@@ -36,8 +36,6 @@ public class Supplier {
 
     private Long relatedSupplierId;
 
-    private String processType;
-
     private String brand;
 
     private String materialType;
@@ -45,6 +43,7 @@ public class Supplier {
     private String remark;
 
     @TableField(fill = FieldFill.INSERT)
+    private Long companyId;
     private LocalDateTime createTime;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)

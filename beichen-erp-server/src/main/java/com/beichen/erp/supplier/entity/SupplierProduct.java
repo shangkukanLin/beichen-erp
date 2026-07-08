@@ -27,5 +27,6 @@ public class SupplierProduct {
 
     private String remark;
 
+    private Long companyId;
     private LocalDateTime createTime;
 }

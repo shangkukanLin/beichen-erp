@@ -25,20 +25,6 @@ public class Project {
 
     private String touchSupplierName;
 
-    private String glass;
-
-    private String touchIc;
-
-    private String displayDriverIc;
-
-    private String chip;
-
-    private String backPaste;
-
-    private String coverPlate;
-
-    private String flexCable;
-
     private String adaptModel;
 
     private String originalSize;
@@ -46,6 +32,10 @@ public class Project {
     private String originalResolution;
 
     private Long projectLeaderId;
+
+    private Long sampleFactoryId;
+
+    private Long outsourceFactoryId;
 
     private LocalDate startDate;
 
@@ -58,6 +48,7 @@ public class Project {
     private String remark;
 
     @TableField(fill = FieldFill.INSERT)
+    private Long companyId;
     private LocalDateTime createTime;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)

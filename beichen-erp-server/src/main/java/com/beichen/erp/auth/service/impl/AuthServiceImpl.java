@@ -30,10 +30,20 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public Map<String, Object> login(LoginDTO loginDTO) {
+        // 验证公司存在且用户属于该公司
+        Long companyId = loginDTO.getCompanyId();
+        if (companyId == null) {
+            // 默认使用公司1（向后兼容）
+            companyId = 1L;
+        }
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>()
                 .eq(User::getUsername, loginDTO.getUsername()));
         if (user == null) {
             throw new BusinessException("用户不存在");
+        }
+        // 验证用户属于该公司
+        if (user.getCompanyId() != null && !user.getCompanyId().equals(companyId)) {
+            throw new BusinessException("用户不属于该公司");
         }
         if (!passwordEncoder.matches(loginDTO.getPassword(), user.getPassword())) {
             throw new BusinessException("用户名或密码错误");
@@ -43,6 +53,8 @@ public class AuthServiceImpl implements AuthService {
         }
         StpUtil.login(user.getId());
         SaTokenInfo tokenInfo = StpUtil.getTokenInfo();
+        // 存入公司ID到session
+        StpUtil.getSession().set("companyId", companyId);
 
         // 查询角色 codes，存入 session 供 @SaCheckRole 使用
         List<String> roleCodes = roleService.getRoleCodesByUserId(user.getId());
@@ -59,6 +71,7 @@ public class AuthServiceImpl implements AuthService {
         userInfo.put("dept", user.getDept());
         userInfo.put("status", user.getStatus());
         userInfo.put("roles", roleCodes);
+        userInfo.put("companyId", companyId);
 
         Map<String, Object> result = new HashMap<>();
         result.put("token", tokenInfo.tokenValue);

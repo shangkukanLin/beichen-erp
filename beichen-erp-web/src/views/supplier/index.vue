@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getSupplierPage, addSupplier, updateSupplier, deleteSupplier, toggleSupplierStatus,
@@ -9,6 +9,7 @@ import {
 } from '@/api/system'
 
 const route = useRoute()
+const router = useRouter()
 
 // ---------- 根据路由确定供应商类型 ----------
 const typeMap: Record<string, { title: string; type: string }> = {
@@ -21,7 +22,16 @@ const currentType = computed(() => typeMap[route.path]?.type || 'solution')
 const pageTitle = computed(() => typeMap[route.path]?.title || '供应商')
 
 // 监听路由变化重新加载
-watch(() => route.path, () => { pagination.pageNum = 1; loadData() })
+watch(() => route.path, () => { pagination.pageNum = 1; activeTab.value = 'active'; loadData() })
+
+// ---------- 委外加工厂 Tab ----------
+const activeTab = ref('active')
+
+function onFactoryTabChange(tab: any) {
+  activeTab.value = tab
+  pagination.pageNum = 1
+  loadData()
+}
 
 // ---------- 查询 ----------
 const query = reactive({ name: '', phone: '', status: undefined as number | undefined })
@@ -32,11 +42,16 @@ const tableData = ref<SupplierVO[]>([])
 async function loadData() {
   tableLoading.value = true
   try {
+    let qStatus = query.status
+    // 委外加工厂：用 Tab 控制状态筛选
+    if (currentType.value === 'factory') {
+      qStatus = activeTab.value === 'active' ? 1 : 0
+    }
     const res = await getSupplierPage({
       supplierType: currentType.value,
       name: query.name || undefined,
       phone: query.phone || undefined,
-      status: query.status,
+      status: qStatus,
       pageNum: pagination.pageNum,
       pageSize: pagination.pageSize
     })
@@ -45,7 +60,7 @@ async function loadData() {
   } finally { tableLoading.value = false }
 }
 function handleQuery() { pagination.pageNum = 1; loadData() }
-function handleReset() { query.name = ''; query.phone = ''; query.status = undefined; pagination.pageNum = 1; loadData() }
+function handleReset() { query.name = ''; query.phone = ''; query.status = undefined; activeTab.value = 'active'; pagination.pageNum = 1; loadData() }
 
 // ---------- 表单 ----------
 const dialogVisible = ref(false)
@@ -56,7 +71,7 @@ const defaultForm = (): SupplierDTO => ({
   code: '', name: '', supplierType: currentType.value, status: 1,
   contact: '', phone: '', address: '', remark: '',
   hasDisplay: 0, hasTouch: 0, relatedSupplierId: undefined,
-  processType: '', brand: '', materialType: ''
+  brand: '', materialType: ''
 })
 const form = reactive<SupplierDTO>(defaultForm())
 const isEdit = ref(false)
@@ -74,12 +89,8 @@ function handleAdd() {
   formRef.value?.clearValidate()
 }
 
-function handleEdit(row: SupplierVO) {
-  Object.assign(form, defaultForm(), row)
-  isEdit.value = true
-  dialogTitle.value = '编辑' + pageTitle.value
-  dialogVisible.value = true
-  formRef.value?.clearValidate()
+function handleDetail(row: SupplierVO) {
+  router.push(`/supplier/detail/${row.id}`)
 }
 
 async function handleSubmit() {
@@ -158,7 +169,7 @@ onMounted(() => { loadData() })
         <el-form-item label="手机号">
           <el-input v-model="query.phone" placeholder="手机号" clearable @keyup.enter="handleQuery" />
         </el-form-item>
-        <el-form-item label="状态">
+        <el-form-item v-if="currentType!=='factory'" label="状态">
           <el-select v-model="query.status" placeholder="全部" clearable style="width:100px">
             <el-option label="合作中" :value="1" />
             <el-option label="已停用" :value="0" />
@@ -174,6 +185,12 @@ onMounted(() => { loadData() })
 
     <!-- 列表 -->
     <el-card shadow="never" class="table-card">
+      <!-- 委外加工厂：Tab 切换 -->
+      <el-tabs v-if="currentType==='factory'" v-model="activeTab" @tab-change="onFactoryTabChange">
+        <el-tab-pane label="合作中" name="active" />
+        <el-tab-pane label="已停用" name="disabled" />
+      </el-tabs>
+
       <el-table v-loading="tableLoading" :data="tableData" border stripe>
         <el-table-column type="index" label="序号" width="55" align="center" />
         <el-table-column prop="code" label="编码" min-width="130" show-overflow-tooltip />
@@ -185,12 +202,12 @@ onMounted(() => { loadData() })
             <el-tag :type="row.status===1?'success':'info'">{{ row.status===1?'合作中':'已停用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280" align="center" fixed="right">
+        <el-table-column label="操作" :width="currentType==='factory'?200:280" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleEdit(row as SupplierVO)">编辑</el-button>
+            <el-button type="primary" link @click="handleDetail(row as SupplierVO)">详细</el-button>
             <el-button type="warning" link @click="openProducts(row as SupplierVO)">产品</el-button>
             <el-button type="success" link @click="handleToggleStatus(row as SupplierVO)">{{ row.status===1?'停用':'启用' }}</el-button>
-            <el-button type="danger" link @click="handleDelete(row as SupplierVO)">删除</el-button>
+            <el-button v-if="currentType!=='factory'" type="danger" link @click="handleDelete(row as SupplierVO)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -255,13 +272,6 @@ onMounted(() => { loadData() })
             <el-col :span="8"><el-form-item label="显示方案"><el-switch v-model="form.hasDisplay" :active-value="1" :inactive-value="0" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="触摸方案"><el-switch v-model="form.hasTouch" :active-value="1" :inactive-value="0" /></el-form-item></el-col>
           </el-row>
-        </template>
-        <!-- 加工厂特有 -->
-        <template v-if="currentType==='factory'">
-          <el-divider>加工信息</el-divider>
-          <el-form-item label="加工类型">
-            <el-input v-model="form.processType" placeholder="如：贴合/组装/全贴" />
-          </el-form-item>
         </template>
         <!-- 成品供应商特有 -->
         <template v-if="currentType==='product'">

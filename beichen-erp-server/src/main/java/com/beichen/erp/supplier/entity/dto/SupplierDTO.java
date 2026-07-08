@@ -31,8 +31,6 @@ public class SupplierDTO {
 
     private Long relatedSupplierId;
 
-    private String processType;
-
     private String brand;
 
     private String materialType;

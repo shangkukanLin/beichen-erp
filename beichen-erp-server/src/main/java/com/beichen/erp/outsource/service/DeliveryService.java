@@ -19,4 +19,6 @@ public interface DeliveryService {
     void update(OutsourceDelivery delivery, List<OutsourceDeliveryItem> items);
 
     OutsourceDelivery getById(Long id);
+
+    void clearAttachUrl(Long id);
 }

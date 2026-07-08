@@ -31,5 +31,6 @@ public class Drawing {
     private Long uploadUserId;
 
     @TableField(fill = FieldFill.INSERT)
+    private Long companyId;
     private LocalDateTime createTime;
 }

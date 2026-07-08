@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, computed } from 'vue'
+import { reactive, ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -17,7 +17,6 @@ const router = useRouter()
 const projectId = Number(route.params.id)
 
 const STATUS_LIST = ['立项', '排线图纸', '排线打样', 'FOG打样', '显示调试', '触摸调试', '背贴盖板打样', '总成样品', '测试', '小批量', '结项']
-const today = new Date().toISOString().split('T')[0]
 
 const saving = ref(false)
 const activeTab = ref((route.query.tab as string) || 'project')
@@ -26,25 +25,35 @@ const activeTab = ref((route.query.tab as string) || 'project')
 const form = reactive<ProjectDTO>({
   name: '', displaySupplierName: '', touchSupplierName: '',
   adaptModel: '', originalSize: '', originalResolution: '',
-  startDate: '', expectedEndDate: '', status: '立项', remark: ''
+  startDate: '', expectedEndDate: '', status: '立项', remark: '',
+  sampleFactoryId: undefined, outsourceFactoryId: undefined
 })
 const bomInputs = reactive<Record<string, string>>({})
 
 const solutionSuppliers = ref<{ id: number; name: string }[]>([])
 const allSuppliers = ref<any[]>([])
+const factoryOptions = ref<{ id: number; name: string }[]>([])
 const bomTypes = ref<string[]>([])
 const allMaterials = ref<any[]>([])
 async function loadBomTypes() {
-  try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => t.typeName) } catch { }
-  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch { }
+  try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => t.typeName) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料数据失败', e?.message || e) }
 }
 function getMaterialsByType(type: string) { return allMaterials.value.filter((m:any) => m.materialType === type) }
 async function loadSolutionSuppliers() {
-  try { const res = await getSupplierPage({ supplierType: 'solution', pageSize: 200 }); solutionSuppliers.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name })) } catch { }
+  try { const res = await getSupplierPage({ supplierType: 'solution', pageSize: 200 }); solutionSuppliers.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name })) } catch (e: any) { console.warn('加载方案商失败', e?.message || e) }
 }
 
 async function loadAllSuppliers() {
-  try { const res = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); allSuppliers.value = res?.records || [] } catch { }
+  try { const res = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); allSuppliers.value = res?.records || [] } catch (e: any) { console.warn('加载供应商失败', e?.message || e) }
+}
+async function loadFactories() {
+  try { const res = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } }); factoryOptions.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name })) } catch (e: any) { console.warn('加载工厂失败', e?.message || e) }
+}
+
+function loadBomInputs(items: any[]) {
+  for (const k of Object.keys(bomInputs)) delete bomInputs[k]
+  for (const item of items) { if (item.materialType) bomInputs[item.materialType] = item.materialName }
 }
 
 async function loadProject() {
@@ -53,17 +62,12 @@ async function loadProject() {
     id: p.id, name: p.name, code: p.code,
     displaySupplierName: p.displaySupplierName, touchSupplierName: p.touchSupplierName,
     adaptModel: p.adaptModel, originalSize: p.originalSize, originalResolution: p.originalResolution,
+    sampleFactoryId: p.sampleFactoryId, outsourceFactoryId: p.outsourceFactoryId,
     startDate: p.startDate, expectedEndDate: p.expectedEndDate,
     status: p.status, remark: p.remark
   })
-  // 加载 BOM 数据填充 bomInputs（关联 BOM物料清单）
-  const bomList = await getProjectBom(projectId) || []
-  // 清空旧数据
-  for (const k of Object.keys(bomInputs)) delete bomInputs[k]
-  // 按物料类型填充（BOM物料清单 Tab 的数据源）
-  for (const item of bomList) {
-    if (item.materialType) bomInputs[item.materialType] = item.materialName
-  }
+  const bomList_data = await getProjectBom(projectId) || []
+  loadBomInputs(bomList_data)
 }
 
 async function handleSave() {
@@ -73,8 +77,9 @@ async function handleSave() {
     const body: any = { ...form, bomData: {} as Record<string,string> }
     for (const [k, v] of Object.entries(bomInputs)) { if (v) (body.bomData as any)[k] = v }
     await updateProject(body as any)
-    ElMessage.success('保存成功，BOM物料已同步'); loadProject()
-  } catch { }
+    ElMessage.success('保存成功，BOM物料已同步')
+    await loadProject(); await loadBom()
+  } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')); await loadProject(); await loadBom() }
   saving.value = false
 }
 
@@ -84,8 +89,15 @@ async function handleStatusChange(newStatus: string) {
   ElMessage.success('阶段已更新')
 }
 
+function goCreateOrder(type: 'sample' | 'outsource') {
+  const factoryId = type === 'sample' ? form.sampleFactoryId : form.outsourceFactoryId
+  if (!factoryId) return
+  router.push({ path: '/outsource/order/add', query: { factoryId, projectId } })
+}
+
 // ===================== 时间线 =====================
-interface TimelineItem { statusName: string; sortOrder: number; plannedEnd?: string; actualEnd?: string }
+interface TimelineItem { statusName: string; sortOrder: number; plannedEnd?: string; actualEnd?: string; status?: string }
+const timelineStatusOptions = ['未完成', '进行中', '已完成']
 const timelineList = ref<TimelineItem[]>([])
 
 async function loadTimeline() {
@@ -101,9 +113,21 @@ async function saveTimeline() {
 // ===================== BOM =====================
 const bomList = ref<BomDTO[]>([])
 async function loadBom() { bomList.value = (await getProjectBom(projectId))?.map(b => ({ materialName: b.materialName, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })) || [] }
-function addBomRow() { bomList.value.push({ materialName: '', spec: '', unit: '', quantityPerSet: undefined, lossRate: undefined, materialType: '', remark: '', supplierId: undefined }) }
+function addBomRow() { bomList.value.push({ materialName: '', spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialType: '', remark: '', supplierId: undefined }) }
 function removeBomRow(i: number) { bomList.value.splice(i, 1) }
-async function saveBom() { await saveProjectBom(projectId, bomList.value); ElMessage.success('BOM已保存'); loadBom() }
+async function saveBom() {
+  const emptyType = bomList.value.find((b: any) => !b.materialType || !b.materialType.trim())
+  if (emptyType) { ElMessage.warning('物料类型不能为空'); return }
+  const emptyName = bomList.value.find((b: any) => !b.materialName || !b.materialName.trim())
+  if (emptyName) { ElMessage.warning('物料名称不能为空'); return }
+  const zeroQty = bomList.value.find((b: any) => !b.quantityPerSet || Number(b.quantityPerSet) <= 0)
+  if (zeroQty) { ElMessage.warning('物料用量必须大于0'); return }
+  await saveProjectBom(projectId, bomList.value)
+  ElMessage.success('BOM已保存')
+  const items = await getProjectBom(projectId) || []
+  bomList.value = items.map(b => ({ materialName: b.materialName, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark }))
+  loadBomInputs(items)
+}
 
 // ===================== BUG =====================
 const bugList = ref<BugDTO[]>([])
@@ -125,7 +149,7 @@ async function handleBugSubmit() {
   else { await addProjectBug(projectId, bugForm); ElMessage.success('已添加') }
   bugDialogVisible.value = false; loadBugs()
 }
-async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectBug(projectId, row.id!); ElMessage.success('已删除'); loadBugs() } catch { } }
+async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectBug(projectId, row.id!); ElMessage.success('已删除'); loadBugs() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
 // ===================== 图纸（含排线图纸上传） =====================
 const drawingList = ref<DrawingVO[]>([])
@@ -166,12 +190,18 @@ async function handleDrawingSubmit() {
     }
     await addProjectDrawing(projectId, drawingForm as any)
     ElMessage.success('图纸已上传'); drawingVisible.value = false; loadDrawings()
-  } catch { } finally { uploading.value = false }
+  } catch (e: any) { ElMessage.error('上传失败: ' + (e?.message || '未知错误')) } finally { uploading.value = false }
 }
 function downloadFile(url: string) { window.open(url) }
-async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(projectId, row.id!); ElMessage.success('已删除'); loadDrawings() } catch { } }
+async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(projectId, row.id!); ElMessage.success('已删除'); loadDrawings() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
-onMounted(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadBomTypes(); loadTimeline(); loadBom(); loadBugs(); loadDrawings() })
+// 切换 Tab 时自动同步 BOM 数据
+watch(activeTab, async (tab) => {
+  if (tab === 'bom') await loadBom()
+  if (tab === 'project') { const items = await getProjectBom(projectId) || []; loadBomInputs(items) }
+})
+
+onMounted(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBomTypes(); loadTimeline(); loadBom(); loadBugs(); loadDrawings() })
 function goBack() { router.push('/dev/project') }
 </script>
 
@@ -202,6 +232,18 @@ function goBack() { router.push('/dev/project') }
               <el-col :span="8"><el-form-item label="触摸方案"><el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /></el-select></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="原机尺寸"><el-input v-model="form.originalSize" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="原分辨率"><el-input v-model="form.originalResolution" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="打样工厂">
+                <div style="display:flex;gap:4px">
+                  <el-select v-model="form.sampleFactoryId" clearable filterable style="flex:1" placeholder="选择工厂"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select>
+                  <el-button v-if="form.sampleFactoryId" type="success" size="small" @click="goCreateOrder('sample')">下单</el-button>
+                </div>
+              </el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="委外工厂">
+                <div style="display:flex;gap:4px">
+                  <el-select v-model="form.outsourceFactoryId" clearable filterable style="flex:1" placeholder="选择工厂"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select>
+                  <el-button v-if="form.outsourceFactoryId" type="success" size="small" @click="goCreateOrder('outsource')">下单</el-button>
+                </div>
+              </el-form-item></el-col>
             </el-row>
           </el-form>
         </el-card>
@@ -240,8 +282,12 @@ function goBack() { router.push('/dev/project') }
             <el-table-column prop="statusName" label="阶段" width="140" />
             <el-table-column label="计划完成" width="160"><template #default="{row}"><el-input v-model="row.plannedEnd" type="date" size="small" /></template></el-table-column>
             <el-table-column label="实际完成" width="160"><template #default="{row}"><el-input v-model="row.actualEnd" type="date" size="small" /></template></el-table-column>
-            <el-table-column label="状态" width="80" align="center">
-              <template #default="{row}"><el-tag v-if="row.plannedEnd && row.plannedEnd<today && !row.actualEnd" type="danger" size="small">超期</el-tag><el-tag v-else-if="row.actualEnd" type="success" size="small">完成</el-tag><el-tag v-else type="info" size="small">待定</el-tag></template>
+            <el-table-column label="状态" width="120" align="center">
+              <template #default="{row}">
+                <el-select v-model="row.status" size="small" style="width:100%">
+                  <el-option v-for="o in timelineStatusOptions" :key="o" :label="o" :value="o" />
+                </el-select>
+              </template>
             </el-table-column>
           </el-table>
           <el-button type="primary" size="small" @click="saveTimeline" style="margin-top:8px">保存时间线</el-button>
@@ -258,7 +304,7 @@ function goBack() { router.push('/dev/project') }
           <el-table :data="bomList" border size="small">
             <el-table-column label="类型" width="120">
               <template #default="{row}">
-                <el-select v-model="row.materialType" size="small" style="width:100%">
+                <el-select v-model="row.materialType" size="small" style="width:100%" @change="row.materialName = ''">
                   <el-option v-for="t in bomTypes" :key="t" :label="t" :value="t" />
                 </el-select>
               </template>

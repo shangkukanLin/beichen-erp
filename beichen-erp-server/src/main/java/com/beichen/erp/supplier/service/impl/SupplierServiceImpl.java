@@ -3,6 +3,7 @@ package com.beichen.erp.supplier.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.entity.dto.SupplierDTO;
@@ -71,13 +72,32 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
 
     @Override
     public void create(SupplierDTO dto) {
+        // 检查同名供应商是否已存在
+        LambdaQueryWrapper<Supplier> checkWrapper = new LambdaQueryWrapper<Supplier>()
+                .eq(Supplier::getName, dto.getName())
+                .eq(Supplier::getSupplierType, dto.getSupplierType());
+        Long cid = CompanyContext.get();
+        if (cid != null && cid > 0) checkWrapper.eq(Supplier::getCompanyId, cid);
+        if (supplierMapper.selectCount(checkWrapper) > 0) {
+            throw new BusinessException("供应商名称「" + dto.getName() + "」已存在，请勿重复添加");
+        }
+
         Supplier supplier = new Supplier();
         BeanUtils.copyProperties(dto, supplier);
         // 带重试，防止并发时编码冲突
-        String code = generateCode(dto.getSupplierType());
+        int seq = 0;
+        String prefix = getPrefixByType(dto.getSupplierType());
+        String dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         for (int i = 0; i < 3; i++) {
             try {
-                supplier.setCode(code);
+                if (i == 0) {
+                    seq = getMaxSeq(prefix, dateStr) + 1;
+                } else {
+                    seq++;
+                }
+                supplier.setCode(prefix + "-" + dateStr + String.format("%03d", seq));
+                // 设置公司ID
+                if (cid != null && cid > 0) supplier.setCompanyId(cid);
                 supplierMapper.insert(supplier);
                 // 委外加工厂自动创建默认仓库
                 if ("factory".equals(dto.getSupplierType())) {
@@ -88,14 +108,30 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
                     wh.setContact(supplier.getContact());
                     wh.setPhone(supplier.getPhone());
                     wh.setStatus(1);
+                    if (cid != null && cid > 0) wh.setCompanyId(cid);
                     warehouseMapper.insert(wh);
                 }
                 return;
             } catch (DuplicateKeyException e) {
                 if (i >= 2) throw e;
-                code = generateCode(dto.getSupplierType());
             }
         }
+    }
+
+    private int getMaxSeq(String prefix, String dateStr) {
+        String likePattern = prefix + "-" + dateStr;
+        LambdaQueryWrapper<Supplier> wrapper = new LambdaQueryWrapper<Supplier>()
+                .likeRight(Supplier::getCode, likePattern)
+                .orderByDesc(Supplier::getCode)
+                .last("LIMIT 1");
+        Supplier last = supplierMapper.selectOne(wrapper);
+        if (last != null && last.getCode() != null) {
+            try {
+                String code = last.getCode();
+                return Integer.parseInt(code.substring(code.length() - 3));
+            } catch (Exception ignored) {}
+        }
+        return 0;
     }
 
     @Override
@@ -107,6 +143,16 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         Supplier exist = supplierMapper.selectById(dto.getId());
         if (exist == null) {
             throw new BusinessException("供应商不存在");
+        }
+        // 检查名称是否与同类型其他供应商重复
+        LambdaQueryWrapper<Supplier> checkWrapper = new LambdaQueryWrapper<Supplier>()
+                .eq(Supplier::getName, dto.getName())
+                .eq(Supplier::getSupplierType, exist.getSupplierType())
+                .ne(Supplier::getId, dto.getId());
+        Long cid2 = CompanyContext.get();
+        if (cid2 != null && cid2 > 0) checkWrapper.eq(Supplier::getCompanyId, cid2);
+        if (supplierMapper.selectCount(checkWrapper) > 0) {
+            throw new BusinessException("供应商名称「" + dto.getName() + "」已存在");
         }
         Supplier supplier = new Supplier();
         BeanUtils.copyProperties(dto, supplier);

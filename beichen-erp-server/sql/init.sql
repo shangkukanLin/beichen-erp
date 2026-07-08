@@ -84,7 +84,6 @@ CREATE TABLE IF NOT EXISTS supplier (
     has_display TINYINT DEFAULT 0 COMMENT '支持显示方案',
     has_touch TINYINT DEFAULT 0 COMMENT '支持触摸方案',
     related_supplier_id BIGINT DEFAULT NULL COMMENT '关联供应商ID',
-    process_type VARCHAR(50) COMMENT '加工类型',
     brand VARCHAR(100) COMMENT '供应品牌',
     material_type VARCHAR(100) COMMENT '供应类型',
     remark VARCHAR(255) COMMENT '备注',

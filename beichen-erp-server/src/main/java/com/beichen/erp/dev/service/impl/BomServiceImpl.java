@@ -2,6 +2,7 @@ package com.beichen.erp.dev.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.Bom;
 import com.beichen.erp.dev.entity.dto.BomDTO;
 import com.beichen.erp.dev.mapper.BomMapper;
@@ -38,6 +39,7 @@ public class BomServiceImpl extends ServiceImpl<BomMapper, Bom> implements BomSe
         }
 
         List<Bom> list = new ArrayList<>();
+        Long cid = CompanyContext.get();
         for (BomDTO dto : items) {
             Bom bom = new Bom();
             bom.setProjectId(projectId);
@@ -49,6 +51,7 @@ public class BomServiceImpl extends ServiceImpl<BomMapper, Bom> implements BomSe
             bom.setLossRate(dto.getLossRate());
             bom.setMaterialType(dto.getMaterialType());
             bom.setRemark(dto.getRemark());
+            if (cid != null && cid > 0) bom.setCompanyId(cid);
             list.add(bom);
         }
         this.saveBatch(list);

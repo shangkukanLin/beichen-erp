@@ -104,4 +104,10 @@ public class BomManageController {
         bomMapper.deleteById(id);
         return R.ok();
     }
+
+    @GetMapping("/project/{projectId}")
+    public R<Object> getByProject(@PathVariable Long projectId) {
+        return R.ok(bomMapper.selectList(new LambdaQueryWrapper<Bom>()
+                .eq(Bom::getProjectId, projectId).orderByAsc(Bom::getId)));
+    }
 }

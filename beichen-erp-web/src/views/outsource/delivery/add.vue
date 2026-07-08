@@ -17,17 +17,17 @@ const uploadFile = ref<File | null>(null)
 const uploading = ref(false)
 
 async function loadFactories() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType:'factory', pageSize:200 } }); factoryOptions.value = r?.records || [] } catch { }
+  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType:'factory', pageSize:200 } }); factoryOptions.value = r?.records || [] } catch (e: any) { console.warn('加载工厂失败', e?.message || e) }
 }
 async function loadWarehouses(factoryId: number) {
-  try { const r = await request.get<any, any>('/outsource/delivery/warehouses/by-factory/' + factoryId); outsourceWarehouses.value = r || [] } catch { }
+  try { const r = await request.get<any, any>('/outsource/delivery/warehouses/by-factory/' + factoryId); outsourceWarehouses.value = r || [] } catch (e: any) { console.warn('加载委外仓库失败', e?.message || e) }
 }
 async function loadInventoryWarehouses() {
-  try { const r = await request.get<any, any>('/outsource/delivery/warehouses/inventory'); inventoryWarehouses.value = r || [] } catch { }
+  try { const r = await request.get<any, any>('/outsource/delivery/warehouses/inventory'); inventoryWarehouses.value = r || [] } catch (e: any) { console.warn('加载进销存仓库失败', e?.message || e) }
 }
 async function loadMaterials() {
-  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize:500 } }); materialOptions.value = r?.records || [] } catch { }
-  try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize:500 } }); supplierOptions.value = r?.records || [] } catch { }
+  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize:500 } }); materialOptions.value = r?.records || [] } catch (e: any) { console.warn('加载物料失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize:500 } }); supplierOptions.value = r?.records || [] } catch (e: any) { console.warn('加载供应商失败', e?.message || e) }
 }
 
 function onFactoryChange(id: number) { form.fromWarehouseId = undefined; form.toWarehouseId = undefined; outsourceWarehouses.value = []; if (id) loadWarehouses(id) }
@@ -43,6 +43,7 @@ function onMaterialSelect(idx: number, mid: number) {
 function handleDragOver(e: DragEvent) { e.preventDefault() }
 function handleDrop(e: DragEvent) { e.preventDefault(); const file = e.dataTransfer?.files?.[0]; if (file) uploadFile.value = file }
 function handleFileSelect(e: Event) { const file = (e.target as HTMLInputElement).files?.[0]; if (file) uploadFile.value = file }
+function handleRemoveUploadFile() { uploadFile.value = null }
 
 async function handleSubmit() {
   if (!form.factoryId) { ElMessage.warning('请选择加工厂'); return }
@@ -104,8 +105,8 @@ onMounted(() => { loadFactories(); loadMaterials(); loadInventoryWarehouses() })
         </el-row>
       </el-form>
       <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'#67c23a':'#dcdfe6', background: uploadFile?'#f0f9eb':'#fafafa' }">
-        <template v-if="uploadFile"><p style="color:#67c23a;font-weight:600;margin:0">📎 {{ uploadFile.name }}</p></template>
-        <template v-else><p style="color:#909399;margin:0">拖拽单据文件到此处，或点击选择</p></template>
+        <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:#67c23a;font-weight:600">📎 {{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
+        <template v-else><p style="color:#909399;margin:0">拖拽文件到此处，或点击选择</p></template>
         <input type="file" @change="handleFileSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
       </div>
     </el-card>

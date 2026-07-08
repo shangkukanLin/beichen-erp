@@ -28,5 +28,6 @@ public class Role {
     private LocalDateTime createTime;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
+    private Long companyId;
     private LocalDateTime updateTime;
 }

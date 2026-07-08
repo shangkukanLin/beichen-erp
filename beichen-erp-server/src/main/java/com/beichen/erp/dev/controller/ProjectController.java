@@ -78,11 +78,15 @@ public class ProjectController {
             String statusName = (String) item.get("statusName");
             Object planned = item.get("plannedEnd");
             Object actual = item.get("actualEnd");
+            Object status = item.get("status");
             if (planned != null && !planned.toString().isBlank()) {
                 timelineService.updatePlanned(id, statusName, LocalDate.parse(planned.toString()));
             }
             if (actual != null && !actual.toString().isBlank()) {
                 timelineService.updateTimeline(id, statusName, LocalDate.parse(actual.toString()));
+            }
+            if (status != null && !status.toString().isBlank()) {
+                timelineService.updateStatus(id, statusName, status.toString());
             }
         }
         return R.ok();

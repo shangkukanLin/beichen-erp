@@ -3,6 +3,7 @@ package com.beichen.erp.outsource.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
@@ -48,6 +49,7 @@ public class OutsourceMaterialController {
             map.put("projectName", idsToNames(m.getProjectIds(), projectMapper));
             map.put("materialName", m.getMaterialName());
             map.put("materialType", m.getMaterialType());
+            map.put("spec", m.getSpec());
             map.put("supplierName", m.getSupplierName());
             map.put("supplierIds", m.getSupplierIds());
             map.put("unit", m.getUnit());
@@ -58,18 +60,17 @@ public class OutsourceMaterialController {
         return R.ok(result);
     }
 
-    private String idsToNames(String ids, com.baomidou.mybatisplus.core.mapper.BaseMapper<?> mapper) {
+    private String idsToNames(String ids, ProjectMapper projectMapper) {
         if (ids == null || ids.isBlank()) return "";
         return Arrays.stream(ids.split(","))
                 .map(String::trim).filter(s -> !s.isEmpty())
                 .map(id -> {
                     try {
-                        if (mapper instanceof ProjectMapper pm) {
-                            Project p = pm.selectById(Long.valueOf(id));
-                            return p != null ? p.getName() : id;
-                        }
-                    } catch (Exception e) { }
-                    return id;
+                        Project p = projectMapper.selectById(Long.valueOf(id));
+                        return p != null ? p.getName() : id;
+                    } catch (Exception e) {
+                        return id;
+                    }
                 }).collect(Collectors.joining(", "));
     }
 
@@ -97,11 +98,14 @@ public class OutsourceMaterialController {
         if (body.get("warehouseId") != null) m.setWarehouseId(Long.valueOf(body.get("warehouseId").toString()));
         m.setMaterialName((String) body.get("materialName"));
         m.setMaterialType((String) body.get("materialType"));
+        m.setSpec((String) body.get("spec"));
         m.setSupplierName((String) body.get("supplierName"));
         m.setSupplierIds(body.get("supplierIds") != null ? body.get("supplierIds").toString() : null);
         m.setUnit(body.get("unit") != null ? body.get("unit").toString() : "PCS");
         m.setStatus(body.get("status") != null ? Integer.valueOf(body.get("status").toString()) : 1);
         m.setRemark((String) body.get("remark"));
+        Long cid = CompanyContext.get();
+        if (cid != null && cid > 0) m.setCompanyId(cid);
     }
 
     @DeleteMapping("/{id}")

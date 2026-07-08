@@ -40,14 +40,24 @@ public class FileController {
     }
 
     @GetMapping("/download/{dateDir}/{fileName}")
-    public ResponseEntity<Resource> download(@PathVariable String dateDir, @PathVariable String fileName) throws IOException {
+    public ResponseEntity<Resource> download(@PathVariable String dateDir, @PathVariable String fileName,
+            @RequestParam(defaultValue = "false") boolean inline) throws IOException {
         Path filePath = uploadDir.resolve(dateDir).resolve(fileName).normalize();
         if (!Files.exists(filePath)) return ResponseEntity.notFound().build();
         Resource resource = new FileSystemResource(filePath);
         String encodedName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
+        String disposition = inline ? "inline" : "attachment";
+        // 根据后缀设置正确的MIME类型
+        MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        String lower = fileName.toLowerCase();
+        if (lower.endsWith(".pdf")) mediaType = MediaType.APPLICATION_PDF;
+        else if (lower.endsWith(".png")) mediaType = MediaType.IMAGE_PNG;
+        else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) mediaType = MediaType.IMAGE_JPEG;
+        else if (lower.endsWith(".gif")) mediaType = MediaType.IMAGE_GIF;
+        else if (lower.endsWith(".txt")) mediaType = MediaType.TEXT_PLAIN;
         return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedName)
+                .contentType(mediaType)
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition + "; filename*=UTF-8''" + encodedName)
                 .body(resource);
     }
 }

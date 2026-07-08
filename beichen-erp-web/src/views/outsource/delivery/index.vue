@@ -13,7 +13,7 @@ const tableLoading = ref(false)
 const factoryOptions = ref<any[]>([])
 
 async function loadOptions() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType:'factory', pageSize:200 } }); factoryOptions.value = r?.records || [] } catch { }
+  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType:'factory', pageSize:200 } }); factoryOptions.value = r?.records || [] } catch (e: any) { console.warn('加载工厂选项失败', e?.message || e) }
 }
 
 async function loadData() {
@@ -31,7 +31,7 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.factoryId = undefined; loadData() }
 
 async function handleCancel(row: any) {
-  try { await ElMessageBox.confirm('确定取消该收发单吗？取消后库存将自动恢复。', '提示', { type: 'warning' }); await request.put(`/outsource/delivery/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch { }
+  try { await ElMessageBox.confirm('确定取消该收发单吗？取消后库存将自动恢复。', '提示', { type: 'warning' }); await request.put(`/outsource/delivery/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
 onMounted(() => { loadOptions(); loadData() })
@@ -52,21 +52,21 @@ onMounted(() => { loadOptions(); loadData() })
         <el-tab-pane label="发料" name="发料" /><el-tab-pane label="收料" name="收料" /><el-tab-pane label="退料" name="退料" />
       </el-tabs>
 
-      <el-table :data="tableData" border stripe v-loading="tableLoading" size="small" style="width:100%">
+      <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%">
         <el-table-column prop="code" label="单号" width="170" />
         <el-table-column prop="deliveryType" label="类型" width="70">
-          <template #default="{row}"><el-tag :type="row.deliveryType==='发料'?'success':row.deliveryType==='收料'?'warning':'danger'" size="small">{{row.deliveryType}}</el-tag></template>
+          <template #default="{row}"><el-tag :type="row.deliveryType==='发料'?'success':row.deliveryType==='收料'?'warning':'danger'">{{row.deliveryType}}</el-tag></template>
         </el-table-column>
         <el-table-column prop="factoryName" label="加工厂" width="110" show-overflow-tooltip />
         <el-table-column label="来源" min-width="100" show-overflow-tooltip><template #default="{row}"><span v-if="row.supplierDirect" style="color:#409eff">{{row.supplierName||'供应商直发'}}</span><span v-else>{{row.fromWarehouseName||'-'}}</span></template></el-table-column>
         <el-table-column prop="toWarehouseName" label="目标仓库" min-width="100" show-overflow-tooltip />
         <el-table-column label="物料" width="60" align="center"><template #default="{row}">{{row.itemCount||0}}项</template></el-table-column>
         <el-table-column prop="deliveryDate" label="日期" width="100" />
-        <el-table-column prop="status" label="状态" width="70"><template #default="{row}"><el-tag :type="row.status==='已确认'?'success':'info'" size="small">{{row.status}}</el-tag></template></el-table-column>
+        <el-table-column prop="status" label="状态" width="70"><template #default="{row}"><el-tag :type="row.status==='已确认'?'success':'info'">{{row.status}}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="120" align="center" fixed="right">
           <template #default="{row}">
-            <el-button type="primary" link size="small" @click="router.push(`/outsource/delivery/detail/${row.id}`)">详情</el-button>
-            <el-button type="danger" link size="small" v-if="row.status==='已确认'" @click="handleCancel(row)">取消</el-button>
+            <el-button type="primary" link @click="router.push(`/outsource/delivery/detail/${row.id}`)">详情</el-button>
+            <el-button type="danger" link v-if="row.status==='已确认'" @click="handleCancel(row)">取消</el-button>
           </template>
         </el-table-column>
       </el-table>
