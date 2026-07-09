@@ -494,3 +494,514 @@ CREATE TABLE IF NOT EXISTS dev_drawing (
     INDEX idx_upload_user_id (upload_user_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='图纸/文档表';
+
+-- ==================== 客户模块（进销存） ====================
+
+CREATE TABLE IF NOT EXISTS customer (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '客户ID',
+    code VARCHAR(50) NOT NULL COMMENT '客户编码',
+    name VARCHAR(100) NOT NULL COMMENT '客户名称',
+    contact VARCHAR(50) COMMENT '联系人',
+    phone VARCHAR(20) COMMENT '联系电话',
+    address VARCHAR(200) COMMENT '地址',
+    credit_period INT DEFAULT 0 COMMENT '账期(天)',
+    credit_limit DECIMAL(18,4) DEFAULT 0 COMMENT '信用额度',
+    receivable_balance DECIMAL(18,4) DEFAULT 0 COMMENT '应收余额(冗余汇总)',
+    prepaid_balance DECIMAL(18,4) DEFAULT 0 COMMENT '预收余额',
+    status TINYINT DEFAULT 1 COMMENT '1合作中 0已停用',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_company_id (company_id),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='客户档案表';
+
+-- ==================== 采购模块 ====================
+
+CREATE TABLE IF NOT EXISTS purchase_order (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '采购订单ID',
+    code VARCHAR(50) NOT NULL COMMENT '采购订单号',
+    supplier_id BIGINT COMMENT '供应商ID',
+    supplier_name VARCHAR(100) COMMENT '供应商名称',
+    warehouse_id BIGINT COMMENT '入库仓库ID',
+    order_date DATE COMMENT '订单日期',
+    status VARCHAR(20) DEFAULT '草稿' COMMENT '状态: 草稿/已审核/已入库/已作废',
+    tax_included TINYINT DEFAULT 0 COMMENT '0未含税 1含税',
+    tax_rate DECIMAL(18,4) DEFAULT 0 COMMENT '税率',
+    total_amount DECIMAL(18,4) DEFAULT 0 COMMENT '总金额',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_supplier_id (supplier_id),
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购订单表';
+
+CREATE TABLE IF NOT EXISTS purchase_order_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '采购订单明细ID',
+    order_id BIGINT NOT NULL COMMENT '采购订单ID',
+    material_id BIGINT COMMENT '物料ID',
+    material_code VARCHAR(50) COMMENT '物料编码',
+    material_name VARCHAR(100) COMMENT '物料名称',
+    spec VARCHAR(100) COMMENT '规格',
+    unit VARCHAR(20) COMMENT '单位',
+    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
+    unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '金额',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_order_id (order_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购订单明细表';
+
+CREATE TABLE IF NOT EXISTS purchase_inbound (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '采购入库单ID',
+    code VARCHAR(50) NOT NULL COMMENT '采购入库单号',
+    order_id BIGINT COMMENT '关联采购订单ID',
+    supplier_id BIGINT COMMENT '供应商ID',
+    supplier_name VARCHAR(100) COMMENT '供应商名称',
+    warehouse_id BIGINT COMMENT '入库仓库ID',
+    inbound_date DATE COMMENT '入库日期',
+    status VARCHAR(20) DEFAULT '草稿' COMMENT '状态: 草稿/已审核/已作废',
+    total_amount DECIMAL(18,4) DEFAULT 0 COMMENT '总金额',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_order_id (order_id),
+    INDEX idx_supplier_id (supplier_id),
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购入库单表';
+
+CREATE TABLE IF NOT EXISTS purchase_inbound_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '采购入库明细ID',
+    inbound_id BIGINT NOT NULL COMMENT '采购入库单ID',
+    order_item_id BIGINT COMMENT '关联采购订单明细ID',
+    material_id BIGINT COMMENT '物料ID',
+    material_code VARCHAR(50) COMMENT '物料编码',
+    material_name VARCHAR(100) COMMENT '物料名称',
+    spec VARCHAR(100) COMMENT '规格',
+    unit VARCHAR(20) COMMENT '单位',
+    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
+    unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '金额',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_inbound_id (inbound_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购入库明细表';
+
+-- ==================== 销售模块 ====================
+
+CREATE TABLE IF NOT EXISTS sale_order (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售订单ID',
+    code VARCHAR(50) NOT NULL COMMENT '销售订单号',
+    customer_id BIGINT COMMENT '客户ID',
+    customer_name VARCHAR(100) COMMENT '客户名称',
+    warehouse_id BIGINT COMMENT '出库仓库ID',
+    order_date DATE COMMENT '订单日期',
+    status VARCHAR(20) DEFAULT '草稿' COMMENT '状态: 草稿/已审核/已出库/已作废',
+    tax_included TINYINT DEFAULT 0 COMMENT '0未含税 1含税',
+    tax_rate DECIMAL(18,4) DEFAULT 0 COMMENT '税率',
+    total_amount DECIMAL(18,4) DEFAULT 0 COMMENT '总金额',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_customer_id (customer_id),
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售订单表';
+
+CREATE TABLE IF NOT EXISTS sale_order_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售订单明细ID',
+    order_id BIGINT NOT NULL COMMENT '销售订单ID',
+    material_id BIGINT COMMENT '物料ID',
+    material_code VARCHAR(50) COMMENT '物料编码',
+    material_name VARCHAR(100) COMMENT '物料名称',
+    spec VARCHAR(100) COMMENT '规格',
+    unit VARCHAR(20) COMMENT '单位',
+    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
+    unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '金额',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_order_id (order_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售订单明细表';
+
+CREATE TABLE IF NOT EXISTS sale_outbound (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售出库单ID',
+    code VARCHAR(50) NOT NULL COMMENT '销售出库单号',
+    order_id BIGINT COMMENT '关联销售订单ID',
+    customer_id BIGINT COMMENT '客户ID',
+    customer_name VARCHAR(100) COMMENT '客户名称',
+    warehouse_id BIGINT COMMENT '出库仓库ID',
+    outbound_date DATE COMMENT '出库日期',
+    status VARCHAR(20) DEFAULT '草稿' COMMENT '状态: 草稿/已审核/已作废',
+    total_amount DECIMAL(18,4) DEFAULT 0 COMMENT '总金额',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_order_id (order_id),
+    INDEX idx_customer_id (customer_id),
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售出库单表';
+
+CREATE TABLE IF NOT EXISTS sale_outbound_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售出库明细ID',
+    outbound_id BIGINT NOT NULL COMMENT '销售出库单ID',
+    order_item_id BIGINT COMMENT '关联销售订单明细ID',
+    material_id BIGINT COMMENT '物料ID',
+    material_code VARCHAR(50) COMMENT '物料编码',
+    material_name VARCHAR(100) COMMENT '物料名称',
+    spec VARCHAR(100) COMMENT '规格',
+    unit VARCHAR(20) COMMENT '单位',
+    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
+    unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '金额',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_outbound_id (outbound_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售出库明细表';
+
+-- ==================== 库存扩展（流水/盘点/调拨/其他出入库） ====================
+
+CREATE TABLE IF NOT EXISTS inventory_stock_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '库存流水ID',
+    warehouse_id BIGINT COMMENT '仓库ID',
+    material_id BIGINT COMMENT '物料ID',
+    material_name VARCHAR(100) COMMENT '物料名称',
+    spec VARCHAR(100) COMMENT '规格',
+    unit VARCHAR(20) COMMENT '单位',
+    change_type VARCHAR(30) COMMENT '变动类型: 采购入库/销售出库/其他入库/其他出库/调拨入/调拨出/盘点溢/盘点损',
+    change_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变动数量(正入库/负出库)',
+    before_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变动前数量',
+    after_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变动后数量',
+    related_bill_no VARCHAR(50) COMMENT '关联单据号',
+    related_bill_type VARCHAR(30) COMMENT '关联单据类型',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_related_bill_no (related_bill_no),
+    INDEX idx_company_id (company_id),
+    INDEX idx_change_type (change_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存变动流水表';
+
+CREATE TABLE IF NOT EXISTS inventory_stock_take (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '盘点单ID',
+    code VARCHAR(50) NOT NULL COMMENT '盘点单号',
+    warehouse_id BIGINT COMMENT '仓库ID',
+    take_date DATE COMMENT '盘点日期',
+    status VARCHAR(20) DEFAULT '草稿' COMMENT '状态: 草稿/已审核',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存盘点单表';
+
+CREATE TABLE IF NOT EXISTS inventory_stock_take_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '盘点明细ID',
+    take_id BIGINT NOT NULL COMMENT '盘点单ID',
+    material_id BIGINT COMMENT '物料ID',
+    material_name VARCHAR(100) COMMENT '物料名称',
+    spec VARCHAR(100) COMMENT '规格',
+    unit VARCHAR(20) COMMENT '单位',
+    book_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '账面数量',
+    actual_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '实盘数量',
+    profit_loss_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '盘盈(+)/盘亏(-)数量',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_take_id (take_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存盘点明细表';
+
+CREATE TABLE IF NOT EXISTS inventory_transfer (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '调拨单ID',
+    code VARCHAR(50) NOT NULL COMMENT '调拨单号',
+    from_warehouse_id BIGINT COMMENT '调出仓库ID',
+    to_warehouse_id BIGINT COMMENT '调入仓库ID',
+    transfer_date DATE COMMENT '调拨日期',
+    status VARCHAR(20) DEFAULT '草稿' COMMENT '状态: 草稿/已审核/已作废',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_from_warehouse_id (from_warehouse_id),
+    INDEX idx_to_warehouse_id (to_warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存调拨单表';
+
+CREATE TABLE IF NOT EXISTS inventory_transfer_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '调拨明细ID',
+    transfer_id BIGINT NOT NULL COMMENT '调拨单ID',
+    material_id BIGINT COMMENT '物料ID',
+    material_name VARCHAR(100) COMMENT '物料名称',
+    spec VARCHAR(100) COMMENT '规格',
+    unit VARCHAR(20) COMMENT '单位',
+    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '调拨数量',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_transfer_id (transfer_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存调拨明细表';
+
+CREATE TABLE IF NOT EXISTS inventory_other_io (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '其他出入库单ID',
+    code VARCHAR(50) NOT NULL COMMENT '单据号',
+    warehouse_id BIGINT COMMENT '仓库ID',
+    io_type VARCHAR(20) COMMENT '类型: 其他入库/其他出库',
+    io_date DATE COMMENT '业务日期',
+    status VARCHAR(20) DEFAULT '草稿' COMMENT '状态: 草稿/已审核/已作废',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_io_type (io_type),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='其他出入库单表';
+
+CREATE TABLE IF NOT EXISTS inventory_other_io_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '其他出入库明细ID',
+    other_io_id BIGINT NOT NULL COMMENT '其他出入库单ID',
+    material_id BIGINT COMMENT '物料ID',
+    material_name VARCHAR(100) COMMENT '物料名称',
+    spec VARCHAR(100) COMMENT '规格',
+    unit VARCHAR(20) COMMENT '单位',
+    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_other_io_id (other_io_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='其他出入库明细表';
+
+-- ==================== 财务模块 ====================
+
+CREATE TABLE IF NOT EXISTS finance_account (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '账户ID',
+    account_name VARCHAR(100) NOT NULL COMMENT '账户名称',
+    account_type VARCHAR(20) COMMENT '类型: 现金/银行',
+    bank_name VARCHAR(100) COMMENT '开户行',
+    account_no VARCHAR(50) COMMENT '账号',
+    balance DECIMAL(18,4) DEFAULT 0 COMMENT '账户余额',
+    status TINYINT DEFAULT 1 COMMENT '1启用 0停用',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_company_id (company_id),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='资金账户表';
+
+CREATE TABLE IF NOT EXISTS finance_receivable (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '应收台账ID',
+    bill_no VARCHAR(50) NOT NULL COMMENT '单据号',
+    customer_id BIGINT COMMENT '客户ID',
+    customer_name VARCHAR(100) COMMENT '客户名称',
+    source_bill_type VARCHAR(30) COMMENT '来源单据类型: 销售出库/其他应收',
+    source_bill_no VARCHAR(50) COMMENT '来源单据号',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '应收金额',
+    paid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '已收金额',
+    unpaid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '未收金额',
+    due_date DATE COMMENT '到期日',
+    status VARCHAR(20) DEFAULT '未结清' COMMENT '状态: 未结清/部分结清/已结清',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_bill_no (bill_no),
+    INDEX idx_customer_id (customer_id),
+    INDEX idx_status (status),
+    INDEX idx_source_bill_no (source_bill_no),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应收台账表';
+
+CREATE TABLE IF NOT EXISTS finance_payable (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '应付台账ID',
+    bill_no VARCHAR(50) NOT NULL COMMENT '单据号',
+    supplier_id BIGINT COMMENT '供应商ID',
+    supplier_name VARCHAR(100) COMMENT '供应商名称',
+    source_bill_type VARCHAR(30) COMMENT '来源单据类型: 采购入库/其他应付',
+    source_bill_no VARCHAR(50) COMMENT '来源单据号',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '应付金额',
+    paid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '已付金额',
+    unpaid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '未付金额',
+    due_date DATE COMMENT '到期日',
+    status VARCHAR(20) DEFAULT '未结清' COMMENT '状态: 未结清/部分结清/已结清',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_bill_no (bill_no),
+    INDEX idx_supplier_id (supplier_id),
+    INDEX idx_status (status),
+    INDEX idx_source_bill_no (source_bill_no),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应付台账表';
+
+CREATE TABLE IF NOT EXISTS finance_receipt (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '收款单ID',
+    code VARCHAR(50) NOT NULL COMMENT '收款单号',
+    customer_id BIGINT COMMENT '客户ID',
+    customer_name VARCHAR(100) COMMENT '客户名称',
+    account_id BIGINT COMMENT '收款账户ID',
+    account_name VARCHAR(100) COMMENT '收款账户名称',
+    receipt_date DATE COMMENT '收款日期',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '收款金额',
+    status VARCHAR(20) DEFAULT '草稿' COMMENT '状态: 草稿/已审核/已作废',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_customer_id (customer_id),
+    INDEX idx_account_id (account_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收款单表';
+
+CREATE TABLE IF NOT EXISTS finance_receipt_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '收款核销明细ID',
+    receipt_id BIGINT NOT NULL COMMENT '收款单ID',
+    receivable_id BIGINT COMMENT '应收台账ID',
+    receivable_bill_no VARCHAR(50) COMMENT '应收单据号',
+    this_amount DECIMAL(18,4) DEFAULT 0 COMMENT '本次核销金额',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_receipt_id (receipt_id),
+    INDEX idx_receivable_id (receivable_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收款核销明细表';
+
+CREATE TABLE IF NOT EXISTS finance_payment (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '付款单ID',
+    code VARCHAR(50) NOT NULL COMMENT '付款单号',
+    supplier_id BIGINT COMMENT '供应商ID',
+    supplier_name VARCHAR(100) COMMENT '供应商名称',
+    account_id BIGINT COMMENT '付款账户ID',
+    account_name VARCHAR(100) COMMENT '付款账户名称',
+    payment_date DATE COMMENT '付款日期',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '付款金额',
+    status VARCHAR(20) DEFAULT '草稿' COMMENT '状态: 草稿/已审核/已作废',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_supplier_id (supplier_id),
+    INDEX idx_account_id (account_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='付款单表';
+
+CREATE TABLE IF NOT EXISTS finance_payment_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '付款核销明细ID',
+    payment_id BIGINT NOT NULL COMMENT '付款单ID',
+    payable_id BIGINT COMMENT '应付台账ID',
+    payable_bill_no VARCHAR(50) COMMENT '应付单据号',
+    this_amount DECIMAL(18,4) DEFAULT 0 COMMENT '本次核销金额',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_payment_id (payment_id),
+    INDEX idx_payable_id (payable_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='付款核销明细表';
+
+CREATE TABLE IF NOT EXISTS finance_cashflow (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '资金流水ID',
+    flow_no VARCHAR(50) NOT NULL COMMENT '流水号',
+    account_id BIGINT COMMENT '账户ID',
+    account_name VARCHAR(100) COMMENT '账户名称',
+    flow_type VARCHAR(20) COMMENT '类型: 收款/付款/其他收入/费用支出',
+    related_bill_no VARCHAR(50) COMMENT '关联单据号',
+    related_bill_type VARCHAR(30) COMMENT '关联单据类型',
+    income DECIMAL(18,4) DEFAULT 0 COMMENT '收入金额',
+    expense DECIMAL(18,4) DEFAULT 0 COMMENT '支出金额',
+    balance DECIMAL(18,4) DEFAULT 0 COMMENT '账户余额(变动后)',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_account_id (account_id),
+    INDEX idx_flow_type (flow_type),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='资金流水表';
+
+CREATE TABLE IF NOT EXISTS finance_bill (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '账单ID',
+    bill_no VARCHAR(50) NOT NULL COMMENT '账单号',
+    bill_type VARCHAR(20) COMMENT '类型: 应收/应付',
+    partner_id BIGINT COMMENT '往来单位ID',
+    partner_name VARCHAR(100) COMMENT '往来单位名称',
+    period_start DATE COMMENT '账期起',
+    period_end DATE COMMENT '账期止',
+    total_amount DECIMAL(18,4) DEFAULT 0 COMMENT '应收/应付总额',
+    paid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '已收/已付总额',
+    unpaid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '未收/未付总额',
+    status VARCHAR(20) DEFAULT '未结清' COMMENT '状态: 未结清/已结清',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_bill_no (bill_no),
+    INDEX idx_bill_type (bill_type),
+    INDEX idx_partner_id (partner_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='账单表';
+
+CREATE TABLE IF NOT EXISTS finance_bill_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '账单明细ID',
+    bill_id BIGINT NOT NULL COMMENT '账单ID',
+    source_bill_type VARCHAR(30) COMMENT '来源单据类型',
+    source_bill_no VARCHAR(50) COMMENT '来源单据号',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '金额',
+    paid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '已收/已付金额',
+    unpaid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '未收/未付金额',
+    due_date DATE COMMENT '到期日',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_bill_id (bill_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='账单明细表';

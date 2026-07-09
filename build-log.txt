@@ -1,0 +1,670 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] -------------------< com.beichen:beichen-erp-server >-------------------
+[INFO] Building beichen-erp-server 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ beichen-erp-server ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ beichen-erp-server ---
+[INFO] Changes detected - recompiling the module! :source
+[INFO] Compiling 238 source files with javac [debug release 21] to target\classes
+[INFO] 由于在类路径中发现了一个或多个处理程序，因此启用了
+  批注处理。未来发行版的 javac 可能会禁用批注处理，
+  除非至少按名称指定了一个处理程序 (-processor)，
+  或指定了搜索路径 (--processor-path, --processor-module-path)，
+  或显式启用了批注处理 (-proc:only, -proc:full)。
+  可使用 -Xlint:-options 隐藏此消息。
+  可使用 -proc:none 禁用批注处理。
+[INFO] -------------------------------------------------------------
+[ERROR] COMPILATION ERROR : 
+[INFO] -------------------------------------------------------------
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/purchase/finance/mapper/FinancePayableMapper.java:[6,8] 类重复: com.beichen.erp.finance.mapper.FinancePayableMapper
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/customer/service/impl/CustomerServiceImpl.java:[85,12] 找不到符号
+  符号:   类 List
+  位置: 类 com.beichen.erp.customer.service.impl.CustomerServiceImpl
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[39,21] 方法引用无效
+  找不到符号
+    符号:   方法 getWarehouseId()
+    位置: 类 com.beichen.erp.inventory.entity.InventoryWarehouseStock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[40,21] 方法引用无效
+  找不到符号
+    符号:   方法 getProductName()
+    位置: 类 com.beichen.erp.inventory.entity.InventoryWarehouseStock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[41,51] 找不到符号
+  符号:   方法 getQuantity()
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[41,81] 找不到符号
+  符号:   方法 getQuantity()
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[47,18] 找不到符号
+  符号:   方法 setQuantity(java.math.BigDecimal)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[51,18] 找不到符号
+  符号:   方法 setWarehouseId(java.lang.Long)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[52,18] 找不到符号
+  符号:   方法 setProductName(java.lang.String)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[53,18] 找不到符号
+  符号:   方法 setQuantity(java.math.BigDecimal)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[55,46] 找不到符号
+  符号:   方法 setCompanyId(java.lang.Long)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[60,12] 找不到符号
+  符号:   方法 setWarehouseId(java.lang.Long)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[61,12] 找不到符号
+  符号:   方法 setMaterialId(java.lang.Long)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[62,12] 找不到符号
+  符号:   方法 setMaterialName(java.lang.String)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[63,12] 找不到符号
+  符号:   方法 setSpec(java.lang.String)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[64,12] 找不到符号
+  符号:   方法 setChangeType(java.lang.String)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[65,12] 找不到符号
+  符号:   方法 setChangeQuantity(java.math.BigDecimal)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[66,12] 找不到符号
+  符号:   方法 setBeforeQuantity(java.math.BigDecimal)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[67,12] 找不到符号
+  符号:   方法 setAfterQuantity(java.math.BigDecimal)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[68,12] 找不到符号
+  符号:   方法 setRelatedBillNo(java.lang.String)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[69,12] 找不到符号
+  符号:   方法 setRelatedBillType(java.lang.String)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[71,40] 找不到符号
+  符号:   方法 setCompanyId(java.lang.Long)
+  位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[45,46] 找不到符号
+  符号:   方法 getPageNum()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[45,66] 找不到符号
+  符号:   方法 getPageSize()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[49,26] 找不到符号
+  符号:   方法 getStatus()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[49,56] 找不到符号
+  符号:   方法 getStatus()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[47,28] 找不到符号
+  符号:   方法 getName()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[47,56] 找不到符号
+  符号:   方法 getName()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[48,48] 找不到符号
+  符号:   方法 getName()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[48,25] 方法引用无效
+  找不到符号
+    符号:   方法 getName()
+    位置: 类 com.beichen.erp.dev.entity.Project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[50,25] 方法引用无效
+  找不到符号
+    符号:   方法 getStatus()
+    位置: 类 com.beichen.erp.dev.entity.Project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[50,50] 找不到符号
+  符号:   方法 getStatus()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[51,30] 方法引用无效
+  找不到符号
+    符号:   方法 getId()
+    位置: 类 com.beichen.erp.dev.entity.Project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[62,28] 方法引用无效
+  找不到符号
+    符号:   方法 getCode()
+    位置: 类 com.beichen.erp.dev.entity.Project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[63,30] 方法引用无效
+  找不到符号
+    符号:   方法 getCode()
+    位置: 类 com.beichen.erp.dev.entity.Project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[68,33] 找不到符号
+  符号:   方法 getCode()
+  位置: 类型为com.beichen.erp.dev.entity.Project的变量 last
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[69,31] 找不到符号
+  符号:   方法 getCode()
+  位置: 类型为com.beichen.erp.dev.entity.Project的变量 last
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[86,16] 找不到符号
+  符号:   方法 setId(<nulltype>)
+  位置: 类型为com.beichen.erp.dev.entity.Project的变量 project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[88,44] 找不到符号
+  符号:   方法 setCompanyId(java.lang.Long)
+  位置: 类型为com.beichen.erp.dev.entity.Project的变量 project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[92,24] 找不到符号
+  符号:   方法 setCode(java.lang.String)
+  位置: 类型为com.beichen.erp.dev.entity.Project的变量 project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[94,53] 找不到符号
+  符号:   方法 getId()
+  位置: 类型为com.beichen.erp.dev.entity.Project的变量 project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[95,37] 找不到符号
+  符号:   方法 getId()
+  位置: 类型为com.beichen.erp.dev.entity.Project的变量 project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[107,16] 找不到符号
+  符号:   方法 getId()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[110,53] 找不到符号
+  符号:   方法 getId()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[116,30] 找不到符号
+  符号:   方法 getCode()
+  位置: 类型为com.beichen.erp.dev.entity.Project的变量 exist
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[120,16] 找不到符号
+  符号:   方法 getBomData()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[120,45] 找不到符号
+  符号:   方法 getBomData()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[122,76] 找不到符号
+  符号:   方法 getId()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[122,54] 方法引用无效
+  找不到符号
+    符号:   方法 getProjectId()
+    位置: 类 com.beichen.erp.dev.entity.Bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[124,47] 方法引用无效
+  找不到符号
+    符号:   方法 getMaterialType()
+    位置: 类 com.beichen.erp.dev.entity.Bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[126,55] 找不到符号
+  符号:   方法 getBomData()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[134,39] 找不到符号
+  符号:   方法 getId()
+  位置: 类型为com.beichen.erp.dev.entity.Bom的变量 existBom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[135,24] 找不到符号
+  符号:   方法 setMaterialName(java.lang.String)
+  位置: 类型为com.beichen.erp.dev.entity.Bom的变量 upd
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[140,41] 找不到符号
+  符号:   方法 getId()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[141,24] 找不到符号
+  符号:   方法 setMaterialType(java.lang.String)
+  位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[142,24] 找不到符号
+  符号:   方法 setMaterialName(java.lang.String)
+  位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[143,24] 找不到符号
+  符号:   方法 setQuantityPerSet(java.math.BigDecimal)
+  位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[144,24] 找不到符号
+  符号:   方法 setLossRate(java.math.BigDecimal)
+  位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[145,52] 找不到符号
+  符号:   方法 setCompanyId(java.lang.Long)
+  位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[170,15] 找不到符号
+  符号:   方法 setId(java.lang.Long)
+  位置: 类型为com.beichen.erp.dev.entity.Project的变量 update
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[171,15] 找不到符号
+  符号:   方法 setStatus(java.lang.String)
+  位置: 类型为com.beichen.erp.dev.entity.Project的变量 update
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[178,29] 方法引用无效
+  找不到符号
+    符号:   方法 getStatus()
+    位置: 类 com.beichen.erp.dev.entity.BomType
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[179,37] 方法引用无效
+  找不到符号
+    符号:   方法 getSortOrder()
+    位置: 类 com.beichen.erp.dev.entity.BomType
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[181,16] 无法将接口 org.apache.ibatis.logging.Log中的方法 warn应用到给定类型;
+  需要: java.lang.String
+  找到:    java.lang.String,java.lang.Long
+  原因: 实际参数列表和形式参数列表长度不同
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[185,52] 找不到符号
+  符号:   方法 getTypeName()
+  位置: 类型为com.beichen.erp.dev.entity.BomType的变量 bt
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[186,49] 找不到符号
+  符号:   方法 getTypeName()
+  位置: 类型为com.beichen.erp.dev.entity.BomType的变量 bt
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[192,16] 找不到符号
+  符号:   方法 getBomData()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[192,44] 找不到符号
+  符号:   方法 getBomData()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[193,23] 找不到符号
+  符号:   方法 getBomData()
+  位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[201,16] 找不到符号
+  符号:   方法 setProjectId(java.lang.Long)
+  位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[202,16] 找不到符号
+  符号:   方法 setMaterialType(java.lang.String)
+  位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[203,16] 找不到符号
+  符号:   方法 setMaterialName(java.lang.String)
+  位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[205,44] 找不到符号
+  符号:   方法 setCompanyId(java.lang.Long)
+  位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[25,10] 找不到符号
+  符号:   方法 setCode(int)
+  位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[26,10] 找不到符号
+  符号:   方法 setMsg(java.lang.String)
+  位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[27,10] 找不到符号
+  符号:   方法 setData(T)
+  位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[33,10] 找不到符号
+  符号:   方法 setCode(int)
+  位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[34,10] 找不到符号
+  符号:   方法 setMsg(java.lang.String)
+  位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[35,10] 找不到符号
+  符号:   方法 setData(T)
+  位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[45,10] 找不到符号
+  符号:   方法 setCode(int)
+  位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[46,10] 找不到符号
+  符号:   方法 setMsg(java.lang.String)
+  位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[42,18] 找不到符号
+  符号:   方法 getRoleId()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[44,51] 找不到符号
+  符号:   方法 getRoleId()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[44,25] 方法引用无效
+  找不到符号
+    符号:   方法 getRoleId()
+    位置: 类 com.beichen.erp.system.entity.UserRole
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[45,40] 方法引用无效
+  找不到符号
+    符号:   方法 getUserId()
+    位置: 类 com.beichen.erp.system.entity.UserRole
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[47,58] 找不到符号
+  符号:   方法 getPageNum()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[47,78] 找不到符号
+  符号:   方法 getPageSize()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[53,43] 找不到符号
+  符号:   方法 getPageNum()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[53,63] 找不到符号
+  符号:   方法 getPageSize()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[59,26] 找不到符号
+  符号:   方法 getStatus()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[57,28] 找不到符号
+  符号:   方法 getPhone()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[57,57] 找不到符号
+  符号:   方法 getPhone()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[55,28] 找不到符号
+  符号:   方法 getUsername()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[55,60] 找不到符号
+  符号:   方法 getUsername()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[56,49] 找不到符号
+  符号:   方法 getUsername()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[56,25] 方法引用无效
+  找不到符号
+    符号:   方法 getUsername()
+    位置: 类 com.beichen.erp.auth.entity.User
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[58,25] 方法引用无效
+  找不到符号
+    符号:   方法 getPhone()
+    位置: 类 com.beichen.erp.auth.entity.User
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[58,46] 找不到符号
+  符号:   方法 getPhone()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[59,48] 方法引用无效
+  找不到符号
+    符号:   方法 getStatus()
+    位置: 类 com.beichen.erp.auth.entity.User
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[59,70] 找不到符号
+  符号:   方法 getStatus()
+  位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[INFO] 100 errors 
+[INFO] -------------------------------------------------------------
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  9.471 s
+[INFO] Finished at: 2026-07-09T18:29:19+08:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project beichen-erp-server: Compilation failure: Compilation failure: 
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/purchase/finance/mapper/FinancePayableMapper.java:[6,8] 类重复: com.beichen.erp.finance.mapper.FinancePayableMapper
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/customer/service/impl/CustomerServiceImpl.java:[85,12] 找不到符号
+[ERROR]   符号:   类 List
+[ERROR]   位置: 类 com.beichen.erp.customer.service.impl.CustomerServiceImpl
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[39,21] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getWarehouseId()
+[ERROR]     位置: 类 com.beichen.erp.inventory.entity.InventoryWarehouseStock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[40,21] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getProductName()
+[ERROR]     位置: 类 com.beichen.erp.inventory.entity.InventoryWarehouseStock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[41,51] 找不到符号
+[ERROR]   符号:   方法 getQuantity()
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[41,81] 找不到符号
+[ERROR]   符号:   方法 getQuantity()
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[47,18] 找不到符号
+[ERROR]   符号:   方法 setQuantity(java.math.BigDecimal)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[51,18] 找不到符号
+[ERROR]   符号:   方法 setWarehouseId(java.lang.Long)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[52,18] 找不到符号
+[ERROR]   符号:   方法 setProductName(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[53,18] 找不到符号
+[ERROR]   符号:   方法 setQuantity(java.math.BigDecimal)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[55,46] 找不到符号
+[ERROR]   符号:   方法 setCompanyId(java.lang.Long)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryWarehouseStock的变量 stock
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[60,12] 找不到符号
+[ERROR]   符号:   方法 setWarehouseId(java.lang.Long)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[61,12] 找不到符号
+[ERROR]   符号:   方法 setMaterialId(java.lang.Long)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[62,12] 找不到符号
+[ERROR]   符号:   方法 setMaterialName(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[63,12] 找不到符号
+[ERROR]   符号:   方法 setSpec(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[64,12] 找不到符号
+[ERROR]   符号:   方法 setChangeType(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[65,12] 找不到符号
+[ERROR]   符号:   方法 setChangeQuantity(java.math.BigDecimal)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[66,12] 找不到符号
+[ERROR]   符号:   方法 setBeforeQuantity(java.math.BigDecimal)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[67,12] 找不到符号
+[ERROR]   符号:   方法 setAfterQuantity(java.math.BigDecimal)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[68,12] 找不到符号
+[ERROR]   符号:   方法 setRelatedBillNo(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[69,12] 找不到符号
+[ERROR]   符号:   方法 setRelatedBillType(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/inventory/service/InventoryWarehouseStockService.java:[71,40] 找不到符号
+[ERROR]   符号:   方法 setCompanyId(java.lang.Long)
+[ERROR]   位置: 类型为com.beichen.erp.inventory.entity.InventoryStockLog的变量 log
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[45,46] 找不到符号
+[ERROR]   符号:   方法 getPageNum()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[45,66] 找不到符号
+[ERROR]   符号:   方法 getPageSize()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[49,26] 找不到符号
+[ERROR]   符号:   方法 getStatus()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[49,56] 找不到符号
+[ERROR]   符号:   方法 getStatus()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[47,28] 找不到符号
+[ERROR]   符号:   方法 getName()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[47,56] 找不到符号
+[ERROR]   符号:   方法 getName()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[48,48] 找不到符号
+[ERROR]   符号:   方法 getName()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[48,25] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getName()
+[ERROR]     位置: 类 com.beichen.erp.dev.entity.Project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[50,25] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getStatus()
+[ERROR]     位置: 类 com.beichen.erp.dev.entity.Project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[50,50] 找不到符号
+[ERROR]   符号:   方法 getStatus()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[51,30] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getId()
+[ERROR]     位置: 类 com.beichen.erp.dev.entity.Project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[62,28] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getCode()
+[ERROR]     位置: 类 com.beichen.erp.dev.entity.Project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[63,30] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getCode()
+[ERROR]     位置: 类 com.beichen.erp.dev.entity.Project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[68,33] 找不到符号
+[ERROR]   符号:   方法 getCode()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Project的变量 last
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[69,31] 找不到符号
+[ERROR]   符号:   方法 getCode()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Project的变量 last
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[86,16] 找不到符号
+[ERROR]   符号:   方法 setId(<nulltype>)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Project的变量 project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[88,44] 找不到符号
+[ERROR]   符号:   方法 setCompanyId(java.lang.Long)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Project的变量 project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[92,24] 找不到符号
+[ERROR]   符号:   方法 setCode(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Project的变量 project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[94,53] 找不到符号
+[ERROR]   符号:   方法 getId()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Project的变量 project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[95,37] 找不到符号
+[ERROR]   符号:   方法 getId()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Project的变量 project
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[107,16] 找不到符号
+[ERROR]   符号:   方法 getId()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[110,53] 找不到符号
+[ERROR]   符号:   方法 getId()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[116,30] 找不到符号
+[ERROR]   符号:   方法 getCode()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Project的变量 exist
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[120,16] 找不到符号
+[ERROR]   符号:   方法 getBomData()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[120,45] 找不到符号
+[ERROR]   符号:   方法 getBomData()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[122,76] 找不到符号
+[ERROR]   符号:   方法 getId()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[122,54] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getProjectId()
+[ERROR]     位置: 类 com.beichen.erp.dev.entity.Bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[124,47] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getMaterialType()
+[ERROR]     位置: 类 com.beichen.erp.dev.entity.Bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[126,55] 找不到符号
+[ERROR]   符号:   方法 getBomData()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[134,39] 找不到符号
+[ERROR]   符号:   方法 getId()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Bom的变量 existBom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[135,24] 找不到符号
+[ERROR]   符号:   方法 setMaterialName(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Bom的变量 upd
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[140,41] 找不到符号
+[ERROR]   符号:   方法 getId()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[141,24] 找不到符号
+[ERROR]   符号:   方法 setMaterialType(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[142,24] 找不到符号
+[ERROR]   符号:   方法 setMaterialName(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[143,24] 找不到符号
+[ERROR]   符号:   方法 setQuantityPerSet(java.math.BigDecimal)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[144,24] 找不到符号
+[ERROR]   符号:   方法 setLossRate(java.math.BigDecimal)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[145,52] 找不到符号
+[ERROR]   符号:   方法 setCompanyId(java.lang.Long)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[170,15] 找不到符号
+[ERROR]   符号:   方法 setId(java.lang.Long)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Project的变量 update
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[171,15] 找不到符号
+[ERROR]   符号:   方法 setStatus(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Project的变量 update
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[178,29] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getStatus()
+[ERROR]     位置: 类 com.beichen.erp.dev.entity.BomType
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[179,37] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getSortOrder()
+[ERROR]     位置: 类 com.beichen.erp.dev.entity.BomType
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[181,16] 无法将接口 org.apache.ibatis.logging.Log中的方法 warn应用到给定类型;
+[ERROR]   需要: java.lang.String
+[ERROR]   找到:    java.lang.String,java.lang.Long
+[ERROR]   原因: 实际参数列表和形式参数列表长度不同
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[185,52] 找不到符号
+[ERROR]   符号:   方法 getTypeName()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.BomType的变量 bt
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[186,49] 找不到符号
+[ERROR]   符号:   方法 getTypeName()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.BomType的变量 bt
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[192,16] 找不到符号
+[ERROR]   符号:   方法 getBomData()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[192,44] 找不到符号
+[ERROR]   符号:   方法 getBomData()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[193,23] 找不到符号
+[ERROR]   符号:   方法 getBomData()
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.dto.ProjectDTO的变量 dto
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[201,16] 找不到符号
+[ERROR]   符号:   方法 setProjectId(java.lang.Long)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[202,16] 找不到符号
+[ERROR]   符号:   方法 setMaterialType(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[203,16] 找不到符号
+[ERROR]   符号:   方法 setMaterialName(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/dev/service/impl/ProjectServiceImpl.java:[205,44] 找不到符号
+[ERROR]   符号:   方法 setCompanyId(java.lang.Long)
+[ERROR]   位置: 类型为com.beichen.erp.dev.entity.Bom的变量 bom
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[25,10] 找不到符号
+[ERROR]   符号:   方法 setCode(int)
+[ERROR]   位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[26,10] 找不到符号
+[ERROR]   符号:   方法 setMsg(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[27,10] 找不到符号
+[ERROR]   符号:   方法 setData(T)
+[ERROR]   位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[33,10] 找不到符号
+[ERROR]   符号:   方法 setCode(int)
+[ERROR]   位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[34,10] 找不到符号
+[ERROR]   符号:   方法 setMsg(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[35,10] 找不到符号
+[ERROR]   符号:   方法 setData(T)
+[ERROR]   位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[45,10] 找不到符号
+[ERROR]   符号:   方法 setCode(int)
+[ERROR]   位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/common/R.java:[46,10] 找不到符号
+[ERROR]   符号:   方法 setMsg(java.lang.String)
+[ERROR]   位置: 类型为com.beichen.erp.common.R<T>的变量 r
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[42,18] 找不到符号
+[ERROR]   符号:   方法 getRoleId()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[44,51] 找不到符号
+[ERROR]   符号:   方法 getRoleId()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[44,25] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getRoleId()
+[ERROR]     位置: 类 com.beichen.erp.system.entity.UserRole
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[45,40] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getUserId()
+[ERROR]     位置: 类 com.beichen.erp.system.entity.UserRole
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[47,58] 找不到符号
+[ERROR]   符号:   方法 getPageNum()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[47,78] 找不到符号
+[ERROR]   符号:   方法 getPageSize()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[53,43] 找不到符号
+[ERROR]   符号:   方法 getPageNum()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[53,63] 找不到符号
+[ERROR]   符号:   方法 getPageSize()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[59,26] 找不到符号
+[ERROR]   符号:   方法 getStatus()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[57,28] 找不到符号
+[ERROR]   符号:   方法 getPhone()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[57,57] 找不到符号
+[ERROR]   符号:   方法 getPhone()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[55,28] 找不到符号
+[ERROR]   符号:   方法 getUsername()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[55,60] 找不到符号
+[ERROR]   符号:   方法 getUsername()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[56,49] 找不到符号
+[ERROR]   符号:   方法 getUsername()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[56,25] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getUsername()
+[ERROR]     位置: 类 com.beichen.erp.auth.entity.User
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[58,25] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getPhone()
+[ERROR]     位置: 类 com.beichen.erp.auth.entity.User
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[58,46] 找不到符号
+[ERROR]   符号:   方法 getPhone()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[59,48] 方法引用无效
+[ERROR]   找不到符号
+[ERROR]     符号:   方法 getStatus()
+[ERROR]     位置: 类 com.beichen.erp.auth.entity.User
+[ERROR] /f:/beichen-erp/beichen-erp-server/src/main/java/com/beichen/erp/system/service/impl/UserServiceImpl.java:[59,70] 找不到符号
+[ERROR]   符号:   方法 getStatus()
+[ERROR]   位置: 类型为com.beichen.erp.system.entity.dto.UserQueryDTO的变量 query
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException

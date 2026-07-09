@@ -39,6 +39,7 @@ function handleSelect(index: string) { emit('select', index) }
     background-color="#304156"
     text-color="#bfcbd9"
     active-text-color="#409EFF"
+    router
     @select="handleSelect"
   >
     <template v-for="item in userStore.menus" :key="item.id">
