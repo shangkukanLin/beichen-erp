@@ -49,12 +49,12 @@ public class OutsourceMaterialController {
             map.put("projectName", idsToNames(m.getProjectIds(), projectMapper));
             map.put("materialName", m.getMaterialName());
             map.put("materialType", m.getMaterialType());
+            map.put("spec", m.getSpec());
             map.put("supplierName", m.getSupplierName());
             map.put("supplierIds", m.getSupplierIds());
             map.put("unit", m.getUnit());
             map.put("status", m.getStatus());
             map.put("remark", m.getRemark());
-            map.put("parentMaterialId", m.getParentMaterialId());
             return map;
         }).toList());
         return R.ok(result);
@@ -98,12 +98,12 @@ public class OutsourceMaterialController {
         if (body.get("warehouseId") != null) m.setWarehouseId(Long.valueOf(body.get("warehouseId").toString()));
         m.setMaterialName((String) body.get("materialName"));
         m.setMaterialType((String) body.get("materialType"));
+        m.setSpec((String) body.get("spec"));
         m.setSupplierName((String) body.get("supplierName"));
         m.setSupplierIds(body.get("supplierIds") != null ? body.get("supplierIds").toString() : null);
         m.setUnit(body.get("unit") != null ? body.get("unit").toString() : "PCS");
         m.setStatus(body.get("status") != null ? Integer.valueOf(body.get("status").toString()) : 1);
         m.setRemark((String) body.get("remark"));
-        if (body.get("parentMaterialId") != null) m.setParentMaterialId(Long.valueOf(body.get("parentMaterialId").toString()));
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) m.setCompanyId(cid);
     }

@@ -81,17 +81,10 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void create(ProjectDTO dto) {
-        // 名称唯一性校验（同公司下）
-        Long cid = CompanyContext.get();
-        Long nameCount = projectMapper.selectCount(new LambdaQueryWrapper<Project>()
-                .eq(Project::getName, dto.getName())
-                .eq(cid != null && cid > 0, Project::getCompanyId, cid));
-        if (nameCount != null && nameCount > 0) {
-            throw new BusinessException("项目名称已存在");
-        }
         Project project = new Project();
         BeanUtils.copyProperties(dto, project);
         project.setId(null); // 强制自增
+        Long cid = CompanyContext.get();
         if (cid != null && cid > 0) project.setCompanyId(cid);
         String code = generateCode();
         for (int i = 0; i < 3; i++) {
@@ -117,15 +110,6 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         Project exist = projectMapper.selectById(dto.getId());
         if (exist == null) {
             throw new BusinessException("项目不存在");
-        }
-        // 名称唯一性校验（排除自身）
-        if (dto.getName() != null && !dto.getName().isBlank()) {
-            Long nameCount = projectMapper.selectCount(new LambdaQueryWrapper<Project>()
-                    .eq(Project::getName, dto.getName())
-                    .ne(Project::getId, dto.getId()));
-            if (nameCount != null && nameCount > 0) {
-                throw new BusinessException("项目名称已存在");
-            }
         }
         Project project = new Project();
         BeanUtils.copyProperties(dto, project);

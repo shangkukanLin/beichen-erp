@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated, computed } from 'vue'
+import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -50,7 +50,6 @@ async function handleToggleStatus(row: any) {
 function handleDetail(row: any) { router.push(`/outsource/warehouse/detail/${row.id}`) }
 
 onMounted(() => { loadFactories(); loadData() })
-onActivated(() => loadData())
 </script>
 
 <template>

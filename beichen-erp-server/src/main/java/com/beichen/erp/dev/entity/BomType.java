@@ -14,6 +14,5 @@ public class BomType {
     private Integer status;
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;
-    private Integer builtIn;
     private LocalDateTime createTime;
 }

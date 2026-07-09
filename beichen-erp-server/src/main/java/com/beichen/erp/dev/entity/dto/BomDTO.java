@@ -8,16 +8,12 @@ import java.math.BigDecimal;
 @Data
 public class BomDTO {
 
-    private Long id;
-
-    private Long parentId;
-
-    private Integer sortOrder;
-
     @NotBlank(message = "物料名称不能为空")
     private String materialName;
 
     private Long supplierId;
+
+    private String spec;
 
     private String unit;
 

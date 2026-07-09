@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'ContractTemplate' })
 
-import { ref, onMounted, onActivated } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getTemplateList, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate } from '@/api/contract-template'
@@ -115,7 +115,6 @@ async function handleSetDefault(row: any) {
 const defaultTemplate = () => `<h1 style="text-align: center;">委外加工合同</h1><p><br></p><p><span style="color: #eb2f96; background-color: #fff0f6;"><strong>{合同信息}</strong></span></p><p><br></p><p>就甲方委托乙方为其生产加工本协议中所列明的产品事宜，经双方友好协商共同达成并签署以下条款：</p><p><br></p><h3>一、委托加工产品数量及价格</h3><p><span style="color: #eb2f96; background-color: #fff0f6;"><strong>{产品表格}</strong></span></p><p><br></p><h3>二、甲方提供物料明细</h3><p><span style="color: #13c2c2; background-color: #e6fffb;"><strong>{物料表格}</strong></span></p><p><br></p><h3>三、订单备注</h3><p><span style="color: #f5222d; background-color: #fff1f0;"><strong>{备注}</strong></span></p><p><br></p><p><span style="color: #eb2f96; background-color: #fff0f6;"><strong>{签名区}</strong></span></p>`
 
 onMounted(() => loadData())
-onActivated(() => loadData())
 </script>
 
 <template>
