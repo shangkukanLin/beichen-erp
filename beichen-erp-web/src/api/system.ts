@@ -304,13 +304,21 @@ export interface ProjectQueryParams {
 }
 
 export interface BomVO {
+<<<<<<< HEAD
   id?: number | string; projectId?: number; supplierId?: number; spec?: string; materialName: string
   unit?: string; quantityPerSet?: number; lossRate?: number
+=======
+  id?: number | string; projectId?: number; supplierId?: number; materialName: string
+  spec?: string; unit?: string; quantityPerSet?: number; lossRate?: number
+>>>>>>> parent of eb8020e (feat: 多级BOM + 物料双向同步 + 批量修复)
   materialType?: string; remark?: string
-  parentId?: number; sortOrder?: number; children?: BomVO[]
 }
 
+<<<<<<< HEAD
 export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialName: string; spec?: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; materialType?: string; remark?: string }
+=======
+export interface BomDTO { materialName: string; supplierId?: number; spec?: string; unit?: string; quantityPerSet?: number; lossRate?: number; materialType?: string; remark?: string }
+>>>>>>> parent of eb8020e (feat: 多级BOM + 物料双向同步 + 批量修复)
 
 export interface BugVO {
   id?: number | string; projectId?: number; code?: string; title: string

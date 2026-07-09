@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getMaterialPage,
@@ -181,7 +181,10 @@ function statusType(status: number) {
 onMounted(() => {
   loadData()
 })
+<<<<<<< HEAD
 onActivated(() => { loadData() })
+=======
+>>>>>>> parent of eb8020e (feat: 多级BOM + 物料双向同步 + 批量修复)
 </script>
 
 <template>
