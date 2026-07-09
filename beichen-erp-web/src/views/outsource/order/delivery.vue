@@ -17,7 +17,14 @@ const isEdit = ref(false)
 const editId = ref<number>()
 const saving = ref(false)
 const uploadFile = ref<File | null>(null)
+const deliveryDate = ref(new Date().toISOString().split('T')[0])
+const warehouseId = ref<number>()
 const form = reactive({ productName: '', quantity: '', deliveryDate: new Date().toISOString().split('T')[0], trackingNo: '', remark: '', attachUrl: '' })
+
+const warehouseOptions = ref<any[]>([])
+async function loadWarehouses() {
+  try { const r = await request.get<any,any>('/inventory/warehouse/page', { params: { pageSize: 200 } }); warehouseOptions.value = r?.records || [] } catch (e: any) { console.warn('加载仓库失败', e?.message || e) }
+}
 
 async function loadData() {
   loading.value = true
@@ -42,20 +49,22 @@ const progress = computed(() => {
 
 function openAdd() {
   isEdit.value = false; editId.value = undefined
-  uploadFile.value = null
+  warehouseId.value = undefined; uploadFile.value = null
   form.productName = ''; form.quantity = ''; form.deliveryDate = new Date().toISOString().split('T')[0]
   form.trackingNo = ''; form.remark = ''; form.attachUrl = ''
   dialogVisible.value = true
+  loadWarehouses()
 }
 
 function openEdit(row: any) {
   isEdit.value = true; editId.value = row.id
-  uploadFile.value = null
+  warehouseId.value = row.warehouseId || undefined; uploadFile.value = null
   Object.assign(form, {
     productName: row.productName, quantity: row.quantity, deliveryDate: row.deliveryDate,
     trackingNo: row.trackingNo || '', remark: row.remark || '', attachUrl: row.attachUrl || ''
   })
   dialogVisible.value = true
+  loadWarehouses()
 }
 
 function handleDragOver(e: DragEvent) { e.preventDefault() }
@@ -68,6 +77,7 @@ function openAttach(url: string) { window.open(url + '?inline=true') }
 async function handleSubmit() {
   if (!form.productName) { ElMessage.warning('请选择产品名称'); return }
   if (!form.quantity) { ElMessage.warning('请输入数量'); return }
+  if (!warehouseId.value) { ElMessage.warning('请选择收货仓库'); return }
   saving.value = true
   try {
     if (uploadFile.value) {
@@ -76,10 +86,10 @@ async function handleSubmit() {
       form.attachUrl = res as unknown as string
     }
     if (isEdit.value && editId.value) {
-      await request.put(`/outsource/order-delivery/${editId.value}`, { ...form, orderId })
+      await request.put(`/outsource/order-delivery/${editId.value}`, { ...form, orderId, warehouseId: warehouseId.value || null })
       ElMessage.success('交货记录已更新')
     } else {
-      await request.post('/outsource/order-delivery', { ...form, orderId })
+      await request.post('/outsource/order-delivery', { ...form, orderId, warehouseId: warehouseId.value || null })
       ElMessage.success('交货记录已保存')
     }
     dialogVisible.value = false
@@ -137,7 +147,13 @@ onMounted(loadData)
       </div>
       <el-table :data="deliveries" border stripe size="small">
         <el-table-column prop="deliveryDate" label="交货日期" width="110" />
-        <el-table-column prop="productName" label="产品名称" min-width="150" />
+        <el-table-column prop="productName" label="产品名称" min-width="130" />
+        <el-table-column label="收货仓库" width="120">
+          <template #default="{row}">
+            <span v-if="row.warehouseId">{{ warehouseOptions.find((w:any)=>w.id===row.warehouseId)?.warehouseName || row.warehouseId }}</span>
+            <span v-else style="color:#c0c4cc">—</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="quantity" label="数量" width="100" />
         <el-table-column prop="trackingNo" label="物流单号" width="140" />
         <el-table-column label="附件" width="80" align="center">
@@ -156,14 +172,19 @@ onMounted(loadData)
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="isEdit?'编辑交货记录':'新增交货记录'" width="480px" :close-on-click-modal="false">
-      <el-form :model="form" label-width="80px" size="small">
+    <el-dialog v-model="dialogVisible" :title="isEdit?'编辑交货记录':'新增交货记录'" width="520px" :close-on-click-modal="false">
+      <el-form :model="form" label-width="85px" size="small">
         <el-form-item label="产品名称">
           <el-select v-model="form.productName" filterable style="width:100%" placeholder="选择订单产品">
             <el-option v-for="p in products" :key="p.id" :label="p.productName" :value="p.productName" />
           </el-select>
         </el-form-item>
         <el-form-item label="数量"><el-input v-model="form.quantity" placeholder="交货数量" /></el-form-item>
+        <el-form-item label="收货仓库" required>
+          <el-select v-model="warehouseId" filterable style="width:100%" placeholder="选择入库仓库">
+            <el-option v-for="w in warehouseOptions" :key="w.id" :label="`${w.warehouseName} (${w.code})`" :value="w.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="交货日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item>
         <el-form-item label="物流单号"><el-input v-model="form.trackingNo" placeholder="选填" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" placeholder="选填" /></el-form-item>

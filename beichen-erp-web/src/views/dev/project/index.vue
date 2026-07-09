@@ -4,7 +4,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getProjectPage, addProject, updateProject, deleteProject, updateProjectStatus,
-  getProjectBom, saveProjectBom, getProjectBugs, addProjectBug, updateProjectBug, deleteProjectBug,
+  getProjectBom, saveProjectBom,
+  getProjectBugs, addProjectBug, updateProjectBug, deleteProjectBug,
   getProjectDrawings, addProjectDrawing, deleteProjectDrawing,
   getSupplierPage,
   type ProjectVO, type ProjectDTO, type BomDTO, type BugDTO, type DrawingVO

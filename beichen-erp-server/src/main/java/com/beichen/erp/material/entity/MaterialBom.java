@@ -9,36 +9,29 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 
+/**
+ * 物料BOM组成关系：父物料(parent) 由 子物料(child) 组成
+ * 仅存储子物料ID，展示时联表取最新物料信息，子物料修改后BOM自动同步
+ */
 @Data
-@TableName("material")
-public class Material {
+@TableName("material_bom")
+public class MaterialBom {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private String code;
+    private Long parentMaterialId;
 
-    private String name;
+    private Long childMaterialId;
 
-    private String category;
+    /** 单台/单套用量 */
+    private BigDecimal quantity;
 
-    private String spec;
-
-    private String unit;
-
-    private BigDecimal safetyStock;
-
-    private BigDecimal currentStock;
-
-    private Integer status;
+    /** 损耗率 */
+    private BigDecimal lossRate;
 
     private String remark;
-
-    /** 子物料组成（仅用于新增/编辑时的入参，不入物料表） */
-    @TableField(exist = false)
-    private List<MaterialBom> bomChildren;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;

@@ -3,6 +3,7 @@ dist/
 node_modules/
 .DS_Store
 *.log
+*.err
 uploads/
 
 # Playwright 测试产物与截图

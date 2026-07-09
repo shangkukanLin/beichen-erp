@@ -28,18 +28,10 @@ const form = reactive<ProjectDTO>({
   startDate: '', expectedEndDate: '', status: '立项', remark: '',
   sampleFactoryId: undefined, outsourceFactoryId: undefined
 })
-const bomInputs = reactive<Record<string, string>>({})
-
 const solutionSuppliers = ref<{ id: number; name: string }[]>([])
 const allSuppliers = ref<any[]>([])
 const factoryOptions = ref<{ id: number; name: string }[]>([])
-const bomTypes = ref<string[]>([])
-const allMaterials = ref<any[]>([])
-async function loadBomTypes() {
-  try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => t.typeName) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
-  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料数据失败', e?.message || e) }
-}
-function getMaterialsByType(type: string) { return allMaterials.value.filter((m:any) => m.materialType === type) }
+
 async function loadSolutionSuppliers() {
   try { const res = await getSupplierPage({ supplierType: 'solution', pageSize: 200 }); solutionSuppliers.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name })) } catch (e: any) { console.warn('加载方案商失败', e?.message || e) }
 }
@@ -49,11 +41,6 @@ async function loadAllSuppliers() {
 }
 async function loadFactories() {
   try { const res = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } }); factoryOptions.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name })) } catch (e: any) { console.warn('加载工厂失败', e?.message || e) }
-}
-
-function loadBomInputs(items: any[]) {
-  for (const k of Object.keys(bomInputs)) delete bomInputs[k]
-  for (const item of items) { if (item.materialType) bomInputs[item.materialType] = item.materialName }
 }
 
 async function loadProject() {
@@ -66,20 +53,15 @@ async function loadProject() {
     startDate: p.startDate, expectedEndDate: p.expectedEndDate,
     status: p.status, remark: p.remark
   })
-  const bomList_data = await getProjectBom(projectId) || []
-  loadBomInputs(bomList_data)
 }
 
 async function handleSave() {
   saving.value = true
   try {
-    // 基础信息
-    const body: any = { ...form, bomData: {} as Record<string,string> }
-    for (const [k, v] of Object.entries(bomInputs)) { if (v) (body.bomData as any)[k] = v }
-    await updateProject(body as any)
-    ElMessage.success('保存成功，BOM物料已同步')
-    await loadProject(); await loadBom()
-  } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')); await loadProject(); await loadBom() }
+    await updateProject(form as any)
+    ElMessage.success('保存成功')
+    await loadProject()
+  } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')); await loadProject() }
   saving.value = false
 }
 
@@ -110,11 +92,57 @@ async function saveTimeline() {
   ElMessage.success('时间线已保存'); loadTimeline()
 }
 
-// ===================== BOM =====================
-const bomList = ref<BomDTO[]>([])
-async function loadBom() { bomList.value = (await getProjectBom(projectId))?.map(b => ({ materialName: b.materialName, supplierId: b.supplierId, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })) || [] }
-function addBomRow() { bomList.value.push({ materialName: '', spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialType: '', remark: '', supplierId: undefined }) }
-function onBomMaterialChange(materialName: string, row: any) {
+// BOM 平铺列表（父+子混排，子行只读缩进）
+const bomList = ref<any[]>([])
+const bomTypes = ref<string[]>([])
+const allMaterials = ref<any[]>([])
+async function loadBomTypes() {
+  try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => t.typeName) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料数据失败', e?.message || e) }
+}
+function getMaterialsByType(type: string) { return allMaterials.value.filter((m:any) => m.materialType === type) }
+
+/** 加载BOM + 子物料平铺展示 */
+async function loadBom() {
+  const items = (await getProjectBom(projectId)) || []
+  const result: any[] = []
+  for (let i = 0; i < items.length; i++) {
+    const b = items[i]
+    result.push({ _idx: i, _isChild: false, materialName: b.materialName, supplierId: b.supplierId, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })
+    result.push(...await fetchChildren(b.materialName))
+  }
+  bomList.value = result
+}
+
+/** 根据物料名查子物料行（缩进展示） */
+async function fetchChildren(materialName: string) {
+  const rows: any[] = []
+  if (!materialName) return rows
+  const mat = allMaterials.value.find((m: any) => m.materialName === materialName)
+  if (!mat) return rows
+  try {
+    const r = await request.get<any, any[]>('/outsource/material-bom/direct', { params: { parentId: mat.id } })
+    if (r && r.length > 0) {
+      for (let j = 0; j < r.length; j++) {
+        rows.push({
+          _isChild: true,
+          materialName: r[j].childName || r[j].childMaterialId,
+          spec: r[j].childSpec || '',
+          unit: r[j].childUnit || '',
+          quantityPerSet: r[j].quantity ?? 1,
+          lossRate: r[j].lossRate ?? 0,
+          materialType: r[j].childType || '',
+          remark: r[j].remark || '',
+          supplierId: undefined
+        })
+      }
+    }
+  } catch { /* ignore */ }
+  return rows
+}
+
+function addBomRow() { bomList.value.push({ _isChild: false, materialName: '', spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialType: '', remark: '', supplierId: undefined }) }
+async function onBomMaterialChange(materialName: string, row: any) {
   if (!materialName || !row.materialType) return
   const matched = getMaterialsByType(row.materialType).find((m: any) => m.materialName === materialName)
   if (!matched) return
@@ -124,20 +152,41 @@ function onBomMaterialChange(materialName: string, row: any) {
     const ids = String(matched.supplierIds).split(',').filter(Boolean).map(Number)
     if (ids.length > 0) row.supplierId = ids[0]
   }
+  // 选择物料后立即加载并显示其子物料
+  const idx = bomList.value.indexOf(row)
+  if (idx >= 0) {
+    // 移除该物料行之前的旧子行
+    let next = idx + 1
+    while (next < bomList.value.length && bomList.value[next]._isChild) {
+      bomList.value.splice(next, 1)
+    }
+    // 插入新的子物料行
+    const children = await fetchChildren(materialName)
+    bomList.value.splice(idx + 1, 0, ...children)
+  }
 }
-function removeBomRow(i: number) { bomList.value.splice(i, 1) }
+function removeBomRow(i: number) {
+  const row = bomList.value[i]
+  // 删除该父行及其子行
+  spliceOne(i)
+  if (row && !row._isChild) {
+    while (i < bomList.value.length && bomList.value[i]._isChild) {
+      bomList.value.splice(i, 1)
+    }
+  }
+}
+function spliceOne(i: number) { bomList.value.splice(i, 1) }
 async function saveBom() {
-  const emptyType = bomList.value.find((b: any) => !b.materialType || !b.materialType.trim())
+  const parentRows = bomList.value.filter((b: any) => !b._isChild)
+  const emptyType = parentRows.find((b: any) => !b.materialType || !b.materialType.trim())
   if (emptyType) { ElMessage.warning('物料类型不能为空'); return }
-  const emptyName = bomList.value.find((b: any) => !b.materialName || !b.materialName.trim())
+  const emptyName = parentRows.find((b: any) => !b.materialName || !b.materialName.trim())
   if (emptyName) { ElMessage.warning('物料名称不能为空'); return }
-  const zeroQty = bomList.value.find((b: any) => !b.quantityPerSet || Number(b.quantityPerSet) <= 0)
+  const zeroQty = parentRows.find((b: any) => !b.quantityPerSet || Number(b.quantityPerSet) <= 0)
   if (zeroQty) { ElMessage.warning('物料用量必须大于0'); return }
-  await saveProjectBom(projectId, bomList.value)
+  await saveProjectBom(projectId, parentRows)
   ElMessage.success('BOM已保存')
-  const items = await getProjectBom(projectId) || []
-  bomList.value = items.map(b => ({ materialName: b.materialName, supplierId: b.supplierId, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark }))
-  loadBomInputs(items)
+  await loadBom()
 }
 
 // ===================== BUG =====================
@@ -206,11 +255,8 @@ async function handleDrawingSubmit() {
 function downloadFile(url: string) { window.open(url) }
 async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(projectId, row.id!); ElMessage.success('已删除'); loadDrawings() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
-// 切换 Tab 时自动同步 BOM 数据
-watch(activeTab, async (tab) => {
-  if (tab === 'bom') await loadBom()
-  if (tab === 'project') { const items = await getProjectBom(projectId) || []; loadBomInputs(items) }
-})
+// 切换 Tab 时自动加载 BOM 数据
+watch(activeTab, async (tab) => { if (tab === 'bom') await loadBom() })
 
 onMounted(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBomTypes(); loadTimeline(); loadBom(); loadBugs(); loadDrawings() })
 function goBack() { router.push('/dev/project') }
@@ -259,18 +305,6 @@ function goBack() { router.push('/dev/project') }
           </el-form>
         </el-card>
 
-        <!-- BOM -->
-        <el-card shadow="never" style="margin-top:12px">
-          <template #header><span style="font-weight:600">BOM 物料（与右侧BOM物料清单关联）</span></template>
-          <el-form :model="bomInputs" label-width="100px" size="default">
-            <el-row :gutter="16">
-              <el-col :span="8" v-for="t in bomTypes" :key="t">
-                <el-form-item :label="t"><el-select v-model="bomInputs[t]" filterable allow-create clearable style="width:100%" :placeholder="'选择'+t"><el-option v-for="m in getMaterialsByType(t)" :key="m.id" :label="m.materialName" :value="m.materialName" /></el-select></el-form-item>
-              </el-col>
-            </el-row>
-          </el-form>
-        </el-card>
-
         <!-- 时间节点 -->
         <el-card shadow="never" style="margin-top:12px">
           <template #header><span style="font-weight:600">时间节点</span></template>
@@ -305,7 +339,7 @@ function goBack() { router.push('/dev/project') }
         </el-card>
       </el-tab-pane>
 
-      <!-- BOM Tab -->
+      <!-- BOM物料清单 Tab -->
       <el-tab-pane label="BOM物料清单" name="bom">
         <el-card shadow="never">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -313,26 +347,37 @@ function goBack() { router.push('/dev/project') }
             <el-button type="success" size="small" @click="saveBom">保存</el-button>
           </div>
           <el-table :data="bomList" border size="small">
-            <el-table-column label="类型" width="120">
+            <el-table-column label="类型" width="100">
               <template #default="{row}">
-                <el-select v-model="row.materialType" size="small" style="width:100%" @change="row.materialName = ''">
+                <span v-if="row._isChild" style="color:#909399;font-size:12px">{{ row.materialType }}</span>
+                <el-select v-else v-model="row.materialType" size="small" style="width:100%" @change="row.materialName = ''">
                   <el-option v-for="t in bomTypes" :key="t" :label="t" :value="t" />
                 </el-select>
               </template>
             </el-table-column>
-            <el-table-column label="物料名称" min-width="110"><template #default="{row}"><el-select v-model="row.materialName" size="small" filterable allow-create clearable style="width:100%" placeholder="选择" @change="(v: string) => onBomMaterialChange(v, row)"><el-option v-for="m in getMaterialsByType(row.materialType || '')" :key="m.id" :label="m.materialName" :value="m.materialName" /></el-select></template></el-table-column>
-            <el-table-column label="供应商" width="110">
+            <el-table-column label="物料名称" min-width="130">
               <template #default="{row}">
-                <el-select v-model="row.supplierId" size="small" clearable filterable style="width:100%">
+                <span v-if="row._isChild" style="color:#409EFF;font-size:12px">└ {{ row.materialName }}</span>
+                <el-select v-else v-model="row.materialName" size="small" filterable allow-create clearable style="width:100%" placeholder="选择" @change="(v: string) => onBomMaterialChange(v, row)"><el-option v-for="m in getMaterialsByType(row.materialType || '')" :key="m.id" :label="m.materialName" :value="m.materialName" /></el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="供应商" width="100">
+              <template #default="{row}">
+                <span v-if="row._isChild" style="color:#909399;font-size:12px">{{ row.supplierId || '-' }}</span>
+                <el-select v-else v-model="row.supplierId" size="small" clearable filterable style="width:100%">
                   <el-option v-for="s in allSuppliers" :key="s.id" :label="s.name" :value="s.id" />
                 </el-select>
               </template>
             </el-table-column>
-            <el-table-column label="规格" width="100"><template #default="{row}"><el-input v-model="row.spec" size="small" /></template></el-table-column>
-            <el-table-column label="单位" width="70"><template #default="{row}"><el-input v-model="row.unit" size="small" /></template></el-table-column>
-            <el-table-column label="用量" width="80"><template #default="{row}"><el-input v-model="row.quantityPerSet" size="small" /></template></el-table-column>
-            <el-table-column label="损耗率%" width="85"><template #default="{row}"><el-input v-model="row.lossRate" size="small" /></template></el-table-column>
-            <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeBomRow($index)">删除</el-button></template></el-table-column>
+            <el-table-column label="规格" width="90"><template #default="{row}"><span v-if="row._isChild" style="color:#909399;font-size:12px">{{ row.spec }}</span><el-input v-else v-model="row.spec" size="small" /></template></el-table-column>
+            <el-table-column label="单位" width="65"><template #default="{row}"><span v-if="row._isChild" style="color:#909399;font-size:12px">{{ row.unit }}</span><el-input v-else v-model="row.unit" size="small" /></template></el-table-column>
+            <el-table-column label="用量" width="75"><template #default="{row}"><span v-if="row._isChild" style="font-size:12px">{{ row.quantityPerSet }}</span><el-input v-else v-model="row.quantityPerSet" size="small" /></template></el-table-column>
+            <el-table-column label="损耗率%" width="80"><template #default="{row}"><span v-if="row._isChild" style="font-size:12px">{{ row.lossRate }}</span><el-input v-else v-model="row.lossRate" size="small" /></template></el-table-column>
+            <el-table-column label="操作" width="60" align="center">
+              <template #default="{$index}">
+                <el-button v-if="!bomList[$index]._isChild" type="danger" link @click="removeBomRow($index)">删除</el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
       </el-tab-pane>

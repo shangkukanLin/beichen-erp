@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.material.entity.Material;
+import com.beichen.erp.material.entity.MaterialBom;
+import com.beichen.erp.material.service.MaterialBomService;
 import com.beichen.erp.material.service.MaterialService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MaterialController {
 
     private final MaterialService materialService;
+    private final MaterialBomService materialBomService;
 
     @GetMapping("/page")
     public R<Page<Material>> page(
@@ -47,18 +50,28 @@ public class MaterialController {
     @PostMapping
     public R<Void> add(@RequestBody Material material) {
         materialService.save(material);
+        // 新增后同步子物料组成
+        if (material.getId() != null && material.getBomChildren() != null) {
+            materialBomService.saveChildren(material.getId(), material.getBomChildren());
+        }
         return R.ok();
     }
 
     @PutMapping
     public R<Void> update(@RequestBody Material material) {
         materialService.updateById(material);
+        // 编辑后同步子物料组成（全量替换）
+        if (material.getId() != null && material.getBomChildren() != null) {
+            materialBomService.saveChildren(material.getId(), material.getBomChildren());
+        }
         return R.ok();
     }
 
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
         materialService.removeById(id);
+        // 级联清理相关BOM关系
+        materialBomService.removeByMaterial(id);
         return R.ok();
     }
 }

@@ -75,13 +75,13 @@ public class OutsourceMaterialController {
     }
 
     @PostMapping
-    public R<Void> add(@RequestBody Map<String, Object> body) {
+    public R<Long> add(@RequestBody Map<String, Object> body) {
         OutsourceMaterial m = new OutsourceMaterial();
         fill(m, body);
         m.setUnit(body.get("unit") != null ? body.get("unit").toString() : "PCS");
         m.setStatus(1);
         mapper.insert(m);
-        return R.ok();
+        return R.ok(m.getId());
     }
 
     @PutMapping

@@ -37,27 +37,45 @@ const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoadi
 const defForm = () => ({ id: undefined as any, projectIds: '', projectIdArr: [] as number[], warehouseId: undefined as any, materialName: '', materialType: '', supplierName: '', supplierIdArr: [] as number[], unit: 'PCS', remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
-function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dialogTitle.value = '新增物料'; dialogVisible.value = true }
+// BOM 子物料
+const bomRows = ref<any[]>([])
+function addBomRow() { bomRows.value.push({ childMaterialId: undefined, quantity: 1, lossRate: 2, remark: '' }) }
+function removeBomRow(idx: number) { bomRows.value.splice(idx, 1) }
+async function loadBomDirect(id: number) {
+  try { const res = await request.get<any, any>('/outsource/material-bom/direct', { params: { parentId: id } });
+    bomRows.value = (res || []).map((n: any) => ({ childMaterialId: n.childMaterialId, quantity: n.quantity ?? 1, lossRate: n.lossRate ?? 0, remark: n.remark || '' })) }
+  catch { bomRows.value = [] }
+}
+
+function handleAdd() { loadOptions(); Object.assign(form, defForm()); bomRows.value = []; isEdit.value = false; dialogTitle.value = '新增物料'; dialogVisible.value = true }
 function handleEdit(row: any) {
+  loadOptions();
   Object.assign(form, defForm(), row)
   form.projectIdArr = (row.projectIds || '').split(',').filter(Boolean).map(Number)
   form.supplierIdArr = (row.supplierIds || '').split(',').filter(Boolean).map(Number)
   form.warehouseId = row.warehouseId || undefined
   isEdit.value = true; dialogTitle.value = '编辑物料'; dialogVisible.value = true
+  loadBomDirect(row.id)
 }
 
 async function handleSubmit() {
   if (!form.materialName) { ElMessage.warning('请输入物料名称'); return }
-  // 构建提交数据
   const ids = form.projectIdArr.join(',')
   const names = form.projectIdArr.map((id:number)=>projectOptions.value.find((p:any)=>p.id===id)?.name||'').filter(Boolean).join(', ')
   const sIds = form.supplierIdArr.join(',')
   const sNames = form.supplierIdArr.map((id:number)=>supplierOptions.value.find((s:any)=>s.id===id)?.name||'').filter(Boolean).join(', ')
   const body = { ...form, projectIds: ids, projectName: names, supplierIds: sIds, supplierName: sNames }
-
   submitLoading.value = true
-  try { if (isEdit.value) { await request.put('/outsource/material', body); ElMessage.success('修改成功') } else { await request.post('/outsource/material', body); ElMessage.success('新增成功') }
-    dialogVisible.value = false; loadData() } finally { submitLoading.value = false }
+  try {
+    if (isEdit.value) { await request.put('/outsource/material', body); ElMessage.success('修改成功') }
+    else { const res = await request.post('/outsource/material', body) as any; form.id = res }
+    // 保存BOM子物料
+    if (form.id) {
+      const validBom = bomRows.value.filter(r => r.childMaterialId != null && r.childMaterialId !== '')
+      await request.post(`/outsource/material-bom/${form.id}`, validBom)
+    }
+    dialogVisible.value = false; loadData()
+  } finally { submitLoading.value = false }
 }
 async function handleDelete(row: any) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await request.delete(`/outsource/material/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
@@ -90,7 +108,7 @@ onMounted(() => { loadOptions(); loadData() })
       <div class="pagination"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleQuery" /></div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="550px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="720px" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px">
         <el-form-item label="所属项目"><el-select v-model="form.projectIdArr" multiple filterable placeholder="可多选" style="width:100%"><el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" /></el-select></el-form-item>
         <el-form-item label="物料类型"><el-select v-model="form.materialType" style="width:100%"><el-option v-for="t in MATERIAL_TYPES" :key="t" :label="t" :value="t" /></el-select></el-form-item>
@@ -100,6 +118,34 @@ onMounted(() => { loadOptions(); loadData() })
         <el-form-item label="单位"><el-input v-model="form.unit" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
       </el-form>
+
+      <el-divider content-position="left"><span style="font-weight:600;font-size:14px">BOM子物料组成</span></el-divider>
+      <div style="margin-bottom:8px">
+        <el-button type="primary" size="small" @click="addBomRow">添加子物料</el-button>
+        <span style="color:#909399;font-size:13px;margin-left:8px">共 {{ bomRows.length }} 项</span>
+      </div>
+      <el-table :data="bomRows" border stripe empty-text="暂无子物料，点击「添加子物料」添加" max-height="280" size="small">
+        <el-table-column label="子物料" min-width="220">
+          <template #default="{ row }">
+            <el-select v-model="row.childMaterialId" filterable placeholder="选择已有物料" style="width:100%" size="small">
+              <el-option v-for="m in tableData" :key="m.id" :label="`${m.materialName} (${m.materialType || ''})`" :value="m.id" :disabled="m.id === form.id" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="用量" width="90">
+          <template #default="{ row }"><el-input v-model="row.quantity" size="small" style="width:100%" /></template>
+        </el-table-column>
+        <el-table-column label="损耗率%" width="100">
+          <template #default="{ row }"><el-input v-model="row.lossRate" size="small" style="width:100%" /></template>
+        </el-table-column>
+        <el-table-column label="备注" min-width="120">
+          <template #default="{ row }"><el-input v-model="row.remark" placeholder="备注" size="small" /></template>
+        </el-table-column>
+        <el-table-column label="操作" width="70" align="center">
+          <template #default="{ $index }"><el-button type="danger" link size="small" @click="removeBomRow($index)">删除</el-button></template>
+        </el-table-column>
+      </el-table>
+
       <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button></template>
     </el-dialog>
   </div>

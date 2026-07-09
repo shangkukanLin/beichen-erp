@@ -3,6 +3,7 @@ package com.beichen.erp.outsource.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
@@ -12,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +25,7 @@ public class OrderDeliveryController {
 
     private final OutsourceOrderDeliveryMapper deliveryMapper;
     private final OutsourceOrderService orderService;
+    private final InventoryWarehouseStockService stockService;
 
     /** 获取某加工单的所有交货记录 */
     @GetMapping("/list/{orderId}")
@@ -82,6 +83,10 @@ public class OrderDeliveryController {
         if (order == null) throw new BusinessException("加工单不存在");
         if (!"生产中".equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可录入交货");
         deliveryMapper.insert(delivery);
+        // 选择了收货仓库则自动入库
+        if (delivery.getWarehouseId() != null && delivery.getProductName() != null && delivery.getQuantity() != null) {
+            stockService.stockIn(delivery.getWarehouseId(), delivery.getProductName(), delivery.getQuantity());
+        }
         return R.ok();
     }
 

@@ -98,6 +98,24 @@ CREATE TABLE IF NOT EXISTS material (
     UNIQUE KEY uk_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='物料主数据表';
 
+-- ==================== 物料BOM(多级组成) ====================
+-- 一个物料可由多个子物料组成；通过 parent_material_id -> child_material_id 的边表示层级关系
+-- 仅存储子物料ID，查询时联表取最新名称/规格/单位，子物料修改后BOM自动同步
+
+CREATE TABLE IF NOT EXISTS material_bom (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'BOM组成ID',
+    parent_material_id BIGINT NOT NULL COMMENT '父物料ID(成品/半成品)',
+    child_material_id BIGINT NOT NULL COMMENT '子物料ID',
+    quantity DECIMAL(18,4) DEFAULT 1 COMMENT '单台/单套用量',
+    loss_rate DECIMAL(18,4) DEFAULT 0 COMMENT '损耗率',
+    remark VARCHAR(255) COMMENT '备注',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_parent_child (parent_material_id, child_material_id),
+    INDEX idx_parent (parent_material_id),
+    INDEX idx_child (child_material_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='物料BOM组成表(多级)';
+
 -- ==================== 供应商模块 ====================
 
 CREATE TABLE IF NOT EXISTS supplier (
@@ -202,6 +220,7 @@ CREATE TABLE IF NOT EXISTS outsource_order_material (
 CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     order_id BIGINT NOT NULL COMMENT '订单ID',
+    warehouse_id BIGINT DEFAULT NULL COMMENT '收货仓库ID',
     delivery_date DATE COMMENT '发货日期',
     product_name VARCHAR(100) COMMENT '产品名称',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
@@ -211,6 +230,7 @@ CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_order_id (order_id),
+    INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协订单发货记录表';
 
@@ -278,6 +298,21 @@ CREATE TABLE IF NOT EXISTS outsource_material (
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协物料表';
 
+CREATE TABLE IF NOT EXISTS outsource_material_bom (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'BOM组成ID',
+    parent_material_id BIGINT NOT NULL COMMENT '父物料ID',
+    child_material_id BIGINT NOT NULL COMMENT '子物料ID',
+    quantity DECIMAL(18,4) DEFAULT 1 COMMENT '单台/单套用量',
+    loss_rate DECIMAL(18,4) DEFAULT 0 COMMENT '损耗率',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_parent_child (parent_material_id, child_material_id),
+    INDEX idx_parent (parent_material_id),
+    INDEX idx_child (child_material_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协物料BOM组成表(多级)';
+
 CREATE TABLE IF NOT EXISTS outsource_warehouse (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '仓库ID',
     factory_id BIGINT COMMENT '工厂ID',
@@ -338,6 +373,19 @@ CREATE TABLE IF NOT EXISTS inventory_warehouse (
     UNIQUE KEY uk_code (code),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存仓库表';
+
+CREATE TABLE IF NOT EXISTS inventory_warehouse_stock (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    warehouse_id BIGINT NOT NULL COMMENT '仓库ID',
+    product_name VARCHAR(100) NOT NULL COMMENT '产品名称',
+    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '库存数量',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_product_name (product_name),
+    UNIQUE KEY uk_warehouse_product (warehouse_id, product_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='进销存仓库库存表';
 
 -- ==================== 研发模块 ====================
 

@@ -110,7 +110,7 @@ function handleAdd() {
   formRef.value?.clearValidate()
 }
 
-function handleEdit(row: Material) {
+async function handleEdit(row: Material) {
   Object.assign(form, defaultForm(), row)
   dialogTitle.value = '编辑物料'
   dialogVisible.value = true
@@ -181,10 +181,7 @@ function statusType(status: number) {
 onMounted(() => {
   loadData()
 })
-<<<<<<< HEAD
 onActivated(() => { loadData() })
-=======
->>>>>>> parent of eb8020e (feat: 多级BOM + 物料双向同步 + 批量修复)
 </script>
 
 <template>
@@ -250,7 +247,7 @@ onActivated(() => { loadData() })
     </el-card>
 
     <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="560px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px" :close-on-click-modal="false">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="12">
@@ -304,6 +301,7 @@ onActivated(() => { loadData() })
           </el-col>
         </el-row>
       </el-form>
+
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>

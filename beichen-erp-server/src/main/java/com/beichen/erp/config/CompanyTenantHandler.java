@@ -9,9 +9,10 @@ import net.sf.jsqlparser.expression.LongValue;
  */
 public class CompanyTenantHandler implements TenantLineHandler {
 
-    /** 不参与租户隔离的表 */
+    /** 不参与租户隔离的表（无 company_id 列的共享表） */
     private static final java.util.Set<String> IGNORE_TABLES = java.util.Set.of(
-        "sys_company", "sys_user", "sys_role", "sys_menu", "sys_role_menu", "sys_user_role"
+        "sys_company", "sys_user", "sys_role", "sys_menu", "sys_role_menu", "sys_user_role",
+        "material", "material_bom"
     );
 
     @Override

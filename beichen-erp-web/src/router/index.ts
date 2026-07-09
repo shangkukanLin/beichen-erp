@@ -143,6 +143,19 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/delivery/add', name: 'OutsourceDeliveryAdd', component: () => import('@/views/outsource/delivery/add.vue'), meta: { title: '新增收发', requiresAuth: true } },
       { path: 'outsource/delivery/detail/:id', name: 'OutsourceDeliveryDetail', component: () => import('@/views/outsource/delivery/detail.vue'), meta: { title: '收发详情', requiresAuth: true } },
       { path: 'outsource/material-history/:wid/:mid', name: 'OutsourceMaterialHistory', component: () => import('@/views/outsource/warehouse-material-history.vue'), meta: { title: '收发历史', requiresAuth: true } },
+      // 物料管理 + 多级BOM
+      {
+        path: 'material',
+        name: 'MaterialManage',
+        component: () => import('@/views/material/index.vue'),
+        meta: { title: '产品管理', requiresAuth: true }
+      },
+      {
+        path: 'material/bom',
+        name: 'MaterialBom',
+        component: () => import('@/views/material/bom.vue'),
+        meta: { title: '物料BOM', requiresAuth: true }
+      },
       { path: 'outsource/order', name: 'OutsourceOrder', component: () => import('@/views/outsource/order/index.vue'), meta: { title: '委外加工单', requiresAuth: true } },
       { path: 'outsource/order/add', name: 'OutsourceOrderAdd', component: () => import('@/views/outsource/order/add.vue'), meta: { title: '新增加工单', requiresAuth: true } },
       { path: 'outsource/order/detail/:id', name: 'OutsourceOrderDetail', component: () => import('@/views/outsource/order/detail.vue'), meta: { title: '加工单详情', requiresAuth: true } },

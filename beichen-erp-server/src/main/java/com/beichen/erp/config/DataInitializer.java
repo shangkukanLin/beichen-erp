@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -41,15 +42,32 @@ public class DataInitializer implements ApplicationRunner {
     private final RoleService roleService;
     private final BomTypeMapper bomTypeMapper;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     public void run(ApplicationArguments args) {
+        alterDeliveryTable();
         initRoles();
         initMenus();
+        fixMaterialMenu();
         initRoleMenus();
         initSuperAdmin();
         initBomTypes();
         initMaterials();
+    }
+
+    /** 增量 DDL：给已有表补加缺失的列 */
+    private void alterDeliveryTable() {
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_order_delivery' AND COLUMN_NAME='warehouse_id'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_order_delivery ADD COLUMN warehouse_id BIGINT DEFAULT NULL COMMENT '收货仓库ID' AFTER order_id");
+                log.info("已添加 outsource_order_delivery.warehouse_id 列");
+            }
+        } catch (Exception e) {
+            log.warn("DDL 执行异常: {}", e.getMessage());
+        }
     }
 
     private void initRoles() {
@@ -148,12 +166,13 @@ public class DataInitializer implements ApplicationRunner {
         saveMenu(16L, 4L, "物料信息", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 2);
         // 进销存子菜单
         saveMenu(18L, 5L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 1);
-        saveMenu(19L, 5L, "物料主数据", "menu", "/inventory/material", "InventoryMaterial", "TakeawayBox", 2);
+        saveMenu(19L, 5L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 2);
         saveMenu(20L, 5L, "采购订单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 3);
         saveMenu(21L, 5L, "采购入库", "menu", "/inventory/inbound", "InventoryInbound", "Download", 4);
         saveMenu(22L, 5L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 5);
         saveMenu(23L, 5L, "销售订单", "menu", "/inventory/sale", "InventorySale", "Sell", 6);
         saveMenu(24L, 5L, "销售出库", "menu", "/inventory/outbound", "InventoryOutbound", "Upload", 7);
+        saveMenu(38L, 5L, "物料BOM", "menu", "/material/bom", "MaterialBom", "Tickets", 8);
         // 财务管理子菜单
         saveMenu(25L, 6L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1);
         saveMenu(26L, 6L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2);
@@ -203,7 +222,7 @@ public class DataInitializer implements ApplicationRunner {
                         8L, 9L, 10L, 11L, 12L, 13L, 14L,
                         15L, 16L, 18L, 19L, 20L, 21L,
                         22L, 23L, 24L, 25L, 26L, 27L, 28L,
-                        29L, 30L, 31L, 33L, 35L, 36L, 37L));
+                        29L, 30L, 31L, 33L, 35L, 36L, 37L, 38L));
                 log.info("初始化 super_admin 菜单权限完成");
             }
         }
@@ -215,7 +234,7 @@ public class DataInitializer implements ApplicationRunner {
                         8L, 9L, 10L, 11L, 12L, 13L, 14L,
                         15L, 16L, 18L, 19L, 20L, 21L,
                         22L, 23L, 24L, 25L, 26L, 27L, 28L,
-                        29L, 30L, 33L, 35L, 36L, 37L));
+                        29L, 30L, 33L, 35L, 36L, 37L, 38L));
                 log.info("初始化 admin 菜单权限完成");
             }
         }
@@ -274,5 +293,29 @@ public class DataInitializer implements ApplicationRunner {
         m.setCurrentStock(currentStock);
         m.setStatus(1);
         materialMapper.insert(m);
+    }
+
+    /**
+     * 修正物料管理菜单路径（始终执行，确保已有库的菜单指向新页面并改名）
+     */
+    private void fixMaterialMenu() {
+        // 菜单ID=19 始终指向物料/产品管理页面，确保路径和名称正确
+        Menu menu = menuMapper.selectById(19L);
+        if (menu != null) {
+            boolean dirty = false;
+            if (!"/material".equals(menu.getRoutePath())) {
+                menu.setRoutePath("/material");
+                menu.setRouteName("MaterialManage");
+                dirty = true;
+            }
+            if (!"产品管理".equals(menu.getMenuName())) {
+                menu.setMenuName("产品管理");
+                dirty = true;
+            }
+            if (dirty) {
+                menuMapper.updateById(menu);
+                log.info("已修正产品管理菜单");
+            }
+        }
     }
 }
