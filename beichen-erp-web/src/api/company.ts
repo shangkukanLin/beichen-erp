@@ -10,6 +10,14 @@ export function verifyAdmin(data: { username: string; password: string }) {
   return request.post<unknown, { token: string }>('/company/admin/verify', data)
 }
 
+/** 超管选择公司进入系统：切换 session companyId 并返回菜单 */
+export function switchCompany(companyId: number) {
+  return request.post<unknown, { companyId: number; roles: string[]; menus: any[] }>(
+    '/company/switch',
+    { companyId: String(companyId) }
+  )
+}
+
 export function getCompanyList() {
   return request.get<unknown, Company[]>('/company/list')
 }

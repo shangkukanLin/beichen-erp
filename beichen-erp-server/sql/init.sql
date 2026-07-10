@@ -382,6 +382,7 @@ CREATE TABLE IF NOT EXISTS dev_project (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '项目ID',
     code VARCHAR(50) NOT NULL COMMENT '项目编号',
     name VARCHAR(100) NOT NULL COMMENT '项目名称',
+    assembly_name VARCHAR(100) COMMENT '总成名称',
     display_supplier_name VARCHAR(100) COMMENT '显示方案供应商',
     touch_supplier_name VARCHAR(100) COMMENT '触摸方案供应商',
     adapt_model VARCHAR(100) COMMENT '适配机型',

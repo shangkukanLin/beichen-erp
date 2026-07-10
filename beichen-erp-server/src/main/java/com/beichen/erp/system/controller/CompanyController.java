@@ -6,9 +6,11 @@ import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.system.entity.Company;
+import com.beichen.erp.system.entity.Menu;
 import com.beichen.erp.system.entity.Role;
 import com.beichen.erp.system.mapper.RoleMapper;
 import com.beichen.erp.system.service.CompanyService;
+import com.beichen.erp.system.service.MenuService;
 import com.beichen.erp.system.service.RoleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -27,6 +29,7 @@ public class CompanyController {
     private final UserMapper userMapper;
     private final RoleMapper roleMapper;
     private final RoleService roleService;
+    private final MenuService menuService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     /** 验证超级管理员凭证，返回 token */
@@ -43,10 +46,39 @@ public class CompanyController {
         if (!roleIds.contains(getSuperAdminRoleId())) throw new BusinessException("无超级管理员权限");
         // 登录超管
         StpUtil.login(user.getId());
-        // 超管公司ID设为0，不受租户限制
+        // 超管公司ID设为0，不受租户限制（仅用于公司管理页）
         StpUtil.getSession().set("companyId", 0L);
         Map<String, Object> result = new HashMap<>();
         result.put("token", StpUtil.getTokenInfo().tokenValue);
+        return R.ok(result);
+    }
+
+    /**
+     * 超管选择公司进入系统：切换 session companyId 并加载菜单。
+     * 调用后前端跳转到 /dashboard，后续请求均以所选公司身份执行（多租户过滤生效）。
+     */
+    @PostMapping("/switch")
+    public R<Map<String, Object>> switchCompany(@RequestBody Map<String, String> body) {
+        checkSuperAdmin();
+        String companyIdStr = body.get("companyId");
+        if (companyIdStr == null || companyIdStr.isBlank()) {
+            throw new BusinessException("公司ID不能为空");
+        }
+        Long companyId = Long.valueOf(companyIdStr);
+        // 切换公司上下文
+        StpUtil.getSession().set("companyId", companyId);
+
+        long userId = StpUtil.getLoginIdAsLong();
+        // 重新加载角色与菜单
+        List<String> roleCodes = roleService.getRoleCodesByUserId(userId);
+        StpUtil.getSession().set("roles", roleCodes);
+        List<Long> roleIds = roleService.getRoleIdsByUserId(userId);
+        List<Menu> menus = menuService.getMenuTreeByRoleIds(roleIds);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("companyId", companyId);
+        result.put("roles", roleCodes);
+        result.put("menus", menus);
         return R.ok(result);
     }
 

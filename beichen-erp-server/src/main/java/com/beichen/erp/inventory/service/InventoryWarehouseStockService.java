@@ -29,28 +29,44 @@ public class InventoryWarehouseStockService {
     /**
      * 通用库存变更：正数入库、负数出库；自动维护库存余额并写流水。
      * 出库（quantity<0）时校验变动后余量不为负。
+     * 优先按 materialId 定位库存行（精确关联物料），materialId 为 null 时回退按 productName 定位（委外兼容）。
      */
     @Transactional
     public void changeStock(Long warehouseId, String productName, BigDecimal quantity,
                             String changeType, String relatedBillNo, String relatedBillType,
                             Long materialId, String spec) {
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) == 0) return;
-        InventoryWarehouseStock stock = mapper.selectOne(new LambdaQueryWrapper<InventoryWarehouseStock>()
-                .eq(InventoryWarehouseStock::getWarehouseId, warehouseId)
-                .eq(InventoryWarehouseStock::getProductName, productName));
+
+        // 优先按 material_id 定位, materialId 为 null 时回退按 productName
+        LambdaQueryWrapper<InventoryWarehouseStock> w = new LambdaQueryWrapper<InventoryWarehouseStock>()
+                .eq(InventoryWarehouseStock::getWarehouseId, warehouseId);
+        if (materialId != null) {
+            w.eq(InventoryWarehouseStock::getMaterialId, materialId);
+        } else {
+            w.eq(InventoryWarehouseStock::getProductName, productName);
+        }
+        InventoryWarehouseStock stock = mapper.selectOne(w);
+
         BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
         BigDecimal after = before.add(quantity);
         if (after.compareTo(BigDecimal.ZERO) < 0) {
-            throw new BusinessException("库存不足，无法出库：" + productName);
+            throw new BusinessException("库存不足，无法出库："
+                    + (materialId != null ? ("物料ID=" + materialId) : productName));
         }
         if (stock != null) {
             stock.setQuantity(after);
+            stock.setAvailableQuantity(after); // 可用量=总量（后续按需拆分为预留+可用）
+            // 补充 productName/materialId（首次记录可能缺失）
+            if (productName != null) stock.setProductName(productName);
+            if (materialId != null) stock.setMaterialId(materialId);
             mapper.updateById(stock);
         } else {
             stock = new InventoryWarehouseStock();
             stock.setWarehouseId(warehouseId);
             stock.setProductName(productName);
+            stock.setMaterialId(materialId);
             stock.setQuantity(after);
+            stock.setAvailableQuantity(after);
             Long cid = CompanyContext.get();
             if (cid != null && cid > 0) stock.setCompanyId(cid);
             mapper.insert(stock);

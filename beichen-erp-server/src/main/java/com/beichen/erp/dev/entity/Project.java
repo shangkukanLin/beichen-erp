@@ -21,6 +21,8 @@ public class Project {
 
     private String name;
 
+    private String assemblyName;
+
     private String displaySupplierName;
 
     private String touchSupplierName;

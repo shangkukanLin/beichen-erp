@@ -92,13 +92,15 @@ const dialogTitle = ref('')
 const formRef = ref<FormInstance>()
 const submitLoading = ref(false)
 const defForm = (): ProjectDTO => ({
-  name: '', displaySupplierName: '', touchSupplierName: '', adaptModel: '',
+  name: '', displaySupplierName: '', touchSupplierName: '',
+  assemblyName: '',
+  adaptModel: '',
   originalSize: '', originalResolution: '', startDate: '', expectedEndDate: '', status: '立项', remark: '',
   sampleFactoryId: undefined, outsourceFactoryId: undefined
 })
 const form = reactive<ProjectDTO>(defForm())
 const isEdit = ref(false)
-const rules: FormRules = { name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }] }
+const rules: FormRules = { name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }], assemblyName: [{ required: true, message: '请输入总成名称', trigger: 'blur' }] }
 
 function handleAdd() { router.push('/dev/project/add') }
 function handleEdit(row: ProjectVO) { router.push(`/dev/project/edit/${row.id}`) }
@@ -203,6 +205,7 @@ onMounted(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBomT
         <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="code" label="编号" width="140" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="assemblyName" label="总成名称" width="110" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="90" show-overflow-tooltip />
         <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
         <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
@@ -254,7 +257,9 @@ onMounted(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBomT
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-row :gutter="12">
           <el-col :span="14"><el-form-item label="项目名称" prop="name"><el-input v-model="form.name" /></el-form-item></el-col>
-          <el-col :span="10"><el-form-item label="状态"><el-select v-model="form.status" style="width:100%"><el-option v-for="s in STATUS_LIST" :key="s" :label="s" :value="s" /></el-select></el-form-item></el-col>
+          <el-col :span="10"><el-form-item label="总成名称"><el-input v-model="form.assemblyName" /></el-form-item></el-col>
+          <el-col :span="14"><el-form-item label="状态"><el-select v-model="form.status" style="width:100%"><el-option v-for="s in STATUS_LIST" :key="s" :label="s" :value="s" /></el-select></el-form-item></el-col>
+          <el-col :span="10"></el-col>
           <el-col :span="12"><el-form-item label="显示方案"><el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /></el-select></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="触摸方案"><el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="适配机型"><el-input v-model="form.adaptModel" /></el-form-item></el-col>

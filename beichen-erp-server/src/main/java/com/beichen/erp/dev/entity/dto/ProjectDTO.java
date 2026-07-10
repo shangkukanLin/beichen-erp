@@ -16,6 +16,9 @@ public class ProjectDTO {
     @NotBlank(message = "项目名称不能为空")
     private String name;
 
+    @NotBlank(message = "总成名称不能为空")
+    private String assemblyName;
+
     private String displaySupplierName;
 
     private String touchSupplierName;

@@ -45,7 +45,9 @@ public class InventoryStockController {
             m.put("id", s.getId());
             m.put("warehouseId", s.getWarehouseId());
             m.put("productName", s.getProductName());
+            m.put("materialId", s.getMaterialId());
             m.put("quantity", s.getQuantity());
+            m.put("availableQuantity", s.getAvailableQuantity());
             if (s.getWarehouseId() != null) {
                 InventoryWarehouse wh = warehouseMapper.selectById(s.getWarehouseId());
                 m.put("warehouseName", wh != null ? wh.getWarehouseName() : "");

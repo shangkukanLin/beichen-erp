@@ -281,6 +281,7 @@ export function saveSupplierProducts(id: number | string, products: SupplierProd
 
 export interface ProjectVO {
   id?: number | string; code: string; name: string
+  assemblyName?: string
   displaySupplierName?: string; touchSupplierName?: string
   adaptModel?: string
   originalSize?: string; originalResolution?: string; projectLeaderId?: number
@@ -291,6 +292,7 @@ export interface ProjectVO {
 
 export interface ProjectDTO {
   id?: number | string; code?: string; name: string
+  assemblyName?: string
   displaySupplierName?: string; touchSupplierName?: string
   adaptModel?: string
   originalSize?: string; originalResolution?: string; projectLeaderId?: number

@@ -19,9 +19,24 @@ public class BomTypeController {
 
     private final BomTypeMapper bomTypeMapper;
 
+    /**
+     * 构建带公司过滤的条件构造器。
+     * 登录时已选定公司(session 存 companyId)，直接用它过滤。
+     * 超管验证接口(/api/company/admin/verify)设置 companyId=0 用于跨公司管理，
+     * 此处对 0 不加过滤（仅 /company-manage 页使用该流程）。
+     */
+    private LambdaQueryWrapper<BomType> buildWrapper() {
+        Long companyId = CompanyContext.get();
+        LambdaQueryWrapper<BomType> wrapper = new LambdaQueryWrapper<>();
+        if (companyId != null && companyId > 0) {
+            wrapper.eq(BomType::getCompanyId, companyId);
+        }
+        return wrapper;
+    }
+
     @GetMapping("/enabled")
     public R<List<BomType>> enabled() {
-        return R.ok(bomTypeMapper.selectList(new LambdaQueryWrapper<BomType>()
+        return R.ok(bomTypeMapper.selectList(buildWrapper()
                 .eq(BomType::getStatus, 1).orderByAsc(BomType::getSortOrder)));
     }
 
@@ -29,12 +44,13 @@ public class BomTypeController {
     public R<Page<BomType>> page(@RequestParam(defaultValue = "1") Integer pageNum,
                                   @RequestParam(defaultValue = "20") Integer pageSize) {
         return R.ok(bomTypeMapper.selectPage(new Page<>(pageNum, pageSize),
-                new LambdaQueryWrapper<BomType>().orderByAsc(BomType::getSortOrder)));
+                buildWrapper().orderByAsc(BomType::getSortOrder)));
     }
 
     @PostMapping
     public R<Void> add(@RequestBody BomType type) {
-        if (bomTypeMapper.selectCount(new LambdaQueryWrapper<BomType>()
+        // 同一公司内类型名称不可重复
+        if (bomTypeMapper.selectCount(buildWrapper()
                 .eq(BomType::getTypeName, type.getTypeName())) > 0) {
             throw new BusinessException("类型名称已存在");
         }

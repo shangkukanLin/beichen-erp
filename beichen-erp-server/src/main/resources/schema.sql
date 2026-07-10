@@ -378,13 +378,17 @@ CREATE TABLE IF NOT EXISTS inventory_warehouse_stock (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     warehouse_id BIGINT NOT NULL COMMENT '仓库ID',
     product_name VARCHAR(100) NOT NULL COMMENT '产品名称',
+    material_id BIGINT DEFAULT NULL COMMENT '物料ID(关联material表)',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '库存数量',
+    available_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '可用数量(预留,目前等于quantity)',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_product_name (product_name),
-    UNIQUE KEY uk_warehouse_product (warehouse_id, product_name)
+    INDEX idx_material_id (material_id),
+    UNIQUE KEY uk_warehouse_product_company (warehouse_id, product_name, company_id),
+    UNIQUE KEY uk_warehouse_material_company (warehouse_id, material_id, company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='进销存仓库库存表';
 
 -- ==================== 研发模块 ====================
@@ -393,6 +397,7 @@ CREATE TABLE IF NOT EXISTS dev_project (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '项目ID',
     code VARCHAR(50) NOT NULL COMMENT '项目编号',
     name VARCHAR(100) NOT NULL COMMENT '项目名称',
+    assembly_name VARCHAR(100) COMMENT '总成名称',
     display_supplier_name VARCHAR(100) COMMENT '显示方案供应商',
     touch_supplier_name VARCHAR(100) COMMENT '触摸方案供应商',
     adapt_model VARCHAR(100) COMMENT '适配机型',

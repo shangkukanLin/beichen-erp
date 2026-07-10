@@ -47,6 +47,7 @@ public class DataInitializer implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         alterDeliveryTable();
+        alterInventoryStockTable();
         initCompany();
         initRoles();
         initMenus();
@@ -54,6 +55,7 @@ public class DataInitializer implements ApplicationRunner {
         fixPurchaseMenu();
         fixSaleMenu();
         fixMenuStructure();
+        fixDevMenu();
         removeObsoleteMenus();
         initRoleMenus();
         initSuperAdmin();
@@ -83,6 +85,51 @@ public class DataInitializer implements ApplicationRunner {
         } catch (Exception e) {
             log.warn("DDL 执行异常: {}", e.getMessage());
         }
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dev_project' AND COLUMN_NAME='assembly_name'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE dev_project ADD COLUMN assembly_name VARCHAR(100) COMMENT '总成名称' AFTER name");
+                log.info("已添加 dev_project.assembly_name 列");
+            }
+        } catch (Exception e) {
+            log.warn("DDL 执行异常: {}", e.getMessage());
+        }
+    }
+
+    /** 增量 DDL：库存表按 material_id 维度重构 + 唯一键补 company_id + 可用量字段 */
+    private void alterInventoryStockTable() {
+        try {
+            // 1) 添加 material_id 列
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_warehouse_stock' AND COLUMN_NAME='material_id'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock ADD COLUMN material_id BIGINT DEFAULT NULL COMMENT '物料ID' AFTER product_name");
+                jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock ADD INDEX idx_material_id (material_id)");
+                log.info("已添加 inventory_warehouse_stock.material_id 列及索引");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        try {
+            // 2) 添加 available_quantity 列
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_warehouse_stock' AND COLUMN_NAME='available_quantity'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock ADD COLUMN available_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '可用数量' AFTER quantity");
+                log.info("已添加 inventory_warehouse_stock.available_quantity 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        try {
+            // 3) 修改唯一键：补 company_id 并增加 material_id 维度的唯一约束
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_warehouse_stock' AND INDEX_NAME='uk_warehouse_product_company'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                // 先尝试删除旧唯一键（忽略不存在的错误）
+                try { jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock DROP INDEX uk_warehouse_product"); } catch (Exception ignored) {}
+                try { jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock ADD UNIQUE KEY uk_warehouse_product_company (warehouse_id, product_name, company_id)"); } catch (Exception e) { log.warn("添加 uk_warehouse_product_company 失败: {}", e.getMessage()); }
+                try { jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock ADD UNIQUE KEY uk_warehouse_material_company (warehouse_id, material_id, company_id)"); } catch (Exception e) { log.warn("添加 uk_warehouse_material_company 失败: {}", e.getMessage()); }
+                log.info("已更新 inventory_warehouse_stock 唯一键");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
     }
 
     /** 初始化默认公司 */
@@ -174,21 +221,22 @@ public class DataInitializer implements ApplicationRunner {
         }
         // 一级菜单
         saveMenu(1L, 0L, "首页", "menu", "/dashboard", "Dashboard", "HomeFilled", 1);
-        saveMenu(2L, 0L, "开发管理", "catalog", "", "", "Cpu", 2);
+        saveMenu(2L, 0L, "研发管理", "catalog", "", "", "Cpu", 2);
         saveMenu(4L, 0L, "委外加工", "catalog", "", "", "Setting", 4);
         saveMenu(5L, 0L, "进销存", "catalog", "", "", "Goods", 5);
         saveMenu(6L, 0L, "财务管理", "catalog", "", "", "Money", 6);
         saveMenu(7L, 0L, "设置", "catalog", "", "", "Tools", 7);
-        // 开发管理子菜单
-        saveMenu(8L, 2L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 1);
-        saveMenu(9L, 2L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 2);
-        saveMenu(10L, 2L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 3);
-        saveMenu(11L, 2L, "方案商", "menu", "/supplier/solution", "SupplierSolution", "Connection", 5);
-        saveMenu(14L, 2L, "辅料商", "menu", "/supplier/material-supplier", "SupplierMaterialSupplier", "Box", 6);
+        // 研发管理子菜单（排序：方案商→BOM类型→研发项目→图纸文档→BOM管理）
+        saveMenu(11L, 2L, "方案商", "menu", "/supplier/solution", "SupplierSolution", "Connection", 1);
+        saveMenu(33L, 2L, "BOM类型", "menu", "/dev/bom-type", "DevBomType", "Tickets", 2);
+        saveMenu(8L, 2L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 3);
+        saveMenu(10L, 2L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 4);
+        saveMenu(9L, 2L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 5);
         // 委外加工子菜单
         saveMenu(15L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1);
         saveMenu(16L, 4L, "物料信息", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 2);
         saveMenu(12L, 4L, "委外加工厂", "menu", "/supplier/factory", "SupplierFactory", "OfficeBuilding", 3);
+        saveMenu(14L, 4L, "辅料商", "menu", "/supplier/material-supplier", "SupplierMaterialSupplier", "Box", 4);
         // 进销存子菜单
         saveMenu(18L, 5L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 1);
         saveMenu(19L, 5L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 2);
@@ -196,7 +244,6 @@ public class DataInitializer implements ApplicationRunner {
         saveMenu(13L, 5L, "成品供应商", "menu", "/supplier/product", "SupplierProduct", "GoodsFilled", 4);
         saveMenu(22L, 5L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 5);
         saveMenu(23L, 5L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 6);
-        saveMenu(38L, 5L, "物料BOM", "menu", "/material/bom", "MaterialBom", "Tickets", 8);
         // 财务管理子菜单
         saveMenu(25L, 6L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1);
         saveMenu(26L, 6L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2);
@@ -207,7 +254,6 @@ public class DataInitializer implements ApplicationRunner {
         saveMenu(30L, 7L, "角色管理", "menu", "/system/role", "SystemRole", "Avatar", 2);
         saveMenu(31L, 7L, "菜单管理", "menu", "/system/menu", "SystemMenu", "Menu", 3);
         // 额外菜单（不在固定ID范围）
-        saveMenu(33L, 2L, "BOM类型", "menu", "/dev/bom-type", "DevBomType", "Tickets", 4);
         saveMenu(35L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 5);
         saveMenu(36L, 5L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 1);
         saveMenu(37L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 6);
@@ -246,7 +292,7 @@ public class DataInitializer implements ApplicationRunner {
                         8L, 9L, 10L, 11L, 12L, 13L, 14L,
                         15L, 16L, 18L, 19L, 20L,
                         22L, 23L, 25L, 26L, 27L, 28L,
-                        29L, 30L, 31L, 33L, 35L, 36L, 37L, 38L));
+                        29L, 30L, 31L, 33L, 35L, 36L, 37L));
                 log.info("初始化 super_admin 菜单权限完成");
             }
         }
@@ -258,7 +304,7 @@ public class DataInitializer implements ApplicationRunner {
                         8L, 9L, 10L, 11L, 12L, 13L, 14L,
                         15L, 16L, 18L, 19L, 20L,
                         22L, 23L, 25L, 26L, 27L, 28L,
-                        29L, 30L, 33L, 35L, 36L, 37L, 38L));
+                        29L, 30L, 33L, 35L, 36L, 37L));
                 log.info("初始化 admin 菜单权限完成");
             }
         }
@@ -382,15 +428,35 @@ public class DataInitializer implements ApplicationRunner {
         }
     }
 
-    /** 移除已废弃的采购入库(21)和销售出库(24)菜单 */
+    /** 移除已废弃的采购入库(21)、销售出库(24)和物料BOM(38)菜单 */
     private void removeObsoleteMenus() {
         try {
-            int deleted = jdbcTemplate.update("DELETE FROM sys_role_menu WHERE menu_id IN (21, 24)");
+            int deleted = jdbcTemplate.update("DELETE FROM sys_role_menu WHERE menu_id IN (21, 24, 38)");
             if (deleted > 0) log.info("已移除废弃菜单的角色关联（{} 条）", deleted);
-            int menuDeleted = jdbcTemplate.update("DELETE FROM sys_menu WHERE id IN (21, 24)");
-            if (menuDeleted > 0) log.info("已删除废弃菜单（采购入库/销售出库）共 {} 条", menuDeleted);
+            int menuDeleted = jdbcTemplate.update("DELETE FROM sys_menu WHERE id IN (21, 24, 38)");
+            if (menuDeleted > 0) log.info("已删除废弃菜单（采购入库/销售出库/物料BOM）共 {} 条", menuDeleted);
         } catch (Exception e) {
             log.warn("清理废弃菜单异常: {}", e.getMessage());
+        }
+    }
+
+    /** 研发管理菜单修正：改名、重排子菜单、移辅料商到委外加工（始终执行） */
+    private void fixDevMenu() {
+        try {
+            // 1) 开发管理 → 研发管理
+            jdbcTemplate.update("UPDATE sys_menu SET menu_name = '研发管理' WHERE id = 2 AND menu_name = '开发管理'");
+            // 2) 研发管理子菜单重排：方案商(1) → BOM类型(2) → 研发项目(3) → 图纸文档(4) → BOM管理(5)
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 1 WHERE id = 11 AND parent_id = 2");
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 2 WHERE id = 33 AND parent_id = 2");
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 3 WHERE id = 8 AND parent_id = 2");
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 4 WHERE id = 10 AND parent_id = 2");
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 5 WHERE id = 9 AND parent_id = 2");
+            // 3) 辅料商(id=14) 从研发管理移到委外加工，排第4位
+            int moved = jdbcTemplate.update("UPDATE sys_menu SET parent_id = 4, sort_order = 4 WHERE id = 14 AND parent_id = 2");
+            if (moved > 0) log.info("已将辅料商菜单移入委外加工");
+            log.info("研发管理菜单已修正（改名+重排+辅料商迁移）");
+        } catch (Exception e) {
+            log.warn("研发管理菜单修正异常: {}", e.getMessage());
         }
     }
 }

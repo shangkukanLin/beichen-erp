@@ -14,6 +14,7 @@ const saving = ref(false)
 
 const form = reactive<ProjectDTO>({
   name: '', status: '立项', displaySupplierName: '', touchSupplierName: '',
+  assemblyName: '',
   adaptModel: '', originalSize: '', originalResolution: '',
   startDate: new Date().toISOString().split('T')[0], expectedEndDate: '', remark: '',
   sampleFactoryId: undefined, outsourceFactoryId: undefined
@@ -26,6 +27,7 @@ async function loadData() {
 
 async function handleSubmit() {
   if (!form.name) { ElMessage.warning('请输入项目名称'); return }
+  if (!form.assemblyName || !form.assemblyName.trim()) { ElMessage.warning('请输入总成名称'); return }
   saving.value = true
   try {
     await addProject(form as any)
@@ -53,6 +55,7 @@ onMounted(() => loadData())
       <el-form :model="form" label-width="100px">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="项目名称"><el-input v-model="form.name" placeholder="请输入项目名称" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="总成名称" prop="assemblyName" :rules="[{ required: true, message: '请输入总成名称', trigger: 'blur' }]"><el-input v-model="form.assemblyName" placeholder="请输入总成名称" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="项目阶段">
             <el-select v-model="form.status" style="width:100%"><el-option v-for="s in STATUS_LIST" :key="s" :label="s" :value="s" /></el-select>
           </el-form-item></el-col>

@@ -150,12 +150,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/material/index.vue'),
         meta: { title: '产品管理', requiresAuth: true }
       },
-      {
-        path: 'material/bom',
-        name: 'MaterialBom',
-        component: () => import('@/views/material/bom.vue'),
-        meta: { title: '物料BOM', requiresAuth: true }
-      },
       { path: 'outsource/order', name: 'OutsourceOrder', component: () => import('@/views/outsource/order/index.vue'), meta: { title: '委外加工单', requiresAuth: true } },
       { path: 'outsource/order/add', name: 'OutsourceOrderAdd', component: () => import('@/views/outsource/order/add.vue'), meta: { title: '新增加工单', requiresAuth: true } },
       { path: 'outsource/order/detail/:id', name: 'OutsourceOrderDetail', component: () => import('@/views/outsource/order/detail.vue'), meta: { title: '加工单详情', requiresAuth: true } },

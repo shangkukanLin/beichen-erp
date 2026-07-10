@@ -24,6 +24,7 @@ const activeTab = ref((route.query.tab as string) || 'project')
 // ===================== 项目基本信息 =====================
 const form = reactive<ProjectDTO>({
   name: '', displaySupplierName: '', touchSupplierName: '',
+  assemblyName: '',
   adaptModel: '', originalSize: '', originalResolution: '',
   startDate: '', expectedEndDate: '', status: '立项', remark: '',
   sampleFactoryId: undefined, outsourceFactoryId: undefined
@@ -47,6 +48,7 @@ async function loadProject() {
   const p = await getProject(projectId)
   Object.assign(form, {
     id: p.id, name: p.name, code: p.code,
+    assemblyName: p.assemblyName,
     displaySupplierName: p.displaySupplierName, touchSupplierName: p.touchSupplierName,
     adaptModel: p.adaptModel, originalSize: p.originalSize, originalResolution: p.originalResolution,
     sampleFactoryId: p.sampleFactoryId, outsourceFactoryId: p.outsourceFactoryId,
@@ -56,6 +58,8 @@ async function loadProject() {
 }
 
 async function handleSave() {
+  if (!form.name.trim()) { ElMessage.warning('请输入项目名称'); return }
+  if (!form.assemblyName || !form.assemblyName.trim()) { ElMessage.warning('请输入总成名称'); return }
   saving.value = true
   try {
     await updateProject(form as any)
@@ -279,6 +283,7 @@ function goBack() { router.push('/dev/project') }
           <el-form :model="form" label-width="100px" size="default">
             <el-row :gutter="16">
               <el-col :span="8"><el-form-item label="项目名称"><el-input v-model="form.name" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="总成名称" prop="assemblyName" :rules="[{ required: true, message: '请输入总成名称', trigger: 'blur' }]"><el-input v-model="form.assemblyName" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="项目阶段">
                 <el-select :model-value="form.status" @change="(v:string)=>handleStatusChange(v)" style="width:100%">
                   <el-option v-for="s in STATUS_LIST" :key="s" :label="s" :value="s" />

@@ -2,7 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getCompanyList, createCompany, updateCompany, deleteCompany, type Company } from '@/api/company'
+import { getCompanyList, createCompany, updateCompany, deleteCompany, switchCompany, type Company } from '@/api/company'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
@@ -13,6 +13,7 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const form = ref<any>({ companyName: '' })
 const editId = ref<number>()
+const enteringId = ref<number>()  // 正在进入的公司ID
 
 async function loadData() {
   loading.value = true
@@ -55,6 +56,27 @@ async function handleDelete(row: any) {
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
+/** 超管选择公司进入系统：切换 companyId → 加载菜单 → 跳仪表盘 */
+async function handleEnter(row: Company) {
+  if (!row.id) return
+  enteringId.value = row.id
+  try {
+    const res = await switchCompany(row.id)
+    // 登录页已经存了 token，这里只更新菜单和角色
+    userStore.setMenus(res.menus || [])
+    userStore.setUserInfo({
+      ...userStore.userInfo,
+      roles: res.roles || []
+    })
+    ElMessage.success(`已进入「${row.companyName}」`)
+    router.push('/dashboard')
+  } catch (e: any) {
+    ElMessage.error('进入失败: ' + (e?.message || '未知错误'))
+  } finally {
+    enteringId.value = undefined
+  }
+}
+
 function goBack() {
   userStore.logout()
   router.push('/login')
@@ -74,12 +96,15 @@ onMounted(() => loadData())
       <div style="margin-bottom:12px"><el-button type="primary" @click="openAdd">新增公司</el-button></div>
       <el-table :data="tableData" border stripe v-loading="loading">
         <el-table-column prop="id" label="ID" width="60" />
-        <el-table-column prop="companyName" label="公司名称" min-width="200" />
+        <el-table-column prop="companyName" label="公司名称" min-width="160" />
         <el-table-column label="状态" width="80">
           <template #default="{row}"><el-tag :type="row.status===1?'success':'danger'">{{ row.status===1?'启用':'停用' }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="140" align="center">
+        <el-table-column label="操作" width="240" align="center">
           <template #default="{row}">
+            <el-button type="success" :loading="enteringId === row.id" @click="handleEnter(row)">
+              {{ enteringId === row.id ? '进入中…' : '进入系统' }}
+            </el-button>
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
@@ -100,7 +125,7 @@ onMounted(() => loadData())
 </template>
 
 <style scoped>
-.company-page { max-width: 700px; margin: 40px auto; padding: 0 16px; }
+.company-page { max-width: 780px; margin: 40px auto; padding: 0 16px; }
 .page-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
 .page-title { font-size: 20px; font-weight: 600; }
 </style>
