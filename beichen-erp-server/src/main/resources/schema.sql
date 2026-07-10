@@ -505,6 +505,7 @@ CREATE TABLE IF NOT EXISTS customer (
     phone VARCHAR(20) COMMENT '联系电话',
     address VARCHAR(200) COMMENT '地址',
     credit_period INT DEFAULT 0 COMMENT '账期(天)',
+    credit_period_months INT DEFAULT 0 COMMENT '账期(月)',
     credit_limit DECIMAL(18,4) DEFAULT 0 COMMENT '信用额度',
     receivable_balance DECIMAL(18,4) DEFAULT 0 COMMENT '应收余额(冗余汇总)',
     prepaid_balance DECIMAL(18,4) DEFAULT 0 COMMENT '预收余额',
@@ -606,8 +607,8 @@ CREATE TABLE IF NOT EXISTS purchase_inbound_item (
 -- ==================== 销售模块 ====================
 
 CREATE TABLE IF NOT EXISTS sale_order (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售订单ID',
-    code VARCHAR(50) NOT NULL COMMENT '销售订单号',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售单ID',
+    code VARCHAR(50) NOT NULL COMMENT '销售单号',
     customer_id BIGINT COMMENT '客户ID',
     customer_name VARCHAR(100) COMMENT '客户名称',
     warehouse_id BIGINT COMMENT '出库仓库ID',
@@ -625,11 +626,11 @@ CREATE TABLE IF NOT EXISTS sale_order (
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_status (status),
     INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售订单表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售单表';
 
 CREATE TABLE IF NOT EXISTS sale_order_item (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售订单明细ID',
-    order_id BIGINT NOT NULL COMMENT '销售订单ID',
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售单明细ID',
+    order_id BIGINT NOT NULL COMMENT '销售单ID',
     material_id BIGINT COMMENT '物料ID',
     material_code VARCHAR(50) COMMENT '物料编码',
     material_name VARCHAR(100) COMMENT '物料名称',
@@ -644,12 +645,12 @@ CREATE TABLE IF NOT EXISTS sale_order_item (
     INDEX idx_order_id (order_id),
     INDEX idx_material_id (material_id),
     INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售订单明细表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售单明细表';
 
 CREATE TABLE IF NOT EXISTS sale_outbound (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售出库单ID',
     code VARCHAR(50) NOT NULL COMMENT '销售出库单号',
-    order_id BIGINT COMMENT '关联销售订单ID',
+    order_id BIGINT COMMENT '关联销售单ID',
     customer_id BIGINT COMMENT '客户ID',
     customer_name VARCHAR(100) COMMENT '客户名称',
     warehouse_id BIGINT COMMENT '出库仓库ID',
@@ -671,7 +672,7 @@ CREATE TABLE IF NOT EXISTS sale_outbound (
 CREATE TABLE IF NOT EXISTS sale_outbound_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售出库明细ID',
     outbound_id BIGINT NOT NULL COMMENT '销售出库单ID',
-    order_item_id BIGINT COMMENT '关联销售订单明细ID',
+    order_item_id BIGINT COMMENT '关联销售单明细ID',
     material_id BIGINT COMMENT '物料ID',
     material_code VARCHAR(50) COMMENT '物料编码',
     material_name VARCHAR(100) COMMENT '物料名称',

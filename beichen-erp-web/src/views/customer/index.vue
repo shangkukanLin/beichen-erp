@@ -42,6 +42,7 @@ const defaultForm = (): Customer => ({
   phone: '',
   address: '',
   creditPeriod: 0,
+  creditPeriodMonths: 0,
   creditLimit: 0,
   receivableBalance: 0,
   prepaidBalance: 0,
@@ -207,6 +208,7 @@ onActivated(() => {
         <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="100" />
         <el-table-column prop="phone" label="电话" width="130" />
+        <el-table-column prop="creditPeriodMonths" label="账期(月)" width="90" align="center" />
         <el-table-column prop="creditPeriod" label="账期(天)" width="90" align="center" />
         <el-table-column prop="creditLimit" label="信用额度" width="120" align="right">
           <template #default="{ row }">{{ fmtMoney(row.creditLimit) }}</template>
@@ -264,6 +266,11 @@ onActivated(() => {
           <el-col :span="12">
             <el-form-item label="电话">
               <el-input v-model="form.phone" placeholder="请输入电话" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="账期(月)">
+              <el-input-number v-model="form.creditPeriodMonths" :min="0" controls-position="right" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">

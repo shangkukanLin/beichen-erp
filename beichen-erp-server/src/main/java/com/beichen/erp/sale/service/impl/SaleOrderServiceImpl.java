@@ -6,6 +6,11 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.entity.FinanceReceivable;
+import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
+import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
+import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
+import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.sale.entity.SaleOrder;
 import com.beichen.erp.sale.entity.SaleOrderItem;
 import com.beichen.erp.sale.mapper.SaleOrderMapper;
@@ -27,6 +32,9 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     private final SaleOrderMapper orderMapper;
     private final SaleOrderItemMapper itemMapper;
     private final CustomerMapper customerMapper;
+    private final InventoryWarehouseStockService stockService;
+    private final FinanceReceivableMapper receivableMapper;
+    private final InventoryWarehouseStockMapper stockMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long customerId, String code, int pageNum, int pageSize) {
@@ -101,7 +109,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     @Transactional(rollbackFor = Exception.class)
     public void update(SaleOrder order, List<SaleOrderItem> items) {
         SaleOrder old = orderMapper.selectById(order.getId());
-        if (old == null) throw new BusinessException("销售订单不存在");
+        if (old == null) throw new BusinessException("销售单不存在");
         if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         if (order.getCustomerId() != null) {
             Customer c = customerMapper.selectById(order.getCustomerId());
@@ -132,7 +140,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     @Transactional(rollbackFor = Exception.class)
     public void cancel(Long id) {
         SaleOrder old = orderMapper.selectById(id);
-        if (old == null) throw new BusinessException("销售订单不存在");
+        if (old == null) throw new BusinessException("销售单不存在");
         if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
         SaleOrder u = new SaleOrder();
         u.setId(id);
@@ -143,13 +151,92 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
-        SaleOrder old = orderMapper.selectById(id);
-        if (old == null) throw new BusinessException("销售订单不存在");
-        if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        SaleOrder order = orderMapper.selectById(id);
+        if (order == null) throw new BusinessException("销售单不存在");
+        if (!"草稿".equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        List<SaleOrderItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, id));
+        if (items.isEmpty()) throw new BusinessException("订单明细不能为空");
+
+        // 1) 库存联动：出库减库存（quantity 负值，库存不足自动抛异常）
+        for (SaleOrderItem it : items) {
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
+            stockService.changeStock(order.getWarehouseId(), it.getMaterialName(),
+                    it.getQuantity().negate(), "销售出库", order.getCode(), "销售单",
+                    it.getMaterialId(), it.getSpec());
+        }
+        // 2) 生成应收台账
+        FinanceReceivable fr = new FinanceReceivable();
+        fr.setBillNo(order.getCode());
+        fr.setCustomerId(order.getCustomerId());
+        fr.setCustomerName(order.getCustomerName());
+        fr.setSourceBillType("销售单");
+        fr.setSourceBillNo(order.getCode());
+        fr.setAmount(order.getTotalAmount());
+        fr.setPaidAmount(BigDecimal.ZERO);
+        fr.setUnpaidAmount(order.getTotalAmount());
+        fr.setDueDate(calcDueDate(order));
+        fr.setStatus("未结清");
+        Long cid = CompanyContext.get();
+        if (cid != null && cid > 0) fr.setCompanyId(cid);
+        receivableMapper.insert(fr);
+        // 3) 更新客户应收余额（冗余）
+        if (order.getCustomerId() != null) {
+            Customer c = customerMapper.selectById(order.getCustomerId());
+            if (c != null) {
+                Customer u = new Customer();
+                u.setId(c.getId());
+                BigDecimal newBal = (c.getReceivableBalance() != null ? c.getReceivableBalance() : BigDecimal.ZERO)
+                        .add(order.getTotalAmount());
+                u.setReceivableBalance(newBal);
+                customerMapper.updateById(u);
+            }
+        }
+        // 4) 更新订单状态为"已完成"（审核即出库）
         SaleOrder u = new SaleOrder();
         u.setId(id);
-        u.setStatus("已审核");
+        u.setStatus("已完成");
         orderMapper.updateById(u);
+    }
+
+    @Override
+    public List<Map<String, Object>> checkStock(Long warehouseId, List<SaleOrderItem> items) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        if (warehouseId == null || items == null || items.isEmpty()) return result;
+
+        for (SaleOrderItem it : items) {
+            if (it.getMaterialName() == null || it.getQuantity() == null) continue;
+            BigDecimal required = it.getQuantity();
+            InventoryWarehouseStock stock = stockMapper.selectOne(
+                    new LambdaQueryWrapper<InventoryWarehouseStock>()
+                            .eq(InventoryWarehouseStock::getWarehouseId, warehouseId)
+                            .eq(InventoryWarehouseStock::getProductName, it.getMaterialName()));
+            BigDecimal available = (stock != null && stock.getQuantity() != null) ? stock.getQuantity() : BigDecimal.ZERO;
+            BigDecimal shortage = required.subtract(available);
+            Map<String, Object> m = new HashMap<>();
+            m.put("materialName", it.getMaterialName());
+            m.put("spec", it.getSpec() != null ? it.getSpec() : "");
+            m.put("unit", it.getUnit() != null ? it.getUnit() : "");
+            m.put("required", required);
+            m.put("available", available);
+            m.put("shortage", shortage.compareTo(BigDecimal.ZERO) > 0 ? shortage : BigDecimal.ZERO);
+            m.put("sufficient", shortage.compareTo(BigDecimal.ZERO) <= 0);
+            result.add(m);
+        }
+        return result;
+    }
+
+    /** 按客户账期计算到期日：月数+天数，都为0则当天到期（立即收款） */
+    private LocalDate calcDueDate(SaleOrder order) {
+        if (order.getOrderDate() == null) return null;
+        LocalDate base = order.getOrderDate();
+        if (order.getCustomerId() != null) {
+            Customer c = customerMapper.selectById(order.getCustomerId());
+            int months = c != null && c.getCreditPeriodMonths() != null ? c.getCreditPeriodMonths() : 0;
+            int days = c != null && c.getCreditPeriod() != null ? c.getCreditPeriod() : 0;
+            return base.plusMonths(months).plusDays(days);
+        }
+        return base; // 无客户信息默认当天到期
     }
 
     private String generateCode() {

@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.entity.FinancePayable;
+import com.beichen.erp.finance.mapper.FinancePayableMapper;
+import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
 import com.beichen.erp.purchase.entity.PurchaseOrderItem;
 import com.beichen.erp.purchase.mapper.PurchaseOrderMapper;
@@ -27,6 +30,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final PurchaseOrderMapper orderMapper;
     private final PurchaseOrderItemMapper itemMapper;
     private final SupplierMapper supplierMapper;
+    private final InventoryWarehouseStockService stockService;
+    private final FinancePayableMapper payableMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long supplierId, String code, int pageNum, int pageSize) {
@@ -103,7 +108,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Transactional(rollbackFor = Exception.class)
     public void update(PurchaseOrder order, List<PurchaseOrderItem> items) {
         PurchaseOrder old = orderMapper.selectById(order.getId());
-        if (old == null) throw new BusinessException("采购订单不存在");
+        if (old == null) throw new BusinessException("采购单不存在");
         if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         if (order.getSupplierId() != null) {
             Supplier s = supplierMapper.selectById(order.getSupplierId());
@@ -134,7 +139,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Transactional(rollbackFor = Exception.class)
     public void cancel(Long id) {
         PurchaseOrder old = orderMapper.selectById(id);
-        if (old == null) throw new BusinessException("采购订单不存在");
+        if (old == null) throw new BusinessException("采购单不存在");
         if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
         PurchaseOrder u = new PurchaseOrder();
         u.setId(id);
@@ -145,12 +150,37 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
-        PurchaseOrder old = orderMapper.selectById(id);
-        if (old == null) throw new BusinessException("采购订单不存在");
-        if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        PurchaseOrder order = orderMapper.selectById(id);
+        if (order == null) throw new BusinessException("采购单不存在");
+        if (!"草稿".equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        List<PurchaseOrderItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, id));
+        if (items.isEmpty()) throw new BusinessException("采购单明细不能为空");
+        // 1) 库存联动：入库加库存 + 写流水
+        for (PurchaseOrderItem it : items) {
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
+            stockService.changeStock(order.getWarehouseId(), it.getMaterialName(), it.getQuantity(),
+                    "采购入库", order.getCode(), "采购单", it.getMaterialId(), it.getSpec());
+        }
+        // 2) 生成应付台账
+        FinancePayable fp = new FinancePayable();
+        fp.setBillNo(order.getCode());
+        fp.setSupplierId(order.getSupplierId());
+        fp.setSupplierName(order.getSupplierName());
+        fp.setSourceBillType("采购单");
+        fp.setSourceBillNo(order.getCode());
+        fp.setAmount(order.getTotalAmount());
+        fp.setPaidAmount(BigDecimal.ZERO);
+        fp.setUnpaidAmount(order.getTotalAmount());
+        fp.setDueDate(order.getOrderDate() != null ? order.getOrderDate().plusMonths(1) : null);
+        fp.setStatus("未结清");
+        Long cid = CompanyContext.get();
+        if (cid != null && cid > 0) fp.setCompanyId(cid);
+        payableMapper.insert(fp);
+        // 3) 更新订单状态为"已完成"（审核即入库）
         PurchaseOrder u = new PurchaseOrder();
         u.setId(id);
-        u.setStatus("已审核");
+        u.setStatus("已完成");
         orderMapper.updateById(u);
     }
 

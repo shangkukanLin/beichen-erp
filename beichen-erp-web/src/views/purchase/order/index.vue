@@ -21,8 +21,7 @@ const tableData = ref<PurchaseOrder[]>([])
 
 const statusOptions = [
   { label: '草稿', value: '草稿' },
-  { label: '已审核', value: '已审核' },
-  { label: '已入库', value: '已入库' },
+  { label: '已完成', value: '已完成' },
   { label: '已作废', value: '已作废' }
 ]
 
@@ -31,13 +30,13 @@ const warehouses = ref<{ id: number; warehouseName: string }[]>([])
 const materialOptions = ref<Material[]>([])
 
 const dialogVisible = ref(false)
-const dialogTitle = ref('新增采购订单')
+const dialogTitle = ref('新增采购单')
 const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 const form = reactive<PurchaseOrder>({
   supplierId: undefined,
   warehouseId: undefined,
-  orderDate: '',
+  orderDate: new Date().toISOString().slice(0, 10),
   taxIncluded: 0,
   taxRate: 0,
   remark: ''
@@ -94,13 +93,13 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.supplierId = ''; query.status = ''; pagination.pageNum = 1; loadData() }
 
 function resetForm() {
-  Object.assign(form, { id: undefined, supplierId: undefined, warehouseId: undefined, orderDate: '', taxIncluded: 0, taxRate: 0, remark: '' })
+  Object.assign(form, { id: undefined, supplierId: undefined, warehouseId: undefined, orderDate: new Date().toISOString().slice(0, 10), taxIncluded: 0, taxRate: 0, remark: '' })
   items.value = []
 }
 
 function handleAdd() {
   resetForm()
-  dialogTitle.value = '新增采购订单'
+  dialogTitle.value = '新增采购单'
   dialogVisible.value = true
   formRef.value?.clearValidate()
 }
@@ -108,7 +107,7 @@ function handleAdd() {
 async function handleEdit(row: PurchaseOrder) {
   resetForm()
   Object.assign(form, row)
-  dialogTitle.value = '编辑采购订单'
+  dialogTitle.value = '编辑采购单'
   dialogVisible.value = true
   formRef.value?.clearValidate()
   try {
@@ -162,7 +161,7 @@ async function handleSubmit() {
 
 async function handleAudit(row: PurchaseOrder) {
   try {
-    await ElMessageBox.confirm(`确认审核采购订单「${row.code}」？`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    await ElMessageBox.confirm(`确认审核采购单「${row.code}」？审核后将直接入库并生成应付。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
     await auditPurchaseOrder(row.id as number)
     ElMessage.success('审核成功')
     loadData()
@@ -170,7 +169,7 @@ async function handleAudit(row: PurchaseOrder) {
 }
 async function handleCancel(row: PurchaseOrder) {
   try {
-    await ElMessageBox.confirm(`确认作废采购订单「${row.code}」？`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    await ElMessageBox.confirm(`确认作废采购单「${row.code}」？`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
     await cancelPurchaseOrder(row.id as number)
     ElMessage.success('已作废')
     loadData()
@@ -190,7 +189,7 @@ function handleCurrentChange(val: number) { pagination.pageNum = val; loadData()
 
 function statusType(s?: string) {
   if (s === '草稿') return 'info'
-  if (s === '已审核' || s === '已入库') return 'success'
+  if (s === '已完成') return 'success'
   if (s === '已作废') return 'danger'
   return ''
 }
@@ -336,7 +335,7 @@ onMounted(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData()
       </template>
     </el-dialog>
 
-    <el-drawer v-model="detailVisible" title="采购订单详情" size="60%">
+    <el-drawer v-model="detailVisible" title="采购单详情" size="60%">
       <el-descriptions :column="2" border>
         <el-descriptions-item label="单号">{{ detailData.code }}</el-descriptions-item>
         <el-descriptions-item label="状态">

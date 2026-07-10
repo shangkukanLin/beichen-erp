@@ -57,6 +57,14 @@ public class SaleOrderController {
     @PutMapping("/{id}/cancel")
     public R<Void> cancel(@PathVariable Long id) { service.cancel(id); return R.ok(); }
 
+    /** 库存检查：传入 warehouseId 和 items，返回各物料的库存对比 */
+    @PostMapping("/check-stock")
+    public R<List<Map<String, Object>>> checkStock(@RequestBody Map<String, Object> body) {
+        Long warehouseId = body.get("warehouseId") != null ? Long.valueOf(body.get("warehouseId").toString()) : null;
+        List<SaleOrderItem> items = parseItems(body);
+        return R.ok(service.checkStock(warehouseId, items));
+    }
+
     @SuppressWarnings("unchecked")
     private SaleOrder parseOrder(Map<String, Object> body) {
         Map<String, Object> d = body.containsKey("order") ? (Map<String, Object>) body.get("order") : body;

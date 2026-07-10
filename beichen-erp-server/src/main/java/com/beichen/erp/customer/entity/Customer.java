@@ -25,6 +25,8 @@ public class Customer {
 
     private Integer creditPeriod;
 
+    private Integer creditPeriodMonths;
+
     private BigDecimal creditLimit;
 
     private BigDecimal receivableBalance;

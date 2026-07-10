@@ -8,6 +8,7 @@ export interface Customer {
   phone?: string
   address?: string
   creditPeriod?: number
+  creditPeriodMonths?: number
   creditLimit?: number
   receivableBalance?: number
   prepaidBalance?: number

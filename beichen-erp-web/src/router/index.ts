@@ -44,7 +44,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/system/menu/index.vue'),
         meta: { title: '菜单管理', requiresAuth: true }
       },
-      // 供应商管理（共用组件）
+      // 供应商（已按类型分散到各业务模块菜单）
       {
         path: 'supplier/solution',
         name: 'SupplierSolution',
@@ -165,11 +165,9 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/warehouse', name: 'InventoryWarehouse', component: () => import('@/views/inventory/warehouse.vue'), meta: { title: '仓库管理', requiresAuth: true } },
       { path: 'inventory/material', redirect: '/material' },
       { path: 'inventory/customer', name: 'InventoryCustomer', component: () => import('@/views/customer/index.vue'), meta: { title: '客户管理', requiresAuth: true } },
-      { path: 'inventory/purchase', name: 'InventoryPurchase', component: () => import('@/views/purchase/order/index.vue'), meta: { title: '采购订单', requiresAuth: true } },
-      { path: 'inventory/inbound', name: 'InventoryInbound', component: () => import('@/views/purchase/inbound/index.vue'), meta: { title: '采购入库', requiresAuth: true } },
+      { path: 'inventory/purchase', name: 'InventoryPurchase', component: () => import('@/views/purchase/order/index.vue'), meta: { title: '采购单', requiresAuth: true } },
       { path: 'inventory/stock', name: 'InventoryStock', component: () => import('@/views/inventory/stock.vue'), meta: { title: '成品库存', requiresAuth: true } },
-      { path: 'inventory/sale', name: 'InventorySale', component: () => import('@/views/sale/order/index.vue'), meta: { title: '销售订单', requiresAuth: true } },
-      { path: 'inventory/outbound', name: 'InventoryOutbound', component: () => import('@/views/sale/outbound/index.vue'), meta: { title: '销售出库', requiresAuth: true } },
+      { path: 'inventory/sale', name: 'InventorySale', component: () => import('@/views/sale/order/index.vue'), meta: { title: '销售单', requiresAuth: true } },
       // 财务管理
       { path: 'finance/receivable', name: 'FinanceReceivable', component: () => import('@/views/finance/receivable.vue'), meta: { title: '应收管理', requiresAuth: true } },
       { path: 'finance/payable', name: 'FinancePayable', component: () => import('@/views/finance/payable.vue'), meta: { title: '应付管理', requiresAuth: true } },
