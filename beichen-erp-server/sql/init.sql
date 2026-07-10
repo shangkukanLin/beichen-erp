@@ -84,12 +84,26 @@ CREATE TABLE IF NOT EXISTS sys_company (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='公司表';
 
+-- ==================== 品牌模块 ====================
+
+CREATE TABLE IF NOT EXISTS brand (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '品牌ID',
+    brand_name VARCHAR(100) NOT NULL COMMENT '品牌名称',
+    status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_brand_name_company (brand_name, company_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='品牌表';
+
 -- ==================== 物料模块 ====================
 
 CREATE TABLE IF NOT EXISTS material (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '物料ID',
     code VARCHAR(50) NOT NULL COMMENT '物料编码',
     name VARCHAR(100) NOT NULL COMMENT '物料名称',
+    brand_id BIGINT DEFAULT NULL COMMENT '品牌ID',
     category VARCHAR(30) COMMENT '分类(原料/辅料/半成品/成品)',
     spec VARCHAR(100) COMMENT '规格型号',
     unit VARCHAR(20) COMMENT '单位',

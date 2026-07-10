@@ -1,22 +1,18 @@
-package com.beichen.erp.system.entity;
+package com.beichen.erp.brand.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("sys_company")
-public class Company {
+@TableName("brand")
+public class Brand {
     @TableId(type = IdType.AUTO)
     private Long id;
-    private String companyName;
-    private String phone;
-    private String address;
-    private String contactPerson;
-    private String taxNo;
-    private String email;
+    private String brandName;
     private Integer status;
     @TableField(fill = FieldFill.INSERT)
+    private Long companyId;
     private LocalDateTime createTime;
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;

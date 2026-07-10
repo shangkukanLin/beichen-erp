@@ -259,11 +259,90 @@ async function handleDrawingSubmit() {
 function downloadFile(url: string) { window.open(url) }
 async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(projectId, row.id!); ElMessage.success('已删除'); loadDrawings() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
+// ===================== 研发物料 =====================
+interface DevMaterialItem {
+  id?: number
+  projectId?: number
+  materialName: string
+  materialType: string
+  quantity: number
+  location: string
+  locationDetail: string
+  purchaseDate: string
+  cost: number
+  status: string
+  remark: string
+}
+const materialTypeOptions = ['基板', '屏幕', '排线', 'IC', '盖板', '背贴', '其他']
+const materialStatusOptions = ['完好', '已损坏', '已使用']
+const todayStr = new Date().toISOString().split('T')[0]
+const devMaterialList = ref<DevMaterialItem[]>([])
+const devMaterialVisible = ref(false)
+const devMaterialForm = reactive<DevMaterialItem>({
+  materialName: '', materialType: '', quantity: 1, location: '', locationDetail: '',
+  purchaseDate: todayStr, cost: 0, status: '完好', remark: ''
+})
+const isDevMaterialEdit = ref(false)
+
+async function loadDevMaterials() {
+  try {
+    const res = await request.get<unknown, DevMaterialItem[]>(`/dev/project/${projectId}/material`)
+    devMaterialList.value = res || []
+  } catch (e: any) { console.warn('加载研发物料失败', e?.message || e) }
+}
+
+function handleAddDevMaterial() {
+  Object.assign(devMaterialForm, {
+    materialName: '', materialType: '', quantity: 1, location: '', locationDetail: '',
+    purchaseDate: todayStr, cost: 0, status: '完好', remark: ''
+  })
+  isDevMaterialEdit.value = false
+  devMaterialVisible.value = true
+}
+
+function handleEditDevMaterial(row: DevMaterialItem) {
+  Object.assign(devMaterialForm, row)
+  isDevMaterialEdit.value = true
+  devMaterialVisible.value = true
+}
+
+async function handleDevMaterialSubmit() {
+  if (!devMaterialForm.materialName || !devMaterialForm.materialName.trim()) {
+    ElMessage.warning('请输入物料名称'); return
+  }
+  try {
+    if (isDevMaterialEdit.value && devMaterialForm.id) {
+      await request.put(`/dev/project/${projectId}/material/${devMaterialForm.id}`, devMaterialForm)
+      ElMessage.success('已更新')
+    } else {
+      await request.post(`/dev/project/${projectId}/material`, devMaterialForm)
+      ElMessage.success('已添加')
+    }
+    devMaterialVisible.value = false
+    loadDevMaterials()
+  } catch (e: any) { ElMessage.error((e?.message || '操作失败')) }
+}
+
+async function handleDeleteDevMaterial(row: DevMaterialItem) {
+  try {
+    await ElMessageBox.confirm('确定删除该物料吗？', '提示', { type: 'warning' })
+    await request.delete(`/dev/project/${projectId}/material/${row.id}`)
+    ElMessage.success('已删除')
+    loadDevMaterials()
+  } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+}
+
 // 切换 Tab 时自动加载 BOM 数据
 watch(activeTab, async (tab) => { if (tab === 'bom') await loadBom() })
 
 onMounted(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBomTypes(); loadTimeline(); loadBom(); loadBugs(); loadDrawings() })
 function goBack() { router.push('/dev/project') }
+
+function onNameBlur() {
+  if (!form.assemblyName || !form.assemblyName.trim()) {
+    form.assemblyName = form.name
+  }
+}
 </script>
 
 <template>
@@ -282,7 +361,7 @@ function goBack() { router.push('/dev/project') }
           <template #header><span style="font-weight:600">基础信息</span></template>
           <el-form :model="form" label-width="100px" size="default">
             <el-row :gutter="16">
-              <el-col :span="8"><el-form-item label="项目名称"><el-input v-model="form.name" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="项目名称"><el-input v-model="form.name" @blur="onNameBlur" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="总成名称" prop="assemblyName" :rules="[{ required: true, message: '请输入总成名称', trigger: 'blur' }]"><el-input v-model="form.assemblyName" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="项目阶段">
                 <el-select :model-value="form.status" @change="(v:string)=>handleStatusChange(v)" style="width:100%">
@@ -410,6 +489,37 @@ function goBack() { router.push('/dev/project') }
         </el-card>
       </el-tab-pane>
 
+      <!-- 研发物料 Tab -->
+      <el-tab-pane label="研发物料" name="material">
+        <el-card shadow="never">
+          <div style="margin-bottom:8px">
+            <el-button type="primary" size="small" @click="handleAddDevMaterial">+ 新增研发物料</el-button>
+          </div>
+          <el-table :data="devMaterialList" border size="small">
+            <el-table-column prop="materialName" label="名称" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="materialType" label="类型" width="80" />
+            <el-table-column prop="quantity" label="数量" width="70" align="center" />
+            <el-table-column prop="location" label="存放位置" width="100" />
+            <el-table-column prop="locationDetail" label="位置详情" min-width="130" show-overflow-tooltip />
+            <el-table-column prop="purchaseDate" label="采购日期" width="110" />
+            <el-table-column prop="cost" label="金额" width="90" align="right">
+              <template #default="{ row }">{{ row.cost ? '¥' + Number(row.cost).toFixed(2) : '-' }}</template>
+            </el-table-column>
+            <el-table-column label="状态" width="90" align="center">
+              <template #default="{ row }">
+                <el-tag size="small" :type="row.status === '完好' ? 'success' : row.status === '已损坏' ? 'danger' : 'warning'">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="120" align="center">
+              <template #default="{ row }">
+                <el-button type="primary" link @click="handleEditDevMaterial(row)">编辑</el-button>
+                <el-button type="danger" link @click="handleDeleteDevMaterial(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-tab-pane>
+
       <!-- BUG Tab -->
       <el-tab-pane label="BUG 列表" name="bug">
         <el-card shadow="never">
@@ -480,6 +590,36 @@ function goBack() { router.push('/dev/project') }
         <el-form-item label="版本"><el-input v-model="drawingForm.version" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="drawingVisible=false">取消</el-button><el-button type="primary" :loading="uploading" @click="handleDrawingSubmit">确定</el-button></template>
+    </el-dialog>
+
+    <!-- 研发物料弹窗 -->
+    <el-dialog v-model="devMaterialVisible" :title="isDevMaterialEdit ? '编辑物料' : '新增物料'" width="520px">
+      <el-form :model="devMaterialForm" label-width="80px">
+        <el-row :gutter="12">
+          <el-col :span="14"><el-form-item label="名称"><el-input v-model="devMaterialForm.materialName" /></el-form-item></el-col>
+          <el-col :span="10"><el-form-item label="类型">
+            <el-select v-model="devMaterialForm.materialType" style="width:100%">
+              <el-option v-for="t in materialTypeOptions" :key="t" :label="t" :value="t" />
+            </el-select>
+          </el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="数量"><el-input-number v-model="devMaterialForm.quantity" :min="0" :precision="0" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="金额"><el-input-number v-model="devMaterialForm.cost" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="存放位置">
+            <el-select v-model="devMaterialForm.location" style="width:100%">
+              <el-option v-for="s in allSuppliers" :key="s.id" :label="s.name" :value="s.name" />
+            </el-select>
+          </el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="状态">
+            <el-select v-model="devMaterialForm.status" style="width:100%">
+              <el-option v-for="s in materialStatusOptions" :key="s" :label="s" :value="s" />
+            </el-select>
+          </el-form-item></el-col>
+          <el-col :span="24"><el-form-item label="位置详情"><el-input v-model="devMaterialForm.locationDetail" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="采购日期"><el-input v-model="devMaterialForm.purchaseDate" type="date" /></el-form-item></el-col>
+          <el-col :span="24"><el-form-item label="备注"><el-input v-model="devMaterialForm.remark" type="textarea" :rows="2" /></el-form-item></el-col>
+        </el-row>
+      </el-form>
+      <template #footer><el-button @click="devMaterialVisible=false">取消</el-button><el-button type="primary" @click="handleDevMaterialSubmit">确定</el-button></template>
     </el-dialog>
   </div>
 </template>

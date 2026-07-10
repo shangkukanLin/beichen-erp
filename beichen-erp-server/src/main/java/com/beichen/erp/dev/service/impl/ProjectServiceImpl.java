@@ -15,6 +15,8 @@ import com.beichen.erp.dev.mapper.BomTypeMapper;
 import com.beichen.erp.dev.service.ProjectService;
 import com.beichen.erp.dev.service.ProjectTimelineService;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.material.entity.Material;
+import com.beichen.erp.material.mapper.MaterialMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -39,6 +41,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     private final ProjectTimelineService timelineService;
     private final BomMapper bomMapper;
     private final BomTypeMapper bomTypeMapper;
+    private final MaterialMapper materialMapper;
 
     @Override
     public Page<Project> page(ProjectQueryDTO query) {
@@ -93,6 +96,8 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
                 projectMapper.insert(project);
                 timelineService.initTimeline(project.getId());
                 initBom(dto, project.getId());
+                // 根据总成名称自动创建产品（研发中）
+                syncProduct(project, null);
                 return;
             } catch (DuplicateKeyException e) {
                 if (i >= 2) throw e;
@@ -115,6 +120,9 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         BeanUtils.copyProperties(dto, project);
         project.setCode(exist.getCode());
         projectMapper.updateById(project);
+
+        // 总成名称变更时同步产品名称
+        syncProduct(project, exist);
 
         // 如果带了 bomData，upsert 更新 BOM 物料（只更新物料名，保留用量等字段）
         if (dto.getBomData() != null && !dto.getBomData().isEmpty()) {
@@ -170,6 +178,73 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         update.setId(id);
         update.setStatus(status);
         projectMapper.updateById(update);
+    }
+
+    /**
+     * 同步产品表：根据项目总成名称自动创建/更新关联产品
+     * @param newProject 新项目数据
+     * @param oldProject 旧项目数据（编辑时传入用于判断名称是否变更，新增时为null）
+     */
+    private void syncProduct(Project newProject, Project oldProject) {
+        String assemblyName = newProject.getAssemblyName();
+        if (assemblyName == null || assemblyName.isBlank()) {
+            return;
+        }
+        Long projectId = newProject.getId();
+
+        // 编辑场景：检查总成名称是否变更
+        if (oldProject != null) {
+            String oldAssemblyName = oldProject.getAssemblyName();
+            if (oldAssemblyName != null && !oldAssemblyName.isBlank() && oldAssemblyName.equals(assemblyName)) {
+                return; // 名称未变，无需同步
+            }
+            // 名称变了，找到关联的旧产品并更新名称
+            Material linked = materialMapper.selectOne(
+                new LambdaQueryWrapper<Material>()
+                    .eq(Material::getProjectId, projectId)
+                    .last("LIMIT 1"));
+            if (linked != null) {
+                linked.setName(assemblyName);
+                materialMapper.updateById(linked);
+            }
+            return;
+        }
+
+        // 新增场景：检查同名产品是否已存在
+        Long count = materialMapper.selectCount(
+            new LambdaQueryWrapper<Material>()
+                .eq(Material::getName, assemblyName));
+        if (count != null && count > 0) {
+            log.info("产品「{}」已存在，不重复创建", assemblyName);
+            return;
+        }
+
+        // 自动创建产品
+        Material material = new Material();
+        material.setName(assemblyName);
+        material.setCode(generateProductCode());
+        material.setStatus("研发中");
+        material.setProjectId(projectId);
+        materialMapper.insert(material);
+        log.info("已自动创建研发中产品：{}（项目ID={}）", assemblyName, projectId);
+    }
+
+    /** 生成产品编码 PRD-YYYYMMDD-NNN */
+    private String generateProductCode() {
+        String prefix = "PRD";
+        String dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        LambdaQueryWrapper<Material> wrapper = new LambdaQueryWrapper<Material>()
+                .likeRight(Material::getCode, prefix + "-" + dateStr)
+                .orderByDesc(Material::getCode)
+                .last("LIMIT 1");
+        Material last = materialMapper.selectOne(wrapper);
+        int seq = 1;
+        if (last != null && last.getCode() != null) {
+            try {
+                seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1;
+            } catch (Exception ignored) {}
+        }
+        return prefix + "-" + dateStr + String.format("%03d", seq);
     }
 
     private void initBom(ProjectDTO dto, Long projectId) {

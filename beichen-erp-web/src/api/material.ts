@@ -3,22 +3,21 @@ import request from '@/utils/request'
 export interface MaterialQueryParams {
   pageNum?: number
   pageSize?: number
-  code?: string
   name?: string
-  category?: string
-  status?: number | string
+  status?: string
 }
 
 export interface Material {
   id?: number | string
-  code: string
+  code?: string
   name: string
-  category: string
+  brandId?: number
+  category?: string
   spec?: string
-  unit: string
+  unit?: string
   safetyStock?: number
   currentStock?: number
-  status: number
+  status: string
   remark?: string
 }
 

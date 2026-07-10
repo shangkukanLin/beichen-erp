@@ -22,6 +22,8 @@ public class Material {
 
     private String name;
 
+    private Long brandId;
+
     private String category;
 
     private String spec;
@@ -32,7 +34,10 @@ public class Material {
 
     private BigDecimal currentStock;
 
-    private Integer status;
+    private String status;
+
+    /** 关联的研发项目ID（来源为研发项目时填充） */
+    private Long projectId;
 
     private String remark;
 

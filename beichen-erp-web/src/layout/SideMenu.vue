@@ -6,7 +6,7 @@ import {
   Goods, Money, Tools, Notebook, Tickets, Files, Connection, OfficeBuilding,
   GoodsFilled, Box, Document, Switch, Timer, TakeawayBox, ShoppingCart,
   Download, Odometer, Sell, Upload, Wallet, CreditCard, Postcard,
-  TrendCharts, UserFilled, Avatar, Menu
+  TrendCharts, UserFilled, Avatar, Menu, CollectionTag, Delete
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 
@@ -15,7 +15,8 @@ const iconMap: Record<string, any> = {
   HomeFilled, Cpu, Shop, Setting, Goods, Money, Tools, Notebook, Tickets,
   Files, Connection, OfficeBuilding, GoodsFilled, Box, Document, Switch,
   Timer, TakeawayBox, ShoppingCart, Download, Odometer, Sell, Upload,
-  Wallet, CreditCard, Postcard, TrendCharts, UserFilled, Avatar, Menu
+  Wallet, CreditCard, Postcard, TrendCharts, UserFilled, Avatar, Menu,
+  CollectionTag, Delete
 }
 function resolveIcon(iconName: string): any {
   if (!iconName) return Menu
@@ -43,6 +44,7 @@ function handleSelect(index: string) { emit('select', index) }
     @select="handleSelect"
   >
     <template v-for="item in userStore.menus" :key="item.id">
+      <!-- catalog 且有子项 → 子菜单 -->
       <el-sub-menu
         v-if="item.menuType === 'catalog' && item.children && item.children.length > 0"
         :index="String(item.routePath || item.id)"
@@ -51,11 +53,28 @@ function handleSelect(index: string) { emit('select', index) }
           <el-icon><component :is="resolveIcon(item.icon)" /></el-icon>
           <span>{{ item.menuName }}</span>
         </template>
-        <el-menu-item v-for="child in item.children" :key="child.id" :index="child.routePath">
-          <el-icon><component :is="resolveIcon(child.icon)" /></el-icon>
-          <template #title>{{ child.menuName }}</template>
-        </el-menu-item>
+        <!-- 递归：子项可能是 menu 或二级 catalog -->
+        <template v-for="child in item.children" :key="child.id">
+          <el-sub-menu
+            v-if="child.menuType === 'catalog' && child.children && child.children.length > 0"
+            :index="String(child.routePath || child.id)"
+          >
+            <template #title>
+              <el-icon><component :is="resolveIcon(child.icon)" /></el-icon>
+              <span>{{ child.menuName }}</span>
+            </template>
+            <el-menu-item v-for="sub in child.children" :key="sub.id" :index="sub.routePath">
+              <el-icon><component :is="resolveIcon(sub.icon)" /></el-icon>
+              <template #title>{{ sub.menuName }}</template>
+            </el-menu-item>
+          </el-sub-menu>
+          <el-menu-item v-else-if="child.menuType === 'menu'" :index="child.routePath">
+            <el-icon><component :is="resolveIcon(child.icon)" /></el-icon>
+            <template #title>{{ child.menuName }}</template>
+          </el-menu-item>
+        </template>
       </el-sub-menu>
+      <!-- 一级 menu（如首页） -->
       <el-menu-item v-else-if="item.menuType === 'menu'" :index="item.routePath">
         <el-icon><component :is="resolveIcon(item.icon)" /></el-icon>
         <template #title>{{ item.menuName }}</template>

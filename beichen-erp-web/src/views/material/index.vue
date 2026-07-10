@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getMaterialPage,
@@ -9,13 +9,21 @@ import {
   type Material,
   type MaterialQueryParams
 } from '@/api/material'
+import request from '@/utils/request'
+
+// 品牌下拉
+const brandOptions = ref<{ id: number; brandName: string }[]>([])
+async function loadBrands() {
+  try { const res = await request.get<any, any>('/brand/enabled'); brandOptions.value = res || [] } catch (e: any) { console.warn('加载品牌失败', e?.message || e) }
+}
 
 // 查询参数
 const query = reactive<MaterialQueryParams>({
-  code: '',
-  name: '',
-  category: ''
+  name: ''
 })
+
+// Tab 切换
+const activeTab = ref('正常')
 
 // 分页
 const pagination = reactive({
@@ -36,8 +44,9 @@ const categoryOptions = [
 ]
 
 const statusOptions = [
-  { label: '启用', value: 1 },
-  { label: '禁用', value: 0 }
+  { label: '正常', value: '正常' },
+  { label: '停售', value: '停售' },
+  { label: '研发中', value: '研发中' }
 ]
 
 // 弹窗
@@ -47,24 +56,22 @@ const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
 const defaultForm = (): Material => ({
-  code: '',
   name: '',
-  category: '',
-  spec: '',
-  unit: '',
+  brandId: undefined,
   safetyStock: 0,
   currentStock: 0,
-  status: 1,
-  remark: ''
-})
+  status: '正常',
+  remark: '',
+  code: '',
+  category: '',
+  spec: '',
+  unit: ''
+} as Material)
 
 const form = reactive<Material>(defaultForm())
 
 const rules: FormRules = {
-  code: [{ required: true, message: '请输入物料编码', trigger: 'blur' }],
   name: [{ required: true, message: '请输入物料名称', trigger: 'blur' }],
-  category: [{ required: true, message: '请选择物料分类', trigger: 'change' }],
-  unit: [{ required: true, message: '请输入计量单位', trigger: 'blur' }],
   status: [{ required: true, message: '请选择状态', trigger: 'change' }]
 }
 
@@ -75,9 +82,8 @@ async function loadData() {
       pageNum: pagination.pageNum,
       pageSize: pagination.pageSize
     }
-    if (query.code) params.code = query.code
     if (query.name) params.name = query.name
-    if (query.category) params.category = query.category
+    params.status = activeTab.value
 
     const res = await getMaterialPage(params)
     tableData.value = res?.records || []
@@ -90,15 +96,18 @@ async function loadData() {
   }
 }
 
+function handleTabChange() {
+  pagination.pageNum = 1
+  loadData()
+}
+
 function handleQuery() {
   pagination.pageNum = 1
   loadData()
 }
 
 function handleReset() {
-  query.code = ''
   query.name = ''
-  query.category = ''
   pagination.pageNum = 1
   loadData()
 }
@@ -108,6 +117,12 @@ function handleAdd() {
   dialogTitle.value = '新增物料'
   dialogVisible.value = true
   formRef.value?.clearValidate()
+}
+
+function getBrandName(brandId: number | string | undefined) {
+  if (brandId == null) return ''
+  const b = brandOptions.value.find(o => o.id === Number(brandId))
+  return b ? b.brandName : ''
 }
 
 async function handleEdit(row: Material) {
@@ -170,18 +185,21 @@ function handleCurrentChange(val: number) {
   loadData()
 }
 
-function statusText(status: number) {
-  return status === 1 ? '启用' : '禁用'
+function statusText(status: string) {
+  return status || '正常'
 }
 
-function statusType(status: number) {
-  return status === 1 ? 'success' : 'info'
+function statusType(status: string) {
+  if (status === '正常') return 'success'
+  if (status === '停售') return 'danger'
+  return 'warning'
 }
 
 onMounted(() => {
+  loadBrands()
   loadData()
 })
-onActivated(() => { loadData() })
+onActivated(() => { loadBrands(); loadData() })
 </script>
 
 <template>
@@ -189,34 +207,31 @@ onActivated(() => { loadData() })
     <!-- 查询栏 -->
     <el-card shadow="never" class="query-card">
       <el-form :inline="true" :model="query" class="query-form">
-        <el-form-item label="编码">
-          <el-input v-model="query.code" placeholder="请输入物料编码" clearable @keyup.enter="handleQuery" />
-        </el-form-item>
         <el-form-item label="名称">
           <el-input v-model="query.name" placeholder="请输入物料名称" clearable @keyup.enter="handleQuery" />
         </el-form-item>
-        <el-form-item label="分类">
-          <el-select v-model="query.category" placeholder="请选择分类" clearable>
-            <el-option v-for="o in categoryOptions" :key="o.value" :label="o.label" :value="o.value" />
-          </el-select>
-        </el-form-item>
         <el-form-item>
-          <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
-          <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
-          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+          <el-button type="primary" @click="handleQuery">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" @click="handleAdd">新增</el-button>
         </el-form-item>
       </el-form>
     </el-card>
 
     <!-- 列表 -->
     <el-card shadow="never" class="table-card">
+      <el-tabs v-model="activeTab" @tab-change="handleTabChange">
+        <el-tab-pane label="正常" name="正常" />
+        <el-tab-pane label="停售" name="停售" />
+        <el-tab-pane label="研发中" name="研发中" />
+      </el-tabs>
+
       <el-table v-loading="tableLoading" :data="tableData" border stripe>
         <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column prop="code" label="编码" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="category" label="分类" width="100" align="center" />
-        <el-table-column prop="spec" label="规格" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="unit" label="单位" width="80" align="center" />
+        <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip />
+        <el-table-column label="品牌" min-width="120">
+          <template #default="{ row }">{{ getBrandName(row.brandId) }}</template>
+        </el-table-column>
         <el-table-column prop="safetyStock" label="安全库存" width="100" align="right" />
         <el-table-column prop="currentStock" label="当前库存" width="100" align="right" />
         <el-table-column label="状态" width="90" align="center">
@@ -251,30 +266,15 @@ onActivated(() => { loadData() })
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="编码" prop="code">
-              <el-input v-model="form.code" placeholder="请输入物料编码" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
             <el-form-item label="名称" prop="name">
               <el-input v-model="form.name" placeholder="请输入物料名称" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="分类" prop="category">
-              <el-select v-model="form.category" placeholder="请选择分类" style="width: 100%">
-                <el-option v-for="o in categoryOptions" :key="o.value" :label="o.label" :value="o.value" />
+            <el-form-item label="品牌">
+              <el-select v-model="form.brandId" placeholder="请选择品牌" clearable style="width:100%">
+                <el-option v-for="b in brandOptions" :key="b.id" :label="b.brandName" :value="b.id" />
               </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="单位" prop="unit">
-              <el-input v-model="form.unit" placeholder="请输入计量单位" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="规格" prop="spec">
-              <el-input v-model="form.spec" placeholder="请输入规格" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -282,16 +282,6 @@ onActivated(() => { loadData() })
               <el-select v-model="form.status" placeholder="请选择状态" style="width: 100%">
                 <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
               </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="安全库存" prop="safetyStock">
-              <el-input-number v-model="form.safetyStock" :min="0" controls-position="right" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="当前库存" prop="currentStock">
-              <el-input-number v-model="form.currentStock" :min="0" controls-position="right" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="24">

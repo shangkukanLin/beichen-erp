@@ -1,24 +1,32 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { reactive, ref, onMounted, onActivated } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { addProject, getSupplierPage, type ProjectDTO } from '@/api/system'
 import request from '@/utils/request'
+import { useTabStore } from '@/stores/tabs'
 
 const router = useRouter()
+const route = useRoute()
+const tabStore = useTabStore()
 
 const STATUS_LIST = ['立项', '排线图纸', '排线打样', 'FOG打样', '显示调试', '触摸调试', '背贴盖板打样', '总成样品', '测试', '小批量', '结项']
 const solutionSuppliers = ref<{ id: number; name: string }[]>([])
 const factoryOptions = ref<{ id: number; name: string }[]>([])
 const saving = ref(false)
 
-const form = reactive<ProjectDTO>({
+const defForm = (): ProjectDTO => ({
   name: '', status: '立项', displaySupplierName: '', touchSupplierName: '',
   assemblyName: '',
   adaptModel: '', originalSize: '', originalResolution: '',
   startDate: new Date().toISOString().split('T')[0], expectedEndDate: '', remark: '',
   sampleFactoryId: undefined, outsourceFactoryId: undefined
 })
+const form = reactive<ProjectDTO>(defForm())
+
+function resetForm() {
+  Object.assign(form, defForm())
+}
 
 async function loadData() {
   try { const r = await getSupplierPage({ supplierType: 'solution', pageSize: 200 }); solutionSuppliers.value = (r?.records || []).map((s: any) => ({ id: s.id, name: s.name })) } catch (e: any) { console.warn('加载方案商失败', e?.message || e) }
@@ -32,14 +40,23 @@ async function handleSubmit() {
   try {
     await addProject(form as any)
     ElMessage.success('项目创建成功')
-    router.push('/dev/project')
+    resetForm()
+    tabStore.removeTab(route.path)
+    router.replace('/dev/project')
   } catch (e: any) { ElMessage.error('项目创建失败: ' + (e?.message || '未知错误')) }
   saving.value = false
 }
 
 function goBack() { router.push('/dev/project') }
 
+function onNameBlur() {
+  if (!form.assemblyName || !form.assemblyName.trim()) {
+    form.assemblyName = form.name
+  }
+}
+
 onMounted(() => loadData())
+onActivated(() => resetForm())
 </script>
 
 <template>
@@ -54,7 +71,7 @@ onMounted(() => loadData())
       <template #header><span style="font-weight:600">基础信息</span></template>
       <el-form :model="form" label-width="100px">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="项目名称"><el-input v-model="form.name" placeholder="请输入项目名称" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="项目名称"><el-input v-model="form.name" placeholder="请输入项目名称" @blur="onNameBlur" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="总成名称" prop="assemblyName" :rules="[{ required: true, message: '请输入总成名称', trigger: 'blur' }]"><el-input v-model="form.assemblyName" placeholder="请输入总成名称" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="项目阶段">
             <el-select v-model="form.status" style="width:100%"><el-option v-for="s in STATUS_LIST" :key="s" :label="s" :value="s" /></el-select>

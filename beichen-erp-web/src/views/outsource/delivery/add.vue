@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { useTabStore } from '@/stores/tabs'
 
 const router = useRouter()
+const route = useRoute()
+const tabStore = useTabStore()
 const saving = ref(false)
 const form = reactive({ deliveryType: '发料', projectId: undefined as any, factoryId: undefined as any, fromWarehouseId: undefined as any, toWarehouseId: undefined as any, supplierDirect: 0, supplierId: undefined as any, logisticsCompany: '', logisticsNo: '', attachUrl: '', deliveryDate: new Date().toISOString().split('T')[0], contact: '', phone: '', remark: '' })
 const factoryOptions = ref<any[]>([])
@@ -56,7 +59,8 @@ async function handleSubmit() {
     if (uploadFile.value) { const fd = new FormData(); fd.append('file', uploadFile.value); const res = await request.post<any, string>('/dev/file/upload', fd); form.attachUrl = res as unknown as string }
     await request.post('/outsource/delivery', { ...form, items: items.value })
     ElMessage.success('收发单已确认，库存已更新')
-    router.push('/outsource/delivery')
+    tabStore.removeTab(route.path)
+    router.replace('/outsource/delivery')
   } finally { saving.value = false }
 }
 

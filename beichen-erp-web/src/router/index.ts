@@ -27,6 +27,24 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '首页', requiresAuth: true }
       },
       {
+        path: 'system/smart',
+        name: 'SystemSmart',
+        component: () => import('@/views/dev/placeholder.vue'),
+        meta: { title: '智能管理', requiresAuth: true }
+      },
+      {
+        path: 'system/settings',
+        name: 'SystemSettings',
+        component: () => import('@/views/system/settings/index.vue'),
+        meta: { title: '系统信息', requiresAuth: true }
+      },
+      {
+        path: 'system/clear-data',
+        name: 'SystemClearData',
+        component: () => import('@/views/system/clear-data/index.vue'),
+        meta: { title: '清空数据', requiresAuth: true }
+      },
+      {
         path: 'system/user',
         name: 'SystemUser',
         component: () => import('@/views/system/user/index.vue'),
@@ -150,6 +168,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/material/index.vue'),
         meta: { title: '产品管理', requiresAuth: true }
       },
+      { path: 'inventory/brand', name: 'InventoryBrand', component: () => import('@/views/inventory/brand/index.vue'), meta: { title: '品牌管理', requiresAuth: true } },
       { path: 'outsource/order', name: 'OutsourceOrder', component: () => import('@/views/outsource/order/index.vue'), meta: { title: '委外加工单', requiresAuth: true } },
       { path: 'outsource/order/add', name: 'OutsourceOrderAdd', component: () => import('@/views/outsource/order/add.vue'), meta: { title: '新增加工单', requiresAuth: true } },
       { path: 'outsource/order/detail/:id', name: 'OutsourceOrderDetail', component: () => import('@/views/outsource/order/detail.vue'), meta: { title: '加工单详情', requiresAuth: true } },

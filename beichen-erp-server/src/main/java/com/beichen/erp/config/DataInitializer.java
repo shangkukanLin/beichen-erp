@@ -13,6 +13,11 @@ import com.beichen.erp.system.entity.UserRole;
 import com.beichen.erp.system.mapper.MenuMapper;
 import com.beichen.erp.system.mapper.RoleMapper;
 import com.beichen.erp.system.mapper.UserRoleMapper;
+import org.springframework.core.io.ClassPathResource;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.Statement;
 import com.beichen.erp.system.service.RoleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,6 +51,12 @@ public class DataInitializer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        initSchema(); // 首次启动执行建表脚本
+        // 清空所有业务数据（保留表结构），仅当启动参数含 --clear-data 时执行
+        if (args.containsOption("clear-data")) {
+            clearAllData();
+            log.info("===== 数据已清空，仅保留表结构 =====");
+        }
         alterDeliveryTable();
         alterInventoryStockTable();
         initCompany();
@@ -56,11 +67,115 @@ public class DataInitializer implements ApplicationRunner {
         fixSaleMenu();
         fixMenuStructure();
         fixDevMenu();
+        fixBrandMenu();
+        fixSettingsMenu();
         removeObsoleteMenus();
         initRoleMenus();
         initSuperAdmin();
         initBomTypes();
         initMaterials();
+    }
+
+    private void initSchema() {
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_user (id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '用户ID',username VARCHAR(50) UNIQUE NOT NULL COMMENT '登录账号',password VARCHAR(100) NOT NULL COMMENT 'BCrypt加密密码',phone VARCHAR(20) COMMENT '手机号',dept VARCHAR(50) COMMENT '所属部门',status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',company_id BIGINT DEFAULT NULL COMMENT '公司ID',deleted TINYINT DEFAULT 0 COMMENT '0正常 1已删除',create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',INDEX idx_company_id (company_id),INDEX idx_username (username)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_company (id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '公司ID',company_name VARCHAR(100) NOT NULL COMMENT '公司名称',status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_role (id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '角色ID',role_name VARCHAR(50) NOT NULL COMMENT '角色名称',role_code VARCHAR(50) NOT NULL COMMENT '角色编码',status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',remark VARCHAR(255) DEFAULT NULL COMMENT '备注',create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',company_id BIGINT DEFAULT NULL COMMENT '公司ID',update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',UNIQUE KEY uk_role_code (role_code),INDEX idx_company_id (company_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_user_role (id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',user_id BIGINT NOT NULL COMMENT '用户ID',role_id BIGINT NOT NULL COMMENT '角色ID',UNIQUE KEY uk_user_role (user_id, role_id),INDEX idx_user_id (user_id),INDEX idx_role_id (role_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_menu (id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '菜单ID',parent_id BIGINT DEFAULT 0 COMMENT '父菜单ID',menu_name VARCHAR(50) NOT NULL COMMENT '菜单名称',menu_type VARCHAR(20) NOT NULL COMMENT '类型',route_path VARCHAR(100) DEFAULT '' COMMENT '路由路径',route_name VARCHAR(100) DEFAULT '' COMMENT '路由名称',icon VARCHAR(50) DEFAULT '' COMMENT '图标',sort_order INT DEFAULT 0 COMMENT '排序',visible TINYINT DEFAULT 1 COMMENT '0隐藏 1显示',status TINYINT DEFAULT 1 COMMENT '0禁用 1启用',create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',company_id BIGINT DEFAULT NULL COMMENT '公司ID',update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',INDEX idx_parent_id (parent_id),INDEX idx_company_id (company_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_role_menu (id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',role_id BIGINT NOT NULL COMMENT '角色ID',menu_id BIGINT NOT NULL COMMENT '菜单ID',UNIQUE KEY uk_role_menu (role_id, menu_id),INDEX idx_role_id (role_id),INDEX idx_menu_id (menu_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS brand (id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '品牌ID',brand_name VARCHAR(100) NOT NULL COMMENT '品牌名称',status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',company_id BIGINT DEFAULT NULL COMMENT '公司ID',create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',UNIQUE KEY uk_brand_name_company (brand_name, company_id),INDEX idx_company_id (company_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        // 增量 DDL：给已有表补加缺失的关键列
+        safeDDL("ALTER TABLE dev_project ADD COLUMN assembly_name VARCHAR(100) COMMENT '总成名称' AFTER name");
+        safeDDL("ALTER TABLE material ADD COLUMN brand_id BIGINT DEFAULT NULL COMMENT '品牌ID' AFTER name");
+        safeDDL("ALTER TABLE sys_company ADD COLUMN phone VARCHAR(20) COMMENT '电话' AFTER company_name");
+        safeDDL("ALTER TABLE sys_company ADD COLUMN address VARCHAR(200) COMMENT '地址' AFTER phone");
+        safeDDL("ALTER TABLE sys_company ADD COLUMN contact_person VARCHAR(50) COMMENT '联系人' AFTER address");
+        safeDDL("ALTER TABLE sys_company ADD COLUMN tax_no VARCHAR(50) COMMENT '税号' AFTER contact_person");
+        safeDDL("ALTER TABLE sys_company ADD COLUMN email VARCHAR(100) COMMENT '邮箱' AFTER tax_no");
+        safeDDL("ALTER TABLE inventory_warehouse_stock ADD COLUMN material_id BIGINT DEFAULT NULL COMMENT '物料ID' AFTER product_name");
+        safeDDL("ALTER TABLE inventory_warehouse_stock ADD COLUMN available_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '可用数量' AFTER quantity");
+        log.info("核心表+增量DDL完成");
+    }
+
+    private void safeDDL(String sql) {
+        try {
+            jdbcTemplate.execute(sql);
+        } catch (Exception e) {
+            log.warn("safeDDL 执行失败: {} — 错误: {}", sql, e.getMessage());
+        }
+    }
+
+    private void clearAllData() {
+        jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 0");
+        String sql = "SELECT CONCAT('DELETE FROM ', table_name, ';') FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE'";
+        jdbcTemplate.queryForList(sql).forEach(row -> {
+            jdbcTemplate.execute(row.values().iterator().next().toString());
+        });
+        jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 1");
+    }
+
+    /** 补全 dev_project 表所有可能缺失的列 */
+    private void alterDevProjectColumns() {
+        String[][] columns = {
+            {"assembly_name", "VARCHAR(100) COMMENT '总成名称'"},
+            {"display_supplier_name", "VARCHAR(100) COMMENT '显示方案供应商'"},
+            {"touch_supplier_name", "VARCHAR(100) COMMENT '触摸方案供应商'"},
+            {"adapt_model", "VARCHAR(100) COMMENT '适配机型'"},
+            {"original_size", "VARCHAR(50) COMMENT '原始尺寸'"},
+            {"original_resolution", "VARCHAR(50) COMMENT '原始分辨率'"},
+            {"project_leader_id", "BIGINT COMMENT '项目负责人ID'"},
+            {"sample_factory_id", "BIGINT COMMENT '样品工厂ID'"},
+            {"outsource_factory_id", "BIGINT COMMENT '外协工厂ID'"},
+            {"start_date", "DATE COMMENT '开始日期'"},
+            {"expected_end_date", "DATE COMMENT '预计结束日期'"},
+            {"actual_end_date", "DATE COMMENT '实际结束日期'"},
+        };
+        for (String[] col : columns) {
+            try {
+                Integer cnt = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dev_project' AND COLUMN_NAME=?",
+                    Integer.class, col[0]);
+                if (cnt == null || cnt == 0) {
+                    jdbcTemplate.execute("ALTER TABLE dev_project ADD COLUMN " + col[0] + " " + col[1]);
+                    log.info("已添加 dev_project.{} 列", col[0]);
+                }
+            } catch (Exception e) {
+                log.warn("添加 dev_project.{} 列异常: {}", col[0], e.getMessage());
+            }
+        }
+    }
+
+    /** 为 material 表添加 project_id 列 */
+    private void alterMaterialProjectId() {
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='material' AND COLUMN_NAME='project_id'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE material ADD COLUMN project_id BIGINT DEFAULT NULL COMMENT '关联研发项目ID' AFTER status");
+                log.info("已添加 material.project_id 列");
+            }
+        } catch (Exception e) {
+            log.warn("添加 material.project_id 列异常: {}", e.getMessage());
+        }
+    }
+
+    /** 将 material.status 从 TINYINT 升级为 VARCHAR */
+    private void alterMaterialStatusColumn() {
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='material' AND COLUMN_NAME='status' AND DATA_TYPE='varchar'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE material MODIFY COLUMN status VARCHAR(20) DEFAULT '正常' COMMENT '状态: 正常/停售/研发中'");
+                // 迁移旧数据: 1→正常, 0→停售
+                jdbcTemplate.execute("UPDATE material SET status = '正常' WHERE status = '1'");
+                jdbcTemplate.execute("UPDATE material SET status = '停售' WHERE status = '0'");
+                log.info("已升级 material.status 为 VARCHAR(20)");
+            }
+        } catch (Exception e) {
+            log.warn("升级 material.status 列类型异常: {}", e.getMessage());
+        }
     }
 
     /** 增量 DDL：给已有表补加缺失的列 */
@@ -85,16 +200,116 @@ public class DataInitializer implements ApplicationRunner {
         } catch (Exception e) {
             log.warn("DDL 执行异常: {}", e.getMessage());
         }
+        // 补全 dev_project 所有可能缺失的列
+        alterDevProjectColumns();
+        // 物料状态字段从 TINYINT 升级为 VARCHAR
+        alterMaterialStatusColumn();
         try {
             Integer cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dev_project' AND COLUMN_NAME='assembly_name'", Integer.class);
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='material' AND COLUMN_NAME='brand_id'", Integer.class);
             if (cnt == null || cnt == 0) {
-                jdbcTemplate.execute("ALTER TABLE dev_project ADD COLUMN assembly_name VARCHAR(100) COMMENT '总成名称' AFTER name");
-                log.info("已添加 dev_project.assembly_name 列");
+                jdbcTemplate.execute("ALTER TABLE material ADD COLUMN brand_id BIGINT DEFAULT NULL COMMENT '品牌ID' AFTER name");
+                log.info("已添加 material.brand_id 列");
             }
         } catch (Exception e) {
             log.warn("DDL 执行异常: {}", e.getMessage());
         }
+        // material.project_id：关联研发项目
+        alterMaterialProjectId();
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='sys_company' AND COLUMN_NAME='phone'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE sys_company ADD COLUMN phone VARCHAR(20) COMMENT '电话' AFTER company_name");
+                jdbcTemplate.execute("ALTER TABLE sys_company ADD COLUMN address VARCHAR(200) COMMENT '地址' AFTER phone");
+                jdbcTemplate.execute("ALTER TABLE sys_company ADD COLUMN contact_person VARCHAR(50) COMMENT '联系人' AFTER address");
+                jdbcTemplate.execute("ALTER TABLE sys_company ADD COLUMN tax_no VARCHAR(50) COMMENT '税号' AFTER contact_person");
+                jdbcTemplate.execute("ALTER TABLE sys_company ADD COLUMN email VARCHAR(100) COMMENT '邮箱' AFTER tax_no");
+                log.info("已添加 sys_company 扩展字段");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='sys_param'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_param (" +
+                    "id BIGINT AUTO_INCREMENT PRIMARY KEY, param_key VARCHAR(50) NOT NULL, param_value VARCHAR(200)," +
+                    "remark VARCHAR(255), company_id BIGINT, create_time DATETIME DEFAULT CURRENT_TIMESTAMP," +
+                    "update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uk_key_company (param_key, company_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                // 插默认参数
+                Long cid = CompanyContext.get();
+                if (cid != null && cid > 0) {
+                    jdbcTemplate.update("INSERT IGNORE INTO sys_param (param_key, param_value, remark, company_id) VALUES ('tax_rate','13.00','税率(%)',?),('credit_period','30','账期天数',?),('stock_alert_threshold','10','库存预警阈值',?)", cid, cid, cid);
+                }
+                log.info("已创建 sys_param 表");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='sys_operation_log'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_operation_log (" +
+                    "id BIGINT AUTO_INCREMENT PRIMARY KEY, user_id BIGINT, username VARCHAR(50)," +
+                    "module VARCHAR(50), operation VARCHAR(50), target VARCHAR(200), detail VARCHAR(500)," +
+                    "ip VARCHAR(50), company_id BIGINT, create_time DATETIME DEFAULT CURRENT_TIMESTAMP," +
+                    "INDEX idx_user_id (user_id), INDEX idx_module (module), INDEX idx_company_id (company_id), INDEX idx_create_time (create_time)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                log.info("已创建 sys_operation_log 表");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='brand'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS brand (" +
+                    "id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '品牌ID'," +
+                    "brand_name VARCHAR(100) NOT NULL COMMENT '品牌名称'," +
+                    "status TINYINT DEFAULT 1 COMMENT '1启用 0禁用'," +
+                    "company_id BIGINT DEFAULT NULL COMMENT '公司ID'," +
+                    "create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'," +
+                    "update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'," +
+                    "UNIQUE KEY uk_brand_name_company (brand_name, company_id)," +
+                    "INDEX idx_company_id (company_id)" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='品牌表'");
+                log.info("已创建 brand 品牌表");
+            }
+        } catch (Exception e) {
+            log.warn("DDL 执行异常: {}", e.getMessage());
+        }
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dev_material'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS dev_material (" +
+                    "id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID'," +
+                    "project_id BIGINT NOT NULL COMMENT '项目ID'," +
+                    "material_name VARCHAR(100) NOT NULL COMMENT '物料名称'," +
+                    "material_type VARCHAR(30) COMMENT '物料类型'," +
+                    "quantity DECIMAL(18,4) DEFAULT 1 COMMENT '数量'," +
+                    "location VARCHAR(30) COMMENT '存放位置'," +
+                    "location_detail VARCHAR(200) COMMENT '位置详情'," +
+                    "purchase_date DATE COMMENT '采购日期'," +
+                    "cost DECIMAL(18,4) COMMENT '采购金额'," +
+                    "status VARCHAR(20) DEFAULT '完好' COMMENT '状态'," +
+                    "remark VARCHAR(255) COMMENT '备注'," +
+                    "company_id BIGINT DEFAULT NULL COMMENT '公司ID'," +
+                    "create_time DATETIME DEFAULT CURRENT_TIMESTAMP," +
+                    "update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP," +
+                    "INDEX idx_project_id (project_id)," +
+                    "INDEX idx_company_id (company_id)" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目物料表'");
+                log.info("已创建 dev_material 研发物料表");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // 已有表补加 company_id 列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dev_material' AND COLUMN_NAME='company_id'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE dev_material ADD COLUMN company_id BIGINT DEFAULT NULL COMMENT '公司ID' AFTER remark");
+                log.info("已为 dev_material 添加 company_id 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
     }
 
     /** 增量 DDL：库存表按 material_id 维度重构 + 唯一键补 company_id + 可用量字段 */
@@ -137,8 +352,8 @@ public class DataInitializer implements ApplicationRunner {
         try {
             Integer cnt = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_company", Integer.class);
             if (cnt == null || cnt == 0) {
-               // jdbcTemplate.update("INSERT INTO sys_company (company_name, status) VALUES (?, ?)", "北辰科技", 1);
-               //   log.info("已初始化默认公司：北辰科技");
+                jdbcTemplate.update("INSERT INTO sys_company (company_name, status) VALUES ('北辰科技', 1)");
+                log.info("已初始化默认公司：北辰科技");
             }
         } catch (Exception e) {
             log.warn("初始化公司异常: {}", e.getMessage());
@@ -238,21 +453,25 @@ public class DataInitializer implements ApplicationRunner {
         saveMenu(12L, 4L, "委外加工厂", "menu", "/supplier/factory", "SupplierFactory", "OfficeBuilding", 3);
         saveMenu(14L, 4L, "辅料商", "menu", "/supplier/material-supplier", "SupplierMaterialSupplier", "Box", 4);
         // 进销存子菜单
-        saveMenu(18L, 5L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 1);
-        saveMenu(19L, 5L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 2);
-        saveMenu(20L, 5L, "采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 3);
-        saveMenu(13L, 5L, "成品供应商", "menu", "/supplier/product", "SupplierProduct", "GoodsFilled", 4);
-        saveMenu(22L, 5L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 5);
-        saveMenu(23L, 5L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 6);
+        saveMenu(39L, 5L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 1);
+        saveMenu(18L, 5L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 2);
+        saveMenu(19L, 5L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 3);
+        saveMenu(20L, 5L, "采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 4);
+        saveMenu(13L, 5L, "成品供应商", "menu", "/supplier/product", "SupplierProduct", "GoodsFilled", 5);
+        saveMenu(22L, 5L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 6);
+        saveMenu(23L, 5L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 7);
         // 财务管理子菜单
         saveMenu(25L, 6L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1);
         saveMenu(26L, 6L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2);
         saveMenu(27L, 6L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 3);
         saveMenu(28L, 6L, "资金流水", "menu", "/finance/cashflow", "FinanceCashflow", "TrendCharts", 4);
         // 设置子菜单
-        saveMenu(29L, 7L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 1);
-        saveMenu(30L, 7L, "角色管理", "menu", "/system/role", "SystemRole", "Avatar", 2);
-        saveMenu(31L, 7L, "菜单管理", "menu", "/system/menu", "SystemMenu", "Menu", 3);
+        saveMenu(40L, 7L, "智能管理", "menu", "/system/smart", "SystemSmart", "Cpu", 1);
+        saveMenu(41L, 7L, "系统设置", "catalog", "", "", "Tools", 2);
+        saveMenu(29L, 41L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 1);
+        saveMenu(30L, 41L, "角色管理", "menu", "/system/role", "SystemRole", "Avatar", 2);
+        saveMenu(31L, 41L, "菜单管理", "menu", "/system/menu", "SystemMenu", "Menu", 3);
+        saveMenu(42L, 7L, "清空数据", "menu", "/system/clear-data", "SystemClearData", "Delete", 3);
         // 额外菜单（不在固定ID范围）
         saveMenu(35L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 5);
         saveMenu(36L, 5L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 1);
@@ -292,7 +511,7 @@ public class DataInitializer implements ApplicationRunner {
                         8L, 9L, 10L, 11L, 12L, 13L, 14L,
                         15L, 16L, 18L, 19L, 20L,
                         22L, 23L, 25L, 26L, 27L, 28L,
-                        29L, 30L, 31L, 33L, 35L, 36L, 37L));
+                        29L, 30L, 31L, 33L, 35L, 36L, 37L, 39L, 40L, 41L, 42L));
                 log.info("初始化 super_admin 菜单权限完成");
             }
         }
@@ -304,7 +523,7 @@ public class DataInitializer implements ApplicationRunner {
                         8L, 9L, 10L, 11L, 12L, 13L, 14L,
                         15L, 16L, 18L, 19L, 20L,
                         22L, 23L, 25L, 26L, 27L, 28L,
-                        29L, 30L, 33L, 35L, 36L, 37L));
+                        29L, 30L, 33L, 35L, 36L, 37L, 39L, 40L, 41L, 42L));
                 log.info("初始化 admin 菜单权限完成");
             }
         }
@@ -361,7 +580,7 @@ public class DataInitializer implements ApplicationRunner {
         m.setUnit(unit);
         m.setSafetyStock(safetyStock);
         m.setCurrentStock(currentStock);
-        m.setStatus(1);
+        m.setStatus("正常");
         materialMapper.insert(m);
     }
 
@@ -457,6 +676,64 @@ public class DataInitializer implements ApplicationRunner {
             log.info("研发管理菜单已修正（改名+重排+辅料商迁移）");
         } catch (Exception e) {
             log.warn("研发管理菜单修正异常: {}", e.getMessage());
+        }
+    }
+
+    /** 品牌管理菜单补建（已有数据库缺失时自动插入，始终执行） */
+    private void fixBrandMenu() {
+        try {
+            // 1) 插入品牌管理菜单(id=39)，如果不存在
+            Integer cnt = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_menu WHERE id = 39", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.update("INSERT INTO sys_menu (id, parent_id, menu_name, menu_type, route_path, route_name, icon, sort_order, visible, status) VALUES (39, 5, '品牌管理', 'menu', '/inventory/brand', 'InventoryBrand', 'CollectionTag', 1, 1, 1)");
+                log.info("已创建品牌管理菜单");
+            }
+            // 2) 重排进销存子菜单：品牌(1)→客户(2)→产品(3)→采购(4)→供应商(5)→库存(6)→销售(7)
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 2 WHERE id = 18 AND parent_id = 5");
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 3 WHERE id = 19 AND parent_id = 5");
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 4 WHERE id = 20 AND parent_id = 5");
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 5 WHERE id = 13 AND parent_id = 5");
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 6 WHERE id = 22 AND parent_id = 5");
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 7 WHERE id = 23 AND parent_id = 5");
+            // 3) 给 super_admin 和 admin 角色补上 39L 权限
+            for (String code : new String[]{"super_admin", "admin"}) {
+                jdbcTemplate.update("INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, 39 FROM sys_role r WHERE r.role_code = ?", code);
+            }
+            log.info("品牌管理菜单已修正");
+        } catch (Exception e) {
+            log.warn("品牌管理菜单修正异常: {}", e.getMessage());
+        }
+    }
+
+    /** 智能管理+系统设置+清空数据菜单补建及结构调整 */
+    private void fixSettingsMenu() {
+        try {
+            // 1) 补建智能管理(40)
+            Integer cnt40 = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_menu WHERE id = 40", Integer.class);
+            if (cnt40 == null || cnt40 == 0) {
+                jdbcTemplate.update("INSERT INTO sys_menu (id,parent_id,menu_name,menu_type,route_path,route_name,icon,sort_order,visible,status) VALUES (40,7,'智能管理','menu','/system/smart','SystemSmart','Cpu',1,1,1)");
+                jdbcTemplate.update("INSERT IGNORE INTO sys_role_menu (role_id,menu_id) SELECT r.id,40 FROM sys_role r WHERE r.role_code IN ('super_admin','admin')");
+            }
+            // 2) 系统设置(41)改为 catalog，并把用户/角色/菜单管理挂入其下
+            jdbcTemplate.update("UPDATE sys_menu SET menu_type='catalog', route_path='', route_name='', sort_order=2 WHERE id=41");
+            Integer cnt41 = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_menu WHERE id = 41", Integer.class);
+            if (cnt41 == null || cnt41 == 0) {
+                jdbcTemplate.update("INSERT INTO sys_menu (id,parent_id,menu_name,menu_type,route_path,route_name,icon,sort_order,visible,status) VALUES (41,7,'系统设置','catalog','','','Tools',2,1,1)");
+                jdbcTemplate.update("INSERT IGNORE INTO sys_role_menu (role_id,menu_id) SELECT r.id,41 FROM sys_role r WHERE r.role_code IN ('super_admin','admin')");
+            }
+            jdbcTemplate.update("UPDATE sys_menu SET parent_id=41, sort_order=1 WHERE id=29 AND parent_id=7");
+            jdbcTemplate.update("UPDATE sys_menu SET parent_id=41, sort_order=2 WHERE id=30 AND parent_id=7");
+            jdbcTemplate.update("UPDATE sys_menu SET parent_id=41, sort_order=3 WHERE id=31 AND parent_id=7");
+            // 3) 补建清空数据(42)
+            Integer cnt42 = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_menu WHERE id = 42", Integer.class);
+            if (cnt42 == null || cnt42 == 0) {
+                jdbcTemplate.update("INSERT INTO sys_menu (id,parent_id,menu_name,menu_type,route_path,route_name,icon,sort_order,visible,status) VALUES (42,7,'清空数据','menu','/system/clear-data','SystemClearData','Delete',3,1,1)");
+                jdbcTemplate.update("INSERT IGNORE INTO sys_role_menu (role_id,menu_id) SELECT r.id,42 FROM sys_role r WHERE r.role_code IN ('super_admin','admin')");
+            }
+            log.info("智能管理+系统设置(catalog)+清空数据菜单已修正");
+        } catch (Exception e) {
+            log.warn("智能管理+系统设置菜单修正异常: {}", e.getMessage());
         }
     }
 }

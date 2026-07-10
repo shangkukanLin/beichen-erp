@@ -10,10 +10,13 @@ spring:
   application:
     name: beichen-erp-server
   datasource:
-    url: jdbc:mysql://localhost:3306/beichen_erp?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_general_ci&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://localhost:3306/beichen_erp?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_general_ci&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
     username: root
     password: root
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      auto-commit: true
+      read-only: false
   sql:
     init:
       mode: always

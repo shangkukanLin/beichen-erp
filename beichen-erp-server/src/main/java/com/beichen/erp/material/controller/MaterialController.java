@@ -32,12 +32,14 @@ public class MaterialController {
             @RequestParam(defaultValue = "10") Integer pageSize,
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String name,
-            @RequestParam(required = false) String category) {
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String status) {
         Page<Material> page = new Page<>(pageNum, pageSize);
         LambdaQueryWrapper<Material> wrapper = new LambdaQueryWrapper<Material>()
                 .like(code != null && !code.isBlank(), Material::getCode, code)
                 .like(name != null && !name.isBlank(), Material::getName, name)
                 .eq(category != null && !category.isBlank(), Material::getCategory, category)
+                .eq(status != null && !status.isBlank(), Material::getStatus, status)
                 .orderByDesc(Material::getId);
         return R.ok(materialService.page(page, wrapper));
     }

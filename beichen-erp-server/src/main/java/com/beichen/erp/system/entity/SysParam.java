@@ -5,18 +5,15 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("sys_company")
-public class Company {
+@TableName("sys_param")
+public class SysParam {
     @TableId(type = IdType.AUTO)
     private Long id;
-    private String companyName;
-    private String phone;
-    private String address;
-    private String contactPerson;
-    private String taxNo;
-    private String email;
-    private Integer status;
+    private String paramKey;
+    private String paramValue;
+    private String remark;
     @TableField(fill = FieldFill.INSERT)
+    private Long companyId;
     private LocalDateTime createTime;
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;

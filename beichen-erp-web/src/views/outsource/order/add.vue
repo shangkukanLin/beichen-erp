@@ -3,9 +3,11 @@ import { reactive, ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { useTabStore } from '@/stores/tabs'
 
 const router = useRouter()
 const route = useRoute()
+const tabStore = useTabStore()
 const saving = ref(false)
 
 const form = reactive({
@@ -109,7 +111,8 @@ async function handleSubmit() {
     })
     await request.post('/outsource/order', { ...cleanForm, products: submitProducts })
     ElMessage.success('加工单创建成功')
-    router.push('/outsource/order')
+    tabStore.removeTab(route.path)
+    router.replace('/outsource/order')
   } catch (e: any) {
     ElMessage.error(e?.message || '创建加工单失败')
   } finally { saving.value = false }
