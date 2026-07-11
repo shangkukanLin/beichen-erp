@@ -68,7 +68,7 @@ function checkMobile() {
   isMobile.value = mobile
   if (!mobile) drawerOpen.value = false
 }
-onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile) })
+onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile); userStore.fetchMenus() })
 onUnmounted(() => { window.removeEventListener('resize', checkMobile) })
 </script>
 

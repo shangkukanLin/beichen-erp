@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import router from '@/router'
-import type { MenuVO } from '@/api/system'
+import { getUserMenuTree, type MenuVO } from '@/api/system'
 
 interface UserInfo {
   id?: number | string
@@ -32,12 +32,8 @@ export const useUserStore = defineStore('user', {
       const paths: string[] = []
       function collectMenus(menuList: MenuVO[]) {
         for (const menu of menuList) {
-          if (menu.routePath) {
-            paths.push(menu.routePath)
-          }
-          if (menu.children && menu.children.length > 0) {
-            collectMenus(menu.children)
-          }
+          if (menu.routePath) paths.push(menu.routePath)
+          if (menu.children && menu.children.length > 0) collectMenus(menu.children)
         }
       }
       collectMenus(state.menus)
@@ -47,11 +43,8 @@ export const useUserStore = defineStore('user', {
   actions: {
     setToken(token: string) {
       this.token = token
-      if (token) {
-        localStorage.setItem(TOKEN_KEY, token)
-      } else {
-        localStorage.removeItem(TOKEN_KEY)
-      }
+      if (token) localStorage.setItem(TOKEN_KEY, token)
+      else localStorage.removeItem(TOKEN_KEY)
     },
     setUserInfo(info: UserInfo) {
       this.userInfo = info
@@ -61,13 +54,22 @@ export const useUserStore = defineStore('user', {
       this.menus = menus
       localStorage.setItem(MENUS_KEY, JSON.stringify(menus))
     },
+    /** 从服务端拉取最新菜单（每次页面加载时调用，确保菜单始终最新） */
+    async fetchMenus() {
+      try {
+        const menus = await getUserMenuTree()
+        if (menus && menus.length > 0) {
+          this.menus = menus
+          localStorage.setItem(MENUS_KEY, JSON.stringify(menus))
+        }
+      } catch { /* 网络异常时保留当前菜单 */ }
+    },
     logout() {
       this.token = ''
       this.userInfo = null
       this.menus = []
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem('beichen_erp_user')
-      localStorage.removeItem(MENUS_KEY)
       router.push('/login')
     }
   }

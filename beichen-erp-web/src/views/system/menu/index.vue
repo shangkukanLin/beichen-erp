@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 import {
   getMenuTree,
   addMenu,
@@ -17,6 +18,7 @@ interface FlatMenu extends MenuVO {
 }
 
 const tableLoading = ref(false)
+const userStore = useUserStore()
 const tableData = ref<FlatMenu[]>([])
 const menuTree = ref<MenuVO[]>([])
 
@@ -147,6 +149,7 @@ async function handleSubmit() {
       }
       dialogVisible.value = false
       loadData()
+      userStore.fetchMenus()
     } catch {
       // 错误已在拦截器中提示
     } finally {
@@ -165,6 +168,7 @@ async function handleDelete(row: FlatMenu) {
     await deleteMenu(row.id as number | string)
     ElMessage.success('删除成功')
     loadData()
+    userStore.fetchMenus()
   } catch {
     // 用户取消或错误
   }

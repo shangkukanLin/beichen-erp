@@ -57,6 +57,8 @@ public class MenuController {
         menu.setVisible(dto.getVisible());
         menu.setStatus(dto.getStatus());
         menuService.save(menu);
+        // 新增菜单自动授权给 super_admin 和 admin
+        roleService.grantMenuToAdminRoles(menu.getId());
         return R.ok();
     }
 
@@ -98,6 +100,8 @@ public class MenuController {
         if (childCount > 0) {
             throw new BusinessException("存在子菜单，不可删除");
         }
+        // 先清理角色菜单关联，再删除菜单
+        roleService.removeMenuFromAllRoles(id);
         menuService.removeById(id);
         return R.ok();
     }

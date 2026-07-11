@@ -11,6 +11,8 @@ import com.beichen.erp.outsource.mapper.OutsourceDeliveryMapper;
 import com.beichen.erp.outsource.mapper.OutsourceWarehouseStockMapper;
 import com.beichen.erp.outsource.service.DeliveryService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +21,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class DeliveryServiceImpl implements DeliveryService {
@@ -26,6 +29,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final OutsourceDeliveryMapper deliveryMapper;
     private final OutsourceDeliveryItemMapper itemMapper;
     private final OutsourceWarehouseStockMapper stockMapper;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     public Page<OutsourceDelivery> page(String deliveryType, Long factoryId, String code, int pageNum, int pageSize) {
@@ -78,6 +82,10 @@ public class DeliveryServiceImpl implements DeliveryService {
                 if (delivery.getFromWarehouseId() != null) updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate());
             }
         }
+        // 发料时同步加工单物料已发数量
+        if ("发料".equals(delivery.getDeliveryType())) {
+            syncDeliveredQuantity(delivery, items, true);
+        }
     }
 
     @Override
@@ -102,6 +110,10 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
         }
 
+        // 发料取消时同步加工单物料已发数量（逆向）
+        if ("发料".equals(delivery.getDeliveryType())) {
+            syncDeliveredQuantity(delivery, items, false);
+        }
         // 更新状态
         OutsourceDelivery update = new OutsourceDelivery();
         update.setId(id);
@@ -116,8 +128,12 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (old == null) throw new BusinessException("单据不存在");
         if ("已取消".equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
 
-        // 1. 逆向旧库存
+        // 1. 加载旧明细并逆向库存
         List<OutsourceDeliveryItem> oldItems = getItems(delivery.getId());
+        // 逆向旧已发数量（仅发料）
+        if ("发料".equals(old.getDeliveryType())) {
+            syncDeliveredQuantity(old, oldItems, false);
+        }
         for (OutsourceDeliveryItem item : oldItems) {
             BigDecimal qty = item.getQuantity();
             if ("发料".equals(old.getDeliveryType())) {
@@ -143,6 +159,10 @@ public class DeliveryServiceImpl implements DeliveryService {
                 if (delivery.getFromWarehouseId() != null) updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate());
             }
         }
+        // 发料时重新应用新已发数量
+        if ("发料".equals(delivery.getDeliveryType())) {
+            syncDeliveredQuantity(delivery, items, true);
+        }
     }
 
     @Override
@@ -159,6 +179,42 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     // ==================== 私有方法 ====================
+
+    /**
+     * 同步加工单物料的已发数量
+     * 发料时，根据物料名称匹配该工厂下"生产中"的加工单物料记录，累加/扣减 delivered_quantity
+     * @param delivery 收发单
+     * @param items 收发明细
+     * @param increase true=发料(累加) / false=取消(扣减)
+     */
+    private void syncDeliveredQuantity(OutsourceDelivery delivery, List<OutsourceDeliveryItem> items, boolean increase) {
+        if (delivery.getFactoryId() == null) return;
+        for (OutsourceDeliveryItem item : items) {
+            if (item.getMaterialName() == null && item.getMaterialId() == null) continue;
+            try {
+                // 找到该工厂"生产中"状态的加工单物料记录
+                String findSql = "SELECT om.id, om.delivered_quantity FROM outsource_order_material om " +
+                    "INNER JOIN outsource_order_product op ON om.product_id = op.id " +
+                    "INNER JOIN outsource_order o ON op.order_id = o.id " +
+                    "WHERE o.factory_id = ? AND o.status = '生产中' " +
+                    "AND (om.material_name = ? OR om.material_id = ?) LIMIT 1";
+                List<java.util.Map<String, Object>> rows = jdbcTemplate.queryForList(
+                    findSql, delivery.getFactoryId(),
+                    item.getMaterialName() != null ? item.getMaterialName() : "",
+                    item.getMaterialId() != null ? item.getMaterialId() : -1L);
+                if (rows.isEmpty()) continue;
+                Long omId = ((Number) rows.get(0).get("id")).longValue();
+                BigDecimal oldQty = (BigDecimal) rows.get(0).get("delivered_quantity");
+                if (oldQty == null) oldQty = BigDecimal.ZERO;
+                BigDecimal newQty = increase ? oldQty.add(item.getQuantity()) : oldQty.subtract(item.getQuantity());
+                if (newQty.compareTo(BigDecimal.ZERO) < 0) newQty = BigDecimal.ZERO;
+                jdbcTemplate.update("UPDATE outsource_order_material SET delivered_quantity = ? WHERE id = ?", newQty, omId);
+                log.info("加工单物料(ID={})已发数量: {} → {}, 物料: {}", omId, oldQty, newQty, item.getMaterialName());
+            } catch (Exception e) {
+                log.warn("同步已发数量失败: material={}, err={}", item.getMaterialName(), e.getMessage());
+            }
+        }
+    }
 
     /**
      * 计算库存变动量：

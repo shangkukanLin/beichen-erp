@@ -31,4 +31,14 @@ public interface RoleService extends IService<Role> {
      * 保存角色菜单关联：先删旧再插新
      */
     void saveRoleMenus(Long roleId, List<Long> menuIds);
+
+    /**
+     * 将菜单自动授权给 super_admin 和 admin 角色
+     */
+    void grantMenuToAdminRoles(Long menuId);
+
+    /**
+     * 删除菜单时，从所有角色中移除该菜单关联
+     */
+    void removeMenuFromAllRoles(Long menuId);
 }

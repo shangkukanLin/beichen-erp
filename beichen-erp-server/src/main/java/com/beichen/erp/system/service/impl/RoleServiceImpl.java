@@ -77,4 +77,33 @@ public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements Ro
             }
         }
     }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void grantMenuToAdminRoles(Long menuId) {
+        if (menuId == null) return;
+        // 查询 super_admin 和 admin 角色ID
+        List<Role> adminRoles = this.list(new LambdaQueryWrapper<Role>()
+                .in(Role::getRoleCode, "super_admin", "admin"));
+        for (Role role : adminRoles) {
+            // 检查是否已存在，避免重复
+            Long cnt = roleMenuMapper.selectCount(new LambdaQueryWrapper<RoleMenu>()
+                    .eq(RoleMenu::getRoleId, role.getId())
+                    .eq(RoleMenu::getMenuId, menuId));
+            if (cnt == null || cnt == 0) {
+                RoleMenu rm = new RoleMenu();
+                rm.setRoleId(role.getId());
+                rm.setMenuId(menuId);
+                roleMenuMapper.insert(rm);
+            }
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void removeMenuFromAllRoles(Long menuId) {
+        if (menuId == null) return;
+        roleMenuMapper.delete(new LambdaQueryWrapper<RoleMenu>()
+                .eq(RoleMenu::getMenuId, menuId));
+    }
 }

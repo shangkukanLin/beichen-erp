@@ -185,6 +185,16 @@ function handleCurrentChange(val: number) {
   loadData()
 }
 
+function isLowStock(row: Material): boolean {
+  const safety = Number(row.safetyStock) || 0
+  const current = Number(row.currentStock) || 0
+  return safety > 0 && current < safety
+}
+
+function rowClass({ row }: { row: Material }) {
+  return isLowStock(row) ? 'low-stock-row' : ''
+}
+
 function statusText(status: string) {
   return status || '正常'
 }
@@ -226,14 +236,21 @@ onActivated(() => { loadBrands(); loadData() })
         <el-tab-pane label="研发中" name="研发中" />
       </el-tabs>
 
-      <el-table v-loading="tableLoading" :data="tableData" border stripe>
+      <el-table v-loading="tableLoading" :data="tableData" border stripe :row-class-name="rowClass">
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip />
         <el-table-column label="品牌" min-width="120">
           <template #default="{ row }">{{ getBrandName(row.brandId) }}</template>
         </el-table-column>
         <el-table-column prop="safetyStock" label="安全库存" width="100" align="right" />
-        <el-table-column prop="currentStock" label="当前库存" width="100" align="right" />
+        <el-table-column label="当前库存" width="130" align="right">
+          <template #default="{ row }">
+            <span :style="{ color: isLowStock(row) ? '#f56c6c' : '', fontWeight: isLowStock(row) ? 'bold' : '' }">
+              {{ row.currentStock ?? 0 }}
+            </span>
+            <el-tag v-if="isLowStock(row)" type="danger" size="small" style="margin-left:4px">预警</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
@@ -284,6 +301,11 @@ onActivated(() => { loadBrands(); loadData() })
               </el-select>
             </el-form-item>
           </el-col>
+          <el-col :span="12">
+            <el-form-item label="安全库存">
+              <el-input-number v-model="form.safetyStock" :min="0" :precision="0" style="width:100%" />
+            </el-form-item>
+          </el-col>
           <el-col :span="24">
             <el-form-item label="备注" prop="remark">
               <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="请输入备注" />
@@ -322,5 +344,9 @@ onActivated(() => { loadBrands(); loadData() })
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+
+:deep(.low-stock-row) {
+  background-color: #fef0f0 !important;
 }
 </style>

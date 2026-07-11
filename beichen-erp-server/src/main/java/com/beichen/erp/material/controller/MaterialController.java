@@ -8,6 +8,7 @@ import com.beichen.erp.material.entity.MaterialBom;
 import com.beichen.erp.material.service.MaterialBomService;
 import com.beichen.erp.material.service.MaterialService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,6 +19,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 @RestController
 @RequestMapping("/api/material")
 @RequiredArgsConstructor
@@ -25,6 +31,7 @@ public class MaterialController {
 
     private final MaterialService materialService;
     private final MaterialBomService materialBomService;
+    private final JdbcTemplate jdbcTemplate;
 
     @GetMapping("/page")
     public R<Page<Material>> page(
@@ -41,7 +48,28 @@ public class MaterialController {
                 .eq(category != null && !category.isBlank(), Material::getCategory, category)
                 .eq(status != null && !status.isBlank(), Material::getStatus, status)
                 .orderByDesc(Material::getId);
-        return R.ok(materialService.page(page, wrapper));
+        Page<Material> result = materialService.page(page, wrapper);
+
+        // 从真实库存表汇总当前库存
+        List<Long> materialIds = result.getRecords().stream()
+                .map(Material::getId).filter(id -> id != null).collect(Collectors.toList());
+        if (!materialIds.isEmpty()) {
+            String placeholders = materialIds.stream().map(id -> "?").collect(Collectors.joining(","));
+            List<Map<String, Object>> stockRows = jdbcTemplate.queryForList(
+                "SELECT material_id, SUM(quantity) AS total FROM inventory_warehouse_stock WHERE material_id IN (" + placeholders + ") GROUP BY material_id",
+                materialIds.toArray());
+            Map<Long, BigDecimal> stockMap = stockRows.stream()
+                .collect(Collectors.toMap(
+                    r -> ((Number) r.get("material_id")).longValue(),
+                    r -> (BigDecimal) r.get("total"),
+                    (a, b) -> a));
+            result.getRecords().forEach(m -> {
+                BigDecimal stock = stockMap.get(m.getId());
+                if (stock != null) m.setCurrentStock(stock);
+            });
+        }
+
+        return R.ok(result);
     }
 
     @GetMapping("/{id}")

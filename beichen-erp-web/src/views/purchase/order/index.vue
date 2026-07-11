@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { getMaterialPage, type Material } from '@/api/material'
@@ -204,6 +204,7 @@ function warehouseName(id?: number) {
 function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Number(v).toFixed(2) }
 
 onMounted(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData() })
+onActivated(() => { loadWarehouses(); loadData() })
 </script>
 
 <template>

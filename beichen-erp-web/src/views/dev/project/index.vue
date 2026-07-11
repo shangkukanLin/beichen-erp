@@ -227,7 +227,7 @@ onActivated(() => { loadData() })
         </el-table-column>
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">编辑</el-button>
+            <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">详细</el-button>
             <el-button type="warning" link size="small" @click="openTimeline(row as ProjectVO)">时间线</el-button>
             <el-button type="danger" link size="small" @click="handleDelete(row as ProjectVO)">删除</el-button>
           </template>
@@ -246,7 +246,7 @@ onActivated(() => { loadData() })
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click="openDetail(row as ProjectVO)">详情</el-button>
-            <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">编辑</el-button>
+            <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">详细</el-button>
             <el-button type="danger" link size="small" @click="handleDelete(row as ProjectVO)">删除</el-button>
           </template>
         </el-table-column>
