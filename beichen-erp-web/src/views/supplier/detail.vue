@@ -121,9 +121,9 @@ onMounted(loadData)
     </div>
 
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
-      <el-tab-pane label="基本信息" name="info">
+      <el-tab-pane label="基础信息" name="info">
         <el-card shadow="never">
-          <template #header><span style="font-weight:600">基本信息</span></template>
+          <template #header><span style="font-weight:600">基础信息</span></template>
           <el-form :model="form" label-width="80px" size="small">
             <el-row :gutter="12">
               <el-col :span="8"><el-form-item label="名称"><el-input v-model="form.name" /></el-form-item></el-col>

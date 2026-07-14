@@ -87,6 +87,7 @@ async function handleLogout() {
       confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning'
     })
     try { await logoutApi() } catch {}
+    tabStore.clearAll()
     userStore.logout()
   } catch {}
 }

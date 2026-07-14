@@ -14,7 +14,11 @@ import com.beichen.erp.outsource.entity.OutsourceWarehouseStock;
 import com.beichen.erp.outsource.mapper.OutsourceWarehouseMapper;
 import com.beichen.erp.outsource.mapper.OutsourceWarehouseStockMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
+import com.beichen.erp.outsource.mapper.OutsourceDeliveryMapper;
+import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
+import com.beichen.erp.outsource.entity.OutsourceDelivery;
+import com.beichen.erp.outsource.entity.OutsourceDeliveryItem;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -37,6 +41,8 @@ public class OutsourceOrderController {
     private final OutsourceWarehouseMapper warehouseMapper;
     private final OutsourceWarehouseStockMapper warehouseStockMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
+    private final OutsourceDeliveryMapper deliveryMapper;
+    private final OutsourceDeliveryItemMapper deliveryItemMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -197,6 +203,92 @@ public class OutsourceOrderController {
     public R<Void> cancel(@PathVariable Long id) {
         orderService.cancel(id);
         return R.ok();
+    }
+
+    /** 加工单退不良（维修返还，扣减良品库存） */
+    @PostMapping("/{id}/return-defect")
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public R<Void> returnDefect(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        OutsourceOrder o = orderService.getById(id);
+        if (o == null) throw new com.beichen.erp.exception.BusinessException("加工单不存在");
+
+        Long factoryId = o.getFactoryId();
+        if (factoryId == null) throw new com.beichen.erp.exception.BusinessException("加工单未关联加工厂");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> items = (List<Map<String, Object>>) body.get("items");
+        if (items == null || items.isEmpty()) throw new com.beichen.erp.exception.BusinessException("退不良明细不能为空");
+
+        // 取工厂的仓库
+        List<OutsourceWarehouse> whs = warehouseMapper.selectList(
+            new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, factoryId));
+        Long whId = body.get("warehouseId") != null ? Long.valueOf(body.get("warehouseId").toString())
+            : (whs.isEmpty() ? null : whs.get(0).getId());
+
+        OutsourceDelivery delivery = new OutsourceDelivery();
+        delivery.setDeliveryType("退料");
+        delivery.setFactoryId(factoryId);
+        delivery.setDeliveryDate(LocalDate.now());
+        delivery.setStatus("已确认");
+        delivery.setRemark("加工单不良退料 - " + o.getCode());
+        delivery.setCode(generateDeliveryCode());
+        deliveryMapper.insert(delivery);
+
+        for (Map<String, Object> it : items) {
+            BigDecimal qty = new BigDecimal(it.get("quantity").toString());
+            if (qty.compareTo(BigDecimal.ZERO) <= 0) continue;
+            Long productId = Long.valueOf(it.get("productId").toString());
+            OutsourceOrderProduct prod = orderService.getProducts(id).stream()
+                .filter(p -> p.getId().equals(productId)).findFirst().orElse(null);
+            if (prod == null) continue;
+
+            OutsourceDeliveryItem di = new OutsourceDeliveryItem();
+            di.setDeliveryId(delivery.getId());
+            di.setMaterialName(prod.getProductName());
+            di.setUnit("个");
+            di.setQuantity(qty);
+            di.setQualityType("不良品");
+            di.setHandleType("维修返还");
+            deliveryItemMapper.insert(di);
+
+            // 加工单退不良：仅记录，不自动扣库存（产品库存通过其他流程管理）
+        }
+        return R.ok();
+    }
+
+    private String generateDeliveryCode() {
+        String ds = LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OutsourceDelivery> w =
+            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OutsourceDelivery>()
+                .likeRight(OutsourceDelivery::getCode, "DEL-" + ds).orderByDesc(OutsourceDelivery::getCode).last("LIMIT 1");
+        OutsourceDelivery last = deliveryMapper.selectOne(w);
+        int seq = 1;
+        if (last != null && last.getCode() != null) {
+            try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception ignored) {}
+        }
+        return "DEL-" + ds + String.format("%03d", seq);
+    }
+
+    /** 查询该加工单的交货/退料记录 */
+    @GetMapping("/{id}/deliveries")
+    public R<List<Map<String, Object>>> deliveries(@PathVariable Long id) {
+        OutsourceOrder o = orderService.getById(id);
+        if (o == null || o.getCode() == null) return R.ok(java.util.Collections.emptyList());
+        List<OutsourceDelivery> list = deliveryMapper.selectList(
+            new LambdaQueryWrapper<OutsourceDelivery>()
+                .like(OutsourceDelivery::getRemark, o.getCode())
+                .orderByDesc(OutsourceDelivery::getId));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (OutsourceDelivery d : list) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", d.getId()); m.put("code", d.getCode()); m.put("deliveryType", d.getDeliveryType());
+            m.put("deliveryDate", d.getDeliveryDate()); m.put("status", d.getStatus()); m.put("remark", d.getRemark());
+            List<OutsourceDeliveryItem> items = deliveryItemMapper.selectList(
+                new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getDeliveryId, d.getId()));
+            m.put("items", items);
+            result.add(m);
+        }
+        return R.ok(result);
     }
 
     @DeleteMapping("/{id}/attach")

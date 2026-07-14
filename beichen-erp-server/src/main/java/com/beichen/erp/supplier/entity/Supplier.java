@@ -36,10 +36,6 @@ public class Supplier {
 
     private Long relatedSupplierId;
 
-    private String brand;
-
-    private String materialType;
-
     private String remark;
 
     @TableField(fill = FieldFill.INSERT)

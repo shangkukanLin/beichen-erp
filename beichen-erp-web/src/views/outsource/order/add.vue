@@ -142,9 +142,9 @@ onActivated(initPage)
       <span class="page-title">新增加工单</span>
     </div>
 
-    <!-- 基本信息 -->
+    <!-- 基础信息 -->
     <el-card shadow="never">
-      <template #header><span style="font-weight:600">基本信息</span></template>
+      <template #header><span style="font-weight:600">基础信息</span></template>
       <el-form :model="form" label-width="90px" size="small">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="加工厂"><el-select v-model="form.factoryId" filterable style="width:100%" placeholder="请选择"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item></el-col>

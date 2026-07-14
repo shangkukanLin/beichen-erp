@@ -11,9 +11,7 @@ public class CompanyTenantHandler implements TenantLineHandler {
 
     /** 不参与租户隔离的表（无 company_id 列的共享表） */
     private static final java.util.Set<String> IGNORE_TABLES = java.util.Set.of(
-        "sys_company", "sys_user", "sys_role", "sys_menu", "sys_role_menu", "sys_user_role",
-        "material",
-        "outsource_warehouse_stock", "outsource_material_stock"
+        "sys_company", "sys_user", "sys_role", "sys_menu", "sys_role_menu", "sys_user_role"
     );
 
     @Override

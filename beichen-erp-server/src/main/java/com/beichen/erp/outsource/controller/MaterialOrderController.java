@@ -269,18 +269,16 @@ public class MaterialOrderController {
         return s != null && s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
     }
 
-    /** 退不良，需指定 factoryId */
+    /** 退不良，使用订单关联的供应商作为工厂。支持处理方式：维修返还(扣库存)/折现退款(仅记录) */
     @PostMapping("/{id}/return-defect")
     @Transactional(rollbackFor = Exception.class)
     public R<Void> returnDefect(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
 
-        Long factoryId = Long.valueOf(body.get("factoryId").toString());
-        List<OutsourceWarehouse> whs = warehouseMapper.selectList(
-            new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, factoryId));
-        if (whs.isEmpty()) throw new BusinessException("该加工厂未配置委外仓库");
-        Long whId = whs.get(0).getId();
+        Long factoryId = o.getSupplierId();
+        if (factoryId == null) throw new BusinessException("订单未关联供应商");
+        String handleType = body.get("handleType") != null ? body.get("handleType").toString() : "维修返还";
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> items = (List<Map<String, Object>>) body.get("items");
@@ -289,10 +287,9 @@ public class MaterialOrderController {
         OutsourceDelivery delivery = new OutsourceDelivery();
         delivery.setDeliveryType("退料");
         delivery.setFactoryId(factoryId);
-        delivery.setFromWarehouseId(whId);
         delivery.setDeliveryDate(LocalDate.now());
         delivery.setStatus("已确认");
-        delivery.setRemark("采购不良退料 - " + o.getCode());
+        delivery.setRemark("不良退料(" + handleType + ") - " + o.getCode());
         delivery.setCode(generateDeliveryCode());
         deliveryMapper.insert(delivery);
 
@@ -316,10 +313,34 @@ public class MaterialOrderController {
             di.setUnit(orderItem.getUnit());
             di.setQuantity(qty);
             di.setQualityType("不良品");
+            di.setHandleType(handleType);
             deliveryItemMapper.insert(di);
 
-            updateStock(whId, orderItem.getMaterialId(), qty.negate(), "良品");
+            // 维修返还：从良品库存扣减；折现退款：不扣库存，仅记录
+            if (!"折现退款".equals(handleType)) {
+                Long whId = body.get("warehouseId") != null ? Long.valueOf(body.get("warehouseId").toString()) : null;
+                if (whId == null) {
+                    // 默认取供应商的第一个仓库
+                    List<OutsourceWarehouse> whs = warehouseMapper.selectList(
+                        new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, factoryId));
+                    whId = whs.isEmpty() ? null : whs.get(0).getId();
+                }
+                if (whId != null) updateStock(whId, orderItem.getMaterialId(), qty.negate(), "良品");
+            }
         }
+        return R.ok();
+    }
+
+    /** 结单：直接标记为已完成 */
+    @PutMapping("/{id}/finish")
+    @Transactional(rollbackFor = Exception.class)
+    public R<Void> finish(@PathVariable Long id) {
+        MaterialOrder o = orderMapper.selectById(id);
+        if (o == null) throw new BusinessException("订单不存在");
+        if ("已取消".equals(o.getStatus())) throw new BusinessException("已取消的订单不可结单");
+        if ("已完成".equals(o.getStatus())) throw new BusinessException("订单已完成");
+        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus("已完成"); upd.setFinishTime(java.time.LocalDateTime.now());
+        orderMapper.updateById(upd);
         return R.ok();
     }
 
@@ -333,6 +354,33 @@ public class MaterialOrderController {
         MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus("已取消");
         orderMapper.updateById(upd);
         return R.ok();
+    }
+
+    /** 查询该订单的交货记录 */
+    @GetMapping("/{id}/deliveries")
+    public R<List<Map<String, Object>>> deliveries(@PathVariable Long id) {
+        MaterialOrder o = orderMapper.selectById(id);
+        if (o == null) return R.ok(Collections.emptyList());
+        List<OutsourceDelivery> list = deliveryMapper.selectList(
+            new LambdaQueryWrapper<OutsourceDelivery>()
+                .like(OutsourceDelivery::getRemark, o.getCode())
+                .orderByDesc(OutsourceDelivery::getId));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (OutsourceDelivery d : list) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", d.getId()); m.put("code", d.getCode()); m.put("deliveryType", d.getDeliveryType());
+            m.put("deliveryDate", d.getDeliveryDate()); m.put("status", d.getStatus()); m.put("remark", d.getRemark());
+            m.put("toWarehouseId", d.getToWarehouseId());
+            if (d.getToWarehouseId() != null) {
+                OutsourceWarehouse wh = warehouseMapper.selectById(d.getToWarehouseId());
+                m.put("warehouseName", wh != null ? wh.getWarehouseName() : "");
+            }
+            List<OutsourceDeliveryItem> items = deliveryItemMapper.selectList(
+                new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getDeliveryId, d.getId()));
+            m.put("items", items);
+            result.add(m);
+        }
+        return R.ok(result);
     }
 
     @DeleteMapping("/{id}/attach")

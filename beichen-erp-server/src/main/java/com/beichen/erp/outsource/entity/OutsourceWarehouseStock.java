@@ -14,6 +14,8 @@ public class OutsourceWarehouseStock {
     private Long materialId;
     private String qualityType;
     private BigDecimal quantity;
+    @TableField(fill = FieldFill.INSERT)
+    private Long companyId;
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
 }

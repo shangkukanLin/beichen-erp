@@ -47,7 +47,7 @@ const dialogVisible = ref(false); const dialogTitle = ref(''); const saving = re
 const form = reactive({
   id: undefined as any, name: '', contact: '', phone: '', address: '', remark: '',
   supplierType: '', checkedTypes: [] as string[], status: 1,
-  isSolution: false, isTouch: false, supplyBrand: '', materialType: ''
+  isSolution: false, isTouch: false
 })
 const isEdit = ref(false)
 
@@ -56,7 +56,7 @@ const isType = computed(() => (type: string) => form.checkedTypes.includes(type)
 
 function resetForm() {
   Object.assign(form, { id: undefined, name: '', contact: '', phone: '', address: '', remark: '',
-    supplierType: '', checkedTypes: [], status: 1, isSolution: false, isTouch: false, supplyBrand: '', materialType: '' })
+    supplierType: '', checkedTypes: [], status: 1, isSolution: false, isTouch: false })
 }
 
 function handleAdd() {
@@ -80,8 +80,6 @@ function handleEdit(row: any) {
     form.isSolution = ct.isSolution || false
     form.isTouch = ct.isTouch || false
   }
-  if (row.supplyBrand) form.supplyBrand = row.supplyBrand
-  if (row.materialType) form.materialType = row.materialType
   isEdit.value = true; dialogTitle.value = '编辑供应商'
   dialogVisible.value = true
 }
@@ -170,12 +168,6 @@ onActivated(loadData)
           <el-form-item label="显示方案"><el-switch v-model="form.isSolution" /></el-form-item>
           <el-form-item label="触摸方案"><el-switch v-model="form.isTouch" /></el-form-item>
         </template>
-
-        <!-- 成品商特有 -->
-        <el-form-item v-if="form.checkedTypes.includes('product')" label="供应品牌"><el-input v-model="form.supplyBrand" placeholder="品牌名称" /></el-form-item>
-
-        <!-- 辅料商特有 -->
-        <el-form-item v-if="form.checkedTypes.includes('material')" label="辅料类型"><el-input v-model="form.materialType" placeholder="如：偏光片、ACF" /></el-form-item>
 
         <el-form-item label="状态"><el-select v-model="form.status" style="width:100%"><el-option label="合作中" :value="1" /><el-option label="已停用" :value="0" /></el-select></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>

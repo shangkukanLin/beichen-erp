@@ -41,6 +41,9 @@ public class Material {
     private String remark;
 
     @TableField(fill = FieldFill.INSERT)
+    private Long companyId;
+
+    @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)

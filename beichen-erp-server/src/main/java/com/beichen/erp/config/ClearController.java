@@ -50,8 +50,11 @@ public class ClearController {
                 "DELETE FROM sale_outbound_item WHERE company_id = " + companyId,
                 "DELETE FROM sale_order_item WHERE company_id = " + companyId,
                 "DELETE FROM outsource_delivery_item WHERE company_id = " + companyId,
+                "DELETE FROM outsource_material_component WHERE company_id = " + companyId,
+                "DELETE FROM outsource_material_order_item WHERE company_id = " + companyId,
                 "DELETE FROM outsource_order_material WHERE company_id = " + companyId,
                 "DELETE FROM outsource_order_product WHERE company_id = " + companyId,
+                "DELETE FROM outsource_order_close_report_item WHERE report_id IN (SELECT id FROM outsource_order_close_report WHERE company_id = " + companyId + ")",
                 "DELETE FROM outsource_order_delivery WHERE company_id = " + companyId,
                 "DELETE FROM finance_payment WHERE company_id = " + companyId,
                 "DELETE FROM finance_receipt WHERE company_id = " + companyId,
@@ -70,9 +73,12 @@ public class ClearController {
                 "DELETE FROM purchase_order WHERE company_id = " + companyId,
                 "DELETE FROM sale_outbound WHERE company_id = " + companyId,
                 "DELETE FROM sale_order WHERE company_id = " + companyId,
+                "DELETE FROM outsource_order_close_report WHERE company_id = " + companyId,
+                "DELETE FROM outsource_material_order WHERE company_id = " + companyId,
                 "DELETE FROM outsource_delivery WHERE company_id = " + companyId,
                 "DELETE FROM outsource_order WHERE company_id = " + companyId,
                 "DELETE FROM outsource_contract_template WHERE company_id = " + companyId,
+                "DELETE FROM outsource_warehouse_stock WHERE company_id = " + companyId,
                 "DELETE FROM outsource_warehouse WHERE company_id = " + companyId,
                 "DELETE FROM outsource_material WHERE company_id = " + companyId,
                 "DELETE FROM dev_drawing WHERE company_id = " + companyId,
@@ -83,14 +89,20 @@ public class ClearController {
                 "DELETE FROM dev_project WHERE company_id = " + companyId,
                 "DELETE FROM supplier_product WHERE company_id = " + companyId,
                 "DELETE FROM supplier WHERE company_id = " + companyId,
+                "DELETE FROM material WHERE company_id = " + companyId,
                 "DELETE FROM customer WHERE company_id = " + companyId,
                 "DELETE FROM brand WHERE company_id = " + companyId,
             };
             for (String s : sqls) { stmt.execute(s); }
+            // 重新初始化BOM类型默认数据
+            String[] defaultTypes = {"玻璃", "驱动IC", "码片IC", "触摸IC", "排线", "背贴", "盖板"};
+            for (int i = 0; i < defaultTypes.length; i++) {
+                stmt.execute("INSERT INTO dev_bom_type (type_name, sort_order, status, company_id) VALUES ('" + defaultTypes[i] + "', " + (i + 1) + ", 1, " + companyId + ")");
+            }
             stmt.execute("SET FOREIGN_KEY_CHECKS = 1");
             conn.commit();
             stmt.close();
-            return R.ok("当前公司所有业务数据已清空");
+            return R.ok("当前公司所有业务数据已清空，BOM类型已重置为默认");
         } catch (Exception e) {
             return R.fail(e.getMessage());
         }

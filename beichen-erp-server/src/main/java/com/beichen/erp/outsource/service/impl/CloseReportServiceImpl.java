@@ -46,7 +46,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
 
         Map<String, Object> result = new LinkedHashMap<>();
 
-        // 基本信息
+        // 基础信息
         result.put("orderId", order.getId());
         result.put("orderCode", order.getCode());
         if (order.getFactoryId() != null) {

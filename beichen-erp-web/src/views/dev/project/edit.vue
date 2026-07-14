@@ -21,7 +21,7 @@ const STATUS_LIST = ['立项', '排线图纸', '排线打样', 'FOG打样', '显
 const saving = ref(false)
 const activeTab = ref((route.query.tab as string) || 'project')
 
-// ===================== 项目基本信息 =====================
+// ===================== 项目基础信息 =====================
 const form = reactive<ProjectDTO>({
   name: '', displaySupplierName: '', touchSupplierName: '',
   assemblyName: '',
@@ -362,7 +362,7 @@ function onNameBlur() {
           </el-form>
         </el-card>
 
-        <div style="margin-top:12px"><el-button type="primary" :loading="saving" @click="handleSave">保存基本信息</el-button></div>
+        <div style="margin-top:12px"><el-button type="primary" :loading="saving" @click="handleSave">保存基础信息</el-button></div>
       </el-tab-pane>
 
       <!-- 阶段时间线 Tab -->

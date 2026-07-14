@@ -17,6 +17,7 @@ public class OutsourceDeliveryItem {
     private String unit;
     private BigDecimal quantity;
     private String qualityType;
+    private String handleType;
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;
     private LocalDateTime createTime;

@@ -72,7 +72,7 @@ onMounted(() => { loadFactories(); loadMaterials(); loadInventoryWarehouses() })
     <div class="page-header"><el-button @click="router.push('/outsource/delivery')">返回列表</el-button><span class="page-title">新增物料收发单</span></div>
 
     <el-card shadow="never">
-      <template #header><span style="font-weight:600">基本信息</span></template>
+      <template #header><span style="font-weight:600">基础信息</span></template>
       <el-form :model="form" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="6"><el-form-item label="类型"><el-select v-model="form.deliveryType" style="width:100%"><el-option label="发料" value="发料"/><el-option label="收料" value="收料"/><el-option label="退料" value="退料"/></el-select></el-form-item></el-col>

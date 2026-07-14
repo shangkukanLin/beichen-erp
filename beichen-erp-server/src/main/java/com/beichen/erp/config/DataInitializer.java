@@ -343,6 +343,41 @@ public class DataInitializer implements ApplicationRunner {
                 log.info("已为 outsource_material_order 添加 attach_url 列");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_delivery_item 添加 handle_type 列（退不良处理方式：维修返还/折现退款）
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_delivery_item' AND COLUMN_NAME='handle_type'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_delivery_item ADD COLUMN handle_type VARCHAR(20) DEFAULT NULL COMMENT '处理方式：维修返还/折现退款' AFTER quality_type");
+                log.info("已为 outsource_delivery_item 添加 handle_type 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_warehouse_stock 添加 company_id 列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_warehouse_stock' AND COLUMN_NAME='company_id'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_warehouse_stock ADD COLUMN company_id BIGINT DEFAULT NULL COMMENT '公司ID' AFTER quantity");
+                jdbcTemplate.execute("UPDATE outsource_warehouse_stock SET company_id = 1 WHERE company_id IS NULL");
+                log.info("已为 outsource_warehouse_stock 添加 company_id 列并回填默认值");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // material 添加 company_id 列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='material' AND COLUMN_NAME='company_id'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE material ADD COLUMN company_id BIGINT DEFAULT NULL COMMENT '公司ID' AFTER remark");
+                jdbcTemplate.execute("UPDATE material SET company_id = 1 WHERE company_id IS NULL");
+                log.info("已为 material 添加 company_id 列并回填默认值");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // 移除 supplier 表的 brand 和 material_type 列（未使用）
+        try { jdbcTemplate.execute("ALTER TABLE supplier DROP COLUMN IF EXISTS brand"); } catch (Exception ignored) {}
+        try { jdbcTemplate.execute("ALTER TABLE supplier DROP COLUMN IF EXISTS material_type"); } catch (Exception ignored) {}
         // 供应商类型支持多值（逗号分隔），扩展列长
         try { jdbcTemplate.execute("ALTER TABLE supplier MODIFY COLUMN supplier_type VARCHAR(100) NOT NULL COMMENT '供应商类型(逗号分隔多值)'"); } catch (Exception ignored) {}
     }

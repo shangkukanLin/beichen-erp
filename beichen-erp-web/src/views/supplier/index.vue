@@ -70,8 +70,7 @@ const formRef = ref<FormInstance>()
 const defaultForm = (): SupplierDTO => ({
   code: '', name: '', supplierType: currentType.value, status: 1,
   contact: '', phone: '', address: '', remark: '',
-  hasDisplay: 0, hasTouch: 0, relatedSupplierId: undefined,
-  brand: '', materialType: ''
+  hasDisplay: 0, hasTouch: 0, relatedSupplierId: undefined
 })
 const form = reactive<SupplierDTO>(defaultForm())
 const isEdit = ref(false)
@@ -274,21 +273,6 @@ onActivated(() => { loadData() })
             <el-col :span="8"><el-form-item label="触摸方案"><el-switch v-model="form.hasTouch" :active-value="1" :inactive-value="0" /></el-form-item></el-col>
           </el-row>
         </template>
-        <!-- 成品供应商特有 -->
-        <template v-if="currentType==='product'">
-          <el-divider>品牌信息</el-divider>
-          <el-form-item label="供应品牌">
-            <el-input v-model="form.brand" placeholder="如：京东方/天马" />
-          </el-form-item>
-        </template>
-        <!-- 辅料商特有 -->
-        <template v-if="currentType==='material'">
-          <el-divider>供应类型</el-divider>
-          <el-form-item label="辅料类型">
-            <el-input v-model="form.materialType" placeholder="如：玻璃/排线/背光/偏光片" />
-          </el-form-item>
-        </template>
-
         <el-form-item label="备注">
           <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="备注" />
         </el-form-item>

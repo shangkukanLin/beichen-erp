@@ -44,7 +44,7 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
       <span class="page-title">{{ warehouse?.warehouseName || '仓库详情' }}</span>
     </div>
 
-    <!-- 仓库基本信息 -->
+    <!-- 仓库基础信息 -->
     <el-card shadow="never" v-loading="loading">
       <template #header><span style="font-weight:600">仓库信息</span></template>
       <el-descriptions v-if="warehouse" :column="2" border size="small">
