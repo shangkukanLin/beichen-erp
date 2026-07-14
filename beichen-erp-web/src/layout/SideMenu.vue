@@ -6,7 +6,7 @@ import {
   Goods, Money, Tools, Notebook, Tickets, Files, Connection, OfficeBuilding,
   GoodsFilled, Box, Document, Switch, Timer, TakeawayBox, ShoppingCart,
   Download, Odometer, Sell, Upload, Wallet, CreditCard, Postcard,
-  TrendCharts, UserFilled, Avatar, Menu, CollectionTag, Delete
+  TrendCharts, UserFilled, Avatar, Menu, CollectionTag, Delete, DataBoard
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 
@@ -16,7 +16,7 @@ const iconMap: Record<string, any> = {
   Files, Connection, OfficeBuilding, GoodsFilled, Box, Document, Switch,
   Timer, TakeawayBox, ShoppingCart, Download, Odometer, Sell, Upload,
   Wallet, CreditCard, Postcard, TrendCharts, UserFilled, Avatar, Menu,
-  CollectionTag, Delete
+  CollectionTag, Delete, DataBoard
 }
 function resolveIcon(iconName: string): any {
   if (!iconName) return Menu

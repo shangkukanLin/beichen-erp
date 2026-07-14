@@ -7,17 +7,23 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.BomType;
 import com.beichen.erp.dev.mapper.BomTypeMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/dev/bom-type")
 @RequiredArgsConstructor
 public class BomTypeController {
 
     private final BomTypeMapper bomTypeMapper;
+    private final OutsourceMaterialMapper outsourceMaterialMapper;
+    private final JdbcTemplate jdbcTemplate;
 
     /**
      * 构建带公司过滤的条件构造器。
@@ -63,12 +69,32 @@ public class BomTypeController {
 
     @PutMapping
     public R<Void> update(@RequestBody BomType type) {
+        // 获取旧名称
+        BomType old = bomTypeMapper.selectById(type.getId());
+        String oldName = old != null ? old.getTypeName() : null;
+        // 更新BOM类型表
         bomTypeMapper.updateById(type);
+        // 同步更新外协物料的materialType
+        if (oldName != null && !oldName.equals(type.getTypeName())) {
+            int updated = jdbcTemplate.update(
+                "UPDATE outsource_material SET material_type = ? WHERE material_type = ?",
+                type.getTypeName(), oldName);
+            log.info("BOM类型「{}」→「{}」，同步更新外协物料 {} 条", oldName, type.getTypeName(), updated);
+        }
         return R.ok();
     }
 
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
+        BomType type = bomTypeMapper.selectById(id);
+        if (type != null) {
+            Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outsource_material WHERE material_type = ?",
+                Long.class, type.getTypeName());
+            if (count != null && count > 0) {
+                throw new BusinessException("该类型下还有 " + count + " 个物料，请先处理后再删除");
+            }
+        }
         bomTypeMapper.deleteById(id);
         return R.ok();
     }

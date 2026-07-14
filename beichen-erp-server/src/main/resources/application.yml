@@ -6,6 +6,11 @@ server:
       enabled: true
       force: true
 
+# 文件上传路径（相对于工作目录），在 Windows 上会自动解析为绝对路径
+file:
+  upload:
+    path: ./uploads
+
 spring:
   application:
     name: beichen-erp-server

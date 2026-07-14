@@ -5,10 +5,13 @@ export interface ContractTemplate {
   templateName: string
   content: string
   status?: number
+  templateType?: string
 }
 
-export function getTemplateList() {
-  return request.get<unknown, ContractTemplate[]>('/outsource/contract-template/list')
+export function getTemplateList(templateType?: string) {
+  const params: any = {}
+  if (templateType) params.templateType = templateType
+  return request.get<unknown, ContractTemplate[]>('/outsource/contract-template/list', { params })
 }
 
 export function createTemplate(data: ContractTemplate) {
@@ -31,5 +34,12 @@ export function exportContractPdf(orderId: number, templateId?: number) {
   const url = templateId
     ? `/outsource/contract-template/export/${orderId}?templateId=${templateId}`
     : `/outsource/contract-template/export/${orderId}`
+  return url
+}
+
+export function exportMaterialOrderPdf(orderId: number, templateId?: number) {
+  const url = templateId
+    ? `/outsource/contract-template/export-material-order/${orderId}?templateId=${templateId}`
+    : `/outsource/contract-template/export-material-order/${orderId}`
   return url
 }

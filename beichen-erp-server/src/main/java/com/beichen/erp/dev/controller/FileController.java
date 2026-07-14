@@ -1,6 +1,8 @@
 package com.beichen.erp.dev.controller;
 
 import com.beichen.erp.common.R;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -10,7 +12,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -21,11 +22,31 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/dev/file")
 public class FileController {
 
-    private final Path uploadDir = Paths.get("/workspace/uploads");
+    @Value("${file.upload.path:./uploads}")
+    private String uploadPath;
+
+    private Path uploadDir;
+
+    @PostConstruct
+    public void init() {
+        // 解析路径：如果是相对路径，则相对于当前工作目录
+        Path p = Paths.get(uploadPath);
+        if (!p.isAbsolute()) {
+            p = Paths.get(System.getProperty("user.dir")).resolve(uploadPath);
+        }
+        this.uploadDir = p.toAbsolutePath().normalize();
+        try {
+            Files.createDirectories(this.uploadDir);
+            log.info("文件上传目录: {}", this.uploadDir);
+        } catch (IOException e) {
+            log.error("无法创建上传目录: {}", e.getMessage());
+        }
+    }
 
     @PostMapping("/upload")
     public R<String> upload(@RequestParam("file") MultipartFile file) throws IOException {
@@ -43,6 +64,10 @@ public class FileController {
     public ResponseEntity<Resource> download(@PathVariable String dateDir, @PathVariable String fileName,
             @RequestParam(defaultValue = "false") boolean inline) throws IOException {
         Path filePath = uploadDir.resolve(dateDir).resolve(fileName).normalize();
+        // 安全检查：防止路径穿越攻击
+        if (!filePath.startsWith(uploadDir)) {
+            return ResponseEntity.badRequest().build();
+        }
         if (!Files.exists(filePath)) return ResponseEntity.notFound().build();
         Resource resource = new FileSystemResource(filePath);
         String encodedName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");

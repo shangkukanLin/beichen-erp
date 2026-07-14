@@ -38,7 +38,7 @@ async function loadData() {
 async function loadOutsourceWarehouses(fid:number){ try{const r=await request.get<any,any>('/outsource/delivery/warehouses/by-factory/'+fid);outsourceWarehouses.value=r||[]}catch(e: any){ console.warn('加载委外仓库失败', e?.message || e) } }
 async function onFactoryChange(fid:number){ form.fromWarehouseId=undefined;form.toWarehouseId=undefined;loadOutsourceWarehouses(fid) }
 
-function addItem(){ items.value.push({material_id:undefined,material_name:'',material_type:'',unit:'',quantity:undefined}) }
+function addItem(){ items.value.push({material_id:undefined,material_name:'',material_type:'',unit:'',quantity:undefined,qualityType:'良品'}) }
 function removeItem(i:number){ items.value.splice(i,1) }
 function onMatSelect(idx:number,mid:number){ const m=materialOptions.value.find((v:any)=>v.id===mid); if(m){items.value[idx].material_name=m.materialName;items.value[idx].material_type=m.materialType;items.value[idx].unit=m.unit} }
 
@@ -121,6 +121,7 @@ onMounted(()=>{ loadOptions(); loadData() })
         <el-table-column label="类型" width="80"><template #default="{row}">{{row.material_type}}</template></el-table-column>
         <el-table-column label="单位" width="60"><template #default="{row}">{{row.unit}}</template></el-table-column>
         <el-table-column label="数量" width="100"><template #default="{row}"><el-input v-model="row.quantity" size="small" /></template></el-table-column>
+        <el-table-column label="质量" width="90" align="center"><template #default="{row}"><el-select v-model="row.qualityType" size="small" style="width:100%"><el-option label="良品" value="良品" /><el-option label="不良品" value="不良品" /></el-select></template></el-table-column>
         <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>
       </el-table>
     </el-card>

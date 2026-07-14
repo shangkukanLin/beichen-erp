@@ -10,6 +10,8 @@ interface UserInfo {
   status?: number
   avatar?: string
   roles?: string[]
+  companyId?: number
+  companyName?: string
   [key: string]: unknown
 }
 

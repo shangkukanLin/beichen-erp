@@ -13,6 +13,8 @@ public class ContractTemplate {
     private String content;
     private Integer status;
     private Integer isDefault;
+    @TableField("template_type")
+    private String templateType;
     @TableField("party_a_address")
     private String partyAAddress;
     @TableField("party_a_contact")

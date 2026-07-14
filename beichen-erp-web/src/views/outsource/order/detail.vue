@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'OutsourceOrderDetail' })
 
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -10,6 +10,40 @@ import { exportContractPdf } from '@/api/contract-template'
 const route = useRoute(); const router = useRouter()
 const loading = ref(true); const saving = ref(false)
 const uploadFile = ref<File | null>(null)
+
+// BOM物料库存缺料
+const materialStockMap = ref<Record<string, any>>({})
+
+async function loadMaterialStock() {
+  if (!form.id) return
+  try {
+    const r = await request.get<any, any>(`/outsource/order/${form.id}/material-stock`)
+    if (r?.materials) {
+      const map: Record<string, any> = {}
+      for (const m of r.materials) { map[m.materialName] = m }
+      materialStockMap.value = map
+    }
+  } catch { materialStockMap.value = {} }
+}
+function getStock(materialName: string) {
+  const s = materialStockMap.value[materialName]
+  return s || { stockQuantity: 0, shortage: 0 }
+}
+function goPurchase(row: any) {
+  const s = getStock(row.materialName)
+  console.log('[goPurchase] stock data for', row.materialName, ':', s)
+  const ids = (s.supplierIds || '') as string
+  const firstId = ids.split(',')[0]?.trim()
+  const p = new URLSearchParams()
+  if (firstId) p.set('supplierId', firstId)
+  if (s.materialId) p.set('materialId', String(s.materialId))
+  p.set('materialName', row.materialName || '')
+  p.set('materialType', row.materialType || '')
+  p.set('unit', row.unit || '')
+  p.set('quantity', String(s.shortage || 0))
+  console.log('[goPurchase] query params:', p.toString())
+  router.push('/outsource/material-order/add?' + p.toString())
+}
 
 const form = reactive({
   id: undefined as any, code: '', status: '',
@@ -57,6 +91,8 @@ async function loadData() {
     if (form.factoryId && !factoryOptions.value.some((f:any)=>f.id===form.factoryId)) {
       try { const sup = await request.get<any,any>(`/supplier/${form.factoryId}`); if (sup) factoryOptions.value.push({id:sup.id,name:sup.name}) } catch (e: any) { console.warn('加载工厂信息失败', e?.message || e) }
     }
+    // 加载物料库存缺料
+    await loadMaterialStock()
   } finally { loading.value = false }
 }
 
@@ -170,31 +206,18 @@ async function handleCancel() {
 function exportPdf() {
   const url = exportContractPdf(form.id as number)
   request.get(url, { responseType: 'blob' }).then((res: any) => {
-    // res 已是 Blob
-    const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' })
-    // 检查是否是 PDF（防止错误 JSON 被当成 PDF）
-    if (blob.type !== 'application/pdf' && !blob.type.startsWith('application/')) {
-      const reader = new FileReader()
-      reader.onload = () => {
-        try {
-          const text = reader.result as string
-          const json = JSON.parse(text)
-          ElMessage.error(json.msg || '导出失败')
-        } catch { ElMessage.error('导出文件异常，请重试') }
-      }
-      reader.readAsText(blob)
-      return
-    }
+    const blob = new Blob([res], { type: 'application/pdf' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
     link.download = `委外加工合同-${form.code}.pdf`
     link.click()
     URL.revokeObjectURL(link.href)
-    ElMessage.success('合同导出成功')
+    ElMessage.success('PDF合同已下载')
   }).catch(() => { ElMessage.error('导出失败') })
 }
 
 onMounted(() => { loadOptions(); loadData() })
+onActivated(() => { loadOptions(); loadData() })
 </script>
 
 <template>
@@ -209,6 +232,7 @@ onMounted(() => { loadOptions(); loadData() })
         <div style="display:flex;gap:8px">
           <el-button v-if="form.status==='待确认'" type="success" @click="handleConfirm">确认（进入生产）</el-button>
           <el-button v-if="form.status==='生产中'" type="success" @click="handleComplete">标记完成</el-button>
+          <el-button v-if="form.status==='生产中'" type="warning" @click="router.push(`/outsource/order/close/${form.id}`)">结单</el-button>
           <el-button v-if="form.status==='生产中'" type="primary" @click="router.push(`/outsource/order/delivery/${form.id}`)">交货管理</el-button>
           <el-button v-if="form.status!=='已取消'" type="danger" @click="handleCancel">取消加工单</el-button>
         </div>
@@ -256,18 +280,38 @@ onMounted(() => { loadOptions(); loadData() })
       <div style="margin-top:8px">
         <div style="margin-bottom:6px"><span style="font-weight:500;font-size:13px">BOM物料清单</span></div>
         <el-table v-if="p.materials && p.materials.length" :data="p.materials" border size="small">
-          <el-table-column prop="materialType" label="类型" width="80" />
-          <el-table-column prop="materialName" label="物料名称" min-width="150" />
-          <el-table-column prop="unit" label="单位" width="60" />
-          <el-table-column label="需求数量" width="100"><template #default="{row}">{{ row.demandQuantity }}</template></el-table-column>
-          <el-table-column label="损耗率(%)" width="110">
+          <el-table-column prop="materialType" label="类型" width="70" />
+          <el-table-column prop="materialName" label="物料名称" min-width="120" />
+          <el-table-column prop="unit" label="单位" width="55" />
+          <el-table-column label="需求" width="75"><template #default="{row}">{{ row.demandQuantity }}</template></el-table-column>
+          <el-table-column label="库存" width="75">
+            <template #default="{row}">
+              <span :style="{color: Number(getStock(row.materialName).stockQuantity||0) < Number(row.demandQuantity||0) ? '#f56c6c' : '#67c23a'}">{{ getStock(row.materialName).stockQuantity || 0 }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="缺料" width="75">
+            <template #default="{row}">
+              <span :style="{color: Number(getStock(row.materialName).shortage||0) > 0 ? '#f56c6c' : '#67c23a'}">{{ getStock(row.materialName).shortage || 0 }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="损耗率(%)" width="85">
             <template #default="{row}"><el-input v-model="row.lossRate" size="small" :disabled="form.status!=='待确认'" /></template>
           </el-table-column>
-          <el-table-column label="已发料" width="90">
+          <el-table-column label="已发料" width="80">
             <template #default="{row}"><span :style="{color: Number(row.deliveredQuantity||0)>0?'#67c23a':''}">{{ row.deliveredQuantity || 0 }}</span></template>
           </el-table-column>
           <el-table-column label="备注" min-width="80">
             <template #default="{row}"><el-input v-model="row.remark" size="small" :disabled="form.status!=='待确认'" /></template>
+          </el-table-column>
+          <el-table-column label="操作" width="80" align="center" v-if="form.status==='生产中'">
+            <template #default="{row}">
+              <el-button
+                v-if="Number(getStock(row.materialName).shortage||0) > 0"
+                type="warning" link size="small"
+                @click="goPurchase(row)">
+                去采购
+              </el-button>
+            </template>
           </el-table-column>
         </el-table>
         <div v-else style="color:#909399;font-size:13px;margin-top:8px">暂无 BOM 物料</div>
@@ -279,7 +323,7 @@ onMounted(() => { loadOptions(); loadData() })
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:600">合同文件</span>
-          <el-button type="warning" size="small" @click="exportPdf">导出PDF合同</el-button>
+          <el-button type="warning" size="small" @click="exportPdf">导出合同</el-button>
         </div>
       </template>
       <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'#67c23a':'#dcdfe6', background: uploadFile?'#f0f9eb':'#fafafa' }">

@@ -204,7 +204,7 @@ function warehouseName(id?: number) {
 function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Number(v).toFixed(2) }
 
 onMounted(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData() })
-onActivated(() => { loadWarehouses(); loadData() })
+onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData() })
 </script>
 
 <template>

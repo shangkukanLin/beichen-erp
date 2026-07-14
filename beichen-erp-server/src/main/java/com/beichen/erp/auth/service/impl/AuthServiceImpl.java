@@ -8,7 +8,9 @@ import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.auth.service.AuthService;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.system.entity.Company;
 import com.beichen.erp.system.entity.Menu;
+import com.beichen.erp.system.mapper.CompanyMapper;
 import com.beichen.erp.system.service.MenuService;
 import com.beichen.erp.system.service.RoleService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserMapper userMapper;
     private final RoleService roleService;
     private final MenuService menuService;
+    private final CompanyMapper companyMapper;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Override
@@ -56,6 +59,11 @@ public class AuthServiceImpl implements AuthService {
         // 存入公司ID到session
         StpUtil.getSession().set("companyId", companyId);
 
+        // 查公司名称，存入 session 和 userInfo
+        Company company = companyMapper.selectById(companyId);
+        String companyName = company != null ? company.getCompanyName() : "";
+        StpUtil.getSession().set("companyName", companyName);
+
         // 查询角色 codes，存入 session 供 @SaCheckRole 使用
         List<String> roleCodes = roleService.getRoleCodesByUserId(user.getId());
         StpUtil.getSession().set("roles", roleCodes);
@@ -72,6 +80,7 @@ public class AuthServiceImpl implements AuthService {
         userInfo.put("status", user.getStatus());
         userInfo.put("roles", roleCodes);
         userInfo.put("companyId", companyId);
+        userInfo.put("companyName", companyName);
 
         Map<String, Object> result = new HashMap<>();
         result.put("token", tokenInfo.tokenValue);

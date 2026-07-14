@@ -124,6 +124,9 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         // 总成名称变更时同步产品名称
         syncProduct(project, exist);
 
+        // 项目进入小批量阶段时，将研发中的产品改为正常
+        syncProductStatus(project);
+
         // 如果带了 bomData，upsert 更新 BOM 物料（只更新物料名，保留用量等字段）
         if (dto.getBomData() != null && !dto.getBomData().isEmpty()) {
             List<Bom> existingBoms = bomMapper.selectList(
@@ -178,6 +181,10 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         update.setId(id);
         update.setStatus(status);
         projectMapper.updateById(update);
+
+        // 项目进入小批量阶段时，将研发中的产品改为正常
+        project.setStatus(status);
+        syncProductStatus(project);
     }
 
     /**
@@ -211,11 +218,14 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         }
 
         // 新增场景：检查同名产品是否已存在
-        Long count = materialMapper.selectCount(
+        Material existing = materialMapper.selectOne(
             new LambdaQueryWrapper<Material>()
                 .eq(Material::getName, assemblyName));
-        if (count != null && count > 0) {
-            log.info("产品「{}」已存在，不重复创建", assemblyName);
+        if (existing != null) {
+            // 已存在，直接关联
+            existing.setProjectId(projectId);
+            materialMapper.updateById(existing);
+            log.info("产品「{}」已存在，已关联到项目ID={}", assemblyName, projectId);
             return;
         }
 
@@ -227,6 +237,25 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         material.setProjectId(projectId);
         materialMapper.insert(material);
         log.info("已自动创建研发中产品：{}（项目ID={}）", assemblyName, projectId);
+    }
+
+    /**
+     * 项目进入小批量阶段时，将关联的"研发中"产品状态改为"正常"
+     */
+    private void syncProductStatus(Project project) {
+        if (project == null || project.getId() == null) return;
+        if (!"小批量".equals(project.getStatus())) return;
+
+        Material linked = materialMapper.selectOne(
+            new LambdaQueryWrapper<Material>()
+                .eq(Material::getProjectId, project.getId())
+                .eq(Material::getStatus, "研发中")
+                .last("LIMIT 1"));
+        if (linked != null) {
+            linked.setStatus("正常");
+            materialMapper.updateById(linked);
+            log.info("项目进入小批量，产品「{}」状态：研发中 → 正常", linked.getName());
+        }
     }
 
     /** 生成产品编码 PRD-YYYYMMDD-NNN */

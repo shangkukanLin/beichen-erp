@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, computed, watch } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -106,43 +106,25 @@ async function loadBomTypes() {
 }
 function getMaterialsByType(type: string) { return allMaterials.value.filter((m:any) => m.materialType === type) }
 
-/** 加载BOM + 子物料平铺展示 */
+/** 加载BOM + 子物料平铺 */
 async function loadBom() {
   const items = (await getProjectBom(projectId)) || []
+  // 批量查询子物料
+  const names = [...new Set(items.map((b:any) => b.materialName).filter(Boolean))]
+  const childrenMap: Record<string, any[]> = {}
+  if (names.length > 0) {
+    try { const r = await request.post<any, any>('/outsource/material/components-batch', names); Object.assign(childrenMap, r || {}) } catch { /* ignore */ }
+  }
+  // 平铺：父行 + 子行（缩进只读）
   const result: any[] = []
-  for (let i = 0; i < items.length; i++) {
-    const b = items[i]
-    result.push({ _idx: i, _isChild: false, materialName: b.materialName, supplierId: b.supplierId, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })
-    result.push(...await fetchChildren(b.materialName))
+  for (const b of items) {
+    result.push({ _isChild: false, materialName: b.materialName, supplierId: b.supplierId, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })
+    const subs = childrenMap[b.materialName] || []
+    for (const s of subs) {
+      result.push({ _isChild: true, materialName: s.childName, materialType: s.childType, quantityPerSet: s.quantity, lossRate: s.lossRate, remark: s.remark })
+    }
   }
   bomList.value = result
-}
-
-/** 根据物料名查子物料行（缩进展示） */
-async function fetchChildren(materialName: string) {
-  const rows: any[] = []
-  if (!materialName) return rows
-  const mat = allMaterials.value.find((m: any) => m.materialName === materialName)
-  if (!mat) return rows
-  try {
-    const r = await request.get<any, any[]>('/outsource/material-bom/direct', { params: { parentId: mat.id } })
-    if (r && r.length > 0) {
-      for (let j = 0; j < r.length; j++) {
-        rows.push({
-          _isChild: true,
-          materialName: r[j].childName || r[j].childMaterialId,
-          spec: r[j].childSpec || '',
-          unit: r[j].childUnit || '',
-          quantityPerSet: r[j].quantity ?? 1,
-          lossRate: r[j].lossRate ?? 0,
-          materialType: r[j].childType || '',
-          remark: r[j].remark || '',
-          supplierId: undefined
-        })
-      }
-    }
-  } catch { /* ignore */ }
-  return rows
 }
 
 function addBomRow() { bomList.value.push({ _isChild: false, materialName: '', spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialType: '', remark: '', supplierId: undefined }) }
@@ -156,39 +138,17 @@ async function onBomMaterialChange(materialName: string, row: any) {
     const ids = String(matched.supplierIds).split(',').filter(Boolean).map(Number)
     if (ids.length > 0) row.supplierId = ids[0]
   }
-  // 选择物料后立即加载并显示其子物料
-  const idx = bomList.value.indexOf(row)
-  if (idx >= 0) {
-    // 移除该物料行之前的旧子行
-    let next = idx + 1
-    while (next < bomList.value.length && bomList.value[next]._isChild) {
-      bomList.value.splice(next, 1)
-    }
-    // 插入新的子物料行
-    const children = await fetchChildren(materialName)
-    bomList.value.splice(idx + 1, 0, ...children)
-  }
 }
-function removeBomRow(i: number) {
-  const row = bomList.value[i]
-  // 删除该父行及其子行
-  spliceOne(i)
-  if (row && !row._isChild) {
-    while (i < bomList.value.length && bomList.value[i]._isChild) {
-      bomList.value.splice(i, 1)
-    }
-  }
-}
-function spliceOne(i: number) { bomList.value.splice(i, 1) }
+function removeBomRow(i: number) { bomList.value.splice(i, 1) }
 async function saveBom() {
-  const parentRows = bomList.value.filter((b: any) => !b._isChild)
-  const emptyType = parentRows.find((b: any) => !b.materialType || !b.materialType.trim())
+  const parents = bomList.value.filter((b: any) => !b._isChild)
+  const emptyType = parents.find((b: any) => !b.materialType || !b.materialType.trim())
   if (emptyType) { ElMessage.warning('物料类型不能为空'); return }
-  const emptyName = parentRows.find((b: any) => !b.materialName || !b.materialName.trim())
+  const emptyName = parents.find((b: any) => !b.materialName || !b.materialName.trim())
   if (emptyName) { ElMessage.warning('物料名称不能为空'); return }
-  const zeroQty = parentRows.find((b: any) => !b.quantityPerSet || Number(b.quantityPerSet) <= 0)
+  const zeroQty = parents.find((b: any) => !b.quantityPerSet || Number(b.quantityPerSet) <= 0)
   if (zeroQty) { ElMessage.warning('物料用量必须大于0'); return }
-  await saveProjectBom(projectId, parentRows)
+  await saveProjectBom(projectId, parents)
   ElMessage.success('BOM已保存')
   await loadBom()
 }
@@ -336,6 +296,7 @@ async function handleDeleteDevMaterial(row: DevMaterialItem) {
 watch(activeTab, async (tab) => { if (tab === 'bom') await loadBom() })
 
 onMounted(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBomTypes(); loadTimeline(); loadBom(); loadBugs(); loadDrawings() })
+onActivated(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBomTypes(); loadTimeline(); loadBom(); loadBugs(); loadDrawings() })
 function goBack() { router.push('/dev/project') }
 
 function onNameBlur() {
@@ -433,7 +394,7 @@ function onNameBlur() {
           <el-table :data="bomList" border size="small">
             <el-table-column label="类型" width="100">
               <template #default="{row}">
-                <span v-if="row._isChild" style="color:#909399;font-size:12px">{{ row.materialType }}</span>
+                <span v-if="row._isChild" style="color:#999;font-size:12px">{{ row.materialType }}</span>
                 <el-select v-else v-model="row.materialType" size="small" style="width:100%" @change="row.materialName = ''">
                   <el-option v-for="t in bomTypes" :key="t" :label="t" :value="t" />
                 </el-select>
@@ -441,25 +402,25 @@ function onNameBlur() {
             </el-table-column>
             <el-table-column label="物料名称" min-width="130">
               <template #default="{row}">
-                <span v-if="row._isChild" style="color:#409EFF;font-size:12px">└ {{ row.materialName }}</span>
+                <span v-if="row._isChild" style="color:#409eff;font-size:12px">└ {{ row.materialName }}</span>
                 <el-select v-else v-model="row.materialName" size="small" filterable allow-create clearable style="width:100%" placeholder="选择" @change="(v: string) => onBomMaterialChange(v, row)"><el-option v-for="m in getMaterialsByType(row.materialType || '')" :key="m.id" :label="m.materialName" :value="m.materialName" /></el-select>
               </template>
             </el-table-column>
             <el-table-column label="供应商" width="100">
               <template #default="{row}">
-                <span v-if="row._isChild" style="color:#909399;font-size:12px">{{ row.supplierId || '-' }}</span>
+                <span v-if="row._isChild" style="color:#999;font-size:12px">-</span>
                 <el-select v-else v-model="row.supplierId" size="small" clearable filterable style="width:100%">
                   <el-option v-for="s in allSuppliers" :key="s.id" :label="s.name" :value="s.id" />
                 </el-select>
               </template>
             </el-table-column>
-            <el-table-column label="规格" width="90"><template #default="{row}"><span v-if="row._isChild" style="color:#909399;font-size:12px">{{ row.spec }}</span><el-input v-else v-model="row.spec" size="small" /></template></el-table-column>
-            <el-table-column label="单位" width="65"><template #default="{row}"><span v-if="row._isChild" style="color:#909399;font-size:12px">{{ row.unit }}</span><el-input v-else v-model="row.unit" size="small" /></template></el-table-column>
-            <el-table-column label="用量" width="75"><template #default="{row}"><span v-if="row._isChild" style="font-size:12px">{{ row.quantityPerSet }}</span><el-input v-else v-model="row.quantityPerSet" size="small" /></template></el-table-column>
-            <el-table-column label="损耗率%" width="80"><template #default="{row}"><span v-if="row._isChild" style="font-size:12px">{{ row.lossRate }}</span><el-input v-else v-model="row.lossRate" size="small" /></template></el-table-column>
+            <el-table-column label="规格" width="90"><template #default="{row}"><span v-if="row._isChild" style="color:#999;font-size:12px">-</span><el-input v-else v-model="row.spec" size="small" /></template></el-table-column>
+            <el-table-column label="单位" width="65"><template #default="{row}"><span v-if="row._isChild" style="color:#999;font-size:12px">-</span><el-input v-else v-model="row.unit" size="small" /></template></el-table-column>
+            <el-table-column label="用量" width="75"><template #default="{row}"><span :style="{fontSize:'12px'}">{{ row.quantityPerSet }}</span></template></el-table-column>
+            <el-table-column label="损耗率%" width="80"><template #default="{row}"><span :style="{fontSize:'12px'}">{{ row.lossRate }}</span></template></el-table-column>
             <el-table-column label="操作" width="60" align="center">
               <template #default="{$index}">
-                <el-button v-if="!bomList[$index]._isChild" type="danger" link @click="removeBomRow($index)">删除</el-button>
+                <el-button type="danger" link @click="removeBomRow($index)">{{ bomList[$index]._isChild ? '' : '删除' }}</el-button>
               </template>
             </el-table-column>
           </el-table>

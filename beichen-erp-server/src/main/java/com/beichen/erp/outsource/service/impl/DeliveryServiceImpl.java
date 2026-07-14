@@ -77,9 +77,9 @@ public class DeliveryServiceImpl implements DeliveryService {
             // 库存联动：发料→目标仓库+，收料/退料→来源仓库-
             BigDecimal qty = item.getQuantity();
             if ("发料".equals(delivery.getDeliveryType())) {
-                if (delivery.getToWarehouseId() != null) updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty);
+                if (delivery.getToWarehouseId() != null) updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType());
             } else {
-                if (delivery.getFromWarehouseId() != null) updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate());
+                if (delivery.getFromWarehouseId() != null) updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType());
             }
         }
         // 发料时同步加工单物料已发数量
@@ -104,9 +104,9 @@ public class DeliveryServiceImpl implements DeliveryService {
         for (OutsourceDeliveryItem item : items) {
             BigDecimal qty = item.getQuantity();
             if ("发料".equals(delivery.getDeliveryType())) {
-                if (delivery.getToWarehouseId() != null) updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty.negate());
+                if (delivery.getToWarehouseId() != null) updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType());
             } else {
-                if (delivery.getFromWarehouseId() != null) updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty);
+                if (delivery.getFromWarehouseId() != null) updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType());
             }
         }
 
@@ -137,9 +137,9 @@ public class DeliveryServiceImpl implements DeliveryService {
         for (OutsourceDeliveryItem item : oldItems) {
             BigDecimal qty = item.getQuantity();
             if ("发料".equals(old.getDeliveryType())) {
-                if (old.getToWarehouseId() != null) updateStock(old.getToWarehouseId(), item.getMaterialId(), qty.negate());
+                if (old.getToWarehouseId() != null) updateStock(old.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType());
             } else {
-                if (old.getFromWarehouseId() != null) updateStock(old.getFromWarehouseId(), item.getMaterialId(), qty);
+                if (old.getFromWarehouseId() != null) updateStock(old.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType());
             }
         }
         // 2. 删旧明细
@@ -154,9 +154,9 @@ public class DeliveryServiceImpl implements DeliveryService {
             itemMapper.insert(item);
             BigDecimal qty = item.getQuantity();
             if ("发料".equals(delivery.getDeliveryType())) {
-                if (delivery.getToWarehouseId() != null) updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty);
+                if (delivery.getToWarehouseId() != null) updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType());
             } else {
-                if (delivery.getFromWarehouseId() != null) updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate());
+                if (delivery.getFromWarehouseId() != null) updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType());
             }
         }
         // 发料时重新应用新已发数量
@@ -230,17 +230,20 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     /**
-     * 更新仓库库存（先查后upsert）
+     * 更新仓库库存（先查后upsert，按良品/不良品分别统计）
      */
-    private void updateStock(Long warehouseId, Long materialId, BigDecimal delta) {
+    private void updateStock(Long warehouseId, Long materialId, BigDecimal delta, String qualityType) {
+        String qt = qualityType != null ? qualityType : "良品";
         LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
                 .eq(OutsourceWarehouseStock::getWarehouseId, warehouseId)
-                .eq(OutsourceWarehouseStock::getMaterialId, materialId);
+                .eq(OutsourceWarehouseStock::getMaterialId, materialId)
+                .eq(OutsourceWarehouseStock::getQualityType, qt);
         OutsourceWarehouseStock stock = stockMapper.selectOne(w);
         if (stock == null) {
             stock = new OutsourceWarehouseStock();
             stock.setWarehouseId(warehouseId);
             stock.setMaterialId(materialId);
+            stock.setQualityType(qt);
             stock.setQuantity(delta);
             stockMapper.insert(stock);
         } else {

@@ -194,6 +194,8 @@ public class DeliveryController {
                     } else {
                         item.setQuantity(BigDecimal.ZERO);
                     }
+                    // 质量类型，默认良品
+                    item.setQualityType(map.get("qualityType") != null ? map.get("qualityType").toString() : "良品");
                     items.add(item);
                 }
             }

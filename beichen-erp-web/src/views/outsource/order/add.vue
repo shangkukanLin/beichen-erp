@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, watch } from 'vue'
+import { reactive, ref, onMounted, onActivated, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -118,7 +118,7 @@ async function handleSubmit() {
   } finally { saving.value = false }
 }
 
-onMounted(async () => {
+async function initPage() {
   await loadOptions()
   addProduct()
   // 从研发项目跳转过来时自动填充
@@ -130,7 +130,9 @@ onMounted(async () => {
     // 延迟触发 BOM 加载（等 projectOptions 就绪）
     setTimeout(() => onProjectSelect(0, Number(qProjectId)), 300)
   }
-})
+}
+onMounted(initPage)
+onActivated(initPage)
 </script>
 
 <template>

@@ -183,7 +183,7 @@ async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.co
 async function openDetail(row: ProjectVO) { detailProject.value = row; detailTab.value = 'bom'; detailVisible.value = true; loadBom(); loadBugs(); loadDrawings() }
 
 onMounted(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBomTypes() })
-onActivated(() => { loadData() })
+onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBomTypes() })
 </script>
 
 <template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import request from '@/utils/request'
 import { getMaterialPage, type Material } from '@/api/material'
@@ -305,6 +305,7 @@ async function otherDetail_(row: OtherIo) {
 }
 
 onMounted(() => { loadWarehouses(); loadMaterials(); loadStock() })
+onActivated(() => { loadWarehouses(); loadMaterials(); loadStock() })
 </script>
 
 <template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { addProject, getSupplierPage, type ProjectDTO } from '@/api/system'
@@ -56,7 +56,6 @@ function onNameBlur() {
 }
 
 onMounted(() => loadData())
-onActivated(() => resetForm())
 </script>
 
 <template>

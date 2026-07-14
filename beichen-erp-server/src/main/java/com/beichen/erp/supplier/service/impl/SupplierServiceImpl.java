@@ -32,8 +32,8 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
     public Page<Supplier> page(SupplierQueryDTO query) {
         Page<Supplier> page = new Page<>(query.getPageNum(), query.getPageSize());
         LambdaQueryWrapper<Supplier> wrapper = new LambdaQueryWrapper<Supplier>()
-                .eq(query.getSupplierType() != null && !query.getSupplierType().isBlank(),
-                        Supplier::getSupplierType, query.getSupplierType())
+                .apply(query.getSupplierType() != null && !query.getSupplierType().isBlank(),
+                        "FIND_IN_SET({0}, supplier_type) > 0", query.getSupplierType())
                 .like(query.getName() != null && !query.getName().isBlank(),
                         Supplier::getName, query.getName())
                 .like(query.getPhone() != null && !query.getPhone().isBlank(),
@@ -72,13 +72,36 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
 
     @Override
     public void create(SupplierDTO dto) {
-        // 检查同名供应商是否已存在
+        // 检查同名供应商是否已存在（不再区分类型，因为供应商可以有多种类型）
+        String primaryType = getPrimaryType(dto.getSupplierType());
         LambdaQueryWrapper<Supplier> checkWrapper = new LambdaQueryWrapper<Supplier>()
-                .eq(Supplier::getName, dto.getName())
-                .eq(Supplier::getSupplierType, dto.getSupplierType());
+                .eq(Supplier::getName, dto.getName());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) checkWrapper.eq(Supplier::getCompanyId, cid);
         if (supplierMapper.selectCount(checkWrapper) > 0) {
+            // 已存在同名供应商：只允许追加新类型，不允许重复创建
+            Supplier exist = supplierMapper.selectOne(checkWrapper);
+            if (exist != null) {
+                String existingTypes = exist.getSupplierType() != null ? exist.getSupplierType() : "";
+                String newTypes = dto.getSupplierType();
+                // 检查是否有新类型需要合并
+                boolean hasNew = false;
+                for (String nt : newTypes.split(",")) {
+                    if (!containsType(existingTypes, nt.trim())) {
+                        hasNew = true;
+                        break;
+                    }
+                }
+                if (hasNew) {
+                    String merged = mergeTypes(existingTypes, newTypes);
+                    Supplier update = new Supplier();
+                    update.setId(exist.getId());
+                    update.setSupplierType(merged);
+                    supplierMapper.updateById(update);
+                    dto.setId(exist.getId()); // 返回已存在记录的ID
+                    return;
+                }
+            }
             throw new BusinessException("供应商名称「" + dto.getName() + "」已存在，请勿重复添加");
         }
 
@@ -86,7 +109,7 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         BeanUtils.copyProperties(dto, supplier);
         // 带重试，防止并发时编码冲突
         int seq = 0;
-        String prefix = getPrefixByType(dto.getSupplierType());
+        String prefix = getPrefixByType(primaryType);
         String dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         for (int i = 0; i < 3; i++) {
             try {
@@ -99,8 +122,8 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
                 // 设置公司ID
                 if (cid != null && cid > 0) supplier.setCompanyId(cid);
                 supplierMapper.insert(supplier);
-                // 委外加工厂自动创建默认仓库
-                if ("factory".equals(dto.getSupplierType())) {
+                // 供应商类型包含"factory"时自动创建默认仓库
+                if (containsType(dto.getSupplierType(), "factory")) {
                     OutsourceWarehouse wh = new OutsourceWarehouse();
                     wh.setFactoryId(supplier.getId());
                     wh.setWarehouseName(supplier.getName() + "仓库");
@@ -116,6 +139,35 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
                 if (i >= 2) throw e;
             }
         }
+    }
+
+    /** 取逗号分隔列表中的第一个类型作为主类型 */
+    private String getPrimaryType(String types) {
+        if (types == null || types.isBlank()) return "";
+        return types.split(",")[0].trim();
+    }
+
+    /** 判断类型列表中是否包含指定类型 */
+    private boolean containsType(String types, String type) {
+        if (types == null || type == null) return false;
+        for (String t : types.split(",")) {
+            if (t.trim().equals(type)) return true;
+        }
+        return false;
+    }
+
+    /** 合并两个逗号分隔的类型列表，去重排序 */
+    private String mergeTypes(String existing, String newTypes) {
+        java.util.Set<String> all = new java.util.LinkedHashSet<>();
+        for (String t : existing.split(",")) {
+            String trimmed = t.trim();
+            if (!trimmed.isEmpty()) all.add(trimmed);
+        }
+        for (String t : newTypes.split(",")) {
+            String trimmed = t.trim();
+            if (!trimmed.isEmpty()) all.add(trimmed);
+        }
+        return String.join(",", all);
     }
 
     private int getMaxSeq(String prefix, String dateStr) {
@@ -144,12 +196,11 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         if (exist == null) {
             throw new BusinessException("供应商不存在");
         }
-        // 检查名称是否与同类型其他供应商重复
+        // 检查名称是否与其他供应商重复（不按类型区分）
+        Long cid2 = CompanyContext.get();
         LambdaQueryWrapper<Supplier> checkWrapper = new LambdaQueryWrapper<Supplier>()
                 .eq(Supplier::getName, dto.getName())
-                .eq(Supplier::getSupplierType, exist.getSupplierType())
                 .ne(Supplier::getId, dto.getId());
-        Long cid2 = CompanyContext.get();
         if (cid2 != null && cid2 > 0) checkWrapper.eq(Supplier::getCompanyId, cid2);
         if (supplierMapper.selectCount(checkWrapper) > 0) {
             throw new BusinessException("供应商名称「" + dto.getName() + "」已存在");
@@ -191,15 +242,17 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
     }
 
     private String getPrefixByType(String type) {
-        if (type == null) {
+        if (type == null || type.isBlank()) {
             throw new BusinessException("供应商类型不能为空");
         }
-        return switch (type) {
+        // 支持多类型（逗号分隔），取第一个作为主类型生成编码前缀
+        String primaryType = type.contains(",") ? type.split(",")[0].trim() : type;
+        return switch (primaryType) {
             case "solution" -> "SOL";
             case "factory" -> "FAC";
             case "product" -> "PRO";
             case "material" -> "MAT";
-            default -> throw new BusinessException("无效的供应商类型: " + type);
+            default -> throw new BusinessException("无效的供应商类型: " + primaryType);
         };
     }
 }

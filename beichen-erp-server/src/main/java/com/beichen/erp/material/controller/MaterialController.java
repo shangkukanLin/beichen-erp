@@ -4,8 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.entity.MaterialBom;
-import com.beichen.erp.material.service.MaterialBomService;
 import com.beichen.erp.material.service.MaterialService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -30,7 +28,6 @@ import java.util.stream.Collectors;
 public class MaterialController {
 
     private final MaterialService materialService;
-    private final MaterialBomService materialBomService;
     private final JdbcTemplate jdbcTemplate;
 
     @GetMapping("/page")
@@ -54,15 +51,34 @@ public class MaterialController {
         List<Long> materialIds = result.getRecords().stream()
                 .map(Material::getId).filter(id -> id != null).collect(Collectors.toList());
         if (!materialIds.isEmpty()) {
-            String placeholders = materialIds.stream().map(id -> "?").collect(Collectors.joining(","));
-            List<Map<String, Object>> stockRows = jdbcTemplate.queryForList(
-                "SELECT material_id, SUM(quantity) AS total FROM inventory_warehouse_stock WHERE material_id IN (" + placeholders + ") GROUP BY material_id",
+            Map<Long, BigDecimal> stockMap = new java.util.HashMap<>();
+            String idPlaceholders = materialIds.stream().map(id -> "?").collect(Collectors.joining(","));
+
+            // 方式1: 按 material_id 汇总
+            List<Map<String, Object>> rows1 = jdbcTemplate.queryForList(
+                "SELECT material_id, SUM(quantity) AS total FROM inventory_warehouse_stock WHERE material_id IN (" + idPlaceholders + ") GROUP BY material_id",
                 materialIds.toArray());
-            Map<Long, BigDecimal> stockMap = stockRows.stream()
-                .collect(Collectors.toMap(
-                    r -> ((Number) r.get("material_id")).longValue(),
-                    r -> (BigDecimal) r.get("total"),
-                    (a, b) -> a));
+            for (Map<String, Object> row : rows1) {
+                Long mid = ((Number) row.get("material_id")).longValue();
+                stockMap.merge(mid, (BigDecimal) row.get("total"), BigDecimal::add);
+            }
+
+            // 方式2: 按 product_name 汇总（兜底 material_id 为 NULL 的记录）
+            List<String> productNames = result.getRecords().stream()
+                .map(Material::getName).filter(n -> n != null && !n.isBlank())
+                .collect(Collectors.toList());
+            if (!productNames.isEmpty()) {
+                String namePlaceholders = productNames.stream().map(n -> "?").collect(Collectors.joining(","));
+                List<Map<String, Object>> rows2 = jdbcTemplate.queryForList(
+                    "SELECT m.id AS material_id, SUM(s.quantity) AS total FROM inventory_warehouse_stock s " +
+                    "JOIN material m ON s.product_name = m.name WHERE s.material_id IS NULL AND s.product_name IN (" + namePlaceholders + ") GROUP BY m.id",
+                    productNames.toArray());
+                for (Map<String, Object> row : rows2) {
+                    Long mid = ((Number) row.get("material_id")).longValue();
+                    stockMap.merge(mid, (BigDecimal) row.get("total"), BigDecimal::add);
+                }
+            }
+
             result.getRecords().forEach(m -> {
                 BigDecimal stock = stockMap.get(m.getId());
                 if (stock != null) m.setCurrentStock(stock);
@@ -80,28 +96,18 @@ public class MaterialController {
     @PostMapping
     public R<Void> add(@RequestBody Material material) {
         materialService.save(material);
-        // 新增后同步子物料组成
-        if (material.getId() != null && material.getBomChildren() != null) {
-            materialBomService.saveChildren(material.getId(), material.getBomChildren());
-        }
         return R.ok();
     }
 
     @PutMapping
     public R<Void> update(@RequestBody Material material) {
         materialService.updateById(material);
-        // 编辑后同步子物料组成（全量替换）
-        if (material.getId() != null && material.getBomChildren() != null) {
-            materialBomService.saveChildren(material.getId(), material.getBomChildren());
-        }
         return R.ok();
     }
 
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
         materialService.removeById(id);
-        // 级联清理相关BOM关系
-        materialBomService.removeByMaterial(id);
         return R.ok();
     }
 }

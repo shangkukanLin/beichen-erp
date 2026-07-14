@@ -18,12 +18,23 @@ const form = reactive({
 })
 const products = ref<any[]>([])
 const typeName = ref('')
+const typeTags = ref<string[]>([])
+const hasFactory = ref(false)
 
-// 仓库/订单
+const TYPE_MAP: Record<string, string> = { solution: '方案商', factory: '加工厂', product: '成品商', material: '辅料商' }
+
+function formatTypes(types: string): string {
+  if (!types) return ''
+  return types.split(',').map(t => TYPE_MAP[t.trim()] || t).join(' + ')
+}
+
+// 仓库/订单/缺料
 const warehouses = ref<any[]>([])
 const orders = ref<any[]>([])
 const whLoading = ref(false)
 const orderLoading = ref(false)
+const materialLoading = ref(false)
+const materialSummary = ref<any[]>([])
 
 async function loadData() {
   loading.value = true
@@ -31,8 +42,9 @@ async function loadData() {
     const res = await request.get<any,any>(`/supplier/${id}`)
     if (res) {
       Object.assign(form, res)
-      const map: Record<string,string> = { solution:'方案商', factory:'委外加工厂', product:'成品供应商', material:'辅料商' }
-      typeName.value = map[res.supplierType] || res.supplierType || ''
+      typeName.value = formatTypes(res.supplierType)
+      typeTags.value = (res.supplierType || '').split(',').map((t: string) => t.trim()).filter(Boolean)
+      hasFactory.value = typeTags.value.includes('factory')
     }
     const prods = await request.get<any,any>(`/supplier/${id}/products`)
     products.value = prods || []
@@ -60,6 +72,16 @@ async function loadOrders() {
 function onTabChange(tab: any) {
   if (tab === 'warehouse' && warehouses.value.length === 0) loadWarehouses()
   if (tab === 'order' && orders.value.length === 0) loadOrders()
+  if (tab === 'material' && materialSummary.value.length === 0) loadMaterialSummary()
+}
+
+async function loadMaterialSummary() {
+  materialLoading.value = true
+  try {
+    const res = await request.get<any, any>(`/supplier/${id}/material-summary`)
+    materialSummary.value = res?.materials || []
+  } catch { materialSummary.value = [] }
+  finally { materialLoading.value = false }
 }
 
 async function handleSave() {
@@ -90,8 +112,11 @@ onMounted(loadData)
     <div class="page-header">
       <el-button @click="router.back()">返回列表</el-button>
       <span class="page-title">{{ typeName }} — {{ form.name || '详情' }}</span>
-      <el-tag v-if="form.status===1" type="success" size="small">启用</el-tag>
-      <el-tag v-else type="danger" size="small">停用</el-tag>
+      <el-tag v-for="t in typeTags" :key="t" size="small" style="margin-left:4px"
+        :type="t==='factory'?'warning':t==='solution'?'primary':t==='material'?'info':'success'"
+      >{{ TYPE_MAP[t] || t }}</el-tag>
+      <el-tag v-if="form.status===1" type="success" size="small" style="margin-left:4px">启用</el-tag>
+      <el-tag v-else type="danger" size="small" style="margin-left:4px">停用</el-tag>
       <el-button type="primary" style="margin-left:auto" :loading="saving" @click="handleSave">保存</el-button>
     </div>
 
@@ -131,7 +156,7 @@ onMounted(loadData)
       </el-tab-pane>
 
       <!-- 仓库详细（仅委外加工厂） -->
-      <el-tab-pane v-if="form.supplierType==='factory'" label="仓库详细" name="warehouse">
+      <el-tab-pane v-if="hasFactory" label="仓库详细" name="warehouse">
         <el-card shadow="never" v-loading="whLoading">
           <el-table :data="warehouses" border stripe size="small">
             <el-table-column prop="warehouseName" label="仓库名称" min-width="200" />
@@ -174,6 +199,40 @@ onMounted(loadData)
             </el-table-column>
           </el-table>
           <div v-if="orders.length===0 && !orderLoading" style="color:#909399;text-align:center;padding:40px">暂无订单</div>
+        </el-card>
+      </el-tab-pane>
+
+      <!-- 物料缺料（仅委外加工厂） -->
+      <el-tab-pane v-if="hasFactory" label="物料缺料" name="material">
+        <el-card shadow="never" v-loading="materialLoading">
+          <el-table :data="materialSummary" border stripe size="small">
+            <el-table-column prop="materialName" label="物料名称" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="materialType" label="类型" width="80" />
+            <el-table-column prop="totalDemand" label="总需求" width="90" align="right" />
+            <el-table-column label="已送料" width="90" align="right">
+              <template #default="{ row }">{{ row.totalDelivered || 0 }}</template>
+            </el-table-column>
+            <el-table-column label="库存" width="80" align="right">
+              <template #default="{ row }">{{ row.warehouseStock || 0 }}</template>
+            </el-table-column>
+            <el-table-column label="缺口" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.gap > 0" type="danger" size="small">{{ row.gap }}</el-tag>
+                <el-tag v-else type="success" size="small">已齐套</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="订单明细" min-width="220">
+              <template #default="{ row }">
+                <div v-for="(o, i) in (row.orders || [])" :key="i" style="font-size:12px;line-height:1.6">
+                  <span>{{ o.order_code }}</span>
+                  <span style="color:#909399;margin:0 4px">/</span>
+                  <span>{{ o.product_name }}</span>
+                  <span style="color:#409EFF;margin-left:4px">需{{ o.demand_quantity }}</span>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-if="materialSummary.length===0 && !materialLoading" style="color:#909399;text-align:center;padding:40px">暂无生产中订单</div>
         </el-card>
       </el-tab-pane>
     </el-tabs>

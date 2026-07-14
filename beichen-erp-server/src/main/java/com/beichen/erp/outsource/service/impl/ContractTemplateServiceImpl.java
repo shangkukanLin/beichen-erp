@@ -20,9 +20,13 @@ public class ContractTemplateServiceImpl implements ContractTemplateService {
     private final ContractTemplateMapper templateMapper;
 
     @Override
-    public List<ContractTemplate> list() {
-        return templateMapper.selectList(new LambdaQueryWrapper<ContractTemplate>()
-                .orderByDesc(ContractTemplate::getId));
+    public List<ContractTemplate> list(String templateType) {
+        LambdaQueryWrapper<ContractTemplate> w = new LambdaQueryWrapper<ContractTemplate>()
+                .orderByDesc(ContractTemplate::getId);
+        if (templateType != null && !templateType.isBlank()) {
+            w.eq(ContractTemplate::getTemplateType, templateType);
+        }
+        return templateMapper.selectList(w);
     }
 
     @Override
@@ -31,11 +35,15 @@ public class ContractTemplateServiceImpl implements ContractTemplateService {
     }
 
     @Override
-    public ContractTemplate getDefault() {
-        return templateMapper.selectOne(new LambdaQueryWrapper<ContractTemplate>()
+    public ContractTemplate getDefault(String templateType) {
+        LambdaQueryWrapper<ContractTemplate> w = new LambdaQueryWrapper<ContractTemplate>()
                 .eq(ContractTemplate::getIsDefault, 1)
                 .eq(ContractTemplate::getStatus, 1)
-                .last("LIMIT 1"));
+                .last("LIMIT 1");
+        if (templateType != null && !templateType.isBlank()) {
+            w.eq(ContractTemplate::getTemplateType, templateType);
+        }
+        return templateMapper.selectOne(w);
     }
 
     @Override
@@ -66,8 +74,11 @@ public class ContractTemplateServiceImpl implements ContractTemplateService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void setDefault(Long id) {
-        // 清除所有默认
+        ContractTemplate existing = templateMapper.selectById(id);
+        if (existing == null) throw new BusinessException("模板不存在");
+        // 清除同类型所有默认
         templateMapper.update(null, new LambdaUpdateWrapper<ContractTemplate>()
+                .eq(existing.getTemplateType() != null, ContractTemplate::getTemplateType, existing.getTemplateType())
                 .set(ContractTemplate::getIsDefault, 0));
         // 设置当前为默认
         ContractTemplate update = new ContractTemplate();

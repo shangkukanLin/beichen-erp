@@ -37,29 +37,32 @@ const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoadi
 const defForm = () => ({ id: undefined as any, projectIds: '', projectIdArr: [] as number[], warehouseId: undefined as any, materialName: '', materialType: '', supplierName: '', supplierIdArr: [] as number[], unit: 'PCS', remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
-// BOM 子物料
+// 子物料组成
 const bomRows = ref<any[]>([])
-function addBomRow() { bomRows.value.push({ childMaterialId: undefined, quantity: 1, lossRate: 2, remark: '' }) }
+function addBomRow() { bomRows.value.push({ childMaterialId: undefined, quantity: 1, lossRate: 0, remark: '' }) }
 function removeBomRow(idx: number) { bomRows.value.splice(idx, 1) }
-async function loadBomDirect(id: number) {
-  try { const res = await request.get<any, any>('/outsource/material-bom/direct', { params: { parentId: id } });
-    bomRows.value = (res || []).map((n: any) => ({ childMaterialId: n.childMaterialId, quantity: n.quantity ?? 1, lossRate: n.lossRate ?? 0, remark: n.remark || '' })) }
-  catch { bomRows.value = [] }
+async function loadComponents(materialId: number) {
+  try { const r = await request.get<any, any>(`/outsource/material/${materialId}/components`); bomRows.value = (r || []).map((c: any) => ({ childMaterialId: c.childMaterialId, quantity: c.quantity ?? 1, lossRate: c.lossRate ?? 0, remark: c.remark || '' })) } catch { bomRows.value = [] }
+}
+async function saveComponents(materialId: number) {
+  const valid = bomRows.value.filter(r => r.childMaterialId)
+  await request.put(`/outsource/material/${materialId}/components`, valid)
 }
 
 function handleAdd() { loadOptions(); Object.assign(form, defForm()); bomRows.value = []; isEdit.value = false; dialogTitle.value = '新增物料'; dialogVisible.value = true }
 function handleEdit(row: any) {
-  loadOptions();
+  loadOptions()
   Object.assign(form, defForm(), row)
   form.projectIdArr = (row.projectIds || '').split(',').filter(Boolean).map(Number)
   form.supplierIdArr = (row.supplierIds || '').split(',').filter(Boolean).map(Number)
   form.warehouseId = row.warehouseId || undefined
   isEdit.value = true; dialogTitle.value = '编辑物料'; dialogVisible.value = true
-  loadBomDirect(row.id)
+  loadComponents(row.id)
 }
 
 async function handleSubmit() {
   if (!form.materialName) { ElMessage.warning('请输入物料名称'); return }
+  if (!form.materialType) { ElMessage.warning('请选择物料类型'); return }
   const ids = form.projectIdArr.join(',')
   const names = form.projectIdArr.map((id:number)=>projectOptions.value.find((p:any)=>p.id===id)?.name||'').filter(Boolean).join(', ')
   const sIds = form.supplierIdArr.join(',')
@@ -69,11 +72,7 @@ async function handleSubmit() {
   try {
     if (isEdit.value) { await request.put('/outsource/material', body); ElMessage.success('修改成功') }
     else { const res = await request.post('/outsource/material', body) as any; form.id = res }
-    // 保存BOM子物料
-    if (form.id) {
-      const validBom = bomRows.value.filter(r => r.childMaterialId != null && r.childMaterialId !== '')
-      await request.post(`/outsource/material-bom/${form.id}`, validBom)
-    }
+    if (form.id) await saveComponents(form.id)
     dialogVisible.value = false; loadData()
   } finally { submitLoading.value = false }
 }
@@ -119,12 +118,12 @@ onMounted(() => { loadOptions(); loadData() })
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
       </el-form>
 
-      <el-divider content-position="left"><span style="font-weight:600;font-size:14px">BOM子物料组成</span></el-divider>
+      <el-divider content-position="left"><span style="font-weight:600;font-size:14px">子物料组成</span></el-divider>
       <div style="margin-bottom:8px">
-        <el-button type="primary" size="small" @click="addBomRow">添加子物料</el-button>
+        <el-button type="primary" size="small" @click="addBomRow">+ 添加子物料</el-button>
         <span style="color:#909399;font-size:13px;margin-left:8px">共 {{ bomRows.length }} 项</span>
       </div>
-      <el-table :data="bomRows" border stripe empty-text="暂无子物料，点击「添加子物料」添加" max-height="280" size="small">
+      <el-table :data="bomRows" border stripe empty-text="暂无子物料" max-height="280" size="small">
         <el-table-column label="子物料" min-width="220">
           <template #default="{ row }">
             <el-select v-model="row.childMaterialId" filterable placeholder="选择已有物料" style="width:100%" size="small">

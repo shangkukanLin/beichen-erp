@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCompanyList, createCompany, updateCompany, deleteCompany, switchCompany, type Company } from '@/api/company'
@@ -83,6 +83,7 @@ function goBack() {
 }
 
 onMounted(() => loadData())
+onActivated(() => loadData())
 </script>
 
 <template>

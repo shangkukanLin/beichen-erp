@@ -7,12 +7,15 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
+import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -108,6 +111,81 @@ public class OutsourceMaterialController {
         if (cid != null && cid > 0) m.setCompanyId(cid);
     }
 
+    private final OutsourceMaterialComponentMapper compMapper;
+
     @DeleteMapping("/{id}")
-    public R<Void> delete(@PathVariable Long id) { mapper.deleteById(id); return R.ok(); }
+    public R<Void> delete(@PathVariable Long id) {
+        // 级联删除子物料组成
+        compMapper.delete(new LambdaQueryWrapper<OutsourceMaterialComponent>()
+            .eq(OutsourceMaterialComponent::getParentMaterialId, id));
+        mapper.deleteById(id);
+        return R.ok();
+    }
+
+    /** 获取物料的子物料组成 */
+    @GetMapping("/{materialId}/components")
+    public R<Object> getComponents(@PathVariable Long materialId) {
+        List<OutsourceMaterialComponent> comps = compMapper.selectList(
+            new LambdaQueryWrapper<OutsourceMaterialComponent>()
+                .eq(OutsourceMaterialComponent::getParentMaterialId, materialId));
+        // 附带子物料名称
+        return R.ok(comps.stream().map(c -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", c.getId());
+            m.put("childMaterialId", c.getChildMaterialId());
+            m.put("quantity", c.getQuantity());
+            m.put("lossRate", c.getLossRate());
+            m.put("remark", c.getRemark());
+            OutsourceMaterial child = mapper.selectById(c.getChildMaterialId());
+            m.put("childName", child != null ? child.getMaterialName() : "");
+            return m;
+        }).toList());
+    }
+
+    /** 保存物料的子物料组成（全量替换） */
+    @PutMapping("/{materialId}/components")
+    public R<Void> saveComponents(@PathVariable Long materialId, @RequestBody List<Map<String, Object>> items) {
+        compMapper.delete(new LambdaQueryWrapper<OutsourceMaterialComponent>()
+            .eq(OutsourceMaterialComponent::getParentMaterialId, materialId));
+        if (items != null) {
+            for (Map<String, Object> it : items) {
+                OutsourceMaterialComponent c = new OutsourceMaterialComponent();
+                c.setParentMaterialId(materialId);
+                c.setChildMaterialId(Long.valueOf(it.get("childMaterialId").toString()));
+                if (it.get("quantity") != null) c.setQuantity(new BigDecimal(it.get("quantity").toString()));
+                if (it.get("lossRate") != null) c.setLossRate(new BigDecimal(it.get("lossRate").toString()));
+                c.setRemark((String) it.get("remark"));
+                compMapper.insert(c);
+            }
+        }
+        return R.ok();
+    }
+
+    /** 批量查询：按物料名获取子物料，返回 Map<物料名, 子物料列表> */
+    @PostMapping("/components-batch")
+    public R<Map<String, Object>> componentsBatch(@RequestBody List<String> names) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (String name : names) {
+            Long id = mapper.findIdByName(name);
+            if (id != null) {
+                List<OutsourceMaterialComponent> comps = compMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceMaterialComponent>()
+                        .eq(OutsourceMaterialComponent::getParentMaterialId, id));
+                if (!comps.isEmpty()) {
+                    result.put(name, comps.stream().map(c -> {
+                        Map<String, Object> m = new HashMap<>();
+                        m.put("childMaterialId", c.getChildMaterialId());
+                        OutsourceMaterial child = mapper.selectById(c.getChildMaterialId());
+                        m.put("childName", child != null ? child.getMaterialName() : "");
+                        m.put("childType", child != null ? child.getMaterialType() : "");
+                        m.put("quantity", c.getQuantity());
+                        m.put("lossRate", c.getLossRate());
+                        m.put("remark", c.getRemark());
+                        return m;
+                    }).toList());
+                }
+            }
+        }
+        return R.ok(result);
+    }
 }

@@ -6,6 +6,7 @@ import { Fold, Expand, User, ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useTabStore } from '@/stores/tabs'
 import { logout as logoutApi } from '@/api/auth'
+import request from '@/utils/request'
 import SideMenu from './SideMenu.vue'
 
 const route = useRoute()
@@ -19,6 +20,19 @@ const drawerOpen = ref(false)
 
 const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => (route.meta.title as string) || '')
+const displayCompanyName = ref('')
+
+// 获取公司名称（优先 userInfo，否则调 API 从 session 读取）
+async function fetchCompanyName() {
+  if (userStore.userInfo?.companyName) {
+    displayCompanyName.value = userStore.userInfo.companyName
+    return
+  }
+  try {
+    const name = await request.get<string, string>('/auth/company-name')
+    if (name) displayCompanyName.value = name
+  } catch { /* ignore */ }
+}
 
 // 路由变化时自动打开页签
 watch(() => route.fullPath, (path) => {
@@ -53,6 +67,20 @@ function closeTab(path: string, e: MouseEvent) {
   }
 }
 
+function handleTabMouseDown(path: string, e: MouseEvent) {
+  // 仅阻止中键默认行为（自动滚动），关闭逻辑在 mouseup 中处理
+  if (e.button === 1) {
+    e.preventDefault()
+  }
+}
+
+function handleTabMouseUp(path: string, e: MouseEvent) {
+  // 中键关闭 Tab，与点击 × 行为一致
+  if (e.button === 1) {
+    closeTab(path, e)
+  }
+}
+
 async function handleLogout() {
   try {
     await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
@@ -68,16 +96,21 @@ function checkMobile() {
   isMobile.value = mobile
   if (!mobile) drawerOpen.value = false
 }
-onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile); userStore.fetchMenus() })
+onMounted(() => { checkMobile(); window.addEventListener('resize', checkMobile); userStore.fetchMenus(); fetchCompanyName() })
 onUnmounted(() => { window.removeEventListener('resize', checkMobile) })
+
+// 登录后 userInfo 更新时同步公司名称
+watch(() => userStore.userInfo?.companyName, (name) => {
+  if (name) displayCompanyName.value = name
+})
 </script>
 
 <template>
   <el-container class="layout-container" :class="{ 'is-mobile': isMobile }">
     <el-aside v-if="!isMobile" :width="isCollapse ? '64px' : '210px'" class="layout-aside">
       <div class="logo">
-        <span v-if="!isCollapse" class="logo-text">北辰ERP</span>
-        <span v-else class="logo-text-mini">北辰</span>
+        <span v-if="!isCollapse" class="logo-text">{{ displayCompanyName || '北辰ERP' }}</span>
+        <span v-else class="logo-text-mini">{{ (displayCompanyName || '北辰').substring(0, 2) }}</span>
       </div>
       <SideMenu :collapse="isCollapse" @select="handleSelect" />
     </el-aside>
@@ -91,7 +124,7 @@ onUnmounted(() => { window.removeEventListener('resize', checkMobile) })
       class="mobile-drawer"
     >
       <div class="logo">
-        <span class="logo-text">北辰ERP</span>
+        <span class="logo-text">{{ displayCompanyName || '北辰ERP' }}</span>
       </div>
       <SideMenu :collapse="false" @select="handleSelect" />
     </el-drawer>
@@ -127,6 +160,8 @@ onUnmounted(() => { window.removeEventListener('resize', checkMobile) })
           class="tab-item"
           :class="{ active: tab.path === tabStore.activePath }"
           @click="switchTab(tab.path)"
+          @mousedown="(e: MouseEvent) => handleTabMouseDown(tab.path, e)"
+          @mouseup="(e: MouseEvent) => handleTabMouseUp(tab.path, e)"
         >
           <span class="tab-label">{{ tab.title }}</span>
           <span class="tab-close" @click="(e: MouseEvent) => closeTab(tab.path, e)">×</span>
@@ -159,7 +194,7 @@ onUnmounted(() => { window.removeEventListener('resize', checkMobile) })
 .username { font-size: 14px; }
 
 /* 页签栏 */
-.tab-bar { display: flex; align-items: center; background: #f5f5f5; border-bottom: 1px solid #e4e7ed; padding: 0 4px; height: 36px; overflow-x: auto; }
+.tab-bar { display: flex; align-items: center; background: #f5f5f5; border-bottom: 1px solid #e4e7ed; padding: 0 4px; height: 46px; overflow-x: auto; }
 .tab-item { display: flex; align-items: center; gap: 2px; padding: 4px 8px 4px 12px; margin: 0 2px; border-radius: 4px 4px 0 0; cursor: pointer; font-size: 12px; color: #606266; background: #e8eaed; white-space: nowrap; max-width: 160px; }
 .tab-item.active { background: #fff; color: #409eff; border-bottom: 2px solid #409eff; }
 .tab-item:hover { color: #409eff; }

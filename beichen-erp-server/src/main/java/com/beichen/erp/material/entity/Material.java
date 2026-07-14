@@ -9,7 +9,6 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Data
 @TableName("material")
@@ -40,10 +39,6 @@ public class Material {
     private Long projectId;
 
     private String remark;
-
-    /** 子物料组成（仅用于新增/编辑时的入参，不入物料表） */
-    @TableField(exist = false)
-    private List<MaterialBom> bomChildren;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;

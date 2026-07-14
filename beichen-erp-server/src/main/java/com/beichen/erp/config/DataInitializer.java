@@ -303,6 +303,38 @@ public class DataInitializer implements ApplicationRunner {
                 log.info("已为 dev_material 添加 company_id 列");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // 已有表补加 company_id 列 - outsource_material_order_item
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_material_order_item' AND COLUMN_NAME='company_id'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_material_order_item ADD COLUMN company_id BIGINT DEFAULT NULL COMMENT '公司ID' AFTER remark");
+                log.info("已为 outsource_material_order_item 添加 company_id 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_material_order 添加 finish_time 列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_material_order' AND COLUMN_NAME='finish_time'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_material_order ADD COLUMN finish_time DATETIME DEFAULT NULL COMMENT '订单完成时间' AFTER update_time");
+                log.info("已为 outsource_material_order 添加 finish_time 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_contract_template 添加 template_type 列（加工合同/采购合同）
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_contract_template' AND COLUMN_NAME='template_type'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_contract_template ADD COLUMN template_type VARCHAR(20) DEFAULT '加工合同' COMMENT '模板类型：加工合同/采购合同' AFTER is_default");
+                log.info("已为 outsource_contract_template 添加 template_type 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // 供应商类型支持多值（逗号分隔），扩展列长
+        try { jdbcTemplate.execute("ALTER TABLE supplier MODIFY COLUMN supplier_type VARCHAR(100) NOT NULL COMMENT '供应商类型(逗号分隔多值)'"); } catch (Exception ignored) {}
     }
 
     /** 增量 DDL：库存表按 material_id 维度重构 + 唯一键补 company_id + 可用量字段 */
@@ -429,30 +461,34 @@ public class DataInitializer implements ApplicationRunner {
         }
         // 一级菜单
         saveMenu(1L, 0L, "首页", "menu", "/dashboard", "Dashboard", "HomeFilled", 1);
-        saveMenu(2L, 0L, "研发管理", "catalog", "", "", "Cpu", 2);
+        saveMenu(50L, 0L, "基础数据", "catalog", "", "", "DataBoard", 2);
+        saveMenu(2L, 0L, "研发管理", "catalog", "", "", "Cpu", 3);
         saveMenu(4L, 0L, "委外加工", "catalog", "", "", "Setting", 4);
         saveMenu(5L, 0L, "进销存", "catalog", "", "", "Goods", 5);
         saveMenu(6L, 0L, "财务管理", "catalog", "", "", "Money", 6);
         saveMenu(7L, 0L, "设置", "catalog", "", "", "Tools", 7);
-        // 研发管理子菜单（排序：方案商→BOM类型→研发项目→图纸文档→BOM管理）
-        saveMenu(11L, 2L, "方案商", "menu", "/supplier/solution", "SupplierSolution", "Connection", 1);
-        saveMenu(33L, 2L, "BOM类型", "menu", "/dev/bom-type", "DevBomType", "Tickets", 2);
-        saveMenu(8L, 2L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 3);
-        saveMenu(10L, 2L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 4);
-        saveMenu(9L, 2L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 5);
+        // 研发管理子菜单
+        saveMenu(8L, 2L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 1);
+        saveMenu(10L, 2L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 2);
+        saveMenu(9L, 2L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 3);
+        // 基础数据子菜单
+        saveMenu(49L, 50L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "UserFilled", 1);
+        saveMenu(18L, 50L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 2);
+        saveMenu(19L, 50L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 3);
+        saveMenu(39L, 50L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 4);
+        saveMenu(36L, 50L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 5);
+        saveMenu(33L, 50L, "BOM类型", "menu", "/dev/bom-type", "DevBomType", "Tickets", 6);
         // 委外加工子菜单
         saveMenu(15L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1);
-        saveMenu(16L, 4L, "物料信息", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 2);
-        saveMenu(12L, 4L, "委外加工厂", "menu", "/supplier/factory", "SupplierFactory", "OfficeBuilding", 3);
-        saveMenu(14L, 4L, "辅料商", "menu", "/supplier/material-supplier", "SupplierMaterialSupplier", "Box", 4);
+        saveMenu(44L, 4L, "委外物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2);
+        saveMenu(16L, 4L, "物料信息", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 3);
+        saveMenu(35L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 4);
+        saveMenu(37L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 5);
+        saveMenu(48L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6);
         // 进销存子菜单
-        saveMenu(39L, 5L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 1);
-        saveMenu(18L, 5L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 2);
-        saveMenu(19L, 5L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 3);
-        saveMenu(20L, 5L, "采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 4);
-        saveMenu(13L, 5L, "成品供应商", "menu", "/supplier/product", "SupplierProduct", "GoodsFilled", 5);
-        saveMenu(22L, 5L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 6);
-        saveMenu(23L, 5L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 7);
+        saveMenu(20L, 5L, "采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1);
+        saveMenu(22L, 5L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 2);
+        saveMenu(23L, 5L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 3);
         // 财务管理子菜单
         saveMenu(25L, 6L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1);
         saveMenu(26L, 6L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2);
@@ -465,12 +501,7 @@ public class DataInitializer implements ApplicationRunner {
         saveMenu(30L, 41L, "角色管理", "menu", "/system/role", "SystemRole", "Avatar", 2);
         saveMenu(31L, 41L, "菜单管理", "menu", "/system/menu", "SystemMenu", "Menu", 3);
         saveMenu(42L, 7L, "清空数据", "menu", "/system/clear-data", "SystemClearData", "Delete", 3);
-        // 额外菜单（不在固定ID范围）
-        saveMenu(35L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 5);
-        saveMenu(36L, 5L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 1);
-        saveMenu(37L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 6);
-        saveMenu(43L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 7);
-        log.info("初始化菜单数据完成（共 33 条）");
+        log.info("初始化菜单数据完成");
     }
 
     private void saveMenu(Long id, Long parentId, String menuName, String menuType,
@@ -501,11 +532,13 @@ public class DataInitializer implements ApplicationRunner {
             List<Long> existingMenuIds = roleService.getMenuIdsByRoleId(superAdminRole.getId());
             if (existingMenuIds == null || existingMenuIds.isEmpty()) {
                 roleService.saveRoleMenus(superAdminRole.getId(), Arrays.asList(
-                        1L, 2L, 3L, 4L, 5L, 6L, 7L,
-                        8L, 9L, 10L, 11L, 12L, 13L, 14L,
-                        15L, 16L, 18L, 19L, 20L,
-                        22L, 23L, 25L, 26L, 27L, 28L,
-                        29L, 30L, 31L, 33L, 35L, 36L, 37L, 39L, 40L, 41L, 42L, 43L));
+                        1L, 2L, 4L, 5L, 6L, 7L,
+                        8L, 9L, 10L,
+                        49L, 50L, 18L, 19L, 33L, 36L, 39L,
+                        15L, 16L, 35L, 37L, 44L, 48L,
+                        20L, 22L, 23L,
+                        25L, 26L, 27L, 28L,
+                        29L, 30L, 31L, 40L, 41L, 42L));
                 log.info("初始化 super_admin 菜单权限完成");
             }
         }
@@ -513,11 +546,13 @@ public class DataInitializer implements ApplicationRunner {
             List<Long> existingMenuIds = roleService.getMenuIdsByRoleId(adminRole.getId());
             if (existingMenuIds == null || existingMenuIds.isEmpty()) {
                 roleService.saveRoleMenus(adminRole.getId(), Arrays.asList(
-                        1L, 2L, 3L, 4L, 5L, 6L, 7L,
-                        8L, 9L, 10L, 11L, 12L, 13L, 14L,
-                        15L, 16L, 18L, 19L, 20L,
-                        22L, 23L, 25L, 26L, 27L, 28L,
-                        29L, 30L, 33L, 35L, 36L, 37L, 39L, 40L, 41L, 42L, 43L));
+                        1L, 2L, 4L, 5L, 6L, 7L,
+                        8L, 9L, 10L,
+                        49L, 50L, 18L, 19L, 33L, 36L, 39L,
+                        15L, 16L, 35L, 37L, 44L, 48L,
+                        20L, 22L, 23L,
+                        25L, 26L, 27L, 28L,
+                        29L, 30L, 33L, 40L, 41L, 42L));
                 log.info("初始化 admin 菜单权限完成");
             }
         }
@@ -574,38 +609,37 @@ public class DataInitializer implements ApplicationRunner {
     }
 
     /**
-     * 同步菜单：用 INSERT IGNORE 确保所有标准菜单存在，不修改已有数据。
-     * 适用于已有数据库补全缺失菜单，新菜单通过菜单管理页面维护。
+     * 同步菜单：用 ON DUPLICATE KEY UPDATE 确保所有标准菜单存在且字段最新。
+     * 会更新已存在菜单的 parent_id 等字段，适用于菜单结构变更后同步已有数据库。
      */
     private void syncMenus() {
         // 标准菜单定义: {id, parent_id, name, type, route_path, route_name, icon, sort_order}
         Object[][] menus = {
             {1L, 0L, "首页", "menu", "/dashboard", "Dashboard", "HomeFilled", 1},
-            {2L, 0L, "研发管理", "catalog", "", "", "Cpu", 2},
+            {50L, 0L, "基础数据", "catalog", "", "", "DataBoard", 2},
+            {2L, 0L, "研发管理", "catalog", "", "", "Cpu", 3},
             {4L, 0L, "委外加工", "catalog", "", "", "Setting", 4},
             {5L, 0L, "进销存", "catalog", "", "", "Goods", 5},
             {6L, 0L, "财务管理", "catalog", "", "", "Money", 6},
             {7L, 0L, "设置", "catalog", "", "", "Tools", 7},
-            {11L, 2L, "方案商", "menu", "/supplier/solution", "SupplierSolution", "Connection", 1},
-            {33L, 2L, "BOM类型", "menu", "/dev/bom-type", "DevBomType", "Tickets", 2},
-            {8L, 2L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 3},
-            {10L, 2L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 4},
-            {9L, 2L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 5},
+            {8L, 2L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 1},
+            {10L, 2L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 2},
+            {9L, 2L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 3},
+            {49L, 50L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "UserFilled", 1},
+            {18L, 50L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 2},
+            {19L, 50L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 3},
+            {39L, 50L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 4},
+            {36L, 50L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 5},
+            {33L, 50L, "BOM类型", "menu", "/dev/bom-type", "DevBomType", "Tickets", 6},
             {15L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1},
-            {16L, 4L, "物料信息", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 2},
-            {12L, 4L, "委外加工厂", "menu", "/supplier/factory", "SupplierFactory", "OfficeBuilding", 3},
-            {14L, 4L, "辅料商", "menu", "/supplier/material-supplier", "SupplierMaterialSupplier", "Box", 4},
-            {35L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 5},
-            {37L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 6},
-            {43L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 7},
-            {39L, 5L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 1},
-            {36L, 5L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 1},
-            {18L, 5L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 2},
-            {19L, 5L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 3},
-            {20L, 5L, "采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 4},
-            {13L, 5L, "成品供应商", "menu", "/supplier/product", "SupplierProduct", "GoodsFilled", 5},
-            {22L, 5L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 6},
-            {23L, 5L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 7},
+            {44L, 4L, "委外物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2},
+            {16L, 4L, "物料信息", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 3},
+            {35L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 4},
+            {37L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 5},
+            {48L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6},
+            {20L, 5L, "采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1},
+            {22L, 5L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 2},
+            {23L, 5L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 3},
             {25L, 6L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1},
             {26L, 6L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2},
             {27L, 6L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 3},
@@ -617,31 +651,46 @@ public class DataInitializer implements ApplicationRunner {
             {31L, 41L, "菜单管理", "menu", "/system/menu", "SystemMenu", "Menu", 3},
             {42L, 7L, "清空数据", "menu", "/system/clear-data", "SystemClearData", "Delete", 3},
         };
-        int inserted = 0;
+        // 使用 ON DUPLICATE KEY UPDATE 实现 upsert，确保已存在菜单的 parent_id 等字段也能更新
+        int processed = 0;
         for (Object[] m : menus) {
             try {
-                int rows = jdbcTemplate.update(
-                    "INSERT IGNORE INTO sys_menu (id, parent_id, menu_name, menu_type, route_path, route_name, icon, sort_order, visible, status) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1)",
+                jdbcTemplate.update(
+                    "INSERT INTO sys_menu (id, parent_id, menu_name, menu_type, route_path, route_name, icon, sort_order, visible, status) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1) " +
+                    "ON DUPLICATE KEY UPDATE parent_id=VALUES(parent_id), menu_name=VALUES(menu_name), " +
+                    "menu_type=VALUES(menu_type), route_path=VALUES(route_path), route_name=VALUES(route_name), " +
+                    "icon=VALUES(icon), sort_order=VALUES(sort_order), visible=1, status=1",
                     m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7]);
-                if (rows > 0) inserted++;
+                processed++;
             } catch (Exception e) {
                 log.warn("同步菜单失败: id={}, err={}", m[0], e.getMessage());
             }
         }
-        if (inserted > 0) {
-            log.info("同步菜单完成，新增 {} 条", inserted);
-            // 为新增菜单授权给 super_admin 和 admin
-            for (Object[] m : menus) {
-                try {
-                    jdbcTemplate.update(
-                        "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
-                        "SELECT r.id, ? FROM sys_role r WHERE r.role_code IN ('super_admin', 'admin')",
-                        m[0]);
-                } catch (Exception ignored) {}
+        log.info("同步菜单完成，处理 {} 条", processed);
+
+        // 删除已废弃的旧菜单及其角色关联（方案商/委外加工厂/成品供应商/辅料商 已合并到供应商管理；43L已被48L替代）
+        Long[] obsoleteMenuIds = {11L, 12L, 13L, 14L, 43L};
+        for (Long menuId : obsoleteMenuIds) {
+            try {
+                jdbcTemplate.update("DELETE FROM sys_role_menu WHERE menu_id = ?", menuId);
+                jdbcTemplate.update("DELETE FROM sys_menu WHERE id = ?", menuId);
+            } catch (Exception e) {
+                log.warn("删除废弃菜单失败: id={}, err={}", menuId, e.getMessage());
             }
-            log.info("已为管理员角色授权新增菜单");
         }
+        log.info("已清理 {} 个废弃菜单", obsoleteMenuIds.length);
+
+        // 始终为所有标准菜单授权给 super_admin 和 admin（每次启动都确保授权完整）
+        for (Object[] m : menus) {
+            try {
+                jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, ? FROM sys_role r WHERE r.role_code IN ('super_admin', 'admin')",
+                    m[0]);
+            } catch (Exception ignored) {}
+        }
+        log.info("已为管理员角色授权标准菜单");
     }
 }
 
