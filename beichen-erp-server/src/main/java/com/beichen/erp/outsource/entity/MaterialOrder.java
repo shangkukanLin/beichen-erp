@@ -17,6 +17,7 @@ public class MaterialOrder {
     private LocalDate deliveryDate;
     private String status;
     private String remark;
+    private String attachUrl;
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;
     private LocalDateTime createTime;

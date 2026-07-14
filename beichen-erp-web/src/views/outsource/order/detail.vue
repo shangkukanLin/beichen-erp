@@ -323,7 +323,7 @@ onActivated(() => { loadOptions(); loadData() })
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:600">合同文件</span>
-          <el-button type="warning" size="small" @click="exportPdf">导出合同</el-button>
+          <el-button type="warning" size="small" @click="exportPdf">导出合同模板</el-button>
         </div>
       </template>
       <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'#67c23a':'#dcdfe6', background: uploadFile?'#f0f9eb':'#fafafa' }">

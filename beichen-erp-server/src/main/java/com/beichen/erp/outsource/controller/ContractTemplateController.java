@@ -6,11 +6,15 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.entity.ContractTemplate;
 import com.beichen.erp.outsource.entity.MaterialOrder;
 import com.beichen.erp.outsource.entity.MaterialOrderItem;
+import com.beichen.erp.outsource.entity.OutsourceMaterial;
+import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
 import com.beichen.erp.outsource.mapper.MaterialOrderItemMapper;
 import com.beichen.erp.outsource.mapper.MaterialOrderMapper;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.service.ContractTemplateService;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.supplier.entity.Supplier;
@@ -53,6 +57,8 @@ public class ContractTemplateController {
     private final CompanyMapper companyMapper;
     private final MaterialOrderMapper materialOrderMapper;
     private final MaterialOrderItemMapper materialOrderItemMapper;
+    private final OutsourceMaterialComponentMapper componentMapper;
+    private final OutsourceMaterialMapper materialMapper;
 
     private static final int A4_W = 595;
     private static final int A4_H = 842;
@@ -120,6 +126,7 @@ public class ContractTemplateController {
             .replace("{乙方地址}", supp != null ? n(supp.getAddress()) : "").replace("{乙方联系人}", supp != null ? n(supp.getContact()) : "").replace("{乙方电话}", supp != null ? n(supp.getPhone()) : "");
         body = body.replace("{合同信息}", infoBlockMo(cn, sn, supp, tplObj));
         body = body.replace("{物料明细表格}", itemTable(items));
+        body = body.replace("{组件表格}", compTable(items));
         body = body.replace("{产品表格}", "").replace("{物料表格}", "");
         body = body.replace("{签名区}", signBlock(cn, sn, ds));
 
@@ -156,6 +163,39 @@ public class ContractTemplateController {
             sb.append("<tr><td align='center' valign='middle'>").append(i++).append("</td><td align='center' valign='middle'>").append(n(it.getMaterialName())).append("</td><td align='center' valign='middle'>").append(n(it.getUnit())).append("</td><td align='center' valign='middle'>").append(fmt(it.getOrderQuantity())).append("</td><td align='center' valign='middle'>").append(fmt(it.getUnitPrice())).append("</td><td align='center' valign='middle'>").append(fmt(a)).append("</td><td align='center' valign='middle'>").append(n(it.getRemark())).append("</td></tr>");
         }
         sb.append("<tr class='total-row'><td align='center' valign='middle' colspan='4'>合计</td><td align='center' valign='middle' colspan='3'>").append(fmt(total)).append(" 元</td></tr></table>");
+        return sb.toString();
+    }
+
+    private String compTable(List<MaterialOrderItem> items) {
+        // 收集所有带组件的物料
+        StringBuilder sb = new StringBuilder();
+        boolean hasAny = false;
+        if (items != null) {
+            for (MaterialOrderItem it : items) {
+                if (it.getMaterialId() == null) continue;
+                List<OutsourceMaterialComponent> comps = componentMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceMaterialComponent>().eq(OutsourceMaterialComponent::getParentMaterialId, it.getMaterialId()));
+                if (comps != null && !comps.isEmpty()) {
+                    if (!hasAny) {
+                        hasAny = true;
+                        sb.append("<h3>三、物料所含子物料明细</h3>");
+                    }
+                    sb.append("<p><b>").append(n(it.getMaterialName())).append("（下单数：").append(fmt(it.getOrderQuantity())).append(" ").append(n(it.getUnit())).append("）</b></p>");
+                    sb.append("<table class='data-table'><tr><th align='center' valign='middle'>序号</th><th align='center' valign='middle'>子物料名称</th><th align='center' valign='middle'>单位</th><th align='center' valign='middle'>每套用量</th><th align='center' valign='middle'>需求总数</th><th align='center' valign='middle'>损耗率(%)</th></tr>");
+                    int j = 1;
+                    for (OutsourceMaterialComponent c : comps) {
+                        BigDecimal perQty = c.getQuantity() != null ? c.getQuantity() : BigDecimal.ONE;
+                        BigDecimal totalQty = perQty.multiply(it.getOrderQuantity() != null ? it.getOrderQuantity() : BigDecimal.ONE);
+                        String childName = "";
+                        String childUnit = "";
+                        OutsourceMaterial child = materialMapper.selectById(c.getChildMaterialId());
+                        if (child != null) { childName = child.getMaterialName() != null ? child.getMaterialName() : ""; childUnit = child.getUnit() != null ? child.getUnit() : ""; }
+                        sb.append("<tr><td align='center' valign='middle'>").append(j++).append("</td><td align='center' valign='middle'>").append(childName).append("</td><td align='center' valign='middle'>").append(childUnit).append("</td><td align='center' valign='middle'>").append(fmt(perQty)).append("</td><td align='center' valign='middle'>").append(fmt(totalQty)).append("</td><td align='center' valign='middle'>").append(fmt(c.getLossRate())).append("</td></tr>");
+                    }
+                    sb.append("</table>");
+                }
+            }
+        }
         return sb.toString();
     }
 

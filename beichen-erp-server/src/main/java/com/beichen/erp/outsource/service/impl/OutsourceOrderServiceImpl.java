@@ -35,10 +35,16 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     @Override
     public Page<Map<String, Object>> page(String status, Long factoryId, String code, int pageNum, int pageSize) {
         LambdaQueryWrapper<OutsourceOrder> w = new LambdaQueryWrapper<OutsourceOrder>()
-                .eq(status != null && !status.isBlank(), OutsourceOrder::getStatus, status)
                 .eq(factoryId != null, OutsourceOrder::getFactoryId, factoryId)
                 .eq(code != null && !code.isBlank(), OutsourceOrder::getCode, code)
                 .orderByDesc(OutsourceOrder::getId);
+        if (status != null && !status.isBlank()) {
+            if (status.contains(",")) {
+                w.in(OutsourceOrder::getStatus, Arrays.stream(status.split(",")).map(String::trim).toList());
+            } else {
+                w.eq(OutsourceOrder::getStatus, status);
+            }
+        }
         Page<OutsourceOrder> rawPage = orderMapper.selectPage(new Page<>(pageNum, pageSize), w);
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, rawPage.getTotal());
         result.setRecords(rawPage.getRecords().stream().map(o -> {

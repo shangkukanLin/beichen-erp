@@ -51,6 +51,7 @@ const PURCHASE_PLACEHOLDERS = [
   { label: '订单号', key: '{订单号}', color: '#eb2f96' },
   { label: '日期', key: '{日期}', color: '#722ed1' },
   { label: '物料明细表格', key: '{物料明细表格}', color: '#ff4d4f' },
+  { label: '组件表格', key: '{组件表格}', color: '#eb2f96' },
   { label: '备注', key: '{备注}', color: '#f5222d' },
   { label: '签名区', key: '{签名区}', color: '#eb2f96' },
 ]

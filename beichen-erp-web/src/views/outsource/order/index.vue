@@ -7,7 +7,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 
 const router = useRouter()
-const activeTab = ref('待确认')
+const activeTab = ref('进行中')
 const query = reactive({ code: '', factoryId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])
@@ -21,7 +21,9 @@ async function loadOptions() {
 async function loadData() {
   tableLoading.value = true
   try {
-    const p: any = { status: activeTab.value, pageNum: pagination.pageNum, pageSize: pagination.pageSize }
+    const p: any = { pageNum: pagination.pageNum, pageSize: pagination.pageSize }
+    if (activeTab.value === '进行中') { p.status = '待确认,生产中' }
+    else { p.status = activeTab.value }
     if (query.code) p.code = query.code
     if (query.factoryId) p.factoryId = query.factoryId
     const r = await request.get<any, any>('/outsource/order/page', { params: p })
@@ -53,8 +55,7 @@ onActivated(refresh)
 
     <el-card shadow="never" class="table-card">
       <el-tabs v-model="activeTab" @tab-change="onTabChange">
-        <el-tab-pane label="待确认" name="待确认" />
-        <el-tab-pane label="生产中" name="生产中" />
+        <el-tab-pane label="进行中" name="进行中" />
         <el-tab-pane label="已完成" name="已完成" />
         <el-tab-pane label="已取消" name="已取消" />
       </el-tabs>

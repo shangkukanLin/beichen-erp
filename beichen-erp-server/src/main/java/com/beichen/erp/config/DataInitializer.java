@@ -333,6 +333,16 @@ public class DataInitializer implements ApplicationRunner {
                 log.info("已为 outsource_contract_template 添加 template_type 列");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_material_order 添加 attach_url 列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_material_order' AND COLUMN_NAME='attach_url'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_material_order ADD COLUMN attach_url VARCHAR(500) DEFAULT NULL COMMENT '合同附件URL' AFTER remark");
+                log.info("已为 outsource_material_order 添加 attach_url 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
         // 供应商类型支持多值（逗号分隔），扩展列长
         try { jdbcTemplate.execute("ALTER TABLE supplier MODIFY COLUMN supplier_type VARCHAR(100) NOT NULL COMMENT '供应商类型(逗号分隔多值)'"); } catch (Exception ignored) {}
     }

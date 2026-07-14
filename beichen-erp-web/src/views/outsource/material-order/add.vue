@@ -3,8 +3,10 @@ import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { useTabStore } from '@/stores/tabs'
 
 const router = useRouter(); const route = useRoute()
+const tabStore = useTabStore()
 const isEdit = ref(false)
 const editId = route.params.id ? Number(route.params.id) : 0
 const saving = ref(false)
@@ -40,13 +42,20 @@ function onMatChange(idx: number, mid: number) {
   if (m) { items.value[idx].materialName = m.materialName; items.value[idx].materialType = m.materialType; items.value[idx].unit = m.unit }
 }
 
+function handleCancel() {
+  tabStore.removeTab(route.fullPath)
+  router.back()
+}
+
 async function handleSubmit() {
   if (items.value.length === 0) { ElMessage.warning('请添加物料'); return }
   saving.value = true
   try {
     if (isEdit.value) { await request.put(`/outsource/material-order/${editId}`, { ...form, items: items.value }); ElMessage.success('已更新') }
     else { await request.post('/outsource/material-order', { ...form, items: items.value }); ElMessage.success('已创建') }
-    router.replace('/outsource/material-order')
+    tabStore.removeTab(route.fullPath)
+    if (isEdit.value) { router.replace(`/outsource/material-order/detail/${editId}`) }
+    else { router.replace('/outsource/material-order') }
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
 
@@ -108,7 +117,7 @@ onMounted(async () => {
 
 <template>
   <div class="add-page">
-    <div class="page-header"><el-button @click="router.push('/outsource/material-order')">← 返回</el-button><span class="page-title">{{ isEdit ? '编辑物料订单' : '新增物料订单' }}</span></div>
+    <div class="page-header"><el-button @click="handleCancel">← 返回</el-button><span class="page-title">{{ isEdit ? '编辑物料订单' : '新增物料订单' }}</span></div>
 
     <el-card shadow="never">
       <template #header><span style="font-weight:600">订单信息</span></template>
@@ -147,7 +156,7 @@ onMounted(async () => {
       </el-table>
     </el-card>
 
-    <div style="margin-top:16px"><el-button type="primary" size="large" :loading="saving" @click="handleSubmit">保存</el-button><el-button size="large" @click="router.push('/outsource/material-order')">取消</el-button></div>
+    <div style="margin-top:16px"><el-button type="primary" size="large" :loading="saving" @click="handleSubmit">保存</el-button><el-button size="large" @click="handleCancel">取消</el-button></div>
   </div>
 </template>
 

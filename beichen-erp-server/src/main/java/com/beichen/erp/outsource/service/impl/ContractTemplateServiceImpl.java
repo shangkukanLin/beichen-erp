@@ -53,6 +53,17 @@ public class ContractTemplateServiceImpl implements ContractTemplateService {
             throw new BusinessException("模板名称不能为空");
         }
         templateMapper.insert(template);
+        // 如果该类型没有默认模板，自动设为默认
+        String type = template.getTemplateType();
+        Long defaultCount = templateMapper.selectCount(new LambdaQueryWrapper<ContractTemplate>()
+                .eq(type != null && !type.isBlank(), ContractTemplate::getTemplateType, type)
+                .eq(ContractTemplate::getIsDefault, 1));
+        if (defaultCount == null || defaultCount == 0) {
+            ContractTemplate upd = new ContractTemplate();
+            upd.setId(template.getId());
+            upd.setIsDefault(1);
+            templateMapper.updateById(upd);
+        }
     }
 
     @Override
