@@ -29,7 +29,18 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row: Brand) {
-  try { await ElMessageBox.confirm(`确定删除品牌「${row.brandName}」吗？`, '提示', { type: 'warning' }); await request.delete(`/brand/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try {
+    const checkRes = await request.get<any, any>(`/brand/${row.id}/check-delete`)
+    if (checkRes && !checkRes.canDelete) {
+      const list = checkRes.associations || {}
+      const detail = Object.entries(list).map(([k, v]) => `${k}：${v}条`).join('；')
+      ElMessage.warning(`该品牌还有关联数据，无法删除（${detail}）。请先清理关联数据后再操作。`, { duration: 5000 })
+      return
+    }
+  } catch {
+    // check-delete 失败时，让后端 delete 端点自行校验
+  }
+  try { await ElMessageBox.confirm(`确定删除品牌「${row.brandName}」吗？`, '提示', { type: 'warning' }); await request.delete(`/brand/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { ElMessage.error(e?.message || '删除失败') } }
 }
 
 onMounted(() => loadData())

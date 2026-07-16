@@ -5,9 +5,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.entity.OutsourceDelivery;
 import com.beichen.erp.outsource.entity.OutsourceDeliveryItem;
+import com.beichen.erp.outsource.entity.OutsourceStockLog;
 import com.beichen.erp.outsource.entity.OutsourceWarehouseStock;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryMapper;
+import com.beichen.erp.outsource.mapper.OutsourceStockLogMapper;
 import com.beichen.erp.outsource.mapper.OutsourceWarehouseStockMapper;
 import com.beichen.erp.outsource.service.DeliveryService;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final OutsourceDeliveryMapper deliveryMapper;
     private final OutsourceDeliveryItemMapper itemMapper;
     private final OutsourceWarehouseStockMapper stockMapper;
+    private final OutsourceStockLogMapper stockLogMapper;
     private final JdbcTemplate jdbcTemplate;
 
     @Override
@@ -77,9 +80,14 @@ public class DeliveryServiceImpl implements DeliveryService {
             // 库存联动：发料→目标仓库+，收料/退料→来源仓库-
             BigDecimal qty = item.getQuantity();
             if ("发料".equals(delivery.getDeliveryType())) {
-                if (delivery.getToWarehouseId() != null) updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType());
+                if (delivery.getToWarehouseId() != null)
+                    updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
+                            item.getMaterialName(), "发料", delivery.getCode());
             } else {
-                if (delivery.getFromWarehouseId() != null) updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType());
+                String type = delivery.getDeliveryType();
+                if (delivery.getFromWarehouseId() != null)
+                    updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
+                            item.getMaterialName(), type != null ? type : "收料", delivery.getCode());
             }
         }
         // 发料时同步加工单物料已发数量
@@ -104,9 +112,14 @@ public class DeliveryServiceImpl implements DeliveryService {
         for (OutsourceDeliveryItem item : items) {
             BigDecimal qty = item.getQuantity();
             if ("发料".equals(delivery.getDeliveryType())) {
-                if (delivery.getToWarehouseId() != null) updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType());
+                if (delivery.getToWarehouseId() != null)
+                    updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
+                            item.getMaterialName(), "取消发料", delivery.getCode());
             } else {
-                if (delivery.getFromWarehouseId() != null) updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType());
+                String type = delivery.getDeliveryType();
+                if (delivery.getFromWarehouseId() != null)
+                    updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
+                            item.getMaterialName(), "取消" + (type != null ? type : "收料"), delivery.getCode());
             }
         }
 
@@ -137,9 +150,14 @@ public class DeliveryServiceImpl implements DeliveryService {
         for (OutsourceDeliveryItem item : oldItems) {
             BigDecimal qty = item.getQuantity();
             if ("发料".equals(old.getDeliveryType())) {
-                if (old.getToWarehouseId() != null) updateStock(old.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType());
+                if (old.getToWarehouseId() != null)
+                    updateStock(old.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
+                            item.getMaterialName(), "编辑回滚-发料", old.getCode());
             } else {
-                if (old.getFromWarehouseId() != null) updateStock(old.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType());
+                String type = old.getDeliveryType();
+                if (old.getFromWarehouseId() != null)
+                    updateStock(old.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
+                            item.getMaterialName(), "编辑回滚-" + (type != null ? type : "收料"), old.getCode());
             }
         }
         // 2. 删旧明细
@@ -154,9 +172,14 @@ public class DeliveryServiceImpl implements DeliveryService {
             itemMapper.insert(item);
             BigDecimal qty = item.getQuantity();
             if ("发料".equals(delivery.getDeliveryType())) {
-                if (delivery.getToWarehouseId() != null) updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType());
+                if (delivery.getToWarehouseId() != null)
+                    updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
+                            item.getMaterialName(), "编辑-发料", delivery.getCode());
             } else {
-                if (delivery.getFromWarehouseId() != null) updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType());
+                String type = delivery.getDeliveryType();
+                if (delivery.getFromWarehouseId() != null)
+                    updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
+                            item.getMaterialName(), "编辑-" + (type != null ? type : "收料"), delivery.getCode());
             }
         }
         // 发料时重新应用新已发数量
@@ -230,26 +253,42 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     /**
-     * 更新仓库库存（先查后upsert，按良品/不良品分别统计）
+     * 更新仓库库存并写入流水日志
      */
-    private void updateStock(Long warehouseId, Long materialId, BigDecimal delta, String qualityType) {
+    private void updateStock(Long warehouseId, Long materialId, BigDecimal delta, String qualityType,
+                             String materialName, String changeType, String deliveryCode) {
         String qt = qualityType != null ? qualityType : "良品";
         LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
                 .eq(OutsourceWarehouseStock::getWarehouseId, warehouseId)
                 .eq(OutsourceWarehouseStock::getMaterialId, materialId)
                 .eq(OutsourceWarehouseStock::getQualityType, qt);
         OutsourceWarehouseStock stock = stockMapper.selectOne(w);
+        BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
+        BigDecimal after;
         if (stock == null) {
             stock = new OutsourceWarehouseStock();
             stock.setWarehouseId(warehouseId);
             stock.setMaterialId(materialId);
             stock.setQualityType(qt);
-            stock.setQuantity(delta);
+            after = delta;
+            stock.setQuantity(after);
             stockMapper.insert(stock);
         } else {
-            stock.setQuantity(stock.getQuantity().add(delta));
+            after = before.add(delta);
+            stock.setQuantity(after);
             stockMapper.updateById(stock);
         }
+        // 写入流水日志
+        OutsourceStockLog logEntry = new OutsourceStockLog();
+        logEntry.setWarehouseId(warehouseId);
+        logEntry.setMaterialId(materialId);
+        logEntry.setMaterialName(materialName);
+        logEntry.setChangeType(changeType);
+        logEntry.setChangeQuantity(delta);
+        logEntry.setBeforeQuantity(before);
+        logEntry.setAfterQuantity(after);
+        logEntry.setRelatedOrderCode(deliveryCode);
+        stockLogMapper.insert(logEntry);
     }
 
     /**

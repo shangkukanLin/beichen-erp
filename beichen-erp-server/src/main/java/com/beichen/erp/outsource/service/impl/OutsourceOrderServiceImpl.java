@@ -14,6 +14,7 @@ import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -31,6 +33,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     private final OutsourceOrderProductMapper productMapper;
     private final OutsourceOrderMaterialMapper materialMapper;
     private final SupplierMapper supplierMapper;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long factoryId, String code, int pageNum, int pageSize) {
@@ -70,6 +73,26 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
                     .collect(java.util.stream.Collectors.joining(" / ")));
             return m;
         }).toList());
+
+        // 补充最近交货时间
+        List<Long> orderIds = result.getRecords().stream()
+                .map(m -> (Long) m.get("id")).collect(Collectors.toList());
+        if (!orderIds.isEmpty()) {
+            String placeholders = orderIds.stream().map(id -> "?").collect(Collectors.joining(","));
+            List<Map<String, Object>> deliveryRows = jdbcTemplate.queryForList(
+                    "SELECT order_id, MAX(delivery_date) AS latest_date FROM outsource_order_delivery " +
+                    "WHERE order_id IN (" + placeholders + ") GROUP BY order_id",
+                    orderIds.toArray());
+            Map<Long, Object> deliveryMap = new HashMap<>();
+            for (Map<String, Object> row : deliveryRows) {
+                Long oid = ((Number) row.get("order_id")).longValue();
+                deliveryMap.put(oid, row.get("latest_date"));
+            }
+            for (Map<String, Object> m : result.getRecords()) {
+                m.put("latestDeliveryDate", deliveryMap.getOrDefault(m.get("id"), null));
+            }
+        }
+
         return result;
     }
 

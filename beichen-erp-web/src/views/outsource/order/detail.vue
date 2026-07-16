@@ -95,7 +95,12 @@ function addProduct() { products.value.push({ _key: Date.now(), projectId: undef
 function removeProduct(idx: number) { products.value.splice(idx, 1) }
 function onProjectSelect(idx: number, pid: number) {
   const proj = projectOptions.value.find((v:any) => v.id === pid)
-  if (proj) { products.value[idx].productName = proj.productName || proj.name || ''; products.value[idx].productSpec = proj.productSpec || ''; loadBomMaterials(idx, pid) }
+  if (proj) {
+    products.value[idx].projectId = pid
+    products.value[idx].productName = proj.productName || proj.name || ''
+    products.value[idx].productSpec = proj.productSpec || ''
+    loadBomMaterials(idx, pid)
+  }
 }
 async function loadBomMaterials(idx: number, pid: number) {
   try {
@@ -136,8 +141,8 @@ async function handleConfirm() {
 
 
 const defectVisible = ref(false); const defectSaving = ref(false)
-const defectItems = ref<any[]>([])
-function openDefectReturn() { defectItems.value = (products.value || []).map((p: any) => ({ productId: p.id, productName: p.productName, quantity: undefined as any })); defectVisible.value = true }
+const defectItems = ref<any[]>([]); const defectWarehouseId = ref<number>()
+function openDefectReturn() { defectItems.value = (products.value || []).map((p: any) => ({ productId: p.id, productName: p.productName, quantity: undefined as any })); defectWarehouseId.value = undefined; defectVisible.value = true; loadDelWarehouses() }
 // ===== 交货管理（Tab 2）=====
 const delSummary = ref<any>({})
 const delProducts = ref<any[]>([])
@@ -159,6 +164,7 @@ async function loadDeliveryData() {
       request.get<any,any>(`/outsource/order/${form.id}/products`)
     ])
     deliveries.value = dList || []; delSummary.value = dSummary || {}; delProducts.value = prods || []
+    if (delWarehouseOptions.value.length === 0) loadDelWarehouses()
   } catch (e: any) { console.warn('加载交货数据失败', e?.message || e) }
 }
 async function loadDelWarehouses() {
@@ -178,20 +184,52 @@ function delHandleDragOver(e: DragEvent) { e.preventDefault() }
 function delHandleDrop(e: DragEvent) { e.preventDefault(); const f = e.dataTransfer?.files?.[0]; if (f) delUploadFile.value = f }
 function delHandleFileSelect(e: Event) { const f = (e.target as HTMLInputElement).files?.[0]; if (f) delUploadFile.value = f }
 function delHandleRemoveFile() { delUploadFile.value = null }
-async function delHandleSubmit() {
+async function delHandleSubmit(forceDelivery = false) {
   if (!delForm.productName) { ElMessage.warning('请选择产品名称'); return }
   if (!delForm.quantity) { ElMessage.warning('请输入数量'); return }
   if (!delWarehouseId.value) { ElMessage.warning('请选择收货仓库'); return }
   delSaving.value = true
   try {
     if (delUploadFile.value) { const fd = new FormData(); fd.append('file', delUploadFile.value); const res = await request.post<any,string>('/dev/file/upload', fd); delForm.attachUrl = res as unknown as string }
+    const body = { ...delForm, orderId: form.id, warehouseId: delWarehouseId.value || null }
+    const params = forceDelivery ? { params: { forceDelivery: true } } : {}
+    let res: any
     if (delIsEdit.value && delEditId.value) {
-      await request.put(`/outsource/order-delivery/${delEditId.value}`, { ...delForm, orderId: form.id, warehouseId: delWarehouseId.value || null }); ElMessage.success('交货记录已更新')
+      res = await request.put(`/outsource/order-delivery/${delEditId.value}`, body, params)
     } else {
-      await request.post('/outsource/order-delivery', { ...delForm, orderId: form.id, warehouseId: delWarehouseId.value || null }); ElMessage.success('交货记录已保存')
+      res = await request.post('/outsource/order-delivery', body, params)
     }
-    delDialogVisible.value = false; loadDeliveryData()
-  } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) } finally { delSaving.value = false }
+    console.log('[交货] 后端响应:', JSON.stringify(res))
+    // 检查是否需要确认缺料（canProceed 不是 true 时都视为缺料）
+    if (res && res.canProceed !== true) {
+      delSaving.value = false
+      const shortages = (res.shortages || []) as any[]
+      let html = '<div style="margin-bottom:8px">以下物料库存不足，是否确认强制出库？</div>'
+      html += '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+      html += '<tr style="background:#f5f7fa"><th style="padding:6px;border:1px solid #ebeef5;text-align:left">物料名称</th><th style="padding:6px;border:1px solid #ebeef5">需要</th><th style="padding:6px;border:1px solid #ebeef5">库存</th><th style="padding:6px;border:1px solid #ebeef5">缺口</th></tr>'
+      for (const s of shortages) {
+        html += `<tr><td style="padding:6px;border:1px solid #ebeef5">${s.materialName || ''}</td>`
+        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#e6a23c">${s.needed || 0}</td>`
+        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#f56c6c">${s.stock || 0}</td>`
+        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#f56c6c;font-weight:600">${s.gap || 0}</td></tr>`
+      }
+      html += '</table>'
+      html += '<div style="margin-top:8px;color:#909399;font-size:12px">确认后物料库存将变为负数</div>'
+      try {
+        await ElMessageBox.confirm(html, '缺料提示', {
+          confirmButtonText: '确认强制出库',
+          cancelButtonText: '取消',
+          type: 'warning',
+          dangerouslyUseHTMLString: true
+        })
+      } catch { return }
+      return delHandleSubmit(true)
+    }
+    ElMessage.success(delIsEdit.value ? '交货记录已更新' : '交货记录已保存')
+    delDialogVisible.value = false; loadDeliveryData(); loadMaterialStock()
+  } catch (e: any) {
+    if (e !== 'cancel' && e !== 'close') { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) }
+  } finally { delSaving.value = false }
 }
 async function delHandleDelete(row: any) {
   try { await ElMessageBox.confirm('确定删除该交货记录吗？', '删除', { type: 'warning' }); await request.delete(`/outsource/order-delivery/${row.id}`); ElMessage.success('已删除'); loadDeliveryData() }
@@ -202,7 +240,12 @@ async function handleDefectReturn() {
   const data = defectItems.value.filter((r: any) => r.quantity && Number(r.quantity) > 0)
   if (data.length === 0) { ElMessage.warning('请输入退不良数量'); return }
   defectSaving.value = true
-  try { await request.post(`/outsource/order/${form.id}/return-defect`, { items: data }); ElMessage.success('退不良完成'); defectVisible.value = false; loadData() } catch (e: any) { ElMessage.error(e?.message || '退不良失败') } finally { defectSaving.value = false }
+  try {
+    for (const item of data) {
+      await request.post(`/outsource/order-delivery/return-defect/${form.id}`, { productName: item.productName, quantity: item.quantity })
+    }
+    ElMessage.success('退不良完成，物料已还回工厂委外仓库'); defectVisible.value = false; loadData()
+  } catch (e: any) { ElMessage.error(e?.message || '退不良失败') } finally { defectSaving.value = false }
 }
 
 function exportPdf() {
@@ -222,7 +265,7 @@ onMounted(() => { loadOptions(); loadData() })
     <div class="page-header">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <el-button @click="router.push('/outsource/order')">返回列表</el-button>
-        <span class="page-title">{{ form.code || '加工单详情' }}</span>
+        <span class="page-title">{{ form.code || '委外加工单详情' }}</span>
         <el-tag :type="form.status==='待确认'?'info':form.status==='生产中'?'primary':form.status==='已完成'?'success':'danger'" size="small">{{ form.status }}</el-tag>
       </div>
     </div>
@@ -326,13 +369,14 @@ onMounted(() => { loadOptions(); loadData() })
           <span style="font-weight:600">交货记录</span>
           <el-button v-if="form.status==='生产中'" type="primary" size="small" @click="delOpenAdd">新增交货</el-button>
         </div>
-        <el-table :data="deliveries" border stripe size="small">
+        <el-table :data="deliveries" border stripe size="small" :row-class-name="({row}:{row:any})=>row.deliveryType==='退不良'?'defect-row':''">
           <el-table-column prop="deliveryDate" label="交货日期" width="110" />
-          <el-table-column prop="productName" label="产品名称" min-width="130" />
+          <el-table-column prop="productName" label="产品名称" min-width="120" />
+          <el-table-column label="类型" width="80" align="center"><template #default="{row}"><el-tag v-if="row.deliveryType==='退不良'" type="warning" size="small">退不良</el-tag><span v-else style="color:#909399">—</span></template></el-table-column>
           <el-table-column label="收货仓库" width="120">
             <template #default="{row}"><span v-if="row.warehouseId">{{ delWarehouseOptions.find((w:any)=>w.id===row.warehouseId)?.warehouseName || row.warehouseId }}</span><span v-else style="color:#c0c4cc">—</span></template>
           </el-table-column>
-          <el-table-column prop="quantity" label="数量" width="100" />
+          <el-table-column label="数量" width="90" align="right"><template #default="{row}"><span :style="{color:Number(row.quantity)<0?'#f56c6c':''}">{{ row.quantity }}</span></template></el-table-column>
           <el-table-column prop="trackingNo" label="物流单号" width="140" />
           <el-table-column label="附件" width="80" align="center"><template #default="{row}"><el-button v-if="row.attachUrl" type="primary" link size="small" @click="openAttach(row.attachUrl)">查看</el-button><span v-else style="color:#c0c4cc">—</span></template></el-table-column>
           <el-table-column prop="remark" label="备注" min-width="150" />
@@ -360,12 +404,12 @@ onMounted(() => { loadOptions(); loadData() })
             </div>
           </el-form-item>
         </el-form>
-        <template #footer><el-button @click="delDialogVisible = false">取消</el-button><el-button type="primary" :loading="delSaving" @click="delHandleSubmit">保存</el-button></template>
+        <template #footer><el-button @click="delDialogVisible = false">取消</el-button><el-button type="primary" :loading="delSaving" @click="delHandleSubmit()">保存</el-button></template>
       </el-dialog>
     </template>
 
     <!-- 退不良弹窗 -->
-    <el-dialog v-model="defectVisible" title="退不良（维修返还）" width="500px" :close-on-click-modal="false">
+    <el-dialog v-model="defectVisible" title="退不良（拆分还料）" width="500px" :close-on-click-modal="false">
       <el-table :data="defectItems" border size="small">
         <el-table-column prop="productName" label="产品" min-width="200" />
         <el-table-column label="退不良数量" width="160"><template #default="{row}"><el-input v-model="row.quantity" size="small" type="number" placeholder="数量" /></template></el-table-column>
@@ -381,4 +425,5 @@ onMounted(() => { loadOptions(); loadData() })
 .page-title { font-size:18px; font-weight:600; }
 .drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
 .drop-zone:hover { border-color:#409eff; background:#ecf5ff }
+:deep(.defect-row) { background:#fdf6ec !important }
 </style>

@@ -364,6 +364,16 @@ public class DataInitializer implements ApplicationRunner {
                 log.info("已为 outsource_warehouse_stock 添加 company_id 列并回填默认值");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_order_delivery 添加 delivery_type 列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_order_delivery' AND COLUMN_NAME='delivery_type'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_order_delivery ADD COLUMN delivery_type VARCHAR(10) DEFAULT '正常' COMMENT '正常/退不良' AFTER quantity");
+                log.info("已为 outsource_order_delivery 添加 delivery_type 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
         // material 添加 company_id 列
         try {
             Integer cnt = jdbcTemplate.queryForObject(

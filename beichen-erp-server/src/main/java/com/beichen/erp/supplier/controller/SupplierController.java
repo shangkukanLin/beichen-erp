@@ -66,6 +66,12 @@ public class SupplierController {
         return R.ok();
     }
 
+    /** 检查供应商是否有关联数据，返回可删除标志和关联明细 */
+    @GetMapping("/{id}/check-delete")
+    public R<Map<String, Object>> checkDelete(@PathVariable Long id) {
+        return R.ok(supplierService.checkDelete(id));
+    }
+
     @PutMapping("/{id}/status")
     public R<Void> toggleStatus(@PathVariable Long id) {
         supplierService.toggleStatus(id);

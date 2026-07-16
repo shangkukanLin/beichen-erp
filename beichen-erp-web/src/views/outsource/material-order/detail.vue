@@ -263,6 +263,8 @@ onMounted(async () => { await loadOptions(); loadAll() })
           <el-table-column prop="code" label="单号" width="150" />
           <el-table-column prop="deliveryType" label="类型" width="70"><template #default="{row}"><el-tag :type="row.deliveryType==='收料'?'success':'warning'" size="small">{{ row.deliveryType }}</el-tag></template></el-table-column>
           <el-table-column prop="deliveryDate" label="日期" width="110" />
+          <el-table-column label="型号" min-width="140" show-overflow-tooltip><template #default="{row}">{{ (row.items||[]).map((i:any)=>i.materialName).join(' / ') }}</template></el-table-column>
+          <el-table-column label="数量" width="80" align="right"><template #default="{row}">{{ (row.items||[]).reduce((s:number,i:any)=>s+(i.quantity||0),0) }}</template></el-table-column>
           <el-table-column prop="warehouseName" label="仓库" width="120" show-overflow-tooltip />
           <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
         </el-table>

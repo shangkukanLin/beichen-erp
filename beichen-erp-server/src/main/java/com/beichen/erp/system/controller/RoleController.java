@@ -7,8 +7,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.system.entity.Role;
+import com.beichen.erp.system.entity.RoleMenu;
 import com.beichen.erp.system.entity.UserRole;
 import com.beichen.erp.system.entity.dto.RoleDTO;
+import com.beichen.erp.system.mapper.RoleMenuMapper;
 import com.beichen.erp.system.mapper.UserRoleMapper;
 import com.beichen.erp.system.service.RoleService;
 import jakarta.validation.Valid;
@@ -33,6 +35,7 @@ public class RoleController {
 
     private final RoleService roleService;
     private final UserRoleMapper userRoleMapper;
+    private final RoleMenuMapper roleMenuMapper;
 
     @GetMapping("/page")
     public R<Page<Role>> page(
@@ -109,8 +112,10 @@ public class RoleController {
         Long count = userRoleMapper.selectCount(new LambdaQueryWrapper<UserRole>()
                 .eq(UserRole::getRoleId, id));
         if (count != null && count > 0) {
-            throw new BusinessException("该角色下存在用户关联，不可删除");
+            throw new BusinessException("该角色下存在" + count + "个用户关联，不可删除");
         }
+        // 清理角色菜单关联
+        roleMenuMapper.delete(new LambdaQueryWrapper<RoleMenu>().eq(RoleMenu::getRoleId, id));
         roleService.removeById(id);
         return R.ok();
     }

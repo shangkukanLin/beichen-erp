@@ -15,9 +15,9 @@ function loadTabs(): { tabs: Tab[]; activePath: string } {
   return { tabs: [], activePath: '' }
 }
 
-function saveTabs(state: { tabs: Tab[]; activePath: string }) {
+function saveTabs(state: { tabs: Tab[]; activePath: string; lastActivePath: string }) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ tabs: state.tabs, activePath: state.activePath }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ tabs: state.tabs, activePath: state.activePath, lastActivePath: state.lastActivePath }))
   } catch {}
 }
 
@@ -26,7 +26,9 @@ export const useTabStore = defineStore('tabs', {
     const saved = loadTabs()
     return {
       tabs: saved.tabs || [] as Tab[],
-      activePath: saved.activePath || '' as string
+      activePath: saved.activePath || '' as string,
+      /** 上一个活跃的 tab 路径，用于关闭当前 tab 时回退 */
+      lastActivePath: (saved as any).lastActivePath || '' as string
     }
   },
   actions: {
@@ -34,6 +36,10 @@ export const useTabStore = defineStore('tabs', {
       const exists = this.tabs.find(t => t.path === path)
       if (!exists) {
         this.tabs.push({ path, title })
+      }
+      // 记录上一个活跃 tab
+      if (this.activePath && this.activePath !== path) {
+        this.lastActivePath = this.activePath
       }
       this.activePath = path
       saveTabs(this.$state)
@@ -43,7 +49,10 @@ export const useTabStore = defineStore('tabs', {
       if (idx === -1) return
       this.tabs.splice(idx, 1)
       if (this.activePath === path) {
-        if (idx > 0) {
+        // 优先回到上一个活跃 tab（如果它还存在于列表中）
+        if (this.lastActivePath && this.tabs.some(t => t.path === this.lastActivePath)) {
+          this.activePath = this.lastActivePath
+        } else if (idx > 0) {
           this.activePath = this.tabs[idx - 1].path
         } else if (this.tabs.length > 0) {
           this.activePath = this.tabs[0].path
@@ -54,12 +63,16 @@ export const useTabStore = defineStore('tabs', {
       saveTabs(this.$state)
     },
     setActive(path: string) {
+      if (this.activePath && this.activePath !== path) {
+        this.lastActivePath = this.activePath
+      }
       this.activePath = path
       saveTabs(this.$state)
     },
     clearAll() {
       this.tabs = []
       this.activePath = ''
+      this.lastActivePath = ''
       localStorage.removeItem(STORAGE_KEY)
     }
   }

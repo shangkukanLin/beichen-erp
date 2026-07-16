@@ -8,9 +8,12 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/brand")
@@ -18,6 +21,7 @@ import java.util.List;
 public class BrandController {
 
     private final BrandMapper brandMapper;
+    private final JdbcTemplate jdbcTemplate;
 
     /** 全部启用品牌（下拉用） */
     @GetMapping("/enabled")
@@ -56,7 +60,27 @@ public class BrandController {
 
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
+        Map<String, Object> check = checkDelete(id).getData();
+        if (!(Boolean) check.get("canDelete")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Integer> associations = (Map<String, Integer>) check.get("associations");
+            StringBuilder sb = new StringBuilder("该品牌有关联数据，无法删除：");
+            associations.forEach((k, v) -> sb.append("\n  - ").append(k).append("：").append(v).append("条"));
+            throw new BusinessException(sb.toString());
+        }
         brandMapper.deleteById(id);
         return R.ok();
+    }
+
+    @GetMapping("/{id}/check-delete")
+    public R<Map<String, Object>> checkDelete(@PathVariable Long id) {
+        int materialCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM material WHERE brand_id = ?", Integer.class, id);
+        Map<String, Object> result = new LinkedHashMap<>();
+        Map<String, Integer> associations = new LinkedHashMap<>();
+        if (materialCount > 0) associations.put("物料", materialCount);
+        result.put("canDelete", associations.isEmpty());
+        result.put("associations", associations);
+        return R.ok(result);
     }
 }

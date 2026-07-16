@@ -17,7 +17,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.beichen.erp.exception.BusinessException;
+
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -107,7 +110,95 @@ public class MaterialController {
 
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
+        Map<String, Object> check = checkDelete(id).getData();
+        if (!(Boolean) check.get("canDelete")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Integer> associations = (Map<String, Integer>) check.get("associations");
+            StringBuilder sb = new StringBuilder("该物料有关联数据，无法删除：");
+            associations.forEach((k, v) -> sb.append("\n  - ").append(k).append("：").append(v).append("条"));
+            throw new BusinessException(sb.toString());
+        }
         materialService.removeById(id);
         return R.ok();
+    }
+
+    @GetMapping("/{id}/check-delete")
+    public R<Map<String, Object>> checkDelete(@PathVariable Long id) {
+        Map<String, Integer> associations = new LinkedHashMap<>();
+
+        // 采购订单明细
+        int cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM purchase_order_item WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.put("采购订单明细", cnt);
+
+        // 采购入库明细
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM purchase_inbound_item WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.put("采购入库明细", cnt);
+
+        // 销售订单明细
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sale_order_item WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.put("销售订单明细", cnt);
+
+        // 销售出库明细
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sale_outbound_item WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.put("销售出库明细", cnt);
+
+        // 库存记录
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM inventory_warehouse_stock WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.put("库存记录", cnt);
+
+        // 库存流水
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM inventory_stock_log WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.put("库存流水", cnt);
+
+        // 盘点明细
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM inventory_stock_take_item WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.put("盘点明细", cnt);
+
+        // 调拨明细
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM inventory_transfer_item WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.put("调拨明细", cnt);
+
+        // 其他出入库明细
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM inventory_other_io_item WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.put("其他出入库明细", cnt);
+
+        // 委外加工
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outsource_order_material WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.put("委外订单物料", cnt);
+
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outsource_warehouse_stock WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.merge("委外库存", cnt, Integer::sum);
+
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outsource_delivery_item WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.merge("委外交货", cnt, Integer::sum);
+
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outsource_material_order_item WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.merge("委外物料订单", cnt, Integer::sum);
+
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outsource_material_component WHERE parent_material_id = ? OR child_material_id = ?", Integer.class, id, id);
+        if (cnt > 0) associations.merge("委外物料组件", cnt, Integer::sum);
+
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outsource_order_close_report_item WHERE material_id = ?", Integer.class, id);
+        if (cnt > 0) associations.merge("委外结单", cnt, Integer::sum);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("canDelete", associations.isEmpty());
+        result.put("associations", associations);
+        return R.ok(result);
     }
 }

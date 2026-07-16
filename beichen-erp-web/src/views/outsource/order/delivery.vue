@@ -74,7 +74,7 @@ function handleRemoveUploadFile() { uploadFile.value = null }
 
 function openAttach(url: string) { window.open(url + '?inline=true') }
 
-async function handleSubmit() {
+async function handleSubmit(forceDelivery = false) {
   if (!form.productName) { ElMessage.warning('请选择产品名称'); return }
   if (!form.quantity) { ElMessage.warning('请输入数量'); return }
   if (!warehouseId.value) { ElMessage.warning('请选择收货仓库'); return }
@@ -85,16 +85,52 @@ async function handleSubmit() {
       const res = await request.post<any,string>('/dev/file/upload', fd)
       form.attachUrl = res as unknown as string
     }
+    const body = { ...form, orderId, warehouseId: warehouseId.value || null }
+    const params = forceDelivery ? { params: { forceDelivery: true } } : {}
+    let res: any
     if (isEdit.value && editId.value) {
-      await request.put(`/outsource/order-delivery/${editId.value}`, { ...form, orderId, warehouseId: warehouseId.value || null })
-      ElMessage.success('交货记录已更新')
+      res = await request.put(`/outsource/order-delivery/${editId.value}`, body, params)
     } else {
-      await request.post('/outsource/order-delivery', { ...form, orderId, warehouseId: warehouseId.value || null })
-      ElMessage.success('交货记录已保存')
+      res = await request.post('/outsource/order-delivery', body, params)
     }
+    console.log('[交货] 后端响应:', JSON.stringify(res))
+    // 检查是否需要确认缺料（canProceed 不是 true 时都视为缺料）
+    if (res && res.canProceed !== true) {
+      saving.value = false
+      const shortages = (res.shortages || []) as any[]
+      // 构建 HTML 格式的缺料表格
+      let html = '<div style="margin-bottom:8px">以下物料库存不足，是否确认强制出库？</div>'
+      html += '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+      html += '<tr style="background:#f5f7fa"><th style="padding:6px;border:1px solid #ebeef5;text-align:left">物料名称</th><th style="padding:6px;border:1px solid #ebeef5">需要</th><th style="padding:6px;border:1px solid #ebeef5">库存</th><th style="padding:6px;border:1px solid #ebeef5">缺口</th></tr>'
+      for (const s of shortages) {
+        html += `<tr><td style="padding:6px;border:1px solid #ebeef5">${s.materialName || ''}</td>`
+        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#e6a23c">${s.needed || 0}</td>`
+        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#f56c6c">${s.stock || 0}</td>`
+        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#f56c6c;font-weight:600">${s.gap || 0}</td></tr>`
+      }
+      html += '</table>'
+      html += '<div style="margin-top:8px;color:#909399;font-size:12px">确认后物料库存将变为负数</div>'
+      try {
+        await ElMessageBox.confirm(html, '缺料提示', {
+          confirmButtonText: '确认强制出库',
+          cancelButtonText: '取消',
+          type: 'warning',
+          dangerouslyUseHTMLString: true
+        })
+      } catch {
+        return // 用户取消
+      }
+      // 用户确认，强制出库
+      return handleSubmit(true)
+    }
+    ElMessage.success(isEdit.value ? '交货记录已更新' : '交货记录已保存')
     dialogVisible.value = false
     loadData()
-  } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) } finally { saving.value = false }
+  } catch (e: any) {
+    if (e !== 'cancel' && e !== 'close') {
+      ElMessage.error('保存失败: ' + (e?.message || '未知错误'))
+    }
+  } finally { saving.value = false }
 }
 
 async function handleDelete(row: any) {

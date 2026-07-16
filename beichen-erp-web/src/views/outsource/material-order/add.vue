@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
 const router = useRouter(); const route = useRoute()
 const tabStore = useTabStore()
@@ -123,7 +124,7 @@ onMounted(async () => {
       <template #header><span style="font-weight:600">订单信息</span></template>
       <el-form :model="form" label-width="90px" size="small">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="供应商"><el-select v-model="form.supplierId" filterable clearable style="width:100%"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="供应商"><el-select v-model="form.supplierId" filterable clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="交期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
         </el-row>
@@ -136,15 +137,17 @@ onMounted(async () => {
       <el-table :data="items" border size="small">
         <el-table-column label="类型" width="90">
           <template #default="{row,$index}">
-            <el-select v-model="row.materialType" size="small" style="width:100%" @change="onTypeChange($index)">
+            <el-select v-model="row.materialType" size="small" style="width:100%" @change="(v: string) => { if (v === ADD_MARKER) { row.materialType = ''; router.push('/dev/bom-type'); return } onTypeChange($index) }">
               <el-option v-for="t in bomTypes" :key="t" :label="t" :value="t" />
+              <el-option label="+ 新增" :value="ADD_MARKER" />
             </el-select>
           </template>
         </el-table-column>
         <el-table-column label="物料" min-width="180">
           <template #default="{row,$index}">
-            <el-select v-model="row.materialId" filterable size="small" style="width:100%" :disabled="!row.materialType" @change="(v:any)=>onMatChange($index,v)">
+            <el-select v-model="row.materialId" filterable size="small" style="width:100%" :disabled="!row.materialType" @change="(v: any) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMatChange($index, v) }">
               <el-option v-for="m in filteredMaterials(row.materialType)" :key="m.id" :label="`${m.materialName} (${m.unit||''})`" :value="m.id" />
+              <el-option label="+ 新增" :value="ADD_MARKER" />
             </el-select>
           </template>
         </el-table-column>

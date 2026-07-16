@@ -40,7 +40,8 @@ async function handleCancel(row: any) {
 
 function refresh() { loadOptions(); loadData() }
 onMounted(refresh)
-onActivated(refresh)
+// 切回时只刷新引用数据（工厂下拉），列表数据保持不变
+onActivated(() => { loadOptions() })
 </script>
 
 <template>
@@ -74,6 +75,9 @@ onActivated(refresh)
           <template #default="{row}">
             <span :style="{ color: row.planEndDate && new Date(row.planEndDate) < new Date() && row.status !== '已完成' && row.status !== '已取消' ? 'red' : '' }">{{ row.planEndDate || '-' }}</span>
           </template>
+        </el-table-column>
+        <el-table-column label="最近交货" width="120">
+          <template #default="{row}">{{ row.latestDeliveryDate || '-' }}</template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100" align="center">
           <template #default="{row}">

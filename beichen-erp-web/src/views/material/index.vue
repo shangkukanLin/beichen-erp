@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted, onActivated } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getMaterialPage,
@@ -10,6 +11,9 @@ import {
   type MaterialQueryParams
 } from '@/api/material'
 import request from '@/utils/request'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+
+const router = useRouter()
 
 // 品牌下拉
 const brandOptions = ref<{ id: number; brandName: string }[]>([])
@@ -157,6 +161,17 @@ async function handleSubmit() {
 
 async function handleDelete(row: Material) {
   try {
+    const checkRes = await request.get<any, any>(`/material/${row.id}/check-delete`)
+    if (checkRes && !checkRes.canDelete) {
+      const list = checkRes.associations || {}
+      const detail = Object.entries(list).map(([k, v]) => `${k}：${v}条`).join('；')
+      ElMessage.warning(`该物料还有关联数据，无法删除（${detail}）。请先清理关联数据后再操作。`, { duration: 5000 })
+      return
+    }
+  } catch {
+    // check-delete 失败时，让后端 delete 端点自行校验
+  }
+  try {
     await ElMessageBox.confirm(`确定要删除物料「${row.name}」吗？`, '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
@@ -164,13 +179,14 @@ async function handleDelete(row: Material) {
     })
     await deleteMaterial(row.id as number | string)
     ElMessage.success('删除成功')
-    // 删除后若当前页空了，回退一页
     if (tableData.value.length === 1 && pagination.pageNum > 1) {
       pagination.pageNum--
     }
     loadData()
-  } catch {
-    // 用户取消或错误
+  } catch (e: any) {
+    if (e !== 'cancel' && e !== 'close') {
+      ElMessage.error(e?.message || '删除失败')
+    }
   }
 }
 
@@ -289,8 +305,9 @@ onActivated(() => { loadBrands(); loadData() })
           </el-col>
           <el-col :span="12">
             <el-form-item label="品牌">
-              <el-select v-model="form.brandId" placeholder="请选择品牌" clearable style="width:100%">
+              <el-select v-model="form.brandId" placeholder="请选择品牌" clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.brandId = undefined; router.push('/inventory/brand'); return } }">
                 <el-option v-for="b in brandOptions" :key="b.id" :label="b.brandName" :value="b.id" />
+                <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </el-form-item>
           </el-col>

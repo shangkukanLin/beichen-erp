@@ -4,17 +4,25 @@ import { reactive, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
 const loading = ref(true)
 const saving = ref(false)
 const activeTab = ref('info')
 
+const TYPE_OPTIONS = [
+  { name: 'solution', label: '方案商' },
+  { name: 'factory', label: '委外加工厂' },
+  { name: 'product', label: '成品供应商' },
+  { name: 'material', label: '辅料商' },
+]
+
 const form = reactive({
   id: undefined as any,
   code: '', name: '', supplierType: '', status: 1,
   contact: '', phone: '', address: '', remark: '',
+  checkedTypes: [] as string[],
+  isSolution: false, isTouch: false,
 })
 const products = ref<any[]>([])
 const typeName = ref('')
@@ -42,9 +50,21 @@ async function loadData() {
     const res = await request.get<any,any>(`/supplier/${id}`)
     if (res) {
       Object.assign(form, res)
+      // 解析类型
+      form.checkedTypes = (res.supplierType || '').split(',').map((t: string) => t.trim()).filter(Boolean)
+      typeTags.value = form.checkedTypes
       typeName.value = formatTypes(res.supplierType)
-      typeTags.value = (res.supplierType || '').split(',').map((t: string) => t.trim()).filter(Boolean)
-      hasFactory.value = typeTags.value.includes('factory')
+      hasFactory.value = form.checkedTypes.includes('factory')
+      // 解析方案商特有字段
+      if (res.contactInfo) {
+        try {
+          const ct = JSON.parse(res.contactInfo)
+          form.isSolution = ct.isSolution || false
+          form.isTouch = ct.isTouch || false
+        } catch { form.isSolution = false; form.isTouch = false }
+      } else {
+        form.isSolution = false; form.isTouch = false
+      }
     }
     const prods = await request.get<any,any>(`/supplier/${id}/products`)
     products.value = prods || []
@@ -86,9 +106,14 @@ async function loadMaterialSummary() {
 
 async function handleSave() {
   if (!form.name) { ElMessage.warning('请输入供应商名称'); return }
+  if (form.checkedTypes.length === 0) { ElMessage.warning('请选择至少一个类型'); return }
   saving.value = true
   try {
-    await request.put('/supplier', form)
+    const body: any = { ...form, supplierType: form.checkedTypes.join(',') }
+    if (form.checkedTypes.includes('solution')) {
+      body.contactInfo = JSON.stringify({ isSolution: form.isSolution, isTouch: form.isTouch })
+    }
+    await request.put('/supplier', body)
     ElMessage.success('保存成功')
     loadData()
   } finally { saving.value = false }
@@ -110,7 +135,6 @@ onMounted(loadData)
 <template>
   <div class="detail-page" v-loading="loading">
     <div class="page-header">
-      <el-button @click="router.back()">返回列表</el-button>
       <span class="page-title">{{ typeName }} — {{ form.name || '详情' }}</span>
       <el-tag v-for="t in typeTags" :key="t" size="small" style="margin-left:4px"
         :type="t==='factory'?'warning':t==='solution'?'primary':t==='material'?'info':'success'"
@@ -128,9 +152,27 @@ onMounted(loadData)
             <el-row :gutter="12">
               <el-col :span="8"><el-form-item label="名称"><el-input v-model="form.name" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="编码"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="状态">
+                <el-select v-model="form.status" style="width:100%">
+                  <el-option label="启用" :value="1" />
+                  <el-option label="停用" :value="0" />
+                </el-select>
+              </el-form-item></el-col>
               <el-col :span="8"><el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="地址"><el-input v-model="form.address" /></el-form-item></el-col>
+              <el-col :span="24">
+                <el-form-item label="类型" required>
+                  <el-checkbox-group v-model="form.checkedTypes">
+                    <el-checkbox v-for="t in TYPE_OPTIONS" :key="t.name" :label="t.name" :value="t.name">{{ t.label }}</el-checkbox>
+                  </el-checkbox-group>
+                </el-form-item>
+              </el-col>
+              <!-- 方案商特有 -->
+              <template v-if="form.checkedTypes.includes('solution')">
+                <el-col :span="8"><el-form-item label="显示方案"><el-switch v-model="form.isSolution" /></el-form-item></el-col>
+                <el-col :span="8"><el-form-item label="触摸方案"><el-switch v-model="form.isTouch" /></el-form-item></el-col>
+              </template>
               <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
             </el-row>
           </el-form>

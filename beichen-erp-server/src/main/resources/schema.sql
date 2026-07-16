@@ -324,6 +324,25 @@ CREATE TABLE IF NOT EXISTS outsource_warehouse_stock (
     UNIQUE KEY uk_warehouse_material_quality (warehouse_id, material_id, quality_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协仓库库存表';
 
+CREATE TABLE IF NOT EXISTS outsource_stock_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    warehouse_id BIGINT NOT NULL COMMENT '仓库ID',
+    material_id BIGINT NOT NULL COMMENT '物料ID',
+    material_name VARCHAR(100) COMMENT '物料名称',
+    change_type VARCHAR(20) NOT NULL COMMENT '出库/回滚',
+    change_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变更数量(负数出库,正数回滚)',
+    before_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变更前库存',
+    after_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变更后库存',
+    related_order_code VARCHAR(30) COMMENT '关联加工单号',
+    related_delivery_id BIGINT COMMENT '关联交货记录ID',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_warehouse_material (warehouse_id, material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协仓库库存流水表';
+
 CREATE TABLE IF NOT EXISTS outsource_order_close_report (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     order_id BIGINT NOT NULL COMMENT '加工单ID',

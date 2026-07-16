@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
 const router = useRouter()
 const route = useRoute()
@@ -48,6 +49,8 @@ function removeProduct(idx: number) { products.value.splice(idx, 1) }
 function onProjectSelect(idx: number, pid: number) {
   const proj = projectOptions.value.find((v:any) => v.id === pid)
   if (proj) {
+    products.value[idx].projectId = pid
+    products.value[idx].productName = proj.productName || proj.name || ''
     loadBomMaterials(idx, pid)
   }
 }
@@ -147,7 +150,7 @@ onActivated(initPage)
       <template #header><span style="font-weight:600">基础信息</span></template>
       <el-form :model="form" label-width="90px" size="small">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="加工厂"><el-select v-model="form.factoryId" filterable style="width:100%" placeholder="请选择"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="加工厂"><el-select v-model="form.factoryId" filterable style="width:100%" placeholder="请选择" @change="(v: any) => { if (v === ADD_MARKER) { form.factoryId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="计划开始"><el-input v-model="form.planStartDate" type="date" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="计划完成"><el-input v-model="form.planEndDate" type="date" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="是否含税"><el-switch v-model="form.taxIncluded" :active-value="1" :inactive-value="0" /></el-form-item></el-col>
@@ -167,7 +170,7 @@ onActivated(initPage)
       </template>
       <el-form :model="p" label-width="90px" size="small">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item label="关联项目"><el-select v-model="p.projectId" filterable clearable style="width:100%" placeholder="选择研发项目" @change="(v:any)=>onProjectSelect(pi,v)"><el-option v-for="pr in projectOptions" :key="pr.id" :label="pr.name" :value="pr.id" /></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="关联项目"><el-select v-model="p.projectId" filterable clearable style="width:100%" placeholder="选择研发项目" @change="(v: any) => { if (v === ADD_MARKER) { p.projectId = undefined; router.push('/dev/project'); return } onProjectSelect(pi, v) }"><el-option v-for="pr in projectOptions" :key="pr.id" :label="pr.name" :value="pr.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
           <el-col :span="5"><el-form-item label="数量"><el-input v-model="p.quantity" type="number" @change="onQuantityChange(pi)" /></el-form-item></el-col>
           <el-col :span="5"><el-form-item label="单价"><el-input v-model="p.unitPrice" type="number" @change="calcAmount(pi)" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>

@@ -35,7 +35,7 @@ async function handleCancel(row: any) {
 }
 
 onMounted(() => { loadOptions(); loadData() })
-onActivated(() => { loadOptions(); loadData() })
+onActivated(() => { loadOptions() })
 </script>
 
 <template>

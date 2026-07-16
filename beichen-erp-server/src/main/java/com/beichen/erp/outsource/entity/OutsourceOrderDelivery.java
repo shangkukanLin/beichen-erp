@@ -16,6 +16,7 @@ public class OutsourceOrderDelivery {
     private LocalDate deliveryDate;
     private String productName;
     private BigDecimal quantity;
+    private String deliveryType;
     private String trackingNo;
     private String remark;
     private String attachUrl;

@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted, onActivated } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { getMaterialPage, type Material } from '@/api/material'
 import { listCustomers, type Customer } from '@/api/customer'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+
+const router = useRouter()
 import {
   getSaleOrderPage, getSaleOrderItems, createSaleOrder, updateSaleOrder, auditSaleOrder, cancelSaleOrder, checkSaleOrderStock,
   type SaleOrder, type SaleOrderItem
@@ -213,15 +217,17 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadData
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="客户" prop="customerId">
-              <el-select v-model="form.customerId" placeholder="请选择" filterable style="width:100%">
+              <el-select v-model="form.customerId" placeholder="请选择" filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer'); return } }">
                 <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
+                <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="出库仓库" prop="warehouseId">
-              <el-select v-model="form.warehouseId" placeholder="请选择" filterable style="width:100%">
+              <el-select v-model="form.warehouseId" placeholder="请选择" filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
                 <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
+                <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -249,8 +255,9 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadData
           <el-table-column label="物料" min-width="180">
             <template #default="{ row }">
               <el-select v-model="row.materialId" placeholder="选择物料" filterable remote :remote-method="loadMaterials"
-                style="width:100%" @change="(v:number)=>onMaterialChange(v, row)">
+                style="width:100%" @change="(v: number) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
                 <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.name}(${m.code})`" :value="m.id" />
+                <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </template>
           </el-table-column>

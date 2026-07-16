@@ -106,7 +106,24 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row: any) {
-  try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await request.delete(`/supplier/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  // 先检查关联数据
+  try {
+    const checkRes = await request.get<any, any>(`/supplier/${row.id}/check-delete`)
+    if (checkRes && !checkRes.canDelete) {
+      const list = checkRes.associations || {}
+      const detail = Object.entries(list).map(([k, v]) => `${k}：${v}条`).join('；')
+      ElMessage.warning(`该供应商还有关联数据，无法删除（${detail}）。请先清理关联数据后再操作。`, { duration: 5000 })
+      return
+    }
+  } catch {
+    // check-delete 失败时，让后端 delete 端点自行校验
+  }
+  try {
+    await ElMessageBox.confirm(`确定删除「${row.name}」吗？`, '提示', { type: 'warning' })
+    await request.delete(`/supplier/${row.id}`)
+    ElMessage.success('已删除')
+    loadData()
+  } catch (e: any) { if (e !== 'cancel' && e !== 'close') { ElMessage.error(e?.message || '删除失败') } }
 }
 
 onMounted(loadData)
@@ -140,11 +157,10 @@ onActivated(loadData)
         <el-table-column prop="contact" label="联系人" width="100" />
         <el-table-column prop="phone" label="电话" width="130" />
         <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag size="small" :type="row.status===1?'success':'danger'">{{ row.status===1?'启用':'停用' }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="180" align="center" fixed="right">
+        <el-table-column label="操作" width="120" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click="router.push(`/supplier/detail/${row.id}`)">详情</el-button>
-            <el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button>
-            <el-button v-if="!parseTypes(row.supplierType).includes('factory')" type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

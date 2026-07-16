@@ -7,7 +7,7 @@ const query = reactive({ warehouseName: '', warehouseType: '' })
 const allData = ref<any[]>([])
 const activeTab = ref('active')
 const tableLoading = ref(false)
-const WARHOUSE_TYPES = ['成品仓', '不良仓']
+const WARHOUSE_TYPES = ['成品仓', '不良仓', '辅料仓']
 const activeData = computed(() => allData.value.filter(v => v.status === 1))
 const stoppedData = computed(() => allData.value.filter(v => v.status === 0))
 

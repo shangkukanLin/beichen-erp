@@ -15,11 +15,14 @@ import com.beichen.erp.outsource.mapper.OutsourceWarehouseMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +30,7 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
 
     private final SupplierMapper supplierMapper;
     private final OutsourceWarehouseMapper warehouseMapper;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     public Page<Supplier> page(SupplierQueryDTO query) {
@@ -225,6 +229,14 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         if (supplier == null) {
             throw new BusinessException("供应商不存在");
         }
+        Map<String, Object> check = checkDelete(id);
+        if (!(Boolean) check.get("canDelete")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Integer> associations = (Map<String, Integer>) check.get("associations");
+            StringBuilder sb = new StringBuilder("该供应商有关联数据，无法删除：");
+            associations.forEach((k, v) -> sb.append("\n  - ").append(k).append("：").append(v).append("条"));
+            throw new BusinessException(sb.toString());
+        }
         supplierMapper.deleteById(id);
     }
 
@@ -239,6 +251,25 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         update.setId(id);
         update.setStatus(supplier.getStatus() != null && supplier.getStatus() == 1 ? 0 : 1);
         supplierMapper.updateById(update);
+    }
+
+    @Override
+    public Map<String, Object> checkDelete(Long id) {
+        int productCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM supplier_product WHERE supplier_id = ?", Integer.class, id);
+        int warehouseCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outsource_warehouse WHERE factory_id = ?", Integer.class, id);
+        int orderCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outsource_order WHERE factory_id = ?", Integer.class, id);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        Map<String, Integer> associations = new LinkedHashMap<>();
+        if (productCount > 0) associations.put("供应产品", productCount);
+        if (warehouseCount > 0) associations.put("委外仓库", warehouseCount);
+        if (orderCount > 0) associations.put("委外订单", orderCount);
+        result.put("canDelete", associations.isEmpty());
+        result.put("associations", associations);
+        return result;
     }
 
     private String getPrefixByType(String type) {

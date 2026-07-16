@@ -41,7 +41,7 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
   <div class="detail-page">
     <div class="page-header">
       <el-button @click="goBack">返回列表</el-button>
-      <span class="page-title">{{ warehouse?.warehouseName || '仓库详情' }}</span>
+      <span class="page-title">{{ warehouse?.warehouseName || '委外仓库详情' }}</span>
     </div>
 
     <!-- 仓库基础信息 -->
@@ -65,7 +65,9 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
         <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="materialType" label="物料类型" width="100" />
         <el-table-column prop="materialName" label="物料名称" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="quantity" label="库存数量" width="100" align="right" />
+        <el-table-column prop="unit" label="单位" width="70" align="center" />
+        <el-table-column label="质量类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.qualityType==='良品'?'success':'danger'" size="small">{{ row.qualityType || '良品' }}</el-tag></template></el-table-column>
+        <el-table-column label="库存数量" width="110" align="right"><template #default="{row}"><span :style="{color: Number(row.quantity)<0?'#f56c6c':'',fontWeight:Number(row.quantity)<0?600:400}">{{ row.quantity }}</span></template></el-table-column>
         <el-table-column label="操作" width="80" align="center">
           <template #default="{row}"><el-button type="primary" link size="small" @click="router.push(`/outsource/material-history/${warehouseId}/${row.materialId}`)">详细</el-button></template>
         </el-table-column>

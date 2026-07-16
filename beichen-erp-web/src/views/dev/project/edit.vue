@@ -10,6 +10,7 @@ import {
   getSupplierPage,
   type ProjectVO, type ProjectDTO, type BomDTO, type BugDTO, type DrawingVO
 } from '@/api/system'
+import { ADD_MARKER, appendAddOption } from '@/composables/useSelectWithAdd'
 import request from '@/utils/request'
 
 const route = useRoute()
@@ -296,8 +297,9 @@ async function handleDeleteDevMaterial(row: DevMaterialItem) {
 watch(activeTab, async (tab) => { if (tab === 'bom') await loadBom() })
 
 onMounted(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBomTypes(); loadTimeline(); loadBom(); loadBugs(); loadDrawings() })
-onActivated(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBomTypes(); loadTimeline(); loadBom(); loadBugs(); loadDrawings() })
-function goBack() { router.push('/dev/project') }
+onActivated(() => { loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBomTypes() })
+
+
 
 function onNameBlur() {
   if (!form.assemblyName || !form.assemblyName.trim()) {
@@ -310,8 +312,7 @@ function onNameBlur() {
   <div class="edit-page">
     <!-- 顶栏 -->
     <div class="page-header">
-      <el-button @click="goBack" :icon="'ArrowLeft'">返回列表</el-button>
-      <span class="page-title">{{ form.name || '项目编辑' }} <el-tag size="small" style="margin-left:8px">{{ form.code }}</el-tag></span>
+      <span class="page-title">{{ form.name || '研发项目详细' }} <el-tag size="small" style="margin-left:8px">{{ form.code }}</el-tag></span>
     </div>
 
     <el-tabs v-model="activeTab">
@@ -330,19 +331,19 @@ function onNameBlur() {
                 </el-select>
               </el-form-item></el-col>
               <el-col :span="8"><el-form-item label="适配机型"><el-input v-model="form.adaptModel" /></el-form-item></el-col>
-              <el-col :span="8"><el-form-item label="显示方案"><el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /></el-select></el-form-item></el-col>
-              <el-col :span="8"><el-form-item label="触摸方案"><el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /></el-select></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="显示方案"><el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%" @change="(v: string) => { if (v === ADD_MARKER) { form.displaySupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="触摸方案"><el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%" @change="(v: string) => { if (v === ADD_MARKER) { form.touchSupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="原机尺寸"><el-input v-model="form.originalSize" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="原分辨率"><el-input v-model="form.originalResolution" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="打样工厂">
                 <div style="display:flex;gap:4px">
-                  <el-select v-model="form.sampleFactoryId" clearable filterable style="flex:1" placeholder="选择工厂"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select>
+                  <el-select v-model="form.sampleFactoryId" clearable filterable style="flex:1" placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.sampleFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
                   <el-button v-if="form.sampleFactoryId" type="success" size="small" @click="goCreateOrder('sample')">下单</el-button>
                 </div>
               </el-form-item></el-col>
               <el-col :span="8"><el-form-item label="委外工厂">
                 <div style="display:flex;gap:4px">
-                  <el-select v-model="form.outsourceFactoryId" clearable filterable style="flex:1" placeholder="选择工厂"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select>
+                  <el-select v-model="form.outsourceFactoryId" clearable filterable style="flex:1" placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.outsourceFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
                   <el-button v-if="form.outsourceFactoryId" type="success" size="small" @click="goCreateOrder('outsource')">下单</el-button>
                 </div>
               </el-form-item></el-col>
@@ -395,22 +396,26 @@ function onNameBlur() {
             <el-table-column label="类型" width="100">
               <template #default="{row}">
                 <span v-if="row._isChild" style="color:#999;font-size:12px">{{ row.materialType }}</span>
-                <el-select v-else v-model="row.materialType" size="small" style="width:100%" @change="row.materialName = ''">
-                  <el-option v-for="t in bomTypes" :key="t" :label="t" :value="t" />
+                <el-select v-else v-model="row.materialType" size="small" style="width:100%" @change="(v: string) => { if (v === ADD_MARKER) { row.materialType = ''; router.push('/dev/bom-type'); return } row.materialName = '' }">
+                  <el-option v-for="t in appendAddOption(bomTypes)" :key="t" :label="t === ADD_MARKER ? '+ 新增' : t" :value="t" />
                 </el-select>
               </template>
             </el-table-column>
             <el-table-column label="物料名称" min-width="130">
               <template #default="{row}">
                 <span v-if="row._isChild" style="color:#409eff;font-size:12px">└ {{ row.materialName }}</span>
-                <el-select v-else v-model="row.materialName" size="small" filterable allow-create clearable style="width:100%" placeholder="选择" @change="(v: string) => onBomMaterialChange(v, row)"><el-option v-for="m in getMaterialsByType(row.materialType || '')" :key="m.id" :label="m.materialName" :value="m.materialName" /></el-select>
+                <el-select v-else v-model="row.materialName" size="small" filterable allow-create clearable style="width:100%" placeholder="选择" @change="(v: string) => { if (v === ADD_MARKER) { row.materialName = ''; router.push('/outsource/material-info'); return } onBomMaterialChange(v, row) }">
+                  <el-option v-for="m in getMaterialsByType(row.materialType || '')" :key="m.id" :label="m.materialName" :value="m.materialName" />
+                  <el-option label="+ 新增" :value="ADD_MARKER" />
+                </el-select>
               </template>
             </el-table-column>
             <el-table-column label="供应商" width="100">
               <template #default="{row}">
                 <span v-if="row._isChild" style="color:#999;font-size:12px">-</span>
-                <el-select v-else v-model="row.supplierId" size="small" clearable filterable style="width:100%">
+                <el-select v-else v-model="row.supplierId" size="small" clearable filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.supplierId = undefined; router.push('/supplier/manage'); return } }">
                   <el-option v-for="s in allSuppliers" :key="s.id" :label="s.name" :value="s.id" />
+                  <el-option label="+ 新增" :value="ADD_MARKER" />
                 </el-select>
               </template>
             </el-table-column>

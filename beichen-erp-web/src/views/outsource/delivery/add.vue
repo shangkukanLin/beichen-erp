@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
 const router = useRouter()
 const route = useRoute()
@@ -16,6 +17,9 @@ const inventoryWarehouses = ref<any[]>([])
 const materialOptions = ref<any[]>([])
 const supplierOptions = ref<any[]>([])
 const items = ref<any[]>([])
+
+const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any) => m.materialType).filter(Boolean))] as string[])
+function materialsByType(type: string) { return materialOptions.value.filter((m: any) => m.materialType === type) }
 const uploadFile = ref<File | null>(null)
 const uploading = ref(false)
 
@@ -33,10 +37,12 @@ async function loadMaterials() {
   try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize:500 } }); supplierOptions.value = r?.records || [] } catch (e: any) { console.warn('加载供应商失败', e?.message || e) }
 }
 
-function onFactoryChange(id: number) { form.fromWarehouseId = undefined; form.toWarehouseId = undefined; outsourceWarehouses.value = []; if (id) loadWarehouses(id) }
+async function onFactoryChange(id: number) { form.fromWarehouseId = undefined; form.toWarehouseId = undefined; outsourceWarehouses.value = []; if (id) { await loadWarehouses(id); if (outsourceWarehouses.value.length > 0) { form.toWarehouseId = outsourceWarehouses.value[0].id } } }
 
 function addItem() { items.value.push({ material_id: undefined as any, material_name: '', material_type: '', unit: '', quantity: undefined as any, qualityType: '良品' }) }
 function removeItem(i: number) { items.value.splice(i, 1) }
+
+function onTypeChange(idx: number) { items.value[idx].material_id = undefined; items.value[idx].material_name = ''; items.value[idx].unit = '' }
 
 function onMaterialSelect(idx: number, mid: number) {
   const m = materialOptions.value.find((v:any)=>v.id===mid)
@@ -49,11 +55,13 @@ function handleFileSelect(e: Event) { const file = (e.target as HTMLInputElement
 function handleRemoveUploadFile() { uploadFile.value = null }
 
 async function handleSubmit() {
-  if (!form.factoryId) { ElMessage.warning('请选择加工厂'); return }
+  if (!form.factoryId) { ElMessage.warning('请选择收货工厂'); return }
   if (form.deliveryType==='发料' && !form.supplierDirect && !form.fromWarehouseId) { ElMessage.warning('请选择来源仓库'); return }
   if (form.deliveryType==='发料' && !form.toWarehouseId) { ElMessage.warning('请选择目标仓库'); return }
   if (form.deliveryType!=='发料' && !form.fromWarehouseId) { ElMessage.warning('请选择来源仓库'); return }
   if (items.value.length===0) { ElMessage.warning('请添加物料'); return }
+  const invalid = items.value.some((i: any) => !i.quantity || Number(i.quantity) <= 0)
+  if (invalid) { ElMessage.warning('物料数量必须大于0'); return }
   saving.value = true
   try {
     if (uploadFile.value) { const fd = new FormData(); fd.append('file', uploadFile.value); const res = await request.post<any, string>('/dev/file/upload', fd); form.attachUrl = res as unknown as string }
@@ -76,12 +84,12 @@ onMounted(() => { loadFactories(); loadMaterials(); loadInventoryWarehouses() })
       <el-form :model="form" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="6"><el-form-item label="类型"><el-select v-model="form.deliveryType" style="width:100%"><el-option label="发料" value="发料"/><el-option label="收料" value="收料"/><el-option label="退料" value="退料"/></el-select></el-form-item></el-col>
-          <el-col :span="6"><el-form-item label="加工厂"><el-select v-model="form.factoryId" filterable style="width:100%" @change="(v:any)=>onFactoryChange(v)"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item></el-col>
+          <el-col :span="6"><el-form-item label="收货工厂"><el-select v-model="form.factoryId" filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.factoryId = undefined; router.push('/supplier/manage'); return } onFactoryChange(v) }"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
           <el-col :span="6" v-if="form.deliveryType==='发料'"><el-form-item label="供应商直发"><el-switch v-model="form.supplierDirect" :active-value="1" :inactive-value="0" /></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType==='发料' && form.supplierDirect"><el-form-item label="供应商"><el-select v-model="form.supplierId" filterable style="width:100%"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType!=='发料' || !form.supplierDirect"><el-form-item :label="form.deliveryType==='发料'?'来源仓库':'来源仓库'"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in inventoryWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType==='发料'"><el-form-item label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%"><el-option v-for="w in outsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType==='发料' && form.supplierDirect"><el-form-item label="供应商"><el-select v-model="form.supplierId" filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType!=='发料' || !form.supplierDirect"><el-form-item :label="form.deliveryType==='发料'?'来源仓库':'来源仓库'"><el-select v-model="form.fromWarehouseId" filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.fromWarehouseId = undefined; router.push('/inventory/warehouse'); return } }"><el-option v-for="w in inventoryWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType==='发料'"><el-form-item label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%" disabled><el-option v-for="w in outsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item></el-col>
         </el-row>
@@ -92,8 +100,8 @@ onMounted(() => { loadFactories(); loadMaterials(); loadInventoryWarehouses() })
       <template #header><span style="font-weight:600">物料明细</span></template>
       <el-button type="primary" size="small" @click="addItem" style="margin-bottom:8px">+ 添加物料</el-button>
       <el-table :data="items" border size="small">
-        <el-table-column label="物料" min-width="180"><template #default="{row,$index}"><el-select v-model="row.material_id" filterable style="width:100%" @change="(v:any)=>onMaterialSelect($index,v)"><el-option v-for="m in materialOptions" :key="m.id" :label="`${m.materialType||''} ${m.materialName}`" :value="m.id" /></el-select></template></el-table-column>
-        <el-table-column label="类型" width="90"><template #default="{row}">{{row.material_type}}</template></el-table-column>
+        <el-table-column label="物料类型" width="110"><template #default="{row,$index}"><el-select v-model="row.material_type" filterable style="width:100%" clearable @change="onTypeChange($index)"><el-option v-for="t in uniqueTypes" :key="t" :label="t" :value="t" /></el-select></template></el-table-column>
+        <el-table-column label="物料名称" min-width="140"><template #default="{row,$index}"><el-select v-model="row.material_id" filterable style="width:100%" :disabled="!row.material_type" @change="(v: any) => { if (v === ADD_MARKER) { row.material_id = undefined; router.push('/material'); return } onMaterialSelect($index, v) }"><el-option v-for="m in materialsByType(row.material_type)" :key="m.id" :label="m.materialName" :value="m.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></template></el-table-column>
         <el-table-column label="单位" width="70"><template #default="{row}">{{row.unit}}</template></el-table-column>
         <el-table-column label="数量" width="120"><template #default="{row}"><el-input v-model="row.quantity" size="small" placeholder="数量" /></template></el-table-column>
         <el-table-column label="质量" width="90" align="center"><template #default="{row}"><el-select v-model="row.qualityType" size="small" style="width:100%"><el-option label="良品" value="良品" /><el-option label="不良品" value="不良品" /></el-select></template></el-table-column>

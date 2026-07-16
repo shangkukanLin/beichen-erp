@@ -42,7 +42,7 @@ async function handleDelete(row: any) {
 
 function refresh() { loadOptions(); loadData() }
 onMounted(refresh)
-onActivated(refresh)
+onActivated(() => { loadOptions() })
 </script>
 
 <template>

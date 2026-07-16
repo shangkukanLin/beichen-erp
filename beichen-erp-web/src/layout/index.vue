@@ -47,10 +47,10 @@ function toggleSidebar() {
   else isCollapse.value = !isCollapse.value
 }
 
-function handleSelect(index: string) {
-  router.push(index)
+// 路由变化时：移动端自动关闭抽屉
+watch(() => route.path, () => {
   if (isMobile.value) drawerOpen.value = false
-}
+})
 
 function switchTab(path: string) {
   tabStore.setActive(path)
@@ -113,7 +113,7 @@ watch(() => userStore.userInfo?.companyName, (name) => {
         <span v-if="!isCollapse" class="logo-text">{{ displayCompanyName || '北辰ERP' }}</span>
         <span v-else class="logo-text-mini">{{ (displayCompanyName || '北辰').substring(0, 2) }}</span>
       </div>
-      <SideMenu :collapse="isCollapse" @select="handleSelect" />
+      <SideMenu :collapse="isCollapse" />
     </el-aside>
 
     <el-drawer
@@ -127,7 +127,7 @@ watch(() => userStore.userInfo?.companyName, (name) => {
       <div class="logo">
         <span class="logo-text">{{ displayCompanyName || '北辰ERP' }}</span>
       </div>
-      <SideMenu :collapse="false" @select="handleSelect" />
+      <SideMenu :collapse="false" />
     </el-drawer>
 
     <el-container>

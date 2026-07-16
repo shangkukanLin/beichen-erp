@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 import { addProject, getSupplierPage, type ProjectDTO } from '@/api/system'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
 const router = useRouter()
 const route = useRoute()
@@ -77,18 +78,18 @@ onMounted(() => loadData())
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="适配机型"><el-input v-model="form.adaptModel" placeholder="如 iPhone 15" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="显示方案">
-            <el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%" placeholder="选择或输入"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /></el-select>
+            <el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%" placeholder="选择或输入" @change="(v: string) => { if (v === ADD_MARKER) { form.displaySupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="触摸方案">
-            <el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%" placeholder="选择或输入"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /></el-select>
+            <el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%" placeholder="选择或输入" @change="(v: string) => { if (v === ADD_MARKER) { form.touchSupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="原机尺寸"><el-input v-model="form.originalSize" placeholder="如 6.1寸" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="原分辨率"><el-input v-model="form.originalResolution" placeholder="如 1080×2400" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="打样工厂">
-            <el-select v-model="form.sampleFactoryId" clearable filterable style="width:100%" placeholder="选择工厂"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select>
+            <el-select v-model="form.sampleFactoryId" clearable filterable style="width:100%" placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.sampleFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="委外工厂">
-            <el-select v-model="form.outsourceFactoryId" clearable filterable style="width:100%" placeholder="选择工厂"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select>
+            <el-select v-model="form.outsourceFactoryId" clearable filterable style="width:100%" placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.outsourceFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
           </el-form-item></el-col>
         </el-row>
       </el-form>

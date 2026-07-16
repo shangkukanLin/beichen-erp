@@ -49,7 +49,7 @@ async function handleDelete(row: any) {
 }
 
 onMounted(() => { loadData() })
-onActivated(() => { loadData() })
+// 切回时不自动刷新列表，仅在用户操作后刷新（如删除/查询）
 </script>
 
 <template>

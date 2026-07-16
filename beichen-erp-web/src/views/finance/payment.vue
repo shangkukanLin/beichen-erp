@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { getPaymentPage, getPaymentItems, createPayment, auditPayment, cancelPayment, getUnpaidPayables, type FinancePayment, type FinancePaymentItem } from '@/api/finance'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+
+const router = useRouter()
 
 const query = reactive({ supplierId: '' as string|number, status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -77,7 +81,7 @@ async function handleDetail(row: FinancePayment) { detail.value = { ...row }; tr
 <template>
   <div class="p">
     <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
-      <el-form-item label="供应商"><el-select v-model="query.supplierId" placeholder="全部" clearable filterable style="width:160px"><el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id"/></el-select></el-form-item>
+      <el-form-item label="供应商"><el-select v-model="query.supplierId" placeholder="全部" clearable filterable style="width:160px" @change="(v: any) => { if (v === ADD_MARKER) { query.supplierId = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id"/><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item>
       <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="o in statusOpts" :key="o.v" :label="o.l" :value="o.v"/></el-select></el-form-item>
       <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button><el-button type="success" @click="handleAdd">新增付款</el-button></el-form-item>
     </el-form></el-card>
@@ -99,7 +103,7 @@ async function handleDetail(row: FinancePayment) { detail.value = { ...row }; tr
     <el-dialog v-model="dVisible" :title="dTitle" width="850px" :close-on-click-modal="false">
       <el-form :model="dForm" label-width="90px">
         <el-row :gutter="16">
-          <el-col :span="12"><el-form-item label="供应商" required><el-select v-model="dForm.supplierId" placeholder="请选择" filterable style="width:100%" @change="onSupplierChange"><el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id"/></el-select></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="供应商" required><el-select v-model="dForm.supplierId" placeholder="请选择" filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { dForm.supplierId = undefined; router.push('/supplier/manage'); return } onSupplierChange() }"><el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id"/><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="付款账户" required><el-select v-model="dForm.accountId" placeholder="请选择" filterable style="width:100%"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id"/></el-select></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="付款日期"><el-date-picker v-model="dForm.paymentDate" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="dForm.remark" type="textarea" :rows="2"/></el-form-item></el-col>
