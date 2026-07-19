@@ -21,4 +21,6 @@ public interface DeliveryService {
     OutsourceDelivery getById(Long id);
 
     void clearAttachUrl(Long id);
+
+    java.math.BigDecimal calcWeightedPrice(Long factoryId, String materialName);
 }

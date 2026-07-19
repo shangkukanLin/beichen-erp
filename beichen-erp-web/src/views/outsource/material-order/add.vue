@@ -118,7 +118,7 @@ onMounted(async () => {
 
 <template>
   <div class="add-page">
-    <div class="page-header"><el-button @click="handleCancel">← 返回</el-button><span class="page-title">{{ isEdit ? '编辑物料订单' : '新增物料订单' }}</span></div>
+    <div class="page-header"><span class="page-title">{{ isEdit ? '编辑物料订单' : '新增物料订单' }}</span></div>
 
     <el-card shadow="never">
       <template #header><span style="font-weight:600">订单信息</span></template>

@@ -80,7 +80,6 @@ onMounted(()=>{ loadOptions(); loadData() })
 <template>
   <div class="detail-page">
     <div class="page-header">
-      <el-button @click="router.push('/outsource/delivery')">返回列表</el-button>
       <span class="page-title">{{ form.code || '收发单详情' }}</span>
       <el-tag :type="form.status==='已确认'?'success':'info'" size="small">{{ form.status }}</el-tag>
     </div>
@@ -110,6 +109,7 @@ onMounted(()=>{ loadOptions(); loadData() })
         <el-table-column label="物料类型" width="110"><template #default="{row,$index}"><el-select v-model="row.material_type" filterable style="width:100%" clearable @change="onTypeChange($index)"><el-option v-for="t in uniqueTypes" :key="t" :label="t" :value="t" /></el-select></template></el-table-column>
         <el-table-column label="物料名称" min-width="130"><template #default="{row,$index}"><el-select v-model="row.material_id" filterable style="width:100%" :disabled="!row.material_type" @change="(v:any)=>onMatSelect($index,v)"><el-option v-for="m in materialsByType(row.material_type)" :key="m.id" :label="m.materialName" :value="m.id" /></el-select></template></el-table-column>
         <el-table-column label="单位" width="60"><template #default="{row}">{{row.unit}}</template></el-table-column>
+        <el-table-column label="单价" width="90"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" /></template></el-table-column>
         <el-table-column label="数量" width="100"><template #default="{row}"><el-input v-model="row.quantity" size="small" /></template></el-table-column>
         <el-table-column label="质量" width="90" align="center"><template #default="{row}"><el-select v-model="row.qualityType" size="small" style="width:100%"><el-option label="良品" value="良品" /><el-option label="不良品" value="不良品" /></el-select></template></el-table-column>
         <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>

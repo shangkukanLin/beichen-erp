@@ -91,7 +91,7 @@ onMounted(() => { loadCompany(); loadParams() })
           <el-table-column prop="operation" label="操作" width="80" />
           <el-table-column prop="target" label="对象" min-width="120" show-overflow-tooltip />
           <el-table-column prop="detail" label="详情" min-width="150" show-overflow-tooltip />
-          <el-table-column prop="createTime" label="时间" width="160" />
+          <el-table-column prop="createTime" label="时间" width="160" :formatter="(r:any,c:any,v:any)=>$fmtDate(v)" />
         </el-table>
         <el-pagination
           v-model:current-page="logPage.pageNum" :page-size="logPage.pageSize" :total="logPage.total"

@@ -141,7 +141,6 @@ onActivated(initPage)
 <template>
   <div class="add-page">
     <div class="page-header">
-      <el-button @click="router.push('/outsource/order')">返回列表</el-button>
       <span class="page-title">新增加工单</span>
     </div>
 

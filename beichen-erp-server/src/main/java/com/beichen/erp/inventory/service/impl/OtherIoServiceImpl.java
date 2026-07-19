@@ -61,7 +61,7 @@ public class OtherIoServiceImpl implements OtherIoService {
         if (otherIo.getWarehouseId() == null) throw new BusinessException("仓库不能为空");
         if (otherIo.getIoType() == null || otherIo.getIoType().isBlank()) throw new BusinessException("出入库类型不能为空");
         otherIo.setCode(gen("QT-"));
-        otherIo.setStatus("草稿");
+        otherIo.setStatus("已确认");
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) otherIo.setCompanyId(cid);
         ioMapper.insert(otherIo);
@@ -71,6 +71,7 @@ public class OtherIoServiceImpl implements OtherIoService {
             if (cid != null && cid > 0) it.setCompanyId(cid);
             itemMapper.insert(it);
         }
+        applyStock(otherIo, items);
     }
 
     @Override
@@ -78,17 +79,26 @@ public class OtherIoServiceImpl implements OtherIoService {
     public void update(InventoryOtherIo otherIo, List<InventoryOtherIoItem> items) {
         InventoryOtherIo old = ioMapper.selectById(otherIo.getId());
         if (old == null) throw new BusinessException("其他出入库单不存在");
-        if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
-        otherIo.setCode(old.getCode());
+        if ("已取消".equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
+
+        // 回滚旧库存
+        List<InventoryOtherIoItem> oldItems = itemMapper.selectList(
+            new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, otherIo.getId()));
+        revertStock(old, oldItems);
+
+        // 更新主表
+        otherIo.setCode(old.getCode()); otherIo.setStatus("已确认");
         ioMapper.updateById(otherIo);
+
+        // 删旧明细 + 插新明细
         itemMapper.delete(new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, otherIo.getId()));
         Long cid = CompanyContext.get();
         for (InventoryOtherIoItem it : items) {
-            it.setId(null);
-            it.setOtherIoId(otherIo.getId());
+            it.setId(null); it.setOtherIoId(otherIo.getId());
             if (cid != null && cid > 0) it.setCompanyId(cid);
             itemMapper.insert(it);
         }
+        applyStock(otherIo, items);
     }
 
     @Override
@@ -96,19 +106,30 @@ public class OtherIoServiceImpl implements OtherIoService {
     public void cancel(Long id) {
         InventoryOtherIo old = ioMapper.selectById(id);
         if (old == null) throw new BusinessException("其他出入库单不存在");
-        if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
-        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus("已作废");
+        if ("已取消".equals(old.getStatus())) throw new BusinessException("单据已取消");
+        List<InventoryOtherIoItem> items = itemMapper.selectList(
+            new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
+        revertStock(old, items);
+        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus("已取消");
         ioMapper.updateById(u);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
+        // 已废弃：提交即生效，无需审核。保留接口兼容
         InventoryOtherIo io = ioMapper.selectById(id);
         if (io == null) throw new BusinessException("其他出入库单不存在");
         if (!"草稿".equals(io.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<InventoryOtherIoItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
+        applyStock(io, items);
+        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus("已审核");
+        ioMapper.updateById(u);
+    }
+
+    /** 应用库存变更 */
+    private void applyStock(InventoryOtherIo io, List<InventoryOtherIoItem> items) {
         String changeType = "其他入库".equals(io.getIoType()) ? "其他入库" : "其他出库";
         for (InventoryOtherIoItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
@@ -116,8 +137,18 @@ public class OtherIoServiceImpl implements OtherIoService {
             stockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
                     changeType, io.getCode(), changeType, it.getMaterialId(), it.getSpec());
         }
-        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus("已审核");
-        ioMapper.updateById(u);
+    }
+
+    /** 逆向库存（编辑回滚 / 取消） */
+    private void revertStock(InventoryOtherIo io, List<InventoryOtherIoItem> items) {
+        String changeType = "其他入库".equals(io.getIoType()) ? "取消入库" : "取消出库";
+        for (InventoryOtherIoItem it : items) {
+            BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
+            // 逆向：入库变成扣回，出库变成加回
+            BigDecimal delta = "其他入库".equals(io.getIoType()) ? q.negate() : q;
+            stockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
+                    changeType, io.getCode(), changeType, it.getMaterialId(), it.getSpec());
+        }
     }
 
     private String gen(String prefix) {

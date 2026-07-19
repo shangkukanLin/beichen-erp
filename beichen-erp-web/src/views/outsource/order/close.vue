@@ -22,7 +22,14 @@ function recalc(row: any) {
   const delivered = Number(row.deliveredQuantity) || 0
   const shipped = Number(row.shippedQuantity) || 0
   const good = Number(row.goodReturnQty) || 0
+  const defect = Number(row.defectReturnQty) || 0
   const targetYield = Number(row.targetYieldRate) || 0
+  // 缺失 = 发料 - 退料总计 - 出货消耗
+  row.missingQty = delivered - (good + defect) - shipped
+  // 最大超损 = (发料 - 良品退料) × (1 - 加工良率/100)
+  row.maxExcessLossQty = Math.max(0, +( (delivered - good) * (1 - targetYield / 100) ).toFixed(2))
+  // 超损总价 = 超损数量 × 物料单价
+  row.excessLossAmount = +(row.excessLossQty * (row.unitPrice || 0)).toFixed(2)
   if (delivered > 0) {
     row.actualYieldRate = +((shipped + good) / delivered * 100).toFixed(2)
     row.yieldLoss = +(targetYield - row.actualYieldRate).toFixed(2)
@@ -37,6 +44,7 @@ function recalc(row: any) {
 function onGoodChange(row: any) { recalc(row) }
 function onDefectChange(row: any) {
   row.defectReturnQty = Math.max(0, Number(row.defectReturnQty) || 0)
+  recalc(row)
 }
 
 async function loadReport() {
@@ -63,6 +71,10 @@ async function handleSave() {
   }
 }
 
+function handleExport() {
+  window.open(`/api/outsource/order/${orderId}/close-report/export`)
+}
+
 async function handleConfirm() {
   try {
     await ElMessageBox.confirm('确认结单？结单后将自动生成退料单，加工单状态变为"已完成"。', '确认结单', { type: 'warning' })
@@ -86,7 +98,6 @@ onMounted(loadReport)
 <template>
   <div class="close-page" v-loading="loading">
     <div class="page-header">
-      <el-button @click="router.push(`/outsource/order/detail/${orderId}`)">← 返回加工单</el-button>
       <span class="page-title">结单报表</span>
       <el-tag v-if="report.reportStatus === '已结单'" type="success">已结单</el-tag>
       <el-tag v-else-if="report.reportStatus === '草稿'" type="warning">草稿</el-tag>
@@ -115,15 +126,19 @@ onMounted(loadReport)
       <el-table :data="items" border size="small" stripe show-summary :summary-method="() => []">
         <el-table-column prop="materialType" label="类目" width="70" />
         <el-table-column prop="materialName" label="物料名称" min-width="120" />
-        <el-table-column prop="unit" label="单位" width="55" />
+
+
         <el-table-column label="发料数量" width="90"><template #default="{row}">{{ fmt(row.deliveredQuantity) }}</template></el-table-column>
-        <el-table-column label="退料总计" width="90"><template #default="{row}">{{ fmt(row.returnedQuantity) }}</template></el-table-column>
+        <el-table-column label="退料总计" width="90" align="right"><template #default="{row}">{{ fmt((+row.goodReturnQty||0) + (+row.defectReturnQty||0)) }}</template></el-table-column>
         <el-table-column label="出货消耗" width="90"><template #default="{row}">{{ fmt(row.shippedQuantity) }}</template></el-table-column>
         <el-table-column label="良品退料" width="100">
           <template #default="{row}"><el-input v-model="row.goodReturnQty" size="small" type="number" @change="onGoodChange(row)" /></template>
         </el-table-column>
         <el-table-column label="不良退料" width="100">
           <template #default="{row}"><el-input v-model="row.defectReturnQty" size="small" type="number" @change="onDefectChange(row)" /></template>
+        </el-table-column>
+        <el-table-column label="缺失" width="80" align="right">
+          <template #default="{row}"><span :style="{color: row.missingQty !== 0 ? '#f56c6c' : '#67c23a'}">{{ fmt(row.missingQty) }}</span></template>
         </el-table-column>
         <el-table-column label="加工良率%" width="90">
           <template #default="{row}"><span style="color:#409eff">{{ fmt(row.targetYieldRate) }}</span></template>
@@ -137,6 +152,15 @@ onMounted(loadReport)
         <el-table-column label="超损数量" width="90">
           <template #default="{row}"><span :style="{color: row.excessLossQty > 0 ? '#f56c6c' : '#67c23a'}">{{ fmt(row.excessLossQty) }}</span></template>
         </el-table-column>
+        <el-table-column label="最大超损" width="90">
+          <template #default="{row}">{{ fmt(row.maxExcessLossQty) }}</template>
+        </el-table-column>
+        <el-table-column label="物料单价" width="100">
+          <template #default="{row}"><el-input v-model="row.unitPrice" size="small" @change="recalc(row)" /></template>
+        </el-table-column>
+        <el-table-column label="超损总价" width="100">
+          <template #default="{row}"><span :style="{color: row.excessLossAmount > 0 ? '#f56c6c' : '#67c23a'}">{{ fmt(row.excessLossAmount) }}</span></template>
+        </el-table-column>
         <el-table-column label="备注" min-width="100"><template #default="{row}"><el-input v-model="row.remark" size="small" placeholder="备注" /></template></el-table-column>
       </el-table>
     </el-card>
@@ -144,10 +168,15 @@ onMounted(loadReport)
     <!-- 交货记录 -->
     <el-card shadow="never" style="margin-bottom:12px">
       <template #header><span style="font-weight:600">交货记录</span></template>
+      <div style="display:flex;gap:20px;margin-bottom:12px;font-size:13px;color:#606266">
+        <span>正常交货：<b style="color:#67c23a">{{ (report.deliveries || []).filter((d:any)=>d.deliveryType!=='退不良').reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
+        <span>退不良：<b style="color:#e6a23c">{{ Math.abs((report.deliveries || []).filter((d:any)=>d.deliveryType==='退不良').reduce((s:number,d:any)=>s+(d.quantity||0),0)) }}</b></span>
+        <span>实际已交：<b style="color:#409eff">{{ (report.deliveries || []).reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
+      </div>
       <el-table :data="report.deliveries" border size="small">
-        <el-table-column prop="deliveryDate" label="日期" width="110" />
+        <el-table-column label="日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column prop="productName" label="产品" min-width="130" />
-        <el-table-column prop="quantity" label="数量" width="100" />
+        <el-table-column label="数量" width="100" align="right"><template #default="{row}"><span :style="{color:Number(row.quantity)<0?'#f56c6c':''}">{{ row.quantity }}</span></template></el-table-column>
         <el-table-column prop="trackingNo" label="物流单号" width="150" />
         <el-table-column prop="remark" label="备注" min-width="150" />
       </el-table>
@@ -157,6 +186,7 @@ onMounted(loadReport)
     <div style="display:flex;gap:12px">
       <el-button type="primary" :disabled="report.reportStatus==='已结单'" @click="handleSave">保存草稿</el-button>
       <el-button type="success" :disabled="!canConfirm" @click="handleConfirm">确认结单</el-button>
+      <el-button type="info" @click="handleExport">导出Excel</el-button>
     </div>
   </div>
 </template>

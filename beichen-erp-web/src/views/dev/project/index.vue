@@ -333,7 +333,7 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
             <el-table-column prop="docName" label="名称" min-width="150" />
             <el-table-column prop="docType" label="类型" width="90" />
             <el-table-column prop="version" label="版本" width="80" />
-            <el-table-column prop="createTime" label="上传时间" width="160" />
+            <el-table-column label="上传时间" width="160"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
             <el-table-column label="操作" width="80" align="center"><template #default="{row}"><el-button type="danger" link @click="handleDeleteDrawing(row as DrawingVO)">删除</el-button></template></el-table-column>
           </el-table>
         </el-tab-pane>

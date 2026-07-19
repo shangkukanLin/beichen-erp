@@ -62,7 +62,7 @@ onActivated(() => { loadOptions() })
         <el-table-column label="来源" min-width="100" show-overflow-tooltip><template #default="{row}"><span v-if="row.supplierDirect" style="color:#409eff">{{row.supplierName||'供应商直发'}}</span><span v-else>{{row.fromWarehouseName||'-'}}</span></template></el-table-column>
         <el-table-column prop="toWarehouseName" label="目标仓库" min-width="100" show-overflow-tooltip />
         <el-table-column label="物料" width="60" align="center"><template #default="{row}">{{row.itemCount||0}}项</template></el-table-column>
-        <el-table-column prop="deliveryDate" label="日期" width="100" />
+        <el-table-column label="日期" width="100"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column prop="status" label="状态" width="70"><template #default="{row}"><el-tag :type="row.status==='已确认'?'success':'info'">{{row.status}}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="120" align="center" fixed="right">
           <template #default="{row}">

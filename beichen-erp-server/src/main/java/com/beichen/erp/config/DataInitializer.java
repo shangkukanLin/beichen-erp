@@ -374,6 +374,56 @@ public class DataInitializer implements ApplicationRunner {
                 log.info("已为 outsource_order_delivery 添加 delivery_type 列");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_order_close_report_item 添加 company_id 列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_order_close_report_item' AND COLUMN_NAME='company_id'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_order_close_report_item ADD COLUMN company_id BIGINT DEFAULT NULL COMMENT '公司ID' AFTER remark");
+                jdbcTemplate.execute("UPDATE outsource_order_close_report_item SET company_id = 1 WHERE company_id IS NULL");
+                log.info("已为 outsource_order_close_report_item 添加 company_id 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_order_close_report_item 添加 material_price 列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_order_close_report_item' AND COLUMN_NAME='material_price'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_order_close_report_item ADD COLUMN material_price DECIMAL(18,4) DEFAULT 0 COMMENT '物料单价' AFTER excess_loss_qty");
+                log.info("已为 outsource_order_close_report_item 添加 material_price 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_delivery_item 添加 unit_price 列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_delivery_item' AND COLUMN_NAME='unit_price'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_delivery_item ADD COLUMN unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价' AFTER quantity");
+                log.info("已为 outsource_delivery_item 添加 unit_price 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_other_io 和 outsource_other_io_item 表
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_other_io'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("CREATE TABLE outsource_other_io (" +
+                    "id BIGINT AUTO_INCREMENT PRIMARY KEY, code VARCHAR(30), warehouse_id BIGINT," +
+                    "io_type VARCHAR(20) COMMENT '入库/出库', io_date DATE, status VARCHAR(20) DEFAULT '已确认'," +
+                    "remark VARCHAR(500), company_id BIGINT, create_time DATETIME DEFAULT CURRENT_TIMESTAMP," +
+                    "update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP," +
+                    "INDEX idx_company_id (company_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                jdbcTemplate.execute("CREATE TABLE outsource_other_io_item (" +
+                    "id BIGINT AUTO_INCREMENT PRIMARY KEY, other_io_id BIGINT," +
+                    "material_id BIGINT, material_name VARCHAR(100), material_type VARCHAR(50)," +
+                    "unit VARCHAR(20), quantity DECIMAL(18,4), remark VARCHAR(500)," +
+                    "company_id BIGINT, INDEX idx_other_io_id (other_io_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                log.info("已创建 outsource_other_io / outsource_other_io_item 表");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
         // material 添加 company_id 列
         try {
             Integer cnt = jdbcTemplate.queryForObject(
@@ -689,12 +739,14 @@ public class DataInitializer implements ApplicationRunner {
             {15L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1},
             {44L, 4L, "委外物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2},
             {16L, 4L, "物料信息", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 3},
-            {35L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 4},
-            {37L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 5},
-            {48L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6},
+            {48L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 4},
+            {51L, 4L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 5},
+            {35L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 6},
+            {37L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 7},
             {20L, 5L, "采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1},
             {22L, 5L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 2},
             {23L, 5L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 3},
+            {52L, 5L, "其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Files", 4},
             {25L, 6L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1},
             {26L, 6L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2},
             {27L, 6L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 3},

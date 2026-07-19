@@ -143,7 +143,6 @@ onMounted(() => loadData())
 <template>
   <div class="template-page">
     <div class="page-header">
-      <el-button @click="router.push('/outsource/order')">← 返回加工单</el-button>
       <span class="page-title">合同模板设置</span>
     </div>
 

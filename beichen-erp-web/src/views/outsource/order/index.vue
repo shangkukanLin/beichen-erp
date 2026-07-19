@@ -70,10 +70,10 @@ onActivated(() => { loadOptions() })
         <el-table-column prop="totalAmount" label="金额" width="110" align="right">
           <template #default="{row}">{{ row.totalAmount ? Number(row.totalAmount).toFixed(2) : '-' }}</template>
         </el-table-column>
-        <el-table-column prop="planStartDate" label="计划开始" width="120" />
-        <el-table-column prop="planEndDate" label="计划完成" width="120">
+        <el-table-column label="计划开始" width="120"><template #default="{row}">{{ $fmtDate(row.planStartDate) }}</template></el-table-column>
+        <el-table-column label="计划完成" width="120">
           <template #default="{row}">
-            <span :style="{ color: row.planEndDate && new Date(row.planEndDate) < new Date() && row.status !== '已完成' && row.status !== '已取消' ? 'red' : '' }">{{ row.planEndDate || '-' }}</span>
+            <span :style="{ color: row.planEndDate && new Date(row.planEndDate) < new Date() && row.status !== '已完成' && row.status !== '已取消' ? 'red' : '' }">{{ $fmtDate(row.planEndDate) || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="最近交货" width="120">

@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted, onActivated, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+
+const router = useRouter()
 
 const query = reactive({ warehouseName: '', warehouseType: '' })
 const allData = ref<any[]>([])
@@ -34,6 +37,8 @@ function handleEdit(row: any) { Object.assign(form, defForm(), row); isEdit.valu
 async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('请输入仓库名称'); return }; submitLoading.value = true
   try { if (isEdit.value) { await request.put('/inventory/warehouse', form); ElMessage.success('已更新') } else { await request.post('/inventory/warehouse', form); ElMessage.success('已新增') }
     dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
+
+function handleDetail(row: any) { router.push(`/inventory/warehouse/detail/${row.id}`) }
 
 async function handleToggleStatus(row: any) {
   row.status = row.status === 1 ? 0 : 1
@@ -68,8 +73,8 @@ onActivated(() => loadData())
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="manager" label="负责人" width="80" />
         <el-table-column prop="phone" label="电话" width="120" />
-        <el-table-column label="操作" width="140" align="center">
-          <template #default="{row}"><el-button type="primary" link @click="handleEdit(row)">编辑</el-button><el-button type="warning" link @click="handleToggleStatus(row)">停用</el-button></template>
+        <el-table-column label="操作" width="155" align="center">
+          <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button type="primary" link @click="handleEdit(row)">编辑</el-button><el-button type="warning" link @click="handleToggleStatus(row)">停用</el-button></template>
         </el-table-column>
       </el-table>
 
@@ -80,8 +85,8 @@ onActivated(() => loadData())
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="manager" label="负责人" width="80" />
         <el-table-column prop="phone" label="电话" width="120" />
-        <el-table-column label="操作" width="140" align="center">
-          <template #default="{row}"><el-button type="primary" link @click="handleEdit(row)">编辑</el-button><el-button type="success" link @click="handleToggleStatus(row)">启用</el-button></template>
+        <el-table-column label="操作" width="155" align="center">
+          <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button type="primary" link @click="handleEdit(row)">编辑</el-button><el-button type="success" link @click="handleToggleStatus(row)">启用</el-button></template>
         </el-table-column>
       </el-table>
     </el-card>

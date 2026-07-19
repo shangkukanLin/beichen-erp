@@ -142,7 +142,18 @@ async function handleConfirm() {
 
 const defectVisible = ref(false); const defectSaving = ref(false)
 const defectItems = ref<any[]>([]); const defectWarehouseId = ref<number>()
-function openDefectReturn() { defectItems.value = (products.value || []).map((p: any) => ({ productId: p.id, productName: p.productName, quantity: undefined as any })); defectWarehouseId.value = undefined; defectVisible.value = true; loadDelWarehouses() }
+const defectWarehouseInfo = ref<any>(null)
+function openDefectReturn() { defectItems.value = (products.value || []).map((p: any) => ({ productId: p.id, productName: p.productName, quantity: undefined as any })); defectWarehouseId.value = undefined; defectWarehouseInfo.value = null; defectVisible.value = true; loadDelWarehouses() }
+function onDefectWhChange(whId: number) {
+  defectWarehouseId.value = whId
+  if (!whId) { defectWarehouseInfo.value = null; return }
+  // 查询该仓库该产品的库存
+  request.get<any,any>('/inventory/stock/page', { params: { pageSize: 500 } }).then((r: any) => {
+    const stocks = r?.records || []
+    const s = stocks.find((s:any) => s.warehouseId === whId && s.productName === defectItems.value[0]?.productName)
+    defectWarehouseInfo.value = s || { quantity: 0 }
+  }).catch(() => { defectWarehouseInfo.value = { quantity: 0 } })
+}
 // ===== 交货管理（Tab 2）=====
 const delSummary = ref<any>({})
 const delProducts = ref<any[]>([])
@@ -242,7 +253,7 @@ async function handleDefectReturn() {
   defectSaving.value = true
   try {
     for (const item of data) {
-      await request.post(`/outsource/order-delivery/return-defect/${form.id}`, { productName: item.productName, quantity: item.quantity })
+      await request.post(`/outsource/order-delivery/return-defect/${form.id}`, { productName: item.productName, quantity: item.quantity, warehouseId: defectWarehouseId.value })
     }
     ElMessage.success('退不良完成，物料已还回工厂委外仓库'); defectVisible.value = false; loadData()
   } catch (e: any) { ElMessage.error(e?.message || '退不良失败') } finally { defectSaving.value = false }
@@ -264,7 +275,6 @@ onMounted(() => { loadOptions(); loadData() })
   <div class="detail-page" v-loading="loading">
     <div class="page-header">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <el-button @click="router.push('/outsource/order')">返回列表</el-button>
         <span class="page-title">{{ form.code || '委外加工单详情' }}</span>
         <el-tag :type="form.status==='待确认'?'info':form.status==='生产中'?'primary':form.status==='已完成'?'success':'danger'" size="small">{{ form.status }}</el-tag>
       </div>
@@ -370,7 +380,7 @@ onMounted(() => { loadOptions(); loadData() })
           <el-button v-if="form.status==='生产中'" type="primary" size="small" @click="delOpenAdd">新增交货</el-button>
         </div>
         <el-table :data="deliveries" border stripe size="small" :row-class-name="({row}:{row:any})=>row.deliveryType==='退不良'?'defect-row':''">
-          <el-table-column prop="deliveryDate" label="交货日期" width="110" />
+          <el-table-column label="交货日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
           <el-table-column prop="productName" label="产品名称" min-width="120" />
           <el-table-column label="类型" width="80" align="center"><template #default="{row}"><el-tag v-if="row.deliveryType==='退不良'" type="warning" size="small">退不良</el-tag><span v-else style="color:#909399">—</span></template></el-table-column>
           <el-table-column label="收货仓库" width="120">
@@ -409,7 +419,9 @@ onMounted(() => { loadOptions(); loadData() })
     </template>
 
     <!-- 退不良弹窗 -->
-    <el-dialog v-model="defectVisible" title="退不良（拆分还料）" width="500px" :close-on-click-modal="false">
+    <el-dialog v-model="defectVisible" title="退不良（拆分还料）" width="550px" :close-on-click-modal="false">
+      <el-form-item label="退不良仓库" style="margin-bottom:12px"><el-select v-model="defectWarehouseId" filterable style="width:100%" placeholder="选择扣减的成品仓库" @change="onDefectWhChange"><el-option v-for="w in delWarehouseOptions" :key="w.id" :label="`${w.warehouseName} (${w.code})`" :value="w.id" /></el-select></el-form-item>
+      <div v-if="defectWarehouseInfo" style="margin-bottom:8px;font-size:13px;color:#606266">当前库存：<b :style="{color:defectWarehouseInfo.quantity>0?'#67c23a':'#f56c6c'}">{{ defectWarehouseInfo.quantity || 0 }}</b></div>
       <el-table :data="defectItems" border size="small">
         <el-table-column prop="productName" label="产品" min-width="200" />
         <el-table-column label="退不良数量" width="160"><template #default="{row}"><el-input v-model="row.quantity" size="small" type="number" placeholder="数量" /></template></el-table-column>

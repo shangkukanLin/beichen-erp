@@ -38,6 +38,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     private final OutsourceWarehouseStockMapper warehouseStockMapper;
     private final BomMapper bomMapper;
     private final SupplierMapper supplierMapper;
+    private final MaterialOrderMapper materialOrderMapper;
+    private final MaterialOrderItemMapper materialOrderItemMapper;
 
     @Override
     public Map<String, Object> getOrCreateReport(Long orderId) {
@@ -72,6 +74,14 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             deliveredByProduct.merge(pn, d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO, BigDecimal::add);
         }
 
+        // 获取该工厂的所有委外仓库ID
+        List<Long> factoryWhIds = new ArrayList<>();
+        if (order.getFactoryId() != null) {
+            List<OutsourceWarehouse> whs = warehouseMapper.selectList(
+                new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, order.getFactoryId()));
+            for (OutsourceWarehouse wh : whs) factoryWhIds.add(wh.getId());
+        }
+
         // 获取所有产品对应的项目ID，查 dev_bom
         Long projectId = null;
         for (OutsourceOrderProduct p : products) {
@@ -84,7 +94,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             List<Bom> bomList = bomMapper.selectList(
                 new LambdaQueryWrapper<Bom>().eq(Bom::getProjectId, projectId));
             for (Bom bom : bomList) {
-                Map<String, Object> item = buildMaterialRow(order, bom, deliveryList, products, deliveredByProduct);
+                Map<String, Object> item = buildMaterialRow(order, bom, deliveryList, products, deliveredByProduct, factoryWhIds);
                 items.add(item);
             }
         }
@@ -107,6 +117,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
                         item.put("goodReturnQty", si.getGoodReturnQty());
                         item.put("defectReturnQty", si.getDefectReturnQty());
                         item.put("remark", si.getRemark());
+                        if (si.getMaterialPrice() != null && si.getMaterialPrice().compareTo(BigDecimal.ZERO) > 0)
+                            item.put("unitPrice", si.getMaterialPrice());
                         // 重新计算
                         recalcItem(item);
                     }
@@ -122,7 +134,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     private Map<String, Object> buildMaterialRow(OutsourceOrder order, Bom bom,
                                                   List<OutsourceOrderDelivery> deliveryList,
                                                   List<OutsourceOrderProduct> products,
-                                                  Map<String, BigDecimal> deliveredByProduct) {
+                                                  Map<String, BigDecimal> deliveredByProduct,
+                                                  List<Long> factoryWhIds) {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("materialName", bom.getMaterialName());
         item.put("materialType", bom.getMaterialType());
@@ -132,12 +145,13 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         BigDecimal lossRate = bom.getLossRate() != null ? bom.getLossRate() : BigDecimal.ZERO;
         item.put("targetYieldRate", new BigDecimal(100).subtract(lossRate));
 
-        // 发料数量 = 该物料所有发料收发单的数量汇总
-        BigDecimal deliveredQty = sumDeliveryQuantity(order.getFactoryId(), bom.getMaterialName(), "发料");
+        // 发料数量 = 发到该工厂仓库的所有发料+收料的总和（含物料订单入库）
+        BigDecimal deliveredQty = sumDeliveryQuantity(factoryWhIds, bom.getMaterialName(), "发料")
+                .add(sumDeliveryQuantity(factoryWhIds, bom.getMaterialName(), "收料"));
         item.put("deliveredQuantity", deliveredQty);
 
-        // 退料数量 = 该物料所有退料收发单的数量汇总
-        BigDecimal returnedQty = sumDeliveryQuantity(order.getFactoryId(), bom.getMaterialName(), "退料");
+        // 退料数量 = 从该工厂仓库退出的退料总和
+        BigDecimal returnedQty = sumDeliveryQuantity(factoryWhIds, bom.getMaterialName(), "退料");
         item.put("returnedQuantity", returnedQty);
 
         // 出货消耗 = SUM(产品交货数 × BOM单套用量)
@@ -159,6 +173,10 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         item.put("shippedQuantity", shippedTotal);
 
         // 良品退料/不良退料默认=0（用户可修改）
+        // 物料单价：该工厂所有物料订单的加权平均
+        BigDecimal unitPrice = calcWeightedPrice(order.getFactoryId(), bom.getMaterialName());
+        item.put("unitPrice", unitPrice);
+
         item.put("goodReturnQty", BigDecimal.ZERO);
         item.put("defectReturnQty", BigDecimal.ZERO);
         item.put("remark", "");
@@ -167,14 +185,19 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         return item;
     }
 
-    /** 汇总某工厂某物料的收发数量 */
-    private BigDecimal sumDeliveryQuantity(Long factoryId, String materialName, String deliveryType) {
-        // 查出该工厂所有对应类型的收发单
-        List<OutsourceDelivery> deliveries = deliveryMapper.selectList(
-            new LambdaQueryWrapper<OutsourceDelivery>()
-                .eq(OutsourceDelivery::getFactoryId, factoryId)
+    /** 汇总某工厂仓库中某物料的收发数量 */
+    private BigDecimal sumDeliveryQuantity(List<Long> warehouseIds, String materialName, String deliveryType) {
+        if (warehouseIds == null || warehouseIds.isEmpty()) return BigDecimal.ZERO;
+        // 查出目标仓库属于该工厂的对应类型收发单
+        LambdaQueryWrapper<OutsourceDelivery> w = new LambdaQueryWrapper<OutsourceDelivery>()
                 .eq(OutsourceDelivery::getDeliveryType, deliveryType)
-                .eq(OutsourceDelivery::getStatus, "已确认"));
+                .eq(OutsourceDelivery::getStatus, "已确认");
+        if ("退料".equals(deliveryType)) {
+            w.in(OutsourceDelivery::getFromWarehouseId, warehouseIds);
+        } else {
+            w.in(OutsourceDelivery::getToWarehouseId, warehouseIds);
+        }
+        List<OutsourceDelivery> deliveries = deliveryMapper.selectList(w);
         BigDecimal total = BigDecimal.ZERO;
         for (OutsourceDelivery d : deliveries) {
             List<OutsourceDeliveryItem> items = deliveryItemMapper.selectList(
@@ -194,7 +217,24 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         BigDecimal delivered = toBD(item.get("deliveredQuantity"));
         BigDecimal shipped = toBD(item.get("shippedQuantity"));
         BigDecimal goodReturn = toBD(item.get("goodReturnQty"));
+        BigDecimal defectReturn = toBD(item.get("defectReturnQty"));
         BigDecimal targetYield = toBD(item.get("targetYieldRate"));
+
+        // 退料总计 = 良品退料 + 不良退料
+        BigDecimal totalReturn = goodReturn.add(defectReturn);
+        item.put("totalReturnQty", totalReturn);
+        // 缺失 = 发料数量 - 退料总计 - 出货消耗
+        item.put("missingQty", delivered.subtract(totalReturn).subtract(shipped));
+
+        // 最大超损 = (发料 - 良品退料) × (1 - 加工良率/100)
+        BigDecimal maxLossRate = BigDecimal.ONE.subtract(targetYield.divide(new BigDecimal(100), 6, RoundingMode.HALF_UP));
+        BigDecimal maxExcessLoss = delivered.subtract(goodReturn).multiply(maxLossRate);
+        if (maxExcessLoss.compareTo(BigDecimal.ZERO) < 0) maxExcessLoss = BigDecimal.ZERO;
+        item.put("maxExcessLossQty", maxExcessLoss.setScale(2, RoundingMode.HALF_UP));
+        // 超损总价 = 超损数量 × 物料单价
+        BigDecimal unitPrice = toBD(item.get("unitPrice"));
+        BigDecimal excessLoss = toBD(item.get("excessLossQty"));
+        item.put("excessLossAmount", excessLoss.multiply(unitPrice).setScale(2, RoundingMode.HALF_UP));
 
         // 生产良率 = (出货 + 良品退料) / 发料 × 100
         if (delivered.compareTo(BigDecimal.ZERO) > 0) {
@@ -375,5 +415,30 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             } catch (Exception e) { seq = 1; }
         }
         return "DEL-" + dateStr + String.format("%03d", seq);
+    }
+
+    /** 加权平均单价：该工厂所有物料订单中该物料的 总金额/总数量 */
+    private BigDecimal calcWeightedPrice(Long factoryId, String materialName) {
+        if (factoryId == null || materialName == null) return BigDecimal.ZERO;
+        try {
+            List<MaterialOrder> orders = materialOrderMapper.selectList(
+                new LambdaQueryWrapper<MaterialOrder>().eq(MaterialOrder::getSupplierId, factoryId));
+            BigDecimal totalAmount = BigDecimal.ZERO, totalQty = BigDecimal.ZERO;
+            for (MaterialOrder o : orders) {
+                List<MaterialOrderItem> items = materialOrderItemMapper.selectList(
+                    new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, o.getId()));
+                for (MaterialOrderItem it : items) {
+                    if (Objects.equals(materialName, it.getMaterialName())) {
+                        BigDecimal qty = it.getOrderQuantity() != null ? it.getOrderQuantity() : BigDecimal.ZERO;
+                        BigDecimal price = it.getUnitPrice() != null ? it.getUnitPrice() : BigDecimal.ZERO;
+                        totalAmount = totalAmount.add(qty.multiply(price));
+                        totalQty = totalQty.add(qty);
+                    }
+                }
+            }
+            if (totalQty.compareTo(BigDecimal.ZERO) > 0)
+                return totalAmount.divide(totalQty, 4, RoundingMode.HALF_UP);
+        } catch (Exception e) { log.warn("计算加权均价失败: {}", e.getMessage()); }
+        return BigDecimal.ZERO;
     }
 }

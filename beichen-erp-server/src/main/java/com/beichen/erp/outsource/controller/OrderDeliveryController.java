@@ -195,7 +195,7 @@ public class OrderDeliveryController {
         applyMaterialDeduction(order, matchedProduct, delivery.getQuantity(), delivery.getProductName());
         // 回滚旧入库 + 添加新入库
         if (old.getWarehouseId() != null) {
-            revertInventoryStock(old);
+            revertInventoryStock(old, order.getCode());
         }
         delivery.setId(id);
         deliveryMapper.updateById(delivery);
@@ -222,7 +222,7 @@ public class OrderDeliveryController {
         return R.ok();
     }
 
-    /** 退不良：拆分产品为BOM物料还回工厂委外仓库 */
+    /** 退不良：拆分产品为BOM物料还回工厂委外仓库，扣减所选成品仓库库存 */
     @PostMapping("/return-defect/{orderId}")
     @Transactional(rollbackFor = Exception.class)
     public R<Void> returnDefect(@PathVariable Long orderId, @RequestBody Map<String, Object> body) {
@@ -234,6 +234,9 @@ public class OrderDeliveryController {
 
         String productName = (String) body.get("productName");
         BigDecimal defectQty = new BigDecimal(body.get("quantity").toString());
+        Long warehouseId = body.get("warehouseId") != null
+                ? Long.valueOf(body.get("warehouseId").toString()) : null;
+        if (warehouseId == null) throw new BusinessException("请选择退不良仓库");
 
         // 匹配产品
         List<OutsourceOrderProduct> products = orderService.getProducts(orderId);
@@ -252,21 +255,40 @@ public class OrderDeliveryController {
         if (defectQty.compareTo(deliveredQty) > 0)
             throw new BusinessException("退不良数量(" + defectQty + ")不能超过已交数量(" + deliveredQty + ")");
 
+        // 校验仓库成品库存
+        LambdaQueryWrapper<InventoryWarehouseStock> stockW = new LambdaQueryWrapper<InventoryWarehouseStock>()
+                .eq(InventoryWarehouseStock::getWarehouseId, warehouseId)
+                .eq(InventoryWarehouseStock::getProductName, productName);
+        InventoryWarehouseStock invStock = inventoryStockMapper.selectOne(stockW);
+        BigDecimal stockQty = invStock != null && invStock.getQuantity() != null ? invStock.getQuantity() : BigDecimal.ZERO;
+        if (stockQty.compareTo(defectQty) < 0)
+            throw new BusinessException(productName + " 仓库库存不足(库存:" + stockQty + "，退:" + defectQty + ")");
+
         // 确定委外仓库
         Long whId = resolveOutsourceWarehouseId(order);
         if (whId == null) throw new BusinessException("工厂无委外仓库");
 
-        // 1. 创建退不良交货记录
+        // 1. 扣减成品库存（写入 inventory_stock_log）
+        Long productMaterialId = null;
+        Material productMat = materialMapper.selectOne(
+            new LambdaQueryWrapper<Material>().eq(Material::getName, productName));
+        if (productMat != null) productMaterialId = productMat.getId();
+        stockService.changeStock(warehouseId, productName, defectQty.negate(),
+            "委外退不良", order.getCode(), "退不良", productMaterialId, null);
+        log.info("退不良扣成品: {} (仓库={}) {} -> {}", productName, warehouseId, stockQty, stockQty.subtract(defectQty));
+
+        // 2. 创建退不良交货记录
         OutsourceOrderDelivery delivery = new OutsourceOrderDelivery();
         delivery.setOrderId(orderId);
         delivery.setProductName(productName);
         delivery.setQuantity(defectQty.negate());
         delivery.setDeliveryType("退不良");
+        delivery.setWarehouseId(warehouseId);
         delivery.setDeliveryDate(LocalDate.now());
         delivery.setRemark("退不良");
         deliveryMapper.insert(delivery);
 
-        // 2. 拆BOM → 物料还回工厂委外仓库
+        // 3. 拆BOM → 物料还回工厂委外仓库
         List<MaterialReq> materials = loadMaterialRequirements(matchedProduct);
         for (MaterialReq mat : materials) {
             if (mat.materialId() == null) continue;
@@ -510,7 +532,7 @@ public class OrderDeliveryController {
         }
         // 回滚收货入库
         if (delivery.getWarehouseId() != null) {
-            revertInventoryStock(delivery);
+            revertInventoryStock(delivery, order.getCode());
         }
     }
 
@@ -532,27 +554,18 @@ public class OrderDeliveryController {
         log.info("入库完成: warehouseId={}, productName={}, qty={}", delivery.getWarehouseId(), delivery.getProductName(), delivery.getQuantity());
     }
 
-    /** 回滚收货入库，直接扣减库存，允许扣到零以下 */
-    private void revertInventoryStock(OutsourceOrderDelivery delivery) {
+    /** 回滚收货入库（统一走 changeStock，自动写 inventory_stock_log） */
+    private void revertInventoryStock(OutsourceOrderDelivery delivery, String orderCode) {
         Long materialId = null;
         Material material = materialMapper.selectOne(
             new LambdaQueryWrapper<Material>().eq(Material::getName, delivery.getProductName()));
         if (material != null) materialId = material.getId();
 
-        LambdaQueryWrapper<InventoryWarehouseStock> w = new LambdaQueryWrapper<InventoryWarehouseStock>()
-                .eq(InventoryWarehouseStock::getWarehouseId, delivery.getWarehouseId());
-        if (materialId != null) {
-            w.eq(InventoryWarehouseStock::getMaterialId, materialId);
-        } else {
-            w.eq(InventoryWarehouseStock::getProductName, delivery.getProductName());
-        }
-        InventoryWarehouseStock stock = inventoryStockMapper.selectOne(w);
-        if (stock != null) {
-            stock.setQuantity(stock.getQuantity().subtract(delivery.getQuantity()));
-            inventoryStockMapper.updateById(stock);
-            log.info("回滚成品库存: warehouseId={}, product={}, qty=-{}",
-                    delivery.getWarehouseId(), delivery.getProductName(), delivery.getQuantity());
-        }
+        stockService.changeStock(delivery.getWarehouseId(), delivery.getProductName(),
+            delivery.getQuantity().negate(), "交货回滚", orderCode, "委外加工",
+            materialId, null);
+        log.info("回滚成品库存: warehouseId={}, product={}, qty=-{}",
+                delivery.getWarehouseId(), delivery.getProductName(), delivery.getQuantity());
     }
 
     /** 写入库存流水日志（变更前/后数量） */

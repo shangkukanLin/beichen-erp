@@ -23,5 +23,8 @@ public class CloseReportItem {
     private BigDecimal actualYieldRate;
     private BigDecimal yieldLoss;
     private BigDecimal excessLossQty;
+    private BigDecimal materialPrice;
     private String remark;
+    @TableField(fill = FieldFill.INSERT)
+    private Long companyId;
 }

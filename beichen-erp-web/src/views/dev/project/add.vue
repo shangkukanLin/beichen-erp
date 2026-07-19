@@ -62,7 +62,6 @@ onMounted(() => loadData())
 <template>
   <div class="add-page">
     <div class="page-header">
-      <el-button @click="goBack" :icon="'ArrowLeft'">返回列表</el-button>
       <span class="page-title">新增研发项目</span>
     </div>
 

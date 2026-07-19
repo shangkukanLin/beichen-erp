@@ -33,6 +33,7 @@ public class MaterialOrderController {
     private final OutsourceDeliveryMapper deliveryMapper;
     private final OutsourceDeliveryItemMapper deliveryItemMapper;
     private final OutsourceMaterialComponentMapper componentMapper;
+    private final OutsourceStockLogMapper stockLogMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -280,6 +281,14 @@ public class MaterialOrderController {
         if (factoryId == null) throw new BusinessException("订单未关联供应商");
         String handleType = body.get("handleType") != null ? body.get("handleType").toString() : "维修返还";
 
+        // 退不良仓库
+        Long whId = body.get("warehouseId") != null ? Long.valueOf(body.get("warehouseId").toString()) : null;
+        if (!"折现退款".equals(handleType) && whId == null) {
+            List<OutsourceWarehouse> whs = warehouseMapper.selectList(
+                new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, factoryId));
+            whId = whs.isEmpty() ? null : whs.get(0).getId();
+        }
+
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> items = (List<Map<String, Object>>) body.get("items");
         if (items == null || items.isEmpty()) throw new BusinessException("退料明细不能为空");
@@ -302,6 +311,18 @@ public class MaterialOrderController {
             if (orderItem.getReceivedQuantity().subtract(orderItem.getDefectReturnedQty()).compareTo(qty) < 0)
                 throw new BusinessException(orderItem.getMaterialName() + " 可退数量不足");
 
+            // 维修返还：校验仓库库存是否足够
+            if (!"折现退款".equals(handleType) && whId != null && orderItem.getMaterialId() != null) {
+                OutsourceWarehouseStock s = warehouseStockMapper.selectOne(
+                    new LambdaQueryWrapper<OutsourceWarehouseStock>()
+                        .eq(OutsourceWarehouseStock::getWarehouseId, whId)
+                        .eq(OutsourceWarehouseStock::getMaterialId, orderItem.getMaterialId())
+                        .eq(OutsourceWarehouseStock::getQualityType, "良品"));
+                BigDecimal stockQty = s != null && s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
+                if (stockQty.compareTo(qty) < 0)
+                    throw new BusinessException(orderItem.getMaterialName() + " 仓库库存不足(库存:" + stockQty + "，退:" + qty + ")");
+            }
+
             orderItem.setDefectReturnedQty(orderItem.getDefectReturnedQty().add(qty));
             itemMapper.updateById(orderItem);
 
@@ -316,16 +337,10 @@ public class MaterialOrderController {
             di.setHandleType(handleType);
             deliveryItemMapper.insert(di);
 
-            // 维修返还：从良品库存扣减；折现退款：不扣库存，仅记录
-            if (!"折现退款".equals(handleType)) {
-                Long whId = body.get("warehouseId") != null ? Long.valueOf(body.get("warehouseId").toString()) : null;
-                if (whId == null) {
-                    // 默认取供应商的第一个仓库
-                    List<OutsourceWarehouse> whs = warehouseMapper.selectList(
-                        new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, factoryId));
-                    whId = whs.isEmpty() ? null : whs.get(0).getId();
-                }
-                if (whId != null) updateStock(whId, orderItem.getMaterialId(), qty.negate(), "良品");
+            // 维修返还：扣减仓库良品库存+写流水；折现退款：不扣库存
+            if (!"折现退款".equals(handleType) && whId != null && orderItem.getMaterialId() != null) {
+                updateStockLog(whId, orderItem.getMaterialId(), qty.negate(), "良品",
+                    orderItem.getMaterialName(), "退不良扣回", o.getCode());
             }
         }
         return R.ok();
@@ -351,12 +366,45 @@ public class MaterialOrderController {
         if (o == null) throw new BusinessException("订单不存在");
         if ("已取消".equals(o.getStatus()) || "已完成".equals(o.getStatus()))
             throw new BusinessException("当前状态不可取消");
+        List<MaterialOrderItem> items = itemMapper.selectList(
+            new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
+        boolean hasDelivery = items.stream().anyMatch(it -> it.getReceivedQuantity() != null && it.getReceivedQuantity().compareTo(BigDecimal.ZERO) > 0);
+        if (hasDelivery) throw new BusinessException("该订单已有交货记录，不可取消");
         MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus("已取消");
         orderMapper.updateById(upd);
         return R.ok();
     }
 
     /** 查询该订单的交货记录 */
+    /** 查询该物料订单的物料发到了哪些委外仓库（用于退不良选择） */
+    @GetMapping("/{id}/defect-warehouses")
+    public R<List<Map<String, Object>>> defectWarehouses(@PathVariable Long id) {
+        MaterialOrder o = orderMapper.selectById(id);
+        if (o == null || o.getCode() == null) return R.ok(Collections.emptyList());
+        // 查询该订单关联的所有收发单，收集目标仓库（收料=收货入库）
+        List<OutsourceDelivery> deliveries = deliveryMapper.selectList(
+            new LambdaQueryWrapper<OutsourceDelivery>()
+                .like(OutsourceDelivery::getRemark, o.getCode())
+                .in(OutsourceDelivery::getDeliveryType, "收料", "发料")
+                .orderByDesc(OutsourceDelivery::getId));
+        // 去重仓库ID
+        Set<Long> whIds = new LinkedHashSet<>();
+        for (OutsourceDelivery d : deliveries) {
+            if (d.getToWarehouseId() != null) whIds.add(d.getToWarehouseId());
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Long whId : whIds) {
+            OutsourceWarehouse wh = warehouseMapper.selectById(whId);
+            if (wh != null) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("id", wh.getId()); m.put("warehouseName", wh.getWarehouseName());
+                m.put("factoryId", wh.getFactoryId());
+                result.add(m);
+            }
+        }
+        return R.ok(result);
+    }
+
     @GetMapping("/{id}/deliveries")
     public R<List<Map<String, Object>>> deliveries(@PathVariable Long id) {
         MaterialOrder o = orderMapper.selectById(id);
@@ -503,15 +551,48 @@ public class MaterialOrderController {
             .eq(OutsourceWarehouseStock::getMaterialId, materialId)
             .eq(OutsourceWarehouseStock::getQualityType, qualityType);
         OutsourceWarehouseStock stock = warehouseStockMapper.selectOne(w);
+        BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
+        BigDecimal after;
         if (stock == null) {
             stock = new OutsourceWarehouseStock();
             stock.setWarehouseId(warehouseId); stock.setMaterialId(materialId);
-            stock.setQualityType(qualityType); stock.setQuantity(delta);
+            stock.setQualityType(qualityType); after = delta;
+            stock.setQuantity(after);
             warehouseStockMapper.insert(stock);
         } else {
-            stock.setQuantity(stock.getQuantity().add(delta));
+            after = before.add(delta);
+            stock.setQuantity(after);
             warehouseStockMapper.updateById(stock);
         }
+    }
+
+    /** 更新库存并写入流水日志 */
+    private void updateStockLog(Long warehouseId, Long materialId, BigDecimal delta, String qualityType,
+                                 String materialName, String changeType, String orderCode) {
+        LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
+            .eq(OutsourceWarehouseStock::getWarehouseId, warehouseId)
+            .eq(OutsourceWarehouseStock::getMaterialId, materialId)
+            .eq(OutsourceWarehouseStock::getQualityType, qualityType);
+        OutsourceWarehouseStock stock = warehouseStockMapper.selectOne(w);
+        BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
+        BigDecimal after;
+        if (stock == null) {
+            stock = new OutsourceWarehouseStock();
+            stock.setWarehouseId(warehouseId); stock.setMaterialId(materialId);
+            stock.setQualityType(qualityType); after = delta;
+            stock.setQuantity(after);
+            warehouseStockMapper.insert(stock);
+        } else {
+            after = before.add(delta);
+            stock.setQuantity(after);
+            warehouseStockMapper.updateById(stock);
+        }
+        OutsourceStockLog logEntry = new OutsourceStockLog();
+        logEntry.setWarehouseId(warehouseId); logEntry.setMaterialId(materialId);
+        logEntry.setMaterialName(materialName); logEntry.setChangeType(changeType);
+        logEntry.setChangeQuantity(delta); logEntry.setBeforeQuantity(before);
+        logEntry.setAfterQuantity(after); logEntry.setRelatedOrderCode(orderCode);
+        stockLogMapper.insert(logEntry);
     }
 
     private String generateCode() {

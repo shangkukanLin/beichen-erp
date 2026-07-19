@@ -32,7 +32,7 @@ async function loadMaterials() {
   } finally { matLoading.value = false }
 }
 
-function goBack() { router.push('/outsource/warehouse') }
+
 
 onMounted(() => { loadWarehouse(); loadMaterials() })
 </script>
@@ -40,7 +40,6 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
 <template>
   <div class="detail-page">
     <div class="page-header">
-      <el-button @click="goBack">返回列表</el-button>
       <span class="page-title">{{ warehouse?.warehouseName || '委外仓库详情' }}</span>
     </div>
 

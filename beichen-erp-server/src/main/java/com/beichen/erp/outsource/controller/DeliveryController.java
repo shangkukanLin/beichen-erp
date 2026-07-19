@@ -138,6 +138,12 @@ public class DeliveryController {
                 .eq(InventoryWarehouse::getStatus, 1).orderByAsc(InventoryWarehouse::getId)));
     }
 
+    /** 查询某个工厂某个物料的加权平均单价 */
+    @GetMapping("/material-weighted-price")
+    public R<java.math.BigDecimal> materialWeightedPrice(@RequestParam Long factoryId, @RequestParam String materialName) {
+        return R.ok(deliveryService.calcWeightedPrice(factoryId, materialName));
+    }
+
     @SuppressWarnings("unchecked")
     private OutsourceDelivery parseDelivery(Map<String, Object> body) {
         // 兼容嵌套格式 {delivery:{...}, items:[...]}
@@ -196,6 +202,8 @@ public class DeliveryController {
                     }
                     // 质量类型，默认良品
                     item.setQualityType(map.get("qualityType") != null ? map.get("qualityType").toString() : "良品");
+                    if (map.get("unit_price") != null && !map.get("unit_price").toString().isBlank())
+                        item.setUnitPrice(new BigDecimal(map.get("unit_price").toString()));
                     items.add(item);
                 }
             }

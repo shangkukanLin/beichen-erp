@@ -51,7 +51,7 @@ onMounted(() => { loadFlow(); loadAccounts() })
         <el-table v-loading="loading" :data="data" border stripe>
           <el-table-column type="index" width="55" align="center"/>
           <el-table-column prop="flowNo" label="流水号" width="150"/>
-          <el-table-column prop="createTime" label="时间" width="170"/>
+          <el-table-column label="时间" width="170"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
           <el-table-column prop="accountName" label="账户" min-width="120"/>
           <el-table-column label="类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.flowType==='收款'||row.flowType==='其他收入'?'success':'danger'">{{row.flowType}}</el-tag></template></el-table-column>
           <el-table-column label="收入" width="120" align="right"><template #default="{row}"><span style="color:#67C23A">{{fmt(row.income)}}</span></template></el-table-column>

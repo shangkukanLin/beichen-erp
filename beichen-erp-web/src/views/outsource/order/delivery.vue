@@ -148,7 +148,6 @@ onMounted(loadData)
 <template>
   <div class="delivery-page" v-loading="loading">
     <div class="page-header">
-      <el-button @click="router.push(`/outsource/order/detail/${orderId}`)">← 返回加工单</el-button>
       <span class="page-title">交货管理</span>
     </div>
 
@@ -182,7 +181,7 @@ onMounted(loadData)
         <el-button type="primary" size="small" @click="openAdd">新增交货</el-button>
       </div>
       <el-table :data="deliveries" border stripe size="small">
-        <el-table-column prop="deliveryDate" label="交货日期" width="110" />
+        <el-table-column label="交货日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column prop="productName" label="产品名称" min-width="130" />
         <el-table-column label="收货仓库" width="120">
           <template #default="{row}">

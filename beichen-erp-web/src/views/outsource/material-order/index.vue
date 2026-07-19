@@ -88,7 +88,7 @@ onMounted(() => { loadData() })
         <el-table-column prop="code" label="订单号" width="180" />
         <el-table-column prop="supplierName" label="供应商" width="160" show-overflow-tooltip />
         <el-table-column label="下单日期" width="105" align="center">
-          <template #default="{row}">{{ row.createTime ? row.createTime.substring(0, 10) : '-' }}</template>
+          <template #default="{row}">{{ $fmtDate(row.createTime) || '-' }}</template>
         </el-table-column>
         <el-table-column label="物料名称" min-width="160" show-overflow-tooltip>
           <template #default="{row}">{{ (row.items || []).map((it: any) => it.materialName).filter(Boolean).join('、') || '-' }}</template>
@@ -99,7 +99,7 @@ onMounted(() => { loadData() })
         <el-table-column label="已收数量" width="90" align="center">
           <template #default="{row}"><span :style="{color: (row.items || []).reduce((s: number, it: any) => s + (it.receivedQuantity || 0), 0)>0?'#67c23a':''}">{{ (row.items || []).reduce((s: number, it: any) => s + (it.receivedQuantity || 0), 0) }}</span></template>
         </el-table-column>
-        <el-table-column prop="deliveryDate" label="交期" width="120" />
+        <el-table-column label="交期" width="120"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column label="状态" width="80"><template #default="{row}"><el-tag :type="row.status==='待确认'?'info':row.status==='收货中'?'warning':row.status==='已完成'?'success':'danger'" size="small">{{ row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="210" align="center" fixed="right">
           <template #default="{row}">

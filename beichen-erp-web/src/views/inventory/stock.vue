@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import request from '@/utils/request'
 import { getMaterialPage, type Material } from '@/api/material'
@@ -14,7 +14,9 @@ import {
 
 const activeTab = ref('stock')
 
-const warehouses = ref<{ id: number; warehouseName: string }[]>([])
+const warehouses = ref<{ id: number; warehouseName: string; warehouseType?: string }[]>([])
+// 成品库存只显示成品仓和不良仓
+const stockWarehouses = computed(() => warehouses.value.filter(w => w.warehouseType !== '辅料仓'))
 const materialOptions = ref<Material[]>([])
 
 const statusOptions = [
@@ -59,8 +61,11 @@ async function loadStock() {
     if (stockQuery.warehouseId) params.warehouseId = stockQuery.warehouseId
     if (stockQuery.productName) params.productName = stockQuery.productName
     const res = await getStockPage(params)
-    stockData.value = res?.records || []
-    stockPage.total = res?.total || 0
+    // 排除辅料仓
+    const fclWhIds = new Set(stockWarehouses.value.map(w => w.id))
+    const allRecords = res?.records || []
+    stockData.value = allRecords.filter((r:any) => fclWhIds.has(r.warehouseId))
+    stockPage.total = stockData.value.length
   } catch { stockData.value = [] } finally { stockLoading.value = false }
 }
 function stockQuery_() { stockPage.pageNum = 1; loadStock() }
@@ -317,7 +322,7 @@ onActivated(() => { loadWarehouses(); loadMaterials(); loadStock() })
           <el-form :inline="true" :model="stockQuery" class="query-form">
             <el-form-item label="仓库">
               <el-select v-model="stockQuery.warehouseId" placeholder="全部" clearable filterable style="width:160px">
-                <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
+                <el-option v-for="w in stockWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
               </el-select>
             </el-form-item>
             <el-form-item label="产品">
@@ -369,7 +374,7 @@ onActivated(() => { loadWarehouses(); loadMaterials(); loadStock() })
           </el-form>
           <el-table v-loading="logLoading" :data="logData" border stripe>
             <el-table-column type="index" label="序号" width="60" align="center" />
-            <el-table-column prop="createTime" label="时间" width="170" />
+            <el-table-column label="时间" width="170"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
             <el-table-column prop="changeType" label="类型" width="100" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.changeQuantity > 0 ? 'success' : 'danger'">{{ row.changeType }}</el-tag>
@@ -418,7 +423,7 @@ onActivated(() => { loadWarehouses(); loadMaterials(); loadStock() })
             <el-table-column type="index" label="序号" width="60" align="center" />
             <el-table-column prop="code" label="单号" min-width="150" />
             <el-table-column label="仓库" min-width="140"><template #default="{ row }">{{ warehouseName(row.warehouseId) }}</template></el-table-column>
-            <el-table-column prop="takeDate" label="盘点日期" width="120" align="center" />
+            <el-table-column label="盘点日期" width="120" align="center"><template #default="{row}">{{ $fmtDate(row.takeDate) }}</template></el-table-column>
             <el-table-column label="状态" width="90" align="center"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ row.status }}</el-tag></template></el-table-column>
             <el-table-column label="操作" width="230" align="center" fixed="right">
               <template #default="{ row }">
@@ -465,7 +470,7 @@ onActivated(() => { loadWarehouses(); loadMaterials(); loadStock() })
             <el-table-column prop="code" label="单号" min-width="150" />
             <el-table-column label="调出仓库" min-width="140"><template #default="{ row }">{{ warehouseName(row.fromWarehouseId) }}</template></el-table-column>
             <el-table-column label="调入仓库" min-width="140"><template #default="{ row }">{{ warehouseName(row.toWarehouseId) }}</template></el-table-column>
-            <el-table-column prop="transferDate" label="调拨日期" width="120" align="center" />
+            <el-table-column label="调拨日期" width="120" align="center"><template #default="{row}">{{ $fmtDate(row.transferDate) }}</template></el-table-column>
             <el-table-column label="状态" width="90" align="center"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ row.status }}</el-tag></template></el-table-column>
             <el-table-column label="操作" width="230" align="center" fixed="right">
               <template #default="{ row }">
@@ -512,7 +517,7 @@ onActivated(() => { loadWarehouses(); loadMaterials(); loadStock() })
             <el-table-column prop="code" label="单号" min-width="150" />
             <el-table-column label="仓库" min-width="140"><template #default="{ row }">{{ warehouseName(row.warehouseId) }}</template></el-table-column>
             <el-table-column label="类型" width="100" align="center"><template #default="{ row }"><el-tag :type="row.ioType === '其他入库' ? 'success' : 'warning'">{{ row.ioType }}</el-tag></template></el-table-column>
-            <el-table-column prop="ioDate" label="日期" width="120" align="center" />
+            <el-table-column label="日期" width="120" align="center"><template #default="{row}">{{ $fmtDate(row.ioDate) }}</template></el-table-column>
             <el-table-column label="状态" width="90" align="center"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ row.status }}</el-tag></template></el-table-column>
             <el-table-column label="操作" width="230" align="center" fixed="right">
               <template #default="{ row }">
