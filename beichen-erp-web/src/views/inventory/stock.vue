@@ -47,7 +47,7 @@ function statusType(s?: string) {
   if (s === '已作废') return 'danger'
   return ''
 }
-function fmt(v?: number) { return v === undefined || v === null ? '0.0000' : Number(v).toFixed(4) }
+function fmt(v?: number) { return v === undefined || v === null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
 
 // ============ 库存查询 ============
 const stockQuery = reactive({ warehouseId: undefined as number | undefined, productName: '' })

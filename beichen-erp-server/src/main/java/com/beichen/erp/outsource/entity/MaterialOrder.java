@@ -14,6 +14,10 @@ public class MaterialOrder {
     private Long id;
     private String code;
     private Long supplierId;
+    /** 订单类型：采购 / 委外 */
+    private String orderType;
+    /** 收货目标仓库（委外单可指定入总成厂仓，空则默认入供应商仓） */
+    private Long targetWarehouseId;
     private LocalDate deliveryDate;
     private String status;
     private String remark;

@@ -61,6 +61,7 @@ async function loadBomMaterials(idx: number, pid: number) {
     if (mats && Array.isArray(mats)) {
       const qty = Number(products.value[idx].quantity) || 1
       products.value[idx].materials = mats.map((m:any) => ({
+        materialId: m.materialId || null,
         materialName: m.materialName || '',
         materialType: m.materialType || '',
         unit: m.unit || '',
@@ -96,6 +97,8 @@ function handleRemoveUploadFile() { uploadFile.value = null }
 async function handleSubmit() {
   if (!form.factoryId) { ElMessage.warning('请选择加工厂'); return }
   if (products.value.length === 0) { ElMessage.warning('请添加加工产品'); return }
+  const missingProject = products.value.find((p: any) => !p.projectId)
+  if (missingProject) { ElMessage.warning('每个产品必须选择关联项目'); return }
   const zeroQty = products.value.find((p: any) => !p.quantity || Number(p.quantity) <= 0)
   if (zeroQty) { ElMessage.warning('加工产品数量必须大于0'); return }
   saving.value = true
@@ -114,6 +117,11 @@ async function handleSubmit() {
     })
     await request.post('/outsource/order', { ...cleanForm, products: submitProducts })
     ElMessage.success('加工单创建成功')
+    // 重置表单，避免 keep-alive 缓存残留数据
+    Object.assign(form, { factoryId: undefined, planStartDate: '', planEndDate: '', taxIncluded: 0, taxRate: '', remark: '', attachUrl: '', logisticsCompany: '', logisticsNo: '' })
+    products.value = []
+    uploadFile.value = null
+    ;(window as any).__orderNeedRefresh = true
     tabStore.removeTab(route.path)
     router.replace('/outsource/order')
   } catch (e: any) {
@@ -123,7 +131,7 @@ async function handleSubmit() {
 
 async function initPage() {
   await loadOptions()
-  addProduct()
+  if (products.value.length === 0) addProduct()
   // 从研发项目跳转过来时自动填充
   const qFactoryId = route.query.factoryId
   const qProjectId = route.query.projectId

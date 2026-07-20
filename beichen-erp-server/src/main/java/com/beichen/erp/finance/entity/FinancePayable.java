@@ -24,6 +24,9 @@ public class FinancePayable {
 
     private String sourceBillNo;
 
+    /** 来源记录ID（交货/收货记录），用于编辑删除时定位 */
+    private Long sourceId;
+
     private BigDecimal amount;
 
     private BigDecimal paidAmount;

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineOptions({ name: 'SupplierDetail' })
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -22,7 +22,7 @@ const form = reactive({
   code: '', name: '', supplierType: '', status: 1,
   contact: '', phone: '', address: '', remark: '',
   checkedTypes: [] as string[],
-  isSolution: false, isTouch: false,
+  creditPeriodMonths: undefined as any, creditPeriod: undefined as any,
 })
 const products = ref<any[]>([])
 const typeName = ref('')
@@ -39,6 +39,15 @@ function formatTypes(types: string): string {
 // 仓库/订单/缺料
 const warehouses = ref<any[]>([])
 const orders = ref<any[]>([])
+const materialOrders = ref<any[]>([])
+const activeStatusTab = ref('进行中')
+const ACTIVE_STATUSES = ['待确认', '生产中', '已确认', '收货中']
+const filteredOrders = computed(() => {
+  const all = [...orders.value, ...materialOrders.value]
+  if (activeStatusTab.value === '已完成') return all.filter(o => o.status === '已完成')
+  if (activeStatusTab.value === '已取消') return all.filter(o => o.status === '已取消')
+  return all.filter(o => ACTIVE_STATUSES.includes(o.status))
+})
 const whLoading = ref(false)
 const orderLoading = ref(false)
 const materialLoading = ref(false)
@@ -55,16 +64,6 @@ async function loadData() {
       typeTags.value = form.checkedTypes
       typeName.value = formatTypes(res.supplierType)
       hasFactory.value = form.checkedTypes.includes('factory')
-      // 解析方案商特有字段
-      if (res.contactInfo) {
-        try {
-          const ct = JSON.parse(res.contactInfo)
-          form.isSolution = ct.isSolution || false
-          form.isTouch = ct.isTouch || false
-        } catch { form.isSolution = false; form.isTouch = false }
-      } else {
-        form.isSolution = false; form.isTouch = false
-      }
     }
     const prods = await request.get<any,any>(`/supplier/${id}/products`)
     products.value = prods || []
@@ -83,15 +82,19 @@ async function loadWarehouses() {
 async function loadOrders() {
   orderLoading.value = true
   try {
-    const r = await request.get<any,any>('/outsource/order/page', { params: { factoryId: id, pageSize: 200 } })
-    orders.value = r?.records || []
-  } catch { orders.value = [] }
+    const [r1, r2] = await Promise.all([
+      request.get<any,any>('/outsource/order/page', { params: { factoryId: id, pageSize: 200 } }),
+      request.get<any,any>('/outsource/material-order/page', { params: { supplierId: id, pageSize: 200 } })
+    ])
+    orders.value = (r1?.records || []).map((o: any) => ({ ...o, _type: '加工单', _route: `/outsource/order/detail/${o.id}` }))
+    materialOrders.value = (r2?.records || []).map((o: any) => ({ ...o, _type: o.orderType || '物料单', _route: `/outsource/material-order/detail/${o.id}` }))
+  } catch { orders.value = []; materialOrders.value = [] }
   finally { orderLoading.value = false }
 }
 
 function onTabChange(tab: any) {
   if (tab === 'warehouse' && warehouses.value.length === 0) loadWarehouses()
-  if (tab === 'order' && orders.value.length === 0) loadOrders()
+  if (tab === 'order' && filteredOrders.value.length === 0) loadOrders()
   if (tab === 'material' && materialSummary.value.length === 0) loadMaterialSummary()
 }
 
@@ -110,9 +113,6 @@ async function handleSave() {
   saving.value = true
   try {
     const body: any = { ...form, supplierType: form.checkedTypes.join(',') }
-    if (form.checkedTypes.includes('solution')) {
-      body.contactInfo = JSON.stringify({ isSolution: form.isSolution, isTouch: form.isTouch })
-    }
     await request.put('/supplier', body)
     ElMessage.success('保存成功')
     loadData()
@@ -168,11 +168,15 @@ onMounted(loadData)
                   </el-checkbox-group>
                 </el-form-item>
               </el-col>
-              <!-- 方案商特有 -->
-              <template v-if="form.checkedTypes.includes('solution')">
-                <el-col :span="8"><el-form-item label="显示方案"><el-switch v-model="form.isSolution" /></el-form-item></el-col>
-                <el-col :span="8"><el-form-item label="触摸方案"><el-switch v-model="form.isTouch" /></el-form-item></el-col>
-              </template>
+              <el-col :span="24">
+                <el-form-item label="账期">
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <el-input-number v-model="form.creditPeriodMonths" :min="0" :max="24" placeholder="月" controls-position="right" style="width:90px" /><span>个月</span>
+                    <el-input-number v-model="form.creditPeriod" :min="0" :max="31" placeholder="天" controls-position="right" style="width:90px" /><span>天</span>
+                    <span style="color:#909399;font-size:12px">（收货/交货后多少天付款，默认当天）</span>
+                  </div>
+                </el-form-item>
+              </el-col>
               <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
             </el-row>
           </el-form>
@@ -217,30 +221,44 @@ onMounted(loadData)
       </el-tab-pane>
 
       <!-- 订单详细 -->
-      <el-tab-pane label="订单详细" name="order">
+      <el-tab-pane label="订单列表" name="order">
         <el-card shadow="never" class="order-table-card">
-          <el-table v-loading="orderLoading" :data="orders" border stripe>
-            <el-table-column prop="code" label="加工单号" min-width="160" show-overflow-tooltip />
-            <el-table-column prop="factoryName" label="加工厂" min-width="130" show-overflow-tooltip />
-            <el-table-column label="产品" width="70" align="center">
-              <template #default="{row}">{{ row.productCount || 0 }}项</template>
+          <div style="margin-bottom:12px">
+            <el-radio-group v-model="activeStatusTab" size="small">
+              <el-radio-button value="进行中">进行中</el-radio-button>
+              <el-radio-button value="已完成">已完成</el-radio-button>
+              <el-radio-button value="已取消">已取消</el-radio-button>
+            </el-radio-group>
+          </div>
+          <el-table v-loading="orderLoading" :data="filteredOrders" border stripe>
+            <el-table-column prop="code" label="订单号" min-width="160" show-overflow-tooltip />
+            <el-table-column label="类型" width="90" align="center">
+              <template #default="{row}"><el-tag :type="row._type==='加工单'?'primary':'warning'" size="small">{{ row._type }}</el-tag></template>
             </el-table-column>
-            <el-table-column prop="totalAmount" label="金额" width="100" align="right">
-              <template #default="{row}">{{ row.totalAmount ? Number(row.totalAmount).toFixed(2) : '-' }}</template>
-            </el-table-column>
-            <el-table-column prop="planEndDate" label="计划完成" width="110" />
-            <el-table-column prop="status" label="状态" width="80" align="center">
+            <el-table-column label="产品/物料" min-width="120" show-overflow-tooltip>
               <template #default="{row}">
-                <el-tag :type="row.status==='待确认'?'info':row.status==='生产中'?'primary':row.status==='已完成'?'success':'danger'" size="small">{{ row.status }}</el-tag>
+                <template v-if="row._type==='加工单'">{{ row.productCount || 0 }}项</template>
+                <template v-else>{{ (row.items || []).map((it:any)=>it.materialName).join('、') || '-' }}</template>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="80" align="center" fixed="right">
+            <el-table-column label="金额" width="90" align="right">
+              <template #default="{row}">{{ row.totalAmount ? Number(row.totalAmount).toFixed(2) : '-' }}</template>
+            </el-table-column>
+            <el-table-column label="日期" width="100" align="center">
+              <template #default="{row}">{{ $fmtDate(row._type==='加工单'?row.planEndDate:row.deliveryDate) }}</template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="80" align="center">
               <template #default="{row}">
-                <el-button type="primary" link @click="router.push(`/outsource/order/detail/${row.id}`)">查看</el-button>
+                <el-tag :type="row.status==='待确认'?'info':row.status==='生产中'||row.status==='收货中'?'primary':row.status==='已完成'?'success':'danger'" size="small">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="70" align="center" fixed="right">
+              <template #default="{row}">
+                <el-button type="primary" link @click="router.push(row._route)">查看</el-button>
               </template>
             </el-table-column>
           </el-table>
-          <div v-if="orders.length===0 && !orderLoading" style="color:#909399;text-align:center;padding:40px">暂无订单</div>
+          <div v-if="filteredOrders.length===0 && !orderLoading" style="color:#909399;text-align:center;padding:40px">暂无订单</div>
         </el-card>
       </el-tab-pane>
 

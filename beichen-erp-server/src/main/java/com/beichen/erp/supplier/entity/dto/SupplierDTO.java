@@ -31,6 +31,10 @@ public class SupplierDTO {
 
     private Long relatedSupplierId;
 
+    private Integer creditPeriodMonths;
+
+    private Integer creditPeriod;
+
     private String brand;
 
     private String materialType;

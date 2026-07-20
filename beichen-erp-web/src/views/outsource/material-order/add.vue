@@ -12,17 +12,25 @@ const isEdit = ref(false)
 const editId = route.params.id ? Number(route.params.id) : 0
 const saving = ref(false)
 
-const form = reactive({ supplierId: undefined as any, deliveryDate: '', remark: '' })
+const form = reactive({ orderType: '采购', supplierId: undefined as any, targetWarehouseId: undefined as any, deliveryDate: '', remark: '' })
 const items = ref<any[]>([])
 const supplierOptions = ref<any[]>([])
 const materialOptions = ref<any[]>([])
 const bomTypes = ref<string[]>([])
 const itemTypes = ref<Record<number, string>>({})
 
+async function loadSuppliers() {
+  try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch { }
+}
+
 async function loadOptions() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType: 'material', pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch { }
+  await loadSuppliers()
   try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); materialOptions.value = r?.records || [] } catch { }
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (r || []).map((t: any) => t.typeName) } catch { }
+}
+
+function onOrderTypeChange() {
+  form.supplierId = undefined
 }
 
 // 根据选择的类型筛选物料
@@ -53,7 +61,14 @@ async function handleSubmit() {
   saving.value = true
   try {
     if (isEdit.value) { await request.put(`/outsource/material-order/${editId}`, { ...form, items: items.value }); ElMessage.success('已更新') }
-    else { await request.post('/outsource/material-order', { ...form, items: items.value }); ElMessage.success('已创建') }
+    else {
+      await request.post('/outsource/material-order', { ...form, items: items.value }); ElMessage.success('已创建')
+      // 重置表单，避免 keep-alive 缓存残留数据
+      Object.assign(form, { orderType: '采购', supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '' })
+      items.value = []
+      onOrderTypeChange()
+      ;(window as any).__materialOrderNeedRefresh = true
+    }
     tabStore.removeTab(route.fullPath)
     if (isEdit.value) { router.replace(`/outsource/material-order/detail/${editId}`) }
     else { router.replace('/outsource/material-order') }
@@ -63,6 +78,10 @@ async function handleSubmit() {
 async function initFromQuery() {
   const q = route.query
   console.log('[initFromQuery] query:', JSON.stringify(q))
+  if (q.orderType === '委外') {
+    form.orderType = '委外'
+    await loadSuppliers()
+  }
   // 供应商：如果不在已加载选项中（可能不是 material 类型），主动拉取并加入选项
   if (q.supplierId) {
     form.supplierId = Number(q.supplierId)
@@ -105,7 +124,8 @@ onMounted(async () => {
     try {
       const r = await request.get<any, any>(`/outsource/material-order/${editId}`)
       if (r) {
-        Object.assign(form, { supplierId: r.supplierId, deliveryDate: r.deliveryDate, remark: r.remark })
+        Object.assign(form, { orderType: r.orderType || '采购', supplierId: r.supplierId, targetWarehouseId: r.targetWarehouseId, deliveryDate: r.deliveryDate, remark: r.remark })
+        await loadSuppliers()
         items.value = (r.items || []).map((it: any) => ({ materialType: it.materialType, materialId: it.materialId, materialName: it.materialName, unit: it.unit, orderQuantity: it.orderQuantity, unitPrice: it.unitPrice, remark: it.remark }))
       }
     } catch { ElMessage.error('加载订单失败') }
@@ -124,7 +144,13 @@ onMounted(async () => {
       <template #header><span style="font-weight:600">订单信息</span></template>
       <el-form :model="form" label-width="90px" size="small">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="供应商"><el-select v-model="form.supplierId" filterable clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="订单类型">
+            <el-radio-group v-model="form.orderType" @change="onOrderTypeChange">
+              <el-radio value="采购">采购</el-radio>
+              <el-radio value="委外">委外</el-radio>
+            </el-radio-group>
+          </el-form-item></el-col>
+          <el-col :span="8"><el-form-item :label="form.orderType==='委外'?'加工厂':'供应商'"><el-select v-model="form.supplierId" filterable clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="交期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
         </el-row>
@@ -153,7 +179,7 @@ onMounted(async () => {
         </el-table-column>
         <el-table-column label="单位" width="60"><template #default="{row}">{{ row.unit }}</template></el-table-column>
         <el-table-column label="数量" width="110"><template #default="{row}"><el-input v-model="row.orderQuantity" size="small" type="number" /></template></el-table-column>
-        <el-table-column label="单价" width="100"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" /></template></el-table-column>
+        <el-table-column :label="form.orderType==='委外'?'加工费单价':'单价'" width="100"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" /></template></el-table-column>
         <el-table-column label="备注" min-width="100"><template #default="{row}"><el-input v-model="row.remark" size="small" /></template></el-table-column>
         <el-table-column label="操作" width="70" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>
       </el-table>

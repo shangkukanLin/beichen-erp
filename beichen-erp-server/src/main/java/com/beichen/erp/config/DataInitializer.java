@@ -419,9 +419,69 @@ public class DataInitializer implements ApplicationRunner {
                 jdbcTemplate.execute("CREATE TABLE outsource_other_io_item (" +
                     "id BIGINT AUTO_INCREMENT PRIMARY KEY, other_io_id BIGINT," +
                     "material_id BIGINT, material_name VARCHAR(100), material_type VARCHAR(50)," +
-                    "unit VARCHAR(20), quantity DECIMAL(18,4), remark VARCHAR(500)," +
-                    "company_id BIGINT, INDEX idx_other_io_id (other_io_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+                    "unit VARCHAR(20), quantity DECIMAL(18,4), unit_price DECIMAL(18,4) DEFAULT 0," +
+                    "remark VARCHAR(500), company_id BIGINT, INDEX idx_other_io_id (other_io_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
                 log.info("已创建 outsource_other_io / outsource_other_io_item 表");
+            }
+            // 已有表补加 unit_price 列
+            Integer cnt2 = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_other_io_item' AND COLUMN_NAME='unit_price'",
+                Integer.class);
+            if (cnt2 == null || cnt2 == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_other_io_item ADD COLUMN unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价' AFTER quantity");
+                log.info("已为 outsource_other_io_item 添加 unit_price 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_material_order 添加 order_type / target_warehouse_id 列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_material_order' AND COLUMN_NAME='order_type'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_material_order ADD COLUMN order_type VARCHAR(10) DEFAULT '采购' COMMENT '订单类型：采购/委外' AFTER supplier_id");
+                jdbcTemplate.execute("ALTER TABLE outsource_material_order ADD COLUMN target_warehouse_id BIGINT DEFAULT NULL COMMENT '收货目标仓库' AFTER order_type");
+                log.info("已为 outsource_material_order 添加 order_type / target_warehouse_id 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // supplier 添加账期列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='supplier' AND COLUMN_NAME='credit_period_months'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE supplier ADD COLUMN credit_period_months INT DEFAULT NULL COMMENT '账期(月)' AFTER related_supplier_id");
+                jdbcTemplate.execute("ALTER TABLE supplier ADD COLUMN credit_period INT DEFAULT NULL COMMENT '账期(天)' AFTER credit_period_months");
+                log.info("已为 supplier 添加账期列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // finance_payable 添加 source_id 列（关联来源记录ID，用于编辑/删除时定位）
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='finance_payable' AND COLUMN_NAME='source_id'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE finance_payable ADD COLUMN source_id BIGINT DEFAULT NULL COMMENT '来源记录ID' AFTER source_bill_no");
+                log.info("已为 finance_payable 添加 source_id 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // finance_payment 添加 attach_url 列（付款凭证）
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='finance_payment' AND COLUMN_NAME='attach_url'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE finance_payment ADD COLUMN attach_url VARCHAR(500) DEFAULT NULL COMMENT '付款凭证' AFTER remark");
+                log.info("已为 finance_payment 添加 attach_url 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // dev_bom 添加 material_id 列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dev_bom' AND COLUMN_NAME='material_id'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE dev_bom ADD COLUMN material_id BIGINT DEFAULT NULL COMMENT '关联物料ID' AFTER supplier_id");
+                log.info("已为 dev_bom 添加 material_id 列");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
         // material 添加 company_id 列
@@ -751,6 +811,7 @@ public class DataInitializer implements ApplicationRunner {
             {26L, 6L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2},
             {27L, 6L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 3},
             {28L, 6L, "资金流水", "menu", "/finance/cashflow", "FinanceCashflow", "TrendCharts", 4},
+            {53L, 6L, "付款管理", "menu", "/finance/payment", "FinancePayment", "Money", 5},
             {40L, 7L, "智能管理", "menu", "/system/smart", "SystemSmart", "Cpu", 1},
             {41L, 7L, "系统设置", "catalog", "", "", "Tools", 2},
             {29L, 41L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 1},

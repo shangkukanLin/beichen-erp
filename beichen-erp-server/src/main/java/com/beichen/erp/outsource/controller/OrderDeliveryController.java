@@ -3,6 +3,7 @@ package com.beichen.erp.outsource.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
@@ -51,6 +52,7 @@ public class OrderDeliveryController {
     private final OutsourceWarehouseMapper warehouseMapper;
     private final OutsourceWarehouseStockMapper warehouseStockMapper;
     private final OutsourceStockLogMapper stockLogMapper;
+    private final PayableHelper payableHelper;
 
     /** 获取某加工单的所有交货记录 */
     @GetMapping("/list/{orderId}")
@@ -154,9 +156,21 @@ public class OrderDeliveryController {
         } else {
             log.warn("未选择收货仓库，跳过入库");
         }
+        // 按实际交货生成应付（金额 = 交货数 × 加工单价）
+        createDeliveryPayable(order, matchedProduct, delivery);
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("canProceed", true);
         return R.ok(resp);
+    }
+
+    /** 交货生成应付 */
+    private void createDeliveryPayable(OutsourceOrder order, OutsourceOrderProduct product, OutsourceOrderDelivery delivery) {
+        BigDecimal price = product.getUnitPrice() != null ? product.getUnitPrice() : BigDecimal.ZERO;
+        BigDecimal amount = delivery.getQuantity().multiply(price);
+        if (amount.compareTo(BigDecimal.ZERO) == 0) return;
+        payableHelper.createPayable(order.getFactoryId(), "委外加工交货", order.getCode(), delivery.getId(),
+            amount, delivery.getDeliveryDate() != null ? delivery.getDeliveryDate() : LocalDate.now(),
+            "交货 - " + order.getCode() + " - " + delivery.getProductName());
     }
 
     /** 修改交货记录 — 回滚旧库存 + 应用新库存 */
@@ -203,6 +217,17 @@ public class OrderDeliveryController {
             addInventoryStock(delivery);
         }
 
+        // 同步应付：删旧重建（已付款的会被阻止并抛异常）
+        BigDecimal price = matchedProduct.getUnitPrice() != null ? matchedProduct.getUnitPrice() : BigDecimal.ZERO;
+        BigDecimal amount = delivery.getQuantity().multiply(price);
+        if (amount.compareTo(BigDecimal.ZERO) == 0) {
+            payableHelper.deleteBySourceId(id);
+        } else {
+            payableHelper.replaceBySourceId(order.getFactoryId(), "委外加工交货", order.getCode(), id, amount,
+                delivery.getDeliveryDate() != null ? delivery.getDeliveryDate() : LocalDate.now(),
+                "交货 - " + order.getCode() + " - " + delivery.getProductName());
+        }
+
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("canProceed", true);
         return R.ok(resp);
@@ -218,6 +243,8 @@ public class OrderDeliveryController {
         if (order != null) {
             revertDeliveryStock(order, old);
         }
+        // 同步删除应付（已付款的会被阻止并抛异常）
+        payableHelper.deleteBySourceId(id);
         deliveryMapper.deleteById(id);
         return R.ok();
     }
@@ -287,6 +314,9 @@ public class OrderDeliveryController {
         delivery.setDeliveryDate(LocalDate.now());
         delivery.setRemark("退不良");
         deliveryMapper.insert(delivery);
+
+        // 退不良冲减应付（负数交货 → 负数应付）
+        createDeliveryPayable(order, matchedProduct, delivery);
 
         // 3. 拆BOM → 物料还回工厂委外仓库
         List<MaterialReq> materials = loadMaterialRequirements(matchedProduct);

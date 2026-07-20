@@ -16,7 +16,9 @@ import com.beichen.erp.outsource.mapper.OutsourceWarehouseStockMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryMapper;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
+import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
 import com.beichen.erp.outsource.entity.OutsourceDelivery;
 import com.beichen.erp.outsource.entity.OutsourceDeliveryItem;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +45,7 @@ public class OutsourceOrderController {
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final OutsourceDeliveryMapper deliveryMapper;
     private final OutsourceDeliveryItemMapper deliveryItemMapper;
+    private final OutsourceMaterialComponentMapper componentMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -162,6 +165,15 @@ public class OutsourceOrderController {
             }
             m.put("stockQuantity", stock);
             m.put("shortage", demand.subtract(stock).max(BigDecimal.ZERO));
+            // 是否有子物料组成（有则可"去委外"）
+            boolean hasComps = false;
+            if (materialId != null) {
+                Long cnt = componentMapper.selectCount(
+                    new LambdaQueryWrapper<OutsourceMaterialComponent>()
+                        .eq(OutsourceMaterialComponent::getParentMaterialId, materialId));
+                hasComps = cnt != null && cnt > 0;
+            }
+            m.put("hasComponents", hasComps);
             result.add(m);
         }
         Map<String, Object> resp = new java.util.LinkedHashMap<>();

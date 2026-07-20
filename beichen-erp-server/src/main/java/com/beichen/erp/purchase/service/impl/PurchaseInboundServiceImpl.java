@@ -35,6 +35,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
     private final SupplierMapper supplierMapper;
     private final InventoryWarehouseStockService stockService;
     private final FinancePayableMapper payableMapper;
+    private final com.beichen.erp.finance.service.PayableHelper payableHelper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long supplierId, String code, int pageNum, int pageSize) {
@@ -173,7 +174,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
         fp.setAmount(inbound.getTotalAmount());
         fp.setPaidAmount(BigDecimal.ZERO);
         fp.setUnpaidAmount(inbound.getTotalAmount());
-        fp.setDueDate(inbound.getInboundDate() != null ? inbound.getInboundDate().plusMonths(1) : null);
+        fp.setDueDate(payableHelper.calcDueDate(supplierMapper.selectById(inbound.getSupplierId()), inbound.getInboundDate()));
         fp.setStatus("未结清");
         payableMapper.insert(fp);
         // 3) 更新入库单状态

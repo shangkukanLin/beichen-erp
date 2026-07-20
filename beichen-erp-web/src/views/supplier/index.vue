@@ -71,7 +71,8 @@ const formRef = ref<FormInstance>()
 const defaultForm = (): SupplierDTO => ({
   code: '', name: '', supplierType: currentType.value, status: 1,
   contact: '', phone: '', address: '', remark: '',
-  hasDisplay: 0, hasTouch: 0, relatedSupplierId: undefined
+  relatedSupplierId: undefined,
+  creditPeriodMonths: undefined, creditPeriod: undefined
 })
 const form = reactive<SupplierDTO>(defaultForm())
 const isEdit = ref(false)
@@ -239,7 +240,7 @@ onActivated(() => { loadData() })
     </el-card>
 
     <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="620px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="700px" :close-on-click-modal="false">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-row :gutter="16">
           <el-col :span="12">
@@ -276,16 +277,17 @@ onActivated(() => { loadData() })
               <el-input v-model="form.address" placeholder="地址" />
             </el-form-item>
           </el-col>
+          <el-col :span="24">
+            <el-form-item label="账期">
+              <div style="display:flex;align-items:center;gap:6px">
+                <el-input-number v-model="form.creditPeriodMonths" :min="0" :max="24" placeholder="月" controls-position="right" style="width:90px" /><span>个月</span>
+                <el-input-number v-model="form.creditPeriod" :min="0" :max="31" placeholder="天" controls-position="right" style="width:90px" /><span>天</span>
+                <span style="color:#909399;font-size:12px">（收货/交货后多少天付款，默认当天）</span>
+              </div>
+            </el-form-item>
+          </el-col>
         </el-row>
 
-        <!-- 方案商特有 -->
-        <template v-if="currentType==='solution'">
-          <el-divider>方案信息</el-divider>
-          <el-row :gutter="16">
-            <el-col :span="8"><el-form-item label="显示方案"><el-switch v-model="form.hasDisplay" :active-value="1" :inactive-value="0" /></el-form-item></el-col>
-            <el-col :span="8"><el-form-item label="触摸方案"><el-switch v-model="form.hasTouch" :active-value="1" :inactive-value="0" /></el-form-item></el-col>
-          </el-row>
-        </template>
         <el-form-item label="备注">
           <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="备注" />
         </el-form-item>

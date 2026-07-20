@@ -79,6 +79,8 @@ public class ClearController {
                 "DELETE FROM outsource_order WHERE company_id = " + companyId,
                 "DELETE FROM outsource_contract_template WHERE company_id = " + companyId,
                 "DELETE FROM outsource_warehouse_stock WHERE company_id = " + companyId,
+                "DELETE FROM outsource_other_io_item WHERE company_id = " + companyId,
+                "DELETE FROM outsource_other_io WHERE company_id = " + companyId,
                 "DELETE FROM outsource_warehouse WHERE company_id = " + companyId,
                 "DELETE FROM outsource_material WHERE company_id = " + companyId,
                 "DELETE FROM dev_drawing WHERE company_id = " + companyId,

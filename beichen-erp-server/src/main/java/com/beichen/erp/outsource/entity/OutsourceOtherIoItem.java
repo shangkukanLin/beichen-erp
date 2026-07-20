@@ -15,6 +15,7 @@ public class OutsourceOtherIoItem {
     private String materialType;
     private String unit;
     private BigDecimal quantity;
+    private BigDecimal unitPrice;
     private String remark;
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;

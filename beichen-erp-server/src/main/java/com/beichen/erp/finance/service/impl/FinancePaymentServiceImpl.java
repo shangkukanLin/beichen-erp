@@ -78,6 +78,9 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         FinancePayment u = new FinancePayment(); u.setId(payment.getId()); u.setAmount(total); paymentMapper.updateById(u);
     }
 
+    @Override
+    public void updateAttach(FinancePayment payment) { paymentMapper.updateById(payment); }
+
     @Override @Transactional(rollbackFor = Exception.class)
     public void cancel(Long id) {
         FinancePayment old = paymentMapper.selectById(id);

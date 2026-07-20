@@ -191,9 +191,9 @@ export interface SupplierVO {
   phone?: string
   address?: string
   status: number
-  hasDisplay?: number
-  hasTouch?: number
   relatedSupplierId?: number | string
+  creditPeriodMonths?: number
+  creditPeriod?: number
   brand?: string
   materialType?: string
   remark?: string
@@ -210,9 +210,9 @@ export interface SupplierDTO {
   phone?: string
   address?: string
   status: number
-  hasDisplay?: number
-  hasTouch?: number
   relatedSupplierId?: number | string
+  creditPeriodMonths?: number
+  creditPeriod?: number
   brand?: string
   materialType?: string
   remark?: string
@@ -307,11 +307,11 @@ export interface ProjectQueryParams {
 
 export interface BomVO {
   id?: number | string; projectId?: number; supplierId?: number; spec?: string; materialName: string
-  unit?: string; quantityPerSet?: number; lossRate?: number
+  materialId?: number; unit?: string; quantityPerSet?: number; lossRate?: number
   materialType?: string; remark?: string
 }
 
-export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialName: string; spec?: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; materialType?: string; remark?: string }
+export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialId?: number; materialName: string; spec?: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; materialType?: string; remark?: string }
 
 export interface BugVO {
   id?: number | string; projectId?: number; code?: string; title: string

@@ -36,6 +36,12 @@ public class Supplier {
 
     private Long relatedSupplierId;
 
+    /** 账期（月） */
+    private Integer creditPeriodMonths;
+
+    /** 账期（天） */
+    private Integer creditPeriod;
+
     private String remark;
 
     @TableField(fill = FieldFill.INSERT)

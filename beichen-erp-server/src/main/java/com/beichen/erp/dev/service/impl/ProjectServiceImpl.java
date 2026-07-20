@@ -242,9 +242,11 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     /**
      * 项目进入小批量阶段时，将关联的"研发中"产品状态改为"正常"
      */
+    private static final java.util.Set<String> PRODUCTION_STATUSES = java.util.Set.of("小批量", "结项");
+
     private void syncProductStatus(Project project) {
         if (project == null || project.getId() == null) return;
-        if (!"小批量".equals(project.getStatus())) return;
+        if (!PRODUCTION_STATUSES.contains(project.getStatus())) return;
 
         Material linked = materialMapper.selectOne(
             new LambdaQueryWrapper<Material>()
@@ -254,7 +256,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         if (linked != null) {
             linked.setStatus("正常");
             materialMapper.updateById(linked);
-            log.info("项目进入小批量，产品「{}」状态：研发中 → 正常", linked.getName());
+            log.info("项目进入{}，产品「{}」状态：研发中 → 正常", project.getStatus(), linked.getName());
         }
     }
 

@@ -21,6 +21,7 @@ public class FinancePayment {
     private BigDecimal amount;
     private String status;
     private String remark;
+    private String attachUrl;
     @TableField(fill = FieldFill.INSERT) private Long companyId;
     private LocalDateTime createTime;
     @TableField(fill = FieldFill.INSERT_UPDATE) private LocalDateTime updateTime;

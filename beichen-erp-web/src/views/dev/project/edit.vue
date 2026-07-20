@@ -119,7 +119,7 @@ async function loadBom() {
   // 平铺：父行 + 子行（缩进只读）
   const result: any[] = []
   for (const b of items) {
-    result.push({ _isChild: false, materialName: b.materialName, supplierId: b.supplierId, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })
+    result.push({ _isChild: false, materialName: b.materialName, materialId: b.materialId, supplierId: b.supplierId, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })
     const subs = childrenMap[b.materialName] || []
     for (const s of subs) {
       result.push({ _isChild: true, materialName: s.childName, materialType: s.childType, quantityPerSet: s.quantity, lossRate: s.lossRate, remark: s.remark })
@@ -128,11 +128,12 @@ async function loadBom() {
   bomList.value = result
 }
 
-function addBomRow() { bomList.value.push({ _isChild: false, materialName: '', spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialType: '', remark: '', supplierId: undefined }) }
+function addBomRow() { bomList.value.push({ _isChild: false, materialName: '', materialId: undefined, spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialType: '', remark: '', supplierId: undefined }) }
 async function onBomMaterialChange(materialName: string, row: any) {
   if (!materialName || !row.materialType) return
   const matched = getMaterialsByType(row.materialType).find((m: any) => m.materialName === materialName)
   if (!matched) return
+  row.materialId = matched.id || undefined
   if (matched.spec) row.spec = matched.spec
   if (matched.unit) row.unit = matched.unit
   if (matched.supplierIds) {

@@ -8,15 +8,15 @@ import { exportMaterialOrderPdf } from '@/api/contract-template'
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
 const loading = ref(true)
-const order = reactive({ id: 0, code: '', status: '', supplierId: undefined as any, supplierName: '', deliveryDate: '', finishTime: '', remark: '', attachUrl: '' })
+const order = reactive({ id: 0, code: '', status: '', orderType: '采购', supplierId: undefined as any, supplierName: '', deliveryDate: '', finishTime: '', remark: '', attachUrl: '' })
 const items = ref<any[]>([])
 const activeTab = ref('detail')
 const saving = ref(false)
 const supplierOptions = ref<any[]>([])
 
 async function loadOptions() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType: 'material', pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch { }
-  // 确保当前供应商在选项中（即使不是 material 类型）
+  try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch { }
+  // 确保当前供应商在选项中（即使不是对应类型）
   if (order.supplierId && !supplierOptions.value.some((s: any) => s.id === order.supplierId)) {
     try { const s = await request.get<any, any>(`/supplier/${order.supplierId}`); if (s) supplierOptions.value.unshift(s) } catch {}
   }
@@ -82,7 +82,7 @@ async function handleSaveAttach() {
   try {
     const fd = new FormData(); fd.append('file', uploadFile.value)
     const res = await request.post<any, string>('/dev/file/upload', fd)
-    await request.put(`/outsource/material-order/${id}`, { supplierId: order.supplierId, deliveryDate: order.deliveryDate, remark: order.remark, attachUrl: res as unknown as string, items: items.value })
+    await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, attachUrl: res as unknown as string, items: items.value })
     ElMessage.success('合同文件已保存'); uploadFile.value = null; await loadAll()
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) } finally { attachSaving.value = false }
 }
@@ -101,10 +101,11 @@ async function loadAll() {
       request.get<any, any>(`/outsource/material-order/${id}/deliveries`)
     ])
     if (o) {
-      Object.assign(order, { id: o.id, code: o.code, status: o.status, supplierId: o.supplierId, supplierName: o.supplierName, deliveryDate: o.deliveryDate || '', finishTime: o.finishTime || '', remark: o.remark || '', attachUrl: o.attachUrl || '' })
+      Object.assign(order, { id: o.id, code: o.code, status: o.status, orderType: o.orderType || '采购', supplierId: o.supplierId, supplierName: o.supplierName, deliveryDate: o.deliveryDate || '', finishTime: o.finishTime || '', remark: o.remark || '', attachUrl: o.attachUrl || '' })
     }
     items.value = o?.items || []
     deliveries.value = dList || []
+    loadOptions()
   } finally { loading.value = false }
 }
 
@@ -162,7 +163,7 @@ async function handleDefectReturn() {
 async function handleSave() {
   saving.value = true
   try {
-    await request.put(`/outsource/material-order/${id}`, { supplierId: order.supplierId, deliveryDate: order.deliveryDate, remark: order.remark, items: items.value })
+    await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, items: items.value })
     ElMessage.success('保存成功')
     await loadAll()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
@@ -210,7 +211,8 @@ onMounted(async () => { await loadOptions(); loadAll() })
         <el-form :model="order" label-width="90px" size="small">
           <el-row :gutter="12">
             <el-col :span="8"><el-form-item label="订单号"><el-input :model-value="order.code" readonly class="readonly-input" /></el-form-item></el-col>
-            <el-col :span="8"><el-form-item label="供应商">
+            <el-col :span="8"><el-form-item label="订单类型"><el-input :model-value="order.orderType" readonly class="readonly-input" /></el-form-item></el-col>
+            <el-col :span="8"><el-form-item :label="order.orderType==='委外'?'加工厂':'供应商'">
               <el-select v-model="order.supplierId" filterable style="width:100%" :disabled="order.status!=='待确认'" @focus="loadOptions">
                 <el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" />
               </el-select>

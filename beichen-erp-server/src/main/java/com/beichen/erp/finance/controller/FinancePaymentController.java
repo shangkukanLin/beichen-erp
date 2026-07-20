@@ -48,6 +48,16 @@ public class FinancePaymentController {
     @PutMapping("/{id}/cancel")
     public R<Void> cancel(@PathVariable Long id) { service.cancel(id); return R.ok(); }
 
+    /** 更新付款凭证 */
+    @PutMapping("/{id}/attach")
+    public R<Void> updateAttach(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        FinancePayment u = new FinancePayment();
+        u.setId(id);
+        u.setAttachUrl(body.get("attachUrl") != null ? body.get("attachUrl").toString() : "");
+        service.updateAttach(u);
+        return R.ok();
+    }
+
     @SuppressWarnings("unchecked")
     private FinancePayment parsePayment(Map<String, Object> body) {
         Map<String, Object> d = body.containsKey("payment") ? (Map<String, Object>) body.get("payment") : body;
@@ -57,6 +67,7 @@ public class FinancePaymentController {
         if (d.get("paymentDate") != null && !d.get("paymentDate").toString().isBlank())
             r.setPaymentDate(LocalDate.parse(d.get("paymentDate").toString()));
         r.setRemark((String) d.get("remark"));
+        r.setAttachUrl((String) d.get("attachUrl"));
         return r;
     }
 

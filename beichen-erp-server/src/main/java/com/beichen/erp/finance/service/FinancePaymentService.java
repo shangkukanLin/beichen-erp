@@ -14,4 +14,5 @@ public interface FinancePaymentService {
     void create(FinancePayment payment, List<FinancePaymentItem> items);
     void cancel(Long id);
     void audit(Long id);
+    void updateAttach(FinancePayment payment);
 }

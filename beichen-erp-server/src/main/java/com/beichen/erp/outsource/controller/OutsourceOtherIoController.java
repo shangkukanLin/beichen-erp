@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.inventory.mapper.InventoryWarehouseMapper;
+import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +30,8 @@ public class OutsourceOtherIoController {
     private final OutsourceWarehouseStockMapper stockMapper;
     private final OutsourceStockLogMapper stockLogMapper;
     private final OutsourceMaterialMapper materialMapper;
+    private final InventoryWarehouseMapper inventoryWarehouseMapper;
+    private final InventoryWarehouseStockService inventoryStockService;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -126,10 +130,16 @@ public class OutsourceOtherIoController {
     }
 
     private void applyStock(OutsourceOtherIo io, List<OutsourceOtherIoItem> items) {
+        boolean isInv = isInventoryWarehouse(io.getWarehouseId());
         String changeType = "入库".equals(io.getIoType()) ? "其他入库" : "其他出库";
         for (OutsourceOtherIoItem it : items) {
             BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = "入库".equals(io.getIoType()) ? qty : qty.negate();
+            if (isInv) {
+                inventoryStockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
+                    changeType, io.getCode(), "其他出入库", it.getMaterialId(), null);
+                continue;
+            }
             // 确保物料存在
             Long matId = it.getMaterialId();
             if (matId == null && it.getMaterialName() != null) {
@@ -172,10 +182,16 @@ public class OutsourceOtherIoController {
     }
 
     private void revertStock(OutsourceOtherIo io, List<OutsourceOtherIoItem> items) {
+        boolean isInv = isInventoryWarehouse(io.getWarehouseId());
         String changeType = "入库".equals(io.getIoType()) ? "取消入库" : "取消出库";
         for (OutsourceOtherIoItem it : items) {
             BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = "入库".equals(io.getIoType()) ? qty.negate() : qty;
+            if (isInv) {
+                inventoryStockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
+                    changeType, io.getCode(), "其他出入库", it.getMaterialId(), null);
+                continue;
+            }
             Long matId = it.getMaterialId();
             if (matId == null && it.getMaterialName() != null)
                 matId = materialMapper.findIdByName(it.getMaterialName());
@@ -226,6 +242,8 @@ public class OutsourceOtherIoController {
                     it.setUnit((String) map.get("unit"));
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank())
                         it.setQuantity(new BigDecimal(map.get("quantity").toString()));
+                    if (map.get("unit_price") != null && !map.get("unit_price").toString().isBlank())
+                        it.setUnitPrice(new BigDecimal(map.get("unit_price").toString()));
                     it.setRemark((String) map.get("remark"));
                     list.add(it);
                 }
@@ -245,5 +263,9 @@ public class OutsourceOtherIoController {
             try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
         }
         return pat + String.format("%03d", seq);
+    }
+
+    private boolean isInventoryWarehouse(Long warehouseId) {
+        return warehouseId != null && inventoryWarehouseMapper.selectById(warehouseId) != null;
     }
 }

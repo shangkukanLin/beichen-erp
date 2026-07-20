@@ -194,6 +194,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'finance/cashflow', name: 'FinanceCashflow', component: () => import('@/views/finance/cashflow.vue'), meta: { title: '资金流水', requiresAuth: true } },
       { path: 'finance/receipt', name: 'FinanceReceipt', component: () => import('@/views/finance/receipt.vue'), meta: { title: '收款管理', requiresAuth: true } },
       { path: 'finance/payment', name: 'FinancePayment', component: () => import('@/views/finance/payment.vue'), meta: { title: '付款管理', requiresAuth: true } },
+      { path: 'finance/payment/supplier/:id', name: 'FinancePaymentSupplier', component: () => import('@/views/finance/payment-supplier.vue'), meta: { title: '供应商应付详情', requiresAuth: true } },
+      { path: 'finance/supplier-settlement/:id', name: 'SupplierSettlement', component: () => import('@/views/finance/supplier-settlement.vue'), meta: { title: '供应商清算', requiresAuth: true } },
       // 占位路由：匹配菜单中有但尚未开发的路由
       {
         path: ':pathMatch(.*)*',

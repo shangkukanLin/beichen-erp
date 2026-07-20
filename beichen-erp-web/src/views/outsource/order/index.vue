@@ -40,8 +40,10 @@ async function handleCancel(row: any) {
 
 function refresh() { loadOptions(); loadData() }
 onMounted(refresh)
-// 切回时只刷新引用数据（工厂下拉），列表数据保持不变
-onActivated(() => { loadOptions() })
+onActivated(() => {
+  loadOptions()
+  if ((window as any).__orderNeedRefresh) { (window as any).__orderNeedRefresh = false; loadData() }
+})
 </script>
 
 <template>
@@ -62,8 +64,10 @@ onActivated(() => { loadOptions() })
       </el-tabs>
 
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%">
-        <el-table-column prop="code" label="单号" min-width="170" show-overflow-tooltip />
-        <el-table-column prop="factoryName" label="加工厂" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="code" label="单号" min-width="120" show-overflow-tooltip />
+        <el-table-column label="加工厂" min-width="160" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
+        </el-table-column>
         <el-table-column label="产品" min-width="200" show-overflow-tooltip>
           <template #default="{row}">{{ row.productNames || (row.productCount || 0) + '项' }}</template>
         </el-table-column>

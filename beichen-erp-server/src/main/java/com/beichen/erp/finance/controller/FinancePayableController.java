@@ -8,7 +8,11 @@ import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -57,5 +61,38 @@ public class FinancePayableController {
                 .eq(FinancePayable::getSupplierId, supplierId)
                 .ne(FinancePayable::getStatus, "已结清")
                 .orderByDesc(FinancePayable::getId)));
+    }
+
+    /** 按供应商汇总应付：总额/已付/未付/逾期 */
+    @GetMapping("/supplier-summary")
+    public R<?> supplierSummary() {
+        List<FinancePayable> all = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
+                .ne(FinancePayable::getStatus, "已作废"));
+        Map<Long, Map<String, Object>> map = new LinkedHashMap<>();
+        java.time.LocalDate today = java.time.LocalDate.now();
+        for (FinancePayable p : all) {
+            if (p.getSupplierId() == null) continue;
+            Map<String, Object> m = map.computeIfAbsent(p.getSupplierId(), k -> {
+                Map<String, Object> x = new LinkedHashMap<>();
+                x.put("supplierId", k);
+                x.put("supplierName", p.getSupplierName());
+                x.put("totalAmount", BigDecimal.ZERO);
+                x.put("paidAmount", BigDecimal.ZERO);
+                x.put("unpaidAmount", BigDecimal.ZERO);
+                x.put("overdueAmount", BigDecimal.ZERO);
+                return x;
+            });
+            BigDecimal amount = p.getAmount() != null ? p.getAmount() : BigDecimal.ZERO;
+            BigDecimal paid = p.getPaidAmount() != null ? p.getPaidAmount() : BigDecimal.ZERO;
+            BigDecimal unpaidAmt = p.getUnpaidAmount() != null ? p.getUnpaidAmount() : BigDecimal.ZERO;
+            m.put("totalAmount", ((BigDecimal) m.get("totalAmount")).add(amount));
+            m.put("paidAmount", ((BigDecimal) m.get("paidAmount")).add(paid));
+            m.put("unpaidAmount", ((BigDecimal) m.get("unpaidAmount")).add(unpaidAmt));
+            if (unpaidAmt.compareTo(BigDecimal.ZERO) > 0 && p.getDueDate() != null && p.getDueDate().isBefore(today))
+                m.put("overdueAmount", ((BigDecimal) m.get("overdueAmount")).add(unpaidAmt));
+        }
+        List<Map<String, Object>> list = new ArrayList<>(map.values());
+        list.sort((a, b) -> ((BigDecimal) b.get("unpaidAmount")).compareTo((BigDecimal) a.get("unpaidAmount")));
+        return R.ok(list);
     }
 }

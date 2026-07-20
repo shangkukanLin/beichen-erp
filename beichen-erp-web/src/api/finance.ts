@@ -9,7 +9,7 @@ export interface FinanceCashflow { id?: number; flowNo?: string; accountId?: num
 
 export interface FinanceReceipt { id?: number; code?: string; customerId?: number; customerName?: string; accountId?: number; accountName?: string; receiptDate?: string; amount?: number; status?: string; remark?: string }
 export interface FinanceReceiptItem { id?: number; receiptId?: number; receivableId?: number; receivableBillNo?: string; thisAmount?: number; remark?: string }
-export interface FinancePayment { id?: number; code?: string; supplierId?: number; supplierName?: string; accountId?: number; accountName?: string; paymentDate?: string; amount?: number; status?: string; remark?: string }
+export interface FinancePayment { id?: number; code?: string; supplierId?: number; supplierName?: string; accountId?: number; accountName?: string; paymentDate?: string; amount?: number; status?: string; remark?: string; attachUrl?: string }
 export interface FinancePaymentItem { id?: number; paymentId?: number; payableId?: number; payableBillNo?: string; thisAmount?: number; remark?: string }
 export interface FinanceBill { id?: number; billNo?: string; billType?: string; partnerId?: number; partnerName?: string; periodStart?: string; periodEnd?: string; totalAmount?: number; paidAmount?: number; unpaidAmount?: number; status?: string }
 export interface FinanceBillItem { id?: number; sourceBillType?: string; sourceBillNo?: string; amount?: number; paidAmount?: number; unpaidAmount?: number; dueDate?: string }

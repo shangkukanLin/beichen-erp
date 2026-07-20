@@ -39,6 +39,14 @@ function goPurchase(row: any) {
   p.set('unit', row.unit || ''); p.set('quantity', String(s.shortage || 0))
   router.push('/outsource/material-order/add?' + p.toString())
 }
+function goOutsource(row: any) {
+  const s = getStock(row.materialName)
+  const p = new URLSearchParams(); p.set('orderType', '委外')
+  if (s.materialId) p.set('materialId', String(s.materialId))
+  p.set('materialName', row.materialName || ''); p.set('materialType', row.materialType || '')
+  p.set('unit', row.unit || ''); p.set('quantity', String(s.shortage || 0))
+  router.push('/outsource/material-order/add?' + p.toString())
+}
 
 const form = reactive({
   id: undefined as any, code: '', status: '',
@@ -336,7 +344,7 @@ onMounted(() => { loadOptions(); loadData() })
             <el-table-column label="损耗率(%)" width="85"><template #default="{row}"><el-input v-model="row.lossRate" size="small" :disabled="form.status!=='待确认'" /></template></el-table-column>
             <el-table-column label="已发料" width="80"><template #default="{row}"><span :style="{color: Number(row.deliveredQuantity||0)>0?'#67c23a':''}">{{ row.deliveredQuantity || 0 }}</span></template></el-table-column>
             <el-table-column label="备注" min-width="80"><template #default="{row}"><el-input v-model="row.remark" size="small" :disabled="form.status!=='待确认'" /></template></el-table-column>
-            <el-table-column label="操作" width="80" align="center" v-if="form.status==='生产中'"><template #default="{row}"><el-button v-if="Number(getStock(row.materialName).shortage||0) > 0" type="warning" link size="small" @click="goPurchase(row)">去采购</el-button></template></el-table-column>
+            <el-table-column label="操作" width="110" align="center" v-if="form.status==='生产中'"><template #default="{row}"><template v-if="Number(getStock(row.materialName).shortage||0) > 0"><el-button type="warning" link size="small" @click="goPurchase(row)">去采购</el-button><el-button v-if="getStock(row.materialName).hasComponents" type="primary" link size="small" @click="goOutsource(row)">去委外</el-button></template></template></el-table-column>
           </el-table>
           <div v-else style="color:#909399;font-size:13px;margin-top:8px">暂无 BOM 物料</div>
         </div>

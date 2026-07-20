@@ -47,7 +47,7 @@ const dialogVisible = ref(false); const dialogTitle = ref(''); const saving = re
 const form = reactive({
   id: undefined as any, name: '', contact: '', phone: '', address: '', remark: '',
   supplierType: '', checkedTypes: [] as string[], status: 1,
-  isSolution: false, isTouch: false
+  creditPeriodMonths: undefined as any, creditPeriod: undefined as any
 })
 const isEdit = ref(false)
 
@@ -56,7 +56,8 @@ const isType = computed(() => (type: string) => form.checkedTypes.includes(type)
 
 function resetForm() {
   Object.assign(form, { id: undefined, name: '', contact: '', phone: '', address: '', remark: '',
-    supplierType: '', checkedTypes: [], status: 1, isSolution: false, isTouch: false })
+    supplierType: '', checkedTypes: [], status: 1,
+    creditPeriodMonths: undefined, creditPeriod: undefined })
 }
 
 function handleAdd() {
@@ -72,14 +73,9 @@ function handleEdit(row: any) {
     id: row.id, name: row.name || '', contact: row.contact || '', phone: row.phone || '',
     address: row.address || '', remark: row.remark || '', supplierType: row.supplierType || '',
     checkedTypes: types,
-    status: row.status ?? 1
+    status: row.status ?? 1,
+    creditPeriodMonths: row.creditPeriodMonths, creditPeriod: row.creditPeriod
   })
-  // 方案商特有字段
-  if (types.includes('solution')) {
-    const ct = row.contactInfo ? JSON.parse(row.contactInfo || '{}') : {}
-    form.isSolution = ct.isSolution || false
-    form.isTouch = ct.isTouch || false
-  }
   isEdit.value = true; dialogTitle.value = '编辑供应商'
   dialogVisible.value = true
 }
@@ -96,9 +92,6 @@ async function handleSubmit() {
   saving.value = true
   try {
     const body: any = { ...form, supplierType: form.checkedTypes.join(',') }
-    if (form.checkedTypes.includes('solution')) {
-      body.contactInfo = JSON.stringify({ isSolution: form.isSolution, isTouch: form.isTouch })
-    }
     if (isEdit.value) { await request.put('/supplier', body); ElMessage.success('已更新') }
     else { await request.post('/supplier', body); ElMessage.success('已添加') }
     dialogVisible.value = false; loadData()
@@ -167,7 +160,7 @@ onActivated(loadData)
       <div class="pagination"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleQuery" /></div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="560px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="640px" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px" size="small">
         <el-form-item label="类型" required>
           <el-checkbox-group v-model="form.checkedTypes">
@@ -179,13 +172,14 @@ onActivated(loadData)
         <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" type="textarea" :rows="2" /></el-form-item>
 
-        <!-- 方案商特有 -->
-        <template v-if="form.checkedTypes.includes('solution')">
-          <el-form-item label="显示方案"><el-switch v-model="form.isSolution" /></el-form-item>
-          <el-form-item label="触摸方案"><el-switch v-model="form.isTouch" /></el-form-item>
-        </template>
-
         <el-form-item label="状态"><el-select v-model="form.status" style="width:100%"><el-option label="合作中" :value="1" /><el-option label="已停用" :value="0" /></el-select></el-form-item>
+        <el-form-item label="账期">
+          <div style="display:flex;align-items:center;gap:6px">
+            <el-input-number v-model="form.creditPeriodMonths" :min="0" :max="24" placeholder="月" controls-position="right" style="width:90px" /><span>个月</span>
+            <el-input-number v-model="form.creditPeriod" :min="0" :max="31" placeholder="天" controls-position="right" style="width:90px" /><span>天</span>
+            <span style="color:#909399;font-size:12px">（收货/交货后多少天付款，默认当天）</span>
+          </div>
+        </el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" :loading="saving" @click="handleSubmit">确定</el-button></template>
