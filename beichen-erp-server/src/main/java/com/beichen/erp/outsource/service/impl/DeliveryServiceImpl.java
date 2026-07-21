@@ -10,6 +10,7 @@ import com.beichen.erp.outsource.entity.OutsourceWarehouseStock;
 import com.beichen.erp.outsource.entity.MaterialOrder;
 import com.beichen.erp.outsource.entity.MaterialOrderItem;
 import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
+import com.beichen.erp.inventory.mapper.InventoryWarehouseMapper;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
@@ -42,6 +43,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final MaterialOrderMapper materialOrderMapper;
     private final MaterialOrderItemMapper materialOrderItemMapper;
     private final InventoryWarehouseStockMapper inventoryStockMapper;
+    private final InventoryWarehouseMapper inventoryWarehouseMapper;
     private final InventoryWarehouseStockService inventoryStockService;
     private final JdbcTemplate jdbcTemplate;
 
@@ -92,27 +94,24 @@ public class DeliveryServiceImpl implements DeliveryService {
             itemMapper.insert(item);
             BigDecimal qty = item.getQuantity();
             if ("发料".equals(delivery.getDeliveryType())) {
-                // 扣减来源仓库（我方仓库 = inventory_warehouse_stock）
+                // 扣减来源仓库（我方仓或委外仓）
                 if (delivery.getFromWarehouseId() != null) {
-                    deductInventoryStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty, item.getMaterialName(), item.getQualityType(), delivery.getCode());
+                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getMaterialName(), item.getQualityType(), "发料出", delivery.getCode());
                 }
-                // 增加目标仓库（委外仓库）
+                // 增加目标仓库（委外仓）
                 if (delivery.getToWarehouseId() != null)
                     updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
                             item.getMaterialName(), "发料入", delivery.getCode());
             } else if ("调拨".equals(delivery.getDeliveryType())) {
                 // 来源仓库-，目标仓库+
                 if (delivery.getFromWarehouseId() != null)
-                    updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
-                            item.getMaterialName(), "调拨出", delivery.getCode());
+                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getMaterialName(), item.getQualityType(), "调拨出", delivery.getCode());
                 if (delivery.getToWarehouseId() != null)
-                    updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
-                            item.getMaterialName(), "调拨入", delivery.getCode());
+                    adjustSourceStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getMaterialName(), item.getQualityType(), "调拨入", delivery.getCode());
             } else {
                 String type = delivery.getDeliveryType();
                 if (delivery.getFromWarehouseId() != null)
-                    updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
-                            item.getMaterialName(), type != null ? type : "退料", delivery.getCode());
+                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getMaterialName(), item.getQualityType(), type != null ? type : "退料", delivery.getCode());
             }
         }
         // 发料时同步加工单物料已发数量
@@ -367,6 +366,17 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
         }
         return "DEL-" + dateStr + String.format("%03d", seq);
+    }
+
+    /** 调整库存：自动判断仓库类型（我方仓用 changeStock，委外仓用 updateStock） */
+    private void adjustSourceStock(Long warehouseId, Long materialId, BigDecimal delta, String materialName,
+                                    String qualityType, String changeType, String orderCode) {
+        // 检查是否为我方仓
+        if (inventoryWarehouseMapper.selectById(warehouseId) != null) {
+            inventoryStockService.changeStock(warehouseId, materialName, delta, changeType, orderCode, "物料收发", materialId, null);
+        } else {
+            updateStock(warehouseId, materialId, delta, qualityType, materialName, changeType, orderCode);
+        }
     }
 
     /** 扣减进销存仓库库存（统一走 changeStock，自动写 inventory_stock_log） */

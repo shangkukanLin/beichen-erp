@@ -68,7 +68,7 @@ function closeTab(path: string, e: MouseEvent) {
 }
 
 function handleClosePage() {
-  tabStore.removeTab(route.path)
+  tabStore.removeTab(route.fullPath)
   const next = tabStore.tabs.length > 0 ? tabStore.activePath || '/dashboard' : '/dashboard'
   router.push(next)
 }

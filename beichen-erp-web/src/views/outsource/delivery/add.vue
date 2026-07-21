@@ -20,6 +20,8 @@ const factoryOptions = ref<any[]>([])
 const outsourceWarehouses = ref<any[]>([])
 const targetOutsourceWarehouses = ref<any[]>([])
 const inventoryWarehouses = ref<any[]>([])
+const allOutsourceWarehouses = ref<any[]>([])
+const combinedFromWhs = computed(() => [...inventoryWarehouses.value, ...allOutsourceWarehouses.value])
 const materialOptions = ref<any[]>([])
 const items = ref<any[]>([])
 const uploadFile = ref<File | null>(null)
@@ -27,6 +29,9 @@ const uploadFile = ref<File | null>(null)
 const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any) => m.materialType).filter(Boolean))] as string[])
 function materialsByType(type: string) { return materialOptions.value.filter((m: any) => m.materialType === type) }
 
+async function loadAllOutsourceWarehouses() {
+  try { const r = await request.get<any,any>('/outsource/warehouse/page',{params:{pageSize:500}}); allOutsourceWarehouses.value = r?.records||[] } catch {}
+}
 async function loadFactories() {
   try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType:'factory', pageSize:200 } }); factoryOptions.value = r?.records || [] } catch {}
 }
@@ -78,7 +83,7 @@ function handleRemoveUploadFile() { uploadFile.value = null }
 async function handleSubmit() {
   if (!form.factoryId) { ElMessage.warning(form.deliveryType === '调拨' ? '请选择来源工厂' : '请选择工厂'); return }
   if (form.deliveryType === '调拨' && !form.supplierId) { ElMessage.warning('请选择目标工厂'); return }
-  if (form.deliveryType === '发料' && !form.fromWarehouseId) { ElMessage.warning('请选择我方仓库'); return }
+  if (form.deliveryType === '发料' && !form.fromWarehouseId) { ElMessage.warning('请选择发出仓库'); return }
   if (form.deliveryType === '发料' && !form.toWarehouseId) { ElMessage.warning('请选择目标仓库'); return }
   if (form.deliveryType !== '发料' && !form.fromWarehouseId) { ElMessage.warning('请选择来源仓库'); return }
   if (form.deliveryType === '调拨' && !form.toWarehouseId) { ElMessage.warning('请选择目标仓库'); return }
@@ -90,12 +95,13 @@ async function handleSubmit() {
     if (uploadFile.value) { const fd = new FormData(); fd.append('file', uploadFile.value); const res = await request.post<any, string>('/dev/file/upload', fd); form.attachUrl = res as unknown as string }
     await request.post('/outsource/delivery', { ...form, items: items.value })
     ElMessage.success('收发单已确认，库存已更新')
+    ;(window as any).__deliveryNeedRefresh = true
     tabStore.removeTab(route.path)
     router.replace('/outsource/delivery')
   } finally { saving.value = false }
 }
 
-onMounted(() => { loadFactories(); loadMaterials(); loadInventoryWarehouses() })
+onMounted(() => { loadFactories(); loadAllOutsourceWarehouses(); loadMaterials(); loadInventoryWarehouses() })
 </script>
 
 <template>
@@ -110,12 +116,12 @@ onMounted(() => { loadFactories(); loadMaterials(); loadInventoryWarehouses() })
           <el-col :span="6"><el-form-item :label="form.deliveryType==='调拨'?'来源工厂':'收货工厂'"><el-select v-model="form.factoryId" filterable style="width:100%" @change="(v:any)=>{if(v===ADD_MARKER){form.factoryId=undefined;router.push('/supplier/manage');return};onFactoryChange(v)}"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
           <el-col :span="6" v-if="form.deliveryType==='调拨'"><el-form-item label="目标工厂"><el-select v-model="form.supplierId" filterable style="width:100%" @change="(v:any)=>{if(v===ADD_MARKER){form.supplierId=undefined;router.push('/supplier/manage');return};onTargetFactoryChange(v)}"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType==='发料'"><el-form-item label="我方仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%" @change="(v:any)=>{if(v===ADD_MARKER){form.fromWarehouseId=undefined;router.push('/inventory/warehouse');return}}"><el-option v-for="w in inventoryWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType==='发料'"><el-form-item label="发出仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id"/></el-select></el-form-item></el-col>
           <el-col :span="6" v-if="form.deliveryType==='发料'"><el-form-item label="目标委外仓库"><el-select v-model="form.toWarehouseId" style="width:100%" disabled><el-option v-for="w in outsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType==='退料'"><el-form-item label="来源委外仓库"><el-select v-model="form.fromWarehouseId" style="width:100%" disabled><el-option v-for="w in outsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType==='退料'"><el-form-item label="目标我方仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%" @change="(v:any)=>{if(v===ADD_MARKER){form.toWarehouseId=undefined;router.push('/inventory/warehouse');return}}"><el-option v-for="w in inventoryWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType==='调拨'"><el-form-item label="来源委外仓库"><el-select v-model="form.fromWarehouseId" style="width:100%" disabled><el-option v-for="w in outsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType==='调拨'"><el-form-item label="目标委外仓库"><el-select v-model="form.toWarehouseId" style="width:100%" disabled><el-option v-for="w in targetOutsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType==='退料'"><el-form-item label="来源仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id"/></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType==='退料'"><el-form-item label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id"/></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType==='调拨'"><el-form-item label="来源仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id"/></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType==='调拨'"><el-form-item label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id"/></el-select></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item></el-col>
         </el-row>

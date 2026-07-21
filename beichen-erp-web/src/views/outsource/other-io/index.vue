@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -47,6 +47,9 @@ function goWarehouseDetail(warehousId: number) {
   else router.push(`/inventory/warehouse/detail/${warehousId}`)
 }
 onMounted(()=>{ loadWarehouses(); loadData() })
+onActivated(() => {
+  if ((window as any).__otherIoNeedRefresh) { (window as any).__otherIoNeedRefresh = false; loadData() }
+})
 </script>
 
 <template>
@@ -66,8 +69,11 @@ onMounted(()=>{ loadWarehouses(); loadData() })
         <el-table-column prop="code" label="单号" width="160"/>
         <el-table-column label="仓库" width="180"><template #default="{row}"><el-button type="primary" link @click="goWarehouseDetail(row.warehouseId)">{{ getWhName(row.warehouseId) }}</el-button></template></el-table-column>
         <el-table-column label="日期" width="110"><template #default="{row}">{{ $fmtDate(row.ioDate) }}</template></el-table-column>
-        <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag v-if="row.status==='已取消'" type="danger" size="small">已取消</el-tag><el-tag v-else type="success" size="small">已确认</el-tag></template></el-table-column>
+        <el-table-column label="物料明细" min-width="160" show-overflow-tooltip>
+          <template #default="{row}"><span v-if="row.itemSummary">{{row.itemSummary}}</span><span v-else style="color:#c0c4cc">-</span></template>
+        </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip/>
+        <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag v-if="row.status==='已取消'" type="danger" size="small">已取消</el-tag><el-tag v-else type="success" size="small">已确认</el-tag></template></el-table-column>
         <el-table-column label="操作" width="140" align="center">
           <template #default="{row}"><el-button type="primary" link @click="handleEdit(row)" :disabled="row.status==='已取消'">编辑</el-button><el-button type="danger" link @click="handleCancel(row)" :disabled="row.status==='已取消'">取消</el-button></template>
         </el-table-column>

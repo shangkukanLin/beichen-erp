@@ -51,6 +51,15 @@ public class OutsourceOtherIoController {
             m.put("warehouseId", o.getWarehouseId()); m.put("ioType", o.getIoType());
             m.put("ioDate", o.getIoDate()); m.put("status", o.getStatus()); m.put("remark", o.getRemark());
             m.put("createTime", o.getCreateTime());
+            // 物料明细
+            List<OutsourceOtherIoItem> items = itemMapper.selectList(new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, o.getId()));
+            java.util.StringJoiner sj = new java.util.StringJoiner("、");
+            for (OutsourceOtherIoItem it : items) {
+                String n = it.getMaterialName() != null ? it.getMaterialName() : (it.getMaterialType() != null ? it.getMaterialType() : "");
+                java.math.BigDecimal q = it.getQuantity() != null ? it.getQuantity() : java.math.BigDecimal.ZERO;
+                sj.add(n + "×" + q.stripTrailingZeros().toPlainString());
+            }
+            m.put("itemSummary", sj.toString());
             return m;
         }).toList());
         return R.ok(res);

@@ -72,6 +72,7 @@ async function handleSubmit() {
       await request.post('/outsource/other-io', body); ElMessage.success('已创建')
       Object.assign(form, { warehouseId: undefined, ioType: '入库', ioDate: new Date().toISOString().slice(0,10), remark: '' })
       items.value = [{ materialId: undefined, materialName: '', materialType: '', unit: '', unit_price: '', quantity: undefined, remark: '' }]
+      ;(window as any).__otherIoNeedRefresh = true
     }
     router.push('/outsource/other-io')
   } catch (e: any) { ElMessage.error(e?.message||'保存失败') } finally { saving.value = false }

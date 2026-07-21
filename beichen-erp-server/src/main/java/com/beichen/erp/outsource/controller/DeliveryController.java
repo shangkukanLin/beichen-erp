@@ -53,12 +53,30 @@ public class DeliveryController {
             if (d.getFactoryId() != null) { Supplier sup = supplierMapper.selectById(d.getFactoryId()); m.put("factoryName", sup != null ? sup.getName() : ""); }
             // 直发供应商名
             if (d.getSupplierDirect() != null && d.getSupplierDirect() == 1 && d.getSupplierId() != null) { Supplier s = supplierMapper.selectById(d.getSupplierId()); m.put("supplierName", s != null ? s.getName() : ""); }
-            // 仓库名
-            if (d.getFromWarehouseId() != null) { OutsourceWarehouse w = warehouseMapper.selectById(d.getFromWarehouseId()); m.put("fromWarehouseName", w != null ? w.getWarehouseName() : ""); }
+            // 来源仓库名（发料来源是我方仓，其他是委外仓）
+            if (d.getFromWarehouseId() != null) {
+                if ("发料".equals(d.getDeliveryType())) {
+                    var iw = inventoryWarehouseMapper.selectById(d.getFromWarehouseId());
+                    m.put("fromWarehouseName", iw != null ? iw.getWarehouseName() : "");
+                } else {
+                    OutsourceWarehouse w = warehouseMapper.selectById(d.getFromWarehouseId());
+                    m.put("fromWarehouseName", w != null ? w.getWarehouseName() : "");
+                }
+            }
+            // 目标仓库名
             if (d.getToWarehouseId() != null) { OutsourceWarehouse w = warehouseMapper.selectById(d.getToWarehouseId()); m.put("toWarehouseName", w != null ? w.getWarehouseName() : ""); }
             // 物料统计
-            Long count = itemMapper.selectCount(new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getDeliveryId, d.getId()));
-            m.put("itemCount", count);
+            List<OutsourceDeliveryItem> items = itemMapper.selectList(new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getDeliveryId, d.getId()));
+            m.put("itemCount", (long) items.size());
+            java.util.StringJoiner sj = new java.util.StringJoiner("、");
+            for (OutsourceDeliveryItem it : items) {
+                String n = it.getMaterialName() != null ? it.getMaterialName() : (it.getMaterialType() != null ? it.getMaterialType() : "");
+                BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
+                sj.add(n + "×" + q.stripTrailingZeros().toPlainString());
+            }
+            m.put("itemSummary", sj.toString());
+            m.put("fromWarehouseId", d.getFromWarehouseId());
+            m.put("toWarehouseId", d.getToWarehouseId());
             return m;
         }).toList());
         return R.ok(result);

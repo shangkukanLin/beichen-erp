@@ -126,17 +126,21 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
                 // 设置公司ID
                 if (cid != null && cid > 0) supplier.setCompanyId(cid);
                 supplierMapper.insert(supplier);
-                // 供应商类型包含"factory"时自动创建默认仓库
+                // 供应商类型包含"factory"时自动创建默认仓库（已存在则跳过）
                 if (containsType(dto.getSupplierType(), "factory")) {
-                    OutsourceWarehouse wh = new OutsourceWarehouse();
-                    wh.setFactoryId(supplier.getId());
-                    wh.setWarehouseName(supplier.getName() + "仓库");
-                    wh.setAddress(supplier.getAddress());
-                    wh.setContact(supplier.getContact());
-                    wh.setPhone(supplier.getPhone());
-                    wh.setStatus(1);
-                    if (cid != null && cid > 0) wh.setCompanyId(cid);
-                    warehouseMapper.insert(wh);
+                    Long existCount = warehouseMapper.selectCount(
+                        new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, supplier.getId()));
+                    if (existCount == null || existCount == 0) {
+                        OutsourceWarehouse wh = new OutsourceWarehouse();
+                        wh.setFactoryId(supplier.getId());
+                        wh.setWarehouseName(supplier.getName() + "仓库");
+                        wh.setAddress(supplier.getAddress());
+                        wh.setContact(supplier.getContact());
+                        wh.setPhone(supplier.getPhone());
+                        wh.setStatus(1);
+                        if (cid != null && cid > 0) wh.setCompanyId(cid);
+                        warehouseMapper.insert(wh);
+                    }
                 }
                 return;
             } catch (DuplicateKeyException e) {
