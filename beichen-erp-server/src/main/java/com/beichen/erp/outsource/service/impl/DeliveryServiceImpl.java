@@ -272,7 +272,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                     "INNER JOIN outsource_order_product op ON om.product_id = op.id " +
                     "INNER JOIN outsource_order o ON op.order_id = o.id " +
                     "WHERE o.factory_id = ? AND o.status = '生产中' " +
-                    "AND (om.material_name = ? OR om.material_id = ?) LIMIT 1";
+                    "AND (om.material_name = ? OR om.outsource_material_id = ?) LIMIT 1";
                 List<java.util.Map<String, Object>> rows = jdbcTemplate.queryForList(
                     findSql, delivery.getFactoryId(),
                     item.getMaterialName() != null ? item.getMaterialName() : "",

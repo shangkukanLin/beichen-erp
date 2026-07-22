@@ -10,6 +10,7 @@ public class OutsourceOtherIoItem {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long otherIoId;
+    @TableField("outsource_material_id")
     private Long materialId;
     private String materialName;
     private String materialType;

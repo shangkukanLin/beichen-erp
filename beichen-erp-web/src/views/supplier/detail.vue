@@ -275,6 +275,9 @@ onMounted(loadData)
             <el-table-column label="库存" width="80" align="right">
               <template #default="{ row }">{{ row.warehouseStock || 0 }}</template>
             </el-table-column>
+            <el-table-column label="已出库" width="80" align="right">
+              <template #default="{ row }"><span :style="{color: Number(row.consumed||0)>0?'#409eff':''}">{{ row.consumed || 0 }}</span></template>
+            </el-table-column>
             <el-table-column label="缺口" width="100" align="center">
               <template #default="{ row }">
                 <el-tag v-if="row.gap > 0" type="danger" size="small">{{ row.gap }}</el-tag>

@@ -9,7 +9,9 @@ import java.math.BigDecimal;
 public class OutsourceMaterialComponent {
     @TableId(type = IdType.AUTO)
     private Long id;
+    @TableField("parent_outsource_material_id")
     private Long parentMaterialId;
+    @TableField("child_outsource_material_id")
     private Long childMaterialId;
     private BigDecimal quantity;
     private BigDecimal lossRate;

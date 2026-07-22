@@ -11,6 +11,7 @@ public class OutsourceWarehouseStock {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long warehouseId;
+    @TableField("outsource_material_id")
     private Long materialId;
     private String qualityType;
     private BigDecimal quantity;

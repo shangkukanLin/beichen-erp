@@ -24,21 +24,24 @@ function recalc(row: any) {
   const good = Number(row.goodReturnQty) || 0
   const defect = Number(row.defectReturnQty) || 0
   const targetYield = Number(row.targetYieldRate) || 0
-  // 缺失 = 发料 - 退料总计 - 出货消耗
-  row.missingQty = delivered - (good + defect) - shipped
-  // 最大超损 = (发料 - 良品退料) × (1 - 加工良率/100)
-  row.maxExcessLossQty = Math.max(0, +( (delivered - good) * (1 - targetYield / 100) ).toFixed(2))
+  const factoryRetain = Number(row.factoryRetainQty) || 0
+  // 缺失 = 发料 - 退料总计 - 出货消耗 - 留存工厂
+  row.missingQty = delivered - (good + defect) - shipped - (Number(row.factoryRetainQty) || 0)
+  // 生产良率% = 出货消耗 / (发料数量 - 工厂留存 - 良品退料) × 100
+  const denom = delivered - factoryRetain - good
+  if (denom > 0) {
+    row.actualYieldRate = +(shipped / denom * 100).toFixed(2)
+  } else {
+    row.actualYieldRate = 0
+  }
+  // 良率超损% = 加工良率 - 生产良率
+  row.yieldLoss = +(targetYield - row.actualYieldRate).toFixed(2)
+  // 超损数量 = (出货消耗 + 不良退料 + 缺失) × (良率超损%/100)（最小0）
+  row.excessLossQty = Math.max(0, +((shipped + defect + row.missingQty) * (row.yieldLoss / 100)).toFixed(2))
+  // 最大超损 = (发料 - 良品退料 - 工厂留存) × (1 - 加工良率/100)（最小0）
+  row.maxExcessLossQty = Math.max(0, +((delivered - good - factoryRetain) * (1 - targetYield / 100)).toFixed(2))
   // 超损总价 = 超损数量 × 物料单价
   row.excessLossAmount = +(row.excessLossQty * (row.unitPrice || 0)).toFixed(2)
-  if (delivered > 0) {
-    row.actualYieldRate = +((shipped + good) / delivered * 100).toFixed(2)
-    row.yieldLoss = +(targetYield - row.actualYieldRate).toFixed(2)
-    const lossPct = (100 - targetYield) / 100
-    let excess = delivered * (1 - lossPct) - shipped - good
-    row.excessLossQty = Math.max(0, +excess.toFixed(2))
-  } else {
-    row.actualYieldRate = 0; row.yieldLoss = 0; row.excessLossQty = 0
-  }
 }
 
 function onGoodChange(row: any) { recalc(row) }
@@ -46,6 +49,7 @@ function onDefectChange(row: any) {
   row.defectReturnQty = Math.max(0, Number(row.defectReturnQty) || 0)
   recalc(row)
 }
+function onRetainChange(row: any) { recalc(row) }
 
 async function loadReport() {
   loading.value = true
@@ -137,6 +141,9 @@ onMounted(loadReport)
         <el-table-column label="不良退料" width="100">
           <template #default="{row}"><el-input v-model="row.defectReturnQty" size="small" type="number" @change="onDefectChange(row)" /></template>
         </el-table-column>
+        <el-table-column label="留存工厂" width="90">
+          <template #default="{row}"><el-input v-model="row.factoryRetainQty" size="small" type="number" @change="onRetainChange(row)" /></template>
+        </el-table-column>
         <el-table-column label="缺失" width="80" align="right">
           <template #default="{row}"><span :style="{color: row.missingQty !== 0 ? '#f56c6c' : '#67c23a'}">{{ fmt(row.missingQty) }}</span></template>
         </el-table-column>
@@ -156,7 +163,7 @@ onMounted(loadReport)
           <template #default="{row}">{{ fmt(row.maxExcessLossQty) }}</template>
         </el-table-column>
         <el-table-column label="物料单价" width="100">
-          <template #default="{row}"><el-input v-model="row.unitPrice" size="small" @change="recalc(row)" /></template>
+          <template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" @change="recalc(row)" /></template>
         </el-table-column>
         <el-table-column label="超损总价" width="100">
           <template #default="{row}"><span :style="{color: row.excessLossAmount > 0 ? '#f56c6c' : '#67c23a'}">{{ fmt(row.excessLossAmount) }}</span></template>

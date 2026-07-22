@@ -16,11 +16,13 @@ import com.beichen.erp.outsource.mapper.OutsourceWarehouseStockMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryMapper;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
+import com.beichen.erp.outsource.mapper.OutsourceOrderDeliveryMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
 import com.beichen.erp.outsource.entity.OutsourceDelivery;
 import com.beichen.erp.outsource.entity.OutsourceDeliveryItem;
+import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -45,6 +47,7 @@ public class OutsourceOrderController {
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final OutsourceDeliveryMapper deliveryMapper;
     private final OutsourceDeliveryItemMapper deliveryItemMapper;
+    private final OutsourceOrderDeliveryMapper orderDeliveryMapper;
     private final OutsourceMaterialComponentMapper componentMapper;
 
     @GetMapping("/page")
@@ -136,11 +139,44 @@ public class OutsourceOrderController {
                 }
             }
         }
+        // 计算已交货产品消耗的物料（出货量）
+        java.util.Map<String, java.math.BigDecimal> productDeliveredMap = new java.util.HashMap<>();
+        java.util.List<OutsourceOrderDelivery> deliveries = orderDeliveryMapper.selectList(
+            new LambdaQueryWrapper<OutsourceOrderDelivery>()
+                .eq(OutsourceOrderDelivery::getOrderId, id));
+        for (OutsourceOrderDelivery d : deliveries) {
+            if (d.getProductName() == null) continue;
+            java.math.BigDecimal qty = d.getQuantity() != null ? d.getQuantity() : java.math.BigDecimal.ZERO;
+            if (qty.compareTo(java.math.BigDecimal.ZERO) <= 0) continue;
+            productDeliveredMap.merge(d.getProductName(), qty, java.math.BigDecimal::add);
+        }
+        // 按产品计算每个物料已被出货消耗的数量
+        java.util.Map<String, java.math.BigDecimal> shippedConsumedMap = new java.util.HashMap<>();
+        for (OutsourceOrderProduct p : products) {
+            java.math.BigDecimal pDelivered = productDeliveredMap.get(p.getProductName());
+            if (pDelivered == null || pDelivered.compareTo(java.math.BigDecimal.ZERO) == 0) continue;
+            java.math.BigDecimal pTotal = p.getQuantity() != null ? p.getQuantity() : java.math.BigDecimal.ONE;
+            java.util.List<OutsourceOrderMaterial> mats = orderService.getMaterials(p.getId());
+            for (OutsourceOrderMaterial mat : mats) {
+                String key = mat.getMaterialName();
+                if (key == null || key.isBlank()) continue;
+                java.math.BigDecimal matDemand = mat.getDemandQuantity() != null ? mat.getDemandQuantity() : java.math.BigDecimal.ZERO;
+                if (matDemand.compareTo(java.math.BigDecimal.ZERO) == 0) continue;
+                java.math.BigDecimal perUnit = matDemand.divide(pTotal, 10, java.math.RoundingMode.HALF_UP);
+                java.math.BigDecimal consumed = perUnit.multiply(pDelivered);
+                shippedConsumedMap.merge(key, consumed, java.math.BigDecimal::add);
+            }
+        }
+
         // 查库存
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map.Entry<String, Map<String, Object>> e : matMap.entrySet()) {
             Map<String, Object> m = e.getValue();
             BigDecimal demand = (BigDecimal) m.get("demandQuantity");
+            // 扣除已出货消耗
+            BigDecimal shippedConsumed = shippedConsumedMap.getOrDefault(e.getKey(), BigDecimal.ZERO);
+            BigDecimal remainingDemand = demand.subtract(shippedConsumed);
+            if (remainingDemand.compareTo(BigDecimal.ZERO) < 0) remainingDemand = BigDecimal.ZERO;
             // 确保materialId已解析（BOM中materialId可能为空，需按名称补查）
             Long materialId = (Long) m.get("materialId");
             if (materialId == null) {
@@ -164,7 +200,9 @@ public class OutsourceOrderController {
                 if (s != null && s.getQuantity() != null) stock = s.getQuantity();
             }
             m.put("stockQuantity", stock);
-            m.put("shortage", demand.subtract(stock).max(BigDecimal.ZERO));
+            m.put("shippedConsumed", shippedConsumed);
+            m.put("remainingDemand", remainingDemand);
+            m.put("shortage", remainingDemand.subtract(stock).max(BigDecimal.ZERO));
             // 是否有子物料组成（有则可"去委外"）
             boolean hasComps = false;
             if (materialId != null) {

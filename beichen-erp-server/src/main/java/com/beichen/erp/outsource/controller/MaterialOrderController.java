@@ -65,7 +65,7 @@ public class MaterialOrderController {
             Map<String, Object> m = buildOrderMap(o);
             List<MaterialOrderItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, o.getId()));
-            m.put("items", buildItemMaps(items));
+            m.put("items", buildItemMaps(items, o.getSupplierId()));
             return m;
         }).toList());
         return R.ok(result);
@@ -77,7 +77,7 @@ public class MaterialOrderController {
         if (o == null) return R.ok(null);
         Map<String, Object> m = buildOrderMap(o);
         m.put("items", buildItemMaps(itemMapper.selectList(
-            new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id))));
+            new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id)), o.getSupplierId()));
         return R.ok(m);
     }
 
@@ -163,7 +163,8 @@ public class MaterialOrderController {
     /** 收货，需指定 factoryId（收货仓库对应工厂）。含子物料库存校验与扣减 */
     @PostMapping("/{id}/receive")
     @Transactional(rollbackFor = Exception.class)
-    public R<Void> receive(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+    public R<?> receive(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        boolean force = Boolean.TRUE.equals(body.get("force"));
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
         if (!"收货中".equals(o.getStatus()) && !"已确认".equals(o.getStatus()))
@@ -190,26 +191,43 @@ public class MaterialOrderController {
         List<Map<String, Object>> items = (List<Map<String, Object>>) body.get("items");
         if (items == null || items.isEmpty()) throw new BusinessException("收货明细不能为空");
 
-        // 1. 校验所有物料的子物料库存是否充足
-        for (Map<String, Object> it : items) {
-            BigDecimal qty = new BigDecimal(it.get("quantity").toString());
-            if (qty.compareTo(BigDecimal.ZERO) <= 0) continue;
-            Long itemId = Long.valueOf(it.get("itemId").toString());
-            MaterialOrderItem orderItem = itemMapper.selectById(itemId);
-            if (orderItem == null || orderItem.getMaterialId() == null) continue;
-            List<OutsourceMaterialComponent> comps = componentMapper.selectList(
-                new LambdaQueryWrapper<OutsourceMaterialComponent>()
-                    .eq(OutsourceMaterialComponent::getParentMaterialId, orderItem.getMaterialId()));
-            if (comps == null || comps.isEmpty()) continue;
-            for (OutsourceMaterialComponent c : comps) {
-                BigDecimal compDemand = (c.getQuantity() != null ? c.getQuantity() : BigDecimal.ONE).multiply(qty);
-                BigDecimal compStock = getStock(compWhId, c.getChildMaterialId());
-                if (compStock.compareTo(compDemand) < 0) {
-                    String childName = c.getChildMaterialId() != null ? 
-                        (materialMapper.selectById(c.getChildMaterialId()) != null ? materialMapper.selectById(c.getChildMaterialId()).getMaterialName() : "子物料" + c.getChildMaterialId()) : "子物料";
-                    throw new BusinessException("子物料「" + childName + "」库存不足（需求：" + compDemand.stripTrailingZeros().toPlainString()
-                        + "，库存：" + compStock.stripTrailingZeros().toPlainString() + "），无法收货");
+        // 1. 校验委外单的子物料库存
+        List<Map<String, Object>> shortages = new ArrayList<>();
+        log.info("收货: orderId={}, orderType={}, force={}", id, o.getOrderType(), force);
+        if ("委外".equals(o.getOrderType())) {
+            for (Map<String, Object> it : items) {
+                BigDecimal qty = new BigDecimal(it.get("quantity").toString());
+                if (qty.compareTo(BigDecimal.ZERO) <= 0) continue;
+                Long itemId = Long.valueOf(it.get("itemId").toString());
+                MaterialOrderItem orderItem = itemMapper.selectById(itemId);
+                if (orderItem == null || orderItem.getMaterialId() == null) continue;
+                List<OutsourceMaterialComponent> comps = componentMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceMaterialComponent>()
+                        .eq(OutsourceMaterialComponent::getParentMaterialId, orderItem.getMaterialId()));
+                if (comps == null || comps.isEmpty()) continue;
+                log.info("物料[{}]有{}个子物料", orderItem.getMaterialName(), comps.size());
+                for (OutsourceMaterialComponent c : comps) {
+                    BigDecimal compDemand = (c.getQuantity() != null ? c.getQuantity() : BigDecimal.ONE).multiply(qty);
+                    BigDecimal compStock = getStock(compWhId, c.getChildMaterialId());
+                    log.info("子物料[{}] demand={} stock={} compWhId={}", c.getChildMaterialId(), compDemand, compStock, compWhId);
+                    if (compStock.compareTo(compDemand) < 0) {
+                        String childName = c.getChildMaterialId() != null ? 
+                            (materialMapper.selectById(c.getChildMaterialId()) != null ? materialMapper.selectById(c.getChildMaterialId()).getMaterialName() : "子物料" + c.getChildMaterialId()) : "子物料";
+                        if (force) continue; // 强制模式跳过校验
+                        Map<String, Object> sh = new LinkedHashMap<>();
+                        sh.put("materialName", childName);
+                        sh.put("demand", compDemand.stripTrailingZeros().toPlainString());
+                        sh.put("stock", compStock.stripTrailingZeros().toPlainString());
+                        sh.put("shortage", compDemand.subtract(compStock).stripTrailingZeros().toPlainString());
+                        shortages.add(sh);
+                    }
                 }
+            }
+            if (!shortages.isEmpty()) {
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("_shortage", true);
+                result.put("shortages", shortages);
+                return R.ok(result);
             }
         }
 
@@ -252,8 +270,9 @@ public class MaterialOrderController {
             updateStockLog(whId, orderItem.getMaterialId(), qty, "良品",
                 orderItem.getMaterialName(), "委外收货入库", o.getCode());
 
-            // 子物料出库（从加工厂仓扣减）+ 流水
-            List<OutsourceMaterialComponent> comps = componentMapper.selectList(
+            // 子物料出库（仅委外单才需要扣子物料）
+            if ("委外".equals(o.getOrderType())) {
+                List<OutsourceMaterialComponent> comps = componentMapper.selectList(
                 new LambdaQueryWrapper<OutsourceMaterialComponent>()
                     .eq(OutsourceMaterialComponent::getParentMaterialId, orderItem.getMaterialId()));
             if (comps != null) {
@@ -263,21 +282,9 @@ public class MaterialOrderController {
                     String childName = cm != null ? cm.getMaterialName() : "子物料";
                     updateStockLog(compWhId, c.getChildMaterialId(), compDemand.negate(), "良品",
                         childName, "委外收货耗料", o.getCode());
-                    // 记录子物料出库明细
-                    OutsourceDeliveryItem cdi = new OutsourceDeliveryItem();
-                    cdi.setDeliveryId(delivery.getId());
-                    cdi.setMaterialId(c.getChildMaterialId());
-                    cdi.setQuantity(compDemand);
-                    cdi.setQualityType("良品");
-                    OutsourceMaterial childMat = materialMapper.selectById(c.getChildMaterialId());
-                    if (childMat != null) {
-                        cdi.setMaterialName(childMat.getMaterialName());
-                        cdi.setMaterialType(childMat.getMaterialType());
-                        cdi.setUnit(childMat.getUnit());
-                    }
-                    deliveryItemMapper.insert(cdi);
                 }
             }
+            } // end of 委外 check
         }
 
         boolean allReceived = itemMapper.selectList(
@@ -511,7 +518,13 @@ public class MaterialOrderController {
     // ==================== 私有 ====================
 
     /** 将 MaterialOrderItem 转为 Map，附带子物料组件列表 */
-    private List<Map<String, Object>> buildItemMaps(List<MaterialOrderItem> items) {
+    private List<Map<String, Object>> buildItemMaps(List<MaterialOrderItem> items, Long supplierId) {
+        // 该供应商的委外仓ID列表
+        java.util.Set<Long> supplierWhIds = new java.util.HashSet<>();
+        if (supplierId != null) {
+            warehouseMapper.selectList(new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, supplierId))
+                .forEach(w -> supplierWhIds.add(w.getId()));
+        }
         if (items == null || items.isEmpty()) return Collections.emptyList();
         return items.stream().map(it -> {
             Map<String, Object> map = new LinkedHashMap<>();
@@ -559,15 +572,18 @@ public class MaterialOrderController {
                                 cm.put("supplierIds", childMat.getSupplierIds());
                                 cm.put("supplierName", childMat.getSupplierName());
                             }
-                            // 查所有委外仓库库存总和
+                            // 查该供应商委外仓库存
                             BigDecimal stock = BigDecimal.ZERO;
-                            List<OutsourceWarehouseStock> stocks = warehouseStockMapper.selectList(
-                                new LambdaQueryWrapper<OutsourceWarehouseStock>()
-                                    .eq(OutsourceWarehouseStock::getMaterialId, c.getChildMaterialId())
-                                    .eq(OutsourceWarehouseStock::getQualityType, "良品"));
-                            if (stocks != null) {
-                                for (OutsourceWarehouseStock s : stocks) {
-                                    if (s.getQuantity() != null) stock = stock.add(s.getQuantity());
+                            if (!supplierWhIds.isEmpty()) {
+                                List<OutsourceWarehouseStock> stocks = warehouseStockMapper.selectList(
+                                    new LambdaQueryWrapper<OutsourceWarehouseStock>()
+                                        .eq(OutsourceWarehouseStock::getMaterialId, c.getChildMaterialId())
+                                        .in(OutsourceWarehouseStock::getWarehouseId, supplierWhIds)
+                                        .eq(OutsourceWarehouseStock::getQualityType, "良品"));
+                                if (stocks != null) {
+                                    for (OutsourceWarehouseStock s : stocks) {
+                                        if (s.getQuantity() != null) stock = stock.add(s.getQuantity());
+                                    }
                                 }
                             }
                             cm.put("stockQuantity", stock);

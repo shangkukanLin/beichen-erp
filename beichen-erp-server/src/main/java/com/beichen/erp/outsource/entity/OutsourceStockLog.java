@@ -11,6 +11,7 @@ public class OutsourceStockLog {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long warehouseId;
+    @TableField("outsource_material_id")
     private Long materialId;
     private String materialName;
     private String changeType;

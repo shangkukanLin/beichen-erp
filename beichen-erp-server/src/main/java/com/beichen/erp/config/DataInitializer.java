@@ -484,6 +484,49 @@ public class DataInitializer implements ApplicationRunner {
                 log.info("已为 dev_bom 添加 material_id 列");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // close_report_item 添加 factory_retain_qty 列
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_order_close_report_item' AND COLUMN_NAME='factory_retain_qty'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_order_close_report_item ADD COLUMN factory_retain_qty DECIMAL(18,4) DEFAULT NULL COMMENT '留存工厂' AFTER material_price");
+                log.info("已为 close_report_item 添加 factory_retain_qty 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // 将委外相关表的 material_id 重命名为 outsource_material_id
+        String[][] osMaterialRename = {
+            {"outsource_order_material", "material_id", "outsource_material_id", "BIGINT"},
+            {"outsource_delivery_item", "material_id", "outsource_material_id", "BIGINT"},
+            {"outsource_warehouse_stock", "material_id", "outsource_material_id", "BIGINT"},
+            {"outsource_stock_log", "material_id", "outsource_material_id", "BIGINT"},
+            {"outsource_order_close_report_item", "material_id", "outsource_material_id", "BIGINT"},
+            {"dev_bom", "material_id", "outsource_material_id", "BIGINT"},
+            {"outsource_other_io_item", "material_id", "outsource_material_id", "BIGINT"},
+            {"outsource_material_component", "parent_material_id", "parent_outsource_material_id", "BIGINT"},
+            {"outsource_material_component", "child_material_id", "child_outsource_material_id", "BIGINT"},
+            {"outsource_material_order_item", "material_id", "outsource_material_id", "BIGINT"},
+        };
+        for (String[] r : osMaterialRename) {
+            try {
+                Integer cnt = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME=?",
+                    Integer.class, r[0], r[2]);
+                if (cnt == null || cnt == 0) {
+                    jdbcTemplate.execute("ALTER TABLE " + r[0] + " ADD COLUMN " + r[2] + " " + r[3] + " DEFAULT NULL COMMENT '委外物料ID' AFTER " + r[1]);
+                    jdbcTemplate.execute("UPDATE " + r[0] + " SET " + r[2] + " = " + r[1] + " WHERE " + r[1] + " IS NOT NULL");
+                    // 旧列改为 NULLABLE，避免 INSERT 只写新列时报错
+                    try { jdbcTemplate.execute("ALTER TABLE " + r[0] + " MODIFY COLUMN " + r[1] + " " + r[3] + " NULL"); } catch (Exception ign) {}
+                    log.info("已为 {} 添加 {} 列并回填数据", r[0], r[2]);
+                }
+            } catch (Exception e) { log.warn("DDL 异常 {}: {}", r[0], e.getMessage()); }
+        }
+        // 将旧 material_id 列改为 NULLABLE（已添加 outsource_material_id 后，旧列不再强制 NOT NULL）
+        for (String[] r : osMaterialRename) {
+            try {
+                jdbcTemplate.execute("ALTER TABLE " + r[0] + " MODIFY COLUMN " + r[1] + " " + r[3] + " NULL");
+            } catch (Exception e) { /* 可能已经改过了 */ }
+        }
         // material 添加 company_id 列
         try {
             Integer cnt = jdbcTemplate.queryForObject(

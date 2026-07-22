@@ -10,6 +10,7 @@ public class MaterialOrderItem {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long orderId;
+    @TableField("outsource_material_id")
     private Long materialId;
     private String materialName;
     private String materialType;

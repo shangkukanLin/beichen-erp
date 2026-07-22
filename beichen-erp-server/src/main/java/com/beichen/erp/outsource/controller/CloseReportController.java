@@ -92,12 +92,12 @@ public class CloseReportController {
         // ===== 标题 =====
         Row tRow = sheet.createRow(rowIdx++); tRow.setHeightInPoints(24);
         Cell tc = tRow.createCell(0); tc.setCellValue("委外加工单结单报表 - " + report.get("orderCode")); tc.setCellStyle(titleStyle);
-        merge(tRow, 0, 0, 15);
+        merge(tRow, 0, 0, 16);
 
         // ===== 一、订单信息 =====
         Row s1 = sheet.createRow(rowIdx++); s1.setHeightInPoints(18);
         Cell sc1 = s1.createCell(0); sc1.setCellValue("一、订单信息"); sc1.setCellStyle(sectionStyle);
-        merge(s1, 0, 0, 15);
+        merge(s1, 0, 0, 16);
 
         // 左：基本信息 (col 0-1) ，右：加工产品 (col 2-3)
         List<?> productsRaw = (List<?>) report.get("products");
@@ -121,14 +121,14 @@ public class CloseReportController {
         // ===== 二、物料明细 =====
         Row s2 = sheet.createRow(rowIdx++); s2.setHeightInPoints(18);
         Cell sc2 = s2.createCell(0); sc2.setCellValue("二、物料明细"); sc2.setCellStyle(sectionStyle);
-        merge(s2, 0, 0, 15);
+        merge(s2, 0, 0, 16);
 
-        String[] headers = {"类目","物料名称","发料数量","退料总计","出货消耗","良品退料","不良退料","缺失","加工良率%","生产良率%","良率超损%","超损数量","最大超损","物料单价","超损总价","备注"};
+        String[] headers = {"类目","物料名称","发料数量","退料总计","出货消耗","良品退料","不良退料","留存工厂","缺失","加工良率%","生产良率%","良率超损%","超损数量","最大超损","物料单价","超损总价","备注"};
         Row hRow = sheet.createRow(rowIdx++);
         for (int c = 0; c < headers.length; c++) hRow.createCell(c).setCellValue(headers[c]);
         for (int c = 0; c < headers.length; c++) hRow.getCell(c).setCellStyle(headerStyle);
 
-        int[] widths = {10, 22, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 18};
+        int[] widths = {10, 22, 12, 12, 12, 12, 12, 12, 12, 13, 13, 13, 13, 13, 13, 13, 18};
         for (int c = 0; c < widths.length; c++) sheet.setColumnWidth(c, widths[c] * 256);
 
         for (int r = 0; r < items.size(); r++) {
@@ -139,23 +139,29 @@ public class CloseReportController {
             textCell(dRow, 0, (String) it.get("materialType"), textStyle);
             textCell(dRow, 1, (String) it.get("materialName"), textStyle);
             numCell(dRow, 2, it, "deliveredQuantity", numStyle);
+            // 退料总计 = F+G
             formulaCell(dRow, 3, "F" + curRow + "+G" + curRow, numStyle);
             numCell(dRow, 4, it, "shippedQuantity", numStyle);
             numCell(dRow, 5, it, "goodReturnQty", numStyle);
             numCell(dRow, 6, it, "defectReturnQty", numStyle);
-            formulaCell(dRow, 7, "C" + curRow + "-D" + curRow + "-E" + curRow, numStyle);
-            numCell(dRow, 8, it, "targetYieldRate", pctStyle);
-            formulaCell(dRow, 9, "IF(C" + curRow + ">0,(E" + curRow + "+F" + curRow + ")/C" + curRow + "*100,0)", pctStyle);
-            formulaCell(dRow, 10, "I" + curRow + "-J" + curRow, pctStyle);
-            formulaCell(dRow, 11, "MAX(0,C" + curRow + "*I" + curRow + "/100-E" + curRow + "-F" + curRow + ")", numStyle);
-            // 最大超损 = MAX(0, (C-F)*(1-I/100))
-            formulaCell(dRow, 12, "MAX(0,(C" + curRow + "-F" + curRow + ")*(1-I" + curRow + "/100))", numStyle);
+            numCell(dRow, 7, it, "factoryRetainQty", numStyle);
+            // 缺失 = C-D-E-H (发料-退料-出货-留存)
+            formulaCell(dRow, 8, "C" + curRow + "-D" + curRow + "-E" + curRow + "-H" + curRow, numStyle);
+            numCell(dRow, 9, it, "targetYieldRate", pctStyle);
+            // 生产良率% = 出货/(发料-留存-良退)*100
+            formulaCell(dRow, 10, "IF(C" + curRow + "-H" + curRow + "-F" + curRow + ">0,E" + curRow + "/(C" + curRow + "-H" + curRow + "-F" + curRow + ")*100,0)", pctStyle);
+            // 良率超损% = 加工良率-生产良率
+            formulaCell(dRow, 11, "J" + curRow + "-K" + curRow, pctStyle);
+            // 超损数量 = (出货+不良退+缺失)*(良率超损%/100)
+            formulaCell(dRow, 12, "MAX(0,(E" + curRow + "+G" + curRow + "+I" + curRow + ")*(L" + curRow + "/100))", numStyle);
+            // 最大超损 = MAX(0, (发料-良退-留存)*(1-加工良率/100))
+            formulaCell(dRow, 13, "MAX(0,(C" + curRow + "-F" + curRow + "-H" + curRow + ")*(1-J" + curRow + "/100))", numStyle);
             // 物料单价
-            numCell(dRow, 13, it, "unitPrice", numStyle);
-            // 超损总价 = L * M
-            formulaCell(dRow, 14, "L" + curRow + "*M" + curRow, numStyle);
+            numCell(dRow, 14, it, "unitPrice", numStyle);
+            // 超损总价 = 超损数量 × 物料单价
+            formulaCell(dRow, 15, "M" + curRow + "*O" + curRow, numStyle);
             // 备注
-            textCell(dRow, 15, (String) it.get("remark"), textStyle);
+            textCell(dRow, 16, (String) it.get("remark"), textStyle);
         }
 
         // ===== 三、交货记录 =====

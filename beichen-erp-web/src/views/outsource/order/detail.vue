@@ -338,11 +338,12 @@ onMounted(() => { loadOptions(); loadData() })
             <el-table-column prop="materialType" label="类型" width="70" />
             <el-table-column prop="materialName" label="物料名称" min-width="120" />
             <el-table-column prop="unit" label="单位" width="55" />
-            <el-table-column label="需求" width="75"><template #default="{row}">{{ row.demandQuantity }}</template></el-table-column>
-            <el-table-column label="库存" width="75"><template #default="{row}"><span :style="{color: Number(getStock(row.materialName).stockQuantity||0) < Number(row.demandQuantity||0) ? '#f56c6c' : '#67c23a'}">{{ getStock(row.materialName).stockQuantity || 0 }}</span></template></el-table-column>
-            <el-table-column label="缺料" width="75"><template #default="{row}"><span :style="{color: Number(getStock(row.materialName).shortage||0) > 0 ? '#f56c6c' : '#67c23a'}">{{ getStock(row.materialName).shortage || 0 }}</span></template></el-table-column>
+            <el-table-column label="需求" width="70"><template #default="{row}">{{ row.demandQuantity }}</template></el-table-column>
+            <el-table-column label="已出货消耗" width="80"><template #default="{row}"><span :style="{color: Number(getStock(row.materialName).shippedConsumed||0)>0?'#409eff':''}">{{ getStock(row.materialName).shippedConsumed || 0 }}</span></template></el-table-column>
+            <el-table-column label="剩余需求" width="75"><template #default="{row}">{{ getStock(row.materialName).remainingDemand || row.demandQuantity }}</template></el-table-column>
+            <el-table-column label="库存" width="70"><template #default="{row}"><span :style="{color: Number(getStock(row.materialName).stockQuantity||0) < Number(getStock(row.materialName).remainingDemand||row.demandQuantity) ? '#f56c6c' : '#67c23a'}">{{ getStock(row.materialName).stockQuantity || 0 }}</span></template></el-table-column>
+            <el-table-column label="缺料" width="70"><template #default="{row}"><span :style="{color: Number(getStock(row.materialName).shortage||0) > 0 ? '#f56c6c' : '#67c23a'}">{{ getStock(row.materialName).shortage || 0 }}</span></template></el-table-column>
             <el-table-column label="损耗率(%)" width="85"><template #default="{row}"><el-input v-model="row.lossRate" size="small" :disabled="form.status!=='待确认'" /></template></el-table-column>
-            <el-table-column label="已发料" width="80"><template #default="{row}"><span :style="{color: Number(row.deliveredQuantity||0)>0?'#67c23a':''}">{{ row.deliveredQuantity || 0 }}</span></template></el-table-column>
             <el-table-column label="备注" min-width="80"><template #default="{row}"><el-input v-model="row.remark" size="small" :disabled="form.status!=='待确认'" /></template></el-table-column>
             <el-table-column label="操作" width="110" align="center" v-if="form.status==='生产中'"><template #default="{row}"><template v-if="Number(getStock(row.materialName).shortage||0) > 0"><el-button type="warning" link size="small" @click="goPurchase(row)">去采购</el-button><el-button v-if="getStock(row.materialName).hasComponents" type="primary" link size="small" @click="goOutsource(row)">去委外</el-button></template></template></el-table-column>
           </el-table>

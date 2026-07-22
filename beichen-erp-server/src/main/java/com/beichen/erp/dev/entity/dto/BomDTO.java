@@ -11,6 +11,8 @@ public class BomDTO {
     @NotBlank(message = "物料名称不能为空")
     private String materialName;
 
+    private Long materialId;
+
     private Long supplierId;
 
     private String spec;

@@ -22,7 +22,7 @@ public class Bom {
     private Long supplierId;
 
     /** 关联物料管理中的物料ID */
-    @TableField("material_id")
+    @TableField("outsource_material_id")
     private Long materialId;
 
     private String materialName;

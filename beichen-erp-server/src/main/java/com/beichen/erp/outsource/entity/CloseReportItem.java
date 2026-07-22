@@ -10,6 +10,7 @@ public class CloseReportItem {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long reportId;
+    @TableField("outsource_material_id")
     private Long materialId;
     private String materialName;
     private String materialType;
@@ -24,6 +25,7 @@ public class CloseReportItem {
     private BigDecimal yieldLoss;
     private BigDecimal excessLossQty;
     private BigDecimal materialPrice;
+    private BigDecimal factoryRetainQty;
     private String remark;
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;

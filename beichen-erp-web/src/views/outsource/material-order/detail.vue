@@ -119,12 +119,41 @@ async function openReceive() {
   try { const r = await request.get<any, any>('/outsource/warehouse/page', { params: { pageSize: 500 } }); warehouseOptions.value = (r?.records || []) } catch { warehouseOptions.value = [] }
   recVisible.value = true
 }
-async function handleReceive() {
+async function handleReceive(force?: boolean) {
   if (!recWarehouseId.value) { ElMessage.warning('请选择收货仓库'); return }
   const data = recItems.value.filter((r: any) => r.quantity && Number(r.quantity) > 0)
   if (data.length === 0) { ElMessage.warning('请输入交货数量'); return }
   recSaving.value = true
-  try { await request.post(`/outsource/material-order/${id}/receive`, { warehouseId: recWarehouseId.value, items: data }); ElMessage.success('交货完成'); recVisible.value = false; loadAll() }
+  try {
+    const res = await request.post<any, any>(`/outsource/material-order/${id}/receive`, { warehouseId: recWarehouseId.value, items: data, force: force || false })
+    if (res?._shortage) {
+      const shortages = (res.shortages || []) as any[]
+      let html = '<div style="margin-bottom:8px">以下子物料库存不足，是否确认缺料收货？</div>'
+      html += '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+      html += '<tr style="background:#f5f7fa"><th style="padding:6px;border:1px solid #ebeef5;text-align:left">物料名称</th><th style="padding:6px;border:1px solid #ebeef5">需要</th><th style="padding:6px;border:1px solid #ebeef5">库存</th><th style="padding:6px;border:1px solid #ebeef5">缺口</th></tr>'
+      for (const s of shortages) {
+        html += `<tr><td style="padding:6px;border:1px solid #ebeef5">${s.materialName||''}</td>`
+        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#e6a23c">${s.demand||0}</td>`
+        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#f56c6c">${s.stock||0}</td>`
+        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#f56c6c;font-weight:600">${s.shortage||0}</td></tr>`
+      }
+      html += '</table>'
+      html += '<div style="margin-top:8px;color:#909399;font-size:12px">确认后子物料库存将变为负数</div>'
+      recSaving.value = false
+      try {
+        await ElMessageBox.confirm(html, '缺料提示', {
+          confirmButtonText: '确认缺料收货',
+          cancelButtonText: '取消',
+          type: 'warning',
+          dangerouslyUseHTMLString: true
+        })
+      } catch { return }
+      handleReceive(true)
+      return
+    }
+    ElMessage.success(force ? '缺料交货完成（子物料库存已为负数）' : '交货完成')
+    recVisible.value = false; loadAll()
+  }
   catch (e: any) { ElMessage.error(e?.message || '交货失败') } finally { recSaving.value = false }
 }
 
