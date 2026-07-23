@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, onActivated, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  getProject, updateProject, updateProjectStatus,
+  getProject, updateProject,
   getProjectBom, saveProjectBom,
   getProjectBugs, addProjectBug, updateProjectBug, deleteProjectBug,
   getProjectDrawings, addProjectDrawing, deleteProjectDrawing,
@@ -16,8 +16,6 @@ import request from '@/utils/request'
 const route = useRoute()
 const router = useRouter()
 const projectId = Number(route.params.id)
-
-const STATUS_LIST = ['立项', '排线图纸', '排线打样', 'FOG打样', '显示调试', '触摸调试', '背贴盖板打样', '总成样品', '测试', '小批量', '结项']
 
 const saving = ref(false)
 const activeTab = ref((route.query.tab as string) || 'project')
@@ -70,12 +68,6 @@ async function handleSave() {
   saving.value = false
 }
 
-async function handleStatusChange(newStatus: string) {
-  await updateProjectStatus(projectId, newStatus)
-  form.status = newStatus
-  ElMessage.success('阶段已更新')
-}
-
 function goCreateOrder(type: 'sample' | 'outsource') {
   const factoryId = type === 'sample' ? form.sampleFactoryId : form.outsourceFactoryId
   if (!factoryId) return
@@ -83,18 +75,71 @@ function goCreateOrder(type: 'sample' | 'outsource') {
 }
 
 // ===================== 时间线 =====================
-interface TimelineItem { statusName: string; sortOrder: number; plannedEnd?: string; actualEnd?: string; status?: string }
-const timelineStatusOptions = ['未完成', '进行中', '已完成']
+interface TimelineItem { id?: number; statusName: string; sortOrder: number; defaultDays?: number; plannedEnd?: string; actualEnd?: string; status?: string }
+const timelineStatusOptions = ['未开始', '进行中', '已完成']
 const timelineList = ref<TimelineItem[]>([])
+const timelineCompleting = ref<Record<number, boolean>>({})
 
 async function loadTimeline() {
   const res = await request.get<unknown, TimelineItem[]>(`/dev/project/${projectId}/timeline`)
   timelineList.value = res || []
 }
 
-async function saveTimeline() {
-  await request.put(`/dev/project/${projectId}/timeline`, timelineList.value)
-  ElMessage.success('时间线已保存'); loadTimeline()
+// 从时间线推导当前项目阶段
+const currentPhaseName = computed(() => {
+  // 优先找"进行中"的阶段
+  const active = timelineList.value.find(t => t.status === '进行中')
+  if (active) return active.statusName
+  // 没有进行中的，找最后一个已完成的
+  for (let i = timelineList.value.length - 1; i >= 0; i--) {
+    if (timelineList.value[i].status === '已完成') return timelineList.value[i].statusName
+  }
+  // 都没有，返回项目当前状态
+  return form.status || '立项'
+})
+
+async function saveTimelineRow(row: TimelineItem) {
+  try {
+    await request.put(`/dev/project-timeline`, {
+      id: row.id,
+      projectId: projectId,
+      statusName: row.statusName,
+      sortOrder: row.sortOrder,
+      defaultDays: row.defaultDays,
+      plannedEnd: row.plannedEnd || null,
+      actualEnd: row.actualEnd || null,
+      status: row.status
+    })
+    // 更新日期或状态后刷新列表（后端可能后推了后续阶段）
+    await loadTimeline()
+  } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '')) }
+}
+
+async function completePhase(timelineId: number) {
+  timelineCompleting.value[timelineId] = true
+  try {
+    await request.post(`/dev/project-timeline/complete/${timelineId}`)
+    ElMessage.success('阶段已完成')
+    await loadTimeline()
+    // 重新加载项目信息（可能自动结项）
+    await loadProject()
+  } catch (e: any) { ElMessage.error('操作失败: ' + (e?.message || '')) }
+  finally { timelineCompleting.value[timelineId] = false }
+}
+
+// 进度统计
+const timelineProgress = computed(() => {
+  const total = timelineList.value.length
+  const completed = timelineList.value.filter(t => t.status === '已完成').length
+  const inProgress = timelineList.value.filter(t => t.status === '进行中').length
+  return { total, completed, inProgress, pct: total > 0 ? Math.round(completed / total * 100) : 0 }
+})
+
+// 行样式
+function timelineRowClass({ row }: { row: TimelineItem }) {
+  if (row.status === '已完成') return 'timeline-row-done'
+  if (row.status === '进行中') return 'timeline-row-active'
+  return ''
 }
 
 // BOM 平铺列表（父+子混排，子行只读缩进）
@@ -119,7 +164,7 @@ async function loadBom() {
   // 平铺：父行 + 子行（缩进只读）
   const result: any[] = []
   for (const b of items) {
-    result.push({ _isChild: false, materialName: b.materialName, materialId: b.materialId, supplierId: b.supplierId, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })
+    result.push({ _isChild: false, materialName: b.materialName, supplierId: b.supplierId, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })
     const subs = childrenMap[b.materialName] || []
     for (const s of subs) {
       result.push({ _isChild: true, materialName: s.childName, materialType: s.childType, quantityPerSet: s.quantity, lossRate: s.lossRate, remark: s.remark })
@@ -128,12 +173,11 @@ async function loadBom() {
   bomList.value = result
 }
 
-function addBomRow() { bomList.value.push({ _isChild: false, materialName: '', materialId: undefined, spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialType: '', remark: '', supplierId: undefined }) }
+function addBomRow() { bomList.value.push({ _isChild: false, materialName: '', spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialType: '', remark: '', supplierId: undefined }) }
 async function onBomMaterialChange(materialName: string, row: any) {
   if (!materialName || !row.materialType) return
   const matched = getMaterialsByType(row.materialType).find((m: any) => m.materialName === materialName)
   if (!matched) return
-  row.materialId = matched.id || undefined
   if (matched.spec) row.spec = matched.spec
   if (matched.unit) row.unit = matched.unit
   if (matched.supplierIds) {
@@ -327,9 +371,7 @@ function onNameBlur() {
               <el-col :span="8"><el-form-item label="项目名称"><el-input v-model="form.name" @blur="onNameBlur" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="总成名称" prop="assemblyName" :rules="[{ required: true, message: '请输入总成名称', trigger: 'blur' }]"><el-input v-model="form.assemblyName" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="项目阶段">
-                <el-select :model-value="form.status" @change="(v:string)=>handleStatusChange(v)" style="width:100%">
-                  <el-option v-for="s in STATUS_LIST" :key="s" :label="s" :value="s" />
-                </el-select>
+                <el-tag type="warning" size="default">{{ currentPhaseName }}</el-tag>
               </el-form-item></el-col>
               <el-col :span="8"><el-form-item label="适配机型"><el-input v-model="form.adaptModel" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="显示方案"><el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%" @change="(v: string) => { if (v === ADD_MARKER) { form.displaySupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
@@ -370,19 +412,52 @@ function onNameBlur() {
       <!-- 阶段时间线 Tab -->
       <el-tab-pane label="阶段时间线" name="timeline">
         <el-card shadow="never">
-          <el-table :data="timelineList" border size="small">
-            <el-table-column prop="statusName" label="阶段" width="140" />
-            <el-table-column label="计划完成" width="160"><template #default="{row}"><el-input v-model="row.plannedEnd" type="date" size="small" /></template></el-table-column>
-            <el-table-column label="实际完成" width="160"><template #default="{row}"><el-input v-model="row.actualEnd" type="date" size="small" /></template></el-table-column>
-            <el-table-column label="状态" width="120" align="center">
+          <!-- 进度概览 -->
+          <div style="margin-bottom:12px;display:flex;align-items:center;gap:16px">
+            <span style="font-size:14px;font-weight:600">进度概览</span>
+            <div style="flex:1;max-width:360px">
+              <el-progress :percentage="timelineProgress.pct" :stroke-width="16" 
+                :color="timelineProgress.pct === 100 ? '#67c23a' : '#409eff'">
+                <span style="font-size:12px">{{ timelineProgress.completed }} / {{ timelineProgress.total }} 已完成</span>
+              </el-progress>
+            </div>
+            <el-tag v-if="timelineProgress.inProgress > 0" type="warning" size="small">{{ timelineProgress.inProgress }} 个进行中</el-tag>
+          </div>
+
+          <el-table :data="timelineList" border size="small" :row-class-name="timelineRowClass">
+            <el-table-column label="排序" width="55" align="center"><template #default="{row}">{{ row.sortOrder }}</template></el-table-column>
+            <el-table-column prop="statusName" label="阶段名称" width="140" />
+            <el-table-column label="默认天数" width="75" align="center"><template #default="{row}">{{ row.defaultDays || '-' }}</template></el-table-column>
+            <el-table-column label="计划完成" width="150">
               <template #default="{row}">
-                <el-select v-model="row.status" size="small" style="width:100%">
+                <el-input v-model="row.plannedEnd" type="date" size="small" 
+                  :disabled="row.status === '已完成'" @change="saveTimelineRow(row)" />
+              </template>
+            </el-table-column>
+            <el-table-column label="实际完成" width="150">
+              <template #default="{row}">
+                <el-input v-model="row.actualEnd" type="date" size="small" @change="saveTimelineRow(row)" />
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="100" align="center">
+              <template #default="{row}">
+                <el-tag v-if="row.status === '已完成'" type="success" size="small">{{ row.status }}</el-tag>
+                <el-tag v-else-if="row.status === '进行中'" type="warning" size="small">{{ row.status }}</el-tag>
+                <el-select v-else v-model="row.status" size="small" style="width:90px" @change="saveTimelineRow(row)">
                   <el-option v-for="o in timelineStatusOptions" :key="o" :label="o" :value="o" />
                 </el-select>
               </template>
             </el-table-column>
+            <el-table-column label="操作" width="80" align="center">
+              <template #default="{row}">
+                <el-button v-if="row.id && row.status === '进行中'" type="success" size="small"
+                  :loading="timelineCompleting[row.id]" @click="completePhase(row.id)">
+                  完成
+                </el-button>
+                <span v-else-if="row.status === '已完成'" style="color:#909399;font-size:12px">-</span>
+              </template>
+            </el-table-column>
           </el-table>
-          <el-button type="primary" size="small" @click="saveTimeline" style="margin-top:8px">保存时间线</el-button>
         </el-card>
       </el-tab-pane>
 
@@ -597,4 +672,8 @@ function onNameBlur() {
 .page-title { font-size:18px; font-weight:600; }
 .drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:32px; text-align:center; transition:all .3s; cursor:pointer }
 .drop-zone:hover { border-color:#409eff; background:#ecf5ff }
+
+/* 时间线行样式 */
+:deep(.timeline-row-done) { background-color: #f0f9eb; }
+:deep(.timeline-row-active) { background-color: #fdf6ec; }
 </style>

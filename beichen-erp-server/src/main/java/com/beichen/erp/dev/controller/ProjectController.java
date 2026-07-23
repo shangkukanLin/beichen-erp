@@ -74,19 +74,53 @@ public class ProjectController {
 
     @PutMapping("/{id}/timeline")
     public R<Void> saveTimeline(@PathVariable Long id, @RequestBody List<Map<String, Object>> list) {
+        // 先加载数据库中的当前时间线，用于对比 plannedEnd 和 status 是否变化
+        List<ProjectTimeline> dbTimelines = timelineService.listByProject(id);
+        java.util.Map<String, LocalDate> dbPlannedMap = new java.util.HashMap<>();
+        java.util.Map<String, String> dbStatusMap = new java.util.HashMap<>();
+        for (ProjectTimeline t : dbTimelines) {
+            dbPlannedMap.put(t.getStatusName(), t.getPlannedEnd());
+            dbStatusMap.put(t.getStatusName(), t.getStatus());
+        }
+
+        // 按 sortOrder 升序处理
+        list.sort((a, b) -> {
+            Object ao = a.get("sortOrder");
+            Object bo = b.get("sortOrder");
+            int av = ao instanceof Number ? ((Number) ao).intValue() : 0;
+            int bv = bo instanceof Number ? ((Number) bo).intValue() : 0;
+            return Integer.compare(av, bv);
+        });
+
         for (Map<String, Object> item : list) {
             String statusName = (String) item.get("statusName");
             Object planned = item.get("plannedEnd");
             Object actual = item.get("actualEnd");
             Object status = item.get("status");
+
             if (planned != null && !planned.toString().isBlank()) {
-                timelineService.updatePlanned(id, statusName, LocalDate.parse(planned.toString()));
+                LocalDate newPlanned = LocalDate.parse(planned.toString());
+                LocalDate oldPlanned = dbPlannedMap.get(statusName);
+                // 仅当计划日期确实发生变更时，才触发后推逻辑
+                if (!newPlanned.equals(oldPlanned)) {
+                    timelineService.updatePlannedAndShift(id, statusName, newPlanned);
+                }
             }
             if (actual != null && !actual.toString().isBlank()) {
                 timelineService.updateTimeline(id, statusName, LocalDate.parse(actual.toString()));
             }
             if (status != null && !status.toString().isBlank()) {
-                timelineService.updateStatus(id, statusName, status.toString());
+                String newStatus = status.toString();
+                String oldStatus = dbStatusMap.get(statusName);
+                // 仅当状态确实发生变更时才更新，避免冲掉 updateStatus 内部的自动完成逻辑
+                if (!newStatus.equals(oldStatus)) {
+                    timelineService.updateStatus(id, statusName, newStatus);
+                    // updateStatus 可能自动完成了其他阶段，刷新状态映射
+                    List<ProjectTimeline> latest = timelineService.listByProject(id);
+                    for (ProjectTimeline t : latest) {
+                        dbStatusMap.put(t.getStatusName(), t.getStatus());
+                    }
+                }
             }
         }
         return R.ok();

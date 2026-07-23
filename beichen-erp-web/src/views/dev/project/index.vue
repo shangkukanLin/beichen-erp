@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
-  getProjectPage, addProject, updateProject, deleteProject, updateProjectStatus,
+  getProjectPage, addProject, updateProject, deleteProject,
   getProjectBom, saveProjectBom,
   getProjectBugs, addProjectBug, updateProjectBug, deleteProjectBug,
   getProjectDrawings, addProjectDrawing, deleteProjectDrawing,
@@ -23,8 +23,8 @@ const tableLoading = ref(false)
 const allProjects = ref<ProjectVO[]>([])
 const timelineMap = ref<Record<number, TimelineItem[]>>({})
 
-interface TimelineItem { statusName: string; sortOrder: number; plannedEnd?: string; actualEnd?: string; status?: string }
-const timelineStatusOptions = ['未完成', '进行中', '已完成']
+interface TimelineItem { id?: number; statusName: string; sortOrder: number; defaultDays?: number; plannedEnd?: string; actualEnd?: string; status?: string }
+const timelineStatusOptions = ['未开始', '进行中', '已完成']
 
 const activeProjects = ref<ProjectVO[]>([])
 const finishedProjects = ref<ProjectVO[]>([])
@@ -122,25 +122,51 @@ async function handleDelete(row: ProjectVO) {
   try { await ElMessageBox.confirm(`确定删除「${row.name}」吗？`, '提示', { type: 'warning' }); await deleteProject(row.id!); ElMessage.success('删除成功'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
-async function handleStatusChange(row: ProjectVO, newStatus: string) {
-  await updateProjectStatus(row.id!, newStatus)
-  ElMessage.success('状态已更新'); loadData()
-}
-
 // ===================== 时间线 =====================
 const timelineVisible = ref(false)
 const timelinePid = ref<number>()
 const timelineList = ref<TimelineItem[]>([])
+const timelineCompleting = ref<Record<number, boolean>>({})
+const timelineProgress = computed(() => {
+  const total = timelineList.value.length
+  const completed = timelineList.value.filter(t => t.status === '已完成').length
+  const inProgress = timelineList.value.filter(t => t.status === '进行中').length
+  return { total, completed, inProgress, pct: total > 0 ? Math.round(completed / total * 100) : 0 }
+})
 
 async function loadTimelineDetail(projectId: number) {
   const res = await request.get<unknown, TimelineItem[]>(`/dev/project/${projectId}/timeline`)
   timelineList.value = res || []
 }
 
-async function saveTimeline() {
+async function saveTimelineRow(row: TimelineItem) {
   if (!timelinePid.value) return
-  await request.put(`/dev/project/${timelinePid.value}/timeline`, timelineList.value)
-  ElMessage.success('时间线已保存'); timelineVisible.value = false; loadData()
+  try {
+    await request.put(`/dev/project-timeline`, {
+      id: row.id,
+      projectId: timelinePid.value,
+      statusName: row.statusName,
+      sortOrder: row.sortOrder,
+      defaultDays: row.defaultDays,
+      plannedEnd: row.plannedEnd || null,
+      actualEnd: row.actualEnd || null,
+      status: row.status
+    })
+    // 更新后刷新（后端可能后推了后续阶段日期，并同步了项目状态）
+    loadTimelineDetail(timelinePid.value)
+    loadData()
+  } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '')) }
+}
+
+async function completePhase(timelineId: number) {
+  timelineCompleting.value[timelineId] = true
+  try {
+    await request.post(`/dev/project-timeline/complete/${timelineId}`)
+    ElMessage.success('阶段已完成')
+    loadTimelineDetail(timelinePid.value!)
+    loadData()
+  } catch (e: any) { ElMessage.error('操作失败: ' + (e?.message || '')) }
+  finally { timelineCompleting.value[timelineId] = false }
 }
 
 function openTimeline(row: ProjectVO) {
@@ -210,11 +236,9 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="90" show-overflow-tooltip />
         <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
         <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
-        <el-table-column label="项目阶段" min-width="120" align="center">
+        <el-table-column label="项目阶段" min-width="100" align="center">
           <template #default="{ row }">
-            <el-select :model-value="row.status" size="small" style="width:100%" @change="(v:string)=>handleStatusChange(row as ProjectVO, v)">
-              <el-option v-for="s in STATUS_LIST" :key="s" :label="s" :value="s" />
-            </el-select>
+            <el-tag type="warning" size="small">{{ row.status }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="截止时间" width="120" align="center">
@@ -280,20 +304,42 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
       <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="timelineVisible" title="状态时间线" width="600px">
+    <el-dialog v-model="timelineVisible" title="阶段时间线" width="720px">
+      <!-- 进度概览 -->
+      <div style="margin-bottom:12px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:13px;font-weight:600">进度</span>
+        <el-progress :percentage="timelineProgress.pct" :stroke-width="12" style="flex:1;max-width:240px"
+          :color="timelineProgress.pct === 100 ? '#67c23a' : '#409eff'">
+          <span style="font-size:11px">{{ timelineProgress.completed }}/{{ timelineProgress.total }}</span>
+        </el-progress>
+        <el-tag v-if="timelineProgress.inProgress > 0" type="warning" size="small">进行中: {{ timelineProgress.inProgress }}</el-tag>
+      </div>
       <el-table :data="timelineList" border size="small">
-        <el-table-column prop="statusName" label="状态" width="140" />
-        <el-table-column label="计划完成" width="160"><template #default="{row}"><el-input v-model="row.plannedEnd" type="date" size="small" /></template></el-table-column>
-        <el-table-column label="实际完成" width="160"><template #default="{row}"><el-input v-model="row.actualEnd" type="date" size="small" /></template></el-table-column>
-        <el-table-column label="状态" width="120" align="center">
+        <el-table-column label="排序" width="55" align="center"><template #default="{row}">{{ row.sortOrder }}</template></el-table-column>
+        <el-table-column prop="statusName" label="阶段" width="130" />
+        <el-table-column label="计划完成" width="150">
+          <template #default="{row}"><el-input v-model="row.plannedEnd" type="date" size="small" :disabled="row.status === '已完成'" @change="saveTimelineRow(row)" /></template>
+        </el-table-column>
+        <el-table-column label="实际完成" width="150"><template #default="{row}"><el-input v-model="row.actualEnd" type="date" size="small" @change="saveTimelineRow(row)" /></template></el-table-column>
+        <el-table-column label="状态" width="95" align="center">
           <template #default="{row}">
-            <el-select v-model="row.status" size="small" style="width:100%">
+            <el-tag v-if="row.status === '已完成'" type="success" size="small">{{ row.status }}</el-tag>
+            <el-tag v-else-if="row.status === '进行中'" type="warning" size="small">{{ row.status }}</el-tag>
+            <el-select v-else v-model="row.status" size="small" style="width:85px" @change="saveTimelineRow(row)">
               <el-option v-for="o in timelineStatusOptions" :key="o" :label="o" :value="o" />
             </el-select>
           </template>
         </el-table-column>
+        <el-table-column label="操作" width="70" align="center">
+          <template #default="{row}">
+            <el-button v-if="row.id && row.status === '进行中'" type="success" size="small"
+              :loading="timelineCompleting[row.id]" @click="completePhase(row.id)">
+              完成
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
-      <template #footer><el-button @click="timelineVisible=false">取消</el-button><el-button type="primary" @click="saveTimeline">保存</el-button></template>
+      <template #footer><el-button @click="timelineVisible=false">关闭</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="detailVisible" :title="'项目详情: '+(detailProject?.name||'')" width="900px" :close-on-click-modal="false">
