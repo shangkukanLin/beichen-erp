@@ -88,7 +88,7 @@ public class TransferController {
                 if (o instanceof Map<?, ?> m) {
                     Map<String, Object> map = (Map<String, Object>) m;
                     InventoryTransferItem it = new InventoryTransferItem();
-                    if (map.get("materialId") != null) it.setMaterialId(Long.valueOf(map.get("materialId").toString()));
+                    if (map.get("materialId") != null) it.setProductId(Long.valueOf(map.get("materialId").toString()));
                     it.setMaterialName((String) map.get("materialName"));
                     it.setSpec((String) map.get("spec"));
                     it.setUnit((String) map.get("unit"));

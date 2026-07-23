@@ -375,6 +375,35 @@ CREATE TABLE IF NOT EXISTS outsource_order_close_report_item (
     INDEX idx_report_id (report_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='结单报表物料明细';
 
+CREATE TABLE IF NOT EXISTS outsource_return_order (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(50) NOT NULL COMMENT '退货单号',
+    factory_id BIGINT COMMENT '加工厂ID',
+    order_id BIGINT COMMENT '关联加工单ID',
+    return_date DATE COMMENT '退货日期',
+    status VARCHAR(20) DEFAULT '已确认' COMMENT '状态',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_factory_id (factory_id),
+    INDEX idx_order_id (order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外退货单';
+
+CREATE TABLE IF NOT EXISTS outsource_return_order_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    return_order_id BIGINT NOT NULL COMMENT '退货单ID',
+    material_name VARCHAR(100) COMMENT '物料名称',
+    material_type VARCHAR(50) COMMENT '物料类型',
+    unit VARCHAR(20) COMMENT '单位',
+    quantity DECIMAL(18,4) COMMENT '退回数量',
+    unit_price DECIMAL(18,4) COMMENT '加工单价',
+    amount DECIMAL(18,4) COMMENT '小计金额',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT COMMENT '公司ID',
+    INDEX idx_return_order_id (return_order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外退货明细';
+
 CREATE TABLE IF NOT EXISTS outsource_contract_template (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '模板ID',
     template_name VARCHAR(100) NOT NULL COMMENT '模板名称',
@@ -468,6 +497,17 @@ CREATE TABLE IF NOT EXISTS dev_project_timeline (
     INDEX idx_project_id (project_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目时间线表';
+
+CREATE TABLE IF NOT EXISTS dev_phase_template (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    name VARCHAR(50) NOT NULL COMMENT '阶段名称',
+    default_days INT DEFAULT 0 COMMENT '默认天数',
+    sort_order INT DEFAULT 0 COMMENT '排序',
+    remark VARCHAR(500) DEFAULT NULL COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    UNIQUE KEY uk_name_company (name, company_id),
+    INDEX idx_sort (sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目阶段模板表';
 
 CREATE TABLE IF NOT EXISTS dev_material (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',

@@ -91,7 +91,7 @@ public class PurchaseOrderController {
                 if (o instanceof Map<?, ?> m) {
                     Map<String, Object> map = (Map<String, Object>) m;
                     PurchaseOrderItem it = new PurchaseOrderItem();
-                    if (map.get("materialId") != null) it.setMaterialId(Long.valueOf(map.get("materialId").toString()));
+                    if (map.get("materialId") != null) it.setProductId(Long.valueOf(map.get("materialId").toString()));
                     it.setMaterialCode((String) map.get("materialCode"));
                     it.setMaterialName((String) map.get("materialName"));
                     it.setSpec((String) map.get("spec"));

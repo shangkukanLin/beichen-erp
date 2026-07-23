@@ -140,7 +140,7 @@ public class StockTakeServiceImpl implements StockTakeService {
             if (pl.compareTo(BigDecimal.ZERO) != 0) {
                 stockService.changeStock(take.getWarehouseId(), it.getMaterialName(), pl,
                         pl.compareTo(BigDecimal.ZERO) > 0 ? "盘点溢" : "盘点损",
-                        take.getCode(), "盘点", it.getMaterialId(), it.getSpec());
+                        take.getCode(), "盘点", it.getProductId(), it.getSpec());
             }
         }
         InventoryStockTake u = new InventoryStockTake(); u.setId(id); u.setStatus("已审核");

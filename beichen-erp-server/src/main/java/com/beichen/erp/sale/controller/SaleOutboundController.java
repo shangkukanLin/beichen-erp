@@ -79,7 +79,7 @@ public class SaleOutboundController {
                 if (o instanceof Map<?, ?> m) {
                     Map<String, Object> map = (Map<String, Object>) m;
                     SaleOutboundItem it = new SaleOutboundItem();
-                    if (map.get("materialId") != null) it.setMaterialId(Long.valueOf(map.get("materialId").toString()));
+                    if (map.get("materialId") != null) it.setProductId(Long.valueOf(map.get("materialId").toString()));
                     if (map.get("orderItemId") != null) it.setOrderItemId(Long.valueOf(map.get("orderItemId").toString()));
                     it.setMaterialCode((String) map.get("materialCode"));
                     it.setMaterialName((String) map.get("materialName"));

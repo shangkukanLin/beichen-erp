@@ -127,6 +127,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'BOM类型管理', requiresAuth: true }
       },
       {
+        path: 'dev/phase-template',
+        name: 'DevPhaseTemplate',
+        component: () => import('@/views/dev/phase-template/index.vue'),
+        meta: { title: '阶段模板管理', requiresAuth: true }
+      },
+      {
         path: 'dev/drawing',
         name: 'DevDrawing',
         component: () => import('@/views/dev/drawing/index.vue'),
@@ -156,6 +162,10 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/delivery/add', name: 'OutsourceDeliveryAdd', component: () => import('@/views/outsource/delivery/add.vue'), meta: { title: '新增物料收发单', requiresAuth: true } },
       { path: 'outsource/delivery/detail/:id', name: 'OutsourceDeliveryDetail', component: () => import('@/views/outsource/delivery/detail.vue'), meta: { title: '物料收发详情', requiresAuth: true } },
       { path: 'outsource/material-history/:wid/:mid', name: 'OutsourceMaterialHistory', component: () => import('@/views/outsource/warehouse-material-history.vue'), meta: { title: '物料库存流水详细', requiresAuth: true } },
+      // 委外退货
+      { path: 'outsource/return-order', name: 'OutsourceReturnOrder', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '委外退货', requiresAuth: true } },
+      { path: 'outsource/return-order/add', name: 'OutsourceReturnOrderAdd', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '新增委外退货', requiresAuth: true } },
+      { path: 'outsource/return-order/detail/:id', name: 'OutsourceReturnOrderDetail', component: () => import('@/views/outsource/return-order/detail.vue'), meta: { title: '委外退货详情', requiresAuth: true } },
       // 物料管理 + 多级BOM
       {
         path: 'material',

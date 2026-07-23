@@ -96,6 +96,7 @@ async function loadData() {
     }
     await loadMaterialStock()
     await loadDeliveryData()
+    if (form.status === '已完成' || form.status === '已取消') loadCloseReport()
   } finally { loading.value = false }
 }
 
@@ -276,6 +277,21 @@ function exportPdf() {
   }).catch(() => { ElMessage.error('导出失败') })
 }
 
+const closeReport = ref<any>({})
+const closeItems = ref<any[]>([])
+const closeLoading = ref(false)
+
+async function loadCloseReport() {
+  if (form.status !== '已完成' && form.status !== '已取消') return
+  closeLoading.value = true
+  try {
+    const r = await request.get<any, any>(`/outsource/order/${route.params.id}/close-report`)
+    Object.assign(closeReport, r || {})
+    closeItems.value = r?.items || []
+  } catch { closeItems.value = [] }
+  finally { closeLoading.value = false }
+}
+
 onMounted(() => { loadOptions(); loadData() })
 </script>
 
@@ -288,9 +304,10 @@ onMounted(() => { loadOptions(); loadData() })
       </div>
     </div>
 
-    <el-tabs v-model="activeTab" style="margin-bottom:12px">
+    <el-tabs v-model="activeTab" style="margin-bottom:12px" @tab-change="(t:string)=>{if(t==='close')loadCloseReport()}">
       <el-tab-pane label="加工详情" name="detail" />
       <el-tab-pane label="交货管理" name="delivery" />
+      <el-tab-pane v-if="form.status==='已完成'||form.status==='已取消'" label="结单详情" name="close" />
     </el-tabs>
 
     <!-- Tab 1: 加工详情 -->
@@ -425,6 +442,22 @@ onMounted(() => { loadOptions(); loadData() })
         </el-form>
         <template #footer><el-button @click="delDialogVisible = false">取消</el-button><el-button type="primary" :loading="delSaving" @click="delHandleSubmit()">保存</el-button></template>
       </el-dialog>
+    </template>
+
+    <!-- Tab 3: 结单详情 -->
+    <template v-if="activeTab === 'close'">
+      <el-card shadow="never" v-loading="closeLoading">
+        <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">结单详情</span><el-button size="small" @click="router.push(`/outsource/order/close/${form.id}`)">查看完整结单报表</el-button></div></template>
+        <el-table :data="closeItems" border size="small" v-if="closeItems.length">
+          <el-table-column label="物料名称" min-width="120"><template #default="{row}">{{ row.materialName }}</template></el-table-column>
+          <el-table-column label="发料数量" width="80" align="right"><template #default="{row}">{{ row.deliveredQuantity }}</template></el-table-column>
+          <el-table-column label="出货消耗" width="80" align="right"><template #default="{row}">{{ row.shippedQuantity }}</template></el-table-column>
+          <el-table-column label="缺失" width="60" align="right"><template #default="{row}"><span :style="{color:row.missingQty!=0?'#f56c6c':''}">{{ row.missingQty }}</span></template></el-table-column>
+          <el-table-column label="超损数量" width="80" align="right"><template #default="{row}">{{ row.excessLossQty }}</template></el-table-column>
+          <el-table-column label="超损总价" width="90" align="right"><template #default="{row}">{{ row.excessLossAmount }}</template></el-table-column>
+        </el-table>
+        <div v-else style="color:#909399;text-align:center;padding:20px">暂无结单数据</div>
+      </el-card>
     </template>
 
     <!-- 退不良弹窗 -->

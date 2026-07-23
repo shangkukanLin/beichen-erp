@@ -15,7 +15,7 @@ public class InventoryOtherIoItem {
 
     private Long otherIoId;
 
-    private Long materialId;
+    private Long productId;
 
     private String materialName;
 

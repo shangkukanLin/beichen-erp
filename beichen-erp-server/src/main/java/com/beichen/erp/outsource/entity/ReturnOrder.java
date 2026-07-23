@@ -7,20 +7,17 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("outsource_order_delivery")
-public class OutsourceOrderDelivery {
+@TableName("outsource_return_order")
+public class ReturnOrder {
     @TableId(type = IdType.AUTO)
     private Long id;
+    private String code;
+    private Long factoryId;
     private Long orderId;
-    private Long productId;
     private Long warehouseId;
-    private LocalDate deliveryDate;
-    private String productName;
-    private BigDecimal quantity;
-    private String deliveryType;
-    private String trackingNo;
+    private LocalDate returnDate;
+    private String status;
     private String remark;
-    private String attachUrl;
     private Long companyId;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;

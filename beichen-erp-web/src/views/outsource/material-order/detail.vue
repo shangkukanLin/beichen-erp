@@ -272,9 +272,10 @@ onMounted(async () => { await loadOptions(); loadAll() })
                   <el-table-column prop="childMaterialName" label="子物料" min-width="120" />
                   <el-table-column prop="childUnit" label="单位" width="55" />
                   <el-table-column label="需求" width="80"><template #default="{row:r}">{{ r.demandQuantity || 0 }}</template></el-table-column>
+                  <el-table-column label="已出货消耗" width="85"><template #default="{row:r}"><span :style="{color: r.deliveredQuantity>0?'#409eff':''}">{{ r.deliveredQuantity || 0 }}</span></template></el-table-column>
+                  <el-table-column label="剩余需求" width="80"><template #default="{row:r}">{{ Math.max(0, Number(r.demandQuantity||0) - Number(r.deliveredQuantity||0)) }}</template></el-table-column>
                   <el-table-column label="库存" width="75"><template #default="{row:r}"><span :style="{color: Number(r.stockQuantity||0) < Number(r.demandQuantity||0) ? '#f56c6c' : '#67c23a'}">{{ r.stockQuantity || 0 }}</span></template></el-table-column>
                   <el-table-column label="缺料" width="75"><template #default="{row:r}"><span :style="{color: Number(r.shortage||0) > 0 ? '#f56c6c' : '#67c23a'}">{{ r.shortage || 0 }}</span></template></el-table-column>
-                  <el-table-column label="已发料" width="75"><template #default="{row:r}"><span :style="{color: r.deliveredQuantity>0?'#67c23a':''}">{{ r.deliveredQuantity || 0 }}</span></template></el-table-column>
                   <el-table-column label="损耗率(%)" width="80"><template #default="{row:r}">{{ r.lossRate || 0 }}</template></el-table-column>
                   <el-table-column label="操作" width="80" align="center"><template #default="{row:r}"><el-button v-if="Number(r.shortage||0) > 0" type="warning" link size="small" @click="goPurchaseComponent(r, row)">去采购</el-button></template></el-table-column>
                 </el-table>
@@ -285,7 +286,7 @@ onMounted(async () => { await loadOptions(); loadAll() })
           <el-table-column prop="materialName" label="物料名称" min-width="130" />
           <el-table-column prop="unit" label="单位" width="60" />
           <el-table-column prop="orderQuantity" label="下单数" width="90" />
-          <el-table-column label="已收(良)" width="90"><template #default="{row}"><span :style="{color:row.receivedQuantity>0?'#67c23a':''}">{{ row.receivedQuantity || 0 }}</span></template></el-table-column>
+          <el-table-column label="已出货" width="90"><template #default="{row}"><span :style="{color:row.receivedQuantity>0?'#67c23a':''}">{{ row.receivedQuantity || 0 }}</span></template></el-table-column>
           <el-table-column label="已退(不良)" width="90"><template #default="{row}"><span :style="{color:row.defectReturnedQty>0?'#f56c6c':''}">{{ row.defectReturnedQty || 0 }}</span></template></el-table-column>
           <el-table-column prop="unitPrice" label="单价" width="80" />
           <el-table-column prop="amount" label="金额" width="100" />

@@ -15,7 +15,7 @@ public class InventoryStockTakeItem {
 
     private Long takeId;
 
-    private Long materialId;
+    private Long productId;
 
     private String materialName;
 

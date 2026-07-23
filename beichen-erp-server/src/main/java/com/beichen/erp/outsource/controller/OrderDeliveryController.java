@@ -87,7 +87,7 @@ public class OrderDeliveryController {
             String pn = p.getProductName() != null ? p.getProductName() : "未命名产品";
             BigDecimal pQty = p.getQuantity() != null ? p.getQuantity() : BigDecimal.ZERO;
             BigDecimal pDelivered = deliveries.stream()
-                    .filter(d -> pn.equals(d.getProductName()))
+                    .filter(d -> p.getId().equals(d.getProductId()))
                     .map(d -> d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             Map<String, Object> ps = new HashMap<>();
@@ -123,9 +123,16 @@ public class OrderDeliveryController {
             .map(p -> "name=" + p.getProductName() + ",id=" + p.getId() + ",projectId=" + p.getProjectId() + ",qty=" + p.getQuantity())
             .toList());
         OutsourceOrderProduct matchedProduct = products.stream()
-            .filter(p -> delivery.getProductName().equals(p.getProductName()))
+            .filter(p -> delivery.getProductId() != null && delivery.getProductId().equals(p.getId()))
             .findFirst().orElse(null);
+        if (matchedProduct == null && delivery.getProductName() != null) {
+            matchedProduct = products.stream()
+                .filter(p -> delivery.getProductId() != null && delivery.getProductId().equals(p.getId()))
+                .findFirst().orElse(null);
+            if (matchedProduct != null) delivery.setProductId(matchedProduct.getId());
+        }
         if (matchedProduct == null) throw new BusinessException("加工单中未找到该产品");
+        delivery.setProductId(matchedProduct.getId());
         log.info("匹配产品: id={}, projectId={}, quantity={}", matchedProduct.getId(), matchedProduct.getProjectId(), matchedProduct.getQuantity());
 
         // 加载物料需求
@@ -186,7 +193,7 @@ public class OrderDeliveryController {
 
         List<OutsourceOrderProduct> products = orderService.getProducts(old.getOrderId());
         OutsourceOrderProduct matchedProduct = products.stream()
-            .filter(p -> delivery.getProductName().equals(p.getProductName()))
+            .filter(p -> delivery.getProductId() != null && delivery.getProductId().equals(p.getId()))
             .findFirst().orElse(null);
         if (matchedProduct == null) throw new BusinessException("加工单中未找到该产品");
 
@@ -260,6 +267,7 @@ public class OrderDeliveryController {
             throw new BusinessException("只有生产中或已完成的加工单可退不良");
 
         String productName = (String) body.get("productName");
+        Long productId = body.get("productId") != null ? Long.valueOf(body.get("productId").toString()) : null;
         BigDecimal defectQty = new BigDecimal(body.get("quantity").toString());
         Long warehouseId = body.get("warehouseId") != null
                 ? Long.valueOf(body.get("warehouseId").toString()) : null;
@@ -268,15 +276,16 @@ public class OrderDeliveryController {
         // 匹配产品
         List<OutsourceOrderProduct> products = orderService.getProducts(orderId);
         OutsourceOrderProduct matchedProduct = products.stream()
-            .filter(p -> productName.equals(p.getProductName()))
+            .filter(p -> productId != null ? productId.equals(p.getId()) : productName != null && productName.equals(p.getProductName()))
             .findFirst().orElse(null);
         if (matchedProduct == null) throw new BusinessException("加工单中未找到该产品");
 
         // 校验退不良数量不超过已交数量
         List<OutsourceOrderDelivery> allDeliveries = deliveryMapper.selectList(
             new LambdaQueryWrapper<OutsourceOrderDelivery>().eq(OutsourceOrderDelivery::getOrderId, orderId));
+        final Long fProductId = matchedProduct.getId();
         BigDecimal deliveredQty = allDeliveries.stream()
-            .filter(d -> productName.equals(d.getProductName()))
+            .filter(d -> fProductId.equals(d.getProductId()))
             .map(d -> d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (defectQty.compareTo(deliveredQty) > 0)
@@ -530,7 +539,7 @@ public class OrderDeliveryController {
     private void revertDeliveryStock(OutsourceOrder order, OutsourceOrderDelivery delivery) {
         List<OutsourceOrderProduct> products = orderService.getProducts(delivery.getOrderId());
         OutsourceOrderProduct matchedProduct = products.stream()
-            .filter(p -> delivery.getProductName().equals(p.getProductName()))
+            .filter(p -> delivery.getProductId() != null && delivery.getProductId().equals(p.getId()))
             .findFirst().orElse(null);
         if (matchedProduct == null) return;
 

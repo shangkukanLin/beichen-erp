@@ -114,9 +114,9 @@ public class TransferServiceImpl implements TransferService {
         for (InventoryTransferItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             stockService.changeStock(transfer.getFromWarehouseId(), it.getMaterialName(), q.negate(),
-                    "调拨出", transfer.getCode(), "调拨", it.getMaterialId(), it.getSpec());
+                    "调拨出", transfer.getCode(), "调拨", it.getProductId(), it.getSpec());
             stockService.changeStock(transfer.getToWarehouseId(), it.getMaterialName(), q,
-                    "调拨入", transfer.getCode(), "调拨", it.getMaterialId(), it.getSpec());
+                    "调拨入", transfer.getCode(), "调拨", it.getProductId(), it.getSpec());
         }
         InventoryTransfer u = new InventoryTransfer(); u.setId(id); u.setStatus("已审核");
         transferMapper.updateById(u);

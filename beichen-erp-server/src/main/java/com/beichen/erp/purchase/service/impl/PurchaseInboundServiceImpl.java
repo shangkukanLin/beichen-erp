@@ -162,7 +162,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
         // 1) 库存联动：入库加库存 + 写流水
         for (PurchaseInboundItem it : items) {
             stockService.changeStock(inbound.getWarehouseId(), it.getMaterialName(), it.getQuantity(),
-                    "采购入库", inbound.getCode(), "采购入库", it.getMaterialId(), it.getSpec());
+                    "采购入库", inbound.getCode(), "采购入库", it.getProductId(), it.getSpec());
         }
         // 2) 生成应付台账
         FinancePayable fp = new FinancePayable();

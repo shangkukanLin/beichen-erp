@@ -160,7 +160,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         for (PurchaseOrderItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
             stockService.changeStock(order.getWarehouseId(), it.getMaterialName(), it.getQuantity(),
-                    "采购入库", order.getCode(), "采购单", it.getMaterialId(), it.getSpec());
+                    "采购入库", order.getCode(), "采购单", it.getProductId(), it.getSpec());
         }
         // 2) 生成应付台账
         FinancePayable fp = new FinancePayable();

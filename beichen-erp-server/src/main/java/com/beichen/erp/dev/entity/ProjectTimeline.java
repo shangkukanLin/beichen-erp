@@ -22,7 +22,7 @@ public class ProjectTimeline {
     private String statusName;
 
     private Integer sortOrder;
-
+    private Integer defaultDays;
     private LocalDate plannedEnd;
 
     private LocalDate actualEnd;

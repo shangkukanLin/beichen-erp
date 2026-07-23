@@ -587,7 +587,10 @@ public class MaterialOrderController {
                                 }
                             }
                             cm.put("stockQuantity", stock);
-                            cm.put("shortage", demand.subtract(stock).max(BigDecimal.ZERO));
+                            // 缺料 = max(剩余需求 - 库存, 0)，其中剩余需求 = max(需求 - 已出货消耗, 0)
+                            BigDecimal delivered = compQty.multiply(recQty);
+                            BigDecimal remaining = demand.subtract(delivered).max(BigDecimal.ZERO);
+                            cm.put("shortage", remaining.subtract(stock).max(BigDecimal.ZERO));
                         }
                         compMaps.add(cm);
                     }

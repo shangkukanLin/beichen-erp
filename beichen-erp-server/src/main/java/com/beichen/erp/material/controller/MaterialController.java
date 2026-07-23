@@ -128,47 +128,47 @@ public class MaterialController {
 
         // 采购订单明细
         int cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM purchase_order_item WHERE material_id = ?", Integer.class, id);
+                "SELECT COUNT(*) FROM purchase_order_item WHERE product_id = ?", Integer.class, id);
         if (cnt > 0) associations.put("采购订单明细", cnt);
 
         // 采购入库明细
         cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM purchase_inbound_item WHERE material_id = ?", Integer.class, id);
+                "SELECT COUNT(*) FROM purchase_inbound_item WHERE product_id = ?", Integer.class, id);
         if (cnt > 0) associations.put("采购入库明细", cnt);
 
         // 销售订单明细
         cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM sale_order_item WHERE material_id = ?", Integer.class, id);
+                "SELECT COUNT(*) FROM sale_order_item WHERE product_id = ?", Integer.class, id);
         if (cnt > 0) associations.put("销售订单明细", cnt);
 
         // 销售出库明细
         cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM sale_outbound_item WHERE material_id = ?", Integer.class, id);
+                "SELECT COUNT(*) FROM sale_outbound_item WHERE product_id = ?", Integer.class, id);
         if (cnt > 0) associations.put("销售出库明细", cnt);
 
         // 库存记录
         cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM inventory_warehouse_stock WHERE material_id = ?", Integer.class, id);
+                "SELECT COUNT(*) FROM inventory_warehouse_stock WHERE product_id = ?", Integer.class, id);
         if (cnt > 0) associations.put("库存记录", cnt);
 
         // 库存流水
         cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM inventory_stock_log WHERE material_id = ?", Integer.class, id);
+                "SELECT COUNT(*) FROM inventory_stock_log WHERE product_id = ?", Integer.class, id);
         if (cnt > 0) associations.put("库存流水", cnt);
 
         // 盘点明细
         cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM inventory_stock_take_item WHERE material_id = ?", Integer.class, id);
+                "SELECT COUNT(*) FROM inventory_stock_take_item WHERE product_id = ?", Integer.class, id);
         if (cnt > 0) associations.put("盘点明细", cnt);
 
         // 调拨明细
         cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM inventory_transfer_item WHERE material_id = ?", Integer.class, id);
+                "SELECT COUNT(*) FROM inventory_transfer_item WHERE product_id = ?", Integer.class, id);
         if (cnt > 0) associations.put("调拨明细", cnt);
 
         // 其他出入库明细
         cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM inventory_other_io_item WHERE material_id = ?", Integer.class, id);
+                "SELECT COUNT(*) FROM inventory_other_io_item WHERE product_id = ?", Integer.class, id);
         if (cnt > 0) associations.put("其他出入库明细", cnt);
 
         // 委外加工

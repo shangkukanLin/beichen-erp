@@ -44,7 +44,6 @@ public class BomServiceImpl extends ServiceImpl<BomMapper, Bom> implements BomSe
             Bom bom = new Bom();
             bom.setProjectId(projectId);
             bom.setSupplierId(dto.getSupplierId());
-            bom.setMaterialId(dto.getMaterialId());
             bom.setMaterialName(dto.getMaterialName());
             bom.setSpec(dto.getSpec());
             bom.setUnit(dto.getUnit());

@@ -307,11 +307,11 @@ export interface ProjectQueryParams {
 
 export interface BomVO {
   id?: number | string; projectId?: number; supplierId?: number; spec?: string; materialName: string
-  materialId?: number; unit?: string; quantityPerSet?: number; lossRate?: number
+  unit?: string; quantityPerSet?: number; lossRate?: number
   materialType?: string; remark?: string
 }
 
-export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialId?: number; materialName: string; spec?: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; materialType?: string; remark?: string }
+export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialName: string; spec?: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; materialType?: string; remark?: string }
 
 export interface BugVO {
   id?: number | string; projectId?: number; code?: string; title: string

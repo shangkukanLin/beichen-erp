@@ -19,6 +19,7 @@ import com.beichen.erp.outsource.mapper.OutsourceStockLogMapper;
 import com.beichen.erp.outsource.mapper.OutsourceWarehouseStockMapper;
 import com.beichen.erp.outsource.mapper.MaterialOrderMapper;
 import com.beichen.erp.outsource.mapper.MaterialOrderItemMapper;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.service.DeliveryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +43,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final OutsourceStockLogMapper stockLogMapper;
     private final MaterialOrderMapper materialOrderMapper;
     private final MaterialOrderItemMapper materialOrderItemMapper;
+    private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final InventoryWarehouseStockMapper inventoryStockMapper;
     private final InventoryWarehouseMapper inventoryWarehouseMapper;
     private final InventoryWarehouseStockService inventoryStockService;
@@ -265,18 +267,15 @@ public class DeliveryServiceImpl implements DeliveryService {
     private void syncDeliveredQuantity(OutsourceDelivery delivery, List<OutsourceDeliveryItem> items, boolean increase) {
         if (delivery.getFactoryId() == null) return;
         for (OutsourceDeliveryItem item : items) {
-            if (item.getMaterialName() == null && item.getMaterialId() == null) continue;
+            if (item.getMaterialId() == null) continue;
             try {
-                // 找到该工厂"生产中"状态的加工单物料记录
                 String findSql = "SELECT om.id, om.delivered_quantity FROM outsource_order_material om " +
                     "INNER JOIN outsource_order_product op ON om.product_id = op.id " +
                     "INNER JOIN outsource_order o ON op.order_id = o.id " +
                     "WHERE o.factory_id = ? AND o.status = '生产中' " +
-                    "AND (om.material_name = ? OR om.outsource_material_id = ?) LIMIT 1";
+                    "AND om.outsource_material_id = ? LIMIT 1";
                 List<java.util.Map<String, Object>> rows = jdbcTemplate.queryForList(
-                    findSql, delivery.getFactoryId(),
-                    item.getMaterialName() != null ? item.getMaterialName() : "",
-                    item.getMaterialId() != null ? item.getMaterialId() : -1L);
+                    findSql, delivery.getFactoryId(), item.getMaterialId());
                 if (rows.isEmpty()) continue;
                 Long omId = ((Number) rows.get(0).get("id")).longValue();
                 BigDecimal oldQty = (BigDecimal) rows.get(0).get("delivered_quantity");
@@ -389,19 +388,21 @@ public class DeliveryServiceImpl implements DeliveryService {
     public java.math.BigDecimal calcWeightedPrice(Long factoryId, String materialName) {
         if (factoryId == null || materialName == null) return java.math.BigDecimal.ZERO;
         try {
+            Long materialId = outsourceMaterialMapper.findIdByName(materialName);
             List<MaterialOrder> orders = materialOrderMapper.selectList(
                 new LambdaQueryWrapper<MaterialOrder>().eq(MaterialOrder::getSupplierId, factoryId));
             java.math.BigDecimal totalAmount = java.math.BigDecimal.ZERO, totalQty = java.math.BigDecimal.ZERO;
             for (MaterialOrder o : orders) {
-                List<MaterialOrderItem> mItems = materialOrderItemMapper.selectList(
-                    new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, o.getId()));
+                LambdaQueryWrapper<MaterialOrderItem> itemW = new LambdaQueryWrapper<MaterialOrderItem>()
+                    .eq(MaterialOrderItem::getOrderId, o.getId());
+                if (materialId != null) itemW.eq(MaterialOrderItem::getMaterialId, materialId);
+                List<MaterialOrderItem> mItems = materialOrderItemMapper.selectList(itemW);
                 for (MaterialOrderItem it : mItems) {
-                    if (java.util.Objects.equals(materialName, it.getMaterialName())) {
-                        java.math.BigDecimal qty = it.getOrderQuantity() != null ? it.getOrderQuantity() : java.math.BigDecimal.ZERO;
-                        java.math.BigDecimal price = it.getUnitPrice() != null ? it.getUnitPrice() : java.math.BigDecimal.ZERO;
-                        totalAmount = totalAmount.add(qty.multiply(price));
-                        totalQty = totalQty.add(qty);
-                    }
+                    if (materialId == null && !java.util.Objects.equals(materialName, it.getMaterialName())) continue;
+                    java.math.BigDecimal qty = it.getOrderQuantity() != null ? it.getOrderQuantity() : java.math.BigDecimal.ZERO;
+                    java.math.BigDecimal price = it.getUnitPrice() != null ? it.getUnitPrice() : java.math.BigDecimal.ZERO;
+                    totalAmount = totalAmount.add(qty.multiply(price));
+                    totalQty = totalQty.add(qty);
                 }
             }
             if (totalQty.compareTo(java.math.BigDecimal.ZERO) > 0)

@@ -15,7 +15,7 @@ public class InventoryStockLog {
 
     private Long warehouseId;
 
-    private Long materialId;
+    private Long productId;
 
     private String materialName;
 

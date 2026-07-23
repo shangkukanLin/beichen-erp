@@ -34,14 +34,14 @@ public class InventoryWarehouseStockService {
     @Transactional
     public void changeStock(Long warehouseId, String productName, BigDecimal quantity,
                             String changeType, String relatedBillNo, String relatedBillType,
-                            Long materialId, String spec) {
+                            Long productId, String spec) {
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) == 0) return;
 
         // 优先按 material_id 定位, materialId 为 null 时回退按 productName
         LambdaQueryWrapper<InventoryWarehouseStock> w = new LambdaQueryWrapper<InventoryWarehouseStock>()
                 .eq(InventoryWarehouseStock::getWarehouseId, warehouseId);
-        if (materialId != null) {
-            w.eq(InventoryWarehouseStock::getMaterialId, materialId);
+        if (productId != null) {
+            w.eq(InventoryWarehouseStock::getProductId, productId);
         } else {
             w.eq(InventoryWarehouseStock::getProductName, productName);
         }
@@ -51,20 +51,20 @@ public class InventoryWarehouseStockService {
         BigDecimal after = before.add(quantity);
         if (after.compareTo(BigDecimal.ZERO) < 0) {
             throw new BusinessException("库存不足，无法出库："
-                    + (materialId != null ? ("物料ID=" + materialId) : productName));
+                    + (productId != null ? ("产品ID=" + productId) : productName));
         }
         if (stock != null) {
             stock.setQuantity(after);
             stock.setAvailableQuantity(after); // 可用量=总量（后续按需拆分为预留+可用）
             // 补充 productName/materialId（首次记录可能缺失）
             if (productName != null) stock.setProductName(productName);
-            if (materialId != null) stock.setMaterialId(materialId);
+            if (productId != null) stock.setProductId(productId);
             mapper.updateById(stock);
         } else {
             stock = new InventoryWarehouseStock();
             stock.setWarehouseId(warehouseId);
             stock.setProductName(productName);
-            stock.setMaterialId(materialId);
+            stock.setProductId(productId);
             stock.setQuantity(after);
             stock.setAvailableQuantity(after);
             Long cid = CompanyContext.get();
@@ -74,7 +74,7 @@ public class InventoryWarehouseStockService {
         // 写库存流水（可追溯）
         InventoryStockLog log = new InventoryStockLog();
         log.setWarehouseId(warehouseId);
-        log.setMaterialId(materialId);
+        log.setProductId(productId);
         log.setMaterialName(productName);
         log.setSpec(spec);
         log.setChangeType(changeType);

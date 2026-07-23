@@ -135,7 +135,7 @@ public class OtherIoServiceImpl implements OtherIoService {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = "其他入库".equals(io.getIoType()) ? q : q.negate();
             stockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
-                    changeType, io.getCode(), changeType, it.getMaterialId(), it.getSpec());
+                    changeType, io.getCode(), changeType, it.getProductId(), it.getSpec());
         }
     }
 
@@ -147,7 +147,7 @@ public class OtherIoServiceImpl implements OtherIoService {
             // 逆向：入库变成扣回，出库变成加回
             BigDecimal delta = "其他入库".equals(io.getIoType()) ? q.negate() : q;
             stockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
-                    changeType, io.getCode(), changeType, it.getMaterialId(), it.getSpec());
+                    changeType, io.getCode(), changeType, it.getProductId(), it.getSpec());
         }
     }
 

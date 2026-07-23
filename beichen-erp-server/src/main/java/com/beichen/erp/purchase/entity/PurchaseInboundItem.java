@@ -17,7 +17,7 @@ public class PurchaseInboundItem {
 
     private Long orderItemId;
 
-    private Long materialId;
+    private Long productId;
 
     private String materialCode;
 

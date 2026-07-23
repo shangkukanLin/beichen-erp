@@ -160,7 +160,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         for (SaleOutboundItem it : items) {
             stockService.changeStock(outbound.getWarehouseId(), it.getMaterialName(),
                     it.getQuantity().negate(), "销售出库", outbound.getCode(), "销售出库",
-                    it.getMaterialId(), it.getSpec());
+                    it.getProductId(), it.getSpec());
         }
         // 2) 生成应收台账
         FinanceReceivable fr = new FinanceReceivable();

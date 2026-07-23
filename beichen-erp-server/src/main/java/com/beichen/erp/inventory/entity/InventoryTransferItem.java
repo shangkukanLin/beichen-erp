@@ -15,7 +15,7 @@ public class InventoryTransferItem {
 
     private Long transferId;
 
-    private Long materialId;
+    private Long productId;
 
     private String materialName;
 

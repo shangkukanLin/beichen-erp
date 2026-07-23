@@ -75,7 +75,7 @@ public class BrandController {
     @GetMapping("/{id}/check-delete")
     public R<Map<String, Object>> checkDelete(@PathVariable Long id) {
         int materialCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM material WHERE brand_id = ?", Integer.class, id);
+                "SELECT COUNT(*) FROM product WHERE brand_id = ?", Integer.class, id);
         Map<String, Object> result = new LinkedHashMap<>();
         Map<String, Integer> associations = new LinkedHashMap<>();
         if (materialCount > 0) associations.put("物料", materialCount);

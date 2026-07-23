@@ -163,7 +163,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
             stockService.changeStock(order.getWarehouseId(), it.getMaterialName(),
                     it.getQuantity().negate(), "销售出库", order.getCode(), "销售单",
-                    it.getMaterialId(), it.getSpec());
+                    it.getProductId(), it.getSpec());
         }
         // 2) 生成应收台账
         FinanceReceivable fr = new FinanceReceivable();

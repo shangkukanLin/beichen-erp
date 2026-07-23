@@ -15,7 +15,7 @@ public class SaleOrderItem {
 
     private Long orderId;
 
-    private Long materialId;
+    private Long productId;
 
     private String materialCode;
 

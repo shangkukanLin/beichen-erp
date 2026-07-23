@@ -12,7 +12,7 @@ public class InventoryWarehouseStock {
     private Long id;
     private Long warehouseId;
     private String productName;
-    private Long materialId;
+    private Long productId;
     private BigDecimal quantity;
     private BigDecimal availableQuantity;
     @TableField(fill = FieldFill.INSERT)

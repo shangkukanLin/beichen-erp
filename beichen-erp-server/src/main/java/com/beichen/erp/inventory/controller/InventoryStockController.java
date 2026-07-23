@@ -45,7 +45,7 @@ public class InventoryStockController {
             m.put("id", s.getId());
             m.put("warehouseId", s.getWarehouseId());
             m.put("productName", s.getProductName());
-            m.put("materialId", s.getMaterialId());
+            m.put("materialId", s.getProductId());
             m.put("quantity", s.getQuantity());
             m.put("availableQuantity", s.getAvailableQuantity());
             if (s.getWarehouseId() != null) {
