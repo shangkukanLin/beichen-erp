@@ -61,7 +61,7 @@ onActivated(() => loadData())
     </el-card>
 
     <el-card shadow="never" class="table-card">
-      <el-tabs v-model="activeTab">
+      <el-tabs v-model="activeTab" type="border-card">
         <el-tab-pane label="启用" name="active" />
         <el-tab-pane label="停用" name="stopped" />
       </el-tabs>

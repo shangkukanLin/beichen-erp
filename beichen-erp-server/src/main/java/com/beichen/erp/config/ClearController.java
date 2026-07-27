@@ -175,4 +175,17 @@ public class ClearController {
             return R.ok("品牌管理菜单已创建。请重新登录。");
         } catch (Exception e) { return R.fail(e.getMessage()); }
     }
+
+    @GetMapping("/api/system/fix-material-demand")
+    public R<String> fixMaterialDemand() {
+        try (Connection conn = dataSource.getConnection()) {
+            conn.setAutoCommit(false);
+            Statement stmt = conn.createStatement();
+            int rows = stmt.executeUpdate(
+                "UPDATE outsource_order_material m JOIN outsource_order_product p ON m.product_id = p.id SET m.demand_quantity = m.demand_quantity * p.quantity");
+            conn.commit();
+            stmt.close();
+            return R.ok("已修复 " + rows + " 条物料需求数量（乘以产品数量）");
+        } catch (Exception e) { return R.fail(e.getMessage()); }
+    }
 }

@@ -316,7 +316,7 @@ onActivated(() => { loadWarehouses(); loadMaterials(); loadStock() })
 <template>
   <div class="page">
     <el-card shadow="never" class="main-card">
-      <el-tabs v-model="activeTab">
+      <el-tabs v-model="activeTab" type="border-card">
         <!-- 库存查询 -->
         <el-tab-pane label="库存查询" name="stock">
           <el-form :inline="true" :model="stockQuery" class="query-form">

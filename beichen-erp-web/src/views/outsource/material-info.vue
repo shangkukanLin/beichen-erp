@@ -106,7 +106,7 @@ onMounted(() => { loadOptions(); loadData() })
     </el-card>
 
     <el-card shadow="never" class="table-card">
-      <el-tabs v-model="activeTab" @tab-change="handleTabChange">
+      <el-tabs v-model="activeTab" type="border-card" @tab-change="handleTabChange">
         <el-tab-pane label="全部" name="全部" />
         <el-tab-pane v-for="t in MATERIAL_TYPES" :key="t" :label="t" :name="t" />
       </el-tabs>

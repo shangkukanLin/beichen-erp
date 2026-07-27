@@ -678,9 +678,22 @@ public class DataInitializer implements ApplicationRunner {
     }
 
     private void initRoles() {
-        insertRoleIfNotExist("超级管理员", "super_admin", 1, "系统超级管理员");
-        insertRoleIfNotExist("管理员", "admin", 1, "系统管理员");
-        insertRoleIfNotExist("普通用户", "user", 1, "普通用户");
+        // 使用 INSERT IGNORE 确保新角色存在，不会覆盖旧角色
+        jdbcTemplate.update("INSERT IGNORE INTO sys_role (role_name, role_code, status, remark, company_id) VALUES " +
+            "('管理员', 'admin', 1, '系统管理员，拥有全部权限', 0), " +
+            "('研发工程师', 'dev_engineer', 1, '研发工程师，负责项目研发和BOM管理', 0), " +
+            "('销售专员', 'sales', 1, '销售专员，负责销售和客户管理', 0), " +
+            "('仓管员', 'warehouse', 1, '仓管员，负责库存和仓库管理', 0), " +
+            "('跟单专员', 'merchandiser', 1, '跟单专员，负责委外加工跟进', 0), " +
+            "('财务', 'finance', 1, '财务人员，负责应收应付和资金管理', 0)"
+        );
+        // 清理旧角色（如果存在则删除）
+        jdbcTemplate.update("DELETE FROM sys_role WHERE role_code IN ('super_admin', 'user')");
+        // 如果 lin 原来是 super_admin，改为 admin
+        jdbcTemplate.update("UPDATE sys_user_role ur JOIN sys_role r ON ur.role_id = r.id SET ur.role_id = " +
+            "(SELECT id FROM sys_role WHERE role_code = 'admin' LIMIT 1) " +
+            "WHERE r.role_code = 'super_admin'");
+        log.info("初始化角色数据完成");
     }
 
     private void insertRoleIfNotExist(String name, String code, Integer status, String remark) {
@@ -728,20 +741,20 @@ public class DataInitializer implements ApplicationRunner {
         if (lin == null) {
             return;
         }
-        Role superAdmin = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
-                .eq(Role::getRoleCode, "super_admin"));
-        if (superAdmin == null) {
+        Role adminRole = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
+                .eq(Role::getRoleCode, "admin"));
+        if (adminRole == null) {
             return;
         }
         Long count = userRoleMapper.selectCount(new LambdaQueryWrapper<UserRole>()
                 .eq(UserRole::getUserId, lin.getId())
-                .eq(UserRole::getRoleId, superAdmin.getId()));
+                .eq(UserRole::getRoleId, adminRole.getId()));
         if (count != null && count > 0) {
             return;
         }
         UserRole ur = new UserRole();
         ur.setUserId(lin.getId());
-        ur.setRoleId(superAdmin.getId());
+        ur.setRoleId(adminRole.getId());
         userRoleMapper.insert(ur);
     }
 
@@ -774,7 +787,7 @@ public class DataInitializer implements ApplicationRunner {
         // 委外加工子菜单
         saveMenu(15L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1);
         saveMenu(44L, 4L, "委外物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2);
-        saveMenu(16L, 4L, "物料信息", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 3);
+        saveMenu(16L, 4L, "物料信息管理", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 3);
         saveMenu(35L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 4);
         saveMenu(37L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 5);
         saveMenu(48L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6);
@@ -814,48 +827,40 @@ public class DataInitializer implements ApplicationRunner {
     }
 
     private void initRoleMenus() {
-        Role superAdminRole = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
-                .eq(Role::getRoleCode, "super_admin"));
-        Role adminRole = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
-                .eq(Role::getRoleCode, "admin"));
-        Role userRole = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
-                .eq(Role::getRoleCode, "user"));
+        // 管理员：全部权限
+        assignRoleMenus("admin", Arrays.asList(
+                1L, 2L, 4L, 5L, 6L, 7L,
+                8L, 9L, 10L,
+                49L, 50L, 18L, 19L, 33L, 36L, 39L,
+                15L, 16L, 35L, 37L, 44L, 48L,
+                20L, 22L, 23L,
+                25L, 26L, 27L, 28L,
+                29L, 40L, 44L, 45L, 46L));
+        // 研发工程师：项目研发 + BOM + 基础产品
+        assignRoleMenus("dev_engineer", Arrays.asList(
+                1L, 2L, 8L, 9L, 10L, 33L, 59L, 19L));
+        // 销售专员：销售 + 客户 + 产品
+        assignRoleMenus("sales", Arrays.asList(
+                1L, 5L, 23L, 18L, 19L, 50L));
+        // 仓管员：库存 + 仓库
+        assignRoleMenus("warehouse", Arrays.asList(
+                1L, 5L, 22L, 36L, 35L, 19L));
+        // 跟单专员：委外加工全部
+        assignRoleMenus("merchandiser", Arrays.asList(
+                1L, 4L, 15L, 44L, 16L, 35L, 37L, 48L, 19L, 18L, 49L, 36L, 50L));
+        // 财务：财务管理
+        assignRoleMenus("finance", Arrays.asList(
+                1L, 6L, 25L, 26L, 27L, 28L, 19L));
+    }
 
-        if (superAdminRole != null) {
-            List<Long> existingMenuIds = roleService.getMenuIdsByRoleId(superAdminRole.getId());
-            if (existingMenuIds == null || existingMenuIds.isEmpty()) {
-                roleService.saveRoleMenus(superAdminRole.getId(), Arrays.asList(
-                        1L, 2L, 4L, 5L, 6L, 7L,
-                        8L, 9L, 10L,
-                        49L, 50L, 18L, 19L, 33L, 36L, 39L,
-                        15L, 16L, 35L, 37L, 44L, 48L,
-                        20L, 22L, 23L,
-                        25L, 26L, 27L, 28L,
-                        29L, 30L, 31L, 40L, 41L, 42L));
-                log.info("初始化 super_admin 菜单权限完成");
-            }
-        }
-        if (adminRole != null) {
-            List<Long> existingMenuIds = roleService.getMenuIdsByRoleId(adminRole.getId());
-            if (existingMenuIds == null || existingMenuIds.isEmpty()) {
-                roleService.saveRoleMenus(adminRole.getId(), Arrays.asList(
-                        1L, 2L, 4L, 5L, 6L, 7L,
-                        8L, 9L, 10L,
-                        49L, 50L, 18L, 19L, 33L, 36L, 39L,
-                        15L, 16L, 35L, 37L, 44L, 48L,
-                        20L, 22L, 23L,
-                        25L, 26L, 27L, 28L,
-                        29L, 30L, 33L, 40L, 41L, 42L));
-                log.info("初始化 admin 菜单权限完成");
-            }
-        }
-        if (userRole != null) {
-            List<Long> existingMenuIds = roleService.getMenuIdsByRoleId(userRole.getId());
-            if (existingMenuIds == null || existingMenuIds.isEmpty()) {
-                roleService.saveRoleMenus(userRole.getId(), Arrays.asList(
-                        1L, 5L, 18L, 19L, 20L, 22L, 23L, 36L));
-                log.info("初始化 user 菜单权限完成");
-            }
+    private void assignRoleMenus(String roleCode, List<Long> menuIds) {
+        Role role = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
+                .eq(Role::getRoleCode, roleCode));
+        if (role == null) return;
+        List<Long> existingMenuIds = roleService.getMenuIdsByRoleId(role.getId());
+        if (existingMenuIds == null || existingMenuIds.isEmpty()) {
+            roleService.saveRoleMenus(role.getId(), menuIds);
+            log.info("初始化 {} 菜单权限完成", roleCode);
         }
     }
 
@@ -999,11 +1004,13 @@ public class DataInitializer implements ApplicationRunner {
             {28L, 6L, "资金流水", "menu", "/finance/cashflow", "FinanceCashflow", "TrendCharts", 4},
             {53L, 6L, "付款管理", "menu", "/finance/payment", "FinancePayment", "Money", 5},
             {40L, 7L, "智能管理", "menu", "/system/smart", "SystemSmart", "Cpu", 1},
-            {41L, 7L, "系统设置", "catalog", "", "", "Tools", 2},
-            {29L, 41L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 1},
-            {30L, 41L, "角色管理", "menu", "/system/role", "SystemRole", "Avatar", 2},
-            {31L, 41L, "菜单管理", "menu", "/system/menu", "SystemMenu", "Menu", 3},
-            {42L, 7L, "清空数据", "menu", "/system/clear-data", "SystemClearData", "Delete", 3},
+            {29L, 7L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 2},
+            {45L, 7L, "权限管理", "menu", "/system/permission", "SystemPermission", "Lock", 3},
+            {30L, 45L, "角色管理", "menu", "/system/permission", "SystemPermission", "", 0},
+            {31L, 45L, "菜单管理", "menu", "/system/permission", "SystemPermission", "", 0},
+            {44L, 7L, "系统信息", "menu", "/system/settings", "SystemSettings", "Setting", 4},
+            {46L, 7L, "数据管理", "menu", "/system/data-manage", "SystemDataManage", "Folder", 5},
+            {42L, 46L, "清空数据", "menu", "/system/data-manage", "SystemDataManage", "", 0},
         };
         // 使用 ON DUPLICATE KEY UPDATE 实现 upsert，确保已存在菜单的 parent_id 等字段也能更新
         int processed = 0;
@@ -1022,6 +1029,17 @@ public class DataInitializer implements ApplicationRunner {
             }
         }
         log.info("同步菜单完成，处理 {} 条", processed);
+
+        // 隐藏已合并到 Tab 页面的旧菜单（角色管理30/菜单管理31/清空数据42/旧系统设置41）
+        Long[] hiddenMenuIds = {30L, 31L, 41L, 42L};
+        for (Long menuId : hiddenMenuIds) {
+            try {
+                jdbcTemplate.update("UPDATE sys_menu SET visible = 0, status = 0 WHERE id = ?", menuId);
+            } catch (Exception e) {
+                log.warn("隐藏菜单失败: id={}, err={}", menuId, e.getMessage());
+            }
+        }
+        log.info("已隐藏 {} 个旧菜单", hiddenMenuIds.length);
 
         // 删除已废弃的旧菜单及其角色关联（方案商/委外加工厂/成品供应商/辅料商 已合并到供应商管理；43L已被48L替代）
         Long[] obsoleteMenuIds = {11L, 12L, 13L, 14L, 43L};

@@ -39,6 +39,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '系统信息', requiresAuth: true }
       },
       {
+        path: 'system/permission',
+        name: 'SystemPermission',
+        component: () => import('@/views/system/permission/index.vue'),
+        meta: { title: '权限管理', requiresAuth: true }
+      },
+      {
+        path: 'system/data-manage',
+        name: 'SystemDataManage',
+        component: () => import('@/views/system/data-manage/index.vue'),
+        meta: { title: '数据管理', requiresAuth: true }
+      },
+      {
         path: 'system/clear-data',
         name: 'SystemClearData',
         component: () => import('@/views/system/clear-data/index.vue'),

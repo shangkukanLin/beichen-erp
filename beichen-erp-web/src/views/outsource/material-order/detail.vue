@@ -274,8 +274,9 @@ onMounted(async () => { await loadOptions(); loadAll() })
                   <el-table-column label="需求" width="80"><template #default="{row:r}">{{ r.demandQuantity || 0 }}</template></el-table-column>
                   <el-table-column label="已出货消耗" width="85"><template #default="{row:r}"><span :style="{color: r.deliveredQuantity>0?'#409eff':''}">{{ r.deliveredQuantity || 0 }}</span></template></el-table-column>
                   <el-table-column label="剩余需求" width="80"><template #default="{row:r}">{{ Math.max(0, Number(r.demandQuantity||0) - Number(r.deliveredQuantity||0)) }}</template></el-table-column>
-                  <el-table-column label="库存" width="75"><template #default="{row:r}"><span :style="{color: Number(r.stockQuantity||0) < Number(r.demandQuantity||0) ? '#f56c6c' : '#67c23a'}">{{ r.stockQuantity || 0 }}</span></template></el-table-column>
-                  <el-table-column label="缺料" width="75"><template #default="{row:r}"><span :style="{color: Number(r.shortage||0) > 0 ? '#f56c6c' : '#67c23a'}">{{ r.shortage || 0 }}</span></template></el-table-column>
+                  <el-table-column label="库存" width="70"><template #default="{row:r}"><span :style="{color: Number(r.stockQuantity||0) < Number(r.demandQuantity||0) ? '#f56c6c' : '#67c23a'}">{{ r.stockQuantity || 0 }}</span></template></el-table-column>
+                  <el-table-column label="可能在途" width="80"><template #default="{row:r}"><span :style="{color: Number(r.inTransit||0) > 0 ? '#409eff' : ''}">{{ r.inTransit || 0 }}</span></template></el-table-column>
+                  <el-table-column label="缺料" width="70"><template #default="{row:r}"><span :style="{color: Number(r.shortage||0) > 0 ? '#f56c6c' : '#67c23a'}">{{ r.shortage || 0 }}</span></template></el-table-column>
                   <el-table-column label="损耗率(%)" width="80"><template #default="{row:r}">{{ r.lossRate || 0 }}</template></el-table-column>
                   <el-table-column label="操作" width="80" align="center"><template #default="{row:r}"><el-button v-if="Number(r.shortage||0) > 0" type="warning" link size="small" @click="goPurchaseComponent(r, row)">去采购</el-button></template></el-table-column>
                 </el-table>

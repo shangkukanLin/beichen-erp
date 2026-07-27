@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -525,6 +526,27 @@ public class MaterialOrderController {
             warehouseMapper.selectList(new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, supplierId))
                 .forEach(w -> supplierWhIds.add(w.getId()));
         }
+        // 查所有活跃物料订单的在途数量（可能不精确，仅按物料名汇总）
+        Map<String, BigDecimal> inTransitMap = new HashMap<>();
+        List<MaterialOrder> activeOrders = orderMapper.selectList(
+            new LambdaQueryWrapper<MaterialOrder>()
+                .notIn(MaterialOrder::getStatus, List.of("已完成", "已取消")));
+            if (!activeOrders.isEmpty()) {
+                List<Long> orderIds = activeOrders.stream().map(MaterialOrder::getId).collect(Collectors.toList());
+                List<MaterialOrderItem> orderItems = itemMapper.selectList(
+                    new LambdaQueryWrapper<MaterialOrderItem>()
+                        .in(MaterialOrderItem::getOrderId, orderIds));
+                for (MaterialOrderItem oi : orderItems) {
+                    if (oi.getMaterialName() == null || oi.getMaterialName().isBlank()) continue;
+                    BigDecimal ordered = oi.getOrderQuantity() != null ? oi.getOrderQuantity() : BigDecimal.ZERO;
+                    BigDecimal received = oi.getReceivedQuantity() != null ? oi.getReceivedQuantity() : BigDecimal.ZERO;
+                    BigDecimal inTransit = ordered.subtract(received);
+                    if (inTransit.compareTo(BigDecimal.ZERO) > 0) {
+                        inTransitMap.merge(oi.getMaterialName(), inTransit, BigDecimal::add);
+                    }
+                }
+            }
+
         if (items == null || items.isEmpty()) return Collections.emptyList();
         return items.stream().map(it -> {
             Map<String, Object> map = new LinkedHashMap<>();
@@ -591,6 +613,9 @@ public class MaterialOrderController {
                             BigDecimal delivered = compQty.multiply(recQty);
                             BigDecimal remaining = demand.subtract(delivered).max(BigDecimal.ZERO);
                             cm.put("shortage", remaining.subtract(stock).max(BigDecimal.ZERO));
+                            cm.put("inTransit", inTransitMap.getOrDefault(childMat.getMaterialName(), BigDecimal.ZERO));
+                        } else {
+                            cm.put("inTransit", BigDecimal.ZERO);
                         }
                         compMaps.add(cm);
                     }

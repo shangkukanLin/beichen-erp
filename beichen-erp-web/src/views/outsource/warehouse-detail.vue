@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
+import * as XLSX from 'xlsx'
 
 const route = useRoute()
 const router = useRouter()
@@ -10,6 +11,67 @@ const warehouse = ref<any>(null)
 const loading = ref(false)
 const matLoading = ref(false)
 const materials = ref<any[]>([])
+const projectMap = ref<Record<number, string>>({})
+
+function getProjectNames(projectIds: string): string {
+  if (!projectIds || !projectIds.trim()) return '-'
+  return projectIds.split(',').filter(Boolean).map(id => {
+    return projectMap.value[Number(id)] || `#${id}`
+  }).join('、')
+}
+
+async function loadProjects() {
+  try {
+    const r = await request.get<any, any>('/dev/project/page', { params: { pageSize: 500 } })
+    const list = r?.records || []
+    list.forEach((p: any) => { projectMap.value[p.id] = p.name })
+  } catch { /* ignore */ }
+}
+
+const PRIORITY_TYPES = ['玻璃', '驱动IC']
+
+// 排序：玻璃/驱动IC > 无归属项目 > 有归属项目
+const sortedMaterials = computed(() => {
+  return [...materials.value].sort((a, b) => {
+    const getOrder = (m: any) => {
+      const type = m.materialType || ''
+      const hasProject = !!(m.projectIds && m.projectIds.trim())
+      if (PRIORITY_TYPES.includes(type)) return 0
+      if (!hasProject) return 1
+      return 2
+    }
+    return getOrder(a) - getOrder(b)
+  })
+})
+
+function exportExcel() {
+  const info = warehouse.value
+  if (!info) return
+
+  const now = new Date().toLocaleString('zh-CN')
+  const cols = ['物料类型', '物料名称', '单位', '质量类型', '库存数量', '归属项目', '备注']
+  const rows: any[][] = [
+    [`库存物料清单 - ${info.warehouseName || ''}`],
+    [`仓库名称：${info.warehouseName || '-'}`],
+    [`所属加工厂：${info.factoryName || '-'}`],
+    [`地址：${info.address || '-'}`],
+    [`联系人：${info.contact || '-'}    电话：${info.phone || '-'}`],
+    [`导出时间：${now}`],
+    [],
+    cols,
+  ]
+  sortedMaterials.value.forEach(m => {
+    rows.push([m.materialType || '', m.materialName || '', m.unit || '', m.qualityType || '良品', m.quantity ?? 0, getProjectNames(m.projectIds), m.remark || ''])
+  })
+
+  const ws = XLSX.utils.aoa_to_sheet(rows)
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }]
+  ws['!cols'] = [{ wch: 14 }, { wch: 22 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 24 }, { wch: 20 }]
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '库存物料')
+  XLSX.writeFile(wb, `${info.warehouseName || '仓库'}_库存物料.xlsx`)
+}
 
 async function loadWarehouse() {
   loading.value = true
@@ -34,7 +96,7 @@ async function loadMaterials() {
 
 
 
-onMounted(() => { loadWarehouse(); loadMaterials() })
+onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
 </script>
 
 <template>
@@ -59,8 +121,11 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
 
     <!-- 物料列表 -->
     <el-card shadow="never" style="margin-top:12px">
-      <template #header><span style="font-weight:600">库存物料</span></template>
-      <el-table :data="materials" border stripe v-loading="matLoading" size="small">
+      <template #header>
+        <span style="font-weight:600">库存物料</span>
+        <el-button type="primary" size="small" style="margin-left:12px" @click="exportExcel">导出</el-button>
+      </template>
+      <el-table :data="sortedMaterials" border stripe v-loading="matLoading" size="small">
         <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="materialType" label="物料类型" width="100" />
         <el-table-column prop="materialName" label="物料名称" min-width="160" show-overflow-tooltip />
@@ -71,7 +136,7 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
           <template #default="{row}"><el-button type="primary" link size="small" @click="router.push(`/outsource/material-history/${warehouseId}/${row.materialId}`)">详细</el-button></template>
         </el-table-column>
       </el-table>
-      <div v-if="materials.length===0" style="text-align:center;color:#909399;padding:24px">暂无关联物料</div>
+      <div v-if="sortedMaterials.length===0" style="text-align:center;color:#909399;padding:24px">暂无关联物料</div>
     </el-card>
   </div>
 </template>

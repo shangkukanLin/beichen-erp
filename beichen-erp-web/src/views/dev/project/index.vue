@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted, onActivated, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getProjectPage, addProject, updateProject, deleteProject,
@@ -17,7 +17,8 @@ const today = new Date().toISOString().split('T')[0]
 const router = useRouter()
 
 // ===================== 列表 + Tab =====================
-const activeTab = ref('active')
+const route = useRoute()
+const activeTab = ref((route.query.tab as string) || 'active')
 const query = reactive({ name: '' })
 const tableLoading = ref(false)
 const allProjects = ref<ProjectVO[]>([])
@@ -30,21 +31,21 @@ const activeProjects = ref<ProjectVO[]>([])
 const finishedProjects = ref<ProjectVO[]>([])
 
 function filterProjects() {
-  activeProjects.value = allProjects.value.filter(p => p.status !== '结项')
-  finishedProjects.value = allProjects.value.filter(p => p.status === '结项')
+  activeProjects.value = allProjects.value.filter((p: any) => p.status !== '结项')
+  finishedProjects.value = allProjects.value.filter((p: any) => p.status === '结项')
 }
 
 function isOverdue(project: ProjectVO) {
   const timelines = timelineMap.value[project.id as number]
   if (!timelines) return false
-  const cur = timelines.find(t => t.statusName === project.status)
+  const cur = timelines.find((t: any) => t.statusName === project.status)
   return !!(cur && cur.plannedEnd && cur.plannedEnd < today && !cur.actualEnd)
 }
 
 function getPlannedEnd(project: ProjectVO) {
   const timelines = timelineMap.value[project.id as number]
   if (!timelines) return ''
-  const cur = timelines.find(t => t.statusName === project.status)
+  const cur = timelines.find((t: any) => t.statusName === project.status)
   return cur?.plannedEnd || ''
 }
 
@@ -107,7 +108,7 @@ function handleEdit(row: ProjectVO) { router.push(`/dev/project/edit/${row.id}`)
 
 async function handleSubmit() {
   if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
+  await formRef.value.validate(async (valid: any) => {
     if (!valid) return
     submitLoading.value = true
     try {
@@ -129,8 +130,8 @@ const timelineList = ref<TimelineItem[]>([])
 const timelineCompleting = ref<Record<number, boolean>>({})
 const timelineProgress = computed(() => {
   const total = timelineList.value.length
-  const completed = timelineList.value.filter(t => t.status === '已完成').length
-  const inProgress = timelineList.value.filter(t => t.status === '进行中').length
+  const completed = timelineList.value.filter((t: any) => t.status === '已完成').length
+  const inProgress = timelineList.value.filter((t: any) => t.status === '进行中').length
   return { total, completed, inProgress, pct: total > 0 ? Math.round(completed / total * 100) : 0 }
 })
 

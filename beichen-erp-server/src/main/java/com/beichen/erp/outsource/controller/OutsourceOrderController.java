@@ -23,6 +23,10 @@ import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
 import com.beichen.erp.outsource.entity.OutsourceDelivery;
 import com.beichen.erp.outsource.entity.OutsourceDeliveryItem;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
+import com.beichen.erp.outsource.entity.MaterialOrder;
+import com.beichen.erp.outsource.entity.MaterialOrderItem;
+import com.beichen.erp.outsource.mapper.MaterialOrderMapper;
+import com.beichen.erp.outsource.mapper.MaterialOrderItemMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -33,6 +37,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/outsource/order")
@@ -49,6 +54,8 @@ public class OutsourceOrderController {
     private final OutsourceDeliveryItemMapper deliveryItemMapper;
     private final OutsourceOrderDeliveryMapper orderDeliveryMapper;
     private final OutsourceMaterialComponentMapper componentMapper;
+    private final MaterialOrderMapper materialOrderMapper;
+    private final MaterialOrderItemMapper materialOrderItemMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -168,6 +175,27 @@ public class OutsourceOrderController {
             }
         }
 
+        // 查所有活跃物料订单的在途数量（可能不精确，仅按物料名汇总）
+        Map<String, BigDecimal> inTransitMap = new HashMap<>();
+        List<MaterialOrder> activeOrders = materialOrderMapper.selectList(
+            new LambdaQueryWrapper<MaterialOrder>()
+                .notIn(MaterialOrder::getStatus, List.of("已完成", "已取消")));
+        if (!activeOrders.isEmpty()) {
+            List<Long> orderIds = activeOrders.stream().map(MaterialOrder::getId).collect(Collectors.toList());
+            List<MaterialOrderItem> items = materialOrderItemMapper.selectList(
+                new LambdaQueryWrapper<MaterialOrderItem>()
+                    .in(MaterialOrderItem::getOrderId, orderIds));
+            for (MaterialOrderItem item : items) {
+                if (item.getMaterialName() == null || item.getMaterialName().isBlank()) continue;
+                BigDecimal ordered = item.getOrderQuantity() != null ? item.getOrderQuantity() : BigDecimal.ZERO;
+                BigDecimal received = item.getReceivedQuantity() != null ? item.getReceivedQuantity() : BigDecimal.ZERO;
+                BigDecimal inTransit = ordered.subtract(received);
+                if (inTransit.compareTo(BigDecimal.ZERO) > 0) {
+                    inTransitMap.merge(item.getMaterialName(), inTransit, BigDecimal::add);
+                }
+            }
+        }
+
         // 查库存
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map.Entry<String, Map<String, Object>> e : matMap.entrySet()) {
@@ -203,6 +231,7 @@ public class OutsourceOrderController {
             m.put("shippedConsumed", shippedConsumed);
             m.put("remainingDemand", remainingDemand);
             m.put("shortage", remainingDemand.subtract(stock).max(BigDecimal.ZERO));
+            m.put("inTransit", inTransitMap.getOrDefault(e.getKey(), BigDecimal.ZERO));
             // 是否有子物料组成（有则可"去委外"）
             boolean hasComps = false;
             if (materialId != null) {

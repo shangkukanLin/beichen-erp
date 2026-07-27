@@ -52,8 +52,7 @@ onMounted(() => { loadCompany(); loadParams() })
 </script>
 
 <template>
-  <el-card shadow="never">
-    <el-tabs v-model="activeTab">
+    <el-tabs v-model="activeTab" type="border-card">
       <el-tab-pane label="公司信息" name="company">
         <el-form :model="companyForm" label-width="100px" style="max-width:600px">
           <el-form-item label="公司名称"><el-input v-model="companyForm.companyName" /></el-form-item>
@@ -99,5 +98,4 @@ onMounted(() => { loadCompany(); loadParams() })
           @current-change="handleLogPageChange" />
       </el-tab-pane>
     </el-tabs>
-  </el-card>
 </template>

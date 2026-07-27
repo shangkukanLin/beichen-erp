@@ -246,7 +246,7 @@ onActivated(() => { loadBrands(); loadData() })
 
     <!-- 列表 -->
     <el-card shadow="never" class="table-card">
-      <el-tabs v-model="activeTab" @tab-change="handleTabChange">
+      <el-tabs v-model="activeTab" type="border-card" @tab-change="handleTabChange">
         <el-tab-pane label="正常" name="正常" />
         <el-tab-pane label="停售" name="停售" />
         <el-tab-pane label="研发中" name="研发中" />

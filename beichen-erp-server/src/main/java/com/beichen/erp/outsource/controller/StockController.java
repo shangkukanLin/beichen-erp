@@ -40,6 +40,7 @@ public class StockController {
                 map.put("materialName", mat != null ? mat.getMaterialName() : "-");
                 map.put("materialType", mat != null ? mat.getMaterialType() : "-");
                 map.put("unit", mat != null ? mat.getUnit() : "");
+                map.put("projectIds", mat != null && mat.getProjectIds() != null ? mat.getProjectIds() : "");
             }
             map.put("quantity", s.getQuantity());
             return map;
