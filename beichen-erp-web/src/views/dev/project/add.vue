@@ -60,10 +60,6 @@ onMounted(() => loadData())
 
 <template>
   <div class="add-page">
-    <div class="page-header">
-      <span class="page-title">新增研发项目</span>
-    </div>
-
     <!-- 基础信息 -->
     <el-card shadow="never">
       <template #header><span style="font-weight:600">基础信息</span></template>
@@ -111,6 +107,5 @@ onMounted(() => loadData())
 
 <style scoped>
 .add-page { display:flex; flex-direction:column; gap:12px; }
-.page-header { display:flex; align-items:center; gap:16px; padding-bottom:8px; }
-.page-title { font-size:18px; font-weight:600; }
+
 </style>

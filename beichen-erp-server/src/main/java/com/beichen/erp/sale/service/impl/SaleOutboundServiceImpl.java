@@ -9,6 +9,8 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.entity.FinanceReceivable;
 import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.material.entity.Material;
+import com.beichen.erp.material.mapper.MaterialMapper;
 import com.beichen.erp.sale.entity.SaleOrder;
 import com.beichen.erp.sale.entity.SaleOutbound;
 import com.beichen.erp.sale.entity.SaleOutboundItem;
@@ -34,6 +36,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     private final SaleOrderMapper orderMapper;
     private final CustomerMapper customerMapper;
     private final InventoryWarehouseStockService stockService;
+    private final MaterialMapper materialMapper;
     private final FinanceReceivableMapper receivableMapper;
 
     @Override
@@ -158,9 +161,12 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
                 new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, id));
         // 1) 库存联动：出库减库存（changeStock 负数，不足自动抛异常）
         for (SaleOutboundItem it : items) {
-            stockService.changeStock(outbound.getWarehouseId(), it.getMaterialName(),
+            Material product = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            stockService.changeStock(outbound.getWarehouseId(),
+                    product != null ? product.getName() : "",
                     it.getQuantity().negate(), "销售出库", outbound.getCode(), "销售出库",
-                    it.getProductId(), it.getSpec());
+                    it.getProductId(),
+                    product != null ? product.getSpec() : "");
         }
         // 2) 生成应收台账
         FinanceReceivable fr = new FinanceReceivable();

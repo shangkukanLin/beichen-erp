@@ -75,8 +75,6 @@ public class InventoryWarehouseStockService {
         InventoryStockLog log = new InventoryStockLog();
         log.setWarehouseId(warehouseId);
         log.setProductId(productId);
-        log.setMaterialName(productName);
-        log.setSpec(spec);
         log.setChangeType(changeType);
         log.setChangeQuantity(quantity);
         log.setBeforeQuantity(before);

@@ -128,8 +128,6 @@ onActivated(() => { resetForm() })
 
 <template>
   <div style="display:flex;flex-direction:column;gap:12px">
-    <div class="page-header"><span class="page-title">新增委外退货</span></div>
-
     <el-card shadow="never">
       <template #header><span style="font-weight:600">退货信息</span></template>
       <el-form :model="form" label-width="90px" size="small">

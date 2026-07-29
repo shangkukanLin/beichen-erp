@@ -138,8 +138,6 @@ onMounted(async () => {
 
 <template>
   <div class="add-page">
-    <div class="page-header"><span class="page-title">{{ isEdit ? '编辑物料订单' : '新增物料订单' }}</span></div>
-
     <el-card shadow="never">
       <template #header><span style="font-weight:600">订单信息</span></template>
       <el-form :model="form" label-width="90px" size="small">
@@ -191,6 +189,5 @@ onMounted(async () => {
 
 <style scoped>
 .add-page { display:flex; flex-direction:column; gap:12px; }
-.page-header { display:flex; align-items:center; gap:16px; padding-bottom:8px; }
-.page-title { font-size:18px; font-weight:600; }
+
 </style>

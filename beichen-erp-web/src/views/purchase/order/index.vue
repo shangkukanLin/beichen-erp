@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
-import { getMaterialPage, type Material } from '@/api/material'
+import { getMaterialPage, type Material } from '@/api/product'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
 const router = useRouter()
@@ -14,20 +14,26 @@ import {
   updatePurchaseOrder,
   auditPurchaseOrder,
   cancelPurchaseOrder,
+  unAuditPurchaseOrder,
+  PurchaseStatus,
+  PurchaseStatusLabel,
   type PurchaseOrder,
   type PurchaseOrderItem
 } from '@/api/purchase'
 
-const query = reactive({ code: '', supplierId: '' as string | number, status: '' as string })
+const query = reactive({ code: '', supplierId: '' as string | number, status: '' as string | number })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableLoading = ref(false)
 const tableData = ref<PurchaseOrder[]>([])
 
 const statusOptions = [
-  { label: '草稿', value: '草稿' },
-  { label: '已完成', value: '已完成' },
-  { label: '已作废', value: '已作废' }
+  { label: PurchaseStatusLabel[PurchaseStatus.DRAFT], value: PurchaseStatus.DRAFT },
+  { label: PurchaseStatusLabel[PurchaseStatus.COMPLETED], value: PurchaseStatus.COMPLETED },
+  { label: PurchaseStatusLabel[PurchaseStatus.CANCELLED], value: PurchaseStatus.CANCELLED }
 ]
+function statusLabel(s?: number) {
+  return s != null ? (PurchaseStatusLabel[s] || '') : ''
+}
 
 const suppliers = ref<{ id: number; name: string }[]>([])
 const warehouses = ref<{ id: number; warehouseName: string }[]>([])
@@ -58,7 +64,7 @@ const rules: FormRules = {
 
 async function loadSuppliers() {
   try {
-    const res = await request.get('/supplier/page', { params: { pageSize: 200 } })
+    const res = await request.get('/supplier/page', { params: { pageSize: 200, supplierType: 'product' } })
     suppliers.value = res?.records || []
   } catch { suppliers.value = [] }
 }
@@ -102,16 +108,13 @@ function resetForm() {
 }
 
 function handleAdd() {
-  resetForm()
-  dialogTitle.value = '新增采购单'
-  dialogVisible.value = true
-  formRef.value?.clearValidate()
+  router.push('/inventory/purchase/add')
 }
 
 async function handleEdit(row: PurchaseOrder) {
   resetForm()
   Object.assign(form, row)
-  dialogTitle.value = '编辑采购单'
+  dialogTitle.value = '编辑成品采购单'
   dialogVisible.value = true
   formRef.value?.clearValidate()
   try {
@@ -121,7 +124,7 @@ async function handleEdit(row: PurchaseOrder) {
 }
 
 function addItem() {
-  items.value.push({ materialId: undefined, materialName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' })
+  items.value.push({ productId: undefined, materialName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' })
 }
 function removeItem(index: number) {
   items.value.splice(index, 1)
@@ -129,7 +132,7 @@ function removeItem(index: number) {
 function onMaterialChange(val: number, row: PurchaseOrderItem) {
   const m = materialOptions.value.find(x => x.id === val)
   if (m) {
-    row.materialId = m.id as number
+    row.productId = m.id as number
     row.materialCode = m.code
     row.materialName = m.name
     row.spec = m.spec
@@ -179,6 +182,14 @@ async function handleCancel(row: PurchaseOrder) {
     loadData()
   } catch { /* 取消 */ }
 }
+async function handleUnAudit(row: PurchaseOrder) {
+  try {
+    await ElMessageBox.confirm(`确认反审核采购单「${row.code}」？反审核后将冲回库存、清除应付台账，单据回到草稿状态。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    await unAuditPurchaseOrder(row.id as number)
+    ElMessage.success('反审核成功，已回到草稿状态')
+    loadData()
+  } catch { /* 取消 */ }
+}
 async function handleDetail(row: PurchaseOrder) {
   detailData.value = { ...row }
   try {
@@ -188,13 +199,20 @@ async function handleDetail(row: PurchaseOrder) {
   detailVisible.value = true
 }
 
+function handleSupplierClick(id?: number) {
+  if (id) router.push(`/supplier/detail/${id}`)
+}
+function handleWarehouseClick(id?: number) {
+  if (id) router.push(`/inventory/warehouse/detail/${id}`)
+}
+
 function handleSizeChange(val: number) { pagination.pageSize = val; pagination.pageNum = 1; loadData() }
 function handleCurrentChange(val: number) { pagination.pageNum = val; loadData() }
 
-function statusType(s?: string) {
-  if (s === '草稿') return 'info'
-  if (s === '已完成') return 'success'
-  if (s === '已作废') return 'danger'
+function statusType(s?: number) {
+  if (s === PurchaseStatus.DRAFT) return 'info'
+  if (s === PurchaseStatus.COMPLETED) return 'success'
+  if (s === PurchaseStatus.CANCELLED) return 'danger'
   return ''
 }
 function supplierName(id?: number) {
@@ -228,12 +246,12 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData
             <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
-        <el-form-item>
-          <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
-          <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
-          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
-        </el-form-item>
       </el-form>
+      <div class="query-actions">
+        <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
+        <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
+        <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="table-card">
@@ -241,24 +259,30 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="code" label="单号" min-width="150" />
         <el-table-column label="供应商" min-width="140">
-          <template #default="{ row }">{{ supplierName(row.supplierId) }}</template>
+          <template #default="{ row }">
+            <el-button type="primary" link @click="handleSupplierClick(row.supplierId)">{{ supplierName(row.supplierId) }}</el-button>
+          </template>
         </el-table-column>
         <el-table-column label="入库仓库" min-width="120">
-          <template #default="{ row }">{{ warehouseName(row.warehouseId) }}</template>
+          <template #default="{ row }">
+            <el-button type="primary" link @click="handleWarehouseClick(row.warehouseId)">{{ warehouseName(row.warehouseId) }}</el-button>
+          </template>
         </el-table-column>
         <el-table-column prop="orderDate" label="订单日期" width="120" align="center" />
+        <el-table-column prop="itemsSummary" label="采购明细" min-width="200" show-overflow-tooltip />
         <el-table-column prop="totalAmount" label="总金额" width="120" align="right">
           <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="90" align="center">
-          <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ row.status }}</el-tag></template>
+          <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="220" align="center" fixed="right">
+        <el-table-column label="操作" width="240" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
-            <el-button v-if="row.status === '草稿'" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === '草稿'" type="warning" link @click="handleEdit(row)">编辑</el-button>
-            <el-button v-if="row.status === '草稿'" type="danger" link @click="handleCancel(row)">作废</el-button>
+            <el-button v-if="row.status === PurchaseStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === PurchaseStatus.COMPLETED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
+            <el-button v-if="row.status === PurchaseStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button>
+            <el-button v-if="row.status === PurchaseStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -312,10 +336,10 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData
         </div>
         <el-table :data="items" border>
           <el-table-column type="index" label="#" width="50" align="center" />
-          <el-table-column label="物料" min-width="180">
+          <el-table-column label="产品" min-width="180">
             <template #default="{ row, $index }">
-              <el-select v-model="row.materialId" placeholder="选择物料" filterable remote :remote-method="loadMaterials"
-                style="width:100%" @change="(v: number) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
+              <el-select v-model="row.productId" placeholder="选择物料" filterable remote :remote-method="loadMaterials"
+                style="width:100%" @change="(v: number) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
                 <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.name}(${m.code})`" :value="m.id" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
@@ -324,7 +348,7 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData
           <el-table-column prop="spec" label="规格" width="100" />
           <el-table-column prop="unit" label="单位" width="70" />
           <el-table-column label="数量" width="120">
-            <template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :precision="2" controls-position="right" style="width:100%" /></template>
+            <template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :step="1" :precision="0" controls-position="right" style="width:100%" /></template>
           </el-table-column>
           <el-table-column label="单价" width="120">
             <template #default="{ row }"><el-input-number v-model="row.unitPrice" :min="0" :precision="2" controls-position="right" style="width:100%" /></template>
@@ -347,7 +371,7 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData
       <el-descriptions :column="2" border>
         <el-descriptions-item label="单号">{{ detailData.code }}</el-descriptions-item>
         <el-descriptions-item label="状态">
-          <el-tag :type="statusType(detailData.status)">{{ detailData.status }}</el-tag>
+          <el-tag :type="statusType(detailData.status)">{{ statusLabel(detailData.status) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="供应商">{{ supplierName(detailData.supplierId) }}</el-descriptions-item>
         <el-descriptions-item label="入库仓库">{{ warehouseName(detailData.warehouseId) }}</el-descriptions-item>
@@ -372,6 +396,7 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData
 <style scoped>
 .page { display: flex; flex-direction: column; gap: 12px; }
 .query-card :deep(.el-card__body), .table-card :deep(.el-card__body) { padding: 16px; }
-.query-form { display: flex; flex-wrap: wrap; }
+.query-form { align-items: center; }
+.query-actions { display: flex; justify-content: center; align-items: center; margin-top: 12px; }
 .pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
 </style>

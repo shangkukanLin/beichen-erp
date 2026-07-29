@@ -11,6 +11,8 @@ import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.material.entity.Material;
+import com.beichen.erp.material.mapper.MaterialMapper;
 import com.beichen.erp.sale.entity.SaleOrder;
 import com.beichen.erp.sale.entity.SaleOrderItem;
 import com.beichen.erp.sale.mapper.SaleOrderMapper;
@@ -35,6 +37,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     private final InventoryWarehouseStockService stockService;
     private final FinanceReceivableMapper receivableMapper;
     private final InventoryWarehouseStockMapper stockMapper;
+    private final MaterialMapper materialMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long customerId, String code, int pageNum, int pageSize) {
@@ -161,9 +164,12 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         // 1) 库存联动：出库减库存（quantity 负值，库存不足自动抛异常）
         for (SaleOrderItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            stockService.changeStock(order.getWarehouseId(), it.getMaterialName(),
+            Material product = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            stockService.changeStock(order.getWarehouseId(),
+                    product != null ? product.getName() : "",
                     it.getQuantity().negate(), "销售出库", order.getCode(), "销售单",
-                    it.getProductId(), it.getSpec());
+                    it.getProductId(),
+                    product != null ? product.getSpec() : "");
         }
         // 2) 生成应收台账
         FinanceReceivable fr = new FinanceReceivable();
@@ -205,18 +211,21 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         if (warehouseId == null || items == null || items.isEmpty()) return result;
 
         for (SaleOrderItem it : items) {
-            if (it.getMaterialName() == null || it.getQuantity() == null) continue;
+            if (it.getProductId() == null || it.getQuantity() == null) continue;
+            Material product = materialMapper.selectById(it.getProductId());
+            if (product == null) continue;
             BigDecimal required = it.getQuantity();
             InventoryWarehouseStock stock = stockMapper.selectOne(
                     new LambdaQueryWrapper<InventoryWarehouseStock>()
                             .eq(InventoryWarehouseStock::getWarehouseId, warehouseId)
-                            .eq(InventoryWarehouseStock::getProductName, it.getMaterialName()));
+                            .eq(InventoryWarehouseStock::getProductId, it.getProductId()));
             BigDecimal available = (stock != null && stock.getQuantity() != null) ? stock.getQuantity() : BigDecimal.ZERO;
             BigDecimal shortage = required.subtract(available);
             Map<String, Object> m = new HashMap<>();
-            m.put("materialName", it.getMaterialName());
-            m.put("spec", it.getSpec() != null ? it.getSpec() : "");
-            m.put("unit", it.getUnit() != null ? it.getUnit() : "");
+            m.put("productId", it.getProductId());
+            m.put("productName", product.getName());
+            m.put("spec", product.getSpec() != null ? product.getSpec() : "");
+            m.put("unit", product.getUnit() != null ? product.getUnit() : "");
             m.put("required", required);
             m.put("available", available);
             m.put("shortage", shortage.compareTo(BigDecimal.ZERO) > 0 ? shortage : BigDecimal.ZERO);

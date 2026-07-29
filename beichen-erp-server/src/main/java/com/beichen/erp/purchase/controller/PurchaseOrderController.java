@@ -23,7 +23,7 @@ public class PurchaseOrderController {
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
-            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Integer status,
             @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) String code,
             @RequestParam(defaultValue = "1") int pageNum,
@@ -67,6 +67,12 @@ public class PurchaseOrderController {
         return R.ok();
     }
 
+    @PutMapping("/{id}/un-audit")
+    public R<Void> unAudit(@PathVariable Long id) {
+        service.unAudit(id);
+        return R.ok();
+    }
+
     @SuppressWarnings("unchecked")
     private PurchaseOrder parseOrder(Map<String, Object> body) {
         Map<String, Object> d = body.containsKey("order") ? (Map<String, Object>) body.get("order") : body;
@@ -91,11 +97,7 @@ public class PurchaseOrderController {
                 if (o instanceof Map<?, ?> m) {
                     Map<String, Object> map = (Map<String, Object>) m;
                     PurchaseOrderItem it = new PurchaseOrderItem();
-                    if (map.get("materialId") != null) it.setProductId(Long.valueOf(map.get("materialId").toString()));
-                    it.setMaterialCode((String) map.get("materialCode"));
-                    it.setMaterialName((String) map.get("materialName"));
-                    it.setSpec((String) map.get("spec"));
-                    it.setUnit((String) map.get("unit"));
+                    if (map.get("productId") != null) it.setProductId(Long.valueOf(map.get("productId").toString()));
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank())
                         it.setQuantity(new BigDecimal(map.get("quantity").toString()));
                     if (map.get("unitPrice") != null && !map.get("unitPrice").toString().isBlank())

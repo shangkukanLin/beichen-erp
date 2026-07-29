@@ -142,10 +142,6 @@ onMounted(() => loadData())
 
 <template>
   <div class="template-page">
-    <div class="page-header">
-      <span class="page-title">合同模板设置</span>
-    </div>
-
     <el-tabs v-model="activeType" @tab-change="onTypeChange">
       <el-tab-pane label="加工合同" name="加工合同" />
       <el-tab-pane label="采购合同" name="采购合同" />
@@ -222,7 +218,6 @@ onMounted(() => loadData())
 
 <style scoped>
 .template-page { padding: 16px; }
-.page-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-.page-title { font-size: 20px; font-weight: 600; }
+
 .quill-wrapper { margin-top:4px; }
 </style>

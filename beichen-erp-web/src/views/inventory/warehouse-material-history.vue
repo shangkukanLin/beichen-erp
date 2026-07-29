@@ -48,8 +48,6 @@ onMounted(() => loadData())
 
 <template>
   <div class="history-page">
-    <div class="page-header"><span class="page-title">物料库存流水详细</span></div>
-
     <el-card shadow="never">
       <el-table :data="records" border stripe v-loading="loading">
         <el-table-column label="时间" width="110"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
@@ -77,7 +75,6 @@ onMounted(() => loadData())
 
 <style scoped>
 .history-page { display:flex; flex-direction:column; gap:12px; }
-.page-header { display:flex; align-items:center; gap:16px; padding-bottom:8px; }
-.page-title { font-size:18px; font-weight:600; }
+
 .pagination { margin-top:16px; display:flex; justify-content:flex-end; }
 </style>

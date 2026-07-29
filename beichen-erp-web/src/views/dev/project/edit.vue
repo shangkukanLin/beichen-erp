@@ -148,7 +148,7 @@ const bomTypes = ref<string[]>([])
 const allMaterials = ref<any[]>([])
 async function loadBomTypes() {
   try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => t.typeName) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
-  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料数据失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/product/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料数据失败', e?.message || e) }
 }
 function getMaterialsByType(type: string) { return allMaterials.value.filter((m:any) => m.materialType === type) }
 
@@ -159,7 +159,7 @@ async function loadBom() {
   const names = [...new Set(items.map((b:any) => b.materialName).filter(Boolean))]
   const childrenMap: Record<string, any[]> = {}
   if (names.length > 0) {
-    try { const r = await request.post<any, any>('/outsource/material/components-batch', names); Object.assign(childrenMap, r || {}) } catch { /* ignore */ }
+    try { const r = await request.post<any, any>('/outsource/product/components-batch', names); Object.assign(childrenMap, r || {}) } catch { /* ignore */ }
   }
   // 平铺：父行 + 子行（缩进只读）
   const result: any[] = []
@@ -318,7 +318,7 @@ async function handleDevMaterialSubmit() {
   }
   try {
     if (isDevMaterialEdit.value && devMaterialForm.id) {
-      await request.put(`/dev/project/${projectId}/material/${devMaterialForm.id}`, devMaterialForm)
+      await request.put(`/dev/project/${projectId}/product/${devMaterialForm.id}`, devMaterialForm)
       ElMessage.success('已更新')
     } else {
       await request.post(`/dev/project/${projectId}/material`, devMaterialForm)
@@ -332,7 +332,7 @@ async function handleDevMaterialSubmit() {
 async function handleDeleteDevMaterial(row: DevMaterialItem) {
   try {
     await ElMessageBox.confirm('确定删除该物料吗？', '提示', { type: 'warning' })
-    await request.delete(`/dev/project/${projectId}/material/${row.id}`)
+    await request.delete(`/dev/project/${projectId}/product/${row.id}`)
     ElMessage.success('已删除')
     loadDevMaterials()
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
@@ -357,7 +357,7 @@ function onNameBlur() {
   <div class="edit-page">
     <!-- 顶栏 -->
     <div class="page-header">
-      <span class="page-title">{{ form.name || '研发项目详细' }} <el-tag size="small" style="margin-left:8px">{{ form.code }}</el-tag></span>
+      <el-tag size="small">{{ form.code }}</el-tag>
     </div>
 
     <el-tabs v-model="activeTab">
@@ -669,7 +669,7 @@ function onNameBlur() {
 <style scoped>
 .edit-page { display:flex; flex-direction:column; gap:12px; }
 .page-header { display:flex; align-items:center; gap:16px; padding-bottom:8px; }
-.page-title { font-size:18px; font-weight:600; }
+
 .drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:32px; text-align:center; transition:all .3s; cursor:pointer }
 .drop-zone:hover { border-color:#409eff; background:#ecf5ff }
 

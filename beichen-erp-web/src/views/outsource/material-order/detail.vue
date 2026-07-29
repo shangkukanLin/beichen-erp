@@ -224,7 +224,6 @@ onMounted(async () => { await loadOptions(); loadAll() })
 <template>
   <div class="detail-page" v-loading="loading">
     <div class="page-header">
-      <span class="page-title">订单详情 - {{ order.code }}</span>
       <el-tag :type="order.status==='待确认'?'info':order.status==='收货中'?'warning':order.status==='已完成'?'success':'danger'" size="small">{{ order.status }}</el-tag>
     </div>
 
@@ -396,7 +395,7 @@ onMounted(async () => { await loadOptions(); loadAll() })
 <style scoped>
 .detail-page { padding:16px; }
 .page-header { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
-.page-title { font-size:18px; font-weight:600; }
+
 .drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
 .drop-zone:hover { border-color:#409eff; background:#ecf5ff }
 :deep(.readonly-input .el-input__inner) { background-color: #f5f7fa; color: #909399; cursor: default; }

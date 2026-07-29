@@ -7,18 +7,7 @@ import request from '@/utils/request'
 const router = useRouter()
 const activeType = ref('all')
 
-const TYPE_TABS = [
-  { name: 'all', label: '全部' },
-  { name: 'solution', label: '方案商' },
-  { name: 'factory', label: '委外加工厂' },
-  { name: 'material', label: '辅料商' },
-  { name: 'product', label: '成品供应商' },
-]
-
-const TYPE_OPTIONS = TYPE_TABS.filter(x => x.name !== 'all')
-
-const TYPE_MAP: Record<string, string> = { solution: '方案商', factory: '加工厂', material: '辅料商', product: '成品商' }
-const TYPE_TAG: Record<string, string> = { solution: 'primary', factory: 'warning', material: 'info', product: 'success' }
+import { TYPE_TABS, TYPE_OPTIONS, TYPE_MAP, TYPE_TAG } from '@/constants/supplier'
 
 const query = reactive({ name: '', phone: '', status: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -46,7 +35,7 @@ watch(activeType, () => { pagination.pageNum = 1; loadData() })
 const dialogVisible = ref(false); const dialogTitle = ref(''); const saving = ref(false)
 const form = reactive({
   id: undefined as any, name: '', contact: '', phone: '', address: '', remark: '',
-  supplierType: '', checkedTypes: [] as string[], status: 1,
+  checkedTypes: [] as string[], status: 1,
   creditPeriodMonths: undefined as any, creditPeriod: undefined as any
 })
 const isEdit = ref(false)
@@ -56,7 +45,7 @@ const isType = computed(() => (type: string) => form.checkedTypes.includes(type)
 
 function resetForm() {
   Object.assign(form, { id: undefined, name: '', contact: '', phone: '', address: '', remark: '',
-    supplierType: '', checkedTypes: [], status: 1,
+    checkedTypes: [] as string[], status: 1,
     creditPeriodMonths: undefined, creditPeriod: undefined })
 }
 
@@ -68,11 +57,10 @@ function handleAdd() {
 
 function handleEdit(row: any) {
   resetForm()
-  const types = (row.supplierType || '').split(',').map((t: string) => t.trim()).filter(Boolean)
   Object.assign(form, {
     id: row.id, name: row.name || '', contact: row.contact || '', phone: row.phone || '',
-    address: row.address || '', remark: row.remark || '', supplierType: row.supplierType || '',
-    checkedTypes: types,
+    address: row.address || '', remark: row.remark || '',
+    checkedTypes: row.typeCodes || [],
     status: row.status ?? 1,
     creditPeriodMonths: row.creditPeriodMonths, creditPeriod: row.creditPeriod
   })
@@ -80,18 +68,12 @@ function handleEdit(row: any) {
   dialogVisible.value = true
 }
 
-// 解析逗号分隔的类型显示
-function parseTypes(types: string): string[] {
-  if (!types) return []
-  return types.split(',').map(t => t.trim()).filter(Boolean)
-}
-
 async function handleSubmit() {
   if (!form.name) { ElMessage.warning('请输入名称'); return }
   if (form.checkedTypes.length === 0) { ElMessage.warning('请选择至少一个类型'); return }
   saving.value = true
   try {
-    const body: any = { ...form, supplierType: form.checkedTypes.join(',') }
+    const body: any = { ...form, typeCodes: form.checkedTypes }
     if (isEdit.value) { await request.put('/supplier', body); ElMessage.success('已更新') }
     else { await request.post('/supplier', body); ElMessage.success('已添加') }
     dialogVisible.value = false; loadData()
@@ -141,7 +123,7 @@ onActivated(loadData)
       <el-table :data="tableData" border stripe v-loading="loading">
         <el-table-column label="类型" width="180">
           <template #default="{ row }">
-            <el-tag v-for="t in parseTypes(row.supplierType)" :key="t" size="small" style="margin-right:4px"
+            <el-tag v-for="t in (row.typeCodes||[])" :key="t" size="small" style="margin-right:4px"
               :type="(TYPE_TAG[t]||'info') as any"
             >{{ TYPE_MAP[t] || t }}</el-tag>
           </template>

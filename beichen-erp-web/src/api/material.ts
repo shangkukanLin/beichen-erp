@@ -39,11 +39,11 @@ export interface PageResult<T> {
 }
 
 export function getMaterialPage(params: MaterialQueryParams) {
-  return request.get<unknown, PageResult<Material>>('/material/page', { params })
+  return request.get<unknown, PageResult<Material>>('/product/page', { params })
 }
 
 export function getMaterial(id: number | string) {
-  return request.get<unknown, Material>(`/material/${id}`)
+  return request.get<unknown, Material>(`/product/${id}`)
 }
 
 export function addMaterial(data: Material) {
@@ -55,7 +55,7 @@ export function updateMaterial(data: Material) {
 }
 
 export function deleteMaterial(id: number | string) {
-  return request.delete<unknown, void>(`/material/${id}`)
+  return request.delete<unknown, void>(`/product/${id}`)
 }
 
 

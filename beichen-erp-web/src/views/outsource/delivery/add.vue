@@ -106,8 +106,6 @@ onMounted(() => { loadFactories(); loadAllOutsourceWarehouses(); loadMaterials()
 
 <template>
   <div class="add-page">
-    <div class="page-header"><span class="page-title">新增物料收发单</span></div>
-
     <el-card shadow="never">
       <template #header><span style="font-weight:600">基础信息</span></template>
       <el-form :model="form" label-width="100px">
@@ -163,8 +161,7 @@ onMounted(() => { loadFactories(); loadAllOutsourceWarehouses(); loadMaterials()
 
 <style scoped>
 .add-page { display:flex; flex-direction:column; gap:12px; }
-.page-header { display:flex; align-items:center; gap:16px; padding-bottom:8px; }
-.page-title { font-size:18px; font-weight:600; }
+
 .drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
 .drop-zone:hover { border-color:#409eff; background:#ecf5ff }
 </style>

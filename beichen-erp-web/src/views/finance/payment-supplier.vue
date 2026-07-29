@@ -85,7 +85,6 @@ onMounted(() => loadAll())
 <template>
   <div class="p" v-loading="loading">
     <div class="page-header">
-      <span class="page-title">{{ supplier.name || '供应商' }} - 应付详情</span>
       <div>
         <el-button type="primary" @click="openAddPayment">新增付款</el-button>
         <el-button type="danger" plain @click="goSettlement">清算</el-button>
@@ -164,7 +163,7 @@ onMounted(() => loadAll())
 <style scoped>
 .p{display:flex;flex-direction:column;gap:12px}
 .page-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:4px}
-.page-title{font-size:18px;font-weight:600}
+
 .stat-row{display:flex;gap:48px;padding:4px 8px}
 .stat-label{font-size:13px;color:#909399;margin-bottom:4px}
 .stat-value{font-size:22px;font-weight:600}

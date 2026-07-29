@@ -19,7 +19,6 @@ const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : 
 const drawerOpen = ref(false)
 
 const activeMenu = computed(() => route.path)
-const currentTitle = computed(() => (route.meta.title as string) || '')
 const displayCompanyName = ref('')
 
 // 获取公司名称（优先 userInfo，否则调 API 从 session 读取）
@@ -62,7 +61,7 @@ function closeTab(path: string, e: MouseEvent) {
   e.stopPropagation()
   tabStore.removeTab(path)
   const next = tabStore.tabs.length > 0 ? tabStore.activePath || '/dashboard' : '/dashboard'
-  if (route.path === path) {
+  if (route.fullPath === path) {
     router.push(next)
   }
 }
@@ -142,7 +141,6 @@ watch(() => userStore.userInfo?.companyName, (name) => {
           <el-icon class="collapse-btn" @click="toggleSidebar">
             <Fold v-if="!isCollapse || isMobile" /><Expand v-else />
           </el-icon>
-          <span class="header-title">{{ currentTitle }}</span>
         </div>
         <div class="header-right">
           <el-dropdown trigger="click">
@@ -180,7 +178,7 @@ watch(() => userStore.userInfo?.companyName, (name) => {
 
       <el-main class="layout-main">
         <router-view v-slot="{ Component, route: r }">
-          <keep-alive :include="tabStore.tabs.length > 0 ? undefined : []">
+          <keep-alive :include="tabStore.tabs.length > 0 ? undefined : []" :exclude="['PurchaseAdd', 'PurchaseReturnAdd']">
             <component :is="Component" :key="r.fullPath" />
           </keep-alive>
         </router-view>
@@ -198,7 +196,6 @@ watch(() => userStore.userInfo?.companyName, (name) => {
 .layout-header { display: flex; align-items: center; justify-content: space-between; background-color: #fff; border-bottom: 1px solid #e6e6e6; padding: 0 16px; height: 48px; }
 .header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .collapse-btn { font-size: 20px; cursor: pointer; color: #5a5e66; }
-.header-title { font-size: 16px; font-weight: 500; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-right { display: flex; align-items: center; }
 .user-info { display: flex; align-items: center; gap: 6px; cursor: pointer; color: #5a5e66; }
 .username { font-size: 14px; }
@@ -206,7 +203,7 @@ watch(() => userStore.userInfo?.companyName, (name) => {
 /* 页签栏 */
 .tab-bar { display: flex; align-items: center; background: #f5f5f5; border-bottom: 1px solid #e4e7ed; padding: 0 8px 0 4px; height: 46px; }
 .tabs-wrapper { display: flex; align-items: center; flex: 1; overflow-x: auto; overflow-y: hidden; min-width: 0; }
-.tab-item { display: flex; align-items: center; gap: 2px; padding: 4px 8px 4px 12px; margin: 0 2px; border-radius: 4px 4px 0 0; cursor: pointer; font-size: 12px; color: #606266; background: #e8eaed; white-space: nowrap; max-width: 160px; flex-shrink: 0; }
+.tab-item { display: flex; align-items: center; gap: 2px; padding: 6px 10px 6px 14px; margin: 0 2px; border-radius: 4px 4px 0 0; cursor: pointer; font-size: 14px; color: #606266; background: #e8eaed; white-space: nowrap; max-width: 180px; flex-shrink: 0; }
 .tab-item.active { background: #fff; color: #409eff; border-bottom: 2px solid #409eff; }
 .tab-item:hover { color: #409eff; }
 .tab-label { overflow: hidden; text-overflow: ellipsis; }

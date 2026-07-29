@@ -68,7 +68,6 @@ onMounted(async () => { await loadAll(); refreshChecks() })
 <template>
   <div class="p" v-loading="loading">
     <div class="page-header">
-      <span class="page-title">清算看板 - {{ data.supplier?.name || '' }}</span>
       <el-tag v-if="data.canSettle" type="success">满足清算条件</el-tag>
       <el-tag v-else type="warning">存在待处理事项</el-tag>
     </div>
@@ -174,7 +173,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
 <style scoped>
 .p{display:flex;flex-direction:column;gap:12px}
 .page-header{display:flex;align-items:center;gap:12px;padding-bottom:4px}
-.page-title{font-size:18px;font-weight:600}
+
 .card-header{display:flex;align-items:center;justify-content:space-between}
 .section-title{font-weight:600;font-size:13px;color:#606266;margin-bottom:6px}
 .check-list{display:flex;flex-direction:column;gap:10px;padding:4px 8px}

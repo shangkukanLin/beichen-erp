@@ -9,7 +9,7 @@ import {
   deleteMaterial,
   type Material,
   type MaterialQueryParams
-} from '@/api/material'
+} from '@/api/product'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
@@ -161,7 +161,7 @@ async function handleSubmit() {
 
 async function handleDelete(row: Material) {
   try {
-    const checkRes = await request.get<any, any>(`/material/${row.id}/check-delete`)
+    const checkRes = await request.get<any, any>(`/product/${row.id}/check-delete`)
     if (checkRes && !checkRes.canDelete) {
       const list = checkRes.associations || {}
       const detail = Object.entries(list).map(([k, v]) => `${k}：${v}条`).join('；')

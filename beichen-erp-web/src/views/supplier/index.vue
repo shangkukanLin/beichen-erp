@@ -69,7 +69,7 @@ const dialogTitle = ref('新增')
 const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 const defaultForm = (): SupplierDTO => ({
-  code: '', name: '', supplierType: currentType.value, status: 1,
+  code: '', name: '', typeCodes: [currentType.value], status: 1,
   contact: '', phone: '', address: '', remark: '',
   relatedSupplierId: undefined,
   creditPeriodMonths: undefined, creditPeriod: undefined
@@ -83,7 +83,7 @@ const rules: FormRules = {
 
 function handleAdd() {
   Object.assign(form, defaultForm())
-  form.supplierType = currentType.value
+  form.typeCodes = [currentType.value]
   isEdit.value = false
   dialogTitle.value = '新增' + pageTitle.value
   dialogVisible.value = true
@@ -100,7 +100,7 @@ async function handleSubmit() {
     if (!valid) return
     submitLoading.value = true
     try {
-      form.supplierType = currentType.value
+      form.typeCodes = [currentType.value]
       if (isEdit.value && form.id) {
         await updateSupplier(form)
         ElMessage.success('修改成功')

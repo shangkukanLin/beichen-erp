@@ -20,9 +20,10 @@ public class Supplier {
 
     private String name;
 
-    private String supplierType;
-
     private String contact;
+    /** 类型编码列表（不持久化，用于返回前端） */
+    @TableField(exist = false)
+    private java.util.List<String> typeCodes;
 
     private String phone;
 

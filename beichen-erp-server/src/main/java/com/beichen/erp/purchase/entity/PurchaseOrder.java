@@ -24,7 +24,7 @@ public class PurchaseOrder {
 
     private LocalDate orderDate;
 
-    private String status;
+    private Integer status;
 
     private Integer taxIncluded;
 
@@ -38,6 +38,12 @@ public class PurchaseOrder {
     private Long companyId;
 
     private LocalDateTime createTime;
+
+    private Long auditorId;
+
+    private String auditorName;
+
+    private LocalDateTime auditTime;
 
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;

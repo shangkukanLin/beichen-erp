@@ -7,9 +7,12 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.material.entity.Material;
+import com.beichen.erp.material.mapper.MaterialMapper;
 import com.beichen.erp.purchase.entity.PurchaseInbound;
 import com.beichen.erp.purchase.entity.PurchaseInboundItem;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
+import com.beichen.erp.purchase.entity.PurchaseOrderStatus;
 import com.beichen.erp.purchase.mapper.PurchaseInboundMapper;
 import com.beichen.erp.purchase.mapper.PurchaseInboundItemMapper;
 import com.beichen.erp.purchase.mapper.PurchaseOrderMapper;
@@ -36,6 +39,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
     private final InventoryWarehouseStockService stockService;
     private final FinancePayableMapper payableMapper;
     private final com.beichen.erp.finance.service.PayableHelper payableHelper;
+    private final MaterialMapper materialMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long supplierId, String code, int pageNum, int pageSize) {
@@ -161,8 +165,12 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
                 new LambdaQueryWrapper<PurchaseInboundItem>().eq(PurchaseInboundItem::getInboundId, id));
         // 1) 库存联动：入库加库存 + 写流水
         for (PurchaseInboundItem it : items) {
-            stockService.changeStock(inbound.getWarehouseId(), it.getMaterialName(), it.getQuantity(),
-                    "采购入库", inbound.getCode(), "采购入库", it.getProductId(), it.getSpec());
+            Material product = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            stockService.changeStock(inbound.getWarehouseId(),
+                    product != null ? product.getName() : "",
+                    it.getQuantity(),
+                    "采购入库", inbound.getCode(), "采购入库", it.getProductId(),
+                    product != null ? product.getSpec() : "");
         }
         // 2) 生成应付台账
         FinancePayable fp = new FinancePayable();
@@ -186,7 +194,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
         if (inbound.getOrderId() != null) {
             PurchaseOrder o = new PurchaseOrder();
             o.setId(inbound.getOrderId());
-            o.setStatus("已入库");
+            o.setStatus(PurchaseOrderStatus.COMPLETED.getCode());
             orderMapper.updateById(o);
         }
     }

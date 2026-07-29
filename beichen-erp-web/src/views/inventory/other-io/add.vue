@@ -16,7 +16,7 @@ async function loadWarehouses() {
   try { const r = await request.get<any,any>('/inventory/warehouse/page',{params:{pageSize:500}}); warehouses.value = r?.records||[] } catch {}
 }
 async function loadMaterials() {
-  try { const r = await request.get<any,any>('/material/page',{params:{pageSize:500}}); materialOptions.value = r?.records||[] } catch {}
+  try { const r = await request.get<any,any>('/product/page',{params:{pageSize:500}}); materialOptions.value = r?.records||[] } catch {}
 }
 function onMatSelect(idx: number, matId: number) {
   const m = materialOptions.value.find((v:any)=>v.id===matId)

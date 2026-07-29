@@ -133,18 +133,57 @@
         </div>
       </el-tab-pane>
 
-      <el-tab-pane v-if="hasModule['inventory']" label="进销存" name="inventory">
+      <el-tab-pane v-if="hasModule['purchase']" label="进货业务" name="purchase">
         <div class="stat-grid">
-          <div class="stat-card" v-for="s in inventoryStats" :key="s.label">
-            <div class="stat-value" :style="{color:s.color}">{{ s.value }}</div>
-            <div class="stat-label">{{ s.label }}</div>
+          <div class="stat-card clickable" @click="$router.push('/inventory/purchase')">
+            <div class="stat-value" style="color:#409eff">{{ purchaseTotal }}</div>
+            <div class="stat-label">成品采购单</div>
+          </div>
+          <div class="stat-card clickable" @click="$router.push('/supplier/manage')">
+            <div class="stat-value" style="color:#67c23a">{{ supplierTotal }}</div>
+            <div class="stat-label">供应商</div>
           </div>
         </div>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <el-button v-if="hasMenu['InventoryPurchase']" type="primary" size="small" text @click="$router.push('/inventory/purchase')">采购管理</el-button>
-          <el-button v-if="hasMenu['InventorySale']" type="primary" size="small" text @click="$router.push('/inventory/sale')">销售管理</el-button>
-          <el-button v-if="hasMenu['InventoryStock']" type="primary" size="small" text @click="$router.push('/inventory/stock')">库存管理</el-button>
+          <el-button v-if="hasMenu['InventoryPurchase']" type="primary" size="small" text @click="$router.push('/inventory/purchase')">成品采购单</el-button>
+          <el-button v-if="hasMenu['SupplierManage']" type="primary" size="small" text @click="$router.push('/supplier/manage')">供应商管理</el-button>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane v-if="hasModule['sale']" label="销售业务" name="sale">
+        <div class="stat-grid">
+          <div class="stat-card clickable" @click="$router.push('/inventory/sale')">
+            <div class="stat-value" style="color:#409eff">{{ saleTotal }}</div>
+            <div class="stat-label">销售单</div>
+          </div>
+          <div class="stat-card clickable" @click="$router.push('/inventory/customer')">
+            <div class="stat-value" style="color:#67c23a">{{ customerTotal }}</div>
+            <div class="stat-label">客户</div>
+          </div>
+        </div>
+        <div class="quick-links">
+          <span class="links-label">快捷入口：</span>
+          <el-button v-if="hasMenu['InventorySale']" type="primary" size="small" text @click="$router.push('/inventory/sale')">销售单</el-button>
+          <el-button v-if="hasMenu['InventoryCustomer']" type="primary" size="small" text @click="$router.push('/inventory/customer')">客户管理</el-button>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane v-if="hasModule['stock']" label="库存业务" name="stock">
+        <div class="stat-grid">
+          <div class="stat-card clickable" @click="$router.push('/material')">
+            <div class="stat-value" style="color:#409eff">{{ productTotal }}</div>
+            <div class="stat-label">产品</div>
+          </div>
+          <div class="stat-card clickable" @click="$router.push('/inventory/warehouse')">
+            <div class="stat-value" style="color:#67c23a">{{ warehouseTotal }}</div>
+            <div class="stat-label">仓库</div>
+          </div>
+        </div>
+        <div class="quick-links">
+          <span class="links-label">快捷入口：</span>
+          <el-button v-if="hasMenu['InventoryStock']" type="primary" size="small" text @click="$router.push('/inventory/stock')">成品库存</el-button>
+          <el-button v-if="hasMenu['InventoryWarehouse']" type="primary" size="small" text @click="$router.push('/inventory/warehouse')">仓库管理</el-button>
           <el-button v-if="hasMenu['MaterialManage']" type="primary" size="small" text @click="$router.push('/material')">产品管理</el-button>
         </div>
       </el-tab-pane>
@@ -177,7 +216,7 @@ const activeTab = ref('dev')
 
 // 根据用户菜单权限判断可见模块
 const hasMenu = ref<Record<string, boolean>>({})
-const hasModule = reactive({ dev: false, outsource: false, inventory: false, finance: false })
+const hasModule = reactive({ dev: false, outsource: false, purchase: false, sale: false, stock: false, finance: false })
 
 // 统计卡片数据
 const devTotal = ref(0)
@@ -191,7 +230,12 @@ const osMatPending = ref(0)
 const osMatReceiving = ref(0)
 const activeOrders = ref<any[]>([])
 const pendingMatOrders = ref<any[]>([])
-const inventoryStats = ref<{label:string,value:any,color:string}[]>([])
+const purchaseTotal = ref(0)
+const supplierTotal = ref(0)
+const saleTotal = ref(0)
+const customerTotal = ref(0)
+const productTotal = ref(0)
+const warehouseTotal = ref(0)
 const financeStats = ref<{label:string,value:any,color:string}[]>([])
 
 function checkUserMenus() {
@@ -209,17 +253,21 @@ function checkUserMenus() {
   // 可见模块判断
   hasModule.dev = names.has('DevProject') || names.has('DevBom')
   hasModule.outsource = names.has('OutsourceOrder') || names.has('OutsourceMaterialOrder')
-  hasModule.inventory = names.has('InventoryPurchase') || names.has('InventorySale') || names.has('InventoryStock') || names.has('MaterialManage')
+  hasModule.purchase = names.has('InventoryPurchase') || names.has('SupplierManage')
+  hasModule.sale = names.has('InventorySale') || names.has('InventoryCustomer')
+  hasModule.stock = names.has('InventoryStock') || names.has('InventoryWarehouse') || names.has('MaterialManage')
   hasModule.finance = names.has('FinanceReceivable') || names.has('FinancePayable')
 
   // 快捷入口可见性
-  const menuNames = ['DevProject','DevBom','DevPhaseTemplate','OutsourceOrder','OutsourceMaterialOrder','OutsourceMaterialInfo','OutsourceWarehouse','OutsourceContractTemplate','OutsourceDelivery','InventoryPurchase','InventorySale','InventoryStock','MaterialManage','FinanceReceivable','FinancePayable','FinanceCashflow']
+  const menuNames = ['DevProject','DevBom','DevPhaseTemplate','OutsourceOrder','OutsourceMaterialOrder','OutsourceMaterialInfo','OutsourceWarehouse','OutsourceContractTemplate','OutsourceDelivery','InventoryPurchase','SupplierManage','InventorySale','InventoryCustomer','InventoryStock','InventoryWarehouse','MaterialManage','FinanceReceivable','FinancePayable','FinanceCashflow']
   menuNames.forEach(n => { hasMenu.value[n] = names.has(n) })
 
   // 默认激活第一个可见Tab
   if (hasModule.dev) activeTab.value = 'dev'
   else if (hasModule.outsource) activeTab.value = 'outsource'
-  else if (hasModule.inventory) activeTab.value = 'inventory'
+  else if (hasModule.purchase) activeTab.value = 'purchase'
+  else if (hasModule.sale) activeTab.value = 'sale'
+  else if (hasModule.stock) activeTab.value = 'stock'
   else if (hasModule.finance) activeTab.value = 'finance'
 }
 
@@ -279,17 +327,33 @@ async function loadStats() {
     }
   } catch { /* ignore */}
   try {
-    if (hasModule.inventory) {
-      const [prodRes, purRes, saleRes] = await Promise.all([
-        request.get<any, any>('/material/page', { params: { pageSize: 1 } }).catch(() => ({})),
+    if (hasModule.purchase) {
+      const [purRes, supRes] = await Promise.all([
         request.get<any, any>('/inventory/purchase/page', { params: { pageSize: 1 } }).catch(() => ({})),
-        request.get<any, any>('/inventory/sale/page', { params: { pageSize: 1 } }).catch(() => ({})),
+        request.get<any, any>('/supplier/page', { params: { pageSize: 1 } }).catch(() => ({})),
       ])
-      inventoryStats.value = [
-        { label:'产品总数', value: prodRes?.total || 0, color: '#409eff' },
-        { label:'采购单', value: purRes?.total || 0, color: '#e6a23c' },
-        { label:'销售单', value: saleRes?.total || 0, color: '#67c23a' },
-      ]
+      purchaseTotal.value = purRes?.total || 0
+      supplierTotal.value = supRes?.total || 0
+    }
+  } catch { /* ignore */}
+  try {
+    if (hasModule.sale) {
+      const [saleRes, cusRes] = await Promise.all([
+        request.get<any, any>('/inventory/sale/page', { params: { pageSize: 1 } }).catch(() => ({})),
+        request.get<any, any>('/inventory/customer/page', { params: { pageSize: 1 } }).catch(() => ({})),
+      ])
+      saleTotal.value = saleRes?.total || 0
+      customerTotal.value = cusRes?.total || 0
+    }
+  } catch { /* ignore */}
+  try {
+    if (hasModule.stock) {
+      const [prodRes, whRes] = await Promise.all([
+        request.get<any, any>('/product/page', { params: { pageSize: 1 } }).catch(() => ({})),
+        request.get<any, any>('/inventory/warehouse/page', { params: { pageSize: 1 } }).catch(() => ({})),
+      ])
+      productTotal.value = prodRes?.total || 0
+      warehouseTotal.value = whRes?.total || 0
     }
   } catch { /* ignore */}
   try {

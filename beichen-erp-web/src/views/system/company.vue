@@ -90,7 +90,6 @@ onActivated(() => loadData())
   <div class="company-page">
     <div class="page-header">
       <el-button @click="goBack">← 返回登录</el-button>
-      <span class="page-title">公司管理</span>
     </div>
 
     <el-card shadow="never">
@@ -128,5 +127,5 @@ onActivated(() => loadData())
 <style scoped>
 .company-page { max-width: 780px; margin: 40px auto; padding: 0 16px; }
 .page-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-.page-title { font-size: 20px; font-weight: 600; }
+
 </style>

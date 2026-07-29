@@ -30,7 +30,9 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 数据初始化：首次启动自动初始化内置角色、菜单、角色权限、超级管理员账号和示例物料数据
@@ -90,6 +92,15 @@ public class DataInitializer implements ApplicationRunner {
         safeDDL("ALTER TABLE sys_company ADD COLUMN email VARCHAR(100) COMMENT '邮箱' AFTER tax_no");
         safeDDL("ALTER TABLE inventory_warehouse_stock ADD COLUMN material_id BIGINT DEFAULT NULL COMMENT '物料ID' AFTER product_name");
         safeDDL("ALTER TABLE inventory_warehouse_stock ADD COLUMN available_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '可用数量' AFTER quantity");
+        safeDDL("ALTER TABLE purchase_order ADD COLUMN auditor_id BIGINT DEFAULT NULL COMMENT '审核人ID' AFTER remark");
+        safeDDL("ALTER TABLE purchase_order ADD COLUMN auditor_name VARCHAR(50) DEFAULT NULL COMMENT '审核人姓名' AFTER auditor_id");
+        safeDDL("ALTER TABLE purchase_order ADD COLUMN audit_time DATETIME DEFAULT NULL COMMENT '审核时间' AFTER auditor_name");
+        // purchase_order.status: VARCHAR → TINYINT (0=草稿 1=已完成 2=已作废)
+        migratePurchaseOrderStatus();
+        // 成品退货单表
+        initPurchaseReturnTables();
+        // 删除旧明细表中的冗余列（产品信息通过product_id JOIN查询）
+        dropRedundantItemColumns();
         log.info("核心表+增量DDL完成");
     }
 
@@ -98,6 +109,81 @@ public class DataInitializer implements ApplicationRunner {
             jdbcTemplate.execute(sql);
         } catch (Exception e) {
             log.warn("safeDDL 执行失败: {} — 错误: {}", sql, e.getMessage());
+        }
+    }
+
+    /** purchase_order.status: VARCHAR → TINYINT (0=草稿 1=已完成 2=已作废) */
+    private void migratePurchaseOrderStatus() {
+        try {
+            String dataType = jdbcTemplate.queryForObject(
+                    "SELECT DATA_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='purchase_order' AND COLUMN_NAME='status'",
+                    String.class);
+            if (dataType != null && ("varchar".equalsIgnoreCase(dataType) || "char".equalsIgnoreCase(dataType))) {
+                jdbcTemplate.execute("UPDATE purchase_order SET status = '0' WHERE status = '草稿'");
+                jdbcTemplate.execute("UPDATE purchase_order SET status = '1' WHERE status = '已完成'");
+                jdbcTemplate.execute("UPDATE purchase_order SET status = '2' WHERE status = '已作废'");
+                jdbcTemplate.execute("ALTER TABLE purchase_order MODIFY COLUMN status TINYINT DEFAULT 0 COMMENT '状态: 0=草稿 1=已完成 2=已作废'");
+                log.info("已将 purchase_order.status 从 VARCHAR 迁移到 TINYINT");
+            }
+        } catch (Exception e) {
+            log.warn("purchase_order.status 迁移异常: {}", e.getMessage());
+        }
+    }
+
+    private void initPurchaseReturnTables() {
+        safeDDL("CREATE TABLE IF NOT EXISTS purchase_return (" +
+                "id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '退货单ID'," +
+                "code VARCHAR(50) NOT NULL UNIQUE COMMENT '退货单号 TH-{date}-{seq}'," +
+                "supplier_id BIGINT COMMENT '供应商ID'," +
+                "warehouse_id BIGINT COMMENT '出库仓库ID'," +
+                "return_date DATE COMMENT '退货日期'," +
+                "status TINYINT DEFAULT 0 COMMENT '状态: 0=草稿 1=已完成 2=已作废'," +
+                "total_amount DECIMAL(18,4) DEFAULT 0 COMMENT '退货总金额'," +
+                "remark VARCHAR(500) COMMENT '备注'," +
+                "auditor_id BIGINT COMMENT '审核人ID'," +
+                "auditor_name VARCHAR(50) COMMENT '审核人姓名'," +
+                "audit_time DATETIME COMMENT '审核时间'," +
+                "company_id BIGINT COMMENT '公司ID'," +
+                "create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'," +
+                "update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品退货单主表'");
+        safeDDL("CREATE TABLE IF NOT EXISTS purchase_return_item (" +
+                "id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '明细ID'," +
+                "return_id BIGINT NOT NULL COMMENT '退货单ID'," +
+                "product_id BIGINT COMMENT '产品ID'," +
+                "quantity DECIMAL(18,4) DEFAULT 0 COMMENT '退货数量'," +
+                "unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '退货单价'," +
+                "amount DECIMAL(18,4) DEFAULT 0 COMMENT '退货金额'," +
+                "remark VARCHAR(255) COMMENT '备注'," +
+                "company_id BIGINT COMMENT '公司ID'," +
+                "create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品退货明细表'");
+    }
+
+    private void dropRedundantItemColumns() {
+        String[] actions = {
+                "ALTER TABLE purchase_order_item DROP COLUMN IF EXISTS material_code",
+                "ALTER TABLE purchase_order_item DROP COLUMN IF EXISTS material_name",
+                "ALTER TABLE purchase_order_item DROP COLUMN IF EXISTS spec",
+                "ALTER TABLE purchase_order_item DROP COLUMN IF EXISTS unit",
+                "ALTER TABLE purchase_inbound_item DROP COLUMN IF EXISTS material_code",
+                "ALTER TABLE purchase_inbound_item DROP COLUMN IF EXISTS material_name",
+                "ALTER TABLE purchase_inbound_item DROP COLUMN IF EXISTS spec",
+                "ALTER TABLE purchase_inbound_item DROP COLUMN IF EXISTS unit",
+                "ALTER TABLE sale_order_item DROP COLUMN IF EXISTS material_code",
+                "ALTER TABLE sale_order_item DROP COLUMN IF EXISTS material_name",
+                "ALTER TABLE sale_order_item DROP COLUMN IF EXISTS spec",
+                "ALTER TABLE sale_order_item DROP COLUMN IF EXISTS unit",
+                "ALTER TABLE sale_outbound_item DROP COLUMN IF EXISTS material_code",
+                "ALTER TABLE sale_outbound_item DROP COLUMN IF EXISTS material_name",
+                "ALTER TABLE sale_outbound_item DROP COLUMN IF EXISTS spec",
+                "ALTER TABLE sale_outbound_item DROP COLUMN IF EXISTS unit",
+                "ALTER TABLE inventory_stock_log DROP COLUMN IF EXISTS material_name",
+                "ALTER TABLE inventory_stock_log DROP COLUMN IF EXISTS spec",
+                "ALTER TABLE inventory_stock_log DROP COLUMN IF EXISTS unit",
+        };
+        for (String sql : actions) {
+            safeDDL(sql);
         }
     }
 
@@ -626,7 +712,18 @@ public class DataInitializer implements ApplicationRunner {
         try { jdbcTemplate.execute("ALTER TABLE supplier DROP COLUMN IF EXISTS brand"); } catch (Exception ignored) {}
         try { jdbcTemplate.execute("ALTER TABLE supplier DROP COLUMN IF EXISTS material_type"); } catch (Exception ignored) {}
         // 供应商类型支持多值（逗号分隔），扩展列长
-        try { jdbcTemplate.execute("ALTER TABLE supplier MODIFY COLUMN supplier_type VARCHAR(100) NOT NULL COMMENT '供应商类型(逗号分隔多值)'"); } catch (Exception ignored) {}
+        // 供应商类型多对多中间表
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS supplier_type_ref (" +
+            "id BIGINT AUTO_INCREMENT PRIMARY KEY," +
+            "supplier_id BIGINT NOT NULL COMMENT '供应商ID'," +
+            "type_code VARCHAR(20) NOT NULL COMMENT '类型编码'," +
+            "company_id BIGINT DEFAULT NULL COMMENT '公司ID'," +
+            "UNIQUE KEY uk_supplier_type (supplier_id, type_code)," +
+            "INDEX idx_supplier_id (supplier_id)," +
+            "INDEX idx_type_code (type_code)," +
+            "INDEX idx_company_id (company_id))");
+        // 删除旧 supplier_type 列
+        try { jdbcTemplate.execute("ALTER TABLE supplier DROP COLUMN IF EXISTS supplier_type"); } catch (Exception ignored) {}
     }
 
     /** 增量 DDL：库存表按 material_id 维度重构 + 唯一键补 company_id + 可用量字段 */
@@ -766,47 +863,53 @@ public class DataInitializer implements ApplicationRunner {
         }
         // 一级菜单
         saveMenu(1L, 0L, "首页", "menu", "/dashboard", "Dashboard", "HomeFilled", 1);
-        saveMenu(50L, 0L, "基础数据", "catalog", "", "", "DataBoard", 2);
-        saveMenu(2L, 0L, "研发管理", "catalog", "", "", "Cpu", 3);
+        saveMenu(2L, 0L, "基础数据", "catalog", "", "", "DataBoard", 2);
+        saveMenu(3L, 0L, "研发管理", "catalog", "", "", "Cpu", 3);
         saveMenu(4L, 0L, "委外加工", "catalog", "", "", "Setting", 4);
-        saveMenu(5L, 0L, "进销存", "catalog", "", "", "Goods", 5);
-        saveMenu(6L, 0L, "财务管理", "catalog", "", "", "Money", 6);
-        saveMenu(7L, 0L, "设置", "catalog", "", "", "Tools", 7);
-        // 研发管理子菜单
-        saveMenu(8L, 2L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 1);
-        saveMenu(10L, 2L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 2);
-        saveMenu(9L, 2L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 3);
-        // 基础数据子菜单
-        saveMenu(49L, 50L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "UserFilled", 1);
-        saveMenu(18L, 50L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 2);
-        saveMenu(19L, 50L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 3);
-        saveMenu(39L, 50L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 4);
-        saveMenu(36L, 50L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 5);
-        saveMenu(33L, 50L, "BOM类型", "menu", "/dev/bom-type", "DevBomType", "Tickets", 6);
-        saveMenu(59L, 50L, "阶段模板", "menu", "/dev/phase-template", "DevPhaseTemplate", "Timer", 7);
-        // 委外加工子菜单
-        saveMenu(15L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1);
-        saveMenu(44L, 4L, "委外物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2);
-        saveMenu(16L, 4L, "物料信息管理", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 3);
-        saveMenu(35L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 4);
-        saveMenu(37L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 5);
-        saveMenu(48L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6);
-        // 进销存子菜单
-        saveMenu(20L, 5L, "采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1);
-        saveMenu(22L, 5L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 2);
-        saveMenu(23L, 5L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 3);
-        // 财务管理子菜单
-        saveMenu(25L, 6L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1);
-        saveMenu(26L, 6L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2);
-        saveMenu(27L, 6L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 3);
-        saveMenu(28L, 6L, "资金流水", "menu", "/finance/cashflow", "FinanceCashflow", "TrendCharts", 4);
-        // 设置子菜单
-        saveMenu(40L, 7L, "智能管理", "menu", "/system/smart", "SystemSmart", "Cpu", 1);
-        saveMenu(41L, 7L, "系统设置", "catalog", "", "", "Tools", 2);
-        saveMenu(29L, 41L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 1);
-        saveMenu(30L, 41L, "角色管理", "menu", "/system/role", "SystemRole", "Avatar", 2);
-        saveMenu(31L, 41L, "菜单管理", "menu", "/system/menu", "SystemMenu", "Menu", 3);
-        saveMenu(42L, 7L, "清空数据", "menu", "/system/clear-data", "SystemClearData", "Delete", 3);
+        saveMenu(5L, 0L, "进货业务", "catalog", "", "", "ShoppingCart", 5);
+        saveMenu(6L, 0L, "销售业务", "catalog", "", "", "Sell", 6);
+        saveMenu(7L, 0L, "库存业务", "catalog", "", "", "Odometer", 7);
+        saveMenu(8L, 0L, "财务管理", "catalog", "", "", "Money", 8);
+        saveMenu(9L, 0L, "设置", "catalog", "", "", "Tools", 9);
+        // 100s 基础数据
+        saveMenu(101L, 2L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 1);
+        saveMenu(102L, 2L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 2);
+        saveMenu(103L, 2L, "BOM类型", "menu", "/dev/bom-type", "DevBomType", "Tickets", 3);
+        saveMenu(104L, 2L, "阶段模板", "menu", "/dev/phase-template", "DevPhaseTemplate", "Timer", 4);
+        // 300s 研发管理
+        saveMenu(301L, 3L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 1);
+        saveMenu(302L, 3L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 2);
+        saveMenu(303L, 3L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 3);
+        // 400s 委外加工
+        saveMenu(401L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1);
+        saveMenu(402L, 4L, "委外物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2);
+        saveMenu(403L, 4L, "物料信息管理", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 3);
+        saveMenu(404L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 4);
+        saveMenu(405L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 5);
+        saveMenu(406L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6);
+        saveMenu(407L, 4L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 7);
+        saveMenu(408L, 4L, "委外退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 8);
+        // 500s 进货业务
+        saveMenu(501L, 5L, "成品采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1);
+        saveMenu(502L, 5L, "成品退货单", "menu", "/inventory/purchase-return", "InventoryPurchaseReturn", "Refrigerator", 2);
+        saveMenu(503L, 5L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "UserFilled", 3);
+        // 600s 销售业务
+        saveMenu(601L, 6L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 1);
+        saveMenu(602L, 6L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 2);
+        // 700s 库存业务
+        saveMenu(701L, 7L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 1);
+        saveMenu(702L, 7L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 2);
+        // 800s 财务管理
+        saveMenu(801L, 8L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1);
+        saveMenu(802L, 8L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2);
+        saveMenu(803L, 8L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 3);
+        saveMenu(804L, 8L, "资金流水", "menu", "/finance/cashflow", "FinanceCashflow", "TrendCharts", 4);
+        // 900s 设置
+        saveMenu(901L, 9L, "智能管理", "menu", "/system/smart", "SystemSmart", "Cpu", 1);
+        saveMenu(902L, 9L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 2);
+        saveMenu(903L, 9L, "权限管理", "menu", "/system/permission", "SystemPermission", "Lock", 3);
+        saveMenu(904L, 9L, "系统信息", "menu", "/system/settings", "SystemSettings", "Setting", 4);
+        saveMenu(905L, 9L, "数据管理", "menu", "/system/data-manage", "SystemDataManage", "Folder", 5);
         log.info("初始化菜单数据完成");
     }
 
@@ -829,28 +932,30 @@ public class DataInitializer implements ApplicationRunner {
     private void initRoleMenus() {
         // 管理员：全部权限
         assignRoleMenus("admin", Arrays.asList(
-                1L, 2L, 4L, 5L, 6L, 7L,
-                8L, 9L, 10L,
-                49L, 50L, 18L, 19L, 33L, 36L, 39L,
-                15L, 16L, 35L, 37L, 44L, 48L,
-                20L, 22L, 23L,
-                25L, 26L, 27L, 28L,
-                29L, 40L, 44L, 45L, 46L));
+                1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L,
+                101L, 102L, 103L, 104L,
+                301L, 302L, 303L,
+                401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L,
+                501L, 502L,
+                601L, 602L,
+                701L, 702L,
+                801L, 802L, 803L, 804L,
+                901L, 902L, 903L, 904L, 905L));
         // 研发工程师：项目研发 + BOM + 基础产品
         assignRoleMenus("dev_engineer", Arrays.asList(
-                1L, 2L, 8L, 9L, 10L, 33L, 59L, 19L));
-        // 销售专员：销售 + 客户 + 产品
+                1L, 3L, 301L, 302L, 101L));
+        // 销售专员：销售业务 + 客户 + 产品
         assignRoleMenus("sales", Arrays.asList(
-                1L, 5L, 23L, 18L, 19L, 50L));
-        // 仓管员：库存 + 仓库
+                1L, 6L, 601L, 602L, 101L));
+        // 仓管员：进货+库存 + 仓库
         assignRoleMenus("warehouse", Arrays.asList(
-                1L, 5L, 22L, 36L, 35L, 19L));
+                1L, 5L, 7L, 501L, 701L, 702L, 101L));
         // 跟单专员：委外加工全部
         assignRoleMenus("merchandiser", Arrays.asList(
-                1L, 4L, 15L, 44L, 16L, 35L, 37L, 48L, 19L, 18L, 49L, 36L, 50L));
+                1L, 4L, 401L, 402L, 403L, 404L, 405L, 406L, 101L, 602L, 502L, 702L));
         // 财务：财务管理
         assignRoleMenus("finance", Arrays.asList(
-                1L, 6L, 25L, 26L, 27L, 28L, 19L));
+                1L, 8L, 801L, 802L, 803L, 804L, 101L));
     }
 
     private void assignRoleMenus(String roleCode, List<Long> menuIds) {
@@ -970,47 +1075,45 @@ public class DataInitializer implements ApplicationRunner {
         // 标准菜单定义: {id, parent_id, name, type, route_path, route_name, icon, sort_order}
         Object[][] menus = {
             {1L, 0L, "首页", "menu", "/dashboard", "Dashboard", "HomeFilled", 1},
-            {50L, 0L, "基础数据", "catalog", "", "", "DataBoard", 2},
-            {2L, 0L, "研发管理", "catalog", "", "", "Cpu", 3},
+            {2L, 0L, "基础数据", "catalog", "", "", "DataBoard", 2},
+            {3L, 0L, "研发管理", "catalog", "", "", "Cpu", 3},
             {4L, 0L, "委外加工", "catalog", "", "", "Setting", 4},
-            {5L, 0L, "进销存", "catalog", "", "", "Goods", 5},
-            {6L, 0L, "财务管理", "catalog", "", "", "Money", 6},
-            {7L, 0L, "设置", "catalog", "", "", "Tools", 7},
-            {8L, 2L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 1},
-            {10L, 2L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 2},
-            {9L, 2L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 3},
-            {49L, 50L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "UserFilled", 1},
-            {18L, 50L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 2},
-            {19L, 50L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 3},
-            {39L, 50L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 4},
-            {36L, 50L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 5},
-            {33L, 50L, "BOM类型", "menu", "/dev/bom-type", "DevBomType", "Tickets", 6},
-            {59L, 50L, "阶段模板", "menu", "/dev/phase-template", "DevPhaseTemplate", "Timer", 7},
-            {15L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1},
-            {44L, 4L, "委外物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2},
-            {16L, 4L, "物料信息管理", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 3},
-            {48L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 4},
-            {51L, 4L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 5},
-            {35L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 6},
-            {37L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 7},
-            {58L, 4L, "委外退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 8},
-            {20L, 5L, "采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1},
-            {22L, 5L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 2},
-            {23L, 5L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 3},
-            {52L, 5L, "其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Files", 4},
-            {25L, 6L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1},
-            {26L, 6L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2},
-            {27L, 6L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 3},
-            {28L, 6L, "资金流水", "menu", "/finance/cashflow", "FinanceCashflow", "TrendCharts", 4},
-            {53L, 6L, "付款管理", "menu", "/finance/payment", "FinancePayment", "Money", 5},
-            {40L, 7L, "智能管理", "menu", "/system/smart", "SystemSmart", "Cpu", 1},
-            {29L, 7L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 2},
-            {45L, 7L, "权限管理", "menu", "/system/permission", "SystemPermission", "Lock", 3},
-            {30L, 45L, "角色管理", "menu", "/system/permission", "SystemPermission", "", 0},
-            {31L, 45L, "菜单管理", "menu", "/system/permission", "SystemPermission", "", 0},
-            {44L, 7L, "系统信息", "menu", "/system/settings", "SystemSettings", "Setting", 4},
-            {46L, 7L, "数据管理", "menu", "/system/data-manage", "SystemDataManage", "Folder", 5},
-            {42L, 46L, "清空数据", "menu", "/system/data-manage", "SystemDataManage", "", 0},
+            {5L, 0L, "进货业务", "catalog", "", "", "ShoppingCart", 5},
+            {6L, 0L, "销售业务", "catalog", "", "", "Sell", 6},
+            {7L, 0L, "库存业务", "catalog", "", "", "Odometer", 7},
+            {8L, 0L, "财务管理", "catalog", "", "", "Money", 8},
+            {9L, 0L, "设置", "catalog", "", "", "Tools", 9},
+            {101L, 2L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 1},
+            {102L, 2L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 2},
+            {103L, 2L, "BOM类型", "menu", "/dev/bom-type", "DevBomType", "Tickets", 3},
+            {104L, 2L, "阶段模板", "menu", "/dev/phase-template", "DevPhaseTemplate", "Timer", 4},
+            {301L, 3L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 1},
+            {302L, 3L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 2},
+            {303L, 3L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 3},
+            {401L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1},
+            {402L, 4L, "委外物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2},
+            {403L, 4L, "物料信息管理", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 3},
+            {404L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 4},
+            {405L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 5},
+            {406L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6},
+            {407L, 4L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 7},
+            {408L, 4L, "委外退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 8},
+            {501L, 5L, "成品采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1},
+            {502L, 5L, "成品退货单", "menu", "/inventory/purchase-return", "InventoryPurchaseReturn", "Refrigerator", 2},
+            {503L, 5L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "UserFilled", 3},
+            {601L, 6L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 1},
+            {602L, 6L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 2},
+            {701L, 7L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 1},
+            {702L, 7L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 2},
+            {801L, 8L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1},
+            {802L, 8L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2},
+            {803L, 8L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 3},
+            {804L, 8L, "资金流水", "menu", "/finance/cashflow", "FinanceCashflow", "TrendCharts", 4},
+            {901L, 9L, "智能管理", "menu", "/system/smart", "SystemSmart", "Cpu", 1},
+            {902L, 9L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 2},
+            {903L, 9L, "权限管理", "menu", "/system/permission", "SystemPermission", "Lock", 3},
+            {904L, 9L, "系统信息", "menu", "/system/settings", "SystemSettings", "Setting", 4},
+            {905L, 9L, "数据管理", "menu", "/system/data-manage", "SystemDataManage", "Folder", 5},
         };
         // 使用 ON DUPLICATE KEY UPDATE 实现 upsert，确保已存在菜单的 parent_id 等字段也能更新
         int processed = 0;
@@ -1030,28 +1133,14 @@ public class DataInitializer implements ApplicationRunner {
         }
         log.info("同步菜单完成，处理 {} 条", processed);
 
-        // 隐藏已合并到 Tab 页面的旧菜单（角色管理30/菜单管理31/清空数据42/旧系统设置41）
-        Long[] hiddenMenuIds = {30L, 31L, 41L, 42L};
-        for (Long menuId : hiddenMenuIds) {
-            try {
-                jdbcTemplate.update("UPDATE sys_menu SET visible = 0, status = 0 WHERE id = ?", menuId);
-            } catch (Exception e) {
-                log.warn("隐藏菜单失败: id={}, err={}", menuId, e.getMessage());
-            }
-        }
-        log.info("已隐藏 {} 个旧菜单", hiddenMenuIds.length);
-
-        // 删除已废弃的旧菜单及其角色关联（方案商/委外加工厂/成品供应商/辅料商 已合并到供应商管理；43L已被48L替代）
-        Long[] obsoleteMenuIds = {11L, 12L, 13L, 14L, 43L};
-        for (Long menuId : obsoleteMenuIds) {
-            try {
-                jdbcTemplate.update("DELETE FROM sys_role_menu WHERE menu_id = ?", menuId);
-                jdbcTemplate.update("DELETE FROM sys_menu WHERE id = ?", menuId);
-            } catch (Exception e) {
-                log.warn("删除废弃菜单失败: id={}, err={}", menuId, e.getMessage());
-            }
-        }
-        log.info("已清理 {} 个废弃菜单", obsoleteMenuIds.length);
+        // 删除所有旧ID菜单（重新编号后旧ID已废弃）
+        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,301L,302L,303L,401L,402L,403L,404L,405L,406L,407L,408L,501L,502L,601L,602L,701L,702L,801L,802L,803L,804L,901L,902L,903L,904L,905L};
+        Set<Long> newIds = new HashSet<>(Arrays.asList(newMenuIds));
+        jdbcTemplate.update("DELETE FROM sys_role_menu WHERE menu_id NOT IN (" +
+            String.join(",", newIds.stream().map(String::valueOf).toArray(String[]::new)) + ")");
+        int deleted = jdbcTemplate.update("DELETE FROM sys_menu WHERE id NOT IN (" +
+            String.join(",", newIds.stream().map(String::valueOf).toArray(String[]::new)) + ")");
+        log.info("已清理 {} 个废弃旧菜单", deleted);
 
         // 始终为所有标准菜单授权给 super_admin 和 admin（每次启动都确保授权完整）
         for (Object[] m : menus) {

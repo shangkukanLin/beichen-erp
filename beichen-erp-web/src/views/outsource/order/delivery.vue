@@ -147,10 +147,6 @@ onMounted(loadData)
 
 <template>
   <div class="delivery-page" v-loading="loading">
-    <div class="page-header">
-      <span class="page-title">交货管理</span>
-    </div>
-
     <!-- 汇总卡片 -->
     <el-row :gutter="12" style="margin-bottom:12px">
       <el-col :span="6"><el-card shadow="never"><p style="color:#909399;font-size:12px;margin:0">订单总量</p><p style="font-size:20px;font-weight:600;margin:4px 0">{{ summary.totalQuantity || 0 }}</p></el-card></el-col>
@@ -243,8 +239,7 @@ onMounted(loadData)
 
 <style scoped>
 .delivery-page { padding: 16px; }
-.page-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
-.page-title { font-size: 20px; font-weight: 600; }
+
 .drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:16px; text-align:center; transition:all .3s; cursor:pointer; margin-top:4px }
 .drop-zone:hover { border-color:#409eff; background:#ecf5ff }
 </style>

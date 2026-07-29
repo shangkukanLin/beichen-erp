@@ -89,11 +89,7 @@ public class SaleOrderController {
                 if (o instanceof Map<?, ?> m) {
                     Map<String, Object> map = (Map<String, Object>) m;
                     SaleOrderItem it = new SaleOrderItem();
-                    if (map.get("materialId") != null) it.setProductId(Long.valueOf(map.get("materialId").toString()));
-                    it.setMaterialCode((String) map.get("materialCode"));
-                    it.setMaterialName((String) map.get("materialName"));
-                    it.setSpec((String) map.get("spec"));
-                    it.setUnit((String) map.get("unit"));
+                    if (map.get("productId") != null) it.setProductId(Long.valueOf(map.get("productId").toString()));
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank())
                         it.setQuantity(new BigDecimal(map.get("quantity").toString()));
                     if (map.get("unitPrice") != null && !map.get("unitPrice").toString().isBlank())

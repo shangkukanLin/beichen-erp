@@ -300,7 +300,6 @@ onMounted(() => { loadOptions(); loadData() })
   <div class="detail-page" v-loading="loading">
     <div class="page-header">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <span class="page-title">{{ form.code || '委外加工单详情' }}</span>
         <el-tag :type="form.status==='待确认'?'info':form.status==='生产中'?'primary':form.status==='已完成'?'success':'danger'" size="small">{{ form.status }}</el-tag>
       </div>
     </div>
@@ -478,7 +477,7 @@ onMounted(() => { loadOptions(); loadData() })
 <style scoped>
 .detail-page { display:flex; flex-direction:column; gap:0; }
 .page-header { display:flex; align-items:center; gap:12px; padding-bottom:8px; flex-wrap:wrap; }
-.page-title { font-size:18px; font-weight:600; }
+
 .drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
 .drop-zone:hover { border-color:#409eff; background:#ecf5ff }
 :deep(.defect-row) { background:#fdf6ec !important }

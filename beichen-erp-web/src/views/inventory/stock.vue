@@ -2,7 +2,7 @@
 import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import request from '@/utils/request'
-import { getMaterialPage, type Material } from '@/api/material'
+import { getMaterialPage, type Material } from '@/api/product'
 import {
   getWarehouseOptions,
   getStockPage, getStockLog,

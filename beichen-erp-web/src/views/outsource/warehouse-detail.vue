@@ -101,10 +101,6 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
 
 <template>
   <div class="detail-page">
-    <div class="page-header">
-      <span class="page-title">{{ warehouse?.warehouseName || '委外仓库详情' }}</span>
-    </div>
-
     <!-- 仓库基础信息 -->
     <el-card shadow="never" v-loading="loading">
       <template #header><span style="font-weight:600">仓库信息</span></template>
@@ -143,6 +139,5 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
 
 <style scoped>
 .detail-page { display:flex; flex-direction:column; gap:12px; }
-.page-header { display:flex; align-items:center; gap:16px; padding-bottom:8px; }
-.page-title { font-size:18px; font-weight:600; }
+
 </style>

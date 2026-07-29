@@ -184,7 +184,7 @@ const bomTypes = ref<string[]>([])
 const allMaterials = ref<any[]>([])
 async function loadBomTypes() {
   try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => t.typeName) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
-  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/product/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料失败', e?.message || e) }
 }
 function getMaterialsByType(type: string) { return allMaterials.value.filter((m:any) => m.materialType === type) }
 async function loadBom() { if (detailProject.value) bomList.value = (await getProjectBom(detailProject.value.id!))?.map(b => ({ materialName: b.materialName, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })) || [] }

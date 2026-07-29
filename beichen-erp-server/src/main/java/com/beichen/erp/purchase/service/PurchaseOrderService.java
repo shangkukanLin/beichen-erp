@@ -9,7 +9,7 @@ import java.util.Map;
 
 public interface PurchaseOrderService {
 
-    Page<Map<String, Object>> page(String status, Long supplierId, String code, int pageNum, int pageSize);
+    Page<Map<String, Object>> page(Integer status, Long supplierId, String code, int pageNum, int pageSize);
 
     PurchaseOrder getById(Long id);
 
@@ -22,4 +22,6 @@ public interface PurchaseOrderService {
     void cancel(Long id);
 
     void audit(Long id);
+
+    void unAudit(Long id);
 }

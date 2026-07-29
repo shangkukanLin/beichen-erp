@@ -102,7 +102,6 @@ onMounted(loadReport)
 <template>
   <div class="close-page" v-loading="loading">
     <div class="page-header">
-      <span class="page-title">结单报表</span>
       <el-tag v-if="report.reportStatus === '已结单'" type="success">已结单</el-tag>
       <el-tag v-else-if="report.reportStatus === '草稿'" type="warning">草稿</el-tag>
       <el-tag v-else type="info">未生成</el-tag>
@@ -201,5 +200,5 @@ onMounted(loadReport)
 <style scoped>
 .close-page { padding: 16px; }
 .page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.page-title { font-size: 18px; font-weight: 600; }
+
 </style>

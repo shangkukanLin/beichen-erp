@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import type { PageResult } from '@/api/material'
+import type { PageResult } from '@/api/product'
 
 /* ============================ 类型定义 ============================ */
 

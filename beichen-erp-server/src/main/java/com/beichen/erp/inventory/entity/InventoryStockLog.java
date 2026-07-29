@@ -17,12 +17,6 @@ public class InventoryStockLog {
 
     private Long productId;
 
-    private String materialName;
-
-    private String spec;
-
-    private String unit;
-
     private String changeType;
 
     private BigDecimal changeQuantity;

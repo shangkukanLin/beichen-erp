@@ -19,14 +19,6 @@ public class SaleOutboundItem {
 
     private Long productId;
 
-    private String materialCode;
-
-    private String materialName;
-
-    private String spec;
-
-    private String unit;
-
     private BigDecimal quantity;
 
     private BigDecimal unitPrice;

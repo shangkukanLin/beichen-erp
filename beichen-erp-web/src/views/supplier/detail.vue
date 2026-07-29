@@ -10,12 +10,7 @@ const loading = ref(true)
 const saving = ref(false)
 const activeTab = ref('info')
 
-const TYPE_OPTIONS = [
-  { name: 'solution', label: '方案商' },
-  { name: 'factory', label: '委外加工厂' },
-  { name: 'product', label: '成品供应商' },
-  { name: 'material', label: '辅料商' },
-]
+import { TYPE_OPTIONS, TYPE_MAP } from '@/constants/supplier'
 
 const form = reactive({
   id: undefined as any,
@@ -29,11 +24,9 @@ const typeName = ref('')
 const typeTags = ref<string[]>([])
 const hasFactory = ref(false)
 
-const TYPE_MAP: Record<string, string> = { solution: '方案商', factory: '加工厂', product: '成品商', material: '辅料商' }
-
-function formatTypes(types: string): string {
-  if (!types) return ''
-  return types.split(',').map(t => TYPE_MAP[t.trim()] || t).join(' + ')
+function formatTypes(types: string[]): string {
+  if (!types || types.length === 0) return ''
+  return types.map(t => TYPE_MAP[t] || t).join(' + ')
 }
 
 // 仓库/订单/缺料
@@ -59,10 +52,10 @@ async function loadData() {
     const res = await request.get<any,any>(`/supplier/${id}`)
     if (res) {
       Object.assign(form, res)
-      // 解析类型
-      form.checkedTypes = (res.supplierType || '').split(',').map((t: string) => t.trim()).filter(Boolean)
+      // 类型编码列表
+      form.checkedTypes = res.typeCodes || []
       typeTags.value = form.checkedTypes
-      typeName.value = formatTypes(res.supplierType)
+      typeName.value = formatTypes(form.checkedTypes || [])
       hasFactory.value = form.checkedTypes.includes('factory')
     }
     const prods = await request.get<any,any>(`/supplier/${id}/products`)
@@ -112,7 +105,7 @@ async function handleSave() {
   if (form.checkedTypes.length === 0) { ElMessage.warning('请选择至少一个类型'); return }
   saving.value = true
   try {
-    const body: any = { ...form, supplierType: form.checkedTypes.join(',') }
+    const body: any = { ...form, typeCodes: form.checkedTypes }
     await request.put('/supplier', body)
     ElMessage.success('保存成功')
     loadData()
@@ -135,8 +128,7 @@ onMounted(loadData)
 <template>
   <div class="detail-page" v-loading="loading">
     <div class="page-header">
-      <span class="page-title">{{ typeName }} — {{ form.name || '详情' }}</span>
-      <el-tag v-for="t in typeTags" :key="t" size="small" style="margin-left:4px"
+      <el-tag v-for="t in typeTags" :key="t" size="small"
         :type="t==='factory'?'warning':t==='solution'?'primary':t==='material'?'info':'success'"
       >{{ TYPE_MAP[t] || t }}</el-tag>
       <el-tag v-if="form.status===1" type="success" size="small" style="margin-left:4px">启用</el-tag>
@@ -305,7 +297,7 @@ onMounted(loadData)
 <style scoped>
 .detail-page { padding:16px; }
 .page-header { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
-.page-title { font-size:20px; font-weight:600; }
+
 .order-table-card :deep(.el-card__body) { padding:16px; }
 .order-table-card { margin-top:4px; }
 </style>

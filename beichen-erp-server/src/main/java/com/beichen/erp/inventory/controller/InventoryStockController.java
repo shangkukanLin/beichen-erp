@@ -33,9 +33,11 @@ public class InventoryStockController {
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) Long warehouseId,
+            @RequestParam(required = false) Long productId,
             @RequestParam(required = false) String productName) {
         LambdaQueryWrapper<InventoryWarehouseStock> w = new LambdaQueryWrapper<InventoryWarehouseStock>()
                 .eq(warehouseId != null, InventoryWarehouseStock::getWarehouseId, warehouseId)
+                .eq(productId != null, InventoryWarehouseStock::getProductId, productId)
                 .like(productName != null && !productName.isBlank(), InventoryWarehouseStock::getProductName, productName)
                 .orderByDesc(InventoryWarehouseStock::getId);
         Page<InventoryWarehouseStock> raw = stockMapper.selectPage(new Page<>(pageNum, pageSize), w);
@@ -45,7 +47,7 @@ public class InventoryStockController {
             m.put("id", s.getId());
             m.put("warehouseId", s.getWarehouseId());
             m.put("productName", s.getProductName());
-            m.put("materialId", s.getProductId());
+            m.put("productId", s.getProductId());
             m.put("quantity", s.getQuantity());
             m.put("availableQuantity", s.getAvailableQuantity());
             if (s.getWarehouseId() != null) {
@@ -63,14 +65,14 @@ public class InventoryStockController {
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) Long warehouseId,
-            @RequestParam(required = false) String materialName,
+            @RequestParam(required = false) Long productId,
             @RequestParam(required = false) String changeType,
             @RequestParam(required = false) String relatedBillNo,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate) {
         LambdaQueryWrapper<InventoryStockLog> w = new LambdaQueryWrapper<InventoryStockLog>()
                 .eq(warehouseId != null, InventoryStockLog::getWarehouseId, warehouseId)
-                .like(materialName != null && !materialName.isBlank(), InventoryStockLog::getMaterialName, materialName)
+                .eq(productId != null, InventoryStockLog::getProductId, productId)
                 .eq(changeType != null && !changeType.isBlank(), InventoryStockLog::getChangeType, changeType)
                 .like(relatedBillNo != null && !relatedBillNo.isBlank(), InventoryStockLog::getRelatedBillNo, relatedBillNo)
                 .ge(startDate != null && !startDate.isBlank(), InventoryStockLog::getCreateTime, startDate)

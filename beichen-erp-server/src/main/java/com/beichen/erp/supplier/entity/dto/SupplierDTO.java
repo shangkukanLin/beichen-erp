@@ -14,8 +14,8 @@ public class SupplierDTO {
     @NotBlank(message = "供应商名称不能为空")
     private String name;
 
-    @NotBlank(message = "供应商类型不能为空")
-    private String supplierType;
+    /** 供应商类型编码列表（product/factory/solution/material） */
+    private java.util.List<String> typeCodes;
 
     private String contact;
 
