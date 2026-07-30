@@ -17,12 +17,6 @@ public class InventoryOtherIoItem {
 
     private Long productId;
 
-    private String materialName;
-
-    private String spec;
-
-    private String unit;
-
     private BigDecimal quantity;
 
     private String remark;

@@ -9,7 +9,12 @@ import com.beichen.erp.inventory.entity.InventoryOtherIoItem;
 import com.beichen.erp.inventory.mapper.InventoryOtherIoMapper;
 import com.beichen.erp.inventory.mapper.InventoryOtherIoItemMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.OtherIoService;
+import com.beichen.erp.material.entity.Material;
+import com.beichen.erp.material.mapper.MaterialMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +31,7 @@ public class OtherIoServiceImpl implements OtherIoService {
     private final InventoryOtherIoMapper ioMapper;
     private final InventoryOtherIoItemMapper itemMapper;
     private final InventoryWarehouseStockService stockService;
+    private final MaterialMapper materialMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long warehouseId, String ioType, int pageNum, int pageSize) {
@@ -130,24 +136,28 @@ public class OtherIoServiceImpl implements OtherIoService {
 
     /** 应用库存变更 */
     private void applyStock(InventoryOtherIo io, List<InventoryOtherIoItem> items) {
-        String changeType = "其他入库".equals(io.getIoType()) ? "其他入库" : "其他出库";
+            StockChangeType type = StockChangeType.OTHER_IN.name().equals(io.getIoType()) ? StockChangeType.OTHER_IN : StockChangeType.OTHER_OUT;
         for (InventoryOtherIoItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = "其他入库".equals(io.getIoType()) ? q : q.negate();
-            stockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
-                    changeType, io.getCode(), changeType, it.getProductId(), it.getSpec());
+            Material prod = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
+                    delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),
+                    prod != null ? prod.getSpec() : "", io.getId());
         }
     }
 
     /** 逆向库存（编辑回滚 / 取消） */
     private void revertStock(InventoryOtherIo io, List<InventoryOtherIoItem> items) {
-        String changeType = "其他入库".equals(io.getIoType()) ? "取消入库" : "取消出库";
+        StockChangeType type = StockChangeType.OTHER_IN.name().equals(io.getIoType()) ? StockChangeType.CANCEL_IN : StockChangeType.CANCEL_OUT;
         for (InventoryOtherIoItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             // 逆向：入库变成扣回，出库变成加回
             BigDecimal delta = "其他入库".equals(io.getIoType()) ? q.negate() : q;
-            stockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
-                    changeType, io.getCode(), changeType, it.getProductId(), it.getSpec());
+            Material prod = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
+                    delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),
+                    prod != null ? prod.getSpec() : "", io.getId());
         }
     }
 

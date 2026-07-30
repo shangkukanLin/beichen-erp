@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("product")
+@TableName("material")
 public class Material {
 
     @TableId(type = IdType.AUTO)

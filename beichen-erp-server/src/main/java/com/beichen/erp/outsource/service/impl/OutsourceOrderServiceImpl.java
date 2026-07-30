@@ -10,6 +10,7 @@ import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
 import com.beichen.erp.outsource.mapper.OutsourceOrderMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
+import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
@@ -118,7 +119,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     public void create(OutsourceOrder order, List<OutsourceOrderProduct> products) {
         if (order.getFactoryId() == null) throw new BusinessException("加工厂不能为空");
         order.setCode(generateCode());
-        order.setStatus("待确认");
+        order.setStatus(OutsourceOrderStatus.PENDING.name());
         // 设置公司ID
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) order.setCompanyId(cid);
@@ -157,7 +158,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     public void update(OutsourceOrder order, List<OutsourceOrderProduct> newProducts) {
         OutsourceOrder old = orderMapper.selectById(order.getId());
         if (old == null) throw new BusinessException("加工单不存在");
-        if ("已取消".equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
+        if (OutsourceOrderStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
 
         // 删除旧产品（级联删除物料）
         List<OutsourceOrderProduct> oldProducts = productMapper.selectList(
@@ -206,10 +207,10 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     public void confirm(Long id) {
         OutsourceOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!"待确认".equals(order.getStatus())) throw new BusinessException("只有待确认状态可以确认");
+        if (!OutsourceOrderStatus.PENDING.name().equals(order.getStatus())) throw new BusinessException("只有待确认状态可以确认");
         OutsourceOrder update = new OutsourceOrder();
         update.setId(id);
-        update.setStatus("生产中");
+        update.setStatus(OutsourceOrderStatus.PRODUCING.name());
         update.setActualStartDate(LocalDate.now());
         orderMapper.updateById(update);
     }
@@ -219,10 +220,10 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     public void complete(Long id) {
         OutsourceOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!"生产中".equals(order.getStatus())) throw new BusinessException("只有生产中状态可以完成");
+        if (!OutsourceOrderStatus.PRODUCING.name().equals(order.getStatus())) throw new BusinessException("只有生产中状态可以完成");
         OutsourceOrder update = new OutsourceOrder();
         update.setId(id);
-        update.setStatus("已完成");
+        update.setStatus(OutsourceOrderStatus.FINISHED.name());
         update.setActualEndDate(LocalDate.now());
         orderMapper.updateById(update);
     }
@@ -232,10 +233,10 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     public void cancel(Long id) {
         OutsourceOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("加工单不存在");
-        if ("已取消".equals(order.getStatus())) throw new BusinessException("已取消状态不可重复取消");
+        if (OutsourceOrderStatus.CANCELLED.name().equals(order.getStatus())) throw new BusinessException("已取消状态不可重复取消");
         OutsourceOrder update = new OutsourceOrder();
         update.setId(id);
-        update.setStatus("已取消");
+        update.setStatus(OutsourceOrderStatus.CANCELLED.name());
         orderMapper.updateById(update);
     }
 

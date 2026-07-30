@@ -89,9 +89,6 @@ public class OtherIoController {
                     Map<String, Object> map = (Map<String, Object>) m;
                     InventoryOtherIoItem it = new InventoryOtherIoItem();
                     if (map.get("productId") != null) it.setProductId(Long.valueOf(map.get("productId").toString()));
-                    it.setMaterialName((String) map.get("materialName"));
-                    it.setSpec((String) map.get("spec"));
-                    it.setUnit((String) map.get("unit"));
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank())
                         it.setQuantity(new BigDecimal(map.get("quantity").toString()));
                     it.setRemark((String) map.get("remark"));

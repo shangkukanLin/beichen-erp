@@ -6,7 +6,11 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.service.PayableHelper;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.supplier.entity.Supplier;
@@ -169,7 +173,7 @@ public class ReturnOrderController {
                     String pn = (String) p.get("productName");
                     BigDecimal qty = toBigDecimal(p.get("quantity"));
                     if (pn != null && qty.compareTo(BigDecimal.ZERO) > 0) {
-                        inventoryStockService.changeStock(invWhId, pn, qty.negate(), "委外退料出", order.getCode(), "委外退货", null, null);
+                        inventoryStockService.changeStock(invWhId, pn, qty.negate(), StockChangeType.OUTSOURCE_RETURN_OUT, order.getCode(), RelatedBillType.OUTSOURCE_RETURN, null, null, order.getId());
                     }
                 }
             }
@@ -189,8 +193,8 @@ public class ReturnOrderController {
     public R<Void> cancel(@PathVariable Long id) {
         ReturnOrder order = returnOrderMapper.selectById(id);
         if (order == null) throw new BusinessException("退货单不存在");
-        if ("已取消".equals(order.getStatus())) throw new BusinessException("已取消");
-        order.setStatus("已取消");
+        if (DocStatus.CANCELLED.name().equals(order.getStatus())) throw new BusinessException("已取消");
+        order.setStatus(DocStatus.CANCELLED.name());
         returnOrderMapper.updateById(order);
 
         // 逆向库存
@@ -231,7 +235,7 @@ public class ReturnOrderController {
         // 查该工厂所有已确认/已结单的加工单
         List<OutsourceOrder> orders = orderMapper.selectList(
             new LambdaQueryWrapper<OutsourceOrder>().eq(OutsourceOrder::getFactoryId, factoryId)
-                .in(OutsourceOrder::getStatus, "已确认", "生产中", "已完成")
+                .in(OutsourceOrder::getStatus, OutsourceOrderStatus.CONFIRMED.name(), OutsourceOrderStatus.PRODUCING.name(), OutsourceOrderStatus.FINISHED.name())
                 .orderByDesc(OutsourceOrder::getCreateTime));
         // 按产品名汇总，每个产品列出可选的BOM版本
         Map<String, Map<String, Object>> productMap = new LinkedHashMap<>();

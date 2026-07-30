@@ -6,6 +6,9 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinanceReceivable;
 import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
@@ -87,7 +90,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
             order.setCustomerName(c != null ? c.getName() : "");
         }
         order.setCode(generateCode());
-        order.setStatus("草稿");
+        order.setStatus(DocStatus.DRAFT.name());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) order.setCompanyId(cid);
         BigDecimal total = BigDecimal.ZERO;
@@ -113,7 +116,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     public void update(SaleOrder order, List<SaleOrderItem> items) {
         SaleOrder old = orderMapper.selectById(order.getId());
         if (old == null) throw new BusinessException("销售单不存在");
-        if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         if (order.getCustomerId() != null) {
             Customer c = customerMapper.selectById(order.getCustomerId());
             order.setCustomerName(c != null ? c.getName() : "");
@@ -144,10 +147,10 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     public void cancel(Long id) {
         SaleOrder old = orderMapper.selectById(id);
         if (old == null) throw new BusinessException("销售单不存在");
-        if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
         SaleOrder u = new SaleOrder();
         u.setId(id);
-        u.setStatus("已作废");
+        u.setStatus(DocStatus.CANCELLED.name());
         orderMapper.updateById(u);
     }
 
@@ -156,7 +159,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     public void audit(Long id) {
         SaleOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("销售单不存在");
-        if (!"草稿".equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (!DocStatus.DRAFT.name().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<SaleOrderItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, id));
         if (items.isEmpty()) throw new BusinessException("订单明细不能为空");
@@ -167,9 +170,9 @@ public class SaleOrderServiceImpl implements SaleOrderService {
             Material product = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(order.getWarehouseId(),
                     product != null ? product.getName() : "",
-                    it.getQuantity().negate(), "销售出库", order.getCode(), "销售单",
+                    it.getQuantity().negate(), StockChangeType.SALE_OUT, order.getCode(), RelatedBillType.SALE_ORDER,
                     it.getProductId(),
-                    product != null ? product.getSpec() : "");
+                    product != null ? product.getSpec() : "", order.getId());
         }
         // 2) 生成应收台账
         FinanceReceivable fr = new FinanceReceivable();
@@ -201,7 +204,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         // 4) 更新订单状态为"已完成"（审核即出库）
         SaleOrder u = new SaleOrder();
         u.setId(id);
-        u.setStatus("已完成");
+        u.setStatus(DocStatus.AUDITED.name());
         orderMapper.updateById(u);
     }
 

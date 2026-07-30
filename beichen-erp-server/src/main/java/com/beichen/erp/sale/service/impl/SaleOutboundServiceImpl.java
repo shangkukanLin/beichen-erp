@@ -6,6 +6,9 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinanceReceivable;
 import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
@@ -87,7 +90,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
             outbound.setCustomerName(c != null ? c.getName() : "");
         }
         outbound.setCode(generateCode());
-        outbound.setStatus("草稿");
+        outbound.setStatus(DocStatus.DRAFT.name());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) outbound.setCompanyId(cid);
         BigDecimal total = BigDecimal.ZERO;
@@ -113,7 +116,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     public void update(SaleOutbound outbound, List<SaleOutboundItem> items) {
         SaleOutbound old = outboundMapper.selectById(outbound.getId());
         if (old == null) throw new BusinessException("销售出库单不存在");
-        if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         if (outbound.getCustomerId() != null) {
             Customer c = customerMapper.selectById(outbound.getCustomerId());
             outbound.setCustomerName(c != null ? c.getName() : "");
@@ -144,10 +147,10 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     public void cancel(Long id) {
         SaleOutbound old = outboundMapper.selectById(id);
         if (old == null) throw new BusinessException("销售出库单不存在");
-        if (!"草稿".equals(old.getStatus())) throw new BusinessException("已审核的出库单不可作废");
+        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("已审核的出库单不可作废");
         SaleOutbound u = new SaleOutbound();
         u.setId(id);
-        u.setStatus("已作废");
+        u.setStatus(DocStatus.CANCELLED.name());
         outboundMapper.updateById(u);
     }
 
@@ -156,7 +159,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     public void audit(Long id) {
         SaleOutbound outbound = outboundMapper.selectById(id);
         if (outbound == null) throw new BusinessException("销售出库单不存在");
-        if (!"草稿".equals(outbound.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (!DocStatus.DRAFT.name().equals(outbound.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<SaleOutboundItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, id));
         // 1) 库存联动：出库减库存（changeStock 负数，不足自动抛异常）
@@ -164,9 +167,9 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
             Material product = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(outbound.getWarehouseId(),
                     product != null ? product.getName() : "",
-                    it.getQuantity().negate(), "销售出库", outbound.getCode(), "销售出库",
+                    it.getQuantity().negate(), StockChangeType.SALE_OUT, outbound.getCode(), RelatedBillType.SALE_OUTBOUND,
                     it.getProductId(),
-                    product != null ? product.getSpec() : "");
+                    product != null ? product.getSpec() : "", outbound.getId());
         }
         // 2) 生成应收台账
         FinanceReceivable fr = new FinanceReceivable();
@@ -196,13 +199,13 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         // 4) 更新出库单状态
         SaleOutbound u = new SaleOutbound();
         u.setId(id);
-        u.setStatus("已审核");
+        u.setStatus(DocStatus.AUDITED.name());
         outboundMapper.updateById(u);
         // 5) 关联销售订单置为已出库
         if (outbound.getOrderId() != null) {
             SaleOrder o = new SaleOrder();
             o.setId(outbound.getOrderId());
-            o.setStatus("已出库");
+            o.setStatus(DocStatus.AUDITED.name());
             orderMapper.updateById(o);
         }
     }

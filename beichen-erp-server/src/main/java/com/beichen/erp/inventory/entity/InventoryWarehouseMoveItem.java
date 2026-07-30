@@ -4,23 +4,20 @@ import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("inventory_stock_take")
-public class InventoryStockTake {
+@TableName("inventory_warehouse_move_item")
+public class InventoryWarehouseMoveItem {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private String code;
+    private Long moveId;
 
-    private Long warehouseId;
+    private Long productId;
 
-    private LocalDate takeDate;
-
-    private String status;
+    private BigDecimal quantity;
 
     private String remark;
 
@@ -28,7 +25,4 @@ public class InventoryStockTake {
     private Long companyId;
 
     private LocalDateTime createTime;
-
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updateTime;
 }

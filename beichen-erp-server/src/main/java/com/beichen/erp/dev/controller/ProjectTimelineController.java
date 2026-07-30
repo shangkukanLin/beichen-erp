@@ -5,6 +5,7 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.PhaseTemplate;
 import com.beichen.erp.dev.entity.Project;
+import com.beichen.erp.dev.common.TimelineStatus;
 import com.beichen.erp.dev.entity.ProjectTimeline;
 import com.beichen.erp.dev.mapper.PhaseTemplateMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
@@ -73,13 +74,13 @@ public class ProjectTimelineController {
     public R<List<ProjectTimeline>> completePhase(@PathVariable Long id) {
         ProjectTimeline phase = timelineMapper.selectById(id);
         if (phase == null) throw new BusinessException("阶段不存在");
-        if (!"进行中".equals(phase.getStatus())) throw new BusinessException("只有「进行中」的阶段才能完成");
+        if (!TimelineStatus.IN_PROGRESS.name().equals(phase.getStatus())) throw new BusinessException("只有「进行中」的阶段才能完成");
 
         // 完成当前阶段（如果已手动设置了实际完成时间则保留）
         if (phase.getActualEnd() == null) {
             phase.setActualEnd(LocalDate.now());
         }
-        phase.setStatus("已完成");
+        phase.setStatus(TimelineStatus.FINISHED.name());
         timelineMapper.updateById(phase);
 
         Long projectId = phase.getProjectId();
@@ -109,7 +110,7 @@ public class ProjectTimelineController {
         if (nextNotStarted != null && !hasAnyInProgress) {
             // 后续没有进行中的阶段时，才将第一个未开始阶段激活
             log.info("[completePhase] → 激活阶段: {}", nextNotStarted.getStatusName());
-            nextNotStarted.setStatus("进行中");
+            nextNotStarted.setStatus(TimelineStatus.IN_PROGRESS.name());
             timelineMapper.updateById(nextNotStarted);
         }
         if (nextNotStarted == null && !hasAnyInProgress) {
@@ -157,7 +158,7 @@ public class ProjectTimelineController {
         LocalDate cursor = completed.getActualEnd();
         for (ProjectTimeline p : phases) {
             if (p.getSortOrder() <= completed.getSortOrder()) continue;
-            if ("已完成".equals(p.getStatus())) {
+            if (TimelineStatus.FINISHED.name().equals(p.getStatus())) {
                 // 已完成阶段：以其实际完成时间作为后续的锚点
                 cursor = p.getActualEnd() != null ? p.getActualEnd() : cursor;
             } else {
@@ -229,7 +230,7 @@ public class ProjectTimelineController {
             p.setStatusName(tpl.getName());
             p.setSortOrder(tpl.getSortOrder());
             p.setDefaultDays(tpl.getDefaultDays());
-            p.setStatus(idx == 0 ? "进行中" : "未开始");
+            p.setStatus(idx == 0 ? TimelineStatus.IN_PROGRESS.name() : TimelineStatus.NOT_STARTED.name());
             if (tpl.getDefaultDays() != null && tpl.getDefaultDays() > 0) {
                 p.setPlannedEnd(cursor.plusDays(tpl.getDefaultDays()));
             } else {
@@ -256,7 +257,7 @@ public class ProjectTimelineController {
         for (ProjectTimeline p : phases) {
             if (p.getSortOrder() <= updated.getSortOrder()) continue;
             // 跳过已完成的阶段，避免覆盖历史数据
-            if ("已完成".equals(p.getStatus())) {
+            if (TimelineStatus.FINISHED.name().equals(p.getStatus())) {
                 cursor = p.getPlannedEnd() != null ? p.getPlannedEnd() : cursor;
                 continue;
             }

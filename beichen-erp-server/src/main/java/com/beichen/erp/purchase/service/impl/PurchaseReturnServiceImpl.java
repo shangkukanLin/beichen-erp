@@ -7,6 +7,8 @@ import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
@@ -160,8 +162,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
             stockService.changeStock(order.getWarehouseId(),
                     product != null ? product.getName() : "",
                     it.getQuantity().negate(),
-                    "退货出库", order.getCode(), "成品退货单", it.getProductId(),
-                    product != null ? product.getSpec() : "");
+                    StockChangeType.RETURN_OUT, order.getCode(), RelatedBillType.PURCHASE_RETURN, it.getProductId(),
+                    product != null ? product.getSpec() : "", order.getId());
         }
         // 2) 冲减应付：新增负数应付台账
         FinancePayable fp = new FinancePayable();
@@ -214,8 +216,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
             stockService.changeStock(order.getWarehouseId(),
                     product != null ? product.getName() : "",
                     it.getQuantity(),
-                    "退货反审核", order.getCode(), "成品退货单", it.getProductId(),
-                    product != null ? product.getSpec() : "");
+                    StockChangeType.RETURN_UN_AUDIT, order.getCode(), RelatedBillType.PURCHASE_RETURN, it.getProductId(),
+                    product != null ? product.getSpec() : "", order.getId());
         }
         // 3) 删除应付台账
         for (FinancePayable fp : payables) {

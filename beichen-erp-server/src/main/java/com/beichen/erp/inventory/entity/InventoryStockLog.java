@@ -29,6 +29,8 @@ public class InventoryStockLog {
 
     private String relatedBillType;
 
+    private Long relatedBillId;
+
     private String remark;
 
     @TableField(fill = FieldFill.INSERT)

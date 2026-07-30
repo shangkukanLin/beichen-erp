@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.PhaseTemplate;
 import com.beichen.erp.dev.entity.Project;
+import com.beichen.erp.dev.common.TimelineStatus;
 import com.beichen.erp.dev.entity.ProjectTimeline;
 import com.beichen.erp.dev.mapper.PhaseTemplateMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
@@ -58,7 +59,7 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
             timeline.setSortOrder(tpl.getSortOrder());
             timeline.setDefaultDays(tpl.getDefaultDays());
             // 第一个阶段默认为"进行中"
-            timeline.setStatus(idx == 0 ? "进行中" : "未开始");
+            timeline.setStatus(idx == 0 ? TimelineStatus.IN_PROGRESS.name() : TimelineStatus.NOT_STARTED.name());
             if (tpl.getDefaultDays() != null && tpl.getDefaultDays() > 0) {
                 timeline.setPlannedEnd(cursor.plusDays(tpl.getDefaultDays()));
             } else {
@@ -128,12 +129,12 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
             throw new BusinessException("时间线记录不存在");
         }
         // 如果设置为"进行中"，确保该项目下没有其他"进行中"的阶段
-        if ("进行中".equals(status) && !"进行中".equals(timeline.getStatus())) {
+        if (TimelineStatus.IN_PROGRESS.name().equals(status) && !TimelineStatus.IN_PROGRESS.name().equals(timeline.getStatus())) {
             List<ProjectTimeline> phases = listByProject(projectId);
             for (ProjectTimeline p : phases) {
-                if ("进行中".equals(p.getStatus()) && !p.getId().equals(timeline.getId())) {
+                if (TimelineStatus.IN_PROGRESS.name().equals(p.getStatus()) && !p.getId().equals(timeline.getId())) {
                     // 将其他进行中的阶段自动标记为已完成（视为被跳过的阶段）
-                    p.setStatus("已完成");
+                    p.setStatus(TimelineStatus.FINISHED.name());
                     if (p.getActualEnd() == null) {
                         p.setActualEnd(LocalDate.now());
                     }
@@ -168,17 +169,17 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
         boolean hasAnyInProgress = false;
         for (ProjectTimeline p : phases) {
             if (p.getSortOrder() > timeline.getSortOrder()) {
-                if ("未开始".equals(p.getStatus()) && nextNotStarted == null) {
+                if (TimelineStatus.NOT_STARTED.name().equals(p.getStatus()) && nextNotStarted == null) {
                     nextNotStarted = p;
                 }
-                if ("进行中".equals(p.getStatus())) {
+                if (TimelineStatus.IN_PROGRESS.name().equals(p.getStatus())) {
                     hasAnyInProgress = true;
                 }
             }
         }
         if (nextNotStarted != null && !hasAnyInProgress) {
             // 后续没有进行中的阶段时，才将第一个未开始阶段激活
-            nextNotStarted.setStatus("进行中");
+            nextNotStarted.setStatus(TimelineStatus.IN_PROGRESS.name());
             projectTimelineMapper.updateById(nextNotStarted);
         }
         if (nextNotStarted == null && !hasAnyInProgress) {
@@ -224,7 +225,7 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
         for (ProjectTimeline p : phases) {
             if (p.getSortOrder() <= updated.getSortOrder()) continue;
             // 跳过已完成的阶段，避免覆盖历史数据
-            if ("已完成".equals(p.getStatus())) {
+            if (TimelineStatus.FINISHED.name().equals(p.getStatus())) {
                 cursor = p.getPlannedEnd() != null ? p.getPlannedEnd() : cursor;
                 continue;
             }

@@ -7,6 +7,8 @@ import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
@@ -195,8 +197,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             stockService.changeStock(order.getWarehouseId(),
                     product != null ? product.getName() : "",
                     it.getQuantity(),
-                    "采购入库", order.getCode(), "采购单", it.getProductId(),
-                    product != null ? product.getSpec() : "");
+                    StockChangeType.PURCHASE_IN, order.getCode(), RelatedBillType.PURCHASE_ORDER, it.getProductId(),
+                    product != null ? product.getSpec() : "", order.getId());
         }
         // 2) 生成应付台账
         FinancePayable fp = new FinancePayable();
@@ -252,8 +254,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             stockService.changeStock(order.getWarehouseId(),
                     product != null ? product.getName() : "",
                     it.getQuantity().negate(),
-                    "采购反审核", order.getCode(), "采购单", it.getProductId(),
-                    product != null ? product.getSpec() : "");
+                    StockChangeType.PURCHASE_UN_AUDIT, order.getCode(), RelatedBillType.PURCHASE_ORDER, it.getProductId(),
+                    product != null ? product.getSpec() : "", order.getId());
         }
 
         // 3) 删除应付台账

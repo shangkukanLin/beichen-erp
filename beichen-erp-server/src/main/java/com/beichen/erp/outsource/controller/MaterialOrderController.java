@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.service.PayableHelper;
+import com.beichen.erp.outsource.common.MaterialOrderStatus;
+import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.supplier.entity.Supplier;
@@ -112,7 +114,7 @@ public class MaterialOrderController {
     public R<Long> create(@RequestBody Map<String, Object> body) {
         MaterialOrder o = parseOrder(body);
         o.setCode(generateCode());
-        o.setStatus("待确认");
+        o.setStatus(MaterialOrderStatus.PENDING.name());
         orderMapper.insert(o);
 
         @SuppressWarnings("unchecked")
@@ -132,7 +134,7 @@ public class MaterialOrderController {
     public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         MaterialOrder old = orderMapper.selectById(id);
         if (old == null) throw new BusinessException("订单不存在");
-        if ("已取消".equals(old.getStatus())) throw new BusinessException("已取消的订单不可编辑");
+        if (MaterialOrderStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("已取消的订单不可编辑");
         MaterialOrder o = parseOrder(body);
         o.setId(id);
         orderMapper.updateById(o);
@@ -155,8 +157,8 @@ public class MaterialOrderController {
     public R<Void> confirm(@PathVariable Long id) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        if (!"待确认".equals(o.getStatus())) throw new BusinessException("只有待确认状态可确认");
-        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus("收货中");
+        if (!MaterialOrderStatus.PENDING.name().equals(o.getStatus())) throw new BusinessException("只有待确认状态可确认");
+        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.RECEIVING.name());
         orderMapper.updateById(upd);
         return R.ok();
     }
@@ -168,7 +170,7 @@ public class MaterialOrderController {
         boolean force = Boolean.TRUE.equals(body.get("force"));
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        if (!"收货中".equals(o.getStatus()) && !"已确认".equals(o.getStatus()))
+        if (!MaterialOrderStatus.RECEIVING.name().equals(o.getStatus()) && !OutsourceOrderStatus.CONFIRMED.name().equals(o.getStatus()))
             throw new BusinessException("当前状态不可收货");
 
         // 供应商（加工厂）仓库：子物料从该仓扣减
@@ -292,7 +294,7 @@ public class MaterialOrderController {
             new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id))
             .stream().allMatch(it -> it.getReceivedQuantity().compareTo(it.getOrderQuantity()) >= 0);
         if (allReceived) {
-            MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus("已完成"); upd.setFinishTime(java.time.LocalDateTime.now());
+            MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.FINISHED.name()); upd.setFinishTime(java.time.LocalDateTime.now());
             orderMapper.updateById(upd);
         }
 
@@ -421,9 +423,9 @@ public class MaterialOrderController {
     public R<Void> finish(@PathVariable Long id) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        if ("已取消".equals(o.getStatus())) throw new BusinessException("已取消的订单不可结单");
-        if ("已完成".equals(o.getStatus())) throw new BusinessException("订单已完成");
-        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus("已完成"); upd.setFinishTime(java.time.LocalDateTime.now());
+        if (MaterialOrderStatus.CANCELLED.name().equals(o.getStatus())) throw new BusinessException("已取消的订单不可结单");
+        if (MaterialOrderStatus.FINISHED.name().equals(o.getStatus())) throw new BusinessException("订单已完成");
+        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.FINISHED.name()); upd.setFinishTime(java.time.LocalDateTime.now());
         orderMapper.updateById(upd);
         return R.ok();
     }
@@ -433,13 +435,13 @@ public class MaterialOrderController {
     public R<Void> cancel(@PathVariable Long id) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        if ("已取消".equals(o.getStatus()) || "已完成".equals(o.getStatus()))
+        if (MaterialOrderStatus.CANCELLED.name().equals(o.getStatus()) || MaterialOrderStatus.FINISHED.name().equals(o.getStatus()))
             throw new BusinessException("当前状态不可取消");
         List<MaterialOrderItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
         boolean hasDelivery = items.stream().anyMatch(it -> it.getReceivedQuantity() != null && it.getReceivedQuantity().compareTo(BigDecimal.ZERO) > 0);
         if (hasDelivery) throw new BusinessException("该订单已有交货记录，不可取消");
-        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus("已取消");
+        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.CANCELLED.name());
         orderMapper.updateById(upd);
         return R.ok();
     }
@@ -530,7 +532,7 @@ public class MaterialOrderController {
         Map<String, BigDecimal> inTransitMap = new HashMap<>();
         List<MaterialOrder> activeOrders = orderMapper.selectList(
             new LambdaQueryWrapper<MaterialOrder>()
-                .notIn(MaterialOrder::getStatus, List.of("已完成", "已取消")));
+                .notIn(MaterialOrder::getStatus, List.of(MaterialOrderStatus.FINISHED.name(), MaterialOrderStatus.CANCELLED.name())));
             if (!activeOrders.isEmpty()) {
                 List<Long> orderIds = activeOrders.stream().map(MaterialOrder::getId).collect(Collectors.toList());
                 List<MaterialOrderItem> orderItems = itemMapper.selectList(

@@ -6,6 +6,9 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.inventory.common.StockChangeType;
+import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
@@ -112,7 +115,7 @@ public class OrderDeliveryController {
         if (delivery.getOrderId() == null) throw new BusinessException("加工单ID不能为空");
         OutsourceOrder order = orderService.getById(delivery.getOrderId());
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!"生产中".equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可录入交货");
+        if (!OutsourceOrderStatus.PRODUCING.name().equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可录入交货");
         if (delivery.getProductName() == null || delivery.getProductName().isBlank())
             throw new BusinessException("产品名称不能为空");
         if (delivery.getQuantity() == null || delivery.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
@@ -263,7 +266,7 @@ public class OrderDeliveryController {
         log.info("退不良: orderId={}, body={}", orderId, body);
         OutsourceOrder order = orderService.getById(orderId);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!"生产中".equals(order.getStatus()) && !"已完成".equals(order.getStatus()))
+        if (!OutsourceOrderStatus.PRODUCING.name().equals(order.getStatus()) && !OutsourceOrderStatus.FINISHED.name().equals(order.getStatus()))
             throw new BusinessException("只有生产中或已完成的加工单可退不良");
 
         String productName = (String) body.get("productName");
@@ -310,7 +313,7 @@ public class OrderDeliveryController {
             new LambdaQueryWrapper<Material>().eq(Material::getName, productName));
         if (productMat != null) productMaterialId = productMat.getId();
         stockService.changeStock(warehouseId, productName, defectQty.negate(),
-            "委外退不良", order.getCode(), "退不良", productMaterialId, null);
+            StockChangeType.OUTSOURCE_DEFECT_RETURN, order.getCode(), RelatedBillType.OUTSOURCE_DEFECT, productMaterialId, null, order.getId());
         log.info("退不良扣成品: {} (仓库={}) {} -> {}", productName, warehouseId, stockQty, stockQty.subtract(defectQty));
 
         // 2. 创建退不良交货记录
@@ -589,7 +592,7 @@ public class OrderDeliveryController {
             log.info("物料表中未找到「{}」，将按 productName 入库", delivery.getProductName());
         }
         stockService.changeStock(delivery.getWarehouseId(), delivery.getProductName(),
-            delivery.getQuantity(), "委外交货入库", null, null, productMaterialId, null);
+            delivery.getQuantity(), StockChangeType.OUTSOURCE_FINISH_IN, null, (RelatedBillType) null, productMaterialId, null, delivery.getId());
         log.info("入库完成: warehouseId={}, productName={}, qty={}", delivery.getWarehouseId(), delivery.getProductName(), delivery.getQuantity());
     }
 
@@ -601,8 +604,8 @@ public class OrderDeliveryController {
         if (material != null) materialId = material.getId();
 
         stockService.changeStock(delivery.getWarehouseId(), delivery.getProductName(),
-            delivery.getQuantity().negate(), "交货回滚", orderCode, "委外加工",
-            materialId, null);
+            delivery.getQuantity().negate(), StockChangeType.OUTSOURCE_ROLLBACK, orderCode, RelatedBillType.OUTSOURCE_ORDER,
+            materialId, null, delivery.getId());
         log.info("回滚成品库存: warehouseId={}, product={}, qty=-{}",
                 delivery.getWarehouseId(), delivery.getProductName(), delivery.getQuantity());
     }

@@ -204,6 +204,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/warehouse/material-history/:wid/:mid', name: 'InventoryMaterialHistory', component: () => import('@/views/inventory/warehouse-material-history.vue'), meta: { title: '物料库存流水详细', requiresAuth: true } },
       { path: 'inventory/other-io', name: 'InventoryOtherIo', component: () => import('@/views/inventory/other-io/index.vue'), meta: { title: '其他出入库', requiresAuth: true } },
       { path: 'inventory/other-io/add', name: 'InventoryOtherIoAdd', component: () => import('@/views/inventory/other-io/add.vue'), meta: { title: '新增其他出入库', requiresAuth: true } },
+      { path: 'inventory/warehouse-move', name: 'InventoryWarehouseMove', component: () => import('@/views/inventory/warehouse-move/index.vue'), meta: { title: '成品移仓单', requiresAuth: true } },
+      { path: 'inventory/warehouse-move/add', name: 'InventoryWarehouseMoveAdd', component: () => import('@/views/inventory/warehouse-move/add.vue'), meta: { title: '新增移仓单', requiresAuth: true } },
       { path: 'inventory/material', redirect: '/material' },
       { path: 'inventory/customer', name: 'InventoryCustomer', component: () => import('@/views/customer/index.vue'), meta: { title: '客户管理', requiresAuth: true } },
       { path: 'inventory/purchase', name: 'InventoryPurchase', component: () => import('@/views/purchase/order/index.vue'), meta: { title: '成品采购单', requiresAuth: true }
@@ -218,7 +220,8 @@ const routes: RouteRecordRaw[] = [
         name: 'InventoryPurchaseReturnAdd',
         component: () => import('@/views/purchase/return/add.vue'),
         meta: { title: '新增成品退货单', requiresAuth: true } },
-      { path: 'inventory/stock', name: 'InventoryStock', component: () => import('@/views/inventory/stock.vue'), meta: { title: '成品库存', requiresAuth: true } },
+      { path: 'inventory/stock', name: 'InventoryStock', component: () => import('@/views/inventory/stock.vue'), meta: { title: '成品库存查询', requiresAuth: true } },
+      { path: 'inventory/stock-log', name: 'InventoryStockLog', component: () => import('@/views/inventory/stock-log.vue'), meta: { title: '库存流水', requiresAuth: true } },
       { path: 'inventory/sale', name: 'InventorySale', component: () => import('@/views/sale/order/index.vue'), meta: { title: '销售单', requiresAuth: true } },
       // 财务管理
       { path: 'finance/receivable', name: 'FinanceReceivable', component: () => import('@/views/finance/receivable.vue'), meta: { title: '应收管理', requiresAuth: true } },

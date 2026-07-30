@@ -5,3 +5,4 @@ set PATH=%JAVA_HOME%\bin;%MAVEN_HOME%\bin;%PATH%
 cd /d c:\Users\75629\CodeBuddy\20260710123705\beichen-erp\beichen-erp-server
 echo [BACKEND] Starting Spring Boot...
 mvn spring-boot:run -DskipTests
+ 

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.dev.entity.Project;
+import com.beichen.erp.dev.common.TimelineStatus;
 import com.beichen.erp.dev.entity.ProjectTimeline;
 import com.beichen.erp.dev.entity.Bom;
 import com.beichen.erp.dev.entity.BomType;
@@ -99,7 +100,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
                 // 将 project.status 同步为时间线中当前进行中的阶段名
                 List<ProjectTimeline> phases = timelineService.listByProject(project.getId());
                 for (ProjectTimeline p : phases) {
-                    if ("进行中".equals(p.getStatus())) {
+                    if (TimelineStatus.IN_PROGRESS.name().equals(p.getStatus())) {
                         project.setStatus(p.getStatusName());
                         projectMapper.updateById(project);
                         break;

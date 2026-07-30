@@ -178,7 +178,7 @@ watch(() => userStore.userInfo?.companyName, (name) => {
 
       <el-main class="layout-main">
         <router-view v-slot="{ Component, route: r }">
-          <keep-alive :include="tabStore.tabs.length > 0 ? undefined : []" :exclude="['PurchaseAdd', 'PurchaseReturnAdd']">
+          <keep-alive :include="tabStore.tabs.length > 0 ? undefined : []" :exclude="['PurchaseAdd', 'PurchaseReturnAdd', 'InventoryWarehouseMoveAdd']">
             <component :is="Component" :key="r.fullPath" />
           </keep-alive>
         </router-view>
@@ -190,6 +190,10 @@ watch(() => userStore.userInfo?.companyName, (name) => {
 <style scoped>
 .layout-container { height: 100%; }
 .layout-aside { background-color: #304156; transition: width 0.28s; overflow-y: auto; overflow-x: hidden; }
+.layout-aside::-webkit-scrollbar { width: 4px; }
+.layout-aside::-webkit-scrollbar-track { background: transparent; }
+.layout-aside::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 2px; }
+.layout-aside::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.3); }
 .logo { height: 60px; display: flex; align-items: center; justify-content: center; color: #fff; background-color: #2b3a4d; }
 .logo-text { font-size: 18px; font-weight: 600; letter-spacing: 1px; }
 .logo-text-mini { font-size: 16px; font-weight: 600; }

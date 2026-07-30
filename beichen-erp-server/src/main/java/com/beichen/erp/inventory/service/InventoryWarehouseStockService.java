@@ -3,6 +3,8 @@ package com.beichen.erp.inventory.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.entity.InventoryStockLog;
 import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
 import com.beichen.erp.inventory.mapper.InventoryStockLogMapper;
@@ -23,7 +25,7 @@ public class InventoryWarehouseStockService {
     /** 入库：增加库存，不存在则新建（委外模块复用） */
     @Transactional
     public void stockIn(Long warehouseId, String productName, BigDecimal quantity) {
-        changeStock(warehouseId, productName, quantity, "采购入库", null, null, null, null);
+        changeStock(warehouseId, productName, quantity, StockChangeType.PURCHASE_IN, null, (RelatedBillType) null, null, null, null);
     }
 
     /**
@@ -33,8 +35,8 @@ public class InventoryWarehouseStockService {
      */
     @Transactional
     public void changeStock(Long warehouseId, String productName, BigDecimal quantity,
-                            String changeType, String relatedBillNo, String relatedBillType,
-                            Long productId, String spec) {
+                            StockChangeType type, String relatedBillNo, RelatedBillType relatedBillType,
+                            Long productId, String spec, Long relatedBillId) {
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) == 0) return;
 
         // 优先按 material_id 定位, materialId 为 null 时回退按 productName
@@ -75,12 +77,13 @@ public class InventoryWarehouseStockService {
         InventoryStockLog log = new InventoryStockLog();
         log.setWarehouseId(warehouseId);
         log.setProductId(productId);
-        log.setChangeType(changeType);
+        log.setChangeType(type.getCode());
         log.setChangeQuantity(quantity);
         log.setBeforeQuantity(before);
         log.setAfterQuantity(after);
         log.setRelatedBillNo(relatedBillNo);
-        log.setRelatedBillType(relatedBillType);
+        log.setRelatedBillType(relatedBillType != null ? relatedBillType.getCode() : null);
+        log.setRelatedBillId(relatedBillId);
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) log.setCompanyId(cid);
         logMapper.insert(log);

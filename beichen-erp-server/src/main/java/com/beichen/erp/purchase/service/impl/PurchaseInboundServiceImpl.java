@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
@@ -91,7 +94,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
             inbound.setSupplierName(s != null ? s.getName() : "");
         }
         inbound.setCode(generateCode());
-        inbound.setStatus("草稿");
+        inbound.setStatus(DocStatus.DRAFT.name());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) inbound.setCompanyId(cid);
         BigDecimal total = BigDecimal.ZERO;
@@ -169,8 +172,8 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
             stockService.changeStock(inbound.getWarehouseId(),
                     product != null ? product.getName() : "",
                     it.getQuantity(),
-                    "采购入库", inbound.getCode(), "采购入库", it.getProductId(),
-                    product != null ? product.getSpec() : "");
+                    StockChangeType.PURCHASE_IN, inbound.getCode(), RelatedBillType.PURCHASE_INBOUND, it.getProductId(),
+                    product != null ? product.getSpec() : "", inbound.getId());
         }
         // 2) 生成应付台账
         FinancePayable fp = new FinancePayable();

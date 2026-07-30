@@ -5,6 +5,8 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
@@ -162,7 +164,7 @@ public class SupplierSettlementController {
 
                 // 入我方 inventory 仓
                 inventoryStockService.changeStock(toWarehouseId, matName, qty,
-                    "清算退料入", delivery.getCode(), "供应商清算", st.getMaterialId(), null);
+                    StockChangeType.SETTLEMENT_RETURN_IN, delivery.getCode(), RelatedBillType.SUPPLIER_SETTLEMENT, st.getMaterialId(), null, delivery.getId());
             }
         }
         if (count == 0) throw new BusinessException("该供应商委外仓无可退物料");

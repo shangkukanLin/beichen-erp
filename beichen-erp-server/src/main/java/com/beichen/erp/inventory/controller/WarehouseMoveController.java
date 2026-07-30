@@ -2,24 +2,25 @@ package com.beichen.erp.inventory.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
-import com.beichen.erp.inventory.entity.InventoryTransfer;
-import com.beichen.erp.inventory.entity.InventoryTransferItem;
-import com.beichen.erp.inventory.service.TransferService;
+import com.beichen.erp.inventory.entity.InventoryWarehouseMove;
+import com.beichen.erp.inventory.entity.InventoryWarehouseMoveItem;
+import com.beichen.erp.inventory.service.WarehouseMoveService;
+import com.beichen.erp.material.entity.Material;
+import com.beichen.erp.material.mapper.MaterialMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @RestController
-@RequestMapping("/api/inventory/transfer")
+@RequestMapping("/api/inventory/warehouse-move")
 @RequiredArgsConstructor
-public class TransferController {
+public class WarehouseMoveController {
 
-    private final TransferService service;
+    private final WarehouseMoveService service;
+    private final MaterialMapper materialMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -32,24 +33,43 @@ public class TransferController {
     }
 
     @GetMapping("/{id}")
-    public R<InventoryTransfer> getById(@PathVariable Long id) {
+    public R<InventoryWarehouseMove> getById(@PathVariable Long id) {
         return R.ok(service.getById(id));
     }
 
     @GetMapping("/{id}/items")
-    public R<List<InventoryTransferItem>> getItems(@PathVariable Long id) {
-        return R.ok(service.getItems(id));
+    public R<List<Map<String, Object>>> getItems(@PathVariable Long id) {
+        List<InventoryWarehouseMoveItem> raw = service.getItems(id);
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (InventoryWarehouseMoveItem it : raw) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", it.getId());
+            m.put("productId", it.getProductId());
+            m.put("quantity", it.getQuantity());
+            m.put("remark", it.getRemark());
+            if (it.getProductId() != null) {
+                Material product = materialMapper.selectById(it.getProductId());
+                if (product != null) {
+                    m.put("productName", product.getName());
+                    m.put("productCode", product.getCode());
+                    m.put("spec", product.getSpec());
+                    m.put("unit", product.getUnit());
+                }
+            }
+            list.add(m);
+        }
+        return R.ok(list);
     }
 
     @PostMapping
     public R<Void> create(@RequestBody Map<String, Object> body) {
-        service.create(parseTransfer(body), parseItems(body));
+        service.create(parseMove(body), parseItems(body));
         return R.ok();
     }
 
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-        InventoryTransfer t = parseTransfer(body);
+        InventoryWarehouseMove t = parseMove(body);
         t.setId(id);
         service.update(t, parseItems(body));
         return R.ok();
@@ -67,31 +87,34 @@ public class TransferController {
         return R.ok();
     }
 
+    @PutMapping("/{id}/un-audit")
+    public R<Void> unAudit(@PathVariable Long id) {
+        service.unAudit(id);
+        return R.ok();
+    }
+
     @SuppressWarnings("unchecked")
-    private InventoryTransfer parseTransfer(Map<String, Object> body) {
-        Map<String, Object> d = body.containsKey("transfer") ? (Map<String, Object>) body.get("transfer") : body;
-        InventoryTransfer o = new InventoryTransfer();
+    private InventoryWarehouseMove parseMove(Map<String, Object> body) {
+        Map<String, Object> d = body.containsKey("move") ? (Map<String, Object>) body.get("move") : body;
+        InventoryWarehouseMove o = new InventoryWarehouseMove();
         if (d.get("fromWarehouseId") != null) o.setFromWarehouseId(Long.valueOf(d.get("fromWarehouseId").toString()));
         if (d.get("toWarehouseId") != null) o.setToWarehouseId(Long.valueOf(d.get("toWarehouseId").toString()));
-        if (d.get("transferDate") != null && !d.get("transferDate").toString().isBlank())
-            o.setTransferDate(LocalDate.parse(d.get("transferDate").toString()));
+        if (d.get("moveDate") != null && !d.get("moveDate").toString().isBlank())
+            o.setMoveDate(LocalDate.parse(d.get("moveDate").toString()));
         o.setRemark((String) d.get("remark"));
         return o;
     }
 
     @SuppressWarnings("unchecked")
-    private List<InventoryTransferItem> parseItems(Map<String, Object> body) {
-        List<InventoryTransferItem> list = new ArrayList<>();
+    private List<InventoryWarehouseMoveItem> parseItems(Map<String, Object> body) {
+        List<InventoryWarehouseMoveItem> list = new ArrayList<>();
         Object obj = body.get("items");
         if (obj instanceof List<?> raw) {
             for (Object o : raw) {
                 if (o instanceof Map<?, ?> m) {
                     Map<String, Object> map = (Map<String, Object>) m;
-                    InventoryTransferItem it = new InventoryTransferItem();
+                    InventoryWarehouseMoveItem it = new InventoryWarehouseMoveItem();
                     if (map.get("productId") != null) it.setProductId(Long.valueOf(map.get("productId").toString()));
-                    it.setMaterialName((String) map.get("materialName"));
-                    it.setSpec((String) map.get("spec"));
-                    it.setUnit((String) map.get("unit"));
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank())
                         it.setQuantity(new BigDecimal(map.get("quantity").toString()));
                     it.setRemark((String) map.get("remark"));

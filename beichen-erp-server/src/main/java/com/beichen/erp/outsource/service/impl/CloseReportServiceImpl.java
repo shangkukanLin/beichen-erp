@@ -2,7 +2,9 @@ package com.beichen.erp.outsource.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.outsource.service.CloseReportService;
@@ -295,7 +297,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             report = new CloseReport();
             report.setOrderId(orderId);
             report.setCloseDate(LocalDate.now());
-            report.setStatus("草稿");
+            report.setStatus(DocStatus.DRAFT.name());
         }
         report.setRemark(remark);
         if (report.getId() == null) {
@@ -322,7 +324,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     public void confirmClose(Long orderId) {
         OutsourceOrder order = orderMapper.selectById(orderId);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!"生产中".equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可结单");
+        if (!OutsourceOrderStatus.PRODUCING.name().equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可结单");
 
         CloseReport report = reportMapper.selectOne(
             new LambdaQueryWrapper<CloseReport>().eq(CloseReport::getOrderId, orderId));
@@ -413,7 +415,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         // 更新加工单状态
         OutsourceOrder updateOrder = new OutsourceOrder();
         updateOrder.setId(orderId);
-        updateOrder.setStatus("已完成");
+        updateOrder.setStatus(OutsourceOrderStatus.FINISHED.name());
         updateOrder.setActualEndDate(LocalDate.now());
         orderMapper.updateById(updateOrder);
 

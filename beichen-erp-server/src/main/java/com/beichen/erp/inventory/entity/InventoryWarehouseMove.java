@@ -3,13 +3,12 @@ package com.beichen.erp.inventory.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("inventory_transfer")
-public class InventoryTransfer {
+@TableName("inventory_warehouse_move")
+public class InventoryWarehouseMove {
 
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -20,7 +19,7 @@ public class InventoryTransfer {
 
     private Long toWarehouseId;
 
-    private LocalDate transferDate;
+    private LocalDate moveDate;
 
     private String status;
 

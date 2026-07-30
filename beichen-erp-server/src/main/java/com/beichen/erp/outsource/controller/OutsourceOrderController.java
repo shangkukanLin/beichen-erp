@@ -7,6 +7,8 @@ import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
+import com.beichen.erp.outsource.common.MaterialOrderStatus;
+import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.outsource.mapper.OutsourceOrderMapper;
 import com.beichen.erp.outsource.entity.OutsourceWarehouse;
@@ -179,7 +181,7 @@ public class OutsourceOrderController {
         Map<String, BigDecimal> inTransitMap = new HashMap<>();
         List<MaterialOrder> activeOrders = materialOrderMapper.selectList(
             new LambdaQueryWrapper<MaterialOrder>()
-                .notIn(MaterialOrder::getStatus, List.of("已完成", "已取消")));
+                .notIn(MaterialOrder::getStatus, List.of(MaterialOrderStatus.FINISHED.name(), MaterialOrderStatus.CANCELLED.name())));
         if (!activeOrders.isEmpty()) {
             List<Long> orderIds = activeOrders.stream().map(MaterialOrder::getId).collect(Collectors.toList());
             List<MaterialOrderItem> items = materialOrderItemMapper.selectList(

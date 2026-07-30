@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.entity.*;
 import com.beichen.erp.finance.mapper.*;
@@ -64,7 +65,7 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         FinanceAccount acc = accountMapper.selectById(receipt.getAccountId());
         receipt.setAccountName(acc != null ? acc.getAccountName() : "");
         receipt.setCode(gen());
-        receipt.setStatus("草稿");
+        receipt.setStatus(DocStatus.DRAFT.name());
         Long cid = CompanyContext.get();
         BigDecimal total = BigDecimal.ZERO;
         if (cid != null && cid > 0) receipt.setCompanyId(cid);
@@ -82,14 +83,14 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
     public void cancel(Long id) {
         FinanceReceipt old = receiptMapper.selectById(id);
         if (old == null) throw new BusinessException("收款单不存在");
-        if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
-        FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus("已作废"); receiptMapper.updateById(u);
+        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus(DocStatus.CANCELLED.name()); receiptMapper.updateById(u);
     }
 
     @Override @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
         FinanceReceipt receipt = receiptMapper.selectById(id);
-        if (receipt == null || !"草稿".equals(receipt.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (receipt == null || !DocStatus.DRAFT.name().equals(receipt.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<FinanceReceiptItem> items = itemMapper.selectList(new LambdaQueryWrapper<FinanceReceiptItem>().eq(FinanceReceiptItem::getReceiptId, id));
         // 核销应收
         for (FinanceReceiptItem it : items) {
@@ -132,7 +133,7 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
                 customerMapper.updateById(u);
             }
         }
-        FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus("已审核"); receiptMapper.updateById(u);
+        FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus(DocStatus.AUDITED.name()); receiptMapper.updateById(u);
     }
 
     private String gen() {

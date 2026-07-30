@@ -3,6 +3,7 @@ package com.beichen.erp.finance.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.entity.*;
 import com.beichen.erp.finance.mapper.*;
@@ -64,7 +65,7 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         FinanceAccount acc = accountMapper.selectById(payment.getAccountId());
         payment.setAccountName(acc != null ? acc.getAccountName() : "");
         payment.setCode(gen("FK-", paymentMapper));
-        payment.setStatus("草稿");
+        payment.setStatus(DocStatus.DRAFT.name());
         Long cid = CompanyContext.get();
         BigDecimal total = BigDecimal.ZERO;
         if (cid != null && cid > 0) payment.setCompanyId(cid);
@@ -85,14 +86,14 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
     public void cancel(Long id) {
         FinancePayment old = paymentMapper.selectById(id);
         if (old == null) throw new BusinessException("付款单不存在");
-        if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
-        FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus("已作废"); paymentMapper.updateById(u);
+        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.CANCELLED.name()); paymentMapper.updateById(u);
     }
 
     @Override @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
         FinancePayment payment = paymentMapper.selectById(id);
-        if (payment == null || !"草稿".equals(payment.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (payment == null || !DocStatus.DRAFT.name().equals(payment.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<FinancePaymentItem> items = itemMapper.selectList(new LambdaQueryWrapper<FinancePaymentItem>().eq(FinancePaymentItem::getPaymentId, id));
         // 核销应付
         for (FinancePaymentItem it : items) {
@@ -126,7 +127,7 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         cf.setBalance(acc != null ? acc.getBalance() : BigDecimal.ZERO);
         cashflowMapper.insert(cf);
         // 更新付款单状态
-        FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus("已审核"); paymentMapper.updateById(u);
+        FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.AUDITED.name()); paymentMapper.updateById(u);
     }
 
     private <T> String gen(String prefix, com.baomidou.mybatisplus.core.mapper.BaseMapper<T> mapper) {

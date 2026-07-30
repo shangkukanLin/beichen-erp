@@ -6,6 +6,9 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseMapper;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
@@ -102,7 +105,7 @@ public class OutsourceOtherIoController {
     public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         OutsourceOtherIo old = ioMapper.selectById(id);
         if (old == null) throw new BusinessException("其他出入库单不存在");
-        if ("已取消".equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
+        if (DocStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
 
         List<OutsourceOtherIoItem> oldItems = itemMapper.selectList(
             new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, id));
@@ -129,7 +132,7 @@ public class OutsourceOtherIoController {
     public R<Void> cancel(@PathVariable Long id) {
         OutsourceOtherIo old = ioMapper.selectById(id);
         if (old == null) throw new BusinessException("其他出入库单不存在");
-        if ("已取消".equals(old.getStatus())) throw new BusinessException("单据已取消");
+        if (DocStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("单据已取消");
         List<OutsourceOtherIoItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, id));
         revertStock(old, items);
@@ -140,13 +143,13 @@ public class OutsourceOtherIoController {
 
     private void applyStock(OutsourceOtherIo io, List<OutsourceOtherIoItem> items) {
         boolean isInv = isInventoryWarehouse(io.getWarehouseId());
-        String changeType = "入库".equals(io.getIoType()) ? "其他入库" : "其他出库";
+        StockChangeType type = "入库".equals(io.getIoType()) ? StockChangeType.OTHER_IN : StockChangeType.OTHER_OUT;
         for (OutsourceOtherIoItem it : items) {
             BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = "入库".equals(io.getIoType()) ? qty : qty.negate();
             if (isInv) {
                 inventoryStockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
-                    changeType, io.getCode(), "其他出入库", it.getMaterialId(), null);
+                    type, io.getCode(), RelatedBillType.OTHER_IO, it.getMaterialId(), null, io.getId());
                 continue;
             }
             // 确保物料存在
@@ -183,7 +186,7 @@ public class OutsourceOtherIoController {
             }
             OutsourceStockLog logEntry = new OutsourceStockLog();
             logEntry.setWarehouseId(io.getWarehouseId()); logEntry.setMaterialId(matId);
-            logEntry.setMaterialName(it.getMaterialName()); logEntry.setChangeType(changeType);
+            logEntry.setMaterialName(it.getMaterialName()); logEntry.setChangeType(type.getLabel());
             logEntry.setChangeQuantity(delta); logEntry.setBeforeQuantity(before);
             logEntry.setAfterQuantity(after); logEntry.setRelatedOrderCode(io.getCode());
             stockLogMapper.insert(logEntry);
@@ -192,13 +195,13 @@ public class OutsourceOtherIoController {
 
     private void revertStock(OutsourceOtherIo io, List<OutsourceOtherIoItem> items) {
         boolean isInv = isInventoryWarehouse(io.getWarehouseId());
-        String changeType = "入库".equals(io.getIoType()) ? "取消入库" : "取消出库";
+        StockChangeType type = "入库".equals(io.getIoType()) ? StockChangeType.CANCEL_IN : StockChangeType.CANCEL_OUT;
         for (OutsourceOtherIoItem it : items) {
             BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = "入库".equals(io.getIoType()) ? qty.negate() : qty;
             if (isInv) {
                 inventoryStockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
-                    changeType, io.getCode(), "其他出入库", it.getMaterialId(), null);
+                    type, io.getCode(), RelatedBillType.OTHER_IO, it.getMaterialId(), null, io.getId());
                 continue;
             }
             Long matId = it.getMaterialId();
@@ -218,7 +221,7 @@ public class OutsourceOtherIoController {
             }
             OutsourceStockLog logEntry = new OutsourceStockLog();
             logEntry.setWarehouseId(io.getWarehouseId()); logEntry.setMaterialId(matId);
-            logEntry.setMaterialName(it.getMaterialName()); logEntry.setChangeType(changeType);
+            logEntry.setMaterialName(it.getMaterialName()); logEntry.setChangeType(type.getLabel());
             logEntry.setChangeQuantity(delta); logEntry.setBeforeQuantity(before);
             logEntry.setAfterQuantity(before.add(delta)); logEntry.setRelatedOrderCode(io.getCode());
             stockLogMapper.insert(logEntry);

@@ -3,6 +3,7 @@ package com.beichen.erp.finance.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +68,7 @@ public class FinancePayableController {
     @GetMapping("/supplier-summary")
     public R<?> supplierSummary() {
         List<FinancePayable> all = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
-                .ne(FinancePayable::getStatus, "已作废"));
+                .ne(FinancePayable::getStatus, DocStatus.CANCELLED.name()));
         Map<Long, Map<String, Object>> map = new LinkedHashMap<>();
         java.time.LocalDate today = java.time.LocalDate.now();
         for (FinancePayable p : all) {
