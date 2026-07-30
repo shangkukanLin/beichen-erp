@@ -148,9 +148,9 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
                 productName = product != null ? product.getName() : "";
             }
             stockService.changeStock(move.getFromWarehouseId(), productName, q.negate(),
-                    StockChangeType.MOVE_OUT, move.getCode(), RelatedBillType.WAREHOUSE_MOVE, it.getProductId(), "", move.getId());
+                    StockChangeType.MOVE_OUT, move.getCode(), RelatedBillType.WAREHOUSE_MOVE, it.getProductId(), "", move.getId(), it.getQualityType());
             stockService.changeStock(move.getToWarehouseId(), productName, q,
-                    StockChangeType.MOVE_IN, move.getCode(), RelatedBillType.WAREHOUSE_MOVE, it.getProductId(), "", move.getId());
+                    StockChangeType.MOVE_IN, move.getCode(), RelatedBillType.WAREHOUSE_MOVE, it.getProductId(), "", move.getId(), it.getQualityType());
         }
         InventoryWarehouseMove u = new InventoryWarehouseMove(); u.setId(id); u.setStatus(DocStatus.AUDITED.name());
         moveMapper.updateById(u);
@@ -173,9 +173,9 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
             }
             // 反审核：退回移出仓、从移入仓扣回
             stockService.changeStock(move.getFromWarehouseId(), productName, q,
-                    StockChangeType.MOVE_IN, move.getCode(), RelatedBillType.WAREHOUSE_MOVE_UN_AUDIT, it.getProductId(), "", move.getId());
+                    StockChangeType.MOVE_IN, move.getCode(), RelatedBillType.WAREHOUSE_MOVE_UN_AUDIT, it.getProductId(), "", move.getId(), it.getQualityType());
             stockService.changeStock(move.getToWarehouseId(), productName, q.negate(),
-                    StockChangeType.MOVE_OUT, move.getCode(), RelatedBillType.WAREHOUSE_MOVE_UN_AUDIT, it.getProductId(), "", move.getId());
+                    StockChangeType.MOVE_OUT, move.getCode(), RelatedBillType.WAREHOUSE_MOVE_UN_AUDIT, it.getProductId(), "", move.getId(), it.getQualityType());
         }
         InventoryWarehouseMove u = new InventoryWarehouseMove(); u.setId(id); u.setStatus(DocStatus.DRAFT.name());
         moveMapper.updateById(u);

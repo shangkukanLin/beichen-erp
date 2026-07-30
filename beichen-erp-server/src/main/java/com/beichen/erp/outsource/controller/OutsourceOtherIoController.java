@@ -149,7 +149,7 @@ public class OutsourceOtherIoController {
             BigDecimal delta = "入库".equals(io.getIoType()) ? qty : qty.negate();
             if (isInv) {
                 inventoryStockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
-                    type, io.getCode(), RelatedBillType.OTHER_IO, it.getMaterialId(), null, io.getId());
+                    type, io.getCode(), RelatedBillType.OTHER_IO, it.getMaterialId(), null, io.getId(), null);
                 continue;
             }
             // 确保物料存在
@@ -201,7 +201,7 @@ public class OutsourceOtherIoController {
             BigDecimal delta = "入库".equals(io.getIoType()) ? qty.negate() : qty;
             if (isInv) {
                 inventoryStockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
-                    type, io.getCode(), RelatedBillType.OTHER_IO, it.getMaterialId(), null, io.getId());
+                    type, io.getCode(), RelatedBillType.OTHER_IO, it.getMaterialId(), null, io.getId(), null);
                 continue;
             }
             Long matId = it.getMaterialId();

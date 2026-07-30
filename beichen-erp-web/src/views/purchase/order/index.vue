@@ -3,10 +3,12 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
-import { getMaterialPage, type Material } from '@/api/product'
+import { getMaterialPage, type Material } from '@/api/material'
+import { getQualityTypes, type QualityOption } from '@/api/product'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
 const router = useRouter()
+const qualityOptions = ref<QualityOption[]>([])
 import {
   getPurchaseOrderPage,
   getPurchaseOrderItems,
@@ -124,7 +126,7 @@ async function handleEdit(row: PurchaseOrder) {
 }
 
 function addItem() {
-  items.value.push({ productId: undefined, materialName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' })
+  items.value.push({ productId: undefined, qualityType: 'A', materialName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' })
 }
 function removeItem(index: number) {
   items.value.splice(index, 1)
@@ -225,8 +227,10 @@ function warehouseName(id?: number) {
 }
 function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Number(v).toFixed(2) }
 
-onMounted(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData() })
-onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData() })
+async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
+
+onMounted(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQualityTypes(); loadData() })
+onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQualityTypes(); loadData() })
 </script>
 
 <template>
@@ -347,6 +351,13 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadData
           </el-table-column>
           <el-table-column prop="spec" label="规格" width="100" />
           <el-table-column prop="unit" label="单位" width="70" />
+          <el-table-column label="品质" width="90">
+            <template #default="{ row }">
+              <el-select v-model="row.qualityType" size="small" style="width:100%">
+                <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
+              </el-select>
+            </template>
+          </el-table-column>
           <el-table-column label="数量" width="120">
             <template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :step="1" :precision="0" controls-position="right" style="width:100%" /></template>
           </el-table-column>

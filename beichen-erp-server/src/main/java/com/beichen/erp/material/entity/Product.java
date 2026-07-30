@@ -1,9 +1,11 @@
 package com.beichen.erp.material.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
-
-import java.time.LocalDateTime;
 import lombok.Data;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @TableName("product")
@@ -15,9 +17,11 @@ public class Product {
     private Long brandId;
     private String category;
     private String spec;
+    /** 通用型号（适用多款机型） */
+    private String generalModel;
     private String unit;
-    private java.math.BigDecimal safetyStock;
-    private java.math.BigDecimal currentStock;
+    private BigDecimal safetyStock;
+    private BigDecimal currentStock;
     private String status;
     private Long projectId;
     private String remark;
@@ -27,4 +31,8 @@ public class Product {
     private LocalDateTime createTime;
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
+
+    /** 等级库存（非DB字段，查询时联查填充） */
+    @TableField(exist = false)
+    private List<ProductQuality> qualities;
 }

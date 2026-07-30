@@ -163,7 +163,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     product != null ? product.getName() : "",
                     it.getQuantity().negate(),
                     StockChangeType.RETURN_OUT, order.getCode(), RelatedBillType.PURCHASE_RETURN, it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId());
+                    product != null ? product.getSpec() : "", order.getId(), it.getQualityType());
         }
         // 2) 冲减应付：新增负数应付台账
         FinancePayable fp = new FinancePayable();
@@ -217,7 +217,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     product != null ? product.getName() : "",
                     it.getQuantity(),
                     StockChangeType.RETURN_UN_AUDIT, order.getCode(), RelatedBillType.PURCHASE_RETURN, it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId());
+                    product != null ? product.getSpec() : "", order.getId(), it.getQualityType());
         }
         // 3) 删除应付台账
         for (FinancePayable fp : payables) {
@@ -265,6 +265,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                 if (map.get("unitPrice") != null) it.setUnitPrice(new BigDecimal(map.get("unitPrice").toString()));
                 if (map.get("amount") != null) it.setAmount(new BigDecimal(map.get("amount").toString()));
                 if (map.get("remark") != null) it.setRemark(map.get("remark").toString());
+                if (map.get("qualityType") != null) it.setQualityType(map.get("qualityType").toString());
                 itemMapper.insert(it);
             }
         }

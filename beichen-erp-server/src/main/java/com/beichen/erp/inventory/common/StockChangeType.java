@@ -66,7 +66,13 @@ public enum StockChangeType {
 
     // ===== 初始化 =====
     /** 期初导入：系统初始化时导入期初库存 */
-    INIT("期初导入");
+    INIT("期初导入"),
+
+    // ===== 品质重分类 =====
+    RECLASSIFY_OUT("重分类出"),
+    RECLASSIFY_IN("重分类入"),
+    CANCEL_RECLASSIFY_OUT("取消重分类出"),
+    CANCEL_RECLASSIFY_IN("取消重分类入");
 
     private final String label;
 

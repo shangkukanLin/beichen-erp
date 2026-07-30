@@ -3,11 +3,13 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
-import { getMaterialPage, type Material } from '@/api/product'
+import { getMaterialPage, type Material } from '@/api/material'
+import { getQualityTypes, type QualityOption } from '@/api/product'
 import { listCustomers, type Customer } from '@/api/customer'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
 const router = useRouter()
+const qualityOptions = ref<QualityOption[]>([])
 import {
   getSaleOutboundPage, getSaleOutboundItems, createSaleOutbound, updateSaleOutbound, auditSaleOutbound, cancelSaleOutbound,
   type SaleOutbound, type SaleOutboundItem
@@ -68,7 +70,7 @@ async function handleEdit(row: SaleOutbound) {
   resetForm(); Object.assign(form, row); dialogTitle.value = '编辑销售出库'; dialogVisible.value = true; formRef.value?.clearValidate()
   try { const res = await getSaleOutboundItems(row.id as number); items.value = res || [] } catch { items.value = [] }
 }
-function addItem() { items.value.push({ materialId: undefined, materialName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' }) }
+function addItem() { items.value.push({ materialId: undefined, qualityType: 'A', materialName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' }) }
 function removeItem(index: number) { items.value.splice(index, 1) }
 function onMaterialChange(val: number, row: SaleOutboundItem) {
   const m = materialOptions.value.find(x => x.id === val)
@@ -114,8 +116,10 @@ function customerName(id?: number) { const c = customers.value.find(x => x.id ==
 function warehouseName(id?: number) { const w = warehouses.value.find(x => x.id === id); return w ? w.warehouseName : '' }
 function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Number(v).toFixed(2) }
 
-onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadData() })
-onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadData() })
+async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
+
+onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualityTypes(); loadData() })
+onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualityTypes(); loadData() })
 </script>
 
 <template>
@@ -223,6 +227,13 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadData
           </el-table-column>
           <el-table-column prop="spec" label="规格" width="100" />
           <el-table-column prop="unit" label="单位" width="70" />
+          <el-table-column label="品质" width="90">
+            <template #default="{ row }">
+              <el-select v-model="row.qualityType" size="small" style="width:100%">
+                <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
+              </el-select>
+            </template>
+          </el-table-column>
           <el-table-column label="数量" width="120">
             <template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :precision="2" controls-position="right" style="width:100%" /></template>
           </el-table-column>

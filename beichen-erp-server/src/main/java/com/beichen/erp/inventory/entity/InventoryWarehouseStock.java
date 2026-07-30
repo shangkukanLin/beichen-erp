@@ -13,6 +13,8 @@ public class InventoryWarehouseStock {
     private Long warehouseId;
     private String productName;
     private Long productId;
+    /** 品质等级: A/B/C/DEFECT */
+    private String qualityType;
     private BigDecimal quantity;
     private BigDecimal availableQuantity;
     @TableField(fill = FieldFill.INSERT)

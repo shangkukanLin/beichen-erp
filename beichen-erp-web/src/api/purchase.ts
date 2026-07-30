@@ -21,6 +21,7 @@ export interface PurchaseOrderItem {
   id?: number
   orderId?: number
   productId?: number
+  qualityType?: string
   quantity?: number
   unitPrice?: number
   amount?: number
@@ -48,6 +49,7 @@ export interface PurchaseInboundItem {
   inboundId?: number
   orderItemId?: number
   productId?: number
+  qualityType?: string
   quantity?: number
   unitPrice?: number
   amount?: number
@@ -74,6 +76,7 @@ export interface PurchaseReturnItem {
   id?: number
   returnId?: number
   productId?: number
+  qualityType?: string
   quantity?: number
   unitPrice?: number
   amount?: number

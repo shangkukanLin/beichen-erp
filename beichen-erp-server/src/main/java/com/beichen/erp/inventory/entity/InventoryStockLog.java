@@ -17,6 +17,8 @@ public class InventoryStockLog {
 
     private Long productId;
 
+    private String qualityType;
+
     private String changeType;
 
     private BigDecimal changeQuantity;

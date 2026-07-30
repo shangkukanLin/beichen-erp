@@ -39,7 +39,10 @@ public enum RelatedBillType {
     MATERIAL_IO("物料收发"),
 
     /** 供应商清算：供应商清算退料触发 */
-    SUPPLIER_SETTLEMENT("供应商清算");
+    SUPPLIER_SETTLEMENT("供应商清算"),
+
+    /** 品质重分类：品质调整单审核触发 */
+    PRODUCT_RECLASSIFY("品质重分类");
 
     private final String label;
 

@@ -173,7 +173,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
                     product != null ? product.getName() : "",
                     it.getQuantity(),
                     StockChangeType.PURCHASE_IN, inbound.getCode(), RelatedBillType.PURCHASE_INBOUND, it.getProductId(),
-                    product != null ? product.getSpec() : "", inbound.getId());
+                    product != null ? product.getSpec() : "", inbound.getId(), it.getQualityType());
         }
         // 2) 生成应付台账
         FinancePayable fp = new FinancePayable();

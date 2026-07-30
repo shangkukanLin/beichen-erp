@@ -6,19 +6,25 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * 品质重分类明细表
+ */
 @Data
-@TableName("inventory_warehouse_move_item")
-public class InventoryWarehouseMoveItem {
+@TableName("product_reclassify_item")
+public class InventoryProductReclassifyItem {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private Long moveId;
+    private Long reclassifyId;
 
     private Long productId;
 
-    /** 品质等级: A/B/C/DEFECT */
-    private String qualityType;
+    /** 原品质等级: A/B/C/DEFECT */
+    private String fromQuality;
+
+    /** 目标品质等级: A/B/C/DEFECT */
+    private String toQuality;
 
     private BigDecimal quantity;
 

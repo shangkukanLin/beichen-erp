@@ -19,6 +19,9 @@ public class PurchaseInboundItem {
 
     private Long productId;
 
+    /** 品质等级: A/B/C/DEFECT */
+    private String qualityType;
+
     private BigDecimal quantity;
 
     private BigDecimal unitPrice;

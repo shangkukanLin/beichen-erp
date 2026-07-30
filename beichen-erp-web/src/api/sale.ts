@@ -3,11 +3,13 @@ import request from '@/utils/request'
 export interface SaleOrderItem {
   id?: number
   orderId?: number
+  productId?: number
   materialId?: number
   materialCode?: string
   materialName?: string
   spec?: string
   unit?: string
+  qualityType?: string
   quantity?: number
   unitPrice?: number
   amount?: number
@@ -38,6 +40,7 @@ export interface SaleOutboundItem {
   materialName?: string
   spec?: string
   unit?: string
+  qualityType?: string
   quantity?: number
   unitPrice?: number
   amount?: number

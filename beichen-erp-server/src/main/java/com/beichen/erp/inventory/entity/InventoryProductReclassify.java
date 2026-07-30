@@ -3,24 +3,26 @@ package com.beichen.erp.inventory.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 
-import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+/**
+ * 品质重分类主表
+ */
 @Data
-@TableName("inventory_warehouse_move_item")
-public class InventoryWarehouseMoveItem {
+@TableName("product_reclassify")
+public class InventoryProductReclassify {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private Long moveId;
+    private String code;
 
-    private Long productId;
+    private Long warehouseId;
 
-    /** 品质等级: A/B/C/DEFECT */
-    private String qualityType;
+    private LocalDate reclassifyDate;
 
-    private BigDecimal quantity;
+    private String status;
 
     private String remark;
 
@@ -28,4 +30,7 @@ public class InventoryWarehouseMoveItem {
     private Long companyId;
 
     private LocalDateTime createTime;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updateTime;
 }

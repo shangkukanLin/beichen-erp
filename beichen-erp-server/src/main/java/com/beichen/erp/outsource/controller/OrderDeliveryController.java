@@ -298,8 +298,9 @@ public class OrderDeliveryController {
         LambdaQueryWrapper<InventoryWarehouseStock> stockW = new LambdaQueryWrapper<InventoryWarehouseStock>()
                 .eq(InventoryWarehouseStock::getWarehouseId, warehouseId)
                 .eq(InventoryWarehouseStock::getProductName, productName);
-        InventoryWarehouseStock invStock = inventoryStockMapper.selectOne(stockW);
-        BigDecimal stockQty = invStock != null && invStock.getQuantity() != null ? invStock.getQuantity() : BigDecimal.ZERO;
+        BigDecimal stockQty = inventoryStockMapper.selectList(stockW)
+                .stream().map(s -> s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (stockQty.compareTo(defectQty) < 0)
             throw new BusinessException(productName + " 仓库库存不足(库存:" + stockQty + "，退:" + defectQty + ")");
 
@@ -313,7 +314,7 @@ public class OrderDeliveryController {
             new LambdaQueryWrapper<Material>().eq(Material::getName, productName));
         if (productMat != null) productMaterialId = productMat.getId();
         stockService.changeStock(warehouseId, productName, defectQty.negate(),
-            StockChangeType.OUTSOURCE_DEFECT_RETURN, order.getCode(), RelatedBillType.OUTSOURCE_DEFECT, productMaterialId, null, order.getId());
+            StockChangeType.OUTSOURCE_DEFECT_RETURN, order.getCode(), RelatedBillType.OUTSOURCE_DEFECT, productMaterialId, null, order.getId(), null);
         log.info("退不良扣成品: {} (仓库={}) {} -> {}", productName, warehouseId, stockQty, stockQty.subtract(defectQty));
 
         // 2. 创建退不良交货记录
@@ -592,7 +593,7 @@ public class OrderDeliveryController {
             log.info("物料表中未找到「{}」，将按 productName 入库", delivery.getProductName());
         }
         stockService.changeStock(delivery.getWarehouseId(), delivery.getProductName(),
-            delivery.getQuantity(), StockChangeType.OUTSOURCE_FINISH_IN, null, (RelatedBillType) null, productMaterialId, null, delivery.getId());
+            delivery.getQuantity(), StockChangeType.OUTSOURCE_FINISH_IN, null, (RelatedBillType) null, productMaterialId, null, delivery.getId(), null);
         log.info("入库完成: warehouseId={}, productName={}, qty={}", delivery.getWarehouseId(), delivery.getProductName(), delivery.getQuantity());
     }
 
@@ -605,7 +606,7 @@ public class OrderDeliveryController {
 
         stockService.changeStock(delivery.getWarehouseId(), delivery.getProductName(),
             delivery.getQuantity().negate(), StockChangeType.OUTSOURCE_ROLLBACK, orderCode, RelatedBillType.OUTSOURCE_ORDER,
-            materialId, null, delivery.getId());
+            materialId, null, delivery.getId(), null);
         log.info("回滚成品库存: warehouseId={}, product={}, qty=-{}",
                 delivery.getWarehouseId(), delivery.getProductName(), delivery.getQuantity());
     }

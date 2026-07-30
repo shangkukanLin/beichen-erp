@@ -3,11 +3,13 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { getQualityTypes, type QualityOption } from '@/api/product'
 
 const route = useRoute(); const router = useRouter()
 const editId = Number(route.query.id) || 0
 const warehouses = ref<any[]>([])
 const materialOptions = ref<any[]>([])
+const qualityOptions = ref<QualityOption[]>([])
 const saving = ref(false)
 const form = reactive({ warehouseId: undefined as any, ioType: '入库', ioDate: new Date().toISOString().slice(0,10), remark: '' })
 const items = ref<any[]>([{ materialId: undefined, materialName: '', spec: '', unit: '', quantity: undefined, remark: '' }])
@@ -18,11 +20,12 @@ async function loadWarehouses() {
 async function loadMaterials() {
   try { const r = await request.get<any,any>('/product/page',{params:{pageSize:500}}); materialOptions.value = r?.records||[] } catch {}
 }
+async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 function onMatSelect(idx: number, matId: number) {
   const m = materialOptions.value.find((v:any)=>v.id===matId)
   if (m) { items.value[idx].materialName=m.name||m.materialName; items.value[idx].spec=m.spec||''; items.value[idx].unit=m.unit||'' }
 }
-function addItem() { items.value.push({ materialId: undefined, materialName: '', spec: '', unit: '', quantity: undefined, remark: '' }) }
+function addItem() { items.value.push({ materialId: undefined, qualityType: 'A', materialName: '', spec: '', unit: '', quantity: undefined, remark: '' }) }
 function removeItem(i: number) { items.value.splice(i,1) }
 
 async function loadDetail() {
@@ -52,7 +55,7 @@ async function handleSubmit() {
   } catch (e: any) { ElMessage.error(e?.message||'保存失败') } finally { saving.value = false }
 }
 
-onMounted(()=>{ loadWarehouses(); loadMaterials(); loadDetail() })
+onMounted(()=>{ loadWarehouses(); loadMaterials(); loadQualityTypes(); loadDetail() })
 </script>
 
 <template>
@@ -75,6 +78,7 @@ onMounted(()=>{ loadWarehouses(); loadMaterials(); loadDetail() })
         <el-table-column label="物料" min-width="160"><template #default="{row,$index}"><el-select v-model="row.materialId" filterable style="width:100%" @change="(v:any)=>onMatSelect($index,v)"><el-option v-for="m in materialOptions" :key="m.id" :label="m.name||m.materialName" :value="m.id"/></el-select></template></el-table-column>
         <el-table-column label="规格" width="100"><template #default="{row}"><el-input v-model="row.spec" size="small"/></template></el-table-column>
         <el-table-column label="单位" width="70"><template #default="{row}"><el-input v-model="row.unit" size="small"/></template></el-table-column>
+        <el-table-column label="品质" width="90"><template #default="{row}"><el-select v-model="row.qualityType" size="small" style="width:100%"><el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value"/></el-select></template></el-table-column>
         <el-table-column label="数量" width="110"><template #default="{row}"><el-input v-model="row.quantity" size="small" type="number"/></template></el-table-column>
         <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>
       </el-table>

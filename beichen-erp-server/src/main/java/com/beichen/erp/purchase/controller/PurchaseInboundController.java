@@ -96,6 +96,7 @@ public class PurchaseInboundController {
                     if (map.get("unitPrice") != null && !map.get("unitPrice").toString().isBlank())
                         it.setUnitPrice(new BigDecimal(map.get("unitPrice").toString()));
                     it.setRemark((String) map.get("remark"));
+                    it.setQualityType((String) map.get("qualityType"));
                     list.add(it);
                 }
             }

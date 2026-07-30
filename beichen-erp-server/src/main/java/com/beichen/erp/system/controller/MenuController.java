@@ -30,7 +30,7 @@ public class MenuController {
     private final MenuService menuService;
     private final RoleService roleService;
 
-    @SaCheckRole(value = {"super_admin"}, mode = SaMode.OR)
+    @SaCheckRole(value = {"super_admin", "admin"}, mode = SaMode.OR)
     @GetMapping("/tree")
     public R<List<Menu>> tree() {
         return R.ok(menuService.getMenuTree());
@@ -43,7 +43,7 @@ public class MenuController {
         return R.ok(menuService.getMenuTreeByRoleIds(roleIds));
     }
 
-    @SaCheckRole(value = {"super_admin"}, mode = SaMode.OR)
+    @SaCheckRole(value = {"super_admin", "admin"}, mode = SaMode.OR)
     @PostMapping
     public R<Void> add(@Valid @RequestBody MenuDTO dto) {
         Menu menu = new Menu();
@@ -62,7 +62,7 @@ public class MenuController {
         return R.ok();
     }
 
-    @SaCheckRole(value = {"super_admin"}, mode = SaMode.OR)
+    @SaCheckRole(value = {"super_admin", "admin"}, mode = SaMode.OR)
     @PutMapping
     public R<Void> update(@Valid @RequestBody MenuDTO dto) {
         if (dto.getId() == null) {
@@ -87,7 +87,7 @@ public class MenuController {
         return R.ok();
     }
 
-    @SaCheckRole(value = {"super_admin"}, mode = SaMode.OR)
+    @SaCheckRole(value = {"super_admin", "admin"}, mode = SaMode.OR)
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
         Menu menu = menuService.getById(id);

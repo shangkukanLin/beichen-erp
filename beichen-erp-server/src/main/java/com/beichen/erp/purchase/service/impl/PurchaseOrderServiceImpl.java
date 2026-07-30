@@ -198,7 +198,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     product != null ? product.getName() : "",
                     it.getQuantity(),
                     StockChangeType.PURCHASE_IN, order.getCode(), RelatedBillType.PURCHASE_ORDER, it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId());
+                    product != null ? product.getSpec() : "", order.getId(), it.getQualityType());
         }
         // 2) 生成应付台账
         FinancePayable fp = new FinancePayable();
@@ -255,7 +255,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     product != null ? product.getName() : "",
                     it.getQuantity().negate(),
                     StockChangeType.PURCHASE_UN_AUDIT, order.getCode(), RelatedBillType.PURCHASE_ORDER, it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId());
+                    product != null ? product.getSpec() : "", order.getId(), it.getQualityType());
         }
 
         // 3) 删除应付台账

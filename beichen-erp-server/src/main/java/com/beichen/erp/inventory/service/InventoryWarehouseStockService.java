@@ -22,24 +22,24 @@ public class InventoryWarehouseStockService {
     private final InventoryWarehouseStockMapper mapper;
     private final InventoryStockLogMapper logMapper;
 
-    /** 入库：增加库存，不存在则新建（委外模块复用） */
+    /** 入库：增加库存，不存在则新建 */
     @Transactional
     public void stockIn(Long warehouseId, String productName, BigDecimal quantity) {
-        changeStock(warehouseId, productName, quantity, StockChangeType.PURCHASE_IN, null, (RelatedBillType) null, null, null, null);
+        changeStock(warehouseId, productName, quantity, StockChangeType.PURCHASE_IN,
+                null, (RelatedBillType) null, null, null, null, "A");
     }
 
     /**
-     * 通用库存变更：正数入库、负数出库；自动维护库存余额并写流水。
-     * 出库（quantity<0）时校验变动后余量不为负。
-     * 优先按 materialId 定位库存行（精确关联物料），materialId 为 null 时回退按 productName 定位（委外兼容）。
+     * 通用库存变更：按 (warehouseId, productId, qualityType) 定位唯一库存行。
+     * qualityType 默认"A规"，传null时兜底为"A"。
      */
     @Transactional
     public void changeStock(Long warehouseId, String productName, BigDecimal quantity,
                             StockChangeType type, String relatedBillNo, RelatedBillType relatedBillType,
-                            Long productId, String spec, Long relatedBillId) {
+                            Long productId, String spec, Long relatedBillId, String qualityType) {
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) == 0) return;
+        if (qualityType == null) qualityType = "A";
 
-        // 优先按 material_id 定位, materialId 为 null 时回退按 productName
         LambdaQueryWrapper<InventoryWarehouseStock> w = new LambdaQueryWrapper<InventoryWarehouseStock>()
                 .eq(InventoryWarehouseStock::getWarehouseId, warehouseId);
         if (productId != null) {
@@ -47,6 +47,7 @@ public class InventoryWarehouseStockService {
         } else {
             w.eq(InventoryWarehouseStock::getProductName, productName);
         }
+        w.eq(InventoryWarehouseStock::getQualityType, qualityType);
         InventoryWarehouseStock stock = mapper.selectOne(w);
 
         BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
@@ -57,26 +58,28 @@ public class InventoryWarehouseStockService {
         }
         if (stock != null) {
             stock.setQuantity(after);
-            stock.setAvailableQuantity(after); // 可用量=总量（后续按需拆分为预留+可用）
-            // 补充 productName/materialId（首次记录可能缺失）
+            stock.setAvailableQuantity(after);
             if (productName != null) stock.setProductName(productName);
             if (productId != null) stock.setProductId(productId);
+            stock.setQualityType(qualityType);
             mapper.updateById(stock);
         } else {
             stock = new InventoryWarehouseStock();
             stock.setWarehouseId(warehouseId);
             stock.setProductName(productName);
             stock.setProductId(productId);
+            stock.setQualityType(qualityType);
             stock.setQuantity(after);
             stock.setAvailableQuantity(after);
             Long cid = CompanyContext.get();
             if (cid != null && cid > 0) stock.setCompanyId(cid);
             mapper.insert(stock);
         }
-        // 写库存流水（可追溯）
+        // 写库存流水
         InventoryStockLog log = new InventoryStockLog();
         log.setWarehouseId(warehouseId);
         log.setProductId(productId);
+        log.setQualityType(qualityType);
         log.setChangeType(type.getCode());
         log.setChangeQuantity(quantity);
         log.setBeforeQuantity(before);

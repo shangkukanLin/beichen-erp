@@ -694,6 +694,7 @@ CREATE TABLE IF NOT EXISTS purchase_order_item (
     order_id BIGINT NOT NULL COMMENT '采购订单ID',
     material_id BIGINT COMMENT '物料ID',
     material_code VARCHAR(50) COMMENT '物料编码',
+    quality_type VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
     amount DECIMAL(18,4) DEFAULT 0 COMMENT '金额',
@@ -733,6 +734,7 @@ CREATE TABLE IF NOT EXISTS purchase_inbound_item (
     order_item_id BIGINT COMMENT '关联采购订单明细ID',
     material_id BIGINT COMMENT '物料ID',
     material_code VARCHAR(50) COMMENT '物料编码',
+    quality_type VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
     amount DECIMAL(18,4) DEFAULT 0 COMMENT '金额',
@@ -770,9 +772,10 @@ CREATE TABLE IF NOT EXISTS purchase_return (
 
 CREATE TABLE IF NOT EXISTS purchase_return_item (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY  COMMENT '主键ID',
-    return_id   BIGINT NOT NULL                   COMMENT '退货单ID(关联主表)',
-    product_id  BIGINT                            COMMENT '产品ID(联查product表)',
-    quantity    DECIMAL(18,4) DEFAULT 0           COMMENT '退货数量',
+    return_id    BIGINT NOT NULL                   COMMENT '退货单ID(关联主表)',
+    product_id   BIGINT                            COMMENT '产品ID(联查product表)',
+    quality_type VARCHAR(10) DEFAULT 'A'           COMMENT '品质等级: A/B/C/DEFECT',
+    quantity     DECIMAL(18,4) DEFAULT 0           COMMENT '退货数量',
     unit_price  DECIMAL(18,4) DEFAULT 0           COMMENT '单价',
     amount      DECIMAL(18,4) DEFAULT 0           COMMENT '金额',
     remark      VARCHAR(255)                      COMMENT '备注',
@@ -812,6 +815,7 @@ CREATE TABLE IF NOT EXISTS sale_order_item (
     order_id BIGINT NOT NULL COMMENT '销售单ID',
     material_id BIGINT COMMENT '物料ID',
     material_code VARCHAR(50) COMMENT '物料编码',
+    quality_type VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
     amount DECIMAL(18,4) DEFAULT 0 COMMENT '金额',
@@ -851,6 +855,7 @@ CREATE TABLE IF NOT EXISTS sale_outbound_item (
     order_item_id BIGINT COMMENT '关联销售单明细ID',
     material_id BIGINT COMMENT '物料ID',
     material_code VARCHAR(50) COMMENT '物料编码',
+    quality_type VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
     amount DECIMAL(18,4) DEFAULT 0 COMMENT '金额',
@@ -907,9 +912,10 @@ CREATE TABLE IF NOT EXISTS inventory_warehouse_move (
 -- ==================== 成品移仓单明细表 ====================
 CREATE TABLE IF NOT EXISTS inventory_warehouse_move_item (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY  COMMENT '主键ID',
-    move_id     BIGINT NOT NULL                   COMMENT '移仓单ID(关联主表)',
-    product_id  BIGINT                            COMMENT '产品ID(关联产品表)',
-    quantity    DECIMAL(18,4) DEFAULT 0           COMMENT '移仓数量',
+    move_id      BIGINT NOT NULL                   COMMENT '移仓单ID(关联主表)',
+    product_id   BIGINT                            COMMENT '产品ID(关联产品表)',
+    quality_type VARCHAR(10) DEFAULT 'A'           COMMENT '品质等级: A/B/C/DEFECT',
+    quantity     DECIMAL(18,4) DEFAULT 0           COMMENT '移仓数量',
     remark      VARCHAR(255)                      COMMENT '备注',
     company_id  BIGINT DEFAULT NULL               COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -938,9 +944,10 @@ CREATE TABLE IF NOT EXISTS inventory_other_io (
 
 CREATE TABLE IF NOT EXISTS inventory_other_io_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '其他出入库明细ID',
-    other_io_id BIGINT NOT NULL COMMENT '其他出入库单ID',
-    product_id BIGINT COMMENT '产品ID(名称/规格/单位联查product表)',
-    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
+    other_io_id   BIGINT NOT NULL COMMENT '其他出入库单ID',
+    product_id    BIGINT COMMENT '产品ID(名称/规格/单位联查product表)',
+    quality_type  VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT',
+    quantity      DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -948,6 +955,39 @@ CREATE TABLE IF NOT EXISTS inventory_other_io_item (
     INDEX idx_product_id (product_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='其他出入库明细表';
+
+-- ==================== 品质重分类 ====================
+
+CREATE TABLE IF NOT EXISTS product_reclassify (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    code            VARCHAR(50) NOT NULL               COMMENT '单号(PC-yyyyMMdd-001)',
+    warehouse_id    BIGINT NOT NULL                    COMMENT '仓库ID',
+    reclassify_date DATE                               COMMENT '调整日期',
+    status          VARCHAR(20) DEFAULT '草稿'         COMMENT '状态: 草稿/已审核/已取消',
+    remark          VARCHAR(500)                       COMMENT '备注',
+    company_id      BIGINT DEFAULT NULL                COMMENT '公司ID',
+    create_time     DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='品质重分类主表';
+
+CREATE TABLE IF NOT EXISTS product_reclassify_item (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    reclassify_id   BIGINT NOT NULL                    COMMENT '重分类单ID',
+    product_id      BIGINT NOT NULL                    COMMENT '产品ID',
+    from_quality    VARCHAR(10) NOT NULL               COMMENT '原品质: A/B/C/DEFECT',
+    to_quality      VARCHAR(10) NOT NULL               COMMENT '目标品质: A/B/C/DEFECT',
+    quantity        DECIMAL(18,4) DEFAULT 0            COMMENT '调整数量',
+    remark          VARCHAR(255)                       COMMENT '备注',
+    company_id      BIGINT DEFAULT NULL                COMMENT '公司ID',
+    create_time     DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_reclassify_id (reclassify_id),
+    INDEX idx_product_id (product_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='品质重分类明细表';
 
 -- ==================== 财务模块 ====================
 
@@ -1234,7 +1274,8 @@ CREATE TABLE IF NOT EXISTS product (
     brand_id        BIGINT DEFAULT NULL               COMMENT '品牌ID',
     category        VARCHAR(30)                       COMMENT '分类',
     spec            VARCHAR(100)                      COMMENT '规格型号',
-    unit            VARCHAR(20)                       COMMENT '单位',
+    general_model   VARCHAR(100) DEFAULT NULL          COMMENT '通用型号(适用多款机型)',
+    unit            VARCHAR(20) DEFAULT 'pcs'          COMMENT '单位',
     safety_stock    DECIMAL(18,4) DEFAULT 0           COMMENT '安全库存',
     current_stock   DECIMAL(18,4) DEFAULT 0           COMMENT '当前库存',
     status          VARCHAR(20) DEFAULT '正常'         COMMENT '状态',

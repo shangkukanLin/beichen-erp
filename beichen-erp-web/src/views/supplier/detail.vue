@@ -20,6 +20,15 @@ const form = reactive({
   creditPeriodMonths: undefined as any, creditPeriod: undefined as any,
 })
 const products = ref<any[]>([])
+const prodOptions = ref<any[]>([])
+async function searchProducts(query?: string) {
+  try {
+    const params: any = { pageSize: 50 }
+    if (query) params.keyword = query
+    const res = await request.get<any, any>('/product/page', { params })
+    prodOptions.value = res?.records || []
+  } catch { prodOptions.value = [] }
+}
 const typeName = ref('')
 const typeTags = ref<string[]>([])
 const hasFactory = ref(false)
@@ -112,7 +121,7 @@ async function handleSave() {
   } finally { saving.value = false }
 }
 
-function addProduct() { products.value.push({ name:'', spec:'', unit:'', unitPrice:0, remark:'' }) }
+function addProduct() { products.value.push({ productId: undefined, unitPrice:0, remark:'' }) }
 function removeProduct(i:number) { products.value.splice(i,1) }
 
 async function saveProducts() {
@@ -183,9 +192,7 @@ onMounted(loadData)
           </template>
           <el-button type="primary" size="small" text @click="addProduct" style="margin-bottom:8px">+ 添加产品</el-button>
           <el-table :data="products" border size="small">
-            <el-table-column label="产品名称"><template #default="{row}"><el-input v-model="row.name" size="small" /></template></el-table-column>
-            <el-table-column label="规格" width="120"><template #default="{row}"><el-input v-model="row.spec" size="small" /></template></el-table-column>
-            <el-table-column label="单位" width="80"><template #default="{row}"><el-input v-model="row.unit" size="small" /></template></el-table-column>
+            <el-table-column label="产品"><template #default="{row}"><el-select v-model="row.productId" placeholder="搜索产品" filterable remote :remote-method="searchProducts" size="small" style="width:100%"><el-option v-for="p in prodOptions" :key="p.id" :label="`${p.name}(${p.code||''})`" :value="p.id" /></el-select></template></el-table-column>
             <el-table-column label="单价" width="100"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" /></template></el-table-column>
             <el-table-column label="备注" width="120"><template #default="{row}"><el-input v-model="row.remark" size="small" /></template></el-table-column>
             <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link size="small" @click="removeProduct($index)">删除</el-button></template></el-table-column>

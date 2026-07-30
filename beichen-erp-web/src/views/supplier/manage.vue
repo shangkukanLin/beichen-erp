@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted, onActivated, watch, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 
 const router = useRouter()
-const activeType = ref('all')
+const route = useRoute()
+const activeType = ref(route.path.startsWith('/outsource/') ? 'all' : 'product')
 
 import { TYPE_TABS, TYPE_OPTIONS, TYPE_MAP, TYPE_TAG } from '@/constants/supplier'
 

@@ -45,6 +45,7 @@ public class WarehouseMoveController {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", it.getId());
             m.put("productId", it.getProductId());
+            m.put("qualityType", it.getQualityType());
             m.put("quantity", it.getQuantity());
             m.put("remark", it.getRemark());
             if (it.getProductId() != null) {
@@ -118,6 +119,7 @@ public class WarehouseMoveController {
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank())
                         it.setQuantity(new BigDecimal(map.get("quantity").toString()));
                     it.setRemark((String) map.get("remark"));
+                    it.setQualityType((String) map.get("qualityType"));
                     list.add(it);
                 }
             }

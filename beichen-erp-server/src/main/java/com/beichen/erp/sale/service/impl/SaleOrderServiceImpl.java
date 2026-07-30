@@ -172,7 +172,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
                     product != null ? product.getName() : "",
                     it.getQuantity().negate(), StockChangeType.SALE_OUT, order.getCode(), RelatedBillType.SALE_ORDER,
                     it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId());
+                    product != null ? product.getSpec() : "", order.getId(), it.getQualityType());
         }
         // 2) 生成应收台账
         FinanceReceivable fr = new FinanceReceivable();
@@ -218,11 +218,12 @@ public class SaleOrderServiceImpl implements SaleOrderService {
             Material product = materialMapper.selectById(it.getProductId());
             if (product == null) continue;
             BigDecimal required = it.getQuantity();
-            InventoryWarehouseStock stock = stockMapper.selectOne(
+            BigDecimal available = stockMapper.selectList(
                     new LambdaQueryWrapper<InventoryWarehouseStock>()
                             .eq(InventoryWarehouseStock::getWarehouseId, warehouseId)
-                            .eq(InventoryWarehouseStock::getProductId, it.getProductId()));
-            BigDecimal available = (stock != null && stock.getQuantity() != null) ? stock.getQuantity() : BigDecimal.ZERO;
+                            .eq(InventoryWarehouseStock::getProductId, it.getProductId()))
+                    .stream().map(s -> s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal shortage = required.subtract(available);
             Map<String, Object> m = new HashMap<>();
             m.put("productId", it.getProductId());

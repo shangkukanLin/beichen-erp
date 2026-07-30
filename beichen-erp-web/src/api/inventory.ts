@@ -92,3 +92,38 @@ export function auditOther(id: number) {
 export function cancelOther(id: number) {
   return request.put<unknown, void>(`/inventory/other/${id}/cancel`)
 }
+
+// 品质重分类
+export interface ReclassifyItem {
+  id?: number
+  productId?: number
+  productName?: string
+  spec?: string
+  unit?: string
+  fromQuality: string
+  toQuality: string
+  quantity?: number
+  remark?: string
+}
+
+export function getReclassifyPage(params: any) {
+  return request.get<unknown, PageResult<any>>('/inventory/reclassify/page', { params })
+}
+export function getReclassify(id: number) {
+  return request.get<unknown, any>(`/inventory/reclassify/${id}`)
+}
+export function getReclassifyItems(id: number) {
+  return request.get<unknown, ReclassifyItem[]>(`/inventory/reclassify/${id}/items`)
+}
+export function createReclassify(data: any) {
+  return request.post<unknown, void>('/inventory/reclassify', data)
+}
+export function updateReclassify(id: number, data: any) {
+  return request.put<unknown, void>(`/inventory/reclassify/${id}`, data)
+}
+export function auditReclassify(id: number) {
+  return request.put<unknown, void>(`/inventory/reclassify/${id}/audit`)
+}
+export function cancelReclassify(id: number) {
+  return request.put<unknown, void>(`/inventory/reclassify/${id}/cancel`)
+}

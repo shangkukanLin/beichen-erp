@@ -81,27 +81,7 @@ public class DataInitializer implements ApplicationRunner {
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_user_role (id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',user_id BIGINT NOT NULL COMMENT '用户ID',role_id BIGINT NOT NULL COMMENT '角色ID',UNIQUE KEY uk_user_role (user_id, role_id),INDEX idx_user_id (user_id),INDEX idx_role_id (role_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_menu (id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '菜单ID',parent_id BIGINT DEFAULT 0 COMMENT '父菜单ID',menu_name VARCHAR(50) NOT NULL COMMENT '菜单名称',menu_type VARCHAR(20) NOT NULL COMMENT '类型',route_path VARCHAR(100) DEFAULT '' COMMENT '路由路径',route_name VARCHAR(100) DEFAULT '' COMMENT '路由名称',icon VARCHAR(50) DEFAULT '' COMMENT '图标',sort_order INT DEFAULT 0 COMMENT '排序',visible TINYINT DEFAULT 1 COMMENT '0隐藏 1显示',status TINYINT DEFAULT 1 COMMENT '0禁用 1启用',create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',company_id BIGINT DEFAULT NULL COMMENT '公司ID',update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',INDEX idx_parent_id (parent_id),INDEX idx_company_id (company_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_role_menu (id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',role_id BIGINT NOT NULL COMMENT '角色ID',menu_id BIGINT NOT NULL COMMENT '菜单ID',UNIQUE KEY uk_role_menu (role_id, menu_id),INDEX idx_role_id (role_id),INDEX idx_menu_id (menu_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS brand (id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '品牌ID',brand_name VARCHAR(100) NOT NULL COMMENT '品牌名称',status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',company_id BIGINT DEFAULT NULL COMMENT '公司ID',create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',UNIQUE KEY uk_brand_name_company (brand_name, company_id),INDEX idx_company_id (company_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        // 增量 DDL：给已有表补加缺失的关键列
-        safeDDL("ALTER TABLE dev_project ADD COLUMN assembly_name VARCHAR(100) COMMENT '总成名称' AFTER name");
-        safeDDL("ALTER TABLE material ADD COLUMN brand_id BIGINT DEFAULT NULL COMMENT '品牌ID' AFTER name");
-        safeDDL("ALTER TABLE sys_company ADD COLUMN phone VARCHAR(20) COMMENT '电话' AFTER company_name");
-        safeDDL("ALTER TABLE sys_company ADD COLUMN address VARCHAR(200) COMMENT '地址' AFTER phone");
-        safeDDL("ALTER TABLE sys_company ADD COLUMN contact_person VARCHAR(50) COMMENT '联系人' AFTER address");
-        safeDDL("ALTER TABLE sys_company ADD COLUMN tax_no VARCHAR(50) COMMENT '税号' AFTER contact_person");
-        safeDDL("ALTER TABLE sys_company ADD COLUMN email VARCHAR(100) COMMENT '邮箱' AFTER tax_no");
-        safeDDL("ALTER TABLE inventory_warehouse_stock ADD COLUMN material_id BIGINT DEFAULT NULL COMMENT '物料ID' AFTER product_name");
-        safeDDL("ALTER TABLE inventory_warehouse_stock ADD COLUMN available_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '可用数量' AFTER quantity");
-        safeDDL("ALTER TABLE purchase_order ADD COLUMN auditor_id BIGINT DEFAULT NULL COMMENT '审核人ID' AFTER remark");
-        safeDDL("ALTER TABLE purchase_order ADD COLUMN auditor_name VARCHAR(50) DEFAULT NULL COMMENT '审核人姓名' AFTER auditor_id");
-        safeDDL("ALTER TABLE purchase_order ADD COLUMN audit_time DATETIME DEFAULT NULL COMMENT '审核时间' AFTER auditor_name");
-        // purchase_order.status: VARCHAR → TINYINT (0=草稿 1=已完成 2=已作废)
-        migratePurchaseOrderStatus();
-        // 成品退货单表
-        initPurchaseReturnTables();
-        // 删除旧明细表中的冗余列（产品信息通过product_id JOIN查询）
-        dropRedundantItemColumns();
-        log.info("核心表+增量DDL完成");
+        log.info("系统核心表创建完成");
     }
 
     private void safeDDL(String sql) {

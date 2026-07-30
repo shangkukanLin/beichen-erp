@@ -143,7 +143,7 @@ public class OtherIoServiceImpl implements OtherIoService {
             Material prod = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
                     delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),
-                    prod != null ? prod.getSpec() : "", io.getId());
+                    prod != null ? prod.getSpec() : "", io.getId(), it.getQualityType());
         }
     }
 
@@ -157,7 +157,7 @@ public class OtherIoServiceImpl implements OtherIoService {
             Material prod = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
                     delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),
-                    prod != null ? prod.getSpec() : "", io.getId());
+                    prod != null ? prod.getSpec() : "", io.getId(), it.getQualityType());
         }
     }
 

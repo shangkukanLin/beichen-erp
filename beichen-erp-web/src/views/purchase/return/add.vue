@@ -48,6 +48,13 @@
               <span :style="{ color: (row._stock ?? 0) <= 0 ? 'red' : '' }">{{ row._stock ?? '-' }}</span>
             </template>
           </el-table-column>
+          <el-table-column label="品质" width="90">
+            <template #default="{ row }">
+              <el-select v-model="row.qualityType" size="small" style="width:100%">
+                <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
+              </el-select>
+            </template>
+          </el-table-column>
           <el-table-column label="退货数量" width="140">
             <template #default="{ row }"><el-input-number v-model="row.quantity" :min="1" :step="1" :precision="0" controls-position="right" style="width:100%" @change="calcAmount" /></template>
           </el-table-column>
@@ -78,9 +85,11 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
 import request from '@/utils/request'
+import { getQualityTypes, type QualityOption } from '@/api/product'
 
 interface ReturnItem {
   productId?: number
+  qualityType?: string
   _stock?: number
   quantity?: number
   unitPrice?: number
@@ -95,6 +104,7 @@ const formRef = ref<FormInstance>()
 const submitLoading = ref(false)
 const suppliers = ref<any[]>([])
 const warehouses = ref<any[]>([])
+const qualityOptions = ref<QualityOption[]>([])
 const productOptions = ref<any[]>([])
 const items = ref<ReturnItem[]>([])
 
@@ -111,7 +121,7 @@ const rules: FormRules = {
 }
 
 function addItem() {
-  items.value.push({ productId: undefined, quantity: 1, unitPrice: 0, remark: '' })
+  items.value.push({ productId: undefined, qualityType: 'A', quantity: 1, unitPrice: 0, remark: '' })
 }
 
 async function loadProducts(query?: string) {
@@ -214,6 +224,7 @@ async function handleSubmit() {
         totalAmount: total,
         items: items.value.map(it => ({
           productId: it.productId,
+          qualityType: it.qualityType,
           quantity: it.quantity,
           unitPrice: it.unitPrice,
           amount: (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0),
@@ -238,10 +249,13 @@ function handleCancel() {
   router.push('/inventory/purchase-return')
 }
 
+async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
+
 onMounted(() => {
   loadSuppliers()
   loadWarehouses()
   loadProducts()
+  loadQualityTypes()
   if (isEdit) {
     tabStore.updateTabTitle(route.fullPath, '编辑成品退货单')
     document.title = '编辑成品退货单 - 北辰ERP管理系统'

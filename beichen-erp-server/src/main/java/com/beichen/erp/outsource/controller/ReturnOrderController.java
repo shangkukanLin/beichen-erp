@@ -173,7 +173,7 @@ public class ReturnOrderController {
                     String pn = (String) p.get("productName");
                     BigDecimal qty = toBigDecimal(p.get("quantity"));
                     if (pn != null && qty.compareTo(BigDecimal.ZERO) > 0) {
-                        inventoryStockService.changeStock(invWhId, pn, qty.negate(), StockChangeType.OUTSOURCE_RETURN_OUT, order.getCode(), RelatedBillType.OUTSOURCE_RETURN, null, null, order.getId());
+                        inventoryStockService.changeStock(invWhId, pn, qty.negate(), StockChangeType.OUTSOURCE_RETURN_OUT, order.getCode(), RelatedBillType.OUTSOURCE_RETURN, null, null, order.getId(), null);
                     }
                 }
             }

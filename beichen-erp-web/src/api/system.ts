@@ -230,7 +230,8 @@ export interface SupplierQueryParams {
 export interface SupplierProductVO {
   id?: number | string
   supplierId?: number | string
-  productName: string
+  productId?: number | string
+  productName?: string
   spec?: string
   unit?: string
   unitPrice?: number
@@ -238,9 +239,7 @@ export interface SupplierProductVO {
 }
 
 export interface SupplierProductDTO {
-  productName: string
-  spec?: string
-  unit?: string
+  productId?: number | string
   unitPrice?: number
   remark?: string
 }

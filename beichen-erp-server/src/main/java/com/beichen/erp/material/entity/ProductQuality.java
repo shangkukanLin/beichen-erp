@@ -1,4 +1,4 @@
-package com.beichen.erp.inventory.entity;
+package com.beichen.erp.material.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
@@ -7,25 +7,26 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("inventory_warehouse_move_item")
-public class InventoryWarehouseMoveItem {
+@TableName("product_quality")
+public class ProductQuality {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    private Long moveId;
-
     private Long productId;
 
-    /** 品质等级: A/B/C/DEFECT */
+    /** 等级类型: A/B/C/DEFECT(ProductQualityType.name()) */
     private String qualityType;
 
     private BigDecimal quantity;
 
-    private String remark;
+    private BigDecimal safetyStock;
 
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;
 
     private LocalDateTime createTime;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updateTime;
 }

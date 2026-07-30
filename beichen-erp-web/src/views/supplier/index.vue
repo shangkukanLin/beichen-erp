@@ -142,6 +142,15 @@ async function handleToggleStatus(row: SupplierVO) {
 }
 
 // ---------- 供应产品 ----------
+const productOptions = ref<any[]>([])
+async function loadProductOptions(query?: string) {
+  try {
+    const params: any = { pageSize: 50 }
+    if (query) params.keyword = query
+    const res = await request.get<any, any>('/product/page', { params })
+    productOptions.value = res?.records || []
+  } catch { productOptions.value = [] }
+}
 const productDialogVisible = ref(false)
 const productSupplierId = ref<number | string>()
 const productList = ref<SupplierProductDTO[]>([])
@@ -149,12 +158,12 @@ const productList = ref<SupplierProductDTO[]>([])
 async function openProducts(row: SupplierVO) {
   productSupplierId.value = row.id
   const list = await getSupplierProducts(row.id!)
-  productList.value = (list || []).map(p => ({ productName: p.productName, spec: p.spec, unit: p.unit, unitPrice: p.unitPrice, remark: p.remark }))
+  productList.value = (list || []).map(p => ({ productId: p.productId, unitPrice: p.unitPrice, remark: p.remark }))
   productDialogVisible.value = true
 }
 
 function addProductRow() {
-  productList.value.push({ productName: '', spec: '', unit: '', unitPrice: undefined, remark: '' })
+  productList.value.push({ productId: undefined, unitPrice: undefined, remark: '' })
 }
 
 function removeProductRow(index: number) {
@@ -302,19 +311,11 @@ onActivated(() => { loadData() })
     <el-dialog v-model="productDialogVisible" title="供应产品" width="700px">
       <el-button type="primary" size="small" @click="addProductRow" style="margin-bottom:12px">+ 添加产品</el-button>
       <el-table :data="productList" border>
-        <el-table-column label="产品名称" min-width="140">
-          <template #default="{ row, $index }">
-            <el-input v-model="row.productName" placeholder="产品名称" size="small" />
-          </template>
-        </el-table-column>
-        <el-table-column label="规格" width="120">
+        <el-table-column label="产品" min-width="220">
           <template #default="{ row }">
-            <el-input v-model="row.spec" placeholder="规格" size="small" />
-          </template>
-        </el-table-column>
-        <el-table-column label="单位" width="80">
-          <template #default="{ row }">
-            <el-input v-model="row.unit" placeholder="单位" size="small" />
+            <el-select v-model="row.productId" placeholder="搜索选择产品" filterable remote :remote-method="loadProductOptions" style="width:100%" size="small">
+              <el-option v-for="p in productOptions" :key="p.id" :label="`${p.name}(${p.code || ''})`" :value="p.id" />
+            </el-select>
           </template>
         </el-table-column>
         <el-table-column label="单价" width="110">

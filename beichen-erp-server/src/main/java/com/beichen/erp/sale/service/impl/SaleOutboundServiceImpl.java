@@ -169,7 +169,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
                     product != null ? product.getName() : "",
                     it.getQuantity().negate(), StockChangeType.SALE_OUT, outbound.getCode(), RelatedBillType.SALE_OUTBOUND,
                     it.getProductId(),
-                    product != null ? product.getSpec() : "", outbound.getId());
+                    product != null ? product.getSpec() : "", outbound.getId(), it.getQualityType());
         }
         // 2) 生成应收台账
         FinanceReceivable fr = new FinanceReceivable();

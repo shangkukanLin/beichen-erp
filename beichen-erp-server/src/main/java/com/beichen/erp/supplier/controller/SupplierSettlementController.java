@@ -164,7 +164,7 @@ public class SupplierSettlementController {
 
                 // 入我方 inventory 仓
                 inventoryStockService.changeStock(toWarehouseId, matName, qty,
-                    StockChangeType.SETTLEMENT_RETURN_IN, delivery.getCode(), RelatedBillType.SUPPLIER_SETTLEMENT, st.getMaterialId(), null, delivery.getId());
+                    StockChangeType.SETTLEMENT_RETURN_IN, delivery.getCode(), RelatedBillType.SUPPLIER_SETTLEMENT, st.getMaterialId(), null, delivery.getId(), null);
             }
         }
         if (count == 0) throw new BusinessException("该供应商委外仓无可退物料");

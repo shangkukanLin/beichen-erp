@@ -29,7 +29,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/system/role")
-@SaCheckRole(value = {"super_admin"}, mode = SaMode.OR)
+@SaCheckRole(value = {"super_admin", "admin"}, mode = SaMode.OR)
 @RequiredArgsConstructor
 public class RoleController {
 
@@ -81,6 +81,9 @@ public class RoleController {
         Role exist = roleService.getById(dto.getId());
         if (exist == null) {
             throw new BusinessException("角色不存在");
+        }
+        if ("super_admin".equals(exist.getRoleCode()) || "admin".equals(exist.getRoleCode())) {
+            throw new BusinessException("内置角色不可编辑");
         }
         Long count = roleService.lambdaQuery()
                 .eq(Role::getRoleCode, dto.getRoleCode())

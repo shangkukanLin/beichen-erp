@@ -49,6 +49,13 @@
           <el-table-column label="单位" width="70">
             <template #default="{ row }">{{ row._unit || '' }}</template>
           </el-table-column>
+          <el-table-column label="品质" width="90">
+            <template #default="{ row }">
+              <el-select v-model="row.qualityType" size="small" style="width:100%">
+                <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
+              </el-select>
+            </template>
+          </el-table-column>
           <el-table-column label="现有库存" width="110" align="right">
             <template #default="{ row }">{{ row._stock != null ? row._stock : '-' }}</template>
           </el-table-column>
@@ -77,9 +84,11 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
 import request from '@/utils/request'
+import { getQualityTypes, type QualityOption } from '@/api/product'
 
 interface MoveItem {
   productId?: number
+  qualityType?: string
   _spec?: string
   _unit?: string
   _stock?: number
@@ -110,6 +119,7 @@ const rules: FormRules = {
 }
 
 const warehouses = ref<any[]>([])
+const qualityOptions = ref<QualityOption[]>([])
 const productOptions = ref<any[]>([])
 
 async function loadWarehouses() {
@@ -127,6 +137,8 @@ async function loadProducts(query?: string) {
     productOptions.value = res?.records || []
   } catch { productOptions.value = [] }
 }
+
+async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
 function onProductChange(val: number, row: MoveItem) {
   const m = productOptions.value.find((x: any) => x.id === val)
@@ -153,7 +165,7 @@ async function refreshStock() {
   }
 }
 
-function addItem() { items.value.push({ productId: undefined, quantity: 1 }) }
+function addItem() { items.value.push({ productId: undefined, qualityType: 'A', quantity: 1 }) }
 
 function resetForm() {
   Object.assign(form, { id: undefined, fromWarehouseId: undefined, toWarehouseId: undefined, moveDate: new Date().toISOString().slice(0,10), remark: '' })
@@ -173,6 +185,7 @@ async function loadMoveData() {
     const its = await request.get<any, any>(`/inventory/warehouse-move/${editId.value}/items`)
     items.value = (its || []).map((it: any) => ({
       productId: it.productId,
+      qualityType: it.qualityType,
       _spec: it.spec,
       _unit: it.unit,
       quantity: it.quantity,
@@ -228,6 +241,7 @@ function handleCancel() {
 onMounted(() => {
   loadWarehouses()
   loadProducts()
+  loadQualityTypes()
   if (isEdit.value) {
     tabStore.updateTabTitle(route.fullPath, '编辑移仓单')
     document.title = '编辑移仓单 - 北辰ERP管理系统'

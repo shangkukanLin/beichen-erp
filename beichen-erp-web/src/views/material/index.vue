@@ -3,12 +3,13 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
-  getMaterialPage,
-  addMaterial,
-  updateMaterial,
-  deleteMaterial,
-  type Material,
-  type MaterialQueryParams
+  getProductPage,
+  addProduct,
+  updateProduct,
+  deleteProduct,
+  type Product,
+  type ProductQuality,
+  type ProductQueryParams
 } from '@/api/product'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
@@ -22,8 +23,8 @@ async function loadBrands() {
 }
 
 // 查询参数
-const query = reactive<MaterialQueryParams>({
-  name: ''
+const query = reactive<ProductQueryParams>({
+  keyword: ''
 })
 
 // Tab 切换
@@ -37,7 +38,7 @@ const pagination = reactive({
 })
 
 const tableLoading = ref(false)
-const tableData = ref<Material[]>([])
+const tableData = ref<Product[]>([])
 
 // 分类下拉选项
 const categoryOptions = [
@@ -55,24 +56,29 @@ const statusOptions = [
 
 // 弹窗
 const dialogVisible = ref(false)
-const dialogTitle = ref('新增物料')
+const dialogTitle = ref('新增产品')
 const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
-const defaultForm = (): Material => ({
+const defaultForm = (): Product => ({
   name: '',
   brandId: undefined,
-  safetyStock: 0,
-  currentStock: 0,
+  category: '',
+  spec: '',
+  generalModel: '',
+  unit: 'pcs',
   status: '正常',
   remark: '',
   code: '',
-  category: '',
-  spec: '',
-  unit: ''
-} as Material)
+  qualities: [
+    { qualityType: 'A', quantity: 0 },
+    { qualityType: 'B', quantity: 0 },
+    { qualityType: 'C', quantity: 0 },
+    { qualityType: 'DEFECT', quantity: 0 },
+  ]
+} as Product)
 
-const form = reactive<Material>(defaultForm())
+const form = reactive<Product>(defaultForm())
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入物料名称', trigger: 'blur' }],
@@ -82,14 +88,14 @@ const rules: FormRules = {
 async function loadData() {
   tableLoading.value = true
   try {
-    const params: MaterialQueryParams = {
+    const params: ProductQueryParams = {
       pageNum: pagination.pageNum,
       pageSize: pagination.pageSize
     }
-    if (query.name) params.name = query.name
-    params.status = activeTab.value
+    if (query.keyword) params.keyword = query.keyword
+    // activeTab 用于前端状态筛选（status），不是 category
 
-    const res = await getMaterialPage(params)
+    const res = await getProductPage(params)
     tableData.value = res?.records || []
     pagination.total = res?.total || 0
   } catch {
@@ -111,14 +117,14 @@ function handleQuery() {
 }
 
 function handleReset() {
-  query.name = ''
+  query.keyword = ''
   pagination.pageNum = 1
   loadData()
 }
 
 function handleAdd() {
   Object.assign(form, defaultForm())
-  dialogTitle.value = '新增物料'
+  dialogTitle.value = '新增产品'
   dialogVisible.value = true
   formRef.value?.clearValidate()
 }
@@ -129,9 +135,17 @@ function getBrandName(brandId: number | string | undefined) {
   return b ? b.brandName : ''
 }
 
-async function handleEdit(row: Material) {
-  Object.assign(form, defaultForm(), row)
-  dialogTitle.value = '编辑物料'
+async function handleEdit(row: Product) {
+  const defaults = defaultForm()
+  Object.assign(form, defaults, row)
+  // 合并服务端返回的等级数据
+  if (row.qualities) {
+    form.qualities = row.qualities.map(q => ({
+      qualityType: q.qualityType,
+      quantity: q.quantity ?? 0,
+    }))
+  }
+  dialogTitle.value = '编辑产品'
   dialogVisible.value = true
   formRef.value?.clearValidate()
 }
@@ -143,10 +157,10 @@ async function handleSubmit() {
     submitLoading.value = true
     try {
       if (form.id) {
-        await updateMaterial(form)
+        await updateProduct(form.id, form)
         ElMessage.success('修改成功')
       } else {
-        await addMaterial(form)
+        await addProduct(form)
         ElMessage.success('新增成功')
       }
       dialogVisible.value = false
@@ -159,7 +173,7 @@ async function handleSubmit() {
   })
 }
 
-async function handleDelete(row: Material) {
+async function handleDelete(row: Product) {
   try {
     const checkRes = await request.get<any, any>(`/product/${row.id}/check-delete`)
     if (checkRes && !checkRes.canDelete) {
@@ -177,7 +191,7 @@ async function handleDelete(row: Material) {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await deleteMaterial(row.id as number | string)
+    await deleteProduct(row.id as number | string)
     ElMessage.success('删除成功')
     if (tableData.value.length === 1 && pagination.pageNum > 1) {
       pagination.pageNum--
@@ -201,13 +215,13 @@ function handleCurrentChange(val: number) {
   loadData()
 }
 
-function isLowStock(row: Material): boolean {
+function isLowStock(row: Product): boolean {
   const safety = Number(row.safetyStock) || 0
   const current = Number(row.currentStock) || 0
   return safety > 0 && current < safety
 }
 
-function rowClass({ row }: { row: Material }) {
+function rowClass({ row }: { row: Product }) {
   return isLowStock(row) ? 'low-stock-row' : ''
 }
 
@@ -234,7 +248,7 @@ onActivated(() => { loadBrands(); loadData() })
     <el-card shadow="never" class="query-card">
       <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="名称">
-          <el-input v-model="query.name" placeholder="请输入物料名称" clearable @keyup.enter="handleQuery" />
+          <el-input v-model="query.keyword" placeholder="请输入产品名称" clearable @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleQuery">查询</el-button>
@@ -258,6 +272,11 @@ onActivated(() => { loadBrands(); loadData() })
         <el-table-column label="品牌" min-width="120">
           <template #default="{ row }">{{ getBrandName(row.brandId) }}</template>
         </el-table-column>
+        <el-table-column prop="code" label="编码" width="120" />
+        <el-table-column prop="category" label="分类" width="100" />
+        <el-table-column prop="spec" label="规格" width="120" />
+        <el-table-column prop="generalModel" label="通用型号" width="120" />
+        <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column prop="safetyStock" label="安全库存" width="100" align="right" />
         <el-table-column label="当前库存" width="130" align="right">
           <template #default="{ row }">
@@ -274,8 +293,8 @@ onActivated(() => { loadBrands(); loadData() })
         </el-table-column>
         <el-table-column label="操作" width="150" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleEdit(row as Material)">编辑</el-button>
-            <el-button type="danger" link @click="handleDelete(row as Material)">删除</el-button>
+            <el-button type="primary" link @click="handleEdit(row as Product)">编辑</el-button>
+            <el-button type="danger" link @click="handleDelete(row as Product)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -300,7 +319,7 @@ onActivated(() => { loadBrands(); loadData() })
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="名称" prop="name">
-              <el-input v-model="form.name" placeholder="请输入物料名称" />
+              <el-input v-model="form.name" placeholder="请输入产品名称" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -310,6 +329,41 @@ onActivated(() => { loadBrands(); loadData() })
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="分类">
+              <el-input v-model="form.category" placeholder="如：成品/半成品/原料" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="规格">
+              <el-input v-model="form.spec" placeholder="规格型号" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="通用型号">
+              <el-input v-model="form.generalModel" placeholder="适用多款机型" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="单位">
+              <el-input v-model="form.unit" placeholder="pcs" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-divider content-position="left">等级库存</el-divider>
+            <el-table :data="form.qualities" border size="small">
+              <el-table-column label="等级" width="120">
+                <template #default="{ row }">
+                  {{ row.qualityType === 'A' ? 'A规' : row.qualityType === 'B' ? 'B规' : row.qualityType === 'C' ? 'C规' : '不良' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="数量" min-width="140">
+                <template #default="{ row }">
+                  <el-input-number v-model="row.quantity" :min="0" :precision="0" controls-position="right" style="width:100%" />
+                </template>
+              </el-table-column>
+            </el-table>
           </el-col>
           <el-col :span="12">
             <el-form-item label="状态" prop="status">

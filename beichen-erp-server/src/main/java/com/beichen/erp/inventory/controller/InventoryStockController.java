@@ -34,10 +34,12 @@ public class InventoryStockController {
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) Long warehouseId,
             @RequestParam(required = false) Long productId,
-            @RequestParam(required = false) String productName) {
+            @RequestParam(required = false) String productName,
+            @RequestParam(required = false) String qualityType) {
         LambdaQueryWrapper<InventoryWarehouseStock> w = new LambdaQueryWrapper<InventoryWarehouseStock>()
                 .eq(warehouseId != null, InventoryWarehouseStock::getWarehouseId, warehouseId)
                 .eq(productId != null, InventoryWarehouseStock::getProductId, productId)
+                .eq(qualityType != null && !qualityType.isBlank(), InventoryWarehouseStock::getQualityType, qualityType)
                 .like(productName != null && !productName.isBlank(), InventoryWarehouseStock::getProductName, productName)
                 .orderByDesc(InventoryWarehouseStock::getId);
         Page<InventoryWarehouseStock> raw = stockMapper.selectPage(new Page<>(pageNum, pageSize), w);
@@ -49,6 +51,7 @@ public class InventoryStockController {
             m.put("productName", s.getProductName());
             m.put("productId", s.getProductId());
             m.put("quantity", s.getQuantity());
+            m.put("qualityType", s.getQualityType());
             m.put("availableQuantity", s.getAvailableQuantity());
             if (s.getWarehouseId() != null) {
                 InventoryWarehouse wh = warehouseMapper.selectById(s.getWarehouseId());
