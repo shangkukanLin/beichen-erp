@@ -12,8 +12,9 @@ import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.dev.mapper.ProjectTimelineMapper;
 import com.beichen.erp.dev.service.ProjectTimelineService;
 import com.beichen.erp.exception.BusinessException;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
+import com.beichen.erp.material.common.ProductStatus;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,7 +29,7 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
     private final ProjectTimelineMapper projectTimelineMapper;
     private final PhaseTemplateMapper phaseTemplateMapper;
     private final ProjectMapper projectMapper;
-    private final MaterialMapper materialMapper;
+    private final ProductMapper productMapper;
 
     @Override
     public List<ProjectTimeline> listByProject(Long projectId) {
@@ -207,14 +208,14 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
 
     /** 同步产品状态：将关联产品从"研发中"改为"正常" */
     private void syncProductStatus(Long projectId) {
-        Material linked = materialMapper.selectOne(
-            new LambdaQueryWrapper<Material>()
-                .eq(Material::getProjectId, projectId)
-                .eq(Material::getStatus, "研发中")
+        Product linked = productMapper.selectOne(
+            new LambdaQueryWrapper<Product>()
+                .eq(Product::getProjectId, projectId)
+                .eq(Product::getStatus, ProductStatus.DEVELOPING)
                 .last("LIMIT 1"));
         if (linked != null) {
-            linked.setStatus("正常");
-            materialMapper.updateById(linked);
+            linked.setStatus(ProductStatus.NORMAL);
+            productMapper.updateById(linked);
         }
     }
 

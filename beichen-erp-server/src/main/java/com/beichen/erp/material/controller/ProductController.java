@@ -2,6 +2,7 @@ package com.beichen.erp.material.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.material.common.ProductStatus;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.service.ProductService;
@@ -20,14 +21,16 @@ public class ProductController {
 
     private final ProductService service;
 
-    /** 分页查询（支持关键字/分类筛选） */
+    /** 分页查询（支持关键字/分类/状态筛选） */
     @GetMapping("/page")
     public R<Page<Product>> page(
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) String category) {
-        return R.ok(service.page(keyword, category, pageNum, pageSize));
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String status) {
+        ProductStatus ps = status != null ? ProductStatus.fromValue(status) : null;
+        return R.ok(service.page(keyword, category, ps, pageNum, pageSize));
     }
 
     /** 单条查询 */

@@ -22,7 +22,9 @@ public interface OutsourceOrderService {
 
     void update(OutsourceOrder order, List<OutsourceOrderProduct> products);
 
-    void confirm(Long id);
+    void audit(Long id);
+
+    void unaudit(Long id);
 
     void complete(Long id);
 

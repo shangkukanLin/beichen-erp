@@ -17,8 +17,9 @@ import com.beichen.erp.dev.mapper.BomTypeMapper;
 import com.beichen.erp.dev.service.ProjectService;
 import com.beichen.erp.dev.service.ProjectTimelineService;
 import com.beichen.erp.exception.BusinessException;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
+import com.beichen.erp.material.common.ProductStatus;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -43,7 +44,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     private final ProjectTimelineService timelineService;
     private final BomMapper bomMapper;
     private final BomTypeMapper bomTypeMapper;
-    private final MaterialMapper materialMapper;
+    private final ProductMapper productMapper;
 
     @Override
     public Page<Project> page(ProjectQueryDTO query) {
@@ -217,36 +218,35 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
                 return; // 名称未变，无需同步
             }
             // 名称变了，找到关联的旧产品并更新名称
-            Material linked = materialMapper.selectOne(
-                new LambdaQueryWrapper<Material>()
-                    .eq(Material::getProjectId, projectId)
+            Product linked = productMapper.selectOne(
+                new LambdaQueryWrapper<Product>()
+                    .eq(Product::getProjectId, projectId)
                     .last("LIMIT 1"));
             if (linked != null) {
                 linked.setName(assemblyName);
-                materialMapper.updateById(linked);
+                productMapper.updateById(linked);
             }
             return;
         }
 
         // 新增场景：检查同名产品是否已存在
-        Material existing = materialMapper.selectOne(
-            new LambdaQueryWrapper<Material>()
-                .eq(Material::getName, assemblyName));
+        Product existing = productMapper.selectOne(
+            new LambdaQueryWrapper<Product>()
+                .eq(Product::getName, assemblyName));
         if (existing != null) {
             // 已存在，直接关联
             existing.setProjectId(projectId);
-            materialMapper.updateById(existing);
+            productMapper.updateById(existing);
             log.info("产品「{}」已存在，已关联到项目ID={}", assemblyName, projectId);
             return;
         }
 
         // 自动创建产品
-        Material material = new Material();
-        material.setName(assemblyName);
-        material.setCode(generateProductCode());
-        material.setStatus("研发中");
-        material.setProjectId(projectId);
-        materialMapper.insert(material);
+        Product product = new Product();
+        product.setName(assemblyName);
+        product.setStatus(ProductStatus.DEVELOPING);
+        product.setProjectId(projectId);
+        productMapper.insert(product);
         log.info("已自动创建研发中产品：{}（项目ID={}）", assemblyName, projectId);
     }
 
@@ -259,34 +259,16 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         if (project == null || project.getId() == null) return;
         if (!PRODUCTION_STATUSES.contains(project.getStatus())) return;
 
-        Material linked = materialMapper.selectOne(
-            new LambdaQueryWrapper<Material>()
-                .eq(Material::getProjectId, project.getId())
-                .eq(Material::getStatus, "研发中")
+        Product linked = productMapper.selectOne(
+            new LambdaQueryWrapper<Product>()
+                .eq(Product::getProjectId, project.getId())
+                .eq(Product::getStatus, ProductStatus.DEVELOPING)
                 .last("LIMIT 1"));
         if (linked != null) {
-            linked.setStatus("正常");
-            materialMapper.updateById(linked);
+            linked.setStatus(ProductStatus.NORMAL);
+            productMapper.updateById(linked);
             log.info("项目进入{}，产品「{}」状态：研发中 → 正常", project.getStatus(), linked.getName());
         }
-    }
-
-    /** 生成产品编码 PRD-YYYYMMDD-NNN */
-    private String generateProductCode() {
-        String prefix = "PRD";
-        String dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        LambdaQueryWrapper<Material> wrapper = new LambdaQueryWrapper<Material>()
-                .likeRight(Material::getCode, prefix + "-" + dateStr)
-                .orderByDesc(Material::getCode)
-                .last("LIMIT 1");
-        Material last = materialMapper.selectOne(wrapper);
-        int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try {
-                seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1;
-            } catch (Exception ignored) {}
-        }
-        return prefix + "-" + dateStr + String.format("%03d", seq);
     }
 
     private void initBom(ProjectDTO dto, Long projectId) {

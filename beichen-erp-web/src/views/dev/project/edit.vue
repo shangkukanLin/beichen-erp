@@ -148,7 +148,7 @@ const bomTypes = ref<string[]>([])
 const allMaterials = ref<any[]>([])
 async function loadBomTypes() {
   try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => t.typeName) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
-  try { const r = await request.get<any, any>('/product/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料数据失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料数据失败', e?.message || e) }
 }
 function getMaterialsByType(type: string) { return allMaterials.value.filter((m:any) => m.materialType === type) }
 
@@ -159,7 +159,7 @@ async function loadBom() {
   const names = [...new Set(items.map((b:any) => b.materialName).filter(Boolean))]
   const childrenMap: Record<string, any[]> = {}
   if (names.length > 0) {
-    try { const r = await request.post<any, any>('/outsource/product/components-batch', names); Object.assign(childrenMap, r || {}) } catch { /* ignore */ }
+    try { const r = await request.post<any, any>('/outsource/material/components-batch', names); Object.assign(childrenMap, r || {}) } catch { /* ignore */ }
   }
   // 平铺：父行 + 子行（缩进只读）
   const result: any[] = []
@@ -355,11 +355,6 @@ function onNameBlur() {
 
 <template>
   <div class="edit-page">
-    <!-- 顶栏 -->
-    <div class="page-header">
-      <el-tag size="small">{{ form.code }}</el-tag>
-    </div>
-
     <el-tabs v-model="activeTab">
       <!-- 项目信息 Tab -->
       <el-tab-pane label="项目信息" name="project">
@@ -370,6 +365,7 @@ function onNameBlur() {
             <el-row :gutter="16">
               <el-col :span="8"><el-form-item label="项目名称"><el-input v-model="form.name" @blur="onNameBlur" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="总成名称" prop="assemblyName" :rules="[{ required: true, message: '请输入总成名称', trigger: 'blur' }]"><el-input v-model="form.assemblyName" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="项目编码"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="项目阶段">
                 <el-tag type="warning" size="default">{{ currentPhaseName }}</el-tag>
               </el-form-item></el-col>

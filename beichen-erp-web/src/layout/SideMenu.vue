@@ -6,7 +6,8 @@ import {
   Goods, Money, Tools, Notebook, Tickets, Files, Connection, OfficeBuilding,
   GoodsFilled, Box, Document, Switch, Timer, TakeawayBox, ShoppingCart,
   Download, Odometer, Sell, Upload, Wallet, CreditCard, Postcard,
-  TrendCharts, UserFilled, Avatar, Menu, CollectionTag, Delete, DataBoard
+  TrendCharts, UserFilled, Avatar, Menu, CollectionTag, Delete, DataBoard,
+  Refresh, Rank, Lock
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 
@@ -16,7 +17,7 @@ const iconMap: Record<string, any> = {
   Files, Connection, OfficeBuilding, GoodsFilled, Box, Document, Switch,
   Timer, TakeawayBox, ShoppingCart, Download, Odometer, Sell, Upload,
   Wallet, CreditCard, Postcard, TrendCharts, UserFilled, Avatar, Menu,
-  CollectionTag, Delete, DataBoard
+  CollectionTag, Delete, DataBoard, Refresh, Rank, Lock
 }
 function resolveIcon(iconName: string): any {
   if (!iconName) return Menu
@@ -48,6 +49,8 @@ function handleMenuSelect(index: string) {
   // 只对已知的叶子菜单路径导航，避免子菜单标题展开时触发意外跳转
   if (!leafRoutePaths.value.has(index)) return
   const path = '/' + index.replace(/^\//, '')
+  // 避免重复导航到当前路径，减少不必要的组件重建
+  if (path === route.path) return
   router.push(path)
 }
 </script>

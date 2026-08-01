@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { getPaymentPage, createPayment, getUnpaidPayables, type FinancePaymentItem } from '@/api/finance'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 
 const route = useRoute(); const router = useRouter()
 const supplierId = Number(route.params.id)
@@ -75,7 +76,7 @@ async function handleSubmitPayment() {
 const totalThisAmount = computed(() => dItems.value.reduce((s, it) => s + (Number(it.thisAmount) || 0), 0))
 
 function stType(s?: string) { if (s === '未结清') return 'danger'; if (s === '部分结清') return 'warning'; if (s === '已结清') return 'success'; return 'info' }
-function pStType(s?: string) { if (s === '草稿') return 'info'; if (s === '已审核') return 'success'; if (s === '已作废') return 'danger'; return '' }
+function pStType(s?: string) { return DocStatusTag[s || ''] || '' }
 function openAttach(url: string) { window.open(url + '?inline=true') }
 function goSettlement() { router.push(`/finance/supplier-settlement/${supplierId}`) }
 

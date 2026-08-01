@@ -5,11 +5,14 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
+import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
 import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
+import com.beichen.erp.outsource.mapper.OutsourceOrderDeliveryMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.supplier.entity.Supplier;
@@ -33,6 +36,8 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     private final OutsourceOrderMapper orderMapper;
     private final OutsourceOrderProductMapper productMapper;
     private final OutsourceOrderMaterialMapper materialMapper;
+    private final OutsourceOrderDeliveryMapper orderDeliveryMapper;
+    private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final SupplierMapper supplierMapper;
     private final JdbcTemplate jdbcTemplate;
 
@@ -204,14 +209,91 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void confirm(Long id) {
+    public void audit(Long id) {
         OutsourceOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!OutsourceOrderStatus.PENDING.name().equals(order.getStatus())) throw new BusinessException("只有待确认状态可以确认");
+        if (!OutsourceOrderStatus.PENDING.name().equals(order.getStatus())) throw new BusinessException("只有待确认状态可以审核");
         OutsourceOrder update = new OutsourceOrder();
         update.setId(id);
         update.setStatus(OutsourceOrderStatus.PRODUCING.name());
         update.setActualStartDate(LocalDate.now());
+        orderMapper.updateById(update);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unaudit(Long id) {
+        OutsourceOrder order = orderMapper.selectById(id);
+        if (order == null) throw new BusinessException("加工单不存在");
+        if (!OutsourceOrderStatus.PRODUCING.name().equals(order.getStatus())) throw new BusinessException("只有生产中状态可以反审核");
+
+        // 检查是否有交货记录
+        List<OutsourceOrderDelivery> deliveries = orderDeliveryMapper.selectList(
+                new LambdaQueryWrapper<OutsourceOrderDelivery>()
+                        .eq(OutsourceOrderDelivery::getOrderId, id)
+                        .eq(OutsourceOrderDelivery::getStatus, "NORMAL"));
+
+        if (!deliveries.isEmpty()) {
+            // 有交货记录：回滚库存
+            for (OutsourceOrderDelivery delivery : deliveries) {
+                // 冲回成品入库（扣减成品库存）
+                String whSql = "UPDATE outsource_warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_name = ? AND quality_type = ?";
+                int affected = jdbcTemplate.update(whSql, delivery.getQuantity(), delivery.getWarehouseId(),
+                        delivery.getProductName(), "良品");
+                if (affected > 0) {
+                    // 写库存流水
+                    jdbcTemplate.update(
+                            "INSERT INTO outsource_stock_log (warehouse_id, product_name, quality_type, change_qty, change_type, remark, create_time) VALUES (?,?,?,?,?,?,NOW())",
+                            delivery.getWarehouseId(), delivery.getProductName(), "良品",
+                            delivery.getQuantity().negate(), "UNAUDIT_RETURN", "反审核回滚成品入库 - " + order.getCode());
+                }
+
+                // 按BOM反算，恢复物料到委外仓
+                List<OutsourceOrderProduct> products = productMapper.selectList(
+                        new LambdaQueryWrapper<OutsourceOrderProduct>().eq(OutsourceOrderProduct::getOrderId, id));
+                for (OutsourceOrderProduct product : products) {
+                    if (delivery.getProductName() != null && delivery.getProductName().equals(product.getProductName())) {
+                        List<OutsourceOrderMaterial> materials = materialMapper.selectList(
+                                new LambdaQueryWrapper<OutsourceOrderMaterial>().eq(OutsourceOrderMaterial::getProductId, product.getId()));
+                        for (OutsourceOrderMaterial mat : materials) {
+                            // demandQuantity 是每生产1个成品需要的物料数量
+                            BigDecimal demandQty = mat.getDemandQuantity();
+                            BigDecimal restoreQty = demandQty != null && delivery.getQuantity() != null
+                                    ? demandQty.multiply(delivery.getQuantity()) : BigDecimal.ZERO;
+                            if (restoreQty.compareTo(BigDecimal.ZERO) > 0) {
+                                // 获取工厂委外仓ID
+                                Long factoryWhId = jdbcTemplate.queryForObject(
+                                    "SELECT id FROM outsource_warehouse WHERE factory_id = ? LIMIT 1", Long.class, order.getFactoryId());
+                                if (factoryWhId != null) {
+                                    String matSql = "UPDATE outsource_warehouse_stock SET quantity = quantity + ? WHERE warehouse_id = ? AND material_name = ?";
+                                    int matAffected = jdbcTemplate.update(matSql, restoreQty, factoryWhId, mat.getMaterialName());
+                                    if (matAffected > 0) {
+                                        jdbcTemplate.update(
+                                                "INSERT INTO outsource_stock_log (warehouse_id, material_name, quality_type, change_qty, change_type, remark, create_time) VALUES (?,?,?,?,?,?,NOW())",
+                                                factoryWhId, mat.getMaterialName(), "良品", restoreQty,
+                                                "UNAUDIT_RESTORE", "反审核恢复物料 - " + order.getCode());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 交货记录标记为 REVERSED
+                delivery.setStatus("REVERSED");
+                orderDeliveryMapper.updateById(delivery);
+            }
+
+            // 冲销应付
+            jdbcTemplate.update(
+                    "UPDATE finance_payable SET status = 'CANCELLED', remark = CONCAT(IFNULL(remark,''), ' [反审核冲销]') WHERE source_type = 'OUTSOURCE_ORDER' AND source_id = ? AND status = 'PENDING'", id);
+        }
+
+        // 状态回退
+        OutsourceOrder update = new OutsourceOrder();
+        update.setId(id);
+        update.setStatus(OutsourceOrderStatus.PENDING.name());
+        update.setActualStartDate(null);
         orderMapper.updateById(update);
     }
 

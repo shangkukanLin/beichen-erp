@@ -6,6 +6,7 @@ import request from '@/utils/request'
 import { getMaterialPage, type Material } from '@/api/material'
 import { getQualityTypes, type QualityOption } from '@/api/product'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 
 const router = useRouter()
 const qualityOptions = ref<QualityOption[]>([])
@@ -26,9 +27,9 @@ const tableLoading = ref(false)
 const tableData = ref<PurchaseInbound[]>([])
 
 const statusOptions = [
-  { label: '草稿', value: '草稿' },
-  { label: '已审核', value: '已审核' },
-  { label: '已作废', value: '已作废' }
+  { label: DocStatusLabel[DocStatus.DRAFT], value: DocStatus.DRAFT },
+  { label: DocStatusLabel[DocStatus.AUDITED], value: DocStatus.AUDITED },
+  { label: DocStatusLabel[DocStatus.CANCELLED], value: DocStatus.CANCELLED }
 ]
 
 const suppliers = ref<{ id: number; name: string }[]>([])
@@ -97,7 +98,7 @@ function addItem() { items.value.push({ materialId: undefined, qualityType: 'A',
 function removeItem(index: number) { items.value.splice(index, 1) }
 function onMaterialChange(val: number, row: PurchaseInboundItem) {
   const m = materialOptions.value.find(x => x.id === val)
-  if (m) { row.materialId = m.id as number; row.materialCode = m.code; row.materialName = m.name; row.spec = m.spec; row.unit = m.unit }
+  if (m) { row.materialId = m.id as number; row.materialName = m.name; row.spec = m.spec; row.unit = m.unit }
 }
 function itemAmount(row: PurchaseInboundItem) {
   const q = Number(row.quantity) || 0; const p = Number(row.unitPrice) || 0; return (q * p).toFixed(2)
@@ -139,7 +140,7 @@ async function handleDetail(row: PurchaseInbound) {
 function handleSizeChange(val: number) { pagination.pageSize = val; pagination.pageNum = 1; loadData() }
 function handleCurrentChange(val: number) { pagination.pageNum = val; loadData() }
 
-function statusType(s?: string) { if (s === '草稿') return 'info'; if (s === '已审核') return 'success'; if (s === '已作废') return 'danger'; return '' }
+function statusType(s?: string) { return DocStatusTag[s || ''] || '' }
 function supplierName(id?: number) { const s = suppliers.value.find(x => x.id === id); return s ? s.name : '' }
 function warehouseName(id?: number) { const w = warehouses.value.find(x => x.id === id); return w ? w.warehouseName : '' }
 function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Number(v).toFixed(2) }
@@ -190,14 +191,14 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQual
           <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="90" align="center">
-          <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ row.status }}</el-tag></template>
+          <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
         <el-table-column label="操作" width="210" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
-            <el-button v-if="row.status === '草稿'" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === '草稿'" type="warning" link @click="handleEdit(row)">编辑</el-button>
-            <el-button v-if="row.status === '草稿'" type="danger" link @click="handleCancel(row)">作废</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -250,7 +251,7 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQual
             <template #default="{ row }">
               <el-select v-model="row.materialId" placeholder="选择物料" filterable remote :remote-method="loadMaterials"
                 style="width:100%" @change="(v: number) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
-                <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.name}(${m.code})`" :value="m.id" />
+                <el-option v-for="m in materialOptions" :key="m.id" :label="m.name" :value="m.id" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </template>

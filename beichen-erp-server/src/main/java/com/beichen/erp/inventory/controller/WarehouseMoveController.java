@@ -52,7 +52,6 @@ public class WarehouseMoveController {
                 Material product = materialMapper.selectById(it.getProductId());
                 if (product != null) {
                     m.put("productName", product.getName());
-                    m.put("productCode", product.getCode());
                     m.put("spec", product.getSpec());
                     m.put("unit", product.getUnit());
                 }

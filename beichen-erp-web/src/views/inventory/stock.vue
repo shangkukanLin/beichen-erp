@@ -10,11 +10,6 @@
         <el-form-item label="产品">
           <el-input v-model="stockQuery.productName" placeholder="产品名称" clearable @keyup.enter="stockQuery_" />
         </el-form-item>
-        <el-form-item label="品质">
-          <el-select v-model="stockQuery.qualityType" placeholder="全部" clearable style="width:120px">
-            <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
-          </el-select>
-        </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="'Search'" @click="stockQuery_">查询</el-button>
           <el-button :icon="'Refresh'" @click="stockReset">重置</el-button>
@@ -26,16 +21,35 @@
       <el-table v-loading="stockLoading" :data="stockData" border stripe>
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column label="仓库" min-width="140">
-          <template #default="{ row }">{{ warehouseName(row.warehouseId) }}</template>
+          <template #default="{ row }">{{ row.warehouseName || warehouseName(row.warehouseId) }}</template>
         </el-table-column>
-        <el-table-column prop="productName" label="产品名称" min-width="180" />
-        <el-table-column label="品质" width="90" align="center">
+        <el-table-column prop="productName" label="产品名称" min-width="160" />
+        <el-table-column label="A规" width="90" align="right">
           <template #default="{ row }">
-            <el-tag :type="qualityTag(row.qualityType)" size="small">{{ qualityLabel(row.qualityType) }}</el-tag>
+            <el-tag v-if="row.qtyA > 0" type="success" size="small">{{ fmt(row.qtyA) }}</el-tag>
+            <span v-else style="color:#999">0</span>
           </template>
         </el-table-column>
-        <el-table-column prop="quantity" label="库存数量" min-width="140" align="right">
-          <template #default="{ row }">{{ fmt(row.quantity) }}</template>
+        <el-table-column label="B规" width="90" align="right">
+          <template #default="{ row }">
+            <el-tag v-if="row.qtyB > 0" type="warning" size="small">{{ fmt(row.qtyB) }}</el-tag>
+            <span v-else style="color:#999">0</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="C规" width="90" align="right">
+          <template #default="{ row }">
+            <el-tag v-if="row.qtyC > 0" type="info" size="small">{{ fmt(row.qtyC) }}</el-tag>
+            <span v-else style="color:#999">0</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="不良" width="90" align="right">
+          <template #default="{ row }">
+            <el-tag v-if="row.qtyDefect > 0" type="danger" size="small">{{ fmt(row.qtyDefect) }}</el-tag>
+            <span v-else style="color:#999">0</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="总库存" width="100" align="right">
+          <template #default="{ row }">{{ fmt(totalQty(row)) }}</template>
         </el-table-column>
       </el-table>
       <div class="pagination">
@@ -50,7 +64,6 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted, computed } from 'vue'
 import request from '@/utils/request'
-import { getQualityTypes, type QualityOption } from '@/api/product'
 
 const warehouses = ref<{ id: number; warehouseName: string; warehouseType?: string }[]>([])
 const stockWarehouses = computed(() => warehouses.value.filter(w => w.warehouseType !== '辅料仓'))
@@ -60,9 +73,11 @@ function warehouseName(id?: number) {
   return w ? w.warehouseName : ''
 }
 function fmt(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
+function totalQty(row: any) {
+  return (Number(row.qtyA) || 0) + (Number(row.qtyB) || 0) + (Number(row.qtyC) || 0) + (Number(row.qtyDefect) || 0)
+}
 
-const qualityOptions = ref<QualityOption[]>([])
-const stockQuery = reactive({ warehouseId: undefined as number | undefined, productName: '', qualityType: '' })
+const stockQuery = reactive({ warehouseId: undefined as number | undefined, productName: '' })
 const stockPage = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const stockLoading = ref(false)
 const stockData = ref<any[]>([])
@@ -73,16 +88,13 @@ async function loadStock() {
     const params: any = { pageNum: stockPage.pageNum, pageSize: stockPage.pageSize }
     if (stockQuery.warehouseId) params.warehouseId = stockQuery.warehouseId
     if (stockQuery.productName) params.productName = stockQuery.productName
-    if (stockQuery.qualityType) params.qualityType = stockQuery.qualityType
     const res = await request.get<any, any>('/inventory/stock/page', { params })
-    const fclWhIds = new Set(stockWarehouses.value.map(w => w.id))
-    const allRecords = res?.records || []
-    stockData.value = allRecords.filter((r: any) => fclWhIds.has(r.warehouseId))
-    stockPage.total = stockData.value.length
-  } catch { stockData.value = [] } finally { stockLoading.value = false }
+    stockData.value = res?.records || []
+    stockPage.total = res?.total || 0
+  } catch { stockData.value = []; stockPage.total = 0 } finally { stockLoading.value = false }
 }
 function stockQuery_() { stockPage.pageNum = 1; loadStock() }
-function stockReset() { stockQuery.warehouseId = undefined; stockQuery.productName = ''; stockQuery.qualityType = ''; stockPage.pageNum = 1; loadStock() }
+function stockReset() { stockQuery.warehouseId = undefined; stockQuery.productName = ''; stockPage.pageNum = 1; loadStock() }
 
 async function loadWarehouses() {
   try {
@@ -91,17 +103,7 @@ async function loadWarehouses() {
   } catch { warehouses.value = [] }
 }
 
-function qualityTag(type?: string) {
-  const m: Record<string, string> = { A: 'success', B: 'warning', C: 'info', DEFECT: 'danger' }
-  return m[type || ''] || ''
-}
-function qualityLabel(type?: string) {
-  const m: Record<string, string> = { A: 'A规', B: 'B规', C: 'C规', DEFECT: '不良' }
-  return m[type || ''] || type || ''
-}
-async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
-
-onMounted(() => { loadWarehouses(); loadQualityTypes(); loadStock() })
+onMounted(() => { loadWarehouses(); loadStock() })
 </script>
 
 <style scoped>

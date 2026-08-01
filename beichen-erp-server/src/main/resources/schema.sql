@@ -97,7 +97,6 @@ CREATE TABLE IF NOT EXISTS brand (
 
 CREATE TABLE IF NOT EXISTS material (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '物料ID',
-    code VARCHAR(50) NOT NULL COMMENT '物料编码',
     name VARCHAR(100) NOT NULL COMMENT '物料名称',
     brand_id BIGINT DEFAULT NULL COMMENT '品牌ID',
     category_code VARCHAR(50) DEFAULT NULL COMMENT '分类编码',
@@ -106,13 +105,12 @@ CREATE TABLE IF NOT EXISTS material (
     unit VARCHAR(20) COMMENT '单位',
     safety_stock DECIMAL(18,4) DEFAULT 0 COMMENT '安全库存',
     current_stock DECIMAL(18,4) DEFAULT 0 COMMENT '当前库存',
-    status VARCHAR(20) DEFAULT '正常' COMMENT '状态: 正常/停售/研发中',
+    status VARCHAR(20) DEFAULT 'NORMAL' COMMENT '状态: NORMAL/DISCONTINUED/DEVELOPING',
     project_id BIGINT DEFAULT NULL COMMENT '关联研发项目ID',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_code (code),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='物料主数据表';
 
@@ -225,6 +223,7 @@ CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     tracking_no VARCHAR(100) COMMENT '物流单号',
     remark VARCHAR(255) COMMENT '备注',
     attach_url VARCHAR(500) COMMENT '附件URL',
+    status VARCHAR(20) DEFAULT 'NORMAL' COMMENT '状态: NORMAL/REVERSED',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_order_id (order_id),
@@ -1269,7 +1268,6 @@ CREATE TABLE IF NOT EXISTS outsource_material_component (
 
 CREATE TABLE IF NOT EXISTS product (
     id              BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '产品ID',
-    code            VARCHAR(50) NOT NULL               COMMENT '产品编码',
     name            VARCHAR(100) NOT NULL              COMMENT '产品名称',
     brand_id        BIGINT DEFAULT NULL               COMMENT '品牌ID',
     category        VARCHAR(30)                       COMMENT '分类',
@@ -1278,12 +1276,11 @@ CREATE TABLE IF NOT EXISTS product (
     unit            VARCHAR(20) DEFAULT 'pcs'          COMMENT '单位',
     safety_stock    DECIMAL(18,4) DEFAULT 0           COMMENT '安全库存',
     current_stock   DECIMAL(18,4) DEFAULT 0           COMMENT '当前库存',
-    status          VARCHAR(20) DEFAULT '正常'         COMMENT '状态',
+    status          VARCHAR(20) DEFAULT 'NORMAL'         COMMENT '状态: NORMAL/DISCONTINUED/DEVELOPING',
     project_id      BIGINT DEFAULT NULL               COMMENT '关联项目ID',
     remark          VARCHAR(255)                      COMMENT '备注',
     company_id      BIGINT DEFAULT NULL               COMMENT '公司ID',
     create_time     DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_code (code),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品主数据表';

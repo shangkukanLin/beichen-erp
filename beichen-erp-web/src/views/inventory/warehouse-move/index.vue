@@ -44,15 +44,15 @@
           <template #default="{ row }">{{ $fmtDate(row.moveDate) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="90" align="center">
-          <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ row.status }}</el-tag></template>
+          <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
         <el-table-column label="操作" width="230" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
-                <el-button v-if="row.status === '草稿'" type="success" link @click="handleAudit(row)">审核</el-button>
-                <el-button v-if="row.status === '已审核'" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
-                <el-button v-if="row.status === '草稿'" type="warning" link @click="handleEdit(row)">编辑</el-button>
-                <el-button v-if="row.status === '草稿'" type="danger" link @click="handleCancel(row)">作废</el-button>
+                <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
+                <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
+                <el-button v-if="row.status === DocStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button>
+                <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -79,7 +79,6 @@
       <el-table :data="detailItems" border>
         <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="productName" label="产品" min-width="140" />
-        <el-table-column prop="productCode" label="编码" width="120" />
         <el-table-column prop="spec" label="规格" width="100" />
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column prop="quantity" label="数量" width="100" align="right" />
@@ -93,6 +92,7 @@ import { reactive, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 
 const router = useRouter()
 const route = useRoute()
@@ -102,9 +102,10 @@ const loading = ref(false)
 const tableData = ref<any[]>([])
 
 const statusOptions = [
-  { label: '草稿', value: '草稿' },
-  { label: '已审核', value: '已审核' },
-  { label: '已作废', value: '已作废' }
+  { label: DocStatusLabel[DocStatus.DRAFT], value: DocStatus.DRAFT },
+  { label: DocStatusLabel[DocStatus.AUDITED], value: DocStatus.AUDITED },
+  { label: DocStatusLabel[DocStatus.CANCELLED], value: DocStatus.CANCELLED }
+]
 ]
 
 const warehouses = ref<any[]>([])
@@ -117,12 +118,7 @@ function warehouseName(id?: number) {
   const w = warehouses.value.find((x: any) => x.id === id)
   return w ? w.warehouseName : ''
 }
-function statusType(s?: string) {
-  if (s === '草稿') return 'info'
-  if (s === '已审核') return 'success'
-  if (s === '已作废') return 'danger'
-  return ''
-}
+function statusType(s?: string) { return DocStatusTag[s || ''] || '' }
 
 async function loadWarehouses() {
   try {

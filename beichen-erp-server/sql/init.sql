@@ -101,7 +101,6 @@ CREATE TABLE IF NOT EXISTS brand (
 
 CREATE TABLE IF NOT EXISTS material (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '物料ID',
-    code VARCHAR(50) NOT NULL COMMENT '物料编码',
     name VARCHAR(100) NOT NULL COMMENT '物料名称',
     brand_id BIGINT DEFAULT NULL COMMENT '品牌ID',
     category VARCHAR(30) COMMENT '分类(原料/辅料/半成品/成品)',
@@ -113,7 +112,6 @@ CREATE TABLE IF NOT EXISTS material (
     remark VARCHAR(255) COMMENT '备注',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='物料主数据表';
 
 -- ==================== 供应商模块 ====================

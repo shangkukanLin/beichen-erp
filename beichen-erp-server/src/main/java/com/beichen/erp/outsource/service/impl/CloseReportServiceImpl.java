@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
+import com.beichen.erp.outsource.common.DeliveryStatus;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.outsource.service.CloseReportService;
@@ -165,7 +166,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         item.put("deliveredQuantity", deliveredQty);
 
         // 退料数量 = 从该工厂仓库退出的退料总和
-        BigDecimal returnedQty = sumDeliveryQuantity(factoryWhIds, mat.getMaterialName(), "退料");
+        BigDecimal returnedQty = sumDeliveryQuantity(factoryWhIds, mat.getMaterialName(), "RETURN");
         item.put("returnedQuantity", returnedQty);
 
         // 出货消耗 = SUM(该产品交货数 × 单套用量)
@@ -201,8 +202,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
 
         LambdaQueryWrapper<OutsourceDelivery> w = new LambdaQueryWrapper<OutsourceDelivery>()
                 .eq(OutsourceDelivery::getDeliveryType, deliveryType)
-                .eq(OutsourceDelivery::getStatus, "已确认");
-        if ("退料".equals(deliveryType)) {
+                .eq(OutsourceDelivery::getStatus, DeliveryStatus.CONFIRMED.getCode());
+        if ("RETURN".equals(deliveryType)) {
             w.in(OutsourceDelivery::getFromWarehouseId, warehouseIds);
         } else {
             w.in(OutsourceDelivery::getToWarehouseId, warehouseIds);
@@ -224,7 +225,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
 
     private BigDecimal sumDeliveryQuantityById(List<Long> warehouseIds, String deliveryType, Long materialId) {
         // SQL 直接按 material_id 聚合，避免全量加载
-        String whColumn = "退料".equals(deliveryType) ? "from_warehouse_id" : "to_warehouse_id";
+        String whColumn = "RETURN".equals(deliveryType) ? "from_warehouse_id" : "to_warehouse_id";
         String sql = "SELECT COALESCE(SUM(di.quantity), 0) " +
             "FROM outsource_delivery_item di " +
             "INNER JOIN outsource_delivery d ON di.delivery_id = d.id " +
@@ -358,11 +359,11 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         // 生成退料单
         if (!returnItems.isEmpty()) {
             OutsourceDelivery returnDelivery = new OutsourceDelivery();
-            returnDelivery.setDeliveryType("退料");
+            returnDelivery.setDeliveryType("RETURN");
             returnDelivery.setFactoryId(order.getFactoryId());
             returnDelivery.setFromWarehouseId(warehouses.get(0).getId());
             returnDelivery.setDeliveryDate(LocalDate.now());
-            returnDelivery.setStatus("已确认");
+            returnDelivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
             returnDelivery.setRemark("结单自动退料 - " + order.getCode());
             returnDelivery.setCode(generateDeliveryCode());
             deliveryMapper.insert(returnDelivery);
@@ -399,7 +400,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             io.setWarehouseId(warehouses.get(0).getId());
             io.setIoType("出库");
             io.setIoDate(LocalDate.now());
-            io.setStatus("已确认");
+            io.setStatus(DeliveryStatus.CONFIRMED.getCode());
             io.setRemark("加工厂遗失 - " + order.getCode());
             io.setCode("IO-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-" + (System.currentTimeMillis() % 100000));
             otherIoMapper.insert(io);

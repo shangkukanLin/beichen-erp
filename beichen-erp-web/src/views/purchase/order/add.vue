@@ -1,10 +1,6 @@
 <template>
   <div class="purchase-add">
-    <div class="page-header">
-      <el-button type="default" @click="$router.back()">返回</el-button>
-    </div>
-
-    <el-card shadow="never" style="margin-top:16px">
+    <el-card shadow="never">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="12">
@@ -48,7 +44,7 @@
             <template #default="{ row }">
               <el-select v-model="row.productId" placeholder="选择产品" filterable remote :remote-method="loadMaterials"
                 style="width:100%" @change="(v: number) => onMaterialChange(v, row)">
-                <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.name}(${m.code || ''})`" :value="m.id" />
+                <el-option v-for="m in materialOptions" :key="m.id" :label="m.name" :value="m.id" />
               </el-select>
             </template>
           </el-table-column>
@@ -124,7 +120,6 @@ function onMaterialChange(val: number, row: PurchaseOrderItem) {
   const m = materialOptions.value.find((x: any) => x.id === val)
   if (m) {
     row.productId = m.id
-    row.materialCode = m.code
     row.materialName = m.name
     row.spec = m.spec
     row.unit = m.unit

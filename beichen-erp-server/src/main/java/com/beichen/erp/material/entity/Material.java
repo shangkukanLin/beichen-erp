@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.beichen.erp.material.common.ProductStatus;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -16,8 +17,6 @@ public class Material {
 
     @TableId(type = IdType.AUTO)
     private Long id;
-
-    private String code;
 
     private String name;
 
@@ -33,7 +32,7 @@ public class Material {
 
     private BigDecimal currentStock;
 
-    private String status;
+    private ProductStatus status;
 
     /** 关联的研发项目ID（来源为研发项目时填充） */
     private Long projectId;

@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { getProductPage, type Product } from '@/api/product'
 import { getQualityTypes, type QualityOption } from '@/api/product'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import {
   getReclassifyPage, getReclassifyItems,
   createReclassify, updateReclassify,
@@ -145,7 +146,7 @@ onActivated(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProduc
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="全部" clearable style="width:120px">
-            <el-option label="草稿" value="草稿" /><el-option label="已审核" value="已审核" /><el-option label="已取消" value="已取消" />
+            <el-option :label="DocStatusLabel[DocStatus.DRAFT]" :value="DocStatus.DRAFT" /><el-option :label="DocStatusLabel[DocStatus.AUDITED]" :value="DocStatus.AUDITED" /><el-option :label="DocStatusLabel[DocStatus.CANCELLED]" :value="DocStatus.CANCELLED" />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -167,16 +168,16 @@ onActivated(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProduc
         <el-table-column prop="reclassifyDate" label="日期" width="110" />
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
-            <el-tag :type="row.status === '草稿' ? '' : row.status === '已审核' ? 'success' : 'danger'" size="small">{{ row.status }}</el-tag>
+            <el-tag :type="DocStatusTag[row.status]||'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
         <el-table-column prop="createTime" label="创建时间" width="160" />
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.status === '草稿'" type="primary" link @click="handleEdit(row)">编辑</el-button>
-            <el-button v-if="row.status === '草稿'" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === '已审核'" type="danger" link @click="handleCancel(row)">取消</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click="handleEdit(row)">编辑</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === DocStatus.AUDITED" type="danger" link @click="handleCancel(row)">取消</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -218,7 +219,7 @@ onActivated(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProduc
           <template #default="{ row }">
             <el-select v-model="row.productId" placeholder="搜索产品" filterable remote :remote-method="loadProductOptions"
               style="width:100%" @change="(v: number) => onProductChange(v, row)">
-              <el-option v-for="p in productOptions" :key="p.id" :label="`${p.name}(${p.code||''})`" :value="p.id" />
+              <el-option v-for="p in productOptions" :key="p.id" :label="p.name" :value="p.id" />
             </el-select>
           </template>
         </el-table-column>

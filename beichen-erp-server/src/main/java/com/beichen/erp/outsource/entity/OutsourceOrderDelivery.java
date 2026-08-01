@@ -21,6 +21,8 @@ public class OutsourceOrderDelivery {
     private String trackingNo;
     private String remark;
     private String attachUrl;
+    /** 状态: NORMAL/REVERSED */
+    private String status;
     private Long companyId;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;

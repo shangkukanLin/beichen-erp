@@ -39,7 +39,7 @@
             <template #default="{ row }">
               <el-select v-model="row.productId" placeholder="选择产品" filterable remote :remote-method="loadProducts"
                 style="width:100%" @change="(v: number) => onProductChange(v, row)">
-                <el-option v-for="m in productOptions" :key="m.id" :label="`${m.name}(${m.code || ''})`" :value="m.id" />
+                <el-option v-for="m in productOptions" :key="m.id" :label="m.name" :value="m.id" />
               </el-select>
             </template>
           </el-table-column>

@@ -7,8 +7,10 @@ import {
   addProduct,
   updateProduct,
   deleteProduct,
+  ProductStatus,
+  ProductStatusLabel,
+  ProductStatusTag,
   type Product,
-  type ProductQuality,
   type ProductQueryParams
 } from '@/api/product'
 import request from '@/utils/request'
@@ -28,7 +30,7 @@ const query = reactive<ProductQueryParams>({
 })
 
 // Tab 切换
-const activeTab = ref('正常')
+const activeTab = ref(ProductStatus.NORMAL)
 
 // 分页
 const pagination = reactive({
@@ -49,9 +51,9 @@ const categoryOptions = [
 ]
 
 const statusOptions = [
-  { label: '正常', value: '正常' },
-  { label: '停售', value: '停售' },
-  { label: '研发中', value: '研发中' }
+  { label: ProductStatusLabel.NORMAL, value: ProductStatus.NORMAL },
+  { label: ProductStatusLabel.DISCONTINUED, value: ProductStatus.DISCONTINUED },
+  { label: ProductStatusLabel.DEVELOPING, value: ProductStatus.DEVELOPING }
 ]
 
 // 弹窗
@@ -67,15 +69,8 @@ const defaultForm = (): Product => ({
   spec: '',
   generalModel: '',
   unit: 'pcs',
-  status: '正常',
+  status: ProductStatus.NORMAL,
   remark: '',
-  code: '',
-  qualities: [
-    { qualityType: 'A', quantity: 0 },
-    { qualityType: 'B', quantity: 0 },
-    { qualityType: 'C', quantity: 0 },
-    { qualityType: 'DEFECT', quantity: 0 },
-  ]
 } as Product)
 
 const form = reactive<Product>(defaultForm())
@@ -93,7 +88,7 @@ async function loadData() {
       pageSize: pagination.pageSize
     }
     if (query.keyword) params.keyword = query.keyword
-    // activeTab 用于前端状态筛选（status），不是 category
+    if (activeTab.value) params.status = activeTab.value
 
     const res = await getProductPage(params)
     tableData.value = res?.records || []
@@ -139,12 +134,6 @@ async function handleEdit(row: Product) {
   const defaults = defaultForm()
   Object.assign(form, defaults, row)
   // 合并服务端返回的等级数据
-  if (row.qualities) {
-    form.qualities = row.qualities.map(q => ({
-      qualityType: q.qualityType,
-      quantity: q.quantity ?? 0,
-    }))
-  }
   dialogTitle.value = '编辑产品'
   dialogVisible.value = true
   formRef.value?.clearValidate()
@@ -226,13 +215,11 @@ function rowClass({ row }: { row: Product }) {
 }
 
 function statusText(status: string) {
-  return status || '正常'
+  return ProductStatusLabel[status] || status || ProductStatusLabel.NORMAL
 }
 
 function statusType(status: string) {
-  if (status === '正常') return 'success'
-  if (status === '停售') return 'danger'
-  return 'warning'
+  return ProductStatusTag[status] || 'warning'
 }
 
 onMounted(() => {
@@ -261,9 +248,9 @@ onActivated(() => { loadBrands(); loadData() })
     <!-- 列表 -->
     <el-card shadow="never" class="table-card">
       <el-tabs v-model="activeTab" type="border-card" @tab-change="handleTabChange">
-        <el-tab-pane label="正常" name="正常" />
-        <el-tab-pane label="停售" name="停售" />
-        <el-tab-pane label="研发中" name="研发中" />
+        <el-tab-pane :label="ProductStatusLabel.NORMAL" :name="ProductStatus.NORMAL" />
+        <el-tab-pane :label="ProductStatusLabel.DISCONTINUED" :name="ProductStatus.DISCONTINUED" />
+        <el-tab-pane :label="ProductStatusLabel.DEVELOPING" :name="ProductStatus.DEVELOPING" />
       </el-tabs>
 
       <el-table v-loading="tableLoading" :data="tableData" border stripe :row-class-name="rowClass">
@@ -272,11 +259,8 @@ onActivated(() => { loadBrands(); loadData() })
         <el-table-column label="品牌" min-width="120">
           <template #default="{ row }">{{ getBrandName(row.brandId) }}</template>
         </el-table-column>
-        <el-table-column prop="code" label="编码" width="120" />
-        <el-table-column prop="category" label="分类" width="100" />
         <el-table-column prop="spec" label="规格" width="120" />
         <el-table-column prop="generalModel" label="通用型号" width="120" />
-        <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column prop="safetyStock" label="安全库存" width="100" align="right" />
         <el-table-column label="当前库存" width="130" align="right">
           <template #default="{ row }">
@@ -284,11 +268,6 @@ onActivated(() => { loadBrands(); loadData() })
               {{ row.currentStock ?? 0 }}
             </span>
             <el-tag v-if="isLowStock(row)" type="danger" size="small" style="margin-left:4px">预警</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="90" align="center">
-          <template #default="{ row }">
-            <el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" align="center" fixed="right">
@@ -349,21 +328,6 @@ onActivated(() => { loadBrands(); loadData() })
             <el-form-item label="单位">
               <el-input v-model="form.unit" placeholder="pcs" />
             </el-form-item>
-          </el-col>
-          <el-col :span="24">
-            <el-divider content-position="left">等级库存</el-divider>
-            <el-table :data="form.qualities" border size="small">
-              <el-table-column label="等级" width="120">
-                <template #default="{ row }">
-                  {{ row.qualityType === 'A' ? 'A规' : row.qualityType === 'B' ? 'B规' : row.qualityType === 'C' ? 'C规' : '不良' }}
-                </template>
-              </el-table-column>
-              <el-table-column label="数量" min-width="140">
-                <template #default="{ row }">
-                  <el-input-number v-model="row.quantity" :min="0" :precision="0" controls-position="right" style="width:100%" />
-                </template>
-              </el-table-column>
-            </el-table>
           </el-col>
           <el-col :span="12">
             <el-form-item label="状态" prop="status">

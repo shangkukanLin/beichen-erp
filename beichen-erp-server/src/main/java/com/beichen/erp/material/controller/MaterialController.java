@@ -3,6 +3,7 @@ package com.beichen.erp.material.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.material.common.ProductStatus;
 import com.beichen.erp.material.entity.Material;
 import com.beichen.erp.material.service.MaterialService;
 import lombok.RequiredArgsConstructor;
@@ -37,16 +38,15 @@ public class MaterialController {
     public R<Page<Material>> page(
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize,
-            @RequestParam(required = false) String code,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String status) {
         Page<Material> page = new Page<>(pageNum, pageSize);
+        ProductStatus ps = status != null ? ProductStatus.fromValue(status) : null;
         LambdaQueryWrapper<Material> wrapper = new LambdaQueryWrapper<Material>()
-                .like(code != null && !code.isBlank(), Material::getCode, code)
                 .like(name != null && !name.isBlank(), Material::getName, name)
                 .eq(category != null && !category.isBlank(), Material::getCategory, category)
-                .eq(status != null && !status.isBlank(), Material::getStatus, status)
+                .eq(ps != null, Material::getStatus, ps)
                 .orderByDesc(Material::getId);
         Page<Material> result = materialService.page(page, wrapper);
 
@@ -74,7 +74,7 @@ public class MaterialController {
                 String namePlaceholders = productNames.stream().map(n -> "?").collect(Collectors.joining(","));
                 List<Map<String, Object>> rows2 = jdbcTemplate.queryForList(
                     "SELECT m.id AS material_id, SUM(s.quantity) AS total FROM inventory_warehouse_stock s " +
-                    "JOIN material m ON s.product_name = m.name WHERE s.material_id IS NULL AND s.product_name IN (" + namePlaceholders + ") GROUP BY m.id",
+                    "JOIN product m ON s.product_name = m.name WHERE s.product_id IS NULL AND s.product_name IN (" + namePlaceholders + ") GROUP BY m.id",
                     productNames.toArray());
                 for (Map<String, Object> row : rows2) {
                     Long mid = ((Number) row.get("material_id")).longValue();

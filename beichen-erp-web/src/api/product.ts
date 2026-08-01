@@ -1,26 +1,36 @@
 import request from '@/utils/request'
 
+/** 产品状态（对应 ProductStatus 枚举） */
+export const ProductStatus = {
+  NORMAL: 'NORMAL',
+  DISCONTINUED: 'DISCONTINUED',
+  DEVELOPING: 'DEVELOPING'
+} as const
+
+export const ProductStatusLabel: Record<string, string> = {
+  [ProductStatus.NORMAL]: '正常',
+  [ProductStatus.DISCONTINUED]: '停售',
+  [ProductStatus.DEVELOPING]: '研发中'
+}
+
+export const ProductStatusTag: Record<string, string> = {
+  [ProductStatus.NORMAL]: 'success',
+  [ProductStatus.DISCONTINUED]: 'danger',
+  [ProductStatus.DEVELOPING]: 'warning'
+}
+
 /** 成品查询参数 */
 export interface ProductQueryParams {
   pageNum?: number
   pageSize?: number
   keyword?: string
   category?: string
-}
-
-/** 产品等级库存 */
-export interface ProductQuality {
-  id?: number | string
-  productId?: number | string
-  qualityType: string  // A/B/C/DEFECT
-  quantity: number
-  safetyStock?: number
+  status?: string
 }
 
 /** 成品信息 */
 export interface Product {
   id?: number | string
-  code?: string
   name: string
   brandId?: number
   category?: string
@@ -30,11 +40,9 @@ export interface Product {
   unit?: string
   safetyStock?: number
   currentStock?: number
-  status: string
+  status: typeof ProductStatus[keyof typeof ProductStatus] | string
   projectId?: number
   remark?: string
-  /** 等级库存列表 */
-  qualities?: ProductQuality[]
 }
 
 export interface PageResult<T> {

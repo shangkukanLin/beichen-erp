@@ -3,6 +3,7 @@ import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag } from '@/api/material'
 
 const router = useRouter()
 const query = reactive({ code: '' })
@@ -13,9 +14,9 @@ const activeTab = ref('进行中')
 
 // 状态 Tab 定义 - 进行中：待确认 + 收货中
 const STATUS_TABS = [
-  { key: '进行中', label: '进行中', type: 'warning', statuses: ['待确认', '收货中'] },
-  { key: '已完成', label: '已完成', type: 'success', statuses: ['已完成'] },
-  { key: '已取消', label: '已取消', type: 'danger', statuses: ['已取消'] }
+  { key: '进行中', label: '进行中', type: 'warning', statuses: [MaterialOrderStatus.PENDING, MaterialOrderStatus.RECEIVING] },
+  { key: '已完成', label: '已完成', type: 'success', statuses: [MaterialOrderStatus.FINISHED] },
+  { key: '已取消', label: '已取消', type: 'danger', statuses: [MaterialOrderStatus.CANCELLED] }
 ]
 const tabPanes = computed(() => STATUS_TABS.map(t => ({ tab: t.key, name: t.key })))
 
@@ -94,12 +95,12 @@ onActivated(() => {
         </el-table-column>
         <el-table-column label="最近交货" width="85" align="center"><template #default="{row}">{{ $fmtDate(row.lastDeliveryTime) || '-' }}</template></el-table-column>
         <el-table-column label="交期" width="90" align="center"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column label="状态" width="70" align="center"><template #default="{row}"><el-tag :type="row.status==='待确认'?'info':row.status==='收货中'?'warning':row.status==='已完成'?'success':'danger'" size="small">{{ row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="状态" width="70" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status]||'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="145" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click="router.push(`/outsource/material-order/detail/${row.id}`)" style="padding:0 4px">详情</el-button>
-            <el-button v-if="row.status==='待确认'" type="success" link size="small" @click="handleConfirm(row)" style="padding:0 4px">确认</el-button>
-            <el-button v-if="row.status!=='已完成' && row.status!=='已取消'" type="danger" link size="small" @click="handleCancel(row)" style="padding:0 4px">取消</el-button>
+            <el-button v-if="row.status===MaterialOrderStatus.PENDING" type="success" link size="small" @click="handleConfirm(row)" style="padding:0 4px">确认</el-button>
+            <el-button v-if="row.status!==MaterialOrderStatus.FINISHED && row.status!==MaterialOrderStatus.CANCELLED" type="danger" link size="small" @click="handleCancel(row)" style="padding:0 4px">取消</el-button>
           </template>
         </el-table-column>
       </el-table>

@@ -14,11 +14,6 @@ import com.beichen.erp.system.entity.UserRole;
 import com.beichen.erp.system.mapper.MenuMapper;
 import com.beichen.erp.system.mapper.RoleMapper;
 import com.beichen.erp.system.mapper.UserRoleMapper;
-import org.springframework.core.io.ClassPathResource;
-
-import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.Statement;
 import com.beichen.erp.system.service.RoleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -869,6 +864,7 @@ public class DataInitializer implements ApplicationRunner {
         saveMenu(406L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6);
         saveMenu(407L, 4L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 7);
         saveMenu(408L, 4L, "委外退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 8);
+        saveMenu(409L, 4L, "供应商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "UserFilled", 9);
         // 500s 进货业务
         saveMenu(501L, 5L, "成品采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1);
         saveMenu(502L, 5L, "成品退货单", "menu", "/inventory/purchase-return", "InventoryPurchaseReturn", "Refrigerator", 2);
@@ -915,7 +911,7 @@ public class DataInitializer implements ApplicationRunner {
                 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L,
                 101L, 102L, 103L, 104L,
                 301L, 302L, 303L,
-                401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L,
+                401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L,
                 501L, 502L,
                 601L, 602L,
                 701L, 702L,
@@ -932,7 +928,7 @@ public class DataInitializer implements ApplicationRunner {
                 1L, 5L, 7L, 501L, 701L, 702L, 101L));
         // 跟单专员：委外加工全部
         assignRoleMenus("merchandiser", Arrays.asList(
-                1L, 4L, 401L, 402L, 403L, 404L, 405L, 406L, 101L, 602L, 502L, 702L));
+                1L, 4L, 401L, 402L, 403L, 404L, 405L, 406L, 409L, 101L, 602L, 502L, 702L));
         // 财务：财务管理
         assignRoleMenus("finance", Arrays.asList(
                 1L, 8L, 801L, 802L, 803L, 804L, 101L));
@@ -1033,20 +1029,6 @@ public class DataInitializer implements ApplicationRunner {
         log.info("初始化阶段模板数据完成（共 {} 条）", defaultPhases.length);
     }
 
-    private void saveMaterial(String code, String name, String category, String spec, String unit,
-                              BigDecimal safetyStock, BigDecimal currentStock) {
-        Material m = new Material();
-        m.setCode(code);
-        m.setName(name);
-        m.setCategory(category);
-        m.setSpec(spec);
-        m.setUnit(unit);
-        m.setSafetyStock(safetyStock);
-        m.setCurrentStock(currentStock);
-        m.setStatus("正常");
-        materialMapper.insert(m);
-    }
-
     /**
      * 同步菜单：用 ON DUPLICATE KEY UPDATE 确保所有标准菜单存在且字段最新。
      * 会更新已存在菜单的 parent_id 等字段，适用于菜单结构变更后同步已有数据库。
@@ -1078,6 +1060,7 @@ public class DataInitializer implements ApplicationRunner {
             {406L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6},
             {407L, 4L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 7},
             {408L, 4L, "委外退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 8},
+            {409L, 4L, "供应商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "UserFilled", 9},
             {501L, 5L, "成品采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1},
             {502L, 5L, "成品退货单", "menu", "/inventory/purchase-return", "InventoryPurchaseReturn", "Refrigerator", 2},
             {503L, 5L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "UserFilled", 3},
@@ -1085,15 +1068,24 @@ public class DataInitializer implements ApplicationRunner {
             {602L, 6L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 2},
             {701L, 7L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 1},
             {702L, 7L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 2},
+            {703L, 7L, "库存流水", "menu", "/inventory/stock-log", "InventoryStockLog", "TrendCharts", 3},
+            {704L, 7L, "其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 4},
+            {705L, 7L, "品质重分类", "menu", "/inventory/reclassify", "InventoryReclassify", "Refresh", 5},
+            {706L, 7L, "成品移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 6},
             {801L, 8L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1},
             {802L, 8L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2},
             {803L, 8L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 3},
             {804L, 8L, "资金流水", "menu", "/finance/cashflow", "FinanceCashflow", "TrendCharts", 4},
+            {805L, 8L, "收款管理", "menu", "/finance/receipt", "FinanceReceipt", "Money", 5},
+            {806L, 8L, "付款管理", "menu", "/finance/payment", "FinancePayment", "Sell", 6},
             {901L, 9L, "智能管理", "menu", "/system/smart", "SystemSmart", "Cpu", 1},
             {902L, 9L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 2},
             {903L, 9L, "权限管理", "menu", "/system/permission", "SystemPermission", "Lock", 3},
             {904L, 9L, "系统信息", "menu", "/system/settings", "SystemSettings", "Setting", 4},
             {905L, 9L, "数据管理", "menu", "/system/data-manage", "SystemDataManage", "Folder", 5},
+            {906L, 9L, "角色管理", "menu", "/system/role", "SystemRole", "Avatar", 6},
+            {907L, 9L, "菜单管理", "menu", "/system/menu", "SystemMenu", "Menu", 7},
+            {908L, 9L, "清空数据", "menu", "/system/clear-data", "SystemClearData", "Delete", 8},
         };
         // 使用 ON DUPLICATE KEY UPDATE 实现 upsert，确保已存在菜单的 parent_id 等字段也能更新
         int processed = 0;
@@ -1114,7 +1106,7 @@ public class DataInitializer implements ApplicationRunner {
         log.info("同步菜单完成，处理 {} 条", processed);
 
         // 删除所有旧ID菜单（重新编号后旧ID已废弃）
-        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,301L,302L,303L,401L,402L,403L,404L,405L,406L,407L,408L,501L,502L,601L,602L,701L,702L,801L,802L,803L,804L,901L,902L,903L,904L,905L};
+        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,301L,302L,303L,401L,402L,403L,404L,405L,406L,407L,408L,409L,501L,502L,503L,601L,602L,701L,702L,703L,704L,705L,706L,801L,802L,803L,804L,805L,806L,901L,902L,903L,904L,905L,906L,907L,908L};
         Set<Long> newIds = new HashSet<>(Arrays.asList(newMenuIds));
         jdbcTemplate.update("DELETE FROM sys_role_menu WHERE menu_id NOT IN (" +
             String.join(",", newIds.stream().map(String::valueOf).toArray(String[]::new)) + ")");

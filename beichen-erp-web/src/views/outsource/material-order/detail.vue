@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { exportMaterialOrderPdf } from '@/api/contract-template'
+import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag } from '@/api/material'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
@@ -223,10 +224,6 @@ onMounted(async () => { await loadOptions(); loadAll() })
 
 <template>
   <div class="detail-page" v-loading="loading">
-    <div class="page-header">
-      <el-tag :type="order.status==='待确认'?'info':order.status==='收货中'?'warning':order.status==='已完成'?'success':'danger'" size="small">{{ order.status }}</el-tag>
-    </div>
-
     <el-tabs v-model="activeTab" style="margin-bottom:12px">
       <el-tab-pane label="订单详情" name="detail" />
       <el-tab-pane label="交货管理" name="delivery" />
@@ -240,8 +237,9 @@ onMounted(async () => { await loadOptions(); loadAll() })
           <el-row :gutter="12">
             <el-col :span="8"><el-form-item label="订单号"><el-input :model-value="order.code" readonly class="readonly-input" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="订单类型"><el-input :model-value="order.orderType" readonly class="readonly-input" /></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="状态"><el-tag :type="MaterialOrderStatusTag[order.status]||'info'" size="small">{{ MaterialOrderStatusLabel[order.status] || order.status }}</el-tag></el-form-item></el-col>
             <el-col :span="8"><el-form-item :label="order.orderType==='委外'?'加工厂':'供应商'">
-              <el-select v-model="order.supplierId" filterable style="width:100%" :disabled="order.status!=='待确认'" @focus="loadOptions">
+              <el-select v-model="order.supplierId" filterable style="width:100%" :disabled="order.status!==MaterialOrderStatus.PENDING" @focus="loadOptions">
                 <el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" />
               </el-select>
             </el-form-item></el-col>
@@ -250,12 +248,12 @@ onMounted(async () => { await loadOptions(); loadAll() })
             <el-col :span="24"><el-form-item label="备注"><el-input v-model="order.remark" type="textarea" :rows="2" /></el-form-item></el-col>
           </el-row>
           <div style="display:flex;gap:8px;margin-top:12px">
-            <el-button v-if="order.status==='待确认'" type="primary" size="small" @click="router.push(`/outsource/material-order/add/${id}`)">编辑物料</el-button>
-            <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="order.status==='已取消'">保存</el-button>
-            <el-button v-if="order.status==='待确认'" type="success" size="small" @click="handleConfirm">确认</el-button>
-            <el-button v-if="order.status==='收货中' || order.status==='已确认'" type="warning" size="small" @click="handleFinish">结单</el-button>
-            <el-button v-if="order.status==='收货中' || order.status==='已确认'" type="warning" size="small" @click="openDefectReturn">退不良</el-button>
-            <el-button v-if="order.status!=='已完成' && order.status!=='已取消'" type="danger" size="small" @click="handleCancel">取消</el-button>
+            <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="primary" size="small" @click="router.push(`/outsource/material-order/add/${id}`)">编辑物料</el-button>
+            <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="order.status===MaterialOrderStatus.CANCELLED">保存</el-button>
+            <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">确认</el-button>
+            <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleFinish">结单</el-button>
+            <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="openDefectReturn">退不良</el-button>
+            <el-button v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">取消</el-button>
           </div>
         </el-form>
       </el-card>
@@ -318,7 +316,7 @@ onMounted(async () => { await loadOptions(); loadAll() })
       <el-card shadow="never">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <span style="font-weight:600">交货记录</span>
-          <el-button v-if="order.status==='收货中' || order.status==='已确认'" type="primary" size="small" @click="openReceive">新增交货</el-button>
+          <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="primary" size="small" @click="openReceive">新增交货</el-button>
         </div>
         <el-table :data="deliveries" border stripe size="small">
           <el-table-column type="expand">

@@ -12,8 +12,8 @@ import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
 import com.beichen.erp.purchase.entity.PurchaseOrderItem;
 import com.beichen.erp.purchase.entity.PurchaseOrderStatus;
@@ -43,7 +43,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final InventoryWarehouseStockService stockService;
     private final FinancePayableMapper payableMapper;
     private final UserMapper userMapper;
-    private final MaterialMapper materialMapper;
+    private final ProductMapper productMapper;
 
     @Override
     public Page<Map<String, Object>> page(Integer status, Long supplierId, String code, int pageNum, int pageSize) {
@@ -86,7 +86,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     .map(it -> {
                         String name = "";
                         if (it.getProductId() != null) {
-                            Material prod = materialMapper.selectById(it.getProductId());
+                            Product prod = productMapper.selectById(it.getProductId());
                             if (prod != null) name = prod.getName();
                         }
                         return name + "*" + (it.getQuantity() != null ? it.getQuantity().stripTrailingZeros().toPlainString() : "0");
@@ -193,7 +193,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         // 1) 库存联动：入库加库存 + 写流水
         for (PurchaseOrderItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Material product = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(order.getWarehouseId(),
                     product != null ? product.getName() : "",
                     it.getQuantity(),
@@ -249,7 +249,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, id));
         for (PurchaseOrderItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Material product = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             // 冲回库存（扣减库存），changeStock 内部会校验是否够扣
             stockService.changeStock(order.getWarehouseId(),
                     product != null ? product.getName() : "",

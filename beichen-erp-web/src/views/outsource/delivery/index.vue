@@ -3,6 +3,7 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { OutsourceOrderStatus, OutsourceOrderStatusLabel } from '@/api/material'
 
 const router = useRouter()
 const activeTab = ref('发料')

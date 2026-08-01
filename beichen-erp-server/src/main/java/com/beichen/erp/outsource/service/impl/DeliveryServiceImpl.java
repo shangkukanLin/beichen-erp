@@ -16,6 +16,7 @@ import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.outsource.common.DeliveryType;
+import com.beichen.erp.outsource.common.DeliveryStatus;
 import com.beichen.erp.outsource.common.OutsourceStockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
@@ -92,7 +93,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         }
         // 生成编码
         delivery.setCode(generateCode());
-        delivery.setStatus("已确认");
+        delivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
         deliveryMapper.insert(delivery);
 
         // 插入明细 + 联动库存
@@ -223,7 +224,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         itemMapper.delete(new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getDeliveryId, delivery.getId()));
         // 3. 更新主表
         delivery.setCode(old.getCode());
-        delivery.setStatus("已确认");
+        delivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
         deliveryMapper.updateById(delivery);
         // 4. 插入新明细 + 重新算库存
         for (OutsourceDeliveryItem item : items) {

@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { exportContractPdf } from '@/api/contract-template'
+import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/material'
 
 const route = useRoute(); const router = useRouter()
 const loading = ref(true); const saving = ref(false)
@@ -96,7 +97,7 @@ async function loadData() {
     }
     await loadMaterialStock()
     await loadDeliveryData()
-    if (form.status === '已完成' || form.status === '已取消') loadCloseReport()
+    if (form.status === OutsourceOrderStatus.FINISHED || form.status === OutsourceOrderStatus.CANCELLED) loadCloseReport()
   } finally { loading.value = false }
 }
 
@@ -144,10 +145,13 @@ async function handleSave() {
     await request.put(`/outsource/order/${form.id}`, { ...form, products: products.value }); ElMessage.success('保存成功'); await loadData()
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) } finally { saving.value = false }
 }
-async function handleConfirm() {
-  try { await ElMessageBox.confirm('确认后加工单将进入生产状态。', '确认加工单', { type:'warning' }); await request.put(`/outsource/order/${form.id}/confirm`); ElMessage.success('已确认，进入生产中'); await loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+async function handleAudit() {
+  try { await ElMessageBox.confirm('审核后加工单将进入生产状态。', '审核加工单', { type:'warning' }); await request.put(`/outsource/order/${form.id}/audit`); ElMessage.success('审核通过，进入生产中'); await loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
+async function handleUnaudit() {
+  try { await ElMessageBox.confirm('反审核将回滚所有交货记录和库存变动，确认继续？', '反审核加工单', { type:'warning' }); await request.put(`/outsource/order/${form.id}/unaudit`); ElMessage.success('已反审核，回到待确认状态'); await loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+}
 
 
 const defectVisible = ref(false); const defectSaving = ref(false)
@@ -180,8 +184,8 @@ const delProgress = computed(() => {
 async function loadDeliveryData() {
   try {
     const [dList, dSummary, prods] = await Promise.all([
-      request.get<any,any>(`/outsource/order-delivery/list/${form.id}`),
-      request.get<any,any>(`/outsource/order-delivery/summary/${form.id}`),
+      request.get<any,any>(`/outsource/order/${form.id}/deliveries`),
+      request.get<any,any>(`/outsource/order/${form.id}/delivery-summary`),
       request.get<any,any>(`/outsource/order/${form.id}/products`)
     ])
     deliveries.value = dList || []; delSummary.value = dSummary || {}; delProducts.value = prods || []
@@ -262,10 +266,8 @@ async function handleDefectReturn() {
   if (data.length === 0) { ElMessage.warning('请输入退不良数量'); return }
   defectSaving.value = true
   try {
-    for (const item of data) {
-      await request.post(`/outsource/order-delivery/return-defect/${form.id}`, { productName: item.productName, quantity: item.quantity, warehouseId: defectWarehouseId.value })
-    }
-    ElMessage.success('退不良完成，物料已还回工厂委外仓库'); defectVisible.value = false; loadData()
+    await request.post(`/outsource/order/${form.id}/return-defect`, { items: data, warehouseId: defectWarehouseId.value })
+    ElMessage.success('退不良完成，成品扣减并按BOM恢复物料到工厂委外仓'); defectVisible.value = false; loadData()
   } catch (e: any) { ElMessage.error(e?.message || '退不良失败') } finally { defectSaving.value = false }
 }
 
@@ -283,7 +285,7 @@ const closeItems = ref<any[]>([])
 const closeLoading = ref(false)
 
 async function loadCloseReport() {
-  if (form.status !== '已完成' && form.status !== '已取消') return
+  if (form.status !== OutsourceOrderStatus.FINISHED && form.status !== OutsourceOrderStatus.CANCELLED) return
   closeLoading.value = true
   try {
     const r = await request.get<any, any>(`/outsource/order/${route.params.id}/close-report`)
@@ -298,29 +300,20 @@ onMounted(() => { loadOptions(); loadData() })
 
 <template>
   <div class="detail-page" v-loading="loading">
-    <div class="page-header">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <el-tag :type="form.status==='待确认'?'info':form.status==='生产中'?'primary':form.status==='已完成'?'success':'danger'" size="small">{{ form.status }}</el-tag>
-      </div>
-    </div>
-
     <el-tabs v-model="activeTab" style="margin-bottom:12px" @tab-change="(t:string)=>{if(t==='close')loadCloseReport()}">
       <el-tab-pane label="加工详情" name="detail" />
       <el-tab-pane label="交货管理" name="delivery" />
-      <el-tab-pane v-if="form.status==='已完成'||form.status==='已取消'" label="结单详情" name="close" />
+      <el-tab-pane v-if="form.status===OutsourceOrderStatus.FINISHED||form.status===OutsourceOrderStatus.CANCELLED" label="结单详情" name="close" />
     </el-tabs>
 
     <!-- Tab 1: 加工详情 -->
     <template v-if="activeTab === 'detail'">
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <el-button v-if="form.status==='待确认'" type="success" @click="handleConfirm">确认（进入生产）</el-button>
-      </div>
-
       <el-card shadow="never">
         <template #header><span style="font-weight:600">基础信息</span></template>
         <el-form :model="form" label-width="90px" size="small">
           <el-row :gutter="12">
-            <el-col :span="8"><el-form-item label="加工厂"><el-select v-model="form.factoryId" filterable style="width:100%" :disabled="form.status!=='待确认'"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="状态"><el-tag :type="OutsourceOrderStatusTag[form.status]||'info'" size="small">{{ OutsourceOrderStatusLabel[form.status] || form.status }}</el-tag></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="加工厂"><el-select v-model="form.factoryId" filterable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="计划开始"><el-input v-model="form.planStartDate" type="date" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="计划完成"><el-input v-model="form.planEndDate" type="date" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="实际开始"><el-input :model-value="form.actualStartDate" readonly /></el-form-item></el-col>
@@ -331,22 +324,24 @@ onMounted(() => { loadOptions(); loadData() })
             <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
           </el-row>
           <div style="display:flex;gap:8px;margin-top:12px">
-            <el-button v-if="form.status==='生产中'" type="warning" size="small" @click="router.push(`/outsource/order/close/${form.id}`)">结单</el-button>
-            <el-button v-if="form.status==='生产中' || form.status==='已完成'" type="warning" size="small" @click="openDefectReturn">退不良</el-button>
-            <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="form.status==='已取消'">保存</el-button>
+            <el-button v-if="form.status===OutsourceOrderStatus.PENDING" type="success" size="small" @click="handleAudit">审核</el-button>
+            <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="danger" size="small" @click="handleUnaudit">反审核</el-button>
+            <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="warning" size="small" @click="router.push(`/outsource/order/close/${form.id}`)">结单</el-button>
+            <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING || form.status===OutsourceOrderStatus.FINISHED" type="warning" size="small" @click="openDefectReturn">退不良</el-button>
+            <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="form.status===OutsourceOrderStatus.CANCELLED">保存</el-button>
           </div>
         </el-form>
       </el-card>
 
       <el-card v-for="(p, pi) in products" :key="p._key" shadow="never" style="margin-top:12px">
-        <template #header><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-weight:600">加工产品 #{{ pi + 1 }}</span><el-button type="danger" size="small" text @click="removeProduct(pi)" v-if="products.length>1 && form.status==='待确认'">删除产品</el-button></div></template>
+        <template #header><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-weight:600">加工产品 #{{ pi + 1 }}</span><el-button type="danger" size="small" text @click="removeProduct(pi)" v-if="products.length>1 && form.status===OutsourceOrderStatus.PENDING">删除产品</el-button></div></template>
         <el-form :model="p" label-width="90px" size="small">
           <el-row :gutter="12">
-            <el-col :span="12"><el-form-item label="关联项目"><el-select v-model="p.projectId" filterable clearable style="width:100%" :disabled="form.status!=='待确认'" @change="(v:any)=>onProjectSelect(pi,v)"><el-option v-for="pr in projectOptions" :key="pr.id" :label="pr.name" :value="pr.id" /></el-select></el-form-item></el-col>
-            <el-col :span="6"><el-form-item label="数量"><el-input v-model="p.quantity" type="number" :disabled="form.status!=='待确认'" @change="calcAmount(pi)" /></el-form-item></el-col>
-            <el-col :span="6"><el-form-item label="单价"><el-input v-model="p.unitPrice" type="number" :disabled="form.status!=='待确认'" @change="calcAmount(pi)" /></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="关联项目"><el-select v-model="p.projectId" filterable clearable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="(v:any)=>onProjectSelect(pi,v)"><el-option v-for="pr in projectOptions" :key="pr.id" :label="pr.name" :value="pr.id" /></el-select></el-form-item></el-col>
+            <el-col :span="6"><el-form-item label="数量"><el-input v-model="p.quantity" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
+            <el-col :span="6"><el-form-item label="单价"><el-input v-model="p.unitPrice" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>
-            <el-col :span="6"><el-form-item label="备注"><el-input v-model="p.remark" :disabled="form.status!=='待确认'" /></el-form-item></el-col>
+            <el-col :span="6"><el-form-item label="备注"><el-input v-model="p.remark" :disabled="form.status!==OutsourceOrderStatus.PENDING" /></el-form-item></el-col>
           </el-row>
         </el-form>
         <div style="margin-top:8px">
@@ -361,9 +356,9 @@ onMounted(() => { loadOptions(); loadData() })
             <el-table-column label="库存" width="70"><template #default="{row}"><span :style="{color: Number(getStock(row.materialName).stockQuantity||0) < Number(getStock(row.materialName).remainingDemand||row.demandQuantity) ? '#f56c6c' : '#67c23a'}">{{ getStock(row.materialName).stockQuantity || 0 }}</span></template></el-table-column>
             <el-table-column label="可能在途" width="80"><template #default="{row}"><span :style="{color: Number(getStock(row.materialName).inTransit||0) > 0 ? '#409eff' : ''}">{{ getStock(row.materialName).inTransit || 0 }}</span></template></el-table-column>
             <el-table-column label="缺料" width="70"><template #default="{row}"><span :style="{color: Number(getStock(row.materialName).shortage||0) > 0 ? '#f56c6c' : '#67c23a'}">{{ getStock(row.materialName).shortage || 0 }}</span></template></el-table-column>
-            <el-table-column label="损耗率(%)" width="85"><template #default="{row}"><el-input v-model="row.lossRate" size="small" :disabled="form.status!=='待确认'" /></template></el-table-column>
-            <el-table-column label="备注" min-width="80"><template #default="{row}"><el-input v-model="row.remark" size="small" :disabled="form.status!=='待确认'" /></template></el-table-column>
-            <el-table-column label="操作" width="110" align="center" v-if="form.status==='生产中'"><template #default="{row}"><template v-if="Number(getStock(row.materialName).shortage||0) > 0"><el-button type="warning" link size="small" @click="goPurchase(row)">去采购</el-button><el-button v-if="getStock(row.materialName).hasComponents" type="primary" link size="small" @click="goOutsource(row)">去委外</el-button></template></template></el-table-column>
+            <el-table-column label="损耗率(%)" width="85"><template #default="{row}"><el-input v-model="row.lossRate" size="small" :disabled="form.status!==OutsourceOrderStatus.PENDING" /></template></el-table-column>
+            <el-table-column label="备注" min-width="80"><template #default="{row}"><el-input v-model="row.remark" size="small" :disabled="form.status!==OutsourceOrderStatus.PENDING" /></template></el-table-column>
+            <el-table-column label="操作" width="110" align="center" v-if="form.status===OutsourceOrderStatus.PRODUCING"><template #default="{row}"><template v-if="Number(getStock(row.materialName).shortage||0) > 0"><el-button type="warning" link size="small" @click="goPurchase(row)">去采购</el-button><el-button v-if="getStock(row.materialName).hasComponents" type="primary" link size="small" @click="goOutsource(row)">去委外</el-button></template></template></el-table-column>
           </el-table>
           <div v-else style="color:#909399;font-size:13px;margin-top:8px">暂无 BOM 物料</div>
         </div>
@@ -404,7 +399,7 @@ onMounted(() => { loadOptions(); loadData() })
       <el-card shadow="never">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <span style="font-weight:600">交货记录</span>
-          <el-button v-if="form.status==='生产中'" type="primary" size="small" @click="delOpenAdd">新增交货</el-button>
+          <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="primary" size="small" @click="delOpenAdd">新增交货</el-button>
         </div>
         <el-table :data="deliveries" border stripe size="small" :row-class-name="({row}:{row:any})=>row.deliveryType==='退不良'?'defect-row':''">
           <el-table-column label="交货日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>

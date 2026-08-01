@@ -3,6 +3,7 @@ import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { listCustomers, type Customer } from '@/api/customer'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
@@ -16,7 +17,7 @@ const data = ref<FinanceReceipt[]>([])
 const customers = ref<Customer[]>([])
 const accounts = ref<{id:number;accountName:string}[]>([])
 
-const statusOpts = [{l:'草稿',v:'草稿'},{l:'已审核',v:'已审核'},{l:'已作废',v:'已作废'}]
+const statusOpts = [{l:DocStatusLabel[DocStatus.DRAFT],v:DocStatus.DRAFT},{l:DocStatusLabel[DocStatus.AUDITED],v:DocStatus.AUDITED},{l:DocStatusLabel[DocStatus.CANCELLED],v:DocStatus.CANCELLED}]
 
 async function loadData() {
   loading.value = true
@@ -38,7 +39,7 @@ function reset_() { query.customerId = ''; query.status = ''; page.pageNum = 1; 
 function cName(id?: number) { return customers.value.find(x => x.id === id)?.name || '' }
 function aName(id?: number) { return accounts.value.find(x => x.id === id)?.accountName || '' }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
-function stType(s?: string) { if (s === '草稿') return 'info'; if (s === '已审核') return 'success'; if (s === '已作废') return 'danger'; return '' }
+function stType(s?: string) { return DocStatusTag[s || ''] || '' }
 
 const dVisible = ref(false)
 const dTitle = ref('新增收款单')
@@ -104,9 +105,9 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
         <el-table-column label="账户" min-width="130"><template #default="{row}">{{ aName(row.accountId) }}</template></el-table-column>
         <el-table-column prop="receiptDate" label="日期" width="120" align="center"/>
         <el-table-column prop="amount" label="金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
-        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{row.status}}</el-tag></template></el-table-column>
+        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="180" align="center" fixed="right">
-          <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button v-if="row.status==='草稿'" type="success" link @click="handleAudit(row)">审核</el-button><el-button v-if="row.status==='草稿'" type="warning" link @click="handleEdit(row)">编辑</el-button><el-button v-if="row.status==='草稿'" type="danger" link @click="handleCancel(row)">作废</el-button></template>
+          <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button></template>
         </el-table-column>
       </el-table>
       <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>

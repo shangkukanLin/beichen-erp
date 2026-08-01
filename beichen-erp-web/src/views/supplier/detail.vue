@@ -192,7 +192,7 @@ onMounted(loadData)
           </template>
           <el-button type="primary" size="small" text @click="addProduct" style="margin-bottom:8px">+ 添加产品</el-button>
           <el-table :data="products" border size="small">
-            <el-table-column label="产品"><template #default="{row}"><el-select v-model="row.productId" placeholder="搜索产品" filterable remote :remote-method="searchProducts" size="small" style="width:100%"><el-option v-for="p in prodOptions" :key="p.id" :label="`${p.name}(${p.code||''})`" :value="p.id" /></el-select></template></el-table-column>
+            <el-table-column label="产品"><template #default="{row}"><el-select v-model="row.productId" placeholder="搜索产品" filterable remote :remote-method="searchProducts" size="small" style="width:100%"><el-option v-for="p in prodOptions" :key="p.id" :label="p.name" :value="p.id" /></el-select></template></el-table-column>
             <el-table-column label="单价" width="100"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" /></template></el-table-column>
             <el-table-column label="备注" width="120"><template #default="{row}"><el-input v-model="row.remark" size="small" /></template></el-table-column>
             <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link size="small" @click="removeProduct($index)">删除</el-button></template></el-table-column>

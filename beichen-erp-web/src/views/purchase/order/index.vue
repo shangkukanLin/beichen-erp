@@ -135,7 +135,6 @@ function onMaterialChange(val: number, row: PurchaseOrderItem) {
   const m = materialOptions.value.find(x => x.id === val)
   if (m) {
     row.productId = m.id as number
-    row.materialCode = m.code
     row.materialName = m.name
     row.spec = m.spec
     row.unit = m.unit
@@ -238,7 +237,7 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQual
     <el-card shadow="never" class="query-card">
       <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="单号">
-          <el-input v-model="query.code" placeholder="请输入单号" clearable @keyup.enter="handleQuery" />
+          <el-input v-model="query.code" placeholder="请输入单号" clearable @keyup.enter="handleQuery" style="width:160px" />
         </el-form-item>
         <el-form-item label="供应商">
           <el-select v-model="query.supplierId" placeholder="请选择" clearable filterable style="width:160px">
@@ -250,12 +249,12 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQual
             <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
+        <el-form-item>
+          <el-button type="primary" @click="handleQuery">查询</el-button>
+          <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" @click="handleAdd">新增</el-button>
+        </el-form-item>
       </el-form>
-      <div class="query-actions">
-        <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
-        <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
-        <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
-      </div>
     </el-card>
 
     <el-card shadow="never" class="table-card">
@@ -344,7 +343,7 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQual
             <template #default="{ row, $index }">
               <el-select v-model="row.productId" placeholder="选择物料" filterable remote :remote-method="loadMaterials"
                 style="width:100%" @change="(v: number) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
-                <el-option v-for="m in materialOptions" :key="m.id" :label="`${m.name}(${m.code})`" :value="m.id" />
+                <el-option v-for="m in materialOptions" :key="m.id" :label="m.name" :value="m.id" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </template>
@@ -408,6 +407,5 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQual
 .page { display: flex; flex-direction: column; gap: 12px; }
 .query-card :deep(.el-card__body), .table-card :deep(.el-card__body) { padding: 16px; }
 .query-form { align-items: center; }
-.query-actions { display: flex; justify-content: center; align-items: center; margin-top: 12px; }
 .pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
 </style>

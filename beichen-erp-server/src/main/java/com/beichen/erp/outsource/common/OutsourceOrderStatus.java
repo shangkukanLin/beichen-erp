@@ -9,11 +9,9 @@ package com.beichen.erp.outsource.common;
  */
 public enum OutsourceOrderStatus {
 
-    /** 待确认：加工单刚创建，等待供应商确认 */
+    /** 待确认：加工单刚创建，等待审核 */
     PENDING("待确认"),
-    /** 已确认：供应商已确认加工单（存量数据） */
-    CONFIRMED("已确认"),
-    /** 生产中：供应商已确认，正在生产加工 */
+    /** 生产中：已审核，正在生产加工 */
     PRODUCING("生产中"),
     /** 已完成：加工完成，成品已入库 */
     FINISHED("已完成"),

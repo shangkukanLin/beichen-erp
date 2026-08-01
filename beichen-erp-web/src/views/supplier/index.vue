@@ -314,7 +314,7 @@ onActivated(() => { loadData() })
         <el-table-column label="产品" min-width="220">
           <template #default="{ row }">
             <el-select v-model="row.productId" placeholder="搜索选择产品" filterable remote :remote-method="loadProductOptions" style="width:100%" size="small">
-              <el-option v-for="p in productOptions" :key="p.id" :label="`${p.name}(${p.code || ''})`" :value="p.id" />
+              <el-option v-for="p in productOptions" :key="p.id" :label="p.name" :value="p.id" />
             </el-select>
           </template>
         </el-table-column>

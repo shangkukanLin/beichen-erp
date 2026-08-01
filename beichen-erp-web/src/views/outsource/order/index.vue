@@ -5,9 +5,10 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/material'
 
 const router = useRouter()
-const activeTab = ref('进行中')
+const activeTab = ref('PENDING_PRODUCING')
 const query = reactive({ code: '', factoryId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])
@@ -22,8 +23,9 @@ async function loadData() {
   tableLoading.value = true
   try {
     const p: any = { pageNum: pagination.pageNum, pageSize: pagination.pageSize }
-    if (activeTab.value === '进行中') { p.status = '待确认,生产中' }
-    else { p.status = activeTab.value }
+    if (activeTab.value === 'PENDING_PRODUCING') { p.status = [OutsourceOrderStatus.PENDING, OutsourceOrderStatus.PRODUCING].join(',') }
+    else if (activeTab.value === 'FINISHED') { p.status = OutsourceOrderStatus.FINISHED }
+    else if (activeTab.value === 'CANCELLED') { p.status = OutsourceOrderStatus.CANCELLED }
     if (query.code) p.code = query.code
     if (query.factoryId) p.factoryId = query.factoryId
     const r = await request.get<any, any>('/outsource/order/page', { params: p })
@@ -58,9 +60,9 @@ onActivated(() => {
 
     <el-card shadow="never" class="table-card">
       <el-tabs v-model="activeTab" @tab-change="onTabChange">
-        <el-tab-pane label="进行中" name="进行中" />
-        <el-tab-pane label="已完成" name="已完成" />
-        <el-tab-pane label="已取消" name="已取消" />
+        <el-tab-pane label="进行中" name="PENDING_PRODUCING" />
+        <el-tab-pane label="已完成" name="FINISHED" />
+        <el-tab-pane label="已取消" name="CANCELLED" />
       </el-tabs>
 
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%">
@@ -77,7 +79,7 @@ onActivated(() => {
         <el-table-column label="计划开始" width="120"><template #default="{row}">{{ $fmtDate(row.planStartDate) }}</template></el-table-column>
         <el-table-column label="计划完成" width="120">
           <template #default="{row}">
-            <span :style="{ color: row.planEndDate && new Date(row.planEndDate) < new Date() && row.status !== '已完成' && row.status !== '已取消' ? 'red' : '' }">{{ $fmtDate(row.planEndDate) || '-' }}</span>
+            <span :style="{ color: row.planEndDate && new Date(row.planEndDate) < new Date() && row.status !== OutsourceOrderStatus.FINISHED && row.status !== OutsourceOrderStatus.CANCELLED ? 'red' : '' }">{{ $fmtDate(row.planEndDate) || '-' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="最近交货" width="120">
@@ -85,13 +87,13 @@ onActivated(() => {
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100" align="center">
           <template #default="{row}">
-            <el-tag :type="row.status==='待确认'?'info':row.status==='生产中'?'primary':row.status==='已完成'?'success':'danger'">{{ row.status }}</el-tag>
+            <el-tag :type="OutsourceOrderStatusTag[row.status]||'info'">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="130" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click="router.push(`/outsource/order/detail/${row.id}`)">详情</el-button>
-            <el-button type="danger" link v-if="row.status!=='已取消'" @click="handleCancel(row)">取消</el-button>
+            <el-button type="danger" link v-if="row.status!==OutsourceOrderStatus.CANCELLED" @click="handleCancel(row)">取消</el-button>
           </template>
         </el-table-column>
       </el-table>

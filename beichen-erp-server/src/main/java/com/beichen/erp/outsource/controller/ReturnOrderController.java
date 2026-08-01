@@ -11,6 +11,7 @@ import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
+import com.beichen.erp.outsource.common.DeliveryStatus;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.supplier.entity.Supplier;
@@ -120,7 +121,7 @@ public class ReturnOrderController {
 
         order.setCode(generateCode());
         if (order.getReturnDate() == null) order.setReturnDate(LocalDate.now());
-        order.setStatus("已确认");
+        order.setStatus(DeliveryStatus.CONFIRMED.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) order.setCompanyId(cid);
         returnOrderMapper.insert(order);
@@ -235,7 +236,7 @@ public class ReturnOrderController {
         // 查该工厂所有已确认/已结单的加工单
         List<OutsourceOrder> orders = orderMapper.selectList(
             new LambdaQueryWrapper<OutsourceOrder>().eq(OutsourceOrder::getFactoryId, factoryId)
-                .in(OutsourceOrder::getStatus, OutsourceOrderStatus.CONFIRMED.name(), OutsourceOrderStatus.PRODUCING.name(), OutsourceOrderStatus.FINISHED.name())
+                .in(OutsourceOrder::getStatus, OutsourceOrderStatus.PRODUCING.name(), OutsourceOrderStatus.FINISHED.name())
                 .orderByDesc(OutsourceOrder::getCreateTime));
         // 按产品名汇总，每个产品列出可选的BOM版本
         Map<String, Map<String, Object>> productMap = new LinkedHashMap<>();

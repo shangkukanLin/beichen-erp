@@ -178,8 +178,8 @@ watch(() => userStore.userInfo?.companyName, (name) => {
 
       <el-main class="layout-main">
         <router-view v-slot="{ Component, route: r }">
-          <keep-alive :include="tabStore.tabs.length > 0 ? undefined : []" :exclude="['PurchaseAdd', 'PurchaseReturnAdd', 'InventoryWarehouseMoveAdd']">
-            <component :is="Component" :key="r.fullPath" />
+          <keep-alive :exclude="['PurchaseAdd', 'PurchaseReturnAdd', 'InventoryWarehouseMoveAdd']">
+            <component :is="Component" :key="r.path" />
           </keep-alive>
         </router-view>
       </el-main>
