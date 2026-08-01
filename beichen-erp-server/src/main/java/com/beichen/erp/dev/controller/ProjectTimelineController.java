@@ -100,7 +100,7 @@ public class ProjectTimelineController {
                     nextNotStarted = p;
                     log.info("[completePhase]   → 找到第一个未开始阶段: {}", p.getStatusName());
                 }
-                if ("进行中".equals(p.getStatus())) {
+                if (TimelineStatus.IN_PROGRESS.name().equals(p.getStatus())) {
                     hasAnyInProgress = true;
                     log.info("[completePhase]   → 发现已有进行中的阶段: {}", p.getStatusName());
                 }
@@ -192,14 +192,14 @@ public class ProjectTimelineController {
                 .orderByAsc(ProjectTimeline::getSortOrder));
         // 找当前进行中的阶段
         for (ProjectTimeline p : phases) {
-            if ("进行中".equals(p.getStatus())) {
+            if (TimelineStatus.IN_PROGRESS.name().equals(p.getStatus())) {
                 updateProjectStatusIfChanged(projectId, p.getStatusName());
                 return;
             }
         }
         // 没有进行中的阶段，找最后一个已完成的
         for (int i = phases.size() - 1; i >= 0; i--) {
-            if ("已完成".equals(phases.get(i).getStatus())) {
+            if (TimelineStatus.FINISHED.name().equals(phases.get(i).getStatus())) {
                 updateProjectStatusIfChanged(projectId, phases.get(i).getStatusName());
                 return;
             }

@@ -2,6 +2,7 @@ package com.beichen.erp.inventory.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
@@ -65,7 +66,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
     public void create(InventoryProductReclassify rc, List<InventoryProductReclassifyItem> items) {
         if (rc.getWarehouseId() == null) throw new BusinessException("仓库不能为空");
         rc.setCode(gen("PC-"));
-        rc.setStatus("草稿");
+        rc.setStatus(DocStatus.DRAFT.name());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) rc.setCompanyId(cid);
         rcMapper.insert(rc);
@@ -86,7 +87,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
     public void update(InventoryProductReclassify rc, List<InventoryProductReclassifyItem> items) {
         InventoryProductReclassify old = rcMapper.selectById(rc.getId());
         if (old == null) throw new BusinessException("品质重分类单不存在");
-        if ("已审核".equals(old.getStatus())) throw new BusinessException("已审核的单据不可编辑");
+        if (DocStatus.AUDITED.name().equals(old.getStatus())) throw new BusinessException("已审核的单据不可编辑");
 
         // 草稿状态更新：直接删旧明细 + 插新
         rc.setCode(old.getCode()); rc.setStatus("草稿");
@@ -109,7 +110,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
     public void audit(Long id) {
         InventoryProductReclassify rc = rcMapper.selectById(id);
         if (rc == null) throw new BusinessException("品质重分类单不存在");
-        if (!"草稿".equals(rc.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (!DocStatus.DRAFT.name().equals(rc.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<InventoryProductReclassifyItem> items = getItems(id);
         if (items.isEmpty()) throw new BusinessException("重分类明细不能为空");
 
@@ -128,7 +129,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
                     RelatedBillType.PRODUCT_RECLASSIFY, it.getProductId(),
                     prod != null ? prod.getSpec() : "", rc.getId(), it.getToQuality());
         }
-        InventoryProductReclassify u = new InventoryProductReclassify(); u.setId(id); u.setStatus("已审核");
+        InventoryProductReclassify u = new InventoryProductReclassify(); u.setId(id); u.setStatus(DocStatus.AUDITED.name());
         rcMapper.updateById(u);
     }
 
@@ -137,7 +138,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
     public void cancel(Long id) {
         InventoryProductReclassify rc = rcMapper.selectById(id);
         if (rc == null) throw new BusinessException("品质重分类单不存在");
-        if (!"已审核".equals(rc.getStatus())) throw new BusinessException("只有已审核状态可取消");
+        if (!DocStatus.AUDITED.name().equals(rc.getStatus())) throw new BusinessException("只有已审核状态可取消");
         List<InventoryProductReclassifyItem> items = getItems(id);
 
         // 逆向操作：恢复 from_quality，冲回 to_quality
@@ -155,7 +156,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
                     RelatedBillType.PRODUCT_RECLASSIFY, it.getProductId(),
                     prod != null ? prod.getSpec() : "", rc.getId(), it.getToQuality());
         }
-        InventoryProductReclassify u = new InventoryProductReclassify(); u.setId(id); u.setStatus("已取消");
+        InventoryProductReclassify u = new InventoryProductReclassify(); u.setId(id); u.setStatus(DocStatus.CANCELLED.name());
         rcMapper.updateById(u);
     }
 

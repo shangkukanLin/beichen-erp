@@ -154,14 +154,14 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
         if (timeline == null || !timeline.getProjectId().equals(projectId)) {
             throw new BusinessException("时间线记录不存在");
         }
-        if (!"进行中".equals(timeline.getStatus())) {
+        if (!TimelineStatus.IN_PROGRESS.name().equals(timeline.getStatus())) {
             throw new BusinessException("只有「进行中」的阶段才能完成");
         }
         // 完成当前阶段（如果已手动设置了实际完成时间则保留）
         if (timeline.getActualEnd() == null) {
             timeline.setActualEnd(LocalDate.now());
         }
-        timeline.setStatus("已完成");
+        timeline.setStatus(TimelineStatus.FINISHED.name());
         projectTimelineMapper.updateById(timeline);
 
         // 查找下一个需要激活的阶段（跳过已完成的，找到第一个"未开始"）

@@ -10,7 +10,6 @@ import com.beichen.erp.inventory.mapper.InventoryOtherIoMapper;
 import com.beichen.erp.inventory.mapper.InventoryOtherIoItemMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.inventory.common.RelatedBillType;
-import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.OtherIoService;
 import com.beichen.erp.material.entity.Material;
@@ -85,7 +84,7 @@ public class OtherIoServiceImpl implements OtherIoService {
     public void update(InventoryOtherIo otherIo, List<InventoryOtherIoItem> items) {
         InventoryOtherIo old = ioMapper.selectById(otherIo.getId());
         if (old == null) throw new BusinessException("其他出入库单不存在");
-        if ("已取消".equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
+        if (DocStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
 
         // 回滚旧库存
         List<InventoryOtherIoItem> oldItems = itemMapper.selectList(
@@ -93,7 +92,7 @@ public class OtherIoServiceImpl implements OtherIoService {
         revertStock(old, oldItems);
 
         // 更新主表
-        otherIo.setCode(old.getCode()); otherIo.setStatus("已确认");
+        otherIo.setCode(old.getCode()); otherIo.setStatus(DocStatus.AUDITED.name());
         ioMapper.updateById(otherIo);
 
         // 删旧明细 + 插新明细
@@ -112,11 +111,11 @@ public class OtherIoServiceImpl implements OtherIoService {
     public void cancel(Long id) {
         InventoryOtherIo old = ioMapper.selectById(id);
         if (old == null) throw new BusinessException("其他出入库单不存在");
-        if ("已取消".equals(old.getStatus())) throw new BusinessException("单据已取消");
+        if (DocStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("单据已取消");
         List<InventoryOtherIoItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
         revertStock(old, items);
-        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus("已取消");
+        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus(DocStatus.CANCELLED.name());
         ioMapper.updateById(u);
     }
 
@@ -126,11 +125,11 @@ public class OtherIoServiceImpl implements OtherIoService {
         // 已废弃：提交即生效，无需审核。保留接口兼容
         InventoryOtherIo io = ioMapper.selectById(id);
         if (io == null) throw new BusinessException("其他出入库单不存在");
-        if (!"草稿".equals(io.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (!DocStatus.DRAFT.name().equals(io.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<InventoryOtherIoItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
         applyStock(io, items);
-        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus("已审核");
+        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus(DocStatus.AUDITED.name());
         ioMapper.updateById(u);
     }
 

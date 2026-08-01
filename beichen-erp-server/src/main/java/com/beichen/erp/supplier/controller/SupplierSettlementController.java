@@ -3,6 +3,8 @@ package com.beichen.erp.supplier.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.outsource.common.OutsourceOrderStatus;
+import com.beichen.erp.outsource.common.MaterialOrderStatus;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.common.RelatedBillType;
@@ -61,13 +63,13 @@ public class SupplierSettlementController {
         // 2. 进行中订单
         List<OutsourceOrder> orders = orderMapper.selectList(new LambdaQueryWrapper<OutsourceOrder>()
             .eq(OutsourceOrder::getFactoryId, supplierId)
-            .in(OutsourceOrder::getStatus, "待确认", "生产中")
+            .in(OutsourceOrder::getStatus, OutsourceOrderStatus.PENDING.name(), OutsourceOrderStatus.PRODUCING.name())
             .orderByDesc(OutsourceOrder::getId));
         result.put("activeOrders", orders);
 
         List<MaterialOrder> materialOrders = materialOrderMapper.selectList(new LambdaQueryWrapper<MaterialOrder>()
             .eq(MaterialOrder::getSupplierId, supplierId)
-            .in(MaterialOrder::getStatus, "待确认", "已确认", "收货中")
+            .in(MaterialOrder::getStatus, MaterialOrderStatus.PENDING.name(), MaterialOrderStatus.RECEIVING.name())
             .orderByDesc(MaterialOrder::getId));
         result.put("activeMaterialOrders", materialOrders);
 

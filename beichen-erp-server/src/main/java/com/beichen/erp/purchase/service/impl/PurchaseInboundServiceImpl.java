@@ -120,7 +120,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
     public void update(PurchaseInbound inbound, List<PurchaseInboundItem> items) {
         PurchaseInbound old = inboundMapper.selectById(inbound.getId());
         if (old == null) throw new BusinessException("采购入库单不存在");
-        if (!"草稿".equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         if (inbound.getSupplierId() != null) {
             Supplier s = supplierMapper.selectById(inbound.getSupplierId());
             inbound.setSupplierName(s != null ? s.getName() : "");
@@ -151,10 +151,10 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
     public void cancel(Long id) {
         PurchaseInbound old = inboundMapper.selectById(id);
         if (old == null) throw new BusinessException("采购入库单不存在");
-        if (!"草稿".equals(old.getStatus())) throw new BusinessException("已审核的入库单不可作废");
+        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("已审核的入库单不可作废");
         PurchaseInbound u = new PurchaseInbound();
         u.setId(id);
-        u.setStatus("已作废");
+        u.setStatus(DocStatus.CANCELLED.name());
         inboundMapper.updateById(u);
     }
 
@@ -163,7 +163,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
     public void audit(Long id) {
         PurchaseInbound inbound = inboundMapper.selectById(id);
         if (inbound == null) throw new BusinessException("采购入库单不存在");
-        if (!"草稿".equals(inbound.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (!DocStatus.DRAFT.name().equals(inbound.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<PurchaseInboundItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<PurchaseInboundItem>().eq(PurchaseInboundItem::getInboundId, id));
         // 1) 库存联动：入库加库存 + 写流水
@@ -191,7 +191,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
         // 3) 更新入库单状态
         PurchaseInbound u = new PurchaseInbound();
         u.setId(id);
-        u.setStatus("已审核");
+        u.setStatus(DocStatus.AUDITED.name());
         inboundMapper.updateById(u);
         // 4) 关联采购订单置为已入库
         if (inbound.getOrderId() != null) {
