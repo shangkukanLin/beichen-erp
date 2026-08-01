@@ -9,6 +9,7 @@ import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
+import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
@@ -347,7 +348,7 @@ public class OrderDeliveryController {
                 stock = new OutsourceWarehouseStock();
                 stock.setWarehouseId(whId);
                 stock.setMaterialId(mat.materialId());
-                stock.setQualityType("良品");
+                stock.setQualityType(QualityType.GOOD.getCode());
                 stock.setQuantity(restoreQty);
                 warehouseStockMapper.insert(stock);
             } else {
@@ -524,7 +525,7 @@ public class OrderDeliveryController {
                 stock = new OutsourceWarehouseStock();
                 stock.setWarehouseId(whId);
                 stock.setMaterialId(mat.materialId());
-                stock.setQualityType("良品");
+                stock.setQualityType(QualityType.GOOD.getCode());
                 after = needed.negate();
                 stock.setQuantity(after);
                 warehouseStockMapper.insert(stock);

@@ -10,6 +10,8 @@ import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.outsource.common.QualityType;
+import com.beichen.erp.outsource.common.DeliveryStatus;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import lombok.RequiredArgsConstructor;
@@ -87,7 +89,7 @@ public class OutsourceOtherIoController {
         if (io.getWarehouseId() == null) throw new BusinessException("仓库不能为空");
         if (io.getIoType() == null || io.getIoType().isBlank()) throw new BusinessException("出入库类型不能为空");
         io.setCode(gen());
-        io.setStatus("已确认");
+        io.setStatus(DeliveryStatus.CONFIRMED.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) io.setCompanyId(cid);
         ioMapper.insert(io);
@@ -178,7 +180,7 @@ public class OutsourceOtherIoController {
             if (stock == null) {
                 stock = new OutsourceWarehouseStock();
                 stock.setWarehouseId(io.getWarehouseId()); stock.setMaterialId(matId);
-                stock.setQualityType("良品"); stock.setQuantity(after);
+                stock.setQualityType(QualityType.GOOD.getCode()); stock.setQuantity(after);
                 stockMapper.insert(stock);
             } else {
                 stock.setQuantity(after);

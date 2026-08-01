@@ -9,6 +9,8 @@ import com.beichen.erp.outsource.common.MaterialOrderStatus;
 import com.beichen.erp.outsource.common.OrderType;
 import com.beichen.erp.outsource.common.DefectHandleType;
 import com.beichen.erp.outsource.common.DeliveryStatus;
+import com.beichen.erp.outsource.common.DeliveryType;
+import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.supplier.entity.Supplier;
@@ -268,7 +270,7 @@ public class MaterialOrderController {
             di.setMaterialType(orderItem.getMaterialType());
             di.setUnit(orderItem.getUnit());
             di.setQuantity(qty);
-            di.setQualityType("良品");
+            di.setQualityType(QualityType.GOOD.getCode());
             deliveryItemMapper.insert(di);
 
             // 父物料入库 + 流水
@@ -353,7 +355,7 @@ public class MaterialOrderController {
         if (items == null || items.isEmpty()) throw new BusinessException("退料明细不能为空");
 
         OutsourceDelivery delivery = new OutsourceDelivery();
-        delivery.setDeliveryType("RETURN");
+        delivery.setDeliveryType(DeliveryType.RETURN.getCode());
         delivery.setFactoryId(factoryId);
         delivery.setDeliveryDate(LocalDate.now());
         delivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
@@ -392,7 +394,7 @@ public class MaterialOrderController {
             di.setMaterialType(orderItem.getMaterialType());
             di.setUnit(orderItem.getUnit());
             di.setQuantity(qty);
-            di.setQualityType("不良品");
+            di.setQualityType(QualityType.DEFECT.getCode());
             di.setHandleType(handleType);
             deliveryItemMapper.insert(di);
 

@@ -9,6 +9,9 @@ import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
 import com.beichen.erp.outsource.common.MaterialOrderStatus;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
+import com.beichen.erp.outsource.common.DeliveryType;
+import com.beichen.erp.outsource.common.DeliveryStatus;
+import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.outsource.mapper.OutsourceOrderMapper;
 import com.beichen.erp.outsource.entity.OutsourceWarehouse;
@@ -230,7 +233,7 @@ public class OutsourceOrderController {
                     new LambdaQueryWrapper<OutsourceWarehouseStock>()
                         .eq(OutsourceWarehouseStock::getWarehouseId, whId)
                         .eq(OutsourceWarehouseStock::getMaterialId, materialId)
-                        .eq(OutsourceWarehouseStock::getQualityType, "良品"));
+                        .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
                 if (s != null && s.getQuantity() != null) stock = s.getQuantity();
             }
             m.put("stockQuantity", stock);
@@ -333,9 +336,9 @@ public class OutsourceOrderController {
             delivery.setOrderId(id);
             delivery.setProductName(prod.getProductName());
             delivery.setQuantity(qty);
-            delivery.setDeliveryType("RETURN");
+            delivery.setDeliveryType(DeliveryType.RETURN.getCode());
             delivery.setWarehouseId(whId);
-            delivery.setStatus("NORMAL");
+            delivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
             delivery.setRemark("退不良 - " + o.getCode());
             orderDeliveryMapper.insert(delivery);
 
@@ -343,10 +346,10 @@ public class OutsourceOrderController {
             if (whId != null) {
                 jdbcTemplate.update(
                     "UPDATE outsource_warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_name = ? AND quality_type = ?",
-                    qty, whId, prod.getProductName(), "良品");
+                    qty, whId, prod.getProductName(), QualityType.GOOD.getCode());
                 jdbcTemplate.update(
                     "INSERT INTO outsource_stock_log (warehouse_id, product_name, quality_type, change_qty, change_type, remark, create_time) VALUES (?,?,?,?,?,?,NOW())",
-                    whId, prod.getProductName(), "良品", qty.negate(), "DEFECT_RETURN_OUT", "退不良扣减成品 - " + o.getCode());
+                    whId, prod.getProductName(), QualityType.GOOD.getCode(), qty.negate(), "DEFECT_RETURN_OUT", "退不良扣减成品 - " + o.getCode());
             }
 
             // 3. 按BOM反算物料，加回工厂委外仓
@@ -362,7 +365,7 @@ public class OutsourceOrderController {
                             restoreQty, factoryWhId, mat.getMaterialName());
                         jdbcTemplate.update(
                             "INSERT INTO outsource_stock_log (warehouse_id, material_name, quality_type, change_qty, change_type, remark, create_time) VALUES (?,?,?,?,?,?,NOW())",
-                            factoryWhId, mat.getMaterialName(), "良品", restoreQty, "DEFECT_RETURN_IN", "退不良恢复物料 - " + o.getCode());
+                            factoryWhId, mat.getMaterialName(), QualityType.GOOD.getCode(), restoreQty, "DEFECT_RETURN_IN", "退不良恢复物料 - " + o.getCode());
                     }
                 }
             }

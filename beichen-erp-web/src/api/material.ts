@@ -77,6 +77,28 @@ export const DefectHandleTypeLabel: Record<string, string> = {
   [DefectHandleType.CASH_REFUND]: '折现退款'
 }
 
+/** 品质类型（对应 QualityType 枚举） */
+export const QualityType = {
+  GOOD: 'GOOD',
+  DEFECT: 'DEFECT'
+} as const
+
+export const QualityTypeLabel: Record<string, string> = {
+  [QualityType.GOOD]: '良品',
+  [QualityType.DEFECT]: '不良品'
+}
+
+/** 交货记录状态（对应 DeliveryItemStatus 枚举） */
+export const DeliveryItemStatus = {
+  NORMAL: 'NORMAL',
+  REVERSED: 'REVERSED'
+} as const
+
+export const DeliveryItemStatusLabel: Record<string, string> = {
+  [DeliveryItemStatus.NORMAL]: '正常',
+  [DeliveryItemStatus.REVERSED]: '已回滚'
+}
+
 export interface MaterialQueryParams {
   pageNum?: number
   pageSize?: number

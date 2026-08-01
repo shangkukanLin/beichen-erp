@@ -14,6 +14,8 @@ import com.beichen.erp.outsource.mapper.OutsourceOrderMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
+import com.beichen.erp.outsource.common.DeliveryStatus;
+import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
@@ -231,7 +233,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
         List<OutsourceOrderDelivery> deliveries = orderDeliveryMapper.selectList(
                 new LambdaQueryWrapper<OutsourceOrderDelivery>()
                         .eq(OutsourceOrderDelivery::getOrderId, id)
-                        .eq(OutsourceOrderDelivery::getStatus, "NORMAL"));
+                        .eq(OutsourceOrderDelivery::getStatus, DeliveryStatus.CONFIRMED.getCode()));
 
         if (!deliveries.isEmpty()) {
             // 有交货记录：回滚库存
@@ -239,12 +241,11 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
                 // 冲回成品入库（扣减成品库存）
                 String whSql = "UPDATE outsource_warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_name = ? AND quality_type = ?";
                 int affected = jdbcTemplate.update(whSql, delivery.getQuantity(), delivery.getWarehouseId(),
-                        delivery.getProductName(), "良品");
+                        delivery.getProductName(), QualityType.GOOD.getCode());
                 if (affected > 0) {
-                    // 写库存流水
                     jdbcTemplate.update(
                             "INSERT INTO outsource_stock_log (warehouse_id, product_name, quality_type, change_qty, change_type, remark, create_time) VALUES (?,?,?,?,?,?,NOW())",
-                            delivery.getWarehouseId(), delivery.getProductName(), "良品",
+                            delivery.getWarehouseId(), delivery.getProductName(), QualityType.GOOD.getCode(),
                             delivery.getQuantity().negate(), "UNAUDIT_RETURN", "反审核回滚成品入库 - " + order.getCode());
                 }
 
@@ -270,7 +271,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
                                     if (matAffected > 0) {
                                         jdbcTemplate.update(
                                                 "INSERT INTO outsource_stock_log (warehouse_id, material_name, quality_type, change_qty, change_type, remark, create_time) VALUES (?,?,?,?,?,?,NOW())",
-                                                factoryWhId, mat.getMaterialName(), "良品", restoreQty,
+                                                factoryWhId, mat.getMaterialName(), QualityType.GOOD.getCode(), restoreQty,
                                                 "UNAUDIT_RESTORE", "反审核恢复物料 - " + order.getCode());
                                     }
                                 }
@@ -280,7 +281,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
                 }
 
                 // 交货记录标记为 REVERSED
-                delivery.setStatus("REVERSED");
+                delivery.setStatus(DeliveryStatus.CANCELLED.getCode());
                 orderDeliveryMapper.updateById(delivery);
             }
 
