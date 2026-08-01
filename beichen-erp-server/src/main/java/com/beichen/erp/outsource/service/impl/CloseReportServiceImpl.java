@@ -8,6 +8,7 @@ import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.common.DeliveryStatus;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.QualityType;
+import com.beichen.erp.outsource.common.CloseReportStatus;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.outsource.service.CloseReportService;
@@ -332,7 +333,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         CloseReport report = reportMapper.selectOne(
             new LambdaQueryWrapper<CloseReport>().eq(CloseReport::getOrderId, orderId));
         if (report == null) throw new BusinessException("请先保存结单报表");
-        if ("已结单".equals(report.getStatus())) throw new BusinessException("已结单，不可重复结单");
+        if (CloseReportStatus.FINISHED.getCode().equals(report.getStatus())) throw new BusinessException("已结单，不可重复结单");
 
         List<CloseReportItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<CloseReportItem>().eq(CloseReportItem::getReportId, report.getId()));
@@ -423,7 +424,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         orderMapper.updateById(updateOrder);
 
         // 更新报表状态
-        report.setStatus("已结单");
+        report.setStatus(CloseReportStatus.FINISHED.getCode());
         report.setCloseDate(LocalDate.now());
         reportMapper.updateById(report);
 

@@ -90,7 +90,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         if (DocStatus.AUDITED.name().equals(old.getStatus())) throw new BusinessException("已审核的单据不可编辑");
 
         // 草稿状态更新：直接删旧明细 + 插新
-        rc.setCode(old.getCode()); rc.setStatus("草稿");
+        rc.setCode(old.getCode()); rc.setStatus(DocStatus.DRAFT.name());
         rcMapper.updateById(rc);
 
         itemMapper.delete(new LambdaQueryWrapper<InventoryProductReclassifyItem>()

@@ -9,6 +9,7 @@ import com.beichen.erp.inventory.entity.InventoryOtherIoItem;
 import com.beichen.erp.inventory.mapper.InventoryOtherIoMapper;
 import com.beichen.erp.inventory.mapper.InventoryOtherIoItemMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.OtherIoService;
@@ -66,7 +67,7 @@ public class OtherIoServiceImpl implements OtherIoService {
         if (otherIo.getWarehouseId() == null) throw new BusinessException("仓库不能为空");
         if (otherIo.getIoType() == null || otherIo.getIoType().isBlank()) throw new BusinessException("出入库类型不能为空");
         otherIo.setCode(gen("QT-"));
-        otherIo.setStatus("已确认");
+        otherIo.setStatus(DocStatus.AUDITED.name());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) otherIo.setCompanyId(cid);
         ioMapper.insert(otherIo);

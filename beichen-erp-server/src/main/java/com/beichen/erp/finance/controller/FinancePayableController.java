@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import lombok.RequiredArgsConstructor;
@@ -60,7 +61,7 @@ public class FinancePayableController {
     public R<?> unpaid(@RequestParam Long supplierId) {
         return R.ok(payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
                 .eq(FinancePayable::getSupplierId, supplierId)
-                .ne(FinancePayable::getStatus, "已结清")
+                .ne(FinancePayable::getStatus, SettlementStatus.SETTLED.getCode())
                 .orderByDesc(FinancePayable::getId)));
     }
 

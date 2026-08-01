@@ -6,6 +6,7 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.entity.*;
+import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinancePaymentService;
 import com.beichen.erp.supplier.entity.Supplier;
@@ -105,7 +106,7 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             BigDecimal newUnpaid = (p.getUnpaidAmount() != null ? p.getUnpaidAmount() : BigDecimal.ZERO).subtract(amt);
             p.setPaidAmount(newPaid);
             p.setUnpaidAmount(newUnpaid.max(BigDecimal.ZERO));
-            p.setStatus(newUnpaid.compareTo(BigDecimal.ZERO) <= 0 ? "已结清" : "部分结清");
+            p.setStatus(newUnpaid.compareTo(BigDecimal.ZERO) <= 0 ? SettlementStatus.SETTLED.getCode() : SettlementStatus.PARTIAL.getCode());
             payableMapper.updateById(p);
         }
         // 更新账户余额

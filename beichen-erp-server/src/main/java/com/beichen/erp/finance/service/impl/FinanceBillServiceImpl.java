@@ -3,6 +3,7 @@ package com.beichen.erp.finance.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.finance.entity.*;
+import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinanceBillService;
 import lombok.RequiredArgsConstructor;
@@ -57,7 +58,7 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         bill.setPartnerName(partnerName);
         bill.setPeriodStart(periodStart);
         bill.setPeriodEnd(periodEnd);
-        bill.setStatus("未结清");
+        bill.setStatus(SettlementStatus.UNSETTLED.getCode());
 
         BigDecimal total = BigDecimal.ZERO;
         BigDecimal paid = BigDecimal.ZERO;
@@ -67,7 +68,7 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         if ("应收".equals(billType)) {
             List<FinanceReceivable> list = receivableMapper.selectList(new LambdaQueryWrapper<FinanceReceivable>()
                     .eq(FinanceReceivable::getCustomerId, partnerId)
-                    .eq(FinanceReceivable::getStatus, "未结清").or().eq(FinanceReceivable::getStatus, "部分结清")
+                    .eq(FinanceReceivable::getStatus, SettlementStatus.UNSETTLED.getCode()).or().eq(FinanceReceivable::getStatus, SettlementStatus.PARTIAL.getCode())
                     .le(FinanceReceivable::getDueDate, periodEnd));
             for (FinanceReceivable r : list) {
                 FinanceBillItem it = new FinanceBillItem();
@@ -85,7 +86,7 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         } else {
             List<FinancePayable> list = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
                     .eq(FinancePayable::getSupplierId, partnerId)
-                    .eq(FinancePayable::getStatus, "未结清").or().eq(FinancePayable::getStatus, "部分结清")
+                    .eq(FinancePayable::getStatus, SettlementStatus.UNSETTLED.getCode()).or().eq(FinancePayable::getStatus, SettlementStatus.PARTIAL.getCode())
                     .le(FinancePayable::getDueDate, periodEnd));
             for (FinancePayable r : list) {
                 FinanceBillItem it = new FinanceBillItem();

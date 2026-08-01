@@ -94,7 +94,7 @@ public class OutsourceOtherIoController {
         if (cid != null && cid > 0) io.setCompanyId(cid);
         ioMapper.insert(io);
         for (OutsourceOtherIoItem it : items) {
-            it.setId(null); it.setOtherIoId(io.getId());
+            it.setOtherIoId(io.getId());
             if (cid != null && cid > 0) it.setCompanyId(cid);
             itemMapper.insert(it);
         }
@@ -114,7 +114,7 @@ public class OutsourceOtherIoController {
         revertStock(old, oldItems);
 
         OutsourceOtherIo io = parseIo(body); io.setId(id);
-        io.setCode(old.getCode()); io.setStatus("已确认");
+        io.setCode(old.getCode()); io.setStatus(DeliveryStatus.CONFIRMED.getCode());
         ioMapper.updateById(io);
         itemMapper.delete(new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, id));
 
@@ -138,7 +138,7 @@ public class OutsourceOtherIoController {
         List<OutsourceOtherIoItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, id));
         revertStock(old, items);
-        OutsourceOtherIo u = new OutsourceOtherIo(); u.setId(id); u.setStatus("已取消");
+        OutsourceOtherIo u = new OutsourceOtherIo(); u.setId(id); u.setStatus(DeliveryStatus.CANCELLED.getCode());
         ioMapper.updateById(u);
         return R.ok();
     }

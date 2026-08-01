@@ -8,6 +8,7 @@ import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
@@ -177,7 +178,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         fp.setPaidAmount(BigDecimal.ZERO);
         fp.setUnpaidAmount(order.getTotalAmount().negate());
         fp.setDueDate(order.getReturnDate());
-        fp.setStatus("未结清");
+        fp.setStatus(SettlementStatus.UNSETTLED.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) fp.setCompanyId(cid);
         payableMapper.insert(fp);
@@ -203,7 +204,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                 .eq(FinancePayable::getSourceBillNo, order.getCode());
         List<FinancePayable> payables = payableMapper.selectList(payableW);
         for (FinancePayable fp : payables) {
-            if (!"未结清".equals(fp.getStatus())) {
+            if (!SettlementStatus.UNSETTLED.getCode().equals(fp.getStatus())) {
                 throw new BusinessException("该退货单对应的应付账款已核销，无法反审核");
             }
         }

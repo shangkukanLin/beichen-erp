@@ -3,6 +3,7 @@ package com.beichen.erp.dev.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.dev.common.BugStatus;
 import com.beichen.erp.dev.entity.Bug;
 import com.beichen.erp.dev.entity.dto.BugDTO;
 import com.beichen.erp.dev.mapper.BugMapper;
@@ -103,7 +104,7 @@ public class BugServiceImpl extends ServiceImpl<BugMapper, Bug> implements BugSe
         bug.setAssignedTo(dto.getAssignedTo());
 
         if (dto.getStatus() != null
-                && ("已修复".equals(dto.getStatus()) || "已关闭".equals(dto.getStatus()))
+                && (BugStatus.FIXED.getCode().equals(dto.getStatus()) || BugStatus.CLOSED.getCode().equals(dto.getStatus()))
                 && exist.getResolvedTime() == null) {
             bug.setResolvedTime(LocalDateTime.now());
         } else {

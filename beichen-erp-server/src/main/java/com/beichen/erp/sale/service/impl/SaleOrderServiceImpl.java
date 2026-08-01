@@ -7,6 +7,7 @@ import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinanceReceivable;
@@ -185,7 +186,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         fr.setPaidAmount(BigDecimal.ZERO);
         fr.setUnpaidAmount(order.getTotalAmount());
         fr.setDueDate(calcDueDate(order));
-        fr.setStatus("未结清");
+        fr.setStatus(SettlementStatus.UNSETTLED.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) fr.setCompanyId(cid);
         receivableMapper.insert(fr);

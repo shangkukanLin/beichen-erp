@@ -6,6 +6,7 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.PhaseTemplate;
 import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.common.TimelineStatus;
+import com.beichen.erp.dev.common.ProjectStatus;
 import com.beichen.erp.dev.entity.ProjectTimeline;
 import com.beichen.erp.dev.mapper.PhaseTemplateMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
@@ -118,8 +119,8 @@ public class ProjectTimelineController {
             // 所有阶段都已处理完毕，自动结项
             log.info("[completePhase] → 所有阶段已完成，自动结项");
             Project project = projectMapper.selectById(projectId);
-            if (project != null && !"结项".equals(project.getStatus())) {
-                project.setStatus("结项");
+            if (project != null && !ProjectStatus.CLOSED.getCode().equals(project.getStatus())) {
+                project.setStatus(ProjectStatus.CLOSED.getCode());
                 project.setActualEndDate(LocalDate.now());
                 projectMapper.updateById(project);
             }
@@ -134,7 +135,7 @@ public class ProjectTimelineController {
         // 到达小批量及之后阶段时，同步产品状态（研发中 → 正常）
         int xiaopiliangOrder = -1;
         for (ProjectTimeline p : phases) {
-            if ("小批量".equals(p.getStatusName())) {
+            if (ProjectStatus.SMALL_BATCH.getCode().equals(p.getStatusName())) {
                 xiaopiliangOrder = p.getSortOrder();
                 break;
             }

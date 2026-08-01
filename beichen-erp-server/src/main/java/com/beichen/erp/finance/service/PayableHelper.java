@@ -2,6 +2,7 @@ package com.beichen.erp.finance.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.supplier.entity.Supplier;
@@ -42,7 +43,7 @@ public class PayableHelper {
         fp.setPaidAmount(BigDecimal.ZERO);
         fp.setUnpaidAmount(amount);
         fp.setDueDate(calcDueDate(s, bizDate));
-        fp.setStatus("未结清");
+        fp.setStatus(SettlementStatus.UNSETTLED.getCode());
         fp.setRemark(remark);
         payableMapper.insert(fp);
         return fp;

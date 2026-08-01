@@ -3,6 +3,7 @@ package com.beichen.erp.finance.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.entity.FinanceReceivable;
 import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import lombok.RequiredArgsConstructor;
@@ -56,7 +57,7 @@ public class FinanceReceivableController {
     public R<?> unpaid(@RequestParam Long customerId) {
         return R.ok(receivableMapper.selectList(new LambdaQueryWrapper<FinanceReceivable>()
                 .eq(FinanceReceivable::getCustomerId, customerId)
-                .ne(FinanceReceivable::getStatus, "已结清")
+                .ne(FinanceReceivable::getStatus, SettlementStatus.SETTLED.getCode())
                 .orderByDesc(FinanceReceivable::getId)));
     }
 }

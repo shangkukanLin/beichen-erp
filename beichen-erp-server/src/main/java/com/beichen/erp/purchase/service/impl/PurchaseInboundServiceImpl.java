@@ -8,6 +8,7 @@ import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinancePayable;
+import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.material.entity.Material;
@@ -186,7 +187,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
         fp.setPaidAmount(BigDecimal.ZERO);
         fp.setUnpaidAmount(inbound.getTotalAmount());
         fp.setDueDate(payableHelper.calcDueDate(supplierMapper.selectById(inbound.getSupplierId()), inbound.getInboundDate()));
-        fp.setStatus("未结清");
+        fp.setStatus(SettlementStatus.UNSETTLED.getCode());
         payableMapper.insert(fp);
         // 3) 更新入库单状态
         PurchaseInbound u = new PurchaseInbound();

@@ -7,6 +7,7 @@ import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinanceReceivable;
@@ -182,7 +183,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         fr.setPaidAmount(BigDecimal.ZERO);
         fr.setUnpaidAmount(outbound.getTotalAmount());
         fr.setDueDate(outbound.getOutboundDate() != null ? outbound.getOutboundDate().plusMonths(1) : null);
-        fr.setStatus("未结清");
+        fr.setStatus(SettlementStatus.UNSETTLED.getCode());
         receivableMapper.insert(fr);
         // 3) 更新客户应收余额（冗余）
         if (outbound.getCustomerId() != null) {

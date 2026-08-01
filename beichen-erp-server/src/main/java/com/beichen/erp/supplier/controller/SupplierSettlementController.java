@@ -7,6 +7,8 @@ import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.common.MaterialOrderStatus;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
+import com.beichen.erp.outsource.common.DeliveryStatus;
+import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
@@ -52,7 +54,7 @@ public class SupplierSettlementController {
         // 1. 未结清应付
         List<FinancePayable> payables = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
             .eq(FinancePayable::getSupplierId, supplierId)
-            .ne(FinancePayable::getStatus, "已结清")
+            .ne(FinancePayable::getStatus, SettlementStatus.SETTLED.getCode())
             .orderByAsc(FinancePayable::getDueDate));
         BigDecimal unpaidTotal = payables.stream()
             .map(p -> p.getUnpaidAmount() != null ? p.getUnpaidAmount() : BigDecimal.ZERO)
@@ -131,7 +133,7 @@ public class SupplierSettlementController {
             delivery.setFactoryId(supplierId);
             delivery.setFromWarehouseId(wh.getId());
             delivery.setDeliveryDate(LocalDate.now());
-            delivery.setStatus("已确认");
+            delivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
             delivery.setRemark("清算退料 - " + s.getName());
             delivery.setCode(count == 0 ? code : generateDeliveryCode());
             deliveryMapper.insert(delivery);

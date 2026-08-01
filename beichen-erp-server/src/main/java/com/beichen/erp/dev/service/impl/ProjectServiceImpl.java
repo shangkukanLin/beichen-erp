@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.common.TimelineStatus;
+import com.beichen.erp.dev.common.ProjectStatus;
 import com.beichen.erp.dev.entity.ProjectTimeline;
 import com.beichen.erp.dev.entity.Bom;
 import com.beichen.erp.dev.entity.BomType;
@@ -253,7 +254,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     /**
      * 项目进入小批量阶段时，将关联的"研发中"产品状态改为"正常"
      */
-    private static final java.util.Set<String> PRODUCTION_STATUSES = java.util.Set.of("小批量", "结项");
+    private static final java.util.Set<String> PRODUCTION_STATUSES = java.util.Set.of(ProjectStatus.SMALL_BATCH.getCode(), ProjectStatus.CLOSED.getCode());
 
     private void syncProductStatus(Project project) {
         if (project == null || project.getId() == null) return;

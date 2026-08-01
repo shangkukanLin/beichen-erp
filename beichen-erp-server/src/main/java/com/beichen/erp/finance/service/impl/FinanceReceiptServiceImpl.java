@@ -8,6 +8,7 @@ import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.entity.*;
+import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinanceReceiptService;
 import lombok.RequiredArgsConstructor;
@@ -102,7 +103,7 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
             BigDecimal newUnpaid = (rec.getUnpaidAmount() != null ? rec.getUnpaidAmount() : BigDecimal.ZERO).subtract(amt);
             rec.setPaidAmount(newPaid);
             rec.setUnpaidAmount(newUnpaid.max(BigDecimal.ZERO));
-            rec.setStatus(newUnpaid.compareTo(BigDecimal.ZERO) <= 0 ? "已结清" : "部分结清");
+            rec.setStatus(newUnpaid.compareTo(BigDecimal.ZERO) <= 0 ? SettlementStatus.SETTLED.getCode() : SettlementStatus.PARTIAL.getCode());
             receivableMapper.updateById(rec);
         }
         // 更新账户余额
