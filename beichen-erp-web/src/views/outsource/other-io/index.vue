@@ -3,13 +3,14 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { IoType, IoTypeLabel } from '@/api/material'
 
 const router = useRouter()
 const loading = ref(false)
 const list = ref<any[]>([])
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const query = reactive({ warehouseId: '' })
-const activeTab = ref('入库')
+const activeTab = ref(IoType.IN)
 const warehouses = ref<any[]>([])
 
 async function loadWarehouses() {
@@ -61,8 +62,8 @@ onActivated(() => {
       </el-form>
     </el-card>
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
-      <el-tab-pane label="入库" name="入库"/>
-      <el-tab-pane label="出库" name="出库"/>
+      <el-tab-pane :label="IoTypeLabel[IoType.IN]" :name="IoType.IN"/>
+      <el-tab-pane :label="IoTypeLabel[IoType.OUT]" :name="IoType.OUT"/>
     </el-tabs>
     <el-card shadow="never" style="margin-top:-12px">
       <el-table :data="list" border stripe v-loading="loading">

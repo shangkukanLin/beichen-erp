@@ -9,12 +9,13 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.finance.common.SettlementStatus;
+import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.purchase.entity.*;
 import com.beichen.erp.purchase.mapper.PurchaseReturnItemMapper;
 import com.beichen.erp.purchase.mapper.PurchaseReturnMapper;
@@ -39,7 +40,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private final PurchaseReturnMapper returnMapper;
     private final PurchaseReturnItemMapper itemMapper;
     private final SupplierMapper supplierMapper;
-    private final MaterialMapper materialMapper;
+    private final ProductMapper productMapper;
     private final InventoryWarehouseStockService stockService;
     private final FinancePayableMapper payableMapper;
     private final UserMapper userMapper;
@@ -53,15 +54,15 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                 .orderByDesc(PurchaseReturn::getId);
         Page<PurchaseReturn> raw = returnMapper.selectPage(new Page<>(pageNum, pageSize), w);
         // 批量查产品
-        Map<Long, Material> productMap = new HashMap<>();
+        Map<Long, Product> productMap = new HashMap<>();
         if (!raw.getRecords().isEmpty()) {
             List<Long> returnIds = raw.getRecords().stream().map(PurchaseReturn::getId).collect(Collectors.toList());
             List<PurchaseReturnItem> allItems = itemMapper.selectList(
                     new LambdaQueryWrapper<PurchaseReturnItem>().in(PurchaseReturnItem::getReturnId, returnIds));
             Set<Long> productIds = allItems.stream().map(PurchaseReturnItem::getProductId).filter(Objects::nonNull).collect(Collectors.toSet());
             if (!productIds.isEmpty()) {
-                List<Material> products = materialMapper.selectBatchIds(productIds);
-                for (Material p : products) productMap.put(p.getId(), p);
+                List<Product> products = productMapper.selectBatchIds(productIds);
+                for (Product p : products) productMap.put(p.getId(), p);
             }
         }
         // 批量查明细
@@ -73,7 +74,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
             itemsMap = allItems.stream().collect(Collectors.groupingBy(PurchaseReturnItem::getReturnId));
         }
         Map<Long, List<PurchaseReturnItem>> finalItemsMap = itemsMap;
-        Map<Long, Material> finalProductMap = productMap;
+        Map<Long, Product> finalProductMap = productMap;
         Page<Map<String, Object>> res = new Page<>(pageNum, pageSize, raw.getTotal());
         res.setRecords(raw.getRecords().stream().map(o -> {
             Map<String, Object> m = new HashMap<>();
@@ -159,7 +160,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         // 1) 库存联动：退货出库减库存
         for (PurchaseReturnItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Material product = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(order.getWarehouseId(),
                     product != null ? product.getName() : "",
                     it.getQuantity().negate(),
@@ -172,7 +173,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         fp.setSupplierId(order.getSupplierId());
         Supplier s = order.getSupplierId() != null ? supplierMapper.selectById(order.getSupplierId()) : null;
         fp.setSupplierName(s != null ? s.getName() : "");
-        fp.setSourceBillType("成品退货单");
+        fp.setSourceBillType(SourceBillType.PURCHASE_RETURN.getCode());
         fp.setSourceBillNo(order.getCode());
         fp.setAmount(order.getTotalAmount().negate());
         fp.setPaidAmount(BigDecimal.ZERO);
@@ -213,7 +214,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                 new LambdaQueryWrapper<PurchaseReturnItem>().eq(PurchaseReturnItem::getReturnId, id));
         for (PurchaseReturnItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Material product = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(order.getWarehouseId(),
                     product != null ? product.getName() : "",
                     it.getQuantity(),

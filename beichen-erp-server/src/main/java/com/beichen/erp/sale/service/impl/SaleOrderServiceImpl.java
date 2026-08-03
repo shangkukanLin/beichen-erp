@@ -8,6 +8,7 @@ import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.finance.common.SettlementStatus;
+import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinanceReceivable;
@@ -15,8 +16,8 @@ import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.sale.entity.SaleOrder;
 import com.beichen.erp.sale.entity.SaleOrderItem;
 import com.beichen.erp.sale.mapper.SaleOrderMapper;
@@ -41,7 +42,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     private final InventoryWarehouseStockService stockService;
     private final FinanceReceivableMapper receivableMapper;
     private final InventoryWarehouseStockMapper stockMapper;
-    private final MaterialMapper materialMapper;
+    private final ProductMapper productMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long customerId, String code, int pageNum, int pageSize) {
@@ -168,7 +169,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         // 1) 库存联动：出库减库存（quantity 负值，库存不足自动抛异常）
         for (SaleOrderItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Material product = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(order.getWarehouseId(),
                     product != null ? product.getName() : "",
                     it.getQuantity().negate(), StockChangeType.SALE_OUT, order.getCode(), RelatedBillType.SALE_ORDER,
@@ -180,7 +181,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         fr.setBillNo(order.getCode());
         fr.setCustomerId(order.getCustomerId());
         fr.setCustomerName(order.getCustomerName());
-        fr.setSourceBillType("销售单");
+        fr.setSourceBillType(SourceBillType.SALE_ORDER.getCode());
         fr.setSourceBillNo(order.getCode());
         fr.setAmount(order.getTotalAmount());
         fr.setPaidAmount(BigDecimal.ZERO);
@@ -216,7 +217,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
 
         for (SaleOrderItem it : items) {
             if (it.getProductId() == null || it.getQuantity() == null) continue;
-            Material product = materialMapper.selectById(it.getProductId());
+            Product product = productMapper.selectById(it.getProductId());
             if (product == null) continue;
             BigDecimal required = it.getQuantity();
             BigDecimal available = stockMapper.selectList(

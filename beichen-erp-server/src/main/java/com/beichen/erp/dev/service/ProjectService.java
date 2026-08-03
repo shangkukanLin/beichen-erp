@@ -2,21 +2,25 @@ package com.beichen.erp.dev.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.beichen.erp.common.PageParam;
 import com.beichen.erp.dev.entity.Project;
-import com.beichen.erp.dev.entity.dto.ProjectDTO;
-import com.beichen.erp.dev.entity.dto.ProjectQueryDTO;
+
+import java.util.List;
 
 public interface ProjectService extends IService<Project> {
 
-    Page<Project> page(ProjectQueryDTO query);
+    /** 分页查询项目 */
+    Page<Project> page(PageParam param, String keyword, String status);
 
-    String generateCode();
+    /** 新增项目（含时间线初始化，第一个阶段自动激活） */
+    Project create(Project project);
 
-    void create(ProjectDTO dto);
+    /** 取消项目 */
+    void cancel(Long projectId);
 
-    void update(ProjectDTO dto);
+    /** 重新激活项目 */
+    void reactivate(Long projectId);
 
-    void delete(Long id);
-
-    void updateStatus(Long id, String status);
+    /** 按状态查询项目列表 */
+    List<Project> listByStatus(String status);
 }

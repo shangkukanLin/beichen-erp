@@ -17,6 +17,7 @@ import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.DeliveryStatus;
+import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.common.OutsourceStockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
@@ -314,7 +315,7 @@ public class DeliveryServiceImpl implements DeliveryService {
      */
     private void updateStock(Long warehouseId, Long materialId, BigDecimal delta, String qualityType,
                              String materialName, String changeType, String deliveryCode) {
-        String qt = qualityType != null ? qualityType : "良品";
+        String qt = qualityType != null ? qualityType : QualityType.GOOD.getCode();
         LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
                 .eq(OutsourceWarehouseStock::getWarehouseId, warehouseId)
                 .eq(OutsourceWarehouseStock::getMaterialId, materialId)

@@ -3,10 +3,10 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { OutsourceOrderStatus, OutsourceOrderStatusLabel } from '@/api/material'
+import { OutsourceOrderStatus, OutsourceOrderStatusLabel, DeliveryType, DeliveryTypeLabel } from '@/api/material'
 
 const router = useRouter()
-const activeTab = ref('发料')
+const activeTab = ref(DeliveryType.DELIVERY)
 const query = reactive({ code: '', factoryId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])
@@ -69,7 +69,7 @@ onActivated(() => { loadOptions() })
 
     <el-card shadow="never" class="table-card">
       <el-tabs v-model="activeTab" @tab-change="onTabChange">
-        <el-tab-pane label="发料" name="发料" /><el-tab-pane label="收料" name="收料" /><el-tab-pane label="退料" name="退料" />
+        <el-tab-pane :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :name="DeliveryType.DELIVERY" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.RECEIVE]" :name="DeliveryType.RECEIVE" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.RETURN]" :name="DeliveryType.RETURN" />
       </el-tabs>
 
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%" size="small">

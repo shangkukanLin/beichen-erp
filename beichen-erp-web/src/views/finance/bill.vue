@@ -4,8 +4,9 @@ import { ElMessage } from 'element-plus'
 import { listCustomers, type Customer } from '@/api/customer'
 import request from '@/utils/request'
 import { getBillPage, getBillItems, generateBill, type FinanceBill, type FinanceBillItem } from '@/api/finance'
+import { BillType, BillTypeLabel } from '@/api/material'
 
-const query = reactive({ billType: '应收', partnerId: '' as string|number })
+const query = reactive({ billType: BillType.RECEIVABLE, partnerId: '' as string|number })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinanceBill[]>([])
@@ -30,18 +31,18 @@ onMounted(() => { loadOpts(); loadData() })
 function query_() { page.pageNum = 1; loadData() }
 function reset_() { query.partnerId = ''; page.pageNum = 1; loadData() }
 function partnerName(id?: number) {
-  if (query.billType === '应收') return customers.value.find(x => x.id === id)?.name || ''
+  if (query.billType === BillType.RECEIVABLE) return customers.value.find(x => x.id === id)?.name || ''
   return suppliers.value.find(x => x.id === id)?.name || ''
 }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 
-const genForm = reactive({ billType: '应收', partnerId: undefined as number|undefined, partnerName: '', periodStart: '', periodEnd: '' })
+const genForm = reactive({ billType: BillType.RECEIVABLE, partnerId: undefined as number|undefined, partnerName: '', periodStart: '', periodEnd: '' })
 const genLoading = ref(false)
 const genDialog = ref(false)
 
 function onBillTypeChange() { genForm.partnerId = undefined; genForm.partnerName = '' }
 async function onPartnerSelect(id: number) {
-  if (genForm.billType === '应收') { const c = customers.value.find(x => x.id === id); genForm.partnerName = c?.name || '' }
+  if (genForm.billType === BillType.RECEIVABLE) { const c = customers.value.find(x => x.id === id); genForm.partnerName = c?.name || '' }
   else { const s = suppliers.value.find(x => x.id === id); genForm.partnerName = s?.name || '' }
 }
 async function handleGenerate() {
@@ -62,15 +63,15 @@ async function handleDetail(row: FinanceBill) { detail.value = { ...row }; try {
 <template>
   <div class="p">
     <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
-      <el-form-item label="类型"><el-select v-model="query.billType" style="width:120px"><el-option label="应收" value="应收"/><el-option label="应付" value="应付"/></el-select></el-form-item>
-      <el-form-item label="往来单位"><el-select v-model="query.partnerId" placeholder="全部" clearable filterable style="width:160px"><el-option v-for="c in (query.billType==='应收'?customers:suppliers)" :key="c.id" :label="(c as any).name||(c as any).companyName" :value="c.id"/></el-select></el-form-item>
+      <el-form-item label="类型"><el-select v-model="query.billType" style="width:120px"><el-option :label="BillTypeLabel[BillType.RECEIVABLE]" :value="BillType.RECEIVABLE"/><el-option :label="BillTypeLabel[BillType.PAYABLE]" :value="BillType.PAYABLE"/></el-select></el-form-item>
+      <el-form-item label="往来单位"><el-select v-model="query.partnerId" placeholder="全部" clearable filterable style="width:160px"><el-option v-for="c in (query.billType===BillType.RECEIVABLE?customers:suppliers)" :key="c.id" :label="(c as any).name||(c as any).companyName" :value="c.id"/></el-select></el-form-item>
       <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button><el-button type="success" @click="genDialog=true">生成账单</el-button></el-form-item>
     </el-form></el-card>
     <el-card shadow="never">
       <el-table v-loading="loading" :data="data" border stripe>
         <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="billNo" label="账单号" min-width="140"/>
-        <el-table-column label="类型" width="70" align="center"><template #default="{row}"><el-tag :type="row.billType==='应收'?'':'warning'">{{ row.billType }}</el-tag></template></el-table-column>
+        <el-table-column label="类型" width="70" align="center"><template #default="{row}"><el-tag :type="row.billType===BillType.RECEIVABLE?'':'warning'">{{ BillTypeLabel[row.billType] || row.billType }}</el-tag></template></el-table-column>
         <el-table-column prop="partnerName" label="往来单位" min-width="140"/>
         <el-table-column prop="periodStart" label="账期起" width="120" align="center"/>
         <el-table-column prop="periodEnd" label="账期止" width="120" align="center"/>
@@ -84,8 +85,8 @@ async function handleDetail(row: FinanceBill) { detail.value = { ...row }; try {
 
     <el-dialog v-model="genDialog" title="生成账单" width="550px">
       <el-form :model="genForm" label-width="90px">
-        <el-form-item label="类型"><el-select v-model="genForm.billType" style="width:100%" @change="onBillTypeChange"><el-option label="应收" value="应收"/><el-option label="应付" value="应付"/></el-select></el-form-item>
-        <el-form-item label="往来单位"><el-select v-model="genForm.partnerId" placeholder="请选择" filterable style="width:100%" @change="onPartnerSelect"><el-option v-for="c in (genForm.billType==='应收'?customers:suppliers)" :key="c.id" :label="(c as any).name||(c as any).companyName" :value="c.id"/></el-select></el-form-item>
+        <el-form-item label="类型"><el-select v-model="genForm.billType" style="width:100%" @change="onBillTypeChange"><el-option :label="BillTypeLabel[BillType.RECEIVABLE]" :value="BillType.RECEIVABLE"/><el-option :label="BillTypeLabel[BillType.PAYABLE]" :value="BillType.PAYABLE"/></el-select></el-form-item>
+        <el-form-item label="往来单位"><el-select v-model="genForm.partnerId" placeholder="请选择" filterable style="width:100%" @change="onPartnerSelect"><el-option v-for="c in (genForm.billType===BillType.RECEIVABLE?customers:suppliers)" :key="c.id" :label="(c as any).name||(c as any).companyName" :value="c.id"/></el-select></el-form-item>
         <el-form-item label="账期起"><el-date-picker v-model="genForm.periodStart" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>
         <el-form-item label="账期止"><el-date-picker v-model="genForm.periodEnd" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>
       </el-form>
@@ -94,7 +95,7 @@ async function handleDetail(row: FinanceBill) { detail.value = { ...row }; try {
     <el-drawer v-model="detailVisible" title="账单详情" size="50%">
       <el-descriptions :column="2" border>
         <el-descriptions-item label="账单号">{{ detail.billNo }}</el-descriptions-item>
-        <el-descriptions-item label="类型"><el-tag :type="detail.billType==='应收'?'':'warning'">{{ detail.billType }}</el-tag></el-descriptions-item>
+        <el-descriptions-item label="类型"><el-tag :type="detail.billType===BillType.RECEIVABLE?'':'warning'">{{ BillTypeLabel[detail.billType] || detail.billType }}</el-tag></el-descriptions-item>
         <el-descriptions-item label="往来单位">{{ detail.partnerName }}</el-descriptions-item>
         <el-descriptions-item label="账期">{{ detail.periodStart }} ~ {{ detail.periodEnd }}</el-descriptions-item>
         <el-descriptions-item label="总额">{{ fmt(detail.totalAmount) }}</el-descriptions-item>

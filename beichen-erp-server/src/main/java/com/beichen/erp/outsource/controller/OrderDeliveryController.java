@@ -8,6 +8,7 @@ import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
+import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
@@ -28,8 +29,8 @@ import com.beichen.erp.outsource.mapper.OutsourceStockLogMapper;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.dev.entity.Bom;
 import com.beichen.erp.dev.mapper.BomMapper;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,7 +53,7 @@ public class OrderDeliveryController {
     private final InventoryWarehouseStockMapper inventoryStockMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final BomMapper bomMapper;
-    private final MaterialMapper materialMapper;
+    private final ProductMapper productMapper;
     private final OutsourceWarehouseMapper warehouseMapper;
     private final OutsourceWarehouseStockMapper warehouseStockMapper;
     private final OutsourceStockLogMapper stockLogMapper;
@@ -311,8 +312,8 @@ public class OrderDeliveryController {
 
         // 1. 扣减成品库存（写入 inventory_stock_log）
         Long productMaterialId = null;
-        Material productMat = materialMapper.selectOne(
-            new LambdaQueryWrapper<Material>().eq(Material::getName, productName));
+        Product productMat = productMapper.selectOne(
+            new LambdaQueryWrapper<Product>().eq(Product::getName, productName));
         if (productMat != null) productMaterialId = productMat.getId();
         stockService.changeStock(warehouseId, productName, defectQty.negate(),
             StockChangeType.OUTSOURCE_DEFECT_RETURN, order.getCode(), RelatedBillType.OUTSOURCE_DEFECT, productMaterialId, null, order.getId(), null);
@@ -323,10 +324,10 @@ public class OrderDeliveryController {
         delivery.setOrderId(orderId);
         delivery.setProductName(productName);
         delivery.setQuantity(defectQty.negate());
-        delivery.setDeliveryType("退不良");
+        delivery.setDeliveryType(DeliveryType.DEFECT_RETURN.getCode());
         delivery.setWarehouseId(warehouseId);
         delivery.setDeliveryDate(LocalDate.now());
-        delivery.setRemark("退不良");
+        delivery.setRemark(DeliveryType.DEFECT_RETURN.getLabel());
         deliveryMapper.insert(delivery);
 
         // 退不良冲减应付（负数交货 → 负数应付）
@@ -342,7 +343,7 @@ public class OrderDeliveryController {
                 new LambdaQueryWrapper<OutsourceWarehouseStock>()
                     .eq(OutsourceWarehouseStock::getWarehouseId, whId)
                     .eq(OutsourceWarehouseStock::getMaterialId, mat.materialId())
-                    .eq(OutsourceWarehouseStock::getQualityType, "良品"));
+                    .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
             BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
             if (stock == null) {
                 stock = new OutsourceWarehouseStock();
@@ -405,10 +406,14 @@ public class OrderDeliveryController {
         List<Bom> bomList = bomMapper.selectList(
             new LambdaQueryWrapper<Bom>().eq(Bom::getProjectId, projectId));
         for (Bom bom : bomList) {
-            if (bom.getMaterialName() == null || bom.getMaterialName().isBlank()) continue;
-            BigDecimal perUnit = bom.getQuantityPerSet() != null ? bom.getQuantityPerSet() : BigDecimal.ZERO;
-            Long materialId = resolveOrCreateMaterialId(bom.getMaterialName(), bom.getMaterialType(), bom.getUnit());
-            result.add(new MaterialReq(materialId, bom.getMaterialName(), perUnit));
+            if (bom.getOutsourceMaterialId() == null) continue;
+            Long materialId = bom.getOutsourceMaterialId();
+            // 通过ID查询物料名称
+            OutsourceMaterial mat = outsourceMaterialMapper.selectById(materialId);
+            String materialName = mat != null ? mat.getMaterialName() : "";
+            if (materialName.isBlank()) continue;
+            BigDecimal perUnit = bom.getQuantity() != null ? bom.getQuantity() : BigDecimal.ZERO;
+            result.add(new MaterialReq(materialId, materialName, perUnit));
         }
         log.info("从 BOM 加载 {} 项 (projectId={})", result.size(), projectId);
         return result;
@@ -466,7 +471,7 @@ public class OrderDeliveryController {
                 new LambdaQueryWrapper<OutsourceWarehouseStock>()
                     .eq(OutsourceWarehouseStock::getWarehouseId, whId)
                     .eq(OutsourceWarehouseStock::getMaterialId, mat.materialId())
-                    .eq(OutsourceWarehouseStock::getQualityType, "良品"));
+                    .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
             BigDecimal currentStock = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
 
             if (currentStock.compareTo(needed) < 0) {
@@ -518,7 +523,7 @@ public class OrderDeliveryController {
                 new LambdaQueryWrapper<OutsourceWarehouseStock>()
                     .eq(OutsourceWarehouseStock::getWarehouseId, whId)
                     .eq(OutsourceWarehouseStock::getMaterialId, mat.materialId())
-                    .eq(OutsourceWarehouseStock::getQualityType, "良品"));
+                    .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
             BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
             BigDecimal after;
             if (stock == null) {
@@ -563,7 +568,7 @@ public class OrderDeliveryController {
                 new LambdaQueryWrapper<OutsourceWarehouseStock>()
                     .eq(OutsourceWarehouseStock::getWarehouseId, whId)
                     .eq(OutsourceWarehouseStock::getMaterialId, mat.materialId())
-                    .eq(OutsourceWarehouseStock::getQualityType, "良品"));
+                    .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
             if (stock != null) {
                 BigDecimal before = stock.getQuantity();
                 BigDecimal after = before.add(toRestore);
@@ -585,13 +590,13 @@ public class OrderDeliveryController {
         log.info("开始入库: warehouseId={}, productName={}, qty={}",
                 delivery.getWarehouseId(), delivery.getProductName(), delivery.getQuantity());
         Long productMaterialId = null;
-        Material material = materialMapper.selectOne(
-            new LambdaQueryWrapper<Material>().eq(Material::getName, delivery.getProductName()));
-        if (material != null) {
-            productMaterialId = material.getId();
-            log.info("找到对应物料记录: materialId={}", productMaterialId);
+        Product product = productMapper.selectOne(
+            new LambdaQueryWrapper<Product>().eq(Product::getName, delivery.getProductName()));
+        if (product != null) {
+            productMaterialId = product.getId();
+            log.info("找到对应产品记录: productId={}", productMaterialId);
         } else {
-            log.info("物料表中未找到「{}」，将按 productName 入库", delivery.getProductName());
+            log.info("产品表中未找到「{}」，将按 productName 入库", delivery.getProductName());
         }
         stockService.changeStock(delivery.getWarehouseId(), delivery.getProductName(),
             delivery.getQuantity(), StockChangeType.OUTSOURCE_FINISH_IN, null, (RelatedBillType) null, productMaterialId, null, delivery.getId(), null);
@@ -601,9 +606,9 @@ public class OrderDeliveryController {
     /** 回滚收货入库（统一走 changeStock，自动写 inventory_stock_log） */
     private void revertInventoryStock(OutsourceOrderDelivery delivery, String orderCode) {
         Long materialId = null;
-        Material material = materialMapper.selectOne(
-            new LambdaQueryWrapper<Material>().eq(Material::getName, delivery.getProductName()));
-        if (material != null) materialId = material.getId();
+        Product product = productMapper.selectOne(
+            new LambdaQueryWrapper<Product>().eq(Product::getName, delivery.getProductName()));
+        if (product != null) materialId = product.getId();
 
         stockService.changeStock(delivery.getWarehouseId(), delivery.getProductName(),
             delivery.getQuantity().negate(), StockChangeType.OUTSOURCE_ROLLBACK, orderCode, RelatedBillType.OUTSOURCE_ORDER,

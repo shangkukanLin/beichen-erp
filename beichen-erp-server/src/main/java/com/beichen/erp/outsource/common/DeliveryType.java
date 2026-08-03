@@ -16,7 +16,9 @@ public enum DeliveryType {
     /** 调拨：仓库间调拨物料 */
     TRANSFER("调拨"),
     /** 退料：退回物料到供应商或仓库 */
-    RETURN("退料");
+    RETURN("退料"),
+    /** 退不良：退回不良品 */
+    DEFECT_RETURN("退不良");
 
     private final String label;
 
@@ -26,4 +28,15 @@ public enum DeliveryType {
     public String getLabel() { return label; }
     /** 存入数据库的枚举常量名 */
     public String getCode() { return name(); }
+
+    /**
+     * 根据数据库存储的 code（枚举名）反向查找。
+     */
+    public static DeliveryType fromCode(String code) {
+        if (code == null || code.isBlank()) return null;
+        for (DeliveryType t : values()) {
+            if (t.name().equalsIgnoreCase(code)) return t;
+        }
+        return null;
+    }
 }

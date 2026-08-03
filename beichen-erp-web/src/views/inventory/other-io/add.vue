@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { getQualityTypes, type QualityOption } from '@/api/product'
+import { IoType, IoTypeLabel } from '@/api/material'
 
 const route = useRoute(); const router = useRouter()
 const editId = Number(route.query.id) || 0
@@ -11,7 +12,7 @@ const warehouses = ref<any[]>([])
 const materialOptions = ref<any[]>([])
 const qualityOptions = ref<QualityOption[]>([])
 const saving = ref(false)
-const form = reactive({ warehouseId: undefined as any, ioType: '入库', ioDate: new Date().toISOString().slice(0,10), remark: '' })
+const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN, ioDate: new Date().toISOString().slice(0,10), remark: '' })
 const items = ref<any[]>([{ materialId: undefined, materialName: '', spec: '', unit: '', quantity: undefined, remark: '' }])
 
 async function loadWarehouses() {
@@ -65,7 +66,7 @@ onMounted(()=>{ loadWarehouses(); loadMaterials(); loadQualityTypes(); loadDetai
       <el-form :model="form" label-width="80px">
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item label="仓库"><el-select v-model="form.warehouseId" filterable style="width:100%"><el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id"/></el-select></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="类型"><el-select v-model="form.ioType" style="width:100%"><el-option label="入库" value="入库"/><el-option label="出库" value="出库"/></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="类型"><el-select v-model="form.ioType" style="width:100%"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="form.ioDate" type="date"/></el-form-item></el-col>
         </el-row>
         <el-form-item label="备注"><el-input v-model="form.remark" placeholder="备注"/></el-form-item>

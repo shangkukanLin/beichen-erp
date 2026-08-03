@@ -8,6 +8,7 @@ import com.beichen.erp.outsource.common.MaterialOrderStatus;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.outsource.common.DeliveryStatus;
+import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
@@ -129,7 +130,7 @@ public class SupplierSettlementController {
             if (list.isEmpty()) continue;
 
             OutsourceDelivery delivery = new OutsourceDelivery();
-            delivery.setDeliveryType("退料");
+            delivery.setDeliveryType(DeliveryType.RETURN.getCode());
             delivery.setFactoryId(supplierId);
             delivery.setFromWarehouseId(wh.getId());
             delivery.setDeliveryDate(LocalDate.now());

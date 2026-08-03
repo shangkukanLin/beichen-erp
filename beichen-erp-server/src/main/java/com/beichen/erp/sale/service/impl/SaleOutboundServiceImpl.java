@@ -8,13 +8,14 @@ import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.finance.common.SettlementStatus;
+import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinanceReceivable;
 import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.sale.entity.SaleOrder;
 import com.beichen.erp.sale.entity.SaleOutbound;
 import com.beichen.erp.sale.entity.SaleOutboundItem;
@@ -40,7 +41,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     private final SaleOrderMapper orderMapper;
     private final CustomerMapper customerMapper;
     private final InventoryWarehouseStockService stockService;
-    private final MaterialMapper materialMapper;
+    private final ProductMapper productMapper;
     private final FinanceReceivableMapper receivableMapper;
 
     @Override
@@ -165,7 +166,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
                 new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, id));
         // 1) 库存联动：出库减库存（changeStock 负数，不足自动抛异常）
         for (SaleOutboundItem it : items) {
-            Material product = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(outbound.getWarehouseId(),
                     product != null ? product.getName() : "",
                     it.getQuantity().negate(), StockChangeType.SALE_OUT, outbound.getCode(), RelatedBillType.SALE_OUTBOUND,
@@ -177,7 +178,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         fr.setBillNo(outbound.getCode());
         fr.setCustomerId(outbound.getCustomerId());
         fr.setCustomerName(outbound.getCustomerName());
-        fr.setSourceBillType("销售出库");
+        fr.setSourceBillType(SourceBillType.SALE_OUTBOUND.getCode());
         fr.setSourceBillNo(outbound.getCode());
         fr.setAmount(outbound.getTotalAmount());
         fr.setPaidAmount(BigDecimal.ZERO);

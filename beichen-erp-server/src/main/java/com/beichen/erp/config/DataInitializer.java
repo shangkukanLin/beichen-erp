@@ -6,8 +6,6 @@ import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.dev.entity.BomType;
 import com.beichen.erp.dev.mapper.BomTypeMapper;
 import com.beichen.erp.dev.mapper.PhaseTemplateMapper;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
 import com.beichen.erp.system.entity.Menu;
 import com.beichen.erp.system.entity.Role;
 import com.beichen.erp.system.entity.UserRole;
@@ -38,7 +36,6 @@ import java.util.Set;
 public class DataInitializer implements ApplicationRunner {
 
     private final UserMapper userMapper;
-    private final MaterialMapper materialMapper;
     private final RoleMapper roleMapper;
     private final UserRoleMapper userRoleMapper;
     private final MenuMapper menuMapper;
@@ -65,7 +62,6 @@ public class DataInitializer implements ApplicationRunner {
         initRoleMenus();
         initSuperAdmin();
         initBomTypes();
-        initMaterials();
         initPhaseTemplates();
     }
 
@@ -943,16 +939,6 @@ public class DataInitializer implements ApplicationRunner {
             roleService.saveRoleMenus(role.getId(), menuIds);
             log.info("初始化 {} 菜单权限完成", roleCode);
         }
-    }
-
-    private void initMaterials() {
-        Long count = materialMapper.selectCount(null);
-        if (count != null && count > 0) {
-            log.info("物料数据已存在，跳过初始化");
-            return;
-        }
-      
-        log.info("初始化示例物料数据完成（共 3 条）");
     }
 
     private void initBomTypes() {

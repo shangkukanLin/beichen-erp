@@ -2,6 +2,7 @@ package com.beichen.erp.outsource.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.common.R;
+import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.config.CompanyContext;
@@ -34,7 +35,7 @@ public class StockController {
             Map<String, Object> map = new HashMap<>();
             map.put("id", s.getId());
             map.put("materialId", s.getMaterialId());
-            map.put("qualityType", s.getQualityType() != null ? s.getQualityType() : "良品");
+            map.put("qualityType", s.getQualityType() != null ? s.getQualityType() : QualityType.GOOD.getCode());
             if (s.getMaterialId() != null) {
                 OutsourceMaterial mat = materialMapper.selectById(s.getMaterialId());
                 map.put("materialName", mat != null ? mat.getMaterialName() : "-");

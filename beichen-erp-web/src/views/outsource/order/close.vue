@@ -3,6 +3,7 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { DeliveryType } from '@/api/material'
 
 defineOptions({ name: 'OrderClose' })
 const route = useRoute(); const router = useRouter()
@@ -175,8 +176,8 @@ onMounted(loadReport)
     <el-card shadow="never" style="margin-bottom:12px">
       <template #header><span style="font-weight:600">交货记录</span></template>
       <div style="display:flex;gap:20px;margin-bottom:12px;font-size:13px;color:#606266">
-        <span>正常交货：<b style="color:#67c23a">{{ (report.deliveries || []).filter((d:any)=>d.deliveryType!=='退不良').reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
-        <span>退不良：<b style="color:#e6a23c">{{ Math.abs((report.deliveries || []).filter((d:any)=>d.deliveryType==='退不良').reduce((s:number,d:any)=>s+(d.quantity||0),0)) }}</b></span>
+        <span>正常交货：<b style="color:#67c23a">{{ (report.deliveries || []).filter((d:any)=>d.deliveryType!==DeliveryType.DEFECT_RETURN).reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
+        <span>退不良：<b style="color:#e6a23c">{{ Math.abs((report.deliveries || []).filter((d:any)=>d.deliveryType===DeliveryType.DEFECT_RETURN).reduce((s:number,d:any)=>s+(d.quantity||0),0)) }}</b></span>
         <span>实际已交：<b style="color:#409eff">{{ (report.deliveries || []).reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
       </div>
       <el-table :data="report.deliveries" border size="small">

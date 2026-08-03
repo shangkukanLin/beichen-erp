@@ -3,6 +3,8 @@ package com.beichen.erp.outsource.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.outsource.common.DeliveryType;
+import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.OutsourceDelivery;
 import com.beichen.erp.outsource.entity.OutsourceDeliveryItem;
 import com.beichen.erp.outsource.entity.OutsourceWarehouse;
@@ -55,7 +57,7 @@ public class DeliveryController {
             if (d.getSupplierDirect() != null && d.getSupplierDirect() == 1 && d.getSupplierId() != null) { Supplier s = supplierMapper.selectById(d.getSupplierId()); m.put("supplierName", s != null ? s.getName() : ""); }
             // 来源仓库名（发料来源是我方仓，其他是委外仓）
             if (d.getFromWarehouseId() != null) {
-                if ("发料".equals(d.getDeliveryType())) {
+                if (DeliveryType.DELIVERY.getCode().equals(d.getDeliveryType())) {
                     var iw = inventoryWarehouseMapper.selectById(d.getFromWarehouseId());
                     m.put("fromWarehouseName", iw != null ? iw.getWarehouseName() : "");
                 } else {
@@ -219,7 +221,7 @@ public class DeliveryController {
                         item.setQuantity(BigDecimal.ZERO);
                     }
                     // 质量类型，默认良品
-                    item.setQualityType(map.get("qualityType") != null ? map.get("qualityType").toString() : "良品");
+                    item.setQualityType(map.get("qualityType") != null ? map.get("qualityType").toString() : QualityType.GOOD.getCode());
                     if (map.get("unit_price") != null && !map.get("unit_price").toString().isBlank())
                         item.setUnitPrice(new BigDecimal(map.get("unit_price").toString()));
                     items.add(item);

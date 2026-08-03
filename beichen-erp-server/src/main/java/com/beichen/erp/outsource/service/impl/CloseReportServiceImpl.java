@@ -6,6 +6,7 @@ import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.common.DeliveryStatus;
+import com.beichen.erp.inventory.common.IoType;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.common.CloseReportStatus;
@@ -401,7 +402,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         if (!missingItems.isEmpty()) {
             OutsourceOtherIo io = new OutsourceOtherIo();
             io.setWarehouseId(warehouses.get(0).getId());
-            io.setIoType("出库");
+            io.setIoType(IoType.OUT.getCode());
             io.setIoDate(LocalDate.now());
             io.setStatus(DeliveryStatus.CONFIRMED.getCode());
             io.setRemark("加工厂遗失 - " + order.getCode());

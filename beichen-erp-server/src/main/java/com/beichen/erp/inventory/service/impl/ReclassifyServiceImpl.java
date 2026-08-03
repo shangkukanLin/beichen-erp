@@ -13,8 +13,8 @@ import com.beichen.erp.inventory.mapper.InventoryProductReclassifyMapper;
 import com.beichen.erp.inventory.mapper.InventoryProductReclassifyItemMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.inventory.service.ReclassifyService;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +31,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
     private final InventoryProductReclassifyMapper rcMapper;
     private final InventoryProductReclassifyItemMapper itemMapper;
     private final InventoryWarehouseStockService stockService;
-    private final MaterialMapper materialMapper;
+    private final ProductMapper productMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long warehouseId, int pageNum, int pageSize) {
@@ -117,7 +117,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         // 执行库存变更：from_quality 扣减，to_quality 增加
         for (InventoryProductReclassifyItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Material prod = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             // 扣减原品质
             stockService.changeStock(rc.getWarehouseId(), prod != null ? prod.getName() : "",
                     it.getQuantity().negate(), StockChangeType.RECLASSIFY_OUT, rc.getCode(),
@@ -144,7 +144,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         // 逆向操作：恢复 from_quality，冲回 to_quality
         for (InventoryProductReclassifyItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Material prod = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             // 恢复原品质
             stockService.changeStock(rc.getWarehouseId(), prod != null ? prod.getName() : "",
                     it.getQuantity(), StockChangeType.CANCEL_RECLASSIFY_OUT, rc.getCode(),

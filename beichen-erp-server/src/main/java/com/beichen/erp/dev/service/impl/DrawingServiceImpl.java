@@ -5,40 +5,43 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.dev.entity.Drawing;
 import com.beichen.erp.dev.mapper.DrawingMapper;
 import com.beichen.erp.dev.service.DrawingService;
-import com.beichen.erp.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class DrawingServiceImpl extends ServiceImpl<DrawingMapper, Drawing> implements DrawingService {
 
-    private final DrawingMapper drawingMapper;
-
     @Override
     public List<Drawing> listByProject(Long projectId) {
-        LambdaQueryWrapper<Drawing> wrapper = new LambdaQueryWrapper<Drawing>()
-                .eq(Drawing::getProjectId, projectId)
-                .orderByDesc(Drawing::getId);
-        return drawingMapper.selectList(wrapper);
+        return baseMapper.selectList(
+                new LambdaQueryWrapper<Drawing>()
+                        .eq(Drawing::getProjectId, projectId)
+                        .orderByAsc(Drawing::getDocName)
+                        .orderByDesc(Drawing::getVersionCode));
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void addDrawing(Drawing drawing) {
-        drawingMapper.insert(drawing);
+    public Drawing upload(Drawing drawing) {
+        // 自动计算版本号：同项目+同文档名+同类型 的最大版本号 + 1
+        Integer maxVersion = getMaxVersion(drawing.getProjectId(), drawing.getDocName(), drawing.getDrawingType());
+        drawing.setVersionCode(maxVersion != null ? maxVersion + 1 : 1);
+        drawing.setUploadTime(LocalDateTime.now());
+        baseMapper.insert(drawing);
+        return drawing;
     }
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void deleteDrawing(Long id) {
-        Drawing drawing = drawingMapper.selectById(id);
-        if (drawing == null) {
-            throw new BusinessException("图纸不存在");
-        }
-        drawingMapper.deleteById(id);
+    private Integer getMaxVersion(Long projectId, String docName, String drawingType) {
+        Drawing last = baseMapper.selectOne(
+                new LambdaQueryWrapper<Drawing>()
+                        .eq(Drawing::getProjectId, projectId)
+                        .eq(Drawing::getDocName, docName)
+                        .eq(Drawing::getDrawingType, drawingType)
+                        .orderByDesc(Drawing::getVersionCode)
+                        .last("LIMIT 1"));
+        return last != null ? last.getVersionCode() : null;
     }
 }

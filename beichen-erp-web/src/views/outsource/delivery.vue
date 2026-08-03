@@ -30,6 +30,7 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.factoryId = undefined; loadData() }
 
 const deliveryTypeMap: Record<string, string> = { 'IN': '入库', 'OUT': '出库' }
+// 注意：此页面的 deliveryTypeMap 映射的是库存出入库方向，不是收发类型，保留不变
 const statusTagMap: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = { '待确认': 'info', '已确认': 'success', '已取消': 'danger' }
 
 async function handleCancel(row: any) {

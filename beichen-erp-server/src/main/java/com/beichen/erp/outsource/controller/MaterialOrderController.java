@@ -240,7 +240,7 @@ public class MaterialOrderController {
 
         // 2. 创建收货单
         OutsourceDelivery delivery = new OutsourceDelivery();
-        delivery.setDeliveryType("收料");
+        delivery.setDeliveryType(DeliveryType.RECEIVE.getCode());
         delivery.setFactoryId(o.getSupplierId());
         delivery.setToWarehouseId(whId);
         delivery.setDeliveryDate(LocalDate.now());
@@ -274,7 +274,7 @@ public class MaterialOrderController {
             deliveryItemMapper.insert(di);
 
             // 父物料入库 + 流水
-            updateStockLog(whId, orderItem.getMaterialId(), qty, "良品",
+            updateStockLog(whId, orderItem.getMaterialId(), qty, QualityType.GOOD.getCode(),
                 orderItem.getMaterialName(), "委外收货入库", o.getCode());
 
             // 子物料出库（仅委外单才需要扣子物料）
@@ -287,7 +287,7 @@ public class MaterialOrderController {
                     BigDecimal compDemand = (c.getQuantity() != null ? c.getQuantity() : BigDecimal.ONE).multiply(qty);
                     OutsourceMaterial cm = materialMapper.selectById(c.getChildMaterialId());
                     String childName = cm != null ? cm.getMaterialName() : "子物料";
-                    updateStockLog(compWhId, c.getChildMaterialId(), compDemand.negate(), "良品",
+                    updateStockLog(compWhId, c.getChildMaterialId(), compDemand.negate(), QualityType.GOOD.getCode(),
                         childName, "委外收货耗料", o.getCode());
                 }
             }
@@ -327,7 +327,7 @@ public class MaterialOrderController {
             new LambdaQueryWrapper<OutsourceWarehouseStock>()
                 .eq(OutsourceWarehouseStock::getWarehouseId, warehouseId)
                 .eq(OutsourceWarehouseStock::getMaterialId, materialId)
-                .eq(OutsourceWarehouseStock::getQualityType, "良品"));
+                .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
         return s != null && s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
     }
 
@@ -378,7 +378,7 @@ public class MaterialOrderController {
                     new LambdaQueryWrapper<OutsourceWarehouseStock>()
                         .eq(OutsourceWarehouseStock::getWarehouseId, whId)
                         .eq(OutsourceWarehouseStock::getMaterialId, orderItem.getMaterialId())
-                        .eq(OutsourceWarehouseStock::getQualityType, "良品"));
+                        .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
                 BigDecimal stockQty = s != null && s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
                 if (stockQty.compareTo(qty) < 0)
                     throw new BusinessException(orderItem.getMaterialName() + " 仓库库存不足(库存:" + stockQty + "，退:" + qty + ")");
@@ -400,7 +400,7 @@ public class MaterialOrderController {
 
             // 维修返还：扣减仓库良品库存+写流水；折现退款：不扣库存
             if (!DefectHandleType.CASH_REFUND.getCode().equals(handleType) && whId != null && orderItem.getMaterialId() != null) {
-                updateStockLog(whId, orderItem.getMaterialId(), qty.negate(), "良品",
+                updateStockLog(whId, orderItem.getMaterialId(), qty.negate(), QualityType.GOOD.getCode(),
                     orderItem.getMaterialName(), "退不良扣回", o.getCode());
             }
         }
@@ -607,7 +607,7 @@ public class MaterialOrderController {
                                     new LambdaQueryWrapper<OutsourceWarehouseStock>()
                                         .eq(OutsourceWarehouseStock::getMaterialId, c.getChildMaterialId())
                                         .in(OutsourceWarehouseStock::getWarehouseId, supplierWhIds)
-                                        .eq(OutsourceWarehouseStock::getQualityType, "良品"));
+                                        .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
                                 if (stocks != null) {
                                     for (OutsourceWarehouseStock s : stocks) {
                                         if (s.getQuantity() != null) stock = stock.add(s.getQuantity());

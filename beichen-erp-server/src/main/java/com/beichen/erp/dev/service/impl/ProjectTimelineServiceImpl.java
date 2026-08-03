@@ -2,242 +2,204 @@ package com.beichen.erp.dev.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.dev.common.ProjectStatus;
+import com.beichen.erp.dev.common.TimelineStatus;
 import com.beichen.erp.dev.entity.PhaseTemplate;
 import com.beichen.erp.dev.entity.Project;
-import com.beichen.erp.dev.common.TimelineStatus;
-import com.beichen.erp.dev.common.ProjectStatus;
 import com.beichen.erp.dev.entity.ProjectTimeline;
 import com.beichen.erp.dev.mapper.PhaseTemplateMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.dev.mapper.ProjectTimelineMapper;
+import com.beichen.erp.dev.service.ProjectProductSyncService;
 import com.beichen.erp.dev.service.ProjectTimelineService;
-import com.beichen.erp.exception.BusinessException;
-import com.beichen.erp.material.common.ProductStatus;
-import com.beichen.erp.material.entity.Product;
-import com.beichen.erp.material.mapper.ProductMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
-public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMapper, ProjectTimeline> implements ProjectTimelineService {
+public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMapper, ProjectTimeline>
+        implements ProjectTimelineService {
 
     private final ProjectTimelineMapper projectTimelineMapper;
     private final PhaseTemplateMapper phaseTemplateMapper;
     private final ProjectMapper projectMapper;
-    private final ProductMapper productMapper;
+    private final ProjectProductSyncService projectProductSyncService;
 
     @Override
     public List<ProjectTimeline> listByProject(Long projectId) {
-        LambdaQueryWrapper<ProjectTimeline> wrapper = new LambdaQueryWrapper<ProjectTimeline>()
-                .eq(ProjectTimeline::getProjectId, projectId)
-                .orderByAsc(ProjectTimeline::getSortOrder);
-        return projectTimelineMapper.selectList(wrapper);
+        return projectTimelineMapper.selectList(
+                new LambdaQueryWrapper<ProjectTimeline>()
+                        .eq(ProjectTimeline::getProjectId, projectId)
+                        .orderByAsc(ProjectTimeline::getSortOrder));
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional
     public void initTimeline(Long projectId) {
-        Long companyId = CompanyContext.get();
-        // 删除旧的时间线
-        projectTimelineMapper.delete(new LambdaQueryWrapper<ProjectTimeline>().eq(ProjectTimeline::getProjectId, projectId));
-        // 获取项目的立项日期
-        Project project = projectMapper.selectById(projectId);
-        LocalDate startDate = project != null && project.getStartDate() != null ? project.getStartDate() : LocalDate.now();
-        // 按模板生成
         List<PhaseTemplate> templates = phaseTemplateMapper.selectList(
-            new LambdaQueryWrapper<PhaseTemplate>().orderByAsc(PhaseTemplate::getSortOrder));
-        LocalDate cursor = startDate;
-        int idx = 0;
-        for (PhaseTemplate tpl : templates) {
-            ProjectTimeline timeline = new ProjectTimeline();
-            timeline.setProjectId(projectId);
-            timeline.setStatusName(tpl.getName());
-            timeline.setSortOrder(tpl.getSortOrder());
-            timeline.setDefaultDays(tpl.getDefaultDays());
-            // 第一个阶段默认为"进行中"
-            timeline.setStatus(idx == 0 ? TimelineStatus.IN_PROGRESS.name() : TimelineStatus.NOT_STARTED.name());
-            if (tpl.getDefaultDays() != null && tpl.getDefaultDays() > 0) {
-                timeline.setPlannedEnd(cursor.plusDays(tpl.getDefaultDays()));
-            } else {
-                timeline.setPlannedEnd(cursor);
-            }
-            if (companyId != null && companyId > 0) {
-                timeline.setCompanyId(companyId);
-            }
-            projectTimelineMapper.insert(timeline);
-            cursor = timeline.getPlannedEnd();
-            idx++;
+                new LambdaQueryWrapper<PhaseTemplate>().orderByAsc(PhaseTemplate::getSortOrder));
+        for (int i = 0; i < templates.size(); i++) {
+            PhaseTemplate tpl = templates.get(i);
+            ProjectTimeline tl = new ProjectTimeline();
+            tl.setProjectId(projectId);
+            tl.setStatusName(tpl.getName());
+            tl.setDefaultDays(tpl.getDefaultDays());
+            tl.setSortOrder(tpl.getSortOrder());
+            tl.setStatus(i == 0 ? TimelineStatus.IN_PROGRESS.getCode() : TimelineStatus.NOT_STARTED.getCode());
+            tl.setCreateTime(LocalDateTime.now());
+            projectTimelineMapper.insert(tl);
         }
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void updateTimeline(Long projectId, String statusName, LocalDate actualEnd) {
-        LambdaQueryWrapper<ProjectTimeline> wrapper = new LambdaQueryWrapper<ProjectTimeline>()
-                .eq(ProjectTimeline::getProjectId, projectId)
-                .eq(ProjectTimeline::getStatusName, statusName);
-        ProjectTimeline timeline = projectTimelineMapper.selectOne(wrapper);
-        if (timeline == null) {
-            throw new BusinessException("时间线记录不存在");
-        }
-        timeline.setActualEnd(actualEnd);
-        projectTimelineMapper.updateById(timeline);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void updatePlanned(Long projectId, String statusName, LocalDate plannedEnd) {
-        LambdaQueryWrapper<ProjectTimeline> wrapper = new LambdaQueryWrapper<ProjectTimeline>()
-                .eq(ProjectTimeline::getProjectId, projectId)
-                .eq(ProjectTimeline::getStatusName, statusName);
-        ProjectTimeline timeline = projectTimelineMapper.selectOne(wrapper);
-        if (timeline == null) {
-            throw new BusinessException("时间线记录不存在");
-        }
-        timeline.setPlannedEnd(plannedEnd);
-        projectTimelineMapper.updateById(timeline);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void updatePlannedAndShift(Long projectId, String statusName, LocalDate plannedEnd) {
-        LambdaQueryWrapper<ProjectTimeline> wrapper = new LambdaQueryWrapper<ProjectTimeline>()
-                .eq(ProjectTimeline::getProjectId, projectId)
-                .eq(ProjectTimeline::getStatusName, statusName);
-        ProjectTimeline timeline = projectTimelineMapper.selectOne(wrapper);
-        if (timeline == null) {
-            throw new BusinessException("时间线记录不存在");
-        }
-        timeline.setPlannedEnd(plannedEnd);
-        projectTimelineMapper.updateById(timeline);
-        // 后推后续所有阶段
-        shiftSubsequentPhases(projectId, timeline);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void updateStatus(Long projectId, String statusName, String status) {
-        LambdaQueryWrapper<ProjectTimeline> wrapper = new LambdaQueryWrapper<ProjectTimeline>()
-                .eq(ProjectTimeline::getProjectId, projectId)
-                .eq(ProjectTimeline::getStatusName, statusName);
-        ProjectTimeline timeline = projectTimelineMapper.selectOne(wrapper);
-        if (timeline == null) {
-            throw new BusinessException("时间线记录不存在");
-        }
-        // 如果设置为"进行中"，确保该项目下没有其他"进行中"的阶段
-        if (TimelineStatus.IN_PROGRESS.name().equals(status) && !TimelineStatus.IN_PROGRESS.name().equals(timeline.getStatus())) {
-            List<ProjectTimeline> phases = listByProject(projectId);
-            for (ProjectTimeline p : phases) {
-                if (TimelineStatus.IN_PROGRESS.name().equals(p.getStatus()) && !p.getId().equals(timeline.getId())) {
-                    // 将其他进行中的阶段自动标记为已完成（视为被跳过的阶段）
-                    p.setStatus(TimelineStatus.FINISHED.name());
-                    if (p.getActualEnd() == null) {
-                        p.setActualEnd(LocalDate.now());
-                    }
-                    projectTimelineMapper.updateById(p);
-                }
-            }
-        }
-        timeline.setStatus(status);
-        projectTimelineMapper.updateById(timeline);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
+    @Transactional
     public void completePhase(Long projectId, Long timelineId) {
-        ProjectTimeline timeline = projectTimelineMapper.selectById(timelineId);
-        if (timeline == null || !timeline.getProjectId().equals(projectId)) {
-            throw new BusinessException("时间线记录不存在");
-        }
-        if (!TimelineStatus.IN_PROGRESS.name().equals(timeline.getStatus())) {
-            throw new BusinessException("只有「进行中」的阶段才能完成");
-        }
-        // 完成当前阶段（如果已手动设置了实际完成时间则保留）
-        if (timeline.getActualEnd() == null) {
-            timeline.setActualEnd(LocalDate.now());
-        }
-        timeline.setStatus(TimelineStatus.FINISHED.name());
-        projectTimelineMapper.updateById(timeline);
+        ProjectTimeline current = projectTimelineMapper.selectById(timelineId);
+        if (current == null) return;
 
-        // 查找下一个需要激活的阶段（跳过已完成的，找到第一个"未开始"）
-        List<ProjectTimeline> phases = listByProject(projectId);
-        ProjectTimeline nextNotStarted = null;
-        boolean hasAnyInProgress = false;
-        for (ProjectTimeline p : phases) {
-            if (p.getSortOrder() > timeline.getSortOrder()) {
-                if (TimelineStatus.NOT_STARTED.name().equals(p.getStatus()) && nextNotStarted == null) {
-                    nextNotStarted = p;
-                }
-                if (TimelineStatus.IN_PROGRESS.name().equals(p.getStatus())) {
-                    hasAnyInProgress = true;
-                }
+        current.setStatus(TimelineStatus.FINISHED.getCode());
+        current.setActualEnd(LocalDate.now());
+        projectTimelineMapper.updateById(current);
+
+        checkProductStatusSync(current.getStatusName(), projectId);
+        activateNextPhase(projectId, current.getSortOrder());
+        syncProjectStatus(projectId);
+    }
+
+    @Override
+    @Transactional
+    public void skipPhase(Long projectId, Long timelineId) {
+        ProjectTimeline current = projectTimelineMapper.selectById(timelineId);
+        if (current == null) return;
+
+        current.setStatus(TimelineStatus.SKIPPED.getCode());
+        current.setActualEnd(LocalDate.now());
+        projectTimelineMapper.updateById(current);
+
+        checkProductStatusSync(current.getStatusName(), projectId);
+        activateNextPhase(projectId, current.getSortOrder());
+        syncProjectStatus(projectId);
+    }
+
+    @Override
+    @Transactional
+    public void saveTimelineRow(Long projectId, ProjectTimeline row) {
+        ProjectTimeline existing = projectTimelineMapper.selectById(row.getId());
+        if (existing == null) return;
+
+        String oldStatus = existing.getStatus();
+        String newStatus = row.getStatus();
+        boolean statusChanged = !oldStatus.equals(newStatus);
+
+        existing.setStatus(newStatus);
+        existing.setPlannedEnd(row.getPlannedEnd());
+        existing.setActualEnd(row.getActualEnd());
+        projectTimelineMapper.updateById(existing);
+
+        if (statusChanged) {
+            if (TimelineStatus.FINISHED.getCode().equals(newStatus)
+                    || TimelineStatus.SKIPPED.getCode().equals(newStatus)) {
+                checkProductStatusSync(existing.getStatusName(), projectId);
+                activateNextPhase(projectId, existing.getSortOrder());
+                syncProjectStatus(projectId);
             }
         }
-        if (nextNotStarted != null && !hasAnyInProgress) {
-            // 后续没有进行中的阶段时，才将第一个未开始阶段激活
-            nextNotStarted.setStatus(TimelineStatus.IN_PROGRESS.name());
-            projectTimelineMapper.updateById(nextNotStarted);
-        }
-        if (nextNotStarted == null && !hasAnyInProgress) {
-            // 所有阶段都已处理完毕，自动结项
-            Project project = projectMapper.selectById(projectId);
-            if (project != null && !ProjectStatus.CLOSED.getCode().equals(project.getStatus())) {
-                project.setStatus(ProjectStatus.CLOSED.getCode());
-                project.setActualEndDate(LocalDate.now());
-                projectMapper.updateById(project);
-            }
-        }
+    }
 
-        // 到达小批量及之后阶段时，同步产品状态（研发中 → 正常）
-        int xiaopiliangOrder = -1;
-        for (ProjectTimeline p : phases) {
-            if (ProjectStatus.SMALL_BATCH.getCode().equals(p.getStatusName())) {
-                xiaopiliangOrder = p.getSortOrder();
+    @Override
+    @Transactional
+    public void updatePlanned(Long projectId, String statusName, LocalDate plannedEnd) {
+        ProjectTimeline tl = findByStatusName(projectId, statusName);
+        if (tl != null) {
+            tl.setPlannedEnd(plannedEnd);
+            projectTimelineMapper.updateById(tl);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void updatePlannedAndShift(Long projectId, String statusName, LocalDate plannedEnd) {
+        ProjectTimeline tl = findByStatusName(projectId, statusName);
+        if (tl == null) return;
+
+        long daysDiff = plannedEnd.toEpochDay() - tl.getPlannedEnd().toEpochDay();
+        tl.setPlannedEnd(plannedEnd);
+        projectTimelineMapper.updateById(tl);
+
+        List<ProjectTimeline> all = listByProject(projectId);
+        boolean found = false;
+        for (ProjectTimeline t : all) {
+            if (found && t.getPlannedEnd() != null) {
+                t.setPlannedEnd(t.getPlannedEnd().plusDays(daysDiff));
+                projectTimelineMapper.updateById(t);
+            }
+            if (t.getId().equals(tl.getId())) found = true;
+        }
+    }
+
+    @Override
+    @Transactional
+    public void updateStatus(Long projectId, String statusName, String status) {
+        ProjectTimeline tl = findByStatusName(projectId, statusName);
+        if (tl != null) {
+            tl.setStatus(status);
+            projectTimelineMapper.updateById(tl);
+        }
+    }
+
+    // ===== 内部方法 =====
+
+    private ProjectTimeline findByStatusName(Long projectId, String statusName) {
+        return projectTimelineMapper.selectOne(
+                new LambdaQueryWrapper<ProjectTimeline>()
+                        .eq(ProjectTimeline::getProjectId, projectId)
+                        .eq(ProjectTimeline::getStatusName, statusName));
+    }
+
+    private void activateNextPhase(Long projectId, int currentSortOrder) {
+        List<ProjectTimeline> all = listByProject(projectId);
+        for (ProjectTimeline t : all) {
+            if (t.getSortOrder() > currentSortOrder
+                    && TimelineStatus.NOT_STARTED.getCode().equals(t.getStatus())) {
+                t.setStatus(TimelineStatus.IN_PROGRESS.getCode());
+                if (t.getPlannedEnd() == null) {
+                    t.setPlannedEnd(LocalDate.now().plusDays(t.getDefaultDays() != null ? t.getDefaultDays() : 7));
+                }
+                projectTimelineMapper.updateById(t);
                 break;
             }
         }
-        if (xiaopiliangOrder > 0 && timeline.getSortOrder() >= xiaopiliangOrder) {
-            syncProductStatus(projectId);
+    }
+
+    /** 从时间线推导项目状态 */
+    private void syncProjectStatus(Long projectId) {
+        Project project = projectMapper.selectById(projectId);
+        if (project == null || project.getCancelledAt() != null) return;
+
+        List<ProjectTimeline> all = listByProject(projectId);
+        boolean allDone = all.stream().allMatch(t ->
+                TimelineStatus.FINISHED.getCode().equals(t.getStatus())
+                        || TimelineStatus.SKIPPED.getCode().equals(t.getStatus()));
+        if (allDone && !ProjectStatus.CLOSED.getCode().equals(project.getStatus())) {
+            project.setStatus(ProjectStatus.CLOSED.getCode());
+            projectMapper.updateById(project);
+            log.info("项目自动结项: projectId={}", projectId);
         }
     }
 
-    /** 同步产品状态：将关联产品从"研发中"改为"正常" */
-    private void syncProductStatus(Long projectId) {
-        Product linked = productMapper.selectOne(
-            new LambdaQueryWrapper<Product>()
-                .eq(Product::getProjectId, projectId)
-                .eq(Product::getStatus, ProductStatus.DEVELOPING)
-                .last("LIMIT 1"));
-        if (linked != null) {
-            linked.setStatus(ProductStatus.NORMAL);
-            productMapper.updateById(linked);
-        }
-    }
-
-    /** 修改阶段日期后，后推后续所有未完成的阶段 */
-    private void shiftSubsequentPhases(Long projectId, ProjectTimeline updated) {
-        List<ProjectTimeline> phases = listByProject(projectId);
-        LocalDate cursor = updated.getPlannedEnd();
-        for (ProjectTimeline p : phases) {
-            if (p.getSortOrder() <= updated.getSortOrder()) continue;
-            // 跳过已完成的阶段，避免覆盖历史数据
-            if (TimelineStatus.FINISHED.name().equals(p.getStatus())) {
-                cursor = p.getPlannedEnd() != null ? p.getPlannedEnd() : cursor;
-                continue;
-            }
-            if (p.getDefaultDays() != null && p.getDefaultDays() > 0) {
-                p.setPlannedEnd(cursor.plusDays(p.getDefaultDays()));
-            } else {
-                p.setPlannedEnd(cursor);
-            }
-            projectTimelineMapper.updateById(p);
-            cursor = p.getPlannedEnd();
+    private void checkProductStatusSync(String statusName, Long projectId) {
+        PhaseTemplate tpl = phaseTemplateMapper.selectOne(
+                new LambdaQueryWrapper<PhaseTemplate>()
+                        .eq(PhaseTemplate::getName, statusName));
+        if (tpl != null && tpl.getProductStatusSync() != null && tpl.getProductStatusSync() == 1) {
+            projectProductSyncService.syncProductStatus(projectId);
         }
     }
 }

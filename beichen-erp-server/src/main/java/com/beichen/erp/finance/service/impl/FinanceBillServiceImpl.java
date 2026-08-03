@@ -3,6 +3,7 @@ package com.beichen.erp.finance.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.finance.entity.*;
+import com.beichen.erp.finance.common.BillType;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinanceBillService;
@@ -65,7 +66,7 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         BigDecimal unpaid = BigDecimal.ZERO;
         List<FinanceBillItem> items = new ArrayList<>();
 
-        if ("应收".equals(billType)) {
+        if (BillType.RECEIVABLE.getCode().equals(billType)) {
             List<FinanceReceivable> list = receivableMapper.selectList(new LambdaQueryWrapper<FinanceReceivable>()
                     .eq(FinanceReceivable::getCustomerId, partnerId)
                     .eq(FinanceReceivable::getStatus, SettlementStatus.UNSETTLED.getCode()).or().eq(FinanceReceivable::getStatus, SettlementStatus.PARTIAL.getCode())

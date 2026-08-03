@@ -3,13 +3,14 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { IoType, IoTypeLabel } from '@/api/material'
 
 const route = useRoute(); const router = useRouter()
 const editId = Number(route.query.id) || 0
 const warehouses = ref<any[]>([])
 const materialOptions = ref<any[]>([])
 const saving = ref(false)
-const form = reactive({ warehouseId: undefined as any, ioType: '入库', ioDate: new Date().toISOString().slice(0,10), remark: '' })
+const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN, ioDate: new Date().toISOString().slice(0,10), remark: '' })
 const items = ref<any[]>([{ materialId: undefined, materialName: '', materialType: '', unit: '', unit_price: '', quantity: undefined, remark: '' }])
 
 const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any) => m.materialType).filter(Boolean))] as string[])
@@ -70,7 +71,7 @@ async function handleSubmit() {
       await request.put(`/outsource/other-io/${editId}`, body); ElMessage.success('已更新')
     } else {
       await request.post('/outsource/other-io', body); ElMessage.success('已创建')
-      Object.assign(form, { warehouseId: undefined, ioType: '入库', ioDate: new Date().toISOString().slice(0,10), remark: '' })
+      Object.assign(form, { warehouseId: undefined, ioType: IoType.IN, ioDate: new Date().toISOString().slice(0,10), remark: '' })
       items.value = [{ materialId: undefined, materialName: '', materialType: '', unit: '', unit_price: '', quantity: undefined, remark: '' }]
       ;(window as any).__otherIoNeedRefresh = true
     }
@@ -88,7 +89,7 @@ onMounted(()=>{ loadWarehouses(); loadMaterials(); loadDetail() })
       <el-form :model="form" label-width="80px">
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item label="仓库"><el-select v-model="form.warehouseId" filterable style="width:100%"><el-option v-for="w in warehouses" :key="w.id+'@'+w._type" :label="`${w.warehouseName}（${w._type}）`" :value="w.id"/></el-select></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="类型"><el-select v-model="form.ioType" style="width:100%"><el-option label="入库" value="入库"/><el-option label="出库" value="出库"/></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="类型"><el-select v-model="form.ioType" style="width:100%"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="form.ioDate" type="date"/></el-form-item></el-col>
         </el-row>
         <el-form-item label="备注"><el-input v-model="form.remark" placeholder="备注"/></el-form-item>

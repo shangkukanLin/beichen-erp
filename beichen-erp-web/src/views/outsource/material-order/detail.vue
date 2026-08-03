@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { exportMaterialOrderPdf } from '@/api/contract-template'
-import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag } from '@/api/material'
+import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/material'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
@@ -331,7 +331,7 @@ onMounted(async () => { await loadOptions(); loadAll() })
             </template>
           </el-table-column>
           <el-table-column prop="code" label="单号" width="150" />
-          <el-table-column prop="deliveryType" label="类型" width="70"><template #default="{row}"><el-tag :type="row.deliveryType==='收料'?'success':'warning'" size="small">{{ row.deliveryType }}</el-tag></template></el-table-column>
+          <el-table-column prop="deliveryType" label="类型" width="70"><template #default="{row}"><el-tag :type="row.deliveryType===DeliveryType.RECEIVE?'success':'warning'" size="small">{{ DeliveryTypeLabel[row.deliveryType] || row.deliveryType }}</el-tag></template></el-table-column>
           <el-table-column label="日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
           <el-table-column label="型号" min-width="140" show-overflow-tooltip><template #default="{row}">{{ (row.items||[]).map((i:any)=>i.materialName).join(' / ') }}</template></el-table-column>
           <el-table-column label="数量" width="80" align="right"><template #default="{row}">{{ (row.items||[]).reduce((s:number,i:any)=>s+(i.quantity||0),0) }}</template></el-table-column>

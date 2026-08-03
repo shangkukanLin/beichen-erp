@@ -3,12 +3,13 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel } from '@/api/material'
 
 const route = useRoute(); const router = useRouter()
 const loading = ref(true); const saving = ref(false)
 const uploadFile = ref<File | null>(null)
 
-const form = reactive({ id: undefined as any, code: '', deliveryType: '发料', factoryId: undefined as any, fromWarehouseId: undefined as any, toWarehouseId: undefined as any, supplierDirect: 0, supplierId: undefined as any, logisticsCompany: '', logisticsNo: '', deliveryDate: '', contact: '', phone: '', remark: '', attachUrl: '', status: '' })
+const form = reactive({ id: undefined as any, code: '', deliveryType: DeliveryType.DELIVERY, factoryId: undefined as any, fromWarehouseId: undefined as any, toWarehouseId: undefined as any, supplierDirect: 0, supplierId: undefined as any, logisticsCompany: '', logisticsNo: '', deliveryDate: '', contact: '', phone: '', remark: '', attachUrl: '', status: '' })
 const items = ref<any[]>([])
 
 const factoryOptions = ref<any[]>([]); const supplierOptions = ref<any[]>([])
@@ -40,7 +41,7 @@ async function loadData() {
 async function loadOutsourceWarehouses(fid:number){ try{const r=await request.get<any,any>('/outsource/delivery/warehouses/by-factory/'+fid);outsourceWarehouses.value=r||[]}catch(e: any){ console.warn('加载委外仓库失败', e?.message || e) } }
 async function onFactoryChange(fid:number){ form.fromWarehouseId=undefined;form.toWarehouseId=undefined;await loadOutsourceWarehouses(fid);if(outsourceWarehouses.value.length>0){form.toWarehouseId=outsourceWarehouses.value[0].id} }
 
-function addItem(){ items.value.push({material_id:undefined,material_name:'',material_type:'',unit:'',quantity:undefined,qualityType:'良品'}) }
+function addItem(){ items.value.push({material_id:undefined,material_name:'',material_type:'',unit:'',quantity:undefined,qualityType:QualityType.GOOD}) }
 function removeItem(i:number){ items.value.splice(i,1) }
 function onTypeChange(idx:number){ items.value[idx].material_id=undefined;items.value[idx].material_name='';items.value[idx].unit='' }
 function onMatSelect(idx:number,mid:number){ const m=materialOptions.value.find((v:any)=>v.id===mid); if(m){items.value[idx].material_name=m.materialName;items.value[idx].material_type=m.materialType;items.value[idx].unit=m.unit} }
@@ -86,13 +87,13 @@ onMounted(()=>{ loadOptions(); loadData() })
     <el-card shadow="never" v-loading="loading">
       <el-form :model="form" label-width="90px" size="small">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item label="类型"><el-select v-model="form.deliveryType" style="width:100%"><el-option label="发料" value="发料"/><el-option label="收料" value="收料"/><el-option label="退料" value="退料"/></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="类型"><el-select v-model="form.deliveryType" style="width:100%"><el-option :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :value="DeliveryType.DELIVERY"/><el-option :label="DeliveryTypeLabel[DeliveryType.RECEIVE]" :value="DeliveryType.RECEIVE"/><el-option :label="DeliveryTypeLabel[DeliveryType.RETURN]" :value="DeliveryType.RETURN"/></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="收货工厂"><el-select v-model="form.factoryId" filterable style="width:100%" @change="(v:any)=>onFactoryChange(v)"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
-          <el-col :span="8" v-if="form.deliveryType==='发料'"><el-form-item label="供应商直发"><el-switch v-model="form.supplierDirect" :active-value="1" :inactive-value="0" /></el-form-item></el-col>
-          <el-col :span="8" v-if="form.deliveryType==='发料' && form.supplierDirect"><el-form-item label="供应商"><el-select v-model="form.supplierId" filterable style="width:100%"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /></el-select></el-form-item></el-col>
-          <el-col :span="8" v-if="form.deliveryType!=='发料' || !form.supplierDirect"><el-form-item label="来源仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in inventoryWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
-          <el-col :span="8" v-if="form.deliveryType==='发料'"><el-form-item label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%" disabled><el-option v-for="w in outsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
+          <el-col :span="8" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item label="供应商直发"><el-switch v-model="form.supplierDirect" :active-value="1" :inactive-value="0" /></el-form-item></el-col>
+          <el-col :span="8" v-if="form.deliveryType===DeliveryType.DELIVERY && form.supplierDirect"><el-form-item label="供应商"><el-select v-model="form.supplierId" filterable style="width:100%"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /></el-select></el-form-item></el-col>
+          <el-col :span="8" v-if="form.deliveryType!==DeliveryType.DELIVERY || !form.supplierDirect"><el-form-item label="来源仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in inventoryWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
+          <el-col :span="8" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%" disabled><el-option v-for="w in outsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item></el-col>
@@ -110,7 +111,7 @@ onMounted(()=>{ loadOptions(); loadData() })
         <el-table-column label="单位" width="60"><template #default="{row}">{{row.unit}}</template></el-table-column>
         <el-table-column label="单价" width="90"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" /></template></el-table-column>
         <el-table-column label="数量" width="100"><template #default="{row}"><el-input v-model="row.quantity" size="small" /></template></el-table-column>
-        <el-table-column label="质量" width="90" align="center"><template #default="{row}"><el-select v-model="row.qualityType" size="small" style="width:100%"><el-option label="良品" value="良品" /><el-option label="不良品" value="不良品" /></el-select></template></el-table-column>
+        <el-table-column label="质量" width="90" align="center"><template #default="{row}"><el-select v-model="row.qualityType" size="small" style="width:100%"><el-option :label="QualityTypeLabel[QualityType.GOOD]" :value="QualityType.GOOD" /><el-option :label="QualityTypeLabel[QualityType.DEFECT]" :value="QualityType.DEFECT" /></el-select></template></el-table-column>
         <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>
       </el-table>
     </el-card>

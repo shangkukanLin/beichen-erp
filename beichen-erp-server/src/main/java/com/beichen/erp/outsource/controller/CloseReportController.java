@@ -1,6 +1,7 @@
 package com.beichen.erp.outsource.controller;
 
 import com.beichen.erp.common.R;
+import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.inventory.entity.InventoryWarehouse;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseMapper;
 import com.beichen.erp.outsource.entity.CloseReportItem;
@@ -189,14 +190,14 @@ public class CloseReportController {
                 textCell(dr, 1, str(d.get("productName")), textStyle);
                 numCellRaw(dr, 2, d.get("quantity"), numStyle);
                 String dtype = str(d.get("deliveryType"));
-                textCell(dr, 3, "退不良".equals(dtype) ? "退不良" : "交货", textStyle);
+                textCell(dr, 3, DeliveryType.DEFECT_RETURN.getCode().equals(dtype) ? DeliveryType.DEFECT_RETURN.getLabel() : "交货", textStyle);
                 String whName = "";
                 Object whIdObj = d.get("warehouseId");
                 if (whIdObj != null) { InventoryWarehouse iw = inventoryWarehouseMapper.selectById(Long.valueOf(whIdObj.toString())); if (iw != null) whName = iw.getWarehouseName(); }
                 textCell(dr, 4, whName, textStyle);
                 textCell(dr, 5, str(d.get("remark")), textStyle);
                 BigDecimal q = toBigDecimal(d.get("quantity"));
-                if ("退不良".equals(dtype)) defectTotal = defectTotal.add(q.abs()); else normalTotal = normalTotal.add(q);
+                if (DeliveryType.DEFECT_RETURN.getCode().equals(dtype)) defectTotal = defectTotal.add(q.abs()); else normalTotal = normalTotal.add(q);
             }
             // 合计行
             rowIdx++;

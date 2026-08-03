@@ -9,6 +9,7 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.finance.common.SettlementStatus;
+import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
@@ -207,7 +208,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         fp.setSupplierId(order.getSupplierId());
         Supplier s = order.getSupplierId() != null ? supplierMapper.selectById(order.getSupplierId()) : null;
         fp.setSupplierName(s != null ? s.getName() : "");
-        fp.setSourceBillType("采购单");
+        fp.setSourceBillType(SourceBillType.PURCHASE_ORDER.getCode());
         fp.setSourceBillNo(order.getCode());
         fp.setAmount(order.getTotalAmount());
         fp.setPaidAmount(BigDecimal.ZERO);

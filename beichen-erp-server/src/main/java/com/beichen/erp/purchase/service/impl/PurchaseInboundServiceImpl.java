@@ -9,10 +9,11 @@ import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.common.SettlementStatus;
+import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.purchase.entity.PurchaseInbound;
 import com.beichen.erp.purchase.entity.PurchaseInboundItem;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
@@ -43,7 +44,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
     private final InventoryWarehouseStockService stockService;
     private final FinancePayableMapper payableMapper;
     private final com.beichen.erp.finance.service.PayableHelper payableHelper;
-    private final MaterialMapper materialMapper;
+    private final ProductMapper productMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long supplierId, String code, int pageNum, int pageSize) {
@@ -169,7 +170,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
                 new LambdaQueryWrapper<PurchaseInboundItem>().eq(PurchaseInboundItem::getInboundId, id));
         // 1) 库存联动：入库加库存 + 写流水
         for (PurchaseInboundItem it : items) {
-            Material product = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(inbound.getWarehouseId(),
                     product != null ? product.getName() : "",
                     it.getQuantity(),
@@ -181,7 +182,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
         fp.setBillNo(inbound.getCode());
         fp.setSupplierId(inbound.getSupplierId());
         fp.setSupplierName(inbound.getSupplierName());
-        fp.setSourceBillType("采购入库");
+        fp.setSourceBillType(SourceBillType.PURCHASE_INBOUND.getCode());
         fp.setSourceBillNo(inbound.getCode());
         fp.setAmount(inbound.getTotalAmount());
         fp.setPaidAmount(BigDecimal.ZERO);

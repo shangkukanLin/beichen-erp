@@ -30,8 +30,7 @@
             <el-table-column prop="name" label="项目名称" min-width="160">
               <template #default="{row}"><el-link type="primary" @click="$router.push(`/dev/project/edit/${row.id}`)">{{ row.name }}</el-link></template>
             </el-table-column>
-            <el-table-column prop="status" label="阶段" width="100"><template #default="{row}"><el-tag size="small">{{ row.status }}</el-tag></template></el-table-column>
-            <el-table-column prop="createTime" label="创建时间" width="140"><template #default="{row}">{{ row.createTime ? row.createTime.slice(0,10) : '' }}</template></el-table-column>
+            <el-table-column label="当前阶段" width="120"><template #default="{row}"><el-tag type="warning" size="small">{{ getDashboardPhase(row) }}</el-tag></template></el-table-column>
           </el-table>
         </el-card>
 
@@ -210,6 +209,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
+import { ProjectStatus } from '@/api/material'
 
 const userStore = useUserStore()
 const activeTab = ref('dev')
@@ -224,6 +224,14 @@ const devInProgress = ref(0)
 const devBomCount = ref(0)
 const devFinished = ref(0)
 const inProgressProjects = ref<any[]>([])
+const dashboardTimelineMap = ref<Record<number, any[]>>({})
+
+function getDashboardPhase(row: any) {
+  const timelines = dashboardTimelineMap.value[row.id]
+  if (!timelines || !timelines.length) return '-'
+  const active = timelines.find((t: any) => t.status === 'IN_PROGRESS')
+  return active ? active.statusName : '-'
+}
 const osPending = ref(0)
 const osInProgress = ref(0)
 const osMatPending = ref(0)
@@ -288,14 +296,21 @@ async function loadStats() {
       let inProgress = 0, finished = 0
       const activeProjects: any[] = []
       allRecords.forEach((p: any) => {
-        if (p.status !== '结项') { inProgress++; activeProjects.push(p) }
-        else finished++
+        if (p.status === ProjectStatus.IN_PROGRESS) { inProgress++; activeProjects.push(p) }
+        else if (p.status === ProjectStatus.CLOSED) finished++
       })
       inProgressProjects.value = activeProjects.slice(0, 5)
       devTotal.value = projTotal
       devInProgress.value = inProgress
       devBomCount.value = bomProjectCount
       devFinished.value = finished
+      // 加载进行中项目的时间线
+      if (activeProjects.length > 0) {
+        try {
+          const tlRes = await request.post('/dev/project/timelines/batch', { projectIds: activeProjects.map((p: any) => p.id) })
+          dashboardTimelineMap.value = tlRes || {}
+        } catch { /* ignore */}
+      }
     }
   } catch { /* ignore */}
   try {

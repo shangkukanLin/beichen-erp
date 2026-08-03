@@ -12,6 +12,7 @@ import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.common.DeliveryStatus;
+import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.supplier.entity.Supplier;
@@ -161,7 +162,7 @@ public class ReturnOrderController {
 
             // 退回物料入工厂委外仓 + 流水
             if (factoryWhId != null && item.getMaterialName() != null) {
-                updateOutsourceStock(factoryWhId, item.getMaterialName(), qty, "良品", "委外退料入", order.getCode());
+                updateOutsourceStock(factoryWhId, item.getMaterialName(), qty, QualityType.GOOD.getCode(), "委外退料入", order.getCode());
             }
         }
 
@@ -210,7 +211,7 @@ public class ReturnOrderController {
         BigDecimal totalAmount = BigDecimal.ZERO;
         for (ReturnOrderItem it : items) {
             if (whId != null && it.getQuantity() != null && it.getMaterialName() != null) {
-                updateOutsourceStock(whId, it.getMaterialName(), it.getQuantity().negate(), "良品", "取消退料", order.getCode());
+                updateOutsourceStock(whId, it.getMaterialName(), it.getQuantity().negate(), QualityType.GOOD.getCode(), "取消退料", order.getCode());
             }
             if (it.getAmount() != null) totalAmount = totalAmount.add(it.getAmount());
         }

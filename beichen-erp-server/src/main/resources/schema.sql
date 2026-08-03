@@ -94,25 +94,7 @@ CREATE TABLE IF NOT EXISTS brand (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='品牌表';
 
 -- ==================== 物料模块 ====================
-
-CREATE TABLE IF NOT EXISTS material (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '物料ID',
-    name VARCHAR(100) NOT NULL COMMENT '物料名称',
-    brand_id BIGINT DEFAULT NULL COMMENT '品牌ID',
-    category_code VARCHAR(50) DEFAULT NULL COMMENT '分类编码',
-    category VARCHAR(30) COMMENT '分类(原料/辅料/半成品/成品)',
-    spec VARCHAR(100) COMMENT '规格型号',
-    unit VARCHAR(20) COMMENT '单位',
-    safety_stock DECIMAL(18,4) DEFAULT 0 COMMENT '安全库存',
-    current_stock DECIMAL(18,4) DEFAULT 0 COMMENT '当前库存',
-    status VARCHAR(20) DEFAULT 'NORMAL' COMMENT '状态: NORMAL/DISCONTINUED/DEVELOPING',
-    project_id BIGINT DEFAULT NULL COMMENT '关联研发项目ID',
-    remark VARCHAR(255) COMMENT '备注',
-    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
-    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='物料主数据表';
+-- material 表已废弃，物料主表统一使用 outsource_material 和 product
 
 -- ==================== 供应商模块 ====================
 
@@ -515,7 +497,8 @@ CREATE TABLE IF NOT EXISTS dev_project (
     start_date DATE COMMENT '开始日期',
     expected_end_date DATE COMMENT '预计结束日期',
     actual_end_date DATE COMMENT '实际结束日期',
-    status VARCHAR(20) DEFAULT '未开始' COMMENT '项目状态',
+    status VARCHAR(20) DEFAULT 'IN_PROGRESS' COMMENT '项目状态(时间线自动推导)',
+    cancelled_at DATETIME COMMENT '取消时间',
     remark VARCHAR(500) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -545,22 +528,27 @@ CREATE TABLE IF NOT EXISTS dev_phase_template (
     name VARCHAR(50) NOT NULL COMMENT '阶段名称',
     default_days INT DEFAULT 0 COMMENT '默认天数',
     sort_order INT DEFAULT 0 COMMENT '排序',
+    product_status_sync TINYINT(1) DEFAULT 0 COMMENT '是否触发产品状态同步(研发中→正常)',
     remark VARCHAR(500) DEFAULT NULL COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_name_company (name, company_id),
     INDEX idx_sort (sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目阶段模板表';
 
-CREATE TABLE IF NOT EXISTS dev_material (
+-- dev_material 已重命名为 dev_purchase_item
+
+CREATE TABLE IF NOT EXISTS dev_purchase_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     project_id BIGINT NOT NULL COMMENT '项目ID',
-    material_name VARCHAR(100) NOT NULL COMMENT '物料名称',
-    material_type VARCHAR(30) COMMENT '物料类型',
+    name VARCHAR(100) NOT NULL COMMENT '名称',
+    type VARCHAR(30) COMMENT '类型',
     quantity DECIMAL(18,4) DEFAULT 1 COMMENT '数量',
     location VARCHAR(30) COMMENT '存放位置',
     location_detail VARCHAR(200) COMMENT '位置详情',
     purchase_date DATE COMMENT '采购日期',
-    cost DECIMAL(18,4) COMMENT '采购金额',
+    amount DECIMAL(18,4) COMMENT '采购金额',
     status VARCHAR(20) DEFAULT '完好' COMMENT '状态: 完好/已损坏/已使用',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
@@ -568,25 +556,24 @@ CREATE TABLE IF NOT EXISTS dev_material (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_project_id (project_id),
     INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目物料表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发采购记录表';
 
 CREATE TABLE IF NOT EXISTS dev_bom (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'BOM ID',
     project_id BIGINT NOT NULL COMMENT '项目ID',
-    parent_id BIGINT DEFAULT NULL COMMENT '父物料ID(空=顶层)',
+    bom_type_id BIGINT COMMENT 'BOM类型ID',
+    outsource_material_id BIGINT COMMENT '关联外协物料ID(outsource_material.id)',
     supplier_id BIGINT COMMENT '供应商ID',
-    material_name VARCHAR(100) NOT NULL COMMENT '物料名称',
-    spec VARCHAR(100) COMMENT '规格型号',
-    unit VARCHAR(20) COMMENT '单位',
-    quantity_per_set DECIMAL(18,4) DEFAULT 0 COMMENT '单套用量',
+    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '单套用量',
     loss_rate DECIMAL(18,4) DEFAULT 0 COMMENT '损耗率',
-    material_type VARCHAR(50) COMMENT '物料类型',
-    remark VARCHAR(255) COMMENT '备注',
+    specification VARCHAR(100) COMMENT '规格型号',
+    unit VARCHAR(20) COMMENT '单位',
+    version INT DEFAULT 1 COMMENT 'BOM版本号',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_project_id (project_id),
-    INDEX idx_supplier_id (supplier_id),
-    INDEX idx_company_id (company_id)
+    INDEX idx_supplier_id (supplier_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='BOM表';
 
 CREATE TABLE IF NOT EXISTS dev_bom_type (
@@ -604,37 +591,32 @@ CREATE TABLE IF NOT EXISTS dev_bug (
     project_id BIGINT NOT NULL COMMENT '项目ID',
     code VARCHAR(50) COMMENT 'Bug编号',
     title VARCHAR(200) NOT NULL COMMENT 'Bug标题',
-    severity VARCHAR(20) COMMENT '严重程度',
-    bug_type VARCHAR(50) COMMENT 'Bug类型',
-    status VARCHAR(20) DEFAULT '未处理' COMMENT '状态',
+    severity VARCHAR(20) COMMENT '严重程度(SeverityType枚举code)',
+    bug_type VARCHAR(50) COMMENT 'Bug类型(BugTypeEnum枚举code)',
+    status VARCHAR(20) DEFAULT 'OPEN' COMMENT '状态(BugStatus枚举code)',
     description TEXT COMMENT '描述',
-    found_by BIGINT COMMENT '发现人ID',
-    assigned_to BIGINT COMMENT '指派人ID',
+    found_by VARCHAR(100) COMMENT '发现人',
     found_time DATETIME COMMENT '发现时间',
     resolved_time DATETIME COMMENT '解决时间',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_project_id (project_id),
-    INDEX idx_status (status),
-    INDEX idx_found_by (found_by),
-    INDEX idx_assigned_to (assigned_to),
-    INDEX idx_company_id (company_id)
+    INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Bug表';
 
 CREATE TABLE IF NOT EXISTS dev_drawing (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '图纸ID',
     project_id BIGINT NOT NULL COMMENT '项目ID',
     doc_name VARCHAR(200) NOT NULL COMMENT '文档名称',
-    doc_type VARCHAR(50) COMMENT '文档类型',
+    doc_type VARCHAR(50) COMMENT '文档类型(与doc_name组合作为版本分组)',
     file_url VARCHAR(500) COMMENT '文件URL',
-    file_size BIGINT COMMENT '文件大小(字节)',
-    version VARCHAR(50) COMMENT '版本号',
-    upload_user_id BIGINT COMMENT '上传人ID',
+    version_code INT DEFAULT 1 COMMENT '版本号(自动递增)',
+    version VARCHAR(50) COMMENT '版本标注(手动填写)',
+    remark VARCHAR(255) COMMENT '备注',
+    upload_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
-    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    INDEX idx_project_id (project_id),
-    INDEX idx_upload_user_id (upload_user_id),
-    INDEX idx_company_id (company_id)
+    INDEX idx_project_id (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='图纸/文档表';
 
 -- ==================== 客户模块（进销存） ====================

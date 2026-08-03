@@ -3,6 +3,7 @@ import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { IoType, IoTypeLabel } from '@/api/material'
 
 const router = useRouter()
 const loading = ref(false)
@@ -41,7 +42,7 @@ onMounted(()=>{ loadWarehouses(); loadData() })
     <el-card shadow="never">
       <el-form :inline="true" :model="query">
         <el-form-item label="仓库"><el-select v-model="query.warehouseId" clearable filterable style="width:180px" placeholder="全部"><el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id"/></el-select></el-form-item>
-        <el-form-item label="类型"><el-select v-model="query.ioType" clearable style="width:120px"><el-option label="入库" value="入库"/><el-option label="出库" value="出库"/></el-select></el-form-item>
+        <el-form-item label="类型"><el-select v-model="query.ioType" clearable style="width:120px"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item>
         <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button type="success" @click="handleAdd">新增</el-button></el-form-item>
       </el-form>
     </el-card>
@@ -49,7 +50,7 @@ onMounted(()=>{ loadWarehouses(); loadData() })
       <el-table :data="list" border stripe v-loading="loading">
         <el-table-column prop="code" label="单号" width="160"/>
         <el-table-column label="仓库" width="140"><template #default="{row}">{{ getWhName(row.warehouseId) }}</template></el-table-column>
-        <el-table-column label="类型" width="80"><template #default="{row}"><el-tag :type="row.ioType==='入库'?'success':'danger'" size="small">{{ row.ioType }}</el-tag></template></el-table-column>
+        <el-table-column label="类型" width="80"><template #default="{row}"><el-tag :type="row.ioType===IoType.IN?'success':'danger'" size="small">{{ IoTypeLabel[row.ioType] || row.ioType }}</el-tag></template></el-table-column>
         <el-table-column label="日期" width="110"><template #default="{row}">{{ $fmtDate(row.ioDate) }}</template></el-table-column>
         <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip/>
         <el-table-column label="操作" width="140" align="center">

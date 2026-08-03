@@ -10,11 +10,12 @@ import com.beichen.erp.inventory.mapper.InventoryOtherIoMapper;
 import com.beichen.erp.inventory.mapper.InventoryOtherIoItemMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.inventory.common.IoType;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.OtherIoService;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,7 +32,7 @@ public class OtherIoServiceImpl implements OtherIoService {
     private final InventoryOtherIoMapper ioMapper;
     private final InventoryOtherIoItemMapper itemMapper;
     private final InventoryWarehouseStockService stockService;
-    private final MaterialMapper materialMapper;
+    private final ProductMapper productMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long warehouseId, String ioType, int pageNum, int pageSize) {
@@ -136,11 +137,11 @@ public class OtherIoServiceImpl implements OtherIoService {
 
     /** 应用库存变更 */
     private void applyStock(InventoryOtherIo io, List<InventoryOtherIoItem> items) {
-            StockChangeType type = StockChangeType.OTHER_IN.name().equals(io.getIoType()) ? StockChangeType.OTHER_IN : StockChangeType.OTHER_OUT;
+            StockChangeType type = IoType.IN.getCode().equals(io.getIoType()) ? StockChangeType.OTHER_IN : StockChangeType.OTHER_OUT;
         for (InventoryOtherIoItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
-            BigDecimal delta = "其他入库".equals(io.getIoType()) ? q : q.negate();
-            Material prod = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            BigDecimal delta = IoType.IN.getCode().equals(io.getIoType()) ? q : q.negate();
+            Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
                     delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),
                     prod != null ? prod.getSpec() : "", io.getId(), it.getQualityType());
@@ -149,12 +150,12 @@ public class OtherIoServiceImpl implements OtherIoService {
 
     /** 逆向库存（编辑回滚 / 取消） */
     private void revertStock(InventoryOtherIo io, List<InventoryOtherIoItem> items) {
-        StockChangeType type = StockChangeType.OTHER_IN.name().equals(io.getIoType()) ? StockChangeType.CANCEL_IN : StockChangeType.CANCEL_OUT;
+        StockChangeType type = IoType.IN.getCode().equals(io.getIoType()) ? StockChangeType.CANCEL_IN : StockChangeType.CANCEL_OUT;
         for (InventoryOtherIoItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             // 逆向：入库变成扣回，出库变成加回
-            BigDecimal delta = "其他入库".equals(io.getIoType()) ? q.negate() : q;
-            Material prod = it.getProductId() != null ? materialMapper.selectById(it.getProductId()) : null;
+            BigDecimal delta = IoType.IN.getCode().equals(io.getIoType()) ? q.negate() : q;
+            Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
                     delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),
                     prod != null ? prod.getSpec() : "", io.getId(), it.getQualityType());

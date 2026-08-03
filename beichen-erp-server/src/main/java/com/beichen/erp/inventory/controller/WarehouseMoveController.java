@@ -5,8 +5,8 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.inventory.entity.InventoryWarehouseMove;
 import com.beichen.erp.inventory.entity.InventoryWarehouseMoveItem;
 import com.beichen.erp.inventory.service.WarehouseMoveService;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,7 +20,7 @@ import java.util.*;
 public class WarehouseMoveController {
 
     private final WarehouseMoveService service;
-    private final MaterialMapper materialMapper;
+    private final ProductMapper productMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -49,7 +49,7 @@ public class WarehouseMoveController {
             m.put("quantity", it.getQuantity());
             m.put("remark", it.getRemark());
             if (it.getProductId() != null) {
-                Material product = materialMapper.selectById(it.getProductId());
+                Product product = productMapper.selectById(it.getProductId());
                 if (product != null) {
                     m.put("productName", product.getName());
                     m.put("spec", product.getSpec());

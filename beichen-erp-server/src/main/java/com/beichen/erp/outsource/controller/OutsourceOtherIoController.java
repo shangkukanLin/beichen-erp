@@ -6,6 +6,7 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseMapper;
+import com.beichen.erp.inventory.common.IoType;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
@@ -145,10 +146,10 @@ public class OutsourceOtherIoController {
 
     private void applyStock(OutsourceOtherIo io, List<OutsourceOtherIoItem> items) {
         boolean isInv = isInventoryWarehouse(io.getWarehouseId());
-        StockChangeType type = "入库".equals(io.getIoType()) ? StockChangeType.OTHER_IN : StockChangeType.OTHER_OUT;
+        StockChangeType type = IoType.IN.getCode().equals(io.getIoType()) ? StockChangeType.OTHER_IN : StockChangeType.OTHER_OUT;
         for (OutsourceOtherIoItem it : items) {
             BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
-            BigDecimal delta = "入库".equals(io.getIoType()) ? qty : qty.negate();
+            BigDecimal delta = IoType.IN.getCode().equals(io.getIoType()) ? qty : qty.negate();
             if (isInv) {
                 inventoryStockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
                     type, io.getCode(), RelatedBillType.OTHER_IO, it.getMaterialId(), null, io.getId(), null);
@@ -173,7 +174,7 @@ public class OutsourceOtherIoController {
             LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
                     .eq(OutsourceWarehouseStock::getWarehouseId, io.getWarehouseId())
                     .eq(OutsourceWarehouseStock::getMaterialId, matId)
-                    .eq(OutsourceWarehouseStock::getQualityType, "良品");
+                    .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode());
             OutsourceWarehouseStock stock = stockMapper.selectOne(w);
             BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
             BigDecimal after = before.add(delta);
@@ -197,10 +198,10 @@ public class OutsourceOtherIoController {
 
     private void revertStock(OutsourceOtherIo io, List<OutsourceOtherIoItem> items) {
         boolean isInv = isInventoryWarehouse(io.getWarehouseId());
-        StockChangeType type = "入库".equals(io.getIoType()) ? StockChangeType.CANCEL_IN : StockChangeType.CANCEL_OUT;
+        StockChangeType type = IoType.IN.getCode().equals(io.getIoType()) ? StockChangeType.CANCEL_IN : StockChangeType.CANCEL_OUT;
         for (OutsourceOtherIoItem it : items) {
             BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
-            BigDecimal delta = "入库".equals(io.getIoType()) ? qty.negate() : qty;
+            BigDecimal delta = IoType.IN.getCode().equals(io.getIoType()) ? qty.negate() : qty;
             if (isInv) {
                 inventoryStockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
                     type, io.getCode(), RelatedBillType.OTHER_IO, it.getMaterialId(), null, io.getId(), null);
@@ -214,7 +215,7 @@ public class OutsourceOtherIoController {
             LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
                     .eq(OutsourceWarehouseStock::getWarehouseId, io.getWarehouseId())
                     .eq(OutsourceWarehouseStock::getMaterialId, matId)
-                    .eq(OutsourceWarehouseStock::getQualityType, "良品");
+                    .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode());
             OutsourceWarehouseStock stock = stockMapper.selectOne(w);
             BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
             if (stock != null) {

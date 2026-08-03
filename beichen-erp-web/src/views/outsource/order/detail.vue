@@ -6,7 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { exportContractPdf } from '@/api/contract-template'
-import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/material'
+import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/material'
 
 const route = useRoute(); const router = useRouter()
 const loading = ref(true); const saving = ref(false)
@@ -401,10 +401,10 @@ onMounted(() => { loadOptions(); loadData() })
           <span style="font-weight:600">交货记录</span>
           <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="primary" size="small" @click="delOpenAdd">新增交货</el-button>
         </div>
-        <el-table :data="deliveries" border stripe size="small" :row-class-name="({row}:{row:any})=>row.deliveryType==='退不良'?'defect-row':''">
+        <el-table :data="deliveries" border stripe size="small" :row-class-name="({row}:{row:any})=>row.deliveryType===DeliveryType.DEFECT_RETURN?'defect-row':''">
           <el-table-column label="交货日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
           <el-table-column prop="productName" label="产品名称" min-width="120" />
-          <el-table-column label="类型" width="80" align="center"><template #default="{row}"><el-tag v-if="row.deliveryType==='退不良'" type="warning" size="small">退不良</el-tag><span v-else style="color:#909399">—</span></template></el-table-column>
+          <el-table-column label="类型" width="80" align="center"><template #default="{row}"><el-tag v-if="row.deliveryType===DeliveryType.DEFECT_RETURN" type="warning" size="small">{{ DeliveryTypeLabel[DeliveryType.DEFECT_RETURN] }}</el-tag><span v-else style="color:#909399">—</span></template></el-table-column>
           <el-table-column label="收货仓库" width="120">
             <template #default="{row}"><span v-if="row.warehouseId">{{ delWarehouseOptions.find((w:any)=>w.id===row.warehouseId)?.warehouseName || row.warehouseId }}</span><span v-else style="color:#c0c4cc">—</span></template>
           </el-table-column>

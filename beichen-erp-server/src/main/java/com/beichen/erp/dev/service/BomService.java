@@ -2,13 +2,23 @@ package com.beichen.erp.dev.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.beichen.erp.dev.entity.Bom;
-import com.beichen.erp.dev.entity.dto.BomDTO;
 
 import java.util.List;
 
 public interface BomService extends IService<Bom> {
 
+    /** 获取项目最新版本BOM */
     List<Bom> listByProject(Long projectId);
 
-    void saveItems(Long projectId, List<BomDTO> items);
+    /** 按版本获取BOM */
+    List<Bom> listByProjectAndVersion(Long projectId, Integer version);
+
+    /** 获取项目的所有版本号列表 */
+    List<Integer> getVersions(Long projectId);
+
+    /** 获取最大版本号 */
+    Integer getMaxVersion(Long projectId);
+
+    /** 创建新版本（从当前最新版本复制） */
+    List<Bom> createNewVersion(Long projectId);
 }

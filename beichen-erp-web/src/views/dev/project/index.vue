@@ -2,6 +2,7 @@
 import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { TimelineStatus, TimelineStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag } from '@/api/material'
 import {
   getProjectPage, addProject, updateProject, deleteProject,
   getProjectBom, saveProjectBom,
@@ -25,28 +26,37 @@ const allProjects = ref<ProjectVO[]>([])
 const timelineMap = ref<Record<number, TimelineItem[]>>({})
 
 interface TimelineItem { id?: number; statusName: string; sortOrder: number; defaultDays?: number; plannedEnd?: string; actualEnd?: string; status?: string }
-const timelineStatusOptions = ['未开始', '进行中', '已完成']
+const timelineStatusOptions = [TimelineStatus.NOT_STARTED, TimelineStatus.IN_PROGRESS, TimelineStatus.FINISHED, TimelineStatus.SKIPPED]
 
 const activeProjects = ref<ProjectVO[]>([])
 const finishedProjects = ref<ProjectVO[]>([])
+const cancelledProjects = ref<ProjectVO[]>([])
 
 function filterProjects() {
-  activeProjects.value = allProjects.value.filter((p: any) => p.status !== '结项')
-  finishedProjects.value = allProjects.value.filter((p: any) => p.status === '结项')
+  activeProjects.value = allProjects.value.filter((p: any) => p.status === ProjectStatus.IN_PROGRESS)
+  finishedProjects.value = allProjects.value.filter((p: any) => p.status === ProjectStatus.CLOSED)
+  cancelledProjects.value = allProjects.value.filter((p: any) => p.status === ProjectStatus.CANCELLED)
 }
 
-function isOverdue(project: ProjectVO) {
-  const timelines = timelineMap.value[project.id as number]
+function isOverdue(row: any) {
+  const timelines = timelineMap.value[row.id]
   if (!timelines) return false
-  const cur = timelines.find((t: any) => t.statusName === project.status)
+  const cur = timelines.find((t: any) => t.status === TimelineStatus.IN_PROGRESS)
   return !!(cur && cur.plannedEnd && cur.plannedEnd < today && !cur.actualEnd)
 }
 
-function getPlannedEnd(project: ProjectVO) {
-  const timelines = timelineMap.value[project.id as number]
+function getCurrentPhase(row: any) {
+  const timelines = timelineMap.value[row.id]
+  if (!timelines || !timelines.length) return '-'
+  const active = timelines.find((t: any) => t.status === TimelineStatus.IN_PROGRESS)
+  return active ? active.statusName : (row.status ? ProjectStatusLabel[row.status] || row.status : '-')
+}
+
+function getPlannedEnd(row: any) {
+  const timelines = timelineMap.value[row.id]
   if (!timelines) return ''
-  const cur = timelines.find((t: any) => t.statusName === project.status)
-  return cur?.plannedEnd || ''
+  const active = timelines.find((t: any) => t.status === TimelineStatus.IN_PROGRESS)
+  return active?.plannedEnd || ''
 }
 
 async function loadTimelines(projects: ProjectVO[]) {
@@ -121,6 +131,24 @@ async function handleSubmit() {
 
 async function handleDelete(row: ProjectVO) {
   try { await ElMessageBox.confirm(`确定删除「${row.name}」吗？`, '提示', { type: 'warning' }); await deleteProject(row.id!); ElMessage.success('删除成功'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+}
+
+async function handleCancel(row: ProjectVO) {
+  try {
+    await ElMessageBox.confirm(`确定取消项目「${row.name}」吗？`, '提示', { type: 'warning' })
+    await request.put(`/dev/project/${row.id}/cancel`)
+    ElMessage.success('项目已取消')
+    loadData()
+  } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+}
+
+async function handleReactivate(row: ProjectVO) {
+  try {
+    await ElMessageBox.confirm(`确定重新激活项目「${row.name}」吗？`, '提示', { type: 'info' })
+    await request.put(`/dev/project/${row.id}/reactivate`)
+    ElMessage.success('项目已重新激活')
+    loadData()
+  } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
 // ===================== 时间线 =====================
@@ -226,6 +254,7 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
       <el-tabs v-model="activeTab" @tab-change="()=>{}">
         <el-tab-pane label="进行中" name="active" />
         <el-tab-pane label="已结项" name="finished" />
+        <el-tab-pane label="已取消" name="cancelled" />
       </el-tabs>
 
       <!-- 进行中 -->
@@ -239,21 +268,22 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
         <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
         <el-table-column label="项目阶段" min-width="100" align="center">
           <template #default="{ row }">
-            <el-tag type="warning" size="small">{{ row.status }}</el-tag>
+            <el-tag type="warning" size="small">{{ getCurrentPhase(row) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="截止时间" width="120" align="center">
           <template #default="{ row }">
-            <span v-if="getPlannedEnd(row as ProjectVO)" :style="{ color: isOverdue(row as ProjectVO) ? '#f56c6c' : '#606266', fontWeight: isOverdue(row as ProjectVO) ? 'bold' : 'normal' }">
-              {{ getPlannedEnd(row as ProjectVO) }}
+            <span v-if="getPlannedEnd(row)" :style="{ color: isOverdue(row) ? '#f56c6c' : '#606266', fontWeight: isOverdue(row) ? 'bold' : 'normal' }">
+              {{ getPlannedEnd(row) }}
             </span>
             <span v-else style="color:#c0c4cc">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" align="center" fixed="right">
+        <el-table-column label="操作" width="280" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">详细</el-button>
             <el-button type="warning" link size="small" @click="openTimeline(row as ProjectVO)">时间线</el-button>
+            <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click="handleCancel(row as ProjectVO)">取消</el-button>
             <el-button type="danger" link size="small" @click="handleDelete(row as ProjectVO)">删除</el-button>
           </template>
         </el-table-column>
@@ -267,11 +297,30 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="90" show-overflow-tooltip />
         <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
         <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
-        <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag type="success" size="small">{{row.status}}</el-tag></template></el-table-column>
+        <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'success'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click="openDetail(row as ProjectVO)">详情</el-button>
             <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">详细</el-button>
+            <el-button type="danger" link size="small" @click="handleDelete(row as ProjectVO)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <!-- 已取消 -->
+      <el-table v-if="activeTab==='cancelled'" :data="cancelledProjects" border stripe v-loading="tableLoading" style="width:100%" size="default">
+        <el-table-column type="index" label="#" width="50" align="center" />
+        <el-table-column prop="code" label="编号" width="140" show-overflow-tooltip />
+        <el-table-column prop="name" label="项目名称" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="displaySupplierName" label="显示方案" min-width="90" show-overflow-tooltip />
+        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
+        <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'danger'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="220" align="center" fixed="right">
+          <template #default="{row}">
+            <el-button type="primary" link size="small" @click="openDetail(row as ProjectVO)">详情</el-button>
+            <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">详细</el-button>
+            <el-button type="warning" link size="small" @click="handleReactivate(row as ProjectVO)">重新激活</el-button>
             <el-button type="danger" link size="small" @click="handleDelete(row as ProjectVO)">删除</el-button>
           </template>
         </el-table-column>

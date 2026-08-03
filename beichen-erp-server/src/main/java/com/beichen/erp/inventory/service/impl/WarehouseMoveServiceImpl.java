@@ -13,8 +13,8 @@ import com.beichen.erp.inventory.mapper.InventoryWarehouseMoveMapper;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseMoveItemMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.inventory.service.WarehouseMoveService;
-import com.beichen.erp.material.entity.Material;
-import com.beichen.erp.material.mapper.MaterialMapper;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +32,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
     private final InventoryWarehouseMoveMapper moveMapper;
     private final InventoryWarehouseMoveItemMapper itemMapper;
     private final InventoryWarehouseStockService stockService;
-    private final MaterialMapper materialMapper;
+    private final ProductMapper productMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long fromWarehouseId, Long toWarehouseId, int pageNum, int pageSize) {
@@ -64,7 +64,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
             String summary = its.stream().map(it -> {
                 String name = "";
                 if (it.getProductId() != null) {
-                    Material prod = materialMapper.selectById(it.getProductId());
+                    Product prod = productMapper.selectById(it.getProductId());
                     if (prod != null) name = prod.getName();
                 }
                 return name + "*" + (it.getQuantity() != null ? it.getQuantity().stripTrailingZeros().toPlainString() : "0");
@@ -144,7 +144,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
             // 查询产品名称用于库存流水
             String productName = "";
             if (it.getProductId() != null) {
-                Material product = materialMapper.selectById(it.getProductId());
+                Product product = productMapper.selectById(it.getProductId());
                 productName = product != null ? product.getName() : "";
             }
             stockService.changeStock(move.getFromWarehouseId(), productName, q.negate(),
@@ -168,7 +168,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             String productName = "";
             if (it.getProductId() != null) {
-                Material product = materialMapper.selectById(it.getProductId());
+                Product product = productMapper.selectById(it.getProductId());
                 productName = product != null ? product.getName() : "";
             }
             // 反审核：退回移出仓、从移入仓扣回

@@ -14,7 +14,9 @@ public enum TimelineStatus {
     /** 进行中：阶段正在执行 */
     IN_PROGRESS("进行中"),
     /** 已完成：阶段已结束 */
-    FINISHED("已完成");
+    FINISHED("已完成"),
+    /** 已跳过：用户跳过该阶段 */
+    SKIPPED("已跳过");
 
     private final String label;
 
