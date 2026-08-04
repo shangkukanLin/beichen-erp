@@ -266,7 +266,7 @@ onMounted(loadData)
         <el-card shadow="never" v-loading="materialLoading">
           <el-table :data="materialSummary" border stripe size="small">
             <el-table-column prop="materialName" label="物料名称" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="materialType" label="类型" width="80" />
+            <el-table-column prop="bomTypeName" label="类型" width="80" />
             <el-table-column prop="totalDemand" label="总需求" width="90" align="right" />
             <el-table-column label="已送料" width="90" align="right">
               <template #default="{ row }">{{ row.totalDelivered || 0 }}</template>

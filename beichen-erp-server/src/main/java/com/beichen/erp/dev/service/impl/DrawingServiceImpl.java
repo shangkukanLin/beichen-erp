@@ -27,19 +27,19 @@ public class DrawingServiceImpl extends ServiceImpl<DrawingMapper, Drawing> impl
     @Override
     public Drawing upload(Drawing drawing) {
         // 自动计算版本号：同项目+同文档名+同类型 的最大版本号 + 1
-        Integer maxVersion = getMaxVersion(drawing.getProjectId(), drawing.getDocName(), drawing.getDrawingType());
+        Integer maxVersion = getMaxVersion(drawing.getProjectId(), drawing.getDocName(), drawing.getDocType());
         drawing.setVersionCode(maxVersion != null ? maxVersion + 1 : 1);
         drawing.setUploadTime(LocalDateTime.now());
         baseMapper.insert(drawing);
         return drawing;
     }
 
-    private Integer getMaxVersion(Long projectId, String docName, String drawingType) {
+    private Integer getMaxVersion(Long projectId, String docName, String docType) {
         Drawing last = baseMapper.selectOne(
                 new LambdaQueryWrapper<Drawing>()
                         .eq(Drawing::getProjectId, projectId)
                         .eq(Drawing::getDocName, docName)
-                        .eq(Drawing::getDrawingType, drawingType)
+                        .eq(Drawing::getDocType, docType)
                         .orderByDesc(Drawing::getVersionCode)
                         .last("LIMIT 1"));
         return last != null ? last.getVersionCode() : null;

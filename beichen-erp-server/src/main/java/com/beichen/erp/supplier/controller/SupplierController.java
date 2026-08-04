@@ -21,6 +21,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.beichen.erp.dev.entity.BomType;
+import com.beichen.erp.dev.mapper.BomTypeMapper;
+
 import java.math.BigDecimal;
 import java.util.*;
 
@@ -32,6 +35,14 @@ public class SupplierController {
     private final SupplierService supplierService;
     private final SupplierProductService supplierProductService;
     private final JdbcTemplate jdbcTemplate;
+    private final BomTypeMapper bomTypeMapper;
+
+    /** bomTypeId -> 类型名（空安全） */
+    private String getBomTypeNameById(Long id) {
+        if (id == null) return "-";
+        BomType t = bomTypeMapper.selectById(id);
+        return t != null ? t.getTypeName() : "-";
+    }
 
     @GetMapping("/page")
     public R<Page<Supplier>> page(SupplierQueryDTO query) {
@@ -88,26 +99,26 @@ public class SupplierController {
     @GetMapping("/{factoryId}/material-summary")
     public R<Map<String, Object>> materialSummary(@PathVariable Long factoryId) {
         // 1. 汇总生产中加工单的物料需求（去掉不可靠的 delivered_quantity）
-        String demandSql = "SELECT om.outsource_material_id, om.material_name, om.material_type, " +
+        String demandSql = "SELECT om.outsource_material_id, om.material_name, om.bom_type_id, " +
             "SUM(om.demand_quantity) AS total_demand " +
             "FROM outsource_order_material om " +
             "INNER JOIN outsource_order_product op ON om.product_id = op.id " +
             "INNER JOIN outsource_order o ON op.order_id = o.id " +
             "WHERE o.factory_id = ? AND o.status = '生产中' " +
-            "GROUP BY om.outsource_material_id, om.material_name, om.material_type";
+            "GROUP BY om.outsource_material_id, om.material_name, om.bom_type_id";
         List<Map<String, Object>> demandRows = jdbcTemplate.queryForList(demandSql, factoryId);
 
         // 1b. 汇总物料订单的子物料需求（带 components 的物料单）
         String compDemandSql = "SELECT mc.child_outsource_material_id AS material_id, " +
             "COALESCE(cm.material_name, '未知物料') AS material_name, " +
-            "COALESCE(cm.material_type, '') AS material_type, " +
+            "COALESCE(cm.bom_type_id, 0) AS bom_type_id, " +
             "SUM(moi.order_quantity * mc.quantity) AS total_demand " +
             "FROM outsource_material_component mc " +
             "INNER JOIN outsource_material_order_item moi ON moi.outsource_material_id = mc.parent_outsource_material_id " +
             "INNER JOIN outsource_material_order mo ON moi.order_id = mo.id " +
             "LEFT JOIN outsource_material cm ON mc.child_outsource_material_id = cm.id " +
             "WHERE mo.supplier_id = ? AND mo.status IN ('待确认', '已确认', '收货中') " +
-            "GROUP BY mc.child_outsource_material_id, cm.material_name, cm.material_type";
+            "GROUP BY mc.child_outsource_material_id, cm.material_name, cm.bom_type_id";
         List<Map<String, Object>> compDemandRows = jdbcTemplate.queryForList(compDemandSql, factoryId);
 
         // 合并需求：按 material_name 汇总
@@ -118,7 +129,8 @@ public class SupplierController {
                 Map<String, Object> x = new LinkedHashMap<>();
                 x.put("materialId", row.get("outsource_material_id"));
                 x.put("materialName", name);
-                x.put("materialType", row.get("material_type"));
+                Long bomTypeId = row.get("bom_type_id") != null ? ((Number) row.get("bom_type_id")).longValue() : null;
+                x.put("bomTypeName", getBomTypeNameById(bomTypeId));
                 x.put("totalDemand", BigDecimal.ZERO);
                 return x;
             });
@@ -131,7 +143,8 @@ public class SupplierController {
                 Map<String, Object> x = new LinkedHashMap<>();
                 x.put("materialId", row.get("material_id"));
                 x.put("materialName", name);
-                x.put("materialType", row.get("material_type"));
+                Long bomTypeId = row.get("bom_type_id") != null ? ((Number) row.get("bom_type_id")).longValue() : null;
+                x.put("bomTypeName", getBomTypeNameById(bomTypeId));
                 x.put("totalDemand", BigDecimal.ZERO);
                 return x;
             });
@@ -210,7 +223,7 @@ public class SupplierController {
 
             Map<String, Object> mat = new LinkedHashMap<>();
             mat.put("materialName", materialName);
-            mat.put("materialType", dm.get("materialType"));
+            mat.put("bomTypeName", dm.get("bomTypeName"));
             mat.put("totalDemand", totalDemand);
             mat.put("totalDelivered", totalDelivered);
             mat.put("warehouseStock", stock);

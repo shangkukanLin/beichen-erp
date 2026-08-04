@@ -57,6 +57,7 @@ public class OutsourceOrderController {
     private final OutsourceWarehouseMapper warehouseMapper;
     private final OutsourceWarehouseStockMapper warehouseStockMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
+    private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
     private final OutsourceDeliveryMapper deliveryMapper;
     private final OutsourceDeliveryItemMapper deliveryItemMapper;
     private final OutsourceOrderDeliveryMapper orderDeliveryMapper;
@@ -128,28 +129,28 @@ public class OutsourceOrderController {
         Long whId = whs.isEmpty() ? null : whs.get(0).getId();
 
         List<OutsourceOrderProduct> products = orderService.getProducts(id);
-        // 汇总所有物料（合并同名物料的需求量）
-        Map<String, Map<String, Object>> matMap = new java.util.LinkedHashMap<>();
+        // 汇总所有物料（按物料ID合并需求量）
+        Map<Long, Map<String, Object>> matMap = new java.util.LinkedHashMap<>();
         for (OutsourceOrderProduct p : products) {
             List<OutsourceOrderMaterial> mats = orderService.getMaterials(p.getId());
             for (OutsourceOrderMaterial mat : mats) {
-                String key = mat.getMaterialName() != null ? mat.getMaterialName() : "";
-                if (key.isBlank()) continue;
+                Long key = mat.getMaterialId();
+                if (key == null) continue;
                 if (matMap.containsKey(key)) {
                     Map<String, Object> existing = matMap.get(key);
                     BigDecimal oldDemand = (BigDecimal) existing.get("demandQuantity");
                     existing.put("demandQuantity", oldDemand.add(mat.getDemandQuantity() != null ? mat.getDemandQuantity() : BigDecimal.ZERO));
                 } else {
                     Map<String, Object> m = new java.util.LinkedHashMap<>();
-                    m.put("materialName", mat.getMaterialName());
-                    m.put("materialType", mat.getMaterialType());
+                    m.put("materialName", mat.getMaterialId() != null ? getMaterialNameById(mat.getMaterialId()) : "");
+                    m.put("bomTypeName", getBomTypeNameById(mat.getBomTypeId()));
                     m.put("unit", mat.getUnit());
                     m.put("materialId", mat.getMaterialId());
                     m.put("demandQuantity", mat.getDemandQuantity() != null ? mat.getDemandQuantity() : BigDecimal.ZERO);
                     // 查物料关联的供应商
                     if (mat.getMaterialId() != null) {
                         OutsourceMaterial om = outsourceMaterialMapper.selectById(mat.getMaterialId());
-                        if (om != null) { m.put("supplierIds", om.getSupplierIds()); m.put("supplierName", om.getSupplierName()); }
+                        if (om != null) { m.put("supplierIds", om.getSupplierIds()); }
                     }
                     matMap.put(key, m);
                 }
@@ -167,15 +168,15 @@ public class OutsourceOrderController {
             productDeliveredMap.merge(d.getProductName(), qty, java.math.BigDecimal::add);
         }
         // 按产品计算每个物料已被出货消耗的数量
-        java.util.Map<String, java.math.BigDecimal> shippedConsumedMap = new java.util.HashMap<>();
+        java.util.Map<Long, java.math.BigDecimal> shippedConsumedMap = new java.util.HashMap<>();
         for (OutsourceOrderProduct p : products) {
             java.math.BigDecimal pDelivered = productDeliveredMap.get(p.getProductName());
             if (pDelivered == null || pDelivered.compareTo(java.math.BigDecimal.ZERO) == 0) continue;
             java.math.BigDecimal pTotal = p.getQuantity() != null ? p.getQuantity() : java.math.BigDecimal.ONE;
             java.util.List<OutsourceOrderMaterial> mats = orderService.getMaterials(p.getId());
             for (OutsourceOrderMaterial mat : mats) {
-                String key = mat.getMaterialName();
-                if (key == null || key.isBlank()) continue;
+                Long key = mat.getMaterialId();
+                if (key == null) continue;
                 java.math.BigDecimal matDemand = mat.getDemandQuantity() != null ? mat.getDemandQuantity() : java.math.BigDecimal.ZERO;
                 if (matDemand.compareTo(java.math.BigDecimal.ZERO) == 0) continue;
                 java.math.BigDecimal perUnit = matDemand.divide(pTotal, 10, java.math.RoundingMode.HALF_UP);
@@ -185,7 +186,7 @@ public class OutsourceOrderController {
         }
 
         // 查所有活跃物料订单的在途数量（可能不精确，仅按物料名汇总）
-        Map<String, BigDecimal> inTransitMap = new HashMap<>();
+        Map<Long, BigDecimal> inTransitMap = new HashMap<>();
         List<MaterialOrder> activeOrders = materialOrderMapper.selectList(
             new LambdaQueryWrapper<MaterialOrder>()
                 .notIn(MaterialOrder::getStatus, List.of(MaterialOrderStatus.FINISHED.name(), MaterialOrderStatus.CANCELLED.name())));
@@ -195,36 +196,31 @@ public class OutsourceOrderController {
                 new LambdaQueryWrapper<MaterialOrderItem>()
                     .in(MaterialOrderItem::getOrderId, orderIds));
             for (MaterialOrderItem item : items) {
-                if (item.getMaterialName() == null || item.getMaterialName().isBlank()) continue;
+                if (item.getMaterialId() == null) continue;
                 BigDecimal ordered = item.getOrderQuantity() != null ? item.getOrderQuantity() : BigDecimal.ZERO;
                 BigDecimal received = item.getReceivedQuantity() != null ? item.getReceivedQuantity() : BigDecimal.ZERO;
                 BigDecimal inTransit = ordered.subtract(received);
                 if (inTransit.compareTo(BigDecimal.ZERO) > 0) {
-                    inTransitMap.merge(item.getMaterialName(), inTransit, BigDecimal::add);
+                    inTransitMap.merge(item.getMaterialId(), inTransit, BigDecimal::add);
                 }
             }
         }
 
         // 查库存
         List<Map<String, Object>> result = new ArrayList<>();
-        for (Map.Entry<String, Map<String, Object>> e : matMap.entrySet()) {
+        for (Map.Entry<Long, Map<String, Object>> e : matMap.entrySet()) {
             Map<String, Object> m = e.getValue();
             BigDecimal demand = (BigDecimal) m.get("demandQuantity");
             // 扣除已出货消耗
             BigDecimal shippedConsumed = shippedConsumedMap.getOrDefault(e.getKey(), BigDecimal.ZERO);
             BigDecimal remainingDemand = demand.subtract(shippedConsumed);
             if (remainingDemand.compareTo(BigDecimal.ZERO) < 0) remainingDemand = BigDecimal.ZERO;
-            // 确保materialId已解析（BOM中materialId可能为空，需按名称补查）
+            // matMap仅汇总materialId非空的物料，materialId必然已解析
             Long materialId = (Long) m.get("materialId");
-            if (materialId == null) {
-                Long mid = outsourceMaterialMapper.findIdByName((String) m.get("materialName"));
-                if (mid != null) m.put("materialId", mid);
-                materialId = mid;
-            }
             // 补查供应商信息（即使无仓库也需要，供"去采购"使用）
             if (materialId != null && !m.containsKey("supplierIds")) {
                 OutsourceMaterial om = outsourceMaterialMapper.selectById(materialId);
-                if (om != null) { m.put("supplierIds", om.getSupplierIds()); m.put("supplierName", om.getSupplierName()); }
+                if (om != null) { m.put("supplierIds", om.getSupplierIds()); }
             }
             // 查良品库存
             BigDecimal stock = BigDecimal.ZERO;
@@ -359,13 +355,14 @@ public class OutsourceOrderController {
                 for (OutsourceOrderMaterial mat : materials) {
                     BigDecimal demandQty = mat.getDemandQuantity();
                     BigDecimal restoreQty = demandQty != null ? demandQty.multiply(qty) : BigDecimal.ZERO;
-                    if (restoreQty.compareTo(BigDecimal.ZERO) > 0) {
+                    if (restoreQty.compareTo(BigDecimal.ZERO) > 0 && mat.getMaterialId() != null) {
+                        String matName = getMaterialNameById(mat.getMaterialId());
                         jdbcTemplate.update(
-                            "UPDATE outsource_warehouse_stock SET quantity = quantity + ? WHERE warehouse_id = ? AND material_name = ?",
-                            restoreQty, factoryWhId, mat.getMaterialName());
+                            "UPDATE outsource_warehouse_stock SET quantity = quantity + ? WHERE warehouse_id = ? AND outsource_material_id = ?",
+                            restoreQty, factoryWhId, mat.getMaterialId());
                         jdbcTemplate.update(
                             "INSERT INTO outsource_stock_log (warehouse_id, material_name, quality_type, change_qty, change_type, remark, create_time) VALUES (?,?,?,?,?,?,NOW())",
-                            factoryWhId, mat.getMaterialName(), QualityType.GOOD.getCode(), restoreQty, "DEFECT_RETURN_IN", "退不良恢复物料 - " + o.getCode());
+                            factoryWhId, matName, QualityType.GOOD.getCode(), restoreQty, "DEFECT_RETURN_IN", "退不良恢复物料 - " + o.getCode());
                     }
                 }
             }
@@ -462,8 +459,7 @@ public class OutsourceOrderController {
                                 Map<String, Object> mm = (Map<String, Object>) matMap;
                                 OutsourceOrderMaterial mat = new OutsourceOrderMaterial();
                                 if (mm.get("materialId") != null) mat.setMaterialId(Long.valueOf(mm.get("materialId").toString()));
-                                mat.setMaterialName((String) mm.get("materialName"));
-                                mat.setMaterialType((String) mm.get("materialType"));
+                                if (mm.get("bomTypeId") != null) mat.setBomTypeId(Long.valueOf(mm.get("bomTypeId").toString()));
                                 mat.setUnit((String) mm.get("unit"));
                                 if (mm.get("demandQuantity") != null && !mm.get("demandQuantity").toString().isBlank())
                                     mat.setDemandQuantity(new BigDecimal(mm.get("demandQuantity").toString()));
@@ -480,5 +476,19 @@ public class OutsourceOrderController {
             }
         }
         return list;
+    }
+
+    /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */
+    private String getMaterialNameById(Long materialId) {
+        if (materialId == null) return "";
+        OutsourceMaterial m = outsourceMaterialMapper.selectById(materialId);
+        return m != null ? m.getMaterialName() : "";
+    }
+
+    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
+    private String getBomTypeNameById(Long bomTypeId) {
+        if (bomTypeId == null) return "-";
+        com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
+        return bt != null ? bt.getTypeName() : "-";
     }
 }

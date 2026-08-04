@@ -260,6 +260,16 @@ const router = createRouter({
   routes
 })
 
+// 全局路由错误处理：捕获懒加载 chunk 失败等异常，避免异常冒泡导致整页刷新
+router.onError((error) => {
+  console.error('路由错误:', error)
+  // 懒加载组件 chunk 加载失败时，记录错误但不主动 reload，避免循环刷新
+  if (error?.message?.includes('Failed to fetch dynamically imported module') ||
+      error?.message?.includes('error loading dynamically imported module')) {
+    console.warn('页面资源加载失败，可能是开发环境热更新或网络瞬断导致')
+  }
+})
+
 router.beforeEach((to, _from, next) => {
   const userStore = useUserStore()
   const isLogin = userStore.isLogin

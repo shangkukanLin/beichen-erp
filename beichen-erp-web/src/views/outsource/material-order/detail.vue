@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { exportMaterialOrderPdf } from '@/api/contract-template'
-import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/material'
+import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
@@ -14,6 +14,16 @@ const items = ref<any[]>([])
 const activeTab = ref('detail')
 const saving = ref(false)
 const supplierOptions = ref<any[]>([])
+const bomTypes = ref<any[]>([])
+
+// bomTypeId -> 类型名 映射（兜底展示用）
+function typeName(bid: number | undefined, fallback?: string) {
+  if (bid != null) { const t = bomTypes.value.find((v: any) => v.id === bid); if (t) return t.typeName }
+  return fallback || '-'
+}
+async function loadBomTypes() {
+  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
+}
 
 async function loadOptions() {
   try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch { }
@@ -162,7 +172,7 @@ function goPurchaseComponent(comp: any, parentItem: any) {
   const ids = (comp.supplierIds || '') as string; const firstId = ids.split(',')[0]?.trim()
   const p = new URLSearchParams(); if (firstId) p.set('supplierId', firstId)
   if (comp.childMaterialId) p.set('materialId', String(comp.childMaterialId))
-  p.set('materialName', comp.childMaterialName || ''); p.set('materialType', comp.childMaterialType || '')
+  p.set('materialName', comp.childMaterialName || ''); p.set('bomTypeId', String(comp.childBomTypeId ?? ''))
   p.set('unit', comp.childUnit || ''); p.set('quantity', String(comp.shortage || 0))
   router.push('/outsource/material-order/add?' + p.toString())
 }
@@ -219,7 +229,7 @@ function exportPdf() {
   }).catch(() => { ElMessage.error('导出失败') })
 }
 
-onMounted(async () => { await loadOptions(); loadAll() })
+onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
 </script>
 
 <template>
@@ -280,7 +290,7 @@ onMounted(async () => { await loadOptions(); loadAll() })
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="materialType" label="类型" width="80" />
+          <el-table-column label="类型" width="80"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
           <el-table-column prop="materialName" label="物料名称" min-width="130" />
           <el-table-column prop="unit" label="单位" width="60" />
           <el-table-column prop="orderQuantity" label="下单数" width="90" />

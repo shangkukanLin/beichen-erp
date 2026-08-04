@@ -160,7 +160,7 @@ public class ContractTemplateController {
         BigDecimal total = BigDecimal.ZERO; int i = 1;
         if (items != null) for (MaterialOrderItem it : items) {
             BigDecimal a = it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO; total = total.add(a);
-            sb.append("<tr><td align='center' valign='middle'>").append(i++).append("</td><td align='center' valign='middle'>").append(n(it.getMaterialName())).append("</td><td align='center' valign='middle'>").append(n(it.getUnit())).append("</td><td align='center' valign='middle'>").append(fmt(it.getOrderQuantity())).append("</td><td align='center' valign='middle'>").append(fmt(it.getUnitPrice())).append("</td><td align='center' valign='middle'>").append(fmt(a)).append("</td><td align='center' valign='middle'>").append(n(it.getRemark())).append("</td></tr>");
+            sb.append("<tr><td align='center' valign='middle'>").append(i++).append("</td><td align='center' valign='middle'>").append(n(getMaterialNameById(it.getMaterialId()))).append("</td><td align='center' valign='middle'>").append(n(it.getUnit())).append("</td><td align='center' valign='middle'>").append(fmt(it.getOrderQuantity())).append("</td><td align='center' valign='middle'>").append(fmt(it.getUnitPrice())).append("</td><td align='center' valign='middle'>").append(fmt(a)).append("</td><td align='center' valign='middle'>").append(n(it.getRemark())).append("</td></tr>");
         }
         sb.append("<tr class='total-row'><td align='center' valign='middle' colspan='4'>合计</td><td align='center' valign='middle' colspan='3'>").append(fmt(total)).append(" 元</td></tr></table>");
         return sb.toString();
@@ -180,7 +180,7 @@ public class ContractTemplateController {
                         hasAny = true;
                         sb.append("<h3>三、物料所含子物料明细</h3>");
                     }
-                    sb.append("<p><b>").append(n(it.getMaterialName())).append("（下单数：").append(fmt(it.getOrderQuantity())).append(" ").append(n(it.getUnit())).append("）</b></p>");
+                    sb.append("<p><b>").append(n(getMaterialNameById(it.getMaterialId()))).append("（下单数：").append(fmt(it.getOrderQuantity())).append(" ").append(n(it.getUnit())).append("）</b></p>");
                     sb.append("<table class='data-table'><tr><th align='center' valign='middle'>序号</th><th align='center' valign='middle'>子物料名称</th><th align='center' valign='middle'>单位</th><th align='center' valign='middle'>每套用量</th><th align='center' valign='middle'>需求总数</th><th align='center' valign='middle'>损耗率(%)</th></tr>");
                     int j = 1;
                     for (OutsourceMaterialComponent c : comps) {
@@ -210,6 +210,13 @@ public class ContractTemplateController {
             log.error("PDF生成失败: {}", e.getMessage(), e);
             throw new BusinessException("PDF生成失败：" + e.getMessage());
         }
+    }
+
+    /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */
+    private String getMaterialNameById(Long materialId) {
+        if (materialId == null) return "";
+        OutsourceMaterial m = materialMapper.selectById(materialId);
+        return m != null ? m.getMaterialName() : "";
     }
 
     // ----------------- 渲染 HTML → 长图 -----------------
@@ -326,7 +333,7 @@ public class ContractTemplateController {
         sb.append("<tr><th align='center' valign='middle'>序号</th><th align='center' valign='middle'>物料名称</th><th align='center' valign='middle'>数量</th><th align='center' valign='middle'>损耗率(%)</th><th align='center' valign='middle'>备注</th></tr>");
         int j = 1;
         for (OutsourceOrderMaterial m : mats) {
-            sb.append("<tr><td align='center' valign='middle'>").append(j++).append("</td><td align='center' valign='middle'>").append(n(m.getMaterialName())).append("</td><td align='center' valign='middle'>").append(fmt(m.getDemandQuantity())).append("</td><td align='center' valign='middle'>").append(fmt(m.getLossRate())).append("</td><td align='center' valign='middle'>").append(n(m.getRemark())).append("</td></tr>");
+            sb.append("<tr><td align='center' valign='middle'>").append(j++).append("</td><td align='center' valign='middle'>").append(n(getMaterialNameById(m.getMaterialId()))).append("</td><td align='center' valign='middle'>").append(fmt(m.getDemandQuantity())).append("</td><td align='center' valign='middle'>").append(fmt(m.getLossRate())).append("</td><td align='center' valign='middle'>").append(n(m.getRemark())).append("</td></tr>");
         }
         sb.append("</table>"); return sb.toString();
     }

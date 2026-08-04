@@ -27,6 +27,9 @@ public class ProjectTimeline {
 
     private LocalDate actualEnd;
 
+    /** 备注 */
+    private String remark;
+
     private String status;
 
     @TableField(fill = FieldFill.INSERT)

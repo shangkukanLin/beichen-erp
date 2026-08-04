@@ -3,7 +3,7 @@ import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 
-const query = reactive({ materialName: '', projectId: undefined as any, materialType: '' })
+const query = reactive({ materialName: '', projectId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])
 const allMaterials = ref<any[]>([])  // 全部物料，不受TAB过滤，供子物料下拉框使用
@@ -11,16 +11,25 @@ const tableLoading = ref(false)
 const projectOptions = ref<any[]>([])
 const supplierOptions = ref<any[]>([])
 const warehouseOptions = ref<any[]>([])
-const MATERIAL_TYPES = ref<string[]>([])
+const MATERIAL_TYPES = ref<any[]>([])
 
-// Tab 切换 - 物料类型
-const activeTab = ref('全部')
+// Tab 切换 - 物料类型（按 bomTypeId 过滤）
+const activeTab = ref<number | string>('全部')
 
 async function loadOptions() {
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); MATERIAL_TYPES.value = (r || []).map((t:any)=>t.typeName) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); MATERIAL_TYPES.value = (r || []) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
   try { const r = await request.get<any, any>('/dev/project/page', { params: { pageSize: 200 } }); projectOptions.value = r?.records || [] } catch (e: any) { console.warn('加载项目失败', e?.message || e) }
   try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch (e: any) { console.warn('加载供应商失败', e?.message || e) }
   try { const r = await request.get<any, any>('/outsource/warehouse/page', { params: { pageSize: 500 } }); warehouseOptions.value = r?.records || [] } catch (e: any) { console.warn('加载仓库失败', e?.message || e) }
+}
+
+// 按供应商ID列表(逗号分隔)查出供应商名称并拼接展示，空安全返回 '-'
+function supplierNames(ids: string | undefined) {
+  if (!ids || !ids.trim()) return '-'
+  return ids.split(',').map(id => {
+    const s = supplierOptions.value.find(x => String(x.id) === id.trim())
+    return s ? s.name : id.trim()
+  }).join(', ')
 }
 
 async function loadData() {
@@ -29,17 +38,17 @@ async function loadData() {
     const p: any = { pageNum: pagination.pageNum, pageSize: pagination.pageSize }
     if (query.materialName) p.materialName = query.materialName
     if (query.projectId) p.projectId = query.projectId
-    if (activeTab.value !== '全部') p.materialType = activeTab.value
+    if (activeTab.value !== '全部') p.bomTypeId = activeTab.value
     const r = await request.get<any, any>('/outsource/material/page', { params: p })
     tableData.value = r?.records || []; pagination.total = r?.total || 0
   } finally { tableLoading.value = false }
 }
 function handleTabChange() { pagination.pageNum = 1; loadData() }
 function handleQuery() { pagination.pageNum = 1; loadData() }
-function handleReset() { query.materialName = ''; query.projectId = undefined; query.materialType = ''; pagination.pageNum = 1; loadData() }
+function handleReset() { query.materialName = ''; query.projectId = undefined; pagination.pageNum = 1; loadData() }
 
 const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoading = ref(false)
-const defForm = () => ({ id: undefined as any, projectIds: '', projectIdArr: [] as number[], warehouseId: undefined as any, materialName: '', materialType: '', supplierName: '', supplierIdArr: [] as number[], unit: 'PCS', remark: '' })
+const defForm = () => ({ id: undefined as any, projectIds: '', projectIdArr: [] as number[], warehouseId: undefined as any, materialName: '', bomTypeId: undefined as any, supplierIdArr: [] as number[], unit: 'PCS', remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
 // 子物料组成
@@ -76,12 +85,11 @@ function handleEdit(row: any) {
 
 async function handleSubmit() {
   if (!form.materialName) { ElMessage.warning('请输入物料名称'); return }
-  if (!form.materialType) { ElMessage.warning('请选择物料类型'); return }
+  if (!form.bomTypeId) { ElMessage.warning('请选择物料类型'); return }
   const ids = form.projectIdArr.join(',')
   const names = form.projectIdArr.map((id:number)=>projectOptions.value.find((p:any)=>p.id===id)?.name||'').filter(Boolean).join(', ')
   const sIds = form.supplierIdArr.join(',')
-  const sNames = form.supplierIdArr.map((id:number)=>supplierOptions.value.find((s:any)=>s.id===id)?.name||'').filter(Boolean).join(', ')
-  const body = { ...form, projectIds: ids, projectName: names, supplierIds: sIds, supplierName: sNames }
+  const body = { ...form, projectIds: ids, projectName: names, supplierIds: sIds }
   submitLoading.value = true
   try {
     if (isEdit.value) { await request.put('/outsource/material', body); ElMessage.success('修改成功') }
@@ -108,15 +116,17 @@ onMounted(() => { loadOptions(); loadData() })
     <el-card shadow="never" class="table-card">
       <el-tabs v-model="activeTab" type="border-card" @tab-change="handleTabChange">
         <el-tab-pane label="全部" name="全部" />
-        <el-tab-pane v-for="t in MATERIAL_TYPES" :key="t" :label="t" :name="t" />
+        <el-tab-pane v-for="t in MATERIAL_TYPES" :key="t.id" :label="t.typeName" :name="t.id" />
       </el-tabs>
 
       <el-table :data="tableData" border stripe v-loading="tableLoading">
         <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="projectName" label="所属项目" width="150" show-overflow-tooltip />
-        <el-table-column prop="materialType" label="物料类型" width="100" />
+        <el-table-column prop="bomTypeName" label="物料类型" width="100" />
         <el-table-column prop="materialName" label="物料名称" min-width="130" show-overflow-tooltip />
-        <el-table-column prop="supplierName" label="供应商" width="180" show-overflow-tooltip />
+        <el-table-column label="供应商" width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ supplierNames(row.supplierIds) }}</template>
+        </el-table-column>
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column label="操作" width="130" align="center" fixed="right">
           <template #default="{row}"><el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button><el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button></template>
@@ -128,7 +138,7 @@ onMounted(() => { loadOptions(); loadData() })
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="720px" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px">
         <el-form-item label="所属项目"><el-select v-model="form.projectIdArr" multiple filterable placeholder="可多选" style="width:100%"><el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" /></el-select></el-form-item>
-        <el-form-item label="物料类型"><el-select v-model="form.materialType" style="width:100%"><el-option v-for="t in MATERIAL_TYPES" :key="t" :label="t" :value="t" /></el-select></el-form-item>
+        <el-form-item label="物料类型"><el-select v-model="form.bomTypeId" style="width:100%"><el-option v-for="t in MATERIAL_TYPES" :key="t.id" :label="t.typeName" :value="t.id" /></el-select></el-form-item>
         <el-form-item label="物料名称" required><el-input v-model="form.materialName" /></el-form-item>
         <el-form-item label="委外仓库"><el-select v-model="form.warehouseId" clearable filterable placeholder="可选" style="width:100%"><el-option v-for="w in warehouseOptions" :key="w.id" :label="`${w.factoryName} - ${w.warehouseName}`" :value="w.id" /></el-select></el-form-item>
         <el-form-item label="供应商"><el-select v-model="form.supplierIdArr" multiple filterable placeholder="可多选" style="width:100%"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /></el-select></el-form-item>
@@ -145,7 +155,7 @@ onMounted(() => { loadOptions(); loadData() })
         <el-table-column label="子物料" min-width="220">
           <template #default="{ row }">
             <el-select v-model="row.childMaterialId" filterable placeholder="选择已有物料" style="width:100%" size="small">
-              <el-option v-for="m in allMaterials" :key="m.id" :label="`${m.materialName} (${m.materialType || ''})`" :value="m.id" :disabled="m.id === form.id" />
+              <el-option v-for="m in allMaterials" :key="m.id" :label="`${m.materialName} (${m.bomTypeName || ''})`" :value="m.id" :disabled="m.id === form.id" />
             </el-select>
           </template>
         </el-table-column>

@@ -24,6 +24,7 @@ public class StockController {
     private final OutsourceDeliveryMapper deliveryMapper;
     private final OutsourceDeliveryItemMapper itemMapper;
     private final OutsourceStockLogMapper stockLogMapper;
+    private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
 
     @GetMapping("/by-warehouse/{warehouseId}")
     public R<List<Map<String, Object>>> byWarehouse(@PathVariable Long warehouseId) {
@@ -39,7 +40,7 @@ public class StockController {
             if (s.getMaterialId() != null) {
                 OutsourceMaterial mat = materialMapper.selectById(s.getMaterialId());
                 map.put("materialName", mat != null ? mat.getMaterialName() : "-");
-                map.put("materialType", mat != null ? mat.getMaterialType() : "-");
+                map.put("bomTypeName", getBomTypeNameById(mat != null ? mat.getBomTypeId() : null));
                 map.put("unit", mat != null ? mat.getUnit() : "");
                 map.put("projectIds", mat != null && mat.getProjectIds() != null ? mat.getProjectIds() : "");
             }
@@ -74,8 +75,8 @@ public class StockController {
             map.put("deliveryDate", d.getDeliveryDate());
             map.put("status", d.getStatus());
             map.put("quantity", item.getQuantity());
-            map.put("materialName", item.getMaterialName());
-            map.put("materialType", item.getMaterialType());
+            map.put("materialName", getMaterialNameById(item.getMaterialId()));
+            map.put("bomTypeName", getBomTypeNameById(item.getBomTypeId()));
             map.put("unit", item.getUnit());
             allRecords.add(map);
         }
@@ -110,5 +111,19 @@ public class StockController {
         result.put("records", page.getRecords());
         result.put("total", page.getTotal());
         return R.ok(result);
+    }
+
+    /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */
+    private String getMaterialNameById(Long materialId) {
+        if (materialId == null) return "";
+        OutsourceMaterial m = materialMapper.selectById(materialId);
+        return m != null ? m.getMaterialName() : "";
+    }
+
+    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
+    private String getBomTypeNameById(Long bomTypeId) {
+        if (bomTypeId == null) return "-";
+        com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
+        return bt != null ? bt.getTypeName() : "-";
     }
 }

@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { IoType, IoTypeLabel } from '@/api/material'
+import { IoType, IoTypeLabel } from '@/api/enums'
 
 const router = useRouter()
 const loading = ref(false)

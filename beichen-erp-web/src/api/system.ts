@@ -195,7 +195,6 @@ export interface SupplierVO {
   creditPeriodMonths?: number
   creditPeriod?: number
   brand?: string
-  materialType?: string
   remark?: string
   createTime?: string
   updateTime?: string
@@ -214,7 +213,6 @@ export interface SupplierDTO {
   creditPeriodMonths?: number
   creditPeriod?: number
   brand?: string
-  materialType?: string
   remark?: string
 }
 
@@ -307,10 +305,10 @@ export interface ProjectQueryParams {
 export interface BomVO {
   id?: number | string; projectId?: number; supplierId?: number; spec?: string; materialName: string
   unit?: string; quantityPerSet?: number; lossRate?: number
-  materialType?: string; remark?: string
+  remark?: string
 }
 
-export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialName: string; spec?: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; materialType?: string; remark?: string }
+export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialName: string; spec?: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; remark?: string }
 
 export interface BugVO {
   id?: number | string; projectId?: number; code?: string; title: string
@@ -335,7 +333,7 @@ export function deleteProject(id: number | string) { return request.delete<unkno
 export function updateProjectStatus(id: number | string, status: string) { return request.put<unknown, void>(`/dev/project/${id}/status?status=${status}`) }
 
 export function getProjectBom(projectId: number | string) { return request.get<unknown, BomVO[]>(`/dev/project/${projectId}/bom`) }
-export function saveProjectBom(projectId: number | string, items: BomDTO[]) { return request.put<unknown, void>(`/dev/project/${projectId}/bom`, items) }
+export function saveProjectBom(projectId: number | string, items: BomDTO[]) { return request.post<unknown, void>(`/dev/project/${projectId}/bom/batch`, items) }
 
 export function getProjectDrawings(projectId: number | string) { return request.get<unknown, DrawingVO[]>(`/dev/project/${projectId}/drawing`) }
 export function addProjectDrawing(projectId: number | string, data: DrawingVO) { return request.post<unknown, void>(`/dev/project/${projectId}/drawing`, data) }

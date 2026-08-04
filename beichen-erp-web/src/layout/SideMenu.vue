@@ -30,28 +30,18 @@ const router = useRouter()
 const userStore = useUserStore()
 const activeMenu = computed(() => route.path)
 
-/** 收集所有叶子菜单的 routePath，用于判断 @select 是否来自真正的菜单项 */
-const leafRoutePaths = computed(() => {
-  const paths = new Set<string>()
-  function collect(menus: any[]) {
-    for (const m of menus) {
-      if (m.menuType === 'menu') paths.add(m.routePath)
-      if (m.children) collect(m.children)
-    }
-  }
-  collect(userStore.menus)
-  return paths
-})
-
-/** 将 index 转为绝对路径后导航，仅在点击叶子菜单项时生效 */
+/** 点击叶子菜单项时导航（el-menu 的 @select 只在叶子项触发，子菜单标题展开不会触发） */
 function handleMenuSelect(index: string) {
   if (!index) return
-  // 只对已知的叶子菜单路径导航，避免子菜单标题展开时触发意外跳转
-  if (!leafRoutePaths.value.has(index)) return
-  const path = '/' + index.replace(/^\//, '')
-  // 避免重复导航到当前路径，减少不必要的组件重建
+  // 规范化为绝对路径（确保前导 /），并去除尾部斜杠以便与当前路由比较
+  const path = ('/' + index.replace(/^\//, '')).replace(/\/$/, '') || '/'
+  // 避免重复导航到当前路径
   if (path === route.path) return
-  router.push(path)
+  // 捕获懒加载 chunk 失败等异常，避免未处理的 Promise rejection
+  router.push(path).catch((err: any) => {
+    if (err?.name === 'NavigationDuplicated' || err?.message?.includes('NavigationDuplicated')) return
+    console.warn('菜单导航失败:', err)
+  })
 }
 </script>
 

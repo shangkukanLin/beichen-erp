@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated, computed } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { TimelineStatus, TimelineStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag } from '@/api/material'
+import { TimelineStatus, ProjectStatus, ProjectStatusLabel, ProjectStatusTag } from '@/api/enums'
 import {
-  getProjectPage, addProject, updateProject, deleteProject,
+  getProjectPage, addProject, updateProject,
   getProjectBom, saveProjectBom,
   getProjectBugs, addProjectBug, updateProjectBug, deleteProjectBug,
   getProjectDrawings, addProjectDrawing, deleteProjectDrawing,
@@ -26,7 +26,6 @@ const allProjects = ref<ProjectVO[]>([])
 const timelineMap = ref<Record<number, TimelineItem[]>>({})
 
 interface TimelineItem { id?: number; statusName: string; sortOrder: number; defaultDays?: number; plannedEnd?: string; actualEnd?: string; status?: string }
-const timelineStatusOptions = [TimelineStatus.NOT_STARTED, TimelineStatus.IN_PROGRESS, TimelineStatus.FINISHED, TimelineStatus.SKIPPED]
 
 const activeProjects = ref<ProjectVO[]>([])
 const finishedProjects = ref<ProjectVO[]>([])
@@ -114,7 +113,7 @@ const isEdit = ref(false)
 const rules: FormRules = { name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }], assemblyName: [{ required: true, message: '请输入总成名称', trigger: 'blur' }] }
 
 function handleAdd() { router.push('/dev/project/add') }
-function handleEdit(row: ProjectVO) { router.push(`/dev/project/edit/${row.id}`) }
+function handleEdit(row: any) { if (row.id) router.push(`/dev/project/edit/${row.id}`) }
 
 async function handleSubmit() {
   if (!formRef.value) return
@@ -129,11 +128,7 @@ async function handleSubmit() {
   })
 }
 
-async function handleDelete(row: ProjectVO) {
-  try { await ElMessageBox.confirm(`确定删除「${row.name}」吗？`, '提示', { type: 'warning' }); await deleteProject(row.id!); ElMessage.success('删除成功'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
-}
-
-async function handleCancel(row: ProjectVO) {
+async function handleCancel(row: any) {
   try {
     await ElMessageBox.confirm(`确定取消项目「${row.name}」吗？`, '提示', { type: 'warning' })
     await request.put(`/dev/project/${row.id}/cancel`)
@@ -142,65 +137,13 @@ async function handleCancel(row: ProjectVO) {
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
-async function handleReactivate(row: ProjectVO) {
+async function handleReactivate(row: any) {
   try {
     await ElMessageBox.confirm(`确定重新激活项目「${row.name}」吗？`, '提示', { type: 'info' })
     await request.put(`/dev/project/${row.id}/reactivate`)
     ElMessage.success('项目已重新激活')
     loadData()
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
-}
-
-// ===================== 时间线 =====================
-const timelineVisible = ref(false)
-const timelinePid = ref<number>()
-const timelineList = ref<TimelineItem[]>([])
-const timelineCompleting = ref<Record<number, boolean>>({})
-const timelineProgress = computed(() => {
-  const total = timelineList.value.length
-  const completed = timelineList.value.filter((t: any) => t.status === '已完成').length
-  const inProgress = timelineList.value.filter((t: any) => t.status === '进行中').length
-  return { total, completed, inProgress, pct: total > 0 ? Math.round(completed / total * 100) : 0 }
-})
-
-async function loadTimelineDetail(projectId: number) {
-  const res = await request.get<unknown, TimelineItem[]>(`/dev/project/${projectId}/timeline`)
-  timelineList.value = res || []
-}
-
-async function saveTimelineRow(row: TimelineItem) {
-  if (!timelinePid.value) return
-  try {
-    await request.put(`/dev/project-timeline`, {
-      id: row.id,
-      projectId: timelinePid.value,
-      statusName: row.statusName,
-      sortOrder: row.sortOrder,
-      defaultDays: row.defaultDays,
-      plannedEnd: row.plannedEnd || null,
-      actualEnd: row.actualEnd || null,
-      status: row.status
-    })
-    // 更新后刷新（后端可能后推了后续阶段日期，并同步了项目状态）
-    loadTimelineDetail(timelinePid.value)
-    loadData()
-  } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '')) }
-}
-
-async function completePhase(timelineId: number) {
-  timelineCompleting.value[timelineId] = true
-  try {
-    await request.post(`/dev/project-timeline/complete/${timelineId}`)
-    ElMessage.success('阶段已完成')
-    loadTimelineDetail(timelinePid.value!)
-    loadData()
-  } catch (e: any) { ElMessage.error('操作失败: ' + (e?.message || '')) }
-  finally { timelineCompleting.value[timelineId] = false }
-}
-
-function openTimeline(row: ProjectVO) {
-  timelinePid.value = row.id as number
-  loadTimelineDetail(row.id as number).then(() => { timelineVisible.value = true })
 }
 
 // ===================== 详情(BOM/BUG/图纸) =====================
@@ -211,14 +154,20 @@ const bomList = ref<BomDTO[]>([])
 const bomTypes = ref<string[]>([])
 const allMaterials = ref<any[]>([])
 async function loadBomTypes() {
-  try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => t.typeName) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
-  try { const r = await request.get<any, any>('/product/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料失败', e?.message || e) }
+  try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => ({ id: t.id, typeName: t.typeName })) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料失败', e?.message || e) }
 }
-function getMaterialsByType(type: string) { return allMaterials.value.filter((m:any) => m.materialType === type) }
-async function loadBom() { if (detailProject.value) bomList.value = (await getProjectBom(detailProject.value.id!))?.map(b => ({ materialName: b.materialName, spec: b.spec, unit: b.unit, quantityPerSet: b.quantityPerSet, lossRate: b.lossRate, materialType: b.materialType, remark: b.remark })) || [] }
-function addBomRow() { bomList.value.push({ materialName: '', spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialType: '', remark: '' }) }
+function getMaterialsByType(type: any) { return allMaterials.value.filter((m:any) => m.bomTypeId != null && m.bomTypeId === type) }
+/** 选中物料后回填显示字段 */
+function onDetailMaterialChange(materialId: number, row: any) {
+  if (!materialId) { row.materialName = ''; return }
+  const m = allMaterials.value.find((mat: any) => mat.id === materialId)
+  if (m) { row.materialName = m.materialName; if (m.spec) row.spec = m.spec; if (m.unit) row.unit = m.unit }
+}
+async function loadBom() { if (detailProject.value) bomList.value = (await getProjectBom(detailProject.value.id!))?.map(b => ({ outsourceMaterialId: b.outsourceMaterialId, materialName: b.materialName, spec: b.spec || b.specification, unit: b.unit, quantityPerSet: b.quantityPerSet || b.quantity, lossRate: b.lossRate, bomTypeId: b.bomTypeId, remark: b.remark })) || [] }
+function addBomRow() { bomList.value.push({ outsourceMaterialId: undefined, materialName: '', spec: '', unit: '', quantityPerSet: 1, lossRate: 2, bomTypeId: '', remark: '' }) }
 function removeBomRow(i: number) { bomList.value.splice(i, 1) }
-async function saveBom() { if (detailProject.value) { const emptyType = bomList.value.find((b: any) => !b.materialType || !b.materialType.trim()); if (emptyType) { ElMessage.warning('物料类型不能为空'); return }; const emptyName = bomList.value.find((b: any) => !b.materialName || !b.materialName.trim()); if (emptyName) { ElMessage.warning('物料名称不能为空'); return }; const zeroQty = bomList.value.find((b: any) => !b.quantityPerSet || Number(b.quantityPerSet) <= 0); if (zeroQty) { ElMessage.warning('物料用量必须大于0'); return }; await saveProjectBom(detailProject.value.id!, bomList.value); ElMessage.success('BOM已保存'); loadBom() } }
+async function saveBom() { if (detailProject.value) { const emptyType = bomList.value.find((b: any) => !b.bomTypeId); if (emptyType) { ElMessage.warning('物料类型不能为空'); return }; const emptyId = bomList.value.find((b: any) => !b.outsourceMaterialId); if (emptyId) { ElMessage.warning('物料名称不能为空'); return }; const zeroQty = bomList.value.find((b: any) => !b.quantityPerSet || Number(b.quantityPerSet) <= 0); if (zeroQty) { ElMessage.warning('物料用量必须大于0'); return }; const bomData = bomList.value.map((b: any) => ({ outsourceMaterialId: b.outsourceMaterialId, quantity: b.quantityPerSet, lossRate: b.lossRate, specification: b.spec, unit: b.unit })); await saveProjectBom(detailProject.value.id!, bomData); ElMessage.success('BOM已保存'); loadBom() } }
 
 const bugList = ref<BugDTO[]>([]); const bugDialogVisible = ref(false)
 const bugForm = reactive<BugDTO>({ title: '', severity: '一般', status: '待处理', description: '', assignedTo: undefined }); const isBugEdit = ref(false)
@@ -279,12 +228,10 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
             <span v-else style="color:#c0c4cc">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280" align="center" fixed="right">
+        <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">详细</el-button>
-            <el-button type="warning" link size="small" @click="openTimeline(row as ProjectVO)">时间线</el-button>
-            <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click="handleCancel(row as ProjectVO)">取消</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row as ProjectVO)">删除</el-button>
+            <el-button type="success" link size="small" @click="handleEdit(row)">详细</el-button>
+            <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click="handleCancel(row)">取消</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -298,11 +245,10 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
         <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
         <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
         <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'success'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="200" align="center" fixed="right">
+        <el-table-column label="操作" width="140" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click="openDetail(row as ProjectVO)">详情</el-button>
             <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">详细</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row as ProjectVO)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -316,18 +262,17 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
         <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
         <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
         <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'danger'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="220" align="center" fixed="right">
+        <el-table-column label="操作" width="180" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click="openDetail(row as ProjectVO)">详情</el-button>
             <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">详细</el-button>
             <el-button type="warning" link size="small" @click="handleReactivate(row as ProjectVO)">重新激活</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row as ProjectVO)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
-    <!-- 弹窗略（新增/编辑/时间线/详情/BUG/图纸保持不变） -->
+    <!-- 新增/编辑弹窗 -->
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="660px" :close-on-click-modal="false" top="3vh">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-row :gutter="12">
@@ -354,44 +299,6 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
       <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="timelineVisible" title="阶段时间线" width="720px">
-      <!-- 进度概览 -->
-      <div style="margin-bottom:12px;display:flex;align-items:center;gap:12px">
-        <span style="font-size:13px;font-weight:600">进度</span>
-        <el-progress :percentage="timelineProgress.pct" :stroke-width="12" style="flex:1;max-width:240px"
-          :color="timelineProgress.pct === 100 ? '#67c23a' : '#409eff'">
-          <span style="font-size:11px">{{ timelineProgress.completed }}/{{ timelineProgress.total }}</span>
-        </el-progress>
-        <el-tag v-if="timelineProgress.inProgress > 0" type="warning" size="small">进行中: {{ timelineProgress.inProgress }}</el-tag>
-      </div>
-      <el-table :data="timelineList" border size="small">
-        <el-table-column label="排序" width="55" align="center"><template #default="{row}">{{ row.sortOrder }}</template></el-table-column>
-        <el-table-column prop="statusName" label="阶段" width="130" />
-        <el-table-column label="计划完成" width="150">
-          <template #default="{row}"><el-input v-model="row.plannedEnd" type="date" size="small" :disabled="row.status === '已完成'" @change="saveTimelineRow(row)" /></template>
-        </el-table-column>
-        <el-table-column label="实际完成" width="150"><template #default="{row}"><el-input v-model="row.actualEnd" type="date" size="small" @change="saveTimelineRow(row)" /></template></el-table-column>
-        <el-table-column label="状态" width="95" align="center">
-          <template #default="{row}">
-            <el-tag v-if="row.status === '已完成'" type="success" size="small">{{ row.status }}</el-tag>
-            <el-tag v-else-if="row.status === '进行中'" type="warning" size="small">{{ row.status }}</el-tag>
-            <el-select v-else v-model="row.status" size="small" style="width:85px" @change="saveTimelineRow(row)">
-              <el-option v-for="o in timelineStatusOptions" :key="o" :label="o" :value="o" />
-            </el-select>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="70" align="center">
-          <template #default="{row}">
-            <el-button v-if="row.id && row.status === '进行中'" type="success" size="small"
-              :loading="timelineCompleting[row.id]" @click="completePhase(row.id)">
-              完成
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <template #footer><el-button @click="timelineVisible=false">关闭</el-button></template>
-    </el-dialog>
-
     <el-dialog v-model="detailVisible" :title="'项目详情: '+(detailProject?.name||'')" width="900px" :close-on-click-modal="false">
       <el-tabs v-model="detailTab">
         <el-tab-pane label="BOM物料清单" name="bom">
@@ -400,12 +307,12 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
           <el-table :data="bomList" border size="small">
             <el-table-column label="类型" width="100">
               <template #default="{row}">
-                <el-select v-model="row.materialType" size="small" style="width:100%" @change="row.materialName = ''">
-                  <el-option v-for="t in bomTypes" :key="t" :label="t" :value="t" />
+                <el-select v-model="row.bomTypeId" size="small" style="width:100%" @change="row.materialName = ''">
+                  <el-option v-for="t in bomTypes" :key="t.id" :label="t.typeName" :value="t.id" />
                 </el-select>
               </template>
             </el-table-column>
-            <el-table-column label="物料名称" min-width="130"><template #default="{row}"><el-select v-model="row.materialName" size="small" filterable allow-create clearable style="width:100%" placeholder="选择"><el-option v-for="m in getMaterialsByType(row.materialType || '')" :key="m.id" :label="m.materialName" :value="m.materialName" /></el-select></template></el-table-column>
+            <el-table-column label="物料名称" min-width="130"><template #default="{row}"><el-select v-model="row.outsourceMaterialId" size="small" filterable clearable style="width:100%" placeholder="选择" @change="(v: number) => onDetailMaterialChange(v, row)"><el-option v-for="m in getMaterialsByType(row.bomTypeId || '')" :key="m.id" :label="m.materialName" :value="m.id" /></el-select></template></el-table-column>
             <el-table-column label="规格" width="100"><template #default="{row}"><el-input v-model="row.spec" size="small" /></template></el-table-column>
             <el-table-column label="单位" width="70"><template #default="{row}"><el-input v-model="row.unit" size="small" /></template></el-table-column>
             <el-table-column label="用量" width="80"><template #default="{row}"><el-input v-model="row.quantityPerSet" size="small" /></template></el-table-column>

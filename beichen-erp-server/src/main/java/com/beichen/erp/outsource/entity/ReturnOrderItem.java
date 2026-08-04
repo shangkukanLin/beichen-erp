@@ -10,8 +10,12 @@ public class ReturnOrderItem {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long returnOrderId;
-    private String materialName;
-    private String materialType;
+    /** 委外物料ID（关联 outsource_material.id），替代冗余 material_name */
+    @TableField("outsource_material_id")
+    private Long materialId;
+    /** BOM类型ID（关联 dev_bom_type.id） */
+    @TableField("bom_type_id")
+    private Long bomTypeId;
     private String unit;
     private BigDecimal quantity;
     private BigDecimal unitPrice;

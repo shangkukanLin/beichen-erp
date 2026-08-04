@@ -17,10 +17,10 @@ public class Drawing {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long projectId;
-    /** 文档名称，与drawingType组合作为版本分组依据 */
+    /** 文档名称，与docType组合作为版本分组依据 */
     private String docName;
     /** 图纸类型 */
-    private String drawingType;
+    private String docType;
     /** 文件URL */
     private String fileUrl;
     /** 自动递增的版本号 */

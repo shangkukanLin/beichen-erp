@@ -60,9 +60,8 @@ public class ProjectController {
     }
 
     /** 修改项目 */
-    @PutMapping("/{id}")
-    public R<Void> update(@PathVariable Long id, @RequestBody Project project) {
-        project.setId(id);
+    @PutMapping
+    public R<Void> update(@RequestBody Project project) {
         projectService.updateById(project);
         return R.ok();
     }

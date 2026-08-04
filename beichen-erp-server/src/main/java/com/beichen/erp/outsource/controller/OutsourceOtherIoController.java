@@ -36,6 +36,7 @@ public class OutsourceOtherIoController {
     private final OutsourceWarehouseStockMapper stockMapper;
     private final OutsourceStockLogMapper stockLogMapper;
     private final OutsourceMaterialMapper materialMapper;
+    private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
     private final InventoryWarehouseMapper inventoryWarehouseMapper;
     private final InventoryWarehouseStockService inventoryStockService;
 
@@ -61,7 +62,7 @@ public class OutsourceOtherIoController {
             List<OutsourceOtherIoItem> items = itemMapper.selectList(new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, o.getId()));
             java.util.StringJoiner sj = new java.util.StringJoiner("、");
             for (OutsourceOtherIoItem it : items) {
-                String n = it.getMaterialName() != null ? it.getMaterialName() : (it.getMaterialType() != null ? it.getMaterialType() : "");
+                String n = getMaterialNameById(it.getMaterialId());
                 java.math.BigDecimal q = it.getQuantity() != null ? it.getQuantity() : java.math.BigDecimal.ZERO;
                 sj.add(n + "×" + q.stripTrailingZeros().toPlainString());
             }
@@ -148,29 +149,15 @@ public class OutsourceOtherIoController {
         boolean isInv = isInventoryWarehouse(io.getWarehouseId());
         StockChangeType type = IoType.IN.getCode().equals(io.getIoType()) ? StockChangeType.OTHER_IN : StockChangeType.OTHER_OUT;
         for (OutsourceOtherIoItem it : items) {
+            Long matId = it.getMaterialId();
+            if (matId == null) continue; // 缺少物料ID则跳过，避免按名自动建物料产生脏数据
             BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = IoType.IN.getCode().equals(io.getIoType()) ? qty : qty.negate();
             if (isInv) {
-                inventoryStockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
-                    type, io.getCode(), RelatedBillType.OTHER_IO, it.getMaterialId(), null, io.getId(), null);
+                inventoryStockService.changeStock(io.getWarehouseId(), getMaterialNameById(matId), delta,
+                    type, io.getCode(), RelatedBillType.OTHER_IO, matId, null, io.getId(), null);
                 continue;
             }
-            // 确保物料存在
-            Long matId = it.getMaterialId();
-            if (matId == null && it.getMaterialName() != null) {
-                matId = materialMapper.findIdByName(it.getMaterialName());
-                if (matId == null) {
-                    OutsourceMaterial mat = new OutsourceMaterial();
-                    mat.setMaterialName(it.getMaterialName());
-                    mat.setMaterialType(it.getMaterialType());
-                    mat.setUnit(it.getUnit());
-                    mat.setStatus(1);
-                    materialMapper.insert(mat);
-                    matId = mat.getId();
-                }
-            }
-            if (matId == null) continue;
-
             LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
                     .eq(OutsourceWarehouseStock::getWarehouseId, io.getWarehouseId())
                     .eq(OutsourceWarehouseStock::getMaterialId, matId)
@@ -189,7 +176,7 @@ public class OutsourceOtherIoController {
             }
             OutsourceStockLog logEntry = new OutsourceStockLog();
             logEntry.setWarehouseId(io.getWarehouseId()); logEntry.setMaterialId(matId);
-            logEntry.setMaterialName(it.getMaterialName()); logEntry.setChangeType(type.getLabel());
+            logEntry.setMaterialName(getMaterialNameById(matId)); logEntry.setChangeType(type.getLabel());
             logEntry.setChangeQuantity(delta); logEntry.setBeforeQuantity(before);
             logEntry.setAfterQuantity(after); logEntry.setRelatedOrderCode(io.getCode());
             stockLogMapper.insert(logEntry);
@@ -200,18 +187,15 @@ public class OutsourceOtherIoController {
         boolean isInv = isInventoryWarehouse(io.getWarehouseId());
         StockChangeType type = IoType.IN.getCode().equals(io.getIoType()) ? StockChangeType.CANCEL_IN : StockChangeType.CANCEL_OUT;
         for (OutsourceOtherIoItem it : items) {
+            Long matId = it.getMaterialId();
+            if (matId == null) continue;
             BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = IoType.IN.getCode().equals(io.getIoType()) ? qty.negate() : qty;
             if (isInv) {
-                inventoryStockService.changeStock(io.getWarehouseId(), it.getMaterialName(), delta,
-                    type, io.getCode(), RelatedBillType.OTHER_IO, it.getMaterialId(), null, io.getId(), null);
+                inventoryStockService.changeStock(io.getWarehouseId(), getMaterialNameById(matId), delta,
+                    type, io.getCode(), RelatedBillType.OTHER_IO, matId, null, io.getId(), null);
                 continue;
             }
-            Long matId = it.getMaterialId();
-            if (matId == null && it.getMaterialName() != null)
-                matId = materialMapper.findIdByName(it.getMaterialName());
-            if (matId == null) continue;
-
             LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
                     .eq(OutsourceWarehouseStock::getWarehouseId, io.getWarehouseId())
                     .eq(OutsourceWarehouseStock::getMaterialId, matId)
@@ -224,7 +208,7 @@ public class OutsourceOtherIoController {
             }
             OutsourceStockLog logEntry = new OutsourceStockLog();
             logEntry.setWarehouseId(io.getWarehouseId()); logEntry.setMaterialId(matId);
-            logEntry.setMaterialName(it.getMaterialName()); logEntry.setChangeType(type.getLabel());
+            logEntry.setMaterialName(getMaterialNameById(matId)); logEntry.setChangeType(type.getLabel());
             logEntry.setChangeQuantity(delta); logEntry.setBeforeQuantity(before);
             logEntry.setAfterQuantity(before.add(delta)); logEntry.setRelatedOrderCode(io.getCode());
             stockLogMapper.insert(logEntry);
@@ -252,8 +236,7 @@ public class OutsourceOtherIoController {
                     Map<String, Object> map = (Map<String, Object>) m;
                     OutsourceOtherIoItem it = new OutsourceOtherIoItem();
                     if (map.get("materialId") != null) it.setMaterialId(Long.valueOf(map.get("materialId").toString()));
-                    it.setMaterialName((String) map.get("materialName"));
-                    it.setMaterialType((String) map.get("materialType"));
+                    if (map.get("bomTypeId") != null) it.setBomTypeId(Long.valueOf(map.get("bomTypeId").toString()));
                     it.setUnit((String) map.get("unit"));
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank())
                         it.setQuantity(new BigDecimal(map.get("quantity").toString()));
@@ -282,5 +265,19 @@ public class OutsourceOtherIoController {
 
     private boolean isInventoryWarehouse(Long warehouseId) {
         return warehouseId != null && inventoryWarehouseMapper.selectById(warehouseId) != null;
+    }
+
+    /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */
+    private String getMaterialNameById(Long materialId) {
+        if (materialId == null) return "";
+        OutsourceMaterial m = materialMapper.selectById(materialId);
+        return m != null ? m.getMaterialName() : "";
+    }
+
+    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
+    private String getBomTypeNameById(Long bomTypeId) {
+        if (bomTypeId == null) return "-";
+        com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
+        return bt != null ? bt.getTypeName() : "-";
     }
 }

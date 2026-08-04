@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { DeliveryType } from '@/api/material'
+import { DeliveryType } from '@/api/enums'
 
 defineOptions({ name: 'OrderClose' })
 const route = useRoute(); const router = useRouter()
@@ -17,6 +17,16 @@ const report = reactive({
 })
 const items = ref<any[]>([])
 const remark = ref('')
+const bomTypes = ref<any[]>([])
+
+// bomTypeId -> 类型名 映射（兜底展示用）
+function typeName(id: number | undefined, fallback?: string) {
+  if (id != null) { const t = bomTypes.value.find((v: any) => v.id === id); if (t) return t.typeName }
+  return fallback || '-'
+}
+async function loadBomTypes() {
+  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
+}
 
 /** 自动计算 */
 function recalc(row: any) {
@@ -97,7 +107,7 @@ async function handleConfirm() {
 
 function fmt(v: any) { return v !== undefined && v !== null ? Number(v).toFixed(2) : '0.00' }
 
-onMounted(loadReport)
+onMounted(() => { loadBomTypes(); loadReport() })
 </script>
 
 <template>
@@ -128,7 +138,7 @@ onMounted(loadReport)
     <el-card shadow="never" style="margin-bottom:12px">
       <template #header><span style="font-weight:600">物料明细</span></template>
       <el-table :data="items" border size="small" stripe show-summary :summary-method="() => []">
-        <el-table-column prop="materialType" label="类目" width="70" />
+        <el-table-column label="类目" width="70"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
         <el-table-column prop="materialName" label="物料名称" min-width="120" />
 
 

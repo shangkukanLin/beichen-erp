@@ -41,6 +41,7 @@ public class ReturnOrderController {
     private final OutsourceOrderProductMapper orderProductMapper;
     private final OutsourceWarehouseMapper warehouseMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
+    private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
     private final SupplierMapper supplierMapper;
     private final PayableHelper payableHelper;
     private final InventoryWarehouseStockService inventoryStockService;
@@ -82,7 +83,7 @@ public class ReturnOrderController {
                 BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
                 totalQty = totalQty.add(qty);
                 if (sb.length() > 0) sb.append("、");
-                sb.append(it.getMaterialName() != null ? it.getMaterialName() : "").append("×").append(qty.stripTrailingZeros().toPlainString());
+                sb.append(getMaterialNameById(it.getMaterialId())).append("×").append(qty.stripTrailingZeros().toPlainString());
             }
             m.put("totalQuantity", totalQty); m.put("itemSummary", sb.toString());
             return m;
@@ -144,12 +145,13 @@ public class ReturnOrderController {
         BigDecimal totalReturnAmount = BigDecimal.ZERO;
         for (Map<String, Object> it : itemsRaw) {
             BigDecimal qty = toBigDecimal(it.get("quantity"));
-            BigDecimal price = calcFifoPrice((String) it.get("materialName"), qty);
+            Long matId = toLong(it.get("materialId"));
+            BigDecimal price = calcFifoPrice(matId, qty);
 
             ReturnOrderItem item = new ReturnOrderItem();
             item.setReturnOrderId(order.getId());
-            item.setMaterialName((String) it.get("materialName"));
-            item.setMaterialType((String) it.get("materialType"));
+            item.setMaterialId(matId);
+            item.setBomTypeId(toLong(it.get("bomTypeId")));
             item.setUnit((String) it.get("unit"));
             item.setQuantity(qty);
             item.setUnitPrice(price);
@@ -161,8 +163,8 @@ public class ReturnOrderController {
             totalReturnAmount = totalReturnAmount.add(item.getAmount());
 
             // 退回物料入工厂委外仓 + 流水
-            if (factoryWhId != null && item.getMaterialName() != null) {
-                updateOutsourceStock(factoryWhId, item.getMaterialName(), qty, QualityType.GOOD.getCode(), "委外退料入", order.getCode());
+            if (factoryWhId != null && matId != null) {
+                updateOutsourceStock(factoryWhId, matId, qty, QualityType.GOOD.getCode(), "委外退料入", order.getCode());
             }
         }
 
@@ -210,8 +212,8 @@ public class ReturnOrderController {
             new LambdaQueryWrapper<ReturnOrderItem>().eq(ReturnOrderItem::getReturnOrderId, id));
         BigDecimal totalAmount = BigDecimal.ZERO;
         for (ReturnOrderItem it : items) {
-            if (whId != null && it.getQuantity() != null && it.getMaterialName() != null) {
-                updateOutsourceStock(whId, it.getMaterialName(), it.getQuantity().negate(), QualityType.GOOD.getCode(), "取消退料", order.getCode());
+            if (whId != null && it.getQuantity() != null && it.getMaterialId() != null) {
+                updateOutsourceStock(whId, it.getMaterialId(), it.getQuantity().negate(), QualityType.GOOD.getCode(), "取消退料", order.getCode());
             }
             if (it.getAmount() != null) totalAmount = totalAmount.add(it.getAmount());
         }
@@ -227,8 +229,8 @@ public class ReturnOrderController {
 
     /** FIFO 物料单价 */
     @GetMapping("/fifo-price")
-    public R<BigDecimal> fifoPrice(@RequestParam String materialName, @RequestParam(defaultValue = "1") BigDecimal qty) {
-        return R.ok(calcFifoPrice(materialName, qty));
+    public R<BigDecimal> fifoPrice(@RequestParam Long materialId, @RequestParam(defaultValue = "1") BigDecimal qty) {
+        return R.ok(calcFifoPrice(materialId, qty));
     }
 
     /** 获取某工厂的产品列表（含每个产品的BOM版本来源），用于退货选择 */
@@ -285,14 +287,16 @@ public class ReturnOrderController {
     public R<List<Map<String, Object>>> bomSnapshot(@RequestParam Long orderId, @RequestParam Long productId) {
         List<OutsourceOrderMaterial> mats = orderMaterialMapper.selectList(
             new LambdaQueryWrapper<OutsourceOrderMaterial>().eq(OutsourceOrderMaterial::getProductId, productId));
-        Map<String, Map<String, Object>> map = new LinkedHashMap<>();
+        Map<Long, Map<String, Object>> map = new LinkedHashMap<>();
         for (OutsourceOrderMaterial mat : mats) {
-            String key = mat.getMaterialName() != null ? mat.getMaterialName() : "";
-            if (key.isBlank()) continue;
+            Long key = mat.getMaterialId();
+            if (key == null) continue;
             Map<String, Object> m = map.computeIfAbsent(key, k -> {
                 Map<String, Object> x = new LinkedHashMap<>();
-                x.put("materialName", key);
-                x.put("materialType", mat.getMaterialType());
+                x.put("outsourceMaterialId", key);
+                x.put("materialName", getMaterialNameById(key));
+                x.put("bomTypeId", mat.getBomTypeId());
+                x.put("bomTypeName", getBomTypeNameById(mat.getBomTypeId()));
                 x.put("unit", mat.getUnit());
                 x.put("perSetQuantity", BigDecimal.ZERO);
                 return x;
@@ -310,8 +314,7 @@ public class ReturnOrderController {
         return R.ok(new ArrayList<>(map.values()));
     }
 
-    private void updateOutsourceStock(Long warehouseId, String materialName, BigDecimal delta, String qualityType, String changeType, String orderCode) {
-        Long materialId = outsourceMaterialMapper.findIdByName(materialName);
+    private void updateOutsourceStock(Long warehouseId, Long materialId, BigDecimal delta, String qualityType, String changeType, String orderCode) {
         if (materialId == null) materialId = -1L; // fallback
 
         // 查找现有库存记录（按 warehouse + material_id + quality）
@@ -323,12 +326,12 @@ public class ReturnOrderController {
                 delta, warehouseId, materialId, qualityType);
         } else {
             jdbcTemplate.update("INSERT INTO outsource_warehouse_stock (warehouse_id, outsource_material_id, material_name, quality_type, quantity, company_id) VALUES (?,?,?,?,?,?)",
-                warehouseId, materialId, materialName, qualityType, delta, CompanyContext.get());
+                warehouseId, materialId, getMaterialNameById(materialId), qualityType, delta, CompanyContext.get());
         }
 
         // 写库存流水
         jdbcTemplate.update("INSERT INTO outsource_stock_log (warehouse_id, outsource_material_id, material_name, change_type, change_quantity, related_order_code, company_id) VALUES (?,?,?,?,?,?,?)",
-            warehouseId, materialId, materialName, changeType, delta, orderCode, CompanyContext.get());
+            warehouseId, materialId, getMaterialNameById(materialId), changeType, delta, orderCode, CompanyContext.get());
     }
 
     private ReturnOrder parseOrder(Map<String, Object> body) {
@@ -343,21 +346,19 @@ public class ReturnOrderController {
         return o;
     }
 
-    private BigDecimal calcFifoPrice(String materialName, BigDecimal requiredQty) {
-        if (materialName == null || requiredQty == null || requiredQty.compareTo(BigDecimal.ZERO) <= 0)
+    private BigDecimal calcFifoPrice(Long materialId, BigDecimal requiredQty) {
+        if (materialId == null || requiredQty == null || requiredQty.compareTo(BigDecimal.ZERO) <= 0)
             return BigDecimal.ZERO;
         try {
-            Long materialId = outsourceMaterialMapper.findIdByName(materialName);
             List<MaterialOrder> orders = materialOrderMapper.selectList(
                 new LambdaQueryWrapper<MaterialOrder>().orderByAsc(MaterialOrder::getDeliveryDate));
             BigDecimal accumulatedAmount = BigDecimal.ZERO, accumulatedQty = BigDecimal.ZERO;
             for (MaterialOrder o : orders) {
                 LambdaQueryWrapper<MaterialOrderItem> itemW = new LambdaQueryWrapper<MaterialOrderItem>()
-                    .eq(MaterialOrderItem::getOrderId, o.getId());
-                if (materialId != null) itemW.eq(MaterialOrderItem::getMaterialId, materialId);
+                    .eq(MaterialOrderItem::getOrderId, o.getId())
+                    .eq(MaterialOrderItem::getMaterialId, materialId);
                 List<MaterialOrderItem> items = materialOrderItemMapper.selectList(itemW);
                 for (MaterialOrderItem itt : items) {
-                    if (materialId == null && !Objects.equals(materialName, itt.getMaterialName())) continue;
                     BigDecimal q = itt.getOrderQuantity() != null ? itt.getOrderQuantity() : BigDecimal.ZERO;
                     BigDecimal p = itt.getUnitPrice() != null ? itt.getUnitPrice() : BigDecimal.ZERO;
                     if (q.compareTo(BigDecimal.ZERO) <= 0 || p.compareTo(BigDecimal.ZERO) <= 0) continue;
@@ -380,6 +381,27 @@ public class ReturnOrderController {
         String s = val.toString().trim();
         if (s.isEmpty()) return BigDecimal.ZERO;
         try { return new BigDecimal(s); } catch (NumberFormatException e) { return BigDecimal.ZERO; }
+    }
+
+    private Long toLong(Object val) {
+        if (val == null) return null;
+        String s = val.toString().trim();
+        if (s.isEmpty()) return null;
+        try { return Long.valueOf(s); } catch (NumberFormatException e) { return null; }
+    }
+
+    /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */
+    private String getMaterialNameById(Long materialId) {
+        if (materialId == null) return "";
+        OutsourceMaterial m = outsourceMaterialMapper.selectById(materialId);
+        return m != null ? m.getMaterialName() : "";
+    }
+
+    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
+    private String getBomTypeNameById(Long bomTypeId) {
+        if (bomTypeId == null) return "-";
+        com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
+        return bt != null ? bt.getTypeName() : "-";
     }
 
     private String generateCode() {

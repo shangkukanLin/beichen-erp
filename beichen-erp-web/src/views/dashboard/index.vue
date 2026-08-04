@@ -27,10 +27,15 @@
             <el-button size="small" text style="float:right" @click="$router.push('/dev/project')">查看更多 →</el-button>
           </template>
           <el-table :data="inProgressProjects" size="small" stripe>
+            <el-table-column label="项目编号" width="150">
+              <template #default="{row}"><el-button type="primary" link size="small" @click="router.push(`/dev/project/edit/${row.id}`)">{{ row.code }}</el-button></template>
+            </el-table-column>
             <el-table-column prop="name" label="项目名称" min-width="160">
-              <template #default="{row}"><el-link type="primary" @click="$router.push(`/dev/project/edit/${row.id}`)">{{ row.name }}</el-link></template>
+              <template #default="{row}"><el-button type="primary" link size="small" @click="router.push(`/dev/project/edit/${row.id}`)">{{ row.name }}</el-button></template>
             </el-table-column>
             <el-table-column label="当前阶段" width="120"><template #default="{row}"><el-tag type="warning" size="small">{{ getDashboardPhase(row) }}</el-tag></template></el-table-column>
+            <el-table-column label="计划完成" width="110"><template #default="{row}"><span :style="{ color: getDashboardPlannedEnd(row) && getDashboardPlannedEnd(row) < today ? '#f56c6c' : '#606266' }">{{ getDashboardPlannedEnd(row) || '-' }}</span></template></el-table-column>
+            <el-table-column label="进度" width="70" align="center"><template #default="{row}">{{ getDashboardProgress(row) }}</template></el-table-column>
           </el-table>
         </el-card>
 
@@ -207,10 +212,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
-import { ProjectStatus } from '@/api/material'
+import { ProjectStatus } from '@/api/enums'
 
+const router = useRouter()
 const userStore = useUserStore()
 const activeTab = ref('dev')
 
@@ -223,6 +230,7 @@ const devTotal = ref(0)
 const devInProgress = ref(0)
 const devBomCount = ref(0)
 const devFinished = ref(0)
+const today = new Date().toISOString().split('T')[0]
 const inProgressProjects = ref<any[]>([])
 const dashboardTimelineMap = ref<Record<number, any[]>>({})
 
@@ -231,6 +239,20 @@ function getDashboardPhase(row: any) {
   if (!timelines || !timelines.length) return '-'
   const active = timelines.find((t: any) => t.status === 'IN_PROGRESS')
   return active ? active.statusName : '-'
+}
+
+function getDashboardPlannedEnd(row: any) {
+  const timelines = dashboardTimelineMap.value[row.id]
+  if (!timelines || !timelines.length) return ''
+  const active = timelines.find((t: any) => t.status === 'IN_PROGRESS')
+  return active?.plannedEnd || ''
+}
+
+function getDashboardProgress(row: any) {
+  const timelines = dashboardTimelineMap.value[row.id]
+  if (!timelines || !timelines.length) return '0/0'
+  const done = timelines.filter((t: any) => t.status === 'FINISHED' || t.status === 'SKIPPED').length
+  return `${done}/${timelines.length}`
 }
 const osPending = ref(0)
 const osInProgress = ref(0)

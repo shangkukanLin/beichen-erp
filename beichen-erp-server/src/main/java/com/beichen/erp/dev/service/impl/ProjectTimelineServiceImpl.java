@@ -45,6 +45,7 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
     public void initTimeline(Long projectId) {
         List<PhaseTemplate> templates = phaseTemplateMapper.selectList(
                 new LambdaQueryWrapper<PhaseTemplate>().orderByAsc(PhaseTemplate::getSortOrder));
+        LocalDate today = LocalDate.now();
         for (int i = 0; i < templates.size(); i++) {
             PhaseTemplate tpl = templates.get(i);
             ProjectTimeline tl = new ProjectTimeline();
@@ -53,6 +54,10 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
             tl.setDefaultDays(tpl.getDefaultDays());
             tl.setSortOrder(tpl.getSortOrder());
             tl.setStatus(i == 0 ? TimelineStatus.IN_PROGRESS.getCode() : TimelineStatus.NOT_STARTED.getCode());
+            // 立项阶段（第一个阶段）默认计划完成日期为创建当天
+            if (i == 0) {
+                tl.setPlannedEnd(today);
+            }
             tl.setCreateTime(LocalDateTime.now());
             projectTimelineMapper.insert(tl);
         }
@@ -65,7 +70,10 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
         if (current == null) return;
 
         current.setStatus(TimelineStatus.FINISHED.getCode());
-        current.setActualEnd(LocalDate.now());
+        // 保留用户设置的实际完成日期，未设置则默认当天
+        if (current.getActualEnd() == null) {
+            current.setActualEnd(LocalDate.now());
+        }
         projectTimelineMapper.updateById(current);
 
         checkProductStatusSync(current.getStatusName(), projectId);
@@ -80,12 +88,86 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
         if (current == null) return;
 
         current.setStatus(TimelineStatus.SKIPPED.getCode());
-        current.setActualEnd(LocalDate.now());
+        if (current.getActualEnd() == null) {
+            current.setActualEnd(LocalDate.now());
+        }
         projectTimelineMapper.updateById(current);
 
         checkProductStatusSync(current.getStatusName(), projectId);
         activateNextPhase(projectId, current.getSortOrder());
         syncProjectStatus(projectId);
+    }
+
+    @Override
+    @Transactional
+    public void revertPhase(Long projectId, Long timelineId) {
+        ProjectTimeline current = projectTimelineMapper.selectById(timelineId);
+        if (current == null) return;
+
+        String oldStatus = current.getStatus();
+        // 只有已完成或已跳过的阶段才能撤销
+        if (!TimelineStatus.FINISHED.getCode().equals(oldStatus)
+                && !TimelineStatus.SKIPPED.getCode().equals(oldStatus)) {
+            log.warn("阶段状态不允许撤销: projectId={}, timelineId={}, status={}", projectId, timelineId, oldStatus);
+            return;
+        }
+
+        // 1. 将当前阶段恢复为进行中
+        current.setStatus(TimelineStatus.IN_PROGRESS.getCode());
+        current.setActualEnd(null);
+        projectTimelineMapper.updateById(current);
+
+        // 2. 将排序在当前之后的所有阶段重置为未开始，清空实际完成日期
+        List<ProjectTimeline> all = listByProject(projectId);
+        for (ProjectTimeline t : all) {
+            if (t.getSortOrder() > current.getSortOrder()) {
+                t.setStatus(TimelineStatus.NOT_STARTED.getCode());
+                t.setActualEnd(null);
+                projectTimelineMapper.updateById(t);
+            }
+        }
+
+        // 3. 如果项目已结项，恢复为进行中
+        Project project = projectMapper.selectById(projectId);
+        if (project != null && ProjectStatus.CLOSED.getCode().equals(project.getStatus())) {
+            project.setStatus(ProjectStatus.IN_PROGRESS.getCode());
+            projectMapper.updateById(project);
+            log.info("项目撤销结项: projectId={}", projectId);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void recalcAllPlannedEnds(Long projectId) {
+        List<ProjectTimeline> all = listByProject(projectId);
+        if (all.isEmpty()) return;
+
+        // 找到第一个进行中的阶段，作为推算起点
+        LocalDate baseDate = null;
+        for (ProjectTimeline t : all) {
+            if (TimelineStatus.IN_PROGRESS.getCode().equals(t.getStatus())) {
+                // 进行中阶段：以实际完成日期或今天为基准
+                baseDate = t.getActualEnd() != null ? t.getActualEnd() : LocalDate.now();
+                // 如果进行中阶段 plannedEnd 为空，设为基准日期
+                if (t.getPlannedEnd() == null) {
+                    t.setPlannedEnd(baseDate);
+                    projectTimelineMapper.updateById(t);
+                }
+                // 从下一个阶段开始级联推算
+                boolean found = false;
+                for (ProjectTimeline next : all) {
+                    if (found) {
+                        int days = next.getDefaultDays() != null ? next.getDefaultDays() : 7;
+                        next.setPlannedEnd(baseDate.plusDays(days));
+                        projectTimelineMapper.updateById(next);
+                        baseDate = next.getPlannedEnd();
+                    }
+                    if (next.getId().equals(t.getId())) found = true;
+                }
+                return;
+            }
+        }
+        // 如果没有进行中的阶段，不做重算
     }
 
     @Override
@@ -101,6 +183,12 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
         existing.setStatus(newStatus);
         existing.setPlannedEnd(row.getPlannedEnd());
         existing.setActualEnd(row.getActualEnd());
+        existing.setRemark(row.getRemark());
+        // 状态变为完成/跳过且未设实际日期时，默认当天
+        if ((TimelineStatus.FINISHED.getCode().equals(newStatus) || TimelineStatus.SKIPPED.getCode().equals(newStatus))
+                && existing.getActualEnd() == null) {
+            existing.setActualEnd(LocalDate.now());
+        }
         projectTimelineMapper.updateById(existing);
 
         if (statusChanged) {

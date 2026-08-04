@@ -60,7 +60,12 @@ public class DataInitializer implements ApplicationRunner {
         initMenus();
         syncMenus();
         initRoleMenus();
-        initSuperAdmin();
+        // 超级管理员初始化独立保护：即使前面步骤异常，也必须保证 lin 账号生成
+        try {
+            initSuperAdmin();
+        } catch (Exception e) {
+            log.error("初始化超级管理员 lin 失败: {}", e.getMessage(), e);
+        }
         initBomTypes();
         initPhaseTemplates();
     }
@@ -650,7 +655,6 @@ public class DataInitializer implements ApplicationRunner {
         String[][] mToP = {
             {"inventory_warehouse_stock", "material_id", "product_id"},
             {"inventory_stock_log", "material_id", "product_id"},
-            {"inventory_stock_take_item", "material_id", "product_id"},
             {"inventory_transfer_item", "material_id", "product_id"},
             {"inventory_other_io_item", "material_id", "product_id"},
             {"purchase_order_item", "material_id", "product_id"},
@@ -781,23 +785,23 @@ public class DataInitializer implements ApplicationRunner {
 
     private void initSuperAdmin() {
         // 清理旧的默认 admin 账号（迁移用，确保系统不再保留 admin）
-        userMapper.delete(new LambdaQueryWrapper<User>()
-                .eq(User::getUsername, "admin"));
+        // 直接用 JdbcTemplate 物理删除，绕过 User 实体的 @TableLogic 逻辑删除，避免隐式拼接 deleted 条件带来的不确定性
+        jdbcTemplate.update("DELETE FROM sys_user WHERE username = 'admin'");
 
-        Long count = userMapper.selectCount(new LambdaQueryWrapper<User>()
-                .eq(User::getUsername, "lin"));
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM sys_user WHERE username = 'lin'", Long.class);
         if (count != null && count > 0) {
             log.info("超级管理员 lin 已存在，跳过初始化");
             ensureLinRole();
             return;
         }
-        User user = new User();
-        user.setUsername("lin");
-        user.setPassword(passwordEncoder.encode("123"));
-        user.setStatus(1);
-        userMapper.insert(user);
+        // 直接插入 lin 账号，密码为 BCrypt 加密的 "123"，角色关联 admin
+        jdbcTemplate.update(
+                "INSERT INTO sys_user (username, password, status, company_id, deleted, create_time, update_time) " +
+                "VALUES (?, ?, 1, 1, 0, NOW(), NOW())",
+                "lin", passwordEncoder.encode("123"));
         ensureLinRole();
-        log.info("初始化超级管理员 lin 完成（角色: super_admin）");
+        log.info("初始化超级管理员 lin 完成（角色: admin）");
     }
 
     /**

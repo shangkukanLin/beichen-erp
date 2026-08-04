@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { getQualityTypes, type QualityOption } from '@/api/product'
-import { IoType, IoTypeLabel } from '@/api/material'
+import { IoType, IoTypeLabel } from '@/api/enums'
 
 const route = useRoute(); const router = useRouter()
 const editId = Number(route.query.id) || 0

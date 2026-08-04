@@ -13,8 +13,9 @@ public class OutsourceOrderMaterial {
     private Long productId;
     @TableField("outsource_material_id")
     private Long materialId;
-    private String materialName;
-    private String materialType;
+    /** BOM类型ID（关联 dev_bom_type.id） */
+    @TableField("bom_type_id")
+    private Long bomTypeId;
     private String unit;
     private BigDecimal demandQuantity;
     private BigDecimal lossRate;

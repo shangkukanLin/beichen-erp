@@ -21,7 +21,5 @@ public class BomDTO {
 
     private BigDecimal lossRate;
 
-    private String materialType;
-
     private String remark;
 }

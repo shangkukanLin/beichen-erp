@@ -23,6 +23,6 @@ public class Bug {
     private String status;
     private String description;
     private String foundBy;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
 }

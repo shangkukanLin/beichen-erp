@@ -1,21 +1,8 @@
-feat: 品质等级全链路 + 产品管理重构 + 代码清理
+refactor: 物料/物料类型全链路改存ID并加固DataInitializer初始化
 
-quality_type (A/B/C/DEFECT):
-- 7张明细表加 quality_type 列
-- 采购入库/销售出库/移仓/其他出入库/采购退货明细加品质选择
-- changeStock() 传 qualityType, inventory_warehouse_stock 三元组定位
-- 新建品质重分类功能(product_reclassify 表 + 审核流程)
-- 库存查询页按品质展示 + 筛选
-
-产品管理:
-- ProductController /product CRUD + /product/quality-types 枚举接口
-- Material Entity @TableName 修正为 material
-- product 表加 general_model(通用型号) + product_quality 等级库存表
-- supplier_product 加 product_id 联动 product 表
-
-其他:
-- DataInitializer 清理 safeDDL 增量代码
-- 委外加工新增供应商管理子菜单(409L)
-- 菜单补全 503L/703L/704L/705L/706L
-- super_admin 角色恢复, lin 升为超级管理员
-- RoleController PUT 内置角色编辑保护
+- 物料明细全链路改用 materialId 关联（删除 name 冗余列），展示统一经 getMaterialNameById 关联查名
+- 物料类型全链路改存 bomTypeId（删除 material_type 列），展示统一经 getBomTypeNameById 查名
+- 修复 BomTypeController.update/delete 引用已删除 material_type 列的 Unknown column 报错
+- DataInitializer.initSuperAdmin 改用 JdbcTemplate 直插绕开 @TableLogic，并加独立 try-catch 保证 lin 账号必生成
+- 前端类型选择器中间态由 materialType(名)改为 bomTypeId(ID)，跨页跳转带参同步
+- BomDTO/SupplierDTO 清理死字段，新增 OutsourceOrderDeliveryService、enums.ts

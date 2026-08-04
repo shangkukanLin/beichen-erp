@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { OutsourceOrderStatus, OutsourceOrderStatusLabel, DeliveryType, DeliveryTypeLabel } from '@/api/material'
+import { OutsourceOrderStatus, OutsourceOrderStatusLabel, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
 
 const router = useRouter()
 const activeTab = ref(DeliveryType.DELIVERY)
@@ -49,6 +49,12 @@ function handleReset() { query.code = ''; query.factoryId = undefined; loadData(
 async function handleCancel(row: any) {
   try { await ElMessageBox.confirm('确定取消该收发单吗？取消后库存将自动恢复。', '提示', { type: 'warning' }); await request.put(`/outsource/delivery/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
+async function handleAudit(row: any) {
+  try { await ElMessageBox.confirm('确定审核该收发单吗？审核后将扣减/增加库存并生成流水。', '审核', { type: 'warning' }); await request.put(`/outsource/delivery/${row.id}/audit`); ElMessage.success('已审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+}
+async function handleUnaudit(row: any) {
+  try { await ElMessageBox.confirm('确定反审核该收发单吗？反审核后将回滚库存与流水，回到草稿。', '反审核', { type: 'warning' }); await request.put(`/outsource/delivery/${row.id}/unaudit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+}
 
 onMounted(() => { loadOptions(); loadData() })
 onActivated(() => {
@@ -84,11 +90,17 @@ onActivated(() => { loadOptions() })
           <template #default="{row}"><span v-if="row.itemSummary">{{row.itemSummary}}</span><span v-else style="color:#c0c4cc">{{row.itemCount||0}}项</span></template>
         </el-table-column>
         <el-table-column label="日期" width="100"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column prop="status" label="状态" width="75"><template #default="{row}"><el-tag :type="row.status==='已确认'?'success':'info'">{{row.status}}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="110" align="center" fixed="right">
+        <el-table-column prop="status" label="状态" width="90"><template #default="{row}">
+          <el-tag :type="row.status==='AUDITED'?'success':(row.status==='CANCELLED'?'danger':'info')">
+            {{ row.status==='AUDITED'?'已审核':(row.status==='CANCELLED'?'已作废':'草稿') }}
+          </el-tag>
+        </template></el-table-column>
+        <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click="router.push(`/outsource/delivery/detail/${row.id}`)">详情</el-button>
-            <el-button type="danger" link v-if="row.status==='已确认'" @click="handleCancel(row)">取消</el-button>
+            <el-button type="success" link v-if="row.status==='DRAFT'" @click="handleAudit(row)">审核</el-button>
+            <el-button type="warning" link v-if="row.status==='AUDITED'" @click="handleUnaudit(row)">反审核</el-button>
+            <el-button type="danger" link v-if="row.status==='AUDITED'" @click="handleCancel(row)">取消</el-button>
           </template>
         </el-table-column>
       </el-table>

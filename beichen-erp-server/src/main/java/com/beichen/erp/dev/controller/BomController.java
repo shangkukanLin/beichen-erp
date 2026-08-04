@@ -31,6 +31,13 @@ public class BomController {
         return R.ok(bomService.getVersions(projectId));
     }
 
+    /** 批量保存BOM（全量替换：先删旧数据再批量插入） */
+    @PostMapping("/{projectId}/bom/batch")
+    public R<Void> saveBatch(@PathVariable Long projectId, @RequestBody List<Bom> items) {
+        bomService.saveBatch(projectId, items);
+        return R.ok();
+    }
+
     /** 保存BOM项 */
     @PostMapping("/{projectId}/bom")
     public R<Void> saveItem(@PathVariable Long projectId, @RequestBody Bom bom) {

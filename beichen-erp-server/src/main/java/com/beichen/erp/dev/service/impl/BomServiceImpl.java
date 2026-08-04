@@ -56,6 +56,21 @@ public class BomServiceImpl extends ServiceImpl<BomMapper, Bom> implements BomSe
 
     @Override
     @Transactional
+    public void saveBatch(Long projectId, List<Bom> items) {
+        // 删除当前最新版本的所有BOM项，再批量插入
+        Integer maxVersion = getMaxVersion(projectId);
+        baseMapper.delete(new LambdaQueryWrapper<Bom>()
+                .eq(Bom::getProjectId, projectId)
+                .eq(Bom::getVersion, maxVersion));
+        for (Bom item : items) {
+            item.setProjectId(projectId);
+            item.setVersion(maxVersion);
+            baseMapper.insert(item);
+        }
+    }
+
+    @Override
+    @Transactional
     public List<Bom> createNewVersion(Long projectId) {
         // 获取当前最新版本的BOM
         Integer currentMax = getMaxVersion(projectId);

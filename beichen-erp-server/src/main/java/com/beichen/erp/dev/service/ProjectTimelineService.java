@@ -20,6 +20,9 @@ public interface ProjectTimelineService extends IService<ProjectTimeline> {
     /** 跳过阶段：标记SKIPPED，激活下一阶段 */
     void skipPhase(Long projectId, Long timelineId);
 
+    /** 撤销阶段：将已完成/已跳过的阶段恢复为进行中，后续阶段重置为未开始 */
+    void revertPhase(Long projectId, Long timelineId);
+
     /** 更新时间线记录（含状态变更+日期后推逻辑） */
     void saveTimelineRow(Long projectId, ProjectTimeline row);
 
@@ -28,6 +31,9 @@ public interface ProjectTimelineService extends IService<ProjectTimeline> {
 
     /** 更新plannedEnd并后推后续所有阶段 */
     void updatePlannedAndShift(Long projectId, String statusName, LocalDate plannedEnd);
+
+    /** 级联重算所有未开始阶段的计划日期（从第一个进行中阶段开始推算） */
+    void recalcAllPlannedEnds(Long projectId);
 
     /** 更新单个阶段状态 */
     void updateStatus(Long projectId, String statusName, String status);

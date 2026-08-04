@@ -37,7 +37,5 @@ public class SupplierDTO {
 
     private String brand;
 
-    private String materialType;
-
     private String remark;
 }

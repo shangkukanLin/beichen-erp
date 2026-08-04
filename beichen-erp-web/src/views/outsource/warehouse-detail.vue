@@ -34,7 +34,7 @@ const PRIORITY_TYPES = ['玻璃', '驱动IC']
 const sortedMaterials = computed(() => {
   return [...materials.value].sort((a, b) => {
     const getOrder = (m: any) => {
-      const type = m.materialType || ''
+      const type = m.bomTypeName || ''
       const hasProject = !!(m.projectIds && m.projectIds.trim())
       if (PRIORITY_TYPES.includes(type)) return 0
       if (!hasProject) return 1
@@ -61,7 +61,7 @@ function exportExcel() {
     cols,
   ]
   sortedMaterials.value.forEach(m => {
-    rows.push([m.materialType || '', m.materialName || '', m.unit || '', m.qualityType || '良品', m.quantity ?? 0, getProjectNames(m.projectIds), m.remark || ''])
+    rows.push([m.bomTypeName || '', m.materialName || '', m.unit || '', m.qualityType || '良品', m.quantity ?? 0, getProjectNames(m.projectIds), m.remark || ''])
   })
 
   const ws = XLSX.utils.aoa_to_sheet(rows)
@@ -123,7 +123,7 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
       </template>
       <el-table :data="sortedMaterials" border stripe v-loading="matLoading" size="small">
         <el-table-column type="index" label="#" width="50" align="center" />
-        <el-table-column prop="materialType" label="物料类型" width="100" />
+        <el-table-column prop="bomTypeName" label="物料类型" width="100" />
         <el-table-column prop="materialName" label="物料名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="unit" label="单位" width="70" align="center" />
         <el-table-column label="质量类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.qualityType==='良品'?'success':'danger'" size="small">{{ row.qualityType || '良品' }}</el-tag></template></el-table-column>

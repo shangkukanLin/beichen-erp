@@ -139,6 +139,31 @@ export const ProjectStatusTag: Record<string, string> = {
   [ProjectStatus.CANCELLED]: 'danger'
 }
 
+/** Bug状态（对应 BugStatus 枚举） */
+export const BugStatus = {
+  OPEN: 'OPEN',
+  FIXING: 'FIXING',
+  FIXED: 'FIXED',
+  VERIFIED: 'VERIFIED',
+  CLOSED: 'CLOSED'
+} as const
+
+export const BugStatusLabel: Record<string, string> = {
+  [BugStatus.OPEN]: '待处理',
+  [BugStatus.FIXING]: '处理中',
+  [BugStatus.FIXED]: '已修复',
+  [BugStatus.VERIFIED]: '已验证',
+  [BugStatus.CLOSED]: '已关闭'
+}
+
+export const BugStatusTag: Record<string, string> = {
+  [BugStatus.OPEN]: 'danger',
+  [BugStatus.FIXING]: 'warning',
+  [BugStatus.FIXED]: 'success',
+  [BugStatus.VERIFIED]: 'primary',
+  [BugStatus.CLOSED]: 'info'
+}
+
 /** Bug严重程度（对应 SeverityType 枚举） */
 export const SeverityType = {
   CRITICAL: 'CRITICAL',
@@ -198,64 +223,6 @@ export const DeliveryItemStatus = {
 export const DeliveryItemStatusLabel: Record<string, string> = {
   [DeliveryItemStatus.NORMAL]: '正常',
   [DeliveryItemStatus.REVERSED]: '已回滚'
-}
-
-export interface MaterialQueryParams {
-  pageNum?: number
-  pageSize?: number
-  name?: string
-  status?: string
-}
-
-export interface Material {
-  id?: number | string
-  code?: string
-  name: string
-  brandId?: number
-  category?: string
-  spec?: string
-  unit?: string
-  safetyStock?: number
-  currentStock?: number
-  status: string
-  remark?: string
-}
-
-/** 物料简要信息 */
-export interface MaterialBrief {
-  id?: number | string
-  code: string
-  name: string
-  spec?: string
-  unit?: string
-  category?: string
-}
-
-export interface PageResult<T> {
-  records: T[]
-  total: number
-  current: number
-  size: number
-}
-
-export function getMaterialPage(params: MaterialQueryParams) {
-  return request.get<unknown, PageResult<Material>>('/product/page', { params })
-}
-
-export function getMaterial(id: number | string) {
-  return request.get<unknown, Material>(`/product/${id}`)
-}
-
-export function addMaterial(data: Material) {
-  return request.post<unknown, void>('/material', data)
-}
-
-export function updateMaterial(data: Material) {
-  return request.put<unknown, void>('/material', data)
-}
-
-export function deleteMaterial(id: number | string) {
-  return request.delete<unknown, void>(`/product/${id}`)
 }
 
 

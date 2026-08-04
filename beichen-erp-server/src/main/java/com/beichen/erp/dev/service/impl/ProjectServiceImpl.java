@@ -101,6 +101,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     private void createTimelinesFromTemplate(Long projectId) {
         List<PhaseTemplate> templates = phaseTemplateMapper.selectList(
                 new LambdaQueryWrapper<PhaseTemplate>().orderByAsc(PhaseTemplate::getSortOrder));
+        LocalDate today = LocalDate.now();
         for (int i = 0; i < templates.size(); i++) {
             PhaseTemplate tpl = templates.get(i);
             ProjectTimeline tl = new ProjectTimeline();
@@ -110,6 +111,10 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
             tl.setSortOrder(tpl.getSortOrder());
             // 第一个阶段自动激活
             tl.setStatus(i == 0 ? TimelineStatus.IN_PROGRESS.getCode() : TimelineStatus.NOT_STARTED.getCode());
+            // 立项阶段默认计划完成日期为创建当天
+            if (i == 0) {
+                tl.setPlannedEnd(today);
+            }
             tl.setCreateTime(LocalDateTime.now());
             projectTimelineMapper.insert(tl);
         }

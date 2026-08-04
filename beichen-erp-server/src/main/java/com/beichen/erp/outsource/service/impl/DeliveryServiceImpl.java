@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.entity.OutsourceDelivery;
 import com.beichen.erp.outsource.entity.OutsourceDeliveryItem;
+import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceStockLog;
 import com.beichen.erp.outsource.entity.OutsourceWarehouseStock;
 import com.beichen.erp.outsource.entity.MaterialOrder;
@@ -16,7 +17,6 @@ import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.outsource.common.DeliveryType;
-import com.beichen.erp.outsource.common.DeliveryStatus;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.common.OutsourceStockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
@@ -92,41 +92,50 @@ public class DeliveryServiceImpl implements DeliveryService {
         } else {
             if (delivery.getFromWarehouseId() == null) throw new BusinessException("来源仓库不能为空");
         }
-        // 生成编码
+        // 生成编码，草稿态存盘，不落库存
         delivery.setCode(generateCode());
-        delivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
+        delivery.setStatus(DocStatus.DRAFT.name());
         deliveryMapper.insert(delivery);
 
-        // 插入明细 + 联动库存
+        // 插入明细（仅存盘，库存动作推迟到审核时执行）
         for (OutsourceDeliveryItem item : items) {
             item.setDeliveryId(delivery.getId());
             itemMapper.insert(item);
-            BigDecimal qty = item.getQuantity();
-            if (DeliveryType.DELIVERY.name().equals(delivery.getDeliveryType())) {
-                // 扣减来源仓库（我方仓或委外仓）
-                if (delivery.getFromWarehouseId() != null) {
-                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getMaterialName(), item.getQualityType(), OutsourceStockChangeType.DELIVERY_OUT.name(), delivery.getCode());
-                }
-                // 增加目标仓库（委外仓）
-                if (delivery.getToWarehouseId() != null)
-                    updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
-                            item.getMaterialName(), OutsourceStockChangeType.DELIVERY_IN.name(), delivery.getCode());
-            } else if (DeliveryType.TRANSFER.name().equals(delivery.getDeliveryType())) {
-                // 来源仓库-，目标仓库+
-                if (delivery.getFromWarehouseId() != null)
-                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getMaterialName(), item.getQualityType(), OutsourceStockChangeType.TRANSFER_OUT.name(), delivery.getCode());
-                if (delivery.getToWarehouseId() != null)
-                    adjustSourceStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getMaterialName(), item.getQualityType(), OutsourceStockChangeType.TRANSFER_IN.name(), delivery.getCode());
-            } else {
-                String type = delivery.getDeliveryType();
-                if (delivery.getFromWarehouseId() != null)
-                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getMaterialName(), item.getQualityType(), type != null ? type : "退料", delivery.getCode());
-            }
         }
-        // 发料时同步加工单物料已发数量
-        if (DeliveryType.DELIVERY.name().equals(delivery.getDeliveryType())) {
-            syncDeliveredQuantity(delivery, items, true);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void audit(Long id) {
+        OutsourceDelivery delivery = deliveryMapper.selectById(id);
+        if (delivery == null) throw new BusinessException("单据不存在");
+        if (!DocStatus.DRAFT.name().equals(delivery.getStatus())) {
+            throw new BusinessException("仅草稿状态可以审核");
         }
+        List<OutsourceDeliveryItem> items = getItems(id);
+        // 审核通过：扣/增库存 + 写流水 + 同步已发数量
+        applyDeliveryStock(delivery, items);
+        OutsourceDelivery update = new OutsourceDelivery();
+        update.setId(id);
+        update.setStatus(DocStatus.AUDITED.name());
+        deliveryMapper.updateById(update);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unaudit(Long id) {
+        OutsourceDelivery delivery = deliveryMapper.selectById(id);
+        if (delivery == null) throw new BusinessException("单据不存在");
+        if (!DocStatus.AUDITED.name().equals(delivery.getStatus())) {
+            throw new BusinessException("仅已审核状态可以反审核");
+        }
+        // 反审核：逆向库存 + 回滚已发数量，回到草稿
+        List<OutsourceDeliveryItem> items = getItems(id);
+        reverseDeliveryStock(delivery, items);
+        OutsourceDelivery update = new OutsourceDelivery();
+        update.setId(id);
+        update.setStatus(DocStatus.DRAFT.name());
+        deliveryMapper.updateById(update);
     }
 
     @Override
@@ -139,6 +148,10 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (DocStatus.CANCELLED.name().equals(delivery.getStatus())) {
             throw new BusinessException("单据已取消，不可重复取消");
         }
+        // 已审核单据作废前需先逆向库存，保证账实一致
+        if (DocStatus.AUDITED.name().equals(delivery.getStatus())) {
+            reverseDeliveryStock(delivery, getItems(id));
+        }
 
         // 逆向库存
         List<OutsourceDeliveryItem> items = getItems(id);
@@ -147,26 +160,26 @@ public class DeliveryServiceImpl implements DeliveryService {
             if (DeliveryType.DELIVERY.name().equals(delivery.getDeliveryType())) {
                 // 恢复我方仓库库存
                 if (delivery.getFromWarehouseId() != null && item.getMaterialId() != null) {
-                    inventoryStockService.changeStock(delivery.getFromWarehouseId(), item.getMaterialName(), qty,
+                    inventoryStockService.changeStock(delivery.getFromWarehouseId(), getMaterialNameById(item.getMaterialId()), qty,
                         StockChangeType.OUTSOURCE_CANCEL_DELIVERY, delivery.getCode(), RelatedBillType.OUTSOURCE_DELIVERY, item.getMaterialId(), null, delivery.getId(), null);
                 }
                 // 扣回委外仓库
                 if (delivery.getToWarehouseId() != null)
                     updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
-                            item.getMaterialName(), OutsourceStockChangeType.CANCEL_DELIVERY.name(), delivery.getCode());
+                            getMaterialNameById(item.getMaterialId()), OutsourceStockChangeType.CANCEL_DELIVERY.name(), delivery.getCode());
             } else if (DeliveryType.TRANSFER.name().equals(delivery.getDeliveryType())) {
                 // 逆向：来源仓库+，目标仓库-
                 if (delivery.getFromWarehouseId() != null)
                     updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
-                            item.getMaterialName(), OutsourceStockChangeType.CANCEL_TRANSFER_OUT.name(), delivery.getCode());
+                            getMaterialNameById(item.getMaterialId()), OutsourceStockChangeType.CANCEL_TRANSFER_OUT.name(), delivery.getCode());
                 if (delivery.getToWarehouseId() != null)
                     updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
-                            item.getMaterialName(), OutsourceStockChangeType.CANCEL_TRANSFER_IN.name(), delivery.getCode());
+                            getMaterialNameById(item.getMaterialId()), OutsourceStockChangeType.CANCEL_TRANSFER_IN.name(), delivery.getCode());
             } else {
                 String type = delivery.getDeliveryType();
                 if (delivery.getFromWarehouseId() != null)
                     updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
-                            item.getMaterialName(), "取消" + (type != null ? type : "收料"), delivery.getCode());
+                            getMaterialNameById(item.getMaterialId()), "取消" + (type != null ? type : "收料"), delivery.getCode());
             }
         }
 
@@ -186,66 +199,21 @@ public class DeliveryServiceImpl implements DeliveryService {
     public void update(OutsourceDelivery delivery, List<OutsourceDeliveryItem> items) {
         OutsourceDelivery old = deliveryMapper.selectById(delivery.getId());
         if (old == null) throw new BusinessException("单据不存在");
-        if (DocStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
+        if (!DocStatus.DRAFT.name().equals(old.getStatus())) {
+            throw new BusinessException("仅草稿状态可编辑，已审核单据请先反审核");
+        }
 
-        // 1. 加载旧明细并逆向库存
-        List<OutsourceDeliveryItem> oldItems = getItems(delivery.getId());
-        // 逆向旧已发数量（仅发料）
-        if (DeliveryType.DELIVERY.name().equals(old.getDeliveryType())) {
-            syncDeliveredQuantity(old, oldItems, false);
-        }
-        for (OutsourceDeliveryItem item : oldItems) {
-            BigDecimal qty = item.getQuantity();
-            if (DeliveryType.DELIVERY.name().equals(old.getDeliveryType())) {
-                // 恢复我方仓库库存
-                if (old.getFromWarehouseId() != null && item.getMaterialId() != null) {
-                    inventoryStockService.changeStock(old.getFromWarehouseId(), item.getMaterialName(), qty,
-                        StockChangeType.OUTSOURCE_EDIT_ROLLBACK, old.getCode(), RelatedBillType.OUTSOURCE_DELIVERY, item.getMaterialId(), null, old.getId(), null);
-                }
-                // 扣回委外仓库
-                if (old.getToWarehouseId() != null)
-                    updateStock(old.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
-                            item.getMaterialName(), OutsourceStockChangeType.EDIT_ROLLBACK.name(), old.getCode());
-            } else if (DeliveryType.TRANSFER.name().equals(old.getDeliveryType())) {
-                // 逆向：来源仓库+，目标仓库-
-                if (old.getFromWarehouseId() != null)
-                    updateStock(old.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
-                            item.getMaterialName(), OutsourceStockChangeType.EDIT_ROLLBACK_TRANSFER_OUT.name(), old.getCode());
-                if (old.getToWarehouseId() != null)
-                    updateStock(old.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
-                            item.getMaterialName(), OutsourceStockChangeType.EDIT_ROLLBACK_TRANSFER_IN.name(), old.getCode());
-            } else {
-                String type = old.getDeliveryType();
-                if (old.getFromWarehouseId() != null)
-                    updateStock(old.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
-                            item.getMaterialName(), "编辑回滚-" + (type != null ? type : "收料"), old.getCode());
-            }
-        }
-        // 2. 删旧明细
+        // 草稿态编辑不触碰库存，仅删旧明细、更新主表、插新明细
+        // 1. 删旧明细
         itemMapper.delete(new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getDeliveryId, delivery.getId()));
-        // 3. 更新主表
+        // 2. 更新主表（保持草稿状态）
         delivery.setCode(old.getCode());
-        delivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
+        delivery.setStatus(DocStatus.DRAFT.name());
         deliveryMapper.updateById(delivery);
-        // 4. 插入新明细 + 重新算库存
+        // 3. 插入新明细（库存动作推迟到审核）
         for (OutsourceDeliveryItem item : items) {
             item.setDeliveryId(delivery.getId());
             itemMapper.insert(item);
-            BigDecimal qty = item.getQuantity();
-            if (DeliveryType.DELIVERY.name().equals(delivery.getDeliveryType())) {
-                if (delivery.getToWarehouseId() != null)
-                    updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
-                            item.getMaterialName(), OutsourceStockChangeType.EDIT_DELIVERY.name(), delivery.getCode());
-            } else {
-                String type = delivery.getDeliveryType();
-                if (delivery.getFromWarehouseId() != null)
-                    updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
-                            item.getMaterialName(), "编辑-" + (type != null ? type : "收料"), delivery.getCode());
-            }
-        }
-        // 发料时重新应用新已发数量
-        if (DeliveryType.DELIVERY.name().equals(delivery.getDeliveryType())) {
-            syncDeliveredQuantity(delivery, items, true);
         }
     }
 
@@ -263,6 +231,77 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     // ==================== 私有方法 ====================
+
+    /**
+     * 审核通过：扣/增库存 + 写流水 + 发料时同步加工单已发数量
+     * 抽取自原 create，使库存动作统一在审核时发生
+     */
+    private void applyDeliveryStock(OutsourceDelivery delivery, List<OutsourceDeliveryItem> items) {
+        for (OutsourceDeliveryItem item : items) {
+            BigDecimal qty = item.getQuantity();
+            if (DeliveryType.DELIVERY.name().equals(delivery.getDeliveryType())) {
+                // 扣减来源仓库（我方仓或委外仓）
+                if (delivery.getFromWarehouseId() != null) {
+                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), getMaterialNameById(item.getMaterialId()), item.getQualityType(), OutsourceStockChangeType.DELIVERY_OUT.name(), delivery.getCode());
+                }
+                // 增加目标仓库（委外仓）
+                if (delivery.getToWarehouseId() != null)
+                    updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
+                            getMaterialNameById(item.getMaterialId()), OutsourceStockChangeType.DELIVERY_IN.name(), delivery.getCode());
+            } else if (DeliveryType.TRANSFER.name().equals(delivery.getDeliveryType())) {
+                // 来源仓库-，目标仓库+
+                if (delivery.getFromWarehouseId() != null)
+                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), getMaterialNameById(item.getMaterialId()), item.getQualityType(), OutsourceStockChangeType.TRANSFER_OUT.name(), delivery.getCode());
+                if (delivery.getToWarehouseId() != null)
+                    adjustSourceStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, getMaterialNameById(item.getMaterialId()), item.getQualityType(), OutsourceStockChangeType.TRANSFER_IN.name(), delivery.getCode());
+            } else {
+                String type = delivery.getDeliveryType();
+                if (delivery.getFromWarehouseId() != null)
+                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), getMaterialNameById(item.getMaterialId()), item.getQualityType(), type != null ? type : "退料", delivery.getCode());
+            }
+        }
+        // 发料时同步加工单物料已发数量
+        if (DeliveryType.DELIVERY.name().equals(delivery.getDeliveryType())) {
+            syncDeliveredQuantity(delivery, items, true);
+        }
+    }
+
+    /**
+     * 反审核/取消：逆向库存 + 发料时回滚已发数量
+     */
+    private void reverseDeliveryStock(OutsourceDelivery delivery, List<OutsourceDeliveryItem> items) {
+        for (OutsourceDeliveryItem item : items) {
+            BigDecimal qty = item.getQuantity();
+            if (DeliveryType.DELIVERY.name().equals(delivery.getDeliveryType())) {
+                // 恢复我方仓库库存
+                if (delivery.getFromWarehouseId() != null && item.getMaterialId() != null) {
+                    inventoryStockService.changeStock(delivery.getFromWarehouseId(), getMaterialNameById(item.getMaterialId()), qty,
+                        StockChangeType.OUTSOURCE_CANCEL_DELIVERY, delivery.getCode(), RelatedBillType.OUTSOURCE_DELIVERY, item.getMaterialId(), null, delivery.getId(), null);
+                }
+                // 扣回委外仓库
+                if (delivery.getToWarehouseId() != null)
+                    updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
+                            getMaterialNameById(item.getMaterialId()), OutsourceStockChangeType.CANCEL_DELIVERY.name(), delivery.getCode());
+            } else if (DeliveryType.TRANSFER.name().equals(delivery.getDeliveryType())) {
+                // 逆向：来源仓库+，目标仓库-
+                if (delivery.getFromWarehouseId() != null)
+                    updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
+                            getMaterialNameById(item.getMaterialId()), OutsourceStockChangeType.CANCEL_TRANSFER_OUT.name(), delivery.getCode());
+                if (delivery.getToWarehouseId() != null)
+                    updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
+                            getMaterialNameById(item.getMaterialId()), OutsourceStockChangeType.CANCEL_TRANSFER_IN.name(), delivery.getCode());
+            } else {
+                String type = delivery.getDeliveryType();
+                if (delivery.getFromWarehouseId() != null)
+                    updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
+                            getMaterialNameById(item.getMaterialId()), "取消" + (type != null ? type : "收料"), delivery.getCode());
+            }
+        }
+        // 发料时逆向已发数量
+        if (DeliveryType.DELIVERY.name().equals(delivery.getDeliveryType())) {
+            syncDeliveredQuantity(delivery, items, false);
+        }
+    }
 
     /**
      * 同步加工单物料的已发数量
@@ -290,9 +329,9 @@ public class DeliveryServiceImpl implements DeliveryService {
                 BigDecimal newQty = increase ? oldQty.add(item.getQuantity()) : oldQty.subtract(item.getQuantity());
                 if (newQty.compareTo(BigDecimal.ZERO) < 0) newQty = BigDecimal.ZERO;
                 jdbcTemplate.update("UPDATE outsource_order_material SET delivered_quantity = ? WHERE id = ?", newQty, omId);
-                log.info("加工单物料(ID={})已发数量: {} → {}, 物料: {}", omId, oldQty, newQty, item.getMaterialName());
+                log.info("加工单物料(ID={})已发数量: {} → {}, 物料: {}", omId, oldQty, newQty, getMaterialNameById(item.getMaterialId()));
             } catch (Exception e) {
-                log.warn("同步已发数量失败: material={}, err={}", item.getMaterialName(), e.getMessage());
+                log.warn("同步已发数量失败: material={}, err={}", getMaterialNameById(item.getMaterialId()), e.getMessage());
             }
         }
     }
@@ -349,6 +388,13 @@ public class DeliveryServiceImpl implements DeliveryService {
         stockLogMapper.insert(logEntry);
     }
 
+    /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */
+    private String getMaterialNameById(Long materialId) {
+        if (materialId == null) return "";
+        OutsourceMaterial m = outsourceMaterialMapper.selectById(materialId);
+        return m != null ? m.getMaterialName() : "";
+    }
+
     /**
      * 生成编码：DEL-YYYYMMDDNNN
      */
@@ -394,20 +440,18 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     @Override
-    public java.math.BigDecimal calcWeightedPrice(Long factoryId, String materialName) {
-        if (factoryId == null || materialName == null) return java.math.BigDecimal.ZERO;
+    public java.math.BigDecimal calcWeightedPrice(Long factoryId, Long materialId) {
+        if (factoryId == null || materialId == null) return java.math.BigDecimal.ZERO;
         try {
-            Long materialId = outsourceMaterialMapper.findIdByName(materialName);
             List<MaterialOrder> orders = materialOrderMapper.selectList(
                 new LambdaQueryWrapper<MaterialOrder>().eq(MaterialOrder::getSupplierId, factoryId));
             java.math.BigDecimal totalAmount = java.math.BigDecimal.ZERO, totalQty = java.math.BigDecimal.ZERO;
             for (MaterialOrder o : orders) {
                 LambdaQueryWrapper<MaterialOrderItem> itemW = new LambdaQueryWrapper<MaterialOrderItem>()
-                    .eq(MaterialOrderItem::getOrderId, o.getId());
-                if (materialId != null) itemW.eq(MaterialOrderItem::getMaterialId, materialId);
+                    .eq(MaterialOrderItem::getOrderId, o.getId())
+                    .eq(MaterialOrderItem::getMaterialId, materialId);
                 List<MaterialOrderItem> mItems = materialOrderItemMapper.selectList(itemW);
                 for (MaterialOrderItem it : mItems) {
-                    if (materialId == null && !java.util.Objects.equals(materialName, it.getMaterialName())) continue;
                     java.math.BigDecimal qty = it.getOrderQuantity() != null ? it.getOrderQuantity() : java.math.BigDecimal.ZERO;
                     java.math.BigDecimal price = it.getUnitPrice() != null ? it.getUnitPrice() : java.math.BigDecimal.ZERO;
                     totalAmount = totalAmount.add(qty.multiply(price));

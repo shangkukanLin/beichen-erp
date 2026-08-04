@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+import { getProjectBom } from '@/api/system'
 
 const router = useRouter()
 const route = useRoute()
@@ -25,11 +26,20 @@ const products = ref<any[]>([])
 
 const factoryOptions = ref<any[]>([])
 const projectOptions = ref<any[]>([])
+const materialOptions = ref<any[]>([])
+const bomTypes = ref<any[]>([])
 const uploadFile = ref<File | null>(null)
+
+// bomTypeId -> 类型名 映射（兜底展示用）
+function typeName(id: number | undefined, fallback?: string) {
+  if (id != null) { const t = bomTypes.value.find((v: any) => v.id === id); if (t) return t.typeName }
+  return fallback || '-'
+}
 
 async function loadOptions() {
   try { const r = await request.get<any,any>('/supplier/page',{params:{supplierType:'factory',pageSize:200}}); factoryOptions.value=r?.records||[] } catch (e: any) { console.warn('加载工厂选项失败', e?.message || e) }
   try { const r = await request.get<any,any>('/dev/project/page',{params:{pageSize:200}}); projectOptions.value=r?.records||[] } catch (e: any) { console.warn('加载项目选项失败', e?.message || e) }
+  try { const r = await request.get<any,any>('/outsource/material/page',{params:{pageSize:500}}); materialOptions.value=r?.records||[] } catch (e: any) { console.warn('加载物料选项失败', e?.message || e) }
 }
 
 function addProduct() {
@@ -57,19 +67,22 @@ function onProjectSelect(idx: number, pid: number) {
 
 async function loadBomMaterials(idx: number, pid: number) {
   try {
-    const mats = await request.get<any,any>(`/dev/bom/project/${pid}`)
+    const mats:any = await getProjectBom(pid)
     if (mats && Array.isArray(mats)) {
       const qty = Number(products.value[idx].quantity) || 1
-      products.value[idx].materials = mats.map((m:any) => ({
-        materialId: m.materialId || null,
-        materialName: m.materialName || '',
-        materialType: m.materialType || '',
-        unit: m.unit || '',
-        bomQuantityPerSet: Number(m.quantityPerSet || 0),
-        demandQuantity: +(qty * Number(m.quantityPerSet || 0)).toFixed(4),
-        lossRate: m.lossRate || 0,
-        remark: ''
-      }))
+      products.value[idx].materials = mats.map((m:any) => {
+        const opt = materialOptions.value.find((o:any) => o.id === m.outsourceMaterialId)
+        return {
+          materialId: m.outsourceMaterialId || null,
+          materialName: opt?.materialName || '',
+          bomTypeId: m.bomTypeId || null,
+          unit: m.unit || '',
+          bomQuantityPerSet: Number(m.quantity || 0),
+          demandQuantity: +(qty * Number(m.quantity || 0)).toFixed(4),
+          lossRate: m.lossRate || 0,
+          remark: ''
+        }
+      })
     }
   } catch { products.value[idx].materials = [] }
 }
@@ -129,8 +142,13 @@ async function handleSubmit() {
   } finally { saving.value = false }
 }
 
+async function loadBomTypes() {
+  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
+}
+
 async function initPage() {
   await loadOptions()
+  await loadBomTypes()
   if (products.value.length === 0) addProduct()
   // 从研发项目跳转过来时自动填充
   const qFactoryId = route.query.factoryId
@@ -184,7 +202,7 @@ onActivated(initPage)
       <div style="margin-top:8px" v-if="p.materials.length > 0">
         <div style="margin-bottom:6px"><span style="font-weight:500;font-size:13px">BOM物料清单</span></div>
         <el-table :data="p.materials" border size="small">
-          <el-table-column prop="materialType" label="类型" width="80" />
+          <el-table-column label="类型" width="80"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
           <el-table-column prop="materialName" label="物料名称" min-width="150" />
           <el-table-column prop="unit" label="单位" width="60" />
           <el-table-column label="单套用量" width="90"><template #default="{row}">{{ row.bomQuantityPerSet }}</template></el-table-column>

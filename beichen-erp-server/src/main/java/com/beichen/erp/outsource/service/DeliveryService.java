@@ -14,6 +14,12 @@ public interface DeliveryService {
 
     void create(OutsourceDelivery delivery, List<OutsourceDeliveryItem> items);
 
+    /** 审核：草稿态生效，扣/增库存并写流水 */
+    void audit(Long id);
+
+    /** 反审核：已审核态回滚库存流水，回到草稿 */
+    void unaudit(Long id);
+
     void cancel(Long id);
 
     void update(OutsourceDelivery delivery, List<OutsourceDeliveryItem> items);
@@ -22,5 +28,5 @@ public interface DeliveryService {
 
     void clearAttachUrl(Long id);
 
-    java.math.BigDecimal calcWeightedPrice(Long factoryId, String materialName);
+    java.math.BigDecimal calcWeightedPrice(Long factoryId, Long materialId);
 }

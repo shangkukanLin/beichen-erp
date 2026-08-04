@@ -36,6 +36,7 @@ public class MaterialOrderController {
     private final MaterialOrderItemMapper itemMapper;
     private final SupplierMapper supplierMapper;
     private final OutsourceMaterialMapper materialMapper;
+    private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
     private final OutsourceWarehouseMapper warehouseMapper;
     private final OutsourceWarehouseStockMapper warehouseStockMapper;
     private final OutsourceDeliveryMapper deliveryMapper;
@@ -212,7 +213,7 @@ public class MaterialOrderController {
                     new LambdaQueryWrapper<OutsourceMaterialComponent>()
                         .eq(OutsourceMaterialComponent::getParentMaterialId, orderItem.getMaterialId()));
                 if (comps == null || comps.isEmpty()) continue;
-                log.info("物料[{}]有{}个子物料", orderItem.getMaterialName(), comps.size());
+                log.info("物料[{}]有{}个子物料", getMaterialNameById(orderItem.getMaterialId()), comps.size());
                 for (OutsourceMaterialComponent c : comps) {
                     BigDecimal compDemand = (c.getQuantity() != null ? c.getQuantity() : BigDecimal.ONE).multiply(qty);
                     BigDecimal compStock = getStock(compWhId, c.getChildMaterialId());
@@ -266,8 +267,7 @@ public class MaterialOrderController {
             OutsourceDeliveryItem di = new OutsourceDeliveryItem();
             di.setDeliveryId(delivery.getId());
             di.setMaterialId(orderItem.getMaterialId());
-            di.setMaterialName(orderItem.getMaterialName());
-            di.setMaterialType(orderItem.getMaterialType());
+            di.setBomTypeId(orderItem.getBomTypeId());
             di.setUnit(orderItem.getUnit());
             di.setQuantity(qty);
             di.setQualityType(QualityType.GOOD.getCode());
@@ -275,7 +275,7 @@ public class MaterialOrderController {
 
             // 父物料入库 + 流水
             updateStockLog(whId, orderItem.getMaterialId(), qty, QualityType.GOOD.getCode(),
-                orderItem.getMaterialName(), "委外收货入库", o.getCode());
+                getMaterialNameById(orderItem.getMaterialId()), "委外收货入库", o.getCode());
 
             // 子物料出库（仅委外单才需要扣子物料）
             if (OrderType.OUTSOURCE.getCode().equals(o.getOrderType())) {
@@ -370,7 +370,7 @@ public class MaterialOrderController {
             MaterialOrderItem orderItem = itemMapper.selectById(itemId);
             if (orderItem == null) continue;
             if (orderItem.getReceivedQuantity().subtract(orderItem.getDefectReturnedQty()).compareTo(qty) < 0)
-                throw new BusinessException(orderItem.getMaterialName() + " 可退数量不足");
+                throw new BusinessException(getMaterialNameById(orderItem.getMaterialId()) + " 可退数量不足");
 
             // 维修返还：校验仓库库存是否足够
             if (!DefectHandleType.CASH_REFUND.getCode().equals(handleType) && whId != null && orderItem.getMaterialId() != null) {
@@ -381,7 +381,7 @@ public class MaterialOrderController {
                         .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
                 BigDecimal stockQty = s != null && s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
                 if (stockQty.compareTo(qty) < 0)
-                    throw new BusinessException(orderItem.getMaterialName() + " 仓库库存不足(库存:" + stockQty + "，退:" + qty + ")");
+                    throw new BusinessException(getMaterialNameById(orderItem.getMaterialId()) + " 仓库库存不足(库存:" + stockQty + "，退:" + qty + ")");
             }
 
             orderItem.setDefectReturnedQty(orderItem.getDefectReturnedQty().add(qty));
@@ -390,8 +390,7 @@ public class MaterialOrderController {
             OutsourceDeliveryItem di = new OutsourceDeliveryItem();
             di.setDeliveryId(delivery.getId());
             di.setMaterialId(orderItem.getMaterialId());
-            di.setMaterialName(orderItem.getMaterialName());
-            di.setMaterialType(orderItem.getMaterialType());
+            di.setBomTypeId(orderItem.getBomTypeId());
             di.setUnit(orderItem.getUnit());
             di.setQuantity(qty);
             di.setQualityType(QualityType.DEFECT.getCode());
@@ -401,7 +400,7 @@ public class MaterialOrderController {
             // 维修返还：扣减仓库良品库存+写流水；折现退款：不扣库存
             if (!DefectHandleType.CASH_REFUND.getCode().equals(handleType) && whId != null && orderItem.getMaterialId() != null) {
                 updateStockLog(whId, orderItem.getMaterialId(), qty.negate(), QualityType.GOOD.getCode(),
-                    orderItem.getMaterialName(), "退不良扣回", o.getCode());
+                    getMaterialNameById(orderItem.getMaterialId()), "退不良扣回", o.getCode());
             }
         }
 
@@ -532,8 +531,8 @@ public class MaterialOrderController {
             warehouseMapper.selectList(new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, supplierId))
                 .forEach(w -> supplierWhIds.add(w.getId()));
         }
-        // 查所有活跃物料订单的在途数量（可能不精确，仅按物料名汇总）
-        Map<String, BigDecimal> inTransitMap = new HashMap<>();
+        // 查所有活跃物料订单的在途数量（按物料ID汇总）
+        Map<Long, BigDecimal> inTransitMap = new HashMap<>();
         List<MaterialOrder> activeOrders = orderMapper.selectList(
             new LambdaQueryWrapper<MaterialOrder>()
                 .notIn(MaterialOrder::getStatus, List.of(MaterialOrderStatus.FINISHED.name(), MaterialOrderStatus.CANCELLED.name())));
@@ -543,12 +542,12 @@ public class MaterialOrderController {
                     new LambdaQueryWrapper<MaterialOrderItem>()
                         .in(MaterialOrderItem::getOrderId, orderIds));
                 for (MaterialOrderItem oi : orderItems) {
-                    if (oi.getMaterialName() == null || oi.getMaterialName().isBlank()) continue;
+                    if (oi.getMaterialId() == null) continue;
                     BigDecimal ordered = oi.getOrderQuantity() != null ? oi.getOrderQuantity() : BigDecimal.ZERO;
                     BigDecimal received = oi.getReceivedQuantity() != null ? oi.getReceivedQuantity() : BigDecimal.ZERO;
                     BigDecimal inTransit = ordered.subtract(received);
                     if (inTransit.compareTo(BigDecimal.ZERO) > 0) {
-                        inTransitMap.merge(oi.getMaterialName(), inTransit, BigDecimal::add);
+                        inTransitMap.merge(oi.getMaterialId(), inTransit, BigDecimal::add);
                     }
                 }
             }
@@ -559,8 +558,9 @@ public class MaterialOrderController {
             map.put("id", it.getId());
             map.put("orderId", it.getOrderId());
             map.put("materialId", it.getMaterialId());
-            map.put("materialName", it.getMaterialName());
-            map.put("materialType", it.getMaterialType());
+            map.put("materialName", getMaterialNameById(it.getMaterialId()));
+            map.put("bomTypeId", it.getBomTypeId());
+            map.put("bomTypeName", getBomTypeNameById(it.getBomTypeId()));
             map.put("unit", it.getUnit());
             map.put("orderQuantity", it.getOrderQuantity());
             map.put("receivedQuantity", it.getReceivedQuantity());
@@ -596,9 +596,9 @@ public class MaterialOrderController {
                             if (childMat != null) {
                                 cm.put("childMaterialName", childMat.getMaterialName());
                                 cm.put("childUnit", childMat.getUnit());
-                                cm.put("childMaterialType", childMat.getMaterialType());
+                                cm.put("childBomTypeId", childMat.getBomTypeId());
+                                cm.put("childBomTypeName", getBomTypeNameById(childMat.getBomTypeId()));
                                 cm.put("supplierIds", childMat.getSupplierIds());
-                                cm.put("supplierName", childMat.getSupplierName());
                             }
                             // 查该供应商委外仓库存
                             BigDecimal stock = BigDecimal.ZERO;
@@ -619,7 +619,7 @@ public class MaterialOrderController {
                             BigDecimal delivered = compQty.multiply(recQty);
                             BigDecimal remaining = demand.subtract(delivered).max(BigDecimal.ZERO);
                             cm.put("shortage", remaining.subtract(stock).max(BigDecimal.ZERO));
-                            cm.put("inTransit", inTransitMap.getOrDefault(childMat.getMaterialName(), BigDecimal.ZERO));
+                            cm.put("inTransit", inTransitMap.getOrDefault(c.getChildMaterialId(), BigDecimal.ZERO));
                         } else {
                             cm.put("inTransit", BigDecimal.ZERO);
                         }
@@ -650,8 +650,7 @@ public class MaterialOrderController {
     private MaterialOrderItem parseItem(Map<String, Object> it) {
         MaterialOrderItem item = new MaterialOrderItem();
         if (it.get("materialId") != null) item.setMaterialId(Long.valueOf(it.get("materialId").toString()));
-        item.setMaterialName((String) it.get("materialName"));
-        item.setMaterialType((String) it.get("materialType"));
+        if (it.get("bomTypeId") != null) item.setBomTypeId(Long.valueOf(it.get("bomTypeId").toString()));
         item.setUnit((String) it.get("unit"));
         if (it.get("orderQuantity") != null) item.setOrderQuantity(new BigDecimal(it.get("orderQuantity").toString()));
         if (it.get("unitPrice") != null) item.setUnitPrice(new BigDecimal(it.get("unitPrice").toString()));
@@ -708,6 +707,20 @@ public class MaterialOrderController {
         logEntry.setChangeQuantity(delta); logEntry.setBeforeQuantity(before);
         logEntry.setAfterQuantity(after); logEntry.setRelatedOrderCode(orderCode);
         stockLogMapper.insert(logEntry);
+    }
+
+    /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */
+    private String getMaterialNameById(Long materialId) {
+        if (materialId == null) return "";
+        OutsourceMaterial m = materialMapper.selectById(materialId);
+        return m != null ? m.getMaterialName() : "";
+    }
+
+    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
+    private String getBomTypeNameById(Long bomTypeId) {
+        if (bomTypeId == null) return "-";
+        com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
+        return bt != null ? bt.getTypeName() : "-";
     }
 
     private String generateCode() {

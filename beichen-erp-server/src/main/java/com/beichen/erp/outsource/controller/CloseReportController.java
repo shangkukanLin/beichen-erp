@@ -39,8 +39,7 @@ public class CloseReportController {
         List<Map<String, Object>> itemsRaw = (List<Map<String, Object>>) body.get("items");
         List<CloseReportItem> items = itemsRaw != null ? itemsRaw.stream().map(m -> {
             CloseReportItem i = new CloseReportItem();
-            i.setMaterialName((String) m.get("materialName"));
-            i.setMaterialType((String) m.get("materialType"));
+            if (m.get("bomTypeId") != null) i.setBomTypeId(Long.valueOf(m.get("bomTypeId").toString()));
             i.setUnit((String) m.get("unit"));
             if (m.get("deliveredQuantity") != null) i.setDeliveredQuantity(new BigDecimal(m.get("deliveredQuantity").toString()));
             if (m.get("returnedQuantity") != null) i.setReturnedQuantity(new BigDecimal(m.get("returnedQuantity").toString()));
@@ -137,7 +136,7 @@ public class CloseReportController {
             Row dRow = sheet.createRow(rowIdx++);
             int curRow = dRow.getRowNum() + 1;
 
-            textCell(dRow, 0, (String) it.get("materialType"), textStyle);
+            textCell(dRow, 0, (String) it.get("bomTypeName"), textStyle);
             textCell(dRow, 1, (String) it.get("materialName"), textStyle);
             numCell(dRow, 2, it, "deliveredQuantity", numStyle);
             // 退料总计 = F+G

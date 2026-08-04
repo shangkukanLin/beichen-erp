@@ -5,8 +5,9 @@ import { reactive, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { getProjectBom } from '@/api/system'
 import { exportContractPdf } from '@/api/contract-template'
-import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/material'
+import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
 
 const route = useRoute(); const router = useRouter()
 const loading = ref(true); const saving = ref(false)
@@ -22,29 +23,35 @@ async function loadMaterialStock() {
     const r = await request.get<any, any>(`/outsource/order/${form.id}/material-stock`)
     if (r?.materials) {
       const map: Record<string, any> = {}
-      for (const m of r.materials) { map[m.materialName] = m }
+      for (const m of r.materials) { if (m.materialId != null) map[m.materialId] = m }
       materialStockMap.value = map
     }
   } catch { materialStockMap.value = {} }
 }
-function getStock(materialName: string) {
-  const s = materialStockMap.value[materialName]
+function getStock(materialId: number | string) {
+  const s = materialId != null ? materialStockMap.value[materialId] : undefined
   return s || { stockQuantity: 0, shortage: 0 }
 }
+// 按物料ID关联反查物料名称（实体已不冗余存name，统一用ID查）
+function matName(id: number | string) {
+  if (id == null) return ''
+  const o = materialOptions.value.find((v:any) => v.id === id)
+  return o?.materialName || ''
+}
 function goPurchase(row: any) {
-  const s = getStock(row.materialName)
+  const s = getStock(row.materialId)
   const ids = (s.supplierIds || '') as string; const firstId = ids.split(',')[0]?.trim()
   const p = new URLSearchParams(); if (firstId) p.set('supplierId', firstId)
   if (s.materialId) p.set('materialId', String(s.materialId))
-  p.set('materialName', row.materialName || ''); p.set('materialType', row.materialType || '')
+  p.set('materialName', matName(row.materialId)); p.set('bomTypeId', String(row.bomTypeId ?? ''))
   p.set('unit', row.unit || ''); p.set('quantity', String(s.shortage || 0))
   router.push('/outsource/material-order/add?' + p.toString())
 }
 function goOutsource(row: any) {
-  const s = getStock(row.materialName)
+  const s = getStock(row.materialId)
   const p = new URLSearchParams(); p.set('orderType', '委外')
   if (s.materialId) p.set('materialId', String(s.materialId))
-  p.set('materialName', row.materialName || ''); p.set('materialType', row.materialType || '')
+  p.set('materialName', matName(row.materialId)); p.set('bomTypeId', String(row.bomTypeId ?? ''))
   p.set('unit', row.unit || ''); p.set('quantity', String(s.shortage || 0))
   router.push('/outsource/material-order/add?' + p.toString())
 }
@@ -63,6 +70,16 @@ const products = ref<any[]>([])
 const factoryOptions = ref<any[]>([])
 const projectOptions = ref<any[]>([])
 const materialOptions = ref<any[]>([])
+const bomTypes = ref<any[]>([])
+
+// bomTypeId -> 类型名 映射（兜底展示用）
+function typeName(id: number | undefined, fallback?: string) {
+  if (id != null) { const t = bomTypes.value.find((v: any) => v.id === id); if (t) return t.typeName }
+  return fallback || '-'
+}
+async function loadBomTypes() {
+  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
+}
 
 // 交货数据
 const deliveries = ref<any[]>([])
@@ -114,16 +131,19 @@ function onProjectSelect(idx: number, pid: number) {
 }
 async function loadBomMaterials(idx: number, pid: number) {
   try {
-    const mats = await request.get<any,any>(`/dev/bom/project/${pid}`)
+    const mats:any = await getProjectBom(pid)
     if (mats && Array.isArray(mats)) {
       const qty = Number(products.value[idx].quantity) || 1
-      products.value[idx].materials = mats.map((m:any) => ({ materialId: undefined, materialName: m.materialName || '', materialType: m.materialType || '', unit: m.unit || '', demandQuantity: +(qty * Number(m.quantityPerSet || 0)).toFixed(4), lossRate: m.lossRate || 0, remark: '' }))
+      products.value[idx].materials = mats.map((m:any) => {
+        const opt = materialOptions.value.find((o:any) => o.id === m.outsourceMaterialId)
+        return { materialId: m.outsourceMaterialId || null, materialName: opt?.materialName || '', bomTypeId: m.bomTypeId || null, unit: m.unit || '', demandQuantity: +(qty * Number(m.quantity || 0)).toFixed(4), lossRate: m.lossRate || 0, remark: '' }
+      })
     }
   } catch { products.value[idx].materials = [] }
 }
 function calcAmount(idx: number) { const p = products.value[idx]; p.amount = (Number(p.quantity) || 0) * (Number(p.unitPrice) || 0) }
-function onMatSelect(idx: number, mi: number, mat: any) { const m = materialOptions.value.find((v:any) => v.id === mi); if (m) { mat.materialName = m.materialName; mat.materialType = m.materialType; mat.unit = m.unit } }
-function addMaterial(idx: number) { products.value[idx].materials.push({ materialId: undefined, materialName: '', materialType: '', unit: '', demandQuantity: 1, lossRate: 0, remark: '' }) }
+function onMatSelect(idx: number, mi: number, mat: any) { const m = materialOptions.value.find((v:any) => v.id === mi); if (m) { mat.materialName = m.materialName; mat.bomTypeId = m.bomTypeId; mat.unit = m.unit } }
+function addMaterial(idx: number) { products.value[idx].materials.push({ materialId: undefined, materialName: '', bomTypeId: undefined, unit: '', demandQuantity: 1, lossRate: 0, remark: '' }) }
 function removeMaterial(pi: number, mi: number) { products.value[pi].materials.splice(mi, 1) }
 
 function openAttach(url:string) { window.open(url + '?inline=true') }
@@ -184,8 +204,8 @@ const delProgress = computed(() => {
 async function loadDeliveryData() {
   try {
     const [dList, dSummary, prods] = await Promise.all([
-      request.get<any,any>(`/outsource/order/${form.id}/deliveries`),
-      request.get<any,any>(`/outsource/order/${form.id}/delivery-summary`),
+      request.get<any,any>(`/outsource/order-delivery/list/${form.id}`),
+      request.get<any,any>(`/outsource/order-delivery/summary/${form.id}`),
       request.get<any,any>(`/outsource/order/${form.id}/products`)
     ])
     deliveries.value = dList || []; delSummary.value = dSummary || {}; delProducts.value = prods || []
@@ -260,6 +280,14 @@ async function delHandleDelete(row: any) {
   try { await ElMessageBox.confirm('确定删除该交货记录吗？', '删除', { type: 'warning' }); await request.delete(`/outsource/order-delivery/${row.id}`); ElMessage.success('已删除'); loadDeliveryData() }
   catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
+async function delHandleAudit(row: any) {
+  try { await ElMessageBox.confirm('确定审核该交货记录吗？审核后将扣减物料、成品入库并生成应付。', '审核', { type: 'warning' }); await request.put(`/outsource/order-delivery/${row.id}/audit`); ElMessage.success('已审核'); loadDeliveryData() }
+  catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+}
+async function delHandleUnaudit(row: any) {
+  try { await ElMessageBox.confirm('确定反审核该交货记录吗？反审核后将回滚库存与应付，回到草稿。', '反审核', { type: 'warning' }); await request.put(`/outsource/order-delivery/${row.id}/unaudit`); ElMessage.success('已反审核'); loadDeliveryData() }
+  catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+}
 
 async function handleDefectReturn() {
   const data = defectItems.value.filter((r: any) => r.quantity && Number(r.quantity) > 0)
@@ -295,7 +323,7 @@ async function loadCloseReport() {
   finally { closeLoading.value = false }
 }
 
-onMounted(() => { loadOptions(); loadData() })
+onMounted(() => { loadOptions(); loadBomTypes(); loadData() })
 </script>
 
 <template>
@@ -346,19 +374,19 @@ onMounted(() => { loadOptions(); loadData() })
         </el-form>
         <div style="margin-top:8px">
           <div style="margin-bottom:6px"><span style="font-weight:500;font-size:13px">BOM物料清单</span></div>
-          <el-table v-if="p.materials && p.materials.length" :data="p.materials" border size="small">
-            <el-table-column prop="materialType" label="类型" width="70" />
-            <el-table-column prop="materialName" label="物料名称" min-width="120" />
+          <el-table v-if="p.materials && p.materials.length" :data="p.materials" border size="small" class="bom-table">
+            <el-table-column label="类型" width="70"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
+            <el-table-column label="物料名称" min-width="120"><template #default="{row}">{{ matName(row.materialId) }}</template></el-table-column>
             <el-table-column prop="unit" label="单位" width="55" />
             <el-table-column label="需求" width="70"><template #default="{row}">{{ row.demandQuantity }}</template></el-table-column>
-            <el-table-column label="已出货消耗" width="80"><template #default="{row}"><span :style="{color: Number(getStock(row.materialName).shippedConsumed||0)>0?'#409eff':''}">{{ getStock(row.materialName).shippedConsumed || 0 }}</span></template></el-table-column>
-            <el-table-column label="剩余需求" width="75"><template #default="{row}">{{ getStock(row.materialName).remainingDemand || row.demandQuantity }}</template></el-table-column>
-            <el-table-column label="库存" width="70"><template #default="{row}"><span :style="{color: Number(getStock(row.materialName).stockQuantity||0) < Number(getStock(row.materialName).remainingDemand||row.demandQuantity) ? '#f56c6c' : '#67c23a'}">{{ getStock(row.materialName).stockQuantity || 0 }}</span></template></el-table-column>
-            <el-table-column label="可能在途" width="80"><template #default="{row}"><span :style="{color: Number(getStock(row.materialName).inTransit||0) > 0 ? '#409eff' : ''}">{{ getStock(row.materialName).inTransit || 0 }}</span></template></el-table-column>
-            <el-table-column label="缺料" width="70"><template #default="{row}"><span :style="{color: Number(getStock(row.materialName).shortage||0) > 0 ? '#f56c6c' : '#67c23a'}">{{ getStock(row.materialName).shortage || 0 }}</span></template></el-table-column>
+            <el-table-column label="已出货消耗" width="80"><template #default="{row}"><span :style="{color: Number(getStock(row.materialId).shippedConsumed||0)>0?'#409eff':''}">{{ getStock(row.materialId).shippedConsumed || 0 }}</span></template></el-table-column>
+            <el-table-column label="剩余需求" width="75"><template #default="{row}">{{ getStock(row.materialId).remainingDemand || row.demandQuantity }}</template></el-table-column>
+            <el-table-column label="库存" width="70"><template #default="{row}"><span :style="{color: Number(getStock(row.materialId).stockQuantity||0) < Number(getStock(row.materialId).remainingDemand||row.demandQuantity) ? '#f56c6c' : '#67c23a'}">{{ getStock(row.materialId).stockQuantity || 0 }}</span></template></el-table-column>
+            <el-table-column label="可能在途" width="80"><template #default="{row}"><span :style="{color: Number(getStock(row.materialId).inTransit||0) > 0 ? '#409eff' : ''}">{{ getStock(row.materialId).inTransit || 0 }}</span></template></el-table-column>
+            <el-table-column label="缺料" width="70"><template #default="{row}"><span :style="{color: Number(getStock(row.materialId).shortage||0) > 0 ? '#f56c6c' : '#67c23a'}">{{ getStock(row.materialId).shortage || 0 }}</span></template></el-table-column>
             <el-table-column label="损耗率(%)" width="85"><template #default="{row}"><el-input v-model="row.lossRate" size="small" :disabled="form.status!==OutsourceOrderStatus.PENDING" /></template></el-table-column>
             <el-table-column label="备注" min-width="80"><template #default="{row}"><el-input v-model="row.remark" size="small" :disabled="form.status!==OutsourceOrderStatus.PENDING" /></template></el-table-column>
-            <el-table-column label="操作" width="110" align="center" v-if="form.status===OutsourceOrderStatus.PRODUCING"><template #default="{row}"><template v-if="Number(getStock(row.materialName).shortage||0) > 0"><el-button type="warning" link size="small" @click="goPurchase(row)">去采购</el-button><el-button v-if="getStock(row.materialName).hasComponents" type="primary" link size="small" @click="goOutsource(row)">去委外</el-button></template></template></el-table-column>
+            <el-table-column label="操作" width="130" align="center" class-name="action-col" v-if="form.status===OutsourceOrderStatus.PRODUCING"><template #default="{row}"><div v-if="Number(getStock(row.materialId).shortage||0) > 0" style="display:flex;align-items:center;justify-content:center;gap:4px"><el-button type="warning" link size="small" @click="goPurchase(row)">去采购</el-button><el-button v-if="getStock(row.materialId).hasComponents" type="primary" link size="small" @click="goOutsource(row)">去委外</el-button></div></template></el-table-column>
           </el-table>
           <div v-else style="color:#909399;font-size:13px;margin-top:8px">暂无 BOM 物料</div>
         </div>
@@ -412,8 +440,18 @@ onMounted(() => { loadOptions(); loadData() })
           <el-table-column prop="trackingNo" label="物流单号" width="140" />
           <el-table-column label="附件" width="80" align="center"><template #default="{row}"><el-button v-if="row.attachUrl" type="primary" link size="small" @click="openAttach(row.attachUrl)">查看</el-button><span v-else style="color:#c0c4cc">—</span></template></el-table-column>
           <el-table-column prop="remark" label="备注" min-width="150" />
-          <el-table-column label="操作" width="120" align="center">
-            <template #default="{row}"><el-button type="primary" link size="small" @click="delOpenEdit(row)">编辑</el-button><el-button type="danger" link size="small" @click="delHandleDelete(row)">删除</el-button></template>
+          <el-table-column prop="status" label="状态" width="90">
+            <template #default="{row}"><el-tag :type="row.status==='AUDITED'?'success':(row.status==='CANCELLED'?'danger':'info')" size="small">
+              {{ row.status==='AUDITED'?'已审核':(row.status==='CANCELLED'?'已作废':'草稿') }}
+            </el-tag></template>
+          </el-table-column>
+          <el-table-column label="操作" width="200" align="center">
+            <template #default="{row}">
+              <el-button type="success" link size="small" v-if="row.status==='DRAFT'" @click="delHandleAudit(row)">审核</el-button>
+              <el-button type="warning" link size="small" v-if="row.status==='AUDITED'" @click="delHandleUnaudit(row)">反审核</el-button>
+              <el-button type="primary" link size="small" v-if="row.status==='DRAFT'" @click="delOpenEdit(row)">编辑</el-button>
+              <el-button type="danger" link size="small" v-if="row.status==='DRAFT'" @click="delHandleDelete(row)">删除</el-button>
+            </template>
           </el-table-column>
         </el-table>
       </el-card>
@@ -476,4 +514,6 @@ onMounted(() => { loadOptions(); loadData() })
 .drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
 .drop-zone:hover { border-color:#409eff; background:#ecf5ff }
 :deep(.defect-row) { background:#fdf6ec !important }
+/* BOM物料清单操作列：确保按钮组在单元格内垂直居中 */
+:deep(.bom-table .action-col .cell) { display:flex !important; align-items:center !important; justify-content:center !important; height:100% !important; }
 </style>

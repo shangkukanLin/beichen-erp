@@ -30,6 +30,6 @@ public class DevPurchaseItem {
     /** 状态：完好/已损坏/已使用 */
     private String status;
     private String remark;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
 }

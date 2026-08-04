@@ -21,4 +21,7 @@ public interface BomService extends IService<Bom> {
 
     /** 创建新版本（从当前最新版本复制） */
     List<Bom> createNewVersion(Long projectId);
+
+    /** 批量保存BOM（全量替换：先删旧版本数据再批量插入） */
+    void saveBatch(Long projectId, List<Bom> items);
 }

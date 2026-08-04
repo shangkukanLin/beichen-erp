@@ -15,6 +15,8 @@ import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
+import com.beichen.erp.dev.entity.BomType;
+import com.beichen.erp.dev.mapper.BomTypeMapper;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +45,14 @@ public class SupplierSettlementController {
     private final OutsourceDeliveryItemMapper deliveryItemMapper;
     private final OutsourceStockLogMapper stockLogMapper;
     private final InventoryWarehouseStockService inventoryStockService;
+    private final BomTypeMapper bomTypeMapper;
+
+    // bomTypeId -> 类型名（空安全）
+    private String getBomTypeNameById(Long id) {
+        if (id == null) return "-";
+        BomType t = bomTypeMapper.selectById(id);
+        return t != null ? t.getTypeName() : "-";
+    }
 
     /** 清算汇总 */
     @GetMapping("/{supplierId}")
@@ -92,7 +102,7 @@ public class SupplierSettlementController {
                 m.put("materialId", st.getMaterialId());
                 OutsourceMaterial mat = st.getMaterialId() != null ? materialMapper.selectById(st.getMaterialId()) : null;
                 m.put("materialName", mat != null ? mat.getMaterialName() : "未知物料");
-                m.put("materialType", mat != null ? mat.getMaterialType() : "");
+                m.put("bomTypeName", mat != null ? getBomTypeNameById(mat.getBomTypeId()) : "-");
                 m.put("unit", mat != null ? mat.getUnit() : "");
                 m.put("qualityType", st.getQualityType());
                 m.put("quantity", st.getQuantity());
@@ -160,8 +170,7 @@ public class SupplierSettlementController {
                 OutsourceDeliveryItem di = new OutsourceDeliveryItem();
                 di.setDeliveryId(delivery.getId());
                 di.setMaterialId(st.getMaterialId());
-                di.setMaterialName(matName);
-                di.setMaterialType(mat != null ? mat.getMaterialType() : null);
+                di.setBomTypeId(mat != null ? mat.getBomTypeId() : null);
                 di.setUnit(mat != null ? mat.getUnit() : null);
                 di.setQuantity(qty);
                 di.setQualityType(st.getQualityType());

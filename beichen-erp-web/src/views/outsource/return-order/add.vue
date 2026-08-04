@@ -14,7 +14,11 @@ const warehouseOptions = ref<any[]>([])
 const productList = ref<any[]>([]) // 该工厂所有产品汇总
 const rows = ref<any[]>([createEmptyRow()])
 const mergedItems = ref<any[]>([])
+const bomTypes = ref<any[]>([])
 const loading = ref(false)
+
+// bomTypeId -> 类型名 映射供展示
+function typeName(id: number | undefined) { if (id == null) return '-'; const t = bomTypes.value.find((v: any) => v.id === id); return t ? t.typeName : (id as any) }
 
 function createEmptyRow() {
   return { productName: undefined as any, selectedVersion: null as any, versions: [] as any[], returnQuantity: undefined as any, materials: [] as any[] }
@@ -87,10 +91,10 @@ function refreshMerged() {
     const qty = Number(row.returnQuantity) || 0
     if (qty <= 0 || !row.materials) continue
     for (const m of row.materials) {
-      const key = m.materialName || ''
+      const key = m.outsourceMaterialId || m.materialName || ''
       if (!key) continue
       if (!map[key]) {
-        map[key] = { materialName: key, materialType: m.materialType, unit: m.unit, quantity: 0, perSetQuantity: m.perSetQuantity }
+        map[key] = { materialId: m.outsourceMaterialId, bomTypeId: m.bomTypeId, materialName: m.materialName, unit: m.unit, quantity: 0, perSetQuantity: m.perSetQuantity }
       }
       map[key].quantity += qty * (Number(m.perSetQuantity) || 0)
     }
@@ -101,10 +105,11 @@ function refreshMerged() {
 async function handleSubmit() {
   if (!form.factoryId) { ElMessage.warning('请选择加工厂'); return }
   const items = mergedItems.value.map(m => ({
-    materialName: m.materialName, materialType: m.materialType, unit: m.unit,
+    materialId: m.materialId, bomTypeId: m.bomTypeId, unit: m.unit,
     quantity: m.quantity, unitPrice: '', remark: ''
   }))
   if (items.length === 0) { ElMessage.warning('请选择产品并填写退回数量'); return }
+  if (items.some((m: any) => !m.materialId)) { ElMessage.warning('存在未关联委外物料的明细，无法保存，请检查BOM物料是否已登记'); return }
   try {
     await request.post('/outsource/return-order', { factoryId: form.factoryId, warehouseId: form.warehouseId, returnDate: form.returnDate, remark: form.remark, items, products: rows.value.filter((r: any) => r.productName && Number(r.returnQuantity) > 0).map((r: any) => ({ productName: r.productName, quantity: Number(r.returnQuantity) })) })
     ElMessage.success('退货单已创建')
@@ -122,7 +127,10 @@ function resetForm() {
   productList.value = []
 }
 
-onMounted(() => { loadFactories() })
+onMounted(() => { loadFactories(); loadBomTypes() })
+async function loadBomTypes() {
+  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
+}
 onActivated(() => { resetForm() })
 </script>
 
@@ -182,7 +190,7 @@ onActivated(() => { resetForm() })
     <el-card shadow="never" v-if="mergedItems.length > 0">
       <template #header><span style="font-weight:600">拆解后的退货物料（合并去重）</span></template>
       <el-table :data="mergedItems" border size="small">
-        <el-table-column prop="materialType" label="类型" width="80" />
+        <el-table-column label="类型" width="80"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
         <el-table-column prop="materialName" label="物料名称" min-width="130" />
         <el-table-column prop="unit" label="单位" width="60" />
         <el-table-column prop="quantity" label="退回数量" width="100" align="right" />

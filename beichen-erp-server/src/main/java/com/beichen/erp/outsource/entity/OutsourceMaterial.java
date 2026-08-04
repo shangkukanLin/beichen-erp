@@ -12,9 +12,9 @@ public class OutsourceMaterial {
     private String projectIds;
     private Long warehouseId;
     private String materialName;
-    private String materialType;
+    /** BOM类型ID（关联 dev_bom_type.id），物料按此ID归类 */
+    private Long bomTypeId;
     private String spec;
-    private String supplierName;
     private String supplierIds;
     private String unit;
     private Integer status;

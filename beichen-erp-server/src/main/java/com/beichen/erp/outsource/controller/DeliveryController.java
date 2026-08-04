@@ -7,8 +7,10 @@ import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.OutsourceDelivery;
 import com.beichen.erp.outsource.entity.OutsourceDeliveryItem;
+import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceWarehouse;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceWarehouseMapper;
 import com.beichen.erp.outsource.service.DeliveryService;
 import com.beichen.erp.supplier.entity.Supplier;
@@ -35,6 +37,8 @@ public class DeliveryController {
     private final OutsourceDeliveryItemMapper itemMapper;
     private final SupplierMapper supplierMapper;
     private final InventoryWarehouseMapper inventoryWarehouseMapper;
+    private final OutsourceMaterialMapper outsourceMaterialMapper;
+    private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -72,7 +76,7 @@ public class DeliveryController {
             m.put("itemCount", (long) items.size());
             java.util.StringJoiner sj = new java.util.StringJoiner("、");
             for (OutsourceDeliveryItem it : items) {
-                String n = it.getMaterialName() != null ? it.getMaterialName() : (it.getMaterialType() != null ? it.getMaterialType() : "");
+                String n = getMaterialNameById(it.getMaterialId());
                 BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
                 sj.add(n + "×" + q.stripTrailingZeros().toPlainString());
             }
@@ -146,6 +150,18 @@ public class DeliveryController {
         return R.ok();
     }
 
+    @PutMapping("/{id}/audit")
+    public R<Void> audit(@PathVariable Long id) {
+        deliveryService.audit(id);
+        return R.ok();
+    }
+
+    @PutMapping("/{id}/unaudit")
+    public R<Void> unaudit(@PathVariable Long id) {
+        deliveryService.unaudit(id);
+        return R.ok();
+    }
+
     @GetMapping("/warehouses/by-factory/{factoryId}")
     public R<Object> warehousesByFactory(@PathVariable Long factoryId) {
         return R.ok(warehouseMapper.selectList(new LambdaQueryWrapper<OutsourceWarehouse>()
@@ -160,8 +176,8 @@ public class DeliveryController {
 
     /** 查询某个工厂某个物料的加权平均单价 */
     @GetMapping("/material-weighted-price")
-    public R<java.math.BigDecimal> materialWeightedPrice(@RequestParam Long factoryId, @RequestParam String materialName) {
-        return R.ok(deliveryService.calcWeightedPrice(factoryId, materialName));
+    public R<java.math.BigDecimal> materialWeightedPrice(@RequestParam Long factoryId, @RequestParam Long materialId) {
+        return R.ok(deliveryService.calcWeightedPrice(factoryId, materialId));
     }
 
     @SuppressWarnings("unchecked")
@@ -212,8 +228,9 @@ public class DeliveryController {
                     // 兼容 materialId 和 material_id
                     Object mid = map.get("materialId") != null ? map.get("materialId") : map.get("material_id");
                     if (mid != null) item.setMaterialId(Long.valueOf(mid.toString()));
-                    item.setMaterialName((String) (map.get("materialName") != null ? map.get("materialName") : map.get("material_name")));
-                    item.setMaterialType((String) (map.get("materialType") != null ? map.get("materialType") : map.get("material_type")));
+                    // 兼容 bomTypeId 和 bom_type_id
+                    Object btid = map.get("bomTypeId") != null ? map.get("bomTypeId") : map.get("bom_type_id");
+                    if (btid != null) item.setBomTypeId(Long.valueOf(btid.toString()));
                     item.setUnit((String) map.get("unit"));
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank()) {
                         item.setQuantity(new BigDecimal(map.get("quantity").toString()));
@@ -229,5 +246,19 @@ public class DeliveryController {
             }
         }
         return items;
+    }
+
+    /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */
+    private String getMaterialNameById(Long materialId) {
+        if (materialId == null) return "";
+        OutsourceMaterial m = outsourceMaterialMapper.selectById(materialId);
+        return m != null ? m.getMaterialName() : "";
+    }
+
+    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
+    private String getBomTypeNameById(Long bomTypeId) {
+        if (bomTypeId == null) return "-";
+        com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
+        return bt != null ? bt.getTypeName() : "-";
     }
 }

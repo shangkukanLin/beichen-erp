@@ -4,7 +4,7 @@ import { ElMessage } from 'element-plus'
 import { listCustomers, type Customer } from '@/api/customer'
 import request from '@/utils/request'
 import { getBillPage, getBillItems, generateBill, type FinanceBill, type FinanceBillItem } from '@/api/finance'
-import { BillType, BillTypeLabel } from '@/api/material'
+import { BillType, BillTypeLabel } from '@/api/enums'
 
 const query = reactive({ billType: BillType.RECEIVABLE, partnerId: '' as string|number })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })

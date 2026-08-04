@@ -2,7 +2,7 @@
 import { reactive, ref, onMounted, onActivated, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { TimelineStatus, TimelineStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag } from '@/api/material'
+import { TimelineStatus, TimelineStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag } from '@/api/enums'
 import {
   getProject, updateProject,
   getProjectBom, saveProjectBom,
@@ -11,7 +11,7 @@ import {
   getSupplierPage,
   type ProjectVO, type ProjectDTO, type BomDTO, type BugDTO, type DrawingVO
 } from '@/api/system'
-import { ADD_MARKER, appendAddOption } from '@/composables/useSelectWithAdd'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import request from '@/utils/request'
 
 const route = useRoute()
@@ -76,7 +76,7 @@ function goCreateOrder(type: 'sample' | 'outsource') {
 }
 
 // ===================== 时间线 =====================
-interface TimelineItem { id?: number; statusName: string; sortOrder: number; defaultDays?: number; plannedEnd?: string; actualEnd?: string; status?: string }
+interface TimelineItem { id?: number; statusName: string; sortOrder: number; defaultDays?: number; plannedEnd?: string; actualEnd?: string; status?: string; remark?: string }
 const timelineStatusOptions = [TimelineStatus.NOT_STARTED, TimelineStatus.IN_PROGRESS, TimelineStatus.FINISHED]
 const timelineList = ref<TimelineItem[]>([])
 const timelineCompleting = ref<Record<number, boolean>>({})
@@ -89,19 +89,22 @@ async function loadTimeline() {
 // 从时间线推导当前项目阶段
 const currentPhaseName = computed(() => {
   // 优先找"进行中"的阶段
-  const active = timelineList.value.find(t => t.status === '进行中')
+  const active = timelineList.value.find(t => t.status === TimelineStatus.IN_PROGRESS)
   if (active) return active.statusName
-  // 没有进行中的，找最后一个已完成的
+  // 没有进行中的，找最后一个已完成/已跳过的
   for (let i = timelineList.value.length - 1; i >= 0; i--) {
-    if (timelineList.value[i].status === '已完成') return timelineList.value[i].statusName
+    if (timelineList.value[i].status === TimelineStatus.FINISHED
+        || timelineList.value[i].status === TimelineStatus.SKIPPED) {
+      return timelineList.value[i].statusName
+    }
   }
-  // 都没有，返回项目当前状态
-  return form.status || '立项'
+  // 都没有，返回模板第一项
+  return timelineList.value.length > 0 ? timelineList.value[0].statusName : '-'
 })
 
 async function saveTimelineRow(row: TimelineItem) {
   try {
-    await request.put(`/dev/project-timeline`, {
+    await request.put(`/dev/project/timeline/${row.id}`, {
       id: row.id,
       projectId: projectId,
       statusName: row.statusName,
@@ -109,7 +112,8 @@ async function saveTimelineRow(row: TimelineItem) {
       defaultDays: row.defaultDays,
       plannedEnd: row.plannedEnd || null,
       actualEnd: row.actualEnd || null,
-      status: row.status
+      status: row.status,
+      remark: row.remark || null
     })
     // 更新日期或状态后刷新列表（后端可能后推了后续阶段）
     await loadTimeline()
@@ -138,30 +142,61 @@ async function skipPhase(timelineId: number) {
   finally { timelineCompleting.value[timelineId] = false }
 }
 
-// 进度统计
+/** 撤销阶段 */
+async function revertPhase(timelineId: number) {
+  try {
+    await ElMessageBox.confirm('撤销后将恢复该阶段为进行中，后续阶段将全部重置为未开始。确认撤销？', '确认撤销', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    await request.put(`/dev/project/timeline/${timelineId}/revert`)
+    ElMessage.success('阶段已撤销')
+    await loadTimeline()
+    await loadProject()
+  } catch (e: any) {
+    if (e !== 'cancel') ElMessage.error('操作失败: ' + (e?.message || ''))
+  }
+}
+
+/** 级联重算计划日期 */
+async function recalcPlannedEnds() {
+  try {
+    await ElMessageBox.confirm('将以第一个进行中阶段为起点，级联推算后续所有未开始阶段的计划日期。确认重算？', '确认重算', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'info' })
+    await request.put(`/dev/project/timeline/recalc`, null, { params: { projectId } })
+    ElMessage.success('计划日期已重算')
+    await loadTimeline()
+  } catch (e: any) {
+    if (e !== 'cancel') ElMessage.error('操作失败: ' + (e?.message || ''))
+  }
+}
+
+// 进度统计（使用枚举比较）
 const timelineProgress = computed(() => {
   const total = timelineList.value.length
-  const completed = timelineList.value.filter(t => t.status === '已完成').length
-  const inProgress = timelineList.value.filter(t => t.status === '进行中').length
+  const completed = timelineList.value.filter(t => t.status === TimelineStatus.FINISHED || t.status === TimelineStatus.SKIPPED).length
+  const inProgress = timelineList.value.filter(t => t.status === TimelineStatus.IN_PROGRESS).length
   return { total, completed, inProgress, pct: total > 0 ? Math.round(completed / total * 100) : 0 }
 })
 
-// 行样式
+// 行样式（使用枚举比较）
 function timelineRowClass({ row }: { row: TimelineItem }) {
-  if (row.status === '已完成') return 'timeline-row-done'
-  if (row.status === '进行中') return 'timeline-row-active'
+  if (row.status === TimelineStatus.FINISHED || row.status === TimelineStatus.SKIPPED) return 'timeline-row-done'
+  if (row.status === TimelineStatus.IN_PROGRESS) return 'timeline-row-active'
   return ''
 }
 
 // BOM 平铺列表（父+子混排，子行只读缩进）
 const bomList = ref<any[]>([])
-const bomTypes = ref<string[]>([])
+const bomTypes = ref<any[]>([])
 const allMaterials = ref<any[]>([])
 async function loadBomTypes() {
-  try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => t.typeName) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
+  try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
   try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料数据失败', e?.message || e) }
 }
-function getMaterialsByType(type: string) { return allMaterials.value.filter((m:any) => m.materialType === type) }
+// BOM类型 id -> 类型名 映射，用于回显
+const bomTypeNameMap = computed<Record<number, string>>(() => {
+  const m: Record<number, string> = {}
+  for (const t of bomTypes.value) m[t.id] = t.typeName
+  return m
+})
+function getMaterialsByType(type: any) { return allMaterials.value.filter((m:any) => m.bomTypeId != null && m.bomTypeId === type) }
 
 /** 加载BOM + 子物料平铺 */
 async function loadBom() {
@@ -181,16 +216,16 @@ async function loadBom() {
   for (const b of items) {
     const matId = b.outsourceMaterialId
     const matName = matId ? (materialNameMap[matId] || '') : ''
-    result.push({ _isChild: false, materialName: matName, outsourceMaterialId: matId, supplierId: b.supplierId, spec: b.specification, unit: b.unit, quantityPerSet: b.quantity, lossRate: b.lossRate, materialType: b.bomTypeId, remark: '', id: b.id })
+    result.push({ _isChild: false, materialName: matName, outsourceMaterialId: matId, supplierId: b.supplierId, spec: b.specification, unit: b.unit, quantityPerSet: b.quantity, lossRate: b.lossRate, bomTypeId: b.bomTypeId, bomTypeName: bomTypeNameMap.value[b.bomTypeId] || '', remark: '', id: b.id })
     const subs = childrenMap[String(matId)] || []
     for (const s of subs) {
-      result.push({ _isChild: true, materialName: s.childName || s.materialName, materialType: s.childType || s.materialType, quantityPerSet: s.quantity, lossRate: s.lossRate, remark: s.remark })
+      result.push({ _isChild: true, materialName: s.childName || s.materialName, bomTypeName: s.childType || '', quantityPerSet: s.quantity, lossRate: s.lossRate, remark: s.remark })
     }
   }
   bomList.value = result
 }
 
-function addBomRow() { bomList.value.push({ _isChild: false, materialName: '', outsourceMaterialId: undefined, spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialType: '', remark: '', supplierId: undefined }) }
+function addBomRow() { bomList.value.push({ _isChild: false, materialName: '', outsourceMaterialId: undefined, spec: '', unit: '', quantityPerSet: 1, lossRate: 2, bomTypeId: '', remark: '', supplierId: undefined }) }
 async function onBomMaterialChange(materialId: number, row: any) {
   if (!materialId) return
   const matched = allMaterials.value.find((m: any) => m.id === materialId)
@@ -207,7 +242,7 @@ async function onBomMaterialChange(materialId: number, row: any) {
 function removeBomRow(i: number) { bomList.value.splice(i, 1) }
 async function saveBom() {
   const parents = bomList.value.filter((b: any) => !b._isChild)
-  const emptyType = parents.find((b: any) => !b.materialType || !b.materialType.trim())
+  const emptyType = parents.find((b: any) => !b.bomTypeId)
   if (emptyType) { ElMessage.warning('BOM类型不能为空'); return }
   const emptyMatId = parents.find((b: any) => !b.outsourceMaterialId)
   if (emptyMatId) { ElMessage.warning('物料名称不能为空'); return }
@@ -217,7 +252,7 @@ async function saveBom() {
   const bomData = parents.map((b: any) => ({
     id: b.id,
     projectId,
-    bomTypeId: b.materialType,
+    bomTypeId: b.bomTypeId,
     outsourceMaterialId: b.outsourceMaterialId,
     supplierId: b.supplierId,
     quantity: b.quantityPerSet,
@@ -242,7 +277,7 @@ const filteredBugs = computed(() => {
 const bugDialogVisible = ref(false)
 const bugForm = reactive<BugDTO>({ title: '', severity: SeverityType.NORMAL, bugType: BugTypeEnum.DISPLAY, status: BugStatus.OPEN, description: '' })
 const isBugEdit = ref(false)
-async function loadBugs() { bugList.value = (await getProjectBugs(projectId)) || [] }
+async function loadBugs() { const res: any = await getProjectBugs(projectId); bugList.value = res?.records || res || [] }
 function handleAddBug() { Object.assign(bugForm, { title: '', severity: SeverityType.NORMAL, bugType: BugTypeEnum.DISPLAY, status: BugStatus.OPEN, description: '' }); isBugEdit.value = false; bugDialogVisible.value = true }
 function handleEditBug(row: BugDTO) { Object.assign(bugForm, row); isBugEdit.value = true; bugDialogVisible.value = true }
 async function handleBugSubmit() {
@@ -310,7 +345,6 @@ interface DevPurchaseItem {
   status: string
   remark: string
 }
-const materialTypeOptions = ['基板', '屏幕', '排线', 'IC', '盖板', '背贴', '其他']
 const materialStatusOptions = ['完好', '已损坏', '已使用']
 const todayStr = new Date().toISOString().split('T')[0]
 const devMaterialList = ref<DevPurchaseItem[]>([])
@@ -449,8 +483,8 @@ function onNameBlur() {
       <!-- 阶段时间线 Tab -->
       <el-tab-pane label="阶段时间线" name="timeline">
         <el-card shadow="never">
-          <!-- 进度概览 -->
-          <div style="margin-bottom:12px;display:flex;align-items:center;gap:16px">
+          <!-- 进度概览 + 操作按钮 -->
+          <div style="margin-bottom:12px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
             <span style="font-size:14px;font-weight:600">进度概览</span>
             <div style="flex:1;max-width:360px">
               <el-progress :percentage="timelineProgress.pct" :stroke-width="16" 
@@ -459,6 +493,7 @@ function onNameBlur() {
               </el-progress>
             </div>
             <el-tag v-if="timelineProgress.inProgress > 0" type="warning" size="small">{{ timelineProgress.inProgress }} 个进行中</el-tag>
+            <el-button type="primary" size="small" plain @click="recalcPlannedEnds">重算计划日期</el-button>
           </div>
 
           <el-table :data="timelineList" border size="small" :row-class-name="timelineRowClass">
@@ -468,12 +503,17 @@ function onNameBlur() {
             <el-table-column label="计划完成" width="150">
               <template #default="{row}">
                 <el-input v-model="row.plannedEnd" type="date" size="small" 
-                  :disabled="row.status === '已完成'" @change="saveTimelineRow(row)" />
+                  :disabled="row.status === TimelineStatus.FINISHED || row.status === TimelineStatus.SKIPPED" @change="saveTimelineRow(row)" />
               </template>
             </el-table-column>
             <el-table-column label="实际完成" width="150">
               <template #default="{row}">
                 <el-input v-model="row.actualEnd" type="date" size="small" @change="saveTimelineRow(row)" />
+              </template>
+            </el-table-column>
+            <el-table-column label="备注" min-width="140">
+              <template #default="{row}">
+                <el-input v-model="row.remark" size="small" placeholder="可选" @change="saveTimelineRow(row)" />
               </template>
             </el-table-column>
             <el-table-column label="状态" width="100" align="center">
@@ -486,8 +526,9 @@ function onNameBlur() {
                 </el-select>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="120" align="center">
+            <el-table-column label="操作" width="170" align="center">
               <template #default="{row}">
+                <div style="display:flex;justify-content:center;align-items:center;gap:4px">
                 <el-button v-if="row.id && row.status === TimelineStatus.IN_PROGRESS" type="success" size="small"
                   :loading="timelineCompleting[row.id]" @click="completePhase(row.id)">
                   完成
@@ -496,7 +537,11 @@ function onNameBlur() {
                   plain @click="skipPhase(row.id)">
                   跳过
                 </el-button>
-                <span v-else-if="row.status === TimelineStatus.FINISHED || row.status === TimelineStatus.SKIPPED" style="color:#909399;font-size:12px">-</span>
+                <el-button v-if="row.id && (row.status === TimelineStatus.FINISHED || row.status === TimelineStatus.SKIPPED)" type="danger" size="small"
+                  plain @click="revertPhase(row.id)">
+                  撤销
+                </el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -513,9 +558,10 @@ function onNameBlur() {
           <el-table :data="bomList" border size="small">
             <el-table-column label="类型" width="100">
               <template #default="{row}">
-                <span v-if="row._isChild" style="color:#999;font-size:12px">{{ row.materialType }}</span>
-                <el-select v-else v-model="row.materialType" size="small" style="width:100%" @change="(v: string) => { if (v === ADD_MARKER) { row.materialType = ''; router.push('/dev/bom-type'); return } row.materialName = '' }">
-                  <el-option v-for="t in appendAddOption(bomTypes)" :key="t" :label="t === ADD_MARKER ? '+ 新增' : t" :value="t" />
+                <span v-if="row._isChild" style="color:#999;font-size:12px">{{ row.bomTypeName }}</span>
+                <el-select v-else v-model="row.bomTypeId" size="small" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.bomTypeId = ''; router.push('/dev/bom-type'); return } row.materialName = '' }">
+                  <el-option v-for="t in bomTypes" :key="t.id" :label="t.typeName" :value="t.id" />
+                  <el-option label="+ 新增" :value="ADD_MARKER" />
                 </el-select>
               </template>
             </el-table-column>
@@ -523,7 +569,7 @@ function onNameBlur() {
               <template #default="{row}">
                 <span v-if="row._isChild" style="color:#409eff;font-size:12px">└ {{ row.materialName }}</span>
                 <el-select v-else v-model="row.outsourceMaterialId" size="small" filterable clearable style="width:100%" placeholder="选择" @change="(v: number) => { if (v === ADD_MARKER) { row.outsourceMaterialId = undefined; router.push('/outsource/material-info'); return } onBomMaterialChange(v, row) }">
-                  <el-option v-for="m in allMaterials" :key="m.id" :label="m.materialName" :value="m.id" />
+                  <el-option v-for="m in getMaterialsByType(row.bomTypeId || '')" :key="m.id" :label="m.materialName" :value="m.id" />
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </el-select>
               </template>
@@ -715,7 +761,7 @@ function onNameBlur() {
           <el-col :span="14"><el-form-item label="名称"><el-input v-model="devMaterialForm.name" /></el-form-item></el-col>
           <el-col :span="10"><el-form-item label="类型">
             <el-select v-model="devMaterialForm.type" style="width:100%">
-              <el-option v-for="t in materialTypeOptions" :key="t" :label="t" :value="t" />
+              <el-option v-for="t in bomTypes" :key="t.id" :label="t.typeName" :value="t.typeName" />
             </el-select>
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="数量"><el-input-number v-model="devMaterialForm.quantity" :min="0" :precision="0" style="width:100%" /></el-form-item></el-col>

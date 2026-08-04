@@ -4,14 +4,14 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.dev.entity.BomType;
 import com.beichen.erp.dev.entity.Project;
+import com.beichen.erp.dev.mapper.BomTypeMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
-import com.beichen.erp.supplier.entity.Supplier;
-import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,7 +26,7 @@ public class OutsourceMaterialController {
 
     private final OutsourceMaterialMapper mapper;
     private final ProjectMapper projectMapper;
-    private final SupplierMapper supplierMapper;
+    private final BomTypeMapper bomTypeMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -34,12 +34,12 @@ public class OutsourceMaterialController {
             @RequestParam(defaultValue = "10") Integer pageSize,
             @RequestParam(required = false) String materialName,
             @RequestParam(required = false) String projectId,
-            @RequestParam(required = false) String materialType,
+            @RequestParam(required = false) Long bomTypeId,
             @RequestParam(required = false) Long warehouseId) {
         LambdaQueryWrapper<OutsourceMaterial> w = new LambdaQueryWrapper<OutsourceMaterial>()
                 .like(materialName != null && !materialName.isBlank(), OutsourceMaterial::getMaterialName, materialName)
                 .like(projectId != null && !projectId.isBlank(), OutsourceMaterial::getProjectIds, projectId)
-                .like(materialType != null && !materialType.isBlank(), OutsourceMaterial::getMaterialType, materialType)
+                .eq(bomTypeId != null, OutsourceMaterial::getBomTypeId, bomTypeId)
                 .eq(warehouseId != null, OutsourceMaterial::getWarehouseId, warehouseId)
                 .orderByDesc(OutsourceMaterial::getId);
         Page<OutsourceMaterial> page = mapper.selectPage(new Page<>(pageNum, pageSize), w);
@@ -51,9 +51,9 @@ public class OutsourceMaterialController {
             map.put("warehouseId", m.getWarehouseId());
             map.put("projectName", idsToNames(m.getProjectIds(), projectMapper));
             map.put("materialName", m.getMaterialName());
-            map.put("materialType", m.getMaterialType());
+            map.put("bomTypeId", m.getBomTypeId());
+            map.put("bomTypeName", getBomTypeNameById(m.getBomTypeId()));
             map.put("spec", m.getSpec());
-            map.put("supplierName", m.getSupplierName());
             map.put("supplierIds", m.getSupplierIds());
             map.put("unit", m.getUnit());
             map.put("status", m.getStatus());
@@ -75,6 +75,13 @@ public class OutsourceMaterialController {
                         return id;
                     }
                 }).collect(Collectors.joining(", "));
+    }
+
+    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
+    private String getBomTypeNameById(Long bomTypeId) {
+        if (bomTypeId == null) return "-";
+        BomType bt = bomTypeMapper.selectById(bomTypeId);
+        return bt != null ? bt.getTypeName() : "-";
     }
 
     @PostMapping
@@ -100,9 +107,11 @@ public class OutsourceMaterialController {
         m.setProjectIds(body.get("projectIds") != null ? body.get("projectIds").toString() : null);
         if (body.get("warehouseId") != null) m.setWarehouseId(Long.valueOf(body.get("warehouseId").toString()));
         m.setMaterialName((String) body.get("materialName"));
-        m.setMaterialType((String) body.get("materialType"));
+        // 仅存储 BOM 类型ID，类型名称在展示时关联 dev_bom_type 查名
+        if (body.get("bomTypeId") != null) {
+            m.setBomTypeId(Long.valueOf(body.get("bomTypeId").toString()));
+        }
         m.setSpec((String) body.get("spec"));
-        m.setSupplierName((String) body.get("supplierName"));
         m.setSupplierIds(body.get("supplierIds") != null ? body.get("supplierIds").toString() : null);
         m.setUnit(body.get("unit") != null ? body.get("unit").toString() : "PCS");
         m.setStatus(body.get("status") != null ? Integer.valueOf(body.get("status").toString()) : 1);
@@ -161,31 +170,44 @@ public class OutsourceMaterialController {
         return R.ok();
     }
 
-    /** 批量查询：按物料名获取子物料，返回 Map<物料名, 子物料列表> */
-    @PostMapping("/components-batch")
-    public R<Map<String, Object>> componentsBatch(@RequestBody List<String> names) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        for (String name : names) {
-            Long id = mapper.findIdByName(name);
-            if (id != null) {
-                List<OutsourceMaterialComponent> comps = compMapper.selectList(
-                    new LambdaQueryWrapper<OutsourceMaterialComponent>()
-                        .eq(OutsourceMaterialComponent::getParentMaterialId, id));
-                if (!comps.isEmpty()) {
-                    result.put(name, comps.stream().map(c -> {
-                        Map<String, Object> m = new HashMap<>();
-                        m.put("childMaterialId", c.getChildMaterialId());
-                        OutsourceMaterial child = mapper.selectById(c.getChildMaterialId());
-                        m.put("childName", child != null ? child.getMaterialName() : "");
-                        m.put("childType", child != null ? child.getMaterialType() : "");
-                        m.put("quantity", c.getQuantity());
-                        m.put("lossRate", c.getLossRate());
-                        m.put("remark", c.getRemark());
-                        return m;
-                    }).toList());
-                }
+    /** 批量查询：按物料ID获取子物料和物料名，返回 {childrenMap: Map<id, 子物料列表>, nameMap: Map<id, 物料名>} */
+    @PostMapping("/components-batch-by-ids")
+    public R<Map<String, Object>> componentsBatchByIds(@RequestBody List<Long> ids) {
+        Map<String, Object> childrenMap = new LinkedHashMap<>();
+        Map<String, Object> nameMap = new LinkedHashMap<>();
+        if (ids == null || ids.isEmpty()) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("childrenMap", childrenMap);
+            result.put("nameMap", nameMap);
+            return R.ok(result);
+        }
+        // 按 ID 批量查询物料，构建 id -> 物料名 映射
+        List<OutsourceMaterial> materials = mapper.selectBatchIds(ids);
+        for (OutsourceMaterial m : materials) {
+            nameMap.put(String.valueOf(m.getId()), m.getMaterialName());
+        }
+        // 查询每个物料的子物料
+        for (Long id : ids) {
+            List<OutsourceMaterialComponent> comps = compMapper.selectList(
+                new LambdaQueryWrapper<OutsourceMaterialComponent>()
+                    .eq(OutsourceMaterialComponent::getParentMaterialId, id));
+            if (!comps.isEmpty()) {
+                childrenMap.put(String.valueOf(id), comps.stream().map(c -> {
+                    Map<String, Object> m = new HashMap<>();
+                    m.put("childMaterialId", c.getChildMaterialId());
+                    OutsourceMaterial child = mapper.selectById(c.getChildMaterialId());
+                    m.put("childName", child != null ? child.getMaterialName() : "");
+                    m.put("childType", child != null ? getBomTypeNameById(child.getBomTypeId()) : "");
+                    m.put("quantity", c.getQuantity());
+                    m.put("lossRate", c.getLossRate());
+                    m.put("remark", c.getRemark());
+                    return m;
+                }).toList());
             }
         }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("childrenMap", childrenMap);
+        result.put("nameMap", nameMap);
         return R.ok(result);
     }
 }

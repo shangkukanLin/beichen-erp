@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
-import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel } from '@/api/material'
+import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel } from '@/api/enums'
 
 const router = useRouter()
 const route = useRoute()
@@ -24,11 +24,14 @@ const inventoryWarehouses = ref<any[]>([])
 const allOutsourceWarehouses = ref<any[]>([])
 const combinedFromWhs = computed(() => [...inventoryWarehouses.value, ...allOutsourceWarehouses.value])
 const materialOptions = ref<any[]>([])
+const bomTypes = ref<any[]>([])
 const items = ref<any[]>([])
 const uploadFile = ref<File | null>(null)
 
-const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any) => m.materialType).filter(Boolean))] as string[])
-function materialsByType(type: string) { return materialOptions.value.filter((m: any) => m.materialType === type) }
+// 类型选择器按 bomTypeId 过滤；bomTypeId -> 类型名 映射供展示
+const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any) => m.bomTypeId).filter(Boolean))] as number[])
+function materialsByType(type: number) { return materialOptions.value.filter((m: any) => m.bomTypeId === type) }
+function typeName(id: number | undefined) { if (id == null) return '-'; const t = bomTypes.value.find((v: any) => v.id === id); return t ? t.typeName : (id as any) }
 
 async function loadAllOutsourceWarehouses() {
   try { const r = await request.get<any,any>('/outsource/warehouse/page',{params:{pageSize:500}}); allOutsourceWarehouses.value = r?.records||[] } catch {}
@@ -48,6 +51,9 @@ async function loadInventoryWarehouses() {
 async function loadMaterials() {
   try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize:500 } }); materialOptions.value = r?.records || [] } catch {}
 }
+async function loadBomTypes() {
+  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
+}
 
 function onTypeChange() { form.factoryId = undefined; form.supplierId = undefined; form.fromWarehouseId = undefined; form.toWarehouseId = undefined; outsourceWarehouses.value = []; targetOutsourceWarehouses.value = [] }
 async function onFactoryChange(id: number) {
@@ -62,12 +68,12 @@ async function onTargetFactoryChange(id: number) {
   if (id) { await loadTargetWarehouses(id); if (targetOutsourceWarehouses.value.length > 0) form.toWarehouseId = targetOutsourceWarehouses.value[0].id }
 }
 
-function addItem() { items.value.push({ material_id: undefined, material_name: '', material_type: '', unit: '', unit_price: '', quantity: undefined, qualityType: QualityType.GOOD }) }
+function addItem() { items.value.push({ material_id: undefined, material_name: '', bomTypeId: undefined, unit: '', unit_price: '', quantity: undefined, qualityType: QualityType.GOOD }) }
 function removeItem(i: number) { items.value.splice(i, 1) }
 function onTypeChangeMtl(idx: number) { items.value[idx].material_id = undefined; items.value[idx].material_name = ''; items.value[idx].unit = '' }
 function onMaterialSelect(idx: number, mid: number) {
   const m = materialOptions.value.find((v: any) => v.id === mid)
-  if (m) { items.value[idx].material_name = m.materialName; items.value[idx].material_type = m.materialType; items.value[idx].unit = m.unit; items.value[idx].material_id = m.id }
+  if (m) { items.value[idx].material_name = m.materialName; items.value[idx].bomTypeId = m.bomTypeId; items.value[idx].unit = m.unit; items.value[idx].material_id = m.id }
   // 自动查询加权平均单价
   if (form.factoryId && m) {
     request.get<any,any>('/outsource/delivery/material-weighted-price', { params: { factoryId: form.factoryId, materialName: m.materialName } }).then((r: any) => {
@@ -102,7 +108,7 @@ async function handleSubmit() {
   } finally { saving.value = false }
 }
 
-onMounted(() => { loadFactories(); loadAllOutsourceWarehouses(); loadMaterials(); loadInventoryWarehouses() })
+onMounted(() => { loadFactories(); loadAllOutsourceWarehouses(); loadMaterials(); loadBomTypes(); loadInventoryWarehouses() })
 </script>
 
 <template>
@@ -131,8 +137,8 @@ onMounted(() => { loadFactories(); loadAllOutsourceWarehouses(); loadMaterials()
       <template #header><span style="font-weight:600">物料明细</span></template>
       <el-button type="primary" size="small" @click="addItem" style="margin-bottom:8px">+ 添加物料</el-button>
       <el-table :data="items" border size="small">
-        <el-table-column label="物料类型" width="110"><template #default="{row,$index}"><el-select v-model="row.material_type" filterable style="width:100%" clearable @change="onTypeChangeMtl($index)"><el-option v-for="t in uniqueTypes" :key="t" :label="t" :value="t" /></el-select></template></el-table-column>
-        <el-table-column label="物料名称" min-width="140"><template #default="{row,$index}"><el-select v-model="row.material_id" filterable style="width:100%" :disabled="!row.material_type" @change="(v: any) => { if (v === ADD_MARKER) { row.material_id = undefined; router.push('/material'); return } onMaterialSelect($index, v) }"><el-option v-for="m in materialsByType(row.material_type)" :key="m.id" :label="m.materialName" :value="m.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></template></el-table-column>
+        <el-table-column label="物料类型" width="110"><template #default="{row,$index}"><el-select v-model="row.bomTypeId" filterable style="width:100%" clearable @change="onTypeChangeMtl($index)"><el-option v-for="t in uniqueTypes" :key="t" :label="typeName(t)" :value="t" /></el-select></template></el-table-column>
+        <el-table-column label="物料名称" min-width="140"><template #default="{row,$index}"><el-select v-model="row.material_id" filterable style="width:100%" :disabled="!row.bomTypeId" @change="(v: any) => { if (v === ADD_MARKER) { row.material_id = undefined; router.push('/material'); return } onMaterialSelect($index, v) }"><el-option v-for="m in materialsByType(row.bomTypeId)" :key="m.id" :label="m.materialName" :value="m.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></template></el-table-column>
         <el-table-column label="单位" width="70"><template #default="{row}">{{row.unit}}</template></el-table-column>
         <el-table-column label="单价" width="100"><template #default="{row}"><el-input v-model="row.unit_price" size="small" placeholder="单价" /></template></el-table-column>
         <el-table-column label="数量" width="120"><template #default="{row}"><el-input v-model="row.quantity" size="small" placeholder="数量" /></template></el-table-column>
