@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 import java.util.List;
 
 /**
- * 研发采购记录管理
+ * 研发项目物料管理
  */
 @RestController
 @RequestMapping("/api/dev/purchase-item")
@@ -17,7 +17,7 @@ public class DevPurchaseItemController {
 
     private final DevPurchaseItemService devPurchaseItemService;
 
-    /** 获取项目的采购记录列表 */
+    /** 获取项目的项目物料列表 */
     @GetMapping("/project/{projectId}")
     public R<List<DevPurchaseItem>> list(@PathVariable Long projectId) {
         return R.ok(devPurchaseItemService.lambdaQuery()
@@ -26,14 +26,14 @@ public class DevPurchaseItemController {
                 .list());
     }
 
-    /** 新增采购记录 */
+    /** 新增项目物料 */
     @PostMapping
     public R<DevPurchaseItem> add(@RequestBody DevPurchaseItem item) {
         devPurchaseItemService.save(item);
         return R.ok(item);
     }
 
-    /** 修改采购记录 */
+    /** 修改项目物料 */
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable Long id, @RequestBody DevPurchaseItem item) {
         item.setId(id);
@@ -41,7 +41,7 @@ public class DevPurchaseItemController {
         return R.ok();
     }
 
-    /** 删除采购记录 */
+    /** 删除项目物料 */
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
         devPurchaseItemService.removeById(id);

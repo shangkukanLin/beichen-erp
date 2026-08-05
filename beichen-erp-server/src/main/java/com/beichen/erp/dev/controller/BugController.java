@@ -39,16 +39,16 @@ public class BugController {
     }
 
     /** 修改Bug */
-    @PutMapping("/bug/{id}")
-    public R<Void> update(@PathVariable Long id, @RequestBody Bug bug) {
+    @PutMapping("/{projectId}/bug/{id}")
+    public R<Void> update(@PathVariable Long projectId, @PathVariable Long id, @RequestBody Bug bug) {
         bug.setId(id);
         bugService.updateById(bug);
         return R.ok();
     }
 
     /** 删除Bug */
-    @DeleteMapping("/bug/{id}")
-    public R<Void> delete(@PathVariable Long id) {
+    @DeleteMapping("/{projectId}/bug/{id}")
+    public R<Void> delete(@PathVariable Long projectId, @PathVariable Long id) {
         bugService.removeById(id);
         return R.ok();
     }

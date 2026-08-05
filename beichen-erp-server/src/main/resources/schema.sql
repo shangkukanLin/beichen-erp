@@ -318,7 +318,7 @@ CREATE TABLE IF NOT EXISTS outsource_material_order_item (
 
 CREATE TABLE IF NOT EXISTS outsource_warehouse (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '仓库ID',
-    factory_id BIGINT COMMENT '工厂ID',
+    factory_id BIGINT COMMENT '工厂ID（关联 supplier.id）',
     warehouse_name VARCHAR(100) NOT NULL COMMENT '仓库名称',
     address VARCHAR(200) COMMENT '仓库地址',
     contact VARCHAR(50) COMMENT '联系人',
@@ -329,7 +329,8 @@ CREATE TABLE IF NOT EXISTS outsource_warehouse (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_factory_id (factory_id),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+    CONSTRAINT fk_warehouse_supplier FOREIGN KEY (factory_id) REFERENCES supplier (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协仓库表';
 
 CREATE TABLE IF NOT EXISTS outsource_warehouse_stock (
@@ -341,7 +342,8 @@ CREATE TABLE IF NOT EXISTS outsource_warehouse_stock (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_material_id (material_id),
-    UNIQUE KEY uk_warehouse_material_quality (warehouse_id, material_id, quality_type)
+    UNIQUE KEY uk_warehouse_material_quality (warehouse_id, material_id, quality_type),
+    CONSTRAINT fk_stock_warehouse FOREIGN KEY (warehouse_id) REFERENCES outsource_warehouse (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协仓库库存表';
 
 CREATE TABLE IF NOT EXISTS outsource_stock_log (
@@ -552,7 +554,7 @@ CREATE TABLE IF NOT EXISTS dev_purchase_item (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_project_id (project_id),
     INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发采购记录表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目物料表';
 
 CREATE TABLE IF NOT EXISTS dev_bom (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'BOM ID',

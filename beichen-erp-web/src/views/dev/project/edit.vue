@@ -272,7 +272,7 @@ const bugListFilter = ref('全部')
 const filteredBugs = computed(() => {
   let list = bugList.value
   if (bugListFilter.value !== '全部') list = list.filter(b => b.bugType === bugListFilter.value)
-  return { active: list.filter(b => b.status !== '已关闭'), closed: list.filter(b => b.status === '已关闭') }
+  return { active: list.filter(b => b.status !== BugStatus.CLOSED), closed: list.filter(b => b.status === BugStatus.CLOSED) }
 })
 const bugDialogVisible = ref(false)
 const bugForm = reactive<BugDTO>({ title: '', severity: SeverityType.NORMAL, bugType: BugTypeEnum.DISPLAY, status: BugStatus.OPEN, description: '' })
@@ -331,7 +331,7 @@ async function handleDrawingSubmit() {
 function downloadFile(url: string) { window.open(url) }
 async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(projectId, row.id!); ElMessage.success('已删除'); loadDrawings() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
-// ===================== 采购记录 =====================
+// ===================== 项目物料 =====================
 interface DevPurchaseItem {
   id?: number
   projectId?: number
@@ -359,7 +359,7 @@ async function loadDevMaterials() {
   try {
     const res = await request.get<unknown, DevPurchaseItem[]>(`/dev/purchase-item/project/${projectId}`)
     devMaterialList.value = res || []
-  } catch (e: any) { console.warn('加载采购记录失败', e?.message || e) }
+  } catch (e: any) { console.warn('加载项目物料失败', e?.message || e) }
 }
 
 function handleAddDevMaterial() {
@@ -621,11 +621,14 @@ function onNameBlur() {
         </el-card>
       </el-tab-pane>
 
-      <!-- 采购记录 Tab -->
-      <el-tab-pane label="采购记录" name="material">
+      <!-- 项目物料 Tab -->
+      <el-tab-pane label="项目物料" name="material">
         <el-card shadow="never">
+          <div style="margin-bottom:8px;color:#909399;font-size:12px">
+            仅记录项目研发自购用料（如机板、原屏幕），与 BOM 表、委外物料无关
+          </div>
           <div style="margin-bottom:8px">
-            <el-button type="primary" size="small" @click="handleAddDevMaterial">+ 新增采购记录</el-button>
+            <el-button type="primary" size="small" @click="handleAddDevMaterial">+ 新增项目用料</el-button>
           </div>
           <el-table :data="devMaterialList" border size="small">
             <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
@@ -754,8 +757,8 @@ function onNameBlur() {
       <template #footer><el-button @click="drawingVisible=false">取消</el-button><el-button type="primary" :loading="uploading" @click="handleDrawingSubmit">确定</el-button></template>
     </el-dialog>
 
-    <!-- 采购记录弹窗 -->
-    <el-dialog v-model="devMaterialVisible" :title="isDevMaterialEdit ? '编辑采购记录' : '新增采购记录'" width="520px">
+    <!-- 项目物料弹窗 -->
+    <el-dialog v-model="devMaterialVisible" :title="isDevMaterialEdit ? '编辑项目物料' : '新增项目用料'" width="520px">
       <el-form :model="devMaterialForm" label-width="80px">
         <el-row :gutter="12">
           <el-col :span="14"><el-form-item label="名称"><el-input v-model="devMaterialForm.name" /></el-form-item></el-col>

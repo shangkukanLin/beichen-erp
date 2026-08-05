@@ -9,8 +9,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 研发采购记录实体
- * <p>记录研发项目中购买的物料（如手机等），用于抓数据等研发活动</p>
+ * 研发项目物料实体
+ * <p>记录研发项目中自购的用料（如机板、原屏幕等），用于研发活动，与 BOM 表、委外物料无关</p>
  * <p>对应数据表 dev_purchase_item</p>
  */
 @Data

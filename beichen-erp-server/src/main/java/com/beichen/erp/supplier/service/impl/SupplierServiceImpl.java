@@ -13,7 +13,9 @@ import com.beichen.erp.supplier.mapper.SupplierMapper;
 import com.beichen.erp.supplier.mapper.SupplierTypeRefMapper;
 import com.beichen.erp.supplier.service.SupplierService;
 import com.beichen.erp.outsource.entity.OutsourceWarehouse;
+import com.beichen.erp.outsource.entity.OutsourceWarehouseStock;
 import com.beichen.erp.outsource.mapper.OutsourceWarehouseMapper;
+import com.beichen.erp.outsource.mapper.OutsourceWarehouseStockMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.dao.DuplicateKeyException;
@@ -33,6 +35,7 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
     private final SupplierMapper supplierMapper;
     private final SupplierTypeRefMapper typeRefMapper;
     private final OutsourceWarehouseMapper warehouseMapper;
+    private final OutsourceWarehouseStockMapper stockMapper;
     private final JdbcTemplate jdbcTemplate;
 
     @Override
@@ -132,21 +135,19 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         // 保存类型关联
         saveTypeRefs(supplier.getId(), typeCodes);
 
-        // factory 自动创建仓库
-        if (typeCodes.contains("factory")) {
-            Long existCount = warehouseMapper.selectCount(
-                new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, supplier.getId()));
-            if (existCount == null || existCount == 0) {
-                OutsourceWarehouse wh = new OutsourceWarehouse();
-                wh.setFactoryId(supplier.getId());
-                wh.setWarehouseName(supplier.getName() + "仓库");
-                wh.setAddress(supplier.getAddress());
-                wh.setContact(supplier.getContact());
-                wh.setPhone(supplier.getPhone());
-                wh.setStatus(1);
-                if (cid != null && cid > 0) wh.setCompanyId(cid);
-                warehouseMapper.insert(wh);
-            }
+        // 新建供应商自动创建委外仓库（不区分类型）
+        Long existCount = warehouseMapper.selectCount(
+            new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, supplier.getId()));
+        if (existCount == null || existCount == 0) {
+            OutsourceWarehouse wh = new OutsourceWarehouse();
+            wh.setFactoryId(supplier.getId());
+            wh.setWarehouseName(supplier.getName() + "仓库");
+            wh.setAddress(supplier.getAddress());
+            wh.setContact(supplier.getContact());
+            wh.setPhone(supplier.getPhone());
+            wh.setStatus(1);
+            if (cid != null && cid > 0) wh.setCompanyId(cid);
+            warehouseMapper.insert(wh);
         }
     }
 
@@ -170,6 +171,14 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         supplier.setCode(exist.getCode());
         supplierMapper.updateById(supplier);
 
+        // 供应商改名时同步仓库名称（仓库名 = 供应商名 + "仓库"）
+        if (!Objects.equals(exist.getName(), dto.getName())) {
+            OutsourceWarehouse whUpdate = new OutsourceWarehouse();
+            whUpdate.setWarehouseName(dto.getName() + "仓库");
+            warehouseMapper.update(whUpdate,
+                    new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, dto.getId()));
+        }
+
         // 同步类型关联
         List<String> typeCodes = dto.getTypeCodes() != null ? dto.getTypeCodes() : Collections.emptyList();
         typeRefMapper.delete(new LambdaQueryWrapper<SupplierTypeRef>().eq(SupplierTypeRef::getSupplierId, dto.getId()));
@@ -191,6 +200,13 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         }
         // 删除类型关联
         typeRefMapper.delete(new LambdaQueryWrapper<SupplierTypeRef>().eq(SupplierTypeRef::getSupplierId, id));
+        // 级联删除该供应商的委外仓库及库存（防止孤儿数据；数据库 fk_warehouse_supplier/fk_stock_warehouse 也兜底级联）
+        List<OutsourceWarehouse> whs = warehouseMapper.selectList(
+                new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, id));
+        for (OutsourceWarehouse wh : whs) {
+            stockMapper.delete(new LambdaQueryWrapper<OutsourceWarehouseStock>().eq(OutsourceWarehouseStock::getWarehouseId, wh.getId()));
+        }
+        warehouseMapper.delete(new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, id));
         supplierMapper.deleteById(id);
     }
 
@@ -212,10 +228,6 @@ public class SupplierServiceImpl extends ServiceImpl<SupplierMapper, Supplier> i
         try {
             int pc = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM supplier_product WHERE supplier_id = ?", Integer.class, id);
             if (pc > 0) associations.put("供应产品", pc);
-        } catch (Exception ignored) {}
-        try {
-            int wc = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outsource_warehouse WHERE factory_id = ?", Integer.class, id);
-            if (wc > 0) associations.put("委外仓库", wc);
         } catch (Exception ignored) {}
         try {
             int oc = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outsource_order WHERE factory_id = ?", Integer.class, id);
