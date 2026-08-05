@@ -199,12 +199,18 @@ CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     order_id BIGINT NOT NULL COMMENT '订单ID',
     warehouse_id BIGINT DEFAULT NULL COMMENT '收货仓库ID',
     delivery_date DATE COMMENT '发货日期',
-    product_name VARCHAR(100) COMMENT '产品名称',
+    product_id BIGINT COMMENT '产品ID',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
+    a_qty DECIMAL(18,4) DEFAULT 0 COMMENT 'A规数量',
+    b_qty DECIMAL(18,4) DEFAULT 0 COMMENT 'B规数量',
+    c_qty DECIMAL(18,4) DEFAULT 0 COMMENT 'C规数量',
+    defect_qty DECIMAL(18,4) DEFAULT 0 COMMENT '不良数量',
+    source_type VARCHAR(20) DEFAULT 'DELIVERY' COMMENT '来源类型: DELIVERY普通交货/RETURN_DEFECT委外退货/AFTER_SALE收费售后',
     tracking_no VARCHAR(100) COMMENT '物流单号',
     remark VARCHAR(255) COMMENT '备注',
     attach_url VARCHAR(500) COMMENT '附件URL',
     status VARCHAR(20) DEFAULT 'NORMAL' COMMENT '状态: NORMAL/REVERSED',
+    is_reverse TINYINT DEFAULT 0 COMMENT '是否退不良红冲记录：1=退不良(数量为负) / 0=普通交货',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_order_id (order_id),
@@ -462,17 +468,18 @@ CREATE TABLE IF NOT EXISTS inventory_warehouse (
 CREATE TABLE IF NOT EXISTS inventory_warehouse_stock (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     warehouse_id BIGINT NOT NULL COMMENT '仓库ID',
-    product_name VARCHAR(100) NOT NULL COMMENT '产品名称',
+    product_id BIGINT DEFAULT NULL COMMENT '产品ID(关联product表)',
     material_id BIGINT DEFAULT NULL COMMENT '物料ID(关联material表)',
+    quality_type VARCHAR(20) DEFAULT 'A' COMMENT '品质等级(A/B/C/DEFECT)，对应成品等级 ProductQualityType',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '库存数量',
     available_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '可用数量(预留,目前等于quantity)',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_warehouse_id (warehouse_id),
-    INDEX idx_product_name (product_name),
+    INDEX idx_product_id (product_id),
     INDEX idx_material_id (material_id),
-    UNIQUE KEY uk_warehouse_product_company (warehouse_id, product_name, company_id),
+    UNIQUE KEY uk_warehouse_product_quality_company (warehouse_id, product_id, quality_type, company_id),
     UNIQUE KEY uk_warehouse_material_company (warehouse_id, material_id, company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='进销存仓库库存表';
 
@@ -846,12 +853,54 @@ CREATE TABLE IF NOT EXISTS sale_outbound_item (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售出库明细表';
 
+-- ==================== 销售退货单（客户退回不良品，入库增库存） ====================
+
+CREATE TABLE IF NOT EXISTS sale_return (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售退货单ID',
+    code VARCHAR(30) COMMENT '退货单号',
+    customer_id BIGINT COMMENT '客户ID',
+    customer_name VARCHAR(100) COMMENT '客户名称',
+    warehouse_id BIGINT COMMENT '退货入库仓库ID',
+    return_date DATE COMMENT '退货日期',
+    status INT DEFAULT 0 COMMENT '状态: 0=草稿 1=已审核 2=已作废',
+    total_amount DECIMAL(18,2) DEFAULT 0 COMMENT '退货总金额',
+    remark VARCHAR(500) COMMENT '备注',
+    auditor_id BIGINT COMMENT '审核人ID',
+    auditor_name VARCHAR(50) COMMENT '审核人姓名',
+    audit_time DATETIME COMMENT '审核时间',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_customer_id (customer_id),
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售退货单主表';
+
+CREATE TABLE IF NOT EXISTS sale_return_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '退货单明细ID',
+    return_id BIGINT COMMENT '退货单ID',
+    product_id BIGINT COMMENT '产品ID',
+    product_name VARCHAR(100) COMMENT '产品名称',
+    quality_type VARCHAR(10) DEFAULT 'DEFECT' COMMENT '品质等级: 固定DEFECT(不良品)',
+    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '退货数量',
+    unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
+    amount DECIMAL(18,2) DEFAULT 0 COMMENT '金额',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_return_id (return_id),
+    INDEX idx_product_id (product_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售退货单明细表';
+
 -- ==================== 库存扩展（流水/盘点/调拨/其他出入库） ====================
 
 CREATE TABLE IF NOT EXISTS inventory_stock_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '库存流水ID',
     warehouse_id BIGINT COMMENT '仓库ID',
     product_id BIGINT COMMENT '产品ID',
+    quality_type VARCHAR(20) COMMENT '品质等级(A/B/C/DEFECT)',
     change_type VARCHAR(30) COMMENT '变动类型(StockChangeType枚举code: PURCHASE_IN/SALE_OUT/MOVE_OUT等)',
     change_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变动数量(正入库/负出库)',
     before_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变动前数量',
@@ -902,6 +951,40 @@ CREATE TABLE IF NOT EXISTS inventory_warehouse_move_item (
     INDEX idx_product_id (product_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品移仓单明细表';
+
+-- ==================== 品质重分类单主表 ====================
+CREATE TABLE IF NOT EXISTS inventory_stock_reclass (
+    id                BIGINT AUTO_INCREMENT PRIMARY KEY  COMMENT '主键ID',
+    code              VARCHAR(50) NOT NULL               COMMENT '重分类单号(FL-yyyyMMdd-NNN)',
+    warehouse_id      BIGINT NOT NULL                   COMMENT '仓库ID(关联仓库表)',
+    reclass_date      DATE NOT NULL                     COMMENT '业务日期',
+    status            VARCHAR(20) DEFAULT '草稿'         COMMENT '状态: 草稿/已审核/已作废',
+    remark            VARCHAR(500)                      COMMENT '备注',
+    company_id        BIGINT DEFAULT NULL               COMMENT '公司ID',
+    create_time       DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='品质重分类单主表';
+
+-- ==================== 品质重分类单明细表 ====================
+CREATE TABLE IF NOT EXISTS inventory_stock_reclass_item (
+    id           BIGINT AUTO_INCREMENT PRIMARY KEY  COMMENT '主键ID',
+    reclass_id   BIGINT NOT NULL                   COMMENT '重分类单ID(关联主表)',
+    product_id   BIGINT                            COMMENT '产品ID(关联产品表)',
+    product_name VARCHAR(200) NOT NULL             COMMENT '产品名称',
+    from_quality VARCHAR(10) NOT NULL              COMMENT '源等级: A/B/C/DEFECT',
+    to_quality   VARCHAR(10) NOT NULL              COMMENT '目标等级: A/B/C/DEFECT',
+    quantity     DECIMAL(18,4) DEFAULT 0           COMMENT '重分类数量',
+    remark       VARCHAR(255)                     COMMENT '备注',
+    company_id   BIGINT DEFAULT NULL              COMMENT '公司ID',
+    create_time  DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_reclass_id (reclass_id),
+    INDEX idx_product_id (product_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='品质重分类单明细表';
 
 CREATE TABLE IF NOT EXISTS inventory_other_io (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '其他出入库单ID',

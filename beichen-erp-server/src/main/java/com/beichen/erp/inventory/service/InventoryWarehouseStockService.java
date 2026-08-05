@@ -5,6 +5,7 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
+import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.inventory.entity.InventoryStockLog;
 import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
 import com.beichen.erp.inventory.mapper.InventoryStockLogMapper;
@@ -24,49 +25,49 @@ public class InventoryWarehouseStockService {
 
     /** 入库：增加库存，不存在则新建 */
     @Transactional
-    public void stockIn(Long warehouseId, String productName, BigDecimal quantity) {
-        changeStock(warehouseId, productName, quantity, StockChangeType.PURCHASE_IN,
-                null, (RelatedBillType) null, null, null, null, "A");
+    public void stockIn(Long warehouseId, Long productId, BigDecimal quantity) {
+        changeStock(warehouseId, productId, quantity, StockChangeType.PURCHASE_IN,
+                null, (RelatedBillType) null, null, null, ProductQualityType.A.name());
     }
 
-    /**
-     * 通用库存变更：按 (warehouseId, productId, qualityType) 定位唯一库存行。
-     * qualityType 默认"A规"，传null时兜底为"A"。
-     */
+    /** 旧签名兼容（传productName+productId） */
     @Transactional
     public void changeStock(Long warehouseId, String productName, BigDecimal quantity,
                             StockChangeType type, String relatedBillNo, RelatedBillType relatedBillType,
                             Long productId, String spec, Long relatedBillId, String qualityType) {
+        changeStock(warehouseId, productId, quantity, type, relatedBillNo, relatedBillType, spec, relatedBillId, qualityType);
+    }
+
+    /**
+     * 通用库存变更：按 (warehouseId, productId, qualityType) 定位唯一库存行。
+     * qualityType 为成品等级（见 ProductQualityType：A/B/C/DEFECT），传null时兜底为A规。
+     */
+    @Transactional
+    public void changeStock(Long warehouseId, Long productId, BigDecimal quantity,
+                            StockChangeType type, String relatedBillNo, RelatedBillType relatedBillType,
+                            String spec, Long relatedBillId, String qualityType) {
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) == 0) return;
-        if (qualityType == null) qualityType = "A";
+        if (qualityType == null) qualityType = ProductQualityType.A.name();
 
         LambdaQueryWrapper<InventoryWarehouseStock> w = new LambdaQueryWrapper<InventoryWarehouseStock>()
-                .eq(InventoryWarehouseStock::getWarehouseId, warehouseId);
-        if (productId != null) {
-            w.eq(InventoryWarehouseStock::getProductId, productId);
-        } else {
-            w.eq(InventoryWarehouseStock::getProductName, productName);
-        }
-        w.eq(InventoryWarehouseStock::getQualityType, qualityType);
+                .eq(InventoryWarehouseStock::getWarehouseId, warehouseId)
+                .eq(InventoryWarehouseStock::getProductId, productId)
+                .eq(InventoryWarehouseStock::getQualityType, qualityType);
         InventoryWarehouseStock stock = mapper.selectOne(w);
 
         BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
         BigDecimal after = before.add(quantity);
         if (after.compareTo(BigDecimal.ZERO) < 0) {
-            throw new BusinessException("库存不足，无法出库："
-                    + (productId != null ? ("产品ID=" + productId) : productName));
+            throw new BusinessException("库存不足，无法出库：产品ID=" + productId);
         }
         if (stock != null) {
             stock.setQuantity(after);
             stock.setAvailableQuantity(after);
-            if (productName != null) stock.setProductName(productName);
-            if (productId != null) stock.setProductId(productId);
             stock.setQualityType(qualityType);
             mapper.updateById(stock);
         } else {
             stock = new InventoryWarehouseStock();
             stock.setWarehouseId(warehouseId);
-            stock.setProductName(productName);
             stock.setProductId(productId);
             stock.setQualityType(qualityType);
             stock.setQuantity(after);

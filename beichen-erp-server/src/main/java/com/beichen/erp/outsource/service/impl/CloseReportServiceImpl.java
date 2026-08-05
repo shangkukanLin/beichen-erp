@@ -82,11 +82,11 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
                 .orderByDesc(OutsourceOrderDelivery::getId));
         result.put("deliveries", deliveryList);
 
-        // 总交货量（按产品名汇总）
-        Map<String, BigDecimal> deliveredByProduct = new HashMap<>();
+        // 总交货量（按产品ID汇总，再通过产品列表查名）
+        Map<Long, BigDecimal> deliveredByProduct = new HashMap<>();
         for (OutsourceOrderDelivery d : deliveryList) {
-            String pn = d.getProductName() != null ? d.getProductName() : "";
-            deliveredByProduct.merge(pn, d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO, BigDecimal::add);
+            if (d.getProductId() == null) continue;
+            deliveredByProduct.merge(d.getProductId(), d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO, BigDecimal::add);
         }
 
         // 获取该工厂的所有委外仓库ID
@@ -148,7 +148,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     private Map<String, Object> buildMaterialRow(OutsourceOrder order, OutsourceOrderMaterial mat,
                                                   List<OutsourceOrderDelivery> deliveryList,
                                                   List<OutsourceOrderProduct> products,
-                                                  Map<String, BigDecimal> deliveredByProduct,
+                                                  Map<Long, BigDecimal> deliveredByProduct,
                                                   List<Long> factoryWhIds) {
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("materialName", getMaterialNameById(mat.getMaterialId()));
@@ -180,7 +180,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         // 出货消耗 = SUM(该产品交货数 × 单套用量)
         BigDecimal shippedTotal = BigDecimal.ZERO;
         if (ownerProduct != null) {
-            BigDecimal pDelivered = deliveredByProduct.getOrDefault(ownerProduct.getProductName() != null ? ownerProduct.getProductName() : "", BigDecimal.ZERO);
+            BigDecimal pDelivered = deliveredByProduct.getOrDefault(ownerProduct.getId(), BigDecimal.ZERO);
             if (pDelivered.compareTo(BigDecimal.ZERO) > 0) {
                 shippedTotal = pDelivered.multiply(qps);
             }

@@ -9,6 +9,7 @@ import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
+import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.common.QualityType;
@@ -112,34 +113,36 @@ public class OrderDeliveryController {
     @Transactional(rollbackFor = Exception.class)
     public R<Map<String, Object>> create(@RequestBody OutsourceOrderDelivery delivery,
                                          @RequestParam(defaultValue = "false") boolean forceDelivery) {
-        log.info("新增交货: orderId={}, product={}, qty={}, warehouseId={}, force={}",
-                delivery.getOrderId(), delivery.getProductName(), delivery.getQuantity(),
-                delivery.getWarehouseId(), forceDelivery);
+        log.info("【调试】delivery: aQty={}, bQty={}, cQty={}, defectQty={}, quantity={}, productId={}",
+                delivery.getAQty(), delivery.getBQty(), delivery.getCQty(), delivery.getDefectQty(),
+                delivery.getQuantity(), delivery.getProductId());
         if (delivery.getOrderId() == null) throw new BusinessException("加工单ID不能为空");
+        if (delivery.getProductId() == null) throw new BusinessException("产品ID不能为空");
         OutsourceOrder order = orderService.getById(delivery.getOrderId());
         if (order == null) throw new BusinessException("加工单不存在");
         if (!OutsourceOrderStatus.PRODUCING.name().equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可录入交货");
-        if (delivery.getProductName() == null || delivery.getProductName().isBlank())
-            throw new BusinessException("产品名称不能为空");
         if (delivery.getQuantity() == null || delivery.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
             throw new BusinessException("交货数量必须大于0");
+        // 强制四等级校验
+        BigDecimal a = delivery.getAQty() == null ? BigDecimal.ZERO : delivery.getAQty();
+        BigDecimal b = delivery.getBQty() == null ? BigDecimal.ZERO : delivery.getBQty();
+        BigDecimal c = delivery.getCQty() == null ? BigDecimal.ZERO : delivery.getCQty();
+        BigDecimal d = delivery.getDefectQty() == null ? BigDecimal.ZERO : delivery.getDefectQty();
+        BigDecimal gradeSum = a.add(b).add(c).add(d);
+        if (gradeSum.compareTo(BigDecimal.ZERO) <= 0)
+            throw new BusinessException("请至少填写一个等级的数量（A规/B规/C规/不良）");
+        if (gradeSum.compareTo(delivery.getQuantity()) != 0)
+            throw new BusinessException("各等级数量之和(" + gradeSum + ")必须等于交货总数量(" + delivery.getQuantity() + ")");
 
         List<OutsourceOrderProduct> products = orderService.getProducts(delivery.getOrderId());
-        log.info("加工单产品列表: {}", products.stream()
-            .map(p -> "name=" + p.getProductName() + ",id=" + p.getId() + ",projectId=" + p.getProjectId() + ",qty=" + p.getQuantity())
-            .toList());
         OutsourceOrderProduct matchedProduct = products.stream()
-            .filter(p -> delivery.getProductId() != null && delivery.getProductId().equals(p.getId()))
+            .filter(p -> delivery.getProductId().equals(p.getId()))
             .findFirst().orElse(null);
-        if (matchedProduct == null && delivery.getProductName() != null) {
-            matchedProduct = products.stream()
-                .filter(p -> delivery.getProductId() != null && delivery.getProductId().equals(p.getId()))
-                .findFirst().orElse(null);
-            if (matchedProduct != null) delivery.setProductId(matchedProduct.getId());
-        }
         if (matchedProduct == null) throw new BusinessException("加工单中未找到该产品");
         delivery.setProductId(matchedProduct.getId());
-        log.info("匹配产品: id={}, projectId={}, quantity={}", matchedProduct.getId(), matchedProduct.getProjectId(), matchedProduct.getQuantity());
+        log.info("新增交货: orderId={}, productId={}, productName={}, qty={}, warehouseId={}, force={}",
+                delivery.getOrderId(), matchedProduct.getId(), matchedProduct.getProductName(),
+                delivery.getQuantity(), delivery.getWarehouseId(), forceDelivery);
 
         // 加载物料需求
         List<MaterialReq> materialReqs = loadMaterialRequirements(matchedProduct);
@@ -187,7 +190,7 @@ public class OrderDeliveryController {
                 .filter(p -> delivery.getProductId() != null && delivery.getProductId().equals(p.getId()))
                 .findFirst().orElse(null);
             if (matchedProduct == null) throw new BusinessException("加工单中未找到该产品");
-            applyMaterialDeduction(order, matchedProduct, delivery.getQuantity(), delivery.getProductName());
+            applyMaterialDeduction(order, matchedProduct, delivery.getQuantity(), matchedProduct.getProductName());
             if (delivery.getWarehouseId() != null) {
                 addInventoryStock(delivery);
             }
@@ -231,7 +234,7 @@ public class OrderDeliveryController {
         if (amount.compareTo(BigDecimal.ZERO) == 0) return;
         payableHelper.createPayable(order.getFactoryId(), "委外加工交货", order.getCode(), delivery.getId(),
             amount, delivery.getDeliveryDate() != null ? delivery.getDeliveryDate() : LocalDate.now(),
-            "交货 - " + order.getCode() + " - " + delivery.getProductName());
+            "交货 - " + order.getCode() + " - " + product.getProductName());
     }
 
     /** 修改交货记录 — 回滚旧库存 + 应用新库存 */
@@ -289,8 +292,8 @@ public class OrderDeliveryController {
         if (!OutsourceOrderStatus.PRODUCING.name().equals(order.getStatus()) && !OutsourceOrderStatus.FINISHED.name().equals(order.getStatus()))
             throw new BusinessException("只有生产中或已完成的加工单可退不良");
 
-        String productName = (String) body.get("productName");
         Long productId = body.get("productId") != null ? Long.valueOf(body.get("productId").toString()) : null;
+        if (productId == null) throw new BusinessException("产品ID不能为空");
         BigDecimal defectQty = new BigDecimal(body.get("quantity").toString());
         Long warehouseId = body.get("warehouseId") != null
                 ? Long.valueOf(body.get("warehouseId").toString()) : null;
@@ -299,9 +302,10 @@ public class OrderDeliveryController {
         // 匹配产品
         List<OutsourceOrderProduct> products = orderService.getProducts(orderId);
         OutsourceOrderProduct matchedProduct = products.stream()
-            .filter(p -> productId != null ? productId.equals(p.getId()) : productName != null && productName.equals(p.getProductName()))
+            .filter(p -> productId.equals(p.getId()))
             .findFirst().orElse(null);
         if (matchedProduct == null) throw new BusinessException("加工单中未找到该产品");
+        String productName = matchedProduct.getProductName();
 
         // 校验退不良数量不超过已交数量
         List<OutsourceOrderDelivery> allDeliveries = deliveryMapper.selectList(
@@ -317,7 +321,7 @@ public class OrderDeliveryController {
         // 校验仓库成品库存
         LambdaQueryWrapper<InventoryWarehouseStock> stockW = new LambdaQueryWrapper<InventoryWarehouseStock>()
                 .eq(InventoryWarehouseStock::getWarehouseId, warehouseId)
-                .eq(InventoryWarehouseStock::getProductName, productName);
+                .eq(InventoryWarehouseStock::getProductId, matchedProduct.getId());
         BigDecimal stockQty = inventoryStockMapper.selectList(stockW)
                 .stream().map(s -> s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -331,7 +335,6 @@ public class OrderDeliveryController {
         // 校验通过：仅存草稿记录（isReverse=true），库存/BOM还料/应付在审核时由 applyDefectStock 统一落账
         OutsourceOrderDelivery delivery = new OutsourceOrderDelivery();
         delivery.setOrderId(orderId);
-        delivery.setProductName(productName);
         delivery.setProductId(matchedProduct.getId());
         delivery.setQuantity(defectQty.negate());
         delivery.setDeliveryType(DeliveryType.DEFECT_RETURN.getCode());
@@ -347,19 +350,15 @@ public class OrderDeliveryController {
 
     /** 退不良审核：扣成品库存 + BOM还料 + 冲减应付 */
     private void applyDefectStock(OutsourceOrder order, OutsourceOrderDelivery delivery) {
-        String productName = delivery.getProductName();
+        String productName = getProductNameByProductId(delivery.getOrderId(), delivery.getProductId());
         BigDecimal defectQty = delivery.getQuantity().abs();
         Long warehouseId = delivery.getWarehouseId();
         if (warehouseId == null) throw new BusinessException("退不良记录缺少仓库");
 
         // 1. 扣减成品库存（写入 inventory_stock_log）
-        Long productMaterialId = null;
-        Product productMat = productMapper.selectOne(
-            new LambdaQueryWrapper<Product>().eq(Product::getName, productName));
-        if (productMat != null) productMaterialId = productMat.getId();
-        stockService.changeStock(warehouseId, productName, defectQty.negate(),
-            StockChangeType.OUTSOURCE_DEFECT_RETURN, order.getCode(), RelatedBillType.OUTSOURCE_DEFECT, productMaterialId, null, order.getId(), null);
-        log.info("退不良扣成品: {} (仓库={}) {} -> {}", productName, warehouseId, stockQtyOf(productName, warehouseId), stockQtyOf(productName, warehouseId).subtract(defectQty));
+        stockService.changeStock(warehouseId, delivery.getProductId(), defectQty.negate(),
+            StockChangeType.OUTSOURCE_DEFECT_RETURN, order.getCode(), RelatedBillType.OUTSOURCE_DEFECT, null, order.getId(), null);
+        log.info("退不良扣成品: {} (仓库={}) {} -> {}", productName, warehouseId, stockQtyOf(delivery.getProductId(), warehouseId), stockQtyOf(delivery.getProductId(), warehouseId).subtract(defectQty));
 
         // 2. 冲减应付（负数交货 → 负数应付）
         OutsourceOrderProduct matchedProduct = orderService.getProducts(delivery.getOrderId()).stream()
@@ -399,18 +398,14 @@ public class OrderDeliveryController {
 
     /** 退不良反审核：逆向成品库存 + 扣回BOM还料 + 删应付 */
     private void revertDefectStock(OutsourceOrder order, OutsourceOrderDelivery delivery) {
-        String productName = delivery.getProductName();
+        String productName = getProductNameByProductId(delivery.getOrderId(), delivery.getProductId());
         BigDecimal defectQty = delivery.getQuantity().abs();
         Long warehouseId = delivery.getWarehouseId();
         if (warehouseId == null) return;
 
         // 1. 恢复成品库存
-        Long productMaterialId = null;
-        Product productMat = productMapper.selectOne(
-            new LambdaQueryWrapper<Product>().eq(Product::getName, productName));
-        if (productMat != null) productMaterialId = productMat.getId();
-        stockService.changeStock(warehouseId, productName, defectQty,
-            StockChangeType.OUTSOURCE_DEFECT_RETURN, order.getCode(), RelatedBillType.OUTSOURCE_DEFECT, productMaterialId, null, order.getId(), null);
+        stockService.changeStock(warehouseId, delivery.getProductId(), defectQty,
+            StockChangeType.OUTSOURCE_DEFECT_RETURN, order.getCode(), RelatedBillType.OUTSOURCE_DEFECT, null, order.getId(), null);
         log.info("退不良反审核恢复成品: {} (仓库={}) +{}", productName, warehouseId, defectQty);
 
         // 2. 扣回BOM还料
@@ -442,10 +437,10 @@ public class OrderDeliveryController {
     }
 
     /** 查询某成品在某仓库的库存总量（用于日志展示） */
-    private BigDecimal stockQtyOf(String productName, Long warehouseId) {
+    private BigDecimal stockQtyOf(Long productId, Long warehouseId) {
         LambdaQueryWrapper<InventoryWarehouseStock> stockW = new LambdaQueryWrapper<InventoryWarehouseStock>()
                 .eq(InventoryWarehouseStock::getWarehouseId, warehouseId)
-                .eq(InventoryWarehouseStock::getProductName, productName);
+                .eq(InventoryWarehouseStock::getProductId, productId);
         return inventoryStockMapper.selectList(stockW)
                 .stream().map(s -> s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -508,6 +503,16 @@ public class OrderDeliveryController {
         if (materialId == null) return "";
         OutsourceMaterial m = outsourceMaterialMapper.selectById(materialId);
         return m != null ? m.getMaterialName() : "";
+    }
+
+    /** 根据 productId 从产品列表中查找产品名称 */
+    private String getProductNameByProductId(Long orderId, Long productId) {
+        if (orderId == null || productId == null) return "";
+        List<OutsourceOrderProduct> products = orderService.getProducts(orderId);
+        return products.stream()
+            .filter(p -> productId.equals(p.getId()))
+            .map(p -> p.getProductName() != null ? p.getProductName() : "")
+            .findFirst().orElse("");
     }
 
     /** 查找工厂的委外仓库 ID */
@@ -658,36 +663,42 @@ public class OrderDeliveryController {
         }
     }
 
-    /** 增加收货入库库存 */
+    /** 增加收货入库库存：按等级拆分子项分别入对应等级库存行 */
     private void addInventoryStock(OutsourceOrderDelivery delivery) {
-        log.info("开始入库: warehouseId={}, productName={}, qty={}",
-                delivery.getWarehouseId(), delivery.getProductName(), delivery.getQuantity());
-        Long productMaterialId = null;
-        Product product = productMapper.selectOne(
-            new LambdaQueryWrapper<Product>().eq(Product::getName, delivery.getProductName()));
-        if (product != null) {
-            productMaterialId = product.getId();
-            log.info("找到对应产品记录: productId={}", productMaterialId);
-        } else {
-            log.info("产品表中未找到「{}」，将按 productName 入库", delivery.getProductName());
+        String productName = getProductNameByProductId(delivery.getOrderId(), delivery.getProductId());
+        log.info("开始入库: warehouseId={}, productName={}, productId={}, 总量={}, A={}, B={}, C={}, 不良={}",
+                delivery.getWarehouseId(), productName, delivery.getProductId(), delivery.getQuantity(),
+                delivery.getAQty(), delivery.getBQty(), delivery.getCQty(), delivery.getDefectQty());
+        LinkedHashMap<String, BigDecimal> gradeMap = new LinkedHashMap<>();
+        gradeMap.put(ProductQualityType.A.name(), delivery.getAQty());
+        gradeMap.put(ProductQualityType.B.name(), delivery.getBQty());
+        gradeMap.put(ProductQualityType.C.name(), delivery.getCQty());
+        gradeMap.put(ProductQualityType.DEFECT.name(), delivery.getDefectQty());
+        for (Map.Entry<String, BigDecimal> entry : gradeMap.entrySet()) {
+            BigDecimal qty = entry.getValue();
+            if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) continue;
+            stockService.changeStock(delivery.getWarehouseId(), delivery.getProductId(),
+                qty, StockChangeType.OUTSOURCE_FINISH_IN, null, (RelatedBillType) null, null, delivery.getId(), entry.getKey());
         }
-        stockService.changeStock(delivery.getWarehouseId(), delivery.getProductName(),
-            delivery.getQuantity(), StockChangeType.OUTSOURCE_FINISH_IN, null, (RelatedBillType) null, productMaterialId, null, delivery.getId(), null);
-        log.info("入库完成: warehouseId={}, productName={}, qty={}", delivery.getWarehouseId(), delivery.getProductName(), delivery.getQuantity());
+        log.info("入库完成: warehouseId={}, productId={}", delivery.getWarehouseId(), delivery.getProductId());
     }
 
-    /** 回滚收货入库（统一走 changeStock，自动写 inventory_stock_log） */
+    /** 回滚收货入库（按等级拆分回滚） */
     private void revertInventoryStock(OutsourceOrderDelivery delivery, String orderCode) {
-        Long materialId = null;
-        Product product = productMapper.selectOne(
-            new LambdaQueryWrapper<Product>().eq(Product::getName, delivery.getProductName()));
-        if (product != null) materialId = product.getId();
-
-        stockService.changeStock(delivery.getWarehouseId(), delivery.getProductName(),
-            delivery.getQuantity().negate(), StockChangeType.OUTSOURCE_ROLLBACK, orderCode, RelatedBillType.OUTSOURCE_ORDER,
-            materialId, null, delivery.getId(), null);
-        log.info("回滚成品库存: warehouseId={}, product={}, qty=-{}",
-                delivery.getWarehouseId(), delivery.getProductName(), delivery.getQuantity());
+        String productName = getProductNameByProductId(delivery.getOrderId(), delivery.getProductId());
+        LinkedHashMap<String, BigDecimal> gradeMap = new LinkedHashMap<>();
+        gradeMap.put(ProductQualityType.A.name(), delivery.getAQty());
+        gradeMap.put(ProductQualityType.B.name(), delivery.getBQty());
+        gradeMap.put(ProductQualityType.C.name(), delivery.getCQty());
+        gradeMap.put(ProductQualityType.DEFECT.name(), delivery.getDefectQty());
+        for (Map.Entry<String, BigDecimal> entry : gradeMap.entrySet()) {
+            BigDecimal qty = entry.getValue();
+            if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) continue;
+            stockService.changeStock(delivery.getWarehouseId(), delivery.getProductId(),
+                qty.negate(), StockChangeType.OUTSOURCE_ROLLBACK, orderCode, RelatedBillType.OUTSOURCE_ORDER,
+                null, delivery.getId(), entry.getKey());
+            log.info("回滚成品库存[{}]: warehouseId={}, product={}, qty=-{}", entry.getKey(), delivery.getWarehouseId(), productName, qty);
+        }
     }
 
     /** 写入库存流水日志（变更前/后数量） */

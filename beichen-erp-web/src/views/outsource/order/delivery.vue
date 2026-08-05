@@ -19,7 +19,13 @@ const saving = ref(false)
 const uploadFile = ref<File | null>(null)
 const deliveryDate = ref(new Date().toISOString().split('T')[0])
 const warehouseId = ref<number>()
-const form = reactive({ productName: '', quantity: '', deliveryDate: new Date().toISOString().split('T')[0], trackingNo: '', remark: '', attachUrl: '' })
+const form = reactive({ productId: undefined as any, quantity: '', aQty: '', bQty: '', cQty: '', defectQty: '', deliveryDate: new Date().toISOString().split('T')[0], trackingNo: '', remark: '', attachUrl: '' })
+
+// 四等级数量合计（自动填充总数量）
+const totalGrade = computed(() => {
+  const sum = (Number(form.aQty) || 0) + (Number(form.bQty) || 0) + (Number(form.cQty) || 0) + (Number(form.defectQty) || 0)
+  return sum
+})
 
 const warehouseOptions = ref<any[]>([])
 async function loadWarehouses() {
@@ -50,7 +56,8 @@ const progress = computed(() => {
 function openAdd() {
   isEdit.value = false; editId.value = undefined
   warehouseId.value = undefined; uploadFile.value = null
-  form.productName = ''; form.quantity = ''; form.deliveryDate = new Date().toISOString().split('T')[0]
+  form.productId = undefined; form.quantity = ''; form.aQty = ''; form.bQty = ''; form.cQty = ''; form.defectQty = ''
+  form.deliveryDate = new Date().toISOString().split('T')[0]
   form.trackingNo = ''; form.remark = ''; form.attachUrl = ''
   dialogVisible.value = true
   loadWarehouses()
@@ -60,7 +67,12 @@ function openEdit(row: any) {
   isEdit.value = true; editId.value = row.id
   warehouseId.value = row.warehouseId || undefined; uploadFile.value = null
   Object.assign(form, {
-    productName: row.productName, quantity: row.quantity, deliveryDate: row.deliveryDate,
+    productId: row.productId, quantity: row.quantity,
+    aQty: row.aQty != null ? String(row.aQty) : '',
+    bQty: row.bQty != null ? String(row.bQty) : '',
+    cQty: row.cQty != null ? String(row.cQty) : '',
+    defectQty: row.defectQty != null ? String(row.defectQty) : '',
+    deliveryDate: row.deliveryDate,
     trackingNo: row.trackingNo || '', remark: row.remark || '', attachUrl: row.attachUrl || ''
   })
   dialogVisible.value = true
@@ -75,7 +87,7 @@ function handleRemoveUploadFile() { uploadFile.value = null }
 function openAttach(url: string) { window.open(url + '?inline=true') }
 
 async function handleSubmit(forceDelivery = false) {
-  if (!form.productName) { ElMessage.warning('请选择产品名称'); return }
+  if (!form.productId) { ElMessage.warning('请选择产品名称'); return }
   if (!form.quantity) { ElMessage.warning('请输入数量'); return }
   if (!warehouseId.value) { ElMessage.warning('请选择收货仓库'); return }
   saving.value = true
@@ -85,7 +97,7 @@ async function handleSubmit(forceDelivery = false) {
       const res = await request.post<any,string>('/dev/file/upload', fd)
       form.attachUrl = res as unknown as string
     }
-    const body = { ...form, orderId, warehouseId: warehouseId.value || null }
+    const body = { productId: form.productId, aQty: form.aQty, bQty: form.bQty, cQty: form.cQty, defectQty: form.defectQty, deliveryDate: form.deliveryDate, trackingNo: form.trackingNo, remark: form.remark, attachUrl: form.attachUrl, orderId, warehouseId: warehouseId.value || null, quantity: totalGrade.value || form.quantity }
     const params = forceDelivery ? { params: { forceDelivery: true } } : {}
     let res: any
     if (isEdit.value && editId.value) {
@@ -178,14 +190,25 @@ onMounted(loadData)
       </div>
       <el-table :data="deliveries" border stripe size="small">
         <el-table-column label="交货日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column prop="productName" label="产品名称" min-width="130" />
+        <el-table-column label="产品名称" min-width="130"><template #default="{row}">{{ products.find((p:any)=>p.id===row.productId)?.productName || '-' }}</template></el-table-column>
         <el-table-column label="收货仓库" width="120">
           <template #default="{row}">
             <span v-if="row.warehouseId">{{ warehouseOptions.find((w:any)=>w.id===row.warehouseId)?.warehouseName || row.warehouseId }}</span>
             <span v-else style="color:#c0c4cc">—</span>
           </template>
         </el-table-column>
-        <el-table-column prop="quantity" label="数量" width="100" />
+        <el-table-column prop="quantity" label="总数量" width="90" />
+        <el-table-column label="等级分布" min-width="160">
+          <template #default="{row}">
+            <span v-if="row.aQty || row.bQty || row.cQty || row.defectQty">
+              <span style="color:#67c23a">A{{ row.aQty||0 }}</span> /
+              <span style="color:#409eff">B{{ row.bQty||0 }}</span> /
+              <span style="color:#e6a23c">C{{ row.cQty||0 }}</span> /
+              <span style="color:#f56c6c">不良{{ row.defectQty||0 }}</span>
+            </span>
+            <span v-else style="color:#909399">{{ row.quantity }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="trackingNo" label="物流单号" width="140" />
         <el-table-column label="附件" width="80" align="center">
           <template #default="{row}">
@@ -206,11 +229,23 @@ onMounted(loadData)
     <el-dialog v-model="dialogVisible" :title="isEdit?'编辑交货记录':'新增交货记录'" width="520px" :close-on-click-modal="false">
       <el-form :model="form" label-width="85px" size="small">
         <el-form-item label="产品名称">
-          <el-select v-model="form.productName" filterable style="width:100%" placeholder="选择订单产品">
-            <el-option v-for="p in products" :key="p.id" :label="p.productName" :value="p.productName" />
+          <el-select v-model="form.productId" filterable style="width:100%" placeholder="选择订单产品">
+            <el-option v-for="p in products" :key="p.id" :label="p.productName" :value="p.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="数量"><el-input v-model="form.quantity" placeholder="交货数量" /></el-form-item>
+        <el-form-item label="等级数量">
+          <div style="width:100%">
+            <el-row :gutter="8">
+              <el-col :span="12"><el-input v-model="form.aQty" type="number" placeholder="A规数量" /></el-col>
+              <el-col :span="12"><el-input v-model="form.bQty" type="number" placeholder="B规数量" /></el-col>
+            </el-row>
+            <el-row :gutter="8" style="margin-top:6px">
+              <el-col :span="12"><el-input v-model="form.cQty" type="number" placeholder="C规数量" /></el-col>
+              <el-col :span="12"><el-input v-model="form.defectQty" type="number" placeholder="不良数量" /></el-col>
+            </el-row>
+            <div style="margin-top:6px;color:#909399;font-size:12px">合计：<b style="color:#303133">{{ totalGrade }}</b>（自动作为总数量）</div>
+          </div>
+        </el-form-item>
         <el-form-item label="收货仓库" required>
           <el-select v-model="warehouseId" filterable style="width:100%" placeholder="选择入库仓库">
             <el-option v-for="w in warehouseOptions" :key="w.id" :label="`${w.warehouseName} (${w.code})`" :value="w.id" />
@@ -231,7 +266,7 @@ onMounted(loadData)
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
+        <el-button type="primary" :loading="saving" @click="() => handleSubmit()">保存</el-button>
       </template>
     </el-dialog>
   </div>

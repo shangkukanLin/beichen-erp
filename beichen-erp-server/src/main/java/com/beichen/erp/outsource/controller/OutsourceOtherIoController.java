@@ -154,8 +154,8 @@ public class OutsourceOtherIoController {
             BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = IoType.IN.getCode().equals(io.getIoType()) ? qty : qty.negate();
             if (isInv) {
-                inventoryStockService.changeStock(io.getWarehouseId(), getMaterialNameById(matId), delta,
-                    type, io.getCode(), RelatedBillType.OTHER_IO, matId, null, io.getId(), null);
+                inventoryStockService.changeStock(io.getWarehouseId(), matId, delta,
+                    type, io.getCode(), RelatedBillType.OTHER_IO, null, io.getId(), null);
                 continue;
             }
             LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
@@ -192,8 +192,8 @@ public class OutsourceOtherIoController {
             BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = IoType.IN.getCode().equals(io.getIoType()) ? qty.negate() : qty;
             if (isInv) {
-                inventoryStockService.changeStock(io.getWarehouseId(), getMaterialNameById(matId), delta,
-                    type, io.getCode(), RelatedBillType.OTHER_IO, matId, null, io.getId(), null);
+                inventoryStockService.changeStock(io.getWarehouseId(), matId, delta,
+                    type, io.getCode(), RelatedBillType.OTHER_IO, null, io.getId(), null);
                 continue;
             }
             LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()

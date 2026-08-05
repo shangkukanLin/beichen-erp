@@ -11,7 +11,6 @@ public class InventoryWarehouseStock {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long warehouseId;
-    private String productName;
     private Long productId;
     /** 品质等级: A/B/C/DEFECT */
     private String qualityType;

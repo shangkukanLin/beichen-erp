@@ -5,7 +5,9 @@ import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.inventory.entity.InventoryWarehouse;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseMapper;
 import com.beichen.erp.outsource.entity.CloseReportItem;
+import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
 import com.beichen.erp.outsource.service.CloseReportService;
+import com.beichen.erp.outsource.service.OutsourceOrderService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.*;
@@ -26,6 +28,7 @@ import java.util.Map;
 public class CloseReportController {
 
     private final CloseReportService reportService;
+    private final OutsourceOrderService orderService;
     private final InventoryWarehouseMapper inventoryWarehouseMapper;
 
     @GetMapping
@@ -181,7 +184,7 @@ public class CloseReportController {
                 if (obj instanceof Map) { @SuppressWarnings("unchecked") Map<String, Object> m = (Map<String, Object>) obj; d = m; }
                 else { var dlv = (com.beichen.erp.outsource.entity.OutsourceOrderDelivery) obj;
                     d = new java.util.LinkedHashMap<>();
-                    d.put("deliveryDate", dlv.getDeliveryDate()); d.put("productName", dlv.getProductName());
+                    d.put("deliveryDate", dlv.getDeliveryDate()); d.put("productName", getProductNameById(orderId, dlv.getProductId()));
                     d.put("quantity", dlv.getQuantity()); d.put("deliveryType", dlv.getDeliveryType());
                     d.put("warehouseId", dlv.getWarehouseId()); d.put("remark", dlv.getRemark()); }
                 Row dr = sheet.createRow(rowIdx++);
@@ -229,6 +232,15 @@ public class CloseReportController {
     }
     private Sheet sheet(Row row) { return row.getSheet(); }
     private String str(Object o) { return o != null ? o.toString() : ""; }
+    /** 根据 productId 从产品列表中查找产品名称 */
+    private String getProductNameById(Long orderId, Long productId) {
+        if (orderId == null || productId == null) return "";
+        List<OutsourceOrderProduct> products = orderService.getProducts(orderId);
+        return products.stream()
+            .filter(p -> productId.equals(p.getId()))
+            .map(p -> p.getProductName() != null ? p.getProductName() : "")
+            .findFirst().orElse("");
+    }
     private BigDecimal toBigDecimal(Object v) {
         if (v == null) return BigDecimal.ZERO;
         if (v instanceof BigDecimal) return (BigDecimal) v;

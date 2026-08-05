@@ -33,25 +33,25 @@ public class InventoryStockController {
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) Long warehouseId,
-            @RequestParam(required = false) String productName,
+            @RequestParam(required = false) Long productId,
             @RequestParam(required = false) String qualityType) {
         // 查询所有符合条件的库存记录
         LambdaQueryWrapper<InventoryWarehouseStock> w = new LambdaQueryWrapper<InventoryWarehouseStock>()
                 .eq(warehouseId != null, InventoryWarehouseStock::getWarehouseId, warehouseId)
-                .like(productName != null && !productName.isBlank(), InventoryWarehouseStock::getProductName, productName)
+                .eq(productId != null, InventoryWarehouseStock::getProductId, productId)
                 .eq(qualityType != null && !qualityType.isBlank(), InventoryWarehouseStock::getQualityType, qualityType);
         List<InventoryWarehouseStock> all = stockMapper.selectList(w);
 
         // 按 (warehouseId, productId) 分组聚合
         Map<String, Map<String, Object>> grouped = new LinkedHashMap<>();
         for (InventoryWarehouseStock s : all) {
-            String key = s.getWarehouseId() + "_" + (s.getProductId() != null ? s.getProductId() : s.getProductName());
+            String key = s.getWarehouseId() + "_" + (s.getProductId() != null ? s.getProductId() : "0");
             Map<String, Object> row = grouped.computeIfAbsent(key, k -> {
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("warehouseId", s.getWarehouseId());
                 m.put("productId", s.getProductId());
-                m.put("productName", s.getProductName());
-                m.put("spec", ""); // 后续联查 product 表填充
+                m.put("productName", ""); // productName 列已删除，前端通过 productId 查名
+                m.put("spec", "");
                 m.put("qtyA", BigDecimal.ZERO);
                 m.put("qtyB", BigDecimal.ZERO);
                 m.put("qtyC", BigDecimal.ZERO);

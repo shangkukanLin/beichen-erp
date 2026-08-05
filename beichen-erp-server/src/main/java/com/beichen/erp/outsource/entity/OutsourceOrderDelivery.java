@@ -1,6 +1,7 @@
 package com.beichen.erp.outsource.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -31,10 +32,22 @@ public class OutsourceOrderDelivery {
     private Long warehouseId;
     /** 交货日期 */
     private LocalDate deliveryDate;
-    /** 产品名称（快照展示用） */
-    private String productName;
-    /** 交货数量：正数=普通交货，负数=退不良 */
+    /** 交货数量：正数=普通交货，负数=退不良（普通交货时等于四等级之和） */
     private BigDecimal quantity;
+    /** A规数量 */
+    @JsonProperty("aQty")
+    private BigDecimal aQty;
+    /** B规数量 */
+    @JsonProperty("bQty")
+    private BigDecimal bQty;
+    /** C规数量 */
+    @JsonProperty("cQty")
+    private BigDecimal cQty;
+    /** 不良数量 */
+    @JsonProperty("defectQty")
+    private BigDecimal defectQty;
+    /** 来源类型：DELIVERY=普通交货 / RETURN_DEFECT=委外退货(不知订单) / AFTER_SALE=收费售后(不知订单) */
+    private String sourceType;
     /** 交货类型：空=普通交货，DEFECT_RETURN=退不良（配合 isReverse 使用） */
     private String deliveryType;
     /** 物流单号（选填） */

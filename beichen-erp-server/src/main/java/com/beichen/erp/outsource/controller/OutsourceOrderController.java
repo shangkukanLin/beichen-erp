@@ -162,15 +162,15 @@ public class OutsourceOrderController {
             new LambdaQueryWrapper<OutsourceOrderDelivery>()
                 .eq(OutsourceOrderDelivery::getOrderId, id));
         for (OutsourceOrderDelivery d : deliveries) {
-            if (d.getProductName() == null) continue;
+            if (d.getProductId() == null) continue;
             java.math.BigDecimal qty = d.getQuantity() != null ? d.getQuantity() : java.math.BigDecimal.ZERO;
             if (qty.compareTo(java.math.BigDecimal.ZERO) <= 0) continue;
-            productDeliveredMap.merge(d.getProductName(), qty, java.math.BigDecimal::add);
+            productDeliveredMap.merge(String.valueOf(d.getProductId()), qty, java.math.BigDecimal::add);
         }
         // 按产品计算每个物料已被出货消耗的数量
         java.util.Map<Long, java.math.BigDecimal> shippedConsumedMap = new java.util.HashMap<>();
         for (OutsourceOrderProduct p : products) {
-            java.math.BigDecimal pDelivered = productDeliveredMap.get(p.getProductName());
+            java.math.BigDecimal pDelivered = productDeliveredMap.get(String.valueOf(p.getId()));
             if (pDelivered == null || pDelivered.compareTo(java.math.BigDecimal.ZERO) == 0) continue;
             java.math.BigDecimal pTotal = p.getQuantity() != null ? p.getQuantity() : java.math.BigDecimal.ONE;
             java.util.List<OutsourceOrderMaterial> mats = orderService.getMaterials(p.getId());
@@ -330,12 +330,14 @@ public class OutsourceOrderController {
             // 1. 在交货记录中生成退不良记录
             OutsourceOrderDelivery delivery = new OutsourceOrderDelivery();
             delivery.setOrderId(id);
-            delivery.setProductName(prod.getProductName());
+            delivery.setProductId(prod.getId());
             delivery.setQuantity(qty);
             delivery.setDeliveryType(DeliveryType.RETURN.getCode());
             delivery.setWarehouseId(whId);
             delivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
             delivery.setRemark("退不良 - " + o.getCode());
+            // 标记来源：加工单交货退不良
+            delivery.setSourceType("DELIVERY");
             orderDeliveryMapper.insert(delivery);
 
             // 2. 扣减成品库存

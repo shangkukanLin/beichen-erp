@@ -160,8 +160,8 @@ public class DeliveryServiceImpl implements DeliveryService {
             if (DeliveryType.DELIVERY.name().equals(delivery.getDeliveryType())) {
                 // 恢复我方仓库库存
                 if (delivery.getFromWarehouseId() != null && item.getMaterialId() != null) {
-                    inventoryStockService.changeStock(delivery.getFromWarehouseId(), getMaterialNameById(item.getMaterialId()), qty,
-                        StockChangeType.OUTSOURCE_CANCEL_DELIVERY, delivery.getCode(), RelatedBillType.OUTSOURCE_DELIVERY, item.getMaterialId(), null, delivery.getId(), null);
+                    inventoryStockService.changeStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty,
+                        StockChangeType.OUTSOURCE_CANCEL_DELIVERY, delivery.getCode(), RelatedBillType.OUTSOURCE_DELIVERY, null, delivery.getId(), null);
                 }
                 // 扣回委外仓库
                 if (delivery.getToWarehouseId() != null)
@@ -275,8 +275,8 @@ public class DeliveryServiceImpl implements DeliveryService {
             if (DeliveryType.DELIVERY.name().equals(delivery.getDeliveryType())) {
                 // 恢复我方仓库库存
                 if (delivery.getFromWarehouseId() != null && item.getMaterialId() != null) {
-                    inventoryStockService.changeStock(delivery.getFromWarehouseId(), getMaterialNameById(item.getMaterialId()), qty,
-                        StockChangeType.OUTSOURCE_CANCEL_DELIVERY, delivery.getCode(), RelatedBillType.OUTSOURCE_DELIVERY, item.getMaterialId(), null, delivery.getId(), null);
+                    inventoryStockService.changeStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty,
+                        StockChangeType.OUTSOURCE_CANCEL_DELIVERY, delivery.getCode(), RelatedBillType.OUTSOURCE_DELIVERY, null, delivery.getId(), null);
                 }
                 // 扣回委外仓库
                 if (delivery.getToWarehouseId() != null)
@@ -427,7 +427,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (inventoryWarehouseMapper.selectById(warehouseId) != null) {
             StockChangeType type = StockChangeType.fromCode(changeType);
             if (type == null) type = StockChangeType.DELIVERY_OUT; // 兜底
-            inventoryStockService.changeStock(warehouseId, materialName, delta, type, orderCode, RelatedBillType.MATERIAL_IO, materialId, null, null, null);
+            inventoryStockService.changeStock(warehouseId, materialId, delta, type, orderCode, RelatedBillType.MATERIAL_IO, null, null, null);
         } else {
             updateStock(warehouseId, materialId, delta, qualityType, materialName, changeType, orderCode);
         }
@@ -435,8 +435,8 @@ public class DeliveryServiceImpl implements DeliveryService {
 
     /** 扣减进销存仓库库存（统一走 changeStock，自动写 inventory_stock_log） */
     private void deductInventoryStock(Long warehouseId, Long materialId, java.math.BigDecimal qty, String materialName, String qualityType, String deliveryCode) {
-        inventoryStockService.changeStock(warehouseId, materialName, qty.negate(),
-            StockChangeType.OUTSOURCE_DELIVERY_OUT, deliveryCode, RelatedBillType.OUTSOURCE_DELIVERY, materialId, null, null, null);
+        inventoryStockService.changeStock(warehouseId, materialId, qty.negate(),
+            StockChangeType.OUTSOURCE_DELIVERY_OUT, deliveryCode, RelatedBillType.OUTSOURCE_DELIVERY, null, null, null);
     }
 
     @Override

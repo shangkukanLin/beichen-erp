@@ -439,6 +439,35 @@ public class DataInitializer implements ApplicationRunner {
                 log.info("已为 outsource_order_delivery 添加 delivery_type 列");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_order_delivery 添加 is_reverse 列（退不良红冲标记）
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_order_delivery' AND COLUMN_NAME='is_reverse'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_order_delivery ADD COLUMN is_reverse TINYINT DEFAULT 0 COMMENT '是否退不良红冲记录：1=退不良(数量为负) / 0=普通交货' AFTER status");
+                log.info("已为 outsource_order_delivery 添加 is_reverse 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_order_delivery 添加等级分布列（A规/B规/C规/不良）与来源类型
+        String[][] outColDefs = {
+            {"a_qty", "DECIMAL(18,4) DEFAULT 0 COMMENT 'A规数量' AFTER quantity"},
+            {"b_qty", "DECIMAL(18,4) DEFAULT 0 COMMENT 'B规数量' AFTER a_qty"},
+            {"c_qty", "DECIMAL(18,4) DEFAULT 0 COMMENT 'C规数量' AFTER b_qty"},
+            {"defect_qty", "DECIMAL(18,4) DEFAULT 0 COMMENT '不良数量' AFTER c_qty"},
+            {"source_type", "VARCHAR(20) DEFAULT 'DELIVERY' COMMENT '来源类型: DELIVERY/RETURN_DEFECT/AFTER_SALE' AFTER defect_qty"}
+        };
+        for (String[] col : outColDefs) {
+            try {
+                Integer c = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_order_delivery' AND COLUMN_NAME=?",
+                    Integer.class, col[0]);
+                if (c == null || c == 0) {
+                    jdbcTemplate.execute("ALTER TABLE outsource_order_delivery ADD COLUMN " + col[0] + " " + col[1]);
+                    log.info("已为 outsource_order_delivery 添加 {} 列", col[0]);
+                }
+            } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        }
         // outsource_order_close_report_item 添加 company_id 列
         try {
             Integer cnt = jdbcTemplate.queryForObject(
@@ -458,6 +487,88 @@ public class DataInitializer implements ApplicationRunner {
             if (cnt == null || cnt == 0) {
                 jdbcTemplate.execute("ALTER TABLE outsource_order_close_report_item ADD COLUMN material_price DECIMAL(18,4) DEFAULT 0 COMMENT '物料单价' AFTER excess_loss_qty");
                 log.info("已为 outsource_order_close_report_item 添加 material_price 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // 品质重分类单主表 / 明细表（若表不存在则创建，不清库老库兼容）
+        try {
+            Integer mc = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_stock_reclass'",
+                Integer.class);
+            if (mc == null || mc == 0) {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS inventory_stock_reclass ("
+                    + "id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',"
+                    + "code VARCHAR(50) NOT NULL COMMENT '重分类单号(FL-yyyyMMdd-NNN)',"
+                    + "warehouse_id BIGINT NOT NULL COMMENT '仓库ID',"
+                    + "reclass_date DATE NOT NULL COMMENT '业务日期',"
+                    + "status VARCHAR(20) DEFAULT '草稿' COMMENT '状态: 草稿/已审核/已作废',"
+                    + "remark VARCHAR(500) COMMENT '备注',"
+                    + "company_id BIGINT DEFAULT NULL COMMENT '公司ID',"
+                    + "create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',"
+                    + "update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',"
+                    + "UNIQUE KEY uk_code (code),"
+                    + "INDEX idx_warehouse_id (warehouse_id), INDEX idx_status (status), INDEX idx_company_id (company_id)"
+                    + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='品质重分类单主表'");
+                log.info("已创建 inventory_stock_reclass 表");
+            }
+            Integer ic = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_stock_reclass_item'",
+                Integer.class);
+            if (ic == null || ic == 0) {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS inventory_stock_reclass_item ("
+                    + "id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',"
+                    + "reclass_id BIGINT NOT NULL COMMENT '重分类单ID',"
+                    + "product_id BIGINT COMMENT '产品ID',"
+                    + "product_name VARCHAR(200) NOT NULL COMMENT '产品名称',"
+                    + "from_quality VARCHAR(10) NOT NULL COMMENT '源等级: A/B/C/DEFECT',"
+                    + "to_quality VARCHAR(10) NOT NULL COMMENT '目标等级: A/B/C/DEFECT',"
+                    + "quantity DECIMAL(18,4) DEFAULT 0 COMMENT '重分类数量',"
+                    + "remark VARCHAR(255) COMMENT '备注',"
+                    + "company_id BIGINT DEFAULT NULL COMMENT '公司ID',"
+                    + "create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',"
+                    + "INDEX idx_reclass_id (reclass_id), INDEX idx_product_id (product_id), INDEX idx_company_id (company_id)"
+                    + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='品质重分类单明细表'");
+                log.info("已创建 inventory_stock_reclass_item 表");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // 销售退货单主表 + 明细表
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='sale_return'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sale_return ("
+                    + "id BIGINT AUTO_INCREMENT PRIMARY KEY,"
+                    + "code VARCHAR(30) COMMENT '退货单号',"
+                    + "customer_id BIGINT COMMENT '客户ID',"
+                    + "customer_name VARCHAR(100) COMMENT '客户名称',"
+                    + "warehouse_id BIGINT COMMENT '退货入库仓库ID',"
+                    + "return_date DATE COMMENT '退货日期',"
+                    + "status INT DEFAULT 0 COMMENT '状态 0=草稿 1=已审核 2=已作废',"
+                    + "total_amount DECIMAL(18,2) DEFAULT 0 COMMENT '退货总金额',"
+                    + "remark VARCHAR(500) COMMENT '备注',"
+                    + "auditor_id BIGINT COMMENT '审核人ID',"
+                    + "auditor_name VARCHAR(50) COMMENT '审核人姓名',"
+                    + "audit_time DATETIME COMMENT '审核时间',"
+                    + "company_id BIGINT DEFAULT NULL COMMENT '公司ID',"
+                    + "create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',"
+                    + "update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',"
+                    + "INDEX idx_customer_id (customer_id), INDEX idx_warehouse_id (warehouse_id),"
+                    + "INDEX idx_status (status), INDEX idx_company_id (company_id)"
+                    + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售退货单主表'");
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sale_return_item ("
+                    + "id BIGINT AUTO_INCREMENT PRIMARY KEY,"
+                    + "return_id BIGINT COMMENT '退货单ID',"
+                    + "product_id BIGINT COMMENT '产品ID',"
+                    + "product_name VARCHAR(100) COMMENT '产品名称',"
+                    + "quality_type VARCHAR(10) DEFAULT 'DEFECT' COMMENT '品质等级 固定DEFECT(不良品)',"
+                    + "quantity DECIMAL(18,4) DEFAULT 0 COMMENT '退货数量',"
+                    + "unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',"
+                    + "amount DECIMAL(18,2) DEFAULT 0 COMMENT '金额',"
+                    + "remark VARCHAR(500) COMMENT '备注',"
+                    + "company_id BIGINT DEFAULT NULL COMMENT '公司ID',"
+                    + "create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',"
+                    + "INDEX idx_return_id (return_id), INDEX idx_product_id (product_id), INDEX idx_company_id (company_id)"
+                    + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售退货单明细表'");
+                log.info("已创建 sale_return / sale_return_item 表");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
         // outsource_delivery_item 添加 unit_price 列
@@ -701,7 +812,7 @@ public class DataInitializer implements ApplicationRunner {
         try { jdbcTemplate.execute("ALTER TABLE supplier DROP COLUMN IF EXISTS supplier_type"); } catch (Exception ignored) {}
     }
 
-    /** 增量 DDL：库存表按 material_id 维度重构 + 唯一键补 company_id + 可用量字段 */
+    /** 增量 DDL：库存表按 material_id 维度重构 + 唯一键补 company_id + 可用量字段 + 品质等级字段 */
     private void alterInventoryStockTable() {
         try {
             // 1) 添加 material_id 列
@@ -714,7 +825,61 @@ public class DataInitializer implements ApplicationRunner {
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
         try {
-            // 2) 添加 available_quantity 列
+            // 2) 添加 quality_type 列（成品等级 A/B/C/DEFECT，对应 ProductQualityType），独立于 material_id 判断，避免被其跳过
+            Integer qtCnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_warehouse_stock' AND COLUMN_NAME='quality_type'", Integer.class);
+            if (qtCnt == null || qtCnt == 0) {
+                try {
+                    jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock ADD COLUMN quality_type VARCHAR(20) DEFAULT 'A' COMMENT '品质等级(A/B/C/DEFECT)' AFTER material_id");
+                    log.info("已添加 inventory_warehouse_stock.quality_type 列");
+                } catch (Exception e) { log.warn("添加 inventory_warehouse_stock.quality_type 列失败: {}", e.getMessage()); }
+            } else {
+                log.info("inventory_warehouse_stock.quality_type 列已存在，跳过");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // 2.4) 清空旧库存数据（唯一键结构已变更，旧数据可能冲突）
+        try {
+            jdbcTemplate.execute("TRUNCATE TABLE inventory_warehouse_stock");
+            log.info("已清空 inventory_warehouse_stock 旧数据");
+        } catch (Exception e) { log.warn("清空 inventory_warehouse_stock 失败: {}", e.getMessage()); }
+        // 2.5) 修复 inventory_warehouse_stock 唯一键，加入 quality_type（支持同产品不同等级多行）
+        try {
+            Integer ukCnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_warehouse_stock' AND INDEX_NAME='uk_warehouse_product_company'", Integer.class);
+            if (ukCnt != null && ukCnt > 0) {
+                jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock DROP INDEX uk_warehouse_product_company");
+                log.info("已删除旧唯一键 uk_warehouse_product_company");
+            }
+            Integer newUkCnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_warehouse_stock' AND INDEX_NAME='uk_warehouse_product_quality_company'", Integer.class);
+            if (newUkCnt == null || newUkCnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock ADD UNIQUE KEY uk_warehouse_product_quality_company (warehouse_id, product_id, quality_type, company_id)");
+                log.info("已添加新唯一键 uk_warehouse_product_quality_company（含 quality_type）");
+            }
+        } catch (Exception e) { log.warn("唯一键DDL 异常: {}", e.getMessage()); }
+        // 2.6) 删除 inventory_warehouse_stock 的 product_name 列（已改为 product_id）
+        try {
+            Integer pnCnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_warehouse_stock' AND COLUMN_NAME='product_name'",
+                Integer.class);
+            if (pnCnt != null && pnCnt > 0) {
+                jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock DROP COLUMN product_name");
+                log.info("已删除 inventory_warehouse_stock.product_name 列");
+            }
+        } catch (Exception e) { log.warn("删除product_name列DDL 异常: {}", e.getMessage()); }
+        // 2.7) 补齐 inventory_stock_log 的 quality_type 列
+        try {
+            Integer qtCnt2 = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_stock_log' AND COLUMN_NAME='quality_type'", Integer.class);
+            if (qtCnt2 == null || qtCnt2 == 0) {
+                jdbcTemplate.execute("ALTER TABLE inventory_stock_log ADD COLUMN quality_type VARCHAR(20) COMMENT '品质等级(A/B/C/DEFECT)' AFTER product_id");
+                log.info("已添加 inventory_stock_log.quality_type 列");
+            } else {
+                log.info("inventory_stock_log.quality_type 列已存在，跳过");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        try {
+            // 3) 添加 available_quantity 列
             Integer cnt = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_warehouse_stock' AND COLUMN_NAME='available_quantity'", Integer.class);
             if (cnt == null || cnt == 0) {
@@ -872,6 +1037,8 @@ public class DataInitializer implements ApplicationRunner {
         // 600s 销售业务
         saveMenu(601L, 6L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 1);
         saveMenu(602L, 6L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 2);
+        saveMenu(603L, 6L, "销售退货单", "menu", "/sale/return", "SaleReturn", "Refund", 3);
+        saveMenu(604L, 6L, "收费售后", "menu", "/outsource/after-sale", "AfterSale", "Service", 4);
         // 700s 库存业务
         saveMenu(701L, 7L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 1);
         saveMenu(702L, 7L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 2);
@@ -913,7 +1080,7 @@ public class DataInitializer implements ApplicationRunner {
                 301L, 302L, 303L,
                 401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L,
                 501L, 502L,
-                601L, 602L,
+                601L, 602L, 603L, 604L,
                 701L, 702L,
                 801L, 802L, 803L, 804L,
                 901L, 902L, 903L, 904L, 905L));
@@ -922,13 +1089,13 @@ public class DataInitializer implements ApplicationRunner {
                 1L, 3L, 301L, 302L, 101L));
         // 销售专员：销售业务 + 客户 + 产品
         assignRoleMenus("sales", Arrays.asList(
-                1L, 6L, 601L, 602L, 101L));
+                1L, 6L, 601L, 602L, 603L, 604L, 101L));
         // 仓管员：进货+库存 + 仓库
         assignRoleMenus("warehouse", Arrays.asList(
-                1L, 5L, 7L, 501L, 701L, 702L, 101L));
+                1L, 5L, 7L, 501L, 701L, 702L, 705L, 603L, 604L, 101L));
         // 跟单专员：委外加工全部
         assignRoleMenus("merchandiser", Arrays.asList(
-                1L, 4L, 401L, 402L, 403L, 404L, 405L, 406L, 409L, 101L, 602L, 502L, 702L));
+                1L, 4L, 401L, 402L, 403L, 404L, 405L, 406L, 409L, 101L, 602L, 502L, 702L, 705L));
         // 财务：财务管理
         assignRoleMenus("finance", Arrays.asList(
                 1L, 8L, 801L, 802L, 803L, 804L, 101L));
@@ -1056,6 +1223,8 @@ public class DataInitializer implements ApplicationRunner {
             {503L, 5L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "UserFilled", 3},
             {601L, 6L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 1},
             {602L, 6L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 2},
+            {603L, 6L, "销售退货单", "menu", "/sale/return", "SaleReturn", "Refund", 3},
+            {604L, 6L, "收费售后", "menu", "/outsource/after-sale", "AfterSale", "Service", 4},
             {701L, 7L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 1},
             {702L, 7L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 2},
             {703L, 7L, "库存流水", "menu", "/inventory/stock-log", "InventoryStockLog", "TrendCharts", 3},
@@ -1096,7 +1265,7 @@ public class DataInitializer implements ApplicationRunner {
         log.info("同步菜单完成，处理 {} 条", processed);
 
         // 删除所有旧ID菜单（重新编号后旧ID已废弃）
-        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,301L,302L,303L,401L,402L,403L,404L,405L,406L,407L,408L,409L,501L,502L,503L,601L,602L,701L,702L,703L,704L,705L,706L,801L,802L,803L,804L,805L,806L,901L,902L,903L,904L,905L,906L,907L,908L};
+        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,301L,302L,303L,401L,402L,403L,404L,405L,406L,407L,408L,409L,501L,502L,503L,601L,602L,603L,604L,701L,702L,703L,704L,705L,706L,801L,802L,803L,804L,805L,806L,901L,902L,903L,904L,905L,906L,907L,908L};
         Set<Long> newIds = new HashSet<>(Arrays.asList(newMenuIds));
         jdbcTemplate.update("DELETE FROM sys_role_menu WHERE menu_id NOT IN (" +
             String.join(",", newIds.stream().map(String::valueOf).toArray(String[]::new)) + ")");

@@ -32,6 +32,10 @@ function getStock(materialId: number | string) {
   const s = materialId != null ? materialStockMap.value[materialId] : undefined
   return s || { stockQuantity: 0, shortage: 0 }
 }
+// 交货记录表格行样式：退不良行高亮
+function deliveryRowClass({ row }: { row: any }) {
+  return row.deliveryType === DeliveryType.DEFECT_RETURN ? 'defect-row' : ''
+}
 // 按物料ID关联反查物料名称（实体已不冗余存name，统一用ID查）
 function matName(id: number | string) {
   if (id == null) return ''
@@ -194,7 +198,12 @@ const delProducts = ref<any[]>([])
 const delDialogVisible = ref(false); const delIsEdit = ref(false); const delEditId = ref<number>()
 const delSaving = ref(false); const delUploadFile = ref<File | null>(null)
 const delWarehouseId = ref<number>(); const delWarehouseOptions = ref<any[]>([])
-const delForm = reactive({ productName: '', quantity: '', deliveryDate: new Date().toISOString().split('T')[0], trackingNo: '', remark: '', attachUrl: '' })
+const delForm = reactive({ productId: undefined as any, quantity: '', aQty: 0 as number, bQty: 0 as number, cQty: 0 as number, defectQty: 0 as number, deliveryDate: new Date().toISOString().split('T')[0], trackingNo: '', remark: '', attachUrl: '' })
+
+// 四等级自动合计
+const delGradeSum = computed(() => {
+  return (Number(delForm.aQty) || 0) + (Number(delForm.bQty) || 0) + (Number(delForm.cQty) || 0) + (Number(delForm.defectQty) || 0)
+})
 
 const delProgress = computed(() => {
   const t = Number(delSummary.value.totalQuantity || 0); const d = Number(delSummary.value.deliveredQuantity || 0)
@@ -217,12 +226,12 @@ async function loadDelWarehouses() {
 }
 function delOpenAdd() {
   delIsEdit.value = false; delEditId.value = undefined; delWarehouseId.value = undefined; delUploadFile.value = null
-  Object.assign(delForm, { productName: '', quantity: '', deliveryDate: new Date().toISOString().split('T')[0], trackingNo: '', remark: '', attachUrl: '' })
+  Object.assign(delForm, { productId: undefined, quantity: '', aQty: 0, bQty: 0, cQty: 0, defectQty: 0, deliveryDate: new Date().toISOString().split('T')[0], trackingNo: '', remark: '', attachUrl: '' })
   delDialogVisible.value = true; loadDelWarehouses()
 }
 function delOpenEdit(row: any) {
   delIsEdit.value = true; delEditId.value = row.id; delWarehouseId.value = row.warehouseId || undefined; delUploadFile.value = null
-  Object.assign(delForm, { productName: row.productName, quantity: row.quantity, deliveryDate: row.deliveryDate, trackingNo: row.trackingNo || '', remark: row.remark || '', attachUrl: row.attachUrl || '' })
+  Object.assign(delForm, { productId: row.productId, quantity: row.quantity, aQty: Number(row.aQty) || 0, bQty: Number(row.bQty) || 0, cQty: Number(row.cQty) || 0, defectQty: Number(row.defectQty) || 0, deliveryDate: row.deliveryDate, trackingNo: row.trackingNo || '', remark: row.remark || '', attachUrl: row.attachUrl || '' })
   delDialogVisible.value = true; loadDelWarehouses()
 }
 function delHandleDragOver(e: DragEvent) { e.preventDefault() }
@@ -230,13 +239,18 @@ function delHandleDrop(e: DragEvent) { e.preventDefault(); const f = e.dataTrans
 function delHandleFileSelect(e: Event) { const f = (e.target as HTMLInputElement).files?.[0]; if (f) delUploadFile.value = f }
 function delHandleRemoveFile() { delUploadFile.value = null }
 async function delHandleSubmit(forceDelivery = false) {
-  if (!delForm.productName) { ElMessage.warning('请选择产品名称'); return }
-  if (!delForm.quantity) { ElMessage.warning('请输入数量'); return }
+  if (!delForm.productId) { ElMessage.warning('请选择产品名称'); return }
+  if (delGradeSum.value <= 0) { ElMessage.warning('请至少填写一个等级的数量'); return }
   if (!delWarehouseId.value) { ElMessage.warning('请选择收货仓库'); return }
   delSaving.value = true
   try {
     if (delUploadFile.value) { const fd = new FormData(); fd.append('file', delUploadFile.value); const res = await request.post<any,string>('/dev/file/upload', fd); delForm.attachUrl = res as unknown as string }
-    const body = { ...delForm, orderId: form.id, warehouseId: delWarehouseId.value || null }
+    const aQty = Number(delForm.aQty) || 0
+    const bQty = Number(delForm.bQty) || 0
+    const cQty = Number(delForm.cQty) || 0
+    const defectQty = Number(delForm.defectQty) || 0
+    const body = { productId: delForm.productId, quantity: delGradeSum.value, aQty, bQty, cQty, defectQty, deliveryDate: delForm.deliveryDate, trackingNo: delForm.trackingNo, remark: delForm.remark, attachUrl: delForm.attachUrl, orderId: form.id, warehouseId: delWarehouseId.value || null }
+    console.log('[交货] 提交body:', JSON.stringify(body), '原始delForm.aQty=', delForm.aQty, '转后aQty=', aQty)
     const params = forceDelivery ? { params: { forceDelivery: true } } : {}
     let res: any
     if (delIsEdit.value && delEditId.value) {
@@ -294,7 +308,7 @@ async function handleDefectReturn() {
   if (data.length === 0) { ElMessage.warning('请输入退不良数量'); return }
   defectSaving.value = true
   try {
-    await request.post(`/outsource/order/${form.id}/return-defect`, { items: data, warehouseId: defectWarehouseId.value })
+    await request.post(`/outsource/order/${form.id}/return-defect`, { items: data, warehouseId: defectWarehouseId.value, sourceType: 'DELIVERY' })
     ElMessage.success('退不良完成，成品扣减并按BOM恢复物料到工厂委外仓'); defectVisible.value = false; loadData()
   } catch (e: any) { ElMessage.error(e?.message || '退不良失败') } finally { defectSaving.value = false }
 }
@@ -328,7 +342,7 @@ onMounted(() => { loadOptions(); loadBomTypes(); loadData() })
 
 <template>
   <div class="detail-page" v-loading="loading">
-    <el-tabs v-model="activeTab" style="margin-bottom:12px" @tab-change="(t:string)=>{if(t==='close')loadCloseReport()}">
+    <el-tabs v-model="activeTab" style="margin-bottom:12px" @tab-change="(t:any)=>{if(t==='close')loadCloseReport()}">
       <el-tab-pane label="加工详情" name="detail" />
       <el-tab-pane label="交货管理" name="delivery" />
       <el-tab-pane v-if="form.status===OutsourceOrderStatus.FINISHED||form.status===OutsourceOrderStatus.CANCELLED" label="结单详情" name="close" />
@@ -429,9 +443,9 @@ onMounted(() => { loadOptions(); loadBomTypes(); loadData() })
           <span style="font-weight:600">交货记录</span>
           <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="primary" size="small" @click="delOpenAdd">新增交货</el-button>
         </div>
-        <el-table :data="deliveries" border stripe size="small" :row-class-name="({row}:{row:any})=>row.deliveryType===DeliveryType.DEFECT_RETURN?'defect-row':''">
+        <el-table :data="deliveries" border stripe size="small" :row-class-name="deliveryRowClass">
           <el-table-column label="交货日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-          <el-table-column prop="productName" label="产品名称" min-width="120" />
+          <el-table-column label="产品名称" min-width="120"><template #default="{row}">{{ delProducts.find((p:any)=>p.id===row.productId)?.productName || '-' }}</template></el-table-column>
           <el-table-column label="类型" width="80" align="center"><template #default="{row}"><el-tag v-if="row.deliveryType===DeliveryType.DEFECT_RETURN" type="warning" size="small">{{ DeliveryTypeLabel[DeliveryType.DEFECT_RETURN] }}</el-tag><span v-else style="color:#909399">—</span></template></el-table-column>
           <el-table-column label="收货仓库" width="120">
             <template #default="{row}"><span v-if="row.warehouseId">{{ delWarehouseOptions.find((w:any)=>w.id===row.warehouseId)?.warehouseName || row.warehouseId }}</span><span v-else style="color:#c0c4cc">—</span></template>
@@ -457,10 +471,18 @@ onMounted(() => { loadOptions(); loadBomTypes(); loadData() })
       </el-card>
 
       <!-- 新增/编辑交货弹窗 -->
-      <el-dialog v-model="delDialogVisible" :title="delIsEdit?'编辑交货记录':'新增交货记录'" width="520px" :close-on-click-modal="false">
+      <el-dialog v-model="delDialogVisible" :title="delIsEdit?'编辑交货记录':'新增交货记录'" width="600px" :close-on-click-modal="false">
         <el-form :model="delForm" label-width="85px" size="small">
-          <el-form-item label="产品名称"><el-select v-model="delForm.productName" filterable style="width:100%" placeholder="选择订单产品"><el-option v-for="p in delProducts" :key="p.id" :label="p.productName" :value="p.productName" /></el-select></el-form-item>
-          <el-form-item label="数量"><el-input v-model="delForm.quantity" placeholder="交货数量" /></el-form-item>
+          <el-form-item label="产品名称"><el-select v-model="delForm.productId" filterable style="width:100%" placeholder="选择订单产品"><el-option v-for="p in delProducts" :key="p.id" :label="p.productName" :value="p.id" /></el-select></el-form-item>
+          <el-form-item label="总数量"><el-input :model-value="delGradeSum" readonly placeholder="由等级数量自动合计" /></el-form-item>
+          <el-form-item label="等级数量">
+            <el-row :gutter="8">
+              <el-col :span="6"><el-input v-model="delForm.aQty" type="number"><template #prepend>A规</template></el-input></el-col>
+              <el-col :span="6"><el-input v-model="delForm.bQty" type="number"><template #prepend>B规</template></el-input></el-col>
+              <el-col :span="6"><el-input v-model="delForm.cQty" type="number"><template #prepend>C规</template></el-input></el-col>
+              <el-col :span="6"><el-input v-model="delForm.defectQty" type="number"><template #prepend>不良</template></el-input></el-col>
+            </el-row>
+          </el-form-item>
           <el-form-item label="收货仓库" required><el-select v-model="delWarehouseId" filterable style="width:100%" placeholder="选择入库仓库"><el-option v-for="w in delWarehouseOptions" :key="w.id" :label="`${w.warehouseName} (${w.code})`" :value="w.id" /></el-select></el-form-item>
           <el-form-item label="交货日期"><el-input v-model="delForm.deliveryDate" type="date" /></el-form-item>
           <el-form-item label="物流单号"><el-input v-model="delForm.trackingNo" placeholder="选填" /></el-form-item>
