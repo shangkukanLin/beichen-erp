@@ -319,7 +319,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .eq(OutsourceWarehouseStock::getWarehouseId, warehouseId)
                 .eq(OutsourceWarehouseStock::getMaterialId, materialId)
                 .eq(OutsourceWarehouseStock::getQualityType, qualityType);
-        OutsourceWarehouseStock stock = warehouseStockMapper.selectOne(w);
+        OutsourceWarehouseStock stock = stockMapper.selectOne(w);
         BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
         BigDecimal after;
         if (stock == null) {
@@ -329,11 +329,11 @@ public class DeliveryServiceImpl implements DeliveryService {
             stock.setQualityType(qualityType);
             after = delta;
             stock.setQuantity(after);
-            warehouseStockMapper.insert(stock);
+            stockMapper.insert(stock);
         } else {
             after = before.add(delta);
             stock.setQuantity(after);
-            warehouseStockMapper.updateById(stock);
+            stockMapper.updateById(stock);
         }
         OutsourceStockLog logEntry = new OutsourceStockLog();
         logEntry.setWarehouseId(warehouseId);

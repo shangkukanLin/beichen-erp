@@ -171,7 +171,9 @@ public class MaterialOrderController {
         boolean force = Boolean.TRUE.equals(body.get("force"));
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        // 收货草稿可在待收货/收货中创建；已结单/已取消不可
+        // 仅已确认(收货中)的订单可收货；待确认/已结单/已取消均禁止
+        if (MaterialOrderStatus.PENDING.name().equals(o.getStatus()))
+            throw new BusinessException("订单尚未确认，请先确认订单再收货");
         if (MaterialOrderStatus.FINISHED.name().equals(o.getStatus()))
             throw new BusinessException("订单已结单，不可再收货");
         if (MaterialOrderStatus.CANCELLED.name().equals(o.getStatus()))
@@ -304,6 +306,9 @@ public class MaterialOrderController {
     public R<?> returnDefect(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
+        // 仅已确认(收货中)的订单可退不良；待确认/已结单/已取消均禁止
+        if (!MaterialOrderStatus.RECEIVING.name().equals(o.getStatus()))
+            throw new BusinessException("仅收货中(已确认)的订单可退不良");
 
         Long factoryId = o.getSupplierId();
         if (factoryId == null) throw new BusinessException("订单未关联供应商");
@@ -406,11 +411,12 @@ public class MaterialOrderController {
     public R<List<Map<String, Object>>> defectWarehouses(@PathVariable Long id) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) return R.ok(Collections.emptyList());
-        // 查询该订单关联的所有收发单，收集目标仓库（收料=收货入库；发料为委外加工发料，不属于物料订单退不良，故仅含收料）
+        // 查询该订单关联的所有收货单(RECEIVE)，收集目标仓库作为可退不良仓库
+        // 注意：delivery_type 库存的是 DeliveryType 的 code(枚举名)，非中文 label
         List<OutsourceDelivery> deliveries = deliveryMapper.selectList(
             new LambdaQueryWrapper<OutsourceDelivery>()
                 .eq(OutsourceDelivery::getSourceOrderId, id)
-                .in(OutsourceDelivery::getDeliveryType, "收料", "发料")
+                .eq(OutsourceDelivery::getDeliveryType, DeliveryType.RECEIVE.getCode())
                 .orderByDesc(OutsourceDelivery::getId));
         // 去重仓库ID
         Set<Long> whIds = new LinkedHashSet<>();
