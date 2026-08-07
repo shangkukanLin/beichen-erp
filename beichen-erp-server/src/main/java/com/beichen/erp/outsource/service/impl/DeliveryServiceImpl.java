@@ -284,28 +284,35 @@ public class DeliveryServiceImpl implements DeliveryService {
         return r.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : r;
     }
 
-    /** 根据累计收货/退不良数量重算物料订单状态：全部收满→FINISHED，部分→RECEIVING，否则 PENDING */
+    /**
+     * 根据累计收货/退不良数量重算物料订单状态。
+     * 仅用于"已确认(RECEIVING)及以上"的订单：全部收满→FINISHED，否则保持 RECEIVING。
+     * 注意：已确认的订单不会因单张收货单反审而退回 PENDING(未确认)，
+     * 避免反审核一张收货单就把整张订单打回未确认态。
+     */
     private void recomputeMaterialOrderStatus(Long orderId) {
         MaterialOrder order = materialOrderMapper.selectById(orderId);
         if (order == null) return;
         if (MaterialOrderStatus.CANCELLED.name().equals(order.getStatus())) return;
+        // 非已确认流程的订单(如 PENDING)不在此维护状态，避免误退回未确认
+        if (!MaterialOrderStatus.RECEIVING.name().equals(order.getStatus())
+                && !MaterialOrderStatus.FINISHED.name().equals(order.getStatus())) {
+            return;
+        }
         List<MaterialOrderItem> items = materialOrderItemMapper.selectList(
                 new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, orderId));
-        boolean allDone = true, anyReceived = false;
+        boolean allDone = true;
         for (MaterialOrderItem it : items) {
             BigDecimal ord = it.getOrderQuantity() != null ? it.getOrderQuantity() : BigDecimal.ZERO;
             BigDecimal rec = it.getReceivedQuantity() != null ? it.getReceivedQuantity() : BigDecimal.ZERO;
-            if (rec.compareTo(BigDecimal.ZERO) > 0) anyReceived = true;
             if (rec.compareTo(ord) < 0) allDone = false;
         }
         if (allDone && !items.isEmpty()) {
             order.setStatus(MaterialOrderStatus.FINISHED.name());
             order.setFinishTime(LocalDateTime.now());
-        } else if (anyReceived) {
-            order.setStatus(MaterialOrderStatus.RECEIVING.name());
-            order.setFinishTime(null);
         } else {
-            order.setStatus(MaterialOrderStatus.PENDING.name());
+            // 关键：保持 RECEIVING，不退回 PENDING
+            order.setStatus(MaterialOrderStatus.RECEIVING.name());
             order.setFinishTime(null);
         }
         materialOrderMapper.updateById(order);
