@@ -22,6 +22,8 @@ public class MaterialOrderItem {
     private BigDecimal unitPrice;
     private BigDecimal amount;
     private String remark;
+    /** 逻辑删除标记：0未删除/1已删除 */
+    private Integer deleted;
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;
 }

@@ -6,6 +6,7 @@ import request from '@/utils/request'
 import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag } from '@/api/enums'
 
 const router = useRouter()
+function typeName(id: any): string { return String(id ?? '') }
 const query = reactive({ code: '' })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])

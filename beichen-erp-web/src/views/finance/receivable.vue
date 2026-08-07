@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { getReceivablePage, type FinanceReceivable, type PageResult } from '@/api/finance'
 import { listCustomers, type Customer } from '@/api/customer'
@@ -27,12 +27,12 @@ function query_() { page.pageNum = 1; load() }
 function reset_() { query.customerId = ''; query.status = ''; query.billNo = ''; page.pageNum = 1; load() }
 function cName(id?: number) { return customers.value.find(x => x.id === id)?.name || '' }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
-function stType(s?: string) { if (s === '未结清') return 'danger'; if (s === '部分结清') return 'warning'; if (s === '已结清') return 'success'; return '' }
+function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === '未结清') return 'danger'; if (s === '部分结清') return 'warning'; if (s === '已结清') return 'success'; return undefined }
 </script>
 <template>
   <div class="p">
     <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
-      <el-form-item label="客户"><el-select v-model="query.customerId" placeholder="全部" clearable filterable style="width:160px"><el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id"/></el-select></el-form-item>
+      <el-form-item label="客户"><el-select v-model="query.customerId" placeholder="全部" clearable filterable style="width:160px"><el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id ?? ''"/></el-select></el-form-item>
       <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="s in [{l:'未结清',v:'未结清'},{l:'部分结清',v:'部分结清'},{l:'已结清',v:'已结清'}]" :key="s.v" :label="s.l" :value="s.v"/></el-select></el-form-item>
       <el-form-item label="单号"><el-input v-model="query.billNo" placeholder="单据号" clearable @keyup.enter="query_"/></el-form-item>
       <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button></el-form-item>

@@ -12,6 +12,7 @@ import com.beichen.erp.dev.entity.ProjectTimeline;
 import com.beichen.erp.dev.mapper.PhaseTemplateMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.dev.mapper.ProjectTimelineMapper;
+import com.beichen.erp.dev.service.ProjectProductSyncService;
 import com.beichen.erp.dev.service.ProjectService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +31,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     private final ProjectMapper projectMapper;
     private final PhaseTemplateMapper phaseTemplateMapper;
     private final ProjectTimelineMapper projectTimelineMapper;
+    private final ProjectProductSyncService projectProductSyncService;
 
     @Override
     public Page<Project> page(PageParam param, String keyword, String status) {
@@ -48,7 +50,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
 
     @Override
     @Transactional
-    public Project create(Project project) {
+    public Project create(Project project, Long linkExistingProductId) {
         project.setCode(generateProjectCode());
         project.setStatus(ProjectStatus.IN_PROGRESS.getCode());
         project.setCreateTime(LocalDateTime.now());
@@ -56,6 +58,9 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
 
         // 创建时间线，第一个阶段自动激活
         createTimelinesFromTemplate(project.getId());
+
+        // 根据总成名称生成/关联产品（若项目配置了总成名称）
+        projectProductSyncService.syncProduct(project.getId(), linkExistingProductId);
         return project;
     }
 

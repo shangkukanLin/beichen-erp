@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { getCashflowPage, getAccountPage, createAccount, updateAccount, type FinanceCashflow, type FinanceAccount, type PageResult } from '@/api/finance'
@@ -44,7 +44,7 @@ onMounted(() => { loadFlow(); loadAccounts() })
     <el-card shadow="never"><el-tabs v-model="tab">
       <el-tab-pane label="资金流水" name="cashflow">
         <el-form :inline="true" :model="fquery" class="qf">
-          <el-form-item label="账户"><el-select v-model="fquery.accountId" placeholder="全部" clearable style="width:150px"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id"/></el-select></el-form-item>
+          <el-form-item label="账户"><el-select v-model="fquery.accountId" placeholder="全部" clearable style="width:150px"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id ?? ''"/></el-select></el-form-item>
           <el-form-item label="类型"><el-select v-model="fquery.flowType" placeholder="全部" clearable style="width:130px"><el-option v-for="t in flowTypes" :key="t.value" :label="t.label" :value="t.value"/></el-select></el-form-item>
           <el-form-item><el-button type="primary" @click="fq_">查询</el-button><el-button @click="fr_">重置</el-button></el-form-item>
         </el-form>

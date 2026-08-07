@@ -6,6 +6,7 @@ import com.beichen.erp.material.common.ProductStatus;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.service.ProductService;
+import com.beichen.erp.dev.service.ProjectProductSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +21,7 @@ import java.util.*;
 public class ProductController {
 
     private final ProductService service;
+    private final ProjectProductSyncService projectProductSyncService;
 
     /** 分页查询（支持关键字/分类/状态筛选） */
     @GetMapping("/page")
@@ -50,6 +52,13 @@ public class ProductController {
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable Long id, @RequestBody Product product) {
         product.setId(id);
+        // 若产品名称变更，同步更新关联项目的总成名称
+        if (product.getName() != null) {
+            Product old = service.getById(id);
+            if (old != null && (old.getName() == null || !old.getName().equals(product.getName()))) {
+                projectProductSyncService.syncAssemblyNameFromProduct(id, product.getName());
+            }
+        }
         service.updateById(product);
         return R.ok();
     }

@@ -51,7 +51,7 @@ function reset_() { query.supplierId = ''; query.status = ''; page.pageNum = 1; 
 function sName(id?: number) { return suppliers.value.find(x => x.id === id)?.name || '' }
 function aName(id?: number) { return accounts.value.find(x => x.id === id)?.accountName || '' }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
-function stType(s?: string) { return DocStatusTag[s || ''] || '' }
+function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { return DocStatusTag[s || ''] || undefined }
 
 async function handleAudit(row: FinancePayment) {
   try { await ElMessageBox.confirm(`确认审核付款单「${row.code}」？将核销应付并扣减账户余额`, '提示', { type: 'warning' })
@@ -142,7 +142,7 @@ onMounted(() => { loadOpts(); loadSummary(); loadData() })
     <el-drawer v-model="detailVisible" title="付款单详情" size="50%">
       <el-descriptions :column="2" border>
         <el-descriptions-item label="单号">{{ detail.code }}</el-descriptions-item>
-        <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ DocStatusLabel[detail.status] || detail.status }}</el-tag></el-descriptions-item>
+        <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ DocStatusLabel[detail.status ?? 0] || detail.status }}</el-tag></el-descriptions-item>
         <el-descriptions-item label="供应商">{{ sName(detail.supplierId) }}</el-descriptions-item>
         <el-descriptions-item label="账户">{{ aName(detail.accountId) }}</el-descriptions-item>
         <el-descriptions-item label="日期">{{ detail.paymentDate }}</el-descriptions-item>

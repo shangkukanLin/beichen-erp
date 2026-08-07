@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { addProject, getSupplierPage, type ProjectDTO } from '@/api/system'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { addProject, checkProjectAssembly, getSupplierPage, type ProjectDTO } from '@/api/system'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
@@ -36,9 +36,35 @@ async function loadData() {
 async function handleSubmit() {
   if (!form.name) { ElMessage.warning('请输入项目名称'); return }
   if (!form.assemblyName || !form.assemblyName.trim()) { ElMessage.warning('请输入总成名称'); return }
+  const assembly = form.assemblyName.trim()
+
+  // 查重：若总成名称与已有产品重名，询问用户关联或修改名称
+  let linkExistingProductId: number | undefined = undefined
+  try {
+    const check = await checkProjectAssembly(assembly)
+    if (check?.exists) {
+      try {
+        const action = await ElMessageBox.confirm(
+          `总成名称「${assembly}」已存在同名产品（ID:${check.productId}），是否关联该产品？`,
+          '产品重名确认',
+          { confirmButtonText: '关联该产品', cancelButtonText: '修改总成名称', type: 'warning' }
+        )
+        if (action === 'confirm') {
+          linkExistingProductId = check.productId
+        }
+      } catch {
+        ElMessage.warning('请修改总成名称后重新提交')
+        return
+      }
+    }
+  } catch (e: any) {
+    // 查重接口异常不阻塞创建
+    console.warn('查重失败', e?.message || e)
+  }
+
   saving.value = true
   try {
-    await addProject(form as any)
+    await addProject(form as any, linkExistingProductId)
     ElMessage.success('项目创建成功')
     resetForm()
     tabStore.removeTab(route.path)

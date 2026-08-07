@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+﻿import request from '@/utils/request'
 
 /** 委外加工单状态（对应 OutsourceOrderStatus 枚举） */
 export const OutsourceOrderStatus = {
@@ -15,7 +15,7 @@ export const OutsourceOrderStatusLabel: Record<string, string> = {
   [OutsourceOrderStatus.CANCELLED]: '已取消'
 }
 
-export const OutsourceOrderStatusTag: Record<string, string> = {
+export const OutsourceOrderStatusTag: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
   [OutsourceOrderStatus.PENDING]: 'info',
   [OutsourceOrderStatus.PRODUCING]: 'primary',
   [OutsourceOrderStatus.FINISHED]: 'success',
@@ -37,7 +37,7 @@ export const MaterialOrderStatusLabel: Record<string, string> = {
   [MaterialOrderStatus.CANCELLED]: '已取消'
 }
 
-export const MaterialOrderStatusTag: Record<string, string> = {
+export const MaterialOrderStatusTag: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
   [MaterialOrderStatus.PENDING]: 'info',
   [MaterialOrderStatus.RECEIVING]: 'warning',
   [MaterialOrderStatus.FINISHED]: 'success',
@@ -133,7 +133,7 @@ export const ProjectStatusLabel: Record<string, string> = {
   [ProjectStatus.CANCELLED]: '已取消'
 }
 
-export const ProjectStatusTag: Record<string, string> = {
+export const ProjectStatusTag: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
   [ProjectStatus.IN_PROGRESS]: 'primary',
   [ProjectStatus.CLOSED]: 'success',
   [ProjectStatus.CANCELLED]: 'danger'
@@ -156,7 +156,7 @@ export const BugStatusLabel: Record<string, string> = {
   [BugStatus.CLOSED]: '已关闭'
 }
 
-export const BugStatusTag: Record<string, string> = {
+export const BugStatusTag: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
   [BugStatus.OPEN]: 'danger',
   [BugStatus.FIXING]: 'warning',
   [BugStatus.FIXED]: 'success',
@@ -224,5 +224,21 @@ export const DeliveryItemStatusLabel: Record<string, string> = {
   [DeliveryItemStatus.NORMAL]: '正常',
   [DeliveryItemStatus.REVERSED]: '已回滚'
 }
+
+/** 研发项目物料类型（对应 DevMaterialTypeEnum 枚举，存储值为中文标签） */
+export const DevMaterialType = {
+  BOARD: '基板',
+  SCREEN: '屏幕',
+  TEST_FIXTURE: '测试架',
+  OTHER: '其他'
+} as const
+
+export const DevMaterialTypeLabel: Record<string, string> = {
+  [DevMaterialType.BOARD]: '基板',
+  [DevMaterialType.SCREEN]: '屏幕',
+  [DevMaterialType.TEST_FIXTURE]: '测试架',
+  [DevMaterialType.OTHER]: '其他'
+}
+
 
 

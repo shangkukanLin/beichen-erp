@@ -9,7 +9,7 @@ import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
 const loading = ref(true)
-const order = reactive({ id: 0, code: '', status: '', orderType: '采购', supplierId: undefined as any, supplierName: '', deliveryDate: '', finishTime: '', remark: '', attachUrl: '' })
+const order = reactive({ id: 0, code: '', status: '', orderType: '采购', supplierId: undefined as any, supplierName: '', deliveryDate: '', finishTime: '', remark: '', attachUrl: '', targetWarehouseId: undefined as any })
 const items = ref<any[]>([])
 const activeTab = ref('detail')
 const saving = ref(false)
@@ -137,7 +137,8 @@ async function handleReceive(force?: boolean) {
   recSaving.value = true
   try {
     const res = await request.post<any, any>(`/outsource/material-order/${id}/receive`, { warehouseId: recWarehouseId.value, items: data, force: force || false })
-    if (res?._shortage) {
+    // 缺料提示：确认后重新提交缺料收货
+    if (res && res._shortage) {
       const shortages = (res.shortages || []) as any[]
       let html = '<div style="margin-bottom:8px">以下子物料库存不足，是否确认缺料收货？</div>'
       html += '<table style="width:100%;border-collapse:collapse;font-size:13px">'
@@ -162,10 +163,37 @@ async function handleReceive(force?: boolean) {
       handleReceive(true)
       return
     }
+    // 收货草稿创建成功后自动审核（审核才扣库存/生成应付），保持一步到位体验
+    const deliveryId = res?.id
+    if (deliveryId) {
+      try { await request.put(`/outsource/material-order/delivery/${deliveryId}/audit`) }
+      catch (err: any) { ElMessage.warning('草稿已保存但审核失败：' + (err?.message || '')); }
+    }
     ElMessage.success(force ? '缺料交货完成（子物料库存已为负数）' : '交货完成')
     recVisible.value = false; loadAll()
   }
   catch (e: any) { ElMessage.error(e?.message || '交货失败') } finally { recSaving.value = false }
+}
+
+// 收货/退不良草稿单审核
+async function auditDelivery(row: any) {
+  try { await ElMessageBox.confirm('审核后将扣减库存并生成应付，是否继续？', '审核收货单', { type: 'warning' }) } catch { return }
+  try {
+    await request.put(`/outsource/material-order/delivery/${row.id}/audit`)
+    ElMessage.success('审核成功'); loadAll()
+  } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
+}
+// 收货/退不良已审核单反审核（逆向回滚库存与应付）
+async function unauditDelivery(row: any) {
+  try { await ElMessageBox.confirm('反审核将回滚库存并冲回应付，是否继续？', '反审核收货单', { type: 'warning' }) } catch { return }
+  try {
+    await request.put(`/outsource/material-order/delivery/${row.id}/unaudit`)
+    ElMessage.success('反审核成功'); loadAll()
+  } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
+}
+// 是否为可审核/反审核的物料订单收发明细（收货/退不良）
+function isMaterialDelivery(row: any) {
+  return row.deliveryType === DeliveryType.RECEIVE || row.deliveryType === DeliveryType.DEFECT_RETURN
 }
 
 function goPurchaseComponent(comp: any, parentItem: any) {
@@ -194,7 +222,13 @@ async function handleDefectReturn() {
   if (defectHandleType.value !== '折现退款' && !defectWarehouseId.value) { ElMessage.warning('请选择退料仓库'); return }
   defectSaving.value = true
   try {
-    await request.post(`/outsource/material-order/${id}/return-defect`, { handleType: defectHandleType.value, warehouseId: defectWarehouseId.value, items: data })
+    const res = await request.post<any, any>(`/outsource/material-order/${id}/return-defect`, { handleType: defectHandleType.value, warehouseId: defectWarehouseId.value, items: data })
+    // 退不良草稿创建成功后自动审核
+    const deliveryId = res?.id
+    if (deliveryId) {
+      try { await request.put(`/outsource/material-order/delivery/${deliveryId}/audit`) }
+      catch (err: any) { ElMessage.warning('草稿已保存但审核失败：' + (err?.message || '')); }
+    }
     ElMessage.success('退不良完成'); defectVisible.value = false; loadAll()
   }
   catch (e: any) { ElMessage.error(e?.message || '退料失败') } finally { defectSaving.value = false }
@@ -342,11 +376,26 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
           </el-table-column>
           <el-table-column prop="code" label="单号" width="150" />
           <el-table-column prop="deliveryType" label="类型" width="70"><template #default="{row}"><el-tag :type="row.deliveryType===DeliveryType.RECEIVE?'success':'warning'" size="small">{{ DeliveryTypeLabel[row.deliveryType] || row.deliveryType }}</el-tag></template></el-table-column>
+          <el-table-column label="状态" width="80"><template #default="{row}">
+            <el-tag v-if="row.status==='AUDITED'" type="success" size="small">已审核</el-tag>
+            <el-tag v-else-if="row.status==='DRAFT'" type="info" size="small">草稿</el-tag>
+            <el-tag v-else-if="row.status==='CANCELLED'" type="danger" size="small">已作废</el-tag>
+            <span v-else>{{ row.status }}</span>
+          </template></el-table-column>
           <el-table-column label="日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
           <el-table-column label="型号" min-width="140" show-overflow-tooltip><template #default="{row}">{{ (row.items||[]).map((i:any)=>i.materialName).join(' / ') }}</template></el-table-column>
           <el-table-column label="数量" width="80" align="right"><template #default="{row}">{{ (row.items||[]).reduce((s:number,i:any)=>s+(i.quantity||0),0) }}</template></el-table-column>
           <el-table-column prop="warehouseName" label="仓库" width="120" show-overflow-tooltip />
-          <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
+          <el-table-column label="操作" width="150" fixed="right">
+            <template #default="{row}">
+              <template v-if="isMaterialDelivery(row)">
+                <el-button v-if="row.status==='DRAFT'" type="primary" link size="small" @click="auditDelivery(row)">审核</el-button>
+                <el-button v-if="row.status==='AUDITED'" type="warning" link size="small" @click="unauditDelivery(row)">反审核</el-button>
+              </template>
+              <span v-else style="color:#c0c4cc;font-size:12px">-</span>
+            </template>
+          </el-table-column>
         </el-table>
       </el-card>
     </template>
@@ -377,7 +426,7 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
         <el-table-column label="本次交货" width="140"><template #default="{row}"><el-input v-model="row.quantity" size="small" type="number" placeholder="数量" /></template></el-table-column>
         <el-table-column prop="orderQuantity" label="下单数" width="80" />
       </el-table>
-      <template #footer><el-button @click="recVisible=false">取消</el-button><el-button type="primary" :loading="recSaving" @click="handleReceive">确认交货</el-button></template>
+      <template #footer><el-button @click="recVisible=false">取消</el-button><el-button type="primary" :loading="recSaving" @click="() => handleReceive()">确认交货</el-button></template>
     </el-dialog>
 
     <!-- 退不良弹窗 -->

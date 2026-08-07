@@ -51,6 +51,8 @@ public class OutsourceDelivery {
     private String remark;
     /** 附件地址（如送货单图片） */
     private String attachUrl;
+    /** 来源订单ID（关联 outsource_material_order.id，强关联回查，替代 remark LIKE 弱关联） */
+    private Long sourceOrderId;
     /** 企业ID（多租户隔离，自动填充） */
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;

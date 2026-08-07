@@ -26,7 +26,11 @@ async function loadMaterials() {
   } finally { matLoading.value = false }
 }
 
-function goLog(row: any) { router.push(`/inventory/warehouse/material-history/${warehouseId}/${row.materialId}`) }
+function goLog(row: any) { router.push(`/inventory/warehouse/material-history/${warehouseId}/${row.productId}`) }
+function fmt(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
+function totalQty(row: any) {
+  return (Number(row.qtyA) || 0) + (Number(row.qtyB) || 0) + (Number(row.qtyC) || 0) + (Number(row.qtyDefect) || 0)
+}
 
 
 
@@ -53,10 +57,33 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
       <el-table :data="materials" border stripe v-loading="matLoading" size="small">
         <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="productName" label="产品/物料" min-width="160" show-overflow-tooltip />
-        <el-table-column label="库存数量" width="120" align="right">
-          <template #default="{row}"><span :style="{color: Number(row.quantity)<0?'#f56c6c':'',fontWeight:Number(row.quantity)<0?600:400}">{{ row.quantity }}</span></template>
+        <el-table-column label="A规" width="90" align="right">
+          <template #default="{row}">
+            <el-tag v-if="Number(row.qtyA)>0" type="success" size="small">{{ fmt(row.qtyA) }}</el-tag>
+            <span v-else style="color:#999">0</span>
+          </template>
         </el-table-column>
-        <el-table-column label="可用数量" width="100" align="right"><template #default="{row}">{{ row.availableQuantity || 0 }}</template></el-table-column>
+        <el-table-column label="B规" width="90" align="right">
+          <template #default="{row}">
+            <el-tag v-if="Number(row.qtyB)>0" type="warning" size="small">{{ fmt(row.qtyB) }}</el-tag>
+            <span v-else style="color:#999">0</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="C规" width="90" align="right">
+          <template #default="{row}">
+            <el-tag v-if="Number(row.qtyC)>0" type="info" size="small">{{ fmt(row.qtyC) }}</el-tag>
+            <span v-else style="color:#999">0</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="不良" width="90" align="right">
+          <template #default="{row}">
+            <el-tag v-if="Number(row.qtyDefect)>0" type="danger" size="small">{{ fmt(row.qtyDefect) }}</el-tag>
+            <span v-else style="color:#999">0</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="总库存" width="100" align="right">
+          <template #default="{row}"><span style="font-weight:600">{{ fmt(totalQty(row)) }}</span></template>
+        </el-table-column>
         <el-table-column label="操作" width="80" align="center">
           <template #default="{row}"><el-button type="primary" link size="small" @click="goLog(row)">流水</el-button></template>
         </el-table-column>

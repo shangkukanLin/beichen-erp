@@ -20,6 +20,8 @@ public class Project {
     private String code;
     private String name;
     private String assemblyName;
+    /** 关联产品ID(product.id)，与产品表双向关联；产品管理里新建的产品此字段为空 */
+    private Long productId;
     private String originalSize;
     private String originalResolution;
     private String displaySupplierName;

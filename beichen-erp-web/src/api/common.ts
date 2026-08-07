@@ -1,4 +1,4 @@
-/** 通用单据状态（对应 DocStatus 枚举） */
+﻿/** 通用单据状态（对应 DocStatus 枚举） */
 export const DocStatus = {
   DRAFT: 'DRAFT',
   AUDITED: 'AUDITED',
@@ -11,8 +11,9 @@ export const DocStatusLabel: Record<string, string> = {
   [DocStatus.CANCELLED]: '已作废'
 }
 
-export const DocStatusTag: Record<string, string> = {
+export const DocStatusTag: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
   [DocStatus.DRAFT]: 'info',
   [DocStatus.AUDITED]: 'success',
   [DocStatus.CANCELLED]: 'danger'
 }
+

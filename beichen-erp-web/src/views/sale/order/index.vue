@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
-import { getMaterialPage, type Material } from '@/api/enums'
+import { getOutsourceMaterialPage, type OutsourceMaterialOption } from '@/api/purchase'
 import { getQualityTypes, type QualityOption } from '@/api/product'
 import { listCustomers, type Customer } from '@/api/customer'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
@@ -29,7 +29,7 @@ const statusOptions = [
 
 const customers = ref<Customer[]>([])
 const warehouses = ref<{ id: number; warehouseName: string }[]>([])
-const materialOptions = ref<Material[]>([])
+const materialOptions = ref<OutsourceMaterialOption[]>([])
 
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增销售单')
@@ -54,7 +54,7 @@ const rules: FormRules = {
 
 async function loadCustomers() { try { const res = await listCustomers(); customers.value = res || [] } catch { customers.value = [] } }
 async function loadWarehouses() { try { const res = await request.get('/inventory/warehouse/page', { params: { pageSize: 200 } }); warehouses.value = res?.records || [] } catch { warehouses.value = [] } }
-async function loadMaterials(keyword?: string) { try { const res = await getMaterialPage({ pageNum: 1, pageSize: 100, name: keyword || '' }); materialOptions.value = res?.records || [] } catch { materialOptions.value = [] } }
+async function loadMaterials(keyword?: string) { try { const res = await getOutsourceMaterialPage({ pageNum: 1, pageSize: 100, materialName: keyword || '' }); materialOptions.value = res?.records || [] } catch { materialOptions.value = [] } }
 
 async function loadData() {
   tableLoading.value = true
@@ -80,7 +80,7 @@ function addItem() { items.value.push({ materialId: undefined, qualityType: 'A',
 function removeItem(index: number) { items.value.splice(index, 1) }
 function onMaterialChange(val: number, row: SaleOrderItem) {
   const m = materialOptions.value.find(x => x.id === val)
-  if (m) { row.materialId = m.id as number; row.materialName = m.name; row.spec = m.spec; row.unit = m.unit }
+  if (m) { row.materialId = m.id as number; row.materialName = m.materialName; row.spec = m.spec; row.unit = m.unit }
 }
 function itemAmount(row: SaleOrderItem) { const q = Number(row.quantity) || 0; const p = Number(row.unitPrice) || 0; return (q * p).toFixed(2) }
 
@@ -167,7 +167,7 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQual
         </el-form-item>
         <el-form-item label="客户">
           <el-select v-model="query.customerId" placeholder="请选择" clearable filterable style="width:160px">
-            <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
+            <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id ?? ''" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
@@ -223,7 +223,7 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQual
           <el-col :span="12">
             <el-form-item label="客户" prop="customerId">
               <el-select v-model="form.customerId" placeholder="请选择" filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer'); return } }">
-                <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
+                <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id ?? ''" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </el-form-item>
@@ -260,8 +260,8 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQual
           <el-table-column label="物料" min-width="180">
             <template #default="{ row }">
               <el-select v-model="row.materialId" placeholder="选择物料" filterable remote :remote-method="loadMaterials"
-                style="width:100%" @change="(v: number) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
-                <el-option v-for="m in materialOptions" :key="m.id" :label="m.name" :value="m.id" />
+                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
+                <el-option v-for="m in materialOptions" :key="m.id" :label="m.materialName" :value="m.id ?? ''" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </template>
@@ -352,3 +352,4 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQual
 .query-form { display: flex; flex-wrap: wrap; }
 .pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
 </style>
+

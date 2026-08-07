@@ -21,6 +21,10 @@ export interface PurchaseOrderItem {
   id?: number
   orderId?: number
   productId?: number
+  materialCode?: string
+  materialName?: string
+  spec?: string
+  unit?: string
   qualityType?: string
   quantity?: number
   unitPrice?: number
@@ -49,6 +53,11 @@ export interface PurchaseInboundItem {
   inboundId?: number
   orderItemId?: number
   productId?: number
+  materialId?: number
+  materialCode?: string
+  materialName?: string
+  spec?: string
+  unit?: string
   qualityType?: string
   quantity?: number
   unitPrice?: number
@@ -104,80 +113,95 @@ export interface PageResult<T> {
   size: number
 }
 
+/** 委外物料（成品采购物料下拉用） */
+export interface OutsourceMaterialOption {
+  id?: number
+  materialName?: string
+  spec?: string
+  unit?: string
+  bomTypeId?: number
+  bomTypeName?: string
+}
+
+/** 查询委外物料列表（用于采购单物料下拉） */
+export function getOutsourceMaterialPage(params: { pageNum?: number; pageSize?: number; materialName?: string }) {
+  return request.get<PageResult<OutsourceMaterialOption>>('/outsource/material/page', { params })
+}
+
 // ---- 成品采购单 API ----
 export function getPurchaseOrderPage(params: any) {
-  return request.get<unknown, PageResult<PurchaseOrder>>('/inventory/purchase/page', { params })
+  return request.get<PageResult<PurchaseOrder>>('/inventory/purchase/page', { params })
 }
 export function getPurchaseOrder(id: number) {
-  return request.get<unknown, PurchaseOrder>(`/inventory/purchase/${id}`)
+  return request.get<PurchaseOrder>(`/inventory/purchase/${id}`)
 }
 export function getPurchaseOrderItems(id: number) {
-  return request.get<unknown, PurchaseOrderItem[]>(`/inventory/purchase/${id}/items`)
+  return request.get<PurchaseOrderItem[]>(`/inventory/purchase/${id}/items`)
 }
 export function createPurchaseOrder(data: any) {
-  return request.post<unknown, void>('/inventory/purchase', data)
+  return request.post<void>('/inventory/purchase', data)
 }
 export function updatePurchaseOrder(id: number, data: any) {
-  return request.put<unknown, void>(`/inventory/purchase/${id}`, data)
+  return request.put<void>(`/inventory/purchase/${id}`, data)
 }
 export function auditPurchaseOrder(id: number) {
-  return request.put<unknown, void>(`/inventory/purchase/${id}/audit`)
+  return request.put<void>(`/inventory/purchase/${id}/audit`)
 }
 export function cancelPurchaseOrder(id: number) {
-  return request.put<unknown, void>(`/inventory/purchase/${id}/cancel`)
+  return request.put<void>(`/inventory/purchase/${id}/cancel`)
 }
 export function unAuditPurchaseOrder(id: number) {
-  return request.put<unknown, void>(`/inventory/purchase/${id}/un-audit`)
+  return request.put<void>(`/inventory/purchase/${id}/un-audit`)
 }
 
 // ---- 采购入库单 API ----
 export function getPurchaseInboundPage(params: any) {
-  return request.get<unknown, PageResult<PurchaseInbound>>('/inventory/inbound/page', { params })
+  return request.get<PageResult<PurchaseInbound>>('/inventory/inbound/page', { params })
 }
 export function getPurchaseInbound(id: number) {
-  return request.get<unknown, PurchaseInbound>(`/inventory/inbound/${id}`)
+  return request.get<PurchaseInbound>(`/inventory/inbound/${id}`)
 }
 export function getPurchaseInboundItems(id: number) {
-  return request.get<unknown, PurchaseInboundItem[]>(`/inventory/inbound/${id}/items`)
+  return request.get<PurchaseInboundItem[]>(`/inventory/inbound/${id}/items`)
 }
 export function createPurchaseInbound(data: any) {
-  return request.post<unknown, void>('/inventory/inbound', data)
+  return request.post<void>('/inventory/inbound', data)
 }
 export function updatePurchaseInbound(id: number, data: any) {
-  return request.put<unknown, void>(`/inventory/inbound/${id}`, data)
+  return request.put<void>(`/inventory/inbound/${id}`, data)
 }
 export function auditPurchaseInbound(id: number) {
-  return request.put<unknown, void>(`/inventory/inbound/${id}/audit`)
+  return request.put<void>(`/inventory/inbound/${id}/audit`)
 }
 export function cancelPurchaseInbound(id: number) {
-  return request.put<unknown, void>(`/inventory/inbound/${id}/cancel`)
+  return request.put<void>(`/inventory/inbound/${id}/cancel`)
 }
 
 // ---- 成品退货单 API ----
 export function getPurchaseReturnPage(params: any) {
-  return request.get<unknown, PageResult<PurchaseReturn>>('/inventory/purchase-return/page', { params })
+  return request.get<PageResult<PurchaseReturn>>('/inventory/purchase-return/page', { params })
 }
 export function getPurchaseReturn(id: number) {
-  return request.get<unknown, PurchaseReturn>(`/inventory/purchase-return/${id}`)
+  return request.get<PurchaseReturn>(`/inventory/purchase-return/${id}`)
 }
 export function getPurchaseReturnItems(id: number) {
-  return request.get<unknown, PurchaseReturnItem[]>(`/inventory/purchase-return/${id}/items`)
+  return request.get<PurchaseReturnItem[]>(`/inventory/purchase-return/${id}/items`)
 }
 export function createPurchaseReturn(data: any) {
-  return request.post<unknown, void>('/inventory/purchase-return', data)
+  return request.post<void>('/inventory/purchase-return', data)
 }
 export function updatePurchaseReturn(id: number, data: any) {
-  return request.put<unknown, void>(`/inventory/purchase-return/${id}`, data)
+  return request.put<void>(`/inventory/purchase-return/${id}`, data)
 }
 export function auditPurchaseReturn(id: number) {
-  return request.put<unknown, void>(`/inventory/purchase-return/${id}/audit`)
+  return request.put<void>(`/inventory/purchase-return/${id}/audit`)
 }
 export function cancelPurchaseReturn(id: number) {
-  return request.put<unknown, void>(`/inventory/purchase-return/${id}/cancel`)
+  return request.put<void>(`/inventory/purchase-return/${id}/cancel`)
 }
 export function unAuditPurchaseReturn(id: number) {
-  return request.put<unknown, void>(`/inventory/purchase-return/${id}/un-audit`)
+  return request.put<void>(`/inventory/purchase-return/${id}/un-audit`)
 }
 export function deletePurchaseReturn(id: number) {
-  return request.delete<unknown, void>(`/inventory/purchase-return/${id}`)
+  return request.delete<void>(`/inventory/purchase-return/${id}`)
 }

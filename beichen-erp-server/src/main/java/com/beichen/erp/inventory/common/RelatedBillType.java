@@ -17,6 +17,8 @@ public enum RelatedBillType {
     SALE_ORDER("销售单"),
     /** 销售出库：销售出库单审核触发 */
     SALE_OUTBOUND("销售出库"),
+    /** 销售退货：销售退货单审核/反审核触发 */
+    SALE_RETURN("销售退货单"),
 
     /** 移仓单：移仓审核/反审核触发 */
     WAREHOUSE_MOVE("移仓单"),

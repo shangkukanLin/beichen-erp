@@ -119,11 +119,11 @@ const statusOptions = [
   { label: ReturnStatusLabel[ReturnStatus.CANCELLED], value: ReturnStatus.CANCELLED },
 ]
 function statusLabel(s?: number) { return s != null ? (ReturnStatusLabel[s] || '') : '' }
-function statusType(s?: number) {
+function statusType(s?: number): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
   if (s === ReturnStatus.DRAFT) return 'info'
   if (s === ReturnStatus.COMPLETED) return 'success'
   if (s === ReturnStatus.CANCELLED) return 'danger'
-  return ''
+  return undefined
 }
 function warehouseName(id?: number) {
   const w = warehouses.value.find((x: any) => x.id === id)

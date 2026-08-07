@@ -1,6 +1,7 @@
 package com.beichen.erp.dev.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -20,10 +21,18 @@ public class DevPurchaseItem {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long projectId;
+    /** 公司ID（研发物料弱引用，不强制过滤） */
+    @TableField("company_id")
+    private Long companyId;
     private String name;
     private String type;
+    /** 存放仓库ID（配合 warehouseType 定位，自有仓库与委外仓库两张表 ID 独立） */
+    @TableField("warehouse_id")
+    private Long warehouseId;
+    /** 仓库归属类型：INVENTORY 自有仓库 / OUTSOURCE 委外仓库 */
+    @TableField("warehouse_type")
+    private String warehouseType;
     private Integer quantity;
-    private String location;
     private String locationDetail;
     private LocalDate purchaseDate;
     private BigDecimal amount;

@@ -3,7 +3,6 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
-import { getMaterialPage, type Material } from '@/api/enums'
 import { getQualityTypes, type QualityOption } from '@/api/product'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
@@ -17,10 +16,12 @@ import {
   auditPurchaseOrder,
   cancelPurchaseOrder,
   unAuditPurchaseOrder,
-  PurchaseStatus,
-  PurchaseStatusLabel,
+  getOutsourceMaterialPage,
   type PurchaseOrder,
-  type PurchaseOrderItem
+  type PurchaseOrderItem,
+  type OutsourceMaterialOption,
+  PurchaseStatus,
+  PurchaseStatusLabel
 } from '@/api/purchase'
 
 const query = reactive({ code: '', supplierId: '' as string | number, status: '' as string | number })
@@ -39,7 +40,7 @@ function statusLabel(s?: number) {
 
 const suppliers = ref<{ id: number; name: string }[]>([])
 const warehouses = ref<{ id: number; warehouseName: string }[]>([])
-const materialOptions = ref<Material[]>([])
+const materialOptions = ref<OutsourceMaterialOption[]>([])
 
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增采购单')
@@ -78,7 +79,7 @@ async function loadWarehouses() {
 }
 async function loadMaterials(keyword?: string) {
   try {
-    const res = await getMaterialPage({ pageNum: 1, pageSize: 100, name: keyword || '' })
+    const res = await getOutsourceMaterialPage({ pageNum: 1, pageSize: 100, materialName: keyword || '' })
     materialOptions.value = res?.records || []
   } catch { materialOptions.value = [] }
 }
@@ -135,7 +136,7 @@ function onMaterialChange(val: number, row: PurchaseOrderItem) {
   const m = materialOptions.value.find(x => x.id === val)
   if (m) {
     row.productId = m.id as number
-    row.materialName = m.name
+    row.materialName = m.materialName
     row.spec = m.spec
     row.unit = m.unit
   }
@@ -210,11 +211,11 @@ function handleWarehouseClick(id?: number) {
 function handleSizeChange(val: number) { pagination.pageSize = val; pagination.pageNum = 1; loadData() }
 function handleCurrentChange(val: number) { pagination.pageNum = val; loadData() }
 
-function statusType(s?: number) {
+function statusType(s?: number): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
   if (s === PurchaseStatus.DRAFT) return 'info'
   if (s === PurchaseStatus.COMPLETED) return 'success'
   if (s === PurchaseStatus.CANCELLED) return 'danger'
-  return ''
+  return undefined
 }
 function supplierName(id?: number) {
   const s = suppliers.value.find(x => x.id === id)
@@ -342,8 +343,8 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQual
           <el-table-column label="产品" min-width="180">
             <template #default="{ row, $index }">
               <el-select v-model="row.productId" placeholder="选择物料" filterable remote :remote-method="loadMaterials"
-                style="width:100%" @change="(v: number) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
-                <el-option v-for="m in materialOptions" :key="m.id" :label="m.name" :value="m.id" />
+                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
+                <el-option v-for="m in materialOptions" :key="m.id" :label="m.materialName" :value="m.id ?? ''" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </template>

@@ -166,7 +166,7 @@ onMounted(async () => {
       <el-table :data="items" border size="small">
         <el-table-column label="类型" width="90">
           <template #default="{row,$index}">
-            <el-select v-model="row.bomTypeId" size="small" style="width:100%" @change="(v: number) => { if (v === ADD_MARKER) { row.bomTypeId = undefined; router.push('/dev/bom-type'); return } onTypeChange($index) }">
+            <el-select v-model="row.bomTypeId" size="small" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.bomTypeId = undefined; router.push('/dev/bom-type'); return } onTypeChange($index) }">
               <el-option v-for="t in bomTypes" :key="t.id" :label="t.typeName" :value="t.id" />
               <el-option label="+ 新增" :value="ADD_MARKER" />
             </el-select>

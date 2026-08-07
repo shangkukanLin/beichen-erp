@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+﻿import request from '@/utils/request'
 
 export interface PageResult<T> { records: T[]; total: number; current: number; size: number }
 
@@ -14,30 +14,31 @@ export interface FinancePaymentItem { id?: number; paymentId?: number; payableId
 export interface FinanceBill { id?: number; billNo?: string; billType?: string; partnerId?: number; partnerName?: string; periodStart?: string; periodEnd?: string; totalAmount?: number; paidAmount?: number; unpaidAmount?: number; status?: string }
 export interface FinanceBillItem { id?: number; sourceBillType?: string; sourceBillNo?: string; amount?: number; paidAmount?: number; unpaidAmount?: number; dueDate?: string }
 
-export function getAccountPage(params?: any) { return request.get<unknown, PageResult<FinanceAccount>>('/finance/account/page', { params }) }
-export function createAccount(data: any) { return request.post<unknown, void>('/finance/account', data) }
-export function updateAccount(data: any) { return request.put<unknown, void>('/finance/account', data) }
+export function getAccountPage(params?: any) { return request.get<PageResult<FinanceAccount>>('/finance/account/page', { params }) }
+export function createAccount(data: any) { return request.post<void>('/finance/account', data) }
+export function updateAccount(data: any) { return request.put<void>('/finance/account', data) }
 
-export function getReceivablePage(params: any) { return request.get<unknown, PageResult<FinanceReceivable>>('/finance/receivable/page', { params }) }
-export function getUnpaidReceivables(customerId: number) { return request.get<unknown, FinanceReceivable[]>('/finance/receivable/unpaid', { params: { customerId } }) }
+export function getReceivablePage(params: any) { return request.get<PageResult<FinanceReceivable>>('/finance/receivable/page', { params }) }
+export function getUnpaidReceivables(customerId: number) { return request.get<FinanceReceivable[]>('/finance/receivable/unpaid', { params: { customerId } }) }
 
-export function getPayablePage(params: any) { return request.get<unknown, PageResult<FinancePayable>>('/finance/payable/page', { params }) }
-export function getUnpaidPayables(supplierId: number) { return request.get<unknown, FinancePayable[]>('/finance/payable/unpaid', { params: { supplierId } }) }
+export function getPayablePage(params: any) { return request.get<PageResult<FinancePayable>>('/finance/payable/page', { params }) }
+export function getUnpaidPayables(supplierId: number) { return request.get<FinancePayable[]>('/finance/payable/unpaid', { params: { supplierId } }) }
 
-export function getCashflowPage(params: any) { return request.get<unknown, PageResult<FinanceCashflow>>('/finance/cashflow/page', { params }) }
+export function getCashflowPage(params: any) { return request.get<PageResult<FinanceCashflow>>('/finance/cashflow/page', { params }) }
 
-export function getReceiptPage(params: any) { return request.get<unknown, PageResult<FinanceReceipt>>('/finance/receipt/page', { params }) }
-export function getReceiptItems(id: number) { return request.get<unknown, FinanceReceiptItem[]>(`/finance/receipt/${id}/items`) }
-export function createReceipt(data: any) { return request.post<unknown, void>('/finance/receipt', data) }
-export function auditReceipt(id: number) { return request.put<unknown, void>(`/finance/receipt/${id}/audit`) }
-export function cancelReceipt(id: number) { return request.put<unknown, void>(`/finance/receipt/${id}/cancel`) }
+export function getReceiptPage(params: any) { return request.get<PageResult<FinanceReceipt>>('/finance/receipt/page', { params }) }
+export function getReceiptItems(id: number) { return request.get<FinanceReceiptItem[]>(`/finance/receipt/${id}/items`) }
+export function createReceipt(data: any) { return request.post<void>('/finance/receipt', data) }
+export function auditReceipt(id: number) { return request.put<void>(`/finance/receipt/${id}/audit`) }
+export function cancelReceipt(id: number) { return request.put<void>(`/finance/receipt/${id}/cancel`) }
 
-export function getPaymentPage(params: any) { return request.get<unknown, PageResult<FinancePayment>>('/finance/payment/page', { params }) }
-export function getPaymentItems(id: number) { return request.get<unknown, FinancePaymentItem[]>(`/finance/payment/${id}/items`) }
-export function createPayment(data: any) { return request.post<unknown, void>('/finance/payment', data) }
-export function auditPayment(id: number) { return request.put<unknown, void>(`/finance/payment/${id}/audit`) }
-export function cancelPayment(id: number) { return request.put<unknown, void>(`/finance/payment/${id}/cancel`) }
+export function getPaymentPage(params: any) { return request.get<PageResult<FinancePayment>>('/finance/payment/page', { params }) }
+export function getPaymentItems(id: number) { return request.get<FinancePaymentItem[]>(`/finance/payment/${id}/items`) }
+export function createPayment(data: any) { return request.post<void>('/finance/payment', data) }
+export function auditPayment(id: number) { return request.put<void>(`/finance/payment/${id}/audit`) }
+export function cancelPayment(id: number) { return request.put<void>(`/finance/payment/${id}/cancel`) }
 
-export function getBillPage(params: any) { return request.get<unknown, PageResult<FinanceBill>>('/finance/bill/page', { params }) }
-export function getBillItems(id: number) { return request.get<unknown, FinanceBillItem[]>(`/finance/bill/${id}/items`) }
-export function generateBill(data: any) { return request.post<unknown, FinanceBill>('/finance/bill/generate', data) }
+export function getBillPage(params: any) { return request.get<PageResult<FinanceBill>>('/finance/bill/page', { params }) }
+export function getBillItems(id: number) { return request.get<FinanceBillItem[]>(`/finance/bill/${id}/items`) }
+export function generateBill(data: any) { return request.post<FinanceBill>('/finance/bill/generate', data) }
+

@@ -3,12 +3,14 @@ package com.beichen.erp.outsource.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.dev.mapper.DevPurchaseItemMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.entity.OutsourceWarehouse;
 import com.beichen.erp.outsource.mapper.OutsourceWarehouseMapper;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -21,6 +23,8 @@ public class OutsourceWarehouseController {
 
     private final OutsourceWarehouseMapper mapper;
     private final SupplierMapper supplierMapper;
+    private final JdbcTemplate jdbcTemplate;
+    private final DevPurchaseItemMapper devPurchaseItemMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -71,5 +75,14 @@ public class OutsourceWarehouseController {
     public R<Void> update(@RequestBody OutsourceWarehouse w) { mapper.updateById(w); return R.ok(); }
 
     @DeleteMapping("/{id}")
-    public R<Void> delete(@PathVariable Long id) { mapper.deleteById(id); return R.ok(); }
+    public R<Void> delete(@PathVariable Long id) {
+        // 拦截：委外仓库已被研发物料引用时禁止删除
+        Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM dev_purchase_item WHERE warehouse_id = ? AND warehouse_type = 'OUTSOURCE'", Integer.class, id);
+        if (cnt != null && cnt > 0) {
+            throw new BusinessException("该委外仓库已被研发物料引用（" + cnt + "条），无法删除");
+        }
+        mapper.deleteById(id);
+        return R.ok();
+    }
 }

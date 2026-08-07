@@ -28,6 +28,8 @@ public class MaterialOrder {
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
     private LocalDateTime finishTime;
+    /** 逻辑删除标记：0未删除/1已删除 */
+    private Integer deleted;
 
     @TableField(exist = false)
     private List<MaterialOrderItem> items;

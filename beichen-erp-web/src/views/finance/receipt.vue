@@ -8,7 +8,7 @@ import { listCustomers, type Customer } from '@/api/customer'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
 const router = useRouter()
-import { getReceiptPage, getReceiptItems, createReceipt, auditReceipt, cancelReceipt, getUnpaidReceivables, type FinanceReceipt, type FinanceReceiptItem } from '@/api/finance'
+import { getReceiptPage, getReceiptItems, createReceipt, auditReceipt, cancelReceipt, getUnpaidReceivables, type FinanceReceipt, type FinanceReceiptItem, type FinanceReceivable } from '@/api/finance'
 
 const query = reactive({ customerId: '' as string|number, status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -39,13 +39,13 @@ function reset_() { query.customerId = ''; query.status = ''; page.pageNum = 1; 
 function cName(id?: number) { return customers.value.find(x => x.id === id)?.name || '' }
 function aName(id?: number) { return accounts.value.find(x => x.id === id)?.accountName || '' }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
-function stType(s?: string) { return DocStatusTag[s || ''] || '' }
+function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { return DocStatusTag[s || ''] || undefined }
 
 const dVisible = ref(false)
 const dTitle = ref('新增收款单')
 const dForm = reactive<FinanceReceipt>({ customerId: undefined, accountId: undefined, receiptDate: '', remark: '' })
 const dItems = ref<FinanceReceiptItem[]>([])
-const unpaid = ref<{id:number;billNo:string;unpaidAmount:number;sourceBillType:string;dueDate:string}[]>([])
+const unpaid = ref<FinanceReceivable[]>([])
 const dLoading = ref(false)
 
 function resetD() { Object.assign(dForm, { id: undefined, customerId: undefined, accountId: undefined, receiptDate: '', remark: '' }); dItems.value = []; unpaid.value = [] }
@@ -93,7 +93,7 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
 <template>
   <div class="p">
     <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
-      <el-form-item label="客户"><el-select v-model="query.customerId" placeholder="全部" clearable filterable style="width:160px" @change="(v: any) => { if (v === ADD_MARKER) { query.customerId = ''; router.push('/inventory/customer'); return } }"><el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id"/><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item>
+      <el-form-item label="客户"><el-select v-model="query.customerId" placeholder="全部" clearable filterable style="width:160px" @change="(v: any) => { if (v === ADD_MARKER) { query.customerId = ''; router.push('/inventory/customer'); return } }"><el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id ?? ''"/><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item>
       <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="o in statusOpts" :key="o.v" :label="o.l" :value="o.v"/></el-select></el-form-item>
       <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button><el-button type="success" @click="handleAdd">新增收款</el-button></el-form-item>
     </el-form></el-card>
@@ -115,7 +115,7 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
     <el-dialog v-model="dVisible" :title="dTitle" width="850px" :close-on-click-modal="false">
       <el-form :model="dForm" label-width="90px">
         <el-row :gutter="16">
-          <el-col :span="12"><el-form-item label="客户" required><el-select v-model="dForm.customerId" placeholder="请选择" filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { dForm.customerId = undefined; router.push('/inventory/customer'); return } onCustomerChange() }"><el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id"/><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="客户" required><el-select v-model="dForm.customerId" placeholder="请选择" filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { dForm.customerId = undefined; router.push('/inventory/customer'); return } onCustomerChange(dForm.customerId as number) }"><el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id ?? ''"/><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="收款账户" required><el-select v-model="dForm.accountId" placeholder="请选择" filterable style="width:100%"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id"/></el-select></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="收款日期"><el-date-picker v-model="dForm.receiptDate" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="dForm.remark" type="textarea" :rows="2"/></el-form-item></el-col>
@@ -124,7 +124,7 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
         <div style="margin-bottom:8px"><el-button type="primary" @click="addItem">添加核销项</el-button></div>
         <el-table :data="dItems" border>
           <el-table-column type="index" width="50" align="center"/>
-          <el-table-column label="应收单据" min-width="220"><template #default="{row}"><el-select v-model="row.receivableId" placeholder="选择应收单据" filterable style="width:100%" @change="(v:number)=>onReceivableChange(v,row)"><el-option v-for="u in unpaid" :key="u.id" :label="`${u.billNo} (未收:${u.unpaidAmount},到期:${u.dueDate})`" :value="u.id"/></el-select></template></el-table-column>
+          <el-table-column label="应收单据" min-width="220"><template #default="{row}"><el-select v-model="row.receivableId" placeholder="选择应收单据" filterable style="width:100%" @change="(v:number)=>onReceivableChange(v,row)"><el-option v-for="u in unpaid" :key="u.id" :label="`${u.billNo} (未收:${u.unpaidAmount},到期:${u.dueDate})`" :value="u.id ?? ''"/></el-select></template></el-table-column>
           <el-table-column label="核销金额" width="140"><template #default="{row}"><el-input-number v-model="row.thisAmount" :min="0" :precision="2" controls-position="right" style="width:100%"/></template></el-table-column>
           <el-table-column label="操作" width="70" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>
         </el-table>

@@ -11,3 +11,20 @@ beichen-erp-web/.playwright-cli/
 beichen-erp-web/*.png
 beichen-erp-web/*.yaml
 
+# 临时调试/编译产物（不入库）
+commit_msg.txt
+compile_err.txt
+compile_out.txt
+cl.txt
+cmplog.txt
+compile_log.txt
+beichen-erp-server/cl.txt
+beichen-erp-server/cmplog.txt
+beichen-erp-server/compile_err.txt
+beichen-erp-server/compile_out.txt
+beichen-erp-web/*.ps1
+beichen-erp-web/ts_errors*.txt
+beichen-erp-web/build_*.txt
+beichen-erp-web/build_final.txt
+beichen-erp-web/build_out.txt
+

@@ -55,6 +55,8 @@ public class DataInitializer implements ApplicationRunner {
         }
         alterDeliveryTable();
         alterInventoryStockTable();
+        alterPurchaseItemNullable();
+        alterPurchaseItemWarehouse();
         initCompany();
         initRoles();
         initMenus();
@@ -187,6 +189,7 @@ public class DataInitializer implements ApplicationRunner {
             {"start_date", "DATE COMMENT '开始日期'"},
             {"expected_end_date", "DATE COMMENT '预计结束日期'"},
             {"actual_end_date", "DATE COMMENT '实际结束日期'"},
+            {"product_id", "BIGINT DEFAULT NULL COMMENT '关联产品ID(product.id)'"},
         };
         for (String[] col : columns) {
             try {
@@ -581,6 +584,23 @@ public class DataInitializer implements ApplicationRunner {
                 log.info("已为 outsource_delivery_item 添加 unit_price 列");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_delivery_item 添加 item_id(来源订单明细行) 与 amount(行金额) 列
+        try {
+            Integer c1 = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_delivery_item' AND COLUMN_NAME='item_id'",
+                Integer.class);
+            if (c1 == null || c1 == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_delivery_item ADD COLUMN item_id BIGINT DEFAULT NULL COMMENT '来源订单明细行ID' AFTER bom_type_id");
+                log.info("已为 outsource_delivery_item 添加 item_id 列");
+            }
+            Integer c2 = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_delivery_item' AND COLUMN_NAME='amount'",
+                Integer.class);
+            if (c2 == null || c2 == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_delivery_item ADD COLUMN amount DECIMAL(18,4) DEFAULT 0 COMMENT '行金额' AFTER unit_price");
+                log.info("已为 outsource_delivery_item 添加 amount 列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
         // outsource_other_io 和 outsource_other_io_item 表
         try {
             Integer cnt = jdbcTemplate.queryForObject(
@@ -640,6 +660,37 @@ public class DataInitializer implements ApplicationRunner {
                 log.info("已为 finance_payable 添加 source_id 列");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_material_order / outsource_material_order_item 添加逻辑删除列 deleted（替代物理删除）
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_material_order' AND COLUMN_NAME='deleted'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_material_order ADD COLUMN deleted TINYINT DEFAULT 0 COMMENT '逻辑删除标记：0未删除/1已删除' AFTER finish_time");
+                jdbcTemplate.execute("ALTER TABLE outsource_material_order_item ADD COLUMN deleted TINYINT DEFAULT 0 COMMENT '逻辑删除标记：0未删除/1已删除' AFTER company_id");
+                log.info("已为 outsource_material_order / outsource_material_order_item 添加 deleted 逻辑删除列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // outsource_delivery 添加来源订单强关联列 source_order_id（替代 remark LIKE 弱关联）
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='outsource_delivery' AND COLUMN_NAME='source_order_id'",
+                Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE outsource_delivery ADD COLUMN source_order_id BIGINT DEFAULT NULL COMMENT '来源订单ID(关联outsource_material_order.id)' AFTER attach_url");
+                log.info("已为 outsource_delivery 添加 source_order_id 来源订单强关联列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // 存量迁移：物料订单收货/退不良单原使用 DeliveryStatus.CONFIRMED，统一升级为 DocStatus.AUDITED（已审核）
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM outsource_delivery WHERE delivery_type IN ('RECEIVE','DEFECT_RETURN') AND status='CONFIRMED'",
+                Integer.class);
+            if (cnt != null && cnt > 0) {
+                jdbcTemplate.execute("UPDATE outsource_delivery SET status='AUDITED' WHERE delivery_type IN ('RECEIVE','DEFECT_RETURN') AND status='CONFIRMED'");
+                log.info("已将 {} 条存量物料订单收发明单由 CONFIRMED 升级为 AUDITED", cnt);
+            }
+        } catch (Exception e) { log.warn("存量升级异常: {}", e.getMessage()); }
         // finance_payment 添加 attach_url 列（付款凭证）
         try {
             Integer cnt = jdbcTemplate.queryForObject(
@@ -895,10 +946,53 @@ public class DataInitializer implements ApplicationRunner {
                 // 先尝试删除旧唯一键（忽略不存在的错误）
                 try { jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock DROP INDEX uk_warehouse_product"); } catch (Exception ignored) {}
                 try { jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock ADD UNIQUE KEY uk_warehouse_product_company (warehouse_id, product_name, company_id)"); } catch (Exception e) { log.warn("添加 uk_warehouse_product_company 失败: {}", e.getMessage()); }
-                try { jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock ADD UNIQUE KEY uk_warehouse_material_company (warehouse_id, material_id, company_id)"); } catch (Exception e) { log.warn("添加 uk_warehouse_material_company 失败: {}", e.getMessage()); }
                 log.info("已更新 inventory_warehouse_stock 唯一键");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // 删除旧的 uk_warehouse_material_company 唯一键（已废弃，与 uk_warehouse_product_quality_company 冲突）
+        try {
+            Integer matUkCnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='inventory_warehouse_stock' AND INDEX_NAME='uk_warehouse_material_company'", Integer.class);
+            if (matUkCnt != null && matUkCnt > 0) {
+                jdbcTemplate.execute("ALTER TABLE inventory_warehouse_stock DROP INDEX uk_warehouse_material_company");
+                log.info("已删除旧唯一键 uk_warehouse_material_company");
+            }
+        } catch (Exception e) { log.warn("删除 uk_warehouse_material_company 异常: {}", e.getMessage()); }
+    }
+
+    /** 增量 DDL：将 dev_purchase_item.project_id 改为可空，支持不关联研发项目的物料 */
+    private void alterPurchaseItemNullable() {
+        try {
+            String nullable = jdbcTemplate.queryForObject(
+                "SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dev_purchase_item' AND COLUMN_NAME='project_id'", String.class);
+            if ("NO".equals(nullable)) {
+                jdbcTemplate.execute("ALTER TABLE dev_purchase_item MODIFY COLUMN project_id BIGINT DEFAULT NULL COMMENT '项目ID（可空，表示不关联研发项目）'");
+                log.info("已将 dev_purchase_item.project_id 改为可空");
+            } else {
+                log.info("dev_purchase_item.project_id 已可空，跳过");
+            }
+        } catch (Exception e) { log.warn("修改 dev_purchase_item.project_id 可空异常: {}", e.getMessage()); }
+    }
+
+    /** 增量 DDL：为 dev_purchase_item 增加存放仓库字段（warehouse_id / warehouse_type），兼容旧库 */
+    private void alterPurchaseItemWarehouse() {
+        try {
+            String hasCol = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dev_purchase_item' AND COLUMN_NAME='warehouse_id'", String.class);
+            if ("0".equals(hasCol)) {
+                jdbcTemplate.execute("ALTER TABLE dev_purchase_item ADD COLUMN warehouse_id BIGINT DEFAULT NULL COMMENT '存放仓库ID（配合 warehouse_type 定位）', ADD COLUMN warehouse_type VARCHAR(20) DEFAULT NULL COMMENT '仓库归属类型：INVENTORY 自有仓库 / OUTSOURCE 委外仓库'");
+                log.info("已为 dev_purchase_item 增加 warehouse_id / warehouse_type 字段");
+            } else {
+                log.info("dev_purchase_item 仓库字段已存在，跳过");
+            }
+            // 删除废弃的 location 快照列（仓库名称改为按 warehouseId 实时查询，不再冗余存储）
+            String hasLocation = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dev_purchase_item' AND COLUMN_NAME='location'", String.class);
+            if ("1".equals(hasLocation)) {
+                jdbcTemplate.execute("ALTER TABLE dev_purchase_item DROP COLUMN location");
+                log.info("已删除 dev_purchase_item.location 废弃快照列");
+            }
+        } catch (Exception e) { log.warn("为 dev_purchase_item 增加仓库字段异常: {}", e.getMessage()); }
     }
 
     /** 初始化默认公司 */
@@ -1020,6 +1114,7 @@ public class DataInitializer implements ApplicationRunner {
         saveMenu(301L, 3L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 1);
         saveMenu(302L, 3L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 2);
         saveMenu(303L, 3L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 3);
+        saveMenu(304L, 3L, "研发物料管理", "menu", "/dev/material", "DevMaterial", "Box", 4);
         // 400s 委外加工
         saveMenu(401L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1);
         saveMenu(402L, 4L, "委外物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2);
@@ -1086,7 +1181,7 @@ public class DataInitializer implements ApplicationRunner {
                 901L, 902L, 903L, 904L, 905L));
         // 研发工程师：项目研发 + BOM + 基础产品
         assignRoleMenus("dev_engineer", Arrays.asList(
-                1L, 3L, 301L, 302L, 101L));
+                1L, 3L, 301L, 302L, 303L, 304L, 101L));
         // 销售专员：销售业务 + 客户 + 产品
         assignRoleMenus("sales", Arrays.asList(
                 1L, 6L, 601L, 602L, 603L, 604L, 101L));
@@ -1154,25 +1249,32 @@ public class DataInitializer implements ApplicationRunner {
         } catch (Exception e) { log.warn("补齐备注失败: {}", e.getMessage()); }
         Long count = phaseTemplateMapper.selectCount(null);
         if (count != null && count > 0) {
+            // 兼容老库：把"小批量""结项"阶段模板的产品状态同步开关置 1，确保推进到该阶段时联动产品状态
+            try {
+                int synced = jdbcTemplate.update(
+                    "UPDATE dev_phase_template SET product_status_sync = 1 WHERE name IN ('小批量','结项') AND (product_status_sync IS NULL OR product_status_sync = 0)");
+                if (synced > 0) log.info("已将 {} 条阶段模板开启产品状态同步开关", synced);
+            } catch (Exception e) { log.warn("开启阶段模板产品状态同步开关失败: {}", e.getMessage()); }
             log.info("阶段模板数据已存在，跳过初始化");
             return;
         }
-        // 阶段模板：name, defaultDays, sortOrder, remark
+        // 阶段模板：name, defaultDays, sortOrder, remark, productStatusSync
+        // 小批量/结项阶段需要触发关联产品状态由"研发中"改为"正常"
         Object[][] defaultPhases = {
-            {"立项", 0, 1, ""},
-            {"结构评估", 2, 2, "根据玻璃尺寸和摄像头孔位与R角来综合评估结构是否支持立项。"},
-            {"立项准备", 5, 3, "根据项目型号收手机，拆分成机板和屏幕分体状态，交给触摸方案公司抓取触摸协议，明确是否可以破解协议以及用哪颗物料可以满足技术标准。"},
-            {"显示评估", 2, 4, "提供机板和原屏给到显示方案公司，并告知触摸方案商建议使用的触摸IC料号及规格书与触摸原理图，让显示方案公司抓取显示协议，根据手机的分辨率与刷新率和玻璃的分辨率综合评估用哪颗码片物料，以及驱动IC。"},
-            {"排线图纸", 3, 5, "根据触摸方案公司建议的触摸IC和显示方案公司建议的码片，开始画图纸，一般都可以画。"},
-            {"排线打样", 4, 6, "出图纸后，把图纸给到排线工厂打样，一般打10PCS，码片和触摸IC需要找方案公司提供。"},
-            {"FOG打样", 2, 7, "排线打样好之后直接让工厂寄给打样加工厂，同时需要寄驱动IC过去和玻璃过去，一般先打样5PCS。"},
-            {"显示调试", 5, 8, "FOG打样直接寄到显示方案公司，并且提供机板，开始调试显示功能。"},
-            {"触摸调试", 5, 9, "初版显示做好以后，移交机板和FOG去触摸方案公司调试触摸。同时保留一个机板和FOG去盖板厂开模做盖板样品。"},
-            {"背贴盖板打样", 2, 10, "使用保留的一个机板和FOG去盖板厂根据屏幕的实际显示效果开模做盖板样品，然后去背贴厂开背贴样品。"},
-            {"总成样品", 2, 11, "将盖板和背贴样品寄到加工厂做成总成，需要寄2PCS总成和机板过去方案公司优化触摸。"},
-            {"测试", 5, 12, "开始测试，需要测试结构/显示/触摸，详见测试文档。"},
-            {"小批量", 3, 13, "测试没问题之后，下物料寄到工厂，先进行100PCS的小批量，到货后过一遍，没有批次问题，就可以结项了。"},
-            {"结项", 0, 14, "结项，通知工厂开始量产。"}
+            {"立项", 0, 1, "", 0},
+            {"结构评估", 2, 2, "根据玻璃尺寸和摄像头孔位与R角来综合评估结构是否支持立项。", 0},
+            {"立项准备", 5, 3, "根据项目型号收手机，拆分成机板和屏幕分体状态，交给触摸方案公司抓取触摸协议，明确是否可以破解协议以及用哪颗物料可以满足技术标准。", 0},
+            {"显示评估", 2, 4, "提供机板和原屏给到显示方案公司，并告知触摸方案商建议使用的触摸IC料号及规格书与触摸原理图，让显示方案公司抓取显示协议，根据手机的分辨率与刷新率和玻璃的分辨率综合评估用哪颗码片物料，以及驱动IC。", 0},
+            {"排线图纸", 3, 5, "根据触摸方案公司建议的触摸IC和显示方案公司建议的码片，开始画图纸，一般都可以画。", 0},
+            {"排线打样", 4, 6, "出图纸后，把图纸给到排线工厂打样，一般打10PCS，码片和触摸IC需要找方案公司提供。", 0},
+            {"FOG打样", 2, 7, "排线打样好之后直接让工厂寄给打样加工厂，同时需要寄驱动IC过去和玻璃过去，一般先打样5PCS。", 0},
+            {"显示调试", 5, 8, "FOG打样直接寄到显示方案公司，并且提供机板，开始调试显示功能。", 0},
+            {"触摸调试", 5, 9, "初版显示做好以后，移交机板和FOG去触摸方案公司调试触摸。同时保留一个机板和FOG去盖板厂开模做盖板样品。", 0},
+            {"背贴盖板打样", 2, 10, "使用保留的一个机板和FOG去盖板厂根据屏幕的实际显示效果开模做盖板样品，然后去背贴厂开背贴样品。", 0},
+            {"总成样品", 2, 11, "将盖板和背贴样品寄到加工厂做成总成，需要寄2PCS总成和机板过去方案公司优化触摸。", 0},
+            {"测试", 5, 12, "开始测试，需要测试结构/显示/触摸，详见测试文档。", 0},
+            {"小批量", 3, 13, "测试没问题之后，下物料寄到工厂，先进行100PCS的小批量，到货后过一遍，没有批次问题，就可以结项了。", 1},
+            {"结项", 0, 14, "结项，通知工厂开始量产。", 1}
         };
         for (Object[] p : defaultPhases) {
             com.beichen.erp.dev.entity.PhaseTemplate t = new com.beichen.erp.dev.entity.PhaseTemplate();
@@ -1180,6 +1282,7 @@ public class DataInitializer implements ApplicationRunner {
             t.setDefaultDays((Integer) p[1]);
             t.setSortOrder((Integer) p[2]);
             t.setRemark((String) p[3]);
+            t.setProductStatusSync((Integer) p[4]);
             t.setCompanyId(1L);
             phaseTemplateMapper.insert(t);
         }
@@ -1209,6 +1312,7 @@ public class DataInitializer implements ApplicationRunner {
             {301L, 3L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 1},
             {302L, 3L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 2},
             {303L, 3L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 3},
+            {304L, 3L, "研发物料管理", "menu", "/dev/material", "DevMaterial", "Box", 4},
             {401L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1},
             {402L, 4L, "委外物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2},
             {403L, 4L, "物料信息管理", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 3},
@@ -1265,7 +1369,7 @@ public class DataInitializer implements ApplicationRunner {
         log.info("同步菜单完成，处理 {} 条", processed);
 
         // 删除所有旧ID菜单（重新编号后旧ID已废弃）
-        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,301L,302L,303L,401L,402L,403L,404L,405L,406L,407L,408L,409L,501L,502L,503L,601L,602L,603L,604L,701L,702L,703L,704L,705L,706L,801L,802L,803L,804L,805L,806L,901L,902L,903L,904L,905L,906L,907L,908L};
+        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,301L,302L,303L,304L,401L,402L,403L,404L,405L,406L,407L,408L,409L,501L,502L,503L,601L,602L,603L,604L,701L,702L,703L,704L,705L,706L,801L,802L,803L,804L,805L,806L,901L,902L,903L,904L,905L,906L,907L,908L};
         Set<Long> newIds = new HashSet<>(Arrays.asList(newMenuIds));
         jdbcTemplate.update("DELETE FROM sys_role_menu WHERE menu_id NOT IN (" +
             String.join(",", newIds.stream().map(String::valueOf).toArray(String[]::new)) + ")");
@@ -1283,6 +1387,18 @@ public class DataInitializer implements ApplicationRunner {
             } catch (Exception ignored) {}
         }
         log.info("已为管理员角色授权标准菜单");
+
+        // 研发工程师角色：补充授权研发模块菜单（每次启动确保权限完整，兼容老库未走 initRoleMenus 的场景）
+        Long[] devMenuIds = {301L, 302L, 303L, 304L, 101L};
+        for (Long mid : devMenuIds) {
+            try {
+                jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, ? FROM sys_role r WHERE r.role_code = 'dev_engineer'",
+                    mid);
+            } catch (Exception ignored) {}
+        }
+        log.info("已为研发工程师角色补充授权研发模块菜单");
     }
 }
 

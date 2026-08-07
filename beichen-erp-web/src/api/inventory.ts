@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+﻿import request from '@/utils/request'
 
 export interface PageResult<T> {
   records: T[]
@@ -63,34 +63,34 @@ export function getWarehouseOptions() {
 
 // 库存查询与流水
 export function getStockPage(params: any) {
-  return request.get<unknown, PageResult<StockRow>>('/inventory/stock/page', { params })
+  return request.get<PageResult<StockRow>>('/inventory/stock/page', { params })
 }
 export function getStockLog(params: any) {
-  return request.get<unknown, PageResult<StockLogRow>>('/inventory/stock/log', { params })
+  return request.get<PageResult<StockLogRow>>('/inventory/stock/log', { params })
 }
 
 
 // 其他出入库
 export function getOtherPage(params: any) {
-  return request.get<unknown, PageResult<OtherIo>>('/inventory/other/page', { params })
+  return request.get<PageResult<OtherIo>>('/inventory/other/page', { params })
 }
 export function getOther(id: number) {
-  return request.get<unknown, OtherIo>(`/inventory/other/${id}`)
+  return request.get<OtherIo>(`/inventory/other/${id}`)
 }
 export function getOtherItems(id: number) {
-  return request.get<unknown, OtherIoItem[]>(`/inventory/other/${id}/items`)
+  return request.get<OtherIoItem[]>(`/inventory/other/${id}/items`)
 }
 export function createOther(data: any) {
-  return request.post<unknown, void>('/inventory/other', data)
+  return request.post<void>('/inventory/other', data)
 }
 export function updateOther(id: number, data: any) {
-  return request.put<unknown, void>(`/inventory/other/${id}`, data)
+  return request.put<void>(`/inventory/other/${id}`, data)
 }
 export function auditOther(id: number) {
-  return request.put<unknown, void>(`/inventory/other/${id}/audit`)
+  return request.put<void>(`/inventory/other/${id}/audit`)
 }
 export function cancelOther(id: number) {
-  return request.put<unknown, void>(`/inventory/other/${id}/cancel`)
+  return request.put<void>(`/inventory/other/${id}/cancel`)
 }
 
 // 品质重分类
@@ -107,23 +107,24 @@ export interface ReclassifyItem {
 }
 
 export function getReclassifyPage(params: any) {
-  return request.get<unknown, PageResult<any>>('/inventory/reclassify/page', { params })
+  return request.get<PageResult<any>>('/inventory/reclassify/page', { params })
 }
 export function getReclassify(id: number) {
-  return request.get<unknown, any>(`/inventory/reclassify/${id}`)
+  return request.get<any>(`/inventory/reclassify/${id}`)
 }
 export function getReclassifyItems(id: number) {
-  return request.get<unknown, ReclassifyItem[]>(`/inventory/reclassify/${id}/items`)
+  return request.get<ReclassifyItem[]>(`/inventory/reclassify/${id}/items`)
 }
 export function createReclassify(data: any) {
-  return request.post<unknown, void>('/inventory/reclassify', data)
+  return request.post<void>('/inventory/reclassify', data)
 }
 export function updateReclassify(id: number, data: any) {
-  return request.put<unknown, void>(`/inventory/reclassify/${id}`, data)
+  return request.put<void>(`/inventory/reclassify/${id}`, data)
 }
 export function auditReclassify(id: number) {
-  return request.put<unknown, void>(`/inventory/reclassify/${id}/audit`)
+  return request.put<void>(`/inventory/reclassify/${id}/audit`)
 }
 export function cancelReclassify(id: number) {
-  return request.put<unknown, void>(`/inventory/reclassify/${id}/cancel`)
+  return request.put<void>(`/inventory/reclassify/${id}/cancel`)
 }
+

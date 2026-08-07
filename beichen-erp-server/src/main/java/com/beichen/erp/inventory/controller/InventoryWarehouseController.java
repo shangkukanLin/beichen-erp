@@ -121,6 +121,11 @@ public class InventoryWarehouseController {
                 "SELECT COUNT(*) FROM outsource_delivery WHERE from_warehouse_id = ? OR to_warehouse_id = ?", Integer.class, id, id);
         if (cnt > 0) associations.merge("委外加工", cnt, Integer::sum);
 
+        // 研发物料引用（自有仓库）
+        cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM dev_purchase_item WHERE warehouse_id = ? AND warehouse_type = 'INVENTORY'", Integer.class, id);
+        if (cnt > 0) associations.put("研发物料", cnt);
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("canDelete", associations.isEmpty());
         result.put("associations", associations);

@@ -236,6 +236,7 @@ CREATE TABLE IF NOT EXISTS outsource_delivery (
     status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '审核状态: DRAFT草稿/AUDITED已审核/CANCELLED已作废',
     remark VARCHAR(500) COMMENT '备注',
     attach_url VARCHAR(500) COMMENT '附件URL',
+    source_order_id BIGINT DEFAULT NULL COMMENT '来源订单ID(关联outsource_material_order.id，强关联回查)',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -295,6 +296,7 @@ CREATE TABLE IF NOT EXISTS outsource_material_order (
     attach_url        VARCHAR(500) DEFAULT NULL          COMMENT '合同附件URL',
     company_id        BIGINT DEFAULT NULL               COMMENT '公司ID',
     finish_time       DATETIME DEFAULT NULL              COMMENT '订单完成时间',
+    deleted           TINYINT DEFAULT 0 COMMENT '逻辑删除标记：0未删除/1已删除',
     create_time       DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_code (code),
@@ -316,6 +318,7 @@ CREATE TABLE IF NOT EXISTS outsource_material_order_item (
     amount                DECIMAL(18,4) DEFAULT 0       COMMENT '金额',
     remark                VARCHAR(255)                  COMMENT '备注',
     company_id            BIGINT DEFAULT NULL            COMMENT '公司ID',
+    deleted               TINYINT DEFAULT 0 COMMENT '逻辑删除标记：0未删除/1已删除',
     INDEX idx_order_id (order_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外物料订单明细表';
@@ -490,6 +493,7 @@ CREATE TABLE IF NOT EXISTS dev_project (
     code VARCHAR(50) NOT NULL COMMENT '项目编号',
     name VARCHAR(100) NOT NULL COMMENT '项目名称',
     assembly_name VARCHAR(100) COMMENT '总成名称',
+    product_id BIGINT DEFAULT NULL COMMENT '关联产品ID(product.id)，与产品表双向关联',
     display_supplier_name VARCHAR(100) COMMENT '显示方案供应商',
     touch_supplier_name VARCHAR(100) COMMENT '触摸方案供应商',
     adapt_model VARCHAR(100) COMMENT '适配机型',
@@ -546,12 +550,13 @@ CREATE TABLE IF NOT EXISTS dev_phase_template (
 
 CREATE TABLE IF NOT EXISTS dev_purchase_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
-    project_id BIGINT NOT NULL COMMENT '项目ID',
+    project_id BIGINT DEFAULT NULL COMMENT '项目ID（可空，表示不关联研发项目）',
     name VARCHAR(100) NOT NULL COMMENT '名称',
     type VARCHAR(30) COMMENT '类型',
     quantity DECIMAL(18,4) DEFAULT 1 COMMENT '数量',
-    location VARCHAR(30) COMMENT '存放位置',
-    location_detail VARCHAR(200) COMMENT '位置详情',
+    location_detail VARCHAR(200) COMMENT '位置详情（具体库位/货架号）',
+    warehouse_id BIGINT DEFAULT NULL COMMENT '存放仓库ID（配合 warehouse_type 定位，自有仓与委外仓 ID 独立）',
+    warehouse_type VARCHAR(20) DEFAULT NULL COMMENT '仓库归属类型：INVENTORY 自有仓库 / OUTSOURCE 委外仓库',
     purchase_date DATE COMMENT '采购日期',
     amount DECIMAL(18,4) COMMENT '采购金额',
     status VARCHAR(20) DEFAULT '完好' COMMENT '状态: 完好/已损坏/已使用',

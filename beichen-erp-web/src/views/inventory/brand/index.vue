@@ -17,7 +17,7 @@ async function loadData() {
 }
 
 function handleAdd() { isEdit.value = false; editId.value = undefined; form.value = { brandName: '', status: 1 }; dialogVisible.value = true }
-function handleEdit(row: Brand) { isEdit.value = true; editId.value = row.id; form.value = { brandName: row.brandName, status: row.status }; dialogVisible.value = true }
+function handleEdit(row: any) { isEdit.value = true; editId.value = row.id; form.value = { brandName: row.brandName, status: row.status }; dialogVisible.value = true }
 
 async function handleSubmit() {
   if (!form.value.brandName.trim()) { ElMessage.warning('请输入品牌名称'); return }
@@ -28,13 +28,13 @@ async function handleSubmit() {
   } catch (e: any) { ElMessage.error('操作失败: ' + (e?.message || '未知错误')) }
 }
 
-async function handleDelete(row: Brand) {
+async function handleDelete(row: any) {
   try {
     const checkRes = await request.get<any, any>(`/brand/${row.id}/check-delete`)
     if (checkRes && !checkRes.canDelete) {
       const list = checkRes.associations || {}
       const detail = Object.entries(list).map(([k, v]) => `${k}：${v}条`).join('；')
-      ElMessage.warning(`该品牌还有关联数据，无法删除（${detail}）。请先清理关联数据后再操作。`, { duration: 5000 })
+      ElMessage({ message: detail, type: 'warning', duration: 5000 })
       return
     }
   } catch {

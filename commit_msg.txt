@@ -1,8 +1,0 @@
-fix: 研发项目BUG接口路径对齐、列表分组修正及供应商仓库关联增强
-
-- BugController 修改/删除接口路径补齐 {projectId} 段，修复编辑BUG报 404
-- 研发项目详情 Tab 文案"采购记录"→"项目物料"、"新增采购记录"→"新增项目用料"，后端 DevPurchaseItem/DevPurchaseItemController/schema.sql 注释同步，并加 BOM/委外物料区分说明
-- 前端 BUG 列表分组改用 BugStatus.CLOSED 枚举比较，修复已关闭 BUG 误入处理中列表
-- SupplierServiceImpl 新建供应商（不限类型）均自动创建委外仓库
-- outsource_warehouse.factory_id / outsource_warehouse_stock.warehouse_id 加物理外键 ON DELETE CASCADE
-- 删除供应商级联删仓库与库存（checkDelete 放行仓库）；供应商改名同步仓库名

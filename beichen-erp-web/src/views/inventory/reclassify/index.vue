@@ -6,7 +6,7 @@ import { getProductPage, type Product } from '@/api/product'
 import { getQualityTypes, type QualityOption } from '@/api/product'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import {
-  getReclassifyPage, getReclassifyItems,
+  getReclassifyPage, getReclassify, getReclassifyItems,
   createReclassify, updateReclassify,
   auditReclassify, cancelReclassify,
   type ReclassifyItem
@@ -65,7 +65,7 @@ function addItem() {
 }
 function removeItem(index: number) { items.value.splice(index, 1) }
 
-async function onProductChange(val: number, row: ReclassifyItem) {
+async function onProductChange(val: number, row: any) {
   const p = productOptions.value.find(x => x.id === val)
   if (p) { row.productName = p.name; row.spec = p.spec; row.unit = p.unit }
 }
@@ -219,7 +219,7 @@ onActivated(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProduc
           <template #default="{ row }">
             <el-select v-model="row.productId" placeholder="搜索产品" filterable remote :remote-method="loadProductOptions"
               style="width:100%" @change="(v: number) => onProductChange(v, row)">
-              <el-option v-for="p in productOptions" :key="p.id" :label="p.name" :value="p.id" />
+              <el-option v-for="p in productOptions" :key="p.id" :label="p.name" :value="p.id ?? ''" />
             </el-select>
           </template>
         </el-table-column>

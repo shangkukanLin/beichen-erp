@@ -87,7 +87,7 @@
             <el-table-column label="计划完成" width="110"><template #default="{row}">{{ row.planEndDate || '-' }}</template></el-table-column>
             <el-table-column label="最近交货" width="110"><template #default="{row}">{{ row.latestDeliveryDate || '-' }}</template></el-table-column>
             <el-table-column label="状态" width="90" align="center">
-              <template #default="{row}"><el-tag :type="row.status==='待确认'?'info':row.status==='生产中'?'':row.status==='已完成'?'success':'danger'" size="small">{{ row.status }}</el-tag></template>
+              <template #default="{row}"><el-tag :type="row.status==='待确认'?'info':row.status==='生产中'?undefined:row.status==='已完成'?'success':'danger'" size="small">{{ row.status }}</el-tag></template>
             </el-table-column>
           </el-table>
         </el-card>

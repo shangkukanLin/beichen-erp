@@ -151,6 +151,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/dev/drawing/index.vue'),
         meta: { title: '图纸文档', requiresAuth: true }
       },
+      {
+        path: 'dev/material',
+        name: 'DevMaterial',
+        component: () => import('@/views/dev/material/index.vue'),
+        meta: { title: '研发物料管理', requiresAuth: true }
+      },
       // 委外加工
       {
         path: 'outsource/material-info',
@@ -179,6 +185,13 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/return-order', name: 'OutsourceReturnOrder', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '委外退货', requiresAuth: true } },
       { path: 'outsource/return-order/add', name: 'OutsourceReturnOrderAdd', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '新增委外退货', requiresAuth: true } },
       { path: 'outsource/return-order/detail/:id', name: 'OutsourceReturnOrderDetail', component: () => import('@/views/outsource/return-order/detail.vue'), meta: { title: '委外退货详情', requiresAuth: true } },
+      // 销售退货单
+      { path: 'sale/return', name: 'SaleReturn', component: () => import('@/views/sale/return/index.vue'), meta: { title: '销售退货单', requiresAuth: true } },
+      { path: 'sale/return/add', name: 'SaleReturnAdd', component: () => import('@/views/sale/return/add.vue'), meta: { title: '新增销售退货单', requiresAuth: true } },
+      { path: 'sale/return/detail/:id', name: 'SaleReturnDetail', component: () => import('@/views/sale/return/detail.vue'), meta: { title: '销售退货单详情', requiresAuth: true } },
+      // 收费售后（客户退回不良品，不关联加工单）
+      { path: 'outsource/after-sale', name: 'AfterSale', component: () => import('@/views/outsource/after-sale/index.vue'), meta: { title: '收费售后', requiresAuth: true } },
+      { path: 'outsource/after-sale/add', name: 'AfterSaleAdd', component: () => import('@/views/outsource/after-sale/add.vue'), meta: { title: '新增收费售后退回', requiresAuth: true } },
       // 物料管理 + 多级BOM
       {
         path: 'material',

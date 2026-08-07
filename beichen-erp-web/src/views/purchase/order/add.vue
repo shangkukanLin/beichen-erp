@@ -79,7 +79,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
-import type { PurchaseOrder, PurchaseOrderItem } from '@/api/system'
+import type { PurchaseOrder, PurchaseOrderItem } from '@/api/purchase'
 
 const router = useRouter()
 const formRef = ref<FormInstance>()

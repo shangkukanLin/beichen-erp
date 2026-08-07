@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+﻿import request from '@/utils/request'
 
 export interface LoginParams {
   username: string
@@ -21,13 +21,14 @@ export interface UserInfo {
 }
 
 export function login(data: LoginParams) {
-  return request.post<unknown, LoginResult>('/auth/login', data)
+  return request.post<LoginResult>('/auth/login', data)
 }
 
 export function logout() {
-  return request.post<unknown, void>('/auth/logout')
+  return request.post<void>('/auth/logout')
 }
 
 export function getUserInfo() {
-  return request.get<unknown, UserInfo>('/auth/info')
+  return request.get<UserInfo>('/auth/info')
 }
+

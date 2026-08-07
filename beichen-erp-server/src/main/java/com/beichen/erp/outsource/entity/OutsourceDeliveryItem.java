@@ -16,9 +16,14 @@ public class OutsourceDeliveryItem {
     /** BOM类型ID（关联 dev_bom_type.id） */
     @TableField("bom_type_id")
     private Long bomTypeId;
+    /** 来源订单明细行ID（关联 outsource_material_order_item.id），用于回写累计收货/退不良数量 */
+    private Long itemId;
     private String unit;
     private BigDecimal quantity;
+    /** 单价 */
     private BigDecimal unitPrice;
+    /** 行金额（数量 × 单价），用于生成应付 */
+    private BigDecimal amount;
     private String qualityType;
     private String handleType;
     @TableField(fill = FieldFill.INSERT)

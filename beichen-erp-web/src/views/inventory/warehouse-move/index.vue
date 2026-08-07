@@ -106,7 +106,6 @@ const statusOptions = [
   { label: DocStatusLabel[DocStatus.AUDITED], value: DocStatus.AUDITED },
   { label: DocStatusLabel[DocStatus.CANCELLED], value: DocStatus.CANCELLED }
 ]
-]
 
 const warehouses = ref<any[]>([])
 

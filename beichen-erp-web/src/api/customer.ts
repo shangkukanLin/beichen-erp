@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+﻿import request from '@/utils/request'
 
 export interface Customer {
   id?: number
@@ -24,25 +24,26 @@ export interface PageResult<T> {
 }
 
 export function getCustomerPage(params: any) {
-  return request.get<unknown, PageResult<Customer>>('/inventory/customer/page', { params })
+  return request.get<PageResult<Customer>>('/inventory/customer/page', { params })
 }
 
 export function listCustomers() {
-  return request.get<unknown, Customer[]>('/inventory/customer/list')
+  return request.get<Customer[]>('/inventory/customer/list')
 }
 
 export function getCustomer(id: number) {
-  return request.get<unknown, Customer>(`/inventory/customer/${id}`)
+  return request.get<Customer>(`/inventory/customer/${id}`)
 }
 
 export function createCustomer(data: Customer) {
-  return request.post<unknown, void>('/inventory/customer', data)
+  return request.post<void>('/inventory/customer', data)
 }
 
 export function updateCustomer(data: Customer) {
-  return request.put<unknown, void>('/inventory/customer', data)
+  return request.put<void>('/inventory/customer', data)
 }
 
 export function updateCustomerStatus(id: number, status: number) {
-  return request.put<unknown, void>(`/inventory/customer/${id}/status`, null, { params: { status } })
+  return request.put<void>(`/inventory/customer/${id}/status`, null, { params: { status } })
 }
+

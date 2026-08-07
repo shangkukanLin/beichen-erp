@@ -27,7 +27,7 @@ function query_() { page.pageNum = 1; load() }
 function reset_() { query.supplierId = ''; query.status = ''; query.billNo = ''; page.pageNum = 1; load() }
 function sName(id?: number) { return suppliers.value.find(x => x.id === id)?.name || '' }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
-function stType(s?: string) { if (s === '未结清') return 'danger'; if (s === '部分结清') return 'warning'; if (s === '已结清') return 'success'; return '' }
+function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === '未结清') return 'danger'; if (s === '部分结清') return 'warning'; if (s === '已结清') return 'success'; return undefined }
 </script>
 <template>
   <div class="p">

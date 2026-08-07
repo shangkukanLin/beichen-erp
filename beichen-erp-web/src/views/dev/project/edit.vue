@@ -13,6 +13,7 @@ import {
 } from '@/api/system'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import request from '@/utils/request'
+import MaterialFormDialog from '@/components/dev/MaterialFormDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -82,7 +83,7 @@ const timelineList = ref<TimelineItem[]>([])
 const timelineCompleting = ref<Record<number, boolean>>({})
 
 async function loadTimeline() {
-  const res = await request.get<unknown, TimelineItem[]>(`/dev/project/${projectId}/timeline`)
+  const res = await request.get<TimelineItem[]>(`/dev/project/${projectId}/timeline`)
   timelineList.value = res || []
 }
 
@@ -102,7 +103,7 @@ const currentPhaseName = computed(() => {
   return timelineList.value.length > 0 ? timelineList.value[0].statusName : '-'
 })
 
-async function saveTimelineRow(row: TimelineItem) {
+async function saveTimelineRow(row: any) {
   try {
     await request.put(`/dev/project/timeline/${row.id}`, {
       id: row.id,
@@ -216,7 +217,7 @@ async function loadBom() {
   for (const b of items) {
     const matId = b.outsourceMaterialId
     const matName = matId ? (materialNameMap[matId] || '') : ''
-    result.push({ _isChild: false, materialName: matName, outsourceMaterialId: matId, supplierId: b.supplierId, spec: b.specification, unit: b.unit, quantityPerSet: b.quantity, lossRate: b.lossRate, bomTypeId: b.bomTypeId, bomTypeName: bomTypeNameMap.value[b.bomTypeId] || '', remark: '', id: b.id })
+    result.push({ _isChild: false, materialName: matName, outsourceMaterialId: matId, supplierId: b.supplierId, spec: b.specification, unit: b.unit, quantityPerSet: b.quantity, lossRate: b.lossRate, bomTypeId: b.bomTypeId, bomTypeName: bomTypeNameMap.value[b.bomTypeId ?? 0] || '', remark: '', id: b.id })
     const subs = childrenMap[String(matId)] || []
     for (const s of subs) {
       result.push({ _isChild: true, materialName: s.childName || s.materialName, bomTypeName: s.childType || '', quantityPerSet: s.quantity, lossRate: s.lossRate, remark: s.remark })
@@ -338,63 +339,28 @@ interface DevPurchaseItem {
   name: string
   type: string
   quantity: number
-  location: string
   locationDetail: string
+  warehouseAddress: string
   purchaseDate: string
   amount: number
   status: string
   remark: string
 }
-const materialStatusOptions = ['完好', '已损坏', '已使用']
-const todayStr = new Date().toISOString().split('T')[0]
 const devMaterialList = ref<DevPurchaseItem[]>([])
-const devMaterialVisible = ref(false)
-const devMaterialForm = reactive<DevPurchaseItem>({
-  name: '', type: '', quantity: 1, location: '', locationDetail: '',
-  purchaseDate: todayStr, amount: 0, status: '完好', remark: ''
-})
-const isDevMaterialEdit = ref(false)
+const materialDialog = ref<any>(null)
 
 async function loadDevMaterials() {
   try {
-    const res = await request.get<unknown, DevPurchaseItem[]>(`/dev/purchase-item/project/${projectId}`)
+    const res = await request.get<DevPurchaseItem[]>(`/dev/purchase-item/project/${projectId}`)
     devMaterialList.value = res || []
   } catch (e: any) { console.warn('加载项目物料失败', e?.message || e) }
 }
 
-function handleAddDevMaterial() {
-  Object.assign(devMaterialForm, {
-    name: '', type: '', quantity: 1, location: '', locationDetail: '',
-    purchaseDate: todayStr, amount: 0, status: '完好', remark: ''
-  })
-  isDevMaterialEdit.value = false
-  devMaterialVisible.value = true
-}
+// 打开共用新增/编辑弹窗（自动锁定当前项目）
+function handleAddDevMaterial() { materialDialog.value?.open() }
+function handleEditDevMaterial(row: any) { materialDialog.value?.open(row) }
 
-function handleEditDevMaterial(row: DevPurchaseItem) {
-  Object.assign(devMaterialForm, row)
-  isDevMaterialEdit.value = true
-  devMaterialVisible.value = true
-}
-
-async function handleDevMaterialSubmit() {
-  if (!devMaterialForm.name || !devMaterialForm.name.trim()) {
-    ElMessage.warning('请输入名称'); return
-  }
-  try {
-    if (isDevMaterialEdit.value && devMaterialForm.id) {
-      await request.put(`/dev/purchase-item/${devMaterialForm.id}`, devMaterialForm)
-      ElMessage.success('已更新')
-    } else {
-      await request.post(`/dev/purchase-item`, { ...devMaterialForm, projectId })
-      ElMessage.success('已添加')
-    }
-    devMaterialVisible.value = false
-    loadDevMaterials()
-  } catch (e: any) { ElMessage.error((e?.message || '操作失败')) }
-}
-
-async function handleDeleteDevMaterial(row: DevPurchaseItem) {
+async function handleDeleteDevMaterial(row: any) {
   try {
     await ElMessageBox.confirm('确定删除该记录吗？', '提示', { type: 'warning' })
     await request.delete(`/dev/purchase-item/${row.id}`)
@@ -408,7 +374,7 @@ interface RelatedOrder { id: number; code: string; status: string; createTime: s
 const relatedOrders = ref<RelatedOrder[]>([])
 async function loadRelatedOrders() {
   try {
-    const res = await request.get<unknown, RelatedOrder[]>(`/dev/project/${projectId}/related-orders`)
+    const res = await request.get<RelatedOrder[]>(`/dev/project/${projectId}/related-orders`)
     relatedOrders.value = res || []
   } catch (e: any) { console.warn('加载关联订单失败', e?.message || e) }
 }
@@ -568,7 +534,7 @@ function onNameBlur() {
             <el-table-column label="物料名称" min-width="130">
               <template #default="{row}">
                 <span v-if="row._isChild" style="color:#409eff;font-size:12px">└ {{ row.materialName }}</span>
-                <el-select v-else v-model="row.outsourceMaterialId" size="small" filterable clearable style="width:100%" placeholder="选择" @change="(v: number) => { if (v === ADD_MARKER) { row.outsourceMaterialId = undefined; router.push('/outsource/material-info'); return } onBomMaterialChange(v, row) }">
+                <el-select v-else v-model="row.outsourceMaterialId" size="small" filterable clearable style="width:100%" placeholder="选择" @change="(v: any) => { if (v === ADD_MARKER) { row.outsourceMaterialId = undefined; router.push('/outsource/material-info'); return } onBomMaterialChange(v, row) }">
                   <el-option v-for="m in getMaterialsByType(row.bomTypeId || '')" :key="m.id" :label="m.materialName" :value="m.id" />
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </el-select>
@@ -634,8 +600,12 @@ function onNameBlur() {
             <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
             <el-table-column prop="type" label="类型" width="80" />
             <el-table-column prop="quantity" label="数量" width="70" align="center" />
-            <el-table-column prop="location" label="存放位置" width="100" />
-            <el-table-column prop="locationDetail" label="位置详情" min-width="130" show-overflow-tooltip />
+            <el-table-column label="存放位置" width="120">
+              <template #default="{ row }">{{ row.warehouseName || '-' }}</template>
+            </el-table-column>
+            <el-table-column label="位置详情" min-width="130" show-overflow-tooltip>
+              <template #default="{ row }">{{ row.warehouseAddress || row.locationDetail || '-' }}</template>
+            </el-table-column>
             <el-table-column prop="purchaseDate" label="采购日期" width="110" />
             <el-table-column prop="amount" label="金额" width="90" align="right">
               <template #default="{ row }">{{ row.amount ? '¥' + Number(row.amount).toFixed(2) : '-' }}</template>
@@ -757,35 +727,8 @@ function onNameBlur() {
       <template #footer><el-button @click="drawingVisible=false">取消</el-button><el-button type="primary" :loading="uploading" @click="handleDrawingSubmit">确定</el-button></template>
     </el-dialog>
 
-    <!-- 项目物料弹窗 -->
-    <el-dialog v-model="devMaterialVisible" :title="isDevMaterialEdit ? '编辑项目物料' : '新增项目用料'" width="520px">
-      <el-form :model="devMaterialForm" label-width="80px">
-        <el-row :gutter="12">
-          <el-col :span="14"><el-form-item label="名称"><el-input v-model="devMaterialForm.name" /></el-form-item></el-col>
-          <el-col :span="10"><el-form-item label="类型">
-            <el-select v-model="devMaterialForm.type" style="width:100%">
-              <el-option v-for="t in bomTypes" :key="t.id" :label="t.typeName" :value="t.typeName" />
-            </el-select>
-          </el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="数量"><el-input-number v-model="devMaterialForm.quantity" :min="0" :precision="0" style="width:100%" /></el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="金额"><el-input-number v-model="devMaterialForm.amount" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="存放位置">
-            <el-select v-model="devMaterialForm.location" style="width:100%">
-              <el-option v-for="s in allSuppliers" :key="s.id" :label="s.name" :value="s.name" />
-            </el-select>
-          </el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="状态">
-            <el-select v-model="devMaterialForm.status" style="width:100%">
-              <el-option v-for="s in materialStatusOptions" :key="s" :label="s" :value="s" />
-            </el-select>
-          </el-form-item></el-col>
-          <el-col :span="24"><el-form-item label="位置详情"><el-input v-model="devMaterialForm.locationDetail" /></el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="采购日期"><el-input v-model="devMaterialForm.purchaseDate" type="date" /></el-form-item></el-col>
-          <el-col :span="24"><el-form-item label="备注"><el-input v-model="devMaterialForm.remark" type="textarea" :rows="2" /></el-form-item></el-col>
-        </el-row>
-      </el-form>
-      <template #footer><el-button @click="devMaterialVisible=false">取消</el-button><el-button type="primary" @click="handleDevMaterialSubmit">确定</el-button></template>
-    </el-dialog>
+    <!-- 项目物料弹窗（共用组件，自动锁定当前项目） -->
+    <MaterialFormDialog ref="materialDialog" :default-project-id="projectId" @saved="loadDevMaterials" />
   </div>
 </template>
 
@@ -800,3 +743,4 @@ function onNameBlur() {
 :deep(.timeline-row-done) { background-color: #f0f9eb; }
 :deep(.timeline-row-active) { background-color: #fdf6ec; }
 </style>
+

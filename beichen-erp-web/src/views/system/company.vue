@@ -57,7 +57,7 @@ async function handleDelete(row: any) {
 }
 
 /** 超管选择公司进入系统：切换 companyId → 加载菜单 → 跳仪表盘 */
-async function handleEnter(row: Company) {
+async function handleEnter(row: any) {
   if (!row.id) return
   enteringId.value = row.id
   try {

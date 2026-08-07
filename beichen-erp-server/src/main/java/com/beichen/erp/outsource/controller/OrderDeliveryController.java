@@ -76,7 +76,9 @@ public class OrderDeliveryController {
         if (order == null) throw new BusinessException("加工单不存在");
         List<OutsourceOrderProduct> products = orderService.getProducts(orderId);
         List<OutsourceOrderDelivery> deliveries = deliveryMapper.selectList(
-                new LambdaQueryWrapper<OutsourceOrderDelivery>().eq(OutsourceOrderDelivery::getOrderId, orderId));
+                new LambdaQueryWrapper<OutsourceOrderDelivery>()
+                        .eq(OutsourceOrderDelivery::getOrderId, orderId)
+                        .eq(OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.name()));
 
         BigDecimal totalQty = products.stream().map(p -> p.getQuantity() != null ? p.getQuantity() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

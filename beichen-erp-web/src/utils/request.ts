@@ -9,13 +9,14 @@ interface ApiResult<T = unknown> {
   data: T
 }
 
-const request: AxiosInstance = axios.create({
+// 底层 axios 实例（挂载拦截器、类型始终为 AxiosResponse）
+const http: AxiosInstance = axios.create({
   baseURL: '/api',
   timeout: 15000
 })
 
 // 请求拦截器
-request.interceptors.request.use(
+http.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const userStore = useUserStore()
     if (userStore.token) {
@@ -26,8 +27,8 @@ request.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// 响应拦截器
-request.interceptors.response.use(
+// 响应拦截器：剥离外层包装，直接返回 data（与 ApiResult.data 一致）
+http.interceptors.response.use(
   (response: AxiosResponse<ApiResult>) => {
     const res = response.data
     // 处理非标准结构（如直接返回数据）
@@ -63,5 +64,27 @@ request.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+/**
+ * 统一请求封装：拦截器已剥离 ApiResult 外层，故 get/post/put/delete 返回 Promise<T>（即 data）。
+ * 调用方直接拿到后端 data，无需再取 .data / .records。
+ */
+const request = {
+  // 第二个泛型参数保持与 axios 原生签名兼容（历史 api 文件用 get<T, any> 写法），但返回始终为 data（Promise<T>）
+  get<T = any, _R = any>(url: string, config?: { params?: any; [k: string]: any }): Promise<T> {
+    return http.get(url, config as any) as unknown as Promise<T>
+  },
+  post<T = any, _R = any>(url: string, data?: any, config?: any): Promise<T> {
+    return http.post(url, data, config) as unknown as Promise<T>
+  },
+  put<T = any, _R = any>(url: string, data?: any, config?: any): Promise<T> {
+    return http.put(url, data, config) as unknown as Promise<T>
+  },
+  delete<T = any, _R = any>(url: string, config?: any): Promise<T> {
+    return http.delete(url, config) as unknown as Promise<T>
+  },
+  // 暴露底层实例（拦截器已配置），供需要原始 AxiosResponse 的场景（极少）
+  raw: http,
+}
 
 export default request

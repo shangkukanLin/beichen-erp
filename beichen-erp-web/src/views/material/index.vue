@@ -130,7 +130,7 @@ function getBrandName(brandId: number | string | undefined) {
   return b ? b.brandName : ''
 }
 
-async function handleEdit(row: Product) {
+async function handleEdit(row: any) {
   const defaults = defaultForm()
   Object.assign(form, defaults, row)
   // 合并服务端返回的等级数据
@@ -162,13 +162,13 @@ async function handleSubmit() {
   })
 }
 
-async function handleDelete(row: Product) {
+async function handleDelete(row: any) {
   try {
     const checkRes = await request.get<any, any>(`/product/${row.id}/check-delete`)
     if (checkRes && !checkRes.canDelete) {
       const list = checkRes.associations || {}
       const detail = Object.entries(list).map(([k, v]) => `${k}：${v}条`).join('；')
-      ElMessage.warning(`该物料还有关联数据，无法删除（${detail}）。请先清理关联数据后再操作。`, { duration: 5000 })
+      ElMessage({ message: detail, type: 'warning', duration: 5000 })
       return
     }
   } catch {
@@ -204,13 +204,13 @@ function handleCurrentChange(val: number) {
   loadData()
 }
 
-function isLowStock(row: Product): boolean {
+function isLowStock(row: any): boolean {
   const safety = Number(row.safetyStock) || 0
   const current = Number(row.currentStock) || 0
   return safety > 0 && current < safety
 }
 
-function rowClass({ row }: { row: Product }) {
+function rowClass({ row }: any) {
   return isLowStock(row) ? 'low-stock-row' : ''
 }
 

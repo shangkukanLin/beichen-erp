@@ -441,7 +441,10 @@ onMounted(() => { loadOptions(); loadBomTypes(); loadData() })
       <el-card shadow="never">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <span style="font-weight:600">交货记录</span>
-          <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="primary" size="small" @click="delOpenAdd">新增交货</el-button>
+          <div v-if="form.status===OutsourceOrderStatus.PRODUCING" style="display:flex;gap:8px">
+            <el-button type="primary" size="small" @click="delOpenAdd">新增交货</el-button>
+            <el-button type="danger" size="small" @click="openDefectReturn">退不良</el-button>
+          </div>
         </div>
         <el-table :data="deliveries" border stripe size="small" :row-class-name="deliveryRowClass">
           <el-table-column label="交货日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>

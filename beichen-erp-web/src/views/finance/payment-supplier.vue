@@ -75,8 +75,8 @@ async function handleSubmitPayment() {
 
 const totalThisAmount = computed(() => dItems.value.reduce((s, it) => s + (Number(it.thisAmount) || 0), 0))
 
-function stType(s?: string) { if (s === '未结清') return 'danger'; if (s === '部分结清') return 'warning'; if (s === '已结清') return 'success'; return 'info' }
-function pStType(s?: string) { return DocStatusTag[s || ''] || '' }
+function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === '未结清') return 'danger'; if (s === '部分结清') return 'warning'; if (s === '已结清') return 'success'; return 'info' }
+function pStType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { return DocStatusTag[s || ''] || undefined }
 function openAttach(url: string) { window.open(url + '?inline=true') }
 function goSettlement() { router.push(`/finance/supplier-settlement/${supplierId}`) }
 

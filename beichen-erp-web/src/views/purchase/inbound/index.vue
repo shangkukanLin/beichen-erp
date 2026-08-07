@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
-import { getMaterialPage, type Material } from '@/api/enums'
+import { getOutsourceMaterialPage, type OutsourceMaterialOption } from '@/api/purchase'
 import { getQualityTypes, type QualityOption } from '@/api/product'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
@@ -34,7 +34,7 @@ const statusOptions = [
 
 const suppliers = ref<{ id: number; name: string }[]>([])
 const warehouses = ref<{ id: number; warehouseName: string }[]>([])
-const materialOptions = ref<Material[]>([])
+const materialOptions = ref<OutsourceMaterialOption[]>([])
 
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增采购入库')
@@ -65,7 +65,7 @@ async function loadWarehouses() {
   try { const res = await request.get('/inventory/warehouse/page', { params: { pageSize: 200 } }); warehouses.value = res?.records || [] } catch { warehouses.value = [] }
 }
 async function loadMaterials(keyword?: string) {
-  try { const res = await getMaterialPage({ pageNum: 1, pageSize: 100, name: keyword || '' }); materialOptions.value = res?.records || [] } catch { materialOptions.value = [] }
+  try { const res = await getOutsourceMaterialPage({ pageNum: 1, pageSize: 100, materialName: keyword || '' }); materialOptions.value = res?.records || [] } catch { materialOptions.value = [] }
 }
 
 async function loadData() {
@@ -98,7 +98,7 @@ function addItem() { items.value.push({ materialId: undefined, qualityType: 'A',
 function removeItem(index: number) { items.value.splice(index, 1) }
 function onMaterialChange(val: number, row: PurchaseInboundItem) {
   const m = materialOptions.value.find(x => x.id === val)
-  if (m) { row.materialId = m.id as number; row.materialName = m.name; row.spec = m.spec; row.unit = m.unit }
+  if (m) { row.materialId = m.id as number; row.materialName = m.materialName; row.spec = m.spec; row.unit = m.unit }
 }
 function itemAmount(row: PurchaseInboundItem) {
   const q = Number(row.quantity) || 0; const p = Number(row.unitPrice) || 0; return (q * p).toFixed(2)
@@ -250,8 +250,8 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQual
           <el-table-column label="物料" min-width="180">
             <template #default="{ row }">
               <el-select v-model="row.materialId" placeholder="选择物料" filterable remote :remote-method="loadMaterials"
-                style="width:100%" @change="(v: number) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
-                <el-option v-for="m in materialOptions" :key="m.id" :label="m.name" :value="m.id" />
+                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
+                <el-option v-for="m in materialOptions" :key="m.id" :label="m.materialName" :value="m.id ?? ''" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </template>
@@ -317,3 +317,4 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQual
 .query-form { display: flex; flex-wrap: wrap; }
 .pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
 </style>
+

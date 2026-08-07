@@ -4,7 +4,7 @@ defineOptions({ name: 'ContractTemplate' })
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getTemplateList, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate } from '@/api/contract-template'
+import { getTemplateList, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate, type ContractTemplate } from '@/api/contract-template'
 import { QuillEditor } from '@vueup/vue-quill'
 import '@vueup/vue-quill/dist/vue-quill.snow.css'
 
@@ -15,7 +15,7 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref<number>()
 
-const form = ref({ templateName: '', content: '', status: 1, partyAAddress: '', partyAContact: '', partyAPhone: '' })
+const form = ref<ContractTemplate>({ templateName: '', content: '', status: 1, partyAAddress: '', partyAContact: '', partyAPhone: '', templateType: '' })
 const quillRef = ref<InstanceType<typeof QuillEditor>>()
 
 const activeType = ref('加工合同')

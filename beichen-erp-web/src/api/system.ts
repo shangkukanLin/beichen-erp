@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+﻿import request from '@/utils/request'
 import type { PageResult } from '@/api/product'
 
 /* ============================ 类型定义 ============================ */
@@ -99,85 +99,85 @@ export interface MenuDTO {
 /* ============================ 用户管理 API ============================ */
 
 export function getUserPage(params: UserQueryParams) {
-  return request.get<unknown, PageResult<UserVO>>('/system/user/page', { params })
+  return request.get<PageResult<UserVO>>('/system/user/page', { params })
 }
 
 export function getUser(id: number | string) {
-  return request.get<unknown, UserVO>(`/system/user/${id}`)
+  return request.get<UserVO>(`/system/user/${id}`)
 }
 
 export function addUser(data: UserDTO) {
-  return request.post<unknown, void>('/system/user', data)
+  return request.post<void>('/system/user', data)
 }
 
 export function updateUser(data: UserDTO) {
-  return request.put<unknown, void>('/system/user', data)
+  return request.put<void>('/system/user', data)
 }
 
 export function deleteUser(id: number | string) {
-  return request.delete<unknown, void>(`/system/user/${id}`)
+  return request.delete<void>(`/system/user/${id}`)
 }
 
 export function resetPassword(data: ResetPasswordParams) {
-  return request.put<unknown, void>('/system/user/reset-password', data)
+  return request.put<void>('/system/user/reset-password', data)
 }
 
 export function toggleUserStatus(id: number | string, status: number) {
-  return request.put<unknown, void>(`/system/user/${id}/status`, { status })
+  return request.put<void>(`/system/user/${id}/status`, { status })
 }
 
 /* ============================ 角色管理 API ============================ */
 
 export function getRolePage(params: RoleQueryParams) {
-  return request.get<unknown, PageResult<Role>>('/system/role/page', { params })
+  return request.get<PageResult<Role>>('/system/role/page', { params })
 }
 
 export function getEnabledRoles() {
-  return request.get<unknown, Role[]>('/system/role/enabled')
+  return request.get<Role[]>('/system/role/enabled')
 }
 
 export function addRole(data: RoleDTO) {
-  return request.post<unknown, void>('/system/role', data)
+  return request.post<void>('/system/role', data)
 }
 
 export function updateRole(data: RoleDTO) {
-  return request.put<unknown, void>('/system/role', data)
+  return request.put<void>('/system/role', data)
 }
 
 export function deleteRole(id: number | string) {
-  return request.delete<unknown, void>(`/system/role/${id}`)
+  return request.delete<void>(`/system/role/${id}`)
 }
 
 /* ============================ 菜单管理 API ============================ */
 
 export function getMenuTree() {
-  return request.get<unknown, MenuVO[]>('/system/menu/tree')
+  return request.get<MenuVO[]>('/system/menu/tree')
 }
 
 export function getUserMenuTree() {
-  return request.get<unknown, MenuVO[]>('/system/menu/tree/user')
+  return request.get<MenuVO[]>('/system/menu/tree/user')
 }
 
 export function addMenu(data: MenuDTO) {
-  return request.post<unknown, void>('/system/menu', data)
+  return request.post<void>('/system/menu', data)
 }
 
 export function updateMenu(data: MenuDTO) {
-  return request.put<unknown, void>('/system/menu', data)
+  return request.put<void>('/system/menu', data)
 }
 
 export function deleteMenu(id: number | string) {
-  return request.delete<unknown, void>(`/system/menu/${id}`)
+  return request.delete<void>(`/system/menu/${id}`)
 }
 
 /* ============================ 角色菜单 API ============================ */
 
 export function getRoleMenus(roleId: number | string) {
-  return request.get<unknown, number[]>(`/system/role/${roleId}/menus`)
+  return request.get<number[]>(`/system/role/${roleId}/menus`)
 }
 
 export function saveRoleMenus(roleId: number | string, menuIds: number[]) {
-  return request.put<unknown, void>(`/system/role/${roleId}/menus`, menuIds)
+  return request.put<void>(`/system/role/${roleId}/menus`, menuIds)
 }
 
 /* ============================ 供应商管理 API ============================ */
@@ -205,6 +205,7 @@ export interface SupplierDTO {
   code: string
   name: string
   supplierType: string
+  typeCodes?: string[]
   contact?: string
   phone?: string
   address?: string
@@ -243,35 +244,35 @@ export interface SupplierProductDTO {
 }
 
 export function getSupplierPage(params: SupplierQueryParams) {
-  return request.get<unknown, PageResult<SupplierVO>>('/supplier/page', { params })
+  return request.get<PageResult<SupplierVO>>('/supplier/page', { params })
 }
 
 export function getSupplier(id: number | string) {
-  return request.get<unknown, SupplierVO>(`/supplier/${id}`)
+  return request.get<SupplierVO>(`/supplier/${id}`)
 }
 
 export function getSupplierProducts(id: number | string) {
-  return request.get<unknown, SupplierProductVO[]>(`/supplier/${id}/products`)
+  return request.get<SupplierProductVO[]>(`/supplier/${id}/products`)
 }
 
 export function addSupplier(data: SupplierDTO) {
-  return request.post<unknown, void>('/supplier', data)
+  return request.post<void>('/supplier', data)
 }
 
 export function updateSupplier(data: SupplierDTO) {
-  return request.put<unknown, void>('/supplier', data)
+  return request.put<void>('/supplier', data)
 }
 
 export function deleteSupplier(id: number | string) {
-  return request.delete<unknown, void>(`/supplier/${id}`)
+  return request.delete<void>(`/supplier/${id}`)
 }
 
 export function toggleSupplierStatus(id: number | string) {
-  return request.put<unknown, void>(`/supplier/${id}/status`)
+  return request.put<void>(`/supplier/${id}/status`)
 }
 
 export function saveSupplierProducts(id: number | string, products: SupplierProductDTO[]) {
-  return request.put<unknown, void>(`/supplier/${id}/products`, products)
+  return request.put<void>(`/supplier/${id}/products`, products)
 }
 
 /* ============================ 研发项目 API ============================ */
@@ -303,12 +304,12 @@ export interface ProjectQueryParams {
 }
 
 export interface BomVO {
-  id?: number | string; projectId?: number; supplierId?: number; spec?: string; materialName: string
-  unit?: string; quantityPerSet?: number; lossRate?: number
+  id?: number | string; projectId?: number; supplierId?: number; spec?: string; specification?: string; materialName: string
+  unit?: string; quantityPerSet?: number; lossRate?: number; outsourceMaterialId?: number; bomTypeId?: number; quantity?: number; bomTypeName?: string
   remark?: string
 }
 
-export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialName: string; spec?: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; remark?: string }
+export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialName?: string; spec?: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; outsourceMaterialId?: number; bomTypeId?: number; quantity?: number; remark?: string }
 
 export interface BugVO {
   id?: number | string; projectId?: number; code?: string; title: string
@@ -324,22 +325,24 @@ export interface DrawingVO {
 }
 
 export function getProjectPage(params: ProjectQueryParams) {
-  return request.get<unknown, PageResult<ProjectVO>>('/dev/project/page', { params })
+  return request.get<PageResult<ProjectVO>>('/dev/project/page', { params })
 }
-export function getProject(id: number | string) { return request.get<unknown, ProjectVO>(`/dev/project/${id}`) }
-export function addProject(data: ProjectDTO) { return request.post<unknown, void>('/dev/project', data) }
-export function updateProject(data: ProjectDTO) { return request.put<unknown, void>('/dev/project', data) }
-export function deleteProject(id: number | string) { return request.delete<unknown, void>(`/dev/project/${id}`) }
-export function updateProjectStatus(id: number | string, status: string) { return request.put<unknown, void>(`/dev/project/${id}/status?status=${status}`) }
+export function getProject(id: number | string) { return request.get<ProjectVO>(`/dev/project/${id}`) }
+export function addProject(data: ProjectDTO, linkExistingProductId?: number | string) { return request.post<void>('/dev/project', data, { params: linkExistingProductId ? { linkExistingProductId } : {} }) }
+export function checkProjectAssembly(name: string) { return request.get<{ exists: boolean; productId?: number; productName?: string }>('/dev/project/check-assembly', { params: { name } }) }
+export function updateProject(data: ProjectDTO) { return request.put<void>('/dev/project', data) }
+export function deleteProject(id: number | string) { return request.delete<void>(`/dev/project/${id}`) }
+export function updateProjectStatus(id: number | string, status: string) { return request.put<void>(`/dev/project/${id}/status?status=${status}`) }
 
-export function getProjectBom(projectId: number | string) { return request.get<unknown, BomVO[]>(`/dev/project/${projectId}/bom`) }
-export function saveProjectBom(projectId: number | string, items: BomDTO[]) { return request.post<unknown, void>(`/dev/project/${projectId}/bom/batch`, items) }
+export function getProjectBom(projectId: number | string) { return request.get<BomVO[]>(`/dev/project/${projectId}/bom`) }
+export function saveProjectBom(projectId: number | string, items: BomDTO[]) { return request.post<void>(`/dev/project/${projectId}/bom/batch`, items) }
 
-export function getProjectDrawings(projectId: number | string) { return request.get<unknown, DrawingVO[]>(`/dev/project/${projectId}/drawing`) }
-export function addProjectDrawing(projectId: number | string, data: DrawingVO) { return request.post<unknown, void>(`/dev/project/${projectId}/drawing`, data) }
-export function deleteProjectDrawing(projectId: number | string, id: number | string) { return request.delete<unknown, void>(`/dev/project/${projectId}/drawing/${id}`) }
+export function getProjectDrawings(projectId: number | string) { return request.get<DrawingVO[]>(`/dev/project/${projectId}/drawing`) }
+export function addProjectDrawing(projectId: number | string, data: DrawingVO) { return request.post<void>(`/dev/project/${projectId}/drawing`, data) }
+export function deleteProjectDrawing(projectId: number | string, id: number | string) { return request.delete<void>(`/dev/project/${projectId}/drawing/${id}`) }
 
-export function getProjectBugs(projectId: number | string) { return request.get<unknown, BugVO[]>(`/dev/project/${projectId}/bug`) }
-export function addProjectBug(projectId: number | string, data: BugDTO) { return request.post<unknown, void>(`/dev/project/${projectId}/bug`, data) }
-export function updateProjectBug(projectId: number | string, data: BugDTO) { return request.put<unknown, void>(`/dev/project/${projectId}/bug/${data.id}`, data) }
-export function deleteProjectBug(projectId: number | string, id: number | string) { return request.delete<unknown, void>(`/dev/project/${projectId}/bug/${id}`) }
+export function getProjectBugs(projectId: number | string) { return request.get<BugVO[]>(`/dev/project/${projectId}/bug`) }
+export function addProjectBug(projectId: number | string, data: BugDTO) { return request.post<void>(`/dev/project/${projectId}/bug`, data) }
+export function updateProjectBug(projectId: number | string, data: BugDTO) { return request.put<void>(`/dev/project/${projectId}/bug/${data.id}`, data) }
+export function deleteProjectBug(projectId: number | string, id: number | string) { return request.delete<void>(`/dev/project/${projectId}/bug/${id}`) }
+

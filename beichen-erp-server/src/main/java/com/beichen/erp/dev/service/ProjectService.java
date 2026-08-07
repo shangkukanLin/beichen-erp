@@ -12,8 +12,9 @@ public interface ProjectService extends IService<Project> {
     /** 分页查询项目 */
     Page<Project> page(PageParam param, String keyword, String status);
 
-    /** 新增项目（含时间线初始化，第一个阶段自动激活） */
-    Project create(Project project);
+    /** 新增项目（含时间线初始化，第一个阶段自动激活）
+     *  @param linkExistingProductId 可选：关联已有产品ID（重名时用户选择关联），null=按总成名称新建 */
+    Project create(Project project, Long linkExistingProductId);
 
     /** 取消项目 */
     void cancel(Long projectId);

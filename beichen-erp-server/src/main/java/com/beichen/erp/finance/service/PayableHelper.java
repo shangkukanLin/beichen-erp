@@ -49,6 +49,20 @@ public class PayableHelper {
         return fp;
     }
 
+    /** 冲回应付（反审核时使用）：将来源记录关联的未付款应付置为已作废，不可恢复 */
+    public void reversePayable(Long sourceId) {
+        if (sourceId == null) return;
+        List<FinancePayable> list = payableMapper.selectList(
+            new LambdaQueryWrapper<FinancePayable>().eq(FinancePayable::getSourceId, sourceId));
+        for (FinancePayable fp : list) {
+            if (fp.getPaidAmount() != null && fp.getPaidAmount().compareTo(BigDecimal.ZERO) > 0)
+                throw new BusinessException("应付单「" + fp.getBillNo() + "」已有付款记录，不可反审核");
+            fp.setStatus(SettlementStatus.CANCELLED.getCode());
+            fp.setUnpaidAmount(BigDecimal.ZERO);
+            payableMapper.updateById(fp);
+        }
+    }
+
     /** 按来源记录删除应付（已付款核销的阻止） */
     public void deleteBySourceId(Long sourceId) {
         if (sourceId == null) return;

@@ -1,4 +1,4 @@
-/** 供应商类型统一定义 */
+﻿/** 供应商类型统一定义 */
 export const TYPE_MAP: Record<string, string> = {
   solution: '方案商',
   factory: '加工厂',
@@ -16,9 +16,10 @@ export const TYPE_TABS = [
 
 export const TYPE_OPTIONS = TYPE_TABS.filter(x => x.name !== 'all')
 
-export const TYPE_TAG: Record<string, string> = {
+export const TYPE_TAG: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
   solution: 'primary',
   factory: 'warning',
   product: 'success',
   material: 'info',
 }
+

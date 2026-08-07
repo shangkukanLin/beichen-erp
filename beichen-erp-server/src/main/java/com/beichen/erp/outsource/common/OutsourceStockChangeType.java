@@ -32,7 +32,15 @@ public enum OutsourceStockChangeType {
     /** 编辑回滚-调拨入：编辑收发单后回滚调拨入的物料 */
     EDIT_ROLLBACK_TRANSFER_IN("编辑回滚-调拨入"),
     /** 编辑-发料：编辑后重新发料 */
-    EDIT_DELIVERY("编辑-发料");
+    EDIT_DELIVERY("编辑-发料"),
+    /** 物料订单收货入库：委外物料订单收货时入目标仓库 */
+    RECEIVE_IN("物料收货入"),
+    /** 物料订单退不良出库：退不良时从目标仓库扣减 */
+    DEFECT_OUT("物料退不良出"),
+    /** 取消物料收货入库：反审核时扣回目标仓库 */
+    CANCEL_RECEIVE_IN("取消物料收货入"),
+    /** 取消物料退不良出库：反审核时恢复目标仓库 */
+    CANCEL_DEFECT_OUT("取消物料退不良出");
 
     private final String label;
 

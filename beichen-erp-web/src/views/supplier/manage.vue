@@ -88,7 +88,7 @@ async function handleDelete(row: any) {
     if (checkRes && !checkRes.canDelete) {
       const list = checkRes.associations || {}
       const detail = Object.entries(list).map(([k, v]) => `${k}：${v}条`).join('；')
-      ElMessage.warning(`该供应商还有关联数据，无法删除（${detail}）。请先清理关联数据后再操作。`, { duration: 5000 })
+      ElMessage({ message: detail, type: 'warning', duration: 5000 })
       return
     }
   } catch {

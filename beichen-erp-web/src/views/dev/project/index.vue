@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
@@ -62,7 +62,7 @@ async function loadTimelines(projects: ProjectVO[]) {
   const ids = projects.map(p => p.id).filter(Boolean) as number[]
   if (ids.length === 0) return
   try {
-    const res = await request.post<unknown, Record<number, TimelineItem[]>>('/dev/project/timelines/batch', { projectIds: ids })
+    const res = await request.post<Record<number, TimelineItem[]>>('/dev/project/timelines/batch', { projectIds: ids })
     if (res) timelineMap.value = { ...timelineMap.value, ...res }
   } catch (e: any) { console.warn('加载时间线失败', e?.message || e) }
 }
@@ -150,8 +150,8 @@ async function handleReactivate(row: any) {
 const detailVisible = ref(false)
 const detailProject = ref<ProjectVO | null>(null)
 const detailTab = ref('bom')
-const bomList = ref<BomDTO[]>([])
-const bomTypes = ref<string[]>([])
+const bomList = ref<any[]>([])
+const bomTypes = ref<any[]>([])
 const allMaterials = ref<any[]>([])
 async function loadBomTypes() {
   try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => ({ id: t.id, typeName: t.typeName })) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
@@ -308,7 +308,7 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
             <el-table-column label="类型" width="100">
               <template #default="{row}">
                 <el-select v-model="row.bomTypeId" size="small" style="width:100%" @change="row.materialName = ''">
-                  <el-option v-for="t in bomTypes" :key="t.id" :label="t.typeName" :value="t.id" />
+                  <el-option v-for="t in bomTypes" :key="t.id" :label="t.typeName" :value="t.id ?? ''" />
                 </el-select>
               </template>
             </el-table-column>
@@ -369,3 +369,4 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
 .project-page { display:flex; flex-direction:column; gap:12px; }
 .query-card :deep(.el-card__body), .table-card :deep(.el-card__body) { padding:16px; }
 </style>
+

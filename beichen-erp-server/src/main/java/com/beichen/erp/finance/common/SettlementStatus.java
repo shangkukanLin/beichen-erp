@@ -10,7 +10,9 @@ public enum SettlementStatus {
     /** 部分结清 */
     PARTIAL("部分结清"),
     /** 已结清 */
-    SETTLED("已结清");
+    SETTLED("已结清"),
+    /** 已冲回（反审核作废） */
+    CANCELLED("已冲回");
 
     private final String label;
 
