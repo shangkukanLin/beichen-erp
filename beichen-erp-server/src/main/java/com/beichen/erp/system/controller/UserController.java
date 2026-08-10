@@ -4,6 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckRole;
 import cn.dev33.satoken.annotation.SaMode;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.system.common.SystemConstants;
 import com.beichen.erp.system.entity.dto.ResetPasswordDTO;
 import com.beichen.erp.system.entity.dto.UserDTO;
 import com.beichen.erp.system.entity.dto.UserQueryDTO;
@@ -22,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/system/user")
-@SaCheckRole(value = {"super_admin", "admin"}, mode = SaMode.OR)
+@SaCheckRole(value = {SystemConstants.SUPER_ADMIN_ROLE_CODE, SystemConstants.ADMIN_ROLE_CODE}, mode = SaMode.OR)
 @RequiredArgsConstructor
 public class UserController {
 

@@ -9,6 +9,7 @@ import com.beichen.erp.finance.entity.*;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinancePaymentService;
+import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
     private final FinanceAccountMapper accountMapper;
     private final FinanceCashflowMapper cashflowMapper;
     private final SupplierMapper supplierMapper;
+    private final PayableHelper payableHelper;
 
     @Override
     public Page<Map<String, Object>> page(Long supplierId, String status, int pageNum, int pageSize) {
@@ -115,6 +117,8 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             acc.setBalance(acc.getBalance().subtract(payment.getAmount()));
             accountMapper.updateById(acc);
         }
+        // 同步减少供应商应付余额（与采购订单审核的 add 对称），统一走原子入口避免并发丢更新
+        payableHelper.changeSupplierBalance(payment.getSupplierId(), payment.getAmount().negate());
         // 写资金流水
         FinanceCashflow cf = new FinanceCashflow();
         cf.setFlowNo(gen("FK-", cashflowMapper));
@@ -131,13 +135,50 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.AUDITED.name()); paymentMapper.updateById(u);
     }
 
-    private <T> String gen(String prefix, com.baomidou.mybatisplus.core.mapper.BaseMapper<T> mapper) {
-        String d = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String pat = prefix + d;
-        // Simple gen using code field reflection not feasible without entity; pass in.
-        // Since all our entities have code field, we use the specific mapper's code field.
-        // For generic usage, we rely on each entity having 'code' column.
-        return prefix + d + String.format("%03d", 1);
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unAudit(Long id) {
+        FinancePayment payment = paymentMapper.selectById(id);
+        if (payment == null) throw new BusinessException("付款单不存在");
+        if (!DocStatus.AUDITED.name().equals(payment.getStatus())) throw new BusinessException("只有已审核的付款单可反审核");
+        List<FinancePaymentItem> items = itemMapper.selectList(new LambdaQueryWrapper<FinancePaymentItem>().eq(FinancePaymentItem::getPaymentId, id));
+        // 1) 反向核销应付台账（按明细精确回退本单写入的核销）
+        BigDecimal settleTotal = BigDecimal.ZERO;
+        for (FinancePaymentItem it : items) {
+            if (it.getPayableId() == null) continue;
+            FinancePayable p = payableMapper.selectById(it.getPayableId());
+            if (p == null) continue;
+            BigDecimal amt = it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO;
+            settleTotal = settleTotal.add(amt);
+            BigDecimal newPaid = (p.getPaidAmount() != null ? p.getPaidAmount() : BigDecimal.ZERO).subtract(amt);
+            BigDecimal newUnpaid = (p.getUnpaidAmount() != null ? p.getUnpaidAmount() : BigDecimal.ZERO).add(amt);
+            p.setPaidAmount(newPaid.max(BigDecimal.ZERO));
+            p.setUnpaidAmount(newUnpaid);
+            p.setStatus(newUnpaid.compareTo(BigDecimal.ZERO) <= 0 ? SettlementStatus.SETTLED.getCode() : SettlementStatus.UNSETTLED.getCode());
+            payableMapper.updateById(p);
+        }
+        // 2) 回退账户余额
+        FinanceAccount acc = accountMapper.selectById(payment.getAccountId());
+        if (acc != null) {
+            acc.setBalance(acc.getBalance().add(payment.getAmount()));
+            accountMapper.updateById(acc);
+        }
+        // 3) 回退供应商应付余额（与 audit 的减对称），统一走原子入口
+        payableHelper.changeSupplierBalance(payment.getSupplierId(), payment.getAmount());
+        // 4) 写冲正资金流水（保留审计轨迹，不删除原流水）
+        FinanceCashflow cf = new FinanceCashflow();
+        cf.setFlowNo(gen("FK-", cashflowMapper));
+        cf.setAccountId(payment.getAccountId());
+        cf.setAccountName(payment.getAccountName());
+        cf.setFlowType("付款冲正");
+        cf.setRelatedBillNo(payment.getCode());
+        cf.setRelatedBillType("付款单");
+        cf.setIncome(payment.getAmount());
+        cf.setExpense(BigDecimal.ZERO);
+        cf.setBalance(acc != null ? acc.getBalance() : BigDecimal.ZERO);
+        cf.setRemark("反审核冲正");
+        cashflowMapper.insert(cf);
+        FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.DRAFT.name()); paymentMapper.updateById(u);
     }
 
     private String gen(String prefix, FinancePaymentMapper mapper) {

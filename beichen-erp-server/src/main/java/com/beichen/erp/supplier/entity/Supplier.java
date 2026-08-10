@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -36,6 +37,9 @@ public class Supplier {
     private Integer hasTouch;
 
     private Long relatedSupplierId;
+
+    /** 应付余额 */
+    private BigDecimal payableBalance;
 
     /** 账期（月） */
     private Integer creditPeriodMonths;

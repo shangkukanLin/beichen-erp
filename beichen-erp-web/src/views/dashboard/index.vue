@@ -329,7 +329,7 @@ async function loadStats() {
       // 加载进行中项目的时间线
       if (activeProjects.length > 0) {
         try {
-          const tlRes = await request.post('/dev/project/timelines/batch', { projectIds: activeProjects.map((p: any) => p.id) })
+          const tlRes = await request.post('/dev/project/timelines/batch', activeProjects.map((p: any) => p.id))
           dashboardTimelineMap.value = tlRes || {}
         } catch { /* ignore */}
       }
@@ -355,7 +355,7 @@ async function loadStats() {
       const allMats = allMatRes?.records || []
       let matPending = 0, matReceiving = 0
       allMats.forEach((m: any) => {
-        if (m.status === '待确认' || m.status === '已确认') matPending++
+        if (m.status === '待确认') matPending++
         if (m.status === '收货中') matReceiving++
       })
       osMatPending.value = matPending

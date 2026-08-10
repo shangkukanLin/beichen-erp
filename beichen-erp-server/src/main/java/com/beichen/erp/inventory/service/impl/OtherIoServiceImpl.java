@@ -124,15 +124,10 @@ public class OtherIoServiceImpl implements OtherIoService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
-        // 已废弃：提交即生效，无需审核。保留接口兼容
+        // 其他出入库单采用"提交即生效"模式：create 已直接置 AUDITED 并应用库存，无需审核。
+        // 保留接口仅为兼容 Controller 路由，空实现杜绝二次库存增减。
         InventoryOtherIo io = ioMapper.selectById(id);
         if (io == null) throw new BusinessException("其他出入库单不存在");
-        if (!DocStatus.DRAFT.name().equals(io.getStatus())) throw new BusinessException("只有草稿状态可审核");
-        List<InventoryOtherIoItem> items = itemMapper.selectList(
-                new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
-        applyStock(io, items);
-        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus(DocStatus.AUDITED.name());
-        ioMapper.updateById(u);
     }
 
     /** 应用库存变更 */

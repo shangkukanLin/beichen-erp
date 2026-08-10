@@ -5,7 +5,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
+import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.system.common.SystemConstants;
 import com.beichen.erp.system.entity.Role;
 import com.beichen.erp.system.entity.UserRole;
 import com.beichen.erp.system.entity.dto.ResetPasswordDTO;
@@ -51,7 +53,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
 
         Page<User> page = new Page<>(query.getPageNum(), query.getPageSize());
+        // 普通公司租户仅可见本公司用户，超管（CompanyContext 为 null）可见全部
+        Long currentCompany = CompanyContext.get();
         LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<User>()
+                .eq(currentCompany != null, User::getCompanyId, currentCompany)
                 .like(query.getUsername() != null && !query.getUsername().isBlank(),
                         User::getUsername, query.getUsername())
                 .like(query.getPhone() != null && !query.getPhone().isBlank(),
@@ -75,7 +80,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public UserVO getUserById(Long id) {
-        User user = baseMapper.selectById(id);
+        Long currentCompany = CompanyContext.get();
+        LambdaQueryWrapper<User> w = new LambdaQueryWrapper<User>().eq(User::getId, id);
+        if (currentCompany != null) {
+            w.eq(User::getCompanyId, currentCompany);
+        }
+        User user = baseMapper.selectOne(w);
         if (user == null) {
             throw new BusinessException("用户不存在");
         }
@@ -91,8 +101,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (dto.getPassword() == null || dto.getPassword().isBlank()) {
             throw new BusinessException("密码不能为空");
         }
-        Long count = baseMapper.selectCount(new LambdaQueryWrapper<User>()
-                .eq(User::getUsername, dto.getUsername()));
+        // 用户名查重限定本公司内，避免跨公司用户名冲突误判
+        Long currentCompany = CompanyContext.get();
+        LambdaQueryWrapper<User> dupWrapper = new LambdaQueryWrapper<User>()
+                .eq(User::getUsername, dto.getUsername());
+        if (currentCompany != null) {
+            dupWrapper.eq(User::getCompanyId, currentCompany);
+        }
+        Long count = baseMapper.selectCount(dupWrapper);
         if (count != null && count > 0) {
             throw new BusinessException("用户名已存在");
         }
@@ -102,6 +118,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setPhone(dto.getPhone());
         user.setDept(dto.getDept());
         user.setStatus(dto.getStatus());
+        // 归属当前租户；超管上下文为 null 时不设置 companyId（留待后续明确）
+        user.setCompanyId(currentCompany);
         baseMapper.insert(user);
 
         saveUserRoles(user.getId(), dto.getRoleIds());
@@ -116,6 +134,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User exist = baseMapper.selectById(dto.getId());
         if (exist == null) {
             throw new BusinessException("用户不存在");
+        }
+        // 校验归属本公司，防止越权改其他公司用户
+        if (CompanyContext.get() != null && !CompanyContext.get().equals(exist.getCompanyId())) {
+            throw new BusinessException("无权限操作该用户");
         }
         // 不改密码不改 username
         User update = new User();
@@ -138,7 +160,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (user == null) {
             throw new BusinessException("用户不存在");
         }
-        if ("lin".equals(user.getUsername())) {
+        // 校验归属本公司，防止越权删其他公司用户
+        if (CompanyContext.get() != null && !CompanyContext.get().equals(user.getCompanyId())) {
+            throw new BusinessException("无权限操作该用户");
+        }
+        if (SystemConstants.SUPER_ADMIN_USERNAME.equals(user.getUsername())) {
             throw new BusinessException("超级管理员不可删除");
         }
         baseMapper.deleteById(id);
@@ -152,6 +178,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (user == null) {
             throw new BusinessException("用户不存在");
         }
+        // 校验归属本公司，防止越权重置其他公司用户密码
+        if (CompanyContext.get() != null && !CompanyContext.get().equals(user.getCompanyId())) {
+            throw new BusinessException("无权限操作该用户");
+        }
         User update = new User();
         update.setId(dto.getId());
         update.setPassword(passwordEncoder.encode(dto.getPassword()));
@@ -164,7 +194,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (user == null) {
             throw new BusinessException("用户不存在");
         }
-        if ("lin".equals(user.getUsername())) {
+        // 校验归属本公司，防止越权禁用其他公司用户
+        if (CompanyContext.get() != null && !CompanyContext.get().equals(user.getCompanyId())) {
+            throw new BusinessException("无权限操作该用户");
+        }
+        if (SystemConstants.SUPER_ADMIN_USERNAME.equals(user.getUsername())) {
             throw new BusinessException("超级管理员不可禁用");
         }
         User update = new User();
@@ -179,7 +213,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         // 查询超级管理员角色ID，禁止通过用户管理分配
         Role superAdminRole = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
-                .eq(Role::getRoleCode, "super_admin"));
+                .eq(Role::getRoleCode, SystemConstants.SUPER_ADMIN_ROLE_CODE));
         Long superAdminId = superAdminRole != null ? superAdminRole.getId() : null;
         for (Long roleId : roleIds) {
             if (superAdminId != null && roleId.equals(superAdminId)) {

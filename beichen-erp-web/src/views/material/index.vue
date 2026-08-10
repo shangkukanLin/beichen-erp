@@ -21,7 +21,7 @@ const router = useRouter()
 // 品牌下拉
 const brandOptions = ref<{ id: number; brandName: string }[]>([])
 async function loadBrands() {
-  try { const res = await request.get<any, any>('/brand/enabled'); brandOptions.value = res || [] } catch (e: any) { console.warn('加载品牌失败', e?.message || e) }
+  try { const res = await request.get<any, any>('/brand/enabled'); brandOptions.value = res || []   } catch (e: any) { ElMessage.error('品牌加载失败：' + (e?.msg || e?.message || '未知错误')) }
 }
 
 // 查询参数
@@ -164,31 +164,17 @@ async function handleSubmit() {
 
 async function handleDelete(row: any) {
   try {
-    const checkRes = await request.get<any, any>(`/product/${row.id}/check-delete`)
-    if (checkRes && !checkRes.canDelete) {
-      const list = checkRes.associations || {}
-      const detail = Object.entries(list).map(([k, v]) => `${k}：${v}条`).join('；')
-      ElMessage({ message: detail, type: 'warning', duration: 5000 })
-      return
-    }
-  } catch {
-    // check-delete 失败时，让后端 delete 端点自行校验
-  }
-  try {
-    await ElMessageBox.confirm(`确定要删除物料「${row.name}」吗？`, '提示', {
+    await ElMessageBox.confirm(`确定要停用物料「${row.name}」吗？停用后仍可在"停售"标签页查看`, '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     })
     await deleteProduct(row.id as number | string)
-    ElMessage.success('删除成功')
-    if (tableData.value.length === 1 && pagination.pageNum > 1) {
-      pagination.pageNum--
-    }
+    ElMessage.success('已停用')
     loadData()
   } catch (e: any) {
     if (e !== 'cancel' && e !== 'close') {
-      ElMessage.error(e?.message || '删除失败')
+      ElMessage.error(e?.message || '停用失败')
     }
   }
 }

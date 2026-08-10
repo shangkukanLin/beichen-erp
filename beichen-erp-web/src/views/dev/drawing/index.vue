@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 
 const router = useRouter()
@@ -26,6 +27,8 @@ async function loadProjects() {
     }
     allProjects.value = projects.filter((p:any) => p.drawingCount > 0)
     filteredProjects.value = allProjects.value
+  } catch (e: any) {
+    ElMessage.error('项目图纸概览加载失败：' + (e?.msg || e?.message || '未知错误'))
   } finally { tableLoading.value = false }
 }
 

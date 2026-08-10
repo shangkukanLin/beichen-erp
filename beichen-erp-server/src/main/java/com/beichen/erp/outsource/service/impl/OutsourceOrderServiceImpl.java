@@ -17,7 +17,7 @@ import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.common.QualityType;
-import com.beichen.erp.outsource.controller.OrderDeliveryController;
+import com.beichen.erp.outsource.service.OutsourceOrderDeliveryService;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
@@ -44,9 +44,10 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final SupplierMapper supplierMapper;
     private final JdbcTemplate jdbcTemplate;
+    /** 交货记录服务与本服务互相依赖，使用 @Lazy 字段注入打破循环依赖 */
     @org.springframework.beans.factory.annotation.Autowired
     @org.springframework.context.annotation.Lazy
-    private OrderDeliveryController orderDeliveryController;
+    private OutsourceOrderDeliveryService outsourceOrderDeliveryService;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long factoryId, String code, int pageNum, int pageSize) {
@@ -243,7 +244,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
         if (!deliveries.isEmpty()) {
             // 已审核交货记录：统一反审核，逆向库存/成品流水/应付，回到草稿
             for (OutsourceOrderDelivery delivery : deliveries) {
-                orderDeliveryController.unaudit(delivery.getId());
+                outsourceOrderDeliveryService.unaudit(delivery.getId());
             }
 
             // 冲销加工单级应付（如整单未结算部分）
@@ -285,6 +286,12 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
         OutsourceOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("加工单不存在");
         if (OutsourceOrderStatus.CANCELLED.name().equals(order.getStatus())) throw new BusinessException("已取消状态不可重复取消");
+        // 存在已审核交货单时禁止直接作废，须先反审核交货单以保证成品库存/应付账实闭环（与 unaudit 对称）
+        List<OutsourceOrderDelivery> audited = orderDeliveryMapper.selectList(
+                new LambdaQueryWrapper<OutsourceOrderDelivery>()
+                        .eq(OutsourceOrderDelivery::getOrderId, id)
+                        .eq(OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.name()));
+        if (!audited.isEmpty()) throw new BusinessException("加工单存在已审核交货单，请先反审核后再取消");
         OutsourceOrder update = new OutsourceOrder();
         update.setId(id);
         update.setStatus(OutsourceOrderStatus.CANCELLED.name());

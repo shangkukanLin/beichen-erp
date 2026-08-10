@@ -136,6 +136,9 @@ public class ReclassifyServiceImpl implements ReclassifyService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void cancel(Long id) {
+        // 注意：品质重分类单无独立 unAudit，cancel 在此承担"反审核"职责——
+        // 校验已审核后执行逆向库存回滚（恢复原品质、冲回目标品质），再将状态置 CANCELLED。
+        // 与 WarehouseMove.unAudit 语义一致，仅方法命名不同（前端已按 cancel 调用，故不改名）。
         InventoryProductReclassify rc = rcMapper.selectById(id);
         if (rc == null) throw new BusinessException("品质重分类单不存在");
         if (!DocStatus.AUDITED.name().equals(rc.getStatus())) throw new BusinessException("只有已审核状态可取消");

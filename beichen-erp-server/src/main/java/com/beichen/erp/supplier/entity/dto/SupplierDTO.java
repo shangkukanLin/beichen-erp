@@ -1,7 +1,10 @@
 package com.beichen.erp.supplier.entity.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import lombok.Data;
+
+import java.util.List;
 
 @Data
 public class SupplierDTO {
@@ -15,7 +18,8 @@ public class SupplierDTO {
     private String name;
 
     /** 供应商类型编码列表（product/factory/solution/material） */
-    private java.util.List<String> typeCodes;
+    @NotEmpty(message = "供应商类型不能为空")
+    private List<String> typeCodes;
 
     private String contact;
 
@@ -34,8 +38,6 @@ public class SupplierDTO {
     private Integer creditPeriodMonths;
 
     private Integer creditPeriod;
-
-    private String brand;
 
     private String remark;
 }

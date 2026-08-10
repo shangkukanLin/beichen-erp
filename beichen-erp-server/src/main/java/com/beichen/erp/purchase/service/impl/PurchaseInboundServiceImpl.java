@@ -7,10 +7,6 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.finance.entity.FinancePayable;
-import com.beichen.erp.finance.common.SettlementStatus;
-import com.beichen.erp.finance.common.SourceBillType;
-import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
@@ -42,8 +38,6 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
     private final PurchaseOrderMapper orderMapper;
     private final SupplierMapper supplierMapper;
     private final InventoryWarehouseStockService stockService;
-    private final FinancePayableMapper payableMapper;
-    private final com.beichen.erp.finance.service.PayableHelper payableHelper;
     private final ProductMapper productMapper;
 
     @Override
@@ -177,20 +171,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
                     StockChangeType.PURCHASE_IN, inbound.getCode(), RelatedBillType.PURCHASE_INBOUND, it.getProductId(),
                     product != null ? product.getSpec() : "", inbound.getId(), it.getQualityType());
         }
-        // 2) 生成应付台账
-        FinancePayable fp = new FinancePayable();
-        fp.setBillNo(inbound.getCode());
-        fp.setSupplierId(inbound.getSupplierId());
-        fp.setSupplierName(inbound.getSupplierName());
-        fp.setSourceBillType(SourceBillType.PURCHASE_INBOUND.getCode());
-        fp.setSourceBillNo(inbound.getCode());
-        fp.setAmount(inbound.getTotalAmount());
-        fp.setPaidAmount(BigDecimal.ZERO);
-        fp.setUnpaidAmount(inbound.getTotalAmount());
-        fp.setDueDate(payableHelper.calcDueDate(supplierMapper.selectById(inbound.getSupplierId()), inbound.getInboundDate()));
-        fp.setStatus(SettlementStatus.UNSETTLED.getCode());
-        payableMapper.insert(fp);
-        // 3) 更新入库单状态
+        // 2) 更新入库单状态（应付由采购订单统一生成，入库单仅负责库存出入）
         PurchaseInbound u = new PurchaseInbound();
         u.setId(id);
         u.setStatus(DocStatus.AUDITED.name());

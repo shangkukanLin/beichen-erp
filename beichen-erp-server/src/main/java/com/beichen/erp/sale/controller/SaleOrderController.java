@@ -54,6 +54,9 @@ public class SaleOrderController {
     @PutMapping("/{id}/audit")
     public R<Void> audit(@PathVariable Long id) { service.audit(id); return R.ok(); }
 
+    @PutMapping("/{id}/un-audit")
+    public R<Void> unAudit(@PathVariable Long id) { service.unAudit(id); return R.ok(); }
+
     @PutMapping("/{id}/cancel")
     public R<Void> cancel(@PathVariable Long id) { service.cancel(id); return R.ok(); }
 

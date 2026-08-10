@@ -278,7 +278,14 @@ const filteredBugs = computed(() => {
 const bugDialogVisible = ref(false)
 const bugForm = reactive<BugDTO>({ title: '', severity: SeverityType.NORMAL, bugType: BugTypeEnum.DISPLAY, status: BugStatus.OPEN, description: '' })
 const isBugEdit = ref(false)
-async function loadBugs() { const res: any = await getProjectBugs(projectId); bugList.value = res?.records || res || [] }
+async function loadBugs() {
+  try {
+    const res: any = await getProjectBugs(projectId)
+    bugList.value = res?.records || res || []
+  } catch (e: any) {
+    ElMessage.error('加载项目缺陷失败：' + (e?.msg || e?.message || '未知错误'))
+  }
+}
 function handleAddBug() { Object.assign(bugForm, { title: '', severity: SeverityType.NORMAL, bugType: BugTypeEnum.DISPLAY, status: BugStatus.OPEN, description: '' }); isBugEdit.value = false; bugDialogVisible.value = true }
 function handleEditBug(row: BugDTO) { Object.assign(bugForm, row); isBugEdit.value = true; bugDialogVisible.value = true }
 async function handleBugSubmit() {
@@ -353,7 +360,7 @@ async function loadDevMaterials() {
   try {
     const res = await request.get<DevPurchaseItem[]>(`/dev/purchase-item/project/${projectId}`)
     devMaterialList.value = res || []
-  } catch (e: any) { console.warn('加载项目物料失败', e?.message || e) }
+  } catch (e: any) { ElMessage.error('加载项目物料失败：' + (e?.msg || e?.message || '未知错误')) }
 }
 
 // 打开共用新增/编辑弹窗（自动锁定当前项目）
@@ -376,7 +383,7 @@ async function loadRelatedOrders() {
   try {
     const res = await request.get<RelatedOrder[]>(`/dev/project/${projectId}/related-orders`)
     relatedOrders.value = res || []
-  } catch (e: any) { console.warn('加载关联订单失败', e?.message || e) }
+  } catch (e: any) { ElMessage.error('加载关联订单失败：' + (e?.msg || e?.message || '未知错误')) }
 }
 
 // 切换 Tab 时自动加载 BOM 数据

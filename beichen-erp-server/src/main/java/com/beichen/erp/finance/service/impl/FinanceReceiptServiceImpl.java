@@ -93,12 +93,14 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         FinanceReceipt receipt = receiptMapper.selectById(id);
         if (receipt == null || !DocStatus.DRAFT.name().equals(receipt.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<FinanceReceiptItem> items = itemMapper.selectList(new LambdaQueryWrapper<FinanceReceiptItem>().eq(FinanceReceiptItem::getReceiptId, id));
-        // 核销应收
+        // 核销应收（按明细逐笔回写台账 paid/unpaid）
+        BigDecimal settleTotal = BigDecimal.ZERO;
         for (FinanceReceiptItem it : items) {
             if (it.getReceivableId() == null) continue;
             FinanceReceivable rec = receivableMapper.selectById(it.getReceivableId());
             if (rec == null) continue;
             BigDecimal amt = it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO;
+            settleTotal = settleTotal.add(amt);
             BigDecimal newPaid = (rec.getPaidAmount() != null ? rec.getPaidAmount() : BigDecimal.ZERO).add(amt);
             BigDecimal newUnpaid = (rec.getUnpaidAmount() != null ? rec.getUnpaidAmount() : BigDecimal.ZERO).subtract(amt);
             rec.setPaidAmount(newPaid);
@@ -130,11 +132,65 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
             if (c != null) {
                 Customer u = new Customer();
                 u.setId(c.getId());
-                u.setReceivableBalance((c.getReceivableBalance() != null ? c.getReceivableBalance() : BigDecimal.ZERO).subtract(receipt.getAmount()));
+                u.setReceivableBalance((c.getReceivableBalance() != null ? c.getReceivableBalance() : BigDecimal.ZERO).subtract(settleTotal));
                 customerMapper.updateById(u);
             }
         }
         FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus(DocStatus.AUDITED.name()); receiptMapper.updateById(u);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unAudit(Long id) {
+        FinanceReceipt receipt = receiptMapper.selectById(id);
+        if (receipt == null) throw new BusinessException("收款单不存在");
+        if (!DocStatus.AUDITED.name().equals(receipt.getStatus())) throw new BusinessException("只有已审核的收款单可反审核");
+        List<FinanceReceiptItem> items = itemMapper.selectList(new LambdaQueryWrapper<FinanceReceiptItem>().eq(FinanceReceiptItem::getReceiptId, id));
+        // 1) 反向核销应收台账（按明细精确回退本单写入的核销）
+        BigDecimal settleTotal = BigDecimal.ZERO;
+        for (FinanceReceiptItem it : items) {
+            if (it.getReceivableId() == null) continue;
+            FinanceReceivable rec = receivableMapper.selectById(it.getReceivableId());
+            if (rec == null) continue;
+            BigDecimal amt = it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO;
+            settleTotal = settleTotal.add(amt);
+            BigDecimal newPaid = (rec.getPaidAmount() != null ? rec.getPaidAmount() : BigDecimal.ZERO).subtract(amt);
+            BigDecimal newUnpaid = (rec.getUnpaidAmount() != null ? rec.getUnpaidAmount() : BigDecimal.ZERO).add(amt);
+            rec.setPaidAmount(newPaid.max(BigDecimal.ZERO));
+            rec.setUnpaidAmount(newUnpaid);
+            rec.setStatus(newUnpaid.compareTo(BigDecimal.ZERO) <= 0 ? SettlementStatus.SETTLED.getCode() : SettlementStatus.UNSETTLED.getCode());
+            receivableMapper.updateById(rec);
+        }
+        // 2) 回退账户余额
+        FinanceAccount acc = accountMapper.selectById(receipt.getAccountId());
+        if (acc != null) {
+            acc.setBalance(acc.getBalance().subtract(receipt.getAmount()));
+            accountMapper.updateById(acc);
+        }
+        // 3) 写冲正资金流水（保留审计轨迹，不删除原流水）
+        FinanceCashflow cf = new FinanceCashflow();
+        cf.setFlowNo(genFlowNo());
+        cf.setAccountId(receipt.getAccountId());
+        cf.setAccountName(receipt.getAccountName());
+        cf.setFlowType("收款冲正");
+        cf.setRelatedBillNo(receipt.getCode());
+        cf.setRelatedBillType("收款单");
+        cf.setIncome(BigDecimal.ZERO);
+        cf.setExpense(receipt.getAmount());
+        cf.setBalance(acc != null ? acc.getBalance() : BigDecimal.ZERO);
+        cf.setRemark("反审核冲正");
+        cashflowMapper.insert(cf);
+        // 4) 回退客户应收余额
+        if (receipt.getCustomerId() != null) {
+            Customer c = customerMapper.selectById(receipt.getCustomerId());
+            if (c != null) {
+                Customer u = new Customer();
+                u.setId(c.getId());
+                u.setReceivableBalance((c.getReceivableBalance() != null ? c.getReceivableBalance() : BigDecimal.ZERO).add(settleTotal));
+                customerMapper.updateById(u);
+            }
+        }
+        FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus(DocStatus.DRAFT.name()); receiptMapper.updateById(u);
     }
 
     private String gen() {

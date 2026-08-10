@@ -14,14 +14,22 @@ public interface SupplierService extends IService<Supplier> {
 
     String generateCode(String type);
 
-    void create(SupplierDTO dto);
+    /**
+     * 新建供应商，返回供应商ID（同名追加类型时返回已存在的ID）
+     */
+    Long create(SupplierDTO dto);
 
     void update(SupplierDTO dto);
 
+    /**
+     * 删除改为停用：仅置 status=0，不物理删除，避免采购单/应付单变孤儿数据
+     */
     void delete(Long id);
 
     void toggleStatus(Long id);
 
-    /** 检查供应商是否有关联数据，返回可删除标志和关联明细 */
+    /**
+     * 检查供应商是否有关联数据，返回可停用标志和关联明细
+     */
     Map<String, Object> checkDelete(Long id);
 }

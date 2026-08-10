@@ -13,7 +13,7 @@ const editId = ref<number>()
 
 async function loadData() {
   loading.value = true
-  try { const res = await request.get<any, any>('/brand/page', { params: { pageSize: 100 } }); tableData.value = res?.records || [] } catch (e: any) { console.warn('加载品牌失败', e?.message || e) } finally { loading.value = false }
+  try { const res = await request.get<any, any>('/brand/page', { params: { pageSize: 100 } }); tableData.value = res?.records || [] } catch (e: any) { console.warn('加载品牌失败', e?.message || e); ElMessage.error('品牌列表加载失败：' + (e?.msg || e?.message || '未知错误')) } finally { loading.value = false }
 }
 
 function handleAdd() { isEdit.value = false; editId.value = undefined; form.value = { brandName: '', status: 1 }; dialogVisible.value = true }

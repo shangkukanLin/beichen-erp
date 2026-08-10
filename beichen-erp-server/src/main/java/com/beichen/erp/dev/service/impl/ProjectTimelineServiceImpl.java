@@ -68,6 +68,11 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
     public void completePhase(Long projectId, Long timelineId) {
         ProjectTimeline current = projectTimelineMapper.selectById(timelineId);
         if (current == null) return;
+        // 已取消项目不允许再推进阶段，避免阶段状态与项目状态脱节
+        if (isProjectCancelled(projectId)) {
+            log.warn("项目已取消，禁止推进阶段: projectId={}, timelineId={}", projectId, timelineId);
+            return;
+        }
 
         current.setStatus(TimelineStatus.FINISHED.getCode());
         // 保留用户设置的实际完成日期，未设置则默认当天
@@ -86,6 +91,11 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
     public void skipPhase(Long projectId, Long timelineId) {
         ProjectTimeline current = projectTimelineMapper.selectById(timelineId);
         if (current == null) return;
+        // 已取消项目不允许再推进阶段
+        if (isProjectCancelled(projectId)) {
+            log.warn("项目已取消，禁止推进阶段: projectId={}, timelineId={}", projectId, timelineId);
+            return;
+        }
 
         current.setStatus(TimelineStatus.SKIPPED.getCode());
         if (current.getActualEnd() == null) {
@@ -143,31 +153,45 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
         if (all.isEmpty()) return;
 
         // 找到第一个进行中的阶段，作为推算起点
-        LocalDate baseDate = null;
+        ProjectTimeline inProgress = null;
         for (ProjectTimeline t : all) {
             if (TimelineStatus.IN_PROGRESS.getCode().equals(t.getStatus())) {
-                // 进行中阶段：以实际完成日期或今天为基准
-                baseDate = t.getActualEnd() != null ? t.getActualEnd() : LocalDate.now();
-                // 如果进行中阶段 plannedEnd 为空，设为基准日期
-                if (t.getPlannedEnd() == null) {
-                    t.setPlannedEnd(baseDate);
-                    projectTimelineMapper.updateById(t);
-                }
-                // 从下一个阶段开始级联推算
-                boolean found = false;
-                for (ProjectTimeline next : all) {
-                    if (found) {
-                        int days = next.getDefaultDays() != null ? next.getDefaultDays() : 7;
-                        next.setPlannedEnd(baseDate.plusDays(days));
-                        projectTimelineMapper.updateById(next);
-                        baseDate = next.getPlannedEnd();
-                    }
-                    if (next.getId().equals(t.getId())) found = true;
-                }
-                return;
+                inProgress = t;
+                break;
             }
         }
-        // 如果没有进行中的阶段，不做重算
+        if (inProgress == null) {
+            // 没有进行中的阶段，不做重算
+            return;
+        }
+
+        // 进行中阶段基准：实际完成日期优先，否则今天
+        LocalDate baseDate = inProgress.getActualEnd() != null ? inProgress.getActualEnd() : LocalDate.now();
+        // 进行中阶段自身计划完成日期为空时回填基准
+        if (inProgress.getPlannedEnd() == null) {
+            inProgress.setPlannedEnd(baseDate);
+            projectTimelineMapper.updateById(inProgress);
+        }
+
+        // 顺序推算后续阶段，跳过已完成/已跳过的阶段（其计划日期为历史快照不应改写）
+        boolean found = false;
+        for (ProjectTimeline next : all) {
+            if (!found) {
+                // 先定位到进行中阶段之后再开始推算
+                if (next.getId().equals(inProgress.getId())) found = true;
+                continue;
+            }
+            if (TimelineStatus.FINISHED.getCode().equals(next.getStatus())
+                    || TimelineStatus.SKIPPED.getCode().equals(next.getStatus())) {
+                // 历史阶段保持原计划日期，仅刷新基准为它的结束，保证后续推算连续
+                if (next.getPlannedEnd() != null) baseDate = next.getPlannedEnd();
+                continue;
+            }
+            int days = next.getDefaultDays() != null ? next.getDefaultDays() : 7;
+            next.setPlannedEnd(baseDate.plusDays(days));
+            projectTimelineMapper.updateById(next);
+            baseDate = next.getPlannedEnd();
+        }
     }
 
     @Override
@@ -175,6 +199,11 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
     public void saveTimelineRow(Long projectId, ProjectTimeline row) {
         ProjectTimeline existing = projectTimelineMapper.selectById(row.getId());
         if (existing == null) return;
+        // 已取消项目不允许通过手动编辑阶段推进状态
+        if (isProjectCancelled(projectId)) {
+            log.warn("项目已取消，禁止编辑阶段: projectId={}, timelineId={}", projectId, row.getId());
+            return;
+        }
 
         String oldStatus = existing.getStatus();
         String newStatus = row.getStatus();
@@ -217,7 +246,9 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
         ProjectTimeline tl = findByStatusName(projectId, statusName);
         if (tl == null) return;
 
-        long daysDiff = plannedEnd.toEpochDay() - tl.getPlannedEnd().toEpochDay();
+        // 原计划完成日期为空时（非首阶段默认不填），以今天为基准计算偏移，避免空指针
+        LocalDate oldPlannedEnd = tl.getPlannedEnd() != null ? tl.getPlannedEnd() : LocalDate.now();
+        long daysDiff = plannedEnd.toEpochDay() - oldPlannedEnd.toEpochDay();
         tl.setPlannedEnd(plannedEnd);
         projectTimelineMapper.updateById(tl);
 
@@ -243,6 +274,12 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
     }
 
     // ===== 内部方法 =====
+
+    /** 判断项目是否已取消（取消后阶段不可再推进/编辑） */
+    private boolean isProjectCancelled(Long projectId) {
+        Project project = projectMapper.selectById(projectId);
+        return project != null && project.getCancelledAt() != null;
+    }
 
     private ProjectTimeline findByStatusName(Long projectId, String statusName) {
         return projectTimelineMapper.selectOne(

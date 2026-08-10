@@ -12,6 +12,7 @@ import com.beichen.erp.system.entity.UserRole;
 import com.beichen.erp.system.entity.dto.RoleDTO;
 import com.beichen.erp.system.mapper.RoleMenuMapper;
 import com.beichen.erp.system.mapper.UserRoleMapper;
+import com.beichen.erp.system.common.SystemConstants;
 import com.beichen.erp.system.service.RoleService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +30,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/system/role")
-@SaCheckRole(value = {"super_admin", "admin"}, mode = SaMode.OR)
+@SaCheckRole(value = {SystemConstants.SUPER_ADMIN_ROLE_CODE, SystemConstants.ADMIN_ROLE_CODE}, mode = SaMode.OR)
 @RequiredArgsConstructor
 public class RoleController {
 
@@ -82,7 +83,10 @@ public class RoleController {
         if (exist == null) {
             throw new BusinessException("角色不存在");
         }
-        if ("super_admin".equals(exist.getRoleCode()) || "admin".equals(exist.getRoleCode())) {
+        // 校验当前租户是否有权操作该角色，防止跨公司越权改角色
+        roleService.assertOwned(exist);
+        if (SystemConstants.SUPER_ADMIN_ROLE_CODE.equals(exist.getRoleCode())
+                || SystemConstants.ADMIN_ROLE_CODE.equals(exist.getRoleCode())) {
             throw new BusinessException("内置角色不可编辑");
         }
         Long count = roleService.lambdaQuery()
@@ -108,8 +112,12 @@ public class RoleController {
         if (role == null) {
             throw new BusinessException("角色不存在");
         }
+        // 校验当前租户是否有权操作该角色，防止跨公司越权删角色
+        roleService.assertOwned(role);
         String code = role.getRoleCode();
-        if ("super_admin".equals(code) || "admin".equals(code) || "user".equals(code)) {
+        if (SystemConstants.SUPER_ADMIN_ROLE_CODE.equals(code)
+                || SystemConstants.ADMIN_ROLE_CODE.equals(code)
+                || SystemConstants.USER_ROLE_CODE.equals(code)) {
             throw new BusinessException("内置角色不可删除");
         }
         Long count = userRoleMapper.selectCount(new LambdaQueryWrapper<UserRole>()

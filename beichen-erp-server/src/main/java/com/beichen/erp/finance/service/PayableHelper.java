@@ -24,6 +24,16 @@ public class PayableHelper {
     private final SupplierMapper supplierMapper;
 
     /**
+     * 原子更新供应商应付余额：在原值基础上增减，避免并发读-改-写丢更新
+     * @param supplierId 供应商ID
+     * @param delta      变动额（正为增加应付，负为减少）
+     */
+    public void changeSupplierBalance(Long supplierId, BigDecimal delta) {
+        if (supplierId == null || delta == null) return;
+        supplierMapper.addPayableBalance(supplierId, delta);
+    }
+
+    /**
      * 生成应付（amount 可为负数表示冲减）
      * @param sourceId 来源记录ID（交货/收货记录），用于后续编辑删除定位
      * @param bizDate  业务日期（收货/交货日期），用于计算到期日

@@ -159,6 +159,12 @@ public class DataInitializer implements ApplicationRunner {
                 "ALTER TABLE inventory_stock_log DROP COLUMN IF EXISTS material_name",
                 "ALTER TABLE inventory_stock_log DROP COLUMN IF EXISTS spec",
                 "ALTER TABLE inventory_stock_log DROP COLUMN IF EXISTS unit",
+                // 删除 product.current_stock 冗余列：库存以 inventory_warehouse_stock 为准，该列恒为0永不维护
+                "ALTER TABLE product DROP COLUMN IF EXISTS current_stock",
+                // 删除 supplier_product 残留列：产品名称/规格/单位已改为关联 product 表查询，同名字段弃用
+                "ALTER TABLE supplier_product DROP COLUMN IF EXISTS product_name",
+                "ALTER TABLE supplier_product DROP COLUMN IF EXISTS spec",
+                "ALTER TABLE supplier_product DROP COLUMN IF EXISTS unit",
         };
         for (String sql : actions) {
             safeDDL(sql);
@@ -648,6 +654,15 @@ public class DataInitializer implements ApplicationRunner {
                 jdbcTemplate.execute("ALTER TABLE supplier ADD COLUMN credit_period_months INT DEFAULT NULL COMMENT '账期(月)' AFTER related_supplier_id");
                 jdbcTemplate.execute("ALTER TABLE supplier ADD COLUMN credit_period INT DEFAULT NULL COMMENT '账期(天)' AFTER credit_period_months");
                 log.info("已为 supplier 添加账期列");
+            }
+        } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
+        // 供应商应付余额字段（与销售侧客户应收余额对称）
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='supplier' AND COLUMN_NAME='payable_balance'", Integer.class);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute("ALTER TABLE supplier ADD COLUMN payable_balance DECIMAL(18,2) DEFAULT 0 COMMENT '应付余额' AFTER related_supplier_id");
+                log.info("已为 supplier 添加 payable_balance 列");
             }
         } catch (Exception e) { log.warn("DDL 执行异常: {}", e.getMessage()); }
         // finance_payable 添加 source_id 列（关联来源记录ID，用于编辑/删除时定位）

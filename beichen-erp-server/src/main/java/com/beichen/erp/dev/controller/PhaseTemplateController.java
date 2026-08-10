@@ -1,11 +1,8 @@
 package com.beichen.erp.dev.controller;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
-import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.PhaseTemplate;
-import com.beichen.erp.dev.mapper.PhaseTemplateMapper;
+import com.beichen.erp.dev.service.PhaseTemplateService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,38 +13,34 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PhaseTemplateController {
 
-    private final PhaseTemplateMapper mapper;
+    private final PhaseTemplateService service;
 
     @GetMapping("/page")
-    public R<Page<PhaseTemplate>> page(
+    public R<?> page(
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "100") int pageSize) {
-        return R.ok(mapper.selectPage(new Page<>(pageNum, pageSize),
-            new LambdaQueryWrapper<PhaseTemplate>().orderByAsc(PhaseTemplate::getSortOrder)));
+        return R.ok(service.page(pageNum, pageSize));
     }
 
     @GetMapping("/list")
     public R<List<PhaseTemplate>> list() {
-        return R.ok(mapper.selectList(
-            new LambdaQueryWrapper<PhaseTemplate>().orderByAsc(PhaseTemplate::getSortOrder)));
+        return R.ok(service.list());
     }
 
     @PostMapping
     public R<PhaseTemplate> create(@RequestBody PhaseTemplate t) {
-        if (t.getCompanyId() == null) t.setCompanyId(CompanyContext.get());
-        mapper.insert(t);
-        return R.ok(t);
+        return R.ok(service.create(t));
     }
 
     @PutMapping
     public R<Void> update(@RequestBody PhaseTemplate t) {
-        mapper.updateById(t);
+        service.update(t);
         return R.ok();
     }
 
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
-        mapper.deleteById(id);
+        service.delete(id);
         return R.ok();
     }
 }

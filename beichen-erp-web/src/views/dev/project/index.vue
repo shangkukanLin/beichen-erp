@@ -62,7 +62,7 @@ async function loadTimelines(projects: ProjectVO[]) {
   const ids = projects.map(p => p.id).filter(Boolean) as number[]
   if (ids.length === 0) return
   try {
-    const res = await request.post<Record<number, TimelineItem[]>>('/dev/project/timelines/batch', { projectIds: ids })
+    const res = await request.post<Record<number, TimelineItem[]>>('/dev/project/timelines/batch', ids)
     if (res) timelineMap.value = { ...timelineMap.value, ...res }
   } catch (e: any) { console.warn('加载时间线失败', e?.message || e) }
 }

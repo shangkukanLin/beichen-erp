@@ -12,7 +12,7 @@ const routes: RouteRecordRaw[] = [
     path: '/company-manage',
     name: 'CompanyManage',
     component: () => import('@/views/system/company.vue'),
-    meta: { title: '公司管理', requiresAuth: false }
+    meta: { title: '公司管理', requiresAuth: true }
   },
   {
     path: '/',
@@ -307,12 +307,18 @@ router.beforeEach((to, _from, next) => {
     return
   }
 
-  // 检查当前路径是否在用户菜单权限中（仅占位路由需要检查）
-  if (to.name === 'Placeholder') {
+  // 菜单权限校验：非 403/占位错误页的业务路由，均需在用户菜单权限内
+  if (to.path !== '/403') {
     const allowedPaths = userStore.menuPaths
-    if (allowedPaths.length > 0 && !allowedPaths.includes(to.path)) {
-      next('/403')
-      return
+    if (allowedPaths.length > 0) {
+      // 菜单已加载：不在权限内则拦截
+      if (!allowedPaths.includes(to.path)) {
+        next('/403')
+        return
+      }
+    } else {
+      // 菜单尚未加载（避免首次进入时异步未就绪误拦），触发拉取后放行
+      userStore.fetchMenus()
     }
   }
 

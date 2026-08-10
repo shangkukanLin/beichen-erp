@@ -57,6 +57,9 @@ public class SaleOutboundController {
     @PutMapping("/{id}/cancel")
     public R<Void> cancel(@PathVariable Long id) { service.cancel(id); return R.ok(); }
 
+    @PutMapping("/{id}/un-audit")
+    public R<Void> unAudit(@PathVariable Long id) { service.unAudit(id); return R.ok(); }
+
     @SuppressWarnings("unchecked")
     private SaleOutbound parseOutbound(Map<String, Object> body) {
         Map<String, Object> d = body.containsKey("outbound") ? (Map<String, Object>) body.get("outbound") : body;

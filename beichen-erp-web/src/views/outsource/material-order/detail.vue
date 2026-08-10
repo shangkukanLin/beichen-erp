@@ -296,7 +296,6 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
             <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="order.status===MaterialOrderStatus.CANCELLED">保存</el-button>
             <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">确认</el-button>
             <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleFinish">结单</el-button>
-            <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="openDefectReturn">退不良</el-button>
             <el-button v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">取消</el-button>
           </div>
         </el-form>
@@ -360,7 +359,10 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
       <el-card shadow="never">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <span style="font-weight:600">交货记录</span>
-          <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="primary" size="small" @click="openReceive">新增交货</el-button>
+          <div style="display:flex;gap:8px">
+            <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="primary" size="small" @click="openReceive">新增交货</el-button>
+            <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="openDefectReturn">退不良</el-button>
+          </div>
         </div>
         <el-table :data="deliveries" border stripe size="small">
           <el-table-column type="expand">

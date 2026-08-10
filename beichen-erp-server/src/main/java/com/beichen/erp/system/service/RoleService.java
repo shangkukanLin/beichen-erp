@@ -41,4 +41,12 @@ public interface RoleService extends IService<Role> {
      * 删除菜单时，从所有角色中移除该菜单关联
      */
     void removeMenuFromAllRoles(Long menuId);
+
+    /**
+     * 校验当前登录租户是否有权操作该角色：
+     * 超管（CompanyContext 为 null）可操作全部；
+     * 普通公司租户仅可操作归属本公司的角色，平台级共享角色（companyId 为 0/空）不可被普通租户改/删/授权。
+     * 校验不通过抛出 BusinessException。
+     */
+    void assertOwned(Role role);
 }

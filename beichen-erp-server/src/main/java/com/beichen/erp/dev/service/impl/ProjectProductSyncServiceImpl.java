@@ -68,7 +68,6 @@ public class ProjectProductSyncServiceImpl implements ProjectProductSyncService 
         product.setStatus(ProductStatus.DEVELOPING);
         product.setUnit("pcs");
         product.setSafetyStock(java.math.BigDecimal.ZERO);
-        product.setCurrentStock(java.math.BigDecimal.ZERO);
         productMapper.insert(product);
 
         // 回写项目 product_id
@@ -121,7 +120,9 @@ public class ProjectProductSyncServiceImpl implements ProjectProductSyncService 
             log.info("未找到项目关联的产品: projectId={}", projectId);
             return;
         }
-        if (ProductStatus.DEVELOPING.getValue().equals(product.getStatus().getValue())) {
+        // 兼容存量产品 status 为 null 的情况，避免 getValue() 时空指针
+        if (product.getStatus() != null
+                && ProductStatus.DEVELOPING.getValue().equals(product.getStatus().getValue())) {
             product.setStatus(ProductStatus.NORMAL);
             productMapper.updateById(product);
             log.info("同步产品状态为正常: projectId={}, productId={}, productName={}",

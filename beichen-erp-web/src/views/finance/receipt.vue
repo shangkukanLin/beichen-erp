@@ -50,11 +50,6 @@ const dLoading = ref(false)
 
 function resetD() { Object.assign(dForm, { id: undefined, customerId: undefined, accountId: undefined, receiptDate: '', remark: '' }); dItems.value = []; unpaid.value = [] }
 function handleAdd() { resetD(); dTitle.value = '新增收款单'; dVisible.value = true }
-async function handleEdit(row: FinanceReceipt) {
-  resetD(); Object.assign(dForm, row); dTitle.value = '编辑收款单'; dVisible.value = true
-  try { dItems.value = await getReceiptItems(row.id as number) || [] } catch {}
-  if (row.customerId) { try { unpaid.value = await getUnpaidReceivables(row.customerId) || [] } catch {} }
-}
 async function onCustomerChange(id: number) {
   try { unpaid.value = await getUnpaidReceivables(id) || [] } catch { unpaid.value = [] }
 }
@@ -107,7 +102,7 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
         <el-table-column prop="amount" label="金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="180" align="center" fixed="right">
-          <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button></template>
+          <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button></template>
         </el-table-column>
       </el-table>
       <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>

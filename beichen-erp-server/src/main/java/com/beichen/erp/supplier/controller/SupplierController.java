@@ -4,14 +4,16 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.entity.SupplierProduct;
+import com.beichen.erp.supplier.entity.dto.ReturnMaterialDTO;
 import com.beichen.erp.supplier.entity.dto.SupplierDTO;
 import com.beichen.erp.supplier.entity.dto.SupplierProductDTO;
 import com.beichen.erp.supplier.entity.dto.SupplierQueryDTO;
+import com.beichen.erp.supplier.service.SupplierMaterialSummaryService;
 import com.beichen.erp.supplier.service.SupplierProductService;
 import com.beichen.erp.supplier.service.SupplierService;
+import com.beichen.erp.supplier.service.SupplierSettlementService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,11 +23,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.beichen.erp.dev.entity.BomType;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
-
-import java.math.BigDecimal;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/supplier")
@@ -34,15 +33,8 @@ public class SupplierController {
 
     private final SupplierService supplierService;
     private final SupplierProductService supplierProductService;
-    private final JdbcTemplate jdbcTemplate;
-    private final BomTypeMapper bomTypeMapper;
-
-    /** bomTypeId -> 类型名（空安全） */
-    private String getBomTypeNameById(Long id) {
-        if (id == null) return "-";
-        BomType t = bomTypeMapper.selectById(id);
-        return t != null ? t.getTypeName() : "-";
-    }
+    private final SupplierMaterialSummaryService materialSummaryService;
+    private final SupplierSettlementService settlementService;
 
     @GetMapping("/page")
     public R<Page<Supplier>> page(SupplierQueryDTO query) {
@@ -59,10 +51,11 @@ public class SupplierController {
         return R.ok(supplierProductService.listBySupplierId(id));
     }
 
+    /** 新增供应商，返回供应商ID */
     @PostMapping
-    public R<Void> add(@Valid @RequestBody SupplierDTO dto) {
-        supplierService.create(dto);
-        return R.ok();
+    public R<Long> add(@Valid @RequestBody SupplierDTO dto) {
+        Long id = supplierService.create(dto);
+        return R.ok(id);
     }
 
     @PutMapping
@@ -71,13 +64,14 @@ public class SupplierController {
         return R.ok();
     }
 
+    /** 删除改为停用（不再物理删除，避免采购单/应付单变孤儿数据） */
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
         supplierService.delete(id);
         return R.ok();
     }
 
-    /** 检查供应商是否有关联数据，返回可删除标志和关联明细 */
+    /** 检查供应商是否有关联数据，返回可停用标志和关联明细 */
     @GetMapping("/{id}/check-delete")
     public R<Map<String, Object>> checkDelete(@PathVariable Long id) {
         return R.ok(supplierService.checkDelete(id));
@@ -95,146 +89,16 @@ public class SupplierController {
         return R.ok();
     }
 
-    /** 委外加工厂物料缺料汇总（加工单 + 物料订单子物料需求，已送料来自物料收发单发料到该厂仓） */
+    /** 委外加工厂物料缺料汇总（业务已下沉到 SupplierMaterialSummaryService） */
     @GetMapping("/{factoryId}/material-summary")
     public R<Map<String, Object>> materialSummary(@PathVariable Long factoryId) {
-        // 1. 汇总生产中加工单的物料需求（去掉不可靠的 delivered_quantity）
-        String demandSql = "SELECT om.outsource_material_id, om.material_name, om.bom_type_id, " +
-            "SUM(om.demand_quantity) AS total_demand " +
-            "FROM outsource_order_material om " +
-            "INNER JOIN outsource_order_product op ON om.product_id = op.id " +
-            "INNER JOIN outsource_order o ON op.order_id = o.id " +
-            "WHERE o.factory_id = ? AND o.status = '生产中' " +
-            "GROUP BY om.outsource_material_id, om.material_name, om.bom_type_id";
-        List<Map<String, Object>> demandRows = jdbcTemplate.queryForList(demandSql, factoryId);
+        return R.ok(materialSummaryService.materialSummary(factoryId));
+    }
 
-        // 1b. 汇总物料订单的子物料需求（带 components 的物料单）
-        String compDemandSql = "SELECT mc.child_outsource_material_id AS material_id, " +
-            "COALESCE(cm.material_name, '未知物料') AS material_name, " +
-            "COALESCE(cm.bom_type_id, 0) AS bom_type_id, " +
-            "SUM(moi.order_quantity * mc.quantity) AS total_demand " +
-            "FROM outsource_material_component mc " +
-            "INNER JOIN outsource_material_order_item moi ON moi.outsource_material_id = mc.parent_outsource_material_id " +
-            "INNER JOIN outsource_material_order mo ON moi.order_id = mo.id " +
-            "LEFT JOIN outsource_material cm ON mc.child_outsource_material_id = cm.id " +
-            "WHERE mo.supplier_id = ? AND mo.status IN ('待确认', '已确认', '收货中') " +
-            "GROUP BY mc.child_outsource_material_id, cm.material_name, cm.bom_type_id";
-        List<Map<String, Object>> compDemandRows = jdbcTemplate.queryForList(compDemandSql, factoryId);
-
-        // 合并需求：按 material_name 汇总
-        Map<String, Map<String, Object>> demandMap = new LinkedHashMap<>();
-        for (Map<String, Object> row : demandRows) {
-            String name = row.get("material_name") != null ? row.get("material_name").toString() : "";
-            Map<String, Object> m = demandMap.computeIfAbsent(name, k -> {
-                Map<String, Object> x = new LinkedHashMap<>();
-                x.put("materialId", row.get("outsource_material_id"));
-                x.put("materialName", name);
-                Long bomTypeId = row.get("bom_type_id") != null ? ((Number) row.get("bom_type_id")).longValue() : null;
-                x.put("bomTypeName", getBomTypeNameById(bomTypeId));
-                x.put("totalDemand", BigDecimal.ZERO);
-                return x;
-            });
-            BigDecimal d = row.get("total_demand") != null ? (BigDecimal) row.get("total_demand") : BigDecimal.ZERO;
-            m.put("totalDemand", ((BigDecimal) m.get("totalDemand")).add(d));
-        }
-        for (Map<String, Object> row : compDemandRows) {
-            String name = row.get("material_name") != null ? row.get("material_name").toString() : "";
-            Map<String, Object> m = demandMap.computeIfAbsent(name, k -> {
-                Map<String, Object> x = new LinkedHashMap<>();
-                x.put("materialId", row.get("material_id"));
-                x.put("materialName", name);
-                Long bomTypeId = row.get("bom_type_id") != null ? ((Number) row.get("bom_type_id")).longValue() : null;
-                x.put("bomTypeName", getBomTypeNameById(bomTypeId));
-                x.put("totalDemand", BigDecimal.ZERO);
-                return x;
-            });
-            BigDecimal d = row.get("total_demand") != null ? (BigDecimal) row.get("total_demand") : BigDecimal.ZERO;
-            m.put("totalDemand", ((BigDecimal) m.get("totalDemand")).add(d));
-        }
-
-        // 1c. 已送料：物料收发单 + 物料订单收货 到该工厂委外仓的数量（按 material_id 聚合）
-        String deliveredSql = "SELECT di.outsource_material_id, COALESCE(om.material_name, di.material_name) AS material_name, " +
-            "SUM(di.quantity) AS delivered_qty " +
-            "FROM outsource_delivery_item di " +
-            "INNER JOIN outsource_delivery d ON di.delivery_id = d.id " +
-            "INNER JOIN outsource_warehouse w ON d.to_warehouse_id = w.id " +
-            "LEFT JOIN outsource_material om ON di.outsource_material_id = om.id " +
-            "WHERE w.factory_id = ? AND d.status = '已确认' " +
-            "AND (d.delivery_type IN ('发料', '收料') OR d.delivery_type IS NULL OR d.delivery_type = '') " +
-            "GROUP BY di.outsource_material_id, om.material_name, di.material_name";
-        List<Map<String, Object>> deliveredRows = jdbcTemplate.queryForList(deliveredSql, factoryId);
-        Map<String, BigDecimal> deliveredMap = new HashMap<>();
-        for (Map<String, Object> row : deliveredRows) {
-            String name = row.get("material_name") != null ? row.get("material_name").toString() : "";
-            BigDecimal qty = row.get("delivered_qty") != null ? (BigDecimal) row.get("delivered_qty") : BigDecimal.ZERO;
-            deliveredMap.put(name, qty);
-        }
-
-        // 2. 汇总该工厂委外仓库的库存
-        String stockSql = "SELECT s.outsource_material_id, SUM(s.quantity) AS stock_qty " +
-            "FROM outsource_warehouse_stock s " +
-            "INNER JOIN outsource_warehouse w ON s.warehouse_id = w.id " +
-            "WHERE w.factory_id = ? GROUP BY s.outsource_material_id";
-        List<Map<String, Object>> stockRows = jdbcTemplate.queryForList(stockSql, factoryId);
-        Map<Long, BigDecimal> stockMap = new HashMap<>();
-        for (Map<String, Object> row : stockRows) {
-            Long mid = ((Number) row.get("outsource_material_id")).longValue();
-            BigDecimal qty = (BigDecimal) row.get("stock_qty");
-            stockMap.put(mid, qty != null ? qty : BigDecimal.ZERO);
-        }
-
-        // 3. 每个物料的订单明细（加工单）
-        String orderSql = "SELECT om.material_name, o.code AS order_code, op.product_name, om.demand_quantity " +
-            "FROM outsource_order_material om " +
-            "INNER JOIN outsource_order_product op ON om.product_id = op.id " +
-            "INNER JOIN outsource_order o ON op.order_id = o.id " +
-            "WHERE o.factory_id = ? AND o.status = '生产中'";
-        List<Map<String, Object>> orderRows = jdbcTemplate.queryForList(orderSql, factoryId);
-        // 加上物料订单明细
-        String moOrderSql = "SELECT cm.material_name, mo.code AS order_code, " +
-            "CONCAT(moi.material_name, ' ×', moi.order_quantity) AS product_name, " +
-            "(moi.order_quantity * mc.quantity) AS demand_quantity " +
-            "FROM outsource_material_component mc " +
-            "INNER JOIN outsource_material_order_item moi ON moi.outsource_material_id = mc.parent_outsource_material_id " +
-            "INNER JOIN outsource_material_order mo ON moi.order_id = mo.id " +
-            "LEFT JOIN outsource_material cm ON mc.child_outsource_material_id = cm.id " +
-            "WHERE mo.supplier_id = ? AND mo.status IN ('待确认', '已确认', '收货中')";
-        orderRows.addAll(jdbcTemplate.queryForList(moOrderSql, factoryId));
-
-        Map<String, List<Map<String, Object>>> orderMap = new HashMap<>();
-        for (Map<String, Object> row : orderRows) {
-            String name = (String) row.get("material_name");
-            orderMap.computeIfAbsent(name, k -> new ArrayList<>()).add(row);
-        }
-
-        // 4. 组装结果：缺口 = 需求 - 已送料
-        List<Map<String, Object>> materials = new ArrayList<>();
-        for (Map<String, Object> dm : demandMap.values()) {
-            String materialName = (String) dm.get("materialName");
-            Long materialId = dm.get("materialId") != null ? ((Number) dm.get("materialId")).longValue() : null;
-            BigDecimal totalDemand = (BigDecimal) dm.get("totalDemand");
-            BigDecimal totalDelivered = deliveredMap.getOrDefault(materialName, BigDecimal.ZERO);
-
-            BigDecimal stock = materialId != null ? stockMap.getOrDefault(materialId, BigDecimal.ZERO) : BigDecimal.ZERO;
-            BigDecimal consumed = totalDelivered.subtract(stock);
-            if (consumed.compareTo(BigDecimal.ZERO) < 0) consumed = BigDecimal.ZERO;
-            BigDecimal gap = totalDemand.subtract(stock);
-            if (gap.compareTo(BigDecimal.ZERO) < 0) gap = BigDecimal.ZERO;
-
-            Map<String, Object> mat = new LinkedHashMap<>();
-            mat.put("materialName", materialName);
-            mat.put("bomTypeName", dm.get("bomTypeName"));
-            mat.put("totalDemand", totalDemand);
-            mat.put("totalDelivered", totalDelivered);
-            mat.put("warehouseStock", stock);
-            mat.put("consumed", consumed);
-            mat.put("gap", gap);
-            mat.put("orders", orderMap.getOrDefault(materialName, Collections.emptyList()));
-            materials.add(mat);
-        }
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("materials", materials);
-        return R.ok(result);
+    /** 供应商委外库存一键退料到指定仓库 */
+    @PostMapping("/{id}/return-materials")
+    public R<Void> returnMaterials(@PathVariable Long id, @Valid @RequestBody ReturnMaterialDTO dto) {
+        settlementService.returnMaterials(id, dto);
+        return R.ok();
     }
 }

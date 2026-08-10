@@ -153,7 +153,6 @@ async function handleSubmit() {
         ...form,
         items: items.value.map(it => ({
           productId: it.productId,
-          materialCode: it.materialCode,
           materialName: it.materialName,
           spec: it.spec,
           unit: it.unit,

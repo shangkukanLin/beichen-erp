@@ -7,10 +7,9 @@ import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.outsource.common.MaterialOrderStatus;
-import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.common.DeliveryType;
-import com.beichen.erp.outsource.common.DeliveryStatus;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.outsource.mapper.OutsourceOrderMapper;
@@ -334,7 +333,7 @@ public class OutsourceOrderController {
             delivery.setQuantity(qty);
             delivery.setDeliveryType(DeliveryType.RETURN.getCode());
             delivery.setWarehouseId(whId);
-            delivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
+            delivery.setStatus(DocStatus.AUDITED.name());
             delivery.setRemark("退不良 - " + o.getCode());
             // 标记来源：加工单交货退不良
             delivery.setSourceType("DELIVERY");

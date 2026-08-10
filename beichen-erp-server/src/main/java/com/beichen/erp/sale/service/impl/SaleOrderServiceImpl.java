@@ -9,13 +9,11 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SourceBillType;
-import com.beichen.erp.inventory.common.RelatedBillType;
-import com.beichen.erp.inventory.common.StockChangeType;
+import com.beichen.erp.finance.service.ReceivableHelper;
 import com.beichen.erp.finance.entity.FinanceReceivable;
 import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.sale.entity.SaleOrder;
@@ -31,6 +29,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -39,8 +38,8 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     private final SaleOrderMapper orderMapper;
     private final SaleOrderItemMapper itemMapper;
     private final CustomerMapper customerMapper;
-    private final InventoryWarehouseStockService stockService;
     private final FinanceReceivableMapper receivableMapper;
+    private final ReceivableHelper receivableHelper;
     private final InventoryWarehouseStockMapper stockMapper;
     private final ProductMapper productMapper;
 
@@ -52,6 +51,12 @@ public class SaleOrderServiceImpl implements SaleOrderService {
                 .like(code != null && !code.isBlank(), SaleOrder::getCode, code)
                 .orderByDesc(SaleOrder::getId);
         Page<SaleOrder> raw = orderMapper.selectPage(new Page<>(pageNum, pageSize), w);
+        // 批量查询客户名称，消除 N+1
+        List<Long> customerIds = raw.getRecords().stream().map(SaleOrder::getCustomerId)
+                .filter(Objects::nonNull).distinct().toList();
+        Map<Long, Customer> customerMap = customerIds.isEmpty() ? Collections.emptyMap()
+                : customerMapper.selectBatchIds(customerIds).stream()
+                        .collect(Collectors.toMap(Customer::getId, c -> c, (a, b) -> a));
         Page<Map<String, Object>> res = new Page<>(pageNum, pageSize, raw.getTotal());
         res.setRecords(raw.getRecords().stream().map(o -> {
             Map<String, Object> m = new HashMap<>();
@@ -66,10 +71,8 @@ public class SaleOrderServiceImpl implements SaleOrderService {
             m.put("totalAmount", o.getTotalAmount());
             m.put("remark", o.getRemark());
             m.put("createTime", o.getCreateTime());
-            if (o.getCustomerId() != null) {
-                Customer c = customerMapper.selectById(o.getCustomerId());
-                m.put("customerName", c != null ? c.getName() : "");
-            }
+            Customer c = o.getCustomerId() != null ? customerMap.get(o.getCustomerId()) : null;
+            m.put("customerName", c != null ? c.getName() : "");
             return m;
         }).toList());
         return res;
@@ -166,17 +169,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
                 new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, id));
         if (items.isEmpty()) throw new BusinessException("订单明细不能为空");
 
-        // 1) 库存联动：出库减库存（quantity 负值，库存不足自动抛异常）
-        for (SaleOrderItem it : items) {
-            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
-            stockService.changeStock(order.getWarehouseId(),
-                    product != null ? product.getName() : "",
-                    it.getQuantity().negate(), StockChangeType.SALE_OUT, order.getCode(), RelatedBillType.SALE_ORDER,
-                    it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId(), it.getQualityType());
-        }
-        // 2) 生成应收台账
+        // 1) 生成应收台账（销售订单仅负责成交与应收，真实出库由"销售出库单"审核统一扣库存，避免双重扣减）
         FinanceReceivable fr = new FinanceReceivable();
         fr.setBillNo(order.getCode());
         fr.setCustomerId(order.getCustomerId());
@@ -207,6 +200,33 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         SaleOrder u = new SaleOrder();
         u.setId(id);
         u.setStatus(DocStatus.AUDITED.name());
+        orderMapper.updateById(u);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unAudit(Long id) {
+        SaleOrder order = orderMapper.selectById(id);
+        if (order == null) throw new BusinessException("销售单不存在");
+        if (!DocStatus.AUDITED.name().equals(order.getStatus())) throw new BusinessException("只有已审核的销售单可反审核");
+        // 1) 冲销应收台账（反审核，已收款单据会校验拦截）
+        receivableHelper.reverseReceivable(order.getCode());
+        // 2) 回退客户应收余额（与 audit 时 add 对称）
+        if (order.getCustomerId() != null) {
+            Customer c = customerMapper.selectById(order.getCustomerId());
+            if (c != null) {
+                Customer u = new Customer();
+                u.setId(c.getId());
+                BigDecimal newBal = (c.getReceivableBalance() != null ? c.getReceivableBalance() : BigDecimal.ZERO)
+                        .subtract(order.getTotalAmount());
+                u.setReceivableBalance(newBal);
+                customerMapper.updateById(u);
+            }
+        }
+        // 3) 订单状态回退为草稿（库存由"销售出库单"反审核统一回补，订单本身不触碰库存）
+        SaleOrder u = new SaleOrder();
+        u.setId(id);
+        u.setStatus(DocStatus.DRAFT.name());
         orderMapper.updateById(u);
     }
 

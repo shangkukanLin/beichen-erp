@@ -33,22 +33,13 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public Map<String, Object> login(LoginDTO loginDTO) {
-        // 验证公司存在且用户属于该公司
+        // 公司ID为必填入参（LoginDTO已校验非空），按"公司+用户名"唯一定位，避免跨公司越权登录
         Long companyId = loginDTO.getCompanyId();
-        if (companyId == null) {
-            // 默认使用公司1（向后兼容）
-            companyId = 1L;
-        }
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>()
-                .eq(User::getUsername, loginDTO.getUsername()));
-        if (user == null) {
-            throw new BusinessException("用户不存在");
-        }
-        // 验证用户属于该公司
-        if (user.getCompanyId() != null && !user.getCompanyId().equals(companyId)) {
-            throw new BusinessException("用户不属于该公司");
-        }
-        if (!passwordEncoder.matches(loginDTO.getPassword(), user.getPassword())) {
+                .eq(User::getUsername, loginDTO.getUsername())
+                .eq(User::getCompanyId, companyId));
+        // 统一提示，防止用户名枚举
+        if (user == null || !passwordEncoder.matches(loginDTO.getPassword(), user.getPassword())) {
             throw new BusinessException("用户名或密码错误");
         }
         if (user.getStatus() != null && user.getStatus() == 0) {

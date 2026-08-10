@@ -113,7 +113,21 @@ async function handleSubmit() {
     submitLoading.value = true
     try {
       if (form.id) {
-        await updateCustomer(form)
+        // 编辑时只提交基础字段，余额字段由后端统管，前端不回传以防误改
+        const payload: Customer = {
+          id: form.id,
+          customerName: form.customerName,
+          customerCode: form.customerCode,
+          contactName: form.contactName,
+          phone: form.phone,
+          address: form.address,
+          creditLimit: form.creditLimit,
+          creditPeriod: form.creditPeriod,
+          creditPeriodMonths: form.creditPeriodMonths,
+          remark: form.remark,
+          status: form.status
+        }
+        await updateCustomer(payload)
         ElMessage.success('修改成功')
       } else {
         await createCustomer(form)

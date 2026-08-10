@@ -52,6 +52,19 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
         } else {
             itemsMap = Collections.emptyMap();
         }
+        // 批量查询产品名称，避免循环内逐条 selectById 产生 N+1
+        List<Long> productIds = new ArrayList<>();
+        itemsMap.values().forEach(its -> its.forEach(it -> {
+            if (it.getProductId() != null) productIds.add(it.getProductId());
+        }));
+        final Map<Long, Product> productMap;
+        if (!productIds.isEmpty()) {
+            productMap = productMapper.selectBatchIds(productIds).stream()
+                    .collect(Collectors.toMap(Product::getId, p -> p, (a, b) -> a));
+        } else {
+            productMap = Collections.emptyMap();
+        }
+
         Page<Map<String, Object>> res = new Page<>(pageNum, pageSize, raw.getTotal());
         res.setRecords(raw.getRecords().stream().map(o -> {
             Map<String, Object> m = new HashMap<>();
@@ -64,7 +77,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
             String summary = its.stream().map(it -> {
                 String name = "";
                 if (it.getProductId() != null) {
-                    Product prod = productMapper.selectById(it.getProductId());
+                    Product prod = productMap.get(it.getProductId());
                     if (prod != null) name = prod.getName();
                 }
                 return name + "*" + (it.getQuantity() != null ? it.getQuantity().stripTrailingZeros().toPlainString() : "0");

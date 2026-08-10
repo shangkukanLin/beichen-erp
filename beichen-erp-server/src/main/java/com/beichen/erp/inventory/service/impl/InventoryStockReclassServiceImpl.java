@@ -91,15 +91,20 @@ public class InventoryStockReclassServiceImpl extends ServiceImpl<InventoryStock
         if (items.isEmpty()) throw new BusinessException("重分类单无明细");
 
         for (InventoryStockReclassItem it : items) {
+            // 入参完整性校验，避免 NPE
+            if (it.getFromQuality() == null || it.getToQuality() == null)
+                throw new BusinessException("源等级与目标等级不能为空：" + it.getProductName());
+            if (it.getQuantity() == null)
+                throw new BusinessException("重分类数量不能为空：" + it.getProductName());
             if (it.getFromQuality().equals(it.getToQuality()))
                 throw new BusinessException("源等级与目标等级不能相同：" + it.getProductName());
             // 源等级扣减
             stockService.changeStock(header.getWarehouseId(), it.getProductName(), it.getQuantity().negate(),
-                    StockChangeType.RECLASS_OUT, header.getCode(), RelatedBillType.PRODUCT_RECLASSIFY,
+                    StockChangeType.RECLASSIFY_OUT, header.getCode(), RelatedBillType.PRODUCT_RECLASSIFY,
                     it.getProductId(), null, it.getId(), it.getFromQuality());
             // 目标等级增加
             stockService.changeStock(header.getWarehouseId(), it.getProductName(), it.getQuantity(),
-                    StockChangeType.RECLASS_IN, header.getCode(), RelatedBillType.PRODUCT_RECLASSIFY,
+                    StockChangeType.RECLASSIFY_IN, header.getCode(), RelatedBillType.PRODUCT_RECLASSIFY,
                     it.getProductId(), null, it.getId(), it.getToQuality());
         }
         header.setStatus("AUDITED");
@@ -116,12 +121,18 @@ public class InventoryStockReclassServiceImpl extends ServiceImpl<InventoryStock
 
         List<InventoryStockReclassItem> items = loadItems(id);
         for (InventoryStockReclassItem it : items) {
-            // 反向回滚：目标等级扣减、源等级增加
+            // 入参完整性校验，避免 NPE
+            if (it.getFromQuality() == null || it.getToQuality() == null)
+                throw new BusinessException("源等级与目标等级不能为空：" + it.getProductName());
+            if (it.getQuantity() == null)
+                throw new BusinessException("重分类数量不能为空：" + it.getProductName());
+            // 反向回滚：目标等级扣减（CANCEL_RECLASSIFY_IN）、源等级增加（CANCEL_RECLASSIFY_OUT）
+            // 与 ReclassifyServiceImpl.cancel 的常量语义保持一致，确保流水报表能区分正逆向
             stockService.changeStock(header.getWarehouseId(), it.getProductName(), it.getQuantity().negate(),
-                    StockChangeType.RECLASS_IN, header.getCode(), RelatedBillType.PRODUCT_RECLASSIFY,
+                    StockChangeType.CANCEL_RECLASSIFY_IN, header.getCode(), RelatedBillType.PRODUCT_RECLASSIFY,
                     it.getProductId(), null, it.getId(), it.getToQuality());
             stockService.changeStock(header.getWarehouseId(), it.getProductName(), it.getQuantity(),
-                    StockChangeType.RECLASS_OUT, header.getCode(), RelatedBillType.PRODUCT_RECLASSIFY,
+                    StockChangeType.CANCEL_RECLASSIFY_OUT, header.getCode(), RelatedBillType.PRODUCT_RECLASSIFY,
                     it.getProductId(), null, it.getId(), it.getFromQuality());
         }
         header.setStatus("DRAFT");

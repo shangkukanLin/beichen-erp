@@ -102,7 +102,11 @@ async function loadCompanies() {
   companyLoading.value = true
   try {
     companyOptions.value = await getCompanyList() || []
-  } catch { companyOptions.value = [{ id: 1, companyName: '北辰科技' }] }
+  } catch {
+    // 公司列表加载失败时不注入假数据，避免用户以错误公司登录
+    companyOptions.value = []
+    ElMessage.error('公司列表加载失败，请刷新页面重试')
+  }
   finally { companyLoading.value = false }
 }
 

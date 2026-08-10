@@ -5,6 +5,7 @@ import cn.dev33.satoken.annotation.SaMode;
 import cn.dev33.satoken.stp.StpUtil;
 import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.system.common.SystemConstants;
 import com.beichen.erp.system.entity.Menu;
 import com.beichen.erp.system.entity.dto.MenuDTO;
 import com.beichen.erp.system.service.MenuService;
@@ -30,7 +31,7 @@ public class MenuController {
     private final MenuService menuService;
     private final RoleService roleService;
 
-    @SaCheckRole(value = {"super_admin", "admin"}, mode = SaMode.OR)
+    @SaCheckRole(value = {SystemConstants.SUPER_ADMIN_ROLE_CODE, SystemConstants.ADMIN_ROLE_CODE}, mode = SaMode.OR)
     @GetMapping("/tree")
     public R<List<Menu>> tree() {
         return R.ok(menuService.getMenuTree());
@@ -43,7 +44,7 @@ public class MenuController {
         return R.ok(menuService.getMenuTreeByRoleIds(roleIds));
     }
 
-    @SaCheckRole(value = {"super_admin", "admin"}, mode = SaMode.OR)
+    @SaCheckRole(value = {SystemConstants.SUPER_ADMIN_ROLE_CODE, SystemConstants.ADMIN_ROLE_CODE}, mode = SaMode.OR)
     @PostMapping
     public R<Void> add(@Valid @RequestBody MenuDTO dto) {
         Menu menu = new Menu();
@@ -62,7 +63,7 @@ public class MenuController {
         return R.ok();
     }
 
-    @SaCheckRole(value = {"super_admin", "admin"}, mode = SaMode.OR)
+    @SaCheckRole(value = {SystemConstants.SUPER_ADMIN_ROLE_CODE, SystemConstants.ADMIN_ROLE_CODE}, mode = SaMode.OR)
     @PutMapping
     public R<Void> update(@Valid @RequestBody MenuDTO dto) {
         if (dto.getId() == null) {
@@ -87,7 +88,7 @@ public class MenuController {
         return R.ok();
     }
 
-    @SaCheckRole(value = {"super_admin", "admin"}, mode = SaMode.OR)
+    @SaCheckRole(value = {SystemConstants.SUPER_ADMIN_ROLE_CODE, SystemConstants.ADMIN_ROLE_CODE}, mode = SaMode.OR)
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
         Menu menu = menuService.getById(id);

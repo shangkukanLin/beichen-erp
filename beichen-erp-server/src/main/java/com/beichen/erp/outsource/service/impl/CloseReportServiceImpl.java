@@ -213,7 +213,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         String sql = "SELECT COALESCE(SUM(di.quantity), 0) " +
             "FROM outsource_delivery_item di " +
             "INNER JOIN outsource_delivery d ON di.delivery_id = d.id " +
-            "WHERE d.delivery_type = ? AND d.status = '已确认' " +
+            "WHERE d.delivery_type = ? AND d.status = '" + DocStatus.AUDITED.name() + "' " +
             "AND d." + whColumn + " IN (" + warehouseIds.stream().map(Object::toString).collect(java.util.stream.Collectors.joining(",")) + ") " +
             "AND di.outsource_material_id = ?";
         BigDecimal result = jdbcTemplate.queryForObject(sql, BigDecimal.class, deliveryType, materialId);
@@ -347,7 +347,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             returnDelivery.setFactoryId(order.getFactoryId());
             returnDelivery.setFromWarehouseId(warehouses.get(0).getId());
             returnDelivery.setDeliveryDate(LocalDate.now());
-            returnDelivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
+            returnDelivery.setStatus(DocStatus.AUDITED.name());
             returnDelivery.setRemark("结单自动退料 - " + order.getCode());
             returnDelivery.setCode(generateDeliveryCode());
             deliveryMapper.insert(returnDelivery);

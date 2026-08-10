@@ -23,6 +23,9 @@ public interface SaleOrderService {
 
     void audit(Long id);
 
+    /** 反审核：冲回应收、回退客户余额、库存回补，状态回退草稿 */
+    void unAudit(Long id);
+
     /** 库存检查：返回每个物料的库存量和缺货信息 */
     List<Map<String, Object>> checkStock(Long warehouseId, List<SaleOrderItem> items);
 }

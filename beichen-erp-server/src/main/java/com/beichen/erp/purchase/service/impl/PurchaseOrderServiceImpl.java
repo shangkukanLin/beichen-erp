@@ -7,13 +7,10 @@ import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
-import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SourceBillType;
-import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
@@ -42,10 +39,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final PurchaseOrderMapper orderMapper;
     private final PurchaseOrderItemMapper itemMapper;
     private final SupplierMapper supplierMapper;
-    private final InventoryWarehouseStockService stockService;
     private final FinancePayableMapper payableMapper;
     private final UserMapper userMapper;
     private final ProductMapper productMapper;
+    private final com.beichen.erp.finance.service.PayableHelper payableHelper;
 
     @Override
     public Page<Map<String, Object>> page(Integer status, Long supplierId, String code, int pageNum, int pageSize) {
@@ -192,17 +189,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         List<PurchaseOrderItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, id));
         if (items.isEmpty()) throw new BusinessException("采购单明细不能为空");
-        // 1) 库存联动：入库加库存 + 写流水
-        for (PurchaseOrderItem it : items) {
-            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
-            stockService.changeStock(order.getWarehouseId(),
-                    product != null ? product.getName() : "",
-                    it.getQuantity(),
-                    StockChangeType.PURCHASE_IN, order.getCode(), RelatedBillType.PURCHASE_ORDER, it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId(), it.getQualityType());
-        }
-        // 2) 生成应付台账
+        // 1) 生成应付台账（采购订单仅负责成交与应付，真实入库由"采购入库单"审核统一加库存，避免双重扣减）
         FinancePayable fp = new FinancePayable();
         fp.setBillNo(order.getCode());
         fp.setSupplierId(order.getSupplierId());
@@ -218,6 +205,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) fp.setCompanyId(cid);
         payableMapper.insert(fp);
+        // 同步增加供应商应付余额（原子更新，避免并发丢更新）
+        if (order.getSupplierId() != null && order.getTotalAmount() != null) {
+            payableHelper.changeSupplierBalance(order.getSupplierId(), order.getTotalAmount());
+        }
         // 3) 更新订单状态为"已完成"，记录审核人
         PurchaseOrder u = new PurchaseOrder();
         u.setId(id);
@@ -237,7 +228,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
         // 1) 检查应付台账状态
         LambdaQueryWrapper<FinancePayable> payableW = new LambdaQueryWrapper<FinancePayable>()
-                .eq(FinancePayable::getSourceBillType, "采购单")
+                .eq(FinancePayable::getSourceBillType, SourceBillType.PURCHASE_ORDER.getCode())
                 .eq(FinancePayable::getSourceBillNo, order.getCode());
         List<FinancePayable> payables = payableMapper.selectList(payableW);
         for (FinancePayable fp : payables) {
@@ -246,26 +237,18 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             }
         }
 
-        // 2) 检查库存：需要冲回的数量是否超出现有库存
-        List<PurchaseOrderItem> items = itemMapper.selectList(
-                new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, id));
-        for (PurchaseOrderItem it : items) {
-            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
-            // 冲回库存（扣减库存），changeStock 内部会校验是否够扣
-            stockService.changeStock(order.getWarehouseId(),
-                    product != null ? product.getName() : "",
-                    it.getQuantity().negate(),
-                    StockChangeType.PURCHASE_UN_AUDIT, order.getCode(), RelatedBillType.PURCHASE_ORDER, it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId(), it.getQualityType());
-        }
+        // 检查库存：采购订单本身不触碰库存，库存由"采购入库单"反审核统一冲回，此处无需库存校验
 
-        // 3) 删除应付台账
+        // 2) 删除应付台账
         for (FinancePayable fp : payables) {
             payableMapper.deleteById(fp.getId());
         }
+        // 同步回退供应商应付余额（与 audit 时 add 对称，原子更新）
+        if (order.getSupplierId() != null && order.getTotalAmount() != null) {
+            payableHelper.changeSupplierBalance(order.getSupplierId(), order.getTotalAmount().negate());
+        }
 
-        // 4) 回退状态到草稿，清除审核信息
+        // 3) 回退状态到草稿，清除审核信息
         PurchaseOrder u = new PurchaseOrder();
         u.setId(id);
         u.setStatus(PurchaseOrderStatus.DRAFT.getCode());

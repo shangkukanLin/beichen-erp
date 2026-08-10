@@ -7,21 +7,15 @@ import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.common.DocStatus;
-import com.beichen.erp.finance.common.SettlementStatus;
-import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.finance.entity.FinanceReceivable;
-import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
-import com.beichen.erp.sale.entity.SaleOrder;
 import com.beichen.erp.sale.entity.SaleOutbound;
 import com.beichen.erp.sale.entity.SaleOutboundItem;
 import com.beichen.erp.sale.mapper.SaleOutboundMapper;
 import com.beichen.erp.sale.mapper.SaleOutboundItemMapper;
-import com.beichen.erp.sale.mapper.SaleOrderMapper;
 import com.beichen.erp.sale.service.SaleOutboundService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,6 +25,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -38,11 +33,9 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
 
     private final SaleOutboundMapper outboundMapper;
     private final SaleOutboundItemMapper itemMapper;
-    private final SaleOrderMapper orderMapper;
     private final CustomerMapper customerMapper;
     private final InventoryWarehouseStockService stockService;
     private final ProductMapper productMapper;
-    private final FinanceReceivableMapper receivableMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long customerId, String code, int pageNum, int pageSize) {
@@ -52,6 +45,12 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
                 .like(code != null && !code.isBlank(), SaleOutbound::getCode, code)
                 .orderByDesc(SaleOutbound::getId);
         Page<SaleOutbound> raw = outboundMapper.selectPage(new Page<>(pageNum, pageSize), w);
+        // 批量查询客户名称，消除 N+1
+        List<Long> customerIds = raw.getRecords().stream().map(SaleOutbound::getCustomerId)
+                .filter(Objects::nonNull).distinct().toList();
+        Map<Long, Customer> customerMap = customerIds.isEmpty() ? Collections.emptyMap()
+                : customerMapper.selectBatchIds(customerIds).stream()
+                        .collect(Collectors.toMap(Customer::getId, c -> c, (a, b) -> a));
         Page<Map<String, Object>> res = new Page<>(pageNum, pageSize, raw.getTotal());
         res.setRecords(raw.getRecords().stream().map(o -> {
             Map<String, Object> m = new HashMap<>();
@@ -65,10 +64,8 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
             m.put("totalAmount", o.getTotalAmount());
             m.put("remark", o.getRemark());
             m.put("createTime", o.getCreateTime());
-            if (o.getCustomerId() != null) {
-                Customer c = customerMapper.selectById(o.getCustomerId());
-                m.put("customerName", c != null ? c.getName() : "");
-            }
+            Customer c = o.getCustomerId() != null ? customerMap.get(o.getCustomerId()) : null;
+            m.put("customerName", c != null ? c.getName() : "");
             return m;
         }).toList());
         return res;
@@ -173,43 +170,36 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
                     it.getProductId(),
                     product != null ? product.getSpec() : "", outbound.getId(), it.getQualityType());
         }
-        // 2) 生成应收台账
-        FinanceReceivable fr = new FinanceReceivable();
-        fr.setBillNo(outbound.getCode());
-        fr.setCustomerId(outbound.getCustomerId());
-        fr.setCustomerName(outbound.getCustomerName());
-        fr.setSourceBillType(SourceBillType.SALE_OUTBOUND.getCode());
-        fr.setSourceBillNo(outbound.getCode());
-        fr.setAmount(outbound.getTotalAmount());
-        fr.setPaidAmount(BigDecimal.ZERO);
-        fr.setUnpaidAmount(outbound.getTotalAmount());
-        fr.setDueDate(outbound.getOutboundDate() != null ? outbound.getOutboundDate().plusMonths(1) : null);
-        fr.setStatus(SettlementStatus.UNSETTLED.getCode());
-        receivableMapper.insert(fr);
-        // 3) 更新客户应收余额（冗余）
-        if (outbound.getCustomerId() != null) {
-            Customer c = customerMapper.selectById(outbound.getCustomerId());
-            if (c != null) {
-                Customer u = new Customer();
-                u.setId(c.getId());
-                BigDecimal newBal = (c.getReceivableBalance() != null ? c.getReceivableBalance() : BigDecimal.ZERO)
-                        .add(outbound.getTotalAmount());
-                u.setReceivableBalance(newBal);
-                customerMapper.updateById(u);
-            }
-        }
-        // 4) 更新出库单状态
+        // 2) 更新出库单状态（销售出库单仅负责真实出库：扣库存；应收由销售订单统一生成，此处不改动订单状态，避免跨单状态污染）
         SaleOutbound u = new SaleOutbound();
         u.setId(id);
         u.setStatus(DocStatus.AUDITED.name());
         outboundMapper.updateById(u);
-        // 5) 关联销售订单置为已出库
-        if (outbound.getOrderId() != null) {
-            SaleOrder o = new SaleOrder();
-            o.setId(outbound.getOrderId());
-            o.setStatus(DocStatus.AUDITED.name());
-            orderMapper.updateById(o);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unAudit(Long id) {
+        SaleOutbound outbound = outboundMapper.selectById(id);
+        if (outbound == null) throw new BusinessException("销售出库单不存在");
+        if (!DocStatus.AUDITED.name().equals(outbound.getStatus())) throw new BusinessException("只有已审核的出库单可反审核");
+        List<SaleOutboundItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, id));
+        // 1) 库存回补：出库时按负数扣库存，反审核原路加回（与 audit 的扣减对称）
+        for (SaleOutboundItem it : items) {
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
+            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+            stockService.changeStock(outbound.getWarehouseId(),
+                    product != null ? product.getName() : "",
+                    it.getQuantity(), StockChangeType.SALE_OUT_UN_AUDIT, outbound.getCode(), RelatedBillType.SALE_OUTBOUND,
+                    it.getProductId(),
+                    product != null ? product.getSpec() : "", outbound.getId(), it.getQualityType());
         }
+        // 2) 出库单状态回退为草稿（实体无审核人字段，仅回退状态）
+        SaleOutbound u = new SaleOutbound();
+        u.setId(id);
+        u.setStatus(DocStatus.DRAFT.name());
+        outboundMapper.updateById(u);
     }
 
     private String generateCode() {

@@ -13,8 +13,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -38,23 +40,46 @@ public class SupplierProductServiceImpl extends ServiceImpl<SupplierProductMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveProducts(Long supplierId, List<SupplierProductDTO> products) {
-        supplierProductMapper.delete(new LambdaQueryWrapper<SupplierProduct>()
-                .eq(SupplierProduct::getSupplierId, supplierId));
-
         if (products == null || products.isEmpty()) {
+            // 入参为空仍保留历史关联（差量更新语义：不清空）
             return;
         }
+        // 差量更新：按 productId 比对，新增的 insert、已存在的 update、多余的 delete
+        List<SupplierProduct> existing = supplierProductMapper.selectList(
+                new LambdaQueryWrapper<SupplierProduct>().eq(SupplierProduct::getSupplierId, supplierId));
+        Map<Long, SupplierProduct> existMap = existing.stream()
+                .collect(Collectors.toMap(SupplierProduct::getProductId, p -> p, (a, b) -> a));
 
-        List<SupplierProduct> list = new ArrayList<>();
+        List<SupplierProduct> toInsert = new ArrayList<>();
+        List<SupplierProduct> toUpdate = new ArrayList<>();
+        Set<Long> seen = new java.util.HashSet<>();
         for (SupplierProductDTO dto : products) {
-            SupplierProduct sp = new SupplierProduct();
-            sp.setSupplierId(supplierId);
-            sp.setProductId(dto.getProductId());
-            sp.setUnitPrice(dto.getUnitPrice());
-            sp.setRemark(dto.getRemark());
-            list.add(sp);
+            if (dto.getProductId() == null) continue;
+            seen.add(dto.getProductId());
+            SupplierProduct exist = existMap.get(dto.getProductId());
+            if (exist != null) {
+                // 已存在：更新单价/备注，保留原 id 与 create_time
+                exist.setUnitPrice(dto.getUnitPrice());
+                exist.setRemark(dto.getRemark());
+                toUpdate.add(exist);
+            } else {
+                SupplierProduct sp = new SupplierProduct();
+                sp.setSupplierId(supplierId);
+                sp.setProductId(dto.getProductId());
+                sp.setUnitPrice(dto.getUnitPrice());
+                sp.setRemark(dto.getRemark());
+                toInsert.add(sp);
+            }
         }
-        this.saveBatch(list);
+        // 多余的删除（历史中存在但本次未传的 productId）
+        List<Long> toDelete = existing.stream()
+                .filter(p -> !seen.contains(p.getProductId()))
+                .map(SupplierProduct::getId)
+                .collect(Collectors.toList());
+
+        if (!toInsert.isEmpty()) this.saveBatch(toInsert);
+        if (!toUpdate.isEmpty()) this.updateBatchById(toUpdate);
+        if (!toDelete.isEmpty()) this.removeByIds(toDelete);
     }
 
     /** 通过 productId 批量填充产品名称/规格/单位 */

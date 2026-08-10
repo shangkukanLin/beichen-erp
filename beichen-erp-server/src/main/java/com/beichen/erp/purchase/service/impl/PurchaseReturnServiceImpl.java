@@ -44,6 +44,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private final InventoryWarehouseStockService stockService;
     private final FinancePayableMapper payableMapper;
     private final UserMapper userMapper;
+    private final com.beichen.erp.finance.service.PayableHelper payableHelper;
 
     @Override
     public Page<Map<String, Object>> page(Integer status, Long supplierId, String code, int pageNum, int pageSize) {
@@ -183,6 +184,10 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) fp.setCompanyId(cid);
         payableMapper.insert(fp);
+        // 同步减少供应商应付余额（原子更新，与采购订单 audit 的 add 对称）
+        if (order.getSupplierId() != null && order.getTotalAmount() != null) {
+            payableHelper.changeSupplierBalance(order.getSupplierId(), order.getTotalAmount().negate());
+        }
         // 3) 更新状态
         PurchaseReturn u = new PurchaseReturn();
         u.setId(id);
@@ -201,7 +206,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         if (!PurchaseReturnStatus.COMPLETED.getCode().equals(order.getStatus())) throw new BusinessException("只有已完成的退货单可反审核");
         // 1) 检查应付台账
         LambdaQueryWrapper<FinancePayable> payableW = new LambdaQueryWrapper<FinancePayable>()
-                .eq(FinancePayable::getSourceBillType, "成品退货单")
+                .eq(FinancePayable::getSourceBillType, SourceBillType.PURCHASE_RETURN.getCode())
                 .eq(FinancePayable::getSourceBillNo, order.getCode());
         List<FinancePayable> payables = payableMapper.selectList(payableW);
         for (FinancePayable fp : payables) {
@@ -224,6 +229,10 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         // 3) 删除应付台账
         for (FinancePayable fp : payables) {
             payableMapper.deleteById(fp.getId());
+        }
+        // 对称回退供应商应付余额（audit 时因负向应付冲抵而减，此处加回，原子更新）
+        if (order.getSupplierId() != null && order.getTotalAmount() != null) {
+            payableHelper.changeSupplierBalance(order.getSupplierId(), order.getTotalAmount());
         }
         // 4) 回退到草稿
         PurchaseReturn u = new PurchaseReturn();

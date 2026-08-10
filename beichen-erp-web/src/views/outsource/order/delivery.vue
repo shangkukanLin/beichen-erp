@@ -43,7 +43,7 @@ async function loadData() {
     deliveries.value = dList || []
     summary.value = dSummary || {}
     products.value = prods || []
-  } catch (e: any) { console.warn('加载交货数据失败', e?.message || e) } finally { loading.value = false }
+  } catch (e: any) { console.warn('加载交货数据失败', e?.message || e); ElMessage.error('加载交货数据失败：' + (e?.msg || e?.message || '未知错误')) } finally { loading.value = false }
 }
 
 const progress = computed(() => {
@@ -105,7 +105,6 @@ async function handleSubmit(forceDelivery = false) {
     } else {
       res = await request.post('/outsource/order-delivery', body, params)
     }
-    console.log('[交货] 后端响应:', JSON.stringify(res))
     // 检查是否需要确认缺料（canProceed 不是 true 时都视为缺料）
     if (res && res.canProceed !== true) {
       saving.value = false

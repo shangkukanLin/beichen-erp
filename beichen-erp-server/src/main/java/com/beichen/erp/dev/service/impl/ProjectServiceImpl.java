@@ -5,15 +5,14 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.common.PageParam;
 import com.beichen.erp.dev.common.ProjectStatus;
-import com.beichen.erp.dev.common.TimelineStatus;
-import com.beichen.erp.dev.entity.PhaseTemplate;
 import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.entity.ProjectTimeline;
-import com.beichen.erp.dev.mapper.PhaseTemplateMapper;
+import com.beichen.erp.dev.mapper.DevPurchaseItemMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.dev.mapper.ProjectTimelineMapper;
 import com.beichen.erp.dev.service.ProjectProductSyncService;
 import com.beichen.erp.dev.service.ProjectService;
+import com.beichen.erp.dev.service.ProjectTimelineService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,7 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -29,11 +31,10 @@ import java.util.List;
 public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> implements ProjectService {
 
     private final ProjectMapper projectMapper;
-    private final PhaseTemplateMapper phaseTemplateMapper;
     private final ProjectTimelineMapper projectTimelineMapper;
     private final ProjectProductSyncService projectProductSyncService;
-
-    @Override
+    private final ProjectTimelineService projectTimelineService;
+    private final DevPurchaseItemMapper devPurchaseItemMapper;
     public Page<Project> page(PageParam param, String keyword, String status) {
         LambdaQueryWrapper<Project> w = new LambdaQueryWrapper<>();
         if (keyword != null && !keyword.isBlank()) {
@@ -56,8 +57,8 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         project.setCreateTime(LocalDateTime.now());
         projectMapper.insert(project);
 
-        // 创建时间线，第一个阶段自动激活
-        createTimelinesFromTemplate(project.getId());
+        // 创建时间线，第一个阶段自动激活（复用 ProjectTimelineService 统一初始化逻辑）
+        projectTimelineService.initTimeline(project.getId());
 
         // 根据总成名称生成/关联产品（若项目配置了总成名称）
         projectProductSyncService.syncProduct(project.getId(), linkExistingProductId);
@@ -103,25 +104,55 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         return "DEV-" + date + "-" + String.format("%03d", count + 1);
     }
 
-    private void createTimelinesFromTemplate(Long projectId) {
-        List<PhaseTemplate> templates = phaseTemplateMapper.selectList(
-                new LambdaQueryWrapper<PhaseTemplate>().orderByAsc(PhaseTemplate::getSortOrder));
-        LocalDate today = LocalDate.now();
-        for (int i = 0; i < templates.size(); i++) {
-            PhaseTemplate tpl = templates.get(i);
-            ProjectTimeline tl = new ProjectTimeline();
-            tl.setProjectId(projectId);
-            tl.setStatusName(tpl.getName());
-            tl.setDefaultDays(tpl.getDefaultDays());
-            tl.setSortOrder(tpl.getSortOrder());
-            // 第一个阶段自动激活
-            tl.setStatus(i == 0 ? TimelineStatus.IN_PROGRESS.getCode() : TimelineStatus.NOT_STARTED.getCode());
-            // 立项阶段默认计划完成日期为创建当天
-            if (i == 0) {
-                tl.setPlannedEnd(today);
-            }
-            tl.setCreateTime(LocalDateTime.now());
-            projectTimelineMapper.insert(tl);
+    @Override
+    @Transactional
+    public void updateProject(Project project) {
+        // 总成名称变更时，同步改名关联产品，确保两处名称一致
+        Project old = projectMapper.selectById(project.getId());
+        projectMapper.updateById(project);
+        if (old != null
+                && old.getAssemblyName() != null
+                && !old.getAssemblyName().equals(project.getAssemblyName())) {
+            projectProductSyncService.syncProductNameFromProject(
+                    project.getId(), project.getAssemblyName());
         }
+    }
+
+    @Override
+    public Map<Long, List<ProjectTimeline>> batchTimelines(List<Long> projectIds) {
+        Map<Long, List<ProjectTimeline>> result = new LinkedHashMap<>();
+        if (projectIds == null || projectIds.isEmpty()) {
+            return result;
+        }
+        // 一次 in 查询取回所有项目的时间线，避免循环内逐个查询（N+1）
+        List<ProjectTimeline> all = projectTimelineMapper.selectList(
+                new LambdaQueryWrapper<ProjectTimeline>().in(ProjectTimeline::getProjectId, projectIds));
+        return buildTimelineMap(all);
+    }
+
+    private Map<Long, List<ProjectTimeline>> buildTimelineMap(List<ProjectTimeline> all) {
+        Map<Long, List<ProjectTimeline>> map = new HashMap<>();
+        for (ProjectTimeline t : all) {
+            map.computeIfAbsent(t.getProjectId(), k -> new java.util.ArrayList<>()).add(t);
+        }
+        return map;
+    }
+
+    @Override
+    public Map<String, Object> getRelatedOrders(Long projectId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        // 仅研发物料(dev_purchase_item) 实体持有 projectId 关联字段，可按项目聚合
+        // 销售/采购/委外工单/委外物料订单实体均无 project 关联字段，不在此聚合
+        List<?> devMaterial = devPurchaseItemMapper.selectList(
+                new LambdaQueryWrapper<com.beichen.erp.dev.entity.DevPurchaseItem>()
+                        .eq(com.beichen.erp.dev.entity.DevPurchaseItem::getProjectId, projectId)
+                        .orderByDesc(com.beichen.erp.dev.entity.DevPurchaseItem::getId));
+        result.put("devMaterial", devMaterial);
+        return result;
+    }
+
+    @Override
+    public List<ProjectTimeline> listByProject(Long projectId) {
+        return projectTimelineService.listByProject(projectId);
     }
 }

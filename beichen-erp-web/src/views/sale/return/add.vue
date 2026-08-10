@@ -185,15 +185,12 @@ async function loadEdit(id: number) {
 
 function buildPayload() {
   return {
-    id: form.id,
     customerId: form.customerId,
-    customerName: form.customerName,
     warehouseId: form.warehouseId,
     returnDate: form.returnDate,
     remark: form.remark,
     items: form.items.map((it) => ({
       productId: it.productId,
-      productName: it.productName,
       quantity: it.quantity,
       unitPrice: it.unitPrice,
       amount: (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0),
@@ -219,6 +216,8 @@ async function submit() {
       ElMessage.success('新增成功')
     }
     router.push('/sale/return')
+  } catch (e: any) {
+    ElMessage.error(e?.msg || e?.message || '保存失败')
   } finally {
     saving.value = false
   }

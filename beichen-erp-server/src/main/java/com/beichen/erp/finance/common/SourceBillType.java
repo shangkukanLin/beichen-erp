@@ -18,7 +18,9 @@ public enum SourceBillType {
     /** 采购入库 */
     PURCHASE_INBOUND("采购入库"),
     /** 成品退货单 */
-    PURCHASE_RETURN("成品退货单");
+    PURCHASE_RETURN("成品退货单"),
+    /** 销售退货 */
+    SALE_RETURN("销售退货");
 
     private final String label;
 

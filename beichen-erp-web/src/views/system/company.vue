@@ -17,7 +17,7 @@ const enteringId = ref<number>()  // 正在进入的公司ID
 
 async function loadData() {
   loading.value = true
-  try { tableData.value = await getCompanyList() || [] } catch (e: any) { console.warn('加载公司列表失败', e?.message || e) } finally { loading.value = false }
+  try { tableData.value = await getCompanyList() || [] } catch (e: any) { ElMessage.error('加载公司列表失败：' + (e?.msg || e?.message || '未知错误')) } finally { loading.value = false }
 }
 
 function openAdd() {
@@ -53,7 +53,7 @@ async function handleDelete(row: any) {
     await deleteCompany(row.id!)
     ElMessage.success('已删除')
     loadData()
-  } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  } catch (e: any) { if (e !== 'cancel' && e !== 'close') { ElMessage.error('删除公司失败：' + (e?.msg || e?.message || '未知错误')) } }
 }
 
 /** 超管选择公司进入系统：切换 companyId → 加载菜单 → 跳仪表盘 */

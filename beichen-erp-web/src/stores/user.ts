@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import router from '@/router'
 import { getUserMenuTree, type MenuVO } from '@/api/system'
+import { SUPER_ADMIN_ROLE_CODE, ADMIN_ROLE_CODE } from '@/constants/system'
 
 interface UserInfo {
   id?: number | string
@@ -28,7 +29,7 @@ export const useUserStore = defineStore('user', {
     isLogin: (state) => !!state.token,
     isAdmin: (state) => {
       const roles = state.userInfo?.roles || []
-      return roles.includes('super_admin') || roles.includes('admin')
+      return roles.includes(SUPER_ADMIN_ROLE_CODE) || roles.includes(ADMIN_ROLE_CODE)
     },
     menuPaths: (state) => {
       const paths: string[] = []

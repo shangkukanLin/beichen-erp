@@ -8,6 +8,11 @@ import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.common.SettlementStatus;
+import com.beichen.erp.finance.common.SourceBillType;
+import com.beichen.erp.finance.entity.FinanceReceivable;
+import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
+import com.beichen.erp.finance.service.ReceivableHelper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
@@ -45,6 +50,8 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     private final ProductMapper productMapper;
     private final CustomerMapper customerMapper;
     private final InventoryWarehouseStockService stockService;
+    private final FinanceReceivableMapper financeReceivableMapper;
+    private final ReceivableHelper receivableHelper;
     private final UserMapper userMapper;
 
     @Override
@@ -168,6 +175,33 @@ public class SaleReturnServiceImpl implements SaleReturnService {
                     StockChangeType.SALE_RETURN_IN, order.getCode(), RelatedBillType.SALE_RETURN, it.getProductId(),
                     product != null ? product.getSpec() : "", order.getId(), "DEFECT");
         }
+        // 财务联动：生成负向应收冲抵原销售应收
+        if (order.getTotalAmount() != null && order.getTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
+            FinanceReceivable fr = new FinanceReceivable();
+            fr.setBillNo(order.getCode());
+            fr.setCustomerId(order.getCustomerId());
+            fr.setCustomerName(order.getCustomerName());
+            fr.setSourceBillType(SourceBillType.SALE_RETURN.getCode());
+            fr.setSourceBillNo(order.getCode());
+            fr.setAmount(order.getTotalAmount().negate());
+            fr.setPaidAmount(BigDecimal.ZERO);
+            fr.setUnpaidAmount(BigDecimal.ZERO);
+            fr.setStatus(SettlementStatus.UNSETTLED.getCode());
+            fr.setRemark("销售退货冲抵应收");
+            financeReceivableMapper.insert(fr);
+            // 同步扣减客户应收余额（与销售订单审核的 add 对称）
+            if (order.getCustomerId() != null) {
+                Customer c = customerMapper.selectById(order.getCustomerId());
+                if (c != null) {
+                    Customer u = new Customer();
+                    u.setId(c.getId());
+                    BigDecimal newBal = (c.getReceivableBalance() != null ? c.getReceivableBalance() : BigDecimal.ZERO)
+                            .subtract(order.getTotalAmount());
+                    u.setReceivableBalance(newBal);
+                    customerMapper.updateById(u);
+                }
+            }
+        }
         SaleReturn u = new SaleReturn();
         u.setId(id);
         u.setStatus(SaleReturnStatus.AUDITED.getCode());
@@ -195,6 +229,21 @@ public class SaleReturnServiceImpl implements SaleReturnService {
                     StockChangeType.SALE_RETURN_UN_AUDIT, order.getCode(), RelatedBillType.SALE_RETURN, it.getProductId(),
                     product != null ? product.getSpec() : "", order.getId(), "DEFECT");
         }
+        // 财务联动：冲销退货负向应收台账
+        receivableHelper.reverseReceivable(order.getCode());
+        // 对称回退客户应收余额（audit 时扣减，此处加回）
+        if (order.getCustomerId() != null && order.getTotalAmount() != null
+                && order.getTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
+            Customer c = customerMapper.selectById(order.getCustomerId());
+            if (c != null) {
+                Customer u = new Customer();
+                u.setId(c.getId());
+                BigDecimal newBal = (c.getReceivableBalance() != null ? c.getReceivableBalance() : BigDecimal.ZERO)
+                        .add(order.getTotalAmount());
+                u.setReceivableBalance(newBal);
+                customerMapper.updateById(u);
+            }
+        }
         SaleReturn u = new SaleReturn();
         u.setId(id);
         u.setStatus(SaleReturnStatus.DRAFT.getCode());
@@ -219,11 +268,14 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
+        // 退货单不为物理删除，仅草稿可作废（置 CANCELLED），避免已审核退货单的物理删除留下孤儿应收台账与库存流水
         SaleReturn old = returnMapper.selectById(id);
         if (old == null) throw new BusinessException("销售退货单不存在");
-        if (!SaleReturnStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可删除");
-        itemMapper.delete(new LambdaQueryWrapper<SaleReturnItem>().eq(SaleReturnItem::getReturnId, id));
-        returnMapper.deleteById(id);
+        if (!SaleReturnStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        SaleReturn u = new SaleReturn();
+        u.setId(id);
+        u.setStatus(SaleReturnStatus.CANCELLED.getCode());
+        returnMapper.updateById(u);
     }
 
     private void saveItems(Long returnId, List<Map<String, Object>> itemMaps) {

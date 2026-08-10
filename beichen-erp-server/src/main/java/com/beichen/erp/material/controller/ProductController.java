@@ -7,6 +7,7 @@ import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.service.ProductService;
 import com.beichen.erp.dev.service.ProjectProductSyncService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -43,7 +44,7 @@ public class ProductController {
 
     /** 新增 */
     @PostMapping
-    public R<Void> add(@RequestBody Product product) {
+    public R<Void> add(@Valid @RequestBody Product product) {
         service.save(product);
         return R.ok();
     }
@@ -63,10 +64,10 @@ public class ProductController {
         return R.ok();
     }
 
-    /** 删除 */
+    /** 删除（物理删除改为停用，走 status 生命周期，避免关联库存/单据成孤儿数据） */
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
-        service.removeById(id);
+        service.discontinue(id);
         return R.ok();
     }
 

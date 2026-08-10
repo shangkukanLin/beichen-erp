@@ -22,4 +22,6 @@ public interface SaleOutboundService {
     void cancel(Long id);
 
     void audit(Long id);
+
+    void unAudit(Long id);
 }

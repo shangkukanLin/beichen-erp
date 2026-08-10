@@ -11,7 +11,7 @@ import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
-import com.beichen.erp.outsource.common.DeliveryStatus;
+import com.beichen.erp.outsource.common.OutsourceSourceBillType;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
@@ -123,7 +123,7 @@ public class ReturnOrderController {
 
         order.setCode(generateCode());
         if (order.getReturnDate() == null) order.setReturnDate(LocalDate.now());
-        order.setStatus(DeliveryStatus.CONFIRMED.getCode());
+        order.setStatus(DocStatus.AUDITED.name());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) order.setCompanyId(cid);
         returnOrderMapper.insert(order);
@@ -183,10 +183,12 @@ public class ReturnOrderController {
             }
         }
 
-        // 应付冲减
+        // 应付冲减（负向应付）+ 同步供应商应付余额
         if (totalReturnAmount.compareTo(BigDecimal.ZERO) > 0) {
-            payableHelper.createPayable(order.getFactoryId(), "委外退料", order.getCode(), order.getId(),
-                totalReturnAmount.negate(), order.getReturnDate(), "委外退料 - " + order.getCode());
+            payableHelper.createPayable(order.getFactoryId(), OutsourceSourceBillType.OUTSOURCE_RETURN.getCode(),
+                order.getCode(), order.getId(), totalReturnAmount.negate(), order.getReturnDate(),
+                "委外退料 - " + order.getCode());
+            payableHelper.changeSupplierBalance(order.getFactoryId(), totalReturnAmount.negate());
         }
 
         return R.ok();
@@ -218,10 +220,11 @@ public class ReturnOrderController {
             if (it.getAmount() != null) totalAmount = totalAmount.add(it.getAmount());
         }
 
-        // 应付冲销
+        // 应付冲销：作废原负向应付（不再新增同 sourceId 的反向记录，避免财务定位冲突）
+        payableHelper.reversePayable(order.getId());
         if (totalAmount.compareTo(BigDecimal.ZERO) > 0) {
-            payableHelper.createPayable(order.getFactoryId(), "取消退料", order.getCode(), order.getId(),
-                totalAmount, LocalDate.now(), "取消退料 - " + order.getCode());
+            // 原退料生成的是负向应付，取消时按正数加回供应商应付余额
+            payableHelper.changeSupplierBalance(order.getFactoryId(), totalAmount);
         }
 
         return R.ok();

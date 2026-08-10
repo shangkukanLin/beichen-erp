@@ -14,6 +14,7 @@ import {
   type UserQueryParams,
   type Role
 } from '@/api/system'
+import { SUPER_ADMIN_ROLE_CODE } from '@/constants/system'
 
 // 查询参数
 const query = reactive<UserQueryParams>({
@@ -87,7 +88,7 @@ async function loadRoles() {
   try {
     const res = await getEnabledRoles()
     // 禁止通过用户管理分配超级管理员角色
-    roleOptions.value = (res || []).filter((r: Role) => r.roleCode !== 'super_admin')
+    roleOptions.value = (res || []).filter((r: Role) => r.roleCode !== SUPER_ADMIN_ROLE_CODE)
   } catch {
     roleOptions.value = []
   }

@@ -14,4 +14,6 @@ public interface FinanceReceiptService {
     void create(FinanceReceipt receipt, List<FinanceReceiptItem> items);
     void cancel(Long id);
     void audit(Long id);
+    /** 反审核：回退核销、账户余额、资金流水冲正、客户应收余额 */
+    void unAudit(Long id);
 }

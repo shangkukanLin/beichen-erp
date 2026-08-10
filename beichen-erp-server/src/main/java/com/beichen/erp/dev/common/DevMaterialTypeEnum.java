@@ -36,6 +36,15 @@ public enum DevMaterialTypeEnum {
         return null;
     }
 
+    /** 按中文标签反查枚举，兼容历史以中文存储的数据 */
+    public static DevMaterialTypeEnum fromLabel(String label) {
+        if (label == null || label.isBlank()) return null;
+        for (DevMaterialTypeEnum t : values()) {
+            if (t.label.equals(label)) return t;
+        }
+        return null;
+    }
+
     /** 返回所有类型的中文标签，供前端下拉使用 */
     public static List<String> allLabels() {
         List<String> labels = new ArrayList<>();

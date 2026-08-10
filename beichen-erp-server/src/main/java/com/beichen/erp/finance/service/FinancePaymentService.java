@@ -14,5 +14,7 @@ public interface FinancePaymentService {
     void create(FinancePayment payment, List<FinancePaymentItem> items);
     void cancel(Long id);
     void audit(Long id);
+    /** 反审核：回退核销、账户余额、供应商应付余额、资金流水冲正 */
+    void unAudit(Long id);
     void updateAttach(FinancePayment payment);
 }
