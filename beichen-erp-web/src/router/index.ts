@@ -283,6 +283,19 @@ router.onError((error) => {
   }
 })
 
+// 菜单路径授权：操作页（如 /dev/project/add、/dev/project/edit/1）本身不是菜单，
+// 逐级向上回退父路径，只要其所属菜单页（如 /dev/project）在白名单内即放行
+function isPathAllowed(toPath: string, allowedPaths: string[]): boolean {
+  let p = toPath
+  while (p.length > 1) {
+    if (allowedPaths.includes(p)) return true
+    const idx = p.lastIndexOf('/')
+    if (idx <= 0) break
+    p = p.substring(0, idx)
+  }
+  return allowedPaths.includes(p)
+}
+
 router.beforeEach((to, _from, next) => {
   const userStore = useUserStore()
   const isLogin = userStore.isLogin
@@ -311,8 +324,8 @@ router.beforeEach((to, _from, next) => {
   if (to.path !== '/403') {
     const allowedPaths = userStore.menuPaths
     if (allowedPaths.length > 0) {
-      // 菜单已加载：不在权限内则拦截
-      if (!allowedPaths.includes(to.path)) {
+      // 菜单已加载：精确路径或父级菜单路径命中白名单即放行，否则拦截
+      if (!isPathAllowed(to.path, allowedPaths)) {
         next('/403')
         return
       }
