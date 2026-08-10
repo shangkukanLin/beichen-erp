@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
 const query = reactive({ materialName: '', projectId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -100,6 +102,29 @@ async function handleSubmit() {
 }
 async function handleDelete(row: any) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await request.delete(`/outsource/material/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
+const router = useRouter()
+
+// 三个下拉「+ 新增」项：识别到标记后移除占位并跳转到对应列表页
+function onProjectChange(val: any[]) {
+  if (val.includes(ADD_MARKER)) {
+    form.projectIdArr = val.filter(v => v !== ADD_MARKER)
+    router.push('/dev/project')
+  }
+}
+function onWarehouseChange(val: any) {
+  if (val === ADD_MARKER) {
+    form.warehouseId = undefined
+    router.push('/outsource/warehouse')
+  }
+}
+function onSupplierChange(val: any[]) {
+  if (val.includes(ADD_MARKER)) {
+    form.supplierIdArr = val.filter(v => v !== ADD_MARKER)
+    // 跳转到供应商管理列表页（与菜单 routePath /supplier/manage 保持一致）
+    router.push('/supplier/manage')
+  }
+}
+
 onMounted(() => { loadOptions(); loadData() })
 </script>
 
@@ -137,11 +162,11 @@ onMounted(() => { loadOptions(); loadData() })
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="720px" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px">
-        <el-form-item label="所属项目"><el-select v-model="form.projectIdArr" multiple filterable placeholder="可多选" style="width:100%"><el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" /></el-select></el-form-item>
+        <el-form-item label="所属项目"><el-select v-model="form.projectIdArr" multiple filterable placeholder="可多选" style="width:100%" @change="onProjectChange"><el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item>
         <el-form-item label="物料类型"><el-select v-model="form.bomTypeId" style="width:100%"><el-option v-for="t in MATERIAL_TYPES" :key="t.id" :label="t.typeName" :value="t.id" /></el-select></el-form-item>
         <el-form-item label="物料名称" required><el-input v-model="form.materialName" /></el-form-item>
-        <el-form-item label="委外仓库"><el-select v-model="form.warehouseId" clearable filterable placeholder="可选" style="width:100%"><el-option v-for="w in warehouseOptions" :key="w.id" :label="`${w.factoryName} - ${w.warehouseName}`" :value="w.id" /></el-select></el-form-item>
-        <el-form-item label="供应商"><el-select v-model="form.supplierIdArr" multiple filterable placeholder="可多选" style="width:100%"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /></el-select></el-form-item>
+        <el-form-item label="委外仓库"><el-select v-model="form.warehouseId" clearable filterable placeholder="可选" style="width:100%" @change="onWarehouseChange"><el-option v-for="w in warehouseOptions" :key="w.id" :label="`${w.factoryName} - ${w.warehouseName}`" :value="w.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item>
+        <el-form-item label="供应商"><el-select v-model="form.supplierIdArr" multiple filterable placeholder="可多选" style="width:100%" @change="onSupplierChange"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item>
         <el-form-item label="单位"><el-input v-model="form.unit" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
       </el-form>

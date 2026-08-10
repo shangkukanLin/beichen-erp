@@ -147,6 +147,7 @@
             <div class="stat-value" style="color:#67c23a">{{ supplierTotal }}</div>
             <div class="stat-label">供应商</div>
           </div>
+          
         </div>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
@@ -329,7 +330,7 @@ async function loadStats() {
       // 加载进行中项目的时间线
       if (activeProjects.length > 0) {
         try {
-          const tlRes = await request.post('/dev/project/timelines/batch', activeProjects.map((p: any) => p.id))
+          const tlRes = await request.post('/dev/project/batch-timelines', activeProjects.map((p: any) => p.id))
           dashboardTimelineMap.value = tlRes || {}
         } catch { /* ignore */}
       }

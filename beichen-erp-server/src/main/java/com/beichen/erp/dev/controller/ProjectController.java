@@ -5,10 +5,14 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.entity.ProjectTimeline;
 import com.beichen.erp.dev.service.ProjectService;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestController
@@ -17,6 +21,23 @@ import java.util.Map;
 public class ProjectController {
 
     private final ProjectService projectService;
+    private final ProductMapper productMapper;
+
+    /** 总成名称查重：新增项目时校验总成名称是否与已有产品重名 */
+    @GetMapping("/check-assembly")
+    public R<Map<String, Object>> checkAssembly(@RequestParam String name) {
+        Product product = productMapper.selectOne(
+                new LambdaQueryWrapper<Product>().eq(Product::getName, name).last("LIMIT 1"));
+        Map<String, Object> result = new LinkedHashMap<>();
+        if (product != null) {
+            result.put("exists", true);
+            result.put("productId", product.getId());
+            result.put("productName", product.getName());
+        } else {
+            result.put("exists", false);
+        }
+        return R.ok(result);
+    }
 
     @GetMapping("/page")
     public R<?> page(PageParam param,
