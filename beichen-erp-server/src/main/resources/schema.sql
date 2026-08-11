@@ -75,6 +75,11 @@ CREATE TABLE IF NOT EXISTS sys_role_menu (
 CREATE TABLE IF NOT EXISTS sys_company (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '公司ID',
     company_name VARCHAR(100) NOT NULL COMMENT '公司名称',
+    phone VARCHAR(20) COMMENT '电话',
+    address VARCHAR(200) COMMENT '地址',
+    contact_person VARCHAR(50) COMMENT '联系人',
+    tax_no VARCHAR(50) COMMENT '税号',
+    email VARCHAR(100) COMMENT '邮箱',
     status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
@@ -109,6 +114,8 @@ CREATE TABLE IF NOT EXISTS supplier (
     status TINYINT DEFAULT 1 COMMENT '1合作中 0已停用',
     has_display TINYINT DEFAULT 0 COMMENT '支持显示方案',
     has_touch TINYINT DEFAULT 0 COMMENT '支持触摸方案',
+    credit_period_months INT DEFAULT NULL COMMENT '账期(月)',
+    credit_period INT DEFAULT NULL COMMENT '账期(天)',
     related_supplier_id BIGINT DEFAULT NULL COMMENT '关联供应商ID',
     payable_balance DECIMAL(18,2) DEFAULT 0 COMMENT '应付余额',
     remark VARCHAR(255) COMMENT '备注',
@@ -123,16 +130,28 @@ CREATE TABLE IF NOT EXISTS supplier (
 CREATE TABLE IF NOT EXISTS supplier_product (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     supplier_id BIGINT NOT NULL COMMENT '供应商ID',
-    product_name VARCHAR(100) NOT NULL COMMENT '产品名称',
-    spec VARCHAR(100) COMMENT '规格型号',
-    unit VARCHAR(20) COMMENT '单位',
+    product_id BIGINT NOT NULL COMMENT '关联产品ID（关联 product 表）',
     unit_price DECIMAL(18,4) COMMENT '参考单价',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_supplier_id (supplier_id),
+    INDEX idx_product_id (product_id),
     INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='供应商产品表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='供应商产品居间表';
+
+CREATE TABLE IF NOT EXISTS supplier_material (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    supplier_id BIGINT NOT NULL COMMENT '供应商ID',
+    material_id BIGINT NOT NULL COMMENT '关联外协物料ID（关联 outsource_material 表）',
+    unit_price DECIMAL(18,4) COMMENT '参考单价',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_supplier_id (supplier_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='供应商物料居间表';
 
 -- ==================== 外协模块 ====================
 
@@ -181,7 +200,7 @@ CREATE TABLE IF NOT EXISTS outsource_order_product (
 CREATE TABLE IF NOT EXISTS outsource_order_material (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     product_id BIGINT NOT NULL COMMENT '产品ID(关联outsource_order_product)',
-    material_id BIGINT COMMENT '物料ID',
+    outsource_material_id BIGINT DEFAULT NULL COMMENT '委外物料ID',
     bom_type_id BIGINT DEFAULT NULL COMMENT 'BOM类型ID(关联dev_bom_type.id)',
     unit VARCHAR(20) COMMENT '单位',
     demand_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '需求数量',
@@ -191,7 +210,7 @@ CREATE TABLE IF NOT EXISTS outsource_order_material (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_product_id (product_id),
-    INDEX idx_material_id (material_id),
+    INDEX idx_outsource_material_id (outsource_material_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协订单物料表';
 
@@ -202,6 +221,7 @@ CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     delivery_date DATE COMMENT '发货日期',
     product_id BIGINT COMMENT '产品ID',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
+    delivery_type VARCHAR(10) DEFAULT '正常' COMMENT '正常/退不良',
     a_qty DECIMAL(18,4) DEFAULT 0 COMMENT 'A规数量',
     b_qty DECIMAL(18,4) DEFAULT 0 COMMENT 'B规数量',
     c_qty DECIMAL(18,4) DEFAULT 0 COMMENT 'C规数量',
@@ -252,15 +272,19 @@ CREATE TABLE IF NOT EXISTS outsource_delivery (
 CREATE TABLE IF NOT EXISTS outsource_delivery_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     delivery_id BIGINT NOT NULL COMMENT '发货单ID',
-    material_id BIGINT COMMENT '物料ID',
+    outsource_material_id BIGINT COMMENT '委外物料ID',
     bom_type_id BIGINT DEFAULT NULL COMMENT 'BOM类型ID(关联dev_bom_type.id)',
+    item_id BIGINT DEFAULT NULL COMMENT '来源订单明细行ID',
     unit VARCHAR(20) COMMENT '单位',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
+    unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '行金额',
     quality_type VARCHAR(20) DEFAULT '良品' COMMENT '良品/不良品',
+    handle_type VARCHAR(20) DEFAULT NULL COMMENT '处理方式：维修返还/折现退款',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_delivery_id (delivery_id),
-    INDEX idx_material_id (material_id),
+    INDEX idx_outsource_material_id (outsource_material_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协发货单明细表';
 
@@ -346,20 +370,22 @@ CREATE TABLE IF NOT EXISTS outsource_warehouse (
 CREATE TABLE IF NOT EXISTS outsource_warehouse_stock (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     warehouse_id BIGINT NOT NULL COMMENT '仓库ID',
-    material_id BIGINT NOT NULL COMMENT '物料ID',
+    outsource_material_id BIGINT NOT NULL COMMENT '委外物料ID',
     quality_type VARCHAR(20) DEFAULT '良品' COMMENT '良品/不良品',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '库存数量',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_warehouse_id (warehouse_id),
-    INDEX idx_material_id (material_id),
-    UNIQUE KEY uk_warehouse_material_quality (warehouse_id, material_id, quality_type),
+    INDEX idx_outsource_material_id (outsource_material_id),
+    INDEX idx_company_id (company_id),
+    UNIQUE KEY uk_warehouse_material_quality (warehouse_id, outsource_material_id, quality_type),
     CONSTRAINT fk_stock_warehouse FOREIGN KEY (warehouse_id) REFERENCES outsource_warehouse (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协仓库库存表';
 
 CREATE TABLE IF NOT EXISTS outsource_stock_log (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     warehouse_id BIGINT NOT NULL COMMENT '仓库ID',
-    material_id BIGINT NOT NULL COMMENT '物料ID',
+    outsource_material_id BIGINT NOT NULL COMMENT '委外物料ID',
     material_name VARCHAR(100) COMMENT '物料名称',
     change_type VARCHAR(20) NOT NULL COMMENT '出库/回滚',
     change_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变更数量(负数出库,正数回滚)',
@@ -370,8 +396,8 @@ CREATE TABLE IF NOT EXISTS outsource_stock_log (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_warehouse_id (warehouse_id),
-    INDEX idx_material_id (material_id),
-    INDEX idx_warehouse_material (warehouse_id, material_id),
+    INDEX idx_outsource_material_id (outsource_material_id),
+    INDEX idx_warehouse_material (warehouse_id, outsource_material_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协仓库库存流水表';
 
@@ -390,7 +416,7 @@ CREATE TABLE IF NOT EXISTS outsource_order_close_report (
 CREATE TABLE IF NOT EXISTS outsource_order_close_report_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     report_id BIGINT NOT NULL COMMENT '报表ID',
-    material_id BIGINT COMMENT '物料ID',
+    outsource_material_id BIGINT COMMENT '委外物料ID',
     bom_type_id BIGINT DEFAULT NULL COMMENT 'BOM类型ID(关联dev_bom_type.id)',
     unit VARCHAR(20) COMMENT '单位',
     delivered_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '发料数量',
@@ -402,8 +428,12 @@ CREATE TABLE IF NOT EXISTS outsource_order_close_report_item (
     actual_yield_rate DECIMAL(18,4) DEFAULT 0 COMMENT '生产良率%',
     yield_loss DECIMAL(18,4) DEFAULT 0 COMMENT '良率超损%',
     excess_loss_qty DECIMAL(18,4) DEFAULT 0 COMMENT '超损数量',
+    material_price DECIMAL(18,4) DEFAULT 0 COMMENT '物料单价',
+    factory_retain_qty DECIMAL(18,4) DEFAULT NULL COMMENT '留存工厂',
     remark VARCHAR(255) COMMENT '备注',
-    INDEX idx_report_id (report_id)
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    INDEX idx_report_id (report_id),
+    INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='结单报表物料明细';
 
 CREATE TABLE IF NOT EXISTS outsource_return_order (
@@ -411,6 +441,7 @@ CREATE TABLE IF NOT EXISTS outsource_return_order (
     code VARCHAR(50) NOT NULL COMMENT '退货单号',
     factory_id BIGINT COMMENT '加工厂ID',
     order_id BIGINT COMMENT '关联加工单ID',
+    warehouse_id BIGINT DEFAULT NULL COMMENT '成品出库仓',
     return_date DATE COMMENT '退货日期',
     status VARCHAR(20) DEFAULT '已确认' COMMENT '状态',
     remark VARCHAR(500) COMMENT '备注',
@@ -441,6 +472,7 @@ CREATE TABLE IF NOT EXISTS outsource_contract_template (
     content TEXT COMMENT '合同模板内容',
     status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',
     is_default TINYINT DEFAULT 0 COMMENT '0非默认 1默认模板',
+    template_type VARCHAR(20) DEFAULT '加工合同' COMMENT '模板类型：加工合同/采购合同',
     party_a_address VARCHAR(255) COMMENT '甲方地址',
     party_a_contact VARCHAR(50) COMMENT '甲方联系人',
     party_a_phone VARCHAR(20) COMMENT '甲方联系电话',
@@ -523,6 +555,7 @@ CREATE TABLE IF NOT EXISTS dev_project_timeline (
     project_id BIGINT NOT NULL COMMENT '项目ID',
     status_name VARCHAR(50) NOT NULL COMMENT '节点名称',
     sort_order INT DEFAULT 0 COMMENT '排序',
+    default_days INT DEFAULT 0 COMMENT '默认天数',
     planned_end DATE COMMENT '计划完成日期',
     actual_end DATE COMMENT '实际完成日期',
     remark VARCHAR(500) DEFAULT NULL COMMENT '备注',
@@ -684,8 +717,7 @@ CREATE TABLE IF NOT EXISTS purchase_order (
 CREATE TABLE IF NOT EXISTS purchase_order_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '采购订单明细ID',
     order_id BIGINT NOT NULL COMMENT '采购订单ID',
-    material_id BIGINT COMMENT '物料ID',
-    material_code VARCHAR(50) COMMENT '物料编码',
+    product_id BIGINT COMMENT '产品ID',
     quality_type VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
@@ -694,7 +726,7 @@ CREATE TABLE IF NOT EXISTS purchase_order_item (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_order_id (order_id),
-    INDEX idx_material_id (material_id),
+    INDEX idx_product_id (product_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购订单明细表';
 
@@ -724,8 +756,7 @@ CREATE TABLE IF NOT EXISTS purchase_inbound_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '采购入库明细ID',
     inbound_id BIGINT NOT NULL COMMENT '采购入库单ID',
     order_item_id BIGINT COMMENT '关联采购订单明细ID',
-    material_id BIGINT COMMENT '物料ID',
-    material_code VARCHAR(50) COMMENT '物料编码',
+    product_id BIGINT COMMENT '产品ID',
     quality_type VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
@@ -734,7 +765,7 @@ CREATE TABLE IF NOT EXISTS purchase_inbound_item (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_inbound_id (inbound_id),
-    INDEX idx_material_id (material_id),
+    INDEX idx_product_id (product_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购入库明细表';
 
@@ -805,8 +836,7 @@ CREATE TABLE IF NOT EXISTS sale_order (
 CREATE TABLE IF NOT EXISTS sale_order_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售单明细ID',
     order_id BIGINT NOT NULL COMMENT '销售单ID',
-    material_id BIGINT COMMENT '物料ID',
-    material_code VARCHAR(50) COMMENT '物料编码',
+    product_id BIGINT COMMENT '产品ID',
     quality_type VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
@@ -815,7 +845,7 @@ CREATE TABLE IF NOT EXISTS sale_order_item (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_order_id (order_id),
-    INDEX idx_material_id (material_id),
+    INDEX idx_product_id (product_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售单明细表';
 
@@ -845,8 +875,7 @@ CREATE TABLE IF NOT EXISTS sale_outbound_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '销售出库明细ID',
     outbound_id BIGINT NOT NULL COMMENT '销售出库单ID',
     order_item_id BIGINT COMMENT '关联销售单明细ID',
-    material_id BIGINT COMMENT '物料ID',
-    material_code VARCHAR(50) COMMENT '物料编码',
+    product_id BIGINT COMMENT '产品ID',
     quality_type VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
@@ -855,7 +884,7 @@ CREATE TABLE IF NOT EXISTS sale_outbound_item (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_outbound_id (outbound_id),
-    INDEX idx_material_id (material_id),
+    INDEX idx_product_id (product_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售出库明细表';
 
@@ -1105,6 +1134,7 @@ CREATE TABLE IF NOT EXISTS finance_payable (
     supplier_name VARCHAR(100) COMMENT '供应商名称',
     source_bill_type VARCHAR(30) COMMENT '来源单据类型: 采购入库/其他应付',
     source_bill_no VARCHAR(50) COMMENT '来源单据号',
+    source_id BIGINT DEFAULT NULL COMMENT '来源记录ID',
     amount DECIMAL(18,4) DEFAULT 0 COMMENT '应付金额',
     paid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '已付金额',
     unpaid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '未付金额',
@@ -1167,6 +1197,7 @@ CREATE TABLE IF NOT EXISTS finance_payment (
     amount DECIMAL(18,4) DEFAULT 0 COMMENT '付款金额',
     status VARCHAR(20) DEFAULT '草稿' COMMENT '状态: 草稿/已审核/已作废',
     remark VARCHAR(500) COMMENT '备注',
+    attach_url VARCHAR(500) DEFAULT NULL COMMENT '付款凭证',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
