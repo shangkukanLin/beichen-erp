@@ -5,15 +5,19 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="供应商" prop="supplierId">
-              <el-select v-model="form.supplierId" placeholder="请选择" filterable style="width:100%">
+              <el-select v-model="form.supplierId" placeholder="请选择" filterable style="width:100%"
+                @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/supplier/manage'); return } }">
                 <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
+                <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="入库仓库" prop="warehouseId">
-              <el-select v-model="form.warehouseId" placeholder="请选择" filterable style="width:100%">
+              <el-select v-model="form.warehouseId" placeholder="请选择" filterable style="width:100%"
+                @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
                 <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
+                <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -40,24 +44,55 @@
         </div>
         <el-table :data="items" border>
           <el-table-column type="index" label="#" width="50" align="center" />
-          <el-table-column label="产品" min-width="180">
+          <el-table-column label="产品" min-width="160">
             <template #default="{ row }">
               <el-select v-model="row.productId" placeholder="选择产品" filterable remote :remote-method="loadMaterials"
-                style="width:100%" @change="(v: number) => onMaterialChange(v, row)">
+                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
                 <el-option v-for="m in materialOptions" :key="m.id" :label="m.name" :value="m.id" />
+                <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column prop="spec" label="规格" width="100" />
-          <el-table-column prop="unit" label="单位" width="70" />
-          <el-table-column label="数量" width="120">
-            <template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :step="1" :precision="0" controls-position="right" style="width:100%" /></template>
+          <el-table-column prop="spec" label="规格" width="90" />
+          <el-table-column prop="unit" label="单位" width="60" />
+          <el-table-column label="品质数量/单价" min-width="360">
+            <template #default="{ row }">
+              <div style="font-size:12px;line-height:28px">
+                <div style="display:flex;align-items:center;gap:4px">
+                  <span style="width:36px;text-align:right;color:#909399">A规</span>
+                  <el-input v-model="row.aQty" type="number" size="small" placeholder="数量" style="flex:1;min-width:56px" />
+                  <el-input v-model="row.aPrice" type="number" size="small" placeholder="单价" style="flex:1;min-width:56px" />
+                  <span style="width:64px;text-align:right">{{ gradeSubtotal(row.aQty, row.aPrice) }}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px">
+                  <span style="width:36px;text-align:right;color:#909399">B规</span>
+                  <el-input v-model="row.bQty" type="number" size="small" placeholder="数量" style="flex:1;min-width:56px" />
+                  <el-input v-model="row.bPrice" type="number" size="small" placeholder="单价" style="flex:1;min-width:56px" />
+                  <span style="width:64px;text-align:right">{{ gradeSubtotal(row.bQty, row.bPrice) }}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px">
+                  <span style="width:36px;text-align:right;color:#909399">C规</span>
+                  <el-input v-model="row.cQty" type="number" size="small" placeholder="数量" style="flex:1;min-width:56px" />
+                  <el-input v-model="row.cPrice" type="number" size="small" placeholder="单价" style="flex:1;min-width:56px" />
+                  <span style="width:64px;text-align:right">{{ gradeSubtotal(row.cQty, row.cPrice) }}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px">
+                  <span style="width:36px;text-align:right;color:#909399">不良</span>
+                  <el-input v-model="row.defectQty" type="number" size="small" placeholder="数量" style="flex:1;min-width:56px" />
+                  <el-input v-model="row.defectPrice" type="number" size="small" placeholder="单价" style="flex:1;min-width:56px" />
+                  <span style="width:64px;text-align:right">{{ gradeSubtotal(row.defectQty, row.defectPrice) }}</span>
+                </div>
+              </div>
+            </template>
           </el-table-column>
-          <el-table-column label="单价" width="120">
-            <template #default="{ row }"><el-input-number v-model="row.unitPrice" :min="0" :precision="2" controls-position="right" style="width:100%" /></template>
+          <el-table-column label="总数" width="70" align="center">
+            <template #default="{ row }">{{ rowTotalQty(row) }}</template>
           </el-table-column>
-          <el-table-column label="金额" width="110" align="right">
-            <template #default="{ row }">{{ ((Number(row.quantity) || 0) * (Number(row.unitPrice) || 0)).toFixed(2) }}</template>
+          <el-table-column label="总金额" width="100" align="right">
+            <template #default="{ row }">{{ rowTotalAmount(row).toFixed(2) }}</template>
+          </el-table-column>
+          <el-table-column label="备注" width="120">
+            <template #default="{ row }"><el-input v-model="row.remark" size="small" placeholder="备注" /></template>
           </el-table-column>
           <el-table-column label="操作" width="70" align="center">
             <template #default="{ $index }"><el-button type="danger" link @click="items.splice($index, 1)">删除</el-button></template>
@@ -79,7 +114,21 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
-import type { PurchaseOrder, PurchaseOrderItem } from '@/api/purchase'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+import type { PurchaseOrder } from '@/api/purchase'
+
+/** 明细行数据结构（前端用，含4个品质的数量+单价） */
+interface ItemRow {
+  productId: any
+  materialName: string
+  spec: string
+  unit: string
+  aQty: string;   aPrice: string
+  bQty: string;   bPrice: string
+  cQty: string;   cPrice: string
+  defectQty: string; defectPrice: string
+  remark: string
+}
 
 const router = useRouter()
 const formRef = ref<FormInstance>()
@@ -87,7 +136,7 @@ const submitLoading = ref(false)
 const suppliers = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const materialOptions = ref<any[]>([])
-const items = ref<PurchaseOrderItem[]>([])
+const items = ref<ItemRow[]>([])
 
 const form = reactive<PurchaseOrder>({
   supplierId: undefined,
@@ -103,8 +152,32 @@ const rules: FormRules = {
   warehouseId: [{ required: true, message: '请选择入库仓库', trigger: 'change' }],
 }
 
+/** 空明细行 */
+function emptyRow(): ItemRow {
+  return { productId: undefined, materialName: '', spec: '', unit: '', aQty: '', aPrice: '', bQty: '', bPrice: '', cQty: '', cPrice: '', defectQty: '', defectPrice: '', remark: '' }
+}
+
 function addItem() {
-  items.value.push({ productId: undefined, materialName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' })
+  items.value.push(emptyRow())
+}
+
+/** 单个品质等级的小计 = 数量 × 单价 */
+function gradeSubtotal(qty: string, price: string): string {
+  const n = (Number(qty) || 0) * (Number(price) || 0)
+  return n > 0 ? n.toFixed(2) : ''
+}
+
+/** 计算某行的四等级总数量 */
+function rowTotalQty(row: ItemRow): number {
+  return (Number(row.aQty) || 0) + (Number(row.bQty) || 0) + (Number(row.cQty) || 0) + (Number(row.defectQty) || 0)
+}
+
+/** 计算某行的总金额（四等级各自 数量×单价 之和） */
+function rowTotalAmount(row: ItemRow): number {
+  return (Number(row.aQty) || 0) * (Number(row.aPrice) || 0)
+       + (Number(row.bQty) || 0) * (Number(row.bPrice) || 0)
+       + (Number(row.cQty) || 0) * (Number(row.cPrice) || 0)
+       + (Number(row.defectQty) || 0) * (Number(row.defectPrice) || 0)
 }
 
 async function loadMaterials(query?: string) {
@@ -116,7 +189,7 @@ async function loadMaterials(query?: string) {
   } catch { materialOptions.value = [] }
 }
 
-function onMaterialChange(val: number, row: PurchaseOrderItem) {
+function onMaterialChange(val: any, row: ItemRow) {
   const m = materialOptions.value.find((x: any) => x.id === val)
   if (m) {
     row.productId = m.id
@@ -140,26 +213,55 @@ async function loadWarehouses() {
   } catch { warehouses.value = [] }
 }
 
+/** 将一行明细按品质等级拆分为多条提交项（每条带各自的数量+单价） */
+function expandItems(row: ItemRow) {
+  const result: any[] = []
+  const grades = [
+    { qualityType: 'A', qty: row.aQty, price: row.aPrice },
+    { qualityType: 'B', qty: row.bQty, price: row.bPrice },
+    { qualityType: 'C', qty: row.cQty, price: row.cPrice },
+    { qualityType: 'DEFECT', qty: row.defectQty, price: row.defectPrice },
+  ]
+  for (const g of grades) {
+    const n = Number(g.qty) || 0
+    if (n <= 0) continue
+    result.push({
+      productId: row.productId,
+      materialName: row.materialName,
+      spec: row.spec,
+      unit: row.unit,
+      qualityType: g.qualityType,
+      quantity: n,
+      unitPrice: Number(g.price) || 0,
+      remark: row.remark,
+    })
+  }
+  return result
+}
+
 async function handleSubmit() {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
     if (!valid) return
     if (items.value.length === 0) { ElMessage.warning('请至少添加一条明细'); return }
     if (items.value.some(it => !it.productId)) { ElMessage.warning('请选择产品'); return }
-    if (items.value.some(it => !it.quantity || Number(it.quantity) <= 0)) { ElMessage.warning('产品数量必须大于0'); return }
+    // 校验每行至少填了一个品质数量
+    for (const row of items.value) {
+      if (rowTotalQty(row) <= 0) {
+        ElMessage.warning(`产品"${row.materialName}"至少需要填写一个品质等级的数量（A规/B规/C规/不良）`)
+        return
+      }
+    }
     submitLoading.value = true
     try {
+      // 每行按品质拆分，合并为完整明细列表
+      const flatItems: any[] = []
+      for (const row of items.value) {
+        flatItems.push(...expandItems(row))
+      }
       const body = {
         ...form,
-        items: items.value.map(it => ({
-          productId: it.productId,
-          materialName: it.materialName,
-          spec: it.spec,
-          unit: it.unit,
-          quantity: it.quantity,
-          unitPrice: it.unitPrice,
-          remark: it.remark,
-        }))
+        items: flatItems,
       }
       await request.post('/inventory/purchase', body)
       ElMessage.success('新增成功')
@@ -169,10 +271,48 @@ async function handleSubmit() {
   })
 }
 
+// 从 URL query 预填：供应商 + 产品/物料（来自供应商详情页"去采购"）
+async function initFromQuery() {
+  const q = router.currentRoute.value.query
+  if (q.supplierId) {
+    form.supplierId = Number(q.supplierId)
+    if (!suppliers.value.some(s => s.id === form.supplierId)) {
+      try {
+        const res = await request.get('/supplier/page', { params: { id: form.supplierId, pageSize: 1 } })
+        const rec = res?.records?.[0]
+        if (rec) suppliers.value.push({ id: rec.id, name: rec.name })
+      } catch { /* 忽略 */ }
+    }
+  }
+  if (q.productId) {
+    try {
+      const p = await request.get<any, any>(`/product/${q.productId}`)
+      if (p) {
+        const it = items.value[0] || (items.value.push(emptyRow()), items.value[0])
+        it.productId = Number(q.productId)
+        it.materialName = p.name
+        it.spec = p.spec
+        it.unit = p.unit
+      }
+    } catch { /* 忽略 */ }
+  } else if (q.materialId) {
+    const it = items.value[0] || (items.value.push(emptyRow()), items.value[0])
+    it.materialName = q.materialName || ('物料#' + q.materialId)
+    try {
+      if (it.materialName) {
+        const res = await request.get('/outsource/material/page', { params: { materialName: it.materialName, pageSize: 1 } })
+        const rec = res?.records?.[0]
+        if (rec) { it.spec = rec.spec || it.spec; it.unit = rec.unit || it.unit }
+      }
+    } catch { /* 忽略 */ }
+  }
+}
+
 onMounted(() => {
   loadSuppliers()
   loadWarehouses()
   loadMaterials()
+  initFromQuery()
 })
 </script>
 

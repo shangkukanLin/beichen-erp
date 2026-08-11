@@ -381,8 +381,9 @@ interface RelatedOrder { id: number; code: string; status: string; createTime: s
 const relatedOrders = ref<RelatedOrder[]>([])
 async function loadRelatedOrders() {
   try {
-    const res = await request.get<RelatedOrder[]>(`/dev/project/${projectId}/related-orders`)
-    relatedOrders.value = res || []
+    const res = await request.get<any, any>(`/dev/project/${projectId}/related-orders`)
+    relatedOrders.value = res?.outsourceOrders || []
+    // devMaterial 由 loadDevMaterials 负责加载
   } catch (e: any) { ElMessage.error('加载关联订单失败：' + (e?.msg || e?.message || '未知错误')) }
 }
 
@@ -664,31 +665,33 @@ function onNameBlur() {
               <el-option :label="BugTypeEnumLabel[BugTypeEnum.TOUCH]" :value="BugTypeEnum.TOUCH"/>
               <el-option :label="BugTypeEnumLabel[BugTypeEnum.STRUCTURE]" :value="BugTypeEnum.STRUCTURE"/>
             </el-select>
+            <el-radio-group v-model="bugTab" size="small" style="margin-left:8px">
+              <el-radio-button value="active">处理中 ({{ filteredBugs.active.length }})</el-radio-button>
+              <el-radio-button value="closed">已关闭 ({{ filteredBugs.closed.length }})</el-radio-button>
+            </el-radio-group>
           </div>
 
-          <el-tabs v-model="bugTab" type="card" style="margin-top:4px">
-            <el-tab-pane :label="'处理中 ('+filteredBugs.active.length+')'" name="active">
-              <el-table :data="filteredBugs.active" border size="small">
-                <el-table-column prop="code" label="编号" width="140" />
-                <el-table-column prop="title" label="标题" min-width="150" />
-                <el-table-column prop="bugType" label="类型" width="70"><template #default="{row}">{{ BugTypeEnumLabel[row.bugType] || row.bugType }}</template></el-table-column>
-                <el-table-column prop="severity" label="严重程度" width="90"><template #default="{row}">{{ SeverityTypeLabel[row.severity] || row.severity }}</template></el-table-column>
-                <el-table-column label="状态" width="90"><template #default="{row}"><el-tag size="small" :type="BugStatusTag[row.status] || 'info'">{{ BugStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-                <el-table-column label="操作" width="120" align="center"><template #default="{row}"><el-button type="primary" link @click="handleEditBug(row as BugDTO)">编辑</el-button><el-button type="danger" link @click="handleDeleteBug(row as BugDTO)">删除</el-button></template></el-table-column>
-              </el-table>
-            </el-tab-pane>
-            <el-tab-pane :label="'已关闭 ('+filteredBugs.closed.length+')'" name="closed">
-              <el-table :data="filteredBugs.closed" border size="small" v-if="filteredBugs.closed.length>0">
-                <el-table-column prop="code" label="编号" width="140" />
-                <el-table-column prop="title" label="标题" min-width="150" />
-                <el-table-column prop="bugType" label="类型" width="70"><template #default="{row}">{{ BugTypeEnumLabel[row.bugType] || row.bugType }}</template></el-table-column>
-                <el-table-column prop="severity" label="严重程度" width="90"><template #default="{row}">{{ SeverityTypeLabel[row.severity] || row.severity }}</template></el-table-column>
-                <el-table-column label="状态" width="90"><template #default="{row}"><el-tag size="small" type="info">{{ BugStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-                <el-table-column label="操作" width="120" align="center"><template #default="{row}"><el-button type="primary" link @click="handleEditBug(row as BugDTO)">编辑</el-button><el-button type="danger" link @click="handleDeleteBug(row as BugDTO)">删除</el-button></template></el-table-column>
-              </el-table>
-              <div v-else style="color:#909399;padding:16px;text-align:center">暂无已关闭的BUG</div>
-            </el-tab-pane>
-          </el-tabs>
+          <!-- 处理中 -->
+          <el-table v-show="bugTab === 'active'" :data="filteredBugs.active" border size="small">
+            <el-table-column prop="code" label="编号" width="140" />
+            <el-table-column prop="title" label="标题" min-width="150" />
+            <el-table-column prop="bugType" label="类型" width="70"><template #default="{row}">{{ BugTypeEnumLabel[row.bugType] || row.bugType }}</template></el-table-column>
+            <el-table-column prop="severity" label="严重程度" width="90"><template #default="{row}">{{ SeverityTypeLabel[row.severity] || row.severity }}</template></el-table-column>
+            <el-table-column label="状态" width="90"><template #default="{row}"><el-tag size="small" :type="BugStatusTag[row.status] || 'info'">{{ BugStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+            <el-table-column label="操作" width="120" align="center"><template #default="{row}"><el-button type="primary" link @click="handleEditBug(row as BugDTO)">编辑</el-button><el-button type="danger" link @click="handleDeleteBug(row as BugDTO)">删除</el-button></template></el-table-column>
+            <template #empty><div style="color:#909399;padding:16px;text-align:center">暂无处理中的BUG</div></template>
+          </el-table>
+
+          <!-- 已关闭 -->
+          <el-table v-show="bugTab === 'closed'" :data="filteredBugs.closed" border size="small">
+            <el-table-column prop="code" label="编号" width="140" />
+            <el-table-column prop="title" label="标题" min-width="150" />
+            <el-table-column prop="bugType" label="类型" width="70"><template #default="{row}">{{ BugTypeEnumLabel[row.bugType] || row.bugType }}</template></el-table-column>
+            <el-table-column prop="severity" label="严重程度" width="90"><template #default="{row}">{{ SeverityTypeLabel[row.severity] || row.severity }}</template></el-table-column>
+            <el-table-column label="状态" width="90"><template #default="{row}"><el-tag size="small" type="info">{{ BugStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+            <el-table-column label="操作" width="120" align="center"><template #default="{row}"><el-button type="primary" link @click="handleEditBug(row as BugDTO)">编辑</el-button><el-button type="danger" link @click="handleDeleteBug(row as BugDTO)">删除</el-button></template></el-table-column>
+            <template #empty><div style="color:#909399;padding:16px;text-align:center">暂无已关闭的BUG</div></template>
+          </el-table>
         </el-card>
       </el-tab-pane>
     </el-tabs>

@@ -6,7 +6,7 @@ import request from '@/utils/request'
 
 const route = useRoute(); const router = useRouter()
 const warehouseId = route.params.wid
-const materialId = route.params.mid
+const productId = route.params.pid
 const records = ref<any[]>([])
 const loading = ref(false)
 const pagination = ref({ pageNum: 1, pageSize: 20, total: 0 })
@@ -15,7 +15,7 @@ async function loadData() {
   loading.value = true
   try {
     const r = await request.get<any, any>('/inventory/stock/log', {
-      params: { warehouseId, materialId, pageNum: pagination.value.pageNum, pageSize: pagination.value.pageSize }
+      params: { warehouseId, productId, pageNum: pagination.value.pageNum, pageSize: pagination.value.pageSize }
     })
     records.value = r?.records || []
     pagination.value.total = r?.total || 0
@@ -32,7 +32,9 @@ async function handleCodeClick(code: string) {
       material_order: '/outsource/material-order/detail/',
       delivery: '/outsource/delivery/detail/',
       other_io: '/inventory/other-io/add?id=',
-      outsource_other_io: '/outsource/other-io/add?id='
+      outsource_other_io: '/outsource/other-io/add?id=',
+      purchase: '/inventory/purchase/detail/',
+      sale: '/inventory/sale/edit?id='
     }
     const path = map[r.type]
     if (path) router.push(path + r.id)
@@ -51,10 +53,15 @@ onMounted(() => loadData())
     <el-card shadow="never">
       <el-table :data="records" border stripe v-loading="loading">
         <el-table-column label="时间" width="110"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
-        <el-table-column label="类型" width="110" align="center">
-          <template #default="{row}"><el-tag :type="row.changeType?.includes('出库')||row.changeType?.includes('退')?'danger':row.changeType?.includes('入库')||row.changeType?.includes('发')?'success':'info'" size="small">{{ row.changeType }}</el-tag></template>
+        <el-table-column label="类型" width="180" align="center">
+          <template #default="{row}"><el-tag :type="row.changeTypeLabel?.includes('出')||row.changeTypeLabel?.includes('退')?'danger':row.changeTypeLabel?.includes('入')||row.changeTypeLabel?.includes('发')?'success':'info'" size="small">{{ row.changeTypeLabel || row.changeType }}</el-tag></template>
         </el-table-column>
-        <el-table-column prop="materialName" label="物料名称" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="productName" label="产品名称" min-width="140" show-overflow-tooltip />
+        <el-table-column label="品质" width="70" align="center">
+          <template #default="{row}">
+            <el-tag :type="row.qualityType==='DEFECT'?'danger':row.qualityType==='B'?'warning':row.qualityType==='C'?'info':undefined" size="small">{{ row.qualityType==='DEFECT'?'不良':row.qualityType||'—' }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="变更前" width="100" align="right">
           <template #default="{row}"><span style="font-weight:500">{{ row.beforeQuantity }}</span></template>
         </el-table-column>

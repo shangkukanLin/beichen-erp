@@ -4,6 +4,7 @@ import { reactive, ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { getProjectBom } from '@/api/system'
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
 const loading = ref(true)
@@ -28,6 +29,37 @@ async function searchProducts(query?: string) {
     const res = await request.get<any, any>('/product/page', { params })
     prodOptions.value = res?.records || []
   } catch { prodOptions.value = [] }
+}
+
+// 供应物料（居间表 supplier_material）
+const materials = ref<any[]>([])
+const matOptions = ref<any[]>([])
+const matLoading = ref(false)
+async function searchMaterials(query?: string) {
+  try {
+    const params: any = { pageSize: 50 }
+    if (query) params.materialName = query
+    const res = await request.get<any, any>('/outsource/material/page', { params })
+    matOptions.value = res?.records || []
+  } catch { matOptions.value = [] }
+}
+async function loadMaterials() {
+  matLoading.value = true
+  try {
+    const res = await request.get<any, any>(`/supplier/${id}/materials`)
+    materials.value = res || []
+  } catch { materials.value = [] }
+  finally { matLoading.value = false }
+}
+function addMaterial() { materials.value.push({ materialId: undefined, unitPrice: 0, remark: '' }) }
+function removeMaterial(i: number) { materials.value.splice(i, 1) }
+async function saveMaterials() {
+  try {
+    const body = materials.value.map((m: any) => ({ materialId: m.materialId, unitPrice: m.unitPrice, remark: m.remark }))
+    await request.put(`/supplier/${id}/materials`, body)
+    ElMessage.success('供应物料已保存')
+    loadMaterials()
+  } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) }
 }
 const typeName = ref('')
 const typeTags = ref<string[]>([])
@@ -69,6 +101,9 @@ async function loadData() {
     }
     const prods = await request.get<any,any>(`/supplier/${id}/products`)
     products.value = prods || []
+    const mats = await request.get<any,any>(`/supplier/${id}/materials`)
+    materials.value = mats || []
+    await markBomFlags()
   } finally { loading.value = false }
 }
 
@@ -98,6 +133,8 @@ function onTabChange(tab: any) {
   if (tab === 'warehouse' && warehouses.value.length === 0) loadWarehouses()
   if (tab === 'order' && filteredOrders.value.length === 0) loadOrders()
   if (tab === 'material' && materialSummary.value.length === 0) loadMaterialSummary()
+  if (tab === 'product' && products.value.length === 0) searchProducts()
+  if (tab === 'material-supply' && materials.value.length === 0) loadMaterials()
 }
 
 async function loadMaterialSummary() {
@@ -131,6 +168,89 @@ async function saveProducts() {
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) }
 }
 
+// 跳采购：成品→成品采购单；物料→委外物料订单（成品采购单不存 materialId，物料采购走物料订单）
+function goPurchase(row: any, type: 'product' | 'material') {
+  if (type === 'product') {
+    router.push({ path: '/inventory/purchase/add', query: { supplierId: id, productId: row.productId } })
+  } else {
+    router.push({
+      path: '/outsource/material-order/add',
+      query: { supplierId: id, materialId: row.materialId, materialName: row.materialName }
+    })
+  }
+}
+
+// 跳委外：产品→委外加工单；物料有子料→委外加工单(物料直挂)，无子料→委外物料订单
+async function goOutsource(row: any, type: 'product' | 'material') {
+  if (type === 'product') {
+    router.push({ path: '/outsource/order/add', query: { supplierId: id, productId: row.productId } })
+    return
+  }
+  try {
+    const res = await request.post<any, any>('/outsource/material/components-batch-by-ids', [row.materialId])
+    const childrenMap: Record<number, any[]> = res?.childrenMap || {}
+    const hasComponents = Array.isArray(childrenMap[row.materialId]) && childrenMap[row.materialId].length > 0
+    if (hasComponents) {
+      router.push({ path: '/outsource/order/add', query: { supplierId: id, materialId: row.materialId } })
+    } else {
+      router.push({
+        path: '/outsource/material-order/add',
+        query: { supplierId: id, materialId: row.materialId, materialName: row.materialName }
+      })
+    }
+  } catch {
+    router.push({
+      path: '/outsource/material-order/add',
+      query: { supplierId: id, materialId: row.materialId, materialName: row.materialName }
+    })
+  }
+}
+
+// 根据行是否有 BOM / 子料，决定显示"去委外"还是"去采购"，并执行对应跳转
+function goAction(row: any, type: 'product' | 'material') {
+  if (type === 'product') {
+    if (row.hasBom) goOutsource(row, 'product')
+    else goPurchase(row, 'product')
+  } else {
+    if (row.hasComponents) goOutsource(row, 'material')
+    else goPurchase(row, 'material')
+  }
+}
+
+// 加载后为每行计算标志：成品是否含 BOM（据关联项目的 BOM 表）、物料是否含子料
+async function markBomFlags() {
+  // 物料：一次批量判定子料
+  if (materials.value.length) {
+    try {
+      const ids = materials.value.map((m: any) => m.materialId)
+      const res = await request.post<any, any>('/outsource/material/components-batch-by-ids', ids)
+      const childrenMap: Record<number, any[]> = res?.childrenMap || {}
+      materials.value.forEach((m: any) => {
+        m.hasComponents = Array.isArray(childrenMap[m.materialId]) && childrenMap[m.materialId].length > 0
+      })
+    } catch { materials.value.forEach((m: any) => (m.hasComponents = false)) }
+  }
+  // 成品：productId → 反查 projectId → 项目 BOM 是否非空
+  if (products.value.length) {
+    try {
+      const proms = await Promise.all(products.value.map((p: any) => request.get<any, any>(`/product/${p.productId}`).catch(() => null)))
+      const pidByProduct: Record<number, number> = {}
+      proms.forEach((pr: any, i: number) => {
+        if (pr?.projectId) pidByProduct[products.value[i].productId] = pr.projectId
+      })
+      const projectIds = [...new Set(Object.values(pidByProduct))]
+      const bomMap: Record<number, boolean> = {}
+      await Promise.all(projectIds.map(async (pid) => {
+        try { const bom = await getProjectBom(pid); bomMap[pid] = Array.isArray(bom) && bom.length > 0 } catch { bomMap[pid] = false }
+      }))
+      products.value.forEach((p: any) => {
+        const pid = pidByProduct[p.productId]
+        p.hasBom = !!pid && !!bomMap[pid]
+      })
+    } catch { products.value.forEach((p: any) => (p.hasBom = false)) }
+  }
+}
+
 onMounted(loadData)
 </script>
 
@@ -140,9 +260,6 @@ onMounted(loadData)
       <el-tag v-for="t in typeTags" :key="t" size="small"
         :type="t==='factory'?'warning':t==='solution'?'primary':t==='material'?'info':'success'"
       >{{ TYPE_MAP[t] || t }}</el-tag>
-      <el-tag v-if="form.status===1" type="success" size="small" style="margin-left:4px">启用</el-tag>
-      <el-tag v-else type="danger" size="small" style="margin-left:4px">停用</el-tag>
-      <el-button type="primary" style="margin-left:auto" :loading="saving" @click="handleSave">保存</el-button>
     </div>
 
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
@@ -179,11 +296,14 @@ onMounted(loadData)
                 </el-form-item>
               </el-col>
               <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
+              <el-col :span="24"><el-form-item><el-button type="primary" :loading="saving" @click="handleSave">保存</el-button></el-form-item></el-col>
             </el-row>
           </el-form>
         </el-card>
+      </el-tab-pane>
 
-        <el-card shadow="never" style="margin-top:12px">
+      <el-tab-pane label="供应产品" name="product">
+        <el-card shadow="never">
           <template #header>
             <div style="display:flex;justify-content:space-between;align-items:center">
               <span style="font-weight:600">供应产品</span>
@@ -192,10 +312,56 @@ onMounted(loadData)
           </template>
           <el-button type="primary" size="small" text @click="addProduct" style="margin-bottom:8px">+ 添加产品</el-button>
           <el-table :data="products" border size="small">
-            <el-table-column label="产品"><template #default="{row}"><el-select v-model="row.productId" placeholder="搜索产品" filterable remote :remote-method="searchProducts" size="small" style="width:100%"><el-option v-for="p in prodOptions" :key="p.id" :label="p.name" :value="p.id" /></el-select></template></el-table-column>
+            <el-table-column label="产品" min-width="160">
+              <template #default="{row}">
+                <span v-if="row.productName">{{ row.productName }}</span>
+                <el-select v-else v-model="row.productId" placeholder="搜索产品" filterable remote :remote-method="searchProducts" size="small" style="width:100%">
+                  <el-option v-for="p in prodOptions" :key="p.id" :label="p.name" :value="p.id" />
+                </el-select>
+              </template>
+            </el-table-column>
             <el-table-column label="单价" width="100"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" /></template></el-table-column>
             <el-table-column label="备注" width="120"><template #default="{row}"><el-input v-model="row.remark" size="small" /></template></el-table-column>
-            <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link size="small" @click="removeProduct($index)">删除</el-button></template></el-table-column>
+            <el-table-column label="操作" width="150" align="center">
+              <template #default="{row, $index}">
+                <el-button type="danger" link size="small" @click="removeProduct($index)">删除</el-button>
+                <el-button v-if="row.hasBom" type="success" link size="small" :disabled="!row.productId" @click="goOutsource(row, 'product')">去委外</el-button>
+                <el-button v-else type="primary" link size="small" :disabled="!row.productId" @click="goPurchase(row, 'product')">去采购</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-tab-pane>
+
+      <el-tab-pane label="供应物料" name="material-supply">
+        <el-card shadow="never" v-loading="matLoading">
+          <template #header>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-weight:600">供应物料</span>
+              <el-button type="primary" size="small" @click="saveMaterials">保存物料</el-button>
+            </div>
+          </template>
+          <el-button type="primary" size="small" text @click="addMaterial" style="margin-bottom:8px">+ 添加物料</el-button>
+          <el-table :data="materials" border size="small">
+            <el-table-column label="物料" min-width="160">
+              <template #default="{row}">
+                <span v-if="row.materialName">{{ row.materialName }}</span>
+                <el-select v-else v-model="row.materialId" placeholder="搜索物料" filterable remote :remote-method="searchMaterials" size="small" style="width:100%">
+                  <el-option v-for="m in matOptions" :key="m.id" :label="m.materialName || ('物料#' + m.id)" :value="m.id" />
+                </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="规格" width="120"><template #default="{row}">{{ row.spec || '-' }}</template></el-table-column>
+            <el-table-column label="BOM类型" width="120"><template #default="{row}">{{ row.bomTypeName || '-' }}</template></el-table-column>
+            <el-table-column label="单价" width="100"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" /></template></el-table-column>
+            <el-table-column label="备注" width="120"><template #default="{row}"><el-input v-model="row.remark" size="small" /></template></el-table-column>
+            <el-table-column label="操作" width="150" align="center">
+              <template #default="{row, $index}">
+                <el-button type="danger" link size="small" :disabled="!!row.id" @click="removeMaterial($index)">删除</el-button>
+                <el-button v-if="row.hasComponents" type="success" link size="small" :disabled="!row.materialId" @click="goOutsource(row, 'material')">去委外</el-button>
+                <el-button v-else type="primary" link size="small" :disabled="!row.materialId" @click="goPurchase(row, 'material')">去采购</el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
       </el-tab-pane>

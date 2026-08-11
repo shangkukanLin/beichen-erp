@@ -26,7 +26,7 @@ async function loadMaterials() {
   } finally { matLoading.value = false }
 }
 
-function goLog(row: any) { router.push(`/inventory/warehouse/material-history/${warehouseId}/${row.productId}`) }
+function goLog(row: any) { router.push(`/inventory/warehouse/product-history/${warehouseId}/${row.productId}`) }
 function fmt(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
 function totalQty(row: any) {
   return (Number(row.qtyA) || 0) + (Number(row.qtyB) || 0) + (Number(row.qtyC) || 0) + (Number(row.qtyDefect) || 0)

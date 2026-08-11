@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.outsource.entity.OutsourceWarehouse;
+import com.beichen.erp.outsource.mapper.OutsourceWarehouseMapper;
 import com.beichen.erp.supplier.common.SupplierTypeEnum;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.entity.SupplierTypeRef;
@@ -38,6 +40,9 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
 
     @Resource
     private SupplierProductService supplierProductService;
+
+    @Resource
+    private OutsourceWarehouseMapper outsourceWarehouseMapper;
 
     @Resource
     private JdbcTemplate jdbcTemplate;
@@ -143,8 +148,26 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
             }
         }
         saveTypeRefs(supplier.getId(), dto.getTypeCodes());
+        // 自动创建该供应商的委外仓库
+        createDefaultWarehouse(supplier.getId(), supplier.getName());
         dto.setId(supplier.getId());
         return supplier.getId();
+    }
+
+    /** 自动为供应商创建默认委外仓库 */
+    private void createDefaultWarehouse(Long supplierId, String supplierName) {
+        // 检查是否已存在该供应商的委外仓库（同名供应商追加类型时跳过）
+        Long count = outsourceWarehouseMapper.selectCount(
+                Wrappers.<OutsourceWarehouse>lambdaQuery().eq(OutsourceWarehouse::getFactoryId, supplierId));
+        if (count != null && count > 0) return;
+        OutsourceWarehouse w = new OutsourceWarehouse();
+        w.setFactoryId(supplierId);
+        w.setWarehouseName(supplierName != null ? supplierName + "委外仓库" : "委外仓库");
+        w.setStatus(1);
+        Long cid = CompanyContext.get();
+        if (cid != null && cid > 0) w.setCompanyId(cid);
+        outsourceWarehouseMapper.insert(w);
+        log.info("已为供应商 {}（ID={}）自动创建委外仓库 ID={}", supplierName, supplierId, w.getId());
     }
 
     private void saveTypeRefs(Long supplierId, List<String> typeCodes) {

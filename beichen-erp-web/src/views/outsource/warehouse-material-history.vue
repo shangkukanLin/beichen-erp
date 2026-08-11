@@ -54,7 +54,7 @@ onMounted(() => loadData())
         <el-table-column label="关联单号" width="180">
           <template #default="{row}"><el-button v-if="row.relatedOrderCode" type="primary" link @click="handleCodeClick(row.relatedOrderCode)">{{ row.relatedOrderCode }}</el-button><span v-else style="color:#c0c4cc">—</span></template>
         </el-table-column>
-        <el-table-column label="类型" width="110" align="center">
+        <el-table-column label="类型" width="190" align="center">
           <template #default="{row}"><el-tag :type="row.changeType==='出货扣料'||row.changeType==='出库'?'danger':row.changeType?.includes('回滚')?'success':'info'" size="small">{{ row.changeType }}</el-tag></template>
         </el-table-column>
         <el-table-column prop="materialName" label="物料名称" min-width="140" show-overflow-tooltip />

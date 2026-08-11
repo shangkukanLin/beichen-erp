@@ -164,21 +164,21 @@ function onDetailMaterialChange(materialId: number, row: any) {
   const m = allMaterials.value.find((mat: any) => mat.id === materialId)
   if (m) { row.materialName = m.materialName; if (m.spec) row.spec = m.spec; if (m.unit) row.unit = m.unit }
 }
-async function loadBom() { if (detailProject.value) bomList.value = (await getProjectBom(detailProject.value.id!))?.map(b => ({ outsourceMaterialId: b.outsourceMaterialId, materialName: b.materialName, spec: b.spec || b.specification, unit: b.unit, quantityPerSet: b.quantityPerSet || b.quantity, lossRate: b.lossRate, bomTypeId: b.bomTypeId, remark: b.remark })) || [] }
+async function loadBom() { if (detailProject.value) { const res: any = await getProjectBom(detailProject.value.id!); const list = res?.records || res || []; bomList.value = list.map((b: any) => ({ outsourceMaterialId: b.outsourceMaterialId, materialName: b.materialName, spec: b.spec || b.specification, unit: b.unit, quantityPerSet: b.quantityPerSet || b.quantity, lossRate: b.lossRate, bomTypeId: b.bomTypeId, remark: b.remark })) } }
 function addBomRow() { bomList.value.push({ outsourceMaterialId: undefined, materialName: '', spec: '', unit: '', quantityPerSet: 1, lossRate: 2, bomTypeId: '', remark: '' }) }
 function removeBomRow(i: number) { bomList.value.splice(i, 1) }
 async function saveBom() { if (detailProject.value) { const emptyType = bomList.value.find((b: any) => !b.bomTypeId); if (emptyType) { ElMessage.warning('物料类型不能为空'); return }; const emptyId = bomList.value.find((b: any) => !b.outsourceMaterialId); if (emptyId) { ElMessage.warning('物料名称不能为空'); return }; const zeroQty = bomList.value.find((b: any) => !b.quantityPerSet || Number(b.quantityPerSet) <= 0); if (zeroQty) { ElMessage.warning('物料用量必须大于0'); return }; const bomData = bomList.value.map((b: any) => ({ outsourceMaterialId: b.outsourceMaterialId, quantity: b.quantityPerSet, lossRate: b.lossRate, specification: b.spec, unit: b.unit })); await saveProjectBom(detailProject.value.id!, bomData); ElMessage.success('BOM已保存'); loadBom() } }
 
 const bugList = ref<BugDTO[]>([]); const bugDialogVisible = ref(false)
 const bugForm = reactive<BugDTO>({ title: '', severity: '一般', status: '待处理', description: '', assignedTo: undefined }); const isBugEdit = ref(false)
-async function loadBugs() { if (detailProject.value) bugList.value = (await getProjectBugs(detailProject.value.id!)) || [] }
+async function loadBugs() { if (detailProject.value) { const res: any = await getProjectBugs(detailProject.value.id!); bugList.value = res?.records || res || [] } }
 function handleAddBug() { Object.assign(bugForm, { title: '', severity: '一般', status: '待处理', description: '', assignedTo: undefined }); isBugEdit.value = false; bugDialogVisible.value = true }
 function handleEditBug(row: BugDTO) { Object.assign(bugForm, row); isBugEdit.value = true; bugDialogVisible.value = true }
 async function handleBugSubmit() { if (!detailProject.value) return; if (isBugEdit.value && bugForm.id) { await updateProjectBug(detailProject.value.id!, bugForm); ElMessage.success('已更新') } else { await addProjectBug(detailProject.value.id!, bugForm); ElMessage.success('已添加') }; bugDialogVisible.value = false; loadBugs() }
 async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectBug(detailProject.value!.id!, row.id!); ElMessage.success('已删除'); loadBugs() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
 const drawingList = ref<DrawingVO[]>([])
-async function loadDrawings() { if (detailProject.value) drawingList.value = (await getProjectDrawings(detailProject.value.id!)) || [] }
+async function loadDrawings() { if (detailProject.value) { const res: any = await getProjectDrawings(detailProject.value.id!); drawingList.value = res?.records || res || [] } }
 const drawingForm = reactive({ docName: '', docType: '图纸', version: '', fileUrl: '' }); const drawingVisible = ref(false)
 function handleAddDrawing() { Object.assign(drawingForm, { docName: '', docType: '图纸', version: '', fileUrl: '' }); drawingVisible.value = true }
 async function handleDrawingSubmit() { if (detailProject.value) { await addProjectDrawing(detailProject.value.id!, drawingForm as any); ElMessage.success('已添加'); drawingVisible.value = false; loadDrawings() } }

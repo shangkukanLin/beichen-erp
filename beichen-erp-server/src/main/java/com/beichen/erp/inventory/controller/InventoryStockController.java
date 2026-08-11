@@ -3,13 +3,15 @@ package com.beichen.erp.inventory.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.entity.InventoryStockLog;
 import com.beichen.erp.inventory.entity.InventoryWarehouse;
 import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
 import com.beichen.erp.inventory.mapper.InventoryStockLogMapper;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseMapper;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
-import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,7 +29,7 @@ public class InventoryStockController {
     private final InventoryWarehouseStockMapper stockMapper;
     private final InventoryWarehouseMapper warehouseMapper;
     private final InventoryStockLogMapper logMapper;
-    private final OutsourceOrderProductMapper orderProductMapper;
+    private final ProductMapper productMapper;
 
     /** 成品库存汇总查询（按产品+仓库 PIVOT 品质等级聚合） */
     @GetMapping("/page")
@@ -44,15 +46,15 @@ public class InventoryStockController {
                 .eq(qualityType != null && !qualityType.isBlank(), InventoryWarehouseStock::getQualityType, qualityType);
         List<InventoryWarehouseStock> all = stockMapper.selectList(w);
 
-        // 批量查询产品名称（product_id 关联 outsource_order_product 表）
+        // 批量查询产品名称（product_id 关联 product 产品主数据表）
         Set<Long> productIds = new HashSet<>();
         for (InventoryWarehouseStock s : all) {
             if (s.getProductId() != null) productIds.add(s.getProductId());
         }
         Map<Long, String> productNameMap = new HashMap<>();
         if (!productIds.isEmpty()) {
-            orderProductMapper.selectBatchIds(productIds).forEach(p -> productNameMap.put(p.getId(),
-                p.getProductName() != null ? p.getProductName() : ""));
+            productMapper.selectBatchIds(productIds).forEach(p -> productNameMap.put(p.getId(),
+                p.getName() != null ? p.getName() : ""));
         }
 
         // 按 (warehouseId, productId) 分组聚合
@@ -116,6 +118,27 @@ public class InventoryStockController {
                 .ge(startDate != null && !startDate.isBlank(), InventoryStockLog::getCreateTime, startDate)
                 .le(endDate != null && !endDate.isBlank(), InventoryStockLog::getCreateTime, endDate + " 23:59:59")
                 .orderByDesc(InventoryStockLog::getId);
-        return R.ok(logMapper.selectPage(new Page<>(pageNum, pageSize), w));
+        Page<InventoryStockLog> page = logMapper.selectPage(new Page<>(pageNum, pageSize), w);
+
+        // 批量补产品名称和变动类型中文标签
+        List<InventoryStockLog> records = page.getRecords();
+        if (!records.isEmpty()) {
+            Set<Long> pIds = new HashSet<>();
+            for (InventoryStockLog log : records) {
+                if (log.getProductId() != null) pIds.add(log.getProductId());
+            }
+            Map<Long, String> nameMap = new HashMap<>();
+            if (!pIds.isEmpty()) {
+                productMapper.selectBatchIds(pIds).forEach(p -> nameMap.put(p.getId(),
+                    p.getName() != null ? p.getName() : ""));
+            }
+            for (InventoryStockLog log : records) {
+                if (log.getProductId() != null) {
+                    log.setProductName(nameMap.getOrDefault(log.getProductId(), ""));
+                }
+                log.setChangeTypeLabel(StockChangeType.labelOf(log.getChangeType()));
+            }
+        }
+        return R.ok(page);
     }
 }

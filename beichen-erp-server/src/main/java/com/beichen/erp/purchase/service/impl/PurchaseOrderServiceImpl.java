@@ -11,6 +11,9 @@ import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.inventory.common.StockChangeType;
+import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
@@ -43,6 +46,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final UserMapper userMapper;
     private final ProductMapper productMapper;
     private final com.beichen.erp.finance.service.PayableHelper payableHelper;
+    private final InventoryWarehouseStockService stockService;
 
     @Override
     public Page<Map<String, Object>> page(Integer status, Long supplierId, String code, int pageNum, int pageSize) {
@@ -104,7 +108,26 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     @Override
     public List<PurchaseOrderItem> getItems(Long orderId) {
-        return itemMapper.selectList(new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, orderId));
+        List<PurchaseOrderItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, orderId));
+        // 批量查询产品名称，补到 productName 展示字段
+        if (!items.isEmpty()) {
+            Set<Long> productIds = items.stream()
+                    .map(PurchaseOrderItem::getProductId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            if (!productIds.isEmpty()) {
+                List<Product> products = productMapper.selectBatchIds(productIds);
+                Map<Long, String> nameMap = products.stream()
+                        .collect(Collectors.toMap(Product::getId, Product::getName, (a, b) -> a));
+                items.forEach(it -> {
+                    if (it.getProductId() != null) {
+                        it.setProductName(nameMap.getOrDefault(it.getProductId(), ""));
+                    }
+                });
+            }
+        }
+        return items;
     }
 
     @Override
@@ -189,7 +212,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         List<PurchaseOrderItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, id));
         if (items.isEmpty()) throw new BusinessException("采购单明细不能为空");
-        // 1) 生成应付台账（采购订单仅负责成交与应付，真实入库由"采购入库单"审核统一加库存，避免双重扣减）
+        // 1) 生成应付台账
         FinancePayable fp = new FinancePayable();
         fp.setBillNo(order.getCode());
         fp.setSupplierId(order.getSupplierId());
@@ -208,6 +231,16 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         // 同步增加供应商应付余额（原子更新，避免并发丢更新）
         if (order.getSupplierId() != null && order.getTotalAmount() != null) {
             payableHelper.changeSupplierBalance(order.getSupplierId(), order.getTotalAmount());
+        }
+        // 2) 审核直接入库，按品质等级分别增加库存
+        for (PurchaseOrderItem it : items) {
+            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+            stockService.changeStock(order.getWarehouseId(),
+                    product != null ? product.getId() : it.getProductId(),
+                    it.getQuantity(),
+                    StockChangeType.PURCHASE_IN, order.getCode(), RelatedBillType.PURCHASE_ORDER,
+                    product != null ? product.getSpec() : "",
+                    order.getId(), it.getQualityType());
         }
         // 3) 更新订单状态为"已完成"，记录审核人
         PurchaseOrder u = new PurchaseOrder();
@@ -237,9 +270,20 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             }
         }
 
-        // 检查库存：采购订单本身不触碰库存，库存由"采购入库单"反审核统一冲回，此处无需库存校验
+        // 2) 冲回库存：审核时加了库存，反审核需按品质等级逐条冲回
+        List<PurchaseOrderItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, id));
+        for (PurchaseOrderItem it : items) {
+            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+            stockService.changeStock(order.getWarehouseId(),
+                    product != null ? product.getId() : it.getProductId(),
+                    it.getQuantity().negate(), // 负数冲回
+                    StockChangeType.PURCHASE_IN, order.getCode(), RelatedBillType.PURCHASE_ORDER,
+                    product != null ? product.getSpec() : "",
+                    order.getId(), it.getQualityType());
+        }
 
-        // 2) 删除应付台账
+        // 3) 删除应付台账
         for (FinancePayable fp : payables) {
             payableMapper.deleteById(fp.getId());
         }
@@ -248,7 +292,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             payableHelper.changeSupplierBalance(order.getSupplierId(), order.getTotalAmount().negate());
         }
 
-        // 3) 回退状态到草稿，清除审核信息
+        // 4) 回退状态到草稿，清除审核信息
         PurchaseOrder u = new PurchaseOrder();
         u.setId(id);
         u.setStatus(PurchaseOrderStatus.DRAFT.getCode());

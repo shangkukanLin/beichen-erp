@@ -13,6 +13,10 @@ import com.beichen.erp.dev.mapper.ProjectTimelineMapper;
 import com.beichen.erp.dev.service.ProjectProductSyncService;
 import com.beichen.erp.dev.service.ProjectService;
 import com.beichen.erp.dev.service.ProjectTimelineService;
+import com.beichen.erp.outsource.entity.OutsourceOrder;
+import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
+import com.beichen.erp.outsource.mapper.OutsourceOrderMapper;
+import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,10 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -35,6 +37,8 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     private final ProjectProductSyncService projectProductSyncService;
     private final ProjectTimelineService projectTimelineService;
     private final DevPurchaseItemMapper devPurchaseItemMapper;
+    private final OutsourceOrderProductMapper outsourceOrderProductMapper;
+    private final OutsourceOrderMapper outsourceOrderMapper;
     public Page<Project> page(PageParam param, String keyword, String status) {
         LambdaQueryWrapper<Project> w = new LambdaQueryWrapper<>();
         if (keyword != null && !keyword.isBlank()) {
@@ -141,13 +145,37 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     @Override
     public Map<String, Object> getRelatedOrders(Long projectId) {
         Map<String, Object> result = new LinkedHashMap<>();
-        // 仅研发物料(dev_purchase_item) 实体持有 projectId 关联字段，可按项目聚合
-        // 销售/采购/委外工单/委外物料订单实体均无 project 关联字段，不在此聚合
+        // 研发物料
         List<?> devMaterial = devPurchaseItemMapper.selectList(
                 new LambdaQueryWrapper<com.beichen.erp.dev.entity.DevPurchaseItem>()
                         .eq(com.beichen.erp.dev.entity.DevPurchaseItem::getProjectId, projectId)
                         .orderByDesc(com.beichen.erp.dev.entity.DevPurchaseItem::getId));
         result.put("devMaterial", devMaterial);
+        // 委外加工单（通过 outsource_order_product.project_id 关联）
+        List<OutsourceOrderProduct> products = outsourceOrderProductMapper.selectList(
+                new LambdaQueryWrapper<OutsourceOrderProduct>()
+                        .eq(OutsourceOrderProduct::getProjectId, projectId));
+        if (!products.isEmpty()) {
+            Set<Long> orderIds = products.stream().map(OutsourceOrderProduct::getOrderId)
+                    .filter(Objects::nonNull).collect(Collectors.toSet());
+            if (!orderIds.isEmpty()) {
+                List<OutsourceOrder> orders = outsourceOrderMapper.selectBatchIds(orderIds);
+                List<Map<String, Object>> orderList = new ArrayList<>();
+                for (OutsourceOrder o : orders) {
+                    Map<String, Object> om = new LinkedHashMap<>();
+                    om.put("id", o.getId()); om.put("code", o.getCode());
+                    om.put("status", o.getStatus()); om.put("createTime", o.getCreateTime());
+                    // 取该订单关联的产品名称
+                    String pn = products.stream()
+                            .filter(p -> Objects.equals(p.getOrderId(), o.getId()))
+                            .map(OutsourceOrderProduct::getProductName)
+                            .filter(Objects::nonNull).findFirst().orElse("");
+                    om.put("productName", pn);
+                    orderList.add(om);
+                }
+                result.put("outsourceOrders", orderList);
+            }
+        }
         return result;
     }
 

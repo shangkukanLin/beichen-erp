@@ -10,8 +10,10 @@ import com.beichen.erp.dev.mapper.BomTypeMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
+import com.beichen.erp.outsource.entity.dto.SupplierMaterialDTO;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
+import com.beichen.erp.outsource.service.SupplierMaterialService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,6 +29,7 @@ public class OutsourceMaterialController {
     private final OutsourceMaterialMapper mapper;
     private final ProjectMapper projectMapper;
     private final BomTypeMapper bomTypeMapper;
+    private final SupplierMaterialService supplierMaterialService;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -54,7 +57,8 @@ public class OutsourceMaterialController {
             map.put("bomTypeId", m.getBomTypeId());
             map.put("bomTypeName", getBomTypeNameById(m.getBomTypeId()));
             map.put("spec", m.getSpec());
-            map.put("supplierIds", m.getSupplierIds());
+            // supplierIds 统一由 supplier_material 居间表联查生成（弃用字段 outsource_material.supplier_ids）
+            map.put("supplierIds", supplierMaterialService.listSupplierIdsByMaterial(m.getId()));
             map.put("unit", m.getUnit());
             map.put("status", m.getStatus());
             map.put("remark", m.getRemark());
@@ -91,6 +95,8 @@ public class OutsourceMaterialController {
         m.setUnit(body.get("unit") != null ? body.get("unit").toString() : "PCS");
         m.setStatus(1);
         mapper.insert(m);
+        // 供应商关联统一写入 supplier_material 居间表（弃用 outsource_material.supplier_ids 字段）
+        syncSupplierMaterials(m.getId(), body);
         return R.ok(m.getId());
     }
 
@@ -100,7 +106,31 @@ public class OutsourceMaterialController {
         m.setId(Long.valueOf(body.get("id").toString()));
         fill(m, body);
         mapper.updateById(m);
+        // 供应商关联统一写入 supplier_material 居间表（差量更新）
+        syncSupplierMaterials(m.getId(), body);
         return R.ok();
+    }
+
+    /** 将前端传入的 supplierIds 逗号串同步到 supplier_material 居间表 */
+    private void syncSupplierMaterials(Long materialId, Map<String, Object> body) {
+        List<SupplierMaterialDTO> dtos = new ArrayList<>();
+        Object idsObj = body.get("supplierIds");
+        if (idsObj != null) {
+            String ids = String.valueOf(idsObj);
+            for (String sid : ids.split(",")) {
+                sid = sid.trim();
+                if (sid.isEmpty()) continue;
+                try {
+                    SupplierMaterialDTO dto = new SupplierMaterialDTO();
+                    dto.setMaterialId(materialId);
+                    dto.setSupplierId(Long.valueOf(sid));
+                    dtos.add(dto);
+                } catch (NumberFormatException ignore) {
+                    // 跳过非数字项
+                }
+            }
+        }
+        supplierMaterialService.saveMaterialsByMaterial(materialId, dtos);
     }
 
     private void fill(OutsourceMaterial m, Map<String, Object> body) {
@@ -112,7 +142,7 @@ public class OutsourceMaterialController {
             m.setBomTypeId(Long.valueOf(body.get("bomTypeId").toString()));
         }
         m.setSpec((String) body.get("spec"));
-        m.setSupplierIds(body.get("supplierIds") != null ? body.get("supplierIds").toString() : null);
+        // 注意：supplierIds 不再写入 outsource_material 实体，改由 supplier_material 居间表维护
         m.setUnit(body.get("unit") != null ? body.get("unit").toString() : "PCS");
         m.setStatus(body.get("status") != null ? Integer.valueOf(body.get("status").toString()) : 1);
         m.setRemark((String) body.get("remark"));

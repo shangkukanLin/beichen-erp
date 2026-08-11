@@ -63,7 +63,7 @@ public class OutsourceWarehouseController {
 
     @PostMapping
     public R<Void> add(@RequestBody OutsourceWarehouse w) {
-        if (w.getWarehouseName() == null || w.getWarehouseName().isBlank()) w.setWarehouseName("默认仓库");
+        if (w.getWarehouseName() == null || w.getWarehouseName().isBlank()) w.setWarehouseName("委外仓库");
         // 一个供应商只能有一个委外仓库
         Long cnt = mapper.selectCount(new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, w.getFactoryId()));
         if (cnt != null && cnt > 0) throw new BusinessException("该供应商已存在委外仓库，一个供应商只能有一个委外仓库");

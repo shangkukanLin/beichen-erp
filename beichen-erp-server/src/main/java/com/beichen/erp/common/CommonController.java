@@ -5,6 +5,10 @@ import com.beichen.erp.inventory.entity.InventoryOtherIo;
 import com.beichen.erp.inventory.mapper.InventoryOtherIoMapper;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
+import com.beichen.erp.purchase.entity.PurchaseOrder;
+import com.beichen.erp.purchase.mapper.PurchaseOrderMapper;
+import com.beichen.erp.sale.entity.SaleOrder;
+import com.beichen.erp.sale.mapper.SaleOrderMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,6 +25,8 @@ public class CommonController {
     private final OutsourceDeliveryMapper deliveryMapper;
     private final InventoryOtherIoMapper inventoryOtherIoMapper;
     private final OutsourceOtherIoMapper outsourceOtherIoMapper;
+    private final PurchaseOrderMapper purchaseOrderMapper;
+    private final SaleOrderMapper saleOrderMapper;
 
     @GetMapping("/resolve-code")
     public R<Map<String, Object>> resolveCode(@RequestParam String code) {
@@ -52,6 +58,16 @@ public class CommonController {
             OutsourceOtherIo o = outsourceOtherIoMapper.selectOne(
                 new LambdaQueryWrapper<OutsourceOtherIo>().eq(OutsourceOtherIo::getCode, code));
             if (o != null) { result.put("type", "outsource_other_io"); result.put("id", o.getId()); return R.ok(result); }
+        }
+        if (code.startsWith("CG-")) {
+            PurchaseOrder o = purchaseOrderMapper.selectOne(
+                new LambdaQueryWrapper<PurchaseOrder>().eq(PurchaseOrder::getCode, code));
+            if (o != null) { result.put("type", "purchase"); result.put("id", o.getId()); return R.ok(result); }
+        }
+        if (code.startsWith("SO-")) {
+            SaleOrder o = saleOrderMapper.selectOne(
+                new LambdaQueryWrapper<SaleOrder>().eq(SaleOrder::getCode, code));
+            if (o != null) { result.put("type", "sale"); result.put("id", o.getId()); return R.ok(result); }
         }
         return R.ok(result);
     }

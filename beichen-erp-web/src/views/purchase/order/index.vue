@@ -56,10 +56,6 @@ const form = reactive<PurchaseOrder>({
 })
 const items = ref<PurchaseOrderItem[]>([])
 
-const detailVisible = ref(false)
-const detailData = ref<PurchaseOrder>({})
-const detailItems = ref<PurchaseOrderItem[]>([])
-
 const rules: FormRules = {
   supplierId: [{ required: true, message: '请选择供应商', trigger: 'change' }],
   warehouseId: [{ required: true, message: '请选择入库仓库', trigger: 'change' }]
@@ -192,13 +188,8 @@ async function handleUnAudit(row: PurchaseOrder) {
     loadData()
   } catch { /* 取消 */ }
 }
-async function handleDetail(row: PurchaseOrder) {
-  detailData.value = { ...row }
-  try {
-    const res = await getPurchaseOrderItems(row.id as number)
-    detailItems.value = res || []
-  } catch { detailItems.value = [] }
-  detailVisible.value = true
+function handleDetail(row: PurchaseOrder) {
+  router.push(`/inventory/purchase/detail/${row.id}`)
 }
 
 function handleSupplierClick(id?: number) {
@@ -377,30 +368,6 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQual
         <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
       </template>
     </el-dialog>
-
-    <el-drawer v-model="detailVisible" title="采购单详情" size="60%">
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="单号">{{ detailData.code }}</el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag :type="statusType(detailData.status)">{{ statusLabel(detailData.status) }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="供应商">{{ supplierName(detailData.supplierId) }}</el-descriptions-item>
-        <el-descriptions-item label="入库仓库">{{ warehouseName(detailData.warehouseId) }}</el-descriptions-item>
-        <el-descriptions-item label="订单日期">{{ detailData.orderDate }}</el-descriptions-item>
-        <el-descriptions-item label="总金额">{{ fmt(detailData.totalAmount) }}</el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ detailData.remark }}</el-descriptions-item>
-      </el-descriptions>
-      <el-divider content-position="left">明细</el-divider>
-      <el-table :data="detailItems" border>
-        <el-table-column type="index" label="#" width="50" align="center" />
-        <el-table-column prop="materialName" label="物料" min-width="140" />
-        <el-table-column prop="spec" label="规格" width="100" />
-        <el-table-column prop="unit" label="单位" width="70" />
-        <el-table-column prop="quantity" label="数量" width="90" align="right" />
-        <el-table-column prop="unitPrice" label="单价" width="90" align="right" />
-        <el-table-column prop="amount" label="金额" width="100" align="right" />
-      </el-table>
-    </el-drawer>
   </div>
 </template>
 

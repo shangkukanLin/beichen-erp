@@ -96,6 +96,12 @@ public enum StockChangeType {
         return name();
     }
 
+    /** 根据 code 获取中文标签，找不到返回 code 本身 */
+    public static String labelOf(String code) {
+        StockChangeType t = fromCode(code);
+        return t != null ? t.label : (code != null ? code : "");
+    }
+
     /**
      * 根据数据库存储的 code（枚举名）反向查找，兼容存量数据迁移。
      * 如果找不到匹配的 code，则尝试用 label 匹配（兼容尚未迁移的中文旧数据）。

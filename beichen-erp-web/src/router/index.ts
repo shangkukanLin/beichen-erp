@@ -215,7 +215,7 @@ const routes: RouteRecordRaw[] = [
       // 进销存
       { path: 'inventory/warehouse', name: 'InventoryWarehouse', component: () => import('@/views/inventory/warehouse.vue'), meta: { title: '仓库管理', requiresAuth: true } },
       { path: 'inventory/warehouse/detail/:id', name: 'InventoryWarehouseDetail', component: () => import('@/views/inventory/warehouse-detail.vue'), meta: { title: '仓库详情', requiresAuth: true, operate: true } },
-      { path: 'inventory/warehouse/material-history/:wid/:mid', name: 'InventoryMaterialHistory', component: () => import('@/views/inventory/warehouse-material-history.vue'), meta: { title: '物料库存流水详细', requiresAuth: true, operate: true } },
+      { path: 'inventory/warehouse/product-history/:wid/:pid', name: 'InventoryProductHistory', component: () => import('@/views/inventory/warehouse-product-history.vue'), meta: { title: '产品库存流水详细', requiresAuth: true, operate: true } },
       { path: 'inventory/other-io', name: 'InventoryOtherIo', component: () => import('@/views/inventory/other-io/index.vue'), meta: { title: '其他出入库', requiresAuth: true } },
       { path: 'inventory/other-io/add', name: 'InventoryOtherIoAdd', component: () => import('@/views/inventory/other-io/add.vue'), meta: { title: '新增其他出入库', requiresAuth: true, operate: true } },
       { path: 'inventory/reclassify', name: 'InventoryReclassify', component: () => import('@/views/inventory/reclassify/index.vue'), meta: { title: '品质重分类', requiresAuth: true } },
@@ -229,6 +229,10 @@ const routes: RouteRecordRaw[] = [
         name: 'InventoryPurchaseAdd',
         component: () => import('@/views/purchase/order/add.vue'),
         meta: { title: '新增成品采购单', requiresAuth: true, operate: true } },
+      { path: 'inventory/purchase/detail/:id',
+        name: 'InventoryPurchaseDetail',
+        component: () => import('@/views/purchase/order/detail.vue'),
+        meta: { title: '采购单详情', requiresAuth: true, operate: true } },
       { path: 'inventory/purchase-return', name: 'InventoryPurchaseReturn', component: () => import('@/views/purchase/return/index.vue'), meta: { title: '成品退货单', requiresAuth: true }
       }, {
         path: 'inventory/purchase-return/add',

@@ -38,5 +38,13 @@ public class InventoryStockLog {
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;
 
+    /** 产品名称（仅展示用，不映射数据库列） */
+    @TableField(exist = false)
+    private String productName;
+
+    /** 变动类型中文标签（仅展示用，不映射数据库列） */
+    @TableField(exist = false)
+    private String changeTypeLabel;
+
     private LocalDateTime createTime;
 }

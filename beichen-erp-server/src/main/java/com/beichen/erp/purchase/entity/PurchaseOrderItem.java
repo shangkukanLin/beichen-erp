@@ -31,5 +31,9 @@ public class PurchaseOrderItem {
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;
 
+    /** 产品名称（仅展示用，不映射数据库列） */
+    @TableField(exist = false)
+    private String productName;
+
     private LocalDateTime createTime;
 }

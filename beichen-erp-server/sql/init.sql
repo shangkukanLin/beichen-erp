@@ -140,16 +140,28 @@ CREATE TABLE IF NOT EXISTS supplier (
 CREATE TABLE IF NOT EXISTS supplier_product (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     supplier_id BIGINT NOT NULL COMMENT '供应商ID',
-    product_name VARCHAR(100) NOT NULL COMMENT '产品名称',
-    spec VARCHAR(100) COMMENT '规格型号',
-    unit VARCHAR(20) COMMENT '单位',
+    product_id BIGINT NOT NULL COMMENT '关联产品ID（关联 product 表）',
     unit_price DECIMAL(18,4) COMMENT '参考单价',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_supplier_id (supplier_id),
+    INDEX idx_product_id (product_id),
     INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='供应商产品表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='供应商产品居间表';
+
+CREATE TABLE IF NOT EXISTS supplier_material (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    supplier_id BIGINT NOT NULL COMMENT '供应商ID',
+    material_id BIGINT NOT NULL COMMENT '关联外协物料ID（关联 outsource_material 表）',
+    unit_price DECIMAL(18,4) COMMENT '参考单价',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_supplier_id (supplier_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='供应商物料居间表';
 
 -- ==================== 外协模块 ====================
 

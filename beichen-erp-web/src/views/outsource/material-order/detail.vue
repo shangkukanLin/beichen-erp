@@ -361,7 +361,7 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
           <span style="font-weight:600">交货记录</span>
           <div style="display:flex;gap:8px">
             <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="primary" size="small" @click="openReceive">新增交货</el-button>
-            <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="openDefectReturn">退不良</el-button>
+            <el-button v-if="order.status===MaterialOrderStatus.RECEIVING || order.status===MaterialOrderStatus.FINISHED" type="warning" size="small" @click="openDefectReturn">退不良</el-button>
           </div>
         </div>
         <el-table :data="deliveries" border stripe size="small">

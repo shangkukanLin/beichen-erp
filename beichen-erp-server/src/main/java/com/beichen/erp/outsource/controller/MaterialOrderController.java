@@ -306,9 +306,10 @@ public class MaterialOrderController {
     public R<?> returnDefect(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        // 仅已确认(收货中)的订单可退不良；待确认/已结单/已取消均禁止
-        if (!MaterialOrderStatus.RECEIVING.name().equals(o.getStatus()))
-            throw new BusinessException("仅收货中(已确认)的订单可退不良");
+        // 已确认(收货中)或已完成的订单可退不良；待确认/已取消禁止
+        if (!MaterialOrderStatus.RECEIVING.name().equals(o.getStatus())
+                && !MaterialOrderStatus.FINISHED.name().equals(o.getStatus()))
+            throw new BusinessException("仅收货中或已完成的订单可退不良");
 
         Long factoryId = o.getSupplierId();
         if (factoryId == null) throw new BusinessException("订单未关联供应商");
@@ -471,7 +472,25 @@ public class MaterialOrderController {
             }
             List<OutsourceDeliveryItem> items = deliveryItemMapper.selectList(
                 new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getDeliveryId, d.getId()));
-            m.put("items", items);
+            // 补物料名称到明细Map（实体无materialName字段，需关联查询）
+            List<Map<String, Object>> itemMaps = new ArrayList<>();
+            for (OutsourceDeliveryItem it : items) {
+                Map<String, Object> im = new LinkedHashMap<>();
+                im.put("id", it.getId()); im.put("deliveryId", it.getDeliveryId());
+                im.put("materialId", it.getMaterialId());
+                im.put("materialName", getMaterialNameById(it.getMaterialId()));
+                im.put("bomTypeId", it.getBomTypeId());
+                im.put("itemId", it.getItemId());
+                im.put("unit", it.getUnit());
+                im.put("quantity", it.getQuantity());
+                im.put("unitPrice", it.getUnitPrice());
+                im.put("amount", it.getAmount());
+                im.put("qualityType", it.getQualityType());
+                im.put("handleType", it.getHandleType());
+                im.put("createTime", it.getCreateTime());
+                itemMaps.add(im);
+            }
+            m.put("items", itemMaps);
             result.add(m);
         }
         return R.ok(result);

@@ -322,7 +322,9 @@ public class DeliveryServiceImpl implements DeliveryService {
         for (MaterialOrderItem it : items) {
             BigDecimal ord = it.getOrderQuantity() != null ? it.getOrderQuantity() : BigDecimal.ZERO;
             BigDecimal rec = it.getReceivedQuantity() != null ? it.getReceivedQuantity() : BigDecimal.ZERO;
-            if (rec.compareTo(ord) < 0) allDone = false;
+            BigDecimal def = it.getDefectReturnedQty() != null ? it.getDefectReturnedQty() : BigDecimal.ZERO;
+            // 有效交货 = 收货数 - 退不良数，必须 >= 下单数才算交齐
+            if (rec.subtract(def).compareTo(ord) < 0) allDone = false;
         }
         if (allDone && !items.isEmpty()) {
             order.setStatus(MaterialOrderStatus.FINISHED.name());

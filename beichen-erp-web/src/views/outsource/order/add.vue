@@ -146,18 +146,67 @@ async function loadBomTypes() {
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
 }
 
+// 物料直挂模式：以某物料名作为加工产品，并将其子料作为 BOM 清单（不关联研发项目）
+async function loadMaterialAsProduct(idx: number, materialId: number) {
+  try {
+    const res = await request.post<any, any>('/outsource/material/components-batch-by-ids', [materialId])
+    const childrenMap: Record<number, any[]> = res?.childrenMap || {}
+    const comps = childrenMap[materialId] || []
+    const mat = materialOptions.value.find((o: any) => o.id === materialId)
+    const qty = Number(products.value[idx].quantity) || 1
+    products.value[idx].productName = mat?.materialName || ('物料#' + materialId)
+    products.value[idx].materials = comps.map((c: any) => ({
+      materialId: c.materialId || null,
+      materialName: c.materialName || '',
+      bomTypeId: c.bomTypeId || null,
+      unit: c.unit || '',
+      bomQuantityPerSet: Number(c.bomQuantityPerSet || 0),
+      demandQuantity: +(qty * Number(c.bomQuantityPerSet || 0)).toFixed(4),
+      lossRate: 0,
+      remark: ''
+    }))
+  } catch { products.value[idx].materials = [] }
+}
+
 async function initPage() {
   await loadOptions()
   await loadBomTypes()
   if (products.value.length === 0) addProduct()
+  const q = route.query
+  // 供应商详情页"去委外"带入：供应商即加工厂
+  if (q.supplierId) {
+    const sid = Number(q.supplierId)
+    form.factoryId = sid
+    if (!factoryOptions.value.some(f => f.id === sid)) {
+      try {
+        const res = await request.get('/supplier/page', { params: { id: sid, pageSize: 1 } })
+        const rec = res?.records?.[0]
+        if (rec) factoryOptions.value.push({ id: rec.id, name: rec.name })
+      } catch { /* 忽略 */ }
+    }
+  }
   // 从研发项目跳转过来时自动填充
-  const qFactoryId = route.query.factoryId
-  const qProjectId = route.query.projectId
+  const qFactoryId = q.factoryId
+  const qProjectId = q.projectId
   if (qFactoryId) form.factoryId = Number(qFactoryId)
   if (qProjectId) {
     products.value[0].projectId = Number(qProjectId)
-    // 延迟触发 BOM 加载（等 projectOptions 就绪）
     setTimeout(() => onProjectSelect(0, Number(qProjectId)), 300)
+  } else if (q.productId) {
+    // 供应产品 → 加工单：经 productId 反查关联项目加载 BOM
+    try {
+      const p = await request.get<any, any>(`/product/${q.productId}`)
+      if (p?.projectId) {
+        products.value[0].projectId = p.projectId
+        setTimeout(() => onProjectSelect(0, p.projectId), 300)
+      }
+    } catch { /* 忽略 */ }
+  } else if (q.materialId) {
+    // 供应物料(有子料) → 加工单：物料直挂
+    const mid = Number(q.materialId)
+    const mat = materialOptions.value.find((o: any) => o.id === mid)
+    products.value[0].productName = mat?.materialName || ('物料#' + mid)
+    loadMaterialAsProduct(0, mid)
   }
 }
 onMounted(initPage)

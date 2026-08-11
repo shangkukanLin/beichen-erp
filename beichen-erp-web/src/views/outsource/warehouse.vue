@@ -14,7 +14,7 @@ const activeData = computed(() => allData.value.filter(v => v.status === 1))
 const stoppedData = computed(() => allData.value.filter(v => v.status === 0))
 
 async function loadFactories() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } }); factoryOptions.value = r?.records || [] } catch (e: any) { console.warn('加载工厂选项失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 200 } }); factoryOptions.value = r?.records || [] } catch (e: any) { console.warn('加载供应商选项失败', e?.message || e) }
 }
 
 async function loadData() {
@@ -34,7 +34,7 @@ const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoadi
 const defForm = () => ({ id: undefined as any, factoryId: undefined as any, warehouseName: '', address: '', contact: '', phone: '', status: 1, remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
-function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dialogTitle.value = '新增仓库'; dialogVisible.value = true }
+function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dialogTitle.value = '新增委外仓库'; dialogVisible.value = true }
 function handleEdit(row: any) { Object.assign(form, defForm(), row); isEdit.value = true; dialogTitle.value = '编辑仓库'; dialogVisible.value = true }
 
 async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('请输入仓库名称'); return }; submitLoading.value = true
@@ -57,7 +57,7 @@ onMounted(() => { loadFactories(); loadData() })
     <el-card shadow="never" class="query-card">
       <el-form :inline="true" :model="query">
         <el-form-item label="仓库名称"><el-input v-model="query.warehouseName" placeholder="仓库名称" clearable @keyup.enter="handleQuery" /></el-form-item>
-        <el-form-item label="加工厂"><el-select v-model="query.factoryId" placeholder="全部" clearable filterable style="width:200px"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item>
+        <el-form-item label="供应商"><el-select v-model="query.factoryId" placeholder="全部" clearable filterable style="width:200px"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item>
         <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button @click="handleReset">重置</el-button><el-button type="success" @click="handleAdd">新增</el-button></el-form-item>
       </el-form>
     </el-card>
@@ -69,7 +69,7 @@ onMounted(() => { loadFactories(); loadData() })
       </el-tabs>
 
       <el-table v-if="activeTab==='active'" :data="activeData" border stripe v-loading="tableLoading" style="width:100%">
-        <el-table-column prop="factoryName" label="所属加工厂" width="140" show-overflow-tooltip />
+        <el-table-column prop="factoryName" label="所属供应商" width="140" show-overflow-tooltip />
         <el-table-column prop="warehouseName" label="仓库名称" min-width="140" />
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="80" />
@@ -80,7 +80,7 @@ onMounted(() => { loadFactories(); loadData() })
       </el-table>
 
       <el-table v-if="activeTab==='stopped'" :data="stoppedData" border stripe style="width:100%">
-        <el-table-column prop="factoryName" label="所属加工厂" width="140" show-overflow-tooltip />
+        <el-table-column prop="factoryName" label="所属供应商" width="140" show-overflow-tooltip />
         <el-table-column prop="warehouseName" label="仓库名称" min-width="140" />
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="80" />
@@ -93,7 +93,7 @@ onMounted(() => { loadFactories(); loadData() })
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px">
-        <el-form-item label="加工厂" required><el-select v-model="form.factoryId" filterable style="width:100%"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item>
+        <el-form-item label="供应商" required><el-select v-model="form.factoryId" filterable style="width:100%"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item>
         <el-form-item label="仓库名称"><el-input v-model="form.warehouseName" /></el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
         <el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item>
