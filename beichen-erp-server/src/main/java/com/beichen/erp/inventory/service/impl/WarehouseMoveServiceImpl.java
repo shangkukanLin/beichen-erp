@@ -11,7 +11,7 @@ import com.beichen.erp.inventory.entity.InventoryWarehouseMove;
 import com.beichen.erp.inventory.entity.InventoryWarehouseMoveItem;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseMoveMapper;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseMoveItemMapper;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.inventory.service.WarehouseMoveService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
@@ -31,7 +31,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
 
     private final InventoryWarehouseMoveMapper moveMapper;
     private final InventoryWarehouseMoveItemMapper itemMapper;
-    private final InventoryWarehouseStockService stockService;
+    private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
 
     @Override

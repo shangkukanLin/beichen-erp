@@ -13,7 +13,7 @@ const query = reactive({ warehouseId: '', ioType: '' })
 const warehouses = ref<any[]>([])
 
 async function loadWarehouses() {
-  try { const r = await request.get<any,any>('/inventory/warehouse/page',{params:{pageSize:500}}); warehouses.value = r?.records||[] } catch {}
+  try { const r = await request.get<any,any>('/warehouse/page',{params:{pageSize:500,warehouseCategory:'INVENTORY'}}); warehouses.value = r?.records||[] } catch {}
 }
 async function loadData() {
   loading.value = true

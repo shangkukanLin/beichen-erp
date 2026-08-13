@@ -9,7 +9,7 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.sale.entity.SaleOutbound;
@@ -34,7 +34,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     private final SaleOutboundMapper outboundMapper;
     private final SaleOutboundItemMapper itemMapper;
     private final CustomerMapper customerMapper;
-    private final InventoryWarehouseStockService stockService;
+    private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
 
     @Override

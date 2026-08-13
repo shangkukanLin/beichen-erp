@@ -155,7 +155,7 @@ async function loadCustomers() {
   customers.value = res.records || []
 }
 async function loadWarehouses() {
-  const res = await request.get('/inventory/warehouse/page', { params: { pageNum: 1, pageSize: 1000 } })
+  const res = await request.get('/warehouse/page', { params: { pageNum: 1, pageSize: 1000 } })
   warehouses.value = res.records || []
 }
 async function loadProducts() {

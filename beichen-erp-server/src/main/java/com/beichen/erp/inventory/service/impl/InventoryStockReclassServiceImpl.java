@@ -12,7 +12,7 @@ import com.beichen.erp.inventory.entity.InventoryStockReclassItem;
 import com.beichen.erp.inventory.mapper.InventoryStockReclassItemMapper;
 import com.beichen.erp.inventory.mapper.InventoryStockReclassMapper;
 import com.beichen.erp.inventory.service.InventoryStockReclassService;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,7 +28,7 @@ public class InventoryStockReclassServiceImpl extends ServiceImpl<InventoryStock
         implements InventoryStockReclassService {
 
     private final InventoryStockReclassItemMapper itemMapper;
-    private final InventoryWarehouseStockService stockService;
+    private final WarehouseStockService stockService;
 
     @Override
     public IPage<InventoryStockReclass> pageList(Map<String, Object> params) {

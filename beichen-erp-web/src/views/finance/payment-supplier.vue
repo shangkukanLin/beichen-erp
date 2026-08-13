@@ -95,9 +95,9 @@ onMounted(() => loadAll())
     <el-card shadow="never">
       <div class="stat-row">
         <div class="stat-item"><div class="stat-label">应付总额</div><div class="stat-value">{{ fmt(summary.totalAmount) }}</div></div>
-        <div class="stat-item"><div class="stat-label">已付</div><div class="stat-value" style="color:#67c23a">{{ fmt(summary.paidAmount) }}</div></div>
-        <div class="stat-item"><div class="stat-label">未付</div><div class="stat-value" style="color:#e6a23c">{{ fmt(summary.unpaidAmount) }}</div></div>
-        <div class="stat-item"><div class="stat-label">逾期金额</div><div class="stat-value" style="color:#f56c6c">{{ fmt(summary.overdueAmount) }}</div></div>
+        <div class="stat-item"><div class="stat-label">已付</div><div class="stat-value" style="color:var(--app-color-success)">{{ fmt(summary.paidAmount) }}</div></div>
+        <div class="stat-item"><div class="stat-label">未付</div><div class="stat-value" style="color:var(--app-color-warning)">{{ fmt(summary.unpaidAmount) }}</div></div>
+        <div class="stat-item"><div class="stat-label">逾期金额</div><div class="stat-value" style="color:var(--app-color-danger)">{{ fmt(summary.overdueAmount) }}</div></div>
       </div>
     </el-card>
 
@@ -109,7 +109,7 @@ onMounted(() => loadAll())
         <el-table-column prop="sourceBillNo" label="来源单号" width="160" show-overflow-tooltip />
         <el-table-column label="应付金额" width="110" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column label="已付" width="110" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
-        <el-table-column label="未付" width="110" align="right"><template #default="{row}"><span style="color:#f56c6c">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
+        <el-table-column label="未付" width="110" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column label="到期日" width="100" align="center"><template #default="{row}">{{ $fmtDate(row.dueDate) }}</template></el-table-column>
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)" size="small">{{ row.status }}</el-tag></template></el-table-column>
       </el-table>
@@ -140,7 +140,7 @@ onMounted(() => loadAll())
           <el-col :span="12"><el-form-item label="付款凭证">
             <div style="display:flex;align-items:center;gap:8px">
               <el-button size="small" @click="($event.currentTarget as HTMLElement).parentElement?.parentElement?.querySelector('input')?.click()">选择图片</el-button>
-              <span style="font-size:12px;color:#909399">{{ uploadFile?.name || '未选择' }}</span>
+              <span style="font-size:var(--app-font-xs);color:var(--app-text-secondary)">{{ uploadFile?.name || '未选择' }}</span>
               <input type="file" accept="image/*" style="display:none" @change="handleFileSelect" />
             </div>
           </el-form-item></el-col>
@@ -166,6 +166,6 @@ onMounted(() => loadAll())
 .page-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:4px}
 
 .stat-row{display:flex;gap:48px;padding:4px 8px}
-.stat-label{font-size:13px;color:#909399;margin-bottom:4px}
+.stat-label{font-size:var(--app-font-sm);color:var(--app-text-secondary);margin-bottom:4px}
 .stat-value{font-size:22px;font-weight:600}
 </style>

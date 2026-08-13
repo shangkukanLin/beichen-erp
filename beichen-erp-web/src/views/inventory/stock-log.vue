@@ -27,8 +27,8 @@
     <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="tableData" border stripe max-height="calc(100vh - 260px)">
         <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column prop="changeType" label="变动类型" width="100" align="center">
-          <template #default="{ row }"><el-tag :type="logTagType(row.changeType)" size="small">{{ row.changeType }}</el-tag></template>
+        <el-table-column prop="changeType" label="变动类型" width="120" align="center">
+          <template #default="{ row }"><el-tag :type="logTagType(row.changeType)" size="small">{{ row.changeTypeLabel || row.changeType }}</el-tag></template>
         </el-table-column>
         <el-table-column label="产品名称" min-width="140">
           <template #default="{ row }">{{ productName(row.productId) }}</template>
@@ -54,7 +54,9 @@
             <span v-else>{{ row.relatedBillNo }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="relatedBillType" label="关联类型" width="110" />
+        <el-table-column prop="relatedBillType" label="关联类型" width="120">
+          <template #default="{ row }">{{ row.relatedBillTypeLabel || row.relatedBillType }}</template>
+        </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
         <el-table-column prop="createTime" label="操作时间" width="160">
           <template #default="{ row }">{{ $fmtDate(row.createTime) }}</template>
@@ -107,7 +109,7 @@ async function loadProducts(queryStr?: string) {
 
 async function loadWarehouses() {
   try {
-    const res = await request.get('/inventory/warehouse/page', { params: { pageSize: 200 } })
+    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY' } })
     warehouses.value = res?.records || []
   } catch { warehouses.value = [] }
 }
@@ -115,11 +117,11 @@ async function loadWarehouses() {
 async function loadData() {
   loading.value = true
   try {
-    const params: any = { pageNum: pagination.pageNum, pageSize: pagination.pageSize }
+    const params: any = { pageNum: pagination.pageNum, pageSize: pagination.pageSize, stockType: 'PRODUCT' }
     if (query.warehouseId) params.warehouseId = query.warehouseId
     if (query.productId) params.productId = query.productId
     if (query.changeType) params.changeType = query.changeType
-    const res = await request.get<any, any>('/inventory/stock/log', { params })
+    const res = await request.get<any, any>('/warehouse/stock/log', { params })
     tableData.value = res?.records || []
     pagination.total = res?.total || 0
     // 收集产品ID并批量加载产品名称
@@ -141,7 +143,7 @@ function handleReset() { query.warehouseId = undefined; query.productId = undefi
 // 关联单号可点击跳转映射(根据 relatedBillType → 单据详情路由)
 const router = useRouter()
 const billDetailRouteMap: Record<string, string> = {
-  PURCHASE_ORDER: '/inventory/purchase', PURCHASE_INBOUND: '/inventory/purchase',
+  PURCHASE_ORDER: '/inventory/purchase/detail', PURCHASE_INBOUND: '/inventory/purchase/detail',
   PURCHASE_RETURN: '/inventory/purchase-return', SALE_ORDER: '/inventory/sale',
   SALE_OUTBOUND: '/inventory/sale', WAREHOUSE_MOVE: '/inventory/warehouse-move',
   WAREHOUSE_MOVE_UN_AUDIT: '/inventory/warehouse-move', OTHER_IO: '/inventory/other-io',

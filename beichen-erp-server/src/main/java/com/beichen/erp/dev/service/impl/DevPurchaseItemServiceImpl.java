@@ -11,10 +11,10 @@ import com.beichen.erp.dev.entity.DevPurchaseItem;
 import com.beichen.erp.dev.mapper.DevPurchaseItemMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.dev.service.DevPurchaseItemService;
-import com.beichen.erp.inventory.entity.InventoryWarehouse;
-import com.beichen.erp.inventory.mapper.InventoryWarehouseMapper;
-import com.beichen.erp.outsource.entity.OutsourceWarehouse;
-import com.beichen.erp.outsource.mapper.OutsourceWarehouseMapper;
+import com.beichen.erp.warehouse.entity.Warehouse;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
+import com.beichen.erp.warehouse.entity.Warehouse;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -34,16 +34,13 @@ public class DevPurchaseItemServiceImpl extends ServiceImpl<DevPurchaseItemMappe
     private static final String PROJECT_NAME_UNLINKED = "未关联";
 
     private final ProjectMapper devProjectMapper;
-    private final InventoryWarehouseMapper inventoryWarehouseMapper;
-    private final OutsourceWarehouseMapper outsourceWarehouseMapper;
+    private final WarehouseMapper warehouseMapper;
 
     @Autowired
     public DevPurchaseItemServiceImpl(ProjectMapper devProjectMapper,
-                                      InventoryWarehouseMapper inventoryWarehouseMapper,
-                                      OutsourceWarehouseMapper outsourceWarehouseMapper) {
+                                      WarehouseMapper warehouseMapper) {
         this.devProjectMapper = devProjectMapper;
-        this.inventoryWarehouseMapper = inventoryWarehouseMapper;
-        this.outsourceWarehouseMapper = outsourceWarehouseMapper;
+        this.warehouseMapper = warehouseMapper;
     }
 
     @Override
@@ -78,24 +75,24 @@ public class DevPurchaseItemServiceImpl extends ServiceImpl<DevPurchaseItemMappe
         }
         Map<Long, String> inventoryNameMap = new HashMap<>();
         if (!inventoryIds.isEmpty()) {
-            List<InventoryWarehouse> ws = inventoryWarehouseMapper.selectBatchIds(inventoryIds);
-            for (InventoryWarehouse w : ws) inventoryNameMap.put(w.getId(), w.getWarehouseName());
+            List<Warehouse> ws = warehouseMapper.selectBatchIds(inventoryIds);
+            for (Warehouse w : ws) inventoryNameMap.put(w.getId(), w.getWarehouseName());
         }
         Map<Long, String> outsourceNameMap = new HashMap<>();
         if (!outsourceIds.isEmpty()) {
-            List<OutsourceWarehouse> ws = outsourceWarehouseMapper.selectBatchIds(outsourceIds);
-            for (OutsourceWarehouse w : ws) outsourceNameMap.put(w.getId(), w.getWarehouseName());
+            List<Warehouse> ws = warehouseMapper.selectBatchIds(outsourceIds);
+            for (Warehouse w : ws) outsourceNameMap.put(w.getId(), w.getWarehouseName());
         }
         // 批量查询仓库地址，避免 N+1；位置详情按 warehouseId 实时带出，不存快照
         Map<Long, String> inventoryAddrMap = new HashMap<>();
         if (!inventoryIds.isEmpty()) {
-            List<InventoryWarehouse> ws = inventoryWarehouseMapper.selectBatchIds(inventoryIds);
-            for (InventoryWarehouse w : ws) inventoryAddrMap.put(w.getId(), w.getAddress());
+            List<Warehouse> ws = warehouseMapper.selectBatchIds(inventoryIds);
+            for (Warehouse w : ws) inventoryAddrMap.put(w.getId(), w.getAddress());
         }
         Map<Long, String> outsourceAddrMap = new HashMap<>();
         if (!outsourceIds.isEmpty()) {
-            List<OutsourceWarehouse> ws = outsourceWarehouseMapper.selectBatchIds(outsourceIds);
-            for (OutsourceWarehouse w : ws) outsourceAddrMap.put(w.getId(), w.getAddress());
+            List<Warehouse> ws = warehouseMapper.selectBatchIds(outsourceIds);
+            for (Warehouse w : ws) outsourceAddrMap.put(w.getId(), w.getAddress());
         }
 
         IPage<Map<String, Object>> result = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
@@ -113,12 +110,12 @@ public class DevPurchaseItemServiceImpl extends ServiceImpl<DevPurchaseItemMappe
         List<Map<String, Object>> options = new ArrayList<>();
 
         // 自有仓库：当前公司 + 启用
-        List<InventoryWarehouse> invList = inventoryWarehouseMapper.selectList(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<InventoryWarehouse>()
-                        .eq(companyId != null, InventoryWarehouse::getCompanyId, companyId)
-                        .eq(InventoryWarehouse::getStatus, 1)
-                        .orderByAsc(InventoryWarehouse::getId));
-        for (InventoryWarehouse w : invList) {
+        List<Warehouse> invList = warehouseMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Warehouse>()
+                        .eq(companyId != null, Warehouse::getCompanyId, companyId)
+                        .eq(Warehouse::getStatus, 1)
+                        .orderByAsc(Warehouse::getId));
+        for (Warehouse w : invList) {
             Map<String, Object> m = new HashMap<>();
             m.put("value", DevMaterialLocationTypeEnum.INVENTORY.getCode() + ":" + w.getId());
             m.put("warehouseId", w.getId());
@@ -130,12 +127,12 @@ public class DevPurchaseItemServiceImpl extends ServiceImpl<DevPurchaseItemMappe
         }
 
         // 委外仓库：当前公司 + 启用，名称拼接供应商名便于区分
-        List<OutsourceWarehouse> outList = outsourceWarehouseMapper.selectList(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OutsourceWarehouse>()
-                        .eq(companyId != null, OutsourceWarehouse::getCompanyId, companyId)
-                        .eq(OutsourceWarehouse::getStatus, 1)
-                        .orderByAsc(OutsourceWarehouse::getId));
-        for (OutsourceWarehouse w : outList) {
+        List<Warehouse> outList = warehouseMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Warehouse>()
+                        .eq(companyId != null, Warehouse::getCompanyId, companyId)
+                        .eq(Warehouse::getStatus, 1)
+                        .orderByAsc(Warehouse::getId));
+        for (Warehouse w : outList) {
             Map<String, Object> m = new HashMap<>();
             m.put("value", DevMaterialLocationTypeEnum.OUTSOURCE.getCode() + ":" + w.getId());
             m.put("warehouseId", w.getId());

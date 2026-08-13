@@ -124,7 +124,7 @@ const productOptions = ref<any[]>([])
 
 async function loadWarehouses() {
   try {
-    const res = await request.get('/inventory/warehouse/page', { params: { pageSize: 200 } })
+    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY' } })
     warehouses.value = res?.records || []
   } catch { warehouses.value = [] }
 }
@@ -145,7 +145,7 @@ function onProductChange(val: number, row: MoveItem) {
   if (m) { row._spec = m.spec; row._unit = m.unit }
   // 查询该产品在移出仓库的现有库存
   if (val && form.fromWarehouseId) {
-    request.get<any, any>('/inventory/stock/page', { params: { productId: val, warehouseId: form.fromWarehouseId, pageSize: 1 } })
+    request.get<any, any>('/warehouse/stock/page', { params: { productId: val, warehouseId: form.fromWarehouseId, pageSize: 1 } })
       .then(r => { row._stock = (r?.records || [])[0]?.quantity || 0 })
       .catch(() => { row._stock = undefined })
   }
@@ -156,7 +156,7 @@ async function refreshStock() {
   for (const item of items.value) {
     if (item.productId && form.fromWarehouseId) {
       try {
-        const r = await request.get<any, any>('/inventory/stock/page', { params: { productId: item.productId, warehouseId: form.fromWarehouseId, pageSize: 1 } })
+        const r = await request.get<any, any>('/warehouse/stock/page', { params: { productId: item.productId, warehouseId: form.fromWarehouseId, pageSize: 1 } })
         item._stock = (r?.records || [])[0]?.quantity || 0
       } catch { item._stock = undefined }
     } else {

@@ -48,7 +48,7 @@ async function loadData() {
     }
     if (order.value.warehouseId) {
       try {
-        const r = await request.get('/inventory/warehouse/page', { params: { pageSize: 200 } })
+        const r = await request.get('/warehouse/page', { params: { pageSize: 200 } })
         const w = (r?.records || []).find((x: any) => x.id === order.value.warehouseId)
         warehouseName.value = w?.warehouseName || ''
       } catch { /* */ }

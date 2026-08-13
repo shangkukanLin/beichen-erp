@@ -22,7 +22,7 @@ async function loadOptions() {
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); MATERIAL_TYPES.value = (r || []) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
   try { const r = await request.get<any, any>('/dev/project/page', { params: { pageSize: 200 } }); projectOptions.value = r?.records || [] } catch (e: any) { console.warn('加载项目失败', e?.message || e) }
   try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch (e: any) { console.warn('加载供应商失败', e?.message || e) }
-  try { const r = await request.get<any, any>('/outsource/warehouse/page', { params: { pageSize: 500 } }); warehouseOptions.value = r?.records || [] } catch (e: any) { console.warn('加载仓库失败', e?.message || e) }
+  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } }); warehouseOptions.value = r?.records || [] } catch (e: any) { console.warn('加载仓库失败', e?.message || e) }
 }
 
 // 按供应商ID列表(逗号分隔)查出供应商名称并拼接展示，空安全返回 '-'
@@ -171,10 +171,10 @@ onMounted(() => { loadOptions(); loadData() })
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
       </el-form>
 
-      <el-divider content-position="left"><span style="font-weight:600;font-size:14px">子物料组成</span></el-divider>
+      <el-divider content-position="left"><span style="font-weight:600;font-size:var(--app-font-base)">子物料组成</span></el-divider>
       <div style="margin-bottom:8px">
         <el-button type="primary" size="small" @click="addBomRow">+ 添加子物料</el-button>
-        <span style="color:#909399;font-size:13px;margin-left:8px">共 {{ bomRows.length }} 项</span>
+        <span style="color:var(--app-text-secondary);font-size:var(--app-font-sm);margin-left:8px">共 {{ bomRows.length }} 项</span>
       </div>
       <el-table :data="bomRows" border stripe empty-text="暂无子物料" max-height="280" size="small">
         <el-table-column label="子物料" min-width="220">

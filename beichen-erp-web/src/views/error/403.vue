@@ -34,14 +34,14 @@ function goHome() {
 .code {
   font-size: 96px;
   margin: 0;
-  color: #409eff;
+  color: var(--app-color-primary);
   letter-spacing: 4px;
   line-height: 1;
 }
 
 .text {
   margin: 16px 0 28px;
-  font-size: 18px;
-  color: #606266;
+  font-size: var(--app-font-xl);
+  color: var(--app-text-regular);
 }
 </style>

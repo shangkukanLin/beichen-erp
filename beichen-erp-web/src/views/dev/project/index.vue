@@ -222,10 +222,10 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
         </el-table-column>
         <el-table-column label="截止时间" width="120" align="center">
           <template #default="{ row }">
-            <span v-if="getPlannedEnd(row)" :style="{ color: isOverdue(row) ? '#f56c6c' : '#606266', fontWeight: isOverdue(row) ? 'bold' : 'normal' }">
+            <span v-if="getPlannedEnd(row)" :style="{ color: isOverdue(row) ? 'var(--app-color-danger)' : 'var(--app-text-regular)', fontWeight: isOverdue(row) ? 'bold' : 'normal' }">
               {{ getPlannedEnd(row) }}
             </span>
-            <span v-else style="color:#c0c4cc">-</span>
+            <span v-else style="color:var(--app-text-placeholder)">-</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="200" align="center" fixed="right">

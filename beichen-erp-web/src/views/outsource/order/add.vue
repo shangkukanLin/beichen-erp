@@ -249,7 +249,7 @@ onActivated(initPage)
 
       <!-- BOM物料表（只读，需求数量自动计算） -->
       <div style="margin-top:8px" v-if="p.materials.length > 0">
-        <div style="margin-bottom:6px"><span style="font-weight:500;font-size:13px">BOM物料清单</span></div>
+        <div style="margin-bottom:6px"><span style="font-weight:500;font-size:var(--app-font-sm)">BOM物料清单</span></div>
         <el-table :data="p.materials" border size="small">
           <el-table-column label="类型" width="80"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
           <el-table-column prop="materialName" label="物料名称" min-width="150" />
@@ -264,7 +264,7 @@ onActivated(initPage)
           </el-table-column>
         </el-table>
       </div>
-      <div v-else style="margin-top:8px;color:#909399;font-size:13px">选择关联项目后自动加载 BOM 物料清单</div>
+      <div v-else style="margin-top:8px;color:var(--app-text-secondary);font-size:var(--app-font-sm)">选择关联项目后自动加载 BOM 物料清单</div>
     </el-card>
 
     <div style="margin-top:12px"><el-button type="primary" @click="addProduct">+ 添加产品</el-button></div>
@@ -272,9 +272,9 @@ onActivated(initPage)
     <!-- 合同文件 -->
     <el-card shadow="never" style="margin-top:12px">
       <template #header><span style="font-weight:600">合同文件</span></template>
-      <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'#67c23a':'#dcdfe6', background: uploadFile?'#f0f9eb':'#fafafa' }">
-        <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:#67c23a;font-weight:600">📎 {{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
-        <template v-else><p style="color:#909399;margin:0">拖拽合同文件到此处，或点击选择</p></template>
+      <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'var(--app-color-success)':'var(--app-border-color)', background: uploadFile?'#f0f9eb':'#fafafa' }">
+        <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:var(--app-color-success);font-weight:600">📎 {{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
+        <template v-else><p style="color:var(--app-text-secondary);margin:0">拖拽合同文件到此处，或点击选择</p></template>
         <input type="file" @change="handleFileSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
       </div>
     </el-card>
@@ -286,6 +286,6 @@ onActivated(initPage)
 <style scoped>
 .add-page { display:flex; flex-direction:column; gap:0; }
 
-.drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
-.drop-zone:hover { border-color:#409eff; background:#ecf5ff }
+.drop-zone { position:relative; border:2px dashed var(--app-border-color); border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
+.drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }
 </style>

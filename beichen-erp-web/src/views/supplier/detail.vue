@@ -110,7 +110,7 @@ async function loadData() {
 async function loadWarehouses() {
   whLoading.value = true
   try {
-    const r = await request.get<any,any>('/outsource/delivery/warehouses/by-factory/' + id)
+    const r = await request.get<any,any>('/warehouse/by-factory/' + id)
     warehouses.value = r || []
   } catch { warehouses.value = [] }
   finally { whLoading.value = false }
@@ -291,7 +291,7 @@ onMounted(loadData)
                   <div style="display:flex;align-items:center;gap:6px">
                     <el-input-number v-model="form.creditPeriodMonths" :min="0" :max="24" placeholder="月" controls-position="right" style="width:90px" /><span>个月</span>
                     <el-input-number v-model="form.creditPeriod" :min="0" :max="31" placeholder="天" controls-position="right" style="width:90px" /><span>天</span>
-                    <span style="color:#909399;font-size:12px">（收货/交货后多少天付款，默认当天）</span>
+                    <span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">（收货/交货后多少天付款，默认当天）</span>
                   </div>
                 </el-form-item>
               </el-col>
@@ -381,7 +381,7 @@ onMounted(loadData)
               </template>
             </el-table-column>
           </el-table>
-          <div v-if="warehouses.length===0 && !whLoading" style="color:#909399;text-align:center;padding:40px">暂无仓库</div>
+          <div v-if="warehouses.length===0 && !whLoading" style="color:var(--app-text-secondary);text-align:center;padding:40px">暂无仓库</div>
         </el-card>
       </el-tab-pane>
 
@@ -423,7 +423,7 @@ onMounted(loadData)
               </template>
             </el-table-column>
           </el-table>
-          <div v-if="filteredOrders.length===0 && !orderLoading" style="color:#909399;text-align:center;padding:40px">暂无订单</div>
+          <div v-if="filteredOrders.length===0 && !orderLoading" style="color:var(--app-text-secondary);text-align:center;padding:40px">暂无订单</div>
         </el-card>
       </el-tab-pane>
 
@@ -441,7 +441,7 @@ onMounted(loadData)
               <template #default="{ row }">{{ row.warehouseStock || 0 }}</template>
             </el-table-column>
             <el-table-column label="已出库" width="80" align="right">
-              <template #default="{ row }"><span :style="{color: Number(row.consumed||0)>0?'#409eff':''}">{{ row.consumed || 0 }}</span></template>
+              <template #default="{ row }"><span :style="{color: Number(row.consumed||0)>0?'var(--app-color-primary)':''}">{{ row.consumed || 0 }}</span></template>
             </el-table-column>
             <el-table-column label="缺口" width="100" align="center">
               <template #default="{ row }">
@@ -451,16 +451,16 @@ onMounted(loadData)
             </el-table-column>
             <el-table-column label="订单明细" min-width="220">
               <template #default="{ row }">
-                <div v-for="(o, i) in (row.orders || [])" :key="i" style="font-size:12px;line-height:1.6">
+                <div v-for="(o, i) in (row.orders || [])" :key="i" style="font-size:var(--app-font-xs);line-height:1.6">
                   <span>{{ o.order_code }}</span>
-                  <span style="color:#909399;margin:0 4px">/</span>
+                  <span style="color:var(--app-text-secondary);margin:0 4px">/</span>
                   <span>{{ o.product_name }}</span>
-                  <span style="color:#409EFF;margin-left:4px">需{{ o.demand_quantity }}</span>
+                  <span style="color:var(--app-color-primary);margin-left:4px">需{{ o.demand_quantity }}</span>
                 </div>
               </template>
             </el-table-column>
           </el-table>
-          <div v-if="materialSummary.length===0 && !materialLoading" style="color:#909399;text-align:center;padding:40px">暂无生产中订单</div>
+          <div v-if="materialSummary.length===0 && !materialLoading" style="color:var(--app-text-secondary);text-align:center;padding:40px">暂无生产中订单</div>
         </el-card>
       </el-tab-pane>
     </el-tabs>
@@ -469,7 +469,8 @@ onMounted(loadData)
 
 <style scoped>
 .detail-page { padding:16px; }
-.page-header { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+.page-header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.detail-page :deep(.el-tabs__header) { margin-bottom:0; }
 
 .order-table-card :deep(.el-card__body) { padding:16px; }
 .order-table-card { margin-top:4px; }

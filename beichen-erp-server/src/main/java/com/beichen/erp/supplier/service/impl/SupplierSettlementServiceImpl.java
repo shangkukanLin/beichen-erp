@@ -11,13 +11,19 @@ import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.outsource.common.DeliveryStatus;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.MaterialOrderStatus;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
+import com.beichen.erp.warehouse.entity.Warehouse;
+import com.beichen.erp.warehouse.entity.WarehouseStock;
+import com.beichen.erp.warehouse.entity.WarehouseStockLog;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockLogMapper;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.entity.dto.ReturnMaterialDTO;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
@@ -50,9 +56,9 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
     @Resource
     private MaterialOrderMapper materialOrderMapper;
     @Resource
-    private OutsourceWarehouseMapper warehouseMapper;
+    private WarehouseMapper warehouseMapper;
     @Resource
-    private OutsourceWarehouseStockMapper warehouseStockMapper;
+    private WarehouseStockMapper warehouseStockMapper;
     @Resource
     private OutsourceMaterialMapper materialMapper;
     @Resource
@@ -60,9 +66,9 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
     @Resource
     private OutsourceDeliveryItemMapper deliveryItemMapper;
     @Resource
-    private OutsourceStockLogMapper stockLogMapper;
+    private WarehouseStockLogMapper stockLogMapper;
     @Resource
-    private InventoryWarehouseStockService inventoryStockService;
+    private WarehouseStockService warehouseStockService;
     @Resource
     private BomTypeMapper bomTypeMapper;
 
@@ -104,16 +110,16 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
         result.put("activeMaterialOrders", materialOrders);
 
         // 3. 委外仓库存（批量预取物料与BOM类型，避免 N+1）
-        List<OutsourceWarehouse> warehouses = warehouseMapper.selectList(
-                new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, supplierId));
+        List<Warehouse> warehouses = warehouseMapper.selectList(
+                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, supplierId));
         Set<Long> matIds = new HashSet<>();
-        List<OutsourceWarehouseStock> allStocks = new ArrayList<>();
-        for (OutsourceWarehouse wh : warehouses) {
-            List<OutsourceWarehouseStock> list = warehouseStockMapper.selectList(
-                    new LambdaQueryWrapper<OutsourceWarehouseStock>()
-                            .eq(OutsourceWarehouseStock::getWarehouseId, wh.getId())
-                            .ne(OutsourceWarehouseStock::getQuantity, BigDecimal.ZERO));
-            for (OutsourceWarehouseStock st : list) {
+        List<WarehouseStock> allStocks = new ArrayList<>();
+        for (Warehouse wh : warehouses) {
+            List<WarehouseStock> list = warehouseStockMapper.selectList(
+                    new LambdaQueryWrapper<WarehouseStock>()
+                            .eq(WarehouseStock::getWarehouseId, wh.getId())
+                            .ne(WarehouseStock::getQuantity, BigDecimal.ZERO));
+            for (WarehouseStock st : list) {
                 allStocks.add(st);
                 if (st.getMaterialId() != null) matIds.add(st.getMaterialId());
             }
@@ -128,8 +134,8 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
                 .collect(Collectors.toMap(BomType::getId, BomType::getTypeName, (a, b) -> a));
 
         List<Map<String, Object>> stocks = new ArrayList<>();
-        for (OutsourceWarehouse wh : warehouses) {
-            for (OutsourceWarehouseStock st : allStocks) {
+        for (Warehouse wh : warehouses) {
+            for (WarehouseStock st : allStocks) {
                 if (!st.getWarehouseId().equals(wh.getId())) continue;
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("warehouseId", wh.getId());
@@ -161,16 +167,16 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
         if (s == null) throw new BusinessException("供应商不存在");
         if (dto.getToWarehouseId() == null) throw new BusinessException("请选择退回目标仓（我方仓库）");
 
-        List<OutsourceWarehouse> warehouses = warehouseMapper.selectList(
-                new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, supplierId));
+        List<Warehouse> warehouses = warehouseMapper.selectList(
+                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, supplierId));
         String code = generateDeliveryCode();
         int count = 0;
 
-        for (OutsourceWarehouse wh : warehouses) {
-            List<OutsourceWarehouseStock> list = warehouseStockMapper.selectList(
-                    new LambdaQueryWrapper<OutsourceWarehouseStock>()
-                            .eq(OutsourceWarehouseStock::getWarehouseId, wh.getId())
-                            .gt(OutsourceWarehouseStock::getQuantity, BigDecimal.ZERO));
+        for (Warehouse wh : warehouses) {
+            List<WarehouseStock> list = warehouseStockMapper.selectList(
+                    new LambdaQueryWrapper<WarehouseStock>()
+                            .eq(WarehouseStock::getWarehouseId, wh.getId())
+                            .gt(WarehouseStock::getQuantity, BigDecimal.ZERO));
             if (list.isEmpty()) continue;
 
             OutsourceDelivery delivery = new OutsourceDelivery();
@@ -184,7 +190,7 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
             deliveryMapper.insert(delivery);
             count++;
 
-            for (OutsourceWarehouseStock st : list) {
+            for (WarehouseStock st : list) {
                 BigDecimal qty = st.getQuantity();
                 OutsourceMaterial mat = st.getMaterialId() != null ? materialMapper.selectById(st.getMaterialId()) : null;
                 String matName = mat != null ? mat.getMaterialName() : "未知物料";
@@ -193,7 +199,7 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
                 BigDecimal before = st.getQuantity();
                 st.setQuantity(BigDecimal.ZERO);
                 warehouseStockMapper.updateById(st);
-                OutsourceStockLog slog = new OutsourceStockLog();
+                WarehouseStockLog slog = new WarehouseStockLog();
                 slog.setWarehouseId(wh.getId()); slog.setMaterialId(st.getMaterialId());
                 slog.setMaterialName(matName); slog.setChangeType("清算退料出");
                 slog.setChangeQuantity(qty.negate()); slog.setBeforeQuantity(before);
@@ -211,7 +217,7 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
                 deliveryItemMapper.insert(di);
 
                 // 入我方 inventory 仓
-                inventoryStockService.changeStock(dto.getToWarehouseId(), matName, qty,
+                warehouseStockService.changeStock(dto.getToWarehouseId(), matName, qty,
                         StockChangeType.SETTLEMENT_RETURN_IN, delivery.getCode(), RelatedBillType.SUPPLIER_SETTLEMENT, st.getMaterialId(), null, delivery.getId(), null);
             }
         }

@@ -145,7 +145,7 @@ async function onProductChange(val: number, row: ReturnItem) {
       const p: any = {}
       if (form.warehouseId) p.warehouseId = form.warehouseId
       p.productId = val
-      const res = await request.get<any, any>('/inventory/stock/page', { params: p })
+      const res = await request.get<any, any>('/warehouse/stock/page', { params: p })
       const arr = res?.records || []
       let total = 0
       if (arr.length > 0) {
@@ -167,7 +167,7 @@ async function loadSuppliers() {
 
 async function loadWarehouses() {
   try {
-    const res = await request.get('/inventory/warehouse/page', { params: { pageSize: 200 } })
+    const res = await request.get('/warehouse/page', { params: { pageSize: 200 } })
     warehouses.value = res?.records || []
   } catch { warehouses.value = [] }
 }
@@ -197,7 +197,7 @@ async function loadReturnData() {
         try {
           const p: any = { productId: item.productId }
           if (form.warehouseId) p.warehouseId = form.warehouseId
-          const r = await request.get<any, any>('/inventory/stock/page', { params: p })
+          const r = await request.get<any, any>('/warehouse/stock/page', { params: p })
           const arr = r?.records || []
           item._stock = arr.reduce((s: number, x: any) => s + (Number(x.quantity) || 0), 0)
         } catch { item._stock = undefined }

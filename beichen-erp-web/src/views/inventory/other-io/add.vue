@@ -16,7 +16,7 @@ const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN, ioDate
 const items = ref<any[]>([{ materialId: undefined, materialName: '', spec: '', unit: '', quantity: undefined, remark: '' }])
 
 async function loadWarehouses() {
-  try { const r = await request.get<any,any>('/inventory/warehouse/page',{params:{pageSize:500}}); warehouses.value = r?.records||[] } catch {}
+  try { const r = await request.get<any,any>('/warehouse/page',{params:{pageSize:500,warehouseCategory:'INVENTORY'}}); warehouses.value = r?.records||[] } catch {}
 }
 async function loadMaterials() {
   try { const r = await request.get<any,any>('/product/page',{params:{pageSize:500}}); materialOptions.value = r?.records||[] } catch {}
@@ -61,7 +61,7 @@ onMounted(()=>{ loadWarehouses(); loadMaterials(); loadQualityTypes(); loadDetai
 
 <template>
   <div style="display:flex;flex-direction:column;gap:12px">
-    <div><span style="font-size:18px;font-weight:600">{{ editId?'编辑':'新增' }}其他出入库</span></div>
+    <div><span style="font-size:var(--app-font-xl);font-weight:600">{{ editId?'编辑':'新增' }}其他出入库</span></div>
     <el-card shadow="never">
       <el-form :model="form" label-width="80px">
         <el-row :gutter="12">

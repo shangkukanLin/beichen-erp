@@ -12,8 +12,8 @@ import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.service.ReceivableHelper;
 import com.beichen.erp.finance.entity.FinanceReceivable;
 import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
-import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
-import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
+import com.beichen.erp.warehouse.entity.WarehouseStock;
+import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.sale.entity.SaleOrder;
@@ -40,7 +40,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     private final CustomerMapper customerMapper;
     private final FinanceReceivableMapper receivableMapper;
     private final ReceivableHelper receivableHelper;
-    private final InventoryWarehouseStockMapper stockMapper;
+    private final WarehouseStockMapper stockMapper;
     private final ProductMapper productMapper;
 
     @Override
@@ -241,9 +241,9 @@ public class SaleOrderServiceImpl implements SaleOrderService {
             if (product == null) continue;
             BigDecimal required = it.getQuantity();
             BigDecimal available = stockMapper.selectList(
-                    new LambdaQueryWrapper<InventoryWarehouseStock>()
-                            .eq(InventoryWarehouseStock::getWarehouseId, warehouseId)
-                            .eq(InventoryWarehouseStock::getProductId, it.getProductId()))
+                    new LambdaQueryWrapper<WarehouseStock>()
+                            .eq(WarehouseStock::getWarehouseId, warehouseId)
+                            .eq(WarehouseStock::getProductId, it.getProductId()))
                     .stream().map(s -> s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal shortage = required.subtract(available);

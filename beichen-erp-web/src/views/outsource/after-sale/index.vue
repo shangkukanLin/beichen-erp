@@ -51,7 +51,7 @@ const warehouses = ref<Record<number, string>>({})
 const query = reactive({ pageNum: 1, pageSize: 10, productName: '' })
 
 async function loadWarehouses() {
-  const res = await request.get('/inventory/warehouse/page', { params: { pageNum: 1, pageSize: 1000 } })
+  const res = await request.get('/warehouse/page', { params: { pageNum: 1, pageSize: 1000 } })
   const map: Record<number, string> = {}
   ;(res.records || []).forEach((w: any) => { map[w.id] = w.name })
   warehouses.value = map

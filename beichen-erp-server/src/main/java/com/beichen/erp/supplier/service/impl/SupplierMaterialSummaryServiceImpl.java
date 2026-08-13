@@ -76,7 +76,7 @@ public class SupplierMaterialSummaryServiceImpl implements SupplierMaterialSumma
         String deliveredSql = "SELECT di.material_id, SUM(di.quantity) AS delivered_qty " +
                 "FROM outsource_delivery_item di " +
                 "INNER JOIN outsource_delivery d ON di.delivery_id = d.id " +
-                "INNER JOIN outsource_warehouse w ON d.to_warehouse_id = w.id " +
+                "INNER JOIN warehouse w ON d.to_warehouse_id = w.id " +
                 "WHERE w.factory_id = ? AND d.status = '已确认' " +
                 "AND (d.delivery_type IN ('发料', '收料') OR d.delivery_type IS NULL OR d.delivery_type = '') " +
                 "GROUP BY di.material_id";
@@ -90,8 +90,8 @@ public class SupplierMaterialSummaryServiceImpl implements SupplierMaterialSumma
 
         // 2. 该厂委外仓库库存（按 material_id 聚合）
         String stockSql = "SELECT s.material_id, SUM(s.quantity) AS stock_qty " +
-                "FROM outsource_warehouse_stock s " +
-                "INNER JOIN outsource_warehouse w ON s.warehouse_id = w.id " +
+                "FROM warehouse_stock s " +
+                "INNER JOIN warehouse w ON s.warehouse_id = w.id " +
                 "WHERE w.factory_id = ? GROUP BY s.material_id";
         List<Map<String, Object>> stockRows = jdbcTemplate.queryForList(stockSql, factoryId);
         Map<Long, BigDecimal> stockMap = new LinkedHashMap<>();

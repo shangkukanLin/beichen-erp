@@ -22,7 +22,7 @@ function typeName(id: number | undefined) { if (id == null) return '-'; const t 
 async function loadOptions() {
   try { const r=await request.get<any,any>('/supplier/page',{params:{supplierType:'factory',pageSize:200}}); factoryOptions.value=r?.records||[] } catch (e: any) { console.warn('加载工厂失败', e?.message || e) }
   try { const r=await request.get<any,any>('/supplier/page',{params:{pageSize:500}}); supplierOptions.value=r?.records||[] } catch (e: any) { console.warn('加载供应商失败', e?.message || e) }
-  try { const r=await request.get<any,any>('/outsource/delivery/warehouses/inventory'); inventoryWarehouses.value=r||[] } catch (e: any) { console.warn('加载进销存仓库失败', e?.message || e) }
+  try { const r=await request.get<any,any>('/warehouse/inventory'); inventoryWarehouses.value=r||[] } catch (e: any) { console.warn('加载进销存仓库失败', e?.message || e) }
   try { const r=await request.get<any,any>('/outsource/material/page',{params:{pageSize:500}}); materialOptions.value=r?.records||[] } catch (e: any) { console.warn('加载物料失败', e?.message || e) }
   try { const r=await request.get<any,any>('/dev/bom-type/enabled'); bomTypes.value=r||[] } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
 }
@@ -41,7 +41,7 @@ async function loadData() {
   loading.value = false
 }
 
-async function loadOutsourceWarehouses(fid:number){ try{const r=await request.get<any,any>('/outsource/delivery/warehouses/by-factory/'+fid);outsourceWarehouses.value=r||[]}catch(e: any){ console.warn('加载委外仓库失败', e?.message || e) } }
+async function loadOutsourceWarehouses(fid:number){ try{const r=await request.get<any,any>('/warehouse/by-factory/'+fid);outsourceWarehouses.value=r||[]}catch(e: any){ console.warn('加载委外仓库失败', e?.message || e) } }
 async function onFactoryChange(fid:number){ form.fromWarehouseId=undefined;form.toWarehouseId=undefined;await loadOutsourceWarehouses(fid);if(outsourceWarehouses.value.length>0){form.toWarehouseId=outsourceWarehouses.value[0].id} }
 
 function addItem(){ items.value.push({material_id:undefined,material_name:'',bomTypeId:undefined,unit:'',quantity:undefined,qualityType:QualityType.GOOD}) }
@@ -128,10 +128,10 @@ onMounted(()=>{ loadOptions(); loadData() })
           <el-col :span="8"><el-form-item label="物流单号"><el-input v-model="form.logisticsNo" /></el-form-item></el-col>
         </el-row>
       </el-form>
-      <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'#67c23a':'#dcdfe6', background: uploadFile?'#f0f9eb':'#fafafa' }">
-        <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:#67c23a;font-weight:600">📎 {{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
-        <template v-else-if="form.attachUrl"><div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap"><span style="color:#409eff">📎 已有附件</span><el-button type="primary" size="small" @click.stop="openAttach(form.attachUrl)">查看</el-button><el-button type="success" size="small"><a :href="form.attachUrl" download style="color:inherit;text-decoration:none">下载</a></el-button><el-button type="danger" size="small" @click.stop="handleDeleteAttach">删除</el-button><span style="color:#909399;font-size:12px">可拖拽新文件替换</span></div></template>
-        <template v-else><p style="color:#909399;margin:0">拖拽文件到此处，或点击选择</p></template>
+      <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'var(--app-color-success)':'var(--app-border-color)', background: uploadFile?'#f0f9eb':'#fafafa' }">
+        <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:var(--app-color-success);font-weight:600">📎 {{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
+        <template v-else-if="form.attachUrl"><div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap"><span style="color:var(--app-color-primary)">📎 已有附件</span><el-button type="primary" size="small" @click.stop="openAttach(form.attachUrl)">查看</el-button><el-button type="success" size="small"><a :href="form.attachUrl" download style="color:inherit;text-decoration:none">下载</a></el-button><el-button type="danger" size="small" @click.stop="handleDeleteAttach">删除</el-button><span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">可拖拽新文件替换</span></div></template>
+        <template v-else><p style="color:var(--app-text-secondary);margin:0">拖拽文件到此处，或点击选择</p></template>
         <input v-if="!form.attachUrl && !uploadFile" type="file" @change="handleFileSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
       </div>
     </el-card>
@@ -144,6 +144,6 @@ onMounted(()=>{ loadOptions(); loadData() })
 .detail-page { display:flex; flex-direction:column; gap:12px; }
 .page-header { display:flex; align-items:center; gap:16px; padding-bottom:8px; }
 
-.drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
-.drop-zone:hover { border-color:#409eff; background:#ecf5ff }
+.drop-zone { position:relative; border:2px dashed var(--app-border-color); border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
+.drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }
 </style>

@@ -155,7 +155,7 @@ onMounted(() => loadData())
         <el-table-column label="当前生效" width="90" align="center">
           <template #default="{row}">
             <el-tag v-if="row.isDefault===1" type="success">使用中</el-tag>
-            <span v-else style="color:#c0c4cc">—</span>
+            <span v-else style="color:var(--app-text-placeholder)">—</span>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="80">
@@ -186,9 +186,9 @@ onMounted(() => loadData())
 
         <el-form-item label="合同内容">
           <div style="margin-bottom:8px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-            <span style="font-size:12px;color:#606266;margin-right:4px;font-weight:500">插入变量：</span>
+            <span style="font-size:var(--app-font-xs);color:var(--app-text-regular);margin-right:4px;font-weight:500">插入变量：</span>
             <el-button v-for="ph in (activeType==='采购合同' ? PURCHASE_PLACEHOLDERS : PROCESSING_PLACEHOLDERS)" :key="ph.key" :style="{ background: ph.color + '15', color: ph.color, borderColor: ph.color + '40' }" @click="insertPlaceholder(ph.key)">{{ ph.label }}</el-button>
-            <span style="margin:0 8px;color:#dcdfe6">|</span>
+            <span style="margin:0 8px;color:var(--app-border-color)">|</span>
             <el-button type="warning" @click="insertSignatureBlock">插入签名区</el-button>
           </div>
           <div class="quill-wrapper">

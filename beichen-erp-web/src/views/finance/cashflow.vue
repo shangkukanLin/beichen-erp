@@ -54,8 +54,8 @@ onMounted(() => { loadFlow(); loadAccounts() })
           <el-table-column label="时间" width="170"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
           <el-table-column prop="accountName" label="账户" min-width="120"/>
           <el-table-column label="类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.flowType==='收款'||row.flowType==='其他收入'?'success':'danger'">{{row.flowType}}</el-tag></template></el-table-column>
-          <el-table-column label="收入" width="120" align="right"><template #default="{row}"><span style="color:#67C23A">{{fmt(row.income)}}</span></template></el-table-column>
-          <el-table-column label="支出" width="120" align="right"><template #default="{row}"><span style="color:#F56C6C">{{fmt(row.expense)}}</span></template></el-table-column>
+          <el-table-column label="收入" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{fmt(row.income)}}</span></template></el-table-column>
+          <el-table-column label="支出" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{fmt(row.expense)}}</span></template></el-table-column>
           <el-table-column prop="balance" label="余额" width="130" align="right"><template #default="{row}">{{fmt(row.balance)}}</template></el-table-column>
           <el-table-column prop="relatedBillNo" label="关联单据" min-width="150"/>
         </el-table>

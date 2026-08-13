@@ -92,7 +92,7 @@ onActivated(() => {
           <template #default="{row}">{{ (row.items || []).reduce((s: number, it: any) => s + (it.orderQuantity || 0), 0) }}</template>
         </el-table-column>
         <el-table-column label="已收" width="72" align="center">
-          <template #default="{row}"><span :style="{color: (row.items || []).reduce((s: number, it: any) => s + (it.receivedQuantity || 0), 0)>0?'#67c23a':''}">{{ (row.items || []).reduce((s: number, it: any) => s + (it.receivedQuantity || 0), 0) }}</span></template>
+          <template #default="{row}"><span :style="{color: (row.items || []).reduce((s: number, it: any) => s + (it.receivedQuantity || 0), 0)>0?'var(--app-color-success)':''}">{{ (row.items || []).reduce((s: number, it: any) => s + (it.receivedQuantity || 0), 0) }}</span></template>
         </el-table-column>
         <el-table-column label="最近交货" width="85" align="center"><template #default="{row}">{{ $fmtDate(row.lastDeliveryTime) || '-' }}</template></el-table-column>
         <el-table-column label="交期" width="90" align="center"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
@@ -117,8 +117,8 @@ onActivated(() => {
 .status-tabs { background: #fff; padding: 0 16px; border-radius: 4px; }
 .status-tabs :deep(.el-tabs__header) { margin: 0; }
 .tab-label { font-weight: 500; }
-.tab-label.tab-info { color: #909399; }
-.tab-label.tab-warning { color: #e6a23c; }
-.tab-label.tab-success { color: #67c23a; }
-.tab-label.tab-danger { color: #f56c6c; }
+.tab-label.tab-info { color: var(--app-text-secondary); }
+.tab-label.tab-warning { color: var(--app-color-warning); }
+.tab-label.tab-success { color: var(--app-color-success); }
+.tab-label.tab-danger { color: var(--app-color-danger); }
 </style>

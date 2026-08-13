@@ -121,7 +121,7 @@ function statusType(s?: string) { return DocStatusTag[s || ''] || '' }
 
 async function loadWarehouses() {
   try {
-    const res = await request.get('/inventory/warehouse/page', { params: { pageSize: 200 } })
+    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY' } })
     warehouses.value = res?.records || []
   } catch { warehouses.value = [] }
 }

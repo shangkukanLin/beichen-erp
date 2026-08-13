@@ -52,7 +52,7 @@ function handleMenuSelect(index: string) {
     :collapse-transition="false"
     background-color="#304156"
     text-color="#bfcbd9"
-    active-text-color="#409EFF"
+    active-text-color="var(--app-color-primary)"
     @select="handleMenuSelect"
   >
     <template v-for="item in userStore.menus" :key="item.id">

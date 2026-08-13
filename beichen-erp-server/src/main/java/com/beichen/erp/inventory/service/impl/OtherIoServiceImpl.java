@@ -8,7 +8,7 @@ import com.beichen.erp.inventory.entity.InventoryOtherIo;
 import com.beichen.erp.inventory.entity.InventoryOtherIoItem;
 import com.beichen.erp.inventory.mapper.InventoryOtherIoMapper;
 import com.beichen.erp.inventory.mapper.InventoryOtherIoItemMapper;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.IoType;
 import com.beichen.erp.inventory.common.RelatedBillType;
@@ -31,7 +31,7 @@ public class OtherIoServiceImpl implements OtherIoService {
 
     private final InventoryOtherIoMapper ioMapper;
     private final InventoryOtherIoItemMapper itemMapper;
-    private final InventoryWarehouseStockService stockService;
+    private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
 
     @Override

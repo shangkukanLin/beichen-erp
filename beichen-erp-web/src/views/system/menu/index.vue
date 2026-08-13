@@ -207,7 +207,7 @@ onActivated(() => {
         <el-table-column label="菜单名称" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <span :style="{ paddingLeft: row.level * 24 + 'px' }">
-              <span v-if="row.level > 0" style="color: #c0c4cc; margin-right: 4px">├</span>
+              <span v-if="row.level > 0" style="color: var(--app-text-placeholder); margin-right: 4px">├</span>
               {{ row.menuName }}
             </span>
           </template>

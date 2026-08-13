@@ -310,15 +310,15 @@ async function handleAdminVerify() {
   padding: 48px 40px;
 }
 .banner-content h1 { font-size: 34px; margin: 0 0 12px; letter-spacing: 2px; }
-.banner-content p { font-size: 14px; opacity: 0.85; margin: 0 0 32px; line-height: 1.6; }
+.banner-content p { font-size: var(--app-font-base); opacity: 0.85; margin: 0 0 32px; line-height: 1.6; }
 .banner-features { list-style: none; padding: 0; margin: 0; }
-.banner-features li { padding: 8px 0; font-size: 14px; opacity: 0.9; }
+.banner-features li { padding: 8px 0; font-size: var(--app-font-base); opacity: 0.9; }
 .banner-features li::before { content: '✓'; margin-right: 10px; color: #7fd1ff; }
 .login-card { width: 380px; border: none; border-radius: 0; display: flex; flex-direction: column; justify-content: center; }
 .login-card :deep(.el-card__body) { padding: 36px 40px 24px; }
 .login-header { text-align: center; margin-bottom: 20px; }
 .login-header h2 { margin: 0 0 8px; font-size: 22px; color: #1a2a4a; }
-.login-header p { margin: 0; color: #909399; font-size: 13px; }
+.login-header p { margin: 0; color: var(--app-text-secondary); font-size: var(--app-font-sm); }
 .login-options { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
 .login-btn { width: 100%; letter-spacing: 4px; }
 .login-footer { text-align: center; margin-top: 4px; }

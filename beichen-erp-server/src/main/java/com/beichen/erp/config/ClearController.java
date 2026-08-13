@@ -37,24 +37,33 @@ public class ClearController {
             conn.setAutoCommit(false);
             Statement stmt = conn.createStatement();
             stmt.execute("SET FOREIGN_KEY_CHECKS = 0");
-            // 按外键依赖顺序删除当前公司的业务数据
+            // 按外键依赖顺序删除当前公司的业务数据（子表→主表→基础数据）
             String[] sqls = {
+                // === 财务明细 ===
                 "DELETE FROM finance_payment_item WHERE company_id = " + companyId,
                 "DELETE FROM finance_receipt_item WHERE company_id = " + companyId,
                 "DELETE FROM finance_bill_item WHERE company_id = " + companyId,
-                "DELETE FROM inventory_warehouse_move_item WHERE company_id = " + companyId,
-                "DELETE FROM inventory_other_io_item WHERE company_id = " + companyId,
+                // === 业务明细 ===
                 "DELETE FROM purchase_inbound_item WHERE company_id = " + companyId,
                 "DELETE FROM purchase_order_item WHERE company_id = " + companyId,
+                "DELETE FROM purchase_return_item WHERE company_id = " + companyId,
                 "DELETE FROM sale_outbound_item WHERE company_id = " + companyId,
                 "DELETE FROM sale_order_item WHERE company_id = " + companyId,
+                "DELETE FROM sale_return_item WHERE company_id = " + companyId,
+                "DELETE FROM inventory_warehouse_move_item WHERE company_id = " + companyId,
+                "DELETE FROM inventory_other_io_item WHERE company_id = " + companyId,
+                "DELETE FROM inventory_stock_reclass_item WHERE company_id = " + companyId,
+                "DELETE FROM product_reclassify_item WHERE company_id = " + companyId,
                 "DELETE FROM outsource_delivery_item WHERE company_id = " + companyId,
                 "DELETE FROM outsource_material_component WHERE company_id = " + companyId,
                 "DELETE FROM outsource_material_order_item WHERE company_id = " + companyId,
                 "DELETE FROM outsource_order_material WHERE company_id = " + companyId,
                 "DELETE FROM outsource_order_product WHERE company_id = " + companyId,
-                "DELETE FROM outsource_order_close_report_item WHERE report_id IN (SELECT id FROM outsource_order_close_report WHERE company_id = " + companyId + ")",
                 "DELETE FROM outsource_order_delivery WHERE company_id = " + companyId,
+                "DELETE FROM outsource_other_io_item WHERE company_id = " + companyId,
+                "DELETE FROM outsource_return_order_item WHERE company_id = " + companyId,
+                "DELETE FROM outsource_order_close_report_item WHERE report_id IN (SELECT id FROM outsource_order_close_report WHERE company_id = " + companyId + ")",
+                // === 财务主表 ===
                 "DELETE FROM finance_payment WHERE company_id = " + companyId,
                 "DELETE FROM finance_receipt WHERE company_id = " + companyId,
                 "DELETE FROM finance_bill WHERE company_id = " + companyId,
@@ -62,33 +71,47 @@ public class ClearController {
                 "DELETE FROM finance_receivable WHERE company_id = " + companyId,
                 "DELETE FROM finance_payable WHERE company_id = " + companyId,
                 "DELETE FROM finance_account WHERE company_id = " + companyId,
-                "DELETE FROM inventory_stock_log WHERE company_id = " + companyId,
+                // === 库存流水（先删流水再删库存） ===
+                "DELETE FROM warehouse_stock_log WHERE company_id = " + companyId,
+                // === 库存主表 ===
+                "DELETE FROM warehouse_stock WHERE company_id = " + companyId,
                 "DELETE FROM inventory_warehouse_move WHERE company_id = " + companyId,
                 "DELETE FROM inventory_other_io WHERE company_id = " + companyId,
-                "DELETE FROM inventory_warehouse_stock WHERE company_id = " + companyId,
-                "DELETE FROM inventory_warehouse WHERE company_id = " + companyId,
+                "DELETE FROM inventory_stock_reclass WHERE company_id = " + companyId,
+                "DELETE FROM product_reclassify WHERE company_id = " + companyId,
+                // === 仓库 ===
+                "DELETE FROM warehouse WHERE company_id = " + companyId,
+                // === 采购主表 ===
                 "DELETE FROM purchase_inbound WHERE company_id = " + companyId,
                 "DELETE FROM purchase_order WHERE company_id = " + companyId,
+                "DELETE FROM purchase_return WHERE company_id = " + companyId,
+                // === 销售主表 ===
                 "DELETE FROM sale_outbound WHERE company_id = " + companyId,
                 "DELETE FROM sale_order WHERE company_id = " + companyId,
+                "DELETE FROM sale_return WHERE company_id = " + companyId,
+                // === 委外主表 ===
+                "DELETE FROM outsource_other_io WHERE company_id = " + companyId,
+                "DELETE FROM outsource_return_order WHERE company_id = " + companyId,
                 "DELETE FROM outsource_order_close_report WHERE company_id = " + companyId,
                 "DELETE FROM outsource_material_order WHERE company_id = " + companyId,
                 "DELETE FROM outsource_delivery WHERE company_id = " + companyId,
                 "DELETE FROM outsource_order WHERE company_id = " + companyId,
                 "DELETE FROM outsource_contract_template WHERE company_id = " + companyId,
-                "DELETE FROM outsource_warehouse_stock WHERE company_id = " + companyId,
-                "DELETE FROM outsource_other_io_item WHERE company_id = " + companyId,
-                "DELETE FROM outsource_other_io WHERE company_id = " + companyId,
-                "DELETE FROM outsource_warehouse WHERE company_id = " + companyId,
+                // === 委外物料 ===
                 "DELETE FROM outsource_material WHERE company_id = " + companyId,
+                // === 研发 ===
                 "DELETE FROM dev_drawing WHERE company_id = " + companyId,
                 "DELETE FROM dev_bug WHERE company_id = " + companyId,
                 "DELETE FROM dev_bom WHERE company_id = " + companyId,
                 "DELETE FROM dev_bom_type WHERE company_id = " + companyId,
+                "DELETE FROM dev_purchase_item WHERE company_id = " + companyId,
                 "DELETE FROM dev_phase_template WHERE company_id = " + companyId,
                 "DELETE FROM dev_project_timeline WHERE company_id = " + companyId,
                 "DELETE FROM dev_project WHERE company_id = " + companyId,
+                // === 基础数据 ===
                 "DELETE FROM supplier_product WHERE company_id = " + companyId,
+                "DELETE FROM supplier_material WHERE company_id = " + companyId,
+                "DELETE FROM supplier_type_ref WHERE company_id = " + companyId,
                 "DELETE FROM supplier WHERE company_id = " + companyId,
                 "DELETE FROM product WHERE company_id = " + companyId,
                 "DELETE FROM customer WHERE company_id = " + companyId,

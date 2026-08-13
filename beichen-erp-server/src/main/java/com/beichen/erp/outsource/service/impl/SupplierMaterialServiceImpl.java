@@ -130,7 +130,9 @@ public class SupplierMaterialServiceImpl extends ServiceImpl<SupplierMaterialMap
     public String listSupplierIdsByMaterial(Long materialId) {
         if (materialId == null) return "";
         List<SupplierMaterial> list = supplierMaterialMapper.selectList(
-                new LambdaQueryWrapper<SupplierMaterial>().eq(SupplierMaterial::getMaterialId, materialId));
+                new LambdaQueryWrapper<SupplierMaterial>()
+                        .eq(SupplierMaterial::getMaterialId, materialId)
+                        .orderByAsc(SupplierMaterial::getId));
         return list.stream().map(m -> String.valueOf(m.getSupplierId()))
                 .distinct().collect(Collectors.joining(","));
     }

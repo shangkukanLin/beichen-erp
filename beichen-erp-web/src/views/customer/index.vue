@@ -116,9 +116,9 @@ async function handleSubmit() {
         // 编辑时只提交基础字段，余额字段由后端统管，前端不回传以防误改
         const payload: Customer = {
           id: form.id,
-          customerName: form.customerName,
-          customerCode: form.customerCode,
-          contactName: form.contactName,
+          name: form.name,
+          code: form.code,
+          contact: form.contact,
           phone: form.phone,
           address: form.address,
           creditLimit: form.creditLimit,
@@ -228,7 +228,7 @@ onActivated(() => {
           <template #default="{ row }">{{ fmtMoney(row.creditLimit) }}</template>
         </el-table-column>
         <el-table-column prop="receivableBalance" label="应收余额" width="120" align="right">
-          <template #default="{ row }"><span style="color:#f56c6c">{{ fmtMoney(row.receivableBalance) }}</span></template>
+          <template #default="{ row }"><span style="color:var(--app-color-danger)">{{ fmtMoney(row.receivableBalance) }}</span></template>
         </el-table-column>
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">

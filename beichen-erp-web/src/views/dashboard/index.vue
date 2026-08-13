@@ -1,6 +1,10 @@
 <template>
   <div class="dashboard">
     <el-tabs v-model="activeTab" type="border-card">
+      <el-tab-pane label="备忘录" name="memo">
+        <memo-panel />
+      </el-tab-pane>
+
       <el-tab-pane v-if="hasModule['dev']" label="项目研发" name="dev">
         <div class="stat-grid">
           <div class="stat-card clickable" @click="$router.push('/dev/project?tab=active')">
@@ -8,15 +12,15 @@
             <div class="stat-label">项目总数</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/dev/project?tab=active')">
-            <div class="stat-value" style="color:#e6a23c">{{ devInProgress }}</div>
+            <div class="stat-value" style="color:var(--app-color-warning)">{{ devInProgress }}</div>
             <div class="stat-label">进行中</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/dev/bom')">
-            <div class="stat-value" style="color:#409eff">{{ devBomCount }}</div>
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ devBomCount }}</div>
             <div class="stat-label">BOM总数</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/dev/project?tab=finished')">
-            <div class="stat-value" style="color:#67c23a">{{ devFinished }}</div>
+            <div class="stat-value" style="color:var(--app-color-success)">{{ devFinished }}</div>
             <div class="stat-label">已结项</div>
           </div>
         </div>
@@ -34,7 +38,7 @@
               <template #default="{row}"><el-button type="primary" link size="small" @click="router.push(`/dev/project/edit/${row.id}`)">{{ row.name }}</el-button></template>
             </el-table-column>
             <el-table-column label="当前阶段" width="120"><template #default="{row}"><el-tag type="warning" size="small">{{ getDashboardPhase(row) }}</el-tag></template></el-table-column>
-            <el-table-column label="计划完成" width="110"><template #default="{row}"><span :style="{ color: getDashboardPlannedEnd(row) && getDashboardPlannedEnd(row) < today ? '#f56c6c' : '#606266' }">{{ getDashboardPlannedEnd(row) || '-' }}</span></template></el-table-column>
+            <el-table-column label="计划完成" width="110"><template #default="{row}"><span :style="{ color: getDashboardPlannedEnd(row) && getDashboardPlannedEnd(row) < today ? 'var(--app-color-danger)' : 'var(--app-text-regular)' }">{{ getDashboardPlannedEnd(row) || '-' }}</span></template></el-table-column>
             <el-table-column label="进度" width="70" align="center"><template #default="{row}">{{ getDashboardProgress(row) }}</template></el-table-column>
           </el-table>
         </el-card>
@@ -50,19 +54,19 @@
       <el-tab-pane v-if="hasModule['outsource']" label="委外加工" name="outsource">
         <div class="stat-grid">
           <div class="stat-card clickable" style="background:#fef0f0" @click="$router.push('/outsource/order')">
-            <div class="stat-value" style="color:#e6a23c">{{ osPending }}</div>
+            <div class="stat-value" style="color:var(--app-color-warning)">{{ osPending }}</div>
             <div class="stat-label">加工单待处理</div>
           </div>
           <div class="stat-card clickable" style="background:#f0f5ff" @click="$router.push('/outsource/order')">
-            <div class="stat-value" style="color:#409eff">{{ osInProgress }}</div>
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ osInProgress }}</div>
             <div class="stat-label">加工单进行中</div>
           </div>
           <div class="stat-card clickable" style="background:#fef0f0" @click="$router.push('/outsource/material-order')">
-            <div class="stat-value" style="color:#e6a23c">{{ osMatPending }}</div>
+            <div class="stat-value" style="color:var(--app-color-warning)">{{ osMatPending }}</div>
             <div class="stat-label">物料订单待处理</div>
           </div>
           <div class="stat-card clickable" style="background:#f0f5ff" @click="$router.push('/outsource/material-order')">
-            <div class="stat-value" style="color:#409eff">{{ osMatReceiving }}</div>
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ osMatReceiving }}</div>
             <div class="stat-label">物料订单收货中</div>
           </div>
         </div>
@@ -113,7 +117,7 @@
             </el-table-column>
             <el-table-column label="已收" width="70" align="center">
               <template #default="{row}">
-                <span :style="{color: (row.items || []).reduce((s: number, it: any) => s + (it.receivedQuantity || 0), 0)>0?'#67c23a':''}">
+                <span :style="{color: (row.items || []).reduce((s: number, it: any) => s + (it.receivedQuantity || 0), 0)>0?'var(--app-color-success)':''}">
                   {{ (row.items || []).reduce((s: number, it: any) => s + (it.receivedQuantity || 0), 0) }}
                 </span>
               </template>
@@ -140,11 +144,11 @@
       <el-tab-pane v-if="hasModule['purchase']" label="进货业务" name="purchase">
         <div class="stat-grid">
           <div class="stat-card clickable" @click="$router.push('/inventory/purchase')">
-            <div class="stat-value" style="color:#409eff">{{ purchaseTotal }}</div>
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ purchaseTotal }}</div>
             <div class="stat-label">成品采购单</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/supplier/manage')">
-            <div class="stat-value" style="color:#67c23a">{{ supplierTotal }}</div>
+            <div class="stat-value" style="color:var(--app-color-success)">{{ supplierTotal }}</div>
             <div class="stat-label">供应商</div>
           </div>
           
@@ -159,11 +163,11 @@
       <el-tab-pane v-if="hasModule['sale']" label="销售业务" name="sale">
         <div class="stat-grid">
           <div class="stat-card clickable" @click="$router.push('/inventory/sale')">
-            <div class="stat-value" style="color:#409eff">{{ saleTotal }}</div>
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ saleTotal }}</div>
             <div class="stat-label">销售单</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/inventory/customer')">
-            <div class="stat-value" style="color:#67c23a">{{ customerTotal }}</div>
+            <div class="stat-value" style="color:var(--app-color-success)">{{ customerTotal }}</div>
             <div class="stat-label">客户</div>
           </div>
         </div>
@@ -174,21 +178,21 @@
         </div>
       </el-tab-pane>
 
-      <el-tab-pane v-if="hasModule['stock']" label="库存业务" name="stock">
+      <el-tab-pane v-if="hasModule['stock']" label="成品库存业务" name="stock">
         <div class="stat-grid">
           <div class="stat-card clickable" @click="$router.push('/material')">
-            <div class="stat-value" style="color:#409eff">{{ productTotal }}</div>
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ productTotal }}</div>
             <div class="stat-label">产品</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/inventory/warehouse')">
-            <div class="stat-value" style="color:#67c23a">{{ warehouseTotal }}</div>
+            <div class="stat-value" style="color:var(--app-color-success)">{{ warehouseTotal }}</div>
             <div class="stat-label">仓库</div>
           </div>
         </div>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
           <el-button v-if="hasMenu['InventoryStock']" type="primary" size="small" text @click="$router.push('/inventory/stock')">成品库存</el-button>
-          <el-button v-if="hasMenu['InventoryWarehouse']" type="primary" size="small" text @click="$router.push('/inventory/warehouse')">仓库管理</el-button>
+          <el-button v-if="hasMenu['InventoryWarehouse']" type="primary" size="small" text @click="$router.push('/inventory/warehouse')">成品仓库管理</el-button>
           <el-button v-if="hasMenu['MaterialManage']" type="primary" size="small" text @click="$router.push('/material')">产品管理</el-button>
         </div>
       </el-tab-pane>
@@ -217,10 +221,11 @@ import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 import { ProjectStatus } from '@/api/enums'
+import MemoPanel from '@/views/memo/index.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
-const activeTab = ref('dev')
+const activeTab = ref('memo')
 
 // 根据用户菜单权限判断可见模块
 const hasMenu = ref<Record<string, boolean>>({})
@@ -293,13 +298,8 @@ function checkUserMenus() {
   const menuNames = ['DevProject','DevBom','DevPhaseTemplate','OutsourceOrder','OutsourceMaterialOrder','OutsourceMaterialInfo','OutsourceWarehouse','OutsourceContractTemplate','OutsourceDelivery','InventoryPurchase','SupplierManage','InventorySale','InventoryCustomer','InventoryStock','InventoryWarehouse','MaterialManage','FinanceReceivable','FinancePayable','FinanceCashflow']
   menuNames.forEach(n => { hasMenu.value[n] = names.has(n) })
 
-  // 默认激活第一个可见Tab
-  if (hasModule.dev) activeTab.value = 'dev'
-  else if (hasModule.outsource) activeTab.value = 'outsource'
-  else if (hasModule.purchase) activeTab.value = 'purchase'
-  else if (hasModule.sale) activeTab.value = 'sale'
-  else if (hasModule.stock) activeTab.value = 'stock'
-  else if (hasModule.finance) activeTab.value = 'finance'
+  // 默认激活第一个Tab：备忘录（个人功能，始终可见）
+  activeTab.value = 'memo'
 }
 
 async function loadStats() {
@@ -388,7 +388,7 @@ async function loadStats() {
     if (hasModule.stock) {
       const [prodRes, whRes] = await Promise.all([
         request.get<any, any>('/product/page', { params: { pageSize: 1 } }).catch(() => ({})),
-        request.get<any, any>('/inventory/warehouse/page', { params: { pageSize: 1 } }).catch(() => ({})),
+        request.get<any, any>('/warehouse/page', { params: { pageSize: 1 } }).catch(() => ({})),
       ])
       productTotal.value = prodRes?.total || 0
       warehouseTotal.value = whRes?.total || 0
@@ -401,8 +401,8 @@ async function loadStats() {
         request.get<any, any>('/finance/payable/page', { params: { pageSize: 1 } }).catch(() => ({})),
       ])
       financeStats.value = [
-        { label:'应收记录', value: recRes?.total || 0, color: '#f56c6c' },
-        { label:'应付记录', value: payRes?.total || 0, color: '#e6a23c' },
+        { label:'应收记录', value: recRes?.total || 0, color: 'var(--app-color-danger)' },
+        { label:'应付记录', value: payRes?.total || 0, color: 'var(--app-color-warning)' },
       ]
     }
   } catch { /* ignore */}
@@ -424,12 +424,12 @@ onMounted(async () => {
 }
 .stat-card.clickable { cursor: pointer; transition: box-shadow 0.2s; }
 .stat-card.clickable:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-.stat-value { font-size: 28px; font-weight: 700; }
-.stat-label { font-size: 13px; color: #909399; margin-top: 4px; }
+.stat-value { font-size: var(--app-font-num); font-weight: 700; }
+.stat-label { font-size: var(--app-font-sm); color: var(--app-text-secondary); margin-top: 4px; }
 
 .quick-links { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-.links-label { color: #909399; font-size: 13px; }
+.links-label { color: var(--app-text-secondary); font-size: var(--app-font-sm); }
 
 .section-card { margin-bottom: 16px; }
-.section-title { font-weight: 600; font-size: 14px; }
+.section-title { font-weight: 600; font-size: var(--app-font-base); }
 </style>

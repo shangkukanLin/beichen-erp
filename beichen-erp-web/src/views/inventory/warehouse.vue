@@ -17,10 +17,10 @@ const stoppedData = computed(() => allData.value.filter(v => v.status === 0))
 async function loadData() {
   tableLoading.value = true
   try {
-    const p: any = { pageSize: 500 }
+    const p: any = { pageSize: 500, warehouseCategory: 'INVENTORY' }
     if (query.warehouseName) p.warehouseName = query.warehouseName
     if (query.warehouseType) p.warehouseType = query.warehouseType
-    const r = await request.get<any, any>('/inventory/warehouse/page', { params: p })
+    const r = await request.get<any, any>('/warehouse/page', { params: p })
     allData.value = r?.records || []
   } finally { tableLoading.value = false }
 }
@@ -35,14 +35,14 @@ function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dia
 function handleEdit(row: any) { Object.assign(form, defForm(), row); isEdit.value = true; dialogTitle.value = '编辑仓库'; dialogVisible.value = true }
 
 async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('请输入仓库名称'); return }; submitLoading.value = true
-  try { if (isEdit.value) { await request.put('/inventory/warehouse', form); ElMessage.success('已更新') } else { await request.post('/inventory/warehouse', form); ElMessage.success('已新增') }
+  try { if (isEdit.value) { await request.put('/warehouse', form); ElMessage.success('已更新') } else { await request.post('/warehouse', form); ElMessage.success('已新增') }
     dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
 
 function handleDetail(row: any) { router.push(`/inventory/warehouse/detail/${row.id}`) }
 
 async function handleToggleStatus(row: any) {
   row.status = row.status === 1 ? 0 : 1
-  await request.put('/inventory/warehouse', row)
+  await request.put('/warehouse', row)
   ElMessage.success(row.status === 1 ? '已启用' : '已停用'); loadData()
 }
 

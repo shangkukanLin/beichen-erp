@@ -47,7 +47,7 @@
           <el-table-column label="产品" min-width="160">
             <template #default="{ row }">
               <el-select v-model="row.productId" placeholder="选择产品" filterable remote :remote-method="loadMaterials"
-                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
+                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row as ItemRow) }">
                 <el-option v-for="m in materialOptions" :key="m.id" :label="m.name" :value="m.id" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
@@ -57,27 +57,27 @@
           <el-table-column prop="unit" label="单位" width="60" />
           <el-table-column label="品质数量/单价" min-width="360">
             <template #default="{ row }">
-              <div style="font-size:12px;line-height:28px">
+              <div style="font-size:var(--app-font-xs);line-height:28px">
                 <div style="display:flex;align-items:center;gap:4px">
-                  <span style="width:36px;text-align:right;color:#909399">A规</span>
+                  <span style="width:36px;text-align:right;color:var(--app-text-secondary)">A规</span>
                   <el-input v-model="row.aQty" type="number" size="small" placeholder="数量" style="flex:1;min-width:56px" />
                   <el-input v-model="row.aPrice" type="number" size="small" placeholder="单价" style="flex:1;min-width:56px" />
                   <span style="width:64px;text-align:right">{{ gradeSubtotal(row.aQty, row.aPrice) }}</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px">
-                  <span style="width:36px;text-align:right;color:#909399">B规</span>
+                  <span style="width:36px;text-align:right;color:var(--app-text-secondary)">B规</span>
                   <el-input v-model="row.bQty" type="number" size="small" placeholder="数量" style="flex:1;min-width:56px" />
                   <el-input v-model="row.bPrice" type="number" size="small" placeholder="单价" style="flex:1;min-width:56px" />
                   <span style="width:64px;text-align:right">{{ gradeSubtotal(row.bQty, row.bPrice) }}</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px">
-                  <span style="width:36px;text-align:right;color:#909399">C规</span>
+                  <span style="width:36px;text-align:right;color:var(--app-text-secondary)">C规</span>
                   <el-input v-model="row.cQty" type="number" size="small" placeholder="数量" style="flex:1;min-width:56px" />
                   <el-input v-model="row.cPrice" type="number" size="small" placeholder="单价" style="flex:1;min-width:56px" />
                   <span style="width:64px;text-align:right">{{ gradeSubtotal(row.cQty, row.cPrice) }}</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px">
-                  <span style="width:36px;text-align:right;color:#909399">不良</span>
+                  <span style="width:36px;text-align:right;color:var(--app-text-secondary)">不良</span>
                   <el-input v-model="row.defectQty" type="number" size="small" placeholder="数量" style="flex:1;min-width:56px" />
                   <el-input v-model="row.defectPrice" type="number" size="small" placeholder="单价" style="flex:1;min-width:56px" />
                   <span style="width:64px;text-align:right">{{ gradeSubtotal(row.defectQty, row.defectPrice) }}</span>
@@ -86,10 +86,10 @@
             </template>
           </el-table-column>
           <el-table-column label="总数" width="70" align="center">
-            <template #default="{ row }">{{ rowTotalQty(row) }}</template>
+            <template #default="{ row }">{{ rowTotalQty(row as ItemRow) }}</template>
           </el-table-column>
           <el-table-column label="总金额" width="100" align="right">
-            <template #default="{ row }">{{ rowTotalAmount(row).toFixed(2) }}</template>
+            <template #default="{ row }">{{ rowTotalAmount(row as ItemRow).toFixed(2) }}</template>
           </el-table-column>
           <el-table-column label="备注" width="120">
             <template #default="{ row }"><el-input v-model="row.remark" size="small" placeholder="备注" /></template>
@@ -208,7 +208,7 @@ async function loadSuppliers() {
 
 async function loadWarehouses() {
   try {
-    const res = await request.get('/inventory/warehouse/page', { params: { pageSize: 200 } })
+    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY' } })
     warehouses.value = res?.records || []
   } catch { warehouses.value = [] }
 }
@@ -278,9 +278,9 @@ async function initFromQuery() {
     form.supplierId = Number(q.supplierId)
     if (!suppliers.value.some(s => s.id === form.supplierId)) {
       try {
-        const res = await request.get('/supplier/page', { params: { id: form.supplierId, pageSize: 1 } })
-        const rec = res?.records?.[0]
-        if (rec) suppliers.value.push({ id: rec.id, name: rec.name })
+        // 按ID查单个供应商，确保 select 能匹配显示名称（不依赖 supplierType 过滤）
+        const supplier = await request.get<any, any>('/supplier/' + form.supplierId)
+        if (supplier) suppliers.value.unshift({ id: supplier.id, name: supplier.name })
       } catch { /* 忽略 */ }
     }
   }
@@ -297,7 +297,7 @@ async function initFromQuery() {
     } catch { /* 忽略 */ }
   } else if (q.materialId) {
     const it = items.value[0] || (items.value.push(emptyRow()), items.value[0])
-    it.materialName = q.materialName || ('物料#' + q.materialId)
+    it.materialName = String(q.materialName ?? '') || ('物料#' + q.materialId)
     try {
       if (it.materialName) {
         const res = await request.get('/outsource/material/page', { params: { materialName: it.materialName, pageSize: 1 } })
@@ -308,8 +308,8 @@ async function initFromQuery() {
   }
 }
 
-onMounted(() => {
-  loadSuppliers()
+onMounted(async () => {
+  await loadSuppliers()
   loadWarehouses()
   loadMaterials()
   initFromQuery()

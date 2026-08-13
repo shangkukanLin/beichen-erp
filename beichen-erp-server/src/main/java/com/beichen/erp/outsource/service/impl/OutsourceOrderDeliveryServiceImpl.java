@@ -9,9 +9,8 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
-import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
@@ -22,18 +21,19 @@ import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
 import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
-import com.beichen.erp.outsource.entity.OutsourceStockLog;
-import com.beichen.erp.outsource.entity.OutsourceWarehouse;
-import com.beichen.erp.outsource.entity.OutsourceWarehouseStock;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderDeliveryMapper;
-import com.beichen.erp.outsource.mapper.OutsourceStockLogMapper;
-import com.beichen.erp.outsource.mapper.OutsourceWarehouseMapper;
-import com.beichen.erp.outsource.mapper.OutsourceWarehouseStockMapper;
 import com.beichen.erp.outsource.service.OutsourceOrderDeliveryService;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
+import com.beichen.erp.warehouse.entity.Warehouse;
+import com.beichen.erp.warehouse.entity.WarehouseStock;
+import com.beichen.erp.warehouse.entity.WarehouseStockLog;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockLogMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -63,13 +63,12 @@ public class OutsourceOrderDeliveryServiceImpl
         implements OutsourceOrderDeliveryService {
 
     private final OutsourceOrderService orderService;
-    private final InventoryWarehouseStockService stockService;
-    private final InventoryWarehouseStockMapper inventoryStockMapper;
+    private final WarehouseStockService stockService;
+    private final WarehouseStockMapper stockMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final BomMapper bomMapper;
-    private final OutsourceWarehouseMapper warehouseMapper;
-    private final OutsourceWarehouseStockMapper warehouseStockMapper;
-    private final OutsourceStockLogMapper stockLogMapper;
+    private final WarehouseMapper warehouseMapper;
+    private final WarehouseStockLogMapper stockLogMapper;
     private final PayableHelper payableHelper;
     private final SupplierMapper supplierMapper;
 
@@ -324,10 +323,10 @@ public class OutsourceOrderDeliveryServiceImpl
             throw new BusinessException("退不良数量(" + defectQty + ")不能超过已交数量(" + deliveredQty + ")");
 
         // 校验仓库成品库存
-        LambdaQueryWrapper<InventoryWarehouseStock> stockW = new LambdaQueryWrapper<InventoryWarehouseStock>()
-                .eq(InventoryWarehouseStock::getWarehouseId, warehouseId)
-                .eq(InventoryWarehouseStock::getProductId, matchedProduct.getId());
-        BigDecimal stockQty = inventoryStockMapper.selectList(stockW)
+        LambdaQueryWrapper<WarehouseStock> stockW = new LambdaQueryWrapper<WarehouseStock>()
+                .eq(WarehouseStock::getWarehouseId, warehouseId)
+                .eq(WarehouseStock::getProductId, matchedProduct.getId());
+        BigDecimal stockQty = stockMapper.selectList(stockW)
                 .stream().map(s -> s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (stockQty.compareTo(defectQty) < 0)
@@ -392,22 +391,22 @@ public class OutsourceOrderDeliveryServiceImpl
             if (mat.materialId() == null) continue;
             BigDecimal restoreQty = mat.perUnit().multiply(defectQty);
 
-            OutsourceWarehouseStock stock = warehouseStockMapper.selectOne(
-                    new LambdaQueryWrapper<OutsourceWarehouseStock>()
-                            .eq(OutsourceWarehouseStock::getWarehouseId, whId)
-                            .eq(OutsourceWarehouseStock::getMaterialId, mat.materialId())
-                            .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
+            WarehouseStock stock = stockMapper.selectOne(
+                    new LambdaQueryWrapper<WarehouseStock>()
+                            .eq(WarehouseStock::getWarehouseId, whId)
+                            .eq(WarehouseStock::getMaterialId, mat.materialId())
+                            .eq(WarehouseStock::getQualityType, QualityType.GOOD.getCode()));
             BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
             if (stock == null) {
-                stock = new OutsourceWarehouseStock();
+                stock = new WarehouseStock();
                 stock.setWarehouseId(whId);
                 stock.setMaterialId(mat.materialId());
                 stock.setQualityType(QualityType.GOOD.getCode());
                 stock.setQuantity(restoreQty);
-                warehouseStockMapper.insert(stock);
+                stockMapper.insert(stock);
             } else {
                 stock.setQuantity(before.add(restoreQty));
-                warehouseStockMapper.updateById(stock);
+                stockMapper.updateById(stock);
             }
             writeStockLog(whId, mat.materialId(), mat.materialName(), "退不良还料",
                     restoreQty, before, before.add(restoreQty), order.getCode());
@@ -436,18 +435,18 @@ public class OutsourceOrderDeliveryServiceImpl
         for (MaterialReq mat : materials) {
             if (mat.materialId() == null) continue;
             BigDecimal restoreQty = mat.perUnit().multiply(defectQty);
-            OutsourceWarehouseStock stock = warehouseStockMapper.selectOne(
-                    new LambdaQueryWrapper<OutsourceWarehouseStock>()
-                            .eq(OutsourceWarehouseStock::getWarehouseId, whId)
-                            .eq(OutsourceWarehouseStock::getMaterialId, mat.materialId())
-                            .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
+            WarehouseStock stock = stockMapper.selectOne(
+                    new LambdaQueryWrapper<WarehouseStock>()
+                            .eq(WarehouseStock::getWarehouseId, whId)
+                            .eq(WarehouseStock::getMaterialId, mat.materialId())
+                            .eq(WarehouseStock::getQualityType, QualityType.GOOD.getCode()));
             if (stock != null) {
                 BigDecimal before = stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
                 stock.setQuantity(before.subtract(restoreQty));
                 if (stock.getQuantity().compareTo(BigDecimal.ZERO) <= 0) {
-                    warehouseStockMapper.deleteById(stock.getId());
+                    stockMapper.deleteById(stock.getId());
                 } else {
-                    warehouseStockMapper.updateById(stock);
+                    stockMapper.updateById(stock);
                 }
                 writeStockLog(whId, mat.materialId(), mat.materialName(), "退不良反审核扣回还料",
                         restoreQty.negate(), before, stock.getQuantity(), order.getCode());
@@ -457,10 +456,10 @@ public class OutsourceOrderDeliveryServiceImpl
 
     /** 查询某成品在某仓库的库存总量（用于日志展示） */
     private BigDecimal stockQtyOf(Long productId, Long warehouseId) {
-        LambdaQueryWrapper<InventoryWarehouseStock> stockW = new LambdaQueryWrapper<InventoryWarehouseStock>()
-                .eq(InventoryWarehouseStock::getWarehouseId, warehouseId)
-                .eq(InventoryWarehouseStock::getProductId, productId);
-        return inventoryStockMapper.selectList(stockW)
+        LambdaQueryWrapper<WarehouseStock> stockW = new LambdaQueryWrapper<WarehouseStock>()
+                .eq(WarehouseStock::getWarehouseId, warehouseId)
+                .eq(WarehouseStock::getProductId, productId);
+        return stockMapper.selectList(stockW)
                 .stream().map(s -> s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
@@ -537,9 +536,9 @@ public class OutsourceOrderDeliveryServiceImpl
     /** 查找工厂的委外仓库 ID */
     private Long resolveOutsourceWarehouseId(OutsourceOrder order) {
         if (order.getFactoryId() == null) return null;
-        List<OutsourceWarehouse> warehouses = warehouseMapper.selectList(
-                new LambdaQueryWrapper<OutsourceWarehouse>()
-                        .eq(OutsourceWarehouse::getFactoryId, order.getFactoryId()));
+        List<Warehouse> warehouses = warehouseMapper.selectList(
+                new LambdaQueryWrapper<Warehouse>()
+                        .eq(Warehouse::getFactoryId, order.getFactoryId()));
         if (warehouses.isEmpty()) {
             log.warn("工厂(ID={})无委外仓库", order.getFactoryId());
             return null;
@@ -564,11 +563,11 @@ public class OutsourceOrderDeliveryServiceImpl
             }
             BigDecimal needed = mat.perUnit().multiply(deliveryQty);
 
-            OutsourceWarehouseStock stock = warehouseStockMapper.selectOne(
-                    new LambdaQueryWrapper<OutsourceWarehouseStock>()
-                            .eq(OutsourceWarehouseStock::getWarehouseId, whId)
-                            .eq(OutsourceWarehouseStock::getMaterialId, mat.materialId())
-                            .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
+            WarehouseStock stock = stockMapper.selectOne(
+                    new LambdaQueryWrapper<WarehouseStock>()
+                            .eq(WarehouseStock::getWarehouseId, whId)
+                            .eq(WarehouseStock::getMaterialId, mat.materialId())
+                            .eq(WarehouseStock::getQualityType, QualityType.GOOD.getCode()));
             BigDecimal currentStock = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
 
             if (currentStock.compareTo(needed) < 0) {
@@ -616,25 +615,25 @@ public class OutsourceOrderDeliveryServiceImpl
                 continue;
             }
             BigDecimal needed = mat.perUnit().multiply(deliveryQty);
-            OutsourceWarehouseStock stock = warehouseStockMapper.selectOne(
-                    new LambdaQueryWrapper<OutsourceWarehouseStock>()
-                            .eq(OutsourceWarehouseStock::getWarehouseId, whId)
-                            .eq(OutsourceWarehouseStock::getMaterialId, mat.materialId())
-                            .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
+            WarehouseStock stock = stockMapper.selectOne(
+                    new LambdaQueryWrapper<WarehouseStock>()
+                            .eq(WarehouseStock::getWarehouseId, whId)
+                            .eq(WarehouseStock::getMaterialId, mat.materialId())
+                            .eq(WarehouseStock::getQualityType, QualityType.GOOD.getCode()));
             BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
             BigDecimal after;
             if (stock == null) {
-                stock = new OutsourceWarehouseStock();
+                stock = new WarehouseStock();
                 stock.setWarehouseId(whId);
                 stock.setMaterialId(mat.materialId());
                 stock.setQualityType(QualityType.GOOD.getCode());
                 after = needed.negate();
                 stock.setQuantity(after);
-                warehouseStockMapper.insert(stock);
+                stockMapper.insert(stock);
             } else {
                 after = stock.getQuantity().subtract(needed);
                 stock.setQuantity(after);
-                warehouseStockMapper.updateById(stock);
+                stockMapper.updateById(stock);
             }
             writeStockLog(whId, mat.materialId(), mat.materialName(), "出货扣料",
                     needed.negate(), before, after, order.getCode());
@@ -661,16 +660,16 @@ public class OutsourceOrderDeliveryServiceImpl
             if (mat.materialId() == null) continue;
             BigDecimal toRestore = mat.perUnit().multiply(oldQty);
 
-            OutsourceWarehouseStock stock = warehouseStockMapper.selectOne(
-                    new LambdaQueryWrapper<OutsourceWarehouseStock>()
-                            .eq(OutsourceWarehouseStock::getWarehouseId, whId)
-                            .eq(OutsourceWarehouseStock::getMaterialId, mat.materialId())
-                            .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode()));
+            WarehouseStock stock = stockMapper.selectOne(
+                    new LambdaQueryWrapper<WarehouseStock>()
+                            .eq(WarehouseStock::getWarehouseId, whId)
+                            .eq(WarehouseStock::getMaterialId, mat.materialId())
+                            .eq(WarehouseStock::getQualityType, QualityType.GOOD.getCode()));
             if (stock != null) {
                 BigDecimal before = stock.getQuantity();
                 BigDecimal after = before.add(toRestore);
                 stock.setQuantity(after);
-                warehouseStockMapper.updateById(stock);
+                stockMapper.updateById(stock);
                 writeStockLog(whId, mat.materialId(), mat.materialName(), "出货扣料-回滚",
                         toRestore, before, after, order.getCode());
                 log.info("回滚物料: {} +{}", mat.materialName(), toRestore.setScale(2, RoundingMode.HALF_UP));
@@ -724,7 +723,7 @@ public class OutsourceOrderDeliveryServiceImpl
     private void writeStockLog(Long whId, Long matId, String matName, String changeType,
                                BigDecimal changeQty, BigDecimal before, BigDecimal after,
                                String orderCode) {
-        OutsourceStockLog record = new OutsourceStockLog();
+        WarehouseStockLog record = new WarehouseStockLog();
         record.setWarehouseId(whId);
         record.setMaterialId(matId);
         record.setMaterialName(matName);

@@ -6,7 +6,7 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
@@ -38,7 +38,7 @@ public class AfterSaleController {
 
     private final OutsourceOrderDeliveryMapper deliveryMapper;
     private final OutsourceOrderProductMapper orderProductMapper;
-    private final InventoryWarehouseStockService inventoryStockService;
+    private final WarehouseStockService warehouseStockService;
     private final ProductMapper productMapper;
 
     /** 收费售后退不良：客户退回不良品 → 入库增不良品库存（立即生效，不关联加工单） */
@@ -67,7 +67,7 @@ public class AfterSaleController {
             throw new BusinessException("无法解析退回产品名称");
 
         // 1. 入库增加成品仓不良品库存（正数）
-        inventoryStockService.changeStock(warehouseId, productId, qty,
+        warehouseStockService.changeStock(warehouseId, productId, qty,
                 StockChangeType.SALE_RETURN_IN, null, RelatedBillType.SALE_RETURN,
                 null, null, "DEFECT");
 
@@ -131,7 +131,7 @@ public class AfterSaleController {
                 Product p = productMapper.selectById(d.getProductId());
                 productName = p != null && p.getName() != null ? p.getName() : "";
             }
-            inventoryStockService.changeStock(d.getWarehouseId(), d.getProductId(),
+            warehouseStockService.changeStock(d.getWarehouseId(), d.getProductId(),
                     d.getQuantity().negate(), StockChangeType.SALE_RETURN_UN_AUDIT,
                     null, RelatedBillType.SALE_RETURN, null, null, "DEFECT");
         }

@@ -9,12 +9,16 @@ import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.common.OutsourceSourceBillType;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
+import com.beichen.erp.warehouse.entity.Warehouse;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockLogMapper;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
@@ -39,12 +43,12 @@ public class ReturnOrderController {
     private final OutsourceOrderMapper orderMapper;
     private final OutsourceOrderMaterialMapper orderMaterialMapper;
     private final OutsourceOrderProductMapper orderProductMapper;
-    private final OutsourceWarehouseMapper warehouseMapper;
+    private final WarehouseMapper warehouseMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
     private final SupplierMapper supplierMapper;
     private final PayableHelper payableHelper;
-    private final InventoryWarehouseStockService inventoryStockService;
+    private final WarehouseStockService warehouseStockService;
     private final MaterialOrderMapper materialOrderMapper;
     private final MaterialOrderItemMapper materialOrderItemMapper;
     private final JdbcTemplate jdbcTemplate;
@@ -131,8 +135,8 @@ public class ReturnOrderController {
         // 工厂委外仓（物料退回目标仓）
         Long factoryWhId = null;
         if (order.getFactoryId() != null) {
-            List<OutsourceWarehouse> whs = warehouseMapper.selectList(
-                new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, order.getFactoryId()));
+            List<Warehouse> whs = warehouseMapper.selectList(
+                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
             factoryWhId = whs.isEmpty() ? null : whs.get(0).getId();
         }
         // 成品出库仓（从我方仓扣减成品）
@@ -177,7 +181,7 @@ public class ReturnOrderController {
                     String pn = (String) p.get("productName");
                     BigDecimal qty = toBigDecimal(p.get("quantity"));
                     if (pn != null && qty.compareTo(BigDecimal.ZERO) > 0) {
-                        inventoryStockService.changeStock(invWhId, null, qty.negate(), StockChangeType.OUTSOURCE_RETURN_OUT, order.getCode(), RelatedBillType.OUTSOURCE_RETURN, null, order.getId(), null);
+                        warehouseStockService.changeStock(invWhId, null, qty.negate(), StockChangeType.OUTSOURCE_RETURN_OUT, order.getCode(), RelatedBillType.OUTSOURCE_RETURN, null, order.getId(), null);
                     }
                 }
             }
@@ -206,8 +210,8 @@ public class ReturnOrderController {
         // 逆向库存
         Long whId = null;
         if (order.getFactoryId() != null) {
-            List<OutsourceWarehouse> whs = warehouseMapper.selectList(
-                new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, order.getFactoryId()));
+            List<Warehouse> whs = warehouseMapper.selectList(
+                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
             whId = whs.isEmpty() ? null : whs.get(0).getId();
         }
         List<ReturnOrderItem> items = returnOrderItemMapper.selectList(
@@ -322,18 +326,18 @@ public class ReturnOrderController {
 
         // 查找现有库存记录（按 warehouse + material_id + quality）
         Integer count = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM outsource_warehouse_stock WHERE warehouse_id=? AND outsource_material_id=? AND quality_type=?",
+            "SELECT COUNT(*) FROM warehouse_stock WHERE warehouse_id=? AND outsource_material_id=? AND quality_type=?",
             Integer.class, warehouseId, materialId, qualityType);
         if (count != null && count > 0) {
-            jdbcTemplate.update("UPDATE outsource_warehouse_stock SET quantity=quantity+? WHERE warehouse_id=? AND outsource_material_id=? AND quality_type=?",
+            jdbcTemplate.update("UPDATE warehouse_stock SET quantity=quantity+? WHERE warehouse_id=? AND outsource_material_id=? AND quality_type=?",
                 delta, warehouseId, materialId, qualityType);
         } else {
-            jdbcTemplate.update("INSERT INTO outsource_warehouse_stock (warehouse_id, outsource_material_id, material_name, quality_type, quantity, company_id) VALUES (?,?,?,?,?,?)",
+            jdbcTemplate.update("INSERT INTO warehouse_stock (warehouse_id, outsource_material_id, material_name, quality_type, quantity, company_id) VALUES (?,?,?,?,?,?)",
                 warehouseId, materialId, getMaterialNameById(materialId), qualityType, delta, CompanyContext.get());
         }
 
         // 写库存流水
-        jdbcTemplate.update("INSERT INTO outsource_stock_log (warehouse_id, outsource_material_id, material_name, change_type, change_quantity, related_order_code, company_id) VALUES (?,?,?,?,?,?,?)",
+        jdbcTemplate.update("INSERT INTO warehouse_stock_log (warehouse_id, outsource_material_id, material_name, change_type, change_quantity, related_order_code, company_id) VALUES (?,?,?,?,?,?,?)",
             warehouseId, materialId, getMaterialNameById(materialId), changeType, delta, orderCode, CompanyContext.get());
     }
 

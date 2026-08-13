@@ -24,7 +24,7 @@ const invWarehouses = ref<any[]>([])
 const returnSaving = ref(false)
 async function openReturn() {
   returnWarehouseId.value = undefined
-  try { const r = await request.get<any, any>('/inventory/warehouse/page', { params: { pageSize: 200 } }); invWarehouses.value = r?.records || [] } catch { invWarehouses.value = [] }
+  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200 } }); invWarehouses.value = r?.records || [] } catch { invWarehouses.value = [] }
   returnVisible.value = true
 }
 async function handleReturn() {
@@ -77,7 +77,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
       <template #header>
         <div class="card-header">
           <span style="font-weight:600">① 财务结算</span>
-          <span>未付合计：<b style="color:#f56c6c">¥ {{ fmt(data.unpaidTotal) }}</b>
+          <span>未付合计：<b style="color:var(--app-color-danger)">¥ {{ fmt(data.unpaidTotal) }}</b>
             <el-button v-if="Number(data.unpaidTotal)>0" type="primary" size="small" style="margin-left:12px" @click="router.push(`/finance/payment/supplier/${supplierId}`)">去付款</el-button>
           </span>
         </div>
@@ -87,7 +87,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
         <el-table-column prop="sourceBillType" label="来源" width="110" />
         <el-table-column prop="sourceBillNo" label="来源单号" width="150" show-overflow-tooltip />
         <el-table-column label="金额" width="100" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
-        <el-table-column label="未付" width="100" align="right"><template #default="{row}"><span style="color:#f56c6c">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
+        <el-table-column label="未付" width="100" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column label="到期日" width="100" align="center"><template #default="{row}">{{ $fmtDate(row.dueDate) }}</template></el-table-column>
         <el-table-column prop="status" label="状态" width="90" align="center" />
       </el-table>
@@ -149,7 +149,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
       </div>
       <div style="margin-top:16px;text-align:center">
         <el-button type="danger" size="large" :disabled="!data.canSettle" :loading="finishing" @click="handleFinish">确认清算并停用供应商</el-button>
-        <div v-if="!data.canSettle" style="color:#909399;font-size:12px;margin-top:8px">请先处理以上待办事项，全部满足后才能清算</div>
+        <div v-if="!data.canSettle" style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin-top:8px">请先处理以上待办事项，全部满足后才能清算</div>
       </div>
     </el-card>
 
@@ -175,7 +175,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
 .page-header{display:flex;align-items:center;gap:12px;padding-bottom:4px}
 
 .card-header{display:flex;align-items:center;justify-content:space-between}
-.section-title{font-weight:600;font-size:13px;color:#606266;margin-bottom:6px}
+.section-title{font-weight:600;font-size:var(--app-font-sm);color:var(--app-text-regular);margin-bottom:6px}
 .check-list{display:flex;flex-direction:column;gap:10px;padding:4px 8px}
-.check-item{display:flex;align-items:center;gap:8px;font-size:14px}
+.check-item{display:flex;align-items:center;gap:8px;font-size:var(--app-font-base)}
 </style>

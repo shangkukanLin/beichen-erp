@@ -11,7 +11,7 @@ import com.beichen.erp.inventory.entity.InventoryProductReclassify;
 import com.beichen.erp.inventory.entity.InventoryProductReclassifyItem;
 import com.beichen.erp.inventory.mapper.InventoryProductReclassifyMapper;
 import com.beichen.erp.inventory.mapper.InventoryProductReclassifyItemMapper;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.inventory.service.ReclassifyService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
@@ -30,7 +30,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
 
     private final InventoryProductReclassifyMapper rcMapper;
     private final InventoryProductReclassifyItemMapper itemMapper;
-    private final InventoryWarehouseStockService stockService;
+    private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
 
     @Override

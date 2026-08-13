@@ -5,16 +5,30 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
-import com.beichen.erp.inventory.mapper.InventoryWarehouseMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.inventory.common.IoType;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.common.DeliveryStatus;
-import com.beichen.erp.outsource.entity.*;
-import com.beichen.erp.outsource.mapper.*;
+import com.beichen.erp.outsource.entity.OutsourceOtherIo;
+import com.beichen.erp.outsource.entity.OutsourceOtherIoItem;
+import com.beichen.erp.outsource.entity.OutsourceMaterial;
+import com.beichen.erp.outsource.entity.OutsourceDelivery;
+import com.beichen.erp.outsource.entity.OutsourceDeliveryItem;
+import com.beichen.erp.outsource.mapper.OutsourceOtherIoMapper;
+import com.beichen.erp.outsource.mapper.OutsourceOtherIoItemMapper;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
+import com.beichen.erp.outsource.mapper.OutsourceDeliveryMapper;
+import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
+import com.beichen.erp.warehouse.entity.WarehouseStock;
+import com.beichen.erp.warehouse.entity.WarehouseStockLog;
+import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockLogMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
+import com.beichen.erp.warehouse.entity.Warehouse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,12 +47,12 @@ public class OutsourceOtherIoController {
 
     private final OutsourceOtherIoMapper ioMapper;
     private final OutsourceOtherIoItemMapper itemMapper;
-    private final OutsourceWarehouseStockMapper stockMapper;
-    private final OutsourceStockLogMapper stockLogMapper;
+    private final WarehouseStockMapper stockMapper;
+    private final WarehouseStockLogMapper stockLogMapper;
     private final OutsourceMaterialMapper materialMapper;
     private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
-    private final InventoryWarehouseMapper inventoryWarehouseMapper;
-    private final InventoryWarehouseStockService inventoryStockService;
+    private final WarehouseMapper warehouseMapper;
+    private final WarehouseStockService warehouseStockService;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -91,7 +105,7 @@ public class OutsourceOtherIoController {
         if (io.getWarehouseId() == null) throw new BusinessException("仓库不能为空");
         if (io.getIoType() == null || io.getIoType().isBlank()) throw new BusinessException("出入库类型不能为空");
         io.setCode(gen());
-        io.setStatus(DeliveryStatus.CONFIRMED.getCode());
+        io.setStatus(DocStatus.DRAFT.getCode()); // 创建时为草稿，审核后才变更库存
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) io.setCompanyId(cid);
         ioMapper.insert(io);
@@ -100,7 +114,6 @@ public class OutsourceOtherIoController {
             if (cid != null && cid > 0) it.setCompanyId(cid);
             itemMapper.insert(it);
         }
-        applyStock(io, items);
         return R.ok();
     }
 
@@ -109,14 +122,10 @@ public class OutsourceOtherIoController {
     public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         OutsourceOtherIo old = ioMapper.selectById(id);
         if (old == null) throw new BusinessException("其他出入库单不存在");
-        if (DocStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
-
-        List<OutsourceOtherIoItem> oldItems = itemMapper.selectList(
-            new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, id));
-        revertStock(old, oldItems);
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("仅草稿状态的单据可编辑");
 
         OutsourceOtherIo io = parseIo(body); io.setId(id);
-        io.setCode(old.getCode()); io.setStatus(DeliveryStatus.CONFIRMED.getCode());
+        io.setCode(old.getCode()); io.setStatus(DocStatus.DRAFT.getCode());
         ioMapper.updateById(io);
         itemMapper.delete(new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, id));
 
@@ -127,7 +136,36 @@ public class OutsourceOtherIoController {
             if (cid != null && cid > 0) it.setCompanyId(cid);
             itemMapper.insert(it);
         }
-        applyStock(io, items);
+        return R.ok();
+    }
+
+    /** 审核：库存生效 */
+    @PutMapping("/{id}/approve")
+    @Transactional(rollbackFor = Exception.class)
+    public R<Void> approve(@PathVariable Long id) {
+        OutsourceOtherIo old = ioMapper.selectById(id);
+        if (old == null) throw new BusinessException("其他出入库单不存在");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("仅草稿状态可审核");
+        List<OutsourceOtherIoItem> items = itemMapper.selectList(
+            new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, id));
+        applyStock(old, items);
+        OutsourceOtherIo u = new OutsourceOtherIo(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
+        ioMapper.updateById(u);
+        return R.ok();
+    }
+
+    /** 反审核：回滚库存，回到草稿 */
+    @PutMapping("/{id}/unapprove")
+    @Transactional(rollbackFor = Exception.class)
+    public R<Void> unapprove(@PathVariable Long id) {
+        OutsourceOtherIo old = ioMapper.selectById(id);
+        if (old == null) throw new BusinessException("其他出入库单不存在");
+        if (!DocStatus.AUDITED.getCode().equals(old.getStatus())) throw new BusinessException("仅已审核状态可反审核");
+        List<OutsourceOtherIoItem> items = itemMapper.selectList(
+            new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, id));
+        revertStock(old, items);
+        OutsourceOtherIo u = new OutsourceOtherIo(); u.setId(id); u.setStatus(DocStatus.DRAFT.getCode());
+        ioMapper.updateById(u);
         return R.ok();
     }
 
@@ -136,37 +174,30 @@ public class OutsourceOtherIoController {
     public R<Void> cancel(@PathVariable Long id) {
         OutsourceOtherIo old = ioMapper.selectById(id);
         if (old == null) throw new BusinessException("其他出入库单不存在");
-        if (DocStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("单据已取消");
-        List<OutsourceOtherIoItem> items = itemMapper.selectList(
-            new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, id));
-        revertStock(old, items);
-        OutsourceOtherIo u = new OutsourceOtherIo(); u.setId(id); u.setStatus(DeliveryStatus.CANCELLED.getCode());
+        if (DocStatus.CANCELLED.getCode().equals(old.getStatus())) throw new BusinessException("单据已取消");
+        if (DocStatus.AUDITED.getCode().equals(old.getStatus())) throw new BusinessException("已审核的单据需先反审核再取消");
+        // 草稿状态直接取消，无需回滚库存
+        OutsourceOtherIo u = new OutsourceOtherIo(); u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode());
         ioMapper.updateById(u);
         return R.ok();
     }
 
     private void applyStock(OutsourceOtherIo io, List<OutsourceOtherIoItem> items) {
-        boolean isInv = isInventoryWarehouse(io.getWarehouseId());
         StockChangeType type = IoType.IN.getCode().equals(io.getIoType()) ? StockChangeType.OTHER_IN : StockChangeType.OTHER_OUT;
         for (OutsourceOtherIoItem it : items) {
             Long matId = it.getMaterialId();
-            if (matId == null) continue; // 缺少物料ID则跳过，避免按名自动建物料产生脏数据
+            if (matId == null) continue;
             BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = IoType.IN.getCode().equals(io.getIoType()) ? qty : qty.negate();
-            if (isInv) {
-                inventoryStockService.changeStock(io.getWarehouseId(), matId, delta,
-                    type, io.getCode(), RelatedBillType.OTHER_IO, null, io.getId(), null);
-                continue;
-            }
-            LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
-                    .eq(OutsourceWarehouseStock::getWarehouseId, io.getWarehouseId())
-                    .eq(OutsourceWarehouseStock::getMaterialId, matId)
-                    .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode());
-            OutsourceWarehouseStock stock = stockMapper.selectOne(w);
+            LambdaQueryWrapper<WarehouseStock> w = new LambdaQueryWrapper<WarehouseStock>()
+                    .eq(WarehouseStock::getWarehouseId, io.getWarehouseId())
+                    .eq(WarehouseStock::getMaterialId, matId)
+                    .eq(WarehouseStock::getQualityType, QualityType.GOOD.getCode());
+            WarehouseStock stock = stockMapper.selectOne(w);
             BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
             BigDecimal after = before.add(delta);
             if (stock == null) {
-                stock = new OutsourceWarehouseStock();
+                stock = new WarehouseStock();
                 stock.setWarehouseId(io.getWarehouseId()); stock.setMaterialId(matId);
                 stock.setQualityType(QualityType.GOOD.getCode()); stock.setQuantity(after);
                 stockMapper.insert(stock);
@@ -174,43 +205,41 @@ public class OutsourceOtherIoController {
                 stock.setQuantity(after);
                 stockMapper.updateById(stock);
             }
-            OutsourceStockLog logEntry = new OutsourceStockLog();
+            WarehouseStockLog logEntry = new WarehouseStockLog();
             logEntry.setWarehouseId(io.getWarehouseId()); logEntry.setMaterialId(matId);
             logEntry.setMaterialName(getMaterialNameById(matId)); logEntry.setChangeType(type.getLabel());
             logEntry.setChangeQuantity(delta); logEntry.setBeforeQuantity(before);
             logEntry.setAfterQuantity(after); logEntry.setRelatedOrderCode(io.getCode());
+            logEntry.setRelatedBillNo(io.getCode()); logEntry.setRelatedBillType(RelatedBillType.OTHER_IO.getCode());
+            logEntry.setRelatedBillId(io.getId());
             stockLogMapper.insert(logEntry);
         }
     }
 
     private void revertStock(OutsourceOtherIo io, List<OutsourceOtherIoItem> items) {
-        boolean isInv = isInventoryWarehouse(io.getWarehouseId());
         StockChangeType type = IoType.IN.getCode().equals(io.getIoType()) ? StockChangeType.CANCEL_IN : StockChangeType.CANCEL_OUT;
         for (OutsourceOtherIoItem it : items) {
             Long matId = it.getMaterialId();
             if (matId == null) continue;
             BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = IoType.IN.getCode().equals(io.getIoType()) ? qty.negate() : qty;
-            if (isInv) {
-                inventoryStockService.changeStock(io.getWarehouseId(), matId, delta,
-                    type, io.getCode(), RelatedBillType.OTHER_IO, null, io.getId(), null);
-                continue;
-            }
-            LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
-                    .eq(OutsourceWarehouseStock::getWarehouseId, io.getWarehouseId())
-                    .eq(OutsourceWarehouseStock::getMaterialId, matId)
-                    .eq(OutsourceWarehouseStock::getQualityType, QualityType.GOOD.getCode());
-            OutsourceWarehouseStock stock = stockMapper.selectOne(w);
+            LambdaQueryWrapper<WarehouseStock> w = new LambdaQueryWrapper<WarehouseStock>()
+                    .eq(WarehouseStock::getWarehouseId, io.getWarehouseId())
+                    .eq(WarehouseStock::getMaterialId, matId)
+                    .eq(WarehouseStock::getQualityType, QualityType.GOOD.getCode());
+            WarehouseStock stock = stockMapper.selectOne(w);
             BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
             if (stock != null) {
                 stock.setQuantity(before.add(delta));
                 stockMapper.updateById(stock);
             }
-            OutsourceStockLog logEntry = new OutsourceStockLog();
+            WarehouseStockLog logEntry = new WarehouseStockLog();
             logEntry.setWarehouseId(io.getWarehouseId()); logEntry.setMaterialId(matId);
             logEntry.setMaterialName(getMaterialNameById(matId)); logEntry.setChangeType(type.getLabel());
             logEntry.setChangeQuantity(delta); logEntry.setBeforeQuantity(before);
             logEntry.setAfterQuantity(before.add(delta)); logEntry.setRelatedOrderCode(io.getCode());
+            logEntry.setRelatedBillNo(io.getCode()); logEntry.setRelatedBillType(RelatedBillType.OTHER_IO.getCode());
+            logEntry.setRelatedBillId(io.getId());
             stockLogMapper.insert(logEntry);
         }
     }
@@ -261,10 +290,6 @@ public class OutsourceOtherIoController {
             try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
         }
         return pat + String.format("%03d", seq);
-    }
-
-    private boolean isInventoryWarehouse(Long warehouseId) {
-        return warehouseId != null && inventoryWarehouseMapper.selectById(warehouseId) != null;
     }
 
     /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */

@@ -2,8 +2,8 @@ package com.beichen.erp.outsource.controller;
 
 import com.beichen.erp.common.R;
 import com.beichen.erp.outsource.common.DeliveryType;
-import com.beichen.erp.inventory.entity.InventoryWarehouse;
-import com.beichen.erp.inventory.mapper.InventoryWarehouseMapper;
+import com.beichen.erp.warehouse.entity.Warehouse;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.outsource.entity.CloseReportItem;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
 import com.beichen.erp.outsource.service.CloseReportService;
@@ -29,7 +29,7 @@ public class CloseReportController {
 
     private final CloseReportService reportService;
     private final OutsourceOrderService orderService;
-    private final InventoryWarehouseMapper inventoryWarehouseMapper;
+    private final WarehouseMapper WarehouseMapper;
 
     @GetMapping
     public R<Map<String, Object>> getReport(@PathVariable Long orderId) {
@@ -195,7 +195,7 @@ public class CloseReportController {
                 textCell(dr, 3, DeliveryType.DEFECT_RETURN.getCode().equals(dtype) ? DeliveryType.DEFECT_RETURN.getLabel() : "交货", textStyle);
                 String whName = "";
                 Object whIdObj = d.get("warehouseId");
-                if (whIdObj != null) { InventoryWarehouse iw = inventoryWarehouseMapper.selectById(Long.valueOf(whIdObj.toString())); if (iw != null) whName = iw.getWarehouseName(); }
+                if (whIdObj != null) { Warehouse iw = WarehouseMapper.selectById(Long.valueOf(whIdObj.toString())); if (iw != null) whName = iw.getWarehouseName(); }
                 textCell(dr, 4, whName, textStyle);
                 textCell(dr, 5, str(d.get("remark")), textStyle);
                 BigDecimal q = toBigDecimal(d.get("quantity"));

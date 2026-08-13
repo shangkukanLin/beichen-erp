@@ -7,7 +7,7 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.purchase.entity.PurchaseInbound;
@@ -37,7 +37,7 @@ public class PurchaseInboundServiceImpl implements PurchaseInboundService {
     private final PurchaseInboundItemMapper itemMapper;
     private final PurchaseOrderMapper orderMapper;
     private final SupplierMapper supplierMapper;
-    private final InventoryWarehouseStockService stockService;
+    private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
 
     @Override

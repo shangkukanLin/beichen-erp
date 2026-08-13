@@ -45,7 +45,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-table-column prop="sourceBillType" label="来源" width="100"/>
         <el-table-column prop="amount" label="应付金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column prop="paidAmount" label="已付" width="120" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
-        <el-table-column prop="unpaidAmount" label="未付" width="120" align="right"><template #default="{row}"><span style="color:#f56c6c">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
+        <el-table-column prop="unpaidAmount" label="未付" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column prop="dueDate" label="到期日" width="120" align="center"/>
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{row.status}}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="80" align="center"><template #default="{row}"><el-button type="primary" link @click="detail=row;detailVisible=true">详情</el-button></template></el-table-column>
@@ -62,7 +62,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-descriptions-item label="到期日">{{ detail.dueDate }}</el-descriptions-item>
         <el-descriptions-item label="应付金额">{{ fmt(detail.amount) }}</el-descriptions-item>
         <el-descriptions-item label="已付金额">{{ fmt(detail.paidAmount) }}</el-descriptions-item>
-        <el-descriptions-item label="未付金额"><span style="color:#f56c6c">{{ fmt(detail.unpaidAmount) }}</span></el-descriptions-item>
+        <el-descriptions-item label="未付金额"><span style="color:var(--app-color-danger)">{{ fmt(detail.unpaidAmount) }}</span></el-descriptions-item>
       </el-descriptions>
     </el-drawer>
   </div>

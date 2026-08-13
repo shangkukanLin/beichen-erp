@@ -195,26 +195,26 @@ watch(() => userStore.userInfo?.companyName, (name) => {
 .layout-aside::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 2px; }
 .layout-aside::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.3); }
 .logo { height: 60px; display: flex; align-items: center; justify-content: center; color: #fff; background-color: #2b3a4d; }
-.logo-text { font-size: 18px; font-weight: 600; letter-spacing: 1px; }
-.logo-text-mini { font-size: 16px; font-weight: 600; }
-.layout-header { display: flex; align-items: center; justify-content: space-between; background-color: #fff; border-bottom: 1px solid #e6e6e6; padding: 0 16px; height: 48px; }
+.logo-text { font-size: var(--app-font-xl); font-weight: 600; letter-spacing: 1px; }
+.logo-text-mini { font-size: var(--app-font-lg); font-weight: 600; }
+.layout-header { display: flex; align-items: center; justify-content: space-between; background-color: var(--app-bg-container); border-bottom: 1px solid var(--app-border-light); padding: 0 var(--app-space-base); height: 48px; }
 .header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.collapse-btn { font-size: 20px; cursor: pointer; color: #5a5e66; }
+.collapse-btn { font-size: 20px; cursor: pointer; color: var(--app-text-regular); }
 .header-right { display: flex; align-items: center; }
-.user-info { display: flex; align-items: center; gap: 6px; cursor: pointer; color: #5a5e66; }
-.username { font-size: 14px; }
+.user-info { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--app-text-regular); }
+.username { font-size: var(--app-font-base); }
 
 /* 页签栏 */
-.tab-bar { display: flex; align-items: center; background: #f5f5f5; border-bottom: 1px solid #e4e7ed; padding: 0 8px 0 4px; height: 46px; }
+.tab-bar { display: flex; align-items: center; background: var(--app-bg-hover); border-bottom: 1px solid var(--app-border-light); padding: 0 8px 0 4px; height: 46px; }
 .tabs-wrapper { display: flex; align-items: center; flex: 1; overflow-x: auto; overflow-y: hidden; min-width: 0; }
-.tab-item { display: flex; align-items: center; gap: 2px; padding: 6px 10px 6px 14px; margin: 0 2px; border-radius: 4px 4px 0 0; cursor: pointer; font-size: 14px; color: #606266; background: #e8eaed; white-space: nowrap; max-width: 180px; flex-shrink: 0; }
-.tab-item.active { background: #fff; color: #409eff; border-bottom: 2px solid #409eff; }
-.tab-item:hover { color: #409eff; }
+.tab-item { display: flex; align-items: center; gap: 2px; padding: 6px 10px 6px 14px; margin: 0 2px; border-radius: var(--app-radius-base) var(--app-radius-base) 0 0; cursor: pointer; font-size: var(--app-font-base); color: var(--app-text-regular); background: #e8eaed; white-space: nowrap; max-width: 180px; flex-shrink: 0; }
+.tab-item.active { background: var(--app-bg-container); color: var(--app-color-primary); border-bottom: 2px solid var(--app-color-primary); }
+.tab-item:hover { color: var(--app-color-primary); }
 .tab-label { overflow: hidden; text-overflow: ellipsis; }
-.tab-close { margin-left: 2px; padding: 0 3px; border-radius: 2px; font-size: 14px; line-height: 1; }
-.tab-close:hover { background: #c0c4cc; color: #fff; }
-.tab-close-btn { flex-shrink: 0; margin-left: 8px; padding: 2px 10px; font-size: 12px; line-height: 20px; color: #909399; cursor: pointer; border-radius: 3px; border: 1px solid #dcdfe6; user-select: none; }
-.tab-close-btn:hover { background: #f56c6c; color: #fff; border-color: #f56c6c; }
+.tab-close { margin-left: 2px; padding: 0 3px; border-radius: var(--app-radius-sm); font-size: var(--app-font-base); line-height: 1; }
+.tab-close:hover { background: var(--app-text-placeholder); color: #fff; }
+.tab-close-btn { flex-shrink: 0; margin-left: 8px; padding: 2px 10px; font-size: var(--app-font-xs); line-height: 20px; color: var(--app-text-secondary); cursor: pointer; border-radius: 3px; border: 1px solid var(--app-border-color); user-select: none; }
+.tab-close-btn:hover { background: var(--app-color-danger); color: #fff; border-color: var(--app-color-danger); }
 
 .layout-main { background-color: #f0f2f5; padding: 16px; }
 

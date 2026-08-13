@@ -8,15 +8,13 @@ import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.OutsourceDelivery;
 import com.beichen.erp.outsource.entity.OutsourceDeliveryItem;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
-import com.beichen.erp.outsource.entity.OutsourceWarehouse;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
-import com.beichen.erp.outsource.mapper.OutsourceWarehouseMapper;
 import com.beichen.erp.outsource.service.DeliveryService;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
-import com.beichen.erp.inventory.entity.InventoryWarehouse;
-import com.beichen.erp.inventory.mapper.InventoryWarehouseMapper;
+import com.beichen.erp.warehouse.entity.Warehouse;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,10 +31,9 @@ import java.util.Map;
 public class DeliveryController {
 
     private final DeliveryService deliveryService;
-    private final OutsourceWarehouseMapper warehouseMapper;
+    private final WarehouseMapper warehouseMapper;
     private final OutsourceDeliveryItemMapper itemMapper;
     private final SupplierMapper supplierMapper;
-    private final InventoryWarehouseMapper inventoryWarehouseMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
 
@@ -59,18 +56,16 @@ public class DeliveryController {
             if (d.getFactoryId() != null) { Supplier sup = supplierMapper.selectById(d.getFactoryId()); m.put("factoryName", sup != null ? sup.getName() : ""); }
             // 直发供应商名
             if (d.getSupplierDirect() != null && d.getSupplierDirect() == 1 && d.getSupplierId() != null) { Supplier s = supplierMapper.selectById(d.getSupplierId()); m.put("supplierName", s != null ? s.getName() : ""); }
-            // 来源仓库名（发料来源是我方仓，其他是委外仓）
+            // 来源仓库名
             if (d.getFromWarehouseId() != null) {
-                if (DeliveryType.DELIVERY.getCode().equals(d.getDeliveryType())) {
-                    var iw = inventoryWarehouseMapper.selectById(d.getFromWarehouseId());
-                    m.put("fromWarehouseName", iw != null ? iw.getWarehouseName() : "");
-                } else {
-                    OutsourceWarehouse w = warehouseMapper.selectById(d.getFromWarehouseId());
-                    m.put("fromWarehouseName", w != null ? w.getWarehouseName() : "");
-                }
+                Warehouse wh = warehouseMapper.selectById(d.getFromWarehouseId());
+                m.put("fromWarehouseName", wh != null ? wh.getWarehouseName() : "");
             }
             // 目标仓库名
-            if (d.getToWarehouseId() != null) { OutsourceWarehouse w = warehouseMapper.selectById(d.getToWarehouseId()); m.put("toWarehouseName", w != null ? w.getWarehouseName() : ""); }
+            if (d.getToWarehouseId() != null) {
+                Warehouse wh = warehouseMapper.selectById(d.getToWarehouseId());
+                m.put("toWarehouseName", wh != null ? wh.getWarehouseName() : "");
+            }
             // 物料统计
             List<OutsourceDeliveryItem> items = itemMapper.selectList(new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getDeliveryId, d.getId()));
             m.put("itemCount", (long) items.size());
@@ -105,13 +100,12 @@ public class DeliveryController {
         if (d.getFactoryId() != null) { Supplier sup = supplierMapper.selectById(d.getFactoryId()); m.put("factoryName", sup != null ? sup.getName() : ""); }
         if (d.getSupplierId() != null) { Supplier sup = supplierMapper.selectById(d.getSupplierId()); m.put("supplierName", sup != null ? sup.getName() : ""); }
         if (d.getFromWarehouseId() != null) {
-            OutsourceWarehouse w = warehouseMapper.selectById(d.getFromWarehouseId());
-            if (w != null) m.put("fromWarehouseName", w.getWarehouseName());
-            else { InventoryWarehouse iw = inventoryWarehouseMapper.selectById(d.getFromWarehouseId()); if (iw != null) m.put("fromWarehouseName", iw.getWarehouseName()); }
+            Warehouse wh = warehouseMapper.selectById(d.getFromWarehouseId());
+            if (wh != null) m.put("fromWarehouseName", wh.getWarehouseName());
         }
         if (d.getToWarehouseId() != null) {
-            OutsourceWarehouse w = warehouseMapper.selectById(d.getToWarehouseId());
-            if (w != null) m.put("toWarehouseName", w.getWarehouseName());
+            Warehouse wh = warehouseMapper.selectById(d.getToWarehouseId());
+            if (wh != null) m.put("toWarehouseName", wh.getWarehouseName());
         }
         return R.ok(m);
     }
@@ -164,14 +158,16 @@ public class DeliveryController {
 
     @GetMapping("/warehouses/by-factory/{factoryId}")
     public R<Object> warehousesByFactory(@PathVariable Long factoryId) {
-        return R.ok(warehouseMapper.selectList(new LambdaQueryWrapper<OutsourceWarehouse>()
-                .eq(OutsourceWarehouse::getFactoryId, factoryId)));
+        return R.ok(warehouseMapper.selectList(new LambdaQueryWrapper<Warehouse>()
+                .eq(Warehouse::getFactoryId, factoryId)));
     }
 
     @GetMapping("/warehouses/inventory")
     public R<Object> inventoryWarehouses() {
-        return R.ok(inventoryWarehouseMapper.selectList(new LambdaQueryWrapper<InventoryWarehouse>()
-                .eq(InventoryWarehouse::getStatus, 1).orderByAsc(InventoryWarehouse::getId)));
+        return R.ok(warehouseMapper.selectList(new LambdaQueryWrapper<Warehouse>()
+                .eq(Warehouse::getWarehouseCategory, "INVENTORY")
+                .eq(Warehouse::getStatus, 1)
+                .orderByAsc(Warehouse::getId)));
     }
 
     /** 查询某个工厂某个物料的加权平均单价 */

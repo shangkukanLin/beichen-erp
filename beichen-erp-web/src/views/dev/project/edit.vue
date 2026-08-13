@@ -459,11 +459,11 @@ function onNameBlur() {
         <el-card shadow="never">
           <!-- 进度概览 + 操作按钮 -->
           <div style="margin-bottom:12px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-            <span style="font-size:14px;font-weight:600">进度概览</span>
+            <span style="font-size:var(--app-font-base);font-weight:600">进度概览</span>
             <div style="flex:1;max-width:360px">
               <el-progress :percentage="timelineProgress.pct" :stroke-width="16" 
-                :color="timelineProgress.pct === 100 ? '#67c23a' : '#409eff'">
-                <span style="font-size:12px">{{ timelineProgress.completed }} / {{ timelineProgress.total }} 已完成</span>
+                :color="timelineProgress.pct === 100 ? 'var(--app-color-success)' : 'var(--app-color-primary)'">
+                <span style="font-size:var(--app-font-xs)">{{ timelineProgress.completed }} / {{ timelineProgress.total }} 已完成</span>
               </el-progress>
             </div>
             <el-tag v-if="timelineProgress.inProgress > 0" type="warning" size="small">{{ timelineProgress.inProgress }} 个进行中</el-tag>
@@ -532,7 +532,7 @@ function onNameBlur() {
           <el-table :data="bomList" border size="small">
             <el-table-column label="类型" width="100">
               <template #default="{row}">
-                <span v-if="row._isChild" style="color:#999;font-size:12px">{{ row.bomTypeName }}</span>
+                <span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ row.bomTypeName }}</span>
                 <el-select v-else v-model="row.bomTypeId" size="small" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.bomTypeId = ''; router.push('/dev/bom-type'); return } row.materialName = '' }">
                   <el-option v-for="t in bomTypes" :key="t.id" :label="t.typeName" :value="t.id" />
                   <el-option label="+ 新增" :value="ADD_MARKER" />
@@ -541,7 +541,7 @@ function onNameBlur() {
             </el-table-column>
             <el-table-column label="物料名称" min-width="130">
               <template #default="{row}">
-                <span v-if="row._isChild" style="color:#409eff;font-size:12px">└ {{ row.materialName }}</span>
+                <span v-if="row._isChild" style="color:var(--app-color-primary);font-size:var(--app-font-xs)">└ {{ row.materialName }}</span>
                 <el-select v-else v-model="row.outsourceMaterialId" size="small" filterable clearable style="width:100%" placeholder="选择" @change="(v: any) => { if (v === ADD_MARKER) { row.outsourceMaterialId = undefined; router.push('/outsource/material-info'); return } onBomMaterialChange(v, row) }">
                   <el-option v-for="m in getMaterialsByType(row.bomTypeId || '')" :key="m.id" :label="m.materialName" :value="m.id" />
                   <el-option label="+ 新增" :value="ADD_MARKER" />
@@ -550,15 +550,15 @@ function onNameBlur() {
             </el-table-column>
             <el-table-column label="供应商" width="100">
               <template #default="{row}">
-                <span v-if="row._isChild" style="color:#999;font-size:12px">-</span>
+                <span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">-</span>
                 <el-select v-else v-model="row.supplierId" size="small" clearable filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.supplierId = undefined; router.push('/supplier/manage'); return } }">
                   <el-option v-for="s in allSuppliers" :key="s.id" :label="s.name" :value="s.id" />
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </el-select>
               </template>
             </el-table-column>
-            <el-table-column label="规格" width="90"><template #default="{row}"><span v-if="row._isChild" style="color:#999;font-size:12px">-</span><el-input v-else v-model="row.spec" size="small" /></template></el-table-column>
-            <el-table-column label="单位" width="65"><template #default="{row}"><span v-if="row._isChild" style="color:#999;font-size:12px">-</span><el-input v-else v-model="row.unit" size="small" /></template></el-table-column>
+            <el-table-column label="规格" width="90"><template #default="{row}"><span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">-</span><el-input v-else v-model="row.spec" size="small" /></template></el-table-column>
+            <el-table-column label="单位" width="65"><template #default="{row}"><span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">-</span><el-input v-else v-model="row.unit" size="small" /></template></el-table-column>
             <el-table-column label="用量" width="75"><template #default="{row}"><span :style="{fontSize:'12px'}">{{ row.quantityPerSet }}</span></template></el-table-column>
             <el-table-column label="损耗率%" width="80"><template #default="{row}"><span :style="{fontSize:'12px'}">{{ row.lossRate }}</span></template></el-table-column>
             <el-table-column label="操作" width="60" align="center">
@@ -598,7 +598,7 @@ function onNameBlur() {
       <!-- 项目物料 Tab -->
       <el-tab-pane label="项目物料" name="material">
         <el-card shadow="never">
-          <div style="margin-bottom:8px;color:#909399;font-size:12px">
+          <div style="margin-bottom:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
             仅记录项目研发自购用料（如机板、原屏幕），与 BOM 表、委外物料无关
           </div>
           <div style="margin-bottom:8px">
@@ -679,7 +679,7 @@ function onNameBlur() {
             <el-table-column prop="severity" label="严重程度" width="90"><template #default="{row}">{{ SeverityTypeLabel[row.severity] || row.severity }}</template></el-table-column>
             <el-table-column label="状态" width="90"><template #default="{row}"><el-tag size="small" :type="BugStatusTag[row.status] || 'info'">{{ BugStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
             <el-table-column label="操作" width="120" align="center"><template #default="{row}"><el-button type="primary" link @click="handleEditBug(row as BugDTO)">编辑</el-button><el-button type="danger" link @click="handleDeleteBug(row as BugDTO)">删除</el-button></template></el-table-column>
-            <template #empty><div style="color:#909399;padding:16px;text-align:center">暂无处理中的BUG</div></template>
+            <template #empty><div style="color:var(--app-text-secondary);padding:16px;text-align:center">暂无处理中的BUG</div></template>
           </el-table>
 
           <!-- 已关闭 -->
@@ -690,7 +690,7 @@ function onNameBlur() {
             <el-table-column prop="severity" label="严重程度" width="90"><template #default="{row}">{{ SeverityTypeLabel[row.severity] || row.severity }}</template></el-table-column>
             <el-table-column label="状态" width="90"><template #default="{row}"><el-tag size="small" type="info">{{ BugStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
             <el-table-column label="操作" width="120" align="center"><template #default="{row}"><el-button type="primary" link @click="handleEditBug(row as BugDTO)">编辑</el-button><el-button type="danger" link @click="handleDeleteBug(row as BugDTO)">删除</el-button></template></el-table-column>
-            <template #empty><div style="color:#909399;padding:16px;text-align:center">暂无已关闭的BUG</div></template>
+            <template #empty><div style="color:var(--app-text-secondary);padding:16px;text-align:center">暂无已关闭的BUG</div></template>
           </el-table>
         </el-card>
       </el-tab-pane>
@@ -719,13 +719,13 @@ function onNameBlur() {
       <!-- 拖拽上传区域 -->
       <div class="drop-zone" 
         @dragover="handleDragOver" @drop="handleDrop"
-        :style="{ borderColor: uploadFile ? '#67c23a' : '#dcdfe6', background: uploadFile ? '#f0f9eb' : '#fafafa' }">
+        :style="{ borderColor: uploadFile ? 'var(--app-color-success)' : 'var(--app-border-color)', background: uploadFile ? '#f0f9eb' : '#fafafa' }">
         <template v-if="uploadFile">
-          <p style="color:#67c23a;font-weight:600;margin:0">📎 {{ uploadFile.name }}</p>
-          <p style="color:#909399;font-size:12px;margin:4px 0 0">{{ (uploadFile.size/1024).toFixed(1) }} KB</p>
+          <p style="color:var(--app-color-success);font-weight:600;margin:0">📎 {{ uploadFile.name }}</p>
+          <p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:4px 0 0">{{ (uploadFile.size/1024).toFixed(1) }} KB</p>
         </template>
         <template v-else>
-          <p style="color:#909399;margin:0">拖拽文件到此处，或点击下方按钮选择</p>
+          <p style="color:var(--app-text-secondary);margin:0">拖拽文件到此处，或点击下方按钮选择</p>
         </template>
         <input type="file" @change="handleFileSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
       </div>
@@ -747,7 +747,7 @@ function onNameBlur() {
 .page-header { display:flex; align-items:center; gap:16px; padding-bottom:8px; }
 
 .drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:32px; text-align:center; transition:all .3s; cursor:pointer }
-.drop-zone:hover { border-color:#409eff; background:#ecf5ff }
+.drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }
 
 /* 时间线行样式 */
 :deep(.timeline-row-done) { background-color: #f0f9eb; }

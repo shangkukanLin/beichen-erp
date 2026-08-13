@@ -20,10 +20,11 @@ async function loadFactories() {
 async function loadData() {
   tableLoading.value = true
   try {
-    const p: any = { pageSize: 500 }
+    // 委外仓库页面只查询委外仓库（warehouseCategory=OUTSOURCE）
+    const p: any = { pageSize: 500, warehouseCategory: 'OUTSOURCE' }
     if (query.warehouseName) p.warehouseName = query.warehouseName
     if (query.factoryId) p.factoryId = query.factoryId
-    const r = await request.get<any, any>('/outsource/warehouse/page', { params: p })
+    const r = await request.get<any, any>('/warehouse/page', { params: p })
     allData.value = r?.records || []
   } finally { tableLoading.value = false }
 }
@@ -31,19 +32,19 @@ function handleQuery() { loadData() }
 function handleReset() { query.warehouseName = ''; query.factoryId = undefined; loadData() }
 
 const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoading = ref(false)
-const defForm = () => ({ id: undefined as any, factoryId: undefined as any, warehouseName: '', address: '', contact: '', phone: '', status: 1, remark: '' })
+const defForm = () => ({ id: undefined as any, factoryId: undefined as any, warehouseName: '', warehouseCategory: 'OUTSOURCE', address: '', contact: '', phone: '', status: 1, remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
 function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dialogTitle.value = '新增委外仓库'; dialogVisible.value = true }
 function handleEdit(row: any) { Object.assign(form, defForm(), row); isEdit.value = true; dialogTitle.value = '编辑仓库'; dialogVisible.value = true }
 
 async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('请输入仓库名称'); return }; submitLoading.value = true
-  try { if (isEdit.value) { await request.put('/outsource/warehouse', form); ElMessage.success('修改成功') } else { await request.post('/outsource/warehouse', form); ElMessage.success('新增成功') }
+  try { if (isEdit.value) { await request.put('/warehouse', form); ElMessage.success('修改成功') } else { await request.post('/warehouse', form); ElMessage.success('新增成功') }
     dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
 
 async function handleToggleStatus(row: any) {
   row.status = row.status === 1 ? 0 : 1
-  await request.put('/outsource/warehouse', row)
+  await request.put('/warehouse', row)
   ElMessage.success(row.status === 1 ? '已启用' : '已停用'); loadData()
 }
 

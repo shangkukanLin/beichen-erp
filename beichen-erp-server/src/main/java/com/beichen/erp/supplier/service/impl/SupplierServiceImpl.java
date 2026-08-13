@@ -4,8 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
-import com.beichen.erp.outsource.entity.OutsourceWarehouse;
-import com.beichen.erp.outsource.mapper.OutsourceWarehouseMapper;
+import com.beichen.erp.warehouse.entity.Warehouse;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.supplier.common.SupplierTypeEnum;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.entity.SupplierTypeRef;
@@ -42,7 +42,7 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
     private SupplierProductService supplierProductService;
 
     @Resource
-    private OutsourceWarehouseMapper outsourceWarehouseMapper;
+    private WarehouseMapper WarehouseMapper;
 
     @Resource
     private JdbcTemplate jdbcTemplate;
@@ -157,16 +157,22 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
     /** 自动为供应商创建默认委外仓库 */
     private void createDefaultWarehouse(Long supplierId, String supplierName) {
         // 检查是否已存在该供应商的委外仓库（同名供应商追加类型时跳过）
-        Long count = outsourceWarehouseMapper.selectCount(
-                Wrappers.<OutsourceWarehouse>lambdaQuery().eq(OutsourceWarehouse::getFactoryId, supplierId));
+        Long count = WarehouseMapper.selectCount(
+                Wrappers.<Warehouse>lambdaQuery().eq(Warehouse::getFactoryId, supplierId));
         if (count != null && count > 0) return;
-        OutsourceWarehouse w = new OutsourceWarehouse();
+        Warehouse w = new Warehouse();
+        // 自动生成编码：WH-YYYYMMDD-序号
+        String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        Long cnt = WarehouseMapper.selectCount(
+                Wrappers.<Warehouse>lambdaQuery().likeRight(Warehouse::getCode, "WH-" + date));
+        w.setCode("WH-" + date + String.format("%03d", (cnt != null ? cnt : 0) + 1));
+        w.setWarehouseCategory("OUTSOURCE");
         w.setFactoryId(supplierId);
         w.setWarehouseName(supplierName != null ? supplierName + "委外仓库" : "委外仓库");
         w.setStatus(1);
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) w.setCompanyId(cid);
-        outsourceWarehouseMapper.insert(w);
+        WarehouseMapper.insert(w);
         log.info("已为供应商 {}（ID={}）自动创建委外仓库 ID={}", supplierName, supplierId, w.getId());
     }
 
@@ -248,7 +254,7 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         // 关联表清单（含各表引用供应商的字段名）
         // supplier_product.supplier_id / outsource_order.factory_id / outsource_material_order.supplier_id
         // purchase_order.supplier_id / purchase_return.supplier_id / purchase_inbound.supplier_id
-        // finance_payable.supplier_id / outsource_warehouse_stock 通过 outsource_warehouse.factory_id 关联
+        // finance_payable.supplier_id / warehouse_stock 通过 warehouse.factory_id 关联
         Object[][] tables = {
                 {"supplier_product", "supplier_id"},
                 {"outsource_order", "factory_id"},
@@ -280,12 +286,12 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         // 委外仓库库存：有正库存时拦截
         try {
             Integer stockCnt = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM outsource_warehouse_stock s "
-                            + "JOIN outsource_warehouse w ON s.warehouse_id = w.id "
+                    "SELECT COUNT(*) FROM warehouse_stock s "
+                            + "JOIN warehouse w ON s.warehouse_id = w.id "
                             + "WHERE w.factory_id = ? AND s.quantity > 0" + cidCond, Integer.class, id);
             if (stockCnt != null && stockCnt > 0) {
                 canDelete = false;
-                details.add("outsource_warehouse_stock 存在 " + stockCnt + " 条正库存记录");
+                details.add("warehouse_stock 存在 " + stockCnt + " 条正库存记录");
             }
         } catch (Exception e) {
             log.error("检查供应商委外库存异常", e);

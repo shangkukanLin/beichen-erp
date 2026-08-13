@@ -13,7 +13,7 @@ import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
@@ -46,7 +46,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final UserMapper userMapper;
     private final ProductMapper productMapper;
     private final com.beichen.erp.finance.service.PayableHelper payableHelper;
-    private final InventoryWarehouseStockService stockService;
+    private final WarehouseStockService stockService;
 
     @Override
     public Page<Map<String, Object>> page(Integer status, Long supplierId, String code, int pageNum, int pageSize) {

@@ -34,19 +34,19 @@ function materialsByType(type: number) { return materialOptions.value.filter((m:
 function typeName(id: number | undefined) { if (id == null) return '-'; const t = bomTypes.value.find((v: any) => v.id === id); return t ? t.typeName : (id as any) }
 
 async function loadAllOutsourceWarehouses() {
-  try { const r = await request.get<any,any>('/outsource/warehouse/page',{params:{pageSize:500}}); allOutsourceWarehouses.value = r?.records||[] } catch {}
+  try { const r = await request.get<any,any>('/warehouse/page',{params:{pageSize:500,warehouseCategory:'OUTSOURCE'}}); allOutsourceWarehouses.value = r?.records||[] } catch {}
 }
 async function loadFactories() {
   try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType:'factory', pageSize:200 } }); factoryOptions.value = r?.records || [] } catch {}
 }
 async function loadWarehouses(factoryId: number) {
-  try { const r = await request.get<any, any>('/outsource/delivery/warehouses/by-factory/' + factoryId); outsourceWarehouses.value = r || [] } catch { outsourceWarehouses.value = [] }
+  try { const r = await request.get<any, any>('/warehouse/by-factory/' + factoryId); outsourceWarehouses.value = r || [] } catch { outsourceWarehouses.value = [] }
 }
 async function loadTargetWarehouses(factoryId: number) {
-  try { const r = await request.get<any, any>('/outsource/delivery/warehouses/by-factory/' + factoryId); targetOutsourceWarehouses.value = r || [] } catch { targetOutsourceWarehouses.value = [] }
+  try { const r = await request.get<any, any>('/warehouse/by-factory/' + factoryId); targetOutsourceWarehouses.value = r || [] } catch { targetOutsourceWarehouses.value = [] }
 }
 async function loadInventoryWarehouses() {
-  try { const r = await request.get<any, any>('/outsource/delivery/warehouses/inventory'); inventoryWarehouses.value = r || [] } catch {}
+  try { const r = await request.get<any, any>('/warehouse/inventory'); inventoryWarehouses.value = r || [] } catch {}
 }
 async function loadMaterials() {
   try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize:500 } }); materialOptions.value = r?.records || [] } catch {}
@@ -76,7 +76,7 @@ function onMaterialSelect(idx: number, mid: number) {
   if (m) { items.value[idx].material_name = m.materialName; items.value[idx].bomTypeId = m.bomTypeId; items.value[idx].unit = m.unit; items.value[idx].material_id = m.id }
   // 自动查询加权平均单价
   if (form.factoryId && m) {
-    request.get<any,any>('/outsource/delivery/material-weighted-price', { params: { factoryId: form.factoryId, materialName: m.materialName } }).then((r: any) => {
+    request.get<any,any>('/outsource/delivery/material-weighted-price', { params: { factoryId: form.factoryId, materialId: m.id } }).then((r: any) => {
       if (r) items.value[idx].unit_price = r
     }).catch(() => {})
   }
@@ -155,9 +155,9 @@ onMounted(() => { loadFactories(); loadAllOutsourceWarehouses(); loadMaterials()
           <el-col :span="8"><el-form-item label="物流单号"><el-input v-model="form.logisticsNo" /></el-form-item></el-col>
         </el-row>
       </el-form>
-      <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'#67c23a':'#dcdfe6', background: uploadFile?'#f0f9eb':'#fafafa' }">
-        <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:#67c23a;font-weight:600">📎 {{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
-        <template v-else><p style="color:#909399;margin:0">拖拽文件到此处，或点击选择</p></template>
+      <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'var(--app-color-success)':'var(--app-border-color)', background: uploadFile?'#f0f9eb':'#fafafa' }">
+        <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:var(--app-color-success);font-weight:600">📎 {{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
+        <template v-else><p style="color:var(--app-text-secondary);margin:0">拖拽文件到此处，或点击选择</p></template>
         <input type="file" @change="handleFileSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
       </div>
     </el-card>
@@ -169,6 +169,6 @@ onMounted(() => { loadFactories(); loadAllOutsourceWarehouses(); loadMaterials()
 <style scoped>
 .add-page { display:flex; flex-direction:column; gap:12px; }
 
-.drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
-.drop-zone:hover { border-color:#409eff; background:#ecf5ff }
+.drop-zone { position:relative; border:2px dashed var(--app-border-color); border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
+.drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }
 </style>

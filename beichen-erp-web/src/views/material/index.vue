@@ -250,7 +250,7 @@ onActivated(() => { loadBrands(); loadData() })
         <el-table-column prop="safetyStock" label="安全库存" width="100" align="right" />
         <el-table-column label="当前库存" width="130" align="right">
           <template #default="{ row }">
-            <span :style="{ color: isLowStock(row) ? '#f56c6c' : '', fontWeight: isLowStock(row) ? 'bold' : '' }">
+            <span :style="{ color: isLowStock(row) ? 'var(--app-color-danger)' : '', fontWeight: isLowStock(row) ? 'bold' : '' }">
               {{ row.currentStock ?? 0 }}
             </span>
             <el-tag v-if="isLowStock(row)" type="danger" size="small" style="margin-left:4px">预警</el-tag>

@@ -10,8 +10,36 @@ import com.beichen.erp.inventory.common.IoType;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.common.CloseReportStatus;
-import com.beichen.erp.outsource.entity.*;
-import com.beichen.erp.outsource.mapper.*;
+import com.beichen.erp.outsource.entity.CloseReport;
+import com.beichen.erp.outsource.entity.CloseReportItem;
+import com.beichen.erp.outsource.entity.OutsourceOrder;
+import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
+import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
+import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
+import com.beichen.erp.outsource.entity.OutsourceDelivery;
+import com.beichen.erp.outsource.entity.OutsourceDeliveryItem;
+import com.beichen.erp.outsource.entity.OutsourceMaterial;
+import com.beichen.erp.outsource.entity.OutsourceOtherIo;
+import com.beichen.erp.outsource.entity.OutsourceOtherIoItem;
+import com.beichen.erp.outsource.entity.MaterialOrder;
+import com.beichen.erp.outsource.entity.MaterialOrderItem;
+import com.beichen.erp.outsource.mapper.CloseReportMapper;
+import com.beichen.erp.outsource.mapper.CloseReportItemMapper;
+import com.beichen.erp.outsource.mapper.OutsourceOrderMapper;
+import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
+import com.beichen.erp.outsource.mapper.OutsourceOrderMaterialMapper;
+import com.beichen.erp.outsource.mapper.OutsourceOrderDeliveryMapper;
+import com.beichen.erp.outsource.mapper.OutsourceDeliveryMapper;
+import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
+import com.beichen.erp.outsource.mapper.OutsourceOtherIoMapper;
+import com.beichen.erp.outsource.mapper.OutsourceOtherIoItemMapper;
+import com.beichen.erp.outsource.mapper.MaterialOrderMapper;
+import com.beichen.erp.outsource.mapper.MaterialOrderItemMapper;
+import com.beichen.erp.warehouse.entity.Warehouse;
+import com.beichen.erp.warehouse.entity.WarehouseStock;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
 import com.beichen.erp.outsource.service.CloseReportService;
 import com.beichen.erp.dev.entity.Bom;
 import com.beichen.erp.dev.entity.BomType;
@@ -44,8 +72,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     private final OutsourceOrderDeliveryMapper orderDeliveryMapper;
     private final OutsourceDeliveryMapper deliveryMapper;
     private final OutsourceDeliveryItemMapper deliveryItemMapper;
-    private final OutsourceWarehouseMapper warehouseMapper;
-    private final OutsourceWarehouseStockMapper warehouseStockMapper;
+    private final WarehouseMapper warehouseMapper;
+    private final WarehouseStockMapper warehouseStockMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final OutsourceOtherIoMapper otherIoMapper;
     private final OutsourceOtherIoItemMapper otherIoItemMapper;
@@ -92,9 +120,9 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         // 获取该工厂的所有委外仓库ID
         List<Long> factoryWhIds = new ArrayList<>();
         if (order.getFactoryId() != null) {
-            List<OutsourceWarehouse> whs = warehouseMapper.selectList(
-                new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, order.getFactoryId()));
-            for (OutsourceWarehouse wh : whs) factoryWhIds.add(wh.getId());
+            List<Warehouse> whs = warehouseMapper.selectList(
+                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
+            for (Warehouse wh : whs) factoryWhIds.add(wh.getId());
         }
 
         // 物料明细：取加工单的 BOM 快照（outsource_order_material），非实时 dev_bom
@@ -320,8 +348,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             new LambdaQueryWrapper<CloseReportItem>().eq(CloseReportItem::getReportId, report.getId()));
 
         // 找到该工厂的委外仓库
-        List<OutsourceWarehouse> warehouses = warehouseMapper.selectList(
-            new LambdaQueryWrapper<OutsourceWarehouse>().eq(OutsourceWarehouse::getFactoryId, order.getFactoryId()));
+        List<Warehouse> warehouses = warehouseMapper.selectList(
+            new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
         if (warehouses.isEmpty()) throw new BusinessException("该加工厂未配置委外仓库");
 
         // 收集需要退料的物料
@@ -423,13 +451,13 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     }
 
     private void updateReturnStock(Long warehouseId, Long materialId, BigDecimal qty, String qualityType) {
-        LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
-            .eq(OutsourceWarehouseStock::getWarehouseId, warehouseId)
-            .eq(OutsourceWarehouseStock::getMaterialId, materialId)
-            .eq(OutsourceWarehouseStock::getQualityType, qualityType != null ? qualityType : QualityType.GOOD.getCode());
-        OutsourceWarehouseStock stock = warehouseStockMapper.selectOne(w);
+        LambdaQueryWrapper<WarehouseStock> w = new LambdaQueryWrapper<WarehouseStock>()
+            .eq(WarehouseStock::getWarehouseId, warehouseId)
+            .eq(WarehouseStock::getMaterialId, materialId)
+            .eq(WarehouseStock::getQualityType, qualityType != null ? qualityType : QualityType.GOOD.getCode());
+        WarehouseStock stock = warehouseStockMapper.selectOne(w);
         if (stock == null) {
-            stock = new OutsourceWarehouseStock();
+            stock = new WarehouseStock();
             stock.setWarehouseId(warehouseId);
             stock.setMaterialId(materialId);
             stock.setQualityType(qualityType != null ? qualityType : QualityType.GOOD.getCode());

@@ -20,14 +20,11 @@ function typeName(id: number | undefined) { if (id == null) return '-'; const t 
 
 async function loadWarehouses() {
   try {
-    const [r1, r2] = await Promise.all([
-      request.get<any,any>('/outsource/warehouse/page', {params:{pageSize:200}}),
-      request.get<any,any>('/inventory/warehouse/page', {params:{pageSize:200}})
-    ]);
-    warehouses.value = [
-      ...(r1?.records || []).map((w:any) => ({ ...w, _type: '委外仓' })),
-      ...(r2?.records || []).map((w:any) => ({ ...w, _type: '我方仓' }))
-    ]
+    const r = await request.get<any,any>('/warehouse/page', {params:{pageSize:200}})
+    warehouses.value = (r?.records || []).map((w:any) => ({
+      ...w,
+      _type: w.warehouseCategory === 'INVENTORY' ? '我方仓' : '委外仓'
+    }))
   } catch {}
 }
 async function loadMaterials() {
@@ -42,7 +39,7 @@ function onMatSelect(idx: number, matId: number) {
     const wh = warehouses.value.find((w:any)=>w.id===form.warehouseId)
     // 委外仓用加工厂ID查加权单价，我方仓不自动查
     if (wh?._type === '委外仓' && wh?.factoryId) {
-      request.get<any,any>('/outsource/delivery/material-weighted-price', { params: { factoryId: wh.factoryId, materialName: m.materialName } }).then((r: any) => {
+      request.get<any,any>('/outsource/delivery/material-weighted-price', { params: { factoryId: wh.factoryId, materialId: m.id } }).then((r: any) => {
         if (r) items.value[idx].unit_price = r
       }).catch(() => {})
     }
@@ -89,7 +86,6 @@ async function loadBomTypes() {
 
 <template>
   <div style="display:flex;flex-direction:column;gap:12px">
-    <div><span style="font-size:18px;font-weight:600">{{ editId?'编辑':'新增' }}物料其他出入库</span></div>
     <el-card shadow="never">
       <el-form :model="form" label-width="80px">
         <el-row :gutter="12">

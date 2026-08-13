@@ -6,13 +6,15 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.entity.OutsourceDelivery;
 import com.beichen.erp.outsource.entity.OutsourceDeliveryItem;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
-import com.beichen.erp.outsource.entity.OutsourceStockLog;
-import com.beichen.erp.outsource.entity.OutsourceWarehouseStock;
+import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
 import com.beichen.erp.outsource.entity.MaterialOrder;
 import com.beichen.erp.outsource.entity.MaterialOrderItem;
-import com.beichen.erp.inventory.entity.InventoryWarehouseStock;
-import com.beichen.erp.inventory.mapper.InventoryWarehouseMapper;
-import com.beichen.erp.inventory.mapper.InventoryWarehouseStockMapper;
+import com.beichen.erp.warehouse.entity.Warehouse;
+import com.beichen.erp.warehouse.entity.WarehouseStock;
+import com.beichen.erp.warehouse.entity.WarehouseStockLog;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
@@ -23,17 +25,18 @@ import com.beichen.erp.outsource.common.MaterialOrderStatus;
 import com.beichen.erp.outsource.common.DefectHandleType;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.common.OutsourceSourceBillType;
+import com.beichen.erp.outsource.common.OrderType;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import com.beichen.erp.finance.service.PayableHelper;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryMapper;
-import com.beichen.erp.outsource.mapper.OutsourceStockLogMapper;
-import com.beichen.erp.outsource.mapper.OutsourceWarehouseStockMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockLogMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
 import com.beichen.erp.outsource.mapper.MaterialOrderMapper;
 import com.beichen.erp.outsource.mapper.MaterialOrderItemMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
 import com.beichen.erp.outsource.service.DeliveryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -54,14 +57,15 @@ public class DeliveryServiceImpl implements DeliveryService {
 
     private final OutsourceDeliveryMapper deliveryMapper;
     private final OutsourceDeliveryItemMapper itemMapper;
-    private final OutsourceWarehouseStockMapper stockMapper;
-    private final OutsourceStockLogMapper stockLogMapper;
+    private final WarehouseStockMapper stockMapper;
+    private final WarehouseStockLogMapper stockLogMapper;
     private final MaterialOrderMapper materialOrderMapper;
     private final MaterialOrderItemMapper materialOrderItemMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
-    private final InventoryWarehouseStockMapper inventoryStockMapper;
-    private final InventoryWarehouseMapper inventoryWarehouseMapper;
-    private final InventoryWarehouseStockService inventoryStockService;
+    private final OutsourceMaterialComponentMapper componentMapper;
+    private final WarehouseStockMapper inventoryStockMapper;
+    private final WarehouseMapper WarehouseMapper;
+    private final WarehouseStockService warehouseStockService;
     private final PayableHelper payableHelper;
     private final SupplierMapper supplierMapper;
     private final JdbcTemplate jdbcTemplate;
@@ -187,7 +191,12 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
         }
 
-        // 2. 生成应付：收货为正应付，退不良为负（冲减）
+        // 2. 委外单收货：扣减子物料库存（从供应商/加工厂委外仓扣，用量×收货数，可扣至负数=强制出库）
+        if (isReceive && OrderType.OUTSOURCE.getLabel().equals(order.getOrderType())) {
+            deductComponents(order, items, delivery);
+        }
+
+        // 3. 生成应付：收货为正应付，退不良为负（冲减）
         BigDecimal totalAmount = items.stream()
                 .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -199,7 +208,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             payableHelper.changeSupplierBalance(order.getSupplierId(), totalAmount);
         }
 
-        // 3. 回写订单明细累计数量
+        // 4. 回写订单明细累计数量
         for (OutsourceDeliveryItem item : items) {
             if (item.getItemId() == null || item.getQuantity() == null) continue;
             MaterialOrderItem oi = materialOrderItemMapper.selectById(item.getItemId());
@@ -211,10 +220,10 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
             materialOrderItemMapper.updateById(oi);
         }
-        // 4. 重算订单状态
+        // 5. 重算订单状态
         recomputeMaterialOrderStatus(orderId);
 
-        // 5. 单据置为已审核
+        // 6. 单据置为已审核
         OutsourceDelivery up = new OutsourceDelivery();
         up.setId(id);
         up.setStatus(DocStatus.AUDITED.name());
@@ -256,7 +265,15 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
         }
 
-        // 2. 冲回应付（已付款的阻止）+ 回退供应商应付余额
+        // 2. 委外单收货反审核：恢复子物料库存（对称加回）
+        if (isReceive) {
+            MaterialOrder order = materialOrderMapper.selectById(orderId);
+            if (order != null && OrderType.OUTSOURCE.getLabel().equals(order.getOrderType())) {
+                restoreComponents(order, items, delivery);
+            }
+        }
+
+        // 3. 冲回应付（已付款的阻止）+ 回退供应商应付余额
         BigDecimal reverseAmount = items.stream()
                 .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -546,15 +563,15 @@ public class DeliveryServiceImpl implements DeliveryService {
     private void updateStock(Long warehouseId, Long materialId, BigDecimal delta, String qualityType,
                              String materialName, String changeType, String deliveryCode) {
         String qt = qualityType != null ? qualityType : QualityType.GOOD.getCode();
-        LambdaQueryWrapper<OutsourceWarehouseStock> w = new LambdaQueryWrapper<OutsourceWarehouseStock>()
-                .eq(OutsourceWarehouseStock::getWarehouseId, warehouseId)
-                .eq(OutsourceWarehouseStock::getMaterialId, materialId)
-                .eq(OutsourceWarehouseStock::getQualityType, qt);
-        OutsourceWarehouseStock stock = stockMapper.selectOne(w);
+        LambdaQueryWrapper<WarehouseStock> w = new LambdaQueryWrapper<WarehouseStock>()
+                .eq(WarehouseStock::getWarehouseId, warehouseId)
+                .eq(WarehouseStock::getMaterialId, materialId)
+                .eq(WarehouseStock::getQualityType, qt);
+        WarehouseStock stock = stockMapper.selectOne(w);
         BigDecimal before = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
         BigDecimal after;
         if (stock == null) {
-            stock = new OutsourceWarehouseStock();
+            stock = new WarehouseStock();
             stock.setWarehouseId(warehouseId);
             stock.setMaterialId(materialId);
             stock.setQualityType(qt);
@@ -567,7 +584,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             stockMapper.updateById(stock);
         }
         // 写入流水日志
-        OutsourceStockLog logEntry = new OutsourceStockLog();
+        WarehouseStockLog logEntry = new WarehouseStockLog();
         logEntry.setWarehouseId(warehouseId);
         logEntry.setMaterialId(materialId);
         logEntry.setMaterialName(materialName);
@@ -584,6 +601,62 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (materialId == null) return "";
         OutsourceMaterial m = outsourceMaterialMapper.selectById(materialId);
         return m != null ? m.getMaterialName() : "";
+    }
+
+    /**
+     * 委外单收货审核：扣减子物料库存。
+     * 从供应商（加工厂）委外仓扣减，扣减量 = 组件用量 × 收货数量；
+     * 库存不足时直接扣至负数（对应"强制出库"，缺料提示已在收货时拦截）。
+     */
+    private void deductComponents(MaterialOrder order, List<OutsourceDeliveryItem> items, OutsourceDelivery delivery) {
+        // 供应商委外仓：子物料从该仓扣减（与收货前缺料校验口径一致）
+        List<Warehouse> supWhs = WarehouseMapper.selectList(
+                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getSupplierId()));
+        Long compWhId = supWhs.isEmpty() ? null : supWhs.get(0).getId();
+        if (compWhId == null) return;
+        for (OutsourceDeliveryItem item : items) {
+            if (item.getItemId() == null || item.getQuantity() == null) continue;
+            MaterialOrderItem oi = materialOrderItemMapper.selectById(item.getItemId());
+            if (oi == null || oi.getMaterialId() == null) continue;
+            List<OutsourceMaterialComponent> comps = componentMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceMaterialComponent>()
+                            .eq(OutsourceMaterialComponent::getParentMaterialId, oi.getMaterialId()));
+            if (comps == null || comps.isEmpty()) continue;
+            for (OutsourceMaterialComponent c : comps) {
+                if (c.getChildMaterialId() == null) continue;
+                BigDecimal demand = (c.getQuantity() != null ? c.getQuantity() : BigDecimal.ONE).multiply(item.getQuantity());
+                String childName = getMaterialNameById(c.getChildMaterialId());
+                // 负向扣减，可扣至负数
+                updateStock(compWhId, c.getChildMaterialId(), demand.negate(),
+                        QualityType.GOOD.getCode(), childName, "委外收货扣子物料", delivery.getCode());
+            }
+        }
+    }
+
+    /**
+     * 委外单收货反审核：对称恢复子物料库存（加回扣减量）。
+     */
+    private void restoreComponents(MaterialOrder order, List<OutsourceDeliveryItem> items, OutsourceDelivery delivery) {
+        List<Warehouse> supWhs = WarehouseMapper.selectList(
+                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getSupplierId()));
+        Long compWhId = supWhs.isEmpty() ? null : supWhs.get(0).getId();
+        if (compWhId == null) return;
+        for (OutsourceDeliveryItem item : items) {
+            if (item.getItemId() == null || item.getQuantity() == null) continue;
+            MaterialOrderItem oi = materialOrderItemMapper.selectById(item.getItemId());
+            if (oi == null || oi.getMaterialId() == null) continue;
+            List<OutsourceMaterialComponent> comps = componentMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceMaterialComponent>()
+                            .eq(OutsourceMaterialComponent::getParentMaterialId, oi.getMaterialId()));
+            if (comps == null || comps.isEmpty()) continue;
+            for (OutsourceMaterialComponent c : comps) {
+                if (c.getChildMaterialId() == null) continue;
+                BigDecimal demand = (c.getQuantity() != null ? c.getQuantity() : BigDecimal.ONE).multiply(item.getQuantity());
+                String childName = getMaterialNameById(c.getChildMaterialId());
+                updateStock(compWhId, c.getChildMaterialId(), demand,
+                        QualityType.GOOD.getCode(), childName, "退审恢复子物料", delivery.getCode());
+            }
+        }
     }
 
     /**
@@ -615,10 +688,10 @@ public class DeliveryServiceImpl implements DeliveryService {
     private void adjustSourceStock(Long warehouseId, Long materialId, BigDecimal delta, String materialName,
                                     String qualityType, String changeType, String orderCode) {
         // 检查是否为我方仓
-        if (inventoryWarehouseMapper.selectById(warehouseId) != null) {
+        if (WarehouseMapper.selectById(warehouseId) != null) {
             StockChangeType type = StockChangeType.fromCode(changeType);
             if (type == null) type = StockChangeType.DELIVERY_OUT; // 兜底
-            inventoryStockService.changeStock(warehouseId, materialId, delta, type, orderCode, RelatedBillType.MATERIAL_IO, null, null, null);
+            warehouseStockService.changeStock(warehouseId, materialId, delta, type, orderCode, RelatedBillType.MATERIAL_IO, null, null, null);
         } else {
             updateStock(warehouseId, materialId, delta, qualityType, materialName, changeType, orderCode);
         }
@@ -626,7 +699,7 @@ public class DeliveryServiceImpl implements DeliveryService {
 
     /** 扣减进销存仓库库存（统一走 changeStock，自动写 inventory_stock_log） */
     private void deductInventoryStock(Long warehouseId, Long materialId, java.math.BigDecimal qty, String materialName, String qualityType, String deliveryCode) {
-        inventoryStockService.changeStock(warehouseId, materialId, qty.negate(),
+        warehouseStockService.changeStock(warehouseId, materialId, qty.negate(),
             StockChangeType.OUTSOURCE_DELIVERY_OUT, deliveryCode, RelatedBillType.OUTSOURCE_DELIVERY, null, null, null);
     }
 

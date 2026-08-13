@@ -76,11 +76,11 @@ function exportExcel() {
 async function loadWarehouse() {
   loading.value = true
   try {
-    const r = await request.get<any, any>(`/outsource/warehouse/by-factory/${warehouseId}`)
+    const r = await request.get<any, any>(`/warehouse/by-factory/${warehouseId}`)
     // by-factory 返回的是仓库列表，取第一个（通常每个工厂只有一个默认仓库）
     // 但实际上这个接口是基于 factory_id 的，而 route 传的是 warehouse_id
     // 需要调整——从 page 接口获取单个仓库
-    const res = await request.get<any, any>('/outsource/warehouse/page', { params: { pageSize: 100 } })
+    const res = await request.get<any, any>('/warehouse/page', { params: { pageSize: 100 } })
     const list = res?.records || []
     warehouse.value = list.find((w:any) => w.id === warehouseId) || null
   } finally { loading.value = false }
@@ -89,8 +89,8 @@ async function loadWarehouse() {
 async function loadMaterials() {
   matLoading.value = true
   try {
-    const r = await request.get<any, any>(`/outsource/stock/by-warehouse/${warehouseId}`)
-    materials.value = r || []
+    const r = await request.get<any, any>(`/warehouse/stock/by-warehouse/${warehouseId}`)
+    materials.value = r?.records || r?.data || r || []
   } finally { matLoading.value = false }
 }
 
@@ -127,12 +127,12 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
         <el-table-column prop="materialName" label="物料名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="unit" label="单位" width="70" align="center" />
         <el-table-column label="质量类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.qualityType==='良品'?'success':'danger'" size="small">{{ row.qualityType || '良品' }}</el-tag></template></el-table-column>
-        <el-table-column label="库存数量" width="110" align="right"><template #default="{row}"><span :style="{color: Number(row.quantity)<0?'#f56c6c':'',fontWeight:Number(row.quantity)<0?600:400}">{{ row.quantity }}</span></template></el-table-column>
+        <el-table-column label="库存数量" width="110" align="right"><template #default="{row}"><span :style="{color: Number(row.quantity)<0?'var(--app-color-danger)':'',fontWeight:Number(row.quantity)<0?600:400}">{{ row.quantity }}</span></template></el-table-column>
         <el-table-column label="操作" width="80" align="center">
           <template #default="{row}"><el-button type="primary" link size="small" @click="router.push(`/outsource/material-history/${warehouseId}/${row.materialId}`)">详细</el-button></template>
         </el-table-column>
       </el-table>
-      <div v-if="sortedMaterials.length===0" style="text-align:center;color:#909399;padding:24px">暂无关联物料</div>
+      <div v-if="sortedMaterials.length===0" style="text-align:center;color:var(--app-text-secondary);padding:24px">暂无关联物料</div>
     </el-card>
   </div>
 </template>

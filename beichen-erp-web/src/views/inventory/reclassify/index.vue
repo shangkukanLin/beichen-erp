@@ -121,7 +121,7 @@ async function handleCancel(row: any) {
 }
 
 async function loadWarehouses() {
-  try { const res = await request.get<any, any>('/inventory/warehouse/page', { params: { pageSize: 200 } }); warehouseOptions.value = res?.records || [] } catch { warehouseOptions.value = [] }
+  try { const res = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY' } }); warehouseOptions.value = res?.records || [] } catch { warehouseOptions.value = [] }
 }
 async function loadQualityTypes() {
   try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] }

@@ -30,7 +30,7 @@ function usedProducts(idx: number) {
 
 async function loadFactories() {
   try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } }); factoryOptions.value = r?.records || [] } catch {}
-  try { const r = await request.get<any, any>('/inventory/warehouse/page', { params: { pageSize: 200 } }); warehouseOptions.value = r?.records || [] } catch {}
+  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200 } }); warehouseOptions.value = r?.records || [] } catch {}
 }
 
 async function onFactoryChange(v: any) {
@@ -175,10 +175,10 @@ onActivated(() => { resetForm() })
         </el-table-column>
         <el-table-column label="BOM物料（单套）" min-width="180">
           <template #default="{row}">
-            <span v-if="row.materials.length" style="font-size:12px">
+            <span v-if="row.materials.length" style="font-size:var(--app-font-xs)">
               {{ row.materials.map((m:any) => m.materialName + '×' + (Number(m.perSetQuantity)||0)).join('、') }}
             </span>
-            <span v-else style="color:#c0c4cc;font-size:12px">选择产品后自动加载</span>
+            <span v-else style="color:var(--app-text-placeholder);font-size:var(--app-font-xs)">选择产品后自动加载</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="60" align="center">

@@ -85,10 +85,10 @@ const stockData = ref<any[]>([])
 async function loadStock() {
   stockLoading.value = true
   try {
-    const params: any = { pageNum: stockPage.pageNum, pageSize: stockPage.pageSize }
+    const params: any = { pageNum: stockPage.pageNum, pageSize: stockPage.pageSize, stockType: 'PRODUCT' }
     if (stockQuery.warehouseId) params.warehouseId = stockQuery.warehouseId
     if (stockQuery.productName) params.productName = stockQuery.productName
-    const res = await request.get<any, any>('/inventory/stock/page', { params })
+    const res = await request.get<any, any>('/warehouse/stock/page', { params })
     stockData.value = res?.records || []
     stockPage.total = res?.total || 0
   } catch { stockData.value = []; stockPage.total = 0 } finally { stockLoading.value = false }
@@ -98,7 +98,7 @@ function stockReset() { stockQuery.warehouseId = undefined; stockQuery.productNa
 
 async function loadWarehouses() {
   try {
-    const res = await request.get('/inventory/warehouse/page', { params: { pageSize: 200 } })
+    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY' } })
     warehouses.value = res?.records || []
   } catch { warehouses.value = [] }
 }

@@ -18,8 +18,8 @@ async function loadOptions() {
   try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType:'factory', pageSize:200 } }); factoryOptions.value = r?.records || [] } catch (e: any) { console.warn('加载工厂选项失败', e?.message || e) }
   try {
     const [r1, r2] = await Promise.all([
-      request.get<any,any>('/outsource/warehouse/page',{params:{pageSize:300}}),
-      request.get<any,any>('/inventory/warehouse/page',{params:{pageSize:300}})
+      request.get<any,any>('/warehouse/page',{params:{pageSize:300}}),
+      request.get<any,any>('/warehouse/page',{params:{pageSize:300}})
     ]);
     allWarehouses.value = [...(r1?.records||[]), ...(r2?.records||[])]
   } catch {}
@@ -81,13 +81,13 @@ onActivated(() => { loadOptions() })
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%" size="small">
         <el-table-column prop="code" label="单号" width="170" />
         <el-table-column label="发出仓库" width="130" show-overflow-tooltip>
-          <template #default="{row}"><span v-if="row.supplierDirect" style="color:#409eff">{{row.supplierName||'供应商直发'}}</span><el-button v-else type="primary" link @click="goWhDetail(row.fromWarehouseId)">{{row.fromWarehouseName||'-'}}</el-button></template>
+          <template #default="{row}"><span v-if="row.supplierDirect" style="color:var(--app-color-primary)">{{row.supplierName||'供应商直发'}}</span><el-button v-else type="primary" link @click="goWhDetail(row.fromWarehouseId)">{{row.fromWarehouseName||'-'}}</el-button></template>
         </el-table-column>
         <el-table-column label="目标仓库" width="130" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click="goWhDetail(row.toWarehouseId)">{{row.toWarehouseName||'-'}}</el-button></template>
         </el-table-column>
         <el-table-column label="物料" min-width="180" show-overflow-tooltip>
-          <template #default="{row}"><span v-if="row.itemSummary">{{row.itemSummary}}</span><span v-else style="color:#c0c4cc">{{row.itemCount||0}}项</span></template>
+          <template #default="{row}"><span v-if="row.itemSummary">{{row.itemSummary}}</span><span v-else style="color:var(--app-text-placeholder)">{{row.itemCount||0}}项</span></template>
         </el-table-column>
         <el-table-column label="日期" width="100"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column prop="status" label="状态" width="90"><template #default="{row}">

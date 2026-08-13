@@ -15,7 +15,7 @@ import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import com.beichen.erp.finance.service.ReceivableHelper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.sale.common.SaleReturnStatus;
@@ -49,7 +49,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     private final SaleReturnItemMapper itemMapper;
     private final ProductMapper productMapper;
     private final CustomerMapper customerMapper;
-    private final InventoryWarehouseStockService stockService;
+    private final WarehouseStockService stockService;
     private final FinanceReceivableMapper financeReceivableMapper;
     private final ReceivableHelper receivableHelper;
     private final UserMapper userMapper;

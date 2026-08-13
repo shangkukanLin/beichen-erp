@@ -103,9 +103,9 @@ onMounted(() => { loadOpts(); loadSummary(); loadData() })
         <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="supplierName" label="供应商" min-width="180" />
         <el-table-column label="应付总额" width="130" align="right"><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
-        <el-table-column label="已付" width="130" align="right"><template #default="{row}"><span style="color:#67c23a">{{ fmt(row.paidAmount) }}</span></template></el-table-column>
-        <el-table-column label="未付" width="130" align="right"><template #default="{row}"><span style="color:#e6a23c;font-weight:600">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
-        <el-table-column label="逾期金额" width="130" align="right"><template #default="{row}"><span :style="{color: Number(row.overdueAmount)>0?'#f56c6c':'#909399', fontWeight: Number(row.overdueAmount)>0?600:400}">{{ fmt(row.overdueAmount) }}</span></template></el-table-column>
+        <el-table-column label="已付" width="130" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.paidAmount) }}</span></template></el-table-column>
+        <el-table-column label="未付" width="130" align="right"><template #default="{row}"><span style="color:var(--app-color-warning);font-weight:600">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
+        <el-table-column label="逾期金额" width="130" align="right"><template #default="{row}"><span :style="{color: Number(row.overdueAmount)>0?'var(--app-color-danger)':'var(--app-text-secondary)', fontWeight: Number(row.overdueAmount)>0?600:400}">{{ fmt(row.overdueAmount) }}</span></template></el-table-column>
         <el-table-column label="操作" width="100" align="center">
           <template #default="{row}"><el-button type="primary" link @click="goSupplierDetail(row)">详情</el-button></template>
         </el-table-column>
@@ -153,7 +153,7 @@ onMounted(() => { loadOpts(); loadSummary(); loadData() })
               <el-image :src="detail.attachUrl" :preview-src-list="[detail.attachUrl]" fit="contain" style="width:80px;height:80px;border:1px solid #dcdfe6;border-radius:4px" preview-teleported />
               <el-link type="primary" @click="openAttach(detail.attachUrl)">查看原图</el-link>
             </template>
-            <span v-else style="color:#909399">未上传</span>
+            <span v-else style="color:var(--app-text-secondary)">未上传</span>
             <label class="upload-btn">
               <input type="file" accept="image/*" style="display:none" @change="handleUploadAttach" />
               <el-button size="small" :loading="attachSaving" @click="($event.currentTarget as HTMLElement).parentElement?.querySelector('input')?.click()">{{ detail.attachUrl ? '更换凭证' : '上传凭证' }}</el-button>

@@ -96,16 +96,16 @@ public class SystemController {
 
             // 依赖顺序（先删依赖表，再删主表）
             List<String> deleteOrder = Arrays.asList(
-                "outsource_delivery_item", "outsource_warehouse_stock",
+                "outsource_delivery_item", "warehouse_stock",
                 "outsource_order_material", "outsource_order_product", "outsource_order_delivery",
                 "outsource_order", "outsource_material_component", "outsource_material",
                 "material_order_item", "material_order",
                 "purchase_inbound_item", "purchase_order_item",
                 "sale_outbound_item", "sale_order_item",
-                "inventory_stock_log", "inventory_warehouse_stock",
-                "inventory_warehouse_move_item", "inventory_other_io_item",
+                "warehouse_stock_log", "warehouse_stock",
+                "warehouse_move_item", "inventory_other_io_item",
                 "project_timeline", "bom", "project",
-                "product", "brand", "supplier", "outsource_warehouse",
+                "product", "brand", "supplier", "warehouse",
                 "sys_role_menu", "sys_user_role",
                 "sys_menu", "sys_role", "sys_user", "sys_config"
             );

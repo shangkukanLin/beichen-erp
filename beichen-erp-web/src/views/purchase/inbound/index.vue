@@ -62,7 +62,7 @@ async function loadSuppliers() {
   try { const res = await request.get('/supplier/page', { params: { pageSize: 200 } }); suppliers.value = res?.records || [] } catch { suppliers.value = [] }
 }
 async function loadWarehouses() {
-  try { const res = await request.get('/inventory/warehouse/page', { params: { pageSize: 200 } }); warehouses.value = res?.records || [] } catch { warehouses.value = [] }
+  try { const res = await request.get('/warehouse/page', { params: { pageSize: 200 } }); warehouses.value = res?.records || [] } catch { warehouses.value = [] }
 }
 async function loadMaterials(keyword?: string) {
   try { const res = await getOutsourceMaterialPage({ pageNum: 1, pageSize: 100, materialName: keyword || '' }); materialOptions.value = res?.records || [] } catch { materialOptions.value = [] }

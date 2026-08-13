@@ -14,7 +14,7 @@ const pagination = ref({ pageNum: 1, pageSize: 20, total: 0 })
 async function loadData() {
   loading.value = true
   try {
-    const r = await request.get<any, any>('/inventory/stock/log', {
+    const r = await request.get<any, any>('/warehouse/stock/log', {
       params: { warehouseId, productId, pageNum: pagination.value.pageNum, pageSize: pagination.value.pageSize }
     })
     records.value = r?.records || []
@@ -66,13 +66,16 @@ onMounted(() => loadData())
           <template #default="{row}"><span style="font-weight:500">{{ row.beforeQuantity }}</span></template>
         </el-table-column>
         <el-table-column label="变更数量" width="100" align="right">
-          <template #default="{row}"><span :style="{color: Number(row.changeQuantity)<0?'#f56c6c':'#67c23a',fontWeight:600}">{{ Number(row.changeQuantity)>0?'+':'' }}{{ row.changeQuantity }}</span></template>
+          <template #default="{row}"><span :style="{color: Number(row.changeQuantity)<0?'var(--app-color-danger)':'var(--app-color-success)',fontWeight:600}">{{ Number(row.changeQuantity)>0?'+':'' }}{{ row.changeQuantity }}</span></template>
         </el-table-column>
         <el-table-column label="变更后" width="100" align="right">
-          <template #default="{row}"><span :style="{color: Number(row.afterQuantity)<0?'#f56c6c':'',fontWeight:600}">{{ row.afterQuantity }}</span></template>
+          <template #default="{row}"><span :style="{color: Number(row.afterQuantity)<0?'var(--app-color-danger)':'',fontWeight:600}">{{ row.afterQuantity }}</span></template>
+        </el-table-column>
+        <el-table-column label="总数" width="100" align="right">
+          <template #default="{row}"><span style="font-weight:600;color:var(--app-color-primary)">{{ row.totalAfterStock }}</span></template>
         </el-table-column>
         <el-table-column label="关联单号" width="160" show-overflow-tooltip>
-          <template #default="{row}"><el-button v-if="row.relatedBillNo" type="primary" link @click="handleCodeClick(row.relatedBillNo)">{{ row.relatedBillNo }}</el-button><span v-else style="color:#c0c4cc">—</span></template>
+          <template #default="{row}"><el-button v-if="row.relatedBillNo" type="primary" link @click="handleCodeClick(row.relatedBillNo)">{{ row.relatedBillNo }}</el-button><span v-else style="color:var(--app-text-placeholder)">—</span></template>
         </el-table-column>
       </el-table>
       <div class="pagination"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="handlePageChange" @size-change="handleSizeChange" /></div>

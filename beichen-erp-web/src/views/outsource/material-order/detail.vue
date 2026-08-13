@@ -63,7 +63,7 @@ function onDefectWhChange(whId: number) {
 }
 async function loadDefectStock(whId: number) {
   try {
-    const r = await request.get<any,any>('/outsource/stock/by-warehouse/' + whId)
+    const r = await request.get<any,any>('/warehouse/stock/by-warehouse/' + whId)
     const stockMap: Record<number, number> = {}
     if (Array.isArray(r)) for (const s of r) stockMap[s.materialId] = s.quantity || 0
     for (const it of defectItems.value) {
@@ -127,7 +127,7 @@ async function openReceive() {
     receivedQuantity: it.receivedQuantity, quantity: undefined as any,
     components: (it.components || []).map((c: any) => ({ childMaterialName: c.childMaterialName, childUnit: c.childUnit, stockQuantity: c.stockQuantity || 0, quantity: c.quantity || 1 }))
   }))
-  try { const r = await request.get<any, any>('/outsource/warehouse/page', { params: { pageSize: 500 } }); warehouseOptions.value = (r?.records || []) } catch { warehouseOptions.value = [] }
+  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } }); warehouseOptions.value = (r?.records || []) } catch { warehouseOptions.value = [] }
   recVisible.value = true
 }
 async function handleReceive(force?: boolean) {
@@ -142,15 +142,15 @@ async function handleReceive(force?: boolean) {
       const shortages = (res.shortages || []) as any[]
       let html = '<div style="margin-bottom:8px">以下子物料库存不足，是否确认缺料收货？</div>'
       html += '<table style="width:100%;border-collapse:collapse;font-size:13px">'
-      html += '<tr style="background:#f5f7fa"><th style="padding:6px;border:1px solid #ebeef5;text-align:left">物料名称</th><th style="padding:6px;border:1px solid #ebeef5">需要</th><th style="padding:6px;border:1px solid #ebeef5">库存</th><th style="padding:6px;border:1px solid #ebeef5">缺口</th></tr>'
+      html += '<tr style="background:var(--app-bg-hover)"><th style="padding:6px;border:1px solid var(--app-border-light);text-align:left">物料名称</th><th style="padding:6px;border:1px solid var(--app-border-light)">需要</th><th style="padding:6px;border:1px solid var(--app-border-light)">库存</th><th style="padding:6px;border:1px solid var(--app-border-light)">缺口</th></tr>'
       for (const s of shortages) {
-        html += `<tr><td style="padding:6px;border:1px solid #ebeef5">${s.materialName||''}</td>`
-        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#e6a23c">${s.demand||0}</td>`
-        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#f56c6c">${s.stock||0}</td>`
-        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#f56c6c;font-weight:600">${s.shortage||0}</td></tr>`
+        html += `<tr><td style="padding:6px;border:1px solid var(--app-border-light)">${s.materialName||''}</td>`
+        html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-warning)">${s.demand||0}</td>`
+        html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-danger)">${s.stock||0}</td>`
+        html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-danger);font-weight:600">${s.shortage||0}</td></tr>`
       }
       html += '</table>'
-      html += '<div style="margin-top:8px;color:#909399;font-size:12px">确认后子物料库存将变为负数</div>'
+      html += '<div style="margin-top:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">确认后子物料库存将变为负数</div>'
       recSaving.value = false
       try {
         await ElMessageBox.confirm(html, '缺料提示', {
@@ -307,16 +307,16 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
           <el-table-column type="expand" v-if="items.some((it: any) => it.components && it.components.length > 0)">
             <template #default="{row}">
               <div v-if="row.components && row.components.length > 0" style="margin:4px 20px">
-                <div style="font-size:12px;color:#606266;margin-bottom:4px;font-weight:500">子物料清单（每套用量 × 下单数 = 需求总数）</div>
+                <div style="font-size:var(--app-font-xs);color:var(--app-text-regular);margin-bottom:4px;font-weight:500">子物料清单（每套用量 × 下单数 = 需求总数）</div>
                 <el-table :data="row.components" border size="small">
                   <el-table-column prop="childMaterialName" label="子物料" min-width="120" />
                   <el-table-column prop="childUnit" label="单位" width="55" />
                   <el-table-column label="需求" width="80"><template #default="{row:r}">{{ r.demandQuantity || 0 }}</template></el-table-column>
-                  <el-table-column label="已出货消耗" width="85"><template #default="{row:r}"><span :style="{color: r.deliveredQuantity>0?'#409eff':''}">{{ r.deliveredQuantity || 0 }}</span></template></el-table-column>
+                  <el-table-column label="已出货消耗" width="85"><template #default="{row:r}"><span :style="{color: r.deliveredQuantity>0?'var(--app-color-primary)':''}">{{ r.deliveredQuantity || 0 }}</span></template></el-table-column>
                   <el-table-column label="剩余需求" width="80"><template #default="{row:r}">{{ Math.max(0, Number(r.demandQuantity||0) - Number(r.deliveredQuantity||0)) }}</template></el-table-column>
-                  <el-table-column label="库存" width="70"><template #default="{row:r}"><span :style="{color: Number(r.stockQuantity||0) < Number(r.demandQuantity||0) ? '#f56c6c' : '#67c23a'}">{{ r.stockQuantity || 0 }}</span></template></el-table-column>
-                  <el-table-column label="可能在途" width="80"><template #default="{row:r}"><span :style="{color: Number(r.inTransit||0) > 0 ? '#409eff' : ''}">{{ r.inTransit || 0 }}</span></template></el-table-column>
-                  <el-table-column label="缺料" width="70"><template #default="{row:r}"><span :style="{color: Number(r.shortage||0) > 0 ? '#f56c6c' : '#67c23a'}">{{ r.shortage || 0 }}</span></template></el-table-column>
+                  <el-table-column label="库存" width="70"><template #default="{row:r}"><span :style="{color: Number(r.stockQuantity||0) < Number(r.demandQuantity||0) ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ r.stockQuantity || 0 }}</span></template></el-table-column>
+                  <el-table-column label="可能在途" width="80"><template #default="{row:r}"><span :style="{color: Number(r.inTransit||0) > 0 ? 'var(--app-color-primary)' : ''}">{{ r.inTransit || 0 }}</span></template></el-table-column>
+                  <el-table-column label="缺料" width="70"><template #default="{row:r}"><span :style="{color: Number(r.shortage||0) > 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ r.shortage || 0 }}</span></template></el-table-column>
                   <el-table-column label="损耗率(%)" width="80"><template #default="{row:r}">{{ r.lossRate || 0 }}</template></el-table-column>
                   <el-table-column label="操作" width="80" align="center"><template #default="{row:r}"><el-button v-if="Number(r.shortage||0) > 0" type="warning" link size="small" @click="goPurchaseComponent(r, row)">去采购</el-button></template></el-table-column>
                 </el-table>
@@ -327,8 +327,8 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
           <el-table-column prop="materialName" label="物料名称" min-width="130" />
           <el-table-column prop="unit" label="单位" width="60" />
           <el-table-column prop="orderQuantity" label="下单数" width="90" />
-          <el-table-column label="已出货" width="90"><template #default="{row}"><span :style="{color:row.receivedQuantity>0?'#67c23a':''}">{{ row.receivedQuantity || 0 }}</span></template></el-table-column>
-          <el-table-column label="已退(不良)" width="90"><template #default="{row}"><span :style="{color:row.defectReturnedQty>0?'#f56c6c':''}">{{ row.defectReturnedQty || 0 }}</span></template></el-table-column>
+          <el-table-column label="已出货" width="90"><template #default="{row}"><span :style="{color:row.receivedQuantity>0?'var(--app-color-success)':''}">{{ row.receivedQuantity || 0 }}</span></template></el-table-column>
+          <el-table-column label="已退(不良)" width="90"><template #default="{row}"><span :style="{color:row.defectReturnedQty>0?'var(--app-color-danger)':''}">{{ row.defectReturnedQty || 0 }}</span></template></el-table-column>
           <el-table-column prop="unitPrice" label="单价" width="80" />
           <el-table-column prop="amount" label="金额" width="100" />
         </el-table>
@@ -336,10 +336,10 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
 
       <el-card shadow="never" style="margin-top:12px">
         <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">合同文件</span><el-button type="warning" size="small" @click="exportPdf">导出合同模板</el-button></div></template>
-        <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'#67c23a':'#dcdfe6', background: uploadFile?'#f0f9eb':'#fafafa' }">
-          <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:#67c23a;font-weight:600">{{ uploadFile.name }}</span><el-button type="primary" size="small" :loading="attachSaving" @click.stop="handleSaveAttach">保存</el-button><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
-          <template v-else-if="order.attachUrl"><div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap"><span style="color:#409eff">已有附件</span><el-button type="primary" size="small" @click.stop="openAttach(order.attachUrl)">查看</el-button><el-button type="success" size="small"><a :href="order.attachUrl" download style="color:inherit;text-decoration:none">下载</a></el-button><el-button type="danger" size="small" @click.stop="handleDeleteAttach">删除</el-button><span style="color:#909399;font-size:12px">可拖拽新文件替换</span></div></template>
-          <template v-else><p style="color:#909399;margin:0">拖拽文件到此处，或点击选择</p></template>
+        <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'var(--app-color-success)':'var(--app-border-color)', background: uploadFile?'#f0f9eb':'#fafafa' }">
+          <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:var(--app-color-success);font-weight:600">{{ uploadFile.name }}</span><el-button type="primary" size="small" :loading="attachSaving" @click.stop="handleSaveAttach">保存</el-button><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
+          <template v-else-if="order.attachUrl"><div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap"><span style="color:var(--app-color-primary)">已有附件</span><el-button type="primary" size="small" @click.stop="openAttach(order.attachUrl)">查看</el-button><el-button type="success" size="small"><a :href="order.attachUrl" download style="color:inherit;text-decoration:none">下载</a></el-button><el-button type="danger" size="small" @click.stop="handleDeleteAttach">删除</el-button><span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">可拖拽新文件替换</span></div></template>
+          <template v-else><p style="color:var(--app-text-secondary);margin:0">拖拽文件到此处，或点击选择</p></template>
           <input v-if="!order.attachUrl && !uploadFile" type="file" @change="handleFileSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
         </div>
       </el-card>
@@ -348,13 +348,13 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
     <!-- Tab 2: 交货管理 -->
     <template v-if="activeTab === 'delivery'">
       <el-row :gutter="12" style="margin-bottom:12px">
-        <el-col :span="6"><el-card shadow="never"><p style="color:#909399;font-size:12px;margin:0">订单总量</p><p style="font-size:20px;font-weight:600;margin:4px 0">{{ totalQuantity }}</p></el-card></el-col>
-        <el-col :span="6"><el-card shadow="never"><p style="color:#909399;font-size:12px;margin:0">已交数量</p><p style="font-size:20px;font-weight:600;margin:4px 0;color:#67c23a">{{ deliveredQuantity }}</p></el-card></el-col>
-        <el-col :span="6"><el-card shadow="never"><p style="color:#909399;font-size:12px;margin:0">剩余数量</p><p style="font-size:20px;font-weight:600;margin:4px 0;color:#e6a23c">{{ totalQuantity - deliveredQuantity }}</p></el-card></el-col>
-        <el-col :span="6"><el-card shadow="never"><p style="color:#909399;font-size:12px;margin:0">交货进度</p><p style="font-size:20px;font-weight:600;margin:4px 0;color:#409eff">{{ deliveryProgress }}%</p></el-card></el-col>
+        <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">订单总量</p><p style="font-size:20px;font-weight:600;margin:4px 0">{{ totalQuantity }}</p></el-card></el-col>
+        <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">已交数量</p><p style="font-size:20px;font-weight:600;margin:4px 0;color:var(--app-color-success)">{{ deliveredQuantity }}</p></el-card></el-col>
+        <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">剩余数量</p><p style="font-size:20px;font-weight:600;margin:4px 0;color:var(--app-color-warning)">{{ totalQuantity - deliveredQuantity }}</p></el-card></el-col>
+        <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">交货进度</p><p style="font-size:20px;font-weight:600;margin:4px 0;color:var(--app-color-primary)">{{ deliveryProgress }}%</p></el-card></el-col>
       </el-row>
       <el-card shadow="never" style="margin-bottom:12px">
-        <el-progress :percentage="deliveryProgress" :stroke-width="16" :text-inside="true" :color="deliveredQuantity>=totalQuantity?'#67c23a':'#409eff'" />
+        <el-progress :percentage="deliveryProgress" :stroke-width="16" :text-inside="true" :color="deliveredQuantity>=totalQuantity?'var(--app-color-success)':'var(--app-color-primary)'" />
       </el-card>
       <el-card shadow="never">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -395,7 +395,7 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
                 <el-button v-if="row.status==='DRAFT'" type="primary" link size="small" @click="auditDelivery(row)">审核</el-button>
                 <el-button v-if="row.status==='AUDITED'" type="warning" link size="small" @click="unauditDelivery(row)">反审核</el-button>
               </template>
-              <span v-else style="color:#c0c4cc;font-size:12px">-</span>
+              <span v-else style="color:var(--app-text-placeholder);font-size:var(--app-font-xs)">-</span>
             </template>
           </el-table-column>
         </el-table>
@@ -405,20 +405,20 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
     <!-- 收货弹窗 -->
     <el-dialog v-model="recVisible" title="新增交货" width="700px" :close-on-click-modal="false">
       <div style="margin-bottom:8px;display:flex;align-items:center;gap:16px">
-        <span style="font-size:13px;color:#606266">供应商：<b>{{ order.supplierName || '-' }}</b></span>
-        <span style="font-size:13px">收货仓库：</span>
+        <span style="font-size:var(--app-font-sm);color:var(--app-text-regular)">供应商：<b>{{ order.supplierName || '-' }}</b></span>
+        <span style="font-size:var(--app-font-sm)">收货仓库：</span>
         <el-select v-model="recWarehouseId" filterable size="small" style="width:180px" placeholder="选择仓库"><el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName || w.name || '仓库'+w.id" :value="w.id" /></el-select>
       </div>
       <el-table :data="recItems" border size="small" row-key="itemId">
         <el-table-column type="expand" v-if="recItems.some((it: any) => it.components && it.components.length > 0)">
           <template #default="{row}">
             <div v-if="row.components && row.components.length > 0" style="margin:4px 20px">
-              <div style="font-size:12px;color:#f56c6c;margin-bottom:4px">交货将扣减以下子物料库存：</div>
+              <div style="font-size:var(--app-font-xs);color:var(--app-color-danger);margin-bottom:4px">交货将扣减以下子物料库存：</div>
               <el-table :data="row.components" border size="small">
                 <el-table-column prop="childMaterialName" label="子物料" min-width="100" />
                 <el-table-column prop="childUnit" label="单位" width="50" />
                 <el-table-column label="本次需求" width="90"><template #default="{row:r}">{{ Number(r.quantity||1) * Number(row.quantity||0) }}</template></el-table-column>
-                <el-table-column label="库存" width="85"><template #default="{row:r}"><span :style="{color: Number(r.stockQuantity||0) < Number(r.quantity||1)*Number(row.quantity||0) ? '#f56c6c' : '#67c23a'}">{{ r.stockQuantity }}</span></template></el-table-column>
+                <el-table-column label="库存" width="85"><template #default="{row:r}"><span :style="{color: Number(r.stockQuantity||0) < Number(r.quantity||1)*Number(row.quantity||0) ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ r.stockQuantity }}</span></template></el-table-column>
               </el-table>
             </div>
           </template>
@@ -434,16 +434,16 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
     <!-- 退不良弹窗 -->
     <el-dialog v-model="defectVisible" title="退不良品" width="650px" :close-on-click-modal="false">
       <div style="margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <span style="font-size:13px;color:#606266">供应商：<b>{{ order.supplierName || '-' }}</b></span>
-        <span style="font-size:13px">处理方式：</span>
+        <span style="font-size:var(--app-font-sm);color:var(--app-text-regular)">供应商：<b>{{ order.supplierName || '-' }}</b></span>
+        <span style="font-size:var(--app-font-sm)">处理方式：</span>
         <el-radio-group v-model="defectHandleType" size="small" @change="defectWarehouseId=undefined"><el-radio label="维修返还" /><el-radio label="折现退款" /></el-radio-group>
       </div>
       <div v-if="defectHandleType!=='折现退款'" style="margin-bottom:8px"><el-select v-model="defectWarehouseId" filterable style="width:100%" placeholder="选择退料仓库" @change="onDefectWhChange"><el-option v-for="w in defectWarehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></div>
-      <div v-if="defectHandleType==='折现退款'" style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid #e6a23c;font-size:12px;color:#e6a23c">折现退款仅作记录，不会扣减库存。款项由财务后续处理。</div>
+      <div v-if="defectHandleType==='折现退款'" style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid var(--app-color-warning);font-size:var(--app-font-xs);color:var(--app-color-warning)">折现退款仅作记录，不会扣减库存。款项由财务后续处理。</div>
       <el-table :data="defectItems" border size="small">
         <el-table-column prop="materialName" label="物料" min-width="140" />
         <el-table-column prop="available" label="可退" width="70" />
-        <el-table-column label="仓库库存" width="90" align="right"><template #default="{row}"><span v-if="row.stockLoading">加载中...</span><span v-else-if="row.warehouseStock===undefined" style="color:#c0c4cc">—</span><span v-else :style="{color:row.warehouseStock<row.quantity?'#f56c6c':'#67c23a'}">{{ row.warehouseStock }}</span></template></el-table-column>
+        <el-table-column label="仓库库存" width="90" align="right"><template #default="{row}"><span v-if="row.stockLoading">加载中...</span><span v-else-if="row.warehouseStock===undefined" style="color:var(--app-text-placeholder)">—</span><span v-else :style="{color:row.warehouseStock<row.quantity?'var(--app-color-danger)':'var(--app-color-success)'}">{{ row.warehouseStock }}</span></template></el-table-column>
         <el-table-column label="退料数量" width="140"><template #default="{row}"><el-input v-model="row.quantity" size="small" type="number" placeholder="数量" /></template></el-table-column>
       </el-table>
       <template #footer><el-button @click="defectVisible=false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认退料</el-button></template>
@@ -455,7 +455,7 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
 .detail-page { padding:16px; }
 .page-header { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
 
-.drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
-.drop-zone:hover { border-color:#409eff; background:#ecf5ff }
-:deep(.readonly-input .el-input__inner) { background-color: #f5f7fa; color: #909399; cursor: default; }
+.drop-zone { position:relative; border:2px dashed var(--app-border-color); border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
+.drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }
+:deep(.readonly-input .el-input__inner) { background-color: var(--app-bg-hover); color: var(--app-text-secondary); cursor: default; }
 </style>

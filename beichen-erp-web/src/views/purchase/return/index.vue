@@ -142,7 +142,7 @@ async function loadSuppliers() {
 }
 async function loadWarehouses() {
   try {
-    const res = await request.get('/inventory/warehouse/page', { params: { pageSize: 200 } })
+    const res = await request.get('/warehouse/page', { params: { pageSize: 200 } })
     warehouses.value = res?.records || []
   } catch { /* */ }
 }

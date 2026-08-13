@@ -43,7 +43,7 @@ onMounted(loadData)
   <div style="display:flex;flex-direction:column;gap:12px">
     <el-card shadow="never">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-weight:600;font-size:15px">阶段模板管理</span>
+        <span style="font-weight:600;font-size:var(--app-font-md)">阶段模板管理</span>
         <el-button type="primary" @click="openAdd">新增阶段</el-button>
       </div>
     </el-card>

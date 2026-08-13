@@ -305,12 +305,15 @@ CREATE TABLE IF NOT EXISTS outsource_material (
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协物料表';
 
--- ==================== 委外仓库 ====================
+-- ==================== 统一仓库模块 ====================
 
-CREATE TABLE IF NOT EXISTS outsource_warehouse (
+CREATE TABLE IF NOT EXISTS warehouse (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '仓库ID',
-    factory_id BIGINT COMMENT '工厂ID',
+    code VARCHAR(50) NOT NULL COMMENT '仓库编码',
     warehouse_name VARCHAR(100) NOT NULL COMMENT '仓库名称',
+    warehouse_category VARCHAR(20) NOT NULL COMMENT '仓库类别: INVENTORY(自有)/OUTSOURCE(委外)',
+    warehouse_type VARCHAR(50) COMMENT '仓库类型(仅INVENTORY): 成品仓/不良品仓/辅料仓',
+    factory_id BIGINT COMMENT '关联加工厂ID(仅OUTSOURCE)',
     address VARCHAR(200) COMMENT '仓库地址',
     contact VARCHAR(50) COMMENT '联系人',
     phone VARCHAR(20) COMMENT '联系电话',
@@ -319,21 +322,55 @@ CREATE TABLE IF NOT EXISTS outsource_warehouse (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
     INDEX idx_factory_id (factory_id),
-    INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协仓库表';
+    INDEX idx_company_id (company_id),
+    INDEX idx_category (warehouse_category)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='统一仓库表';
 
-CREATE TABLE IF NOT EXISTS outsource_warehouse_stock (
+CREATE TABLE IF NOT EXISTS warehouse_stock (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     warehouse_id BIGINT NOT NULL COMMENT '仓库ID',
-    material_id BIGINT NOT NULL COMMENT '物料ID',
-    quality_type VARCHAR(20) DEFAULT '良品' COMMENT '良品/不良品',
+    product_id BIGINT DEFAULT NULL COMMENT '产品ID(自有仓成品库存)',
+    material_id BIGINT DEFAULT NULL COMMENT '物料ID(委外仓物料库存)',
+    quality_type VARCHAR(20) DEFAULT 'A' COMMENT '品质等级',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '库存数量',
+    available_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '可用数量',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_product_id (product_id),
     INDEX idx_material_id (material_id),
-    UNIQUE KEY uk_warehouse_material_quality (warehouse_id, material_id, quality_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协仓库库存表';
+    UNIQUE KEY uk_wh_prod_quality_company (warehouse_id, product_id, quality_type, company_id),
+    UNIQUE KEY uk_wh_material_company (warehouse_id, material_id, company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='统一库存表';
+
+CREATE TABLE IF NOT EXISTS warehouse_stock_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    warehouse_id BIGINT NOT NULL COMMENT '仓库ID',
+    product_id BIGINT DEFAULT NULL COMMENT '产品ID',
+    material_id BIGINT DEFAULT NULL COMMENT '物料ID',
+    material_name VARCHAR(100) COMMENT '物料名称',
+    quality_type VARCHAR(20) COMMENT '品质等级',
+    change_type VARCHAR(20) NOT NULL COMMENT '变动类型',
+    change_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变更数量',
+    before_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变更前库存',
+    after_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变更后库存',
+    related_bill_no VARCHAR(100) COMMENT '关联单据号',
+    related_bill_type VARCHAR(50) COMMENT '关联单据类型',
+    related_bill_id BIGINT COMMENT '关联单据ID',
+    related_delivery_id BIGINT COMMENT '关联发货单ID',
+    related_order_code VARCHAR(30) COMMENT '关联加工单号',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_product_id (product_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id),
+    INDEX idx_related_bill_no (related_bill_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='统一库存流水表';
 
 CREATE TABLE IF NOT EXISTS outsource_contract_template (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '模板ID',
@@ -349,25 +386,6 @@ CREATE TABLE IF NOT EXISTS outsource_contract_template (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协合同模板表';
-
--- ==================== 库存模块 ====================
-
-CREATE TABLE IF NOT EXISTS inventory_warehouse (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '仓库ID',
-    code VARCHAR(50) NOT NULL COMMENT '仓库编码',
-    warehouse_name VARCHAR(100) NOT NULL COMMENT '仓库名称',
-    warehouse_type VARCHAR(50) COMMENT '仓库类型',
-    address VARCHAR(200) COMMENT '仓库地址',
-    manager VARCHAR(50) COMMENT '管理员',
-    phone VARCHAR(20) COMMENT '联系电话',
-    status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',
-    remark VARCHAR(255) COMMENT '备注',
-    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
-    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_code (code),
-    INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存仓库表';
 
 -- ==================== 研发模块 ====================
 

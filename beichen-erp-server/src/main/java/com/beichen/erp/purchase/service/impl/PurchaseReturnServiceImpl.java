@@ -13,7 +13,7 @@ import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
-import com.beichen.erp.inventory.service.InventoryWarehouseStockService;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.purchase.entity.*;
@@ -41,7 +41,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private final PurchaseReturnItemMapper itemMapper;
     private final SupplierMapper supplierMapper;
     private final ProductMapper productMapper;
-    private final InventoryWarehouseStockService stockService;
+    private final WarehouseStockService stockService;
     private final FinancePayableMapper payableMapper;
     private final UserMapper userMapper;
     private final com.beichen.erp.finance.service.PayableHelper payableHelper;

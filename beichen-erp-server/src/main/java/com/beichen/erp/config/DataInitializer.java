@@ -145,7 +145,7 @@ public class DataInitializer implements ApplicationRunner {
             {4L, 0L, "委外加工", "catalog", "", "", "Setting", 4},
             {5L, 0L, "进货业务", "catalog", "", "", "ShoppingCart", 5},
             {6L, 0L, "销售业务", "catalog", "", "", "Sell", 6},
-            {7L, 0L, "库存业务", "catalog", "", "", "Odometer", 7},
+            {7L, 0L, "成品库存业务", "catalog", "", "", "Odometer", 7},
             {8L, 0L, "财务管理", "catalog", "", "", "Money", 8},
             {9L, 0L, "设置", "catalog", "", "", "Tools", 9},
             {101L, 2L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 1},
@@ -159,12 +159,13 @@ public class DataInitializer implements ApplicationRunner {
             {401L, 4L, "委外加工单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1},
             {402L, 4L, "委外物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2},
             {403L, 4L, "物料信息管理", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 3},
-            {404L, 4L, "委外仓库", "menu", "/outsource/warehouse", "OutsourceWarehouse", "Odometer", 4},
-            {405L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 5},
-            {406L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6},
-            {407L, 4L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 7},
-            {408L, 4L, "委外退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 8},
-            {409L, 4L, "供应商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "UserFilled", 9},
+            {404L, 4L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 4},
+            {406L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 5},
+            {407L, 4L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 6},
+            {408L, 4L, "委外退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 7},
+            {409L, 4L, "供应商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "UserFilled", 8},
+            {410L, 4L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 9},
+            {405L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 10},
             {501L, 5L, "成品采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1},
             {502L, 5L, "成品退货单", "menu", "/inventory/purchase-return", "InventoryPurchaseReturn", "Refrigerator", 2},
             {503L, 5L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "UserFilled", 3},
@@ -173,10 +174,10 @@ public class DataInitializer implements ApplicationRunner {
             {603L, 6L, "销售退货单", "menu", "/sale/return", "SaleReturn", "Refund", 3},
             {604L, 6L, "收费售后", "menu", "/outsource/after-sale", "AfterSale", "Service", 4},
             {701L, 7L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 1},
-            {702L, 7L, "仓库管理", "menu", "/inventory/warehouse", "InventoryWarehouse", "Odometer", 2},
-            {703L, 7L, "库存流水", "menu", "/inventory/stock-log", "InventoryStockLog", "TrendCharts", 3},
-            {704L, 7L, "其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 4},
-            {705L, 7L, "品质重分类", "menu", "/inventory/reclassify", "InventoryReclassify", "Refresh", 5},
+            {702L, 7L, "成品仓库管理", "menu", "/inventory/warehouse", "Warehouse", "Odometer", 2},
+            {703L, 7L, "成品库存流水", "menu", "/inventory/stock-log", "WarehouseStockLog", "TrendCharts", 3},
+            {704L, 7L, "成品其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 4},
+            {705L, 7L, "成品品质重分类", "menu", "/inventory/reclassify", "InventoryReclassify", "Refresh", 5},
             {706L, 7L, "成品移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 6},
             {801L, 8L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1},
             {802L, 8L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2},
@@ -212,7 +213,7 @@ public class DataInitializer implements ApplicationRunner {
         log.info("同步菜单完成，处理 {} 条", processed);
 
         // 删除非标准菜单（旧ID已废弃）
-        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,301L,302L,303L,304L,401L,402L,403L,404L,405L,406L,407L,408L,409L,501L,502L,503L,601L,602L,603L,604L,701L,702L,703L,704L,705L,706L,801L,802L,803L,804L,805L,806L,901L,902L,903L,904L,905L,906L,907L,908L};
+        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,301L,302L,303L,304L,401L,402L,403L,404L,405L,406L,407L,408L,409L,410L,501L,502L,503L,601L,602L,603L,604L,701L,702L,703L,704L,705L,706L,801L,802L,803L,804L,805L,806L,901L,902L,903L,904L,905L,906L,907L,908L};
         Set<Long> newIds = new HashSet<>(Arrays.asList(newMenuIds));
         jdbcTemplate.update("DELETE FROM sys_role_menu WHERE menu_id NOT IN (" +
             String.join(",", newIds.stream().map(String::valueOf).toArray(String[]::new)) + ")");
@@ -251,7 +252,7 @@ public class DataInitializer implements ApplicationRunner {
                 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L,
                 101L, 102L, 103L, 104L,
                 301L, 302L, 303L, 304L,
-                401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L,
+                401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L, 410L,
                 501L, 502L, 503L,
                 601L, 602L, 603L, 604L,
                 701L, 702L, 703L, 704L, 705L, 706L,
@@ -268,7 +269,7 @@ public class DataInitializer implements ApplicationRunner {
                 1L, 5L, 7L, 501L, 502L, 701L, 702L, 703L, 704L, 705L, 706L, 603L, 604L, 101L));
         // 跟单专员：委外加工全部
         assignRoleMenus("merchandiser", Arrays.asList(
-                1L, 4L, 401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L, 101L, 602L, 502L, 702L, 705L));
+                1L, 4L, 401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L, 410L, 101L, 602L, 502L, 702L, 705L));
         // 财务：财务管理
         assignRoleMenus("finance", Arrays.asList(
                 1L, 8L, 801L, 802L, 803L, 804L, 805L, 806L, 101L));

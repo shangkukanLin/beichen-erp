@@ -129,7 +129,7 @@ onMounted(() => { loadBomTypes(); loadReport() })
         <el-descriptions-item label="结单日期">{{ report.closeDate || '-' }}</el-descriptions-item>
       </el-descriptions>
       <div style="margin-top:8px">
-        <span style="font-weight:500;font-size:13px">备注：</span>
+        <span style="font-weight:500;font-size:var(--app-font-sm)">备注：</span>
         <el-input v-model="remark" placeholder="结单备注" size="small" style="width:400px;margin-left:4px" />
       </div>
     </el-card>
@@ -155,19 +155,19 @@ onMounted(() => { loadBomTypes(); loadReport() })
           <template #default="{row}"><el-input v-model="row.factoryRetainQty" size="small" type="number" @change="onRetainChange(row)" /></template>
         </el-table-column>
         <el-table-column label="缺失" width="80" align="right">
-          <template #default="{row}"><span :style="{color: row.missingQty !== 0 ? '#f56c6c' : '#67c23a'}">{{ fmt(row.missingQty) }}</span></template>
+          <template #default="{row}"><span :style="{color: row.missingQty !== 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ fmt(row.missingQty) }}</span></template>
         </el-table-column>
         <el-table-column label="加工良率%" width="90">
-          <template #default="{row}"><span style="color:#409eff">{{ fmt(row.targetYieldRate) }}</span></template>
+          <template #default="{row}"><span style="color:var(--app-color-primary)">{{ fmt(row.targetYieldRate) }}</span></template>
         </el-table-column>
         <el-table-column label="生产良率%" width="90">
-          <template #default="{row}"><span :style="{color: row.yieldLoss > 0 ? '#e6a23c' : '#67c23a'}">{{ fmt(row.actualYieldRate) }}</span></template>
+          <template #default="{row}"><span :style="{color: row.yieldLoss > 0 ? 'var(--app-color-warning)' : 'var(--app-color-success)'}">{{ fmt(row.actualYieldRate) }}</span></template>
         </el-table-column>
         <el-table-column label="良率超损%" width="90">
-          <template #default="{row}"><span :style="{color: row.yieldLoss > 0 ? '#f56c6c' : '#67c23a'}">{{ fmt(row.yieldLoss) }}</span></template>
+          <template #default="{row}"><span :style="{color: row.yieldLoss > 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ fmt(row.yieldLoss) }}</span></template>
         </el-table-column>
         <el-table-column label="超损数量" width="90">
-          <template #default="{row}"><span :style="{color: row.excessLossQty > 0 ? '#f56c6c' : '#67c23a'}">{{ fmt(row.excessLossQty) }}</span></template>
+          <template #default="{row}"><span :style="{color: row.excessLossQty > 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ fmt(row.excessLossQty) }}</span></template>
         </el-table-column>
         <el-table-column label="最大超损" width="90">
           <template #default="{row}">{{ fmt(row.maxExcessLossQty) }}</template>
@@ -176,7 +176,7 @@ onMounted(() => { loadBomTypes(); loadReport() })
           <template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" @change="recalc(row)" /></template>
         </el-table-column>
         <el-table-column label="超损总价" width="100">
-          <template #default="{row}"><span :style="{color: row.excessLossAmount > 0 ? '#f56c6c' : '#67c23a'}">{{ fmt(row.excessLossAmount) }}</span></template>
+          <template #default="{row}"><span :style="{color: row.excessLossAmount > 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ fmt(row.excessLossAmount) }}</span></template>
         </el-table-column>
         <el-table-column label="备注" min-width="100"><template #default="{row}"><el-input v-model="row.remark" size="small" placeholder="备注" /></template></el-table-column>
       </el-table>
@@ -185,15 +185,15 @@ onMounted(() => { loadBomTypes(); loadReport() })
     <!-- 交货记录 -->
     <el-card shadow="never" style="margin-bottom:12px">
       <template #header><span style="font-weight:600">交货记录</span></template>
-      <div style="display:flex;gap:20px;margin-bottom:12px;font-size:13px;color:#606266">
-        <span>正常交货：<b style="color:#67c23a">{{ (report.deliveries || []).filter((d:any)=>d.deliveryType!==DeliveryType.DEFECT_RETURN).reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
-        <span>退不良：<b style="color:#e6a23c">{{ Math.abs((report.deliveries || []).filter((d:any)=>d.deliveryType===DeliveryType.DEFECT_RETURN).reduce((s:number,d:any)=>s+(d.quantity||0),0)) }}</b></span>
-        <span>实际已交：<b style="color:#409eff">{{ (report.deliveries || []).reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
+      <div style="display:flex;gap:20px;margin-bottom:12px;font-size:var(--app-font-sm);color:var(--app-text-regular)">
+        <span>正常交货：<b style="color:var(--app-color-success)">{{ (report.deliveries || []).filter((d:any)=>d.deliveryType!==DeliveryType.DEFECT_RETURN).reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
+        <span>退不良：<b style="color:var(--app-color-warning)">{{ Math.abs((report.deliveries || []).filter((d:any)=>d.deliveryType===DeliveryType.DEFECT_RETURN).reduce((s:number,d:any)=>s+(d.quantity||0),0)) }}</b></span>
+        <span>实际已交：<b style="color:var(--app-color-primary)">{{ (report.deliveries || []).reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
       </div>
       <el-table :data="report.deliveries" border size="small">
         <el-table-column label="日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column prop="productName" label="产品" min-width="130" />
-        <el-table-column label="数量" width="100" align="right"><template #default="{row}"><span :style="{color:Number(row.quantity)<0?'#f56c6c':''}">{{ row.quantity }}</span></template></el-table-column>
+        <el-table-column label="数量" width="100" align="right"><template #default="{row}"><span :style="{color:Number(row.quantity)<0?'var(--app-color-danger)':''}">{{ row.quantity }}</span></template></el-table-column>
         <el-table-column prop="trackingNo" label="物流单号" width="150" />
         <el-table-column prop="remark" label="备注" min-width="150" />
       </el-table>

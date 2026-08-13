@@ -29,7 +29,7 @@ const totalGrade = computed(() => {
 
 const warehouseOptions = ref<any[]>([])
 async function loadWarehouses() {
-  try { const r = await request.get<any,any>('/inventory/warehouse/page', { params: { pageSize: 200 } }); warehouseOptions.value = r?.records || [] } catch (e: any) { console.warn('加载仓库失败', e?.message || e) }
+  try { const r = await request.get<any,any>('/warehouse/page', { params: { pageSize: 200 } }); warehouseOptions.value = r?.records || [] } catch (e: any) { console.warn('加载仓库失败', e?.message || e) }
 }
 
 async function loadData() {
@@ -112,15 +112,15 @@ async function handleSubmit(forceDelivery = false) {
       // 构建 HTML 格式的缺料表格
       let html = '<div style="margin-bottom:8px">以下物料库存不足，是否确认强制出库？</div>'
       html += '<table style="width:100%;border-collapse:collapse;font-size:13px">'
-      html += '<tr style="background:#f5f7fa"><th style="padding:6px;border:1px solid #ebeef5;text-align:left">物料名称</th><th style="padding:6px;border:1px solid #ebeef5">需要</th><th style="padding:6px;border:1px solid #ebeef5">库存</th><th style="padding:6px;border:1px solid #ebeef5">缺口</th></tr>'
+      html += '<tr style="background:var(--app-bg-hover)"><th style="padding:6px;border:1px solid var(--app-border-light);text-align:left">物料名称</th><th style="padding:6px;border:1px solid var(--app-border-light)">需要</th><th style="padding:6px;border:1px solid var(--app-border-light)">库存</th><th style="padding:6px;border:1px solid var(--app-border-light)">缺口</th></tr>'
       for (const s of shortages) {
-        html += `<tr><td style="padding:6px;border:1px solid #ebeef5">${s.materialName || ''}</td>`
-        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#e6a23c">${s.needed || 0}</td>`
-        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#f56c6c">${s.stock || 0}</td>`
-        html += `<td style="padding:6px;border:1px solid #ebeef5;text-align:center;color:#f56c6c;font-weight:600">${s.gap || 0}</td></tr>`
+        html += `<tr><td style="padding:6px;border:1px solid var(--app-border-light)">${s.materialName || ''}</td>`
+        html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-warning)">${s.needed || 0}</td>`
+        html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-danger)">${s.stock || 0}</td>`
+        html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-danger);font-weight:600">${s.gap || 0}</td></tr>`
       }
       html += '</table>'
-      html += '<div style="margin-top:8px;color:#909399;font-size:12px">确认后物料库存将变为负数</div>'
+      html += '<div style="margin-top:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">确认后物料库存将变为负数</div>'
       try {
         await ElMessageBox.confirm(html, '缺料提示', {
           confirmButtonText: '确认强制出库',
@@ -160,14 +160,14 @@ onMounted(loadData)
   <div class="delivery-page" v-loading="loading">
     <!-- 汇总卡片 -->
     <el-row :gutter="12" style="margin-bottom:12px">
-      <el-col :span="6"><el-card shadow="never"><p style="color:#909399;font-size:12px;margin:0">订单总量</p><p style="font-size:20px;font-weight:600;margin:4px 0">{{ summary.totalQuantity || 0 }}</p></el-card></el-col>
-      <el-col :span="6"><el-card shadow="never"><p style="color:#909399;font-size:12px;margin:0">已交数量</p><p style="font-size:20px;font-weight:600;margin:4px 0;color:#67c23a">{{ summary.deliveredQuantity || 0 }}</p></el-card></el-col>
-      <el-col :span="6"><el-card shadow="never"><p style="color:#909399;font-size:12px;margin:0">剩余数量</p><p style="font-size:20px;font-weight:600;margin:4px 0;color:#e6a23c">{{ summary.remainingQuantity || 0 }}</p></el-card></el-col>
-      <el-col :span="6"><el-card shadow="never"><p style="color:#909399;font-size:12px;margin:0">交货进度</p><p style="font-size:20px;font-weight:600;margin:4px 0;color:#409eff">{{ progress }}%</p></el-card></el-col>
+      <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">订单总量</p><p style="font-size:20px;font-weight:600;margin:4px 0">{{ summary.totalQuantity || 0 }}</p></el-card></el-col>
+      <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">已交数量</p><p style="font-size:20px;font-weight:600;margin:4px 0;color:var(--app-color-success)">{{ summary.deliveredQuantity || 0 }}</p></el-card></el-col>
+      <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">剩余数量</p><p style="font-size:20px;font-weight:600;margin:4px 0;color:var(--app-color-warning)">{{ summary.remainingQuantity || 0 }}</p></el-card></el-col>
+      <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">交货进度</p><p style="font-size:20px;font-weight:600;margin:4px 0;color:var(--app-color-primary)">{{ progress }}%</p></el-card></el-col>
     </el-row>
 
     <el-card shadow="never" style="margin-bottom:12px">
-      <el-progress :percentage="progress" :stroke-width="16" :text-inside="true" :color="progress>=100?'#67c23a':'#409eff'" />
+      <el-progress :percentage="progress" :stroke-width="16" :text-inside="true" :color="progress>=100?'var(--app-color-success)':'var(--app-color-primary)'" />
     </el-card>
 
     <!-- 按产品分类 -->
@@ -176,9 +176,9 @@ onMounted(loadData)
       <el-table :data="summary.productStats" border size="small">
         <el-table-column prop="productName" label="产品名称" min-width="150" />
         <el-table-column prop="totalQuantity" label="订单数量" width="100" />
-        <el-table-column label="已交数量" width="100"><template #default="{row}"><span style="color:#67c23a;font-weight:500">{{ row.deliveredQuantity }}</span></template></el-table-column>
-        <el-table-column label="剩余数量" width="100"><template #default="{row}"><span :style="{color: Number(row.remainingQuantity)<=0?'#67c23a':'#e6a23c',fontWeight:'500'}">{{ row.remainingQuantity }}</span></template></el-table-column>
-        <el-table-column label="进度" width="180"><template #default="{row}"><el-progress :percentage="Number(row.totalQuantity)===0?0:Math.min(100,Math.round(Number(row.deliveredQuantity)/Number(row.totalQuantity)*100))" :stroke-width="12" :color="Number(row.remainingQuantity)<=0?'#67c23a':'#409eff'" /></template></el-table-column>
+        <el-table-column label="已交数量" width="100"><template #default="{row}"><span style="color:var(--app-color-success);font-weight:500">{{ row.deliveredQuantity }}</span></template></el-table-column>
+        <el-table-column label="剩余数量" width="100"><template #default="{row}"><span :style="{color: Number(row.remainingQuantity)<=0?'var(--app-color-success)':'var(--app-color-warning)',fontWeight:'500'}">{{ row.remainingQuantity }}</span></template></el-table-column>
+        <el-table-column label="进度" width="180"><template #default="{row}"><el-progress :percentage="Number(row.totalQuantity)===0?0:Math.min(100,Math.round(Number(row.deliveredQuantity)/Number(row.totalQuantity)*100))" :stroke-width="12" :color="Number(row.remainingQuantity)<=0?'var(--app-color-success)':'var(--app-color-primary)'" /></template></el-table-column>
       </el-table>
     </el-card>
 
@@ -193,26 +193,26 @@ onMounted(loadData)
         <el-table-column label="收货仓库" width="120">
           <template #default="{row}">
             <span v-if="row.warehouseId">{{ warehouseOptions.find((w:any)=>w.id===row.warehouseId)?.warehouseName || row.warehouseId }}</span>
-            <span v-else style="color:#c0c4cc">—</span>
+            <span v-else style="color:var(--app-text-placeholder)">—</span>
           </template>
         </el-table-column>
         <el-table-column prop="quantity" label="总数量" width="90" />
         <el-table-column label="等级分布" min-width="160">
           <template #default="{row}">
             <span v-if="row.aQty || row.bQty || row.cQty || row.defectQty">
-              <span style="color:#67c23a">A{{ row.aQty||0 }}</span> /
-              <span style="color:#409eff">B{{ row.bQty||0 }}</span> /
-              <span style="color:#e6a23c">C{{ row.cQty||0 }}</span> /
-              <span style="color:#f56c6c">不良{{ row.defectQty||0 }}</span>
+              <span style="color:var(--app-color-success)">A{{ row.aQty||0 }}</span> /
+              <span style="color:var(--app-color-primary)">B{{ row.bQty||0 }}</span> /
+              <span style="color:var(--app-color-warning)">C{{ row.cQty||0 }}</span> /
+              <span style="color:var(--app-color-danger)">不良{{ row.defectQty||0 }}</span>
             </span>
-            <span v-else style="color:#909399">{{ row.quantity }}</span>
+            <span v-else style="color:var(--app-text-secondary)">{{ row.quantity }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="trackingNo" label="物流单号" width="140" />
         <el-table-column label="附件" width="80" align="center">
           <template #default="{row}">
             <el-button v-if="row.attachUrl" type="primary" link size="small" @click="openAttach(row.attachUrl)">查看</el-button>
-            <span v-else style="color:#c0c4cc">—</span>
+            <span v-else style="color:var(--app-text-placeholder)">—</span>
           </template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="150" />
@@ -242,7 +242,7 @@ onMounted(loadData)
               <el-col :span="12"><el-input v-model="form.cQty" type="number" placeholder="C规数量" /></el-col>
               <el-col :span="12"><el-input v-model="form.defectQty" type="number" placeholder="不良数量" /></el-col>
             </el-row>
-            <div style="margin-top:6px;color:#909399;font-size:12px">合计：<b style="color:#303133">{{ totalGrade }}</b>（自动作为总数量）</div>
+            <div style="margin-top:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">合计：<b style="color:var(--app-text-primary)">{{ totalGrade }}</b>（自动作为总数量）</div>
           </div>
         </el-form-item>
         <el-form-item label="收货仓库" required>
@@ -255,10 +255,10 @@ onMounted(loadData)
         <el-form-item label="备注"><el-input v-model="form.remark" placeholder="选填" /></el-form-item>
 
         <el-form-item label="交货图片">
-          <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'#67c23a':'#dcdfe6', background: uploadFile?'#f0f9eb':'#fafafa' }">
-            <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:#67c23a;font-weight:600">📎 {{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
-            <template v-else-if="form.attachUrl"><div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap"><span style="color:#409eff">📎 已有图片</span><el-button type="primary" size="small" @click.stop="openAttach(form.attachUrl)">查看</el-button><span style="color:#909399;font-size:12px">可拖拽新文件替换</span></div></template>
-            <template v-else><p style="color:#909399;margin:0">拖拽图片到此处，或点击选择</p></template>
+          <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'var(--app-color-success)':'var(--app-border-color)', background: uploadFile?'#f0f9eb':'#fafafa' }">
+            <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:var(--app-color-success);font-weight:600">📎 {{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
+            <template v-else-if="form.attachUrl"><div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap"><span style="color:var(--app-color-primary)">📎 已有图片</span><el-button type="primary" size="small" @click.stop="openAttach(form.attachUrl)">查看</el-button><span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">可拖拽新文件替换</span></div></template>
+            <template v-else><p style="color:var(--app-text-secondary);margin:0">拖拽图片到此处，或点击选择</p></template>
             <input v-if="!form.attachUrl && !uploadFile" type="file" @change="handleFileSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
           </div>
         </el-form-item>
@@ -274,6 +274,6 @@ onMounted(loadData)
 <style scoped>
 .delivery-page { padding: 16px; }
 
-.drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:16px; text-align:center; transition:all .3s; cursor:pointer; margin-top:4px }
-.drop-zone:hover { border-color:#409eff; background:#ecf5ff }
+.drop-zone { position:relative; border:2px dashed var(--app-border-color); border-radius:8px; padding:16px; text-align:center; transition:all .3s; cursor:pointer; margin-top:4px }
+.drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }
 </style>

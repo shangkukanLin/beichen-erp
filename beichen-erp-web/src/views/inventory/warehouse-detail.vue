@@ -13,16 +13,37 @@ const materials = ref<any[]>([])
 async function loadWarehouse() {
   loading.value = true
   try {
-    const r = await request.get<any,any>('/inventory/warehouse/page', { params: { pageSize: 200 } })
+    const r = await request.get<any,any>('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY' } })
     warehouse.value = (r?.records || []).find((w:any) => w.id === warehouseId) || null
   } finally { loading.value = false }
+}
+
+// 按产品聚合库存：by-warehouse 返回一条品质一条记录，这里归并为每产品一行（A/B/C/不良四列）
+function groupStocks(rows: any[]) {
+  const map = new Map<number, any>()
+  for (const r of rows || []) {
+    if (r.productId == null) continue // 仅统计成品库存
+    if (!map.has(r.productId)) {
+      map.set(r.productId, { productId: r.productId, productName: r.productName || '', qtyA: 0, qtyB: 0, qtyC: 0, qtyDefect: 0 })
+    }
+    const row = map.get(r.productId)
+    const q = Number(r.quantity) || 0
+    // 兼容后端 qualityTypeLabel 对 DEFECT 误转为"不良品"的情况
+    const qt = r.qualityType
+    if (qt === 'A' || qt === 'A规') row.qtyA += q
+    else if (qt === 'B' || qt === 'B规') row.qtyB += q
+    else if (qt === 'C' || qt === 'C规') row.qtyC += q
+    else row.qtyDefect += q // DEFECT / 不良 / 不良品 等归入不良
+  }
+  return Array.from(map.values())
 }
 
 async function loadMaterials() {
   matLoading.value = true
   try {
-    const r = await request.get<any,any>('/inventory/stock/page', { params: { pageSize: 500, warehouseId } })
-    materials.value = r?.records || []
+    const r = await request.get<any,any>(`/warehouse/stock/by-warehouse/${warehouseId}`)
+    const rows = r?.records || r?.data || r || []
+    materials.value = groupStocks(Array.isArray(rows) ? rows : [])
   } finally { matLoading.value = false }
 }
 
@@ -88,7 +109,7 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
           <template #default="{row}"><el-button type="primary" link size="small" @click="goLog(row)">流水</el-button></template>
         </el-table-column>
       </el-table>
-      <div v-if="materials.length===0" style="text-align:center;color:#909399;padding:24px">暂无库存物料</div>
+      <div v-if="materials.length===0" style="text-align:center;color:var(--app-text-secondary);padding:24px">暂无库存物料</div>
     </el-card>
   </div>
 </template>

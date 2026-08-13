@@ -58,15 +58,15 @@ export interface OtherIoItem extends BaseItem {
 
 // 仓库
 export function getWarehouseOptions() {
-  return request.get('/inventory/warehouse/page', { params: { pageSize: 200 } })
+  return request.get('/warehouse/page', { params: { pageSize: 200 } })
 }
 
 // 库存查询与流水
 export function getStockPage(params: any) {
-  return request.get<PageResult<StockRow>>('/inventory/stock/page', { params })
+  return request.get<PageResult<StockRow>>('/warehouse/stock/page', { params })
 }
 export function getStockLog(params: any) {
-  return request.get<PageResult<StockLogRow>>('/inventory/stock/log', { params })
+  return request.get<PageResult<StockLogRow>>('/warehouse/stock/log', { params })
 }
 
 
