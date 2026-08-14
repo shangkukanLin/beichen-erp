@@ -2,7 +2,7 @@
 
 export interface PageResult<T> { records: T[]; total: number; current: number; size: number }
 
-export interface FinanceAccount { id?: number; accountName?: string; accountType?: string; bankName?: string; accountNo?: string; balance?: number; status?: number }
+export interface FinanceAccount { id?: number; accountName?: string; accountType?: string; bankName?: string; accountNo?: string; openingBalance?: number; balance?: number; status?: number }
 export interface FinanceReceivable { id?: number; billNo?: string; customerId?: number; customerName?: string; sourceBillType?: string; sourceBillNo?: string; amount?: number; paidAmount?: number; unpaidAmount?: number; dueDate?: string; status?: string }
 export interface FinancePayable { id?: number; billNo?: string; supplierId?: number; supplierName?: string; sourceBillType?: string; sourceBillNo?: string; amount?: number; paidAmount?: number; unpaidAmount?: number; dueDate?: string; status?: string }
 export interface FinanceCashflow { id?: number; flowNo?: string; accountId?: number; accountName?: string; flowType?: string; relatedBillNo?: string; income?: number; expense?: number; balance?: number; createTime?: string }
@@ -41,4 +41,7 @@ export function cancelPayment(id: number) { return request.put<void>(`/finance/p
 export function getBillPage(params: any) { return request.get<PageResult<FinanceBill>>('/finance/bill/page', { params }) }
 export function getBillItems(id: number) { return request.get<FinanceBillItem[]>(`/finance/bill/${id}/items`) }
 export function generateBill(data: any) { return request.post<FinanceBill>('/finance/bill/generate', data) }
+export function auditBill(id: number) { return request.post<void>(`/finance/bill/${id}/audit`) }
+export function unAuditBill(id: number) { return request.post<void>(`/finance/bill/${id}/unAudit`) }
+export function cancelBill(id: number) { return request.post<void>(`/finance/bill/${id}/cancel`) }
 

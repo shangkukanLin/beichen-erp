@@ -17,6 +17,34 @@ const accounts = ref<any[]>([])
 
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 
+// 来源单据类型 code -> 中文（finance SourceBillType + 委外 OutsourceSourceBillType）
+const SOURCE_TYPE_LABEL: Record<string, string> = {
+  SALE_OUTBOUND: '销售出库', SALE_ORDER: '销售单', PURCHASE_ORDER: '采购单',
+  PURCHASE_INBOUND: '采购入库', PURCHASE_RETURN: '成品退货单', SALE_RETURN: '销售退货',
+  OUTSOURCE_DELIVERY: '委外加工交货', OUTSOURCE_MATERIAL_DELIVERY: '委外物料收发', OUTSOURCE_RETURN: '委外退料'
+}
+function sourceBillTypeLabel(code?: string) { return code ? (SOURCE_TYPE_LABEL[code] || code) : '' }
+// 结算状态 code -> 中文
+const STATUS_LABEL: Record<string, string> = { UNSETTLED: '未结清', PARTIAL: '部分结清', SETTLED: '已结清', CANCELLED: '已冲回' }
+function statusLabel(code?: string) { return code ? (STATUS_LABEL[code] || code) : '' }
+
+// 来源单据类型 -> 详情路由前缀（用于点击来源单号跳转）
+const SOURCE_DETAIL_ROUTE: Record<string, string> = {
+  PURCHASE_ORDER: '/inventory/purchase/detail',
+  PURCHASE_RETURN: '/inventory/purchase-return/detail',
+  OUTSOURCE_DELIVERY: '/outsource/order/detail',
+  OUTSOURCE_MATERIAL_DELIVERY: '/outsource/delivery/detail',
+  OUTSOURCE_RETURN: '/outsource/return-order/detail',
+  SALE_ORDER: '/sale/order',
+  SALE_OUTBOUND: '/sale/outbound',
+  SALE_RETURN: '/sale/return/detail'
+}
+function goSourceDetail(row: any) {
+  const base = SOURCE_DETAIL_ROUTE[row.sourceBillType]
+  if (!base || row.sourceId == null) return
+  router.push(`${base}/${row.sourceId}`)
+}
+
 async function loadAll() {
   loading.value = true
   try {
@@ -75,7 +103,7 @@ async function handleSubmitPayment() {
 
 const totalThisAmount = computed(() => dItems.value.reduce((s, it) => s + (Number(it.thisAmount) || 0), 0))
 
-function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === '未结清') return 'danger'; if (s === '部分结清') return 'warning'; if (s === '已结清') return 'success'; return 'info' }
+function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === 'UNSETTLED') return 'danger'; if (s === 'PARTIAL') return 'warning'; if (s === 'SETTLED') return 'success'; if (s === 'CANCELLED') return 'info'; return 'info' }
 function pStType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { return DocStatusTag[s || ''] || undefined }
 function openAttach(url: string) { window.open(url + '?inline=true') }
 function goSettlement() { router.push(`/finance/supplier-settlement/${supplierId}`) }
@@ -105,13 +133,13 @@ onMounted(() => loadAll())
       <template #header><span style="font-weight:600">应付明细</span></template>
       <el-table :data="payables" border stripe size="small">
         <el-table-column prop="billNo" label="单据号" width="150" />
-        <el-table-column prop="sourceBillType" label="来源" width="110" />
-        <el-table-column prop="sourceBillNo" label="来源单号" width="160" show-overflow-tooltip />
+        <el-table-column label="来源" width="130"><template #default="{row}">{{ sourceBillTypeLabel(row.sourceBillType) }}</template></el-table-column>
+        <el-table-column label="来源单号" width="160" show-overflow-tooltip><template #default="{row}"><a v-if="row.sourceId != null" class="bill-link" @click="goSourceDetail(row)">{{ row.sourceBillNo }}</a><span v-else>{{ row.sourceBillNo }}</span></template></el-table-column>
         <el-table-column label="应付金额" width="110" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column label="已付" width="110" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
         <el-table-column label="未付" width="110" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column label="到期日" width="100" align="center"><template #default="{row}">{{ $fmtDate(row.dueDate) }}</template></el-table-column>
-        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)" size="small">{{ row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
       </el-table>
       <el-empty v-if="payables.length===0" description="暂无应付" :image-size="60" />
     </el-card>
@@ -124,7 +152,7 @@ onMounted(() => loadAll())
         <el-table-column prop="paymentDate" label="日期" width="100" align="center" />
         <el-table-column label="金额" width="110" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column label="凭证" width="70" align="center"><template #default="{row}"><el-link v-if="row.attachUrl" type="primary" @click="openAttach(row.attachUrl)">查看</el-link><span v-else style="color:#c0c4cc">—</span></template></el-table-column>
-        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="pStType(row.status)" size="small">{{ row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="pStType(row.status)" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
       </el-table>
       <el-empty v-if="payments.length===0" description="暂无付款记录" :image-size="60" />

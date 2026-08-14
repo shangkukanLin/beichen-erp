@@ -24,6 +24,8 @@ public class FinanceReceivable {
 
     private String sourceBillNo;
 
+    private Long sourceId;
+
     private BigDecimal amount;
 
     private BigDecimal paidAmount;

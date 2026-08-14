@@ -1,6 +1,7 @@
 package com.beichen.erp.sale.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.beichen.erp.sale.common.SaleReturnStatus;
@@ -27,7 +28,8 @@ public class SaleReturn {
     /** 客户ID */
     private Long customerId;
 
-    /** 客户名称（冗余存储） */
+    /** 客户名称（实时查名，不落库） */
+    @TableField(exist = false)
     private String customerName;
 
     /** 退货入库仓库ID */

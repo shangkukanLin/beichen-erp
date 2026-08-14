@@ -1,6 +1,7 @@
 package com.beichen.erp.inventory.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import java.math.BigDecimal;
@@ -17,7 +18,8 @@ public class InventoryStockReclassItem {
     private Long reclassId;
     /** 产品ID */
     private Long productId;
-    /** 产品名称 */
+    /** 产品名称（实时查名，不落库） */
+    @TableField(exist = false)
     private String productName;
     /** 源等级: A/B/C/DEFECT */
     private String fromQuality;

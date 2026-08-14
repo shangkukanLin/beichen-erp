@@ -38,7 +38,8 @@ public class Supplier {
 
     private Long relatedSupplierId;
 
-    /** 应付余额 */
+    /** 应付余额（实时汇总，不落库，用于列表展示） */
+    @TableField(exist = false)
     private BigDecimal payableBalance;
 
     /** 账期（月） */

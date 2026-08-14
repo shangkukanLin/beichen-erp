@@ -48,37 +48,6 @@ export interface PurchaseOrder {
   items?: PurchaseOrderItem[]
 }
 
-export interface PurchaseInboundItem {
-  id?: number
-  inboundId?: number
-  orderItemId?: number
-  productId?: number
-  materialId?: number
-  materialCode?: string
-  materialName?: string
-  spec?: string
-  unit?: string
-  qualityType?: string
-  quantity?: number
-  unitPrice?: number
-  amount?: number
-  remark?: string
-}
-
-export interface PurchaseInbound {
-  id?: number
-  code?: string
-  orderId?: number
-  supplierId?: number
-  supplierName?: string
-  warehouseId?: number
-  inboundDate?: string
-  status?: string
-  totalAmount?: number
-  remark?: string
-  items?: PurchaseInboundItem[]
-}
-
 // ---- 成品退货单 ----
 
 export interface PurchaseReturnItem {
@@ -152,29 +121,6 @@ export function cancelPurchaseOrder(id: number) {
 }
 export function unAuditPurchaseOrder(id: number) {
   return request.put<void>(`/inventory/purchase/${id}/un-audit`)
-}
-
-// ---- 采购入库单 API ----
-export function getPurchaseInboundPage(params: any) {
-  return request.get<PageResult<PurchaseInbound>>('/inventory/inbound/page', { params })
-}
-export function getPurchaseInbound(id: number) {
-  return request.get<PurchaseInbound>(`/inventory/inbound/${id}`)
-}
-export function getPurchaseInboundItems(id: number) {
-  return request.get<PurchaseInboundItem[]>(`/inventory/inbound/${id}/items`)
-}
-export function createPurchaseInbound(data: any) {
-  return request.post<void>('/inventory/inbound', data)
-}
-export function updatePurchaseInbound(id: number, data: any) {
-  return request.put<void>(`/inventory/inbound/${id}`, data)
-}
-export function auditPurchaseInbound(id: number) {
-  return request.put<void>(`/inventory/inbound/${id}/audit`)
-}
-export function cancelPurchaseInbound(id: number) {
-  return request.put<void>(`/inventory/inbound/${id}/cancel`)
 }
 
 // ---- 成品退货单 API ----

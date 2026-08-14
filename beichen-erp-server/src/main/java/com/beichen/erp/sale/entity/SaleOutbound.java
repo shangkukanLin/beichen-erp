@@ -20,6 +20,8 @@ public class SaleOutbound {
 
     private Long customerId;
 
+    /** 客户名称（实时查名，不落库） */
+    @TableField(exist = false)
     private String customerName;
 
     private Long warehouseId;

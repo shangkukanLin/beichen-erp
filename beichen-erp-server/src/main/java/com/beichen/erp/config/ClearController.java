@@ -44,7 +44,6 @@ public class ClearController {
                 "DELETE FROM finance_receipt_item WHERE company_id = " + companyId,
                 "DELETE FROM finance_bill_item WHERE company_id = " + companyId,
                 // === 业务明细 ===
-                "DELETE FROM purchase_inbound_item WHERE company_id = " + companyId,
                 "DELETE FROM purchase_order_item WHERE company_id = " + companyId,
                 "DELETE FROM purchase_return_item WHERE company_id = " + companyId,
                 "DELETE FROM sale_outbound_item WHERE company_id = " + companyId,
@@ -82,7 +81,6 @@ public class ClearController {
                 // === 仓库 ===
                 "DELETE FROM warehouse WHERE company_id = " + companyId,
                 // === 采购主表 ===
-                "DELETE FROM purchase_inbound WHERE company_id = " + companyId,
                 "DELETE FROM purchase_order WHERE company_id = " + companyId,
                 "DELETE FROM purchase_return WHERE company_id = " + companyId,
                 // === 销售主表 ===

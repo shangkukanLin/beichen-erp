@@ -219,7 +219,7 @@ function openDefectReturn() {
 async function handleDefectReturn() {
   const data = defectItems.value.filter((r: any) => r.quantity && Number(r.quantity) > 0)
   if (data.length === 0) { ElMessage.warning('请输入退料数量'); return }
-  if (defectHandleType.value !== '折现退款' && !defectWarehouseId.value) { ElMessage.warning('请选择退料仓库'); return }
+  if (!defectWarehouseId.value) { ElMessage.warning('请选择退料仓库'); return }
   defectSaving.value = true
   try {
     const res = await request.post<any, any>(`/outsource/material-order/${id}/return-defect`, { handleType: defectHandleType.value, warehouseId: defectWarehouseId.value, items: data })
@@ -438,8 +438,8 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
         <span style="font-size:var(--app-font-sm)">处理方式：</span>
         <el-radio-group v-model="defectHandleType" size="small" @change="defectWarehouseId=undefined"><el-radio label="维修返还" /><el-radio label="折现退款" /></el-radio-group>
       </div>
-      <div v-if="defectHandleType!=='折现退款'" style="margin-bottom:8px"><el-select v-model="defectWarehouseId" filterable style="width:100%" placeholder="选择退料仓库" @change="onDefectWhChange"><el-option v-for="w in defectWarehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></div>
-      <div v-if="defectHandleType==='折现退款'" style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid var(--app-color-warning);font-size:var(--app-font-xs);color:var(--app-color-warning)">折现退款仅作记录，不会扣减库存。款项由财务后续处理。</div>
+      <div style="margin-bottom:8px"><el-select v-model="defectWarehouseId" filterable style="width:100%" placeholder="选择退料仓库" @change="onDefectWhChange"><el-option v-for="w in defectWarehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></div>
+      <div v-if="defectHandleType==='折现退款'" style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid var(--app-color-warning);font-size:var(--app-font-xs);color:var(--app-color-warning)">折现退款将扣减退料仓库库存，并按退料金额自动冲减供应商应付。</div>
       <el-table :data="defectItems" border size="small">
         <el-table-column prop="materialName" label="物料" min-width="140" />
         <el-table-column prop="available" label="可退" width="70" />

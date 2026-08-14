@@ -1,6 +1,7 @@
 package com.beichen.erp.sale.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -24,7 +25,8 @@ public class SaleReturnItem {
     /** 产品ID */
     private Long productId;
 
-    /** 产品名称（冗余存储） */
+    /** 产品名称（实时查名，不落库） */
+    @TableField(exist = false)
     private String productName;
 
     /** 品质等级：销售退货固定为 DEFECT(不良品) */

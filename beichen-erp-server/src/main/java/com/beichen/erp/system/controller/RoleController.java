@@ -5,6 +5,7 @@ import cn.dev33.satoken.annotation.SaMode;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.system.entity.Role;
 import com.beichen.erp.system.entity.RoleMenu;
@@ -70,6 +71,8 @@ public class RoleController {
         role.setRoleCode(dto.getRoleCode());
         role.setStatus(dto.getStatus());
         role.setRemark(dto.getRemark());
+        // 显式设置 companyId，避免 CompanyContext 为 null 时自动填充失败导致角色 company_id 为 NULL（成为孤儿角色）
+        role.setCompanyId(CompanyContext.get());
         roleService.save(role);
         return R.ok();
     }

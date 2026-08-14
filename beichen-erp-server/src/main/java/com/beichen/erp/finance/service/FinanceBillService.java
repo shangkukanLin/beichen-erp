@@ -13,4 +13,7 @@ public interface FinanceBillService {
     FinanceBill getById(Long id);
     List<FinanceBillItem> getItems(Long billId);
     FinanceBill generate(String billType, Long partnerId, String partnerName, LocalDate periodStart, LocalDate periodEnd);
+    void audit(Long id);
+    void unAudit(Long id);
+    void cancel(Long id);
 }

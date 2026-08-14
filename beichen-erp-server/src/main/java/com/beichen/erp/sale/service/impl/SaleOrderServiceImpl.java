@@ -90,10 +90,6 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     @Transactional(rollbackFor = Exception.class)
     public void create(SaleOrder order, List<SaleOrderItem> items) {
         if (order.getCustomerId() == null) throw new BusinessException("客户不能为空");
-        if (order.getCustomerId() != null) {
-            Customer c = customerMapper.selectById(order.getCustomerId());
-            order.setCustomerName(c != null ? c.getName() : "");
-        }
         order.setCode(generateCode());
         order.setStatus(DocStatus.DRAFT.name());
         Long cid = CompanyContext.get();
@@ -122,10 +118,6 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         SaleOrder old = orderMapper.selectById(order.getId());
         if (old == null) throw new BusinessException("销售单不存在");
         if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
-        if (order.getCustomerId() != null) {
-            Customer c = customerMapper.selectById(order.getCustomerId());
-            order.setCustomerName(c != null ? c.getName() : "");
-        }
         order.setCode(old.getCode());
         orderMapper.updateById(order);
         itemMapper.delete(new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, order.getId()));
@@ -173,9 +165,12 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         FinanceReceivable fr = new FinanceReceivable();
         fr.setBillNo(order.getCode());
         fr.setCustomerId(order.getCustomerId());
-        fr.setCustomerName(order.getCustomerName());
+        // 应收台账留痕：固化开单时的客户名（实时查一次）
+        Customer c = order.getCustomerId() != null ? customerMapper.selectById(order.getCustomerId()) : null;
+        fr.setCustomerName(c != null ? c.getName() : "");
         fr.setSourceBillType(SourceBillType.SALE_ORDER.getCode());
         fr.setSourceBillNo(order.getCode());
+        fr.setSourceId(order.getId());
         fr.setAmount(order.getTotalAmount());
         fr.setPaidAmount(BigDecimal.ZERO);
         fr.setUnpaidAmount(order.getTotalAmount());
@@ -184,18 +179,6 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) fr.setCompanyId(cid);
         receivableMapper.insert(fr);
-        // 3) 更新客户应收余额（冗余）
-        if (order.getCustomerId() != null) {
-            Customer c = customerMapper.selectById(order.getCustomerId());
-            if (c != null) {
-                Customer u = new Customer();
-                u.setId(c.getId());
-                BigDecimal newBal = (c.getReceivableBalance() != null ? c.getReceivableBalance() : BigDecimal.ZERO)
-                        .add(order.getTotalAmount());
-                u.setReceivableBalance(newBal);
-                customerMapper.updateById(u);
-            }
-        }
         // 4) 更新订单状态为"已完成"（审核即出库）
         SaleOrder u = new SaleOrder();
         u.setId(id);
@@ -211,18 +194,6 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         if (!DocStatus.AUDITED.name().equals(order.getStatus())) throw new BusinessException("只有已审核的销售单可反审核");
         // 1) 冲销应收台账（反审核，已收款单据会校验拦截）
         receivableHelper.reverseReceivable(order.getCode());
-        // 2) 回退客户应收余额（与 audit 时 add 对称）
-        if (order.getCustomerId() != null) {
-            Customer c = customerMapper.selectById(order.getCustomerId());
-            if (c != null) {
-                Customer u = new Customer();
-                u.setId(c.getId());
-                BigDecimal newBal = (c.getReceivableBalance() != null ? c.getReceivableBalance() : BigDecimal.ZERO)
-                        .subtract(order.getTotalAmount());
-                u.setReceivableBalance(newBal);
-                customerMapper.updateById(u);
-            }
-        }
         // 3) 订单状态回退为草稿（库存由"销售出库单"反审核统一回补，订单本身不触碰库存）
         SaleOrder u = new SaleOrder();
         u.setId(id);

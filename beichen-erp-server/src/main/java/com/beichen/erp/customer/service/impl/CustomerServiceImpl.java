@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -36,7 +37,26 @@ public class CustomerServiceImpl implements CustomerService {
             }
             w.eq(Customer::getStatus, Integer.valueOf(status));
         }
-        return customerMapper.selectPage(new Page<>(pageNum, pageSize), w);
+        Page<Customer> page = customerMapper.selectPage(new Page<>(pageNum, pageSize), w);
+        // 应收余额实时汇总回填（废弃快照字段后，余额统一由应收台账实时 SUM 计算）
+        fillReceivableBalance(page.getRecords());
+        return page;
+    }
+
+    /** 批量回填应收余额（实时汇总，避免逐客户 N+1） */
+    private void fillReceivableBalance(List<Customer> customers) {
+        if (customers == null || customers.isEmpty()) return;
+        List<Long> ids = customers.stream().map(Customer::getId).filter(java.util.Objects::nonNull).toList();
+        if (ids.isEmpty()) return;
+        Map<Long, Map<String, Object>> balanceMap = customerMapper.sumReceivableBalance(ids);
+        for (Customer c : customers) {
+            Map<String, Object> row = balanceMap.get(c.getId());
+            if (row != null && row.get("balance") != null) {
+                c.setReceivableBalance(new BigDecimal(row.get("balance").toString()));
+            } else {
+                c.setReceivableBalance(BigDecimal.ZERO);
+            }
+        }
     }
 
     @Override
@@ -71,11 +91,9 @@ public class CustomerServiceImpl implements CustomerService {
         } else {
             customer.setCode(generateCode());
         }
-        // 资金类字段（应收/预收余额）由收付款流水累计，新建时强制归零，禁止外部写入
+        // 账期/信用额度默认值（应收余额由应收台账实时汇总，不在此维护）
         if (customer.getCreditPeriod() == null) customer.setCreditPeriod(0);
         if (customer.getCreditLimit() == null) customer.setCreditLimit(BigDecimal.ZERO);
-        customer.setReceivableBalance(BigDecimal.ZERO);
-        customer.setPrepaidBalance(BigDecimal.ZERO);
         if (customer.getStatus() == null) customer.setStatus(1);
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) customer.setCompanyId(cid);
@@ -105,7 +123,7 @@ public class CustomerServiceImpl implements CustomerService {
         if (customer.getCreditLimit() != null && customer.getCreditLimit().compareTo(BigDecimal.ZERO) < 0) {
             throw new BusinessException("信用额度不能为负");
         }
-        // 仅更新基础资料字段，应收/预收余额由收付款业务维护，禁止此处被外部篡改
+        // 仅更新基础资料字段（应收余额由应收台账实时汇总，不在资料维护中处理）
         Customer u = new Customer();
         u.setId(customer.getId());
         u.setName(customer.getName());

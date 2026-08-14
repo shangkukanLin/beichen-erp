@@ -229,14 +229,8 @@ public class OutsourceOrderDeliveryServiceImpl
         } else {
             revertDeliveryStock(order, delivery);
         }
-        // 同步删除应付（已付款的会被阻止并抛异常）+ 回退供应商应付余额
+        // 同步删除应付（已付款的会被阻止并抛异常）
         payableHelper.deleteBySourceId(id);
-        OutsourceOrderProduct product = orderService.getProducts(delivery.getOrderId()).stream()
-                .filter(p -> p.getId().equals(delivery.getProductId())).findFirst().orElse(null);
-        if (product != null && delivery.getQuantity() != null) {
-            BigDecimal price = product.getUnitPrice() != null ? product.getUnitPrice() : BigDecimal.ZERO;
-            payableHelper.changeSupplierBalance(order.getFactoryId(), delivery.getQuantity().multiply(price).negate());
-        }
         OutsourceOrderDelivery upd = new OutsourceOrderDelivery();
         upd.setId(id);
         upd.setStatus(DocStatus.DRAFT.name());
@@ -359,11 +353,9 @@ public class OutsourceOrderDeliveryServiceImpl
         BigDecimal amount = delivery.getQuantity().multiply(price);
         if (amount.compareTo(BigDecimal.ZERO) == 0) return;
         payableHelper.createPayable(order.getFactoryId(), OutsourceSourceBillType.OUTSOURCE_DELIVERY.getCode(),
-                order.getCode(), delivery.getId(), amount,
+                order.getCode(), order.getId(), amount,
                 delivery.getDeliveryDate() != null ? delivery.getDeliveryDate() : LocalDate.now(),
                 "交货 - " + order.getCode() + " - " + product.getProductName());
-        // 同步增加供应商应付余额（原子更新，与采购/财务模块口径一致）
-        payableHelper.changeSupplierBalance(order.getFactoryId(), amount);
     }
 
     /** 退不良审核：扣成品库存 + BOM还料 + 冲减应付 */

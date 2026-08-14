@@ -15,6 +15,8 @@ public class FinanceBillItem {
     private Long billId;
     private String sourceBillType;
     private String sourceBillNo;
+    /** 来源台账ID（应付/应收台账主键），用于核销时反向联动账单进度 */
+    private Long sourceId;
     private BigDecimal amount;
     private BigDecimal paidAmount;
     private BigDecimal unpaidAmount;

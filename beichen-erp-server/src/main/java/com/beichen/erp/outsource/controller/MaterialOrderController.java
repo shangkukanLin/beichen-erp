@@ -321,13 +321,14 @@ public class MaterialOrderController {
         if (factoryId == null) throw new BusinessException("订单未关联供应商");
         String handleType = body.get("handleType") != null ? body.get("handleType").toString() : DefectHandleType.REPAIR_RETURN.getCode();
 
-        // 退不良仓库
+        // 退不良仓库（维修返还、折现退款均需退料仓库，缺省取供应商第一委外仓）
         Long whId = body.get("warehouseId") != null ? Long.valueOf(body.get("warehouseId").toString()) : null;
-        if (!DefectHandleType.CASH_REFUND.getCode().equals(handleType) && whId == null) {
+        if (whId == null) {
             List<Warehouse> whs = warehouseMapper.selectList(
                 new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, factoryId));
             whId = whs.isEmpty() ? null : whs.get(0).getId();
         }
+        if (whId == null) throw new BusinessException("请选择退料仓库");
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> items = (List<Map<String, Object>>) body.get("items");
@@ -355,8 +356,8 @@ public class MaterialOrderController {
             if (orderItem.getReceivedQuantity().subtract(orderItem.getDefectReturnedQty()).compareTo(qty) < 0)
                 throw new BusinessException(getMaterialNameById(orderItem.getMaterialId()) + " 可退数量不足");
 
-            // 维修返还：校验仓库库存是否足够（仅校验，实际扣减推迟到审核）
-            if (!DefectHandleType.CASH_REFUND.getCode().equals(handleType) && whId != null && orderItem.getMaterialId() != null) {
+            // 退不良（维修返还、折现退款均校验仓库库存是否足够，实际扣减推迟到审核）
+            if (whId != null && orderItem.getMaterialId() != null) {
                 WarehouseStock s = warehouseStockMapper.selectOne(
                     new LambdaQueryWrapper<WarehouseStock>()
                         .eq(WarehouseStock::getWarehouseId, whId)

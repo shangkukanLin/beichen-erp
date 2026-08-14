@@ -84,10 +84,6 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     public void create(SaleOutbound outbound, List<SaleOutboundItem> items) {
         if (outbound.getCustomerId() == null) throw new BusinessException("客户不能为空");
         if (outbound.getWarehouseId() == null) throw new BusinessException("出库仓库不能为空");
-        if (outbound.getCustomerId() != null) {
-            Customer c = customerMapper.selectById(outbound.getCustomerId());
-            outbound.setCustomerName(c != null ? c.getName() : "");
-        }
         outbound.setCode(generateCode());
         outbound.setStatus(DocStatus.DRAFT.name());
         Long cid = CompanyContext.get();
@@ -116,10 +112,6 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         SaleOutbound old = outboundMapper.selectById(outbound.getId());
         if (old == null) throw new BusinessException("销售出库单不存在");
         if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
-        if (outbound.getCustomerId() != null) {
-            Customer c = customerMapper.selectById(outbound.getCustomerId());
-            outbound.setCustomerName(c != null ? c.getName() : "");
-        }
         outbound.setCode(old.getCode());
         outboundMapper.updateById(outbound);
         itemMapper.delete(new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, outbound.getId()));

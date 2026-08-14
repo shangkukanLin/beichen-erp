@@ -9,7 +9,6 @@ import com.beichen.erp.finance.entity.*;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinancePaymentService;
-import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +30,9 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
     private final FinanceAccountMapper accountMapper;
     private final FinanceCashflowMapper cashflowMapper;
     private final SupplierMapper supplierMapper;
-    private final PayableHelper payableHelper;
+    private final FinanceSettlementMapper settlementMapper;
+    private final FinanceBillItemMapper billItemMapper;
+    private final FinanceBillMapper billMapper;
 
     @Override
     public Page<Map<String, Object>> page(Long supplierId, String status, int pageNum, int pageSize) {
@@ -98,28 +99,68 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         FinancePayment payment = paymentMapper.selectById(id);
         if (payment == null || !DocStatus.DRAFT.name().equals(payment.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<FinancePaymentItem> items = itemMapper.selectList(new LambdaQueryWrapper<FinancePaymentItem>().eq(FinancePaymentItem::getPaymentId, id));
-        // 核销应付
+        // 核销应付：更新台账 + 写入核销流水（双向可追溯），超额部分生成负数应付（预付）
         for (FinancePaymentItem it : items) {
             if (it.getPayableId() == null) continue;
             FinancePayable p = payableMapper.selectById(it.getPayableId());
             if (p == null) continue;
             BigDecimal amt = it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO;
-            BigDecimal newPaid = (p.getPaidAmount() != null ? p.getPaidAmount() : BigDecimal.ZERO).add(amt);
-            BigDecimal newUnpaid = (p.getUnpaidAmount() != null ? p.getUnpaidAmount() : BigDecimal.ZERO).subtract(amt);
-            p.setPaidAmount(newPaid);
-            p.setUnpaidAmount(newUnpaid.max(BigDecimal.ZERO));
-            p.setStatus(newUnpaid.compareTo(BigDecimal.ZERO) <= 0 ? SettlementStatus.SETTLED.getCode() : SettlementStatus.PARTIAL.getCode());
-            payableMapper.updateById(p);
+            BigDecimal unpaid = p.getUnpaidAmount() != null ? p.getUnpaidAmount() : BigDecimal.ZERO;
+            BigDecimal newUnpaid = unpaid.subtract(amt);
+            if (newUnpaid.compareTo(BigDecimal.ZERO) < 0) {
+                // 超额付款：原应付全额结清，超额部分生成负数应付（预付，供应商欠我方）
+                BigDecimal over = newUnpaid.negate();
+                BigDecimal total = p.getAmount() != null ? p.getAmount() : BigDecimal.ZERO;
+                p.setPaidAmount(total);
+                p.setUnpaidAmount(BigDecimal.ZERO);
+                p.setStatus(SettlementStatus.SETTLED.getCode());
+                payableMapper.updateById(p);
+                // 生成负数应付（预付单），sourceBillType=ADVANCE + sourceId=原付款单id 用于反审核精确删除
+                FinancePayable advance = new FinancePayable();
+                advance.setBillNo(p.getBillNo() + "-ADV");
+                advance.setSupplierId(p.getSupplierId());
+                advance.setSupplierName(p.getSupplierName());
+                advance.setSourceBillType("ADVANCE");
+                advance.setSourceBillNo(p.getSourceBillNo());
+                advance.setSourceId(id);
+                advance.setAmount(over.negate());
+                advance.setPaidAmount(BigDecimal.ZERO);
+                advance.setUnpaidAmount(over.negate());
+                advance.setDueDate(p.getDueDate());
+                advance.setStatus(SettlementStatus.ADVANCE.getCode());
+                advance.setRemark("付款预付（多付，供应商欠我方）");
+                payableMapper.insert(advance);
+                // 核销流水记录实际核销额 = 原未付额（全额结清）
+                FinanceSettlement st = new FinanceSettlement();
+                st.setReceiptPaymentId(id);
+                st.setPayableReceivableId(it.getPayableId());
+                st.setAmount(unpaid);
+                st.setDirection("PAY");
+                st.setSourceType("PAYMENT");
+                st.setSourceId(id);
+                st.setCompanyId(CompanyContext.get());
+                settlementMapper.insert(st);
+            } else {
+                // 正常核销
+                BigDecimal newPaid = (p.getPaidAmount() != null ? p.getPaidAmount() : BigDecimal.ZERO).add(amt);
+                p.setPaidAmount(newPaid);
+                p.setUnpaidAmount(newUnpaid);
+                p.setStatus(newUnpaid.compareTo(BigDecimal.ZERO) <= 0 ? SettlementStatus.SETTLED.getCode() : SettlementStatus.PARTIAL.getCode());
+                payableMapper.updateById(p);
+                FinanceSettlement st = new FinanceSettlement();
+                st.setReceiptPaymentId(id);
+                st.setPayableReceivableId(it.getPayableId());
+                st.setAmount(amt);
+                st.setDirection("PAY");
+                st.setSourceType("PAYMENT");
+                st.setSourceId(id);
+                st.setCompanyId(CompanyContext.get());
+                settlementMapper.insert(st);
+            }
         }
-        // 更新账户余额
-        FinanceAccount acc = accountMapper.selectById(payment.getAccountId());
-        if (acc != null) {
-            acc.setBalance(acc.getBalance().subtract(payment.getAmount()));
-            accountMapper.updateById(acc);
-        }
-        // 同步减少供应商应付余额（与采购订单审核的 add 对称），统一走原子入口避免并发丢更新
-        payableHelper.changeSupplierBalance(payment.getSupplierId(), payment.getAmount().negate());
-        // 写资金流水
+        // 账单联动：核销后反向更新账单明细已付金额（账单=结算快照，随核销进度同步）
+        syncBillProgress(id);
+        // 写资金流水（账户余额由流水实时累计，不再维护余额快照）
         FinanceCashflow cf = new FinanceCashflow();
         cf.setFlowNo(gen("FK-", cashflowMapper));
         cf.setAccountId(payment.getAccountId());
@@ -129,10 +170,52 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         cf.setRelatedBillType("付款单");
         cf.setIncome(BigDecimal.ZERO);
         cf.setExpense(payment.getAmount());
-        cf.setBalance(acc != null ? acc.getBalance() : BigDecimal.ZERO);
         cashflowMapper.insert(cf);
         // 更新付款单状态
         FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.AUDITED.name()); paymentMapper.updateById(u);
+    }
+
+    /** 账单进度联动：按核销流水反查账单明细，同步已付金额并重算账单主表 */
+    private void syncBillProgress(Long paymentId) {
+        List<FinanceSettlement> sts = settlementMapper.selectList(
+                new LambdaQueryWrapper<FinanceSettlement>()
+                        .eq(FinanceSettlement::getReceiptPaymentId, paymentId)
+                        .eq(FinanceSettlement::getDirection, "PAY"));
+        Set<Long> billIds = new HashSet<>();
+        for (FinanceSettlement st : sts) {
+            List<FinanceBillItem> items = billItemMapper.selectList(
+                    new LambdaQueryWrapper<FinanceBillItem>().eq(FinanceBillItem::getSourceId, st.getPayableReceivableId()));
+            for (FinanceBillItem item : items) {
+                BigDecimal newPaid = (item.getPaidAmount() != null ? item.getPaidAmount() : BigDecimal.ZERO).add(st.getAmount());
+                BigDecimal newUnpaid = (item.getAmount() != null ? item.getAmount() : BigDecimal.ZERO).subtract(newPaid);
+                item.setPaidAmount(newPaid);
+                item.setUnpaidAmount(newUnpaid.max(BigDecimal.ZERO));
+                billItemMapper.updateById(item);
+                billIds.add(item.getBillId());
+            }
+        }
+        // 重算账单主表 paidAmount/unpaidAmount
+        for (Long billId : billIds) {
+            recalcBill(billId);
+        }
+    }
+
+    /** 重算账单主表金额 */
+    private void recalcBill(Long billId) {
+        List<FinanceBillItem> items = billItemMapper.selectList(
+                new LambdaQueryWrapper<FinanceBillItem>().eq(FinanceBillItem::getBillId, billId));
+        BigDecimal total = BigDecimal.ZERO, paid = BigDecimal.ZERO, unpaid = BigDecimal.ZERO;
+        for (FinanceBillItem it : items) {
+            total = total.add(it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO);
+            paid = paid.add(it.getPaidAmount() != null ? it.getPaidAmount() : BigDecimal.ZERO);
+            unpaid = unpaid.add(it.getUnpaidAmount() != null ? it.getUnpaidAmount() : BigDecimal.ZERO);
+        }
+        FinanceBill b = new FinanceBill();
+        b.setId(billId);
+        b.setTotalAmount(total);
+        b.setPaidAmount(paid);
+        b.setUnpaidAmount(unpaid);
+        billMapper.updateById(b);
     }
 
     @Override
@@ -141,31 +224,33 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         FinancePayment payment = paymentMapper.selectById(id);
         if (payment == null) throw new BusinessException("付款单不存在");
         if (!DocStatus.AUDITED.name().equals(payment.getStatus())) throw new BusinessException("只有已审核的付款单可反审核");
-        List<FinancePaymentItem> items = itemMapper.selectList(new LambdaQueryWrapper<FinancePaymentItem>().eq(FinancePaymentItem::getPaymentId, id));
-        // 1) 反向核销应付台账（按明细精确回退本单写入的核销）
-        BigDecimal settleTotal = BigDecimal.ZERO;
-        for (FinancePaymentItem it : items) {
-            if (it.getPayableId() == null) continue;
-            FinancePayable p = payableMapper.selectById(it.getPayableId());
+        // 1) 反向核销应付台账：按核销流水精确冲销（双向可追溯）
+        List<FinanceSettlement> settlements = settlementMapper.selectList(
+                new LambdaQueryWrapper<FinanceSettlement>()
+                        .eq(FinanceSettlement::getReceiptPaymentId, id)
+                        .eq(FinanceSettlement::getDirection, "PAY"));
+        for (FinanceSettlement st : settlements) {
+            FinancePayable p = payableMapper.selectById(st.getPayableReceivableId());
             if (p == null) continue;
-            BigDecimal amt = it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO;
-            settleTotal = settleTotal.add(amt);
+            BigDecimal amt = st.getAmount() != null ? st.getAmount() : BigDecimal.ZERO;
             BigDecimal newPaid = (p.getPaidAmount() != null ? p.getPaidAmount() : BigDecimal.ZERO).subtract(amt);
             BigDecimal newUnpaid = (p.getUnpaidAmount() != null ? p.getUnpaidAmount() : BigDecimal.ZERO).add(amt);
             p.setPaidAmount(newPaid.max(BigDecimal.ZERO));
             p.setUnpaidAmount(newUnpaid);
             p.setStatus(newUnpaid.compareTo(BigDecimal.ZERO) <= 0 ? SettlementStatus.SETTLED.getCode() : SettlementStatus.UNSETTLED.getCode());
             payableMapper.updateById(p);
+            // 冲销后删除核销流水记录
+            settlementMapper.deleteById(st.getId());
         }
-        // 2) 回退账户余额
-        FinanceAccount acc = accountMapper.selectById(payment.getAccountId());
-        if (acc != null) {
-            acc.setBalance(acc.getBalance().add(payment.getAmount()));
-            accountMapper.updateById(acc);
+        // 2) 删除本付款单产生的预付单（负数应付，物理删除，审计链由付款单+资金流水+核销流水保留）
+        List<FinancePayable> advances = payableMapper.selectList(
+                new LambdaQueryWrapper<FinancePayable>()
+                        .eq(FinancePayable::getSourceBillType, "ADVANCE")
+                        .eq(FinancePayable::getSourceId, id));
+        for (FinancePayable adv : advances) {
+            payableMapper.deleteById(adv.getId());
         }
-        // 3) 回退供应商应付余额（与 audit 的减对称），统一走原子入口
-        payableHelper.changeSupplierBalance(payment.getSupplierId(), payment.getAmount());
-        // 4) 写冲正资金流水（保留审计轨迹，不删除原流水）
+        // 4) 写冲正资金流水（保留审计轨迹，不删除原流水；账户余额由流水实时累计）
         FinanceCashflow cf = new FinanceCashflow();
         cf.setFlowNo(gen("FK-", cashflowMapper));
         cf.setAccountId(payment.getAccountId());
@@ -175,7 +260,6 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         cf.setRelatedBillType("付款单");
         cf.setIncome(payment.getAmount());
         cf.setExpense(BigDecimal.ZERO);
-        cf.setBalance(acc != null ? acc.getBalance() : BigDecimal.ZERO);
         cf.setRemark("反审核冲正");
         cashflowMapper.insert(cf);
         FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.DRAFT.name()); paymentMapper.updateById(u);

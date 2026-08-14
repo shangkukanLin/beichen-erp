@@ -3,8 +3,12 @@ import { reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { listCustomers, type Customer } from '@/api/customer'
 import request from '@/utils/request'
-import { getBillPage, getBillItems, generateBill, type FinanceBill, type FinanceBillItem } from '@/api/finance'
+import { getBillPage, getBillItems, generateBill, auditBill, unAuditBill, cancelBill, type FinanceBill, type FinanceBillItem } from '@/api/finance'
 import { BillType, BillTypeLabel } from '@/api/enums'
+
+// 账单状态 code → 中文 label（后端存 DocStatus code，前端展示中文）
+const StatusLabel: Record<string, string> = { DRAFT: '草稿', AUDITED: '已审核', CANCELLED: '已作废' }
+const StatusTag: Record<string, 'info' | 'success' | 'warning' | 'danger' | 'primary'> = { DRAFT: 'info', AUDITED: 'success', CANCELLED: 'danger' }
 
 const query = reactive({ billType: BillType.RECEIVABLE, partnerId: '' as string|number })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -59,6 +63,9 @@ const detailVisible = ref(false)
 const detail = ref<FinanceBill>({})
 const detailItems = ref<FinanceBillItem[]>([])
 async function handleDetail(row: FinanceBill) { detail.value = { ...row }; try { detailItems.value = await getBillItems(row.id as number) || [] } catch {}; detailVisible.value = true }
+async function handleAudit(row: FinanceBill) { try { await auditBill(row.id as number); ElMessage.success('账单已审核'); loadData() } catch {} }
+async function handleUnAudit(row: FinanceBill) { try { await unAuditBill(row.id as number); ElMessage.success('账单已反审核'); loadData() } catch {} }
+async function handleCancel(row: FinanceBill) { try { await cancelBill(row.id as number); ElMessage.success('账单已作废'); loadData() } catch {} }
 </script>
 <template>
   <div class="p">
@@ -78,7 +85,13 @@ async function handleDetail(row: FinanceBill) { detail.value = { ...row }; try {
         <el-table-column prop="totalAmount" label="总额" width="120" align="right"><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
         <el-table-column prop="paidAmount" label="已收付" width="120" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
         <el-table-column prop="unpaidAmount" label="未收付" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
-        <el-table-column label="操作" width="80" align="center"><template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button></template></el-table-column>
+        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="StatusTag[row.status] || 'info'" size="small">{{ StatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="200" align="center"><template #default="{row}">
+          <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
+          <el-button v-if="row.status==='DRAFT'" type="success" link @click="handleAudit(row)">审核</el-button>
+          <el-button v-if="row.status==='AUDITED'" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
+          <el-button v-if="row.status!=='CANCELLED'" type="danger" link @click="handleCancel(row)">作废</el-button>
+        </template></el-table-column>
       </el-table>
       <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
     </el-card>

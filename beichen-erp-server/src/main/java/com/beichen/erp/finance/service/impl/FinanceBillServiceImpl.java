@@ -2,6 +2,8 @@ package com.beichen.erp.finance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.entity.*;
 import com.beichen.erp.finance.common.BillType;
 import com.beichen.erp.finance.common.SettlementStatus;
@@ -9,6 +11,7 @@ import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinanceBillService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -59,7 +62,8 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         bill.setPartnerName(partnerName);
         bill.setPeriodStart(periodStart);
         bill.setPeriodEnd(periodEnd);
-        bill.setStatus(SettlementStatus.UNSETTLED.getCode());
+        // 账单生成后为草稿，需审核后生效（生命周期：草稿→已审核→已作废）
+        bill.setStatus(DocStatus.DRAFT.name());
 
         BigDecimal total = BigDecimal.ZERO;
         BigDecimal paid = BigDecimal.ZERO;
@@ -75,6 +79,7 @@ public class FinanceBillServiceImpl implements FinanceBillService {
                 FinanceBillItem it = new FinanceBillItem();
                 it.setSourceBillType(r.getSourceBillType());
                 it.setSourceBillNo(r.getSourceBillNo());
+                it.setSourceId(r.getId());
                 it.setAmount(r.getAmount());
                 it.setPaidAmount(r.getPaidAmount() != null ? r.getPaidAmount() : BigDecimal.ZERO);
                 it.setUnpaidAmount(r.getUnpaidAmount() != null ? r.getUnpaidAmount() : BigDecimal.ZERO);
@@ -93,6 +98,7 @@ public class FinanceBillServiceImpl implements FinanceBillService {
                 FinanceBillItem it = new FinanceBillItem();
                 it.setSourceBillType(r.getSourceBillType());
                 it.setSourceBillNo(r.getSourceBillNo());
+                it.setSourceId(r.getId());
                 it.setAmount(r.getAmount());
                 it.setPaidAmount(r.getPaidAmount() != null ? r.getPaidAmount() : BigDecimal.ZERO);
                 it.setUnpaidAmount(r.getUnpaidAmount() != null ? r.getUnpaidAmount() : BigDecimal.ZERO);
@@ -113,6 +119,42 @@ public class FinanceBillServiceImpl implements FinanceBillService {
             billItemMapper.insert(it);
         }
         return bill;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void audit(Long id) {
+        FinanceBill bill = billMapper.selectById(id);
+        if (bill == null) throw new BusinessException("账单不存在");
+        if (!DocStatus.DRAFT.name().equals(bill.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        FinanceBill u = new FinanceBill();
+        u.setId(id);
+        u.setStatus(DocStatus.AUDITED.name());
+        billMapper.updateById(u);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unAudit(Long id) {
+        FinanceBill bill = billMapper.selectById(id);
+        if (bill == null) throw new BusinessException("账单不存在");
+        if (!DocStatus.AUDITED.name().equals(bill.getStatus())) throw new BusinessException("只有已审核状态可反审核");
+        FinanceBill u = new FinanceBill();
+        u.setId(id);
+        u.setStatus(DocStatus.DRAFT.name());
+        billMapper.updateById(u);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void cancel(Long id) {
+        FinanceBill bill = billMapper.selectById(id);
+        if (bill == null) throw new BusinessException("账单不存在");
+        if (DocStatus.CANCELLED.name().equals(bill.getStatus())) throw new BusinessException("账单已作废");
+        FinanceBill u = new FinanceBill();
+        u.setId(id);
+        u.setStatus(DocStatus.CANCELLED.name());
+        billMapper.updateById(u);
     }
 
     private String genCode() {

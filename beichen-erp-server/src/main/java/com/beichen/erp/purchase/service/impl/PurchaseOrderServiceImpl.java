@@ -134,10 +134,6 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Transactional(rollbackFor = Exception.class)
     public void create(PurchaseOrder order, List<PurchaseOrderItem> items) {
         if (order.getSupplierId() == null) throw new BusinessException("供应商不能为空");
-        if (order.getSupplierId() != null) {
-            Supplier s = supplierMapper.selectById(order.getSupplierId());
-            order.setSupplierName(s != null ? s.getName() : "");
-        }
         order.setCode(generateCode());
         order.setStatus(PurchaseOrderStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
@@ -166,10 +162,6 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         PurchaseOrder old = orderMapper.selectById(order.getId());
         if (old == null) throw new BusinessException("采购单不存在");
         if (!PurchaseOrderStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
-        if (order.getSupplierId() != null) {
-            Supplier s = supplierMapper.selectById(order.getSupplierId());
-            order.setSupplierName(s != null ? s.getName() : "");
-        }
         order.setCode(old.getCode());
         orderMapper.updateById(order);
         itemMapper.delete(new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, order.getId()));
@@ -220,6 +212,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         fp.setSupplierName(s != null ? s.getName() : "");
         fp.setSourceBillType(SourceBillType.PURCHASE_ORDER.getCode());
         fp.setSourceBillNo(order.getCode());
+        fp.setSourceId(order.getId());
         fp.setAmount(order.getTotalAmount());
         fp.setPaidAmount(BigDecimal.ZERO);
         fp.setUnpaidAmount(order.getTotalAmount());
@@ -228,10 +221,6 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) fp.setCompanyId(cid);
         payableMapper.insert(fp);
-        // 同步增加供应商应付余额（原子更新，避免并发丢更新）
-        if (order.getSupplierId() != null && order.getTotalAmount() != null) {
-            payableHelper.changeSupplierBalance(order.getSupplierId(), order.getTotalAmount());
-        }
         // 2) 审核直接入库，按品质等级分别增加库存
         for (PurchaseOrderItem it : items) {
             Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
@@ -286,10 +275,6 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         // 3) 删除应付台账
         for (FinancePayable fp : payables) {
             payableMapper.deleteById(fp.getId());
-        }
-        // 同步回退供应商应付余额（与 audit 时 add 对称，原子更新）
-        if (order.getSupplierId() != null && order.getTotalAmount() != null) {
-            payableHelper.changeSupplierBalance(order.getSupplierId(), order.getTotalAmount().negate());
         }
 
         // 4) 回退状态到草稿，清除审核信息

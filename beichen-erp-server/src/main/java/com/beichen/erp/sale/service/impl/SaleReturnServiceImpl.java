@@ -125,10 +125,6 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         order.setStatus(SaleReturnStatus.DRAFT.getCode());
         order.setCode(generateCode());
         if (order.getTotalAmount() == null) order.setTotalAmount(BigDecimal.ZERO);
-        if (order.getCustomerId() != null) {
-            Customer c = customerMapper.selectById(order.getCustomerId());
-            order.setCustomerName(c != null ? c.getName() : null);
-        }
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) order.setCompanyId(cid);
         returnMapper.insert(order);
@@ -146,10 +142,6 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         order.setCode(null);
         order.setStatus(null);
         if (order.getTotalAmount() == null) order.setTotalAmount(BigDecimal.ZERO);
-        if (order.getCustomerId() != null) {
-            Customer c = customerMapper.selectById(order.getCustomerId());
-            order.setCustomerName(c != null ? c.getName() : null);
-        }
         returnMapper.updateById(order);
         itemMapper.delete(new LambdaQueryWrapper<SaleReturnItem>().eq(SaleReturnItem::getReturnId, id));
         saveItems(id, itemMaps);
@@ -180,27 +172,18 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             FinanceReceivable fr = new FinanceReceivable();
             fr.setBillNo(order.getCode());
             fr.setCustomerId(order.getCustomerId());
-            fr.setCustomerName(order.getCustomerName());
+            // 应收台账留痕：固化开单时的客户名（实时查一次）
+            Customer c = order.getCustomerId() != null ? customerMapper.selectById(order.getCustomerId()) : null;
+            fr.setCustomerName(c != null ? c.getName() : "");
             fr.setSourceBillType(SourceBillType.SALE_RETURN.getCode());
             fr.setSourceBillNo(order.getCode());
+            fr.setSourceId(order.getId());
             fr.setAmount(order.getTotalAmount().negate());
             fr.setPaidAmount(BigDecimal.ZERO);
             fr.setUnpaidAmount(BigDecimal.ZERO);
             fr.setStatus(SettlementStatus.UNSETTLED.getCode());
             fr.setRemark("销售退货冲抵应收");
             financeReceivableMapper.insert(fr);
-            // 同步扣减客户应收余额（与销售订单审核的 add 对称）
-            if (order.getCustomerId() != null) {
-                Customer c = customerMapper.selectById(order.getCustomerId());
-                if (c != null) {
-                    Customer u = new Customer();
-                    u.setId(c.getId());
-                    BigDecimal newBal = (c.getReceivableBalance() != null ? c.getReceivableBalance() : BigDecimal.ZERO)
-                            .subtract(order.getTotalAmount());
-                    u.setReceivableBalance(newBal);
-                    customerMapper.updateById(u);
-                }
-            }
         }
         SaleReturn u = new SaleReturn();
         u.setId(id);
@@ -231,19 +214,6 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         }
         // 财务联动：冲销退货负向应收台账
         receivableHelper.reverseReceivable(order.getCode());
-        // 对称回退客户应收余额（audit 时扣减，此处加回）
-        if (order.getCustomerId() != null && order.getTotalAmount() != null
-                && order.getTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
-            Customer c = customerMapper.selectById(order.getCustomerId());
-            if (c != null) {
-                Customer u = new Customer();
-                u.setId(c.getId());
-                BigDecimal newBal = (c.getReceivableBalance() != null ? c.getReceivableBalance() : BigDecimal.ZERO)
-                        .add(order.getTotalAmount());
-                u.setReceivableBalance(newBal);
-                customerMapper.updateById(u);
-            }
-        }
         SaleReturn u = new SaleReturn();
         u.setId(id);
         u.setStatus(SaleReturnStatus.DRAFT.getCode());
@@ -290,11 +260,6 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             if (map.get("remark") != null) it.setRemark(map.get("remark").toString());
             // 销售退货固定为不良品
             it.setQualityType("DEFECT");
-            // 冗余产品名
-            if (it.getProductId() != null) {
-                Product p = productMapper.selectById(it.getProductId());
-                if (p != null) it.setProductName(p.getName());
-            }
             Long cid = CompanyContext.get();
             if (cid != null && cid > 0) it.setCompanyId(cid);
             itemMapper.insert(it);

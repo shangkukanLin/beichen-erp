@@ -100,7 +100,7 @@ public class SystemController {
                 "outsource_order_material", "outsource_order_product", "outsource_order_delivery",
                 "outsource_order", "outsource_material_component", "outsource_material",
                 "material_order_item", "material_order",
-                "purchase_inbound_item", "purchase_order_item",
+                "purchase_order_item",
                 "sale_outbound_item", "sale_order_item",
                 "warehouse_stock_log", "warehouse_stock",
                 "warehouse_move_item", "inventory_other_io_item",

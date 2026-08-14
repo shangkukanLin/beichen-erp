@@ -15,6 +15,10 @@ public class FinanceAccount {
     private String accountType;
     private String bankName;
     private String accountNo;
+    /** 期初余额（开户时的初始资金，落库，之后不可变） */
+    private BigDecimal openingBalance;
+    /** 当前余额（实时汇总，不落库，用于列表展示） */
+    @TableField(exist = false)
     private BigDecimal balance;
     private Integer status;
     private String remark;

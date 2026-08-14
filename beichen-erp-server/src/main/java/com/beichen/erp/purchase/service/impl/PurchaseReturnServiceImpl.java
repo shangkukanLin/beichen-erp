@@ -176,6 +176,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         fp.setSupplierName(s != null ? s.getName() : "");
         fp.setSourceBillType(SourceBillType.PURCHASE_RETURN.getCode());
         fp.setSourceBillNo(order.getCode());
+        fp.setSourceId(order.getId());
         fp.setAmount(order.getTotalAmount().negate());
         fp.setPaidAmount(BigDecimal.ZERO);
         fp.setUnpaidAmount(order.getTotalAmount().negate());
@@ -184,10 +185,6 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) fp.setCompanyId(cid);
         payableMapper.insert(fp);
-        // 同步减少供应商应付余额（原子更新，与采购订单 audit 的 add 对称）
-        if (order.getSupplierId() != null && order.getTotalAmount() != null) {
-            payableHelper.changeSupplierBalance(order.getSupplierId(), order.getTotalAmount().negate());
-        }
         // 3) 更新状态
         PurchaseReturn u = new PurchaseReturn();
         u.setId(id);
@@ -229,10 +226,6 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         // 3) 删除应付台账
         for (FinancePayable fp : payables) {
             payableMapper.deleteById(fp.getId());
-        }
-        // 对称回退供应商应付余额（audit 时因负向应付冲抵而减，此处加回，原子更新）
-        if (order.getSupplierId() != null && order.getTotalAmount() != null) {
-            payableHelper.changeSupplierBalance(order.getSupplierId(), order.getTotalAmount());
         }
         // 4) 回退到草稿
         PurchaseReturn u = new PurchaseReturn();

@@ -19,6 +19,8 @@ public class FinanceCashflow {
     private String relatedBillType;
     private BigDecimal income;
     private BigDecimal expense;
+    /** 变动后余额（实时累计，不落库，用于流水列表展示） */
+    @TableField(exist = false)
     private BigDecimal balance;
     private String remark;
     @TableField(fill = FieldFill.INSERT) private Long companyId;

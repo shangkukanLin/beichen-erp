@@ -42,7 +42,7 @@ public class FinancePayableController {
             Map<String, Object> m = new HashMap<>();
             m.put("id", r.getId()); m.put("billNo", r.getBillNo());
             m.put("supplierId", r.getSupplierId()); m.put("supplierName", r.getSupplierName());
-            m.put("sourceBillType", r.getSourceBillType()); m.put("sourceBillNo", r.getSourceBillNo());
+            m.put("sourceBillType", r.getSourceBillType()); m.put("sourceBillNo", r.getSourceBillNo()); m.put("sourceId", r.getSourceId());
             m.put("amount", r.getAmount()); m.put("paidAmount", r.getPaidAmount());
             m.put("unpaidAmount", r.getUnpaidAmount()); m.put("dueDate", r.getDueDate());
             m.put("status", r.getStatus()); m.put("remark", r.getRemark());

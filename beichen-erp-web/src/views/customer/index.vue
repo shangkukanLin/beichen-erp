@@ -44,8 +44,6 @@ const defaultForm = (): Customer => ({
   creditPeriod: 0,
   creditPeriodMonths: 0,
   creditLimit: 0,
-  receivableBalance: 0,
-  prepaidBalance: 0,
   status: 1,
   remark: ''
 })

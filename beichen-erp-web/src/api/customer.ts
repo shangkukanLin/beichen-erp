@@ -11,7 +11,6 @@ export interface Customer {
   creditPeriodMonths?: number
   creditLimit?: number
   receivableBalance?: number
-  prepaidBalance?: number
   status: number
   remark?: string
 }

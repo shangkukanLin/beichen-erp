@@ -187,12 +187,11 @@ public class ReturnOrderController {
             }
         }
 
-        // 应付冲减（负向应付）+ 同步供应商应付余额
+        // 应付冲减（负向应付）
         if (totalReturnAmount.compareTo(BigDecimal.ZERO) > 0) {
             payableHelper.createPayable(order.getFactoryId(), OutsourceSourceBillType.OUTSOURCE_RETURN.getCode(),
                 order.getCode(), order.getId(), totalReturnAmount.negate(), order.getReturnDate(),
                 "委外退料 - " + order.getCode());
-            payableHelper.changeSupplierBalance(order.getFactoryId(), totalReturnAmount.negate());
         }
 
         return R.ok();
@@ -226,10 +225,6 @@ public class ReturnOrderController {
 
         // 应付冲销：作废原负向应付（不再新增同 sourceId 的反向记录，避免财务定位冲突）
         payableHelper.reversePayable(order.getId());
-        if (totalAmount.compareTo(BigDecimal.ZERO) > 0) {
-            // 原退料生成的是负向应付，取消时按正数加回供应商应付余额
-            payableHelper.changeSupplierBalance(order.getFactoryId(), totalAmount);
-        }
 
         return R.ok();
     }
@@ -326,18 +321,18 @@ public class ReturnOrderController {
 
         // 查找现有库存记录（按 warehouse + material_id + quality）
         Integer count = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM warehouse_stock WHERE warehouse_id=? AND outsource_material_id=? AND quality_type=?",
+            "SELECT COUNT(*) FROM warehouse_stock WHERE warehouse_id=? AND material_id=? AND quality_type=?",
             Integer.class, warehouseId, materialId, qualityType);
         if (count != null && count > 0) {
-            jdbcTemplate.update("UPDATE warehouse_stock SET quantity=quantity+? WHERE warehouse_id=? AND outsource_material_id=? AND quality_type=?",
+            jdbcTemplate.update("UPDATE warehouse_stock SET quantity=quantity+? WHERE warehouse_id=? AND material_id=? AND quality_type=?",
                 delta, warehouseId, materialId, qualityType);
         } else {
-            jdbcTemplate.update("INSERT INTO warehouse_stock (warehouse_id, outsource_material_id, material_name, quality_type, quantity, company_id) VALUES (?,?,?,?,?,?)",
-                warehouseId, materialId, getMaterialNameById(materialId), qualityType, delta, CompanyContext.get());
+            jdbcTemplate.update("INSERT INTO warehouse_stock (warehouse_id, material_id, quality_type, quantity, company_id) VALUES (?,?,?,?,?)",
+                warehouseId, materialId, qualityType, delta, CompanyContext.get());
         }
 
         // 写库存流水
-        jdbcTemplate.update("INSERT INTO warehouse_stock_log (warehouse_id, outsource_material_id, material_name, change_type, change_quantity, related_order_code, company_id) VALUES (?,?,?,?,?,?,?)",
+        jdbcTemplate.update("INSERT INTO warehouse_stock_log (warehouse_id, material_id, material_name, change_type, change_quantity, related_order_code, company_id) VALUES (?,?,?,?,?,?,?)",
             warehouseId, materialId, getMaterialNameById(materialId), changeType, delta, orderCode, CompanyContext.get());
     }
 

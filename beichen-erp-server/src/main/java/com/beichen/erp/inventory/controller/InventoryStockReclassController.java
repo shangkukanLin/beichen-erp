@@ -96,7 +96,6 @@ public class InventoryStockReclassController {
         return list.stream().map(m -> {
             InventoryStockReclassItem it = new InventoryStockReclassItem();
             it.setProductId(m.get("productId") == null ? null : Long.valueOf(m.get("productId").toString()));
-            it.setProductName(m.get("productName") == null ? null : m.get("productName").toString());
             it.setFromQuality(m.get("fromQuality") == null ? null : m.get("fromQuality").toString());
             it.setToQuality(m.get("toQuality") == null ? null : m.get("toQuality").toString());
             it.setQuantity(new java.math.BigDecimal(m.get("quantity").toString()));

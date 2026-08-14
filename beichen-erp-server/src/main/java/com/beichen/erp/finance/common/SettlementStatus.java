@@ -12,7 +12,9 @@ public enum SettlementStatus {
     /** 已结清 */
     SETTLED("已结清"),
     /** 已冲回（反审核作废） */
-    CANCELLED("已冲回");
+    CANCELLED("已冲回"),
+    /** 预付/多付：超额付款产生的负数应付（供应商欠我方），实时汇总时自然抵扣 */
+    ADVANCE("预付");
 
     private final String label;
 

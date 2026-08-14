@@ -28,10 +28,10 @@ function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 // accounts
 const accounts = ref<FinanceAccount[]>([])
 const aDialog = ref(false)
-const aForm = reactive<FinanceAccount>({ accountName: '', accountType: '银行', bankName: '', accountNo: '', balance: 0, status: 1 })
+const aForm = reactive<FinanceAccount>({ accountName: '', accountType: '银行', bankName: '', accountNo: '', openingBalance: 0, status: 1 })
 const aRef = ref<FormInstance>()
 async function loadAccounts() { try { const r = await getAccountPage({pageSize:200}); accounts.value = r?.records || [] } catch {} }
-function addAccount() { Object.assign(aForm, { id: undefined, accountName: '', accountType: '银行', bankName: '', accountNo: '', balance: 0, status: 1 }); aDialog.value = true }
+function addAccount() { Object.assign(aForm, { id: undefined, accountName: '', accountType: '银行', bankName: '', accountNo: '', openingBalance: 0, status: 1 }); aDialog.value = true }
 function editAccount(row: FinanceAccount) { Object.assign(aForm, row); aDialog.value = true }
 async function saveAccount() {
   try { if (aForm.id) { await updateAccount(aForm); ElMessage.success('修改成功') } else { await createAccount(aForm); ElMessage.success('新增成功') }; aDialog.value = false; loadAccounts() } catch {}
@@ -81,7 +81,7 @@ onMounted(() => { loadFlow(); loadAccounts() })
         <el-form-item label="类型"><el-select v-model="aForm.accountType" style="width:100%"><el-option label="现金" value="现金"/><el-option label="银行" value="银行"/></el-select></el-form-item>
         <el-form-item label="开户行"><el-input v-model="aForm.bankName"/></el-form-item>
         <el-form-item label="账号"><el-input v-model="aForm.accountNo"/></el-form-item>
-        <el-form-item label="余额"><el-input-number v-model="aForm.balance" :min="0" :precision="2" controls-position="right" style="width:100%"/></el-form-item>
+        <el-form-item label="期初余额"><el-input-number v-model="aForm.openingBalance" :min="0" :precision="2" :disabled="!!aForm.id" controls-position="right" style="width:100%"/></el-form-item>
       </el-form>
       <template #footer><el-button @click="aDialog=false">取消</el-button><el-button type="primary" @click="saveAccount">确定</el-button></template>
     </el-dialog>

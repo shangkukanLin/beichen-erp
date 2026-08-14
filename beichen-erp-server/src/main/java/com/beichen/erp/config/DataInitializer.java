@@ -60,6 +60,80 @@ public class DataInitializer implements ApplicationRunner {
         initSuperAdmin();
         initBomTypes();
         initPhaseTemplates();
+        initSchemaColumns();
+    }
+
+    /** 幂等补列：为存量库平滑升级（schema.sql 的 CREATE TABLE IF NOT EXISTS 不会给已存在表加列） */
+    private void initSchemaColumns() {
+        addColumnIfAbsent("finance_receivable", "source_id",
+                "ALTER TABLE finance_receivable ADD COLUMN source_id BIGINT DEFAULT NULL COMMENT '来源记录ID'");
+        // 废弃余额快照字段：余额改由台账实时 SUM 汇总，物理删除冗余快照列
+        dropColumnIfExists("supplier", "payable_balance");
+        dropColumnIfExists("customer", "receivable_balance");
+        dropColumnIfExists("customer", "prepaid_balance");
+        // 业务单据冗余名字快照列：改为存 ID 查询时 JOIN 查名（财务单据与库存流水留痕列保留）
+        dropColumnIfExists("purchase_order", "supplier_name");
+        dropColumnIfExists("sale_order", "customer_name");
+        dropColumnIfExists("sale_outbound", "customer_name");
+        dropColumnIfExists("sale_return", "customer_name");
+        dropColumnIfExists("sale_return_item", "product_name");
+        dropColumnIfExists("inventory_stock_reclass_item", "product_name");
+        // 账户余额实时算：删余额快照列，加期初余额列（期初余额落流水，余额由流水实时累计）
+        addColumnIfAbsent("finance_account", "opening_balance",
+                "ALTER TABLE finance_account ADD COLUMN opening_balance DECIMAL(18,4) DEFAULT 0 COMMENT '期初余额(开户时初始资金，之后不可变)' AFTER account_no");
+        dropColumnIfExists("finance_account", "balance");
+        dropColumnIfExists("finance_cashflow", "balance");
+        // 账单明细补 source_id（来源台账ID，核销时反向联动账单进度）
+        addColumnIfAbsent("finance_bill_item", "source_id",
+                "ALTER TABLE finance_bill_item ADD COLUMN source_id BIGINT DEFAULT NULL COMMENT '来源台账ID(应付/应收台账主键，核销联动用)' AFTER source_bill_no");
+        // 库存流水 change_type 扩长：StockChangeType 枚举名超 20 字符（如 OUTSOURCE_CANCEL_DELIVERY=24），原 varchar(20) 会 Data truncation
+        modifyColumn("warehouse_stock_log", "change_type",
+                "ALTER TABLE warehouse_stock_log MODIFY COLUMN change_type VARCHAR(50) NOT NULL COMMENT '变动类型'");
+    }
+
+    /** 幂等扩长/修改列：当列长度不足时执行 ALTER MODIFY（用于枚举 code 超长的平滑升级） */
+    private void modifyColumn(String table, String column, String alterSql) {
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?",
+                    Integer.class, table, column);
+            if (cnt != null && cnt > 0) {
+                jdbcTemplate.execute(alterSql);
+                log.info("已修改列 {}.{}", table, column);
+            }
+        } catch (Exception e) {
+            log.warn("修改列 {}.{} 失败: {}", table, column, e.getMessage());
+        }
+    }
+
+    /** 判断列是否存在，不存在则执行 ALTER 补列 */
+    private void addColumnIfAbsent(String table, String column, String alterSql) {
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?",
+                    Integer.class, table, column);
+            if (cnt == null || cnt == 0) {
+                jdbcTemplate.execute(alterSql);
+                log.info("已补充列 {}.{}", table, column);
+            }
+        } catch (Exception e) {
+            log.warn("补充列 {}.{} 失败: {}", table, column, e.getMessage());
+        }
+    }
+
+    /** 判断列是否存在，存在则执行 ALTER 删列（用于废弃冗余快照字段的平滑下线） */
+    private void dropColumnIfExists(String table, String column) {
+        try {
+            Integer cnt = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?",
+                    Integer.class, table, column);
+            if (cnt != null && cnt > 0) {
+                jdbcTemplate.execute("ALTER TABLE " + table + " DROP COLUMN " + column);
+                log.info("已删除冗余列 {}.{}", table, column);
+            }
+        } catch (Exception e) {
+            log.warn("删除列 {}.{} 失败: {}", table, column, e.getMessage());
+        }
     }
 
     /** 清空所有业务数据（保留表结构） */

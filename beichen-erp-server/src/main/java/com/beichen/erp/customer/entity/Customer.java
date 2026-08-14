@@ -29,9 +29,9 @@ public class Customer {
 
     private BigDecimal creditLimit;
 
+    /** 应收余额（实时汇总，不落库，用于列表展示） */
+    @TableField(exist = false)
     private BigDecimal receivableBalance;
-
-    private BigDecimal prepaidBalance;
 
     private Integer status;
 

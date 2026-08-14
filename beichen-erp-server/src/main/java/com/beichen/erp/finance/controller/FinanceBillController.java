@@ -43,4 +43,13 @@ public class FinanceBillController {
         LocalDate periodEnd = body.get("periodEnd") != null ? LocalDate.parse(body.get("periodEnd").toString()) : null;
         return R.ok(service.generate(billType, partnerId, partnerName, periodStart, periodEnd));
     }
+
+    @PostMapping("/{id}/audit")
+    public R<Void> audit(@PathVariable Long id) { service.audit(id); return R.ok(); }
+
+    @PostMapping("/{id}/unAudit")
+    public R<Void> unAudit(@PathVariable Long id) { service.unAudit(id); return R.ok(); }
+
+    @PostMapping("/{id}/cancel")
+    public R<Void> cancel(@PathVariable Long id) { service.cancel(id); return R.ok(); }
 }

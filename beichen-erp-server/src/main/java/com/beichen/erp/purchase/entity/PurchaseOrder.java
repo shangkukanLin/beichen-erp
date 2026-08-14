@@ -18,6 +18,8 @@ public class PurchaseOrder {
 
     private Long supplierId;
 
+    /** 供应商名称（实时查名，不落库） */
+    @TableField(exist = false)
     private String supplierName;
 
     private Long warehouseId;

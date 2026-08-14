@@ -85,9 +85,8 @@ public class WarehouseController {
     public R<Void> add(@RequestBody Warehouse w) {
         if (w.getCode() == null || w.getCode().isBlank()) {
             String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-            Long cnt = warehouseMapper.selectCount(
-                new LambdaQueryWrapper<Warehouse>().likeRight(Warehouse::getCode, "WH-" + date));
-            w.setCode("WH-" + date + String.format("%03d", (cnt != null ? cnt : 0) + 1));
+            // 取当日最大序号 + 1（避免用 selectCount 导致删除后编号空洞撞唯一索引）
+            w.setCode("WH-" + date + String.format("%03d", nextWarehouseSeq(date)));
         }
         // 未指定仓库类别时默认为自有仓库（委外仓库由供应商创建时显式设为 OUTSOURCE）
         if (w.getWarehouseCategory() == null || w.getWarehouseCategory().isBlank()) {
@@ -96,6 +95,20 @@ public class WarehouseController {
         if (w.getStatus() == null) w.setStatus(1);
         warehouseMapper.insert(w);
         return R.ok();
+    }
+
+    /** 计算当日仓库编码最大序号 + 1（避免删除后编号空洞撞唯一索引） */
+    private int nextWarehouseSeq(String date) {
+        List<Warehouse> list = warehouseMapper.selectList(
+                new LambdaQueryWrapper<Warehouse>().likeRight(Warehouse::getCode, "WH-" + date)
+                        .orderByDesc(Warehouse::getCode).last("LIMIT 1"));
+        if (list == null || list.isEmpty() || list.get(0).getCode() == null) return 1;
+        String code = list.get(0).getCode();
+        try {
+            return Integer.parseInt(code.substring(code.length() - 3)) + 1;
+        } catch (NumberFormatException e) {
+            return 1;
+        }
     }
 
     /** 编辑仓库 */
@@ -130,10 +143,6 @@ public class WarehouseController {
         if (cnt > 0) associations.put("采购订单", cnt);
 
         cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM purchase_inbound WHERE warehouse_id = ?", Integer.class, id);
-        if (cnt > 0) associations.put("采购入库单", cnt);
-
-        cnt = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM sale_order WHERE warehouse_id = ?", Integer.class, id);
         if (cnt > 0) associations.put("销售订单", cnt);
 
@@ -150,12 +159,8 @@ public class WarehouseController {
         if (cnt > 0) associations.put("库存流水", cnt);
 
         cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM inventory_stock_take WHERE warehouse_id = ?", Integer.class, id);
-        if (cnt > 0) associations.put("盘点单", cnt);
-
-        cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM inventory_transfer WHERE from_warehouse_id = ? OR to_warehouse_id = ?", Integer.class, id, id);
-        if (cnt > 0) associations.put("调拨单", cnt);
+                "SELECT COUNT(*) FROM inventory_warehouse_move WHERE from_warehouse_id = ? OR to_warehouse_id = ?", Integer.class, id, id);
+        if (cnt > 0) associations.put("移仓单", cnt);
 
         cnt = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM inventory_other_io WHERE warehouse_id = ?", Integer.class, id);

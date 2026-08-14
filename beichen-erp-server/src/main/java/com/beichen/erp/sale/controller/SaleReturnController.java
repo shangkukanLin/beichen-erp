@@ -14,7 +14,7 @@ import java.util.Map;
  * 销售退货单接口
  */
 @RestController
-@RequestMapping("/sale/return")
+@RequestMapping("/api/sale/return")
 public class SaleReturnController {
 
     private final SaleReturnService service;

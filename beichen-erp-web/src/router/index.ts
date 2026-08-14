@@ -243,6 +243,7 @@ const routes: RouteRecordRaw[] = [
         name: 'InventoryPurchaseReturnAdd',
         component: () => import('@/views/purchase/return/add.vue'),
         meta: { title: '新增成品退货单', requiresAuth: true, operate: true } },
+      { path: 'inventory/purchase-return/detail/:id', name: 'InventoryPurchaseReturnDetail', component: () => import('@/views/purchase/return/detail.vue'), meta: { title: '成品退货单详情', requiresAuth: true, operate: true } },
       { path: 'inventory/stock', name: 'InventoryStock', component: () => import('@/views/inventory/stock.vue'), meta: { title: '成品库存查询', requiresAuth: true } },
       { path: 'inventory/stock-log', name: 'InventoryStockLog', component: () => import('@/views/inventory/stock-log.vue'), meta: { title: '成品库存流水', requiresAuth: true } },
       { path: 'inventory/sale', name: 'InventorySale', component: () => import('@/views/sale/order/index.vue'), meta: { title: '销售单', requiresAuth: true } },

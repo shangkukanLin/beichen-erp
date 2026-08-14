@@ -77,7 +77,25 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
             }
             s.setTypeCodes(codes);
         }
+        // 应付余额实时汇总回填（废弃快照字段后，余额统一由应付台账实时 SUM 计算）
+        fillPayableBalance(page.getRecords());
         return page;
+    }
+
+    /** 批量回填应付余额（实时汇总，避免逐供应商 N+1） */
+    private void fillPayableBalance(List<Supplier> suppliers) {
+        if (suppliers == null || suppliers.isEmpty()) return;
+        List<Long> ids = suppliers.stream().map(Supplier::getId).filter(java.util.Objects::nonNull).toList();
+        if (ids.isEmpty()) return;
+        Map<Long, Map<String, Object>> balanceMap = baseMapper.sumPayableBalance(ids);
+        for (Supplier s : suppliers) {
+            Map<String, Object> row = balanceMap.get(s.getId());
+            if (row != null && row.get("balance") != null) {
+                s.setPayableBalance(new java.math.BigDecimal(row.get("balance").toString()));
+            } else {
+                s.setPayableBalance(java.math.BigDecimal.ZERO);
+            }
+        }
     }
 
     @Override
@@ -161,11 +179,10 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
                 Wrappers.<Warehouse>lambdaQuery().eq(Warehouse::getFactoryId, supplierId));
         if (count != null && count > 0) return;
         Warehouse w = new Warehouse();
-        // 自动生成编码：WH-YYYYMMDD-序号
+        // 自动生成编码：WH-YYYYMMDD-序号（取当日最大序号 + 1，避免删除后编号空洞撞唯一索引）
         String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        Long cnt = WarehouseMapper.selectCount(
-                Wrappers.<Warehouse>lambdaQuery().likeRight(Warehouse::getCode, "WH-" + date));
-        w.setCode("WH-" + date + String.format("%03d", (cnt != null ? cnt : 0) + 1));
+        int seq = nextWarehouseSeq(date);
+        w.setCode("WH-" + date + String.format("%03d", seq));
         w.setWarehouseCategory("OUTSOURCE");
         w.setFactoryId(supplierId);
         w.setWarehouseName(supplierName != null ? supplierName + "委外仓库" : "委外仓库");
@@ -174,6 +191,20 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         if (cid != null && cid > 0) w.setCompanyId(cid);
         WarehouseMapper.insert(w);
         log.info("已为供应商 {}（ID={}）自动创建委外仓库 ID={}", supplierName, supplierId, w.getId());
+    }
+
+    /** 计算当日仓库编码最大序号 + 1（避免删除后编号空洞撞唯一索引） */
+    private int nextWarehouseSeq(String date) {
+        List<Warehouse> list = WarehouseMapper.selectList(
+                Wrappers.<Warehouse>lambdaQuery().likeRight(Warehouse::getCode, "WH-" + date)
+                        .orderByDesc(Warehouse::getCode).last("LIMIT 1"));
+        if (list == null || list.isEmpty() || list.get(0).getCode() == null) return 1;
+        String code = list.get(0).getCode();
+        try {
+            return Integer.parseInt(code.substring(code.length() - 3)) + 1;
+        } catch (NumberFormatException e) {
+            return 1;
+        }
     }
 
     private void saveTypeRefs(Long supplierId, List<String> typeCodes) {
@@ -253,7 +284,7 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         String cidCond = (cid != null) ? " AND company_id = " + cid : "";
         // 关联表清单（含各表引用供应商的字段名）
         // supplier_product.supplier_id / outsource_order.factory_id / outsource_material_order.supplier_id
-        // purchase_order.supplier_id / purchase_return.supplier_id / purchase_inbound.supplier_id
+        // purchase_order.supplier_id / purchase_return.supplier_id
         // finance_payable.supplier_id / warehouse_stock 通过 warehouse.factory_id 关联
         Object[][] tables = {
                 {"supplier_product", "supplier_id"},
@@ -261,7 +292,6 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
                 {"outsource_material_order", "supplier_id"},
                 {"purchase_order", "supplier_id"},
                 {"purchase_return", "supplier_id"},
-                {"purchase_inbound", "supplier_id"},
                 {"finance_payable", "supplier_id"},
         };
         Map<String, Object> result = new LinkedHashMap<>();
@@ -288,7 +318,8 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
             Integer stockCnt = jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM warehouse_stock s "
                             + "JOIN warehouse w ON s.warehouse_id = w.id "
-                            + "WHERE w.factory_id = ? AND s.quantity > 0" + cidCond, Integer.class, id);
+                            + "WHERE w.factory_id = ? AND s.quantity > 0"
+                            + (cid != null ? " AND s.company_id = " + cid : ""), Integer.class, id);
             if (stockCnt != null && stockCnt > 0) {
                 canDelete = false;
                 details.add("warehouse_stock 存在 " + stockCnt + " 条正库存记录");

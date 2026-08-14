@@ -183,11 +183,9 @@ public class DeliveryServiceImpl implements DeliveryService {
                 changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity(),
                         QualityType.GOOD.getCode(), "委外收货入库", delivery.getCode());
             } else {
-                // 退不良：仅维修返还（非折现退款）扣减目标仓库良品库存
-                if (!DefectHandleType.CASH_REFUND.getCode().equals(item.getHandleType())) {
-                    changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity().negate(),
-                            QualityType.GOOD.getCode(), "退不良扣回", delivery.getCode());
-                }
+                // 退不良：维修返还、折现退款均扣减目标仓库良品库存
+                changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity().negate(),
+                        QualityType.GOOD.getCode(), "退不良扣回", delivery.getCode());
             }
         }
 
@@ -196,16 +194,25 @@ public class DeliveryServiceImpl implements DeliveryService {
             deductComponents(order, items, delivery);
         }
 
-        // 3. 生成应付：收货为正应付，退不良为负（冲减）
-        BigDecimal totalAmount = items.stream()
-                .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (totalAmount.compareTo(BigDecimal.ZERO) != 0) {
-            payableHelper.createPayable(order.getSupplierId(), OutsourceSourceBillType.OUTSOURCE_MATERIAL_DELIVERY.getCode(),
-                    delivery.getCode(), delivery.getId(), totalAmount, delivery.getDeliveryDate(),
-                    "委外物料订单" + (isReceive ? "收货" : "退不良"));
-            // 同步供应商应付余额（原子更新，与采购/财务模块口径一致）
-            payableHelper.changeSupplierBalance(order.getSupplierId(), totalAmount);
+        // 3. 生成应付：收货为正应付；退不良-折现退款为负应付（冲减）；退不良-维修返还不涉及款项
+        if (isReceive) {
+            BigDecimal totalAmount = items.stream()
+                    .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (totalAmount.compareTo(BigDecimal.ZERO) != 0) {
+                payableHelper.createPayable(order.getSupplierId(), OutsourceSourceBillType.OUTSOURCE_MATERIAL_DELIVERY.getCode(),
+                        delivery.getCode(), delivery.getId(), totalAmount, delivery.getDeliveryDate(), "委外物料订单收货");
+            }
+        } else {
+            // 退不良：仅折现退款生成负应付冲减供应商应付
+            BigDecimal cashRefundAmount = items.stream()
+                    .filter(it -> DefectHandleType.CASH_REFUND.getLabel().equals(it.getHandleType()))
+                    .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (cashRefundAmount.compareTo(BigDecimal.ZERO) > 0) {
+                payableHelper.createPayable(order.getSupplierId(), OutsourceSourceBillType.OUTSOURCE_MATERIAL_DELIVERY.getCode(),
+                        delivery.getCode(), delivery.getId(), cashRefundAmount.negate(), delivery.getDeliveryDate(), "委外物料订单退不良折现退款");
+            }
         }
 
         // 4. 回写订单明细累计数量
@@ -257,11 +264,9 @@ public class DeliveryServiceImpl implements DeliveryService {
                 changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity().negate(),
                         QualityType.GOOD.getCode(), "退审收货入库", delivery.getCode());
             } else {
-                // 反审核：恢复维修返还扣减的库存（+qty）
-                if (!DefectHandleType.CASH_REFUND.getCode().equals(item.getHandleType())) {
-                    changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity(),
-                            QualityType.GOOD.getCode(), "退审退不良", delivery.getCode());
-                }
+                // 反审核：恢复退不良扣减的库存（+qty，维修返还、折现退款均恢复）
+                changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity(),
+                        QualityType.GOOD.getCode(), "退审退不良", delivery.getCode());
             }
         }
 
@@ -274,16 +279,19 @@ public class DeliveryServiceImpl implements DeliveryService {
         }
 
         // 3. 冲回应付（已付款的阻止）+ 回退供应商应付余额
-        BigDecimal reverseAmount = items.stream()
-                .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        payableHelper.reversePayable(delivery.getId());
-        if (reverseAmount.compareTo(BigDecimal.ZERO) != 0) {
-            MaterialOrder mo = materialOrderMapper.selectById(orderId);
-            if (mo != null) {
-                payableHelper.changeSupplierBalance(mo.getSupplierId(), reverseAmount.negate());
-            }
+        // 收货：回滚正应付；退不良：仅折现退款回滚负应付（维修返还无应付）
+        BigDecimal reverseAmount;
+        if (isReceive) {
+            reverseAmount = items.stream()
+                    .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        } else {
+            reverseAmount = items.stream()
+                    .filter(it -> DefectHandleType.CASH_REFUND.getLabel().equals(it.getHandleType()))
+                    .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
+        payableHelper.reversePayable(delivery.getId());
 
         // 3. 回滚订单明细累计数量
         for (OutsourceDeliveryItem item : items) {

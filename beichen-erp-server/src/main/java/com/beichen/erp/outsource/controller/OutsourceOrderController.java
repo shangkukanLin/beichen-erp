@@ -342,11 +342,11 @@ public class OutsourceOrderController {
             // 2. 扣减成品库存
             if (whId != null) {
                 jdbcTemplate.update(
-                    "UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_name = ? AND quality_type = ?",
-                    qty, whId, prod.getProductName(), QualityType.GOOD.getCode());
+                    "UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ? AND quality_type = ?",
+                    qty, whId, prod.getId(), QualityType.GOOD.getCode());
                 jdbcTemplate.update(
-                    "INSERT INTO warehouse_stock_log (warehouse_id, product_name, quality_type, change_qty, change_type, remark, create_time) VALUES (?,?,?,?,?,?,NOW())",
-                    whId, prod.getProductName(), QualityType.GOOD.getCode(), qty.negate(), "DEFECT_RETURN_OUT", "退不良扣减成品 - " + o.getCode());
+                    "INSERT INTO warehouse_stock_log (warehouse_id, product_id, quality_type, change_quantity, change_type, remark, create_time) VALUES (?,?,?,?,?,?,NOW())",
+                    whId, prod.getId(), QualityType.GOOD.getCode(), qty.negate(), "DEFECT_RETURN_OUT", "退不良扣减成品 - " + o.getCode());
             }
 
             // 3. 按BOM反算物料，加回工厂委外仓
@@ -359,11 +359,11 @@ public class OutsourceOrderController {
                     if (restoreQty.compareTo(BigDecimal.ZERO) > 0 && mat.getMaterialId() != null) {
                         String matName = getMaterialNameById(mat.getMaterialId());
                         jdbcTemplate.update(
-                            "UPDATE warehouse_stock SET quantity = quantity + ? WHERE warehouse_id = ? AND outsource_material_id = ?",
+                            "UPDATE warehouse_stock SET quantity = quantity + ? WHERE warehouse_id = ? AND material_id = ?",
                             restoreQty, factoryWhId, mat.getMaterialId());
                         jdbcTemplate.update(
-                            "INSERT INTO warehouse_stock_log (warehouse_id, material_name, quality_type, change_qty, change_type, remark, create_time) VALUES (?,?,?,?,?,?,NOW())",
-                            factoryWhId, matName, QualityType.GOOD.getCode(), restoreQty, "DEFECT_RETURN_IN", "退不良恢复物料 - " + o.getCode());
+                            "INSERT INTO warehouse_stock_log (warehouse_id, material_id, material_name, quality_type, change_quantity, change_type, remark, create_time) VALUES (?,?,?,?,?,?,?,NOW())",
+                            factoryWhId, mat.getMaterialId(), matName, QualityType.GOOD.getCode(), restoreQty, "DEFECT_RETURN_IN", "退不良恢复物料 - " + o.getCode());
                     }
                 }
             }
