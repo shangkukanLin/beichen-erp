@@ -2,6 +2,7 @@ package com.beichen.erp.finance.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.entity.*;
@@ -54,6 +55,7 @@ public class FinanceBillServiceImpl implements FinanceBillService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public FinanceBill generate(String billType, Long partnerId, String partnerName, LocalDate periodStart, LocalDate periodEnd) {
         FinanceBill bill = new FinanceBill();
         bill.setBillNo(genCode());
@@ -73,7 +75,8 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         if (BillType.RECEIVABLE.getCode().equals(billType)) {
             List<FinanceReceivable> list = receivableMapper.selectList(new LambdaQueryWrapper<FinanceReceivable>()
                     .eq(FinanceReceivable::getCustomerId, partnerId)
-                    .eq(FinanceReceivable::getStatus, SettlementStatus.UNSETTLED.getCode()).or().eq(FinanceReceivable::getStatus, SettlementStatus.PARTIAL.getCode())
+                    .and(w -> w.eq(FinanceReceivable::getStatus, SettlementStatus.UNSETTLED.getCode())
+                            .or().eq(FinanceReceivable::getStatus, SettlementStatus.PARTIAL.getCode()))
                     .le(FinanceReceivable::getDueDate, periodEnd));
             for (FinanceReceivable r : list) {
                 FinanceBillItem it = new FinanceBillItem();
@@ -92,7 +95,8 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         } else {
             List<FinancePayable> list = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
                     .eq(FinancePayable::getSupplierId, partnerId)
-                    .eq(FinancePayable::getStatus, SettlementStatus.UNSETTLED.getCode()).or().eq(FinancePayable::getStatus, SettlementStatus.PARTIAL.getCode())
+                    .and(w -> w.eq(FinancePayable::getStatus, SettlementStatus.UNSETTLED.getCode())
+                            .or().eq(FinancePayable::getStatus, SettlementStatus.PARTIAL.getCode()))
                     .le(FinancePayable::getDueDate, periodEnd));
             for (FinancePayable r : list) {
                 FinanceBillItem it = new FinanceBillItem();
@@ -159,13 +163,13 @@ public class FinanceBillServiceImpl implements FinanceBillService {
 
     private String genCode() {
         String d = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String pat = "ZD-" + d;
+        String pat = BillPrefix.BILL + d;
         LambdaQueryWrapper<FinanceBill> w = new LambdaQueryWrapper<FinanceBill>().likeRight(FinanceBill::getBillNo, pat).orderByDesc(FinanceBill::getBillNo).last("LIMIT 1");
         FinanceBill last = billMapper.selectOne(w);
         int seq = 1;
         if (last != null && last.getBillNo() != null) {
             try { seq = Integer.parseInt(last.getBillNo().substring(last.getBillNo().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
         }
-        return "ZD-" + d + String.format("%03d", seq);
+        return BillPrefix.BILL + d + String.format("%03d", seq);
     }
 }

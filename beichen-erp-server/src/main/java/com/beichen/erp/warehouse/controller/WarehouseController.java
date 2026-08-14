@@ -2,10 +2,12 @@ package com.beichen.erp.warehouse.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
+import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import lombok.RequiredArgsConstructor;
@@ -86,11 +88,11 @@ public class WarehouseController {
         if (w.getCode() == null || w.getCode().isBlank()) {
             String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
             // 取当日最大序号 + 1（避免用 selectCount 导致删除后编号空洞撞唯一索引）
-            w.setCode("WH-" + date + String.format("%03d", nextWarehouseSeq(date)));
+            w.setCode(BillPrefix.WAREHOUSE + date + String.format("%03d", nextWarehouseSeq(date)));
         }
         // 未指定仓库类别时默认为自有仓库（委外仓库由供应商创建时显式设为 OUTSOURCE）
         if (w.getWarehouseCategory() == null || w.getWarehouseCategory().isBlank()) {
-            w.setWarehouseCategory("INVENTORY");
+            w.setWarehouseCategory(WarehouseCategory.INVENTORY.getCode());
         }
         if (w.getStatus() == null) w.setStatus(1);
         warehouseMapper.insert(w);
@@ -100,7 +102,7 @@ public class WarehouseController {
     /** 计算当日仓库编码最大序号 + 1（避免删除后编号空洞撞唯一索引） */
     private int nextWarehouseSeq(String date) {
         List<Warehouse> list = warehouseMapper.selectList(
-                new LambdaQueryWrapper<Warehouse>().likeRight(Warehouse::getCode, "WH-" + date)
+                new LambdaQueryWrapper<Warehouse>().likeRight(Warehouse::getCode, BillPrefix.WAREHOUSE + date)
                         .orderByDesc(Warehouse::getCode).last("LIMIT 1"));
         if (list == null || list.isEmpty() || list.get(0).getCode() == null) return 1;
         String code = list.get(0).getCode();
@@ -194,7 +196,7 @@ public class WarehouseController {
         return R.ok(warehouseMapper.selectList(
             new LambdaQueryWrapper<Warehouse>()
                 .eq(Warehouse::getFactoryId, factoryId)
-                .eq(Warehouse::getWarehouseCategory, "OUTSOURCE")));
+                .eq(Warehouse::getWarehouseCategory, WarehouseCategory.OUTSOURCE.getCode())));
     }
 
     /** 查询所有启用的自有仓库 */
@@ -202,7 +204,7 @@ public class WarehouseController {
     public R<List<Warehouse>> inventory() {
         return R.ok(warehouseMapper.selectList(
             new LambdaQueryWrapper<Warehouse>()
-                .eq(Warehouse::getWarehouseCategory, "INVENTORY")
+                .eq(Warehouse::getWarehouseCategory, WarehouseCategory.INVENTORY.getCode())
                 .eq(Warehouse::getStatus, 1)
                 .orderByAsc(Warehouse::getId)));
     }

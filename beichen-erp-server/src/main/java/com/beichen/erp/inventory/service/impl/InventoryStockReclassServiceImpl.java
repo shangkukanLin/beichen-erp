@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
@@ -56,7 +57,7 @@ public class InventoryStockReclassServiceImpl extends ServiceImpl<InventoryStock
         if (header.getStatus() == null || header.getStatus().isEmpty()) header.setStatus("DRAFT");
         if (header.getId() == null) {
             if (header.getCode() == null || header.getCode().isEmpty())
-                header.setCode("FL-" + LocalDate.now() + "-" + System.currentTimeMillis() % 100000);
+                header.setCode(BillPrefix.STOCK_RECLASS + LocalDate.now() + "-" + System.currentTimeMillis() % 100000);
             baseMapper.insert(header);
         } else {
             baseMapper.updateById(header);

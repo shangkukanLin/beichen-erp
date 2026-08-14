@@ -6,6 +6,7 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SourceBillType;
@@ -247,7 +248,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
 
     private String generateCode() {
         String d = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String pat = "XS-" + d;
+        String pat = BillPrefix.SALE + d;
         LambdaQueryWrapper<SaleOrder> w = new LambdaQueryWrapper<SaleOrder>()
                 .likeRight(SaleOrder::getCode, pat).orderByDesc(SaleOrder::getCode).last("LIMIT 1");
         SaleOrder last = orderMapper.selectOne(w);
@@ -255,6 +256,6 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         if (last != null && last.getCode() != null) {
             try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
         }
-        return "XS-" + d + String.format("%03d", seq);
+        return BillPrefix.SALE + d + String.format("%03d", seq);
     }
 }

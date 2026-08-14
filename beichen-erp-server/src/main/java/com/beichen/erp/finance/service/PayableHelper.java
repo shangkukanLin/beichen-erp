@@ -1,6 +1,7 @@
 package com.beichen.erp.finance.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.entity.FinancePayable;
@@ -96,11 +97,11 @@ public class PayableHelper {
     private String generateBillNo() {
         String ds = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         FinancePayable last = payableMapper.selectOne(new LambdaQueryWrapper<FinancePayable>()
-            .likeRight(FinancePayable::getBillNo, "YF-" + ds).orderByDesc(FinancePayable::getBillNo).last("LIMIT 1"));
+            .likeRight(FinancePayable::getBillNo, BillPrefix.PAYABLE + ds).orderByDesc(FinancePayable::getBillNo).last("LIMIT 1"));
         int seq = 1;
         if (last != null && last.getBillNo() != null) {
             try { seq = Integer.parseInt(last.getBillNo().substring(last.getBillNo().length() - 3)) + 1; } catch (Exception ignored) {}
         }
-        return "YF-" + ds + String.format("%03d", seq);
+        return BillPrefix.PAYABLE + ds + String.format("%03d", seq);
     }
 }

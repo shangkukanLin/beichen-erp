@@ -1,6 +1,7 @@
 package com.beichen.erp.outsource.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.R;
 import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.mapper.ProjectMapper;
@@ -375,13 +376,13 @@ public class OutsourceOrderController {
         String ds = LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
         com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OutsourceDelivery> w =
             new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OutsourceDelivery>()
-                .likeRight(OutsourceDelivery::getCode, "DEL-" + ds).orderByDesc(OutsourceDelivery::getCode).last("LIMIT 1");
+                .likeRight(OutsourceDelivery::getCode, BillPrefix.OUTSOURCE_DELIVERY + ds).orderByDesc(OutsourceDelivery::getCode).last("LIMIT 1");
         OutsourceDelivery last = deliveryMapper.selectOne(w);
         int seq = 1;
         if (last != null && last.getCode() != null) {
             try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception ignored) {}
         }
-        return "DEL-" + ds + String.format("%03d", seq);
+        return BillPrefix.OUTSOURCE_DELIVERY + ds + String.format("%03d", seq);
     }
 
     /** 查询该加工单的交货/退料记录 */

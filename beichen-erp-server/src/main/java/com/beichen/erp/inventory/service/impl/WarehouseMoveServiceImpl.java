@@ -3,6 +3,7 @@ package com.beichen.erp.inventory.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.common.DocStatus;
@@ -103,7 +104,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
             throw new BusinessException("移出/移入仓库不能为空");
         if (move.getFromWarehouseId().equals(move.getToWarehouseId()))
             throw new BusinessException("移出与移入仓库不能相同");
-        move.setCode(gen("YC-"));
+        move.setCode(gen(BillPrefix.WAREHOUSE_MOVE));
         move.setStatus(DocStatus.DRAFT.name());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) move.setCompanyId(cid);

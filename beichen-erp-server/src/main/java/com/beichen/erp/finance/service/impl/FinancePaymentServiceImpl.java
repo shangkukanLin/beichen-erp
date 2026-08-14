@@ -3,9 +3,13 @@ package com.beichen.erp.finance.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.entity.*;
+import com.beichen.erp.finance.common.CashflowType;
+import com.beichen.erp.finance.common.SettlementDirection;
+import com.beichen.erp.finance.common.SettlementSourceType;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinancePaymentService;
@@ -68,7 +72,7 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         payment.setSupplierName(s != null ? s.getName() : "");
         FinanceAccount acc = accountMapper.selectById(payment.getAccountId());
         payment.setAccountName(acc != null ? acc.getAccountName() : "");
-        payment.setCode(gen("FK-", paymentMapper));
+        payment.setCode(gen(BillPrefix.PAYMENT, paymentMapper));
         payment.setStatus(DocStatus.DRAFT.name());
         Long cid = CompanyContext.get();
         BigDecimal total = BigDecimal.ZERO;
@@ -117,10 +121,10 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
                 payableMapper.updateById(p);
                 // 生成负数应付（预付单），sourceBillType=ADVANCE + sourceId=原付款单id 用于反审核精确删除
                 FinancePayable advance = new FinancePayable();
-                advance.setBillNo(p.getBillNo() + "-ADV");
+                advance.setBillNo(p.getBillNo() + "-" + SettlementStatus.ADVANCE.getCode());
                 advance.setSupplierId(p.getSupplierId());
                 advance.setSupplierName(p.getSupplierName());
-                advance.setSourceBillType("ADVANCE");
+                advance.setSourceBillType(SettlementStatus.ADVANCE.getCode());
                 advance.setSourceBillNo(p.getSourceBillNo());
                 advance.setSourceId(id);
                 advance.setAmount(over.negate());
@@ -135,8 +139,8 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
                 st.setReceiptPaymentId(id);
                 st.setPayableReceivableId(it.getPayableId());
                 st.setAmount(unpaid);
-                st.setDirection("PAY");
-                st.setSourceType("PAYMENT");
+                st.setDirection(SettlementDirection.PAY.getCode());
+                st.setSourceType(SettlementSourceType.PAYMENT.getCode());
                 st.setSourceId(id);
                 st.setCompanyId(CompanyContext.get());
                 settlementMapper.insert(st);
@@ -151,8 +155,8 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
                 st.setReceiptPaymentId(id);
                 st.setPayableReceivableId(it.getPayableId());
                 st.setAmount(amt);
-                st.setDirection("PAY");
-                st.setSourceType("PAYMENT");
+                st.setDirection(SettlementDirection.PAY.getCode());
+                st.setSourceType(SettlementSourceType.PAYMENT.getCode());
                 st.setSourceId(id);
                 st.setCompanyId(CompanyContext.get());
                 settlementMapper.insert(st);
@@ -162,10 +166,10 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         syncBillProgress(id);
         // 写资金流水（账户余额由流水实时累计，不再维护余额快照）
         FinanceCashflow cf = new FinanceCashflow();
-        cf.setFlowNo(gen("FK-", cashflowMapper));
+        cf.setFlowNo(gen(BillPrefix.PAYMENT, cashflowMapper));
         cf.setAccountId(payment.getAccountId());
         cf.setAccountName(payment.getAccountName());
-        cf.setFlowType("付款");
+        cf.setFlowType(CashflowType.PAYMENT.getCode());
         cf.setRelatedBillNo(payment.getCode());
         cf.setRelatedBillType("付款单");
         cf.setIncome(BigDecimal.ZERO);
@@ -180,7 +184,7 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         List<FinanceSettlement> sts = settlementMapper.selectList(
                 new LambdaQueryWrapper<FinanceSettlement>()
                         .eq(FinanceSettlement::getReceiptPaymentId, paymentId)
-                        .eq(FinanceSettlement::getDirection, "PAY"));
+                        .eq(FinanceSettlement::getDirection, SettlementDirection.PAY.getCode()));
         Set<Long> billIds = new HashSet<>();
         for (FinanceSettlement st : sts) {
             List<FinanceBillItem> items = billItemMapper.selectList(
@@ -195,6 +199,29 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             }
         }
         // 重算账单主表 paidAmount/unpaidAmount
+        for (Long billId : billIds) {
+            recalcBill(billId);
+        }
+    }
+
+    /** 反审核时反向扣减账单明细已付金额：按核销流水冲减，与 syncBillProgress 累加逻辑对称 */
+    private void reverseBillProgress(Long paymentId) {
+        List<FinanceSettlement> sts = settlementMapper.selectList(
+                new LambdaQueryWrapper<FinanceSettlement>()
+                        .eq(FinanceSettlement::getReceiptPaymentId, paymentId)
+                        .eq(FinanceSettlement::getDirection, SettlementDirection.PAY.getCode()));
+        Set<Long> billIds = new HashSet<>();
+        for (FinanceSettlement st : sts) {
+            List<FinanceBillItem> items = billItemMapper.selectList(
+                    new LambdaQueryWrapper<FinanceBillItem>().eq(FinanceBillItem::getSourceId, st.getPayableReceivableId()));
+            for (FinanceBillItem item : items) {
+                BigDecimal newPaid = (item.getPaidAmount() != null ? item.getPaidAmount() : BigDecimal.ZERO).subtract(st.getAmount());
+                item.setPaidAmount(newPaid.max(BigDecimal.ZERO));
+                item.setUnpaidAmount((item.getAmount() != null ? item.getAmount() : BigDecimal.ZERO).subtract(item.getPaidAmount()).max(BigDecimal.ZERO));
+                billItemMapper.updateById(item);
+                billIds.add(item.getBillId());
+            }
+        }
         for (Long billId : billIds) {
             recalcBill(billId);
         }
@@ -224,11 +251,13 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         FinancePayment payment = paymentMapper.selectById(id);
         if (payment == null) throw new BusinessException("付款单不存在");
         if (!DocStatus.AUDITED.name().equals(payment.getStatus())) throw new BusinessException("只有已审核的付款单可反审核");
-        // 1) 反向核销应付台账：按核销流水精确冲销（双向可追溯）
+        // 1) 反向扣减账单明细已付金额（必须在删除核销流水之前调用，否则流水已被删无法反查）
+        reverseBillProgress(id);
+        // 2) 反向核销应付台账：按核销流水精确冲销（双向可追溯）
         List<FinanceSettlement> settlements = settlementMapper.selectList(
                 new LambdaQueryWrapper<FinanceSettlement>()
                         .eq(FinanceSettlement::getReceiptPaymentId, id)
-                        .eq(FinanceSettlement::getDirection, "PAY"));
+                        .eq(FinanceSettlement::getDirection, SettlementDirection.PAY.getCode()));
         for (FinanceSettlement st : settlements) {
             FinancePayable p = payableMapper.selectById(st.getPayableReceivableId());
             if (p == null) continue;
@@ -242,20 +271,20 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             // 冲销后删除核销流水记录
             settlementMapper.deleteById(st.getId());
         }
-        // 2) 删除本付款单产生的预付单（负数应付，物理删除，审计链由付款单+资金流水+核销流水保留）
+        // 3) 删除本付款单产生的预付单（负数应付，物理删除，审计链由付款单+资金流水+核销流水保留）
         List<FinancePayable> advances = payableMapper.selectList(
                 new LambdaQueryWrapper<FinancePayable>()
-                        .eq(FinancePayable::getSourceBillType, "ADVANCE")
+                        .eq(FinancePayable::getSourceBillType, SettlementStatus.ADVANCE.getCode())
                         .eq(FinancePayable::getSourceId, id));
         for (FinancePayable adv : advances) {
             payableMapper.deleteById(adv.getId());
         }
         // 4) 写冲正资金流水（保留审计轨迹，不删除原流水；账户余额由流水实时累计）
         FinanceCashflow cf = new FinanceCashflow();
-        cf.setFlowNo(gen("FK-", cashflowMapper));
+        cf.setFlowNo(gen(BillPrefix.PAYMENT, cashflowMapper));
         cf.setAccountId(payment.getAccountId());
         cf.setAccountName(payment.getAccountName());
-        cf.setFlowType("付款冲正");
+        cf.setFlowType(CashflowType.PAYMENT_REVERSE.getCode());
         cf.setRelatedBillNo(payment.getCode());
         cf.setRelatedBillType("付款单");
         cf.setIncome(payment.getAmount());

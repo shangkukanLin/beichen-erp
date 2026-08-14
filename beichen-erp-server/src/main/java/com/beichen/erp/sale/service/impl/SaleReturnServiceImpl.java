@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SourceBillType;
@@ -180,7 +181,8 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             fr.setSourceId(order.getId());
             fr.setAmount(order.getTotalAmount().negate());
             fr.setPaidAmount(BigDecimal.ZERO);
-            fr.setUnpaidAmount(BigDecimal.ZERO);
+            // 负向应收：unpaidAmount 与 amount 一致（负数表示冲抵金额），便于应收汇总口径正确
+            fr.setUnpaidAmount(order.getTotalAmount().negate());
             fr.setStatus(SettlementStatus.UNSETTLED.getCode());
             fr.setRemark("销售退货冲抵应收");
             financeReceivableMapper.insert(fr);
@@ -268,7 +270,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
 
     private String generateCode() {
         String d = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String pat = "XTH-" + d;
+        String pat = BillPrefix.SALE_RETURN + d;
         LambdaQueryWrapper<SaleReturn> w = new LambdaQueryWrapper<SaleReturn>()
                 .likeRight(SaleReturn::getCode, pat).orderByDesc(SaleReturn::getCode).last("LIMIT 1");
         SaleReturn last = returnMapper.selectOne(w);
@@ -278,7 +280,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
                 seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1;
             } catch (Exception e) { seq = 1; }
         }
-        return "XTH-" + d + String.format("%03d", seq);
+        return BillPrefix.SALE_RETURN + d + String.format("%03d", seq);
     }
 
     private Long getCurrentUserId() {

@@ -2,6 +2,7 @@ package com.beichen.erp.outsource.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
@@ -414,7 +415,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             io.setIoDate(LocalDate.now());
             io.setStatus(DeliveryStatus.CONFIRMED.getCode());
             io.setRemark("加工厂遗失 - " + order.getCode());
-            io.setCode("IO-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-" + (System.currentTimeMillis() % 100000));
+            io.setCode(BillPrefix.OTHER_IO + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-" + (System.currentTimeMillis() % 100000));
             otherIoMapper.insert(io);
 
             for (OutsourceOtherIoItem oi : missingItems) {
@@ -476,7 +477,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
 
     private String generateDeliveryCode() {
         String dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String likePattern = "DEL-" + dateStr;
+        String likePattern = BillPrefix.OUTSOURCE_DELIVERY + dateStr;
         LambdaQueryWrapper<OutsourceDelivery> w = new LambdaQueryWrapper<OutsourceDelivery>()
             .likeRight(OutsourceDelivery::getCode, likePattern)
             .orderByDesc(OutsourceDelivery::getCode).last("LIMIT 1");
@@ -488,7 +489,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
                 seq = Integer.parseInt(numPart) + 1;
             } catch (Exception e) { seq = 1; }
         }
-        return "DEL-" + dateStr + String.format("%03d", seq);
+        return BillPrefix.OUTSOURCE_DELIVERY + dateStr + String.format("%03d", seq);
     }
 
     /** 加权平均单价：该工厂所有物料订单中该物料的 总金额/总数量 */

@@ -12,10 +12,12 @@ import com.beichen.erp.outsource.entity.MaterialOrderItem;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
 import com.beichen.erp.warehouse.entity.WarehouseStockLog;
+import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.outsource.common.DeliveryType;
@@ -32,7 +34,6 @@ import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryMapper;
 import com.beichen.erp.warehouse.mapper.WarehouseStockLogMapper;
-import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
 import com.beichen.erp.outsource.mapper.MaterialOrderMapper;
 import com.beichen.erp.outsource.mapper.MaterialOrderItemMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
@@ -64,7 +65,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final OutsourceMaterialComponentMapper componentMapper;
     private final WarehouseStockMapper inventoryStockMapper;
-    private final WarehouseMapper WarehouseMapper;
+    private final WarehouseMapper warehouseMapper;
     private final WarehouseStockService warehouseStockService;
     private final PayableHelper payableHelper;
     private final SupplierMapper supplierMapper;
@@ -618,7 +619,7 @@ public class DeliveryServiceImpl implements DeliveryService {
      */
     private void deductComponents(MaterialOrder order, List<OutsourceDeliveryItem> items, OutsourceDelivery delivery) {
         // 供应商委外仓：子物料从该仓扣减（与收货前缺料校验口径一致）
-        List<Warehouse> supWhs = WarehouseMapper.selectList(
+        List<Warehouse> supWhs = warehouseMapper.selectList(
                 new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getSupplierId()));
         Long compWhId = supWhs.isEmpty() ? null : supWhs.get(0).getId();
         if (compWhId == null) return;
@@ -645,7 +646,7 @@ public class DeliveryServiceImpl implements DeliveryService {
      * 委外单收货反审核：对称恢复子物料库存（加回扣减量）。
      */
     private void restoreComponents(MaterialOrder order, List<OutsourceDeliveryItem> items, OutsourceDelivery delivery) {
-        List<Warehouse> supWhs = WarehouseMapper.selectList(
+        List<Warehouse> supWhs = warehouseMapper.selectList(
                 new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getSupplierId()));
         Long compWhId = supWhs.isEmpty() ? null : supWhs.get(0).getId();
         if (compWhId == null) return;
@@ -672,7 +673,7 @@ public class DeliveryServiceImpl implements DeliveryService {
      */
     private String generateCode() {
         String dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String likePattern = "DEL-" + dateStr;
+        String likePattern = BillPrefix.OUTSOURCE_DELIVERY + dateStr;
 
         LambdaQueryWrapper<OutsourceDelivery> w = new LambdaQueryWrapper<OutsourceDelivery>()
                 .likeRight(OutsourceDelivery::getCode, likePattern)
@@ -689,14 +690,15 @@ public class DeliveryServiceImpl implements DeliveryService {
                 seq = 1;
             }
         }
-        return "DEL-" + dateStr + String.format("%03d", seq);
+        return BillPrefix.OUTSOURCE_DELIVERY + dateStr + String.format("%03d", seq);
     }
 
     /** 调整库存：自动判断仓库类型（我方仓用 changeStock，委外仓用 updateStock） */
     private void adjustSourceStock(Long warehouseId, Long materialId, BigDecimal delta, String materialName,
                                     String qualityType, String changeType, String orderCode) {
-        // 检查是否为我方仓
-        if (WarehouseMapper.selectById(warehouseId) != null) {
+        // 按仓库类别区分：INVENTORY(自有仓)走进销存 changeStock，OUTSOURCE(委外仓)走委外库存 updateStock
+        Warehouse wh = warehouseId != null ? warehouseMapper.selectById(warehouseId) : null;
+        if (wh != null && WarehouseCategory.INVENTORY.getCode().equals(wh.getWarehouseCategory())) {
             StockChangeType type = StockChangeType.fromCode(changeType);
             if (type == null) type = StockChangeType.DELIVERY_OUT; // 兜底
             warehouseStockService.changeStock(warehouseId, materialId, delta, type, orderCode, RelatedBillType.MATERIAL_IO, null, null, null);

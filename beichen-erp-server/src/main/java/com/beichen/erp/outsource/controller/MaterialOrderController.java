@@ -2,6 +2,7 @@ package com.beichen.erp.outsource.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
@@ -749,24 +750,24 @@ public class MaterialOrderController {
     private String generateCode() {
         String ds = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         LambdaQueryWrapper<MaterialOrder> w = new LambdaQueryWrapper<MaterialOrder>()
-            .likeRight(MaterialOrder::getCode, "MWO-" + ds).orderByDesc(MaterialOrder::getCode).last("LIMIT 1");
+            .likeRight(MaterialOrder::getCode, BillPrefix.OUTSOURCE_MATERIAL_ORDER + ds).orderByDesc(MaterialOrder::getCode).last("LIMIT 1");
         MaterialOrder last = orderMapper.selectOne(w);
         int seq = 1;
         if (last != null && last.getCode() != null) {
             try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception ignored) {}
         }
-        return "MWO-" + ds + String.format("%03d", seq);
+        return BillPrefix.OUTSOURCE_MATERIAL_ORDER + ds + String.format("%03d", seq);
     }
 
     private String generateDeliveryCode() {
         String ds = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         LambdaQueryWrapper<OutsourceDelivery> w = new LambdaQueryWrapper<OutsourceDelivery>()
-            .likeRight(OutsourceDelivery::getCode, "DEL-" + ds).orderByDesc(OutsourceDelivery::getCode).last("LIMIT 1");
+            .likeRight(OutsourceDelivery::getCode, BillPrefix.OUTSOURCE_DELIVERY + ds).orderByDesc(OutsourceDelivery::getCode).last("LIMIT 1");
         OutsourceDelivery last = deliveryMapper.selectOne(w);
         int seq = 1;
         if (last != null && last.getCode() != null) {
             try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception ignored) {}
         }
-        return "DEL-" + ds + String.format("%03d", seq);
+        return BillPrefix.OUTSOURCE_DELIVERY + ds + String.format("%03d", seq);
     }
 }

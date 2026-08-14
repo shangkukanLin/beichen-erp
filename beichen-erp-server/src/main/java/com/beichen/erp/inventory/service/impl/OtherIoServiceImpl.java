@@ -3,6 +3,7 @@ package com.beichen.erp.inventory.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.entity.InventoryOtherIo;
 import com.beichen.erp.inventory.entity.InventoryOtherIoItem;
@@ -67,7 +68,7 @@ public class OtherIoServiceImpl implements OtherIoService {
     public void create(InventoryOtherIo otherIo, List<InventoryOtherIoItem> items) {
         if (otherIo.getWarehouseId() == null) throw new BusinessException("仓库不能为空");
         if (otherIo.getIoType() == null || otherIo.getIoType().isBlank()) throw new BusinessException("出入库类型不能为空");
-        otherIo.setCode(gen("QT-"));
+        otherIo.setCode(gen(BillPrefix.INVENTORY_OTHER_IO));
         otherIo.setStatus(DocStatus.AUDITED.name());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) otherIo.setCompanyId(cid);

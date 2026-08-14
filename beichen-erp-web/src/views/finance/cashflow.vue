@@ -9,7 +9,19 @@ const fquery = reactive({ accountId: undefined as number|undefined, flowType: ''
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinanceCashflow[]>([])
-const flowTypes = ['收款','付款','其他收入','费用支出'].map(t=>({label:t,value:t}))
+// 流水类型：后端存 code（英文），前端展示 label（中文）
+const flowTypes = [
+  { label: '收款', value: 'RECEIPT' },
+  { label: '付款', value: 'PAYMENT' },
+  { label: '期初', value: 'OPENING' },
+  { label: '收款冲正', value: 'RECEIPT_REVERSE' },
+  { label: '付款冲正', value: 'PAYMENT_REVERSE' },
+]
+const flowTypeLabelMap: Record<string, string> = {
+  RECEIPT: '收款', PAYMENT: '付款', OPENING: '期初',
+  RECEIPT_REVERSE: '收款冲正', PAYMENT_REVERSE: '付款冲正',
+}
+function flowTypeLabel(code?: string) { return code ? (flowTypeLabelMap[code] ?? code) : '' }
 
 async function loadFlow() {
   loading.value = true
@@ -53,7 +65,7 @@ onMounted(() => { loadFlow(); loadAccounts() })
           <el-table-column prop="flowNo" label="流水号" width="150"/>
           <el-table-column label="时间" width="170"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
           <el-table-column prop="accountName" label="账户" min-width="120"/>
-          <el-table-column label="类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.flowType==='收款'||row.flowType==='其他收入'?'success':'danger'">{{row.flowType}}</el-tag></template></el-table-column>
+          <el-table-column label="类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.flowType==='RECEIPT'||row.flowType==='OPENING'?'success':'danger'">{{flowTypeLabel(row.flowType)}}</el-tag></template></el-table-column>
           <el-table-column label="收入" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{fmt(row.income)}}</span></template></el-table-column>
           <el-table-column label="支出" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{fmt(row.expense)}}</span></template></el-table-column>
           <el-table-column prop="balance" label="余额" width="130" align="right"><template #default="{row}">{{fmt(row.balance)}}</template></el-table-column>

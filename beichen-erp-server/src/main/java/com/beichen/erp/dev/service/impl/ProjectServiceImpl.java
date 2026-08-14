@@ -3,6 +3,7 @@ package com.beichen.erp.dev.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.PageParam;
 import com.beichen.erp.dev.common.ProjectStatus;
 import com.beichen.erp.dev.entity.Project;
@@ -103,9 +104,9 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     private String generateProjectCode() {
         String date = LocalDate.now().toString().replace("-", "").substring(2);
         LambdaQueryWrapper<Project> w = new LambdaQueryWrapper<>();
-        w.likeRight(Project::getCode, "DEV-" + date);
+        w.likeRight(Project::getCode, BillPrefix.DEV_PROJECT + date);
         long count = projectMapper.selectCount(w);
-        return "DEV-" + date + "-" + String.format("%03d", count + 1);
+        return BillPrefix.DEV_PROJECT + date + "-" + String.format("%03d", count + 1);
     }
 
     @Override

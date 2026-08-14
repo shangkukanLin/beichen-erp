@@ -138,6 +138,15 @@ public class WarehouseStockService {
         warehouseStockLogMapper.insert(log);
     }
 
+    /** 查询指定仓库+产品+品质等级的当前库存量（用于反审核前校验库存是否被后续单据消耗），无记录返回 0 */
+    public BigDecimal getQuantity(Long warehouseId, Long productId, String qualityType) {
+        if (qualityType == null) qualityType = ProductQualityType.A.name();
+        Long companyId = CompanyContext.get();
+        if (companyId != null && companyId <= 0) companyId = null;
+        WarehouseStock exist = selectExist(warehouseId, productId, qualityType, companyId);
+        return exist != null && exist.getQuantity() != null ? exist.getQuantity() : BigDecimal.ZERO;
+    }
+
     private WarehouseStock selectExist(Long warehouseId, Long productId, String qualityType, Long companyId) {
         return warehouseStockMapper.selectOne(new LambdaQueryWrapper<WarehouseStock>()
                 .eq(WarehouseStock::getWarehouseId, warehouseId)

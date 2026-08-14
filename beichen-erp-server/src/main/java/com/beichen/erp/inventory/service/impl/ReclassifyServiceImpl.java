@@ -2,6 +2,7 @@ package com.beichen.erp.inventory.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
@@ -65,7 +66,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
     @Transactional(rollbackFor = Exception.class)
     public void create(InventoryProductReclassify rc, List<InventoryProductReclassifyItem> items) {
         if (rc.getWarehouseId() == null) throw new BusinessException("仓库不能为空");
-        rc.setCode(gen("PC-"));
+        rc.setCode(gen(BillPrefix.RECLASSIFY));
         rc.setStatus(DocStatus.DRAFT.name());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) rc.setCompanyId(cid);

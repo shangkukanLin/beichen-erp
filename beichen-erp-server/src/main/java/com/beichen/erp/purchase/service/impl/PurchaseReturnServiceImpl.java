@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.finance.common.SettlementStatus;
@@ -277,7 +278,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
 
     private String generateCode() {
         String d = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String pat = "TH-" + d;
+        String pat = BillPrefix.PURCHASE_RETURN + d;
         LambdaQueryWrapper<PurchaseReturn> w = new LambdaQueryWrapper<PurchaseReturn>()
                 .likeRight(PurchaseReturn::getCode, pat).orderByDesc(PurchaseReturn::getCode).last("LIMIT 1");
         PurchaseReturn last = returnMapper.selectOne(w);
@@ -287,7 +288,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                 seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1;
             } catch (Exception e) { seq = 1; }
         }
-        return "TH-" + d + String.format("%03d", seq);
+        return BillPrefix.PURCHASE_RETURN + d + String.format("%03d", seq);
     }
 
     private Long getCurrentUserId() {

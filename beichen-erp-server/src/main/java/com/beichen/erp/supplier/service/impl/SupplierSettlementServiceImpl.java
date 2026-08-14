@@ -1,6 +1,7 @@
 package com.beichen.erp.supplier.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.R;
 import com.beichen.erp.dev.entity.BomType;
 import com.beichen.erp.dev.mapper.BomTypeMapper;
@@ -246,11 +247,11 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
     private String generateDeliveryCode() {
         String ds = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         OutsourceDelivery last = deliveryMapper.selectOne(new LambdaQueryWrapper<OutsourceDelivery>()
-                .likeRight(OutsourceDelivery::getCode, "DEL-" + ds).orderByDesc(OutsourceDelivery::getCode).last("LIMIT 1"));
+                .likeRight(OutsourceDelivery::getCode, BillPrefix.OUTSOURCE_DELIVERY + ds).orderByDesc(OutsourceDelivery::getCode).last("LIMIT 1"));
         int seq = 1;
         if (last != null && last.getCode() != null) {
             try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception ignored) {}
         }
-        return "DEL-" + ds + String.format("%03d", seq);
+        return BillPrefix.OUTSOURCE_DELIVERY + ds + String.format("%03d", seq);
     }
 }

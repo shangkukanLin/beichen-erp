@@ -5,9 +5,13 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.entity.*;
+import com.beichen.erp.finance.common.CashflowType;
+import com.beichen.erp.finance.common.SettlementDirection;
+import com.beichen.erp.finance.common.SettlementSourceType;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinanceReceiptService;
@@ -114,10 +118,10 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
                 receivableMapper.updateById(rec);
                 // 生成负数应收（预收单），sourceBillType=ADVANCE + sourceId=原收款单id 用于反审核精确删除
                 FinanceReceivable advance = new FinanceReceivable();
-                advance.setBillNo(rec.getBillNo() + "-ADV");
+                advance.setBillNo(rec.getBillNo() + "-" + SettlementStatus.ADVANCE.getCode());
                 advance.setCustomerId(rec.getCustomerId());
                 advance.setCustomerName(rec.getCustomerName());
-                advance.setSourceBillType("ADVANCE");
+                advance.setSourceBillType(SettlementStatus.ADVANCE.getCode());
                 advance.setSourceBillNo(rec.getSourceBillNo());
                 advance.setSourceId(id);
                 advance.setAmount(over.negate());
@@ -132,8 +136,8 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
                 st.setReceiptPaymentId(id);
                 st.setPayableReceivableId(it.getReceivableId());
                 st.setAmount(unpaid);
-                st.setDirection("RECEIVE");
-                st.setSourceType("RECEIPT");
+                st.setDirection(SettlementDirection.RECEIVE.getCode());
+                st.setSourceType(SettlementSourceType.RECEIPT.getCode());
                 st.setSourceId(id);
                 st.setCompanyId(CompanyContext.get());
                 settlementMapper.insert(st);
@@ -148,8 +152,8 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
                 st.setReceiptPaymentId(id);
                 st.setPayableReceivableId(it.getReceivableId());
                 st.setAmount(amt);
-                st.setDirection("RECEIVE");
-                st.setSourceType("RECEIPT");
+                st.setDirection(SettlementDirection.RECEIVE.getCode());
+                st.setSourceType(SettlementSourceType.RECEIPT.getCode());
                 st.setSourceId(id);
                 st.setCompanyId(CompanyContext.get());
                 settlementMapper.insert(st);
@@ -162,7 +166,7 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         cf.setFlowNo(genFlowNo());
         cf.setAccountId(receipt.getAccountId());
         cf.setAccountName(receipt.getAccountName());
-        cf.setFlowType("收款");
+        cf.setFlowType(CashflowType.RECEIPT.getCode());
         cf.setRelatedBillNo(receipt.getCode());
         cf.setRelatedBillType("收款单");
         cf.setIncome(receipt.getAmount());
@@ -176,7 +180,7 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         List<FinanceSettlement> sts = settlementMapper.selectList(
                 new LambdaQueryWrapper<FinanceSettlement>()
                         .eq(FinanceSettlement::getReceiptPaymentId, receiptId)
-                        .eq(FinanceSettlement::getDirection, "RECEIVE"));
+                        .eq(FinanceSettlement::getDirection, SettlementDirection.RECEIVE.getCode()));
         Set<Long> billIds = new HashSet<>();
         for (FinanceSettlement st : sts) {
             List<FinanceBillItem> items = billItemMapper.selectList(
@@ -186,6 +190,29 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
                 BigDecimal newUnpaid = (item.getAmount() != null ? item.getAmount() : BigDecimal.ZERO).subtract(newPaid);
                 item.setPaidAmount(newPaid);
                 item.setUnpaidAmount(newUnpaid.max(BigDecimal.ZERO));
+                billItemMapper.updateById(item);
+                billIds.add(item.getBillId());
+            }
+        }
+        for (Long billId : billIds) {
+            recalcBill(billId);
+        }
+    }
+
+    /** 反审核时反向扣减账单明细已收金额：按核销流水冲减，与 syncBillProgress 累加逻辑对称 */
+    private void reverseBillProgress(Long receiptId) {
+        List<FinanceSettlement> sts = settlementMapper.selectList(
+                new LambdaQueryWrapper<FinanceSettlement>()
+                        .eq(FinanceSettlement::getReceiptPaymentId, receiptId)
+                        .eq(FinanceSettlement::getDirection, SettlementDirection.RECEIVE.getCode()));
+        Set<Long> billIds = new HashSet<>();
+        for (FinanceSettlement st : sts) {
+            List<FinanceBillItem> items = billItemMapper.selectList(
+                    new LambdaQueryWrapper<FinanceBillItem>().eq(FinanceBillItem::getSourceId, st.getPayableReceivableId()));
+            for (FinanceBillItem item : items) {
+                BigDecimal newPaid = (item.getPaidAmount() != null ? item.getPaidAmount() : BigDecimal.ZERO).subtract(st.getAmount());
+                item.setPaidAmount(newPaid.max(BigDecimal.ZERO));
+                item.setUnpaidAmount((item.getAmount() != null ? item.getAmount() : BigDecimal.ZERO).subtract(item.getPaidAmount()).max(BigDecimal.ZERO));
                 billItemMapper.updateById(item);
                 billIds.add(item.getBillId());
             }
@@ -219,11 +246,13 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         FinanceReceipt receipt = receiptMapper.selectById(id);
         if (receipt == null) throw new BusinessException("收款单不存在");
         if (!DocStatus.AUDITED.name().equals(receipt.getStatus())) throw new BusinessException("只有已审核的收款单可反审核");
-        // 1) 反向核销应收台账：按核销流水精确冲销（双向可追溯）
+        // 1) 反向扣减账单明细已收金额（必须在删除核销流水之前调用，否则流水已被删无法反查）
+        reverseBillProgress(id);
+        // 2) 反向核销应收台账：按核销流水精确冲销（双向可追溯）
         List<FinanceSettlement> settlements = settlementMapper.selectList(
                 new LambdaQueryWrapper<FinanceSettlement>()
                         .eq(FinanceSettlement::getReceiptPaymentId, id)
-                        .eq(FinanceSettlement::getDirection, "RECEIVE"));
+                        .eq(FinanceSettlement::getDirection, SettlementDirection.RECEIVE.getCode()));
         for (FinanceSettlement st : settlements) {
             FinanceReceivable rec = receivableMapper.selectById(st.getPayableReceivableId());
             if (rec == null) continue;
@@ -237,20 +266,20 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
             // 冲销后删除核销流水记录
             settlementMapper.deleteById(st.getId());
         }
-        // 2) 删除本收款单产生的预收单（负数应收，物理删除，审计链由收款单+资金流水+核销流水保留）
+        // 3) 删除本收款单产生的预收单（负数应收，物理删除，审计链由收款单+资金流水+核销流水保留）
         List<FinanceReceivable> advances = receivableMapper.selectList(
                 new LambdaQueryWrapper<FinanceReceivable>()
-                        .eq(FinanceReceivable::getSourceBillType, "ADVANCE")
+                        .eq(FinanceReceivable::getSourceBillType, SettlementStatus.ADVANCE.getCode())
                         .eq(FinanceReceivable::getSourceId, id));
         for (FinanceReceivable adv : advances) {
             receivableMapper.deleteById(adv.getId());
         }
-        // 3) 写冲正资金流水（保留审计轨迹，不删除原流水；账户余额由流水实时累计）
+        // 4) 写冲正资金流水（保留审计轨迹，不删除原流水；账户余额由流水实时累计）
         FinanceCashflow cf = new FinanceCashflow();
         cf.setFlowNo(genFlowNo());
         cf.setAccountId(receipt.getAccountId());
         cf.setAccountName(receipt.getAccountName());
-        cf.setFlowType("收款冲正");
+        cf.setFlowType(CashflowType.RECEIPT_REVERSE.getCode());
         cf.setRelatedBillNo(receipt.getCode());
         cf.setRelatedBillType("收款单");
         cf.setIncome(BigDecimal.ZERO);
@@ -262,25 +291,25 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
 
     private String gen() {
         String d = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String pat = "SK-" + d;
+        String pat = BillPrefix.RECEIPT + d;
         LambdaQueryWrapper<FinanceReceipt> w = new LambdaQueryWrapper<FinanceReceipt>().likeRight(FinanceReceipt::getCode, pat).orderByDesc(FinanceReceipt::getCode).last("LIMIT 1");
         FinanceReceipt last = receiptMapper.selectOne(w);
         int seq = 1;
         if (last != null && last.getCode() != null) {
             try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
         }
-        return "SK-" + d + String.format("%03d", seq);
+        return BillPrefix.RECEIPT + d + String.format("%03d", seq);
     }
 
     private String genFlowNo() {
         String d = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String pat = "FL-" + d;
+        String pat = BillPrefix.CASHFLOW + d;
         LambdaQueryWrapper<FinanceCashflow> w = new LambdaQueryWrapper<FinanceCashflow>().likeRight(FinanceCashflow::getFlowNo, pat).orderByDesc(FinanceCashflow::getFlowNo).last("LIMIT 1");
         FinanceCashflow last = cashflowMapper.selectOne(w);
         int seq = 1;
         if (last != null && last.getFlowNo() != null) {
             try { seq = Integer.parseInt(last.getFlowNo().substring(last.getFlowNo().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
         }
-        return "FL-" + d + String.format("%03d", seq);
+        return BillPrefix.CASHFLOW + d + String.format("%03d", seq);
     }
 }

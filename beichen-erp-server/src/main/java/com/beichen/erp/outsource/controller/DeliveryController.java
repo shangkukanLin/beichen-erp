@@ -13,6 +13,7 @@ import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.service.DeliveryService;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
+import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import lombok.RequiredArgsConstructor;
@@ -165,7 +166,7 @@ public class DeliveryController {
     @GetMapping("/warehouses/inventory")
     public R<Object> inventoryWarehouses() {
         return R.ok(warehouseMapper.selectList(new LambdaQueryWrapper<Warehouse>()
-                .eq(Warehouse::getWarehouseCategory, "INVENTORY")
+                .eq(Warehouse::getWarehouseCategory, WarehouseCategory.INVENTORY.getCode())
                 .eq(Warehouse::getStatus, 1)
                 .orderByAsc(Warehouse::getId)));
     }

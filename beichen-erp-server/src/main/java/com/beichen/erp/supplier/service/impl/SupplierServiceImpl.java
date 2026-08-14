@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.common.BillPrefix;
+import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.supplier.common.SupplierTypeEnum;
@@ -182,8 +184,8 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         // 自动生成编码：WH-YYYYMMDD-序号（取当日最大序号 + 1，避免删除后编号空洞撞唯一索引）
         String date = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         int seq = nextWarehouseSeq(date);
-        w.setCode("WH-" + date + String.format("%03d", seq));
-        w.setWarehouseCategory("OUTSOURCE");
+        w.setCode(BillPrefix.WAREHOUSE + date + String.format("%03d", seq));
+        w.setWarehouseCategory(WarehouseCategory.OUTSOURCE.getCode());
         w.setFactoryId(supplierId);
         w.setWarehouseName(supplierName != null ? supplierName + "委外仓库" : "委外仓库");
         w.setStatus(1);
@@ -196,7 +198,7 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
     /** 计算当日仓库编码最大序号 + 1（避免删除后编号空洞撞唯一索引） */
     private int nextWarehouseSeq(String date) {
         List<Warehouse> list = WarehouseMapper.selectList(
-                Wrappers.<Warehouse>lambdaQuery().likeRight(Warehouse::getCode, "WH-" + date)
+                Wrappers.<Warehouse>lambdaQuery().likeRight(Warehouse::getCode, BillPrefix.WAREHOUSE + date)
                         .orderByDesc(Warehouse::getCode).last("LIMIT 1"));
         if (list == null || list.isEmpty() || list.get(0).getCode() == null) return 1;
         String code = list.get(0).getCode();

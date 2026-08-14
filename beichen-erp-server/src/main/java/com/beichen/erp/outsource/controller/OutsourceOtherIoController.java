@@ -2,6 +2,7 @@ package com.beichen.erp.outsource.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.R;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
@@ -281,7 +282,7 @@ public class OutsourceOtherIoController {
 
     private String gen() {
         String d = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String pat = "OWO-" + d;
+        String pat = BillPrefix.OUTSOURCE_OTHER_IO + d;
         LambdaQueryWrapper<OutsourceOtherIo> w = new LambdaQueryWrapper<OutsourceOtherIo>()
                 .likeRight(OutsourceOtherIo::getCode, pat).orderByDesc(OutsourceOtherIo::getCode).last("LIMIT 1");
         OutsourceOtherIo last = ioMapper.selectOne(w);

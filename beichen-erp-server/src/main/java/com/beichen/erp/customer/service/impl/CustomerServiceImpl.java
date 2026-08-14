@@ -3,6 +3,7 @@ package com.beichen.erp.customer.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.customer.service.CustomerService;
@@ -161,7 +162,7 @@ public class CustomerServiceImpl implements CustomerService {
     private String generateCode() {
         Long cid = CompanyContext.get();
         String dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String likePattern = "CU-" + dateStr;
+        String likePattern = BillPrefix.CUSTOMER + dateStr;
         // 自动生成编码存在性校验 + 重试，避免并发重复
         for (int i = 0; i < 3; i++) {
             LambdaQueryWrapper<Customer> w = new LambdaQueryWrapper<Customer>()
@@ -179,7 +180,7 @@ public class CustomerServiceImpl implements CustomerService {
                     seq = Integer.parseInt(numPart) + 1;
                 } catch (Exception e) { seq = 1; }
             }
-            String code = "CU-" + dateStr + String.format("%03d", seq);
+            String code = BillPrefix.CUSTOMER + dateStr + String.format("%03d", seq);
             Long cnt = customerMapper.selectCount(new LambdaQueryWrapper<Customer>()
                     .eq(Customer::getCode, code)
                     .eq(Customer::getCompanyId, cid));
@@ -188,6 +189,6 @@ public class CustomerServiceImpl implements CustomerService {
             }
         }
         // 极端并发兜底：时间戳后缀
-        return "CU-" + dateStr + "-" + System.nanoTime() % 1000;
+        return BillPrefix.CUSTOMER + dateStr + "-" + System.nanoTime() % 1000;
     }
 }

@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SourceBillType;
@@ -259,9 +260,19 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             }
         }
 
-        // 2) 冲回库存：审核时加了库存，反审核需按品质等级逐条冲回
+        // 2) 冲回库存前校验：该批库存是否已被后续单据（销售出库/移仓/重分类等）消耗
         List<PurchaseOrderItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, id));
+        for (PurchaseOrderItem it : items) {
+            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+            BigDecimal currentQty = stockService.getQuantity(order.getWarehouseId(),
+                    product != null ? product.getId() : it.getProductId(), it.getQualityType());
+            if (currentQty.compareTo(it.getQuantity()) < 0) {
+                throw new BusinessException("该采购单对应库存已被后续单据消耗，无法反审核。当前库存 "
+                        + currentQty + " 小于入库数量 " + it.getQuantity());
+            }
+        }
+        // 3) 冲回库存：审核时加了库存，反审核需按品质等级逐条冲回
         for (PurchaseOrderItem it : items) {
             Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(order.getWarehouseId(),
@@ -272,12 +283,12 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     order.getId(), it.getQualityType());
         }
 
-        // 3) 删除应付台账
+        // 4) 删除应付台账
         for (FinancePayable fp : payables) {
             payableMapper.deleteById(fp.getId());
         }
 
-        // 4) 回退状态到草稿，清除审核信息
+        // 5) 回退状态到草稿，清除审核信息
         PurchaseOrder u = new PurchaseOrder();
         u.setId(id);
         u.setStatus(PurchaseOrderStatus.DRAFT.getCode());
@@ -289,7 +300,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     private String generateCode() {
         String d = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String pat = "CG-" + d;
+        String pat = BillPrefix.PURCHASE + d;
         LambdaQueryWrapper<PurchaseOrder> w = new LambdaQueryWrapper<PurchaseOrder>()
                 .likeRight(PurchaseOrder::getCode, pat).orderByDesc(PurchaseOrder::getCode).last("LIMIT 1");
         PurchaseOrder last = orderMapper.selectOne(w);
@@ -299,7 +310,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1;
             } catch (Exception e) { seq = 1; }
         }
-        return "CG-" + d + String.format("%03d", seq);
+        return BillPrefix.PURCHASE + d + String.format("%03d", seq);
     }
 
     private Long getCurrentUserId() {

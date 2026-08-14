@@ -3,6 +3,7 @@ package com.beichen.erp.outsource.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
@@ -243,13 +244,11 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
 
         if (!deliveries.isEmpty()) {
             // 已审核交货记录：统一反审核，逆向库存/成品流水/应付，回到草稿
+            // 应付冲销由交货单反审核内部调用 PayableHelper.reversePayable 完成，
+            // 此处不再重复手写 SQL（原 SQL 字段名 source_type / 枚举值 PENDING 均错误，已删除）
             for (OutsourceOrderDelivery delivery : deliveries) {
                 outsourceOrderDeliveryService.unaudit(delivery.getId());
             }
-
-            // 冲销加工单级应付（如整单未结算部分）
-            jdbcTemplate.update(
-                    "UPDATE finance_payable SET status = 'CANCELLED', remark = CONCAT(IFNULL(remark,''), ' [反审核冲销]') WHERE source_type = 'OUTSOURCE_ORDER' AND source_id = ? AND status = 'PENDING'", id);
         }
 
         // 状态回退
@@ -300,7 +299,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
 
     private String generateCode() {
         String dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String likePattern = "WO-" + dateStr;
+        String likePattern = BillPrefix.OUTSOURCE_ORDER + dateStr;
         LambdaQueryWrapper<OutsourceOrder> w = new LambdaQueryWrapper<OutsourceOrder>()
                 .likeRight(OutsourceOrder::getCode, likePattern)
                 .orderByDesc(OutsourceOrder::getCode)
@@ -313,6 +312,6 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
                 seq = Integer.parseInt(numPart) + 1;
             } catch (Exception e) { seq = 1; }
         }
-        return "WO-" + dateStr + String.format("%03d", seq);
+        return BillPrefix.OUTSOURCE_ORDER + dateStr + String.format("%03d", seq);
     }
 }
