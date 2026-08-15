@@ -19,8 +19,18 @@ public interface DevPurchaseItemService extends IService<DevPurchaseItem> {
     IPage<Map<String, Object>> pageMaterial(PageParam pageParam, String name, Long projectId, String type);
 
     /**
-     * 查询当前公司下所有启用的仓库（含自有仓库与委外仓库），供研发物料「存放位置」下拉使用
-     * 返回 Map 列表，每项含：value(type:id)、warehouseId、warehouseType、warehouseName、groupLabel
+     * 查询当前公司下所有启用的仓库（含自有仓库与委外仓库），供研发物料「位置」下拉使用
+     * 返回 Map 列表，每项含：value(placeType:placeId)、placeId、placeType、placeName、groupLabel
      */
     List<Map<String, Object>> warehouseOptions();
+
+    /**
+     * 查询某研发项目下的物料列表，返回实体列表（warehouseName/warehouseAddress 已实时回填）
+     */
+    List<DevPurchaseItem> listByProject(Long projectId);
+
+    /**
+     * 查询单条研发物料详情（当前位置已实时回填）
+     */
+    DevPurchaseItem getDetail(Long id);
 }

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { DevMaterialTypeLabel } from '@/api/enums'
 import MaterialFormDialog from '@/components/dev/MaterialFormDialog.vue'
 
 const loading = ref(false)
+const router = useRouter()
 const list = ref<any[]>([])
 const total = ref(0)
 const pageNum = ref(1)
@@ -44,7 +46,7 @@ function handlePageChange(p: number) { pageNum.value = p; loadList() }
 function handleSizeChange(s: number) { pageSize.value = s; pageNum.value = 1; loadList() }
 
 function handleAdd() { materialDialog.value?.open() }
-function handleEdit(row: any) { materialDialog.value?.open(row) }
+function handleDetail(row: any) { router.push(`/dev/material/detail/${row.id}`) }
 async function handleDelete(row: any) {
   try {
     await ElMessageBox.confirm('确定删除该物料记录吗？', '提示', { type: 'warning' })
@@ -99,7 +101,7 @@ onMounted(() => { loadProjects(); loadList() })
         <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
         <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+            <el-button link type="primary" @click="handleDetail(row)">详情</el-button>
             <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>

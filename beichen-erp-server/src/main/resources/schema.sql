@@ -583,6 +583,24 @@ CREATE TABLE IF NOT EXISTS dev_purchase_item (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目物料表';
 
+CREATE TABLE IF NOT EXISTS dev_material_flow (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    material_id BIGINT NOT NULL COMMENT '物料ID(dev_purchase_item.id)',
+    place_type VARCHAR(30) NOT NULL COMMENT '位置类型：INVENTORY/OUTSOURCE/SUPPLIER/CUSTOMER/TEXT',
+    place_id BIGINT DEFAULT NULL COMMENT '关联对象ID(仓库/供应商/客户主键，TEXT时为null)',
+    place_name VARCHAR(200) COMMENT '位置名称(快照，用于列表展示)',
+    place_detail VARCHAR(200) COMMENT '自定义文本位置(place_type=TEXT时使用)',
+    handler VARCHAR(50) COMMENT '经办人',
+    flow_time DATETIME COMMENT '流转时间',
+    images VARCHAR(1000) COMMENT '图片URL列表(逗号分隔)',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发物料位置流转记录表';
+
 CREATE TABLE IF NOT EXISTS dev_bom (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'BOM ID',
     project_id BIGINT NOT NULL COMMENT '项目ID',

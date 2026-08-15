@@ -221,7 +221,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     public void audit(Long id) {
         OutsourceOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!OutsourceOrderStatus.PENDING.name().equals(order.getStatus())) throw new BusinessException("只有待确认状态可以审核");
+        if (!OutsourceOrderStatus.PENDING.name().equals(order.getStatus())) throw new BusinessException("只有待审核状态可以审核");
         OutsourceOrder update = new OutsourceOrder();
         update.setId(id);
         update.setStatus(OutsourceOrderStatus.PRODUCING.name());

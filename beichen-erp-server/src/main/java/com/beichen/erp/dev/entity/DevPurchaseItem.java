@@ -26,12 +26,6 @@ public class DevPurchaseItem {
     private Long companyId;
     private String name;
     private String type;
-    /** 存放仓库ID（配合 warehouseType 定位，自有仓库与委外仓库两张表 ID 独立） */
-    @TableField("warehouse_id")
-    private Long warehouseId;
-    /** 仓库归属类型：INVENTORY 自有仓库 / OUTSOURCE 委外仓库 */
-    @TableField("warehouse_type")
-    private String warehouseType;
     private Integer quantity;
     private String locationDetail;
     private LocalDate purchaseDate;
@@ -41,4 +35,11 @@ public class DevPurchaseItem {
     private String remark;
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
+
+    /** 当前位置名称（非表字段，取最新流转记录 place_name 实时回填） */
+    @TableField(exist = false)
+    private String warehouseName;
+    /** 当前位置详情（非表字段，取最新流转记录 place_detail 实时回填） */
+    @TableField(exist = false)
+    private String warehouseAddress;
 }

@@ -1,6 +1,7 @@
 package com.beichen.erp.config;
 
 import com.beichen.erp.common.R;
+import com.beichen.erp.common.DefaultContractTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -43,6 +44,7 @@ public class ClearController {
                 "DELETE FROM finance_payment_item WHERE company_id = " + companyId,
                 "DELETE FROM finance_receipt_item WHERE company_id = " + companyId,
                 "DELETE FROM finance_bill_item WHERE company_id = " + companyId,
+                "DELETE FROM finance_settlement WHERE company_id = " + companyId,
                 // === 业务明细 ===
                 "DELETE FROM purchase_order_item WHERE company_id = " + companyId,
                 "DELETE FROM purchase_return_item WHERE company_id = " + companyId,
@@ -143,6 +145,11 @@ public class ClearController {
                     + p[0].replace("'", "''") + "', " + p[1] + ", " + p[2] + ", '"
                     + p[3].replace("'", "''") + "', " + companyId + ")");
             }
+            // 重新初始化默认合同模板（加工合同、采购合同），与 BOM 类型/阶段模板一致
+            insertContractTemplate(stmt, companyId, DefaultContractTemplate.TYPE_PROCESSING,
+                    DefaultContractTemplate.NAME_PROCESSING, DefaultContractTemplate.PROCESSING_CONTRACT_HTML);
+            insertContractTemplate(stmt, companyId, DefaultContractTemplate.TYPE_PURCHASE,
+                    DefaultContractTemplate.NAME_PURCHASE, DefaultContractTemplate.PURCHASE_CONTRACT_HTML);
             stmt.execute("SET FOREIGN_KEY_CHECKS = 1");
             conn.commit();
             stmt.close();
@@ -150,6 +157,14 @@ public class ClearController {
         } catch (Exception e) {
             return R.fail(e.getMessage());
         }
+    }
+
+    /** 插入一条默认合同模板（清空数据后重置用，与 DataInitializer 共用 DefaultContractTemplate 常量） */
+    private void insertContractTemplate(Statement stmt, Long companyId, String type, String name, String content) throws Exception {
+        String escapedName = name.replace("'", "''");
+        String escapedContent = content.replace("'", "''");
+        stmt.execute("INSERT INTO outsource_contract_template (template_name, content, template_type, status, is_default, party_a_address, party_a_contact, party_a_phone, company_id, create_time, update_time) VALUES ('"
+                + escapedName + "', '" + escapedContent + "', '" + type + "', 1, 1, '', '', '', " + companyId + ", NOW(), NOW())");
     }
 
     @PostMapping("/api/system/clear-data")

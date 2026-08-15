@@ -1,6 +1,7 @@
 package com.beichen.erp.dev.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.PageParam;
 import com.beichen.erp.common.R;
 import com.beichen.erp.dev.common.BugTypeEnum;
@@ -34,8 +35,30 @@ public class BugController {
     @PostMapping("/{projectId}/bug")
     public R<Bug> add(@PathVariable Long projectId, @RequestBody Bug bug) {
         bug.setProjectId(projectId);
+        // 生成Bug编号：DEV_BUG-yyyyMMdd-序号
+        bug.setCode(generateBugCode());
         bugService.save(bug);
         return R.ok(bug);
+    }
+
+    /** 生成Bug编号：DEV_BUG-yyyyMMdd-三位序号 */
+    private String generateBugCode() {
+        String dateStr = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String likePattern = BillPrefix.DEV_BUG + dateStr;
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Bug> w =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Bug>()
+                        .likeRight(Bug::getCode, likePattern)
+                        .orderByDesc(Bug::getCode)
+                        .last("LIMIT 1");
+        Bug last = bugService.getOne(w, false);
+        int seq = 1;
+        if (last != null && last.getCode() != null) {
+            try {
+                String numPart = last.getCode().substring(last.getCode().length() - 3);
+                seq = Integer.parseInt(numPart) + 1;
+            } catch (Exception e) { seq = 1; }
+        }
+        return BillPrefix.DEV_BUG + dateStr + String.format("%03d", seq);
     }
 
     /** 修改Bug */

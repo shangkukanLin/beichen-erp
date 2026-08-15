@@ -157,6 +157,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/dev/material/index.vue'),
         meta: { title: '研发物料管理', requiresAuth: true }
       },
+      {
+        path: 'dev/material/detail/:id',
+        name: 'DevMaterialDetail',
+        component: () => import('@/views/dev/material/detail.vue'),
+        meta: { title: '研发物料详情', requiresAuth: true, operate: true }
+      },
       // 委外加工
       {
         path: 'outsource/material-info',

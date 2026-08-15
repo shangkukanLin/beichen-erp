@@ -63,6 +63,7 @@ const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
 const defaultForm = (): Product => ({
+  id: undefined,
   name: '',
   brandId: undefined,
   category: '',

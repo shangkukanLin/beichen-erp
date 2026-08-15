@@ -58,6 +58,8 @@ public final class BillPrefix {
     public static final String SUPPLIER_SETTLEMENT = "DEL-";
     /** 研发项目 */
     public static final String DEV_PROJECT = "DEV-";
+    /** 研发BUG */
+    public static final String DEV_BUG = "DEV_BUG-";
     /** 其他出入库单（委外关单遗失，历史遗留，保留兼容） */
     public static final String OTHER_IO = "IO-";
     /** 库存盘点重分类单 */

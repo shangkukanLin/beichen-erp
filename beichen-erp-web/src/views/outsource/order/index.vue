@@ -66,7 +66,7 @@ onActivated(() => {
       </el-tabs>
 
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%">
-        <el-table-column prop="code" label="单号" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="code" label="单号" min-width="130" show-overflow-tooltip />
         <el-table-column label="加工厂" min-width="160" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
         </el-table-column>

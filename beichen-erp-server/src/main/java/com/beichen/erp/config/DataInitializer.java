@@ -1,12 +1,15 @@
 package com.beichen.erp.config;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.beichen.erp.common.DefaultContractTemplate;
 import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.dev.entity.BomType;
 import com.beichen.erp.dev.entity.PhaseTemplate;
 import com.beichen.erp.dev.mapper.BomTypeMapper;
 import com.beichen.erp.dev.mapper.PhaseTemplateMapper;
+import com.beichen.erp.outsource.entity.ContractTemplate;
+import com.beichen.erp.outsource.mapper.ContractTemplateMapper;
 import com.beichen.erp.system.entity.Menu;
 import com.beichen.erp.system.entity.Role;
 import com.beichen.erp.system.entity.UserRole;
@@ -43,6 +46,7 @@ public class DataInitializer implements ApplicationRunner {
     private final RoleService roleService;
     private final BomTypeMapper bomTypeMapper;
     private final PhaseTemplateMapper phaseTemplateMapper;
+    private final ContractTemplateMapper contractTemplateMapper;
     private final JdbcTemplate jdbcTemplate;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -60,7 +64,37 @@ public class DataInitializer implements ApplicationRunner {
         initSuperAdmin();
         initBomTypes();
         initPhaseTemplates();
+        initContractTemplates();
         initSchemaColumns();
+    }
+
+    /** 幂等初始化默认合同模板：加工合同、采购合同各建一条默认模板（无默认模板时才插入） */
+    private void initContractTemplates() {
+        initContractTemplate(DefaultContractTemplate.TYPE_PROCESSING, DefaultContractTemplate.NAME_PROCESSING, DefaultContractTemplate.PROCESSING_CONTRACT_HTML);
+        initContractTemplate(DefaultContractTemplate.TYPE_PURCHASE, DefaultContractTemplate.NAME_PURCHASE, DefaultContractTemplate.PURCHASE_CONTRACT_HTML);
+    }
+
+    private void initContractTemplate(String type, String name, String content) {
+        // 清理 company_id 为 NULL 的历史脏数据（早期初始化遗漏 companyId 导致）
+        contractTemplateMapper.delete(new LambdaQueryWrapper<ContractTemplate>()
+                .eq(ContractTemplate::getTemplateType, type)
+                .isNull(ContractTemplate::getCompanyId));
+        Long count = contractTemplateMapper.selectCount(new LambdaQueryWrapper<ContractTemplate>()
+                .eq(ContractTemplate::getTemplateType, type)
+                .eq(ContractTemplate::getCompanyId, 1L));
+        if (count != null && count > 0) return; // 已存在该类型默认模板，不重复初始化
+        ContractTemplate tpl = new ContractTemplate();
+        tpl.setTemplateName(name);
+        tpl.setContent(content);
+        tpl.setTemplateType(type);
+        tpl.setStatus(1);
+        tpl.setIsDefault(1);
+        tpl.setPartyAAddress("");
+        tpl.setPartyAContact("");
+        tpl.setPartyAPhone("");
+        tpl.setCompanyId(1L);
+        contractTemplateMapper.insert(tpl);
+        log.info("===== 已初始化默认合同模板：{} =====", type);
     }
 
     /** 幂等补列：为存量库平滑升级（schema.sql 的 CREATE TABLE IF NOT EXISTS 不会给已存在表加列） */

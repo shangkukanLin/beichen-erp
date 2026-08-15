@@ -172,7 +172,7 @@ async function saveBom() { if (detailProject.value) { const emptyType = bomList.
 const bugList = ref<BugDTO[]>([]); const bugDialogVisible = ref(false)
 const bugForm = reactive<BugDTO>({ title: '', severity: '一般', status: '待处理', description: '', assignedTo: undefined }); const isBugEdit = ref(false)
 async function loadBugs() { if (detailProject.value) { const res: any = await getProjectBugs(detailProject.value.id!); bugList.value = res?.records || res || [] } }
-function handleAddBug() { Object.assign(bugForm, { title: '', severity: '一般', status: '待处理', description: '', assignedTo: undefined }); isBugEdit.value = false; bugDialogVisible.value = true }
+function handleAddBug() { Object.assign(bugForm, { id: undefined, title: '', severity: '一般', status: '待处理', description: '', assignedTo: undefined }); isBugEdit.value = false; bugDialogVisible.value = true }
 function handleEditBug(row: BugDTO) { Object.assign(bugForm, row); isBugEdit.value = true; bugDialogVisible.value = true }
 async function handleBugSubmit() { if (!detailProject.value) return; if (isBugEdit.value && bugForm.id) { await updateProjectBug(detailProject.value.id!, bugForm); ElMessage.success('已更新') } else { await addProjectBug(detailProject.value.id!, bugForm); ElMessage.success('已添加') }; bugDialogVisible.value = false; loadBugs() }
 async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectBug(detailProject.value!.id!, row.id!); ElMessage.success('已删除'); loadBugs() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
@@ -180,7 +180,7 @@ async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('
 const drawingList = ref<DrawingVO[]>([])
 async function loadDrawings() { if (detailProject.value) { const res: any = await getProjectDrawings(detailProject.value.id!); drawingList.value = res?.records || res || [] } }
 const drawingForm = reactive({ docName: '', docType: '图纸', version: '', fileUrl: '' }); const drawingVisible = ref(false)
-function handleAddDrawing() { Object.assign(drawingForm, { docName: '', docType: '图纸', version: '', fileUrl: '' }); drawingVisible.value = true }
+function handleAddDrawing() { Object.assign(drawingForm, { id: undefined, docName: '', docType: '图纸', version: '', fileUrl: '' }); drawingVisible.value = true }
 async function handleDrawingSubmit() { if (detailProject.value) { await addProjectDrawing(detailProject.value.id!, drawingForm as any); ElMessage.success('已添加'); drawingVisible.value = false; loadDrawings() } }
 async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(detailProject.value!.id!, row.id!); ElMessage.success('已删除'); loadDrawings() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 

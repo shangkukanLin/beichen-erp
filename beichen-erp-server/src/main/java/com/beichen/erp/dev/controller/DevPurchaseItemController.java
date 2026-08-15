@@ -22,13 +22,16 @@ public class DevPurchaseItemController {
 
     private final DevPurchaseItemService devPurchaseItemService;
 
-    /** 获取项目的项目物料列表 */
+    /** 获取项目的项目物料列表（已回填 warehouseName/warehouseAddress） */
     @GetMapping("/project/{projectId}")
     public R<List<DevPurchaseItem>> list(@PathVariable Long projectId) {
-        return R.ok(devPurchaseItemService.lambdaQuery()
-                .eq(DevPurchaseItem::getProjectId, projectId)
-                .orderByDesc(DevPurchaseItem::getId)
-                .list());
+        return R.ok(devPurchaseItemService.listByProject(projectId));
+    }
+
+    /** 获取单条研发物料详情（已回填当前位置） */
+    @GetMapping("/{id}")
+    public R<DevPurchaseItem> detail(@PathVariable Long id) {
+        return R.ok(devPurchaseItemService.getDetail(id));
     }
 
     /** 全局分页查询研发物料（支持按名称模糊、按项目、按类型过滤，projectId为空则查询全部含未关联项目） */

@@ -36,6 +36,7 @@ const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 
 const defaultForm = (): Customer => ({
+  id: undefined,
   code: '',
   name: '',
   contact: '',

@@ -9,7 +9,7 @@ export const OutsourceOrderStatus = {
 } as const
 
 export const OutsourceOrderStatusLabel: Record<string, string> = {
-  [OutsourceOrderStatus.PENDING]: '待确认',
+  [OutsourceOrderStatus.PENDING]: '待审核',
   [OutsourceOrderStatus.PRODUCING]: '生产中',
   [OutsourceOrderStatus.FINISHED]: '已完成',
   [OutsourceOrderStatus.CANCELLED]: '已取消'

@@ -5,6 +5,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { getProjectBom } from '@/api/system'
+import {
+  OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag,
+  MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag
+} from '@/api/enums'
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
 const loading = ref(true)
@@ -75,11 +79,17 @@ const warehouses = ref<any[]>([])
 const orders = ref<any[]>([])
 const materialOrders = ref<any[]>([])
 const activeStatusTab = ref('进行中')
-const ACTIVE_STATUSES = ['待确认', '生产中', '已确认', '收货中']
+// 进行中状态（存 code，比较也用 code）：加工单待审核/生产中 + 物料订单待确认/收货中
+const ACTIVE_STATUSES = [
+  OutsourceOrderStatus.PENDING, OutsourceOrderStatus.PRODUCING,
+  MaterialOrderStatus.PENDING, MaterialOrderStatus.RECEIVING
+]
+const FINISHED_STATUSES = [OutsourceOrderStatus.FINISHED, MaterialOrderStatus.FINISHED]
+const CANCELLED_STATUSES = [OutsourceOrderStatus.CANCELLED, MaterialOrderStatus.CANCELLED]
 const filteredOrders = computed(() => {
   const all = [...orders.value, ...materialOrders.value]
-  if (activeStatusTab.value === '已完成') return all.filter(o => o.status === '已完成')
-  if (activeStatusTab.value === '已取消') return all.filter(o => o.status === '已取消')
+  if (activeStatusTab.value === '已完成') return all.filter(o => FINISHED_STATUSES.includes(o.status))
+  if (activeStatusTab.value === '已取消') return all.filter(o => CANCELLED_STATUSES.includes(o.status))
   return all.filter(o => ACTIVE_STATUSES.includes(o.status))
 })
 const whLoading = ref(false)
@@ -414,7 +424,16 @@ onMounted(loadData)
             </el-table-column>
             <el-table-column prop="status" label="状态" width="80" align="center">
               <template #default="{row}">
-                <el-tag :type="row.status==='待确认'?'info':row.status==='生产中'||row.status==='收货中'?'primary':row.status==='已完成'?'success':'danger'" size="small">{{ row.status }}</el-tag>
+                <el-tag
+                  v-if="row._type==='加工单'"
+                  :type="OutsourceOrderStatusTag[row.status] || 'info'"
+                  size="small"
+                >{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag>
+                <el-tag
+                  v-else
+                  :type="MaterialOrderStatusTag[row.status] || 'info'"
+                  size="small"
+                >{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="70" align="center" fixed="right">

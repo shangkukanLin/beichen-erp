@@ -286,7 +286,7 @@ async function loadBugs() {
     ElMessage.error('加载项目缺陷失败：' + (e?.msg || e?.message || '未知错误'))
   }
 }
-function handleAddBug() { Object.assign(bugForm, { title: '', severity: SeverityType.NORMAL, bugType: BugTypeEnum.DISPLAY, status: BugStatus.OPEN, description: '' }); isBugEdit.value = false; bugDialogVisible.value = true }
+function handleAddBug() { Object.assign(bugForm, { id: undefined, title: '', severity: SeverityType.NORMAL, bugType: BugTypeEnum.DISPLAY, status: BugStatus.OPEN, description: '' }); isBugEdit.value = false; bugDialogVisible.value = true }
 function handleEditBug(row: BugDTO) { Object.assign(bugForm, row); isBugEdit.value = true; bugDialogVisible.value = true }
 async function handleBugSubmit() {
   if (isBugEdit.value && bugForm.id) { await updateProjectBug(projectId, bugForm); ElMessage.success('已更新') }
@@ -304,7 +304,7 @@ const uploadFile = ref<File | null>(null)
 const uploading = ref(false)
 
 function handleAddDrawing() { 
-  Object.assign(drawingForm, { docName: '', docType: '排线图', version: 'v1.0', fileUrl: '' })
+  Object.assign(drawingForm, { id: undefined, docName: '', docType: '排线图', version: 'v1.0', fileUrl: '' })
   uploadFile.value = null
   drawingVisible.value = true 
 }
@@ -347,6 +347,7 @@ interface DevPurchaseItem {
   type: string
   quantity: number
   locationDetail: string
+  warehouseName: string
   warehouseAddress: string
   purchaseDate: string
   amount: number
@@ -363,9 +364,12 @@ async function loadDevMaterials() {
   } catch (e: any) { ElMessage.error('加载项目物料失败：' + (e?.msg || e?.message || '未知错误')) }
 }
 
-// 打开共用新增/编辑弹窗（自动锁定当前项目）
+// 打开共用新增弹窗（自动锁定当前项目）
 function handleAddDevMaterial() { materialDialog.value?.open() }
-function handleEditDevMaterial(row: any) { materialDialog.value?.open(row) }
+// 进入物料独立详情页
+function handleDetailDevMaterial(row: any) {
+  router.push({ path: `/dev/material/detail/${row.id}`, query: { projectId } })
+}
 
 async function handleDeleteDevMaterial(row: any) {
   try {
@@ -424,15 +428,15 @@ function onNameBlur() {
               <el-col :span="8"><el-form-item label="原机尺寸"><el-input v-model="form.originalSize" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="原分辨率"><el-input v-model="form.originalResolution" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="打样工厂">
-                <div style="display:flex;gap:4px">
+                <div style="display:flex;gap:4px;align-items:center">
                   <el-select v-model="form.sampleFactoryId" clearable filterable style="flex:1" placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.sampleFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
-                  <el-button v-if="form.sampleFactoryId" type="success" size="small" @click="goCreateOrder('sample')">下单</el-button>
+                  <el-button v-if="form.sampleFactoryId" type="success" @click="goCreateOrder('sample')">下单</el-button>
                 </div>
               </el-form-item></el-col>
               <el-col :span="8"><el-form-item label="委外工厂">
-                <div style="display:flex;gap:4px">
+                <div style="display:flex;gap:4px;align-items:center">
                   <el-select v-model="form.outsourceFactoryId" clearable filterable style="flex:1" placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.outsourceFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
-                  <el-button v-if="form.outsourceFactoryId" type="success" size="small" @click="goCreateOrder('outsource')">下单</el-button>
+                  <el-button v-if="form.outsourceFactoryId" type="success" @click="goCreateOrder('outsource')">下单</el-button>
                 </div>
               </el-form-item></el-col>
             </el-row>
@@ -604,28 +608,26 @@ function onNameBlur() {
           <div style="margin-bottom:8px">
             <el-button type="primary" size="small" @click="handleAddDevMaterial">+ 新增项目用料</el-button>
           </div>
-          <el-table :data="devMaterialList" border size="small">
-            <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="type" label="类型" width="80" />
-            <el-table-column prop="quantity" label="数量" width="70" align="center" />
-            <el-table-column label="存放位置" width="120">
-              <template #default="{ row }">{{ row.warehouseName || '-' }}</template>
-            </el-table-column>
-            <el-table-column label="位置详情" min-width="130" show-overflow-tooltip>
-              <template #default="{ row }">{{ row.warehouseAddress || row.locationDetail || '-' }}</template>
-            </el-table-column>
-            <el-table-column prop="purchaseDate" label="采购日期" width="110" />
-            <el-table-column prop="amount" label="金额" width="90" align="right">
+          <el-table :data="devMaterialList" border stripe size="small">
+            <el-table-column type="index" label="#" width="50" />
+            <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="type" label="类型" width="120" />
+            <el-table-column prop="quantity" label="数量" width="90" align="center" />
+            <el-table-column prop="amount" label="金额" width="110" align="right">
               <template #default="{ row }">{{ row.amount ? '¥' + Number(row.amount).toFixed(2) : '-' }}</template>
+            </el-table-column>
+            <el-table-column label="存放位置" width="140">
+              <template #default="{ row }">{{ row.warehouseName || '-' }}</template>
             </el-table-column>
             <el-table-column label="状态" width="90" align="center">
               <template #default="{ row }">
                 <el-tag size="small" :type="row.status === '完好' ? 'success' : row.status === '已损坏' ? 'danger' : 'warning'">{{ row.status }}</el-tag>
               </template>
             </el-table-column>
+            <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
             <el-table-column label="操作" width="120" align="center">
               <template #default="{ row }">
-                <el-button type="primary" link @click="handleEditDevMaterial(row)">编辑</el-button>
+                <el-button type="primary" link @click="handleDetailDevMaterial(row)">详情</el-button>
                 <el-button type="danger" link @click="handleDeleteDevMaterial(row)">删除</el-button>
               </template>
             </el-table-column>
@@ -673,7 +675,7 @@ function onNameBlur() {
 
           <!-- 处理中 -->
           <el-table v-show="bugTab === 'active'" :data="filteredBugs.active" border size="small">
-            <el-table-column prop="code" label="编号" width="140" />
+            <el-table-column prop="code" label="编号" width="240" />
             <el-table-column prop="title" label="标题" min-width="150" />
             <el-table-column prop="bugType" label="类型" width="70"><template #default="{row}">{{ BugTypeEnumLabel[row.bugType] || row.bugType }}</template></el-table-column>
             <el-table-column prop="severity" label="严重程度" width="90"><template #default="{row}">{{ SeverityTypeLabel[row.severity] || row.severity }}</template></el-table-column>
@@ -684,7 +686,7 @@ function onNameBlur() {
 
           <!-- 已关闭 -->
           <el-table v-show="bugTab === 'closed'" :data="filteredBugs.closed" border size="small">
-            <el-table-column prop="code" label="编号" width="140" />
+            <el-table-column prop="code" label="编号" width="240" />
             <el-table-column prop="title" label="标题" min-width="150" />
             <el-table-column prop="bugType" label="类型" width="70"><template #default="{row}">{{ BugTypeEnumLabel[row.bugType] || row.bugType }}</template></el-table-column>
             <el-table-column prop="severity" label="严重程度" width="90"><template #default="{row}">{{ SeverityTypeLabel[row.severity] || row.severity }}</template></el-table-column>
