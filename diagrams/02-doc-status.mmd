@@ -1,0 +1,9 @@
+flowchart LR
+    A["<b>草稿</b><br/>DRAFT<br/>单据创建，尚未生效"] -->|"审核"| B["<b>已审核</b><br/>AUDITED<br/>审核通过，正式生效<br/>库存/资金变更"]
+    B -->|"反审核"| A
+    A -->|"作废"| C["<b>已作废</b><br/>CANCELLED<br/>单据废弃，不可操作"]
+    B -->|"取消"| C
+
+    style A fill:#FF9800,color:#fff
+    style B fill:#4CAF50,color:#fff
+    style C fill:#9E9E9E,color:#fff

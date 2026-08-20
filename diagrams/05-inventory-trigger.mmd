@@ -1,0 +1,38 @@
+flowchart TD
+    subgraph inventory["进销存 - 库存管理"]
+        direction TB
+        W["自有仓库<br/>inventory_warehouse"] 
+        S["库存<br/>inventory_stock<br/>产品+仓库+品质 三维管理"]
+        L["库存流水<br/>inventory_stock_log<br/>完整审计链路"]
+        W --> S --> L
+    end
+
+    subgraph triggers["库存变更触发源"]
+        direction LR
+        T1["采购入库审核<br/>(+入库)"]
+        T2["采购退货审核<br/>(-出库)"]
+        T3["销售出库审核<br/>(-出库)"]
+        T4["销售退货审核<br/>(+入库)"]
+        T5["成品移仓审核<br/>(出库仓-/入库仓+)"]
+        T6["委外交货<br/>(+入库)"]
+        T7["品质重分类<br/>(同仓品质转换)"]
+    end
+
+    T1 -->|"增加"| S
+    T2 -->|"扣减"| S
+    T3 -->|"扣减"| S
+    T4 -->|"增加"| S
+    T5 -->|"转移"| S
+    T6 -->|"增加"| S
+    T7 -->|"转换"| S
+
+    style W fill:#4CAF50,color:#fff
+    style S fill:#2196F3,color:#fff
+    style L fill:#607D8B,color:#fff
+    style T1 fill:#27AE60,color:#fff
+    style T2 fill:#E74C3C,color:#fff
+    style T3 fill:#E74C3C,color:#fff
+    style T4 fill:#27AE60,color:#fff
+    style T5 fill:#FF9800,color:#fff
+    style T6 fill:#27AE60,color:#fff
+    style T7 fill:#9C27B0,color:#fff

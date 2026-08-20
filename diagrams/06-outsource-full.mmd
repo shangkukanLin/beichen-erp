@@ -1,0 +1,25 @@
+flowchart LR
+    subgraph O["委外加工完整流程"]
+        direction TB
+        A["<b>① 研发输出BOM</b>"] --> B["<b>② 创建委外物料订单</b><br/>向供应商采购物料"]
+        B --> BA["待确认"]
+        BA -->|"确认"| BB["收货中"]
+        BB --> BC["已完成"]
+        B --> C["<b>③ 物料收发单</b><br/>发料给工厂 / 从工厂收料"]
+        C --> CA["草稿"] --> CB["已审核"]
+        C --> D["<b>④ 创建委外加工单</b><br/>委托外协工厂加工"]
+        D --> DA["待确认"] --> DB["生产中"] --> DC["已完成"]
+        D --> E["<b>⑤ 加工成品交货</b><br/>按品质等级入库"]
+        E --> EA["A级品 / B级品 / C级品 / 不良品"]
+        D --> F["<b>⑥ 委外售后/退货</b>"]
+        E --> G["<b>⑦ 财务结算</b><br/>物料采购应付 + 加工费应付"]
+    end
+
+    style A fill:#4CAF50,color:#fff
+    style B fill:#2196F3,color:#fff
+    style C fill:#2196F3,color:#fff
+    style D fill:#FF9800,color:#fff
+    style E fill:#FF9800,color:#fff
+    style EA fill:#E91E63,color:#fff
+    style F fill:#9C27B0,color:#fff
+    style G fill:#00BCD4,color:#fff

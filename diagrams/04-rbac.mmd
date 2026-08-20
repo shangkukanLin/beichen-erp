@@ -1,0 +1,16 @@
+flowchart TD
+    A["用户<br/>sys_user"] -->|"属于"| B["用户角色关联<br/>sys_user_role"]
+    B -->|"关联"| C["角色<br/>sys_role<br/>(超管/管理员/用户)"]
+    C -->|"拥有"| D["角色菜单关联<br/>sys_role_menu"]
+    D -->|"关联"| E["菜单<br/>sys_menu<br/>(树形菜单结构)"]
+
+    F["前端路由守卫"] -.->|"校验"| E
+    G["Sa-Token注解"] -.->|"鉴权"| E
+
+    style A fill:#4CAF50,color:#fff
+    style B fill:#9E9E9E,color:#fff
+    style C fill:#FF9800,color:#fff
+    style D fill:#9E9E9E,color:#fff
+    style E fill:#2196F3,color:#fff
+    style F fill:#E91E63,color:#fff
+    style G fill:#E91E63,color:#fff

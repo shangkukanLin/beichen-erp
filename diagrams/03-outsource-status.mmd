@@ -1,0 +1,10 @@
+flowchart LR
+    A["<b>待确认</b><br/>PENDING<br/>加工单已创建"] -->|"确认"| B["<b>生产中</b><br/>PRODUCING<br/>工厂正在加工"]
+    B -->|"完成交货"| C["<b>已完成</b><br/>FINISHED<br/>全部交货完成"]
+    A -->|"取消"| D["<b>已取消</b><br/>CANCELLED"]
+    B -->|"取消"| D
+
+    style A fill:#FF9800,color:#fff
+    style B fill:#2196F3,color:#fff
+    style C fill:#4CAF50,color:#fff
+    style D fill:#9E9E9E,color:#fff

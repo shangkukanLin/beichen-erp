@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  body { font-family: Microsoft YaHei, sans-serif; margin: 40px; background: #fff; }
+  .diagram-wrapper { margin-bottom: 60px; padding: 30px; border: 1px solid #e0e0e0; border-radius: 8px; page-break-inside: avoid; }
+  .diagram-wrapper h2 { text-align: center; color: #2E75B6; font-size: 20px; margin-bottom: 20px; }
+  .diagram-wrapper .desc { text-align: center; color: #666; font-size: 14px; margin-bottom: 20px; }
+  .mermaid { display: flex; justify-content: center; background: #fafafa; padding: 20px; border-radius: 4px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: false, theme: 'default', securityLevel: 'loose' });
+  
+  const diagrams = [
+    { id: "main-flow", title: "图4-1 端到端业务主流程", desc: "覆盖研发立项到财务结算的8步标准业务流程" },
+    { id: "doc-status", title: "图4-2 单据状态流转", desc: "所有业务单据遵循的统一状态机模型" },
+    { id: "outsource-status", title: "图4-3 委外加工单状态流转", desc: "委外加工单从待确认到已完成的完整状态变迁" },
+    { id: "rbac", title: "图2-1 RBAC权限模型", desc: "基于角色的访问控制模型，用户-角色-菜单三级关联" },
+    { id: "inventory-trigger", title: "图4-4 库存变更触发全景", desc: "7种业务操作触发库存变更，统一记录流水" },
+    { id: "outsource-full", title: "图3-1 委外加工完整流程", desc: "从BOM输出到财务结算的委外全链路流程" },
+    { id: "finance-flow", title: "图3-2 财务自动记账流程", desc: "业务单据审核后自动生成应收应付，统一收款付款核销" },
+  ];
+
+  async function renderAll() {
+    for (const d of diagrams) {
+      try {
+        const codeEl = document.getElementById(d.id + '-code');
+        const targetEl = document.getElementById(d.id);
+        const code = codeEl.textContent.trim();
+        const { svg } = await mermaid.render(d.id + '-svg', code);
+        targetEl.innerHTML = svg;
+      } catch (e) {
+        document.getElementById(d.id).innerHTML = '<p style="color:red">渲染失败: ' + e.message + '</p>';
+      }
+    }
+    // Signal completion
+    document.body.setAttribute('data-ready', 'true');
+  }
+  
+  window.addEventListener('DOMContentLoaded', () => setTimeout(renderAll, 500));
+</script>
+</head>
+<body>
+  <h1 style="text-align:center;color:#2E75B6;margin-bottom:40px;">北辰ERP - 业务流程图</h1>
+
+  <div class="diagram-wrapper">
+    <h2>图4-1 端到端业务主流程</h2>
+    <p class="desc">覆盖研发立项到财务结算的8步标准业务流程</p>
+    <div class="mermaid" id="main-flow"></div>
+    <script id="main-flow-code" type="text/mermaid">
+flowchart LR
+    A["<b>1.研发立项</b><br/>创建项目/BOM/图纸"] --> B["<b>2.物料采购</b><br/>委外物料订单"]
+    B --> C["<b>3.物料收发</b><br/>发往工厂/收回"]
+    C --> D["<b>4.委外加工</b><br/>加工单跟踪"]
+    D --> E["<b>5.成品交货</b><br/>按品质入库"]
+    E --> F["<b>6.成品采购</b><br/>非委外场景"]
+    E --> G["<b>7.销售出库</b><br/>库存检查发货"]
+    F --> G
+    G --> H["<b>8.财务结算</b><br/>应收应付核算"]
+    H --> I["<b>清算看板</b><br/>可视化对账"]
+
+    style A fill:#4CAF50,color:#fff
+    style B fill:#2196F3,color:#fff
+    style C fill:#2196F3,color:#fff
+    style D fill:#FF9800,color:#fff
+    style E fill:#FF9800,color:#fff
+    style F fill:#9C27B0,color:#fff
+    style G fill:#E91E63,color:#fff
+    style H fill:#00BCD4,color:#fff
+    style I fill:#607D8B,color:#fff
+    </script>
+  </div>
+
+  <div class="diagram-wrapper">
+    <h2>图4-2 单据状态流转</h2>
+    <p class="desc">所有业务单据遵循的统一状态机模型（适用于采购/销售/移仓/收款等单据）</p>
+    <div class="mermaid" id="doc-status"></div>
+    <script id="doc-status-code" type="text/mermaid">
+flowchart LR
+    A["<b>草稿 DRAFT</b><br/>新建，未生效"] -->|"审核"| B["<b>已审核 AUDITED</b><br/>审核通过，库存/资金变更"]
+    B -->|"反审核"| A
+    A -->|"作废"| C["<b>已作废 CANCELLED</b><br/>废弃，不可操作"]
+    B -->|"取消"| C
+
+    style A fill:#FF9800,color:#fff
+    style B fill:#4CAF50,color:#fff
+    style C fill:#9E9E9E,color:#fff
+    </script>
+  </div>
+
+  <div class="diagram-wrapper">
+    <h2>图4-3 委外加工单状态流转</h2>
+    <p class="desc">委外加工单从创建到完成的独立状态机</p>
+    <div class="mermaid" id="outsource-status"></div>
+    <script id="outsource-status-code" type="text/mermaid">
+flowchart LR
+    A["<b>待确认 PENDING</b><br/>加工单已创建"] -->|"确认"| B["<b>生产中 PRODUCING</b><br/>工厂加工中"]
+    B -->|"完成交货"| C["<b>已完成 FINISHED</b><br/>全部交货完成"]
+    A -->|"取消"| D["<b>已取消 CANCELLED</b>"]
+    B -->|"取消"| D
+
+    style A fill:#FF9800,color:#fff
+    style B fill:#2196F3,color:#fff
+    style C fill:#4CAF50,color:#fff
+    style D fill:#9E9E9E,color:#fff
+    </script>
+  </div>
+
+  <div class="diagram-wrapper">
+    <h2>图2-1 RBAC权限模型</h2>
+    <p class="desc">基于角色的访问控制：用户→角色→菜单三层级联</p>
+    <div class="mermaid" id="rbac"></div>
+    <script id="rbac-code" type="text/mermaid">
+flowchart TD
+    A["<b>用户</b><br/>sys_user"] -->|"sys_user_role"| B["<b>角色</b><br/>sys_role<br/>超管/管理员/用户"]
+    B -->|"sys_role_menu"| C["<b>菜单</b><br/>sys_menu<br/>树形结构"]
+    
+    D["<b>前端路由守卫</b>"] -.->|"白名单校验"| C
+    E["<b>Sa-Token注解</b>"] -.->|"接口鉴权"| C
+
+    style A fill:#4CAF50,color:#fff
+    style B fill:#FF9800,color:#fff
+    style C fill:#2196F3,color:#fff
+    style D fill:#E91E63,color:#fff
+    style E fill:#E91E63,color:#fff
+    </script>
+  </div>
+
+  <div class="diagram-wrapper">
+    <h2>图4-4 库存变更触发全景</h2>
+    <p class="desc">7种业务操作触发库存变更，统一记录流水，完整审计可追溯</p>
+    <div class="mermaid" id="inventory-trigger"></div>
+    <script id="inventory-trigger-code" type="text/mermaid">
+flowchart TD
+    S["<b>库存 inventory_stock</b><br/>产品 + 仓库 + 品质 三维管理"]
+    
+    T1["采购入库 (+入库)"] --> S
+    T2["采购退货 (-出库)"] --> S
+    T3["销售出库 (-出库)"] --> S
+    T4["销售退货 (+入库)"] --> S
+    T5["成品移仓 (转移)"] --> S
+    T6["委外交货 (+入库)"] --> S
+    T7["品质重分类 (转换)"] --> S
+    
+    S --> L["<b>库存流水 inventory_stock_log</b><br/>操作类型/单据号/数量/操作人/时间"]
+
+    style S fill:#2196F3,color:#fff
+    style L fill:#607D8B,color:#fff
+    style T1 fill:#27AE60,color:#fff
+    style T2 fill:#E74C3C,color:#fff
+    style T3 fill:#E74C3C,color:#fff
+    style T4 fill:#27AE60,color:#fff
+    style T5 fill:#FF9800,color:#fff
+    style T6 fill:#27AE60,color:#fff
+    style T7 fill:#9C27B0,color:#fff
+    </script>
+  </div>
+
+  <div class="diagram-wrapper">
+    <h2>图3-1 委外加工完整流程</h2>
+    <p class="desc">从研发BOM输出到财务结算的委外全链路流程</p>
+    <div class="mermaid" id="outsource-full"></div>
+    <script id="outsource-full-code" type="text/mermaid">
+flowchart TD
+    A["<b>1.研发输出BOM</b>"] --> B["<b>2.委外物料订单</b><br/>向供应商采购物料<br/>待确认→收货中→已完成"]
+    B --> C["<b>3.物料收发单</b><br/>发料给工厂<br/>从工厂收料<br/>草稿→已审核"]
+    C --> D["<b>4.委外加工单</b><br/>委托外协工厂<br/>待确认→生产中→已完成"]
+    D --> E["<b>5.成品交货</b><br/>按品质分级入库<br/>A/B/C/不良品"]
+    D --> F["<b>6.售后/退货</b>"]
+    E --> G["<b>7.财务结算</b><br/>物料采购应付+加工费应付"]
+
+    style A fill:#4CAF50,color:#fff
+    style B fill:#2196F3,color:#fff
+    style C fill:#2196F3,color:#fff
+    style D fill:#FF9800,color:#fff
+    style E fill:#FF9800,color:#fff
+    style F fill:#9C27B0,color:#fff
+    style G fill:#00BCD4,color:#fff
+    </script>
+  </div>
+
+  <div class="diagram-wrapper">
+    <h2>图3-2 财务自动记账流程</h2>
+    <p class="desc">业务单据审核后自动生成应收应付，完整资金审计</p>
+    <div class="mermaid" id="finance-flow"></div>
+    <script id="finance-flow-code" type="text/mermaid">
+flowchart LR
+    SA["销售出库<br/>审核"] -->|自动生成| AR["应收账款<br/>finance_receivable"]
+    PI["采购入库<br/>审核"] -->|自动生成| AP["应付账款<br/>finance_payable"]
+    
+    AR --> BILL["账单汇总<br/>按客户/供应商"]
+    AP --> BILL
+    
+    BILL --> REC["收款单<br/>finance_receipt"]
+    BILL --> PAY["付款单<br/>finance_payment"]
+    
+    REC -->|审核| CF["资金流水<br/>finance_cashflow<br/>完整审计"]
+    PAY -->|审核| CF
+    
+    CF --> KP["清算看板<br/>应付/已付可视化"]
+
+    style SA fill:#E91E63,color:#fff
+    style AR fill:#27AE60,color:#fff
+    style PI fill:#9C27B0,color:#fff
+    style AP fill:#E74C3C,color:#fff
+    style BILL fill:#2196F3,color:#fff
+    style REC fill:#4CAF50,color:#fff
+    style PAY fill:#FF9800,color:#fff
+    style CF fill:#607D8B,color:#fff
+    style KP fill:#00BCD4,color:#fff
+    </script>
+  </div>
+</body>
+</html>
