@@ -66,7 +66,6 @@ async function saveMaterials() {
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) }
 }
 const typeName = ref('')
-const typeTags = ref<string[]>([])
 const hasFactory = ref(false)
 
 function formatTypes(types: string[]): string {
@@ -105,7 +104,6 @@ async function loadData() {
       Object.assign(form, res)
       // 类型编码列表
       form.checkedTypes = res.typeCodes || []
-      typeTags.value = form.checkedTypes
       typeName.value = formatTypes(form.checkedTypes || [])
       hasFactory.value = form.checkedTypes.includes('factory')
     }
@@ -266,12 +264,6 @@ onMounted(loadData)
 
 <template>
   <div class="detail-page" v-loading="loading">
-    <div class="page-header">
-      <el-tag v-for="t in typeTags" :key="t" size="small"
-        :type="t==='factory'?'warning':t==='solution'?'primary':t==='material'?'info':'success'"
-      >{{ TYPE_MAP[t] || t }}</el-tag>
-    </div>
-
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
       <el-tab-pane label="基础信息" name="info">
         <el-card shadow="never">
@@ -488,7 +480,6 @@ onMounted(loadData)
 
 <style scoped>
 .detail-page { padding:16px; }
-.page-header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .detail-page :deep(.el-tabs__header) { margin-bottom:0; }
 
 .order-table-card :deep(.el-card__body) { padding:16px; }

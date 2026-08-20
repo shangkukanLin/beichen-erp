@@ -2,78 +2,21 @@
 defineOptions({ name: 'ContractTemplate' })
 
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getTemplateList, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate, type ContractTemplate } from '@/api/contract-template'
 import { QuillEditor } from '@vueup/vue-quill'
 import '@vueup/vue-quill/dist/vue-quill.snow.css'
 
-const router = useRouter()
 const list = ref<any[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref<number>()
 
-const form = ref<ContractTemplate>({ templateName: '', content: '', status: 1, partyAAddress: '', partyAContact: '', partyAPhone: '', templateType: '' })
+const form = ref<ContractTemplate>({ templateName: '', content: '', status: 1, templateType: '' })
 const quillRef = ref<InstanceType<typeof QuillEditor>>()
 
 const activeType = ref('加工合同')
-
-const PROCESSING_PLACEHOLDERS = [
-  { label: '合同信息', key: '{合同信息}', color: '#eb2f96' },
-  { label: '甲方', key: '{甲方}', color: '#1890ff' },
-  { label: '乙方', key: '{乙方}', color: '#52c41a' },
-  { label: '甲方地址', key: '{甲方地址}', color: '#fa8c16' },
-  { label: '甲方联系人', key: '{甲方联系人}', color: '#722ed1' },
-  { label: '甲方电话', key: '{甲方电话}', color: '#f5222d' },
-  { label: '乙方地址', key: '{乙方地址}', color: '#13c2c2' },
-  { label: '乙方联系人', key: '{乙方联系人}', color: '#2f54eb' },
-  { label: '乙方电话', key: '{乙方电话}', color: '#fa541c' },
-  { label: '加工单号', key: '{加工单号}', color: '#eb2f96' },
-  { label: '日期', key: '{日期}', color: '#722ed1' },
-  { label: '产品表格', key: '{产品表格}', color: '#ff4d4f' },
-  { label: '物料表格', key: '{物料表格}', color: '#13c2c2' },
-  { label: '备注', key: '{备注}', color: '#f5222d' },
-  { label: '签名区', key: '{签名区}', color: '#eb2f96' },
-]
-
-const PURCHASE_PLACEHOLDERS = [
-  { label: '合同信息', key: '{合同信息}', color: '#eb2f96' },
-  { label: '甲方', key: '{甲方}', color: '#1890ff' },
-  { label: '乙方', key: '{乙方}', color: '#52c41a' },
-  { label: '甲方地址', key: '{甲方地址}', color: '#fa8c16' },
-  { label: '甲方联系人', key: '{甲方联系人}', color: '#722ed1' },
-  { label: '甲方电话', key: '{甲方电话}', color: '#f5222d' },
-  { label: '乙方地址', key: '{乙方地址}', color: '#13c2c2' },
-  { label: '乙方联系人', key: '{乙方联系人}', color: '#2f54eb' },
-  { label: '乙方电话', key: '{乙方电话}', color: '#fa541c' },
-  { label: '订单号', key: '{订单号}', color: '#eb2f96' },
-  { label: '日期', key: '{日期}', color: '#722ed1' },
-  { label: '物料明细表格', key: '{物料明细表格}', color: '#ff4d4f' },
-  { label: '组件表格', key: '{组件表格}', color: '#eb2f96' },
-  { label: '备注', key: '{备注}', color: '#f5222d' },
-  { label: '签名区', key: '{签名区}', color: '#eb2f96' },
-]
-
-function insertPlaceholder(key: string) {
-  const quill = (quillRef.value as any)?.getQuill?.()
-  if (!quill) return
-  const range = quill.getSelection ? quill.getSelection(true) : null
-  const idx = range ? range.index : quill.getLength() - 1
-  quill.insertText(idx, key, { bold: true, color: '#1890ff', background: '#e6f7ff' })
-  quill.setSelection(idx + key.length)
-}
-
-function insertSignatureBlock() {
-  const quill = (quillRef.value as any)?.getQuill?.()
-  if (!quill) return
-  const range = quill.getSelection ? quill.getSelection(true) : null
-  const idx = range ? range.index : quill.getLength() - 1
-  quill.insertText(idx, '{签名区}', { bold: true, color: '#eb2f96', background: '#fff0f6' })
-  quill.setSelection(idx + 5)
-  ElMessage.success('签名区占位已插入（导出PDF时自动生成签名表格）')
-}
 
 function onTypeChange() { loadData() }
 async function loadData() {
@@ -84,13 +27,13 @@ async function loadData() {
 
 function openAdd() {
   isEdit.value = false; editId.value = undefined
-  form.value = { templateName: '', content: defaultTemplate(), status: 1, partyAAddress: '', partyAContact: '', partyAPhone: '', templateType: activeType.value }
+  form.value = { templateName: '', content: defaultClauses(), status: 1, templateType: activeType.value }
   dialogVisible.value = true
 }
 
 function openEdit(row: any) {
   isEdit.value = true; editId.value = row.id
-  form.value = { templateName: row.templateName, content: row.content || '', status: row.status, partyAAddress: row.partyAAddress || '', partyAContact: row.partyAContact || '', partyAPhone: row.partyAPhone || '', templateType: row.templateType || activeType.value }
+  form.value = { templateName: row.templateName, content: row.content || '', status: row.status, templateType: row.templateType || activeType.value }
   dialogVisible.value = true
 }
 
@@ -100,7 +43,7 @@ async function handleSubmit() {
   const quill = (quillRef.value as any)?.getQuill?.()
   if (quill) {
     const html = quill.root?.innerHTML || ''
-    if (!html || html === '<p><br></p>') { ElMessage.warning('请输入合同内容'); return }
+    if (!html || html === '<p><br></p>') { ElMessage.warning('请输入条款内容'); return }
     form.value.content = html
   }
   try {
@@ -133,9 +76,9 @@ async function handleSetDefault(row: any) {
   } catch (e: any) { ElMessage.error('设置失败: ' + (e?.message || '未知错误')) }
 }
 
-const defaultTemplate = () => activeType.value === '采购合同'
-  ? `<h1 style="text-align: center;">物料采购合同</h1><p><br></p><p><span style="color: #eb2f96; background-color: #fff0f6;"><strong>{合同信息}</strong></span></p><p><br></p><p>就甲方向乙方采购本协议中所列明的物料事宜，经双方友好协商共同达成并签署以下条款：</p><p><br></p><h3>一、采购物料明细</h3><p><span style="color: #ff4d4f; background-color: #fff1f0;"><strong>{物料明细表格}</strong></span></p><p><br></p><h3>二、订单备注</h3><p><span style="color: #f5222d; background-color: #fff1f0;"><strong>{备注}</strong></span></p><p><br></p><p><span style="color: #eb2f96; background-color: #fff0f6;"><strong>{签名区}</strong></span></p>`
-  : `<h1 style="text-align: center;">委外加工合同</h1><p><br></p><p><span style="color: #eb2f96; background-color: #fff0f6;"><strong>{合同信息}</strong></span></p><p><br></p><p>就甲方委托乙方为其生产加工本协议中所列明的产品事宜，经双方友好协商共同达成并签署以下条款：</p><p><br></p><h3>一、委托加工产品数量及价格</h3><p><span style="color: #eb2f96; background-color: #fff0f6;"><strong>{产品表格}</strong></span></p><p><br></p><h3>二、甲方提供物料明细</h3><p><span style="color: #13c2c2; background-color: #e6fffb;"><strong>{物料表格}</strong></span></p><p><br></p><h3>三、订单备注</h3><p><span style="color: #f5222d; background-color: #fff1f0;"><strong>{备注}</strong></span></p><p><br></p><p><span style="color: #eb2f96; background-color: #fff0f6;"><strong>{签名区}</strong></span></p>`
+const defaultClauses = () => activeType.value === '采购合同'
+  ? `<h1 style="text-align: center;">物料采购合同</h1><p><br></p><p>就甲方向乙方采购本协议所列物料事宜，经双方友好协商，达成如下条款：</p><p><br></p><p>1、订单一经确认回传即刻具备法律效力。</p><p>2、订单确认后，应如期交货，如有延迟必须告知甲方，获取甲方同意。</p><p>3、乙方需按照甲方订单需求的产品型号，规格及数量提供质量合格的产品。</p><p>4、如因乙方私自调整产品的材料或工艺等原因导致的产品质量问题，所产生的一切损失由乙方承担。</p><p>5、双方遵守保密原则，双方合作各项细节需做好保密措施，未经允许不得外泄。</p>`
+  : `<h1 style="text-align: center;">委外加工合同</h1><p><br></p><p>就甲方委托乙方加工生产本协议所列产品事宜，经双方友好协商，达成如下条款：</p><p><br></p><h3>订单备注</h3><p>1、订单一经确认回传即刻具备法律效力。</p><p>2、乙方需按照甲方订单要求的产品型号，规格及数量加工质量合格的产品。</p><p>3、乙方收到甲方物料后需两天内确认好实际到货数量与订单数量是否相符，如有偏差应立刻向甲方反馈，超过两天未提出异议则默认到货数量无误。</p><p>4、乙方应妥善保管相关物料，如有损坏，丢失，则由乙方照价赔偿。</p><p>5、乙方收到物料之日起，7个工作日内交货，交货后3个工作日内结单。</p><p>6、乙方不得随意改变生产工艺及配套辅料。如需调整工艺或配套辅料，应先打样由甲方确认，样品通过甲方验证后方可调整，否则产生的一切损失由乙方承担。</p><p>7、全新物料加工良率保98%以上（含贴片，绑定，贴合总成等全段工序）；旧物料加工良率原则上保96%以上，如发生良率超标时，由乙方照价赔偿。如遇特殊项目则以双方协商良率为准。</p><p>8、双方合作的新项目及新批次物料，乙方须先做小批量由甲方验证以后方可量产。</p><p>9、双方遵守保密原则，双方的所有资料（含商业资料和技术资料）均做好保密措施，未经允许不得外泄。</p>`
 
 onMounted(() => loadData())
 </script>
@@ -178,19 +121,10 @@ onMounted(() => loadData())
           <el-switch v-model="form.status" :active-value="1" :inactive-value="0" />
         </el-form-item>
 
-        <!-- 甲方信息 -->
-        <el-divider content-position="left" style="margin:8px 0">甲方（我方）信息 — 导出合同时填入 {甲方地址} {甲方联系人} {甲方电话}</el-divider>
-        <el-form-item label="联系地址"><el-input v-model="form.partyAAddress" placeholder="甲方联系地址" /></el-form-item>
-        <el-form-item label="联系人"><el-input v-model="form.partyAContact" placeholder="甲方联系人" /></el-form-item>
-        <el-form-item label="联系电话"><el-input v-model="form.partyAPhone" placeholder="甲方联系电话" /></el-form-item>
+        <el-alert type="info" :closable="false" show-icon style="margin-bottom:8px"
+          title="导出合同时，标题、甲乙双方信息、明细表格、签名区由系统自动生成，您只需编辑以下「条款」内容。" />
 
-        <el-form-item label="合同内容">
-          <div style="margin-bottom:8px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-            <span style="font-size:var(--app-font-xs);color:var(--app-text-regular);margin-right:4px;font-weight:500">插入变量：</span>
-            <el-button v-for="ph in (activeType==='采购合同' ? PURCHASE_PLACEHOLDERS : PROCESSING_PLACEHOLDERS)" :key="ph.key" :style="{ background: ph.color + '15', color: ph.color, borderColor: ph.color + '40' }" @click="insertPlaceholder(ph.key)">{{ ph.label }}</el-button>
-            <span style="margin:0 8px;color:var(--app-border-color)">|</span>
-            <el-button type="warning" @click="insertSignatureBlock">插入签名区</el-button>
-          </div>
+        <el-form-item label="合同条款">
           <div class="quill-wrapper">
             <QuillEditor
               ref="quillRef"

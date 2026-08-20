@@ -12,6 +12,11 @@ public interface SupplierService extends IService<Supplier> {
 
     Page<Supplier> page(SupplierQueryDTO query);
 
+    /**
+     * 详情查询：补充回填类型编码列表 typeCodes（transient 字段，selectById 不会填充）
+     */
+    Supplier getById(Long id);
+
     String generateCode(String type);
 
     /**

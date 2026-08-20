@@ -3,8 +3,12 @@ package com.beichen.erp.common;
 /**
  * 默认合同模板常量
  * <p>
- * 统一管理「加工合同」「采购合同」默认模板的 HTML 内容与占位符，
+ * 统一管理「加工合同」「采购合同」默认模板的「条款」富文本内容，
  * 供 DataInitializer（启动初始化）与 ClearController（清空数据后重置）共用，避免内容不一致。
+ * </p>
+ * <p>
+ * 合同导出为固定结构（标题 → 甲乙双方 → 明细 → 条款 → 签名区），
+ * 本常量只存「条款」富文本，其余块由后端按单据数据自动拼装。
  * </p>
  */
 public final class DefaultContractTemplate {
@@ -21,27 +25,28 @@ public final class DefaultContractTemplate {
     /** 物料采购合同默认模板名称 */
     public static final String NAME_PURCHASE = "物料采购合同";
 
-    /** 委外加工合同默认模板内容（占位符由导出时动态替换） */
+    /** 委外加工合同默认条款（富文本） */
     public static final String PROCESSING_CONTRACT_HTML =
         "<h1 style=\"text-align: center;\">委外加工合同</h1><p><br></p>"
-        + "<p><span style=\"color: #eb2f96; background-color: #fff0f6;\"><strong>{合同信息}</strong></span></p><p><br></p>"
-        + "<p>就甲方委托乙方为其生产加工本协议中所列明的产品事宜，经双方友好协商共同达成并签署以下条款：</p><p><br></p>"
-        + "<h3>一、委托加工产品数量及价格</h3>"
-        + "<p><span style=\"color: #eb2f96; background-color: #fff0f6;\"><strong>{产品表格}</strong></span></p><p><br></p>"
-        + "<h3>二、甲方提供物料明细</h3>"
-        + "<p><span style=\"color: #13c2c2; background-color: #e6fffb;\"><strong>{物料表格}</strong></span></p><p><br></p>"
-        + "<h3>三、订单备注</h3>"
-        + "<p><span style=\"color: #f5222d; background-color: #fff1f0;\"><strong>{备注}</strong></span></p><p><br></p>"
-        + "<p><span style=\"color: #eb2f96; background-color: #fff0f6;\"><strong>{签名区}</strong></span></p>";
+        + "<p>就甲方委托乙方加工生产本协议所列产品事宜，经双方友好协商，达成如下条款：</p><p><br></p>"
+        + "<h3>订单备注</h3>"
+        + "<p>1、订单一经确认回传即刻具备法律效力。</p>"
+        + "<p>2、乙方需按照甲方订单要求的产品型号，规格及数量加工质量合格的产品。</p>"
+        + "<p>3、乙方收到甲方物料后需两天内确认好实际到货数量与订单数量是否相符，如有偏差应立刻向甲方反馈，超过两天未提出异议则默认到货数量无误。</p>"
+        + "<p>4、乙方应妥善保管相关物料，如有损坏，丢失，则由乙方照价赔偿。</p>"
+        + "<p>5、乙方收到物料之日起，7个工作日内交货，交货后3个工作日内结单。</p>"
+        + "<p>6、乙方不得随意改变生产工艺及配套辅料。如需调整工艺或配套辅料，应先打样由甲方确认，样品通过甲方验证后方可调整，否则产生的一切损失由乙方承担。</p>"
+        + "<p>7、全新物料加工良率保98%以上（含贴片，绑定，贴合总成等全段工序）；旧物料加工良率原则上保96%以上，如发生良率超标时，由乙方照价赔偿。如遇特殊项目则以双方协商良率为准。</p>"
+        + "<p>8、双方合作的新项目及新批次物料，乙方须先做小批量由甲方验证以后方可量产。</p>"
+        + "<p>9、双方遵守保密原则，双方的所有资料（含商业资料和技术资料）均做好保密措施，未经允许不得外泄。</p>";
 
-    /** 物料采购合同默认模板内容（占位符由导出时动态替换） */
+    /** 物料采购合同默认条款（富文本） */
     public static final String PURCHASE_CONTRACT_HTML =
         "<h1 style=\"text-align: center;\">物料采购合同</h1><p><br></p>"
-        + "<p><span style=\"color: #eb2f96; background-color: #fff0f6;\"><strong>{合同信息}</strong></span></p><p><br></p>"
-        + "<p>就甲方向乙方采购本协议中所列明的物料事宜，经双方友好协商共同达成并签署以下条款：</p><p><br></p>"
-        + "<h3>一、采购物料明细</h3>"
-        + "<p><span style=\"color: #ff4d4f; background-color: #fff1f0;\"><strong>{物料明细表格}</strong></span></p><p><br></p>"
-        + "<h3>二、订单备注</h3>"
-        + "<p><span style=\"color: #f5222d; background-color: #fff1f0;\"><strong>{备注}</strong></span></p><p><br></p>"
-        + "<p><span style=\"color: #eb2f96; background-color: #fff0f6;\"><strong>{签名区}</strong></span></p>";
+        + "<p>就甲方向乙方采购本协议所列物料事宜，经双方友好协商，达成如下条款：</p><p><br></p>"
+        + "<p>1、订单一经确认回传即刻具备法律效力。</p>"
+        + "<p>2、订单确认后，应如期交货，如有延迟必须告知甲方，获取甲方同意。</p>"
+        + "<p>3、乙方需按照甲方订单需求的产品型号，规格及数量提供质量合格的产品。</p>"
+        + "<p>4、如因乙方私自调整产品的材料或工艺等原因导致的产品质量问题，所产生的一切损失由乙方承担。</p>"
+        + "<p>5、双方遵守保密原则，双方合作各项细节需做好保密措施，未经允许不得外泄。</p>";
 }

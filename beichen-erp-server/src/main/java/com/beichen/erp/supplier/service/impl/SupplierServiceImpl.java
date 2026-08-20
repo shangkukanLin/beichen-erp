@@ -84,6 +84,21 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         return page;
     }
 
+    @Override
+    public Supplier getById(Long id) {
+        Supplier s = super.getById(id);
+        if (s == null) return null;
+        // 回填类型编码列表（transient 字段，详情接口需显式填充）
+        List<SupplierTypeRef> refs = supplierTypeRefMapper.selectList(
+                Wrappers.<SupplierTypeRef>lambdaQuery().eq(SupplierTypeRef::getSupplierId, id));
+        List<String> codes = new ArrayList<>();
+        for (SupplierTypeRef ref : refs) {
+            codes.add(ref.getTypeCode());
+        }
+        s.setTypeCodes(codes);
+        return s;
+    }
+
     /** 批量回填应付余额（实时汇总，避免逐供应商 N+1） */
     private void fillPayableBalance(List<Supplier> suppliers) {
         if (suppliers == null || suppliers.isEmpty()) return;

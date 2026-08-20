@@ -10,7 +10,7 @@ const query = reactive({ warehouseName: '', warehouseType: '' })
 const allData = ref<any[]>([])
 const activeTab = ref('active')
 const tableLoading = ref(false)
-const WARHOUSE_TYPES = ['成品仓', '不良仓', '辅料仓']
+const WARHOUSE_TYPES = ['成品仓', '不良仓']
 const activeData = computed(() => allData.value.filter(v => v.status === 1))
 const stoppedData = computed(() => allData.value.filter(v => v.status === 0))
 
@@ -21,7 +21,8 @@ async function loadData() {
     if (query.warehouseName) p.warehouseName = query.warehouseName
     if (query.warehouseType) p.warehouseType = query.warehouseType
     const r = await request.get<any, any>('/warehouse/page', { params: p })
-    allData.value = r?.records || []
+    // 成品仓管理排除「辅料仓」（物料仓已在「自有物料仓」菜单单独管理）
+    allData.value = (r?.records || []).filter((v: any) => v.warehouseType !== '辅料仓')
   } finally { tableLoading.value = false }
 }
 function handleQuery() { loadData() }

@@ -318,8 +318,8 @@ async function handleDefectReturn() {
 function exportPdf() {
   const url = exportContractPdf(form.id as number)
   request.get(url, { responseType: 'blob' }).then((res: any) => {
-    // 错误响应为 JSON Blob（application/json），成功响应为 PDF Blob，据此区分
-    const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/pdf' })
+    // 错误响应为 JSON Blob（application/json），成功响应为 DOCX Blob，据此区分
+    const blob = res instanceof Blob ? res : new Blob([res], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })
     if (blob.type && blob.type.includes('application/json')) {
       blob.text().then((txt: string) => {
         try {
@@ -330,8 +330,8 @@ function exportPdf() {
       return
     }
     const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob); link.download = `委外加工合同-${form.code}.pdf`; link.click(); URL.revokeObjectURL(link.href)
-    ElMessage.success('PDF合同已下载')
+    link.href = URL.createObjectURL(blob); link.download = `委外加工合同-${form.code}.docx`; link.click(); URL.revokeObjectURL(link.href)
+    ElMessage.success('合同已下载')
   }).catch(() => { ElMessage.error('导出失败') })
 }
 

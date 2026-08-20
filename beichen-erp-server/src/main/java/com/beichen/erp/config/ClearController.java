@@ -163,8 +163,8 @@ public class ClearController {
     private void insertContractTemplate(Statement stmt, Long companyId, String type, String name, String content) throws Exception {
         String escapedName = name.replace("'", "''");
         String escapedContent = content.replace("'", "''");
-        stmt.execute("INSERT INTO outsource_contract_template (template_name, content, template_type, status, is_default, party_a_address, party_a_contact, party_a_phone, company_id, create_time, update_time) VALUES ('"
-                + escapedName + "', '" + escapedContent + "', '" + type + "', 1, 1, '', '', '', " + companyId + ", NOW(), NOW())");
+        stmt.execute("INSERT INTO outsource_contract_template (template_name, content, template_type, status, is_default, company_id, create_time, update_time) VALUES ('"
+                + escapedName + "', '" + escapedContent + "', '" + type + "', 1, 1, " + companyId + ", NOW(), NOW())");
     }
 
     @PostMapping("/api/system/clear-data")

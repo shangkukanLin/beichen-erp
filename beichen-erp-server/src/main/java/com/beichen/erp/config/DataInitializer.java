@@ -82,19 +82,39 @@ public class DataInitializer implements ApplicationRunner {
         Long count = contractTemplateMapper.selectCount(new LambdaQueryWrapper<ContractTemplate>()
                 .eq(ContractTemplate::getTemplateType, type)
                 .eq(ContractTemplate::getCompanyId, 1L));
-        if (count != null && count > 0) return; // 已存在该类型默认模板，不重复初始化
+        if (count != null && count > 0) {
+            // 已存在默认模板：若 content 仍是旧版含占位符的内容，重置为新的纯条款内容
+            resetLegacyTemplate(type, content);
+            return;
+        }
         ContractTemplate tpl = new ContractTemplate();
         tpl.setTemplateName(name);
         tpl.setContent(content);
         tpl.setTemplateType(type);
         tpl.setStatus(1);
         tpl.setIsDefault(1);
-        tpl.setPartyAAddress("");
-        tpl.setPartyAContact("");
-        tpl.setPartyAPhone("");
         tpl.setCompanyId(1L);
         contractTemplateMapper.insert(tpl);
         log.info("===== 已初始化默认合同模板：{} =====", type);
+    }
+
+    /** 旧版模板 content 含占位符（如 {产品表格}/{签名区}），导出改为固定结构后需重置为纯条款内容 */
+    private void resetLegacyTemplate(String type, String content) {
+        ContractTemplate existing = contractTemplateMapper.selectOne(new LambdaQueryWrapper<ContractTemplate>()
+                .eq(ContractTemplate::getTemplateType, type)
+                .eq(ContractTemplate::getCompanyId, 1L)
+                .eq(ContractTemplate::getIsDefault, 1)
+                .last("LIMIT 1"));
+        if (existing == null || existing.getContent() == null) return;
+        // 仅当 content 含旧占位符时才重置，避免覆盖用户已自行编辑的条款
+        if (existing.getContent().contains("{产品表格}") || existing.getContent().contains("{物料明细表格}")
+                || existing.getContent().contains("{签名区}") || existing.getContent().contains("{合同信息}")) {
+            ContractTemplate upd = new ContractTemplate();
+            upd.setId(existing.getId());
+            upd.setContent(content);
+            contractTemplateMapper.updateById(upd);
+            log.info("===== 已重置旧版默认合同模板内容：{} =====", type);
+        }
     }
 
     /** 幂等补列：为存量库平滑升级（schema.sql 的 CREATE TABLE IF NOT EXISTS 不会给已存在表加列） */

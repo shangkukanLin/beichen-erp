@@ -6,9 +6,6 @@ export interface ContractTemplate {
   content: string
   status?: number
   templateType?: string
-  partyAAddress?: string
-  partyAContact?: string
-  partyAPhone?: string
 }
 
 export function getTemplateList(templateType?: string) {
@@ -46,4 +43,3 @@ export function exportMaterialOrderPdf(orderId: number, templateId?: number) {
     : `/outsource/contract-template/export-material-order/${orderId}`
   return url
 }
-

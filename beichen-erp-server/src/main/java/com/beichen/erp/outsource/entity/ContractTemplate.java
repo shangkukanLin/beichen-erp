@@ -15,12 +15,6 @@ public class ContractTemplate {
     private Integer isDefault;
     @TableField("template_type")
     private String templateType;
-    @TableField("party_a_address")
-    private String partyAAddress;
-    @TableField("party_a_contact")
-    private String partyAContact;
-    @TableField("party_a_phone")
-    private String partyAPhone;
     private Long companyId;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
