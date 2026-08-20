@@ -7,6 +7,7 @@ import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.common.BillPrefix;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.finance.common.SettlementStatus;
@@ -120,7 +121,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     @Transactional(rollbackFor = Exception.class)
     public PurchaseReturn create(PurchaseReturn order, List<Map<String, Object>> itemMaps) {
         order.setId(null);
-        order.setStatus(PurchaseReturnStatus.DRAFT.getCode());
+        order.setStatus(DocStatus.DRAFT.getCode());
         order.setCode(generateCode());
         if (order.getTotalAmount() == null) order.setTotalAmount(BigDecimal.ZERO);
         returnMapper.insert(order);
@@ -133,7 +134,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     public PurchaseReturn update(Long id, PurchaseReturn order, List<Map<String, Object>> itemMaps) {
         PurchaseReturn old = returnMapper.selectById(id);
         if (old == null) throw new BusinessException("退货单不存在");
-        if (!PurchaseReturnStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         order.setId(id);
         order.setCode(null); // 单号不可修改
         order.setStatus(null);
@@ -155,7 +156,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     public void audit(Long id) {
         PurchaseReturn order = returnMapper.selectById(id);
         if (order == null) throw new BusinessException("退货单不存在");
-        if (!PurchaseReturnStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<PurchaseReturnItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<PurchaseReturnItem>().eq(PurchaseReturnItem::getReturnId, id));
         if (items.isEmpty()) throw new BusinessException("退货单明细不能为空");
@@ -189,7 +190,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         // 3) 更新状态
         PurchaseReturn u = new PurchaseReturn();
         u.setId(id);
-        u.setStatus(PurchaseReturnStatus.COMPLETED.getCode());
+        u.setStatus(DocStatus.AUDITED.getCode());
         u.setAuditorId(getCurrentUserId());
         u.setAuditorName(getCurrentUserName());
         u.setAuditTime(LocalDateTime.now());
@@ -201,7 +202,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     public void unAudit(Long id) {
         PurchaseReturn order = returnMapper.selectById(id);
         if (order == null) throw new BusinessException("退货单不存在");
-        if (!PurchaseReturnStatus.COMPLETED.getCode().equals(order.getStatus())) throw new BusinessException("只有已完成的退货单可反审核");
+        if (!DocStatus.AUDITED.getCode().equals(order.getStatus())) throw new BusinessException("只有已完成的退货单可反审核");
         // 1) 检查应付台账
         LambdaQueryWrapper<FinancePayable> payableW = new LambdaQueryWrapper<FinancePayable>()
                 .eq(FinancePayable::getSourceBillType, SourceBillType.PURCHASE_RETURN.getCode())
@@ -231,7 +232,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         // 4) 回退到草稿
         PurchaseReturn u = new PurchaseReturn();
         u.setId(id);
-        u.setStatus(PurchaseReturnStatus.DRAFT.getCode());
+        u.setStatus(DocStatus.DRAFT.getCode());
         u.setAuditorId(null);
         u.setAuditorName(null);
         u.setAuditTime(null);
@@ -243,10 +244,10 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     public void cancel(Long id) {
         PurchaseReturn old = returnMapper.selectById(id);
         if (old == null) throw new BusinessException("退货单不存在");
-        if (!PurchaseReturnStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
         PurchaseReturn u = new PurchaseReturn();
         u.setId(id);
-        u.setStatus(PurchaseReturnStatus.CANCELLED.getCode());
+        u.setStatus(DocStatus.CANCELLED.getCode());
         returnMapper.updateById(u);
     }
 
@@ -255,7 +256,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     public void delete(Long id) {
         PurchaseReturn old = returnMapper.selectById(id);
         if (old == null) throw new BusinessException("退货单不存在");
-        if (!PurchaseReturnStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可删除");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可删除");
         itemMapper.delete(new LambdaQueryWrapper<PurchaseReturnItem>().eq(PurchaseReturnItem::getReturnId, id));
         returnMapper.deleteById(id);
     }

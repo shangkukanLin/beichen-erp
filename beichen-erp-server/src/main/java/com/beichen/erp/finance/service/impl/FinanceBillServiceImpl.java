@@ -65,7 +65,7 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         bill.setPeriodStart(periodStart);
         bill.setPeriodEnd(periodEnd);
         // 账单生成后为草稿，需审核后生效（生命周期：草稿→已审核→已作废）
-        bill.setStatus(DocStatus.DRAFT.name());
+        bill.setStatus(DocStatus.DRAFT.getCode());
 
         BigDecimal total = BigDecimal.ZERO;
         BigDecimal paid = BigDecimal.ZERO;
@@ -130,10 +130,10 @@ public class FinanceBillServiceImpl implements FinanceBillService {
     public void audit(Long id) {
         FinanceBill bill = billMapper.selectById(id);
         if (bill == null) throw new BusinessException("账单不存在");
-        if (!DocStatus.DRAFT.name().equals(bill.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (!DocStatus.DRAFT.getCode().equals(bill.getStatus())) throw new BusinessException("只有草稿状态可审核");
         FinanceBill u = new FinanceBill();
         u.setId(id);
-        u.setStatus(DocStatus.AUDITED.name());
+        u.setStatus(DocStatus.AUDITED.getCode());
         billMapper.updateById(u);
     }
 
@@ -142,10 +142,10 @@ public class FinanceBillServiceImpl implements FinanceBillService {
     public void unAudit(Long id) {
         FinanceBill bill = billMapper.selectById(id);
         if (bill == null) throw new BusinessException("账单不存在");
-        if (!DocStatus.AUDITED.name().equals(bill.getStatus())) throw new BusinessException("只有已审核状态可反审核");
+        if (!DocStatus.AUDITED.getCode().equals(bill.getStatus())) throw new BusinessException("只有已审核状态可反审核");
         FinanceBill u = new FinanceBill();
         u.setId(id);
-        u.setStatus(DocStatus.DRAFT.name());
+        u.setStatus(DocStatus.DRAFT.getCode());
         billMapper.updateById(u);
     }
 
@@ -154,10 +154,10 @@ public class FinanceBillServiceImpl implements FinanceBillService {
     public void cancel(Long id) {
         FinanceBill bill = billMapper.selectById(id);
         if (bill == null) throw new BusinessException("账单不存在");
-        if (DocStatus.CANCELLED.name().equals(bill.getStatus())) throw new BusinessException("账单已作废");
+        if (DocStatus.CANCELLED.getCode().equals(bill.getStatus())) throw new BusinessException("账单已作废");
         FinanceBill u = new FinanceBill();
         u.setId(id);
-        u.setStatus(DocStatus.CANCELLED.name());
+        u.setStatus(DocStatus.CANCELLED.getCode());
         billMapper.updateById(u);
     }
 

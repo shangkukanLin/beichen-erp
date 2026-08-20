@@ -214,11 +214,39 @@ public class WarehouseStockController {
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam Long warehouseId,
             @RequestParam Long materialId) {
-        return R.ok(stockLogMapper.selectPage(new Page<>(pageNum, pageSize),
+        Page<WarehouseStockLog> page = stockLogMapper.selectPage(new Page<>(pageNum, pageSize),
             new LambdaQueryWrapper<WarehouseStockLog>()
                 .eq(WarehouseStockLog::getWarehouseId, warehouseId)
                 .eq(WarehouseStockLog::getMaterialId, materialId)
-                .orderByDesc(WarehouseStockLog::getId)));
+                .orderByDesc(WarehouseStockLog::getId));
+
+        // 补展示字段：变动类型/关联单据类型中文标签
+        for (WarehouseStockLog log : page.getRecords()) {
+            log.setChangeTypeLabel(StockChangeType.labelOf(log.getChangeType()));
+            RelatedBillType rbt = RelatedBillType.fromCode(log.getRelatedBillType());
+            log.setRelatedBillTypeLabel(rbt != null ? rbt.getLabel() : log.getRelatedBillType());
+        }
+
+        // 物料名称兜底：流水冗余列 material_name 为空时，按 materialId 实时查补
+        Map<Long, String> matNameMap = new HashMap<>();
+        for (WarehouseStockLog log : page.getRecords()) {
+            if (log.getMaterialId() != null && (log.getMaterialName() == null || log.getMaterialName().isEmpty())) {
+                matNameMap.putIfAbsent(log.getMaterialId(), null);
+            }
+        }
+        if (!matNameMap.isEmpty()) {
+            List<OutsourceMaterial> mats = outsourceMaterialMapper.selectBatchIds(matNameMap.keySet());
+            for (OutsourceMaterial m : mats) {
+                matNameMap.put(m.getId(), m.getMaterialName());
+            }
+            for (WarehouseStockLog log : page.getRecords()) {
+                if (log.getMaterialId() != null && (log.getMaterialName() == null || log.getMaterialName().isEmpty())) {
+                    log.setMaterialName(matNameMap.getOrDefault(log.getMaterialId(), ""));
+                }
+            }
+        }
+
+        return R.ok(page);
     }
 
     /** 品质类型枚举转中文标签 */

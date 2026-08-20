@@ -11,7 +11,7 @@ public interface SupplierMaterialService extends IService<SupplierMaterial> {
     /** 按供应商ID查询其供应的物料列表（联查物料名称/规格/BOM类型名） */
     List<SupplierMaterial> listBySupplierId(Long supplierId);
 
-    /** 按物料ID生成供应商ID逗号串（供 outsource_material 列表回填 supplierIds 字段） */
+    /** 按物料ID从 supplier_material 居间表查询供应商ID逗号串（供列表/详情展示） */
     String listSupplierIdsByMaterial(Long materialId);
 
     /** 差量保存某供应商供应的物料：新增、更新、删除 */

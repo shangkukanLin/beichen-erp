@@ -126,7 +126,7 @@ public class SupplierMaterialServiceImpl extends ServiceImpl<SupplierMaterialMap
         if (!toDelete.isEmpty()) this.removeByIds(toDelete);
     }
 
-    /** 按物料ID生成供应商ID逗号串（供 outsource_material 列表回填 supplierIds 字段，保持前端兼容） */
+    /** 按物料ID从 supplier_material 居间表查询供应商ID逗号串（供列表/详情展示） */
     public String listSupplierIdsByMaterial(Long materialId) {
         if (materialId == null) return "";
         List<SupplierMaterial> list = supplierMaterialMapper.selectList(

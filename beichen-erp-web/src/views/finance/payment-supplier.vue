@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { getPaymentPage, createPayment, getUnpaidPayables, type FinancePaymentItem } from '@/api/finance'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import { SettlementStatus, SettlementStatusLabel } from '@/api/enums'
 
 const route = useRoute(); const router = useRouter()
 const supplierId = Number(route.params.id)
@@ -25,7 +26,7 @@ const SOURCE_TYPE_LABEL: Record<string, string> = {
 }
 function sourceBillTypeLabel(code?: string) { return code ? (SOURCE_TYPE_LABEL[code] || code) : '' }
 // 结算状态 code -> 中文
-const STATUS_LABEL: Record<string, string> = { UNSETTLED: '未结清', PARTIAL: '部分结清', SETTLED: '已结清', CANCELLED: '已冲回' }
+const STATUS_LABEL: Record<string, string> = SettlementStatusLabel
 function statusLabel(code?: string) { return code ? (STATUS_LABEL[code] || code) : '' }
 
 // 来源单据类型 -> 详情路由前缀（用于点击来源单号跳转）
@@ -103,7 +104,7 @@ async function handleSubmitPayment() {
 
 const totalThisAmount = computed(() => dItems.value.reduce((s, it) => s + (Number(it.thisAmount) || 0), 0))
 
-function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === 'UNSETTLED') return 'danger'; if (s === 'PARTIAL') return 'warning'; if (s === 'SETTLED') return 'success'; if (s === 'CANCELLED') return 'info'; return 'info' }
+function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === SettlementStatus.UNSETTLED) return 'danger'; if (s === SettlementStatus.PARTIAL) return 'warning'; if (s === SettlementStatus.SETTLED) return 'success'; if (s === SettlementStatus.CANCELLED) return 'info'; return 'info' }
 function pStType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { return DocStatusTag[s || ''] || undefined }
 function openAttach(url: string) { window.open(url + '?inline=true') }
 function goSettlement() { router.push(`/finance/supplier-settlement/${supplierId}`) }

@@ -220,7 +220,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
-import { ProjectStatus } from '@/api/enums'
+import { ProjectStatus, TimelineStatus, OutsourceOrderStatus, MaterialOrderStatus } from '@/api/enums'
 import MemoPanel from '@/views/memo/index.vue'
 
 const router = useRouter()
@@ -243,21 +243,21 @@ const dashboardTimelineMap = ref<Record<number, any[]>>({})
 function getDashboardPhase(row: any) {
   const timelines = dashboardTimelineMap.value[row.id]
   if (!timelines || !timelines.length) return '-'
-  const active = timelines.find((t: any) => t.status === 'IN_PROGRESS')
+  const active = timelines.find((t: any) => t.status === TimelineStatus.IN_PROGRESS)
   return active ? active.statusName : '-'
 }
 
 function getDashboardPlannedEnd(row: any) {
   const timelines = dashboardTimelineMap.value[row.id]
   if (!timelines || !timelines.length) return ''
-  const active = timelines.find((t: any) => t.status === 'IN_PROGRESS')
+  const active = timelines.find((t: any) => t.status === TimelineStatus.IN_PROGRESS)
   return active?.plannedEnd || ''
 }
 
 function getDashboardProgress(row: any) {
   const timelines = dashboardTimelineMap.value[row.id]
   if (!timelines || !timelines.length) return '0/0'
-  const done = timelines.filter((t: any) => t.status === 'FINISHED' || t.status === 'SKIPPED').length
+  const done = timelines.filter((t: any) => t.status === TimelineStatus.FINISHED || t.status === TimelineStatus.SKIPPED).length
   return `${done}/${timelines.length}`
 }
 const osPending = ref(0)
@@ -346,9 +346,9 @@ async function loadStats() {
       let pending = 0, inProd = 0
       const activeList: any[] = []
       allOrders.forEach((o: any) => {
-        if (o.status === '待确认') pending++
-        if (o.status === '生产中') { inProd++; activeList.push(o) }
-        if (o.status === '待确认') activeList.push(o)
+        if (o.status === OutsourceOrderStatus.PENDING) pending++
+        if (o.status === OutsourceOrderStatus.PRODUCING) { inProd++; activeList.push(o) }
+        if (o.status === OutsourceOrderStatus.PENDING) activeList.push(o)
       })
       osPending.value = pending
       osInProgress.value = pending + inProd
@@ -356,12 +356,12 @@ async function loadStats() {
       const allMats = allMatRes?.records || []
       let matPending = 0, matReceiving = 0
       allMats.forEach((m: any) => {
-        if (m.status === '待确认') matPending++
-        if (m.status === '收货中') matReceiving++
+        if (m.status === MaterialOrderStatus.PENDING) matPending++
+        if (m.status === MaterialOrderStatus.RECEIVING) matReceiving++
       })
       osMatPending.value = matPending
       osMatReceiving.value = matReceiving
-      pendingMatOrders.value = allMats.filter((m: any) => m.status !== '已完成' && m.status !== '已取消').slice(0, 5)
+      pendingMatOrders.value = allMats.filter((m: any) => m.status !== MaterialOrderStatus.FINISHED && m.status !== MaterialOrderStatus.CANCELLED).slice(0, 5)
     }
   } catch { /* ignore */}
   try {

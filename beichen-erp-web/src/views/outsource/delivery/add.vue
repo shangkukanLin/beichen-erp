@@ -34,7 +34,7 @@ function materialsByType(type: number) { return materialOptions.value.filter((m:
 function typeName(id: number | undefined) { if (id == null) return '-'; const t = bomTypes.value.find((v: any) => v.id === id); return t ? t.typeName : (id as any) }
 
 async function loadAllOutsourceWarehouses() {
-  try { const r = await request.get<any,any>('/warehouse/page',{params:{pageSize:500,warehouseCategory:'OUTSOURCE'}}); allOutsourceWarehouses.value = r?.records||[] } catch {}
+  try { const r = await request.get<any,any>('/warehouse/page',{params:{pageSize:500,warehouseCategory: WarehouseCategory.OUTSOURCE}}); allOutsourceWarehouses.value = r?.records||[] } catch {}
 }
 async function loadFactories() {
   try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType:'factory', pageSize:200 } }); factoryOptions.value = r?.records || [] } catch {}

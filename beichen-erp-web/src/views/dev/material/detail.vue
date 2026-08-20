@@ -3,6 +3,7 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
+import { WarehouseCategory, WarehouseCategoryLabel, MaterialPlaceType, MaterialPlaceTypeLabel } from '@/api/enums'
 import request from '@/utils/request'
 
 const route = useRoute()
@@ -56,15 +57,13 @@ interface FlowRecord {
 
 const flowList = ref<FlowRecord[]>([])
 const placeTypeOptions = [
-  { label: '自有仓库', value: 'INVENTORY' },
-  { label: '委外仓库', value: 'OUTSOURCE' },
-  { label: '供应商', value: 'SUPPLIER' },
-  { label: '客户', value: 'CUSTOMER' },
-  { label: '自定义', value: 'TEXT' }
+  { label: MaterialPlaceTypeLabel[MaterialPlaceType.INVENTORY], value: MaterialPlaceType.INVENTORY },
+  { label: MaterialPlaceTypeLabel[MaterialPlaceType.OUTSOURCE], value: MaterialPlaceType.OUTSOURCE },
+  { label: MaterialPlaceTypeLabel[MaterialPlaceType.SUPPLIER], value: MaterialPlaceType.SUPPLIER },
+  { label: MaterialPlaceTypeLabel[MaterialPlaceType.CUSTOMER], value: MaterialPlaceType.CUSTOMER },
+  { label: MaterialPlaceTypeLabel[MaterialPlaceType.TEXT], value: MaterialPlaceType.TEXT }
 ]
-const placeTypeLabelMap: Record<string, string> = {
-  INVENTORY: '自有仓库', OUTSOURCE: '委外仓库', SUPPLIER: '供应商', CUSTOMER: '客户', TEXT: '自定义'
-}
+const placeTypeLabelMap: Record<string, string> = MaterialPlaceTypeLabel
 // 下拉关联数据源
 const warehouseOptions = ref<any[]>([])
 const supplierOptions = ref<any[]>([])
@@ -117,10 +116,10 @@ function handleEditFlow(row: FlowRecord) {
 
 async function handleFlowSubmit() {
   if (!flowForm.placeType) { ElMessage.warning('请选择位置类型'); return }
-  if (flowForm.placeType !== 'TEXT' && !flowForm.placeId) { ElMessage.warning('请选择位置'); return }
-  if (flowForm.placeType === 'TEXT' && !flowForm.placeDetail?.trim()) { ElMessage.warning('请输入位置'); return }
+  if (flowForm.placeType !== MaterialPlaceType.TEXT && !flowForm.placeId) { ElMessage.warning('请选择位置'); return }
+  if (flowForm.placeType === MaterialPlaceType.TEXT && !flowForm.placeDetail?.trim()) { ElMessage.warning('请输入位置'); return }
   const payload: any = { ...flowForm, materialId, images: flowImageList.value.map((i: any) => i.url).join(',') }
-  if (payload.placeType === 'TEXT') { payload.placeId = null }
+  if (payload.placeType === MaterialPlaceType.TEXT) { payload.placeId = null }
   try {
     if (isFlowEdit.value && flowForm.id) {
       await request.put(`/dev/material-flow/${flowForm.id}`, payload)
@@ -217,7 +216,7 @@ async function loadMaterialType() {
           v-for="f in flowList" :key="f.id"
           :timestamp="f.flowTime"
           placement="top"
-          :type="f.placeType === 'TEXT' ? 'info' : 'primary'"
+          :type="f.placeType === MaterialPlaceType.TEXT ? 'info' : 'primary'"
         >
           <div class="flow-item">
             <div class="flow-item-title">
@@ -251,15 +250,15 @@ async function loadMaterialType() {
             <el-option v-for="o in placeTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
-        <el-form-item v-if="flowForm.placeType !== 'TEXT'" label="选择位置">
+        <el-form-item v-if="flowForm.placeType !== MaterialPlaceType.TEXT" label="选择位置">
           <el-select v-model="flowForm.placeId" style="width:100%" filterable clearable placeholder="请选择">
-            <el-option-group v-if="flowForm.placeType === 'INVENTORY' || flowForm.placeType === 'OUTSOURCE'" label="仓库">
+            <el-option-group v-if="flowForm.placeType === WarehouseCategory.INVENTORY || flowForm.placeType === WarehouseCategory.OUTSOURCE" label="仓库">
               <el-option v-for="w in warehouseOptions.filter((x:any) => x.placeType === flowForm.placeType)" :key="w.value" :label="w.placeName" :value="w.placeId" />
             </el-option-group>
-            <el-option-group v-if="flowForm.placeType === 'SUPPLIER'" label="供应商">
+            <el-option-group v-if="flowForm.placeType === MaterialPlaceType.SUPPLIER" label="供应商">
               <el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" />
             </el-option-group>
-            <el-option-group v-if="flowForm.placeType === 'CUSTOMER'" label="客户">
+            <el-option-group v-if="flowForm.placeType === MaterialPlaceType.CUSTOMER" label="客户">
               <el-option v-for="c in customerOptions" :key="c.id" :label="c.name" :value="c.id" />
             </el-option-group>
           </el-select>

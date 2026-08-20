@@ -2,7 +2,7 @@
 import { reactive, ref, onMounted, onActivated, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { TimelineStatus, TimelineStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag } from '@/api/enums'
+import { TimelineStatus, TimelineStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/enums'
 import {
   getProject, updateProject,
   getProjectBom, saveProjectBom,
@@ -643,7 +643,7 @@ function onNameBlur() {
             <el-table-column prop="productName" label="产品" min-width="120" />
             <el-table-column label="状态" width="90" align="center">
               <template #default="{row}">
-                <el-tag size="small" type="primary">{{ row.status }}</el-tag>
+                <el-tag size="small" :type="OutsourceOrderStatusTag[row.status] || 'primary'">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="createTime" label="创建时间" width="160" />

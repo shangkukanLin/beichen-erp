@@ -100,13 +100,13 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
         // 2. 进行中订单
         List<OutsourceOrder> orders = orderMapper.selectList(new LambdaQueryWrapper<OutsourceOrder>()
                 .eq(OutsourceOrder::getFactoryId, supplierId)
-                .in(OutsourceOrder::getStatus, OutsourceOrderStatus.PENDING.name(), OutsourceOrderStatus.PRODUCING.name())
+                .in(OutsourceOrder::getStatus, OutsourceOrderStatus.PENDING.getCode(), OutsourceOrderStatus.PRODUCING.getCode())
                 .orderByDesc(OutsourceOrder::getId));
         result.put("activeOrders", orders);
 
         List<MaterialOrder> materialOrders = materialOrderMapper.selectList(new LambdaQueryWrapper<MaterialOrder>()
                 .eq(MaterialOrder::getSupplierId, supplierId)
-                .in(MaterialOrder::getStatus, MaterialOrderStatus.PENDING.name(), MaterialOrderStatus.RECEIVING.name())
+                .in(MaterialOrder::getStatus, MaterialOrderStatus.PENDING.getCode(), MaterialOrderStatus.RECEIVING.getCode())
                 .orderByDesc(MaterialOrder::getId));
         result.put("activeMaterialOrders", materialOrders);
 
@@ -202,7 +202,7 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
                 warehouseStockMapper.updateById(st);
                 WarehouseStockLog slog = new WarehouseStockLog();
                 slog.setWarehouseId(wh.getId()); slog.setMaterialId(st.getMaterialId());
-                slog.setMaterialName(matName); slog.setChangeType("清算退料出");
+                slog.setMaterialName(matName); slog.setChangeType(StockChangeType.SETTLEMENT_RETURN_OUT.getCode());
                 slog.setChangeQuantity(qty.negate()); slog.setBeforeQuantity(before);
                 slog.setAfterQuantity(BigDecimal.ZERO); slog.setRelatedOrderCode(delivery.getCode());
                 stockLogMapper.insert(slog);

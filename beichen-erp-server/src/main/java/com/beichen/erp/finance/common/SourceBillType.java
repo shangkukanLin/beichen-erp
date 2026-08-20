@@ -20,7 +20,15 @@ public enum SourceBillType {
     /** 成品退货单 */
     PURCHASE_RETURN("成品退货单"),
     /** 销售退货 */
-    SALE_RETURN("销售退货");
+    SALE_RETURN("销售退货"),
+    /** 委外加工单交货（成品报工入库产生应付） */
+    OUTSOURCE_DELIVERY("委外加工交货"),
+    /** 委外物料订单收货 / 退不良（收发单审核产生应付） */
+    OUTSOURCE_MATERIAL_DELIVERY("委外物料收发"),
+    /** 委外退料（负向应付冲减） */
+    OUTSOURCE_RETURN("委外退料"),
+    /** 委外超损赔偿（结单超损总价生成负应付） */
+    OUTSOURCE_EXCESS_LOSS("委外超损");
 
     private final String label;
 

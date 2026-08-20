@@ -16,7 +16,7 @@ const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN, ioDate
 const items = ref<any[]>([{ materialId: undefined, materialName: '', spec: '', unit: '', quantity: undefined, remark: '' }])
 
 async function loadWarehouses() {
-  try { const r = await request.get<any,any>('/warehouse/page',{params:{pageSize:500,warehouseCategory:'INVENTORY'}}); warehouses.value = r?.records||[] } catch {}
+  try { const r = await request.get<any,any>('/warehouse/page',{params:{pageSize:500,warehouseCategory: WarehouseCategory.INVENTORY}}); warehouses.value = r?.records||[] } catch {}
 }
 async function loadMaterials() {
   try { const r = await request.get<any,any>('/product/page',{params:{pageSize:500}}); materialOptions.value = r?.records||[] } catch {}

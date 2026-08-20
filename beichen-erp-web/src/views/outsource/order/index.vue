@@ -24,8 +24,8 @@ async function loadData() {
   try {
     const p: any = { pageNum: pagination.pageNum, pageSize: pagination.pageSize }
     if (activeTab.value === 'PENDING_PRODUCING') { p.status = [OutsourceOrderStatus.PENDING, OutsourceOrderStatus.PRODUCING].join(',') }
-    else if (activeTab.value === 'FINISHED') { p.status = OutsourceOrderStatus.FINISHED }
-    else if (activeTab.value === 'CANCELLED') { p.status = OutsourceOrderStatus.CANCELLED }
+    else if (activeTab.value === OutsourceOrderStatus.FINISHED) { p.status = OutsourceOrderStatus.FINISHED }
+    else if (activeTab.value === OutsourceOrderStatus.CANCELLED) { p.status = OutsourceOrderStatus.CANCELLED }
     if (query.code) p.code = query.code
     if (query.factoryId) p.factoryId = query.factoryId
     const r = await request.get<any, any>('/outsource/order/page', { params: p })

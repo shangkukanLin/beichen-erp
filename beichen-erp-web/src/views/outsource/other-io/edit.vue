@@ -3,7 +3,8 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { IoType, IoTypeLabel } from '@/api/enums'
+import { IoType, IoTypeLabel, WarehouseCategory } from '@/api/enums'
+import { DocStatus } from '@/api/common'
 
 const route = useRoute(); const router = useRouter()
 const editId = Number(route.params.id) || 0
@@ -24,7 +25,7 @@ async function loadWarehouses() {
     const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200 } })
     warehouses.value = (r?.records || []).map((w: any) => ({
       ...w,
-      _type: w.warehouseCategory === 'INVENTORY' ? '我方仓' : '委外仓'
+      _type: w.warehouseCategory === WarehouseCategory.INVENTORY ? '我方仓' : '委外仓'
     }))
   } catch {}
 }
@@ -58,7 +59,7 @@ async function loadDetail() {
   try {
     const io = await request.get<any, any>(`/outsource/other-io/${editId}`)
     if (!io) { ElMessage.error('单据不存在'); router.push('/outsource/other-io'); return }
-    if (io.status !== 'DRAFT') { ElMessage.warning('仅草稿状态可编辑'); router.push(`/outsource/other-io/detail/${editId}`); return }
+    if (io.status !== DocStatus.DRAFT) { ElMessage.warning('仅草稿状态可编辑'); router.push(`/outsource/other-io/detail/${editId}`); return }
     form.warehouseId = io.warehouseId; form.ioType = io.ioType
     form.ioDate = io.ioDate; form.remark = io.remark || ''
     const its = await request.get<any, any>(`/outsource/other-io/${editId}/items`)

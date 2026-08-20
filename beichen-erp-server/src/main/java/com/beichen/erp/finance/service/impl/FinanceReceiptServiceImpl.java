@@ -73,7 +73,7 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         FinanceAccount acc = accountMapper.selectById(receipt.getAccountId());
         receipt.setAccountName(acc != null ? acc.getAccountName() : "");
         receipt.setCode(gen());
-        receipt.setStatus(DocStatus.DRAFT.name());
+        receipt.setStatus(DocStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
         BigDecimal total = BigDecimal.ZERO;
         if (cid != null && cid > 0) receipt.setCompanyId(cid);
@@ -91,14 +91,14 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
     public void cancel(Long id) {
         FinanceReceipt old = receiptMapper.selectById(id);
         if (old == null) throw new BusinessException("收款单不存在");
-        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
-        FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus(DocStatus.CANCELLED.name()); receiptMapper.updateById(u);
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode()); receiptMapper.updateById(u);
     }
 
     @Override @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
         FinanceReceipt receipt = receiptMapper.selectById(id);
-        if (receipt == null || !DocStatus.DRAFT.name().equals(receipt.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (receipt == null || !DocStatus.DRAFT.getCode().equals(receipt.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<FinanceReceiptItem> items = itemMapper.selectList(new LambdaQueryWrapper<FinanceReceiptItem>().eq(FinanceReceiptItem::getReceiptId, id));
         // 核销应收：更新台账 + 写入核销流水（双向可追溯），超额部分生成负数应收（预收）
         for (FinanceReceiptItem it : items) {
@@ -172,7 +172,7 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         cf.setIncome(receipt.getAmount());
         cf.setExpense(BigDecimal.ZERO);
         cashflowMapper.insert(cf);
-        FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus(DocStatus.AUDITED.name()); receiptMapper.updateById(u);
+        FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode()); receiptMapper.updateById(u);
     }
 
     /** 账单进度联动：按核销流水反查账单明细，同步已收金额并重算账单主表 */
@@ -245,7 +245,7 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
     public void unAudit(Long id) {
         FinanceReceipt receipt = receiptMapper.selectById(id);
         if (receipt == null) throw new BusinessException("收款单不存在");
-        if (!DocStatus.AUDITED.name().equals(receipt.getStatus())) throw new BusinessException("只有已审核的收款单可反审核");
+        if (!DocStatus.AUDITED.getCode().equals(receipt.getStatus())) throw new BusinessException("只有已审核的收款单可反审核");
         // 1) 反向扣减账单明细已收金额（必须在删除核销流水之前调用，否则流水已被删无法反查）
         reverseBillProgress(id);
         // 2) 反向核销应收台账：按核销流水精确冲销（双向可追溯）
@@ -286,7 +286,7 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         cf.setExpense(receipt.getAmount());
         cf.setRemark("反审核冲正");
         cashflowMapper.insert(cf);
-        FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus(DocStatus.DRAFT.name()); receiptMapper.updateById(u);
+        FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus(DocStatus.DRAFT.getCode()); receiptMapper.updateById(u);
     }
 
     private String gen() {

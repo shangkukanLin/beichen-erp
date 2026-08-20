@@ -1,16 +1,13 @@
 package com.beichen.erp.outsource.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.R;
 import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
-import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.outsource.common.MaterialOrderStatus;
-import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.outsource.service.SupplierMaterialService;
@@ -24,7 +21,6 @@ import com.beichen.erp.outsource.mapper.OutsourceDeliveryMapper;
 import com.beichen.erp.outsource.mapper.OutsourceDeliveryItemMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderDeliveryMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
-import com.beichen.erp.outsource.mapper.OutsourceOrderMaterialMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
 import com.beichen.erp.outsource.entity.OutsourceDelivery;
@@ -35,7 +31,6 @@ import com.beichen.erp.outsource.entity.MaterialOrderItem;
 import com.beichen.erp.outsource.mapper.MaterialOrderMapper;
 import com.beichen.erp.outsource.mapper.MaterialOrderItemMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 
@@ -62,12 +57,10 @@ public class OutsourceOrderController {
     private final OutsourceDeliveryMapper deliveryMapper;
     private final OutsourceDeliveryItemMapper deliveryItemMapper;
     private final OutsourceOrderDeliveryMapper orderDeliveryMapper;
-    private final OutsourceOrderMaterialMapper outsourceOrderMaterialMapper;
     private final OutsourceMaterialComponentMapper componentMapper;
     private final MaterialOrderMapper materialOrderMapper;
     private final MaterialOrderItemMapper materialOrderItemMapper;
     private final SupplierMaterialService supplierMaterialService;
-    private final JdbcTemplate jdbcTemplate;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -190,7 +183,7 @@ public class OutsourceOrderController {
         Map<Long, BigDecimal> inTransitMap = new HashMap<>();
         List<MaterialOrder> activeOrders = materialOrderMapper.selectList(
             new LambdaQueryWrapper<MaterialOrder>()
-                .notIn(MaterialOrder::getStatus, List.of(MaterialOrderStatus.FINISHED.name(), MaterialOrderStatus.CANCELLED.name())));
+                .notIn(MaterialOrder::getStatus, List.of(MaterialOrderStatus.FINISHED.getCode(), MaterialOrderStatus.CANCELLED.getCode())));
         if (!activeOrders.isEmpty()) {
             List<Long> orderIds = activeOrders.stream().map(MaterialOrder::getId).collect(Collectors.toList());
             List<MaterialOrderItem> items = materialOrderItemMapper.selectList(
@@ -285,104 +278,10 @@ public class OutsourceOrderController {
         return R.ok();
     }
 
-    @PutMapping("/{id}/complete")
-    public R<Void> complete(@PathVariable Long id) {
-        orderService.complete(id);
-        return R.ok();
-    }
-
     @PutMapping("/{id}/cancel")
     public R<Void> cancel(@PathVariable Long id) {
         orderService.cancel(id);
         return R.ok();
-    }
-
-    /** 加工单退不良（成品扣减 → BOM反算物料加回委外仓，写入交货记录） */
-    @PostMapping("/{id}/return-defect")
-    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
-    public R<Void> returnDefect(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-        OutsourceOrder o = orderService.getById(id);
-        if (o == null) throw new com.beichen.erp.exception.BusinessException("加工单不存在");
-
-        Long factoryId = o.getFactoryId();
-        if (factoryId == null) throw new com.beichen.erp.exception.BusinessException("加工单未关联加工厂");
-        Long factoryWhId = jdbcTemplate.queryForObject(
-            "SELECT id FROM warehouse WHERE factory_id = ? LIMIT 1", Long.class, factoryId);
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> items = (List<Map<String, Object>>) body.get("items");
-        if (items == null || items.isEmpty()) throw new com.beichen.erp.exception.BusinessException("退不良明细不能为空");
-
-        // 取成品仓库
-        List<Warehouse> whs = warehouseMapper.selectList(
-            new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, factoryId));
-        Long whId = body.get("warehouseId") != null ? Long.valueOf(body.get("warehouseId").toString())
-            : (whs.isEmpty() ? null : whs.get(0).getId());
-
-        for (Map<String, Object> it : items) {
-            BigDecimal qty = new BigDecimal(it.get("quantity").toString());
-            if (qty.compareTo(BigDecimal.ZERO) <= 0) continue;
-            Long productId = Long.valueOf(it.get("productId").toString());
-            OutsourceOrderProduct prod = orderService.getProducts(id).stream()
-                .filter(p -> p.getId().equals(productId)).findFirst().orElse(null);
-            if (prod == null) continue;
-
-            // 1. 在交货记录中生成退不良记录
-            OutsourceOrderDelivery delivery = new OutsourceOrderDelivery();
-            delivery.setOrderId(id);
-            delivery.setProductId(prod.getId());
-            delivery.setQuantity(qty);
-            delivery.setDeliveryType(DeliveryType.RETURN.getCode());
-            delivery.setWarehouseId(whId);
-            delivery.setStatus(DocStatus.AUDITED.name());
-            delivery.setRemark("退不良 - " + o.getCode());
-            // 标记来源：加工单交货退不良
-            delivery.setSourceType("DELIVERY");
-            orderDeliveryMapper.insert(delivery);
-
-            // 2. 扣减成品库存
-            if (whId != null) {
-                jdbcTemplate.update(
-                    "UPDATE warehouse_stock SET quantity = quantity - ? WHERE warehouse_id = ? AND product_id = ? AND quality_type = ?",
-                    qty, whId, prod.getId(), QualityType.GOOD.getCode());
-                jdbcTemplate.update(
-                    "INSERT INTO warehouse_stock_log (warehouse_id, product_id, quality_type, change_quantity, change_type, remark, create_time) VALUES (?,?,?,?,?,?,NOW())",
-                    whId, prod.getId(), QualityType.GOOD.getCode(), qty.negate(), "DEFECT_RETURN_OUT", "退不良扣减成品 - " + o.getCode());
-            }
-
-            // 3. 按BOM反算物料，加回工厂委外仓
-            if (factoryWhId != null) {
-                List<OutsourceOrderMaterial> materials = outsourceOrderMaterialMapper.selectList(
-                    new LambdaQueryWrapper<OutsourceOrderMaterial>().eq(OutsourceOrderMaterial::getProductId, prod.getId()));
-                for (OutsourceOrderMaterial mat : materials) {
-                    BigDecimal demandQty = mat.getDemandQuantity();
-                    BigDecimal restoreQty = demandQty != null ? demandQty.multiply(qty) : BigDecimal.ZERO;
-                    if (restoreQty.compareTo(BigDecimal.ZERO) > 0 && mat.getMaterialId() != null) {
-                        String matName = getMaterialNameById(mat.getMaterialId());
-                        jdbcTemplate.update(
-                            "UPDATE warehouse_stock SET quantity = quantity + ? WHERE warehouse_id = ? AND material_id = ?",
-                            restoreQty, factoryWhId, mat.getMaterialId());
-                        jdbcTemplate.update(
-                            "INSERT INTO warehouse_stock_log (warehouse_id, material_id, material_name, quality_type, change_quantity, change_type, remark, create_time) VALUES (?,?,?,?,?,?,?,NOW())",
-                            factoryWhId, mat.getMaterialId(), matName, QualityType.GOOD.getCode(), restoreQty, "DEFECT_RETURN_IN", "退不良恢复物料 - " + o.getCode());
-                    }
-                }
-            }
-        }
-        return R.ok();
-    }
-
-    private String generateDeliveryCode() {
-        String ds = LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd"));
-        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OutsourceDelivery> w =
-            new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<OutsourceDelivery>()
-                .likeRight(OutsourceDelivery::getCode, BillPrefix.OUTSOURCE_DELIVERY + ds).orderByDesc(OutsourceDelivery::getCode).last("LIMIT 1");
-        OutsourceDelivery last = deliveryMapper.selectOne(w);
-        int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception ignored) {}
-        }
-        return BillPrefix.OUTSOURCE_DELIVERY + ds + String.format("%03d", seq);
     }
 
     /** 查询该加工单的交货/退料记录 */

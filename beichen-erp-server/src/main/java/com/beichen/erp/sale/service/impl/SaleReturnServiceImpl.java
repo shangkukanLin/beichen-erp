@@ -16,10 +16,11 @@ import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import com.beichen.erp.finance.service.ReceivableHelper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
+import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
-import com.beichen.erp.sale.common.SaleReturnStatus;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.sale.entity.SaleReturn;
 import com.beichen.erp.sale.entity.SaleReturnItem;
 import com.beichen.erp.sale.mapper.SaleReturnItemMapper;
@@ -123,7 +124,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     @Transactional(rollbackFor = Exception.class)
     public SaleReturn create(SaleReturn order, List<Map<String, Object>> itemMaps) {
         order.setId(null);
-        order.setStatus(SaleReturnStatus.DRAFT.getCode());
+        order.setStatus(DocStatus.DRAFT.getCode());
         order.setCode(generateCode());
         if (order.getTotalAmount() == null) order.setTotalAmount(BigDecimal.ZERO);
         Long cid = CompanyContext.get();
@@ -138,7 +139,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     public SaleReturn update(Long id, SaleReturn order, List<Map<String, Object>> itemMaps) {
         SaleReturn old = returnMapper.selectById(id);
         if (old == null) throw new BusinessException("销售退货单不存在");
-        if (!SaleReturnStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         order.setId(id);
         order.setCode(null);
         order.setStatus(null);
@@ -154,7 +155,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     public void audit(Long id) {
         SaleReturn order = returnMapper.selectById(id);
         if (order == null) throw new BusinessException("销售退货单不存在");
-        if (!SaleReturnStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<SaleReturnItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleReturnItem>().eq(SaleReturnItem::getReturnId, id));
         if (items.isEmpty()) throw new BusinessException("销售退货单明细不能为空");
@@ -166,7 +167,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
                     product != null ? product.getName() : (it.getProductName() != null ? it.getProductName() : ""),
                     it.getQuantity(),
                     StockChangeType.SALE_RETURN_IN, order.getCode(), RelatedBillType.SALE_RETURN, it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId(), "DEFECT");
+                    product != null ? product.getSpec() : "", order.getId(), ProductQualityType.DEFECT.getCode());
         }
         // 财务联动：生成负向应收冲抵原销售应收
         if (order.getTotalAmount() != null && order.getTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
@@ -189,7 +190,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         }
         SaleReturn u = new SaleReturn();
         u.setId(id);
-        u.setStatus(SaleReturnStatus.AUDITED.getCode());
+        u.setStatus(DocStatus.AUDITED.getCode());
         u.setAuditorId(getCurrentUserId());
         u.setAuditorName(getCurrentUserName());
         u.setAuditTime(LocalDateTime.now());
@@ -201,7 +202,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     public void unAudit(Long id) {
         SaleReturn order = returnMapper.selectById(id);
         if (order == null) throw new BusinessException("销售退货单不存在");
-        if (!SaleReturnStatus.AUDITED.getCode().equals(order.getStatus())) throw new BusinessException("只有已审核的退货单可反审核");
+        if (!DocStatus.AUDITED.getCode().equals(order.getStatus())) throw new BusinessException("只有已审核的退货单可反审核");
         // 对称回滚：从 DEFECT 库存扣减已入库数量
         List<SaleReturnItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleReturnItem>().eq(SaleReturnItem::getReturnId, id));
@@ -212,13 +213,13 @@ public class SaleReturnServiceImpl implements SaleReturnService {
                     product != null ? product.getName() : (it.getProductName() != null ? it.getProductName() : ""),
                     it.getQuantity().negate(),
                     StockChangeType.SALE_RETURN_UN_AUDIT, order.getCode(), RelatedBillType.SALE_RETURN, it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId(), "DEFECT");
+                    product != null ? product.getSpec() : "", order.getId(), ProductQualityType.DEFECT.getCode());
         }
         // 财务联动：冲销退货负向应收台账
         receivableHelper.reverseReceivable(order.getCode());
         SaleReturn u = new SaleReturn();
         u.setId(id);
-        u.setStatus(SaleReturnStatus.DRAFT.getCode());
+        u.setStatus(DocStatus.DRAFT.getCode());
         u.setAuditorId(null);
         u.setAuditorName(null);
         u.setAuditTime(null);
@@ -230,10 +231,10 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     public void cancel(Long id) {
         SaleReturn old = returnMapper.selectById(id);
         if (old == null) throw new BusinessException("销售退货单不存在");
-        if (!SaleReturnStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
         SaleReturn u = new SaleReturn();
         u.setId(id);
-        u.setStatus(SaleReturnStatus.CANCELLED.getCode());
+        u.setStatus(DocStatus.CANCELLED.getCode());
         returnMapper.updateById(u);
     }
 
@@ -243,10 +244,10 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         // 退货单不为物理删除，仅草稿可作废（置 CANCELLED），避免已审核退货单的物理删除留下孤儿应收台账与库存流水
         SaleReturn old = returnMapper.selectById(id);
         if (old == null) throw new BusinessException("销售退货单不存在");
-        if (!SaleReturnStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
         SaleReturn u = new SaleReturn();
         u.setId(id);
-        u.setStatus(SaleReturnStatus.CANCELLED.getCode());
+        u.setStatus(DocStatus.CANCELLED.getCode());
         returnMapper.updateById(u);
     }
 
@@ -261,7 +262,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             if (map.get("amount") != null) it.setAmount(new BigDecimal(map.get("amount").toString()));
             if (map.get("remark") != null) it.setRemark(map.get("remark").toString());
             // 销售退货固定为不良品
-            it.setQualityType("DEFECT");
+            it.setQualityType(ProductQualityType.DEFECT.getCode());
             Long cid = CompanyContext.get();
             if (cid != null && cid > 0) it.setCompanyId(cid);
             itemMapper.insert(it);

@@ -69,7 +69,7 @@ public class FinancePayableController {
     @GetMapping("/supplier-summary")
     public R<?> supplierSummary() {
         List<FinancePayable> all = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
-                .ne(FinancePayable::getStatus, DocStatus.CANCELLED.name()));
+                .ne(FinancePayable::getStatus, DocStatus.CANCELLED.getCode()));
         Map<Long, Map<String, Object>> map = new LinkedHashMap<>();
         java.time.LocalDate today = java.time.LocalDate.now();
         for (FinancePayable p : all) {

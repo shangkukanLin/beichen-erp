@@ -18,7 +18,7 @@ function productName(pid?: number) { return pid ? (products.value[pid] || `#${pi
 function statusLabel(s?: number) { return s != null ? (ReturnStatusLabel[s] || '') : '' }
 function statusType(s?: number): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
   if (s === ReturnStatus.DRAFT) return 'info'
-  if (s === ReturnStatus.COMPLETED) return 'success'
+  if (s === ReturnStatus.AUDITED) return 'success'
   if (s === ReturnStatus.CANCELLED) return 'danger'
   return undefined
 }

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 
 const router = useRouter()
 const activeTab = ref(DeliveryType.DELIVERY)
@@ -91,16 +92,16 @@ onActivated(() => { loadOptions() })
         </el-table-column>
         <el-table-column label="日期" width="100"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column prop="status" label="状态" width="90"><template #default="{row}">
-          <el-tag :type="row.status==='AUDITED'?'success':(row.status==='CANCELLED'?'danger':'info')">
-            {{ row.status==='AUDITED'?'已审核':(row.status==='CANCELLED'?'已作废':'草稿') }}
+          <el-tag :type="DocStatusTag[row.status] || 'info'">
+            {{ DocStatusLabel[row.status] || row.status }}
           </el-tag>
         </template></el-table-column>
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click="router.push(`/outsource/delivery/detail/${row.id}`)">详情</el-button>
-            <el-button type="success" link v-if="row.status==='DRAFT'" @click="handleAudit(row)">审核</el-button>
-            <el-button type="warning" link v-if="row.status==='AUDITED'" @click="handleUnaudit(row)">反审核</el-button>
-            <el-button type="danger" link v-if="row.status==='AUDITED'" @click="handleCancel(row)">取消</el-button>
+            <el-button type="success" link v-if="row.status===DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
+            <el-button type="warning" link v-if="row.status===DocStatus.AUDITED" @click="handleUnaudit(row)">反审核</el-button>
+            <el-button type="danger" link v-if="row.status===DocStatus.AUDITED" @click="handleCancel(row)">取消</el-button>
           </template>
         </el-table-column>
       </el-table>

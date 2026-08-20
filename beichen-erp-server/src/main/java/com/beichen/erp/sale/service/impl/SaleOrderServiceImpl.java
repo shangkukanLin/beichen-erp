@@ -92,7 +92,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     public void create(SaleOrder order, List<SaleOrderItem> items) {
         if (order.getCustomerId() == null) throw new BusinessException("客户不能为空");
         order.setCode(generateCode());
-        order.setStatus(DocStatus.DRAFT.name());
+        order.setStatus(DocStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) order.setCompanyId(cid);
         BigDecimal total = BigDecimal.ZERO;
@@ -118,7 +118,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     public void update(SaleOrder order, List<SaleOrderItem> items) {
         SaleOrder old = orderMapper.selectById(order.getId());
         if (old == null) throw new BusinessException("销售单不存在");
-        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         order.setCode(old.getCode());
         orderMapper.updateById(order);
         itemMapper.delete(new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, order.getId()));
@@ -145,10 +145,10 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     public void cancel(Long id) {
         SaleOrder old = orderMapper.selectById(id);
         if (old == null) throw new BusinessException("销售单不存在");
-        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
         SaleOrder u = new SaleOrder();
         u.setId(id);
-        u.setStatus(DocStatus.CANCELLED.name());
+        u.setStatus(DocStatus.CANCELLED.getCode());
         orderMapper.updateById(u);
     }
 
@@ -157,7 +157,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     public void audit(Long id) {
         SaleOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("销售单不存在");
-        if (!DocStatus.DRAFT.name().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<SaleOrderItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, id));
         if (items.isEmpty()) throw new BusinessException("订单明细不能为空");
@@ -183,7 +183,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         // 4) 更新订单状态为"已完成"（审核即出库）
         SaleOrder u = new SaleOrder();
         u.setId(id);
-        u.setStatus(DocStatus.AUDITED.name());
+        u.setStatus(DocStatus.AUDITED.getCode());
         orderMapper.updateById(u);
     }
 
@@ -192,13 +192,13 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     public void unAudit(Long id) {
         SaleOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("销售单不存在");
-        if (!DocStatus.AUDITED.name().equals(order.getStatus())) throw new BusinessException("只有已审核的销售单可反审核");
+        if (!DocStatus.AUDITED.getCode().equals(order.getStatus())) throw new BusinessException("只有已审核的销售单可反审核");
         // 1) 冲销应收台账（反审核，已收款单据会校验拦截）
         receivableHelper.reverseReceivable(order.getCode());
         // 3) 订单状态回退为草稿（库存由"销售出库单"反审核统一回补，订单本身不触碰库存）
         SaleOrder u = new SaleOrder();
         u.setId(id);
-        u.setStatus(DocStatus.DRAFT.name());
+        u.setStatus(DocStatus.DRAFT.getCode());
         orderMapper.updateById(u);
     }
 

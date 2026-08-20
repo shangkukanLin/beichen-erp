@@ -73,7 +73,7 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         FinanceAccount acc = accountMapper.selectById(payment.getAccountId());
         payment.setAccountName(acc != null ? acc.getAccountName() : "");
         payment.setCode(gen(BillPrefix.PAYMENT, paymentMapper));
-        payment.setStatus(DocStatus.DRAFT.name());
+        payment.setStatus(DocStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
         BigDecimal total = BigDecimal.ZERO;
         if (cid != null && cid > 0) payment.setCompanyId(cid);
@@ -94,14 +94,14 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
     public void cancel(Long id) {
         FinancePayment old = paymentMapper.selectById(id);
         if (old == null) throw new BusinessException("付款单不存在");
-        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
-        FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.CANCELLED.name()); paymentMapper.updateById(u);
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode()); paymentMapper.updateById(u);
     }
 
     @Override @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
         FinancePayment payment = paymentMapper.selectById(id);
-        if (payment == null || !DocStatus.DRAFT.name().equals(payment.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (payment == null || !DocStatus.DRAFT.getCode().equals(payment.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<FinancePaymentItem> items = itemMapper.selectList(new LambdaQueryWrapper<FinancePaymentItem>().eq(FinancePaymentItem::getPaymentId, id));
         // 核销应付：更新台账 + 写入核销流水（双向可追溯），超额部分生成负数应付（预付）
         for (FinancePaymentItem it : items) {
@@ -176,7 +176,7 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         cf.setExpense(payment.getAmount());
         cashflowMapper.insert(cf);
         // 更新付款单状态
-        FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.AUDITED.name()); paymentMapper.updateById(u);
+        FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode()); paymentMapper.updateById(u);
     }
 
     /** 账单进度联动：按核销流水反查账单明细，同步已付金额并重算账单主表 */
@@ -250,7 +250,7 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
     public void unAudit(Long id) {
         FinancePayment payment = paymentMapper.selectById(id);
         if (payment == null) throw new BusinessException("付款单不存在");
-        if (!DocStatus.AUDITED.name().equals(payment.getStatus())) throw new BusinessException("只有已审核的付款单可反审核");
+        if (!DocStatus.AUDITED.getCode().equals(payment.getStatus())) throw new BusinessException("只有已审核的付款单可反审核");
         // 1) 反向扣减账单明细已付金额（必须在删除核销流水之前调用，否则流水已被删无法反查）
         reverseBillProgress(id);
         // 2) 反向核销应付台账：按核销流水精确冲销（双向可追溯）
@@ -291,7 +291,7 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         cf.setExpense(BigDecimal.ZERO);
         cf.setRemark("反审核冲正");
         cashflowMapper.insert(cf);
-        FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.DRAFT.name()); paymentMapper.updateById(u);
+        FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.DRAFT.getCode()); paymentMapper.updateById(u);
     }
 
     private String gen(String prefix, FinancePaymentMapper mapper) {

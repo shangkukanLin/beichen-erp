@@ -3,7 +3,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { IoType, IoTypeLabel } from '@/api/enums'
+import { IoType, IoTypeLabel, WarehouseCategory } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id) || 0
@@ -32,16 +33,10 @@ function getTypeName(id: number | undefined) {
   return t ? t.typeName : '-'
 }
 function statusLabel(s: string) {
-  if (s === 'DRAFT') return '草稿'
-  if (s === 'AUDITED') return '已审核'
-  if (s === 'CANCELLED') return '已取消'
-  return s || '-'
+  return DocStatusLabel[s] || s || '-'
 }
 function statusTag(s: string): any {
-  if (s === 'DRAFT') return 'info'
-  if (s === 'AUDITED') return 'success'
-  if (s === 'CANCELLED') return 'danger'
-  return 'warning'
+  return DocStatusTag[s] || 'warning'
 }
 
 // 编辑态物料类型/物料联动（复用 add.vue 交互）
@@ -76,7 +71,7 @@ async function loadWarehouses() {
     const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200 } })
     warehouses.value = (r?.records || []).map((w: any) => ({
       ...w,
-      _type: w.warehouseCategory === 'INVENTORY' ? '我方仓' : '委外仓'
+      _type: w.warehouseCategory === WarehouseCategory.INVENTORY ? '我方仓' : '委外仓'
     }))
   } catch {}
 }
@@ -236,7 +231,7 @@ onMounted(() => { loadWarehouses(); loadMaterials(); loadBomTypes(); loadDetail(
 
     <!-- 底部按钮 -->
     <div style="display:flex;gap:12px;justify-content:center">
-      <template v-if="detail.status==='DRAFT' && !editing">
+      <template v-if="detail.status===DocStatus.DRAFT && !editing">
         <el-button type="primary" @click="startEdit">编辑</el-button>
       </template>
       <template v-else-if="editing">

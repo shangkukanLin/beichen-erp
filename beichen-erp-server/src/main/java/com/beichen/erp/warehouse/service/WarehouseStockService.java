@@ -6,6 +6,9 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.material.common.ProductQualityType;
+import com.beichen.erp.outsource.common.QualityType;
+import com.beichen.erp.outsource.entity.OutsourceMaterial;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
 import com.beichen.erp.warehouse.entity.WarehouseStockLog;
 import com.beichen.erp.warehouse.mapper.WarehouseStockLogMapper;
@@ -25,12 +28,13 @@ public class WarehouseStockService {
 
     private final WarehouseStockMapper warehouseStockMapper;
     private final WarehouseStockLogMapper warehouseStockLogMapper;
+    private final OutsourceMaterialMapper outsourceMaterialMapper;
 
     /** 入库：增加库存，不存在则新建 */
     @Transactional
     public void stockIn(Long warehouseId, Long productId, BigDecimal quantity) {
         changeStock(warehouseId, productId, quantity, StockChangeType.PURCHASE_IN,
-                null, (RelatedBillType) null, null, null, ProductQualityType.A.name());
+                null, (RelatedBillType) null, null, null, ProductQualityType.A.getCode());
     }
 
     /** 旧签名兼容 */
@@ -49,7 +53,7 @@ public class WarehouseStockService {
                             StockChangeType type, String relatedBillNo, RelatedBillType relatedBillType,
                             String spec, Long relatedBillId, String qualityType) {
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) == 0) return;
-        if (qualityType == null) qualityType = ProductQualityType.A.name();
+        if (qualityType == null) qualityType = ProductQualityType.A.getCode();
         Long companyId = CompanyContext.get();
         if (companyId != null && companyId <= 0) companyId = null;
 
@@ -101,7 +105,7 @@ public class WarehouseStockService {
         Long companyId = CompanyContext.get();
 
         // 物料库存用 material_id，qualityType 统一为 GOOD
-        String qt = "GOOD";
+        String qt = QualityType.GOOD.getCode();
         int rows = warehouseStockMapper.updateMaterialQuantity(warehouseId, materialId, companyId, quantity);
         if (rows == 0) {
             WarehouseStock exist = selectMaterialExist(warehouseId, materialId, companyId);
@@ -126,6 +130,9 @@ public class WarehouseStockService {
         WarehouseStockLog log = new WarehouseStockLog();
         log.setWarehouseId(warehouseId);
         log.setMaterialId(materialId);
+        // 固化物料名称，避免流水展示时物料名为空
+        OutsourceMaterial mat = outsourceMaterialMapper.selectById(materialId);
+        if (mat != null) log.setMaterialName(mat.getMaterialName());
         log.setQualityType(qt);
         log.setChangeType(changeType);
         log.setChangeQuantity(quantity);
@@ -140,7 +147,7 @@ public class WarehouseStockService {
 
     /** 查询指定仓库+产品+品质等级的当前库存量（用于反审核前校验库存是否被后续单据消耗），无记录返回 0 */
     public BigDecimal getQuantity(Long warehouseId, Long productId, String qualityType) {
-        if (qualityType == null) qualityType = ProductQualityType.A.name();
+        if (qualityType == null) qualityType = ProductQualityType.A.getCode();
         Long companyId = CompanyContext.get();
         if (companyId != null && companyId <= 0) companyId = null;
         WarehouseStock exist = selectExist(warehouseId, productId, qualityType, companyId);
@@ -177,7 +184,7 @@ public class WarehouseStockService {
         WarehouseStock s = new WarehouseStock();
         s.setWarehouseId(warehouseId);
         s.setMaterialId(materialId);
-        s.setQualityType("GOOD");
+        s.setQualityType(QualityType.GOOD.getCode());
         s.setQuantity(quantity);
         if (companyId != null) s.setCompanyId(companyId);
         warehouseStockMapper.insert(s);

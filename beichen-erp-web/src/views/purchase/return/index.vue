@@ -48,7 +48,7 @@
           <template #default="{ row }">
             <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
             <el-button v-if="row.status === ReturnStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === ReturnStatus.COMPLETED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
+            <el-button v-if="row.status === ReturnStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
             <el-button v-if="row.status === ReturnStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button>
             <el-button v-if="row.status === ReturnStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
           </template>
@@ -115,13 +115,13 @@ const warehouses = ref<any[]>([])
 
 const statusOptions = [
   { label: ReturnStatusLabel[ReturnStatus.DRAFT], value: ReturnStatus.DRAFT },
-  { label: ReturnStatusLabel[ReturnStatus.COMPLETED], value: ReturnStatus.COMPLETED },
+  { label: ReturnStatusLabel[ReturnStatus.AUDITED], value: ReturnStatus.AUDITED },
   { label: ReturnStatusLabel[ReturnStatus.CANCELLED], value: ReturnStatus.CANCELLED },
 ]
 function statusLabel(s?: number) { return s != null ? (ReturnStatusLabel[s] || '') : '' }
 function statusType(s?: number): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
   if (s === ReturnStatus.DRAFT) return 'info'
-  if (s === ReturnStatus.COMPLETED) return 'success'
+  if (s === ReturnStatus.AUDITED) return 'success'
   if (s === ReturnStatus.CANCELLED) return 'danger'
   return undefined
 }

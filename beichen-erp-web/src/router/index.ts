@@ -225,6 +225,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/warehouse', name: 'InventoryWarehouse', component: () => import('@/views/inventory/warehouse.vue'), meta: { title: '成品仓库管理', requiresAuth: true } },
       { path: 'inventory/warehouse/detail/:id', name: 'InventoryWarehouseDetail', component: () => import('@/views/inventory/warehouse-detail.vue'), meta: { title: '仓库详情', requiresAuth: true, operate: true } },
       { path: 'inventory/warehouse/product-history/:wid/:pid', name: 'InventoryProductHistory', component: () => import('@/views/inventory/warehouse-product-history.vue'), meta: { title: '产品库存流水详细', requiresAuth: true, operate: true } },
+      { path: 'inventory/warehouse/material-history/:wid/:mid', name: 'InventoryMaterialHistory', component: () => import('@/views/inventory/warehouse-material-history.vue'), meta: { title: '物料库存流水详细', requiresAuth: true, operate: true } },
       { path: 'inventory/other-io', name: 'InventoryOtherIo', component: () => import('@/views/inventory/other-io/index.vue'), meta: { title: '成品其他出入库', requiresAuth: true } },
       { path: 'inventory/other-io/add', name: 'InventoryOtherIoAdd', component: () => import('@/views/inventory/other-io/add.vue'), meta: { title: '新增成品其他出入库', requiresAuth: true, operate: true } },
       { path: 'inventory/other-io/detail/:id', name: 'InventoryOtherIoDetail', component: () => import('@/views/inventory/other-io/detail.vue'), meta: { title: '成品其他出入库详细', requiresAuth: true, operate: true } },

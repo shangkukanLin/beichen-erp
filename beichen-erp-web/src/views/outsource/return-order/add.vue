@@ -111,7 +111,7 @@ async function handleSubmit() {
   if (items.length === 0) { ElMessage.warning('请选择产品并填写退回数量'); return }
   if (items.some((m: any) => !m.materialId)) { ElMessage.warning('存在未关联委外物料的明细，无法保存，请检查BOM物料是否已登记'); return }
   try {
-    await request.post('/outsource/return-order', { factoryId: form.factoryId, warehouseId: form.warehouseId, returnDate: form.returnDate, remark: form.remark, items, products: rows.value.filter((r: any) => r.productName && Number(r.returnQuantity) > 0).map((r: any) => ({ productName: r.productName, quantity: Number(r.returnQuantity) })) })
+    await request.post('/outsource/return-order', { factoryId: form.factoryId, warehouseId: form.warehouseId, returnDate: form.returnDate, remark: form.remark, items, products: rows.value.filter((r: any) => r.productName && Number(r.returnQuantity) > 0).map((r: any) => ({ productName: r.productName, productId: r.selectedVersion?.productId || null, quantity: Number(r.returnQuantity) })) })
     ElMessage.success('退货单已创建')
     resetForm()
     ;(window as any).__returnOrderNeedRefresh = true

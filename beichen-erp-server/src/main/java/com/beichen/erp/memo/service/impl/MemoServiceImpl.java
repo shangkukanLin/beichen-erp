@@ -4,6 +4,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.memo.common.MemoStatus;
 import com.beichen.erp.memo.entity.Memo;
 import com.beichen.erp.memo.entity.MemoProgress;
 import com.beichen.erp.memo.mapper.MemoMapper;
@@ -44,7 +45,7 @@ public class MemoServiceImpl implements MemoService {
         }
         memo.setId(null);
         memo.setUserId(currentUserId());
-        memo.setStatus("OPEN");
+        memo.setStatus(MemoStatus.OPEN.getCode());
         memoMapper.insert(memo);
     }
 

@@ -31,7 +31,7 @@ const tableData = ref<PurchaseOrder[]>([])
 
 const statusOptions = [
   { label: PurchaseStatusLabel[PurchaseStatus.DRAFT], value: PurchaseStatus.DRAFT },
-  { label: PurchaseStatusLabel[PurchaseStatus.COMPLETED], value: PurchaseStatus.COMPLETED },
+  { label: PurchaseStatusLabel[PurchaseStatus.AUDITED], value: PurchaseStatus.AUDITED },
   { label: PurchaseStatusLabel[PurchaseStatus.CANCELLED], value: PurchaseStatus.CANCELLED }
 ]
 function statusLabel(s?: number) {
@@ -204,7 +204,7 @@ function handleCurrentChange(val: number) { pagination.pageNum = val; loadData()
 
 function statusType(s?: number): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
   if (s === PurchaseStatus.DRAFT) return 'info'
-  if (s === PurchaseStatus.COMPLETED) return 'success'
+  if (s === PurchaseStatus.AUDITED) return 'success'
   if (s === PurchaseStatus.CANCELLED) return 'danger'
   return undefined
 }
@@ -275,7 +275,7 @@ onActivated(() => { loadSuppliers(); loadWarehouses(); loadMaterials(); loadQual
           <template #default="{ row }">
             <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
             <el-button v-if="row.status === PurchaseStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === PurchaseStatus.COMPLETED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
+            <el-button v-if="row.status === PurchaseStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
             <el-button v-if="row.status === PurchaseStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button>
             <el-button v-if="row.status === PurchaseStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
           </template>

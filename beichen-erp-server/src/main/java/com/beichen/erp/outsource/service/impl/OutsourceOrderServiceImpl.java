@@ -133,7 +133,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     public void create(OutsourceOrder order, List<OutsourceOrderProduct> products) {
         if (order.getFactoryId() == null) throw new BusinessException("加工厂不能为空");
         order.setCode(generateCode());
-        order.setStatus(OutsourceOrderStatus.PENDING.name());
+        order.setStatus(OutsourceOrderStatus.PENDING.getCode());
         // 设置公司ID
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) order.setCompanyId(cid);
@@ -172,7 +172,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     public void update(OutsourceOrder order, List<OutsourceOrderProduct> newProducts) {
         OutsourceOrder old = orderMapper.selectById(order.getId());
         if (old == null) throw new BusinessException("加工单不存在");
-        if (OutsourceOrderStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
+        if (OutsourceOrderStatus.CANCELLED.getCode().equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
 
         // 删除旧产品（级联删除物料）
         List<OutsourceOrderProduct> oldProducts = productMapper.selectList(
@@ -221,10 +221,10 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     public void audit(Long id) {
         OutsourceOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!OutsourceOrderStatus.PENDING.name().equals(order.getStatus())) throw new BusinessException("只有待审核状态可以审核");
+        if (!OutsourceOrderStatus.PENDING.getCode().equals(order.getStatus())) throw new BusinessException("只有待审核状态可以审核");
         OutsourceOrder update = new OutsourceOrder();
         update.setId(id);
-        update.setStatus(OutsourceOrderStatus.PRODUCING.name());
+        update.setStatus(OutsourceOrderStatus.PRODUCING.getCode());
         update.setActualStartDate(LocalDate.now());
         orderMapper.updateById(update);
     }
@@ -234,13 +234,13 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     public void unaudit(Long id) {
         OutsourceOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!OutsourceOrderStatus.PRODUCING.name().equals(order.getStatus())) throw new BusinessException("只有生产中状态可以反审核");
+        if (!OutsourceOrderStatus.PRODUCING.getCode().equals(order.getStatus())) throw new BusinessException("只有生产中状态可以反审核");
 
         // 检查是否有已审核的交货记录
         List<OutsourceOrderDelivery> deliveries = orderDeliveryMapper.selectList(
                 new LambdaQueryWrapper<OutsourceOrderDelivery>()
                         .eq(OutsourceOrderDelivery::getOrderId, id)
-                        .eq(OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.name()));
+                        .eq(OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.getCode()));
 
         if (!deliveries.isEmpty()) {
             // 已审核交货记录：统一反审核，逆向库存/成品流水/应付，回到草稿
@@ -254,21 +254,8 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
         // 状态回退
         OutsourceOrder update = new OutsourceOrder();
         update.setId(id);
-        update.setStatus(OutsourceOrderStatus.PENDING.name());
+        update.setStatus(OutsourceOrderStatus.PENDING.getCode());
         update.setActualStartDate(null);
-        orderMapper.updateById(update);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void complete(Long id) {
-        OutsourceOrder order = orderMapper.selectById(id);
-        if (order == null) throw new BusinessException("加工单不存在");
-        if (!OutsourceOrderStatus.PRODUCING.name().equals(order.getStatus())) throw new BusinessException("只有生产中状态可以完成");
-        OutsourceOrder update = new OutsourceOrder();
-        update.setId(id);
-        update.setStatus(OutsourceOrderStatus.FINISHED.name());
-        update.setActualEndDate(LocalDate.now());
         orderMapper.updateById(update);
     }
 
@@ -284,16 +271,16 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     public void cancel(Long id) {
         OutsourceOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (OutsourceOrderStatus.CANCELLED.name().equals(order.getStatus())) throw new BusinessException("已取消状态不可重复取消");
+        if (OutsourceOrderStatus.CANCELLED.getCode().equals(order.getStatus())) throw new BusinessException("已取消状态不可重复取消");
         // 存在已审核交货单时禁止直接作废，须先反审核交货单以保证成品库存/应付账实闭环（与 unaudit 对称）
         List<OutsourceOrderDelivery> audited = orderDeliveryMapper.selectList(
                 new LambdaQueryWrapper<OutsourceOrderDelivery>()
                         .eq(OutsourceOrderDelivery::getOrderId, id)
-                        .eq(OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.name()));
+                        .eq(OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.getCode()));
         if (!audited.isEmpty()) throw new BusinessException("加工单存在已审核交货单，请先反审核后再取消");
         OutsourceOrder update = new OutsourceOrder();
         update.setId(id);
-        update.setStatus(OutsourceOrderStatus.CANCELLED.name());
+        update.setStatus(OutsourceOrderStatus.CANCELLED.getCode());
         orderMapper.updateById(update);
     }
 

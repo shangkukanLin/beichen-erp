@@ -15,7 +15,7 @@ const warehouseName = ref('')
 
 function statusType(s?: number) {
   if (s === PurchaseStatus.DRAFT) return 'info'
-  if (s === PurchaseStatus.COMPLETED) return 'success'
+  if (s === PurchaseStatus.AUDITED) return 'success'
   if (s === PurchaseStatus.CANCELLED) return 'danger'
   return undefined
 }

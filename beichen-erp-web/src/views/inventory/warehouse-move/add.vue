@@ -77,6 +77,7 @@
 </template>
 
 <script setup lang="ts">
+import { WarehouseCategory } from '@/api/enums'
 defineOptions({ name: 'InventoryWarehouseMoveAdd' })
 
 import { reactive, ref, watch, onMounted, onBeforeUnmount, onActivated } from 'vue'
@@ -124,7 +125,7 @@ const productOptions = ref<any[]>([])
 
 async function loadWarehouses() {
   try {
-    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY' } })
+    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } })
     warehouses.value = res?.records || []
   } catch { warehouses.value = [] }
 }

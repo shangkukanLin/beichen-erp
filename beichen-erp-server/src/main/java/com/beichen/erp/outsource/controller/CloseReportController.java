@@ -42,9 +42,9 @@ public class CloseReportController {
         List<Map<String, Object>> itemsRaw = (List<Map<String, Object>>) body.get("items");
         List<CloseReportItem> items = itemsRaw != null ? itemsRaw.stream().map(m -> {
             CloseReportItem i = new CloseReportItem();
+            if (m.get("materialId") != null) i.setMaterialId(Long.valueOf(m.get("materialId").toString()));
             if (m.get("bomTypeId") != null) i.setBomTypeId(Long.valueOf(m.get("bomTypeId").toString()));
             i.setUnit((String) m.get("unit"));
-            if (m.get("deliveredQuantity") != null) i.setDeliveredQuantity(new BigDecimal(m.get("deliveredQuantity").toString()));
             if (m.get("returnedQuantity") != null) i.setReturnedQuantity(new BigDecimal(m.get("returnedQuantity").toString()));
             if (m.get("goodReturnQty") != null) i.setGoodReturnQty(new BigDecimal(m.get("goodReturnQty").toString()));
             if (m.get("defectReturnQty") != null) i.setDefectReturnQty(new BigDecimal(m.get("defectReturnQty").toString()));
@@ -53,6 +53,8 @@ public class CloseReportController {
             if (m.get("actualYieldRate") != null) i.setActualYieldRate(new BigDecimal(m.get("actualYieldRate").toString()));
             if (m.get("yieldLoss") != null) i.setYieldLoss(new BigDecimal(m.get("yieldLoss").toString()));
             if (m.get("excessLossQty") != null) i.setExcessLossQty(new BigDecimal(m.get("excessLossQty").toString()));
+            if (m.get("factoryRetainQty") != null) i.setFactoryRetainQty(new BigDecimal(m.get("factoryRetainQty").toString()));
+            if (m.get("missingQty") != null) i.setMissingQty(new BigDecimal(m.get("missingQty").toString()));
             if (m.get("unitPrice") != null) i.setMaterialPrice(new BigDecimal(m.get("unitPrice").toString()));
             i.setRemark((String) m.get("remark"));
             return i;
@@ -63,8 +65,17 @@ public class CloseReportController {
     }
 
     @PostMapping("/confirm")
-    public R<Void> confirm(@PathVariable Long orderId) {
-        reportService.confirmClose(orderId);
+    public R<Void> confirm(@PathVariable Long orderId, @RequestBody Map<String, Object> body) {
+        Long returnWarehouseId = body != null && body.get("returnWarehouseId") != null
+                ? Long.valueOf(body.get("returnWarehouseId").toString()) : null;
+        reportService.confirmClose(orderId, returnWarehouseId);
+        return R.ok();
+    }
+
+    /** 反结单：逆向结单，订单回退到生产中 */
+    @PostMapping("/reopen")
+    public R<Void> reopen(@PathVariable Long orderId) {
+        reportService.reopenClose(orderId);
         return R.ok();
     }
 
@@ -126,7 +137,7 @@ public class CloseReportController {
         Cell sc2 = s2.createCell(0); sc2.setCellValue("二、物料明细"); sc2.setCellStyle(sectionStyle);
         merge(s2, 0, 0, 16);
 
-        String[] headers = {"类目","物料名称","发料数量","退料总计","出货消耗","良品退料","不良退料","留存工厂","缺失","加工良率%","生产良率%","良率超损%","超损数量","最大超损","物料单价","超损总价","备注"};
+        String[] headers = {"类目","物料名称","用料总数","退料总计","出货消耗","良品退料","不良退料","留存工厂","缺失","加工良率%","生产良率%","良率超损%","超损数量","最大超损","物料单价","超损总价","备注"};
         Row hRow = sheet.createRow(rowIdx++);
         for (int c = 0; c < headers.length; c++) hRow.createCell(c).setCellValue(headers[c]);
         for (int c = 0; c < headers.length; c++) hRow.getCell(c).setCellStyle(headerStyle);
@@ -141,23 +152,24 @@ public class CloseReportController {
 
             textCell(dRow, 0, (String) it.get("bomTypeName"), textStyle);
             textCell(dRow, 1, (String) it.get("materialName"), textStyle);
-            numCell(dRow, 2, it, "deliveredQuantity", numStyle);
+            // 用料总数 = 出货消耗 + 良品退料 + 不良退料 + 留存工厂 + 缺失
+            formulaCell(dRow, 2, "E" + curRow + "+F" + curRow + "+G" + curRow + "+H" + curRow + "+I" + curRow, numStyle);
             // 退料总计 = F+G
             formulaCell(dRow, 3, "F" + curRow + "+G" + curRow, numStyle);
             numCell(dRow, 4, it, "shippedQuantity", numStyle);
             numCell(dRow, 5, it, "goodReturnQty", numStyle);
             numCell(dRow, 6, it, "defectReturnQty", numStyle);
             numCell(dRow, 7, it, "factoryRetainQty", numStyle);
-            // 缺失 = C-D-E-H (发料-退料-出货-留存)
-            formulaCell(dRow, 8, "C" + curRow + "-D" + curRow + "-E" + curRow + "-H" + curRow, numStyle);
+            // 缺失 = 手动填写
+            numCell(dRow, 8, it, "missingQty", numStyle);
             numCell(dRow, 9, it, "targetYieldRate", pctStyle);
-            // 生产良率% = 出货/(发料-留存-良退)*100
+            // 生产良率% = 出货/(用料总数-留存-良退)*100
             formulaCell(dRow, 10, "IF(C" + curRow + "-H" + curRow + "-F" + curRow + ">0,E" + curRow + "/(C" + curRow + "-H" + curRow + "-F" + curRow + ")*100,0)", pctStyle);
             // 良率超损% = 加工良率-生产良率
             formulaCell(dRow, 11, "J" + curRow + "-K" + curRow, pctStyle);
             // 超损数量 = (出货+不良退+缺失)*(良率超损%/100)
             formulaCell(dRow, 12, "MAX(0,(E" + curRow + "+G" + curRow + "+I" + curRow + ")*(L" + curRow + "/100))", numStyle);
-            // 最大超损 = MAX(0, (发料-良退-留存)*(1-加工良率/100))
+            // 最大超损 = MAX(0, (用料总数-良退-留存)*(1-加工良率/100))
             formulaCell(dRow, 13, "MAX(0,(C" + curRow + "-F" + curRow + "-H" + curRow + ")*(1-J" + curRow + "/100))", numStyle);
             // 物料单价
             numCell(dRow, 14, it, "unitPrice", numStyle);

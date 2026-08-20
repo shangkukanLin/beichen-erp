@@ -1,5 +1,16 @@
 ﻿import request from '@/utils/request'
 
+/** 结单报表状态（对应 CloseReportStatus 枚举） */
+export const CloseReportStatus = {
+  DRAFT: 'DRAFT',       // 草稿
+  FINISHED: 'FINISHED'  // 已结单
+} as const
+
+export const CloseReportStatusLabel: Record<string, string> = {
+  [CloseReportStatus.DRAFT]: '草稿',
+  [CloseReportStatus.FINISHED]: '已结单'
+}
+
 /** 委外加工单状态（对应 OutsourceOrderStatus 枚举） */
 export const OutsourceOrderStatus = {
   PENDING: 'PENDING',
@@ -238,6 +249,100 @@ export const DevMaterialTypeLabel: Record<string, string> = {
   [DevMaterialType.SCREEN]: '屏幕',
   [DevMaterialType.TEST_FIXTURE]: '测试架',
   [DevMaterialType.OTHER]: '其他'
+}
+
+/** 仓库类别（对应 Warehouse 实体 warehouse_category 字段） */
+export const WarehouseCategory = {
+  INVENTORY: 'INVENTORY', // 自有仓
+  OUTSOURCE: 'OUTSOURCE'  // 委外仓
+} as const
+
+export const WarehouseCategoryLabel: Record<string, string> = {
+  [WarehouseCategory.INVENTORY]: '自有仓库',
+  [WarehouseCategory.OUTSOURCE]: '委外仓库'
+}
+
+/** 菜单类型（对应 sys_menu 的 menu_type 字段） */
+export const MenuType = {
+  CATALOG: 'catalog', // 目录
+  MENU: 'menu'        // 菜单
+} as const
+
+export const MenuTypeLabel: Record<string, string> = {
+  [MenuType.CATALOG]: '目录',
+  [MenuType.MENU]: '菜单'
+}
+
+/** 研发物料存放位置类型（对应 DevMaterialPlaceTypeEnum，存储值为英文 code） */
+export const MaterialPlaceType = {
+  INVENTORY: 'INVENTORY', // 自有仓库
+  OUTSOURCE: 'OUTSOURCE', // 委外仓库
+  SUPPLIER: 'SUPPLIER',   // 供应商
+  CUSTOMER: 'CUSTOMER',   // 客户
+  TEXT: 'TEXT'            // 自定义文本
+} as const
+
+export const MaterialPlaceTypeLabel: Record<string, string> = {
+  [MaterialPlaceType.INVENTORY]: '自有仓库',
+  [MaterialPlaceType.OUTSOURCE]: '委外仓库',
+  [MaterialPlaceType.SUPPLIER]: '供应商',
+  [MaterialPlaceType.CUSTOMER]: '客户',
+  [MaterialPlaceType.TEXT]: '自定义'
+}
+
+/** 仓库类型（对应 Warehouse.warehouseType 字段，存储值为中文） */
+export const WarehouseType = {
+  AUXILIARY: '辅料仓', // 辅料仓
+  FINISHED: '成品仓',  // 成品仓
+  DEFECT: '不良品仓'   // 不良品仓
+} as const
+
+/** 产品品质等级（对应 ProductQualityType 枚举，存储值为 A/B/C/DEFECT） */
+export const ProductQualityType = {
+  A: 'A',
+  B: 'B',
+  C: 'C',
+  DEFECT: 'DEFECT'
+} as const
+
+export const ProductQualityTypeLabel: Record<string, string> = {
+  [ProductQualityType.A]: 'A规',
+  [ProductQualityType.B]: 'B规',
+  [ProductQualityType.C]: 'C规',
+  [ProductQualityType.DEFECT]: '不良品'
+}
+
+/** 备忘录状态（对应 MemoStatus 枚举） */
+export const MemoStatus = {
+  OPEN: 'OPEN',      // 未处理
+  CLOSED: 'CLOSED'   // 已关闭
+} as const
+
+export const MemoStatusLabel: Record<string, string> = {
+  [MemoStatus.OPEN]: '未处理',
+  [MemoStatus.CLOSED]: '已关闭'
+}
+
+/** 结算状态（对应 SettlementStatus 枚举） */
+export const SettlementStatus = {
+  UNSETTLED: 'UNSETTLED', // 未结算
+  PARTIAL: 'PARTIAL',     // 部分结算
+  SETTLED: 'SETTLED',     // 已结算
+  CANCELLED: 'CANCELLED'  // 已作废
+} as const
+
+export const SettlementStatusLabel: Record<string, string> = {
+  [SettlementStatus.UNSETTLED]: '未结算',
+  [SettlementStatus.PARTIAL]: '部分结算',
+  [SettlementStatus.SETTLED]: '已结算',
+  [SettlementStatus.CANCELLED]: '已作废'
+}
+
+export const SettlementStatusTag: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
+  [SettlementStatus.UNSETTLED]: 'danger',
+  [SettlementStatus.PARTIAL]: 'warning',
+  [SettlementStatus.SETTLED]: 'success',
+  [SettlementStatus.CANCELLED]: 'info'
 }
 
 

@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { DeliveryType } from '@/api/enums'
+import { DeliveryType, CloseReportStatus, CloseReportStatusLabel } from '@/api/enums'
 
 defineOptions({ name: 'OrderClose' })
 const route = useRoute(); const router = useRouter()
@@ -18,6 +18,8 @@ const report = reactive({
 const items = ref<any[]>([])
 const remark = ref('')
 const bomTypes = ref<any[]>([])
+const warehouses = ref<any[]>([])
+const returnWarehouseId = ref<number | null>(null)
 
 // bomTypeId -> 类型名 映射（兜底展示用）
 function typeName(id: number | undefined, fallback?: string) {
@@ -27,19 +29,25 @@ function typeName(id: number | undefined, fallback?: string) {
 async function loadBomTypes() {
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
 }
+async function loadWarehouses() {
+  try {
+    const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200 } })
+    warehouses.value = r?.records || r?.list || []
+  } catch {}
+}
 
 /** 自动计算 */
 function recalc(row: any) {
-  const delivered = Number(row.deliveredQuantity) || 0
   const shipped = Number(row.shippedQuantity) || 0
   const good = Number(row.goodReturnQty) || 0
   const defect = Number(row.defectReturnQty) || 0
   const targetYield = Number(row.targetYieldRate) || 0
   const factoryRetain = Number(row.factoryRetainQty) || 0
-  // 缺失 = 发料 - 退料总计 - 出货消耗 - 留存工厂
-  row.missingQty = delivered - (good + defect) - shipped - (Number(row.factoryRetainQty) || 0)
-  // 生产良率% = 出货消耗 / (发料数量 - 工厂留存 - 良品退料) × 100
-  const denom = delivered - factoryRetain - good
+  const missing = Number(row.missingQty) || 0
+  // 用料总数 = 出货消耗 + 良品退料 + 不良退料 + 留存工厂 + 缺失（缺失为手动填写）
+  row.usedTotalQuantity = shipped + good + defect + factoryRetain + missing
+  // 生产良率% = 出货消耗 / (用料总数 - 工厂留存 - 良品退料) × 100
+  const denom = row.usedTotalQuantity - factoryRetain - good
   if (denom > 0) {
     row.actualYieldRate = +(shipped / denom * 100).toFixed(2)
   } else {
@@ -48,9 +56,9 @@ function recalc(row: any) {
   // 良率超损% = 加工良率 - 生产良率
   row.yieldLoss = +(targetYield - row.actualYieldRate).toFixed(2)
   // 超损数量 = (出货消耗 + 不良退料 + 缺失) × (良率超损%/100)（最小0）
-  row.excessLossQty = Math.max(0, +((shipped + defect + row.missingQty) * (row.yieldLoss / 100)).toFixed(2))
-  // 最大超损 = (发料 - 良品退料 - 工厂留存) × (1 - 加工良率/100)（最小0）
-  row.maxExcessLossQty = Math.max(0, +((delivered - good - factoryRetain) * (1 - targetYield / 100)).toFixed(2))
+  row.excessLossQty = Math.max(0, +((shipped + defect + missing) * (row.yieldLoss / 100)).toFixed(2))
+  // 最大超损 = (用料总数 - 良品退料 - 工厂留存) × (1 - 加工良率/100)（最小0）
+  row.maxExcessLossQty = Math.max(0, +((row.usedTotalQuantity - good - factoryRetain) * (1 - targetYield / 100)).toFixed(2))
   // 超损总价 = 超损数量 × 物料单价
   row.excessLossAmount = +(row.excessLossQty * (row.unitPrice || 0)).toFixed(2)
 }
@@ -91,13 +99,17 @@ function handleExport() {
 }
 
 async function handleConfirm() {
+  if (!returnWarehouseId.value) {
+    ElMessage.warning('请选择退回仓库')
+    return
+  }
   try {
     await ElMessageBox.confirm('确认结单？结单后将自动生成退料单，加工单状态变为"已完成"。', '确认结单', { type: 'warning' })
   } catch { return }
   try {
     // 先保存最终数据
     await request.put(`/outsource/order/${orderId}/close-report`, { items: items.value, remark: remark.value })
-    await request.post(`/outsource/order/${orderId}/close-report/confirm`)
+    await request.post(`/outsource/order/${orderId}/close-report/confirm`, { returnWarehouseId: returnWarehouseId.value })
     ElMessage.success('结单完成')
     loadReport()
   } catch (e: any) {
@@ -105,16 +117,29 @@ async function handleConfirm() {
   }
 }
 
+async function handleReopen() {
+  try {
+    await ElMessageBox.confirm('确认反结单？将逆向退料、缺失、超损应付，加工单状态回到"生产中"。', '反结单', { type: 'warning' })
+  } catch { return }
+  try {
+    await request.post(`/outsource/order/${orderId}/close-report/reopen`)
+    ElMessage.success('反结单完成')
+    loadReport()
+  } catch (e: any) {
+    ElMessage.error('反结单失败: ' + (e?.message || '未知错误'))
+  }
+}
+
 function fmt(v: any) { return v !== undefined && v !== null ? Number(v).toFixed(2) : '0.00' }
 
-onMounted(() => { loadBomTypes(); loadReport() })
+onMounted(() => { loadBomTypes(); loadWarehouses(); loadReport() })
 </script>
 
 <template>
   <div class="close-page" v-loading="loading">
     <div class="page-header">
-      <el-tag v-if="report.reportStatus === '已结单'" type="success">已结单</el-tag>
-      <el-tag v-else-if="report.reportStatus === '草稿'" type="warning">草稿</el-tag>
+      <el-tag v-if="report.reportStatus === CloseReportStatus.FINISHED" type="success">{{ CloseReportStatusLabel[CloseReportStatus.FINISHED] }}</el-tag>
+      <el-tag v-else-if="report.reportStatus === CloseReportStatus.DRAFT" type="warning">{{ CloseReportStatusLabel[CloseReportStatus.DRAFT] }}</el-tag>
       <el-tag v-else type="info">未生成</el-tag>
     </div>
 
@@ -136,13 +161,23 @@ onMounted(() => { loadBomTypes(); loadReport() })
 
     <!-- 物料明细 -->
     <el-card shadow="never" style="margin-bottom:12px">
-      <template #header><span style="font-weight:600">物料明细</span></template>
+      <template #header>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-weight:600">物料明细</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:var(--app-font-sm);color:var(--app-text-regular)">退回仓库：</span>
+            <el-select v-model="returnWarehouseId" placeholder="请选择退回仓库" size="small" style="width:200px" clearable :disabled="report.reportStatus==='已结单'">
+              <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
+            </el-select>
+          </div>
+        </div>
+      </template>
       <el-table :data="items" border size="small" stripe show-summary :summary-method="() => []">
         <el-table-column label="类目" width="70"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
         <el-table-column prop="materialName" label="物料名称" min-width="120" />
 
 
-        <el-table-column label="发料数量" width="90"><template #default="{row}">{{ fmt(row.deliveredQuantity) }}</template></el-table-column>
+        <el-table-column label="用料总数" width="90"><template #default="{row}">{{ fmt(row.usedTotalQuantity) }}</template></el-table-column>
         <el-table-column label="退料总计" width="90" align="right"><template #default="{row}">{{ fmt((+row.goodReturnQty||0) + (+row.defectReturnQty||0)) }}</template></el-table-column>
         <el-table-column label="出货消耗" width="90"><template #default="{row}">{{ fmt(row.shippedQuantity) }}</template></el-table-column>
         <el-table-column label="良品退料" width="100">
@@ -154,8 +189,8 @@ onMounted(() => { loadBomTypes(); loadReport() })
         <el-table-column label="留存工厂" width="90">
           <template #default="{row}"><el-input v-model="row.factoryRetainQty" size="small" type="number" @change="onRetainChange(row)" /></template>
         </el-table-column>
-        <el-table-column label="缺失" width="80" align="right">
-          <template #default="{row}"><span :style="{color: row.missingQty !== 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ fmt(row.missingQty) }}</span></template>
+        <el-table-column label="缺失" width="90">
+          <template #default="{row}"><el-input v-model="row.missingQty" size="small" type="number" @change="recalc(row)" /></template>
         </el-table-column>
         <el-table-column label="加工良率%" width="90">
           <template #default="{row}"><span style="color:var(--app-color-primary)">{{ fmt(row.targetYieldRate) }}</span></template>
@@ -200,9 +235,10 @@ onMounted(() => { loadBomTypes(); loadReport() })
     </el-card>
 
     <!-- 操作 -->
-    <div style="display:flex;gap:12px">
+    <div style="display:flex;gap:12px;align-items:center">
       <el-button type="primary" :disabled="report.reportStatus==='已结单'" @click="handleSave">保存草稿</el-button>
       <el-button type="success" :disabled="!canConfirm" @click="handleConfirm">确认结单</el-button>
+      <el-button v-if="report.reportStatus==='已结单'" type="warning" @click="handleReopen">反结单</el-button>
       <el-button type="info" @click="handleExport">导出Excel</el-button>
     </div>
   </div>

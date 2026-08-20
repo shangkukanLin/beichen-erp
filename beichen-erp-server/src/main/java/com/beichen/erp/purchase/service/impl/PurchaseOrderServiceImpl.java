@@ -19,7 +19,7 @@ import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
 import com.beichen.erp.purchase.entity.PurchaseOrderItem;
-import com.beichen.erp.purchase.entity.PurchaseOrderStatus;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.purchase.mapper.PurchaseOrderMapper;
 import com.beichen.erp.purchase.mapper.PurchaseOrderItemMapper;
 import com.beichen.erp.purchase.service.PurchaseOrderService;
@@ -136,7 +136,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public void create(PurchaseOrder order, List<PurchaseOrderItem> items) {
         if (order.getSupplierId() == null) throw new BusinessException("供应商不能为空");
         order.setCode(generateCode());
-        order.setStatus(PurchaseOrderStatus.DRAFT.getCode());
+        order.setStatus(DocStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) order.setCompanyId(cid);
         BigDecimal total = BigDecimal.ZERO;
@@ -162,7 +162,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public void update(PurchaseOrder order, List<PurchaseOrderItem> items) {
         PurchaseOrder old = orderMapper.selectById(order.getId());
         if (old == null) throw new BusinessException("采购单不存在");
-        if (!PurchaseOrderStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         order.setCode(old.getCode());
         orderMapper.updateById(order);
         itemMapper.delete(new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, order.getId()));
@@ -189,10 +189,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public void cancel(Long id) {
         PurchaseOrder old = orderMapper.selectById(id);
         if (old == null) throw new BusinessException("采购单不存在");
-        if (!PurchaseOrderStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
         PurchaseOrder u = new PurchaseOrder();
         u.setId(id);
-        u.setStatus(PurchaseOrderStatus.CANCELLED.getCode());
+        u.setStatus(DocStatus.CANCELLED.getCode());
         orderMapper.updateById(u);
     }
 
@@ -201,7 +201,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public void audit(Long id) {
         PurchaseOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("采购单不存在");
-        if (!PurchaseOrderStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<PurchaseOrderItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, id));
         if (items.isEmpty()) throw new BusinessException("采购单明细不能为空");
@@ -235,7 +235,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         // 3) 更新订单状态为"已完成"，记录审核人
         PurchaseOrder u = new PurchaseOrder();
         u.setId(id);
-        u.setStatus(PurchaseOrderStatus.COMPLETED.getCode());
+        u.setStatus(DocStatus.AUDITED.getCode());
         u.setAuditorId(getCurrentUserId());
         u.setAuditorName(getCurrentUserName());
         u.setAuditTime(LocalDateTime.now());
@@ -247,7 +247,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public void unAudit(Long id) {
         PurchaseOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("采购单不存在");
-        if (!PurchaseOrderStatus.COMPLETED.getCode().equals(order.getStatus())) throw new BusinessException("只有已完成状态可反审核");
+        if (!DocStatus.AUDITED.getCode().equals(order.getStatus())) throw new BusinessException("只有已完成状态可反审核");
 
         // 1) 检查应付台账状态
         LambdaQueryWrapper<FinancePayable> payableW = new LambdaQueryWrapper<FinancePayable>()
@@ -291,7 +291,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         // 5) 回退状态到草稿，清除审核信息
         PurchaseOrder u = new PurchaseOrder();
         u.setId(id);
-        u.setStatus(PurchaseOrderStatus.DRAFT.getCode());
+        u.setStatus(DocStatus.DRAFT.getCode());
         u.setAuditorId(null);
         u.setAuditorName(null);
         u.setAuditTime(null);

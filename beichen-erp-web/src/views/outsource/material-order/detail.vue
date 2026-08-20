@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { exportMaterialOrderPdf } from '@/api/contract-template'
 import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
@@ -389,9 +390,9 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
           <el-table-column prop="code" label="单号" width="150" />
           <el-table-column prop="deliveryType" label="类型" width="70"><template #default="{row}"><el-tag :type="row.deliveryType===DeliveryType.RECEIVE?'success':'warning'" size="small">{{ DeliveryTypeLabel[row.deliveryType] || row.deliveryType }}</el-tag></template></el-table-column>
           <el-table-column label="状态" width="80"><template #default="{row}">
-            <el-tag v-if="row.status==='AUDITED'" type="success" size="small">已审核</el-tag>
-            <el-tag v-else-if="row.status==='DRAFT'" type="info" size="small">草稿</el-tag>
-            <el-tag v-else-if="row.status==='CANCELLED'" type="danger" size="small">已作废</el-tag>
+            <el-tag v-if="row.status===DocStatus.AUDITED" :type="DocStatusTag[row.status]" size="small">{{ DocStatusLabel[row.status] }}</el-tag>
+            <el-tag v-else-if="row.status===DocStatus.DRAFT" :type="DocStatusTag[row.status]" size="small">{{ DocStatusLabel[row.status] }}</el-tag>
+            <el-tag v-else-if="row.status===DocStatus.CANCELLED" :type="DocStatusTag[row.status]" size="small">{{ DocStatusLabel[row.status] }}</el-tag>
             <span v-else>{{ row.status }}</span>
           </template></el-table-column>
           <el-table-column label="日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
@@ -402,8 +403,8 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
           <el-table-column label="操作" width="150" fixed="right">
             <template #default="{row}">
               <template v-if="isMaterialDelivery(row)">
-                <el-button v-if="row.status==='DRAFT'" type="primary" link size="small" @click="auditDelivery(row)">审核</el-button>
-                <el-button v-if="row.status==='AUDITED'" type="warning" link size="small" @click="unauditDelivery(row)">反审核</el-button>
+                <el-button v-if="row.status===DocStatus.DRAFT" type="primary" link size="small" @click="auditDelivery(row)">审核</el-button>
+                <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link size="small" @click="unauditDelivery(row)">反审核</el-button>
               </template>
               <span v-else style="color:var(--app-text-placeholder);font-size:var(--app-font-xs)">-</span>
             </template>

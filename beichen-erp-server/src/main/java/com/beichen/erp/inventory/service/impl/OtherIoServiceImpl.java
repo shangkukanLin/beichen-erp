@@ -69,7 +69,7 @@ public class OtherIoServiceImpl implements OtherIoService {
         if (otherIo.getWarehouseId() == null) throw new BusinessException("仓库不能为空");
         if (otherIo.getIoType() == null || otherIo.getIoType().isBlank()) throw new BusinessException("出入库类型不能为空");
         otherIo.setCode(gen(BillPrefix.INVENTORY_OTHER_IO));
-        otherIo.setStatus(DocStatus.AUDITED.name());
+        otherIo.setStatus(DocStatus.AUDITED.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) otherIo.setCompanyId(cid);
         ioMapper.insert(otherIo);
@@ -87,7 +87,7 @@ public class OtherIoServiceImpl implements OtherIoService {
     public void update(InventoryOtherIo otherIo, List<InventoryOtherIoItem> items) {
         InventoryOtherIo old = ioMapper.selectById(otherIo.getId());
         if (old == null) throw new BusinessException("其他出入库单不存在");
-        if (DocStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
+        if (DocStatus.CANCELLED.getCode().equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
 
         // 回滚旧库存
         List<InventoryOtherIoItem> oldItems = itemMapper.selectList(
@@ -95,7 +95,7 @@ public class OtherIoServiceImpl implements OtherIoService {
         revertStock(old, oldItems);
 
         // 更新主表
-        otherIo.setCode(old.getCode()); otherIo.setStatus(DocStatus.AUDITED.name());
+        otherIo.setCode(old.getCode()); otherIo.setStatus(DocStatus.AUDITED.getCode());
         ioMapper.updateById(otherIo);
 
         // 删旧明细 + 插新明细
@@ -114,11 +114,11 @@ public class OtherIoServiceImpl implements OtherIoService {
     public void cancel(Long id) {
         InventoryOtherIo old = ioMapper.selectById(id);
         if (old == null) throw new BusinessException("其他出入库单不存在");
-        if (DocStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("单据已取消");
+        if (DocStatus.CANCELLED.getCode().equals(old.getStatus())) throw new BusinessException("单据已取消");
         List<InventoryOtherIoItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
         revertStock(old, items);
-        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus(DocStatus.CANCELLED.name());
+        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode());
         ioMapper.updateById(u);
     }
 

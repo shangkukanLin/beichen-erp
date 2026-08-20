@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.beichen.erp.sale.common.SaleReturnStatus;
+import com.beichen.erp.common.DocStatus;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -38,8 +38,8 @@ public class SaleReturn {
     /** 退货日期 */
     private LocalDate returnDate;
 
-    /** 状态：0=草稿 1=已审核 2=已作废 */
-    private Integer status;
+    /** 状态：DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废 */
+    private String status;
 
     /** 退货总金额 */
     private BigDecimal totalAmount;
@@ -66,7 +66,7 @@ public class SaleReturn {
     private LocalDateTime updateTime;
 
     public SaleReturn() {
-        this.status = SaleReturnStatus.DRAFT.getCode();
+        this.status = DocStatus.DRAFT.getCode();
         this.totalAmount = BigDecimal.ZERO;
     }
 }

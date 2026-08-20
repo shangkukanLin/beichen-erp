@@ -8,6 +8,7 @@ import request from '@/utils/request'
 import { getProjectBom } from '@/api/system'
 import { exportContractPdf } from '@/api/contract-template'
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 
 const route = useRoute(); const router = useRouter()
 const loading = ref(true); const saving = ref(false)
@@ -83,6 +84,8 @@ function typeName(id: number | undefined, fallback?: string) {
   if (id != null) { const t = bomTypes.value.find((v: any) => v.id === id); if (t) return t.typeName }
   return fallback || '-'
 }
+// 数字格式化（保留2位小数，null/undefined 显示 0）
+function fmt(v: any) { return v !== undefined && v !== null ? Number(v).toFixed(2) : '0.00' }
 async function loadBomTypes() {
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
 }
@@ -308,10 +311,14 @@ async function delHandleUnaudit(row: any) {
 async function handleDefectReturn() {
   const data = defectItems.value.filter((r: any) => r.quantity && Number(r.quantity) > 0)
   if (data.length === 0) { ElMessage.warning('请输入退不良数量'); return }
+  if (!defectWarehouseId.value) { ElMessage.warning('请选择退不良仓库'); return }
   defectSaving.value = true
   try {
-    await request.post(`/outsource/order/${form.id}/return-defect`, { items: data, warehouseId: defectWarehouseId.value, sourceType: 'DELIVERY' })
-    ElMessage.success('退不良完成，成品扣减并按BOM恢复物料到工厂委外仓'); defectVisible.value = false; loadData()
+    // 逐产品调用新版退不良接口（存草稿），审核时统一落账
+    for (const r of data) {
+      await request.post(`/outsource/order-delivery/return-defect/${form.id}`, { productId: r.productId, quantity: r.quantity, warehouseId: defectWarehouseId.value })
+    }
+    ElMessage.success('退不良草稿已保存，请在交货记录中审核'); defectVisible.value = false; loadData(); loadDeliveryData()
   } catch (e: any) { ElMessage.error(e?.message || '退不良失败') } finally { defectSaving.value = false }
 }
 
@@ -472,16 +479,16 @@ onMounted(() => { loadOptions(); loadBomTypes(); loadData() })
           <el-table-column label="附件" width="80" align="center"><template #default="{row}"><el-button v-if="row.attachUrl" type="primary" link size="small" @click="openAttach(row.attachUrl)">查看</el-button><span v-else style="color:var(--app-text-placeholder)">—</span></template></el-table-column>
           <el-table-column prop="remark" label="备注" min-width="150" />
           <el-table-column prop="status" label="状态" width="90">
-            <template #default="{row}"><el-tag :type="row.status==='AUDITED'?'success':(row.status==='CANCELLED'?'danger':'info')" size="small">
-              {{ row.status==='AUDITED'?'已审核':(row.status==='CANCELLED'?'已作废':'草稿') }}
+            <template #default="{row}"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">
+              {{ DocStatusLabel[row.status] || row.status }}
             </el-tag></template>
           </el-table-column>
           <el-table-column label="操作" width="200" align="center">
             <template #default="{row}">
-              <el-button type="success" link size="small" v-if="row.status==='DRAFT'" @click="delHandleAudit(row)">审核</el-button>
-              <el-button type="warning" link size="small" v-if="row.status==='AUDITED'" @click="delHandleUnaudit(row)">反审核</el-button>
-              <el-button type="primary" link size="small" v-if="row.status==='DRAFT'" @click="delOpenEdit(row)">编辑</el-button>
-              <el-button type="danger" link size="small" v-if="row.status==='DRAFT'" @click="delHandleDelete(row)">删除</el-button>
+              <el-button type="success" link size="small" v-if="row.status===DocStatus.DRAFT" @click="delHandleAudit(row)">审核</el-button>
+              <el-button type="warning" link size="small" v-if="row.status===DocStatus.AUDITED" @click="delHandleUnaudit(row)">反审核</el-button>
+              <el-button type="primary" link size="small" v-if="row.status===DocStatus.DRAFT" @click="delOpenEdit(row)">编辑</el-button>
+              <el-button type="danger" link size="small" v-if="row.status===DocStatus.DRAFT" @click="delHandleDelete(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -521,13 +528,24 @@ onMounted(() => { loadOptions(); loadBomTypes(); loadData() })
     <template v-if="activeTab === 'close'">
       <el-card shadow="never" v-loading="closeLoading">
         <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">结单详情</span><el-button size="small" @click="router.push(`/outsource/order/close/${form.id}`)">查看完整结单报表</el-button></div></template>
-        <el-table :data="closeItems" border size="small" v-if="closeItems.length">
-          <el-table-column label="物料名称" min-width="120"><template #default="{row}">{{ row.materialName }}</template></el-table-column>
-          <el-table-column label="发料数量" width="80" align="right"><template #default="{row}">{{ row.deliveredQuantity }}</template></el-table-column>
-          <el-table-column label="出货消耗" width="80" align="right"><template #default="{row}">{{ row.shippedQuantity }}</template></el-table-column>
-          <el-table-column label="缺失" width="60" align="right"><template #default="{row}"><span :style="{color:row.missingQty!=0?'var(--app-color-danger)':''}">{{ row.missingQty }}</span></template></el-table-column>
-          <el-table-column label="超损数量" width="80" align="right"><template #default="{row}">{{ row.excessLossQty }}</template></el-table-column>
-          <el-table-column label="超损总价" width="90" align="right"><template #default="{row}">{{ row.excessLossAmount }}</template></el-table-column>
+        <el-table :data="closeItems" border size="small" stripe v-if="closeItems.length">
+          <el-table-column label="类目" width="70"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
+          <el-table-column prop="materialName" label="物料名称" min-width="120" />
+          <el-table-column label="用料总数" width="90" align="right"><template #default="{row}">{{ fmt(row.usedTotalQuantity) }}</template></el-table-column>
+          <el-table-column label="退料总计" width="90" align="right"><template #default="{row}">{{ fmt((+row.goodReturnQty||0) + (+row.defectReturnQty||0)) }}</template></el-table-column>
+          <el-table-column label="出货消耗" width="90" align="right"><template #default="{row}">{{ fmt(row.shippedQuantity) }}</template></el-table-column>
+          <el-table-column label="良品退料" width="90" align="right"><template #default="{row}">{{ fmt(row.goodReturnQty) }}</template></el-table-column>
+          <el-table-column label="不良退料" width="90" align="right"><template #default="{row}">{{ fmt(row.defectReturnQty) }}</template></el-table-column>
+          <el-table-column label="留存工厂" width="90" align="right"><template #default="{row}">{{ fmt(row.factoryRetainQty) }}</template></el-table-column>
+          <el-table-column label="缺失" width="90" align="right"><template #default="{row}"><span :style="{color:row.missingQty!=0?'var(--app-color-danger)':''}">{{ fmt(row.missingQty) }}</span></template></el-table-column>
+          <el-table-column label="加工良率%" width="90" align="right"><template #default="{row}"><span style="color:var(--app-color-primary)">{{ fmt(row.targetYieldRate) }}</span></template></el-table-column>
+          <el-table-column label="生产良率%" width="90" align="right"><template #default="{row}"><span :style="{color: row.yieldLoss > 0 ? 'var(--app-color-warning)' : 'var(--app-color-success)'}">{{ fmt(row.actualYieldRate) }}</span></template></el-table-column>
+          <el-table-column label="良率超损%" width="90" align="right"><template #default="{row}"><span :style="{color: row.yieldLoss > 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ fmt(row.yieldLoss) }}</span></template></el-table-column>
+          <el-table-column label="超损数量" width="90" align="right"><template #default="{row}"><span :style="{color: row.excessLossQty > 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ fmt(row.excessLossQty) }}</span></template></el-table-column>
+          <el-table-column label="最大超损" width="90" align="right"><template #default="{row}">{{ fmt(row.maxExcessLossQty) }}</template></el-table-column>
+          <el-table-column label="物料单价" width="90" align="right"><template #default="{row}">{{ fmt(row.unitPrice) }}</template></el-table-column>
+          <el-table-column label="超损总价" width="90" align="right"><template #default="{row}"><span :style="{color: row.excessLossAmount > 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ fmt(row.excessLossAmount) }}</span></template></el-table-column>
+          <el-table-column label="备注" min-width="100"><template #default="{row}">{{ row.remark || '-' }}</template></el-table-column>
         </el-table>
         <div v-else style="color:var(--app-text-secondary);text-align:center;padding:20px">暂无结单数据</div>
       </el-card>

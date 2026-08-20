@@ -86,7 +86,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         if (outbound.getCustomerId() == null) throw new BusinessException("客户不能为空");
         if (outbound.getWarehouseId() == null) throw new BusinessException("出库仓库不能为空");
         outbound.setCode(generateCode());
-        outbound.setStatus(DocStatus.DRAFT.name());
+        outbound.setStatus(DocStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) outbound.setCompanyId(cid);
         BigDecimal total = BigDecimal.ZERO;
@@ -112,7 +112,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     public void update(SaleOutbound outbound, List<SaleOutboundItem> items) {
         SaleOutbound old = outboundMapper.selectById(outbound.getId());
         if (old == null) throw new BusinessException("销售出库单不存在");
-        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         outbound.setCode(old.getCode());
         outboundMapper.updateById(outbound);
         itemMapper.delete(new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, outbound.getId()));
@@ -139,10 +139,10 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     public void cancel(Long id) {
         SaleOutbound old = outboundMapper.selectById(id);
         if (old == null) throw new BusinessException("销售出库单不存在");
-        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("已审核的出库单不可作废");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("已审核的出库单不可作废");
         SaleOutbound u = new SaleOutbound();
         u.setId(id);
-        u.setStatus(DocStatus.CANCELLED.name());
+        u.setStatus(DocStatus.CANCELLED.getCode());
         outboundMapper.updateById(u);
     }
 
@@ -151,7 +151,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     public void audit(Long id) {
         SaleOutbound outbound = outboundMapper.selectById(id);
         if (outbound == null) throw new BusinessException("销售出库单不存在");
-        if (!DocStatus.DRAFT.name().equals(outbound.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (!DocStatus.DRAFT.getCode().equals(outbound.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<SaleOutboundItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, id));
         // 1) 库存联动：出库减库存（changeStock 负数，不足自动抛异常）
@@ -166,7 +166,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         // 2) 更新出库单状态（销售出库单仅负责真实出库：扣库存；应收由销售订单统一生成，此处不改动订单状态，避免跨单状态污染）
         SaleOutbound u = new SaleOutbound();
         u.setId(id);
-        u.setStatus(DocStatus.AUDITED.name());
+        u.setStatus(DocStatus.AUDITED.getCode());
         outboundMapper.updateById(u);
     }
 
@@ -175,7 +175,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     public void unAudit(Long id) {
         SaleOutbound outbound = outboundMapper.selectById(id);
         if (outbound == null) throw new BusinessException("销售出库单不存在");
-        if (!DocStatus.AUDITED.name().equals(outbound.getStatus())) throw new BusinessException("只有已审核的出库单可反审核");
+        if (!DocStatus.AUDITED.getCode().equals(outbound.getStatus())) throw new BusinessException("只有已审核的出库单可反审核");
         List<SaleOutboundItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, id));
         // 1) 库存回补：出库时按负数扣库存，反审核原路加回（与 audit 的扣减对称）
@@ -191,7 +191,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         // 2) 出库单状态回退为草稿（实体无审核人字段，仅回退状态）
         SaleOutbound u = new SaleOutbound();
         u.setId(id);
-        u.setStatus(DocStatus.DRAFT.name());
+        u.setStatus(DocStatus.DRAFT.getCode());
         outboundMapper.updateById(u);
     }
 

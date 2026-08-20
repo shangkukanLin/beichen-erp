@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { IoType, IoTypeLabel } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 
 const router = useRouter()
 const loading = ref(false)
@@ -32,7 +33,7 @@ async function loadData() {
 function handleAdd() { router.push('/outsource/other-io/add') }
 function handleEdit(row: any) {
   // 草稿跳编辑页，已审核/已取消跳详情页
-  if (row.status === 'DRAFT') router.push(`/outsource/other-io/edit/${row.id}`)
+  if (row.status === DocStatus.DRAFT) router.push(`/outsource/other-io/edit/${row.id}`)
   else router.push(`/outsource/other-io/detail/${row.id}`)
 }
 async function handleApprove(row: any) {
@@ -85,18 +86,18 @@ onActivated(() => {
         <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip/>
         <el-table-column label="状态" width="80" align="center">
           <template #default="{row}">
-            <el-tag v-if="row.status==='DRAFT'" type="info" size="small">草稿</el-tag>
-            <el-tag v-else-if="row.status==='AUDITED'" type="success" size="small">已审核</el-tag>
-            <el-tag v-else-if="row.status==='CANCELLED'" type="danger" size="small">已取消</el-tag>
+            <el-tag v-if="row.status===DocStatus.DRAFT" :type="DocStatusTag[row.status]" size="small">{{ DocStatusLabel[row.status] }}</el-tag>
+            <el-tag v-else-if="row.status===DocStatus.AUDITED" :type="DocStatusTag[row.status]" size="small">{{ DocStatusLabel[row.status] }}</el-tag>
+            <el-tag v-else-if="row.status===DocStatus.CANCELLED" :type="DocStatusTag[row.status]" size="small">{{ DocStatusLabel[row.status] }}</el-tag>
             <el-tag v-else type="warning" size="small">{{row.status}}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="200" align="center">
           <template #default="{row}">
-            <el-button v-if="row.status==='DRAFT'" type="success" link @click="handleApprove(row)">审核</el-button>
-            <el-button v-if="row.status==='AUDITED'" type="warning" link @click="handleUnapprove(row)">反审核</el-button>
-            <el-button type="primary" link @click="handleEdit(row)">{{ row.status==='DRAFT' ? '编辑' : '详细' }}</el-button>
-            <el-button type="danger" link @click="handleCancel(row)" :disabled="row.status==='CANCELLED' || row.status==='AUDITED'">取消</el-button>
+            <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleApprove(row)">审核</el-button>
+            <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click="handleUnapprove(row)">反审核</el-button>
+            <el-button type="primary" link @click="handleEdit(row)">{{ row.status===DocStatus.DRAFT ? '编辑' : '详细' }}</el-button>
+            <el-button type="danger" link @click="handleCancel(row)" :disabled="row.status===DocStatus.CANCELLED || row.status===DocStatus.AUDITED">取消</el-button>
           </template>
         </el-table-column>
       </el-table>

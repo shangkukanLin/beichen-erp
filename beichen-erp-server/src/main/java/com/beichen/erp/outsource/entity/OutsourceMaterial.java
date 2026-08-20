@@ -15,7 +15,6 @@ public class OutsourceMaterial {
     /** BOM类型ID（关联 dev_bom_type.id），物料按此ID归类 */
     private Long bomTypeId;
     private String spec;
-    private String supplierIds;
     private String unit;
     private Integer status;
     private String remark;

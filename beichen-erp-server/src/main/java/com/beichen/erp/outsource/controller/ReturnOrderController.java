@@ -11,7 +11,7 @@ import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
-import com.beichen.erp.outsource.common.OutsourceSourceBillType;
+import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
@@ -127,7 +127,7 @@ public class ReturnOrderController {
 
         order.setCode(generateCode());
         if (order.getReturnDate() == null) order.setReturnDate(LocalDate.now());
-        order.setStatus(DocStatus.AUDITED.name());
+        order.setStatus(DocStatus.AUDITED.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) order.setCompanyId(cid);
         returnOrderMapper.insert(order);
@@ -168,7 +168,7 @@ public class ReturnOrderController {
 
             // 退回物料入工厂委外仓 + 流水
             if (factoryWhId != null && matId != null) {
-                updateOutsourceStock(factoryWhId, matId, qty, QualityType.GOOD.getCode(), "委外退料入", order.getCode());
+                updateOutsourceStock(factoryWhId, matId, qty, QualityType.GOOD.getCode(), StockChangeType.RETURN_IN.getCode(), order.getCode());
             }
         }
 
@@ -181,7 +181,9 @@ public class ReturnOrderController {
                     String pn = (String) p.get("productName");
                     BigDecimal qty = toBigDecimal(p.get("quantity"));
                     if (pn != null && qty.compareTo(BigDecimal.ZERO) > 0) {
-                        warehouseStockService.changeStock(invWhId, null, qty.negate(), StockChangeType.OUTSOURCE_RETURN_OUT, order.getCode(), RelatedBillType.OUTSOURCE_RETURN, null, order.getId(), null);
+                        // 成品出库：productId 用于精确定位库存行（不能为 null）
+                        Long productId = p.get("productId") != null ? toLong(p.get("productId")) : null;
+                        warehouseStockService.changeStock(invWhId, productId, qty.negate(), StockChangeType.OUTSOURCE_RETURN_OUT, order.getCode(), RelatedBillType.OUTSOURCE_RETURN, null, order.getId(), null);
                     }
                 }
             }
@@ -189,7 +191,7 @@ public class ReturnOrderController {
 
         // 应付冲减（负向应付）
         if (totalReturnAmount.compareTo(BigDecimal.ZERO) > 0) {
-            payableHelper.createPayable(order.getFactoryId(), OutsourceSourceBillType.OUTSOURCE_RETURN.getCode(),
+            payableHelper.createPayable(order.getFactoryId(), SourceBillType.OUTSOURCE_RETURN.getCode(),
                 order.getCode(), order.getId(), totalReturnAmount.negate(), order.getReturnDate(),
                 "委外退料 - " + order.getCode());
         }
@@ -202,8 +204,8 @@ public class ReturnOrderController {
     public R<Void> cancel(@PathVariable Long id) {
         ReturnOrder order = returnOrderMapper.selectById(id);
         if (order == null) throw new BusinessException("退货单不存在");
-        if (DocStatus.CANCELLED.name().equals(order.getStatus())) throw new BusinessException("已取消");
-        order.setStatus(DocStatus.CANCELLED.name());
+        if (DocStatus.CANCELLED.getCode().equals(order.getStatus())) throw new BusinessException("已取消");
+        order.setStatus(DocStatus.CANCELLED.getCode());
         returnOrderMapper.updateById(order);
 
         // 逆向库存
@@ -218,7 +220,7 @@ public class ReturnOrderController {
         BigDecimal totalAmount = BigDecimal.ZERO;
         for (ReturnOrderItem it : items) {
             if (whId != null && it.getQuantity() != null && it.getMaterialId() != null) {
-                updateOutsourceStock(whId, it.getMaterialId(), it.getQuantity().negate(), QualityType.GOOD.getCode(), "取消退料", order.getCode());
+                updateOutsourceStock(whId, it.getMaterialId(), it.getQuantity().negate(), QualityType.GOOD.getCode(), StockChangeType.CANCEL_RETURN_IN.getCode(), order.getCode());
             }
             if (it.getAmount() != null) totalAmount = totalAmount.add(it.getAmount());
         }
@@ -241,7 +243,7 @@ public class ReturnOrderController {
         // 查该工厂所有已确认/已结单的加工单
         List<OutsourceOrder> orders = orderMapper.selectList(
             new LambdaQueryWrapper<OutsourceOrder>().eq(OutsourceOrder::getFactoryId, factoryId)
-                .in(OutsourceOrder::getStatus, OutsourceOrderStatus.PRODUCING.name(), OutsourceOrderStatus.FINISHED.name())
+                .in(OutsourceOrder::getStatus, OutsourceOrderStatus.PRODUCING.getCode(), OutsourceOrderStatus.FINISHED.getCode())
                 .orderByDesc(OutsourceOrder::getCreateTime));
         // 按产品名汇总，每个产品列出可选的BOM版本
         Map<String, Map<String, Object>> productMap = new LinkedHashMap<>();

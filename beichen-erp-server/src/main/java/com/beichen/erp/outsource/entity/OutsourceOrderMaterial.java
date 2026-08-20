@@ -19,7 +19,6 @@ public class OutsourceOrderMaterial {
     private String unit;
     private BigDecimal demandQuantity;
     private BigDecimal lossRate;
-    private BigDecimal deliveredQuantity;
     private String remark;
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;

@@ -6,7 +6,10 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
+import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
+import com.beichen.erp.outsource.common.DeliverySourceType;
+import com.beichen.erp.outsource.common.DeliveryStatus;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
@@ -21,7 +24,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -69,7 +71,7 @@ public class AfterSaleController {
         // 1. 入库增加成品仓不良品库存（正数）
         warehouseStockService.changeStock(warehouseId, productId, qty,
                 StockChangeType.SALE_RETURN_IN, null, RelatedBillType.SALE_RETURN,
-                null, null, "DEFECT");
+                null, null, ProductQualityType.DEFECT.getCode());
 
         // 2. 写入退不良记录（sourceType=AFTER_SALE，不关联加工单，立即生效）
         OutsourceOrderDelivery delivery = new OutsourceOrderDelivery();
@@ -80,9 +82,9 @@ public class AfterSaleController {
         delivery.setDeliveryDate(LocalDate.now());
         delivery.setRemark("收费售后退回不良品" + (remark != null ? "：" + remark : ""));
         delivery.setIsReverse(false);
-        delivery.setStatus("CONFIRMED");
+        delivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
         // 标记来源：收费售后
-        delivery.setSourceType("AFTER_SALE");
+        delivery.setSourceType(DeliverySourceType.AFTER_SALE.getCode());
         deliveryMapper.insert(delivery);
         log.info("收费售后退不良入库: {} x{} 仓库={}", productName, qty, warehouseId);
         return R.ok();
@@ -95,7 +97,7 @@ public class AfterSaleController {
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) String productName) {
         LambdaQueryWrapper<OutsourceOrderDelivery> w = new LambdaQueryWrapper<OutsourceOrderDelivery>()
-                .eq(OutsourceOrderDelivery::getSourceType, "AFTER_SALE");
+                .eq(OutsourceOrderDelivery::getSourceType, DeliverySourceType.AFTER_SALE.getCode());
         // productName 列已删除，改为通过 product_id 关联查询
         if (productName != null && !productName.isBlank()) {
             List<Long> productIds = orderProductMapper.selectList(
@@ -121,7 +123,7 @@ public class AfterSaleController {
     public R<Void> remove(@PathVariable Long id) {
         OutsourceOrderDelivery d = deliveryMapper.selectById(id);
         if (d == null) throw new BusinessException("记录不存在");
-        if (!"AFTER_SALE".equals(d.getSourceType())) throw new BusinessException("仅可删除收费售后记录");
+        if (!DeliverySourceType.AFTER_SALE.getCode().equals(d.getSourceType())) throw new BusinessException("仅可删除收费售后记录");
         // 逆向扣回入库的不良品库存
         if (d.getWarehouseId() != null && d.getQuantity() != null
                 && d.getQuantity().compareTo(BigDecimal.ZERO) > 0) {
@@ -133,7 +135,7 @@ public class AfterSaleController {
             }
             warehouseStockService.changeStock(d.getWarehouseId(), d.getProductId(),
                     d.getQuantity().negate(), StockChangeType.SALE_RETURN_UN_AUDIT,
-                    null, RelatedBillType.SALE_RETURN, null, null, "DEFECT");
+                    null, RelatedBillType.SALE_RETURN, null, null, ProductQualityType.DEFECT.getCode());
         }
         deliveryMapper.deleteById(id);
         return R.ok();

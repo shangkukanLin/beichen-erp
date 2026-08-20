@@ -2,6 +2,7 @@
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { MenuType, MenuTypeLabel } from '@/api/enums'
 import {
   getMenuTree,
   addMenu,
@@ -50,8 +51,8 @@ async function loadData() {
 /* ============== 类型选项 ============== */
 
 const typeOptions = [
-  { label: '目录', value: 'catalog' },
-  { label: '菜单', value: 'menu' }
+  { label: MenuTypeLabel[MenuType.CATALOG], value: MenuType.CATALOG },
+  { label: MenuTypeLabel[MenuType.MENU], value: MenuType.MENU }
 ]
 
 const statusOptions = [
@@ -71,7 +72,7 @@ const defaultForm = (): MenuDTO => ({
   id: undefined,
   parentId: 0,
   menuName: '',
-  menuType: 'menu',
+  menuType: MenuType.MENU,
   routePath: '',
   routeName: '',
   icon: '',
@@ -86,7 +87,7 @@ const form = reactive<MenuDTO>(defaultForm())
 function buildTreeSelectOptions(tree: MenuVO[]): MenuVO[] {
   const result: MenuVO[] = []
   for (const item of tree) {
-    if (item.menuType === 'catalog') {
+    if (item.menuType === MenuType.CATALOG) {
       result.push({ ...item })
     }
     if (item.children && item.children.length > 0) {
@@ -175,7 +176,7 @@ async function handleDelete(row: FlatMenu) {
 }
 
 function typeText(type: string) {
-  return type === 'catalog' ? '目录' : '菜单'
+  return MenuTypeLabel[type] || (type === MenuType.CATALOG ? '目录' : '菜单')
 }
 
 function statusText(status: number) {
@@ -214,7 +215,7 @@ onActivated(() => {
         </el-table-column>
         <el-table-column label="类型" width="90" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.menuType === 'catalog' ? 'warning' : 'info'" size="small">
+            <el-tag :type="row.menuType === MenuType.CATALOG ? 'warning' : 'info'" size="small">
               {{ typeText(row.menuType) }}
             </el-tag>
           </template>

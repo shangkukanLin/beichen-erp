@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { getQualityTypes, type QualityOption } from '@/api/product'
 import { IoType, IoTypeLabel } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id) || 0
@@ -34,19 +35,15 @@ function qualityLabel(q: string | undefined) {
   return qualityOptions.value.find((o: any) => o.value === q)?.label || q
 }
 function statusLabel(s: string) {
-  if (s === 'AUDITED') return '已审核'
-  if (s === 'CANCELLED') return '已取消'
-  return s || '-'
+  return DocStatusLabel[s] || s || '-'
 }
 function statusTag(s: string): any {
-  if (s === 'AUDITED') return 'success'
-  if (s === 'CANCELLED') return 'danger'
-  return 'warning'
+  return DocStatusTag[s] || 'warning'
 }
 
 async function loadWarehouses() {
   try {
-    const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500, warehouseCategory: 'INVENTORY' } })
+    const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500, warehouseCategory: WarehouseCategory.INVENTORY } })
     warehouses.value = r?.records || []
   } catch {}
 }

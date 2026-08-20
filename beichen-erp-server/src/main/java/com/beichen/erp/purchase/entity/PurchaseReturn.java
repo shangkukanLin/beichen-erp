@@ -22,7 +22,7 @@ public class PurchaseReturn {
 
     private LocalDate returnDate;
 
-    private Integer status;
+    private String status;
 
     private BigDecimal totalAmount;
 

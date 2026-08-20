@@ -14,6 +14,9 @@ public interface CloseReportService extends IService<CloseReport> {
     /** 保存草稿 */
     void saveDraft(Long orderId, List<CloseReportItem> items, String remark);
 
-    /** 确认结单 */
-    void confirmClose(Long orderId);
+    /** 确认结单（returnWarehouseId：退料退回仓库，必填） */
+    void confirmClose(Long orderId, Long returnWarehouseId);
+
+    /** 反结单：逆向结单的库存/退料/缺失/超损应付，订单回退到生产中 */
+    void reopenClose(Long orderId);
 }

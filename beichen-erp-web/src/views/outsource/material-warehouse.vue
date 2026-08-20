@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { WarehouseCategory, WarehouseType } from '@/api/enums'
 import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -11,14 +12,14 @@ const allData = ref<any[]>([])
 const activeTab = ref('active')
 const tableLoading = ref(false)
 // 自有物料仓：只展示自有仓库中的辅料仓
-const WAREHOUSE_TYPE = '辅料仓'
+const WAREHOUSE_TYPE = WarehouseType.AUXILIARY
 const activeData = computed(() => allData.value.filter(v => v.status === 1))
 const stoppedData = computed(() => allData.value.filter(v => v.status === 0))
 
 async function loadData() {
   tableLoading.value = true
   try {
-    const p: any = { pageSize: 500, warehouseCategory: 'INVENTORY', warehouseType: WAREHOUSE_TYPE }
+    const p: any = { pageSize: 500, warehouseCategory: WarehouseCategory.INVENTORY, warehouseType: WAREHOUSE_TYPE }
     if (query.warehouseName) p.warehouseName = query.warehouseName
     const r = await request.get<any, any>('/warehouse/page', { params: p })
     allData.value = r?.records || []

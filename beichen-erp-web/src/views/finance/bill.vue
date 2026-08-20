@@ -5,10 +5,11 @@ import { listCustomers, type Customer } from '@/api/customer'
 import request from '@/utils/request'
 import { getBillPage, getBillItems, generateBill, auditBill, unAuditBill, cancelBill, type FinanceBill, type FinanceBillItem } from '@/api/finance'
 import { BillType, BillTypeLabel } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 
 // 账单状态 code → 中文 label（后端存 DocStatus code，前端展示中文）
-const StatusLabel: Record<string, string> = { DRAFT: '草稿', AUDITED: '已审核', CANCELLED: '已作废' }
-const StatusTag: Record<string, 'info' | 'success' | 'warning' | 'danger' | 'primary'> = { DRAFT: 'info', AUDITED: 'success', CANCELLED: 'danger' }
+const StatusLabel: Record<string, string> = DocStatusLabel
+const StatusTag: Record<string, 'info' | 'success' | 'warning' | 'danger' | 'primary'> = DocStatusTag
 
 const query = reactive({ billType: BillType.RECEIVABLE, partnerId: '' as string|number })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -88,9 +89,9 @@ async function handleCancel(row: FinanceBill) { try { await cancelBill(row.id as
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="StatusTag[row.status] || 'info'" size="small">{{ StatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="200" align="center"><template #default="{row}">
           <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
-          <el-button v-if="row.status==='DRAFT'" type="success" link @click="handleAudit(row)">审核</el-button>
-          <el-button v-if="row.status==='AUDITED'" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
-          <el-button v-if="row.status!=='CANCELLED'" type="danger" link @click="handleCancel(row)">作废</el-button>
+          <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
+          <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
+          <el-button v-if="row.status!==DocStatus.CANCELLED" type="danger" link @click="handleCancel(row)">作废</el-button>
         </template></el-table-column>
       </el-table>
       <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>

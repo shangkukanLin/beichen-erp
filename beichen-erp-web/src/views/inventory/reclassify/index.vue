@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { WarehouseCategory } from '@/api/enums'
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -121,7 +122,7 @@ async function handleCancel(row: any) {
 }
 
 async function loadWarehouses() {
-  try { const res = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY' } }); warehouseOptions.value = res?.records || [] } catch { warehouseOptions.value = [] }
+  try { const res = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } }); warehouseOptions.value = res?.records || [] } catch { warehouseOptions.value = [] }
 }
 async function loadQualityTypes() {
   try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] }

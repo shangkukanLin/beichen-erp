@@ -121,7 +121,26 @@ async function initFromQuery() {
   }
 }
 
-onActivated(() => { loadOptions() })
+// 重置为空白表单（供 keep-alive 缓存恢复时清空上次填写信息）
+function resetForm() {
+  Object.assign(form, { orderType: '采购', supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '' })
+  items.value = []
+  addItem()
+}
+
+onActivated(async () => {
+  await loadOptions()
+  // keep-alive 缓存恢复：非编辑模式需按来源重新初始化（避免残留上次填写信息）
+  if (!editId) {
+    const hasQuery = !!route.query.materialId || !!route.query.supplierId || !!route.query.bomTypeId
+    if (hasQuery) {
+      await initFromQuery()
+      if (items.value.length === 0) addItem()
+    } else {
+      resetForm()
+    }
+  }
+})
 onMounted(async () => {
   await loadOptions()
   if (editId) {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import request from '@/utils/request'
+import { SettlementStatus, SettlementStatusLabel } from '@/api/enums'
 import { getPayablePage, type FinancePayable } from '@/api/finance'
 
 const query = reactive({ supplierId: '' as string|number, status: '', billNo: '' })
@@ -35,15 +36,15 @@ const SOURCE_TYPE_LABEL: Record<string, string> = {
 }
 function sourceBillTypeLabel(code?: string) { return code ? (SOURCE_TYPE_LABEL[code] || code) : '' }
 // 结算状态 code -> 中文
-const STATUS_LABEL: Record<string, string> = { UNSETTLED: '未结清', PARTIAL: '部分结清', SETTLED: '已结清', CANCELLED: '已冲回' }
+const STATUS_LABEL: Record<string, string> = SettlementStatusLabel
 function statusLabel(code?: string) { return code ? (STATUS_LABEL[code] || code) : '' }
-function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === 'UNSETTLED') return 'danger'; if (s === 'PARTIAL') return 'warning'; if (s === 'SETTLED') return 'success'; if (s === 'CANCELLED') return 'info'; return undefined }
+function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === SettlementStatus.UNSETTLED) return 'danger'; if (s === SettlementStatus.PARTIAL) return 'warning'; if (s === SettlementStatus.SETTLED) return 'success'; if (s === SettlementStatus.CANCELLED) return 'info'; return undefined }
 </script>
 <template>
   <div class="p">
     <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
       <el-form-item label="供应商"><el-select v-model="query.supplierId" placeholder="全部" clearable filterable style="width:160px"><el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id"/></el-select></el-form-item>
-      <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="s in [{l:'未结清',v:'UNSETTLED'},{l:'部分结清',v:'PARTIAL'},{l:'已结清',v:'SETTLED'}]" :key="s.v" :label="s.l" :value="s.v"/></el-select></el-form-item>
+      <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="s in [{l:SettlementStatusLabel[SettlementStatus.UNSETTLED],v:SettlementStatus.UNSETTLED},{l:SettlementStatusLabel[SettlementStatus.PARTIAL],v:SettlementStatus.PARTIAL},{l:SettlementStatusLabel[SettlementStatus.SETTLED],v:SettlementStatus.SETTLED}]" :key="s.v" :label="s.l" :value="s.v"/></el-select></el-form-item>
       <el-form-item label="单号"><el-input v-model="query.billNo" placeholder="单据号" clearable @keyup.enter="query_"/></el-form-item>
       <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button></el-form-item>
     </el-form></el-card>

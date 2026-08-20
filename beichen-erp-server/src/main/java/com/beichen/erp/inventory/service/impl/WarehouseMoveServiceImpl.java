@@ -105,7 +105,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
         if (move.getFromWarehouseId().equals(move.getToWarehouseId()))
             throw new BusinessException("移出与移入仓库不能相同");
         move.setCode(gen(BillPrefix.WAREHOUSE_MOVE));
-        move.setStatus(DocStatus.DRAFT.name());
+        move.setStatus(DocStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) move.setCompanyId(cid);
         moveMapper.insert(move);
@@ -122,7 +122,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
     public void update(InventoryWarehouseMove move, List<InventoryWarehouseMoveItem> items) {
         InventoryWarehouseMove old = moveMapper.selectById(move.getId());
         if (old == null) throw new BusinessException("移仓单不存在");
-        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         move.setCode(old.getCode());
         moveMapper.updateById(move);
         itemMapper.delete(new LambdaQueryWrapper<InventoryWarehouseMoveItem>().eq(InventoryWarehouseMoveItem::getMoveId, move.getId()));
@@ -140,8 +140,8 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
     public void cancel(Long id) {
         InventoryWarehouseMove old = moveMapper.selectById(id);
         if (old == null) throw new BusinessException("移仓单不存在");
-        if (!DocStatus.DRAFT.name().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
-        InventoryWarehouseMove u = new InventoryWarehouseMove(); u.setId(id); u.setStatus(DocStatus.CANCELLED.name());
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        InventoryWarehouseMove u = new InventoryWarehouseMove(); u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode());
         moveMapper.updateById(u);
     }
 
@@ -150,7 +150,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
     public void audit(Long id) {
         InventoryWarehouseMove move = moveMapper.selectById(id);
         if (move == null) throw new BusinessException("移仓单不存在");
-        if (!DocStatus.DRAFT.name().equals(move.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        if (!DocStatus.DRAFT.getCode().equals(move.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<InventoryWarehouseMoveItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<InventoryWarehouseMoveItem>().eq(InventoryWarehouseMoveItem::getMoveId, id));
         for (InventoryWarehouseMoveItem it : items) {
@@ -166,7 +166,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
             stockService.changeStock(move.getToWarehouseId(), productName, q,
                     StockChangeType.MOVE_IN, move.getCode(), RelatedBillType.WAREHOUSE_MOVE, it.getProductId(), "", move.getId(), it.getQualityType());
         }
-        InventoryWarehouseMove u = new InventoryWarehouseMove(); u.setId(id); u.setStatus(DocStatus.AUDITED.name());
+        InventoryWarehouseMove u = new InventoryWarehouseMove(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
         moveMapper.updateById(u);
     }
 
@@ -175,7 +175,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
     public void unAudit(Long id) {
         InventoryWarehouseMove move = moveMapper.selectById(id);
         if (move == null) throw new BusinessException("移仓单不存在");
-        if (!DocStatus.AUDITED.name().equals(move.getStatus())) throw new BusinessException("只有已审核状态可反审核");
+        if (!DocStatus.AUDITED.getCode().equals(move.getStatus())) throw new BusinessException("只有已审核状态可反审核");
         List<InventoryWarehouseMoveItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<InventoryWarehouseMoveItem>().eq(InventoryWarehouseMoveItem::getMoveId, id));
         for (InventoryWarehouseMoveItem it : items) {
@@ -191,7 +191,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
             stockService.changeStock(move.getToWarehouseId(), productName, q.negate(),
                     StockChangeType.MOVE_OUT, move.getCode(), RelatedBillType.WAREHOUSE_MOVE_UN_AUDIT, it.getProductId(), "", move.getId(), it.getQualityType());
         }
-        InventoryWarehouseMove u = new InventoryWarehouseMove(); u.setId(id); u.setStatus(DocStatus.DRAFT.name());
+        InventoryWarehouseMove u = new InventoryWarehouseMove(); u.setId(id); u.setStatus(DocStatus.DRAFT.getCode());
         moveMapper.updateById(u);
     }
 

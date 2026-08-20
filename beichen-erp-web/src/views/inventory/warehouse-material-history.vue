@@ -55,7 +55,7 @@ onMounted(() => loadData())
           <template #default="{row}"><el-button v-if="row.relatedOrderCode" type="primary" link @click="handleCodeClick(row.relatedOrderCode)">{{ row.relatedOrderCode }}</el-button><span v-else style="color:var(--app-text-placeholder)">—</span></template>
         </el-table-column>
         <el-table-column label="类型" width="190" align="center">
-          <template #default="{row}"><el-tag :type="row.changeTypeLabel?.includes('出')||row.changeTypeLabel?.includes('扣')||row.changeType?.includes('OUT')?'danger':row.changeTypeLabel?.includes('回滚')||row.changeType?.includes('ROLLBACK')?'success':'info'" size="small">{{ row.changeTypeLabel || row.changeType }}</el-tag></template>
+          <template #default="{row}"><el-tag :type="row.changeType?.includes('OUT')||row.changeType?.includes('出库')||row.changeType?.includes('扣')?'danger':row.changeType?.includes('回滚')||row.changeType?.includes('ROLLBACK')?'success':'info'" size="small">{{ row.changeTypeLabel || row.changeType }}</el-tag></template>
         </el-table-column>
         <el-table-column prop="materialName" label="物料名称" min-width="140" show-overflow-tooltip />
         <el-table-column label="变更前" width="100" align="right">

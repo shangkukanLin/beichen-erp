@@ -26,4 +26,7 @@ public enum ProductQualityType {
     ProductQualityType(String label) {
         this.label = label;
     }
+
+    /** 存入数据库的枚举常量名（A/B/C/DEFECT） */
+    public String getCode() { return name(); }
 }

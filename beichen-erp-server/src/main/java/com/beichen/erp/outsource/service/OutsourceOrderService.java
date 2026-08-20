@@ -26,7 +26,5 @@ public interface OutsourceOrderService {
 
     void unaudit(Long id);
 
-    void complete(Long id);
-
     void cancel(Long id);
 }

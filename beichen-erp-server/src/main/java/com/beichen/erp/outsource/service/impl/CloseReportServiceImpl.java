@@ -8,9 +8,12 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.common.DeliveryStatus;
 import com.beichen.erp.inventory.common.IoType;
+import com.beichen.erp.inventory.common.RelatedBillType;
+import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.common.CloseReportStatus;
+import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.outsource.entity.CloseReport;
 import com.beichen.erp.outsource.entity.CloseReportItem;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
@@ -41,6 +44,7 @@ import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
+import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.outsource.service.CloseReportService;
 import com.beichen.erp.dev.entity.Bom;
 import com.beichen.erp.dev.entity.BomType;
@@ -48,6 +52,7 @@ import com.beichen.erp.dev.mapper.BomMapper;
 import com.beichen.erp.dev.mapper.BomTypeMapper;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
+import com.beichen.erp.finance.service.PayableHelper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -75,6 +80,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     private final OutsourceDeliveryItemMapper deliveryItemMapper;
     private final WarehouseMapper warehouseMapper;
     private final WarehouseStockMapper warehouseStockMapper;
+    private final WarehouseStockService warehouseStockService;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final OutsourceOtherIoMapper otherIoMapper;
     private final OutsourceOtherIoItemMapper otherIoItemMapper;
@@ -84,6 +90,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     private final SupplierMapper supplierMapper;
     private final MaterialOrderMapper materialOrderMapper;
     private final MaterialOrderItemMapper materialOrderItemMapper;
+    private final PayableHelper payableHelper;
 
     @Override
     public Map<String, Object> getOrCreateReport(Long orderId) {
@@ -162,6 +169,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
                             item.put("unitPrice", si.getMaterialPrice());
                         if (si.getFactoryRetainQty() != null)
                             item.put("factoryRetainQty", si.getFactoryRetainQty());
+                        if (si.getMissingQty() != null)
+                            item.put("missingQty", si.getMissingQty());
                         // 重新计算
                         recalcItem(item);
                     }
@@ -197,10 +206,9 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         BigDecimal lossRate = mat.getLossRate() != null ? mat.getLossRate() : BigDecimal.ZERO;
         item.put("targetYieldRate", new BigDecimal(100).subtract(lossRate));
 
-        // 发料数量 = 发到该工厂仓库的所有发料+收料的总和（含物料订单入库）
-        BigDecimal deliveredQty = sumDeliveryQuantity(factoryWhIds, mat.getMaterialId(), "发料")
-                .add(sumDeliveryQuantity(factoryWhIds, mat.getMaterialId(), "收料"));
-        item.put("deliveredQuantity", deliveredQty);
+        // 发料数量（仅用于 FIFO 单价计算，不再作为展示字段）
+        BigDecimal deliveredQty = sumDeliveryQuantity(factoryWhIds, mat.getMaterialId(), DeliveryType.DELIVERY.getCode())
+                .add(sumDeliveryQuantity(factoryWhIds, mat.getMaterialId(), DeliveryType.RECEIVE.getCode()));
 
         // 退料数量 = 从该工厂仓库退出的退料总和
         BigDecimal returnedQty = sumDeliveryQuantity(factoryWhIds, mat.getMaterialId(), DeliveryType.RETURN.getCode());
@@ -216,7 +224,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         }
         item.put("shippedQuantity", shippedTotal);
 
-        // 良品退料/不良退料默认=0（用户可修改）
+        // 良品退料/不良退料/留存工厂/缺失默认=0（用户可修改）
         // 物料单价：先进先出，按交期升序取最早订单的单价
         BigDecimal unitPrice = calcFifoPrice(mat.getMaterialId(), null, deliveredQty);
         item.put("unitPrice", unitPrice);
@@ -224,6 +232,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         item.put("goodReturnQty", BigDecimal.ZERO);
         item.put("defectReturnQty", BigDecimal.ZERO);
         item.put("factoryRetainQty", BigDecimal.ZERO);
+        item.put("missingQty", BigDecimal.ZERO);
         item.put("remark", "");
 
         recalcItem(item);
@@ -242,7 +251,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         String sql = "SELECT COALESCE(SUM(di.quantity), 0) " +
             "FROM outsource_delivery_item di " +
             "INNER JOIN outsource_delivery d ON di.delivery_id = d.id " +
-            "WHERE d.delivery_type = ? AND d.status = '" + DocStatus.AUDITED.name() + "' " +
+            "WHERE d.delivery_type = ? AND d.status = '" + DocStatus.AUDITED.getCode() + "' " +
             "AND d." + whColumn + " IN (" + warehouseIds.stream().map(Object::toString).collect(java.util.stream.Collectors.joining(",")) + ") " +
             "AND di.outsource_material_id = ?";
         BigDecimal result = jdbcTemplate.queryForObject(sql, BigDecimal.class, deliveryType, materialId);
@@ -251,22 +260,24 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
 
     /** 重新计算生产良率、超损等 */
     private void recalcItem(Map<String, Object> item) {
-        BigDecimal delivered = toBD(item.get("deliveredQuantity"));
         BigDecimal shipped = toBD(item.get("shippedQuantity"));
         BigDecimal goodReturn = toBD(item.get("goodReturnQty"));
         BigDecimal defectReturn = toBD(item.get("defectReturnQty"));
         BigDecimal targetYield = toBD(item.get("targetYieldRate"));
         BigDecimal factoryRetain = toBD(item.get("factoryRetainQty"));
+        // 缺失为手动填写，直接读取（不再自动推导）
+        BigDecimal missing = toBD(item.get("missingQty"));
 
         // 退料总计 = 良品退料 + 不良退料
         BigDecimal totalReturn = goodReturn.add(defectReturn);
         item.put("totalReturnQty", totalReturn);
-        // 缺失 = 发料 - 退料总计 - 出货消耗 - 留存工厂
-        BigDecimal missing = delivered.subtract(totalReturn).subtract(shipped).subtract(factoryRetain);
-        item.put("missingQty", missing);
 
-        // 生产良率% = 出货消耗 / (发料 - 留存 - 良退) × 100
-        BigDecimal denom = delivered.subtract(factoryRetain).subtract(goodReturn);
+        // 用料总数 = 出货消耗 + 良品退料 + 不良退料 + 留存工厂 + 缺失（物料全部去向之和）
+        BigDecimal usedTotal = shipped.add(goodReturn).add(defectReturn).add(factoryRetain).add(missing);
+        item.put("usedTotalQuantity", usedTotal);
+
+        // 生产良率% = 出货消耗 / (用料总数 - 留存 - 良退) × 100
+        BigDecimal denom = usedTotal.subtract(factoryRetain).subtract(goodReturn);
         BigDecimal actualYield = BigDecimal.ZERO;
         if (denom.compareTo(BigDecimal.ZERO) > 0) {
             actualYield = shipped.divide(denom, 6, RoundingMode.HALF_UP).multiply(new BigDecimal(100));
@@ -281,9 +292,9 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         if (excessLossQty.compareTo(BigDecimal.ZERO) < 0) excessLossQty = BigDecimal.ZERO;
         item.put("excessLossQty", excessLossQty.setScale(2, RoundingMode.HALF_UP));
 
-        // 最大超损 = (发料 - 良品退料 - 工厂留存) × (1 - 加工良率/100)（最小0）
+        // 最大超损 = (用料总数 - 良品退料 - 工厂留存) × (1 - 加工良率/100)（最小0）
         BigDecimal maxLossRate = BigDecimal.ONE.subtract(targetYield.divide(new BigDecimal(100), 6, RoundingMode.HALF_UP));
-        BigDecimal maxExcessLoss = delivered.subtract(goodReturn).subtract(factoryRetain).multiply(maxLossRate);
+        BigDecimal maxExcessLoss = usedTotal.subtract(goodReturn).subtract(factoryRetain).multiply(maxLossRate);
         if (maxExcessLoss.compareTo(BigDecimal.ZERO) < 0) maxExcessLoss = BigDecimal.ZERO;
         item.put("maxExcessLossQty", maxExcessLoss.setScale(2, RoundingMode.HALF_UP));
 
@@ -311,7 +322,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             report = new CloseReport();
             report.setOrderId(orderId);
             report.setCloseDate(LocalDate.now());
-            report.setStatus(DocStatus.DRAFT.name());
+            report.setStatus(DocStatus.DRAFT.getCode());
         }
         report.setRemark(remark);
         if (report.getId() == null) {
@@ -335,10 +346,11 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void confirmClose(Long orderId) {
+    public void confirmClose(Long orderId, Long returnWarehouseId) {
         OutsourceOrder order = orderMapper.selectById(orderId);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!OutsourceOrderStatus.PRODUCING.name().equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可结单");
+        if (!OutsourceOrderStatus.PRODUCING.getCode().equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可结单");
+        if (returnWarehouseId == null) throw new BusinessException("请选择退回仓库");
 
         CloseReport report = reportMapper.selectOne(
             new LambdaQueryWrapper<CloseReport>().eq(CloseReport::getOrderId, orderId));
@@ -352,6 +364,9 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         List<Warehouse> warehouses = warehouseMapper.selectList(
             new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
         if (warehouses.isEmpty()) throw new BusinessException("该加工厂未配置委外仓库");
+        Long factoryWhId = warehouses.get(0).getId();
+        // 退回仓库不能是当前工厂委外仓本身（否则退料无意义）
+        if (factoryWhId.equals(returnWarehouseId)) throw new BusinessException("退回仓库不能是该工厂委外仓库");
 
         // 收集需要退料的物料
         List<OutsourceDeliveryItem> returnItems = new ArrayList<>();
@@ -364,7 +379,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
                 returnItems.add(di);
             }
             if (defectQty.compareTo(BigDecimal.ZERO) > 0) {
-                OutsourceDeliveryItem di = buildReturnItem(item, defectQty, "不良品");
+                OutsourceDeliveryItem di = buildReturnItem(item, defectQty, QualityType.DEFECT.getCode());
                 returnItems.add(di);
             }
         }
@@ -374,30 +389,35 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             OutsourceDelivery returnDelivery = new OutsourceDelivery();
             returnDelivery.setDeliveryType(DeliveryType.RETURN.getCode());
             returnDelivery.setFactoryId(order.getFactoryId());
-            returnDelivery.setFromWarehouseId(warehouses.get(0).getId());
+            returnDelivery.setFromWarehouseId(factoryWhId);
+            returnDelivery.setToWarehouseId(returnWarehouseId);
             returnDelivery.setDeliveryDate(LocalDate.now());
-            returnDelivery.setStatus(DocStatus.AUDITED.name());
+            returnDelivery.setStatus(DocStatus.AUDITED.getCode());
             returnDelivery.setRemark("结单自动退料 - " + order.getCode());
             returnDelivery.setCode(generateDeliveryCode());
+            // 关联加工单，便于反结单精确定位退料单
+            returnDelivery.setSourceOrderId(orderId);
             deliveryMapper.insert(returnDelivery);
 
             for (OutsourceDeliveryItem di : returnItems) {
                 di.setDeliveryId(returnDelivery.getId());
                 deliveryItemMapper.insert(di);
-                // 退料 = 来源仓库减少（消耗）
-                updateReturnStock(warehouses.get(0).getId(), di.getMaterialId(), di.getQuantity(), di.getQualityType());
+                // 退料：工厂委外仓减少（消耗）
+                warehouseStockService.changeMaterialStock(factoryWhId, di.getMaterialId(), di.getQuantity().negate(),
+                        StockChangeType.OUTSOURCE_RETURN_OUT.getCode(), order.getCode(),
+                        RelatedBillType.OUTSOURCE_RETURN, returnDelivery.getId(), orderId);
+                // 退回仓库增加
+                warehouseStockService.changeMaterialStock(returnWarehouseId, di.getMaterialId(), di.getQuantity(),
+                        StockChangeType.SETTLEMENT_RETURN_IN.getCode(), order.getCode(),
+                        RelatedBillType.OUTSOURCE_RETURN, returnDelivery.getId(), orderId);
             }
         }
 
         // 缺失 → 生成物料其他出入库（出库），扣减工厂仓库存
         List<OutsourceOtherIoItem> missingItems = new ArrayList<>();
         for (CloseReportItem item : items) {
-            BigDecimal delivered = item.getDeliveredQuantity() != null ? item.getDeliveredQuantity() : BigDecimal.ZERO;
-            BigDecimal good = item.getGoodReturnQty() != null ? item.getGoodReturnQty() : BigDecimal.ZERO;
-            BigDecimal defect = item.getDefectReturnQty() != null ? item.getDefectReturnQty() : BigDecimal.ZERO;
-            BigDecimal shipped = item.getShippedQuantity() != null ? item.getShippedQuantity() : BigDecimal.ZERO;
-            BigDecimal retain = item.getFactoryRetainQty() != null ? item.getFactoryRetainQty() : BigDecimal.ZERO;
-            BigDecimal missing = delivered.subtract(good.add(defect)).subtract(shipped).subtract(retain);
+            // 缺失为手动填写，直接读取（不再由发料推导）
+            BigDecimal missing = item.getMissingQty() != null ? item.getMissingQty() : BigDecimal.ZERO;
             if (missing.compareTo(BigDecimal.ZERO) <= 0) continue;
 
             OutsourceOtherIoItem oi = new OutsourceOtherIoItem();
@@ -421,15 +441,30 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             for (OutsourceOtherIoItem oi : missingItems) {
                 oi.setOtherIoId(io.getId());
                 otherIoItemMapper.insert(oi);
-                deductStockById(warehouses.get(0).getId(), oi.getMaterialId(), oi.getQuantity());
+                deductStockById(warehouses.get(0).getId(), oi.getMaterialId(), oi.getQuantity(), order.getCode(), orderId);
             }
             log.info("加工单(ID={}) 结单生成缺失出库{}项", orderId, missingItems.size());
+        }
+
+        // 超损赔偿 → 生成负应付（冲减加工厂应付）；sourceId 用报表ID避免与交货应付(orderId)冲突
+        // 超损总价 = Σ(超损数量 × 物料单价)
+        BigDecimal totalExcessLoss = BigDecimal.ZERO;
+        for (CloseReportItem it : items) {
+            BigDecimal qty = it.getExcessLossQty() != null ? it.getExcessLossQty() : BigDecimal.ZERO;
+            BigDecimal price = it.getMaterialPrice() != null ? it.getMaterialPrice() : BigDecimal.ZERO;
+            totalExcessLoss = totalExcessLoss.add(qty.multiply(price));
+        }
+        if (totalExcessLoss.compareTo(BigDecimal.ZERO) > 0) {
+            payableHelper.createPayable(order.getFactoryId(),
+                    SourceBillType.OUTSOURCE_EXCESS_LOSS.getCode(),
+                    order.getCode(), report.getId(), totalExcessLoss.negate(),
+                    LocalDate.now(), "委外超损赔偿 - " + order.getCode());
         }
 
         // 更新加工单状态
         OutsourceOrder updateOrder = new OutsourceOrder();
         updateOrder.setId(orderId);
-        updateOrder.setStatus(OutsourceOrderStatus.FINISHED.name());
+        updateOrder.setStatus(OutsourceOrderStatus.FINISHED.getCode());
         updateOrder.setActualEndDate(LocalDate.now());
         orderMapper.updateById(updateOrder);
 
@@ -439,6 +474,84 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         reportMapper.updateById(report);
 
         log.info("加工单(ID={}) 已结单，生成退料{}项", orderId, returnItems.size());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void reopenClose(Long orderId) {
+        OutsourceOrder order = orderMapper.selectById(orderId);
+        if (order == null) throw new BusinessException("加工单不存在");
+        if (!OutsourceOrderStatus.FINISHED.getCode().equals(order.getStatus()))
+            throw new BusinessException("只有已完成的加工单可反结单");
+
+        CloseReport report = reportMapper.selectOne(
+            new LambdaQueryWrapper<CloseReport>().eq(CloseReport::getOrderId, orderId));
+        if (report == null) throw new BusinessException("未找到结单报表");
+        if (!CloseReportStatus.FINISHED.getCode().equals(report.getStatus()))
+            throw new BusinessException("该订单尚未结单，无需反结单");
+
+        // 1. 冲回超损应付（已付款会自动拦截）
+        payableHelper.reversePayable(report.getId());
+
+        // 2. 逆向退料单：作废 + 工厂仓加回、退回仓减回
+        List<OutsourceDelivery> returnDeliveries = deliveryMapper.selectList(
+            new LambdaQueryWrapper<OutsourceDelivery>()
+                .eq(OutsourceDelivery::getSourceOrderId, orderId)
+                .eq(OutsourceDelivery::getDeliveryType, DeliveryType.RETURN.getCode()));
+        for (OutsourceDelivery rd : returnDeliveries) {
+            if (DocStatus.CANCELLED.getCode().equals(rd.getStatus())) continue;
+            List<OutsourceDeliveryItem> rItems = deliveryItemMapper.selectList(
+                new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getDeliveryId, rd.getId()));
+            for (OutsourceDeliveryItem di : rItems) {
+                // 工厂委外仓加回（结单时是减）
+                warehouseStockService.changeMaterialStock(rd.getFromWarehouseId(), di.getMaterialId(), di.getQuantity(),
+                        StockChangeType.OUTSOURCE_RETURN_OUT.getCode(), order.getCode(),
+                        RelatedBillType.OUTSOURCE_RETURN, rd.getId(), orderId);
+                // 退回仓减回（结单时是加）
+                warehouseStockService.changeMaterialStock(rd.getToWarehouseId(), di.getMaterialId(), di.getQuantity().negate(),
+                        StockChangeType.SETTLEMENT_RETURN_IN.getCode(), order.getCode(),
+                        RelatedBillType.OUTSOURCE_RETURN, rd.getId(), orderId);
+            }
+            // 作废退料单
+            OutsourceDelivery updD = new OutsourceDelivery();
+            updD.setId(rd.getId());
+            updD.setStatus(DocStatus.CANCELLED.getCode());
+            deliveryMapper.updateById(updD);
+        }
+
+        // 3. 逆向缺失出库单：作废 + 工厂仓加回（结单时是减）
+        List<OutsourceOtherIo> missingIos = otherIoMapper.selectList(
+            new LambdaQueryWrapper<OutsourceOtherIo>()
+                .eq(OutsourceOtherIo::getRemark, "加工厂遗失 - " + order.getCode()));
+        for (OutsourceOtherIo io : missingIos) {
+            if (DeliveryStatus.CANCELLED.getCode().equals(io.getStatus())) continue;
+            List<OutsourceOtherIoItem> ioItems = otherIoItemMapper.selectList(
+                new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, io.getId()));
+            for (OutsourceOtherIoItem oi : ioItems) {
+                warehouseStockService.changeMaterialStock(io.getWarehouseId(), oi.getMaterialId(), oi.getQuantity(),
+                        StockChangeType.OUTSOURCE_RETURN_OUT.getCode(), order.getCode(),
+                        RelatedBillType.OUTSOURCE_RETURN, io.getId(), orderId);
+            }
+            // 作废缺失单
+            OutsourceOtherIo updIo = new OutsourceOtherIo();
+            updIo.setId(io.getId());
+            updIo.setStatus(DeliveryStatus.CANCELLED.getCode());
+            otherIoMapper.updateById(updIo);
+        }
+
+        // 4. 订单回退到生产中，清空实际结束日期（用 update 显式 set null，因 MP 默认忽略 null）
+        orderMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<OutsourceOrder>()
+                .eq(OutsourceOrder::getId, orderId)
+                .set(OutsourceOrder::getStatus, OutsourceOrderStatus.PRODUCING.getCode())
+                .set(OutsourceOrder::getActualEndDate, null));
+
+        // 5. 报表回退草稿，清空结单日期，保留明细供重新编辑
+        reportMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<CloseReport>()
+                .eq(CloseReport::getId, report.getId())
+                .set(CloseReport::getStatus, CloseReportStatus.DRAFT.getCode())
+                .set(CloseReport::getCloseDate, null));
+
+        log.info("加工单(ID={}) 已反结单，退回生产中", orderId);
     }
 
     private OutsourceDeliveryItem buildReturnItem(CloseReportItem item, BigDecimal qty, String qualityType) {
@@ -451,28 +564,12 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         return di;
     }
 
-    private void updateReturnStock(Long warehouseId, Long materialId, BigDecimal qty, String qualityType) {
-        LambdaQueryWrapper<WarehouseStock> w = new LambdaQueryWrapper<WarehouseStock>()
-            .eq(WarehouseStock::getWarehouseId, warehouseId)
-            .eq(WarehouseStock::getMaterialId, materialId)
-            .eq(WarehouseStock::getQualityType, qualityType != null ? qualityType : QualityType.GOOD.getCode());
-        WarehouseStock stock = warehouseStockMapper.selectOne(w);
-        if (stock == null) {
-            stock = new WarehouseStock();
-            stock.setWarehouseId(warehouseId);
-            stock.setMaterialId(materialId);
-            stock.setQualityType(qualityType != null ? qualityType : QualityType.GOOD.getCode());
-            stock.setQuantity(qty.negate());
-            warehouseStockMapper.insert(stock);
-        } else {
-            stock.setQuantity(stock.getQuantity().subtract(qty));
-            warehouseStockMapper.updateById(stock);
-        }
-    }
-
-    private void deductStockById(Long warehouseId, Long materialId, BigDecimal qty) {
+    /** 缺失扣库存：工厂委外仓减少（消耗） */
+    private void deductStockById(Long warehouseId, Long materialId, BigDecimal qty, String orderCode, Long orderId) {
         if (materialId == null || qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) return;
-        updateReturnStock(warehouseId, materialId, qty, QualityType.GOOD.getCode());
+        warehouseStockService.changeMaterialStock(warehouseId, materialId, qty.negate(),
+                StockChangeType.OUTSOURCE_RETURN_OUT.getCode(), orderCode,
+                RelatedBillType.OUTSOURCE_RETURN, null, orderId);
     }
 
     private String generateDeliveryCode() {

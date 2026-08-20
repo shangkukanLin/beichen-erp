@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.beichen.erp.material.common.ProductQualityType;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -48,6 +49,6 @@ public class SaleReturnItem {
     private Long companyId;
 
     public SaleReturnItem() {
-        this.qualityType = "DEFECT";
+        this.qualityType = ProductQualityType.DEFECT.getCode();
     }
 }

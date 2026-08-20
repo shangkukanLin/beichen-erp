@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { MemoStatus } from '@/api/enums'
 
 const loading = ref(false)
 const memoList = ref<any[]>([])
@@ -10,13 +11,13 @@ const progressList = ref<any[]>([])
 const progressLoading = ref(false)
 
 // 状态分组（进行中/关闭）
-const listTab = ref('OPEN')
+const listTab = ref(MemoStatus.OPEN)
 const keyword = ref('')
 
 // 按状态分组的列表
-const openMemos = computed(() => memoList.value.filter((m: any) => m.status === 'OPEN'))
-const closedMemos = computed(() => memoList.value.filter((m: any) => m.status === 'CLOSED'))
-const currentMemos = computed(() => (listTab.value === 'OPEN' ? openMemos.value : closedMemos.value))
+const openMemos = computed(() => memoList.value.filter((m: any) => m.status === MemoStatus.OPEN))
+const closedMemos = computed(() => memoList.value.filter((m: any) => m.status === MemoStatus.CLOSED))
+const currentMemos = computed(() => (listTab.value === MemoStatus.OPEN ? openMemos.value : closedMemos.value))
 
 // 新增/编辑备忘录弹窗
 const dialogVisible = ref(false)
@@ -33,10 +34,10 @@ const editProgressVisible = ref(false)
 const editProgressForm = reactive({ id: undefined as any, content: '' })
 
 function statusLabel(s: string) {
-  return s === 'OPEN' ? '进行中' : s === 'CLOSED' ? '关闭' : s
+  return s === MemoStatus.OPEN ? '进行中' : s === MemoStatus.CLOSED ? '关闭' : s
 }
 function statusTag(s: string): any {
-  return s === 'OPEN' ? 'success' : 'info'
+  return s === MemoStatus.OPEN ? 'success' : 'info'
 }
 
 async function loadMemoList() {
@@ -105,7 +106,7 @@ async function handleSaveMemo() {
 }
 
 async function toggleStatus(m: any) {
-  const target = m.status === 'OPEN' ? 'CLOSED' : 'OPEN'
+  const target = m.status === MemoStatus.OPEN ? MemoStatus.CLOSED : MemoStatus.OPEN
   try {
     await request.put(`/memo/${m.id}`, { status: target })
     loadMemoList()
@@ -198,8 +199,8 @@ onMounted(() => loadMemoList())
             </span>
             <span v-if="activeMemoId">
               <el-button size="small" text type="primary" @click="openEdit(currentMemos.find((m: any) => m.id === activeMemoId))">编辑标题</el-button>
-              <el-button size="small" text :type="currentMemos.find((m: any) => m.id === activeMemoId)?.status === 'OPEN' ? 'warning' : 'success'" @click="toggleStatus(currentMemos.find((m: any) => m.id === activeMemoId))">
-                {{ currentMemos.find((m: any) => m.id === activeMemoId)?.status === 'OPEN' ? '关闭' : '重开' }}
+              <el-button size="small" text :type="currentMemos.find((m: any) => m.id === activeMemoId)?.status === MemoStatus.OPEN ? 'warning' : 'success'" @click="toggleStatus(currentMemos.find((m: any) => m.id === activeMemoId))">
+                {{ currentMemos.find((m: any) => m.id === activeMemoId)?.status === MemoStatus.OPEN ? '关闭' : '重开' }}
               </el-button>
             </span>
           </div>

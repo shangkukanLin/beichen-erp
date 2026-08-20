@@ -26,7 +26,7 @@ public class PurchaseOrder {
 
     private LocalDate orderDate;
 
-    private Integer status;
+    private String status;
 
     private Integer taxIncluded;
 

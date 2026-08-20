@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.common.BillPrefix;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
@@ -54,7 +55,7 @@ public class InventoryStockReclassServiceImpl extends ServiceImpl<InventoryStock
     public Long saveDraft(InventoryStockReclass header, List<InventoryStockReclassItem> items) {
         Long companyId = header.getCompanyId();
         if (header.getReclassifyDate() == null) header.setReclassifyDate(LocalDate.now());
-        if (header.getStatus() == null || header.getStatus().isEmpty()) header.setStatus("DRAFT");
+        if (header.getStatus() == null || header.getStatus().isEmpty()) header.setStatus(DocStatus.DRAFT.getCode());
         if (header.getId() == null) {
             if (header.getCode() == null || header.getCode().isEmpty())
                 header.setCode(BillPrefix.STOCK_RECLASS + LocalDate.now() + "-" + System.currentTimeMillis() % 100000);
@@ -86,7 +87,7 @@ public class InventoryStockReclassServiceImpl extends ServiceImpl<InventoryStock
     public void review(Long id) {
         InventoryStockReclass header = baseMapper.selectById(id);
         if (header == null) throw new BusinessException("重分类单不存在");
-        if (!"DRAFT".equals(header.getStatus())) throw new BusinessException("仅草稿可审核");
+        if (!DocStatus.DRAFT.getCode().equals(header.getStatus())) throw new BusinessException("仅草稿可审核");
 
         List<InventoryStockReclassItem> items = loadItems(id);
         if (items.isEmpty()) throw new BusinessException("重分类单无明细");
@@ -108,7 +109,7 @@ public class InventoryStockReclassServiceImpl extends ServiceImpl<InventoryStock
                     StockChangeType.RECLASSIFY_IN, header.getCode(), RelatedBillType.PRODUCT_RECLASSIFY,
                     it.getProductId(), null, it.getId(), it.getToQuality());
         }
-        header.setStatus("AUDITED");
+        header.setStatus(DocStatus.AUDITED.getCode());
         header.setUpdateTime(LocalDateTime.now());
         baseMapper.updateById(header);
     }
@@ -118,7 +119,7 @@ public class InventoryStockReclassServiceImpl extends ServiceImpl<InventoryStock
     public void unreview(Long id) {
         InventoryStockReclass header = baseMapper.selectById(id);
         if (header == null) throw new BusinessException("重分类单不存在");
-        if (!"AUDITED".equals(header.getStatus())) throw new BusinessException("仅已审核可反审核");
+        if (!DocStatus.AUDITED.getCode().equals(header.getStatus())) throw new BusinessException("仅已审核可反审核");
 
         List<InventoryStockReclassItem> items = loadItems(id);
         for (InventoryStockReclassItem it : items) {
@@ -136,7 +137,7 @@ public class InventoryStockReclassServiceImpl extends ServiceImpl<InventoryStock
                     StockChangeType.CANCEL_RECLASSIFY_OUT, header.getCode(), RelatedBillType.PRODUCT_RECLASSIFY,
                     it.getProductId(), null, it.getId(), it.getFromQuality());
         }
-        header.setStatus("DRAFT");
+        header.setStatus(DocStatus.DRAFT.getCode());
         header.setUpdateTime(LocalDateTime.now());
         baseMapper.updateById(header);
     }
@@ -147,7 +148,7 @@ public class InventoryStockReclassServiceImpl extends ServiceImpl<InventoryStock
         InventoryStockReclass header = baseMapper.selectById(id);
         if (header == null) throw new BusinessException("重分类单不存在");
         if ("AUDITED".equals(header.getStatus())) throw new BusinessException("已审核单据不可作废，请先反审核");
-        header.setStatus("CANCELLED");
+        header.setStatus(DocStatus.CANCELLED.getCode());
         header.setUpdateTime(LocalDateTime.now());
         baseMapper.updateById(header);
     }

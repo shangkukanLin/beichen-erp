@@ -16,7 +16,6 @@ public class CloseReportItem {
     @TableField("bom_type_id")
     private Long bomTypeId;
     private String unit;
-    private BigDecimal deliveredQuantity;
     private BigDecimal returnedQuantity;
     private BigDecimal goodReturnQty;
     private BigDecimal defectReturnQty;
@@ -27,6 +26,7 @@ public class CloseReportItem {
     private BigDecimal excessLossQty;
     private BigDecimal materialPrice;
     private BigDecimal factoryRetainQty;
+    private BigDecimal missingQty;
     private String remark;
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;

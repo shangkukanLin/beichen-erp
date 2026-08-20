@@ -10,6 +10,7 @@ import {
   Refresh, Rank, Lock
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { MenuType } from '@/api/enums'
 
 // 图标字符串名 → 组件映射
 const iconMap: Record<string, any> = {
@@ -58,7 +59,7 @@ function handleMenuSelect(index: string) {
     <template v-for="item in userStore.menus" :key="item.id">
       <!-- catalog 且有子项 → 子菜单 -->
       <el-sub-menu
-        v-if="item.menuType === 'catalog' && item.children && item.children.length > 0"
+        v-if="item.menuType === MenuType.CATALOG && item.children && item.children.length > 0"
         :index="String(item.routePath || item.id)"
       >
         <template #title>
@@ -68,7 +69,7 @@ function handleMenuSelect(index: string) {
         <!-- 递归：子项可能是 menu 或二级 catalog -->
         <template v-for="child in item.children" :key="child.id">
           <el-sub-menu
-            v-if="child.menuType === 'catalog' && child.children && child.children.length > 0"
+            v-if="child.menuType === MenuType.CATALOG && child.children && child.children.length > 0"
             :index="String(child.routePath || child.id)"
           >
             <template #title>
@@ -80,14 +81,14 @@ function handleMenuSelect(index: string) {
               <template #title>{{ sub.menuName }}</template>
             </el-menu-item>
           </el-sub-menu>
-          <el-menu-item v-else-if="child.menuType === 'menu'" :index="child.routePath">
+          <el-menu-item v-else-if="child.menuType === MenuType.MENU" :index="child.routePath">
             <el-icon><component :is="resolveIcon(child.icon)" /></el-icon>
             <template #title>{{ child.menuName }}</template>
           </el-menu-item>
         </template>
       </el-sub-menu>
       <!-- 一级 menu（如首页） -->
-      <el-menu-item v-else-if="item.menuType === 'menu'" :index="item.routePath">
+      <el-menu-item v-else-if="item.menuType === MenuType.MENU" :index="item.routePath">
         <el-icon><component :is="resolveIcon(item.icon)" /></el-icon>
         <template #title>{{ item.menuName }}</template>
       </el-menu-item>

@@ -9,12 +9,10 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.inventory.common.RelatedBillType;
-import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
-import com.beichen.erp.outsource.common.OutsourceSourceBillType;
+import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
@@ -89,7 +87,7 @@ public class OutsourceOrderDeliveryServiceImpl
         List<OutsourceOrderDelivery> deliveries = baseMapper.selectList(
                 new LambdaQueryWrapper<OutsourceOrderDelivery>()
                         .eq(OutsourceOrderDelivery::getOrderId, orderId)
-                        .eq(OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.name()));
+                        .eq(OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.getCode()));
 
         BigDecimal totalQty = products.stream().map(p -> p.getQuantity() != null ? p.getQuantity() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -132,7 +130,7 @@ public class OutsourceOrderDeliveryServiceImpl
         if (delivery.getProductId() == null) throw new BusinessException("产品ID不能为空");
         OutsourceOrder order = orderService.getById(delivery.getOrderId());
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!OutsourceOrderStatus.PRODUCING.name().equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可录入交货");
+        if (!OutsourceOrderStatus.PRODUCING.getCode().equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可录入交货");
         if (delivery.getQuantity() == null || delivery.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
             throw new BusinessException("交货数量必须大于0");
         // 强制四等级校验
@@ -174,7 +172,7 @@ public class OutsourceOrderDeliveryServiceImpl
 
         // 草稿态存盘，不扣物料/不入库存/不生成应付，审核通过后由 audit() 统一落账
         delivery.setIsReverse(false);
-        delivery.setStatus(DocStatus.DRAFT.name());
+        delivery.setStatus(DocStatus.DRAFT.getCode());
         baseMapper.insert(delivery);
         log.info("交货记录已保存(草稿): id={}", delivery.getId());
         Map<String, Object> resp = new LinkedHashMap<>();
@@ -189,7 +187,7 @@ public class OutsourceOrderDeliveryServiceImpl
     public void audit(Long id) {
         OutsourceOrderDelivery delivery = baseMapper.selectById(id);
         if (delivery == null) throw new BusinessException("交货记录不存在");
-        if (!DocStatus.DRAFT.name().equals(delivery.getStatus())) throw new BusinessException("仅草稿状态可以审核");
+        if (!DocStatus.DRAFT.getCode().equals(delivery.getStatus())) throw new BusinessException("仅草稿状态可以审核");
         OutsourceOrder order = orderService.getById(delivery.getOrderId());
         if (order == null) throw new BusinessException("加工单不存在");
 
@@ -210,7 +208,7 @@ public class OutsourceOrderDeliveryServiceImpl
         }
         OutsourceOrderDelivery upd = new OutsourceOrderDelivery();
         upd.setId(id);
-        upd.setStatus(DocStatus.AUDITED.name());
+        upd.setStatus(DocStatus.AUDITED.getCode());
         baseMapper.updateById(upd);
     }
 
@@ -220,7 +218,7 @@ public class OutsourceOrderDeliveryServiceImpl
     public void unaudit(Long id) {
         OutsourceOrderDelivery delivery = baseMapper.selectById(id);
         if (delivery == null) throw new BusinessException("交货记录不存在");
-        if (!DocStatus.AUDITED.name().equals(delivery.getStatus())) throw new BusinessException("仅已审核状态可以反审核");
+        if (!DocStatus.AUDITED.getCode().equals(delivery.getStatus())) throw new BusinessException("仅已审核状态可以反审核");
         OutsourceOrder order = orderService.getById(delivery.getOrderId());
         if (order == null) throw new BusinessException("加工单不存在");
 
@@ -229,11 +227,11 @@ public class OutsourceOrderDeliveryServiceImpl
         } else {
             revertDeliveryStock(order, delivery);
         }
-        // 同步删除应付（已付款的会被阻止并抛异常）
-        payableHelper.deleteBySourceId(id);
+        // 同步冲回应付（置已作废，保留审计；已付款的会被阻止并抛异常）
+        payableHelper.reversePayable(id);
         OutsourceOrderDelivery upd = new OutsourceOrderDelivery();
         upd.setId(id);
-        upd.setStatus(DocStatus.DRAFT.name());
+        upd.setStatus(DocStatus.DRAFT.getCode());
         baseMapper.updateById(upd);
     }
 
@@ -243,7 +241,7 @@ public class OutsourceOrderDeliveryServiceImpl
     public Map<String, Object> updateDelivery(Long id, OutsourceOrderDelivery delivery, boolean forceDelivery) {
         OutsourceOrderDelivery old = baseMapper.selectById(id);
         if (old == null) throw new BusinessException("交货记录不存在");
-        if (!DocStatus.DRAFT.name().equals(old.getStatus())) {
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) {
             throw new BusinessException("仅草稿状态可编辑，已审核记录请先反审核");
         }
 
@@ -259,7 +257,7 @@ public class OutsourceOrderDeliveryServiceImpl
         // 草稿态编辑不触碰库存，仅更新记录本身与审核状态（保持草稿）
         delivery.setId(id);
         delivery.setIsReverse(old.getIsReverse());
-        delivery.setStatus(DocStatus.DRAFT.name());
+        delivery.setStatus(DocStatus.DRAFT.getCode());
         baseMapper.updateById(delivery);
 
         Map<String, Object> resp = new LinkedHashMap<>();
@@ -274,7 +272,7 @@ public class OutsourceOrderDeliveryServiceImpl
     public void deleteDelivery(Long id) {
         OutsourceOrderDelivery old = baseMapper.selectById(id);
         if (old == null) throw new BusinessException("交货记录不存在");
-        if (!DocStatus.DRAFT.name().equals(old.getStatus())) {
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) {
             throw new BusinessException("仅草稿状态可删除，已审核记录请先反审核");
         }
         baseMapper.deleteById(id);
@@ -287,7 +285,7 @@ public class OutsourceOrderDeliveryServiceImpl
         log.info("退不良: orderId={}, body={}", orderId, body);
         OutsourceOrder order = orderService.getById(orderId);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!OutsourceOrderStatus.PRODUCING.name().equals(order.getStatus()) && !OutsourceOrderStatus.FINISHED.name().equals(order.getStatus()))
+        if (!OutsourceOrderStatus.PRODUCING.getCode().equals(order.getStatus()) && !OutsourceOrderStatus.FINISHED.getCode().equals(order.getStatus()))
             throw new BusinessException("只有生产中或已完成的加工单可退不良");
 
         Long productId = body.get("productId") != null ? Long.valueOf(body.get("productId").toString()) : null;
@@ -340,20 +338,20 @@ public class OutsourceOrderDeliveryServiceImpl
         delivery.setDeliveryDate(LocalDate.now());
         delivery.setRemark(DeliveryType.DEFECT_RETURN.getLabel());
         delivery.setIsReverse(true);
-        delivery.setStatus(DocStatus.DRAFT.name());
+        delivery.setStatus(DocStatus.DRAFT.getCode());
         baseMapper.insert(delivery);
         log.info("退不良记录已保存(草稿): id={}", delivery.getId());
     }
 
     // ==================== 私有业务方法 ====================
 
-    /** 交货生成应付 */
+    /** 交货生成应付（sourceId 用交货记录ID，与反审核冲销 reversePayable(deliveryId) 精确匹配） */
     private void createDeliveryPayable(OutsourceOrder order, OutsourceOrderProduct product, OutsourceOrderDelivery delivery) {
         BigDecimal price = product.getUnitPrice() != null ? product.getUnitPrice() : BigDecimal.ZERO;
         BigDecimal amount = delivery.getQuantity().multiply(price);
         if (amount.compareTo(BigDecimal.ZERO) == 0) return;
-        payableHelper.createPayable(order.getFactoryId(), OutsourceSourceBillType.OUTSOURCE_DELIVERY.getCode(),
-                order.getCode(), order.getId(), amount,
+        payableHelper.createPayable(order.getFactoryId(), SourceBillType.OUTSOURCE_DELIVERY.getCode(),
+                order.getCode(), delivery.getId(), amount,
                 delivery.getDeliveryDate() != null ? delivery.getDeliveryDate() : LocalDate.now(),
                 "交货 - " + order.getCode() + " - " + product.getProductName());
     }
@@ -400,7 +398,7 @@ public class OutsourceOrderDeliveryServiceImpl
                 stock.setQuantity(before.add(restoreQty));
                 stockMapper.updateById(stock);
             }
-            writeStockLog(whId, mat.materialId(), mat.materialName(), "退不良还料",
+            writeStockLog(whId, mat.materialId(), mat.materialName(), StockChangeType.OUTSOURCE_DEFECT_RETURN.getCode(),
                     restoreQty, before, before.add(restoreQty), order.getCode());
             log.info("退不良还料: {} +{} (仓库ID={})", mat.materialName(), restoreQty, whId);
         }
@@ -680,10 +678,10 @@ public class OutsourceOrderDeliveryServiceImpl
                 delivery.getWarehouseId(), productName, delivery.getProductId(), delivery.getQuantity(),
                 delivery.getAQty(), delivery.getBQty(), delivery.getCQty(), delivery.getDefectQty());
         LinkedHashMap<String, BigDecimal> gradeMap = new LinkedHashMap<>();
-        gradeMap.put(ProductQualityType.A.name(), delivery.getAQty());
-        gradeMap.put(ProductQualityType.B.name(), delivery.getBQty());
-        gradeMap.put(ProductQualityType.C.name(), delivery.getCQty());
-        gradeMap.put(ProductQualityType.DEFECT.name(), delivery.getDefectQty());
+        gradeMap.put(ProductQualityType.A.getCode(), delivery.getAQty());
+        gradeMap.put(ProductQualityType.B.getCode(), delivery.getBQty());
+        gradeMap.put(ProductQualityType.C.getCode(), delivery.getCQty());
+        gradeMap.put(ProductQualityType.DEFECT.getCode(), delivery.getDefectQty());
         for (Map.Entry<String, BigDecimal> entry : gradeMap.entrySet()) {
             BigDecimal qty = entry.getValue();
             if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) continue;
@@ -697,10 +695,10 @@ public class OutsourceOrderDeliveryServiceImpl
     private void revertInventoryStock(OutsourceOrderDelivery delivery, String orderCode) {
         String productName = getProductNameByProductId(delivery.getOrderId(), delivery.getProductId());
         LinkedHashMap<String, BigDecimal> gradeMap = new LinkedHashMap<>();
-        gradeMap.put(ProductQualityType.A.name(), delivery.getAQty());
-        gradeMap.put(ProductQualityType.B.name(), delivery.getBQty());
-        gradeMap.put(ProductQualityType.C.name(), delivery.getCQty());
-        gradeMap.put(ProductQualityType.DEFECT.name(), delivery.getDefectQty());
+        gradeMap.put(ProductQualityType.A.getCode(), delivery.getAQty());
+        gradeMap.put(ProductQualityType.B.getCode(), delivery.getBQty());
+        gradeMap.put(ProductQualityType.C.getCode(), delivery.getCQty());
+        gradeMap.put(ProductQualityType.DEFECT.getCode(), delivery.getDefectQty());
         for (Map.Entry<String, BigDecimal> entry : gradeMap.entrySet()) {
             BigDecimal qty = entry.getValue();
             if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) continue;

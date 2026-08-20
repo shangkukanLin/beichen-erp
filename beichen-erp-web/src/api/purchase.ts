@@ -2,14 +2,14 @@ import request from '@/utils/request'
 
 /** 采购单状态 */
 export const PurchaseStatus = {
-  DRAFT: 0,      // 草稿
-  COMPLETED: 1,  // 已完成
-  CANCELLED: 2   // 已作废
+  DRAFT: 'DRAFT',      // 草稿
+  AUDITED: 'AUDITED',  // 已审核
+  CANCELLED: 'CANCELLED'   // 已作废
 } as const
 
-export const PurchaseStatusLabel: Record<number, string> = {
+export const PurchaseStatusLabel: Record<string, string> = {
   [PurchaseStatus.DRAFT]: '草稿',
-  [PurchaseStatus.COMPLETED]: '已完成',
+  [PurchaseStatus.AUDITED]: '已审核',
   [PurchaseStatus.CANCELLED]: '已作废'
 }
 

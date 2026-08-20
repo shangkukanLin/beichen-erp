@@ -88,6 +88,7 @@
 </template>
 
 <script setup lang="ts">
+import { WarehouseCategory } from '@/api/enums'
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -121,7 +122,7 @@ function statusType(s?: string) { return DocStatusTag[s || ''] || '' }
 
 async function loadWarehouses() {
   try {
-    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY' } })
+    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } })
     warehouses.value = res?.records || []
   } catch { warehouses.value = [] }
 }

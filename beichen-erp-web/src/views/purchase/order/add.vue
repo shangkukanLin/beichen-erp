@@ -109,6 +109,7 @@
 </template>
 
 <script setup lang="ts">
+import { WarehouseCategory } from '@/api/enums'
 defineOptions({ name: 'PurchaseAdd' })
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -208,7 +209,7 @@ async function loadSuppliers() {
 
 async function loadWarehouses() {
   try {
-    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY' } })
+    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } })
     warehouses.value = res?.records || []
   } catch { warehouses.value = [] }
 }

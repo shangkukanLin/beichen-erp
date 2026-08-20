@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { IoType, IoTypeLabel } from '@/api/enums'
+import { IoType, IoTypeLabel, WarehouseCategory } from '@/api/enums'
 
 const route = useRoute(); const router = useRouter()
 const editId = Number(route.query.id) || 0
@@ -23,7 +23,7 @@ async function loadWarehouses() {
     const r = await request.get<any,any>('/warehouse/page', {params:{pageSize:200}})
     warehouses.value = (r?.records || []).map((w:any) => ({
       ...w,
-      _type: w.warehouseCategory === 'INVENTORY' ? '我方仓' : '委外仓'
+      _type: w.warehouseCategory === WarehouseCategory.INVENTORY ? '我方仓' : '委外仓'
     }))
   } catch {}
 }

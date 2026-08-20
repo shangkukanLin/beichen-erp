@@ -101,14 +101,14 @@ export function getSaleOutboundPage(params: any) {
   return request.get<PageResult<SaleOutbound>>('/inventory/outbound/page', { params })
 }
 // ==================== 销售退货单 ====================
-/** 销售退货单状态：0=草稿 1=已审核 2=已作废（与后端 SaleReturnStatus 一致） */
+/** 销售退货单状态：DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废（与后端 DocStatus 一致） */
 export const SaleReturnStatus = {
-  DRAFT: 0,
-  AUDITED: 1,
-  CANCELLED: 2,
+  DRAFT: 'DRAFT',
+  AUDITED: 'AUDITED',
+  CANCELLED: 'CANCELLED',
 } as const
 
-export const SaleReturnStatusLabel: Record<number, string> = {
+export const SaleReturnStatusLabel: Record<string, string> = {
   [SaleReturnStatus.DRAFT]: '草稿',
   [SaleReturnStatus.AUDITED]: '已审核',
   [SaleReturnStatus.CANCELLED]: '已作废',

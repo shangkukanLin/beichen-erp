@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { WarehouseCategory } from '@/api/enums'
 import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -21,7 +22,7 @@ async function loadData() {
   tableLoading.value = true
   try {
     // 委外仓库页面只查询委外仓库（warehouseCategory=OUTSOURCE）
-    const p: any = { pageSize: 500, warehouseCategory: 'OUTSOURCE' }
+    const p: any = { pageSize: 500, warehouseCategory: WarehouseCategory.OUTSOURCE }
     if (query.warehouseName) p.warehouseName = query.warehouseName
     if (query.factoryId) p.factoryId = query.factoryId
     const r = await request.get<any, any>('/warehouse/page', { params: p })
@@ -32,7 +33,7 @@ function handleQuery() { loadData() }
 function handleReset() { query.warehouseName = ''; query.factoryId = undefined; loadData() }
 
 const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoading = ref(false)
-const defForm = () => ({ id: undefined as any, factoryId: undefined as any, warehouseName: '', warehouseCategory: 'OUTSOURCE', address: '', contact: '', phone: '', status: 1, remark: '' })
+const defForm = () => ({ id: undefined as any, factoryId: undefined as any, warehouseName: '', warehouseCategory: WarehouseCategory.OUTSOURCE, address: '', contact: '', phone: '', status: 1, remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
 function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dialogTitle.value = '新增委外仓库'; dialogVisible.value = true }

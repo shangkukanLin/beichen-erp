@@ -143,6 +143,9 @@ public class DataInitializer implements ApplicationRunner {
         // 库存流水 change_type 扩长：StockChangeType 枚举名超 20 字符（如 OUTSOURCE_CANCEL_DELIVERY=24），原 varchar(20) 会 Data truncation
         modifyColumn("warehouse_stock_log", "change_type",
                 "ALTER TABLE warehouse_stock_log MODIFY COLUMN change_type VARCHAR(50) NOT NULL COMMENT '变动类型'");
+        // 结单报表物料明细：缺失改手动填写，新增 missing_qty 列
+        addColumnIfAbsent("outsource_order_close_report_item", "missing_qty",
+                "ALTER TABLE outsource_order_close_report_item ADD COLUMN missing_qty DECIMAL(18,4) DEFAULT NULL COMMENT '缺失(手动填写)' AFTER factory_retain_qty");
     }
 
     /** 幂等扩长/修改列：当列长度不足时执行 ALTER MODIFY（用于枚举 code 超长的平滑升级） */

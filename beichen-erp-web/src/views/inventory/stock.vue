@@ -62,11 +62,12 @@
 </template>
 
 <script setup lang="ts">
+import { WarehouseCategory, WarehouseType } from '@/api/enums'
 import { reactive, ref, onMounted, computed } from 'vue'
 import request from '@/utils/request'
 
 const warehouses = ref<{ id: number; warehouseName: string; warehouseType?: string }[]>([])
-const stockWarehouses = computed(() => warehouses.value.filter(w => w.warehouseType !== '辅料仓'))
+const stockWarehouses = computed(() => warehouses.value.filter(w => w.warehouseType !== WarehouseType.AUXILIARY))
 
 function warehouseName(id?: number) {
   const w = warehouses.value.find(x => x.id === id)
@@ -98,7 +99,7 @@ function stockReset() { stockQuery.warehouseId = undefined; stockQuery.productNa
 
 async function loadWarehouses() {
   try {
-    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY' } })
+    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } })
     warehouses.value = res?.records || []
   } catch { warehouses.value = [] }
 }

@@ -51,6 +51,7 @@ public class MaterialOrderController {
     private final DeliveryService deliveryService;
     private final OutsourceMaterialComponentMapper componentMapper;
     private final WarehouseStockLogMapper stockLogMapper;
+    private final com.beichen.erp.outsource.service.SupplierMaterialService supplierMaterialService;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -122,7 +123,7 @@ public class MaterialOrderController {
     public R<Long> create(@RequestBody Map<String, Object> body) {
         MaterialOrder o = parseOrder(body);
         o.setCode(generateCode());
-        o.setStatus(MaterialOrderStatus.PENDING.name());
+        o.setStatus(MaterialOrderStatus.PENDING.getCode());
         orderMapper.insert(o);
 
         @SuppressWarnings("unchecked")
@@ -142,7 +143,7 @@ public class MaterialOrderController {
     public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         MaterialOrder old = orderMapper.selectById(id);
         if (old == null) throw new BusinessException("订单不存在");
-        if (MaterialOrderStatus.CANCELLED.name().equals(old.getStatus())) throw new BusinessException("已取消的订单不可编辑");
+        if (MaterialOrderStatus.CANCELLED.getCode().equals(old.getStatus())) throw new BusinessException("已取消的订单不可编辑");
         MaterialOrder o = parseOrder(body);
         o.setId(id);
         orderMapper.updateById(o);
@@ -165,8 +166,8 @@ public class MaterialOrderController {
     public R<Void> confirm(@PathVariable Long id) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        if (!MaterialOrderStatus.PENDING.name().equals(o.getStatus())) throw new BusinessException("只有待确认状态可确认");
-        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.RECEIVING.name());
+        if (!MaterialOrderStatus.PENDING.getCode().equals(o.getStatus())) throw new BusinessException("只有待确认状态可确认");
+        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.RECEIVING.getCode());
         orderMapper.updateById(upd);
         return R.ok();
     }
@@ -179,11 +180,11 @@ public class MaterialOrderController {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
         // 仅已确认(收货中)的订单可收货；待确认/已结单/已取消均禁止
-        if (MaterialOrderStatus.PENDING.name().equals(o.getStatus()))
+        if (MaterialOrderStatus.PENDING.getCode().equals(o.getStatus()))
             throw new BusinessException("订单尚未确认，请先确认订单再收货");
-        if (MaterialOrderStatus.FINISHED.name().equals(o.getStatus()))
+        if (MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus()))
             throw new BusinessException("订单已结单，不可再收货");
-        if (MaterialOrderStatus.CANCELLED.name().equals(o.getStatus()))
+        if (MaterialOrderStatus.CANCELLED.getCode().equals(o.getStatus()))
             throw new BusinessException("订单已取消，不可收货");
 
         // 供应商（加工厂）仓库：子物料从该仓扣减
@@ -253,7 +254,7 @@ public class MaterialOrderController {
         delivery.setFactoryId(o.getSupplierId());
         delivery.setToWarehouseId(whId);
         delivery.setDeliveryDate(LocalDate.now());
-        delivery.setStatus(DocStatus.DRAFT.name());
+        delivery.setStatus(DocStatus.DRAFT.getCode());
         delivery.setRemark((OrderType.OUTSOURCE.getLabel().equals(o.getOrderType()) ? "委外收货 - " : "采购收货 - ") + o.getCode());
         // 强关联来源订单ID，便于财务/库存回查（替代 remark LIKE 弱关联）
         delivery.setSourceOrderId(id);
@@ -286,11 +287,11 @@ public class MaterialOrderController {
         }
 
         // 订单进入收货中（仅标记，不等到全部收满）
-        if (!MaterialOrderStatus.RECEIVING.name().equals(o.getStatus())
-                && !MaterialOrderStatus.FINISHED.name().equals(o.getStatus())) {
+        if (!MaterialOrderStatus.RECEIVING.getCode().equals(o.getStatus())
+                && !MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus())) {
             MaterialOrder upd = new MaterialOrder();
             upd.setId(id);
-            upd.setStatus(MaterialOrderStatus.RECEIVING.name());
+            upd.setStatus(MaterialOrderStatus.RECEIVING.getCode());
             orderMapper.updateById(upd);
         }
         return R.ok(delivery.getId());
@@ -314,8 +315,8 @@ public class MaterialOrderController {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
         // 已确认(收货中)或已完成的订单可退不良；待确认/已取消禁止
-        if (!MaterialOrderStatus.RECEIVING.name().equals(o.getStatus())
-                && !MaterialOrderStatus.FINISHED.name().equals(o.getStatus()))
+        if (!MaterialOrderStatus.RECEIVING.getCode().equals(o.getStatus())
+                && !MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus()))
             throw new BusinessException("仅收货中或已完成的订单可退不良");
 
         Long factoryId = o.getSupplierId();
@@ -340,7 +341,7 @@ public class MaterialOrderController {
         delivery.setFactoryId(factoryId);
         delivery.setToWarehouseId(whId);
         delivery.setDeliveryDate(LocalDate.now());
-        delivery.setStatus(DocStatus.DRAFT.name());
+        delivery.setStatus(DocStatus.DRAFT.getCode());
         delivery.setRemark("不良退料(" + handleType + ") - " + o.getCode());
         // 强关联来源订单ID，便于退不良记录回查（替代 remark LIKE 弱关联）
         delivery.setSourceOrderId(id);
@@ -391,9 +392,9 @@ public class MaterialOrderController {
     public R<Void> finish(@PathVariable Long id) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        if (MaterialOrderStatus.CANCELLED.name().equals(o.getStatus())) throw new BusinessException("已取消的订单不可结单");
-        if (MaterialOrderStatus.FINISHED.name().equals(o.getStatus())) throw new BusinessException("订单已完成");
-        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.FINISHED.name()); upd.setFinishTime(java.time.LocalDateTime.now());
+        if (MaterialOrderStatus.CANCELLED.getCode().equals(o.getStatus())) throw new BusinessException("已取消的订单不可结单");
+        if (MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus())) throw new BusinessException("订单已完成");
+        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.FINISHED.getCode()); upd.setFinishTime(java.time.LocalDateTime.now());
         orderMapper.updateById(upd);
         return R.ok();
     }
@@ -403,13 +404,13 @@ public class MaterialOrderController {
     public R<Void> cancel(@PathVariable Long id) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        if (MaterialOrderStatus.CANCELLED.name().equals(o.getStatus()) || MaterialOrderStatus.FINISHED.name().equals(o.getStatus()))
+        if (MaterialOrderStatus.CANCELLED.getCode().equals(o.getStatus()) || MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus()))
             throw new BusinessException("当前状态不可取消");
         List<MaterialOrderItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
         boolean hasDelivery = items.stream().anyMatch(it -> it.getReceivedQuantity() != null && it.getReceivedQuantity().compareTo(BigDecimal.ZERO) > 0);
         if (hasDelivery) throw new BusinessException("该订单已有交货记录，不可取消");
-        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.CANCELLED.name());
+        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.CANCELLED.getCode());
         orderMapper.updateById(upd);
         return R.ok();
     }
@@ -537,7 +538,7 @@ public class MaterialOrderController {
         List<MaterialOrder> activeOrders = orderMapper.selectList(
             new LambdaQueryWrapper<MaterialOrder>()
                 .eq(MaterialOrder::getDeleted, 0)
-                .notIn(MaterialOrder::getStatus, List.of(MaterialOrderStatus.FINISHED.name(), MaterialOrderStatus.CANCELLED.name())));
+                .notIn(MaterialOrder::getStatus, List.of(MaterialOrderStatus.FINISHED.getCode(), MaterialOrderStatus.CANCELLED.getCode())));
             if (!activeOrders.isEmpty()) {
                 List<Long> orderIds = activeOrders.stream().map(MaterialOrder::getId).collect(Collectors.toList());
                 List<MaterialOrderItem> orderItems = itemMapper.selectList(
@@ -600,7 +601,8 @@ public class MaterialOrderController {
                                 cm.put("childUnit", childMat.getUnit());
                                 cm.put("childBomTypeId", childMat.getBomTypeId());
                                 cm.put("childBomTypeName", getBomTypeNameById(childMat.getBomTypeId()));
-                                cm.put("supplierIds", childMat.getSupplierIds());
+                                // 供应商从 supplier_material 居间表联查（outsource_material.supplier_ids 冗余字段已废弃）
+                                cm.put("supplierIds", supplierMaterialService.listSupplierIdsByMaterial(childMat.getId()));
                             }
                             // 查该供应商委外仓库存
                             BigDecimal stock = BigDecimal.ZERO;
