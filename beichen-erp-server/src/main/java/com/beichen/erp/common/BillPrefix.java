@@ -42,6 +42,8 @@ public final class BillPrefix {
     public static final String OUTSOURCE_PO = "PO-";
     /** 委外退不良/缺陷单 */
     public static final String OUTSOURCE_DEFECT = "DEF-";
+    /** 委外物料退货单 */
+    public static final String OUTSOURCE_MATERIAL_RETURN = "MR-";
     /** 委外其他出入库 */
     public static final String OUTSOURCE_OTHER_IO = "OWO-";
     /** 移仓单 */

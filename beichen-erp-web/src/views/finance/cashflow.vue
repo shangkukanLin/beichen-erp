@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { getCashflowPage, getAccountPage, createAccount, updateAccount, type FinanceCashflow, type FinanceAccount, type PageResult } from '@/api/finance'
 
@@ -50,6 +50,7 @@ async function saveAccount() {
 }
 
 onMounted(() => { loadFlow(); loadAccounts() })
+onActivated(() => { loadFlow(); loadAccounts() })
 </script>
 <template>
   <div class="p">

@@ -1,30 +1,21 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const activeTab = ref(DeliveryType.DELIVERY)
 const query = reactive({ code: '', factoryId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])
 const tableLoading = ref(false)
-const factoryOptions = ref<any[]>([])
-const allWarehouses = ref<any[]>([])
-
-async function loadOptions() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType:'factory', pageSize:200 } }); factoryOptions.value = r?.records || [] } catch (e: any) { console.warn('加载工厂选项失败', e?.message || e) }
-  try {
-    const [r1, r2] = await Promise.all([
-      request.get<any,any>('/warehouse/page',{params:{pageSize:300}}),
-      request.get<any,any>('/warehouse/page',{params:{pageSize:300}})
-    ]);
-    allWarehouses.value = [...(r1?.records||[]), ...(r2?.records||[])]
-  } catch {}
-}
+const factoryOptions = computed(() => optionsStore.suppliers['suppliers:factory'] || [])
+const allWarehouses = computed(() => optionsStore.warehouses || [])
 
 function goWhDetail(warehouseId: number) {
   const w = allWarehouses.value.find((x:any)=>x.id===warehouseId)
@@ -57,11 +48,8 @@ async function handleUnaudit(row: any) {
   try { await ElMessageBox.confirm('确定反审核该收发单吗？反审核后将回滚库存与流水，回到草稿。', '反审核', { type: 'warning' }); await request.put(`/outsource/delivery/${row.id}/unaudit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
-onMounted(() => { loadOptions(); loadData() })
-onActivated(() => {
-  if ((window as any).__deliveryNeedRefresh) { (window as any).__deliveryNeedRefresh = false; loadData() }
-})
-onActivated(() => { loadOptions() })
+onMounted(() => { optionsStore.ensureSuppliers('factory'); optionsStore.ensureWarehouses(); loadData() })
+onActivated(() => { loadData() })
 </script>
 
 <template>

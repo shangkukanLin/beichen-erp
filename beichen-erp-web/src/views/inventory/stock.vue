@@ -63,10 +63,12 @@
 
 <script setup lang="ts">
 import { WarehouseCategory, WarehouseType } from '@/api/enums'
-import { reactive, ref, onMounted, computed } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import request from '@/utils/request'
+import { useOptionsStore } from '@/stores/options'
 
-const warehouses = ref<{ id: number; warehouseName: string; warehouseType?: string }[]>([])
+const optionsStore = useOptionsStore()
+const warehouses = computed(() => optionsStore.warehouses.filter(w => w.warehouseCategory === WarehouseCategory.INVENTORY))
 const stockWarehouses = computed(() => warehouses.value.filter(w => w.warehouseType !== WarehouseType.AUXILIARY))
 
 function warehouseName(id?: number) {
@@ -97,14 +99,8 @@ async function loadStock() {
 function stockQuery_() { stockPage.pageNum = 1; loadStock() }
 function stockReset() { stockQuery.warehouseId = undefined; stockQuery.productName = ''; stockPage.pageNum = 1; loadStock() }
 
-async function loadWarehouses() {
-  try {
-    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } })
-    warehouses.value = res?.records || []
-  } catch { warehouses.value = [] }
-}
-
-onMounted(() => { loadWarehouses(); loadStock() })
+onMounted(() => { optionsStore.ensureWarehouses(); loadStock() })
+onActivated(() => { loadStock() })
 </script>
 
 <style scoped>

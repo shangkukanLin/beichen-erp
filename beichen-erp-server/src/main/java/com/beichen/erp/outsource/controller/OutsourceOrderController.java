@@ -97,6 +97,8 @@ public class OutsourceOrderController {
         for (OutsourceOrderProduct p : products) {
             Map<String, Object> pm = new HashMap<>();
             pm.put("id", p.getId()); pm.put("orderId", p.getOrderId()); pm.put("projectId", p.getProjectId());
+            // 产品主数据ID(product.id)，退不良库存匹配使用
+            pm.put("productId", p.getProductId());
             pm.put("productName", p.getProductName()); pm.put("productSpec", p.getProductSpec());
             pm.put("quantity", p.getQuantity()); pm.put("unitPrice", p.getUnitPrice());
             pm.put("amount", p.getAmount()); pm.put("remark", p.getRemark());

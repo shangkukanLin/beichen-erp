@@ -2,12 +2,13 @@
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { addProject, checkProjectAssembly, getSupplierPage, type ProjectDTO } from '@/api/system'
-import request from '@/utils/request'
+import { addProject, checkProjectAssembly, type ProjectDTO } from '@/api/system'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const route = useRoute()
 const tabStore = useTabStore()
 
@@ -29,8 +30,8 @@ function resetForm() {
 }
 
 async function loadData() {
-  try { const r = await getSupplierPage({ supplierType: 'solution', pageSize: 200 }); solutionSuppliers.value = (r?.records || []).map((s: any) => ({ id: s.id, name: s.name })) } catch (e: any) { console.warn('加载方案商失败', e?.message || e) }
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } }); factoryOptions.value = (r?.records || []).map((s: any) => ({ id: s.id, name: s.name })) } catch (e: any) { console.warn('加载工厂失败', e?.message || e) }
+  await optionsStore.ensureSuppliers('solution'); solutionSuppliers.value = (optionsStore.suppliers['suppliers:solution'] || []).map((s: any) => ({ id: s.id, name: s.name }))
+  await optionsStore.ensureSuppliers('factory'); factoryOptions.value = (optionsStore.suppliers['suppliers:factory'] || []).map((s: any) => ({ id: s.id, name: s.name }))
 }
 
 async function handleSubmit() {
@@ -65,6 +66,7 @@ async function handleSubmit() {
   saving.value = true
   try {
     await addProject(form as any, linkExistingProductId)
+    optionsStore.refreshProjects()
     ElMessage.success('项目创建成功')
     resetForm()
     tabStore.removeTab(route.path)

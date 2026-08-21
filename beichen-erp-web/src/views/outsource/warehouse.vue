@@ -4,8 +4,10 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const query = reactive({ warehouseName: '', factoryId: undefined as any })
 const allData = ref<any[]>([])
 const activeTab = ref('active')
@@ -15,7 +17,7 @@ const activeData = computed(() => allData.value.filter(v => v.status === 1))
 const stoppedData = computed(() => allData.value.filter(v => v.status === 0))
 
 async function loadFactories() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 200 } }); factoryOptions.value = r?.records || [] } catch (e: any) { console.warn('加载供应商选项失败', e?.message || e) }
+  await optionsStore.ensureSuppliers('all'); factoryOptions.value = optionsStore.suppliers['suppliers:all'] || []
 }
 
 async function loadData() {
@@ -41,12 +43,12 @@ function handleEdit(row: any) { Object.assign(form, defForm(), row); isEdit.valu
 
 async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('请输入仓库名称'); return }; submitLoading.value = true
   try { if (isEdit.value) { await request.put('/warehouse', form); ElMessage.success('修改成功') } else { await request.post('/warehouse', form); ElMessage.success('新增成功') }
-    dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
+    optionsStore.refreshWarehouses(); dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
 
 async function handleToggleStatus(row: any) {
   row.status = row.status === 1 ? 0 : 1
   await request.put('/warehouse', row)
-  ElMessage.success(row.status === 1 ? '已启用' : '已停用'); loadData()
+  optionsStore.refreshWarehouses(); ElMessage.success(row.status === 1 ? '已启用' : '已停用'); loadData()
 }
 
 function handleDetail(row: any) { router.push(`/outsource/warehouse/detail/${row.id}`) }

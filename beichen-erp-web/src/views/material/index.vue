@@ -15,8 +15,10 @@ import {
 } from '@/api/product'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
+const optionsStore = useOptionsStore()
 
 // 品牌下拉
 const brandOptions = ref<{ id: number; brandName: string }[]>([])
@@ -153,6 +155,7 @@ async function handleSubmit() {
         await addProduct(form)
         ElMessage.success('新增成功')
       }
+      optionsStore.refreshProducts()
       dialogVisible.value = false
       loadData()
     } catch {
@@ -171,6 +174,7 @@ async function handleDelete(row: any) {
       type: 'warning'
     })
     await deleteProduct(row.id as number | string)
+    optionsStore.refreshProducts()
     ElMessage.success('已停用')
     loadData()
   } catch (e: any) {

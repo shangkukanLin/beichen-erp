@@ -4,9 +4,11 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
 const tabStore = useTabStore()
+const optionsStore = useOptionsStore()
 
 const form = reactive({ factoryId: undefined as any, warehouseId: undefined as any, returnDate: new Date().toISOString().slice(0, 10), remark: '' })
 const factoryOptions = ref<any[]>([])
@@ -29,8 +31,8 @@ function usedProducts(idx: number) {
 }
 
 async function loadFactories() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } }); factoryOptions.value = r?.records || [] } catch {}
-  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200 } }); warehouseOptions.value = r?.records || [] } catch {}
+  await optionsStore.ensureSuppliers('factory'); factoryOptions.value = optionsStore.suppliers['suppliers:factory'] || []
+  await optionsStore.ensureWarehouses(); warehouseOptions.value = optionsStore.warehouses || []
 }
 
 async function onFactoryChange(v: any) {
@@ -112,9 +114,8 @@ async function handleSubmit() {
   if (items.some((m: any) => !m.materialId)) { ElMessage.warning('存在未关联委外物料的明细，无法保存，请检查BOM物料是否已登记'); return }
   try {
     await request.post('/outsource/return-order', { factoryId: form.factoryId, warehouseId: form.warehouseId, returnDate: form.returnDate, remark: form.remark, items, products: rows.value.filter((r: any) => r.productName && Number(r.returnQuantity) > 0).map((r: any) => ({ productName: r.productName, productId: r.selectedVersion?.productId || null, quantity: Number(r.returnQuantity) })) })
-    ElMessage.success('退货单已创建')
+    ElMessage.success('退货单草稿已保存，请在列表中审核生效')
     resetForm()
-    ;(window as any).__returnOrderNeedRefresh = true
     tabStore.removeTab(window.location.hash.replace('#', ''))
     router.replace('/outsource/return-order')
   } catch (e: any) { ElMessage.error(e?.message || '创建失败') }
@@ -129,9 +130,9 @@ function resetForm() {
 
 onMounted(() => { loadFactories(); loadBomTypes() })
 async function loadBomTypes() {
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
+  await optionsStore.ensureBomTypes(); bomTypes.value = optionsStore.bomTypes || []
 }
-onActivated(() => { resetForm() })
+onActivated(() => { loadFactories(); resetForm() })
 </script>
 
 <template>

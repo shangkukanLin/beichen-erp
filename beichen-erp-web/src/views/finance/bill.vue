@@ -1,22 +1,22 @@
 ﻿<script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { ElMessage } from 'element-plus'
-import { listCustomers, type Customer } from '@/api/customer'
-import request from '@/utils/request'
 import { getBillPage, getBillItems, generateBill, auditBill, unAuditBill, cancelBill, type FinanceBill, type FinanceBillItem } from '@/api/finance'
 import { BillType, BillTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import { useOptionsStore } from '@/stores/options'
 
 // 账单状态 code → 中文 label（后端存 DocStatus code，前端展示中文）
 const StatusLabel: Record<string, string> = DocStatusLabel
 const StatusTag: Record<string, 'info' | 'success' | 'warning' | 'danger' | 'primary'> = DocStatusTag
 
+const optionsStore = useOptionsStore()
 const query = reactive({ billType: BillType.RECEIVABLE, partnerId: '' as string|number })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinanceBill[]>([])
-const customers = ref<Customer[]>([])
-const suppliers = ref<{id:number;name:string}[]>([])
+const customers = computed(() => optionsStore.customers || [])
+const suppliers = computed(() => optionsStore.suppliers['suppliers:all'] || [])
 
 async function loadData() {
   loading.value = true
@@ -28,11 +28,8 @@ async function loadData() {
     data.value = res?.records || []; page.total = res?.total || 0
   } catch { data.value = [] } finally { loading.value = false }
 }
-async function loadOpts() {
-  try { customers.value = await listCustomers() || [] } catch {}
-  try { const r = await request.get('/supplier/page',{params:{pageSize:200}}); suppliers.value = r?.records || [] } catch {}
-}
-onMounted(() => { loadOpts(); loadData() })
+onMounted(() => { optionsStore.ensureCustomers(); optionsStore.ensureSuppliers('all'); loadData() })
+onActivated(() => { loadData() })
 function query_() { page.pageNum = 1; loadData() }
 function reset_() { query.partnerId = ''; page.pageNum = 1; loadData() }
 function partnerName(id?: number) {

@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/enums'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const loading = ref(false)
 const list = ref<any[]>([])
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
-const factoryOptions = ref<any[]>([])
+const factoryOptions = computed(() => optionsStore.suppliers['suppliers:factory'] || [])
 
 async function loadData() {
   loading.value = true
@@ -18,25 +21,31 @@ async function loadData() {
   } finally { loading.value = false }
 }
 
-async function loadOptions() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } }); factoryOptions.value = r?.records || [] } catch {}
+async function handleAudit(row: any) {
+  try { await ElMessageBox.confirm('确认审核该退货单？审核后物料入工厂仓、成品出库并冲减应付', '确认审核', { type: 'warning' }) } catch { return }
+  try { await request.put(`/outsource/return-order/${row.id}/audit`); ElMessage.success('审核成功'); loadData() } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
+}
+
+async function handleUnAudit(row: any) {
+  try { await ElMessageBox.confirm('确认取消审核？将逆向库存并冲销应付', '确认取消审核', { type: 'warning' }) } catch { return }
+  try { await request.put(`/outsource/return-order/${row.id}/un-audit`); ElMessage.success('已取消审核'); loadData() } catch (e: any) { ElMessage.error(e?.message || '取消审核失败') }
 }
 
 async function handleCancel(row: any) {
-  try { await ElMessageBox.confirm('确认取消？将逆向库存', '确认', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/return-order/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch (e: any) { ElMessage.error(e?.message || '失败') }
+  try { await ElMessageBox.confirm('确认作废该退货单？', '确认作废', { type: 'warning' }) } catch { return }
+  try { await request.put(`/outsource/return-order/${row.id}/cancel`); ElMessage.success('已作废'); loadData() } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 function handleAdd() { router.push('/outsource/return-order/add') }
 
-onMounted(() => { loadOptions(); loadData() })
-onActivated(() => { if ((window as any).__returnOrderNeedRefresh) { (window as any).__returnOrderNeedRefresh = false; loadData() } })
+onMounted(() => { optionsStore.ensureSuppliers('factory'); loadData() })
+onActivated(() => { loadData() })
 </script>
 
 <template>
   <div style="display:flex;flex-direction:column;gap:12px">
     <el-card shadow="never">
-      <el-button type="primary" @click="handleAdd">新增退货</el-button>
+      <el-button type="primary" @click="handleAdd">新增委外加工退货</el-button>
     </el-card>
     <el-card shadow="never">
       <el-table :data="list" border stripe v-loading="loading">
@@ -51,13 +60,15 @@ onActivated(() => { if ((window as any).__returnOrderNeedRefresh) { (window as a
         <el-table-column label="退货日期" width="110" align="center">
           <template #default="{ row }">{{ $fmtDate(row.returnDate) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="80" align="center">
-          <template #default="{ row }"><el-tag :type="row.status==='已取消'?'danger':'success'" size="small">{{ row.status }}</el-tag></template>
+        <el-table-column label="状态" width="90" align="center">
+          <template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="110" align="center">
+        <el-table-column label="操作" width="180" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click="router.push(`/outsource/return-order/detail/${row.id}`)">详情</el-button>
-            <el-button type="danger" link v-if="row.status!=='已取消'" @click="handleCancel(row)">取消</el-button>
+            <el-button type="success" link v-if="row.status===DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
+            <el-button type="warning" link v-if="row.status===DocStatus.AUDITED" @click="handleUnAudit(row)">取消审核</el-button>
+            <el-button type="danger" link v-if="row.status===DocStatus.DRAFT" @click="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

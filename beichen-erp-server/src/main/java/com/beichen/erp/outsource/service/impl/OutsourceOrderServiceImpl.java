@@ -5,7 +5,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.dev.entity.Project;
+import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.material.entity.Product;
+import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
@@ -44,6 +48,9 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     private final OutsourceOrderDeliveryMapper orderDeliveryMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final SupplierMapper supplierMapper;
+    /** 产品主数据Mapper(product表)，与加工单产品明细Mapper(productMapper)区分 */
+    private final ProductMapper masterProductMapper;
+    private final ProjectMapper projectMapper;
     private final JdbcTemplate jdbcTemplate;
     /** 交货记录服务与本服务互相依赖，使用 @Lazy 字段注入打破循环依赖 */
     @org.springframework.beans.factory.annotation.Autowired
@@ -148,6 +155,8 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
             }
             total = total.add(p.getAmount());
             p.setOrderId(order.getId());
+            // 回填关联产品主数据ID(product.id)，交货/库存落账使用
+            p.setProductId(resolveProductMasterId(p));
             if (cid != null && cid > 0) p.setCompanyId(cid);
             productMapper.insert(p);
             // 保存物料
@@ -199,6 +208,8 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
             total = total.add(p.getAmount());
             p.setId(null);
             p.setOrderId(order.getId());
+            // 回填关联产品主数据ID(product.id)，交货/库存落账使用
+            p.setProductId(resolveProductMasterId(p));
             productMapper.insert(p);
             // 插入物料
             if (p.getMaterials() != null) {
@@ -214,6 +225,26 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
         amountUpdate.setId(order.getId());
         amountUpdate.setTotalAmount(total);
         orderMapper.updateById(amountUpdate);
+    }
+
+    /**
+     * 解析加工产品关联的产品主数据ID(product.id)。
+     * 优先级：前端直传productId > 项目关联(dev_project.product_id) > 按产品名称匹配product表。
+     */
+    @Override
+    public Long resolveProductMasterId(OutsourceOrderProduct p) {
+        if (p == null) return null;
+        if (p.getProductId() != null) return p.getProductId();
+        if (p.getProjectId() != null) {
+            Project proj = projectMapper.selectById(p.getProjectId());
+            if (proj != null && proj.getProductId() != null) return proj.getProductId();
+        }
+        if (p.getProductName() != null && !p.getProductName().isBlank()) {
+            Product product = masterProductMapper.selectOne(new LambdaQueryWrapper<Product>()
+                    .eq(Product::getName, p.getProductName()).last("LIMIT 1"));
+            if (product != null) return product.getId();
+        }
+        return null;
     }
 
     @Override

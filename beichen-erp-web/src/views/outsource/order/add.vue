@@ -6,10 +6,12 @@ import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { getProjectBom } from '@/api/system'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
 const route = useRoute()
 const tabStore = useTabStore()
+const optionsStore = useOptionsStore()
 const saving = ref(false)
 
 const form = reactive({
@@ -37,9 +39,9 @@ function typeName(id: number | undefined, fallback?: string) {
 }
 
 async function loadOptions() {
-  try { const r = await request.get<any,any>('/supplier/page',{params:{supplierType:'factory',pageSize:200}}); factoryOptions.value=r?.records||[] } catch (e: any) { console.warn('加载工厂选项失败', e?.message || e) }
-  try { const r = await request.get<any,any>('/dev/project/page',{params:{pageSize:200}}); projectOptions.value=r?.records||[] } catch (e: any) { console.warn('加载项目选项失败', e?.message || e) }
-  try { const r = await request.get<any,any>('/outsource/material/page',{params:{pageSize:500}}); materialOptions.value=r?.records||[] } catch (e: any) { console.warn('加载物料选项失败', e?.message || e) }
+  await optionsStore.ensureSuppliers('factory'); factoryOptions.value = optionsStore.suppliers['suppliers:factory'] || []
+  await optionsStore.ensureProjects(); projectOptions.value = optionsStore.projects || []
+  await optionsStore.ensureMaterials(); materialOptions.value = optionsStore.materials || []
 }
 
 function addProduct() {
@@ -60,7 +62,8 @@ function onProjectSelect(idx: number, pid: number) {
   const proj = projectOptions.value.find((v:any) => v.id === pid)
   if (proj) {
     products.value[idx].projectId = pid
-    products.value[idx].productName = proj.productName || proj.name || ''
+    // 产品名称取项目总成名称(assemblyName)，与产品主数据一致；无总成名称时回退项目名
+    products.value[idx].productName = proj.assemblyName || proj.name || ''
     loadBomMaterials(idx, pid)
   }
 }
@@ -123,10 +126,10 @@ async function handleSubmit() {
       if (v === '' || v === undefined) continue
       cleanForm[k] = v
     }
-    // 提交时映射 productName 为项目名
+    // 提交时映射 productName 为项目总成名称(与产品主数据一致)，并携带产品主数据ID(用于交货/库存落账)
     const submitProducts = products.value.map((p:any) => {
       const proj = projectOptions.value.find((pr:any) => pr.id === p.projectId)
-      return { ...p, productName: proj?.name || '', productSpec: '' }
+      return { ...p, productName: proj?.assemblyName || proj?.name || '', productSpec: proj?.productSpec || '', productId: proj?.productId || null }
     })
     await request.post('/outsource/order', { ...cleanForm, products: submitProducts })
     ElMessage.success('加工单创建成功')
@@ -134,7 +137,6 @@ async function handleSubmit() {
     Object.assign(form, { factoryId: undefined, planStartDate: '', planEndDate: '', taxIncluded: 0, taxRate: '', remark: '', attachUrl: '', logisticsCompany: '', logisticsNo: '' })
     products.value = []
     uploadFile.value = null
-    ;(window as any).__orderNeedRefresh = true
     tabStore.removeTab(route.path)
     router.replace('/outsource/order')
   } catch (e: any) {
@@ -240,7 +242,7 @@ onActivated(initPage)
       </template>
       <el-form :model="p" label-width="90px" size="small">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item label="关联项目"><el-select v-model="p.projectId" filterable clearable style="width:100%" placeholder="选择研发项目" @change="(v: any) => { if (v === ADD_MARKER) { p.projectId = undefined; router.push('/dev/project'); return } onProjectSelect(pi, v) }"><el-option v-for="pr in projectOptions" :key="pr.id" :label="pr.name" :value="pr.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="加工产品"><el-select v-model="p.projectId" filterable clearable style="width:100%" placeholder="选择产品" @change="(v: any) => { if (v === ADD_MARKER) { p.projectId = undefined; router.push('/dev/project'); return } onProjectSelect(pi, v) }"><el-option v-for="pr in projectOptions" :key="pr.id" :label="pr.assemblyName || pr.name" :value="pr.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
           <el-col :span="5"><el-form-item label="数量"><el-input v-model="p.quantity" type="number" @change="onQuantityChange(pi)" /></el-form-item></el-col>
           <el-col :span="5"><el-form-item label="单价"><el-input v-model="p.unitPrice" type="number" @change="calcAmount(pi)" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>

@@ -26,8 +26,10 @@ public class OutsourceOrderDelivery {
     private Long id;
     /** 关联加工单ID */
     private Long orderId;
-    /** 关联加工单产品ID */
+    /** 关联加工单产品ID(outsource_order_product.id) */
     private Long productId;
+    /** 关联产品主数据ID(product.id)，成品库存/流水落账用 */
+    private Long productMasterId;
     /** 成品入库仓库ID（选了仓库才做成品入库） */
     private Long warehouseId;
     /** 交货日期 */
@@ -50,6 +52,8 @@ public class OutsourceOrderDelivery {
     private String sourceType;
     /** 交货类型：空=普通交货，DEFECT_RETURN=退不良（配合 isReverse 使用） */
     private String deliveryType;
+    /** 退不良规格(A/B/C/DEFECT)，普通交货为空 */
+    private String qualityType;
     /** 物流单号（选填） */
     private String trackingNo;
     /** 备注 */

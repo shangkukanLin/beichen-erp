@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { getPaymentPage, getPaymentItems, auditPayment, cancelPayment, type FinancePayment, type FinancePaymentItem } from '@/api/finance'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const activeTab = ref('supplier')
 
 // ========== Tab1 供应商汇总 ==========
@@ -27,7 +29,7 @@ const query = reactive({ supplierId: '' as string|number, status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinancePayment[]>([])
-const suppliers = ref<{id:number;name:string}[]>([])
+const suppliers = computed(() => optionsStore.suppliers['suppliers:all'] || [])
 const accounts = ref<{id:number;accountName:string}[]>([])
 
 const statusOpts = [{l:DocStatusLabel[DocStatus.DRAFT],v:DocStatus.DRAFT},{l:DocStatusLabel[DocStatus.AUDITED],v:DocStatus.AUDITED},{l:DocStatusLabel[DocStatus.CANCELLED],v:DocStatus.CANCELLED}]
@@ -42,8 +44,7 @@ async function loadData() {
     data.value = res?.records || []; page.total = res?.total || 0
   } catch { data.value = [] } finally { loading.value = false }
 }
-async function loadOpts() {
-  try { const r = await request.get<any, any>('/supplier/page',{params:{pageSize:200}}); suppliers.value = r?.records || [] } catch {}
+async function loadAccounts() {
   try { const r = await request.get<any, any>('/finance/account/list'); accounts.value = r || [] } catch {}
 }
 function query_() { page.pageNum = 1; loadData() }
@@ -87,7 +88,8 @@ async function handleUploadAttach(e: Event) {
 }
 function openAttach(url: string) { window.open(url + '?inline=true') }
 
-onMounted(() => { loadOpts(); loadSummary(); loadData() })
+onMounted(() => { optionsStore.ensureSuppliers('all'); loadAccounts(); loadSummary(); loadData() })
+onActivated(() => { loadSummary(); loadData() })
 </script>
 
 <template>

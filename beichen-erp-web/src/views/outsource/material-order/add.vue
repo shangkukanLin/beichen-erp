@@ -5,9 +5,11 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter(); const route = useRoute()
 const tabStore = useTabStore()
+const optionsStore = useOptionsStore()
 const isEdit = ref(false)
 const editId = route.params.id ? Number(route.params.id) : 0
 const saving = ref(false)
@@ -20,12 +22,12 @@ const bomTypes = ref<any[]>([])
 const itemTypes = ref<Record<number, string>>({})
 
 async function loadSuppliers() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch { }
+  await optionsStore.ensureSuppliers('all'); supplierOptions.value = optionsStore.suppliers['suppliers:all'] || []
 }
 
 async function loadOptions() {
   await loadSuppliers()
-  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); materialOptions.value = r?.records || [] } catch { }
+  await optionsStore.ensureMaterials(); materialOptions.value = optionsStore.materials || []
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch { }
 }
 
@@ -72,7 +74,6 @@ async function handleSubmit() {
       Object.assign(form, { orderType: '采购', supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '' })
       items.value = []
       onOrderTypeChange()
-      ;(window as any).__materialOrderNeedRefresh = true
     }
     tabStore.removeTab(route.fullPath)
     if (isEdit.value) { router.replace(`/outsource/material-order/detail/${editId}`) }

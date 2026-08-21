@@ -53,7 +53,6 @@
 import { onMounted, reactive, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
 import {
   getSaleReturn,
   getSaleReturnItems,
@@ -63,11 +62,13 @@ import {
   SaleReturnStatus,
   SaleReturnStatusLabel,
 } from '@/api/sale'
+import { useOptionsStore } from '@/stores/options'
 
 const route = useRoute()
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const acting = ref(false)
-const warehouses = ref<any[]>([])
+const warehouses = computed(() => optionsStore.warehouses || [])
 const items = ref<any[]>([])
 
 const head = reactive({
@@ -84,7 +85,7 @@ const header = head
 
 const warehouseName = computed(() => {
   const w = warehouses.value.find((x) => x.id === head.warehouseId)
-  return w ? w.name : '—'
+  return w ? (w.warehouseName || w.name) : '—'
 })
 
 function statusLabel(s: number) {
@@ -98,11 +99,6 @@ function statusTagType(s: number) {
 function formatMoney(v: any) {
   const n = Number(v || 0)
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-async function loadWarehouses() {
-  const res = await request.get('/warehouse/page', { params: { pageNum: 1, pageSize: 1000 } })
-  warehouses.value = res.records || []
 }
 
 async function loadDetail(id: number) {
@@ -162,7 +158,7 @@ async function doCancel() {
 }
 
 onMounted(async () => {
-  await loadWarehouses()
+  optionsStore.ensureWarehouses()
   await loadDetail(Number(route.params.id))
 })
 </script>

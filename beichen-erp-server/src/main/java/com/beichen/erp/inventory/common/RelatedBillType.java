@@ -36,6 +36,8 @@ public enum RelatedBillType {
     OUTSOURCE_ORDER("委外加工"),
     /** 退不良：委外退不良品触发 */
     OUTSOURCE_DEFECT("退不良"),
+    /** 委外物料退货：委外物料退货单触发 */
+    OUTSOURCE_MATERIAL_RETURN("委外物料退货"),
 
     /** 物料收发：委外发料 adjustSourceStock 触发 */
     MATERIAL_IO("物料收发"),

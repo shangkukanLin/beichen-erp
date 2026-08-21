@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
-import request from '@/utils/request'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { SettlementStatus, SettlementStatusLabel } from '@/api/enums'
 import { getPayablePage, type FinancePayable } from '@/api/finance'
+import { useOptionsStore } from '@/stores/options'
 
+const optionsStore = useOptionsStore()
 const query = reactive({ supplierId: '' as string|number, status: '', billNo: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinancePayable[]>([])
-const suppliers = ref<{id:number;name:string}[]>([])
+const suppliers = computed(() => optionsStore.suppliers['suppliers:all'] || [])
 const detailVisible = ref(false)
 const detail = ref<FinancePayable>({})
 
@@ -23,7 +24,8 @@ async function load() {
     data.value = res?.records || []; page.total = res?.total || 0
   } catch { data.value = [] } finally { loading.value = false }
 }
-onMounted(async () => { try { const r = await request.get('/supplier/page',{params:{pageSize:200}}); suppliers.value = r?.records || [] } catch {}; load() })
+onMounted(() => { optionsStore.ensureSuppliers('all'); load() })
+onActivated(() => { load() })
 function query_() { page.pageNum = 1; load() }
 function reset_() { query.supplierId = ''; query.status = ''; query.billNo = ''; page.pageNum = 1; load() }
 function sName(id?: number) { return suppliers.value.find(x => x.id === id)?.name || '' }

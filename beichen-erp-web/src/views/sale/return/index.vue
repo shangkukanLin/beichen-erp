@@ -63,11 +63,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onActivated, reactive, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
 import {
   getSaleReturnPage,
   auditSaleReturn,
@@ -77,14 +76,16 @@ import {
   SaleReturnStatus,
   SaleReturnStatusLabel,
 } from '@/api/sale'
+import { useOptionsStore } from '@/stores/options'
 
 interface Customer { id: number; name: string }
 
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const loading = ref(false)
 const list = ref<any[]>([])
 const total = ref(0)
-const customers = ref<Customer[]>([])
+const customers = computed<Customer[]>(() => optionsStore.customers || [])
 const statusOptions = SaleReturnStatusLabel
 
 const query = reactive({
@@ -131,15 +132,6 @@ function resetQuery() {
   query.customerId = undefined
   query.status = undefined
   load(1)
-}
-
-async function loadCustomers() {
-  try {
-    const res = await request.get('/inventory/customer/page', { params: { pageNum: 1, pageSize: 1000 } })
-    customers.value = res.records || []
-  } catch {
-    customers.value = []
-  }
 }
 
 function goAdd() {
@@ -209,9 +201,10 @@ function doDelete(row: any) {
 }
 
 onMounted(() => {
-  loadCustomers()
+  optionsStore.ensureCustomers()
   load()
 })
+onActivated(() => { load() })
 </script>
 
 <style scoped>

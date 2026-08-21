@@ -183,6 +183,7 @@ CREATE TABLE IF NOT EXISTS outsource_order_product (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     order_id BIGINT NOT NULL COMMENT '订单ID',
     project_id BIGINT COMMENT '项目ID',
+    product_id BIGINT COMMENT '关联产品主数据ID(product.id)',
     product_name VARCHAR(100) NOT NULL COMMENT '产品名称',
     product_spec VARCHAR(100) COMMENT '产品规格',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
@@ -217,9 +218,11 @@ CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     order_id BIGINT NOT NULL COMMENT '订单ID',
     warehouse_id BIGINT DEFAULT NULL COMMENT '收货仓库ID',
     delivery_date DATE COMMENT '发货日期',
-    product_id BIGINT COMMENT '产品ID',
+    product_id BIGINT COMMENT '产品ID(关联outsource_order_product)',
+    product_master_id BIGINT COMMENT '关联产品主数据ID(product.id)',
+    quality_type VARCHAR(20) COMMENT '退不良规格(A/B/C/DEFECT)',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
-    delivery_type VARCHAR(10) DEFAULT '正常' COMMENT '正常/退不良',
+    delivery_type VARCHAR(20) DEFAULT '正常' COMMENT '正常/退不良',
     a_qty DECIMAL(18,4) DEFAULT 0 COMMENT 'A规数量',
     b_qty DECIMAL(18,4) DEFAULT 0 COMMENT 'B规数量',
     c_qty DECIMAL(18,4) DEFAULT 0 COMMENT 'C规数量',
@@ -479,6 +482,50 @@ CREATE TABLE IF NOT EXISTS outsource_return_order_item (
     company_id BIGINT COMMENT '公司ID',
     INDEX idx_return_order_id (return_order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外退货明细';
+
+CREATE TABLE IF NOT EXISTS outsource_return_order_product (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    return_order_id BIGINT NOT NULL COMMENT '退货单ID',
+    product_id BIGINT COMMENT '产品ID(关联product.id)',
+    product_name VARCHAR(100) COMMENT '产品名称快照',
+    quantity DECIMAL(18,4) COMMENT '退货数量',
+    company_id BIGINT COMMENT '公司ID',
+    INDEX idx_return_order_id (return_order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外加工退货成品明细';
+
+CREATE TABLE IF NOT EXISTS outsource_material_return (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    code VARCHAR(50) NOT NULL COMMENT '退货单号',
+    return_type VARCHAR(20) DEFAULT 'MATERIAL' COMMENT '退货类型：MATERIAL物料商/PRODUCT成品商(预留)',
+    supplier_id BIGINT COMMENT '退回对象供应商ID',
+    from_warehouse_id BIGINT COMMENT '物料出库源仓(用户自选)',
+    return_date DATE COMMENT '退货日期',
+    status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态：DRAFT/AUDITED/CANCELLED',
+    auditor_id BIGINT COMMENT '审核人ID',
+    auditor_name VARCHAR(50) COMMENT '审核人姓名',
+    audit_time DATETIME COMMENT '审核时间',
+    remark VARCHAR(500) COMMENT '备注',
+    company_id BIGINT COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_supplier_id (supplier_id),
+    INDEX idx_from_warehouse_id (from_warehouse_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外物料退货单';
+
+CREATE TABLE IF NOT EXISTS outsource_material_return_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    return_order_id BIGINT NOT NULL COMMENT '退货单ID',
+    outsource_material_id BIGINT COMMENT '委外物料ID(关联outsource_material.id)',
+    bom_type_id BIGINT DEFAULT NULL COMMENT 'BOM类型ID(关联dev_bom_type.id)',
+    unit VARCHAR(20) COMMENT '单位',
+    quantity DECIMAL(18,4) COMMENT '退货数量',
+    unit_price DECIMAL(18,4) COMMENT '单价(FIFO默认可手填)',
+    amount DECIMAL(18,4) COMMENT '小计金额',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT COMMENT '公司ID',
+    INDEX idx_return_order_id (return_order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外物料退货明细';
 
 CREATE TABLE IF NOT EXISTS outsource_contract_template (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '模板ID',

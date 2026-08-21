@@ -1,14 +1,15 @@
 ﻿<script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { getReceivablePage, type FinanceReceivable, type PageResult } from '@/api/finance'
-import { listCustomers, type Customer } from '@/api/customer'
 import { SettlementStatus, SettlementStatusLabel } from '@/api/enums'
+import { useOptionsStore } from '@/stores/options'
 
+const optionsStore = useOptionsStore()
 const query = reactive({ customerId: '' as string|number, status: '', billNo: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinanceReceivable[]>([])
-const customers = ref<Customer[]>([])
+const customers = computed(() => optionsStore.customers || [])
 const detailVisible = ref(false)
 const detail = ref<FinanceReceivable>({})
 
@@ -23,7 +24,8 @@ async function load() {
     data.value = res?.records || []; page.total = res?.total || 0
   } catch { data.value = [] } finally { loading.value = false }
 }
-onMounted(async () => { try { customers.value = await listCustomers() || [] } catch {}; load() })
+onMounted(() => { optionsStore.ensureCustomers(); load() })
+onActivated(() => { load() })
 function query_() { page.pageNum = 1; load() }
 function reset_() { query.customerId = ''; query.status = ''; query.billNo = ''; page.pageNum = 1; load() }
 function cName(id?: number) { return customers.value.find(x => x.id === id)?.name || '' }

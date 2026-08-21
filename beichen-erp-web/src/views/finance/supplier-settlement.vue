@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { useOptionsStore } from '@/stores/options'
 
 const route = useRoute(); const router = useRouter()
+const optionsStore = useOptionsStore()
 const supplierId = Number(route.params.id)
 const loading = ref(false)
 const data = ref<any>({})
@@ -24,7 +26,7 @@ const invWarehouses = ref<any[]>([])
 const returnSaving = ref(false)
 async function openReturn() {
   returnWarehouseId.value = undefined
-  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200 } }); invWarehouses.value = r?.records || [] } catch { invWarehouses.value = [] }
+  await optionsStore.ensureWarehouses(); invWarehouses.value = optionsStore.warehouses || []
   returnVisible.value = true
 }
 async function handleReturn() {
@@ -63,6 +65,7 @@ function refreshChecks() {
 }
 
 onMounted(async () => { await loadAll(); refreshChecks() })
+onActivated(async () => { await loadAll(); refreshChecks() })
 </script>
 
 <template>

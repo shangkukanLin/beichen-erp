@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+import { useOptionsStore } from '@/stores/options'
 
+const optionsStore = useOptionsStore()
 const query = reactive({ materialName: '', projectId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])
@@ -19,10 +21,10 @@ const MATERIAL_TYPES = ref<any[]>([])
 const activeTab = ref<number | string>('全部')
 
 async function loadOptions() {
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); MATERIAL_TYPES.value = (r || []) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
-  try { const r = await request.get<any, any>('/dev/project/page', { params: { pageSize: 200 } }); projectOptions.value = r?.records || [] } catch (e: any) { console.warn('加载项目失败', e?.message || e) }
-  try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch (e: any) { console.warn('加载供应商失败', e?.message || e) }
-  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } }); warehouseOptions.value = r?.records || [] } catch (e: any) { console.warn('加载仓库失败', e?.message || e) }
+  await optionsStore.ensureBomTypes(); MATERIAL_TYPES.value = optionsStore.bomTypes || []
+  await optionsStore.ensureProjects(); projectOptions.value = optionsStore.projects || []
+  await optionsStore.ensureSuppliers('all'); supplierOptions.value = optionsStore.suppliers['suppliers:all'] || []
+  await optionsStore.ensureWarehouses(); warehouseOptions.value = optionsStore.warehouses || []
 }
 
 // 按供应商ID列表(逗号分隔)查出供应商名称并拼接展示，空安全返回 '-'
@@ -67,10 +69,7 @@ async function saveComponents(materialId: number) {
 
 // 加载全部物料（不受TAB过滤），供子物料下拉框使用
 async function loadAllMaterials() {
-  try {
-    const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } })
-    allMaterials.value = r?.records || []
-  } catch { allMaterials.value = [] }
+  await optionsStore.ensureMaterials(); allMaterials.value = optionsStore.materials || []
 }
 
 function handleAdd() { loadOptions(); Object.assign(form, defForm()); bomRows.value = []; isEdit.value = false; dialogTitle.value = '新增物料'; dialogVisible.value = true; loadAllMaterials() }
@@ -97,10 +96,10 @@ async function handleSubmit() {
     if (isEdit.value) { await request.put('/outsource/material', body); ElMessage.success('修改成功') }
     else { const res = await request.post('/outsource/material', body) as any; form.id = res }
     if (form.id) await saveComponents(form.id)
-    dialogVisible.value = false; loadData()
+    optionsStore.refreshMaterials(); dialogVisible.value = false; loadData()
   } finally { submitLoading.value = false }
 }
-async function handleDelete(row: any) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await request.delete(`/outsource/material/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
+async function handleDelete(row: any) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await request.delete(`/outsource/material/${row.id}`); optionsStore.refreshMaterials(); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
 const router = useRouter()
 
@@ -126,6 +125,7 @@ function onSupplierChange(val: any[]) {
 }
 
 onMounted(() => { loadOptions(); loadData() })
+onActivated(() => { loadOptions(); loadData() })
 </script>
 
 <template>

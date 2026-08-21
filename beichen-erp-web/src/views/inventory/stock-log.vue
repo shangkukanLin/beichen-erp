@@ -73,9 +73,10 @@
 
 <script setup lang="ts">
 import { WarehouseCategory } from '@/api/enums'
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
+import { useOptionsStore } from '@/stores/options'
 
 const changeTypeOptions = ['PURCHASE_IN', 'RETURN_OUT', 'SALE_OUT', 'MOVE_OUT', 'MOVE_IN', 'OTHER_IN', 'OTHER_OUT', 'CANCEL_IN', 'CANCEL_OUT', 'INIT']
 
@@ -84,7 +85,8 @@ const pagination = reactive({ pageNum: 1, pageSize: 20, total: 0 })
 const loading = ref(false)
 const tableData = ref<any[]>([])
 
-const warehouses = ref<any[]>([])
+const optionsStore = useOptionsStore()
+const warehouses = computed(() => optionsStore.warehouses.filter((w: any) => w.warehouseCategory === WarehouseCategory.INVENTORY))
 const productOptions = ref<any[]>([])
 const productMap = ref<Record<number, string>>({})
 
@@ -106,13 +108,6 @@ async function loadProducts(queryStr?: string) {
     const res = await request.get('/product/page', { params })
     productOptions.value = res?.records || []
   } catch { productOptions.value = [] }
-}
-
-async function loadWarehouses() {
-  try {
-    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } })
-    warehouses.value = res?.records || []
-  } catch { warehouses.value = [] }
 }
 
 async function loadData() {
@@ -170,7 +165,8 @@ function handleBillClick(billType?: string, billId?: number) {
   }
 }
 
-onMounted(() => { loadWarehouses(); loadData() })
+onMounted(() => { optionsStore.ensureWarehouses(); loadData() })
+onActivated(() => { loadData() })
 </script>
 
 <style scoped>

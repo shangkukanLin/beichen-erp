@@ -17,6 +17,9 @@ public class ReturnOrder {
     private Long warehouseId;
     private LocalDate returnDate;
     private String status;
+    private Long auditorId;
+    private String auditorName;
+    private LocalDateTime auditTime;
     private String remark;
     private Long companyId;
     @TableField(fill = FieldFill.INSERT)

@@ -17,7 +17,7 @@
           <el-col :span="8">
             <el-form-item label="退货仓库" prop="warehouseId">
               <el-select v-model="form.warehouseId" filterable placeholder="请选择仓库" style="width: 100%">
-                <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
+                <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -89,24 +89,25 @@ import { onMounted, reactive, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import request from '@/utils/request'
 import {
   getSaleReturn,
   getSaleReturnItems,
   createSaleReturn,
   updateSaleReturn,
 } from '@/api/sale'
+import { useOptionsStore } from '@/stores/options'
 
 interface Opt { id: number; name: string }
 
 const route = useRoute()
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const formRef = ref()
 const saving = ref(false)
 const isEdit = ref(false)
-const customers = ref<Opt[]>([])
-const warehouses = ref<Opt[]>([])
-const products = ref<Opt[]>([])
+const customers = computed(() => optionsStore.customers || [])
+const warehouses = computed(() => optionsStore.warehouses || [])
+const products = computed(() => optionsStore.products || [])
 
 const form = reactive({
   id: undefined as number | undefined,
@@ -148,19 +149,6 @@ function onCustomerChange(id: number) {
 function onProductChange(row: any, id: number) {
   const p = products.value.find((x) => x.id === id)
   row.productName = p ? p.name : ''
-}
-
-async function loadCustomers() {
-  const res = await request.get('/inventory/customer/page', { params: { pageNum: 1, pageSize: 1000 } })
-  customers.value = res.records || []
-}
-async function loadWarehouses() {
-  const res = await request.get('/warehouse/page', { params: { pageNum: 1, pageSize: 1000 } })
-  warehouses.value = res.records || []
-}
-async function loadProducts() {
-  const res = await request.get('/product/page', { params: { pageNum: 1, pageSize: 1000 } })
-  products.value = res.records || []
 }
 
 async function loadEdit(id: number) {
@@ -228,7 +216,9 @@ function goBack() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadCustomers(), loadWarehouses(), loadProducts()])
+  optionsStore.ensureCustomers()
+  optionsStore.ensureWarehouses()
+  optionsStore.ensureProducts()
   const id = route.query.id
   if (id) {
     isEdit.value = true

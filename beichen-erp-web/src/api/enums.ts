@@ -345,5 +345,35 @@ export const SettlementStatusTag: Record<string, 'success' | 'warning' | 'info' 
   [SettlementStatus.CANCELLED]: 'info'
 }
 
+/** 通用单据状态（对应 DocStatus 枚举：草稿/已审核/已作废） */
+export const DocStatus = {
+  DRAFT: 'DRAFT',
+  AUDITED: 'AUDITED',
+  CANCELLED: 'CANCELLED'
+} as const
+
+export const DocStatusLabel: Record<string, string> = {
+  [DocStatus.DRAFT]: '草稿',
+  [DocStatus.AUDITED]: '已审核',
+  [DocStatus.CANCELLED]: '已作废'
+}
+
+export const DocStatusTag: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
+  [DocStatus.DRAFT]: 'info',
+  [DocStatus.AUDITED]: 'success',
+  [DocStatus.CANCELLED]: 'danger'
+}
+
+/** 委外物料退货类型（对应 MaterialReturnType 枚举） */
+export const MaterialReturnType = {
+  MATERIAL: 'MATERIAL',
+  PRODUCT: 'PRODUCT'
+} as const
+
+export const MaterialReturnTypeLabel: Record<string, string> = {
+  [MaterialReturnType.MATERIAL]: '物料商退货',
+  [MaterialReturnType.PRODUCT]: '成品商退货'
+}
+
 
 

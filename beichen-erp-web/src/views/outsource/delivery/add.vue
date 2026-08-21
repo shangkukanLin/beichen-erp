@@ -5,11 +5,13 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
-import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel } from '@/api/enums'
+import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel, WarehouseCategory } from '@/api/enums'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
 const route = useRoute()
 const tabStore = useTabStore()
+const optionsStore = useOptionsStore()
 const saving = ref(false)
 const form = reactive({
   deliveryType: DeliveryType.DELIVERY as string, factoryId: undefined as any, supplierId: undefined as any,
@@ -21,10 +23,10 @@ const factoryOptions = ref<any[]>([])
 const outsourceWarehouses = ref<any[]>([])
 const targetOutsourceWarehouses = ref<any[]>([])
 const inventoryWarehouses = ref<any[]>([])
-const allOutsourceWarehouses = ref<any[]>([])
+const allOutsourceWarehouses = computed(() => optionsStore.warehouses.filter((w: any) => w.warehouseCategory === WarehouseCategory.OUTSOURCE))
 const combinedFromWhs = computed(() => [...inventoryWarehouses.value, ...allOutsourceWarehouses.value])
-const materialOptions = ref<any[]>([])
-const bomTypes = ref<any[]>([])
+const materialOptions = computed(() => optionsStore.materials || [])
+const bomTypes = computed(() => optionsStore.bomTypes || [])
 const items = ref<any[]>([])
 const uploadFile = ref<File | null>(null)
 
@@ -33,11 +35,8 @@ const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any
 function materialsByType(type: number) { return materialOptions.value.filter((m: any) => m.bomTypeId === type) }
 function typeName(id: number | undefined) { if (id == null) return '-'; const t = bomTypes.value.find((v: any) => v.id === id); return t ? t.typeName : (id as any) }
 
-async function loadAllOutsourceWarehouses() {
-  try { const r = await request.get<any,any>('/warehouse/page',{params:{pageSize:500,warehouseCategory: WarehouseCategory.OUTSOURCE}}); allOutsourceWarehouses.value = r?.records||[] } catch {}
-}
 async function loadFactories() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType:'factory', pageSize:200 } }); factoryOptions.value = r?.records || [] } catch {}
+  await optionsStore.ensureSuppliers('factory'); factoryOptions.value = optionsStore.suppliers['suppliers:factory'] || []
 }
 async function loadWarehouses(factoryId: number) {
   try { const r = await request.get<any, any>('/warehouse/by-factory/' + factoryId); outsourceWarehouses.value = r || [] } catch { outsourceWarehouses.value = [] }
@@ -48,13 +47,6 @@ async function loadTargetWarehouses(factoryId: number) {
 async function loadInventoryWarehouses() {
   try { const r = await request.get<any, any>('/warehouse/inventory'); inventoryWarehouses.value = r || [] } catch {}
 }
-async function loadMaterials() {
-  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize:500 } }); materialOptions.value = r?.records || [] } catch {}
-}
-async function loadBomTypes() {
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
-}
-
 function onTypeChange() { form.factoryId = undefined; form.supplierId = undefined; form.fromWarehouseId = undefined; form.toWarehouseId = undefined; outsourceWarehouses.value = []; targetOutsourceWarehouses.value = [] }
 async function onFactoryChange(id: number) {
   form.fromWarehouseId = undefined; form.toWarehouseId = undefined; outsourceWarehouses.value = []
@@ -102,13 +94,12 @@ async function handleSubmit() {
     if (uploadFile.value) { const fd = new FormData(); fd.append('file', uploadFile.value); const res = await request.post<any, string>('/dev/file/upload', fd); form.attachUrl = res as unknown as string }
     await request.post('/outsource/delivery', { ...form, items: items.value })
     ElMessage.success('收发单已确认，库存已更新')
-    ;(window as any).__deliveryNeedRefresh = true
     tabStore.removeTab(route.path)
     router.replace('/outsource/delivery')
   } finally { saving.value = false }
 }
 
-onMounted(() => { loadFactories(); loadAllOutsourceWarehouses(); loadMaterials(); loadBomTypes(); loadInventoryWarehouses() })
+onMounted(() => { loadFactories(); optionsStore.ensureWarehouses(); optionsStore.ensureMaterials(); optionsStore.ensureBomTypes(); loadInventoryWarehouses() })
 </script>
 
 <template>

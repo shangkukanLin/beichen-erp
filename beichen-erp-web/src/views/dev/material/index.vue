@@ -1,29 +1,27 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { DevMaterialTypeLabel } from '@/api/enums'
 import MaterialFormDialog from '@/components/dev/MaterialFormDialog.vue'
+import { useOptionsStore } from '@/stores/options'
 
 const loading = ref(false)
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const list = ref<any[]>([])
 const total = ref(0)
 const pageNum = ref(1)
 const pageSize = ref(10)
 
 const materialTypeOptions = Object.values(DevMaterialTypeLabel)
-const projectOptions = ref<any[]>([])
+const projectOptions = computed(() => optionsStore.projects || [])
 const materialDialog = ref<any>(null)
 
 const query = reactive<{ name: string; projectId: number | '' ; type: string }>({
   name: '', projectId: '', type: ''
 })
-
-async function loadProjects() {
-  try { const res: any = await request.get('/dev/project/page', { params: { pageSize: 500 } }); projectOptions.value = res?.records || [] } catch (e) { /* 忽略 */ }
-}
 
 function projectName(id: number) { const f = projectOptions.value.find((x: any) => x.id === id); return f ? f.name : '未关联' }
 
@@ -55,7 +53,8 @@ async function handleDelete(row: any) {
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
-onMounted(() => { loadProjects(); loadList() })
+onMounted(() => { optionsStore.ensureProjects(); loadList() })
+onActivated(() => { loadList() })
 </script>
 
 <template>

@@ -8,15 +8,16 @@ import {
   getProjectBom, saveProjectBom,
   getProjectBugs, addProjectBug, updateProjectBug, deleteProjectBug,
   getProjectDrawings, addProjectDrawing, deleteProjectDrawing,
-  getSupplierPage,
   type ProjectVO, type ProjectDTO, type BomDTO, type BugDTO, type DrawingVO
 } from '@/api/system'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import request from '@/utils/request'
 import MaterialFormDialog from '@/components/dev/MaterialFormDialog.vue'
+import { useOptionsStore } from '@/stores/options'
 
 const route = useRoute()
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const projectId = Number(route.params.id)
 
 const saving = ref(false)
@@ -35,14 +36,14 @@ const allSuppliers = ref<any[]>([])
 const factoryOptions = ref<{ id: number; name: string }[]>([])
 
 async function loadSolutionSuppliers() {
-  try { const res = await getSupplierPage({ supplierType: 'solution', pageSize: 200 }); solutionSuppliers.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name })) } catch (e: any) { console.warn('加载方案商失败', e?.message || e) }
+  await optionsStore.ensureSuppliers('solution'); solutionSuppliers.value = (optionsStore.suppliers['suppliers:solution'] || []).map((s: any) => ({ id: s.id, name: s.name }))
 }
 
 async function loadAllSuppliers() {
-  try { const res = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); allSuppliers.value = res?.records || [] } catch (e: any) { console.warn('加载供应商失败', e?.message || e) }
+  await optionsStore.ensureSuppliers('all'); allSuppliers.value = optionsStore.suppliers['suppliers:all'] || []
 }
 async function loadFactories() {
-  try { const res = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } }); factoryOptions.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name })) } catch (e: any) { console.warn('加载工厂失败', e?.message || e) }
+  await optionsStore.ensureSuppliers('factory'); factoryOptions.value = (optionsStore.suppliers['suppliers:factory'] || []).map((s: any) => ({ id: s.id, name: s.name }))
 }
 
 async function loadProject() {
@@ -64,6 +65,7 @@ async function handleSave() {
   saving.value = true
   try {
     await updateProject(form as any)
+    optionsStore.refreshProjects()
     ElMessage.success('保存成功')
     await loadProject()
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')); await loadProject() }
@@ -188,8 +190,8 @@ const bomList = ref<any[]>([])
 const bomTypes = ref<any[]>([])
 const allMaterials = ref<any[]>([])
 async function loadBomTypes() {
-  try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
-  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料数据失败', e?.message || e) }
+  await optionsStore.ensureBomTypes(); bomTypes.value = optionsStore.bomTypes || []
+  await optionsStore.ensureMaterials(); allMaterials.value = optionsStore.materials || []
 }
 // BOM类型 id -> 类型名 映射，用于回显
 const bomTypeNameMap = computed<Record<number, string>>(() => {

@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { getPurchaseReturn, getPurchaseReturnItems, ReturnStatus, ReturnStatusLabel, type PurchaseReturn, type PurchaseReturnItem } from '@/api/purchase'
+import { useOptionsStore } from '@/stores/options'
 
 const route = useRoute(); const router = useRouter()
+const optionsStore = useOptionsStore()
 const id = Number(route.params.id)
 const loading = ref(false)
 const detail = ref<Partial<PurchaseReturn>>({})
 const items = ref<PurchaseReturnItem[]>([])
-const warehouses = ref<{ id: number; warehouseName?: string; name?: string }[]>([])
+const warehouses = computed(() => optionsStore.warehouses || [])
 const products = ref<Record<number, string>>({})
 
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
@@ -38,11 +40,7 @@ async function loadData() {
   } finally { loading.value = false }
 }
 
-async function loadWarehouses() {
-  try { const r = await request.get('/warehouse/page', { params: { pageSize: 200 } }); warehouses.value = r?.records || [] } catch { warehouses.value = [] }
-}
-
-onMounted(() => { loadWarehouses(); loadData() })
+onMounted(() => { optionsStore.ensureWarehouses(); loadData() })
 </script>
 
 <template>

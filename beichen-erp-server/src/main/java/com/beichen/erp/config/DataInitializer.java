@@ -146,6 +146,23 @@ public class DataInitializer implements ApplicationRunner {
         // 结单报表物料明细：缺失改手动填写，新增 missing_qty 列
         addColumnIfAbsent("outsource_order_close_report_item", "missing_qty",
                 "ALTER TABLE outsource_order_close_report_item ADD COLUMN missing_qty DECIMAL(18,4) DEFAULT NULL COMMENT '缺失(手动填写)' AFTER factory_retain_qty");
+        // 委外成品库存产品ID语义修正：加工单产品明细关联产品主数据，交货库存落主表ID
+        addColumnIfAbsent("outsource_order_product", "product_id",
+                "ALTER TABLE outsource_order_product ADD COLUMN product_id BIGINT DEFAULT NULL COMMENT '关联产品主数据ID(product.id)' AFTER project_id");
+        addColumnIfAbsent("outsource_order_delivery", "product_master_id",
+                "ALTER TABLE outsource_order_delivery ADD COLUMN product_master_id BIGINT DEFAULT NULL COMMENT '关联产品主数据ID(product.id)' AFTER product_id");
+        addColumnIfAbsent("outsource_order_delivery", "quality_type",
+                "ALTER TABLE outsource_order_delivery ADD COLUMN quality_type VARCHAR(20) DEFAULT NULL COMMENT '退不良规格(A/B/C/DEFECT)' AFTER product_master_id");
+        // delivery_type 历史列宽10放不下 DEFECT_RETURN(13字符)，统一扩到20
+        modifyColumn("outsource_order_delivery", "delivery_type",
+                "ALTER TABLE outsource_order_delivery MODIFY COLUMN delivery_type VARCHAR(20) DEFAULT '正常' COMMENT '正常/退不良'");
+        // 委外加工退货状态机改造：草稿-审核-取消审核，加审计字段
+        addColumnIfAbsent("outsource_return_order", "auditor_id",
+                "ALTER TABLE outsource_return_order ADD COLUMN auditor_id BIGINT DEFAULT NULL COMMENT '审核人ID' AFTER status");
+        addColumnIfAbsent("outsource_return_order", "auditor_name",
+                "ALTER TABLE outsource_return_order ADD COLUMN auditor_name VARCHAR(50) DEFAULT NULL COMMENT '审核人姓名' AFTER auditor_id");
+        addColumnIfAbsent("outsource_return_order", "audit_time",
+                "ALTER TABLE outsource_return_order ADD COLUMN audit_time DATETIME DEFAULT NULL COMMENT '审核时间' AFTER auditor_name");
     }
 
     /** 幂等扩长/修改列：当列长度不足时执行 ALTER MODIFY（用于枚举 code 超长的平滑升级） */
@@ -293,10 +310,11 @@ public class DataInitializer implements ApplicationRunner {
             {404L, 4L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 4},
             {406L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 5},
             {407L, 4L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 6},
-            {408L, 4L, "委外退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 7},
-            {409L, 4L, "供应商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "UserFilled", 8},
-            {410L, 4L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 9},
-            {405L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 10},
+            {408L, 4L, "委外加工退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 7},
+            {411L, 4L, "委外物料退货", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Refrigerator", 8},
+            {409L, 4L, "供应商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "UserFilled", 9},
+            {410L, 4L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 10},
+            {405L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 11},
             {501L, 5L, "成品采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1},
             {502L, 5L, "成品退货单", "menu", "/inventory/purchase-return", "InventoryPurchaseReturn", "Refrigerator", 2},
             {503L, 5L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "UserFilled", 3},
@@ -344,7 +362,7 @@ public class DataInitializer implements ApplicationRunner {
         log.info("同步菜单完成，处理 {} 条", processed);
 
         // 删除非标准菜单（旧ID已废弃）
-        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,301L,302L,303L,304L,401L,402L,403L,404L,405L,406L,407L,408L,409L,410L,501L,502L,503L,601L,602L,603L,604L,701L,702L,703L,704L,705L,706L,801L,802L,803L,804L,805L,806L,901L,902L,903L,904L,905L,906L,907L,908L};
+        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,301L,302L,303L,304L,401L,402L,403L,404L,405L,406L,407L,408L,409L,410L,411L,501L,502L,503L,601L,602L,603L,604L,701L,702L,703L,704L,705L,706L,801L,802L,803L,804L,805L,806L,901L,902L,903L,904L,905L,906L,907L,908L};
         Set<Long> newIds = new HashSet<>(Arrays.asList(newMenuIds));
         jdbcTemplate.update("DELETE FROM sys_role_menu WHERE menu_id NOT IN (" +
             String.join(",", newIds.stream().map(String::valueOf).toArray(String[]::new)) + ")");
@@ -383,7 +401,7 @@ public class DataInitializer implements ApplicationRunner {
                 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L,
                 101L, 102L, 103L, 104L,
                 301L, 302L, 303L, 304L,
-                401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L, 410L,
+                401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L, 410L, 411L,
                 501L, 502L, 503L,
                 601L, 602L, 603L, 604L,
                 701L, 702L, 703L, 704L, 705L, 706L,

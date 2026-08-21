@@ -47,9 +47,7 @@ async function handleCancel(row: any) {
   try { await ElMessageBox.confirm('确定取消该订单？', '取消订单', { type: 'warning' }); await request.put(`/outsource/material-order/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 onMounted(() => { loadData() })
-onActivated(() => {
-  if ((window as any).__materialOrderNeedRefresh) { (window as any).__materialOrderNeedRefresh = false; loadData() }
-})
+onActivated(() => { loadData() })
 </script>
 
 <template>

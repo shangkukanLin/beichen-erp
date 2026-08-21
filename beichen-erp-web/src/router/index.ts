@@ -187,10 +187,14 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/delivery/add', name: 'OutsourceDeliveryAdd', component: () => import('@/views/outsource/delivery/add.vue'), meta: { title: '新增物料收发单', requiresAuth: true, operate: true } },
       { path: 'outsource/delivery/detail/:id', name: 'OutsourceDeliveryDetail', component: () => import('@/views/outsource/delivery/detail.vue'), meta: { title: '物料收发单详情', requiresAuth: true, operate: true } },
       { path: 'outsource/material-history/:wid/:mid', name: 'OutsourceMaterialHistory', component: () => import('@/views/outsource/warehouse-material-history.vue'), meta: { title: '物料库存流水详细', requiresAuth: true, operate: true } },
-      // 委外退货
-      { path: 'outsource/return-order', name: 'OutsourceReturnOrder', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '委外退货', requiresAuth: true } },
-      { path: 'outsource/return-order/add', name: 'OutsourceReturnOrderAdd', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '新增委外退货', requiresAuth: true, operate: true } },
-      { path: 'outsource/return-order/detail/:id', name: 'OutsourceReturnOrderDetail', component: () => import('@/views/outsource/return-order/detail.vue'), meta: { title: '委外退货详情', requiresAuth: true, operate: true } },
+      // 委外加工退货
+      { path: 'outsource/return-order', name: 'OutsourceReturnOrder', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '委外加工退货', requiresAuth: true } },
+      { path: 'outsource/return-order/add', name: 'OutsourceReturnOrderAdd', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '新增委外加工退货', requiresAuth: true, operate: true } },
+      { path: 'outsource/return-order/detail/:id', name: 'OutsourceReturnOrderDetail', component: () => import('@/views/outsource/return-order/detail.vue'), meta: { title: '委外加工退货详情', requiresAuth: true, operate: true } },
+      // 委外物料退货
+      { path: 'outsource/material-return', name: 'OutsourceMaterialReturn', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '委外物料退货', requiresAuth: true } },
+      { path: 'outsource/material-return/add', name: 'OutsourceMaterialReturnAdd', component: () => import('@/views/outsource/material-return/add.vue'), meta: { title: '新增委外物料退货', requiresAuth: true, operate: true } },
+      { path: 'outsource/material-return/detail/:id', name: 'OutsourceMaterialReturnDetail', component: () => import('@/views/outsource/material-return/detail.vue'), meta: { title: '委外物料退货详情', requiresAuth: true, operate: true } },
       // 销售退货单
       { path: 'sale/return', name: 'SaleReturn', component: () => import('@/views/sale/return/index.vue'), meta: { title: '销售退货单', requiresAuth: true } },
       { path: 'sale/return/add', name: 'SaleReturnAdd', component: () => import('@/views/sale/return/add.vue'), meta: { title: '新增销售退货单', requiresAuth: true, operate: true } },

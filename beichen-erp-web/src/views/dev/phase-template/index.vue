@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 
@@ -37,6 +37,7 @@ async function handleSubmit() {
 }
 
 onMounted(loadData)
+onActivated(loadData)
 </script>
 
 <template>

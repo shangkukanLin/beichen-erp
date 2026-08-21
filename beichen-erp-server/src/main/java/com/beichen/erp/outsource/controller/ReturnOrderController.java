@@ -1,7 +1,10 @@
 package com.beichen.erp.outsource.controller;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.beichen.erp.auth.entity.User;
+import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.common.R;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
@@ -29,6 +32,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -40,6 +44,7 @@ public class ReturnOrderController {
 
     private final ReturnOrderMapper returnOrderMapper;
     private final ReturnOrderItemMapper returnOrderItemMapper;
+    private final OutsourceReturnOrderProductMapper returnProductMapper;
     private final OutsourceOrderMapper orderMapper;
     private final OutsourceOrderMaterialMapper orderMaterialMapper;
     private final OutsourceOrderProductMapper orderProductMapper;
@@ -51,6 +56,7 @@ public class ReturnOrderController {
     private final WarehouseStockService warehouseStockService;
     private final MaterialOrderMapper materialOrderMapper;
     private final MaterialOrderItemMapper materialOrderItemMapper;
+    private final UserMapper userMapper;
     private final JdbcTemplate jdbcTemplate;
 
     @GetMapping("/page")
@@ -127,26 +133,16 @@ public class ReturnOrderController {
 
         order.setCode(generateCode());
         if (order.getReturnDate() == null) order.setReturnDate(LocalDate.now());
-        order.setStatus(DocStatus.AUDITED.getCode());
+        order.setStatus(DocStatus.DRAFT.getCode());
+        // 成品出库仓（审核时从我方仓扣减成品）
+        Object invWhObj = body.get("warehouseId");
+        if (invWhObj != null && !invWhObj.toString().isBlank()) order.setWarehouseId(Long.valueOf(invWhObj.toString()));
+        order.setRemark((String) body.get("remark"));
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) order.setCompanyId(cid);
         returnOrderMapper.insert(order);
 
-        // 工厂委外仓（物料退回目标仓）
-        Long factoryWhId = null;
-        if (order.getFactoryId() != null) {
-            List<Warehouse> whs = warehouseMapper.selectList(
-                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
-            factoryWhId = whs.isEmpty() ? null : whs.get(0).getId();
-        }
-        // 成品出库仓（从我方仓扣减成品）
-        Long invWhId = null;
-        Object invWhObj = body.get("warehouseId");
-        if (invWhObj != null && !invWhObj.toString().isBlank()) invWhId = Long.valueOf(invWhObj.toString());
-        order.setRemark((String) body.get("remark"));
-        if (invWhId != null) order.setWarehouseId(invWhId);
-
-        BigDecimal totalReturnAmount = BigDecimal.ZERO;
+        // 保存退货物料明细（FIFO 价，草稿阶段不动库存/应付）
         for (Map<String, Object> it : itemsRaw) {
             BigDecimal qty = toBigDecimal(it.get("quantity"));
             Long matId = toLong(it.get("materialId"));
@@ -163,39 +159,128 @@ public class ReturnOrderController {
             item.setRemark((String) it.get("remark"));
             if (cid != null && cid > 0) item.setCompanyId(cid);
             returnOrderItemMapper.insert(item);
-
-            totalReturnAmount = totalReturnAmount.add(item.getAmount());
-
-            // 退回物料入工厂委外仓 + 流水
-            if (factoryWhId != null && matId != null) {
-                updateOutsourceStock(factoryWhId, matId, qty, QualityType.GOOD.getCode(), StockChangeType.RETURN_IN.getCode(), order.getCode());
-            }
         }
 
-        // 成品从我方仓减少
+        // 保存退货成品明细（审核时扣减成品库存）
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> products = (List<Map<String, Object>>) body.get("products");
+        if (products != null) {
+            for (Map<String, Object> p : products) {
+                BigDecimal qty = toBigDecimal(p.get("quantity"));
+                if (qty.compareTo(BigDecimal.ZERO) <= 0) continue;
+                OutsourceReturnOrderProduct prod = new OutsourceReturnOrderProduct();
+                prod.setReturnOrderId(order.getId());
+                prod.setProductId(toLong(p.get("productId")));
+                prod.setProductName((String) p.get("productName"));
+                prod.setQuantity(qty);
+                if (cid != null && cid > 0) prod.setCompanyId(cid);
+                returnProductMapper.insert(prod);
+            }
+        }
+        return R.ok();
+    }
+
+    /** 审核：退货物料入工厂委外仓 + 成品出库 + 负向应付 */
+    @PutMapping("/{id}/audit")
+    @Transactional(rollbackFor = Exception.class)
+    public R<Void> audit(@PathVariable Long id) {
+        ReturnOrder order = returnOrderMapper.selectById(id);
+        if (order == null) throw new BusinessException("退货单不存在");
+        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
+
+        List<ReturnOrderItem> items = returnOrderItemMapper.selectList(
+            new LambdaQueryWrapper<ReturnOrderItem>().eq(ReturnOrderItem::getReturnOrderId, id));
+        if (items.isEmpty()) throw new BusinessException("退货单明细不能为空");
+
+        // 工厂委外仓（物料退回目标仓）
+        Long factoryWhId = null;
+        if (order.getFactoryId() != null) {
+            List<Warehouse> whs = warehouseMapper.selectList(
+                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
+            factoryWhId = whs.isEmpty() ? null : whs.get(0).getId();
+        }
+        Long invWhId = order.getWarehouseId();
+
+        // 1. 退货物料入工厂委外仓 + 流水
+        BigDecimal totalReturnAmount = BigDecimal.ZERO;
+        for (ReturnOrderItem it : items) {
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
+            if (factoryWhId != null && it.getMaterialId() != null) {
+                updateOutsourceStock(factoryWhId, it.getMaterialId(), it.getQuantity(), QualityType.GOOD.getCode(), StockChangeType.RETURN_IN.getCode(), order.getCode());
+            }
+            if (it.getAmount() != null) totalReturnAmount = totalReturnAmount.add(it.getAmount());
+        }
+
+        // 2. 成品从我方仓减少
         if (invWhId != null) {
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> products = (List<Map<String, Object>>) body.get("products");
-            if (products != null) {
-                for (Map<String, Object> p : products) {
-                    String pn = (String) p.get("productName");
-                    BigDecimal qty = toBigDecimal(p.get("quantity"));
-                    if (pn != null && qty.compareTo(BigDecimal.ZERO) > 0) {
-                        // 成品出库：productId 用于精确定位库存行（不能为 null）
-                        Long productId = p.get("productId") != null ? toLong(p.get("productId")) : null;
-                        warehouseStockService.changeStock(invWhId, productId, qty.negate(), StockChangeType.OUTSOURCE_RETURN_OUT, order.getCode(), RelatedBillType.OUTSOURCE_RETURN, null, order.getId(), null);
-                    }
-                }
+            List<OutsourceReturnOrderProduct> products = returnProductMapper.selectList(
+                new LambdaQueryWrapper<OutsourceReturnOrderProduct>().eq(OutsourceReturnOrderProduct::getReturnOrderId, id));
+            for (OutsourceReturnOrderProduct p : products) {
+                if (p.getQuantity() == null || p.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
+                warehouseStockService.changeStock(invWhId, p.getProductId(), p.getQuantity().negate(), StockChangeType.OUTSOURCE_RETURN_OUT, order.getCode(), RelatedBillType.OUTSOURCE_RETURN, null, order.getId(), null);
             }
         }
 
-        // 应付冲减（负向应付）
+        // 3. 应付冲减（负向应付）
         if (totalReturnAmount.compareTo(BigDecimal.ZERO) > 0) {
             payableHelper.createPayable(order.getFactoryId(), SourceBillType.OUTSOURCE_RETURN.getCode(),
                 order.getCode(), order.getId(), totalReturnAmount.negate(), order.getReturnDate(),
                 "委外退料 - " + order.getCode());
         }
 
+        // 4. 更新状态与审计
+        ReturnOrder u = new ReturnOrder();
+        u.setId(id);
+        u.setStatus(DocStatus.AUDITED.getCode());
+        u.setAuditorId(getCurrentUserId());
+        u.setAuditorName(getCurrentUserName());
+        u.setAuditTime(LocalDateTime.now());
+        returnOrderMapper.updateById(u);
+        return R.ok();
+    }
+
+    /** 取消审核：物料出工厂委外仓 + 成品恢复 + 冲销应付 */
+    @PutMapping("/{id}/un-audit")
+    @Transactional(rollbackFor = Exception.class)
+    public R<Void> unAudit(@PathVariable Long id) {
+        ReturnOrder order = returnOrderMapper.selectById(id);
+        if (order == null) throw new BusinessException("退货单不存在");
+        if (!DocStatus.AUDITED.getCode().equals(order.getStatus())) throw new BusinessException("只有已审核状态可取消审核");
+
+        // 工厂委外仓
+        Long whId = null;
+        if (order.getFactoryId() != null) {
+            List<Warehouse> whs = warehouseMapper.selectList(
+                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
+            whId = whs.isEmpty() ? null : whs.get(0).getId();
+        }
+        // 1. 物料逆向（从工厂委外仓扣回）
+        List<ReturnOrderItem> items = returnOrderItemMapper.selectList(
+            new LambdaQueryWrapper<ReturnOrderItem>().eq(ReturnOrderItem::getReturnOrderId, id));
+        for (ReturnOrderItem it : items) {
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
+            if (whId != null && it.getMaterialId() != null) {
+                updateOutsourceStock(whId, it.getMaterialId(), it.getQuantity().negate(), QualityType.GOOD.getCode(), StockChangeType.CANCEL_RETURN_IN.getCode(), order.getCode());
+            }
+        }
+        // 2. 成品逆向（恢复我方成品库存）
+        Long invWhId = order.getWarehouseId();
+        if (invWhId != null) {
+            List<OutsourceReturnOrderProduct> products = returnProductMapper.selectList(
+                new LambdaQueryWrapper<OutsourceReturnOrderProduct>().eq(OutsourceReturnOrderProduct::getReturnOrderId, id));
+            for (OutsourceReturnOrderProduct p : products) {
+                if (p.getQuantity() == null || p.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
+                warehouseStockService.changeStock(invWhId, p.getProductId(), p.getQuantity(), StockChangeType.OUTSOURCE_RETURN_OUT_UN_AUDIT, order.getCode(), RelatedBillType.OUTSOURCE_RETURN, null, order.getId(), null);
+            }
+        }
+        // 3. 冲销应付
+        payableHelper.reversePayable(id);
+        // 4. 回草稿
+        ReturnOrder u = new ReturnOrder();
+        u.setId(id);
+        u.setStatus(DocStatus.DRAFT.getCode());
+        u.setAuditorId(null); u.setAuditorName(null); u.setAuditTime(null);
+        returnOrderMapper.updateById(u);
         return R.ok();
     }
 
@@ -204,31 +289,26 @@ public class ReturnOrderController {
     public R<Void> cancel(@PathVariable Long id) {
         ReturnOrder order = returnOrderMapper.selectById(id);
         if (order == null) throw new BusinessException("退货单不存在");
-        if (DocStatus.CANCELLED.getCode().equals(order.getStatus())) throw new BusinessException("已取消");
-        order.setStatus(DocStatus.CANCELLED.getCode());
-        returnOrderMapper.updateById(order);
-
-        // 逆向库存
-        Long whId = null;
-        if (order.getFactoryId() != null) {
-            List<Warehouse> whs = warehouseMapper.selectList(
-                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
-            whId = whs.isEmpty() ? null : whs.get(0).getId();
-        }
-        List<ReturnOrderItem> items = returnOrderItemMapper.selectList(
-            new LambdaQueryWrapper<ReturnOrderItem>().eq(ReturnOrderItem::getReturnOrderId, id));
-        BigDecimal totalAmount = BigDecimal.ZERO;
-        for (ReturnOrderItem it : items) {
-            if (whId != null && it.getQuantity() != null && it.getMaterialId() != null) {
-                updateOutsourceStock(whId, it.getMaterialId(), it.getQuantity().negate(), QualityType.GOOD.getCode(), StockChangeType.CANCEL_RETURN_IN.getCode(), order.getCode());
-            }
-            if (it.getAmount() != null) totalAmount = totalAmount.add(it.getAmount());
-        }
-
-        // 应付冲销：作废原负向应付（不再新增同 sourceId 的反向记录，避免财务定位冲突）
-        payableHelper.reversePayable(order.getId());
-
+        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        ReturnOrder u = new ReturnOrder();
+        u.setId(id);
+        u.setStatus(DocStatus.CANCELLED.getCode());
+        returnOrderMapper.updateById(u);
         return R.ok();
+    }
+
+    /** 当前登录用户ID */
+    private Long getCurrentUserId() {
+        try { return StpUtil.getLoginIdAsLong(); } catch (Exception e) { return null; }
+    }
+
+    /** 当前登录用户名 */
+    private String getCurrentUserName() {
+        try {
+            Long userId = StpUtil.getLoginIdAsLong();
+            User user = userMapper.selectById(userId);
+            return user != null ? user.getUsername() : null;
+        } catch (Exception e) { return null; }
     }
 
     /** FIFO 物料单价 */

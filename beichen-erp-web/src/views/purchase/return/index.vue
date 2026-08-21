@@ -93,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -102,16 +102,17 @@ import {
   ReturnStatus, ReturnStatusLabel,
   type PurchaseReturn, type PurchaseReturnItem
 } from '@/api/purchase'
-import request from '@/utils/request'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const list = ref<PurchaseReturn[]>([])
 const loading = ref(false)
 const query = reactive({ code: '', supplierId: '' as string | number, status: '' as string | number })
 const pagination = reactive({ pageNum: 1, pageSize: 20, total: 0 })
 
-const suppliers = ref<any[]>([])
-const warehouses = ref<any[]>([])
+const suppliers = computed(() => optionsStore.suppliers['suppliers:product'] || [])
+const warehouses = computed(() => optionsStore.warehouses || [])
 
 const statusOptions = [
   { label: ReturnStatusLabel[ReturnStatus.DRAFT], value: ReturnStatus.DRAFT },
@@ -133,19 +134,6 @@ function warehouseName(id?: number) {
 const detailVisible = ref(false)
 const detailData = ref<Partial<PurchaseReturn>>({})
 const detailItems = ref<PurchaseReturnItem[]>([])
-
-async function loadSuppliers() {
-  try {
-    const res = await request.get('/supplier/page', { params: { pageSize: 200, supplierType: 'product' } })
-    suppliers.value = res?.records || []
-  } catch { /* */ }
-}
-async function loadWarehouses() {
-  try {
-    const res = await request.get('/warehouse/page', { params: { pageSize: 200 } })
-    warehouses.value = res?.records || []
-  } catch { /* */ }
-}
 
 async function loadData() {
   loading.value = true
@@ -201,10 +189,11 @@ async function handleCancel(row: PurchaseReturn) {
 }
 
 onMounted(() => {
-  loadSuppliers()
-  loadWarehouses()
+  optionsStore.ensureSuppliers('product')
+  optionsStore.ensureWarehouses()
   loadData()
 })
+onActivated(() => { loadData() })
 </script>
 
 <style scoped>

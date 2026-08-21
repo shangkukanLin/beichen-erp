@@ -3,8 +3,10 @@ import { reactive, ref, onMounted, onActivated, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const route = useRoute()
 const activeType = ref(route.path.startsWith('/outsource/') ? 'all' : 'product')
 
@@ -77,7 +79,7 @@ async function handleSubmit() {
     const body: any = { ...form, typeCodes: form.checkedTypes }
     if (isEdit.value) { await request.put('/supplier', body); ElMessage.success('已更新') }
     else { await request.post('/supplier', body); ElMessage.success('已添加') }
-    dialogVisible.value = false; loadData()
+    optionsStore.refreshAllSuppliers(); dialogVisible.value = false; loadData()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
 
@@ -97,7 +99,7 @@ async function handleDelete(row: any) {
   try {
     await ElMessageBox.confirm(`确定删除「${row.name}」吗？`, '提示', { type: 'warning' })
     await request.delete(`/supplier/${row.id}`)
-    ElMessage.success('已删除')
+    optionsStore.refreshAllSuppliers(); ElMessage.success('已删除')
     loadData()
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { ElMessage.error(e?.message || '删除失败') } }
 }

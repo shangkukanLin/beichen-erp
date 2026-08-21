@@ -13,6 +13,8 @@ public class OutsourceOrderProduct {
     private Long id;
     private Long orderId;
     private Long projectId;
+    /** 关联产品主数据ID(product.id)，交货/库存落账用主表ID */
+    private Long productId;
     private String productName;
     private String productSpec;
     private BigDecimal quantity;

@@ -3,6 +3,7 @@ import { reactive, ref, onMounted, onActivated, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
+import { useOptionsStore } from '@/stores/options'
 import {
   getSupplierPage, addSupplier, updateSupplier, toggleSupplierStatus,
   getSupplierProducts, saveSupplierProducts,
@@ -11,6 +12,7 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const optionsStore = useOptionsStore()
 
 // ---------- 根据路由确定供应商类型 ----------
 const typeMap: Record<string, { title: string; type: string }> = {
@@ -108,6 +110,7 @@ async function handleSubmit() {
         await addSupplier(form)
         ElMessage.success('新增成功')
       }
+      optionsStore.refreshAllSuppliers()
       dialogVisible.value = false
       loadData()
     } catch { /* 拦截器已提示 */ } finally { submitLoading.value = false }
@@ -116,6 +119,7 @@ async function handleSubmit() {
 
 async function handleToggleStatus(row: SupplierVO) {
   await toggleSupplierStatus(row.id!)
+  optionsStore.refreshAllSuppliers()
   ElMessage.success(row.status === 1 ? '已停用' : '已启用')
   loadData()
 }

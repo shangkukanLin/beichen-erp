@@ -1,21 +1,20 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { IoType, IoTypeLabel } from '@/api/enums'
+import { IoType, IoTypeLabel, WarehouseCategory } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const loading = ref(false)
 const list = ref<any[]>([])
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const query = reactive({ warehouseId: '', ioType: '' })
-const warehouses = ref<any[]>([])
+const warehouses = computed(() => optionsStore.warehouses.filter((w: any) => w.warehouseCategory === WarehouseCategory.INVENTORY))
 
-async function loadWarehouses() {
-  try { const r = await request.get<any,any>('/warehouse/page',{params:{pageSize:500,warehouseCategory: WarehouseCategory.INVENTORY}}); warehouses.value = r?.records||[] } catch {}
-}
 async function loadData() {
   loading.value = true
   try {
@@ -35,7 +34,8 @@ async function handleCancel(row: any) {
 function handleQuery() { pagination.pageNum=1; loadData() }
 
 function getWhName(id: number) { return warehouses.value.find((w:any)=>w.id===id)?.warehouseName || id }
-onMounted(()=>{ loadWarehouses(); loadData() })
+onMounted(()=>{ optionsStore.ensureWarehouses(); loadData() })
+onActivated(() => { loadData() })
 </script>
 
 <template>

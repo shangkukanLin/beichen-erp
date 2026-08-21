@@ -49,6 +49,8 @@ public enum StockChangeType {
     OUTSOURCE_FINISH_IN("委外交货入库"),
     /** 委外退料出：委外退货退回供应商，从委外仓扣减 */
     OUTSOURCE_RETURN_OUT("委外退料出"),
+    /** 委外退料出反审核：委外加工退货取消审核，恢复已出库成品 */
+    OUTSOURCE_RETURN_OUT_UN_AUDIT("委外退料出反审核"),
     /** 委外退不良：加工单退回不良品 */
     OUTSOURCE_DEFECT_RETURN("委外退不良"),
     /** 交货回滚：委外交货回滚，撤销入库操作 */
@@ -85,6 +87,10 @@ public enum StockChangeType {
     CANCEL_RECEIVE_IN("取消物料收货入"),
     /** 取消物料退不良出：反审核时恢复目标仓库 */
     CANCEL_DEFECT_OUT("取消物料退不良出"),
+    /** 委外物料退货出：委外物料退货单审核，物料从源仓扣减退回物料商 */
+    MATERIAL_RETURN_OUT("委外物料退货出"),
+    /** 取消委外物料退货出：委外物料退货取消审核，物料恢复源仓 */
+    CANCEL_MATERIAL_RETURN_OUT("取消委外物料退货出"),
 
     // ===== 供应商清算 =====
     /** 清算退料入：供应商清算后退料入库 */

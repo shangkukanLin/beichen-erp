@@ -1,25 +1,21 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { IoType, IoTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const loading = ref(false)
 const list = ref<any[]>([])
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const query = reactive({ warehouseId: '' })
 const activeTab = ref(IoType.IN)
-const warehouses = ref<any[]>([])
+const warehouses = computed(() => optionsStore.warehouses || [])
 
-async function loadWarehouses() {
-  try {
-    const r = await request.get<any,any>('/warehouse/page',{params:{pageSize:200}})
-    warehouses.value = r?.records || []
-  } catch {}
-}
 async function loadData() {
   loading.value = true
   try {
@@ -57,10 +53,8 @@ function goWarehouseDetail(warehousId: number) {
   if (wh?.factoryId != null) router.push(`/outsource/warehouse/detail/${warehousId}`)
   else router.push(`/inventory/warehouse/detail/${warehousId}`)
 }
-onMounted(()=>{ loadWarehouses(); loadData() })
-onActivated(() => {
-  if ((window as any).__otherIoNeedRefresh) { (window as any).__otherIoNeedRefresh = false; loadData() }
-})
+onMounted(()=>{ optionsStore.ensureWarehouses(); loadData() })
+onActivated(() => { loadData() })
 </script>
 
 <template>

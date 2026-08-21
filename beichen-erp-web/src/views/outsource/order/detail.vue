@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'OutsourceOrderDetail' })
 
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -9,8 +9,10 @@ import { getProjectBom } from '@/api/system'
 import { exportContractPdf } from '@/api/contract-template'
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import { useOptionsStore } from '@/stores/options'
 
 const route = useRoute(); const router = useRouter()
+const optionsStore = useOptionsStore()
 const loading = ref(true); const saving = ref(false)
 const activeTab = ref('detail')
 const uploadFile = ref<File | null>(null)
@@ -75,9 +77,9 @@ const form = reactive({
 
 const products = ref<any[]>([])
 const factoryOptions = ref<any[]>([])
-const projectOptions = ref<any[]>([])
-const materialOptions = ref<any[]>([])
-const bomTypes = ref<any[]>([])
+const projectOptions = computed(() => optionsStore.projects || [])
+const materialOptions = computed(() => optionsStore.materials || [])
+const bomTypes = computed(() => optionsStore.bomTypes || [])
 
 // bomTypeId -> 类型名 映射（兜底展示用）
 function typeName(id: number | undefined, fallback?: string) {
@@ -86,17 +88,11 @@ function typeName(id: number | undefined, fallback?: string) {
 }
 // 数字格式化（保留2位小数，null/undefined 显示 0）
 function fmt(v: any) { return v !== undefined && v !== null ? Number(v).toFixed(2) : '0.00' }
-async function loadBomTypes() {
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
-}
-
 // 交货数据
 const deliveries = ref<any[]>([])
 
 async function loadOptions() {
-  try { const r = await request.get<any,any>('/supplier/page',{params:{supplierType:'factory',pageSize:200}}); factoryOptions.value=r?.records||[] } catch (e: any) { console.warn('加载工厂选项失败', e?.message || e) }
-  try { const r = await request.get<any,any>('/dev/project/page',{params:{pageSize:200}}); projectOptions.value=r?.records||[] } catch (e: any) { console.warn('加载项目选项失败', e?.message || e) }
-  try { const r = await request.get<any,any>('/outsource/material/page',{params:{pageSize:500}}); materialOptions.value=r?.records||[] } catch (e: any) { console.warn('加载物料选项失败', e?.message || e) }
+  await optionsStore.ensureSuppliers('factory'); factoryOptions.value = optionsStore.suppliers['suppliers:factory'] || []
 }
 
 async function loadData() {
@@ -133,7 +129,8 @@ function onProjectSelect(idx: number, pid: number) {
   const proj = projectOptions.value.find((v:any) => v.id === pid)
   if (proj) {
     products.value[idx].projectId = pid
-    products.value[idx].productName = proj.productName || proj.name || ''
+    // 产品名称取项目总成名称(assemblyName)，与产品主数据一致；无总成名称时回退项目名
+    products.value[idx].productName = proj.assemblyName || proj.name || ''
     products.value[idx].productSpec = proj.productSpec || ''
     loadBomMaterials(idx, pid)
   }
@@ -186,14 +183,28 @@ async function handleUnaudit() {
 const defectVisible = ref(false); const defectSaving = ref(false)
 const defectItems = ref<any[]>([]); const defectWarehouseId = ref<number>()
 const defectWarehouseInfo = ref<any>(null)
-function openDefectReturn() { defectItems.value = (products.value || []).map((p: any) => ({ productId: p.id, productName: p.productName, quantity: undefined as any })); defectWarehouseId.value = undefined; defectWarehouseInfo.value = null; defectVisible.value = true; loadDelWarehouses() }
+// 四规格初始空库存
+const emptyDefectStock = () => ({ a: 0, b: 0, c: 0, defect: 0 })
+function openDefectReturn() {
+  defectItems.value = (products.value || []).map((p: any) => ({ productId: p.id, productName: p.productName, masterId: p.productId, aQty: undefined as any, bQty: undefined as any, cQty: undefined as any, defectQty: undefined as any, stocks: emptyDefectStock() }))
+  defectWarehouseId.value = undefined; defectWarehouseInfo.value = null; defectVisible.value = true; loadDelWarehouses()
+}
 function onDefectWhChange(whId: number) {
   defectWarehouseId.value = whId
   if (!whId) { defectWarehouseInfo.value = null; return }
-  // 查询该仓库该产品的库存
-  request.get<any,any>('/warehouse/stock/page', { params: { pageSize: 500 } }).then((r: any) => {
+  // 按产品主数据ID查询该仓库该产品各规格库存（productName 为快照名且实体无此字段，不能用名称匹配）
+  request.get<any,any>('/warehouse/stock/page', { params: { pageSize: 500, stockType: 'PRODUCT' } }).then((r: any) => {
     const stocks = r?.records || []
-    const s = stocks.find((s:any) => s.warehouseId === whId && s.productName === defectItems.value[0]?.productName)
+    const masterId = defectItems.value[0]?.masterId
+    const s = stocks.find((s:any) => s.warehouseId === whId && s.productId === masterId)
+    const qmap: Record<string, 'a' | 'b' | 'c' | 'defect'> = { A: 'a', B: 'b', C: 'c', DEFECT: 'defect' }
+    const stocksOf: { a: number; b: number; c: number; defect: number } = emptyDefectStock()
+    // 该仓该产品可能有多行(不同规格)，全部取出来按规格填充
+    const rows = stocks.filter((s:any) => s.warehouseId === whId && s.productId === masterId)
+    for (const row of rows) {
+      const key = qmap[row.qualityType]; if (key) stocksOf[key] = Number(row.quantity || 0)
+    }
+    defectItems.value = defectItems.value.map((it: any) => ({ ...it, stocks: { ...stocksOf } }))
     defectWarehouseInfo.value = s || { quantity: 0 }
   }).catch(() => { defectWarehouseInfo.value = { quantity: 0 } })
 }
@@ -227,7 +238,7 @@ async function loadDeliveryData() {
   } catch (e: any) { console.warn('加载交货数据失败', e?.message || e) }
 }
 async function loadDelWarehouses() {
-  try { const r = await request.get<any,any>('/warehouse/page', { params: { pageSize: 200 } }); delWarehouseOptions.value = r?.records || [] } catch {}
+  await optionsStore.ensureWarehouses(); delWarehouseOptions.value = optionsStore.warehouses || []
 }
 function delOpenAdd() {
   delIsEdit.value = false; delEditId.value = undefined; delWarehouseId.value = undefined; delUploadFile.value = null
@@ -309,14 +320,20 @@ async function delHandleUnaudit(row: any) {
 }
 
 async function handleDefectReturn() {
-  const data = defectItems.value.filter((r: any) => r.quantity && Number(r.quantity) > 0)
+  // 收集所有产品各规格>0的数量
+  const data: any[] = []
+  for (const r of defectItems.value) {
+    for (const [qualityType, qtyKey] of [['A','aQty'],['B','bQty'],['C','cQty'],['DEFECT','defectQty']] as const) {
+      const q = Number(r[qtyKey]); if (q > 0) data.push({ productId: r.productId, qualityType, quantity: q })
+    }
+  }
   if (data.length === 0) { ElMessage.warning('请输入退不良数量'); return }
   if (!defectWarehouseId.value) { ElMessage.warning('请选择退不良仓库'); return }
   defectSaving.value = true
   try {
-    // 逐产品调用新版退不良接口（存草稿），审核时统一落账
+    // 逐规格调用退不良接口（存草稿），审核时统一落账
     for (const r of data) {
-      await request.post(`/outsource/order-delivery/return-defect/${form.id}`, { productId: r.productId, quantity: r.quantity, warehouseId: defectWarehouseId.value })
+      await request.post(`/outsource/order-delivery/return-defect/${form.id}`, { productId: r.productId, qualityType: r.qualityType, quantity: r.quantity, warehouseId: defectWarehouseId.value })
     }
     ElMessage.success('退不良草稿已保存，请在交货记录中审核'); defectVisible.value = false; loadData(); loadDeliveryData()
   } catch (e: any) { ElMessage.error(e?.message || '退不良失败') } finally { defectSaving.value = false }
@@ -357,7 +374,7 @@ async function loadCloseReport() {
   finally { closeLoading.value = false }
 }
 
-onMounted(() => { loadOptions(); loadBomTypes(); loadData() })
+onMounted(() => { loadOptions(); optionsStore.ensureProjects(); optionsStore.ensureMaterials(); optionsStore.ensureBomTypes(); loadData() })
 </script>
 
 <template>
@@ -400,7 +417,7 @@ onMounted(() => { loadOptions(); loadBomTypes(); loadData() })
         <template #header><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-weight:600">加工产品 #{{ pi + 1 }}</span><el-button type="danger" size="small" text @click="removeProduct(pi)" v-if="products.length>1 && form.status===OutsourceOrderStatus.PENDING">删除产品</el-button></div></template>
         <el-form :model="p" label-width="90px" size="small">
           <el-row :gutter="12">
-            <el-col :span="12"><el-form-item label="关联项目"><el-select v-model="p.projectId" filterable clearable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="(v:any)=>onProjectSelect(pi,v)"><el-option v-for="pr in projectOptions" :key="pr.id" :label="pr.name" :value="pr.id" /></el-select></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="加工产品"><el-select v-model="p.projectId" filterable clearable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="(v:any)=>onProjectSelect(pi,v)"><el-option v-for="pr in projectOptions" :key="pr.id" :label="pr.assemblyName || pr.name" :value="pr.id" /></el-select></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="数量"><el-input v-model="p.quantity" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="单价"><el-input v-model="p.unitPrice" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>
@@ -552,12 +569,34 @@ onMounted(() => { loadOptions(); loadBomTypes(); loadData() })
     </template>
 
     <!-- 退不良弹窗 -->
-    <el-dialog v-model="defectVisible" title="退不良（拆分还料）" width="550px" :close-on-click-modal="false">
+    <el-dialog v-model="defectVisible" title="退不良（拆分还料）" width="780px" :close-on-click-modal="false">
       <el-form-item label="退不良仓库" style="margin-bottom:12px"><el-select v-model="defectWarehouseId" filterable style="width:100%" placeholder="选择扣减的成品仓库" @change="onDefectWhChange"><el-option v-for="w in delWarehouseOptions" :key="w.id" :label="`${w.warehouseName} (${w.code})`" :value="w.id" /></el-select></el-form-item>
-      <div v-if="defectWarehouseInfo" style="margin-bottom:8px;font-size:var(--app-font-sm);color:var(--app-text-regular)">当前库存：<b :style="{color:defectWarehouseInfo.quantity>0?'var(--app-color-success)':'var(--app-color-danger)'}">{{ defectWarehouseInfo.quantity || 0 }}</b></div>
       <el-table :data="defectItems" border size="small">
-        <el-table-column prop="productName" label="产品" min-width="200" />
-        <el-table-column label="退不良数量" width="160"><template #default="{row}"><el-input v-model="row.quantity" size="small" type="number" placeholder="数量" /></template></el-table-column>
+        <el-table-column prop="productName" label="产品" min-width="160" />
+        <el-table-column label="A规" width="130">
+          <template #default="{row}">
+            <div style="font-size:12px;color:var(--app-text-regular)">库存 {{ row.stocks?.a ?? 0 }}</div>
+            <el-input v-model="row.aQty" size="small" type="number" placeholder="数量" />
+          </template>
+        </el-table-column>
+        <el-table-column label="B规" width="130">
+          <template #default="{row}">
+            <div style="font-size:12px;color:var(--app-text-regular)">库存 {{ row.stocks?.b ?? 0 }}</div>
+            <el-input v-model="row.bQty" size="small" type="number" placeholder="数量" />
+          </template>
+        </el-table-column>
+        <el-table-column label="C规" width="130">
+          <template #default="{row}">
+            <div style="font-size:12px;color:var(--app-text-regular)">库存 {{ row.stocks?.c ?? 0 }}</div>
+            <el-input v-model="row.cQty" size="small" type="number" placeholder="数量" />
+          </template>
+        </el-table-column>
+        <el-table-column label="不良" width="130">
+          <template #default="{row}">
+            <div style="font-size:12px;color:var(--app-text-regular)">库存 {{ row.stocks?.defect ?? 0 }}</div>
+            <el-input v-model="row.defectQty" size="small" type="number" placeholder="数量" />
+          </template>
+        </el-table-column>
       </el-table>
       <template #footer><el-button @click="defectVisible=false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认退不良</el-button></template>
     </el-dialog>

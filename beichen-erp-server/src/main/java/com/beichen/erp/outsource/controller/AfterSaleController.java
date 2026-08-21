@@ -76,6 +76,8 @@ public class AfterSaleController {
         // 2. 写入退不良记录（sourceType=AFTER_SALE，不关联加工单，立即生效）
         OutsourceOrderDelivery delivery = new OutsourceOrderDelivery();
         delivery.setProductId(productId);
+        // 收费售后直接使用产品主数据ID(product.id)
+        delivery.setProductMasterId(productId);
         delivery.setQuantity(qty);
         delivery.setDeliveryType(DeliveryType.DEFECT_RETURN.getCode());
         delivery.setWarehouseId(warehouseId);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, computed } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -110,6 +110,7 @@ function openAttach(url: string) { window.open(url + '?inline=true') }
 function goSettlement() { router.push(`/finance/supplier-settlement/${supplierId}`) }
 
 onMounted(() => loadAll())
+onActivated(() => loadAll())
 </script>
 
 <template>

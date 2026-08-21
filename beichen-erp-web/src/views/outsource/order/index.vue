@@ -1,23 +1,21 @@
 <script setup lang="ts">
 defineOptions({ name: 'OutsourceOrderIndex' })
 
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/enums'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
+const optionsStore = useOptionsStore()
 const activeTab = ref('PENDING_PRODUCING')
 const query = reactive({ code: '', factoryId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])
 const tableLoading = ref(false)
-const factoryOptions = ref<any[]>([])
-
-async function loadOptions() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType:'factory', pageSize:200 } }); factoryOptions.value = r?.records || [] } catch (e: any) { console.warn('加载工厂选项失败', e?.message || e) }
-}
+const factoryOptions = computed(() => optionsStore.suppliers['suppliers:factory'] || [])
 
 async function loadData() {
   tableLoading.value = true
@@ -40,11 +38,10 @@ async function handleCancel(row: any) {
   try { await ElMessageBox.confirm('确定取消该加工单吗？', '提示', { type: 'warning' }); await request.put(`/outsource/order/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
-function refresh() { loadOptions(); loadData() }
+function refresh() { optionsStore.ensureSuppliers('factory'); loadData() }
 onMounted(refresh)
 onActivated(() => {
-  loadOptions()
-  if ((window as any).__orderNeedRefresh) { (window as any).__orderNeedRefresh = false; loadData() }
+  loadData()
 })
 </script>
 

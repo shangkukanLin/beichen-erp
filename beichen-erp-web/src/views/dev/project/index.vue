@@ -12,7 +12,9 @@ import {
   type ProjectVO, type ProjectDTO, type BomDTO, type BugDTO, type DrawingVO
 } from '@/api/system'
 import request from '@/utils/request'
+import { useOptionsStore } from '@/stores/options'
 
+const optionsStore = useOptionsStore()
 const STATUS_LIST = ['立项', '排线图纸', '排线打样', 'FOG打样', '显示调试', '触摸调试', '背贴盖板打样', '总成样品', '测试', '小批量', '结项']
 const today = new Date().toISOString().split('T')[0]
 const router = useRouter()
@@ -123,7 +125,7 @@ async function handleSubmit() {
     try {
       if (isEdit.value && form.id) { await updateProject(form); ElMessage.success('修改成功') }
       else { await addProject(form); ElMessage.success('新增成功') }
-      dialogVisible.value = false; loadData()
+      optionsStore.refreshProjects(); dialogVisible.value = false; loadData()
     } finally { submitLoading.value = false }
   })
 }
@@ -132,6 +134,7 @@ async function handleCancel(row: any) {
   try {
     await ElMessageBox.confirm(`确定取消项目「${row.name}」吗？`, '提示', { type: 'warning' })
     await request.put(`/dev/project/${row.id}/cancel`)
+    optionsStore.refreshProjects()
     ElMessage.success('项目已取消')
     loadData()
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
@@ -141,6 +144,7 @@ async function handleReactivate(row: any) {
   try {
     await ElMessageBox.confirm(`确定重新激活项目「${row.name}」吗？`, '提示', { type: 'info' })
     await request.put(`/dev/project/${row.id}/reactivate`)
+    optionsStore.refreshProjects()
     ElMessage.success('项目已重新激活')
     loadData()
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }

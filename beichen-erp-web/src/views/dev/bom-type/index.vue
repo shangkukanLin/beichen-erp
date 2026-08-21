@@ -2,7 +2,9 @@
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { useOptionsStore } from '@/stores/options'
 
+const optionsStore = useOptionsStore()
 const tableData = ref<any[]>([])
 const dialogVisible = ref(false)
 const form = reactive({ id: undefined as number | undefined, typeName: '', sortOrder: 0, status: 1 })
@@ -20,11 +22,11 @@ async function handleSubmit() {
   if (!form.typeName) { ElMessage.warning('请输入类型名称'); return }
   if (isEdit.value) { await request.put('/dev/bom-type', form); ElMessage.success('已更新') }
   else { await request.post('/dev/bom-type', form); ElMessage.success('已添加') }
-  dialogVisible.value = false; loadData()
+  optionsStore.refreshBomTypes(); dialogVisible.value = false; loadData()
 }
 
 async function handleDelete(row: any) {
-  try { await ElMessageBox.confirm(`确定删除「${row.typeName}」吗？`, '提示', { type: 'warning' }); await request.delete(`/dev/bom-type/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm(`确定删除「${row.typeName}」吗？`, '提示', { type: 'warning' }); await request.delete(`/dev/bom-type/${row.id}`); optionsStore.refreshBomTypes(); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
 onMounted(() => loadData())

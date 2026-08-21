@@ -89,14 +89,16 @@
 
 <script setup lang="ts">
 import { WarehouseCategory } from '@/api/enums'
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
 const route = useRoute()
+const optionsStore = useOptionsStore()
 const query = reactive({ status: '', fromWarehouseId: undefined as number | undefined, toWarehouseId: undefined as number | undefined })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
@@ -108,7 +110,7 @@ const statusOptions = [
   { label: DocStatusLabel[DocStatus.CANCELLED], value: DocStatus.CANCELLED }
 ]
 
-const warehouses = ref<any[]>([])
+const warehouses = computed(() => optionsStore.warehouses.filter((w: any) => w.warehouseCategory === WarehouseCategory.INVENTORY))
 
 const detailVisible = ref(false)
 const detail = ref<any>({})
@@ -119,13 +121,6 @@ function warehouseName(id?: number) {
   return w ? w.warehouseName : ''
 }
 function statusType(s?: string) { return DocStatusTag[s || ''] || '' }
-
-async function loadWarehouses() {
-  try {
-    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } })
-    warehouses.value = res?.records || []
-  } catch { warehouses.value = [] }
-}
 
 async function loadData() {
   loading.value = true
@@ -184,7 +179,7 @@ async function handleDetail(row: any) {
 }
 
 onMounted(() => {
-  loadWarehouses()
+  optionsStore.ensureWarehouses()
   loadData().then(() => {
     // 库存流水链接跳转：自动打开指定单据详情
     const billId = route.query.billId
@@ -194,6 +189,7 @@ onMounted(() => {
     }
   })
 })
+onActivated(() => { loadData() })
 </script>
 
 <style scoped>
