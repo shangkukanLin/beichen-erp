@@ -12,9 +12,7 @@ import {
   type ProjectVO, type ProjectDTO, type BomDTO, type BugDTO, type DrawingVO
 } from '@/api/system'
 import request from '@/utils/request'
-import { useOptionsStore } from '@/stores/options'
 
-const optionsStore = useOptionsStore()
 const STATUS_LIST = ['立项', '排线图纸', '排线打样', 'FOG打样', '显示调试', '触摸调试', '背贴盖板打样', '总成样品', '测试', '小批量', '结项']
 const today = new Date().toISOString().split('T')[0]
 const router = useRouter()
@@ -85,6 +83,7 @@ function handleReset() { query.name = ''; loadData() }
 // ===================== 方案公司下拉 =====================
 const solutionSuppliers = ref<{ id: number; name: string }[]>([])
 const factoryOptions = ref<{ id: number; name: string }[]>([])
+const fetchFactorySuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, supplierType: 'factory', name: kw } })
 async function loadSolutionSuppliers() {
   try {
     const res = await getSupplierPage({ supplierType: 'solution', pageSize: 200 })
@@ -125,7 +124,7 @@ async function handleSubmit() {
     try {
       if (isEdit.value && form.id) { await updateProject(form); ElMessage.success('修改成功') }
       else { await addProject(form); ElMessage.success('新增成功') }
-      optionsStore.refreshProjects(); dialogVisible.value = false; loadData()
+      dialogVisible.value = false; loadData()
     } finally { submitLoading.value = false }
   })
 }
@@ -134,7 +133,6 @@ async function handleCancel(row: any) {
   try {
     await ElMessageBox.confirm(`确定取消项目「${row.name}」吗？`, '提示', { type: 'warning' })
     await request.put(`/dev/project/${row.id}/cancel`)
-    optionsStore.refreshProjects()
     ElMessage.success('项目已取消')
     loadData()
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
@@ -144,7 +142,6 @@ async function handleReactivate(row: any) {
   try {
     await ElMessageBox.confirm(`确定重新激活项目「${row.name}」吗？`, '提示', { type: 'info' })
     await request.put(`/dev/project/${row.id}/reactivate`)
-    optionsStore.refreshProjects()
     ElMessage.success('项目已重新激活')
     loadData()
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
@@ -290,10 +287,10 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
           <el-col :span="8"><el-form-item label="原机尺寸"><el-input v-model="form.originalSize" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="原分辨率"><el-input v-model="form.originalResolution" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="打样工厂">
-            <el-select v-model="form.sampleFactoryId" clearable filterable style="width:100%" placeholder="选择工厂"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select>
+            <RemoteSelect v-model="form.sampleFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" />
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="委外工厂">
-            <el-select v-model="form.outsourceFactoryId" clearable filterable style="width:100%" placeholder="选择工厂"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select>
+            <RemoteSelect v-model="form.outsourceFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" />
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="立项日期"><el-input v-model="form.startDate" type="date" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="预计完成"><el-input v-model="form.expectedEndDate" type="date" /></el-form-item></el-col>

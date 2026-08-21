@@ -5,20 +5,25 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect'
 
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const activeTab = ref(DeliveryType.DELIVERY)
 const query = reactive({ code: '', factoryId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])
 const tableLoading = ref(false)
-const factoryOptions = computed(() => optionsStore.suppliers['suppliers:factory'] || [])
-const allWarehouses = computed(() => optionsStore.warehouses || [])
+
+// Odoo 风格：加工厂筛选实时查库
+const fetchFactories = (kw: string) => request.get('/supplier/page', { params: { supplierType: 'factory', pageSize: 500, name: kw } })
+// 仓库列表（用于点击仓库跳转详情）
+const warehouseOptions = ref<any[]>([])
+async function loadWarehouseOptions() {
+  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } }); warehouseOptions.value = r?.records || [] } catch { warehouseOptions.value = [] }
+}
 
 function goWhDetail(warehouseId: number) {
-  const w = allWarehouses.value.find((x:any)=>x.id===warehouseId)
+  const w = warehouseOptions.value.find((x:any)=>x.id===warehouseId)
   if (!w) return
   if (w.factoryId != null) router.push(`/outsource/warehouse/detail/${warehouseId}`)
   else router.push(`/inventory/warehouse/detail/${warehouseId}`)
@@ -48,7 +53,7 @@ async function handleUnaudit(row: any) {
   try { await ElMessageBox.confirm('确定反审核该收发单吗？反审核后将回滚库存与流水，回到草稿。', '反审核', { type: 'warning' }); await request.put(`/outsource/delivery/${row.id}/unaudit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
-onMounted(() => { optionsStore.ensureSuppliers('factory'); optionsStore.ensureWarehouses(); loadData() })
+onMounted(() => { loadWarehouseOptions(); loadData() })
 onActivated(() => { loadData() })
 </script>
 
@@ -57,7 +62,7 @@ onActivated(() => { loadData() })
     <el-card shadow="never" class="query-card">
       <el-form :inline="true" :model="query">
         <el-form-item label="单号"><el-input v-model="query.code" placeholder="收发单号" clearable @keyup.enter="handleQuery" /></el-form-item>
-        <el-form-item label="加工厂"><el-select v-model="query.factoryId" placeholder="全部" clearable filterable style="width:180px"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item>
+        <el-form-item label="加工厂"><RemoteSelect v-model="query.factoryId" :fetch="fetchFactories" placeholder="全部" clearable style="width:180px" /></el-form-item>
         <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button @click="handleReset">重置</el-button><el-button type="success" @click="router.push('/outsource/delivery/add')">新增</el-button></el-form-item>
       </el-form>
     </el-card>

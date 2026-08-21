@@ -8,17 +8,13 @@
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="客户" prop="customerId">
-              <el-select v-model="form.customerId" filterable placeholder="请选择客户" style="width: 100%"
-                @change="onCustomerChange">
-                <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
-              </el-select>
+              <RemoteSelect v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择客户" style="width: 100%"
+                @change="onCustomerChange" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="退货仓库" prop="warehouseId">
-              <el-select v-model="form.warehouseId" filterable placeholder="请选择仓库" style="width: 100%">
-                <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
-              </el-select>
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" placeholder="请选择仓库" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -36,10 +32,8 @@
         <el-table :data="form.items" border>
           <el-table-column label="产品" min-width="220">
             <template #default="{ row }">
-              <el-select v-model="row.productId" filterable placeholder="请选择" style="width: 100%"
-                @change="(id: number) => onProductChange(row, id)">
-                <el-option v-for="p in products" :key="p.id" :label="`${p.name}`" :value="p.id" />
-              </el-select>
+              <RemoteSelect v-model="row.productId" :fetch="fetchProducts" placeholder="请选择" style="width: 100%"
+                @change="(id: number) => onProductChange(row, id)" />
             </template>
           </el-table-column>
           <el-table-column label="品质等级" width="110" align="center">
@@ -85,29 +79,37 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, computed } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
+import request from '@/utils/request'
+import RemoteSelect from '@/components/RemoteSelect'
 import {
   getSaleReturn,
   getSaleReturnItems,
   createSaleReturn,
   updateSaleReturn,
 } from '@/api/sale'
-import { useOptionsStore } from '@/stores/options'
-
-interface Opt { id: number; name: string }
 
 const route = useRoute()
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const formRef = ref()
 const saving = ref(false)
 const isEdit = ref(false)
-const customers = computed(() => optionsStore.customers || [])
-const warehouses = computed(() => optionsStore.warehouses || [])
-const products = computed(() => optionsStore.products || [])
+
+// Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
+const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
+const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 500, keyword: kw } })
+
+// 列表/拼装用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
+const customers = ref<{ id: number; name: string }[]>([])
+const warehouses = ref<{ id: number; warehouseName: string }[]>([])
+const products = ref<{ id: number; name: string }[]>([])
+async function loadCustomers() { try { const r: any = await fetchCustomers(''); customers.value = r?.records || [] } catch { customers.value = [] } }
+async function loadWarehouses() { try { const r: any = await fetchWarehouses(''); warehouses.value = r?.records || [] } catch { warehouses.value = [] } }
+async function loadProducts() { try { const r: any = await fetchProducts(''); products.value = r?.records || [] } catch { products.value = [] } }
 
 const form = reactive({
   id: undefined as number | undefined,
@@ -216,9 +218,9 @@ function goBack() {
 }
 
 onMounted(async () => {
-  optionsStore.ensureCustomers()
-  optionsStore.ensureWarehouses()
-  optionsStore.ensureProducts()
+  loadCustomers()
+  loadWarehouses()
+  loadProducts()
   const id = route.query.id
   if (id) {
     isEdit.value = true

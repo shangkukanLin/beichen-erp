@@ -1,22 +1,26 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect'
 
 const router = useRouter()
 import { getReceiptPage, getReceiptItems, createReceipt, auditReceipt, cancelReceipt, getUnpaidReceivables, type FinanceReceipt, type FinanceReceiptItem, type FinanceReceivable } from '@/api/finance'
 
-const optionsStore = useOptionsStore()
 const query = reactive({ customerId: '' as string|number, status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinanceReceipt[]>([])
-const customers = computed(() => optionsStore.customers || [])
+const customersOptions = ref<any[]>([])
 const accounts = ref<{id:number;accountName:string}[]>([])
+
+const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
+async function loadCustomersOptions() {
+  try { const r: any = await fetchCustomers(''); customersOptions.value = r?.records || [] } catch { customersOptions.value = [] }
+}
 
 const statusOpts = [{l:DocStatusLabel[DocStatus.DRAFT],v:DocStatus.DRAFT},{l:DocStatusLabel[DocStatus.AUDITED],v:DocStatus.AUDITED},{l:DocStatusLabel[DocStatus.CANCELLED],v:DocStatus.CANCELLED}]
 
@@ -33,11 +37,11 @@ async function loadData() {
 async function loadAccounts() {
   try { const r = await request.get('/finance/account/list'); accounts.value = r || [] } catch {}
 }
-onMounted(() => { optionsStore.ensureCustomers(); loadAccounts(); loadData() })
+onMounted(() => { loadCustomersOptions(); loadAccounts(); loadData() })
 onActivated(() => { loadData() })
 function query_() { page.pageNum = 1; loadData() }
 function reset_() { query.customerId = ''; query.status = ''; page.pageNum = 1; loadData() }
-function cName(id?: number) { return customers.value.find(x => x.id === id)?.name || '' }
+function cName(id?: number) { return customersOptions.value.find(x => x.id === id)?.name || '' }
 function aName(id?: number) { return accounts.value.find(x => x.id === id)?.accountName || '' }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { return DocStatusTag[s || ''] || undefined }
@@ -89,7 +93,7 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
 <template>
   <div class="p">
     <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
-      <el-form-item label="客户"><el-select v-model="query.customerId" placeholder="全部" clearable filterable style="width:160px" @change="(v: any) => { if (v === ADD_MARKER) { query.customerId = ''; router.push('/inventory/customer'); return } }"><el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id ?? ''"/><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item>
+      <el-form-item label="客户"><RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="全部" style="width:160px" @change="(v: any) => { if (v === ADD_MARKER) { query.customerId = ''; router.push('/inventory/customer'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
       <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="o in statusOpts" :key="o.v" :label="o.l" :value="o.v"/></el-select></el-form-item>
       <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button><el-button type="success" @click="handleAdd">新增收款</el-button></el-form-item>
     </el-form></el-card>
@@ -111,7 +115,7 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
     <el-dialog v-model="dVisible" :title="dTitle" width="850px" :close-on-click-modal="false">
       <el-form :model="dForm" label-width="90px">
         <el-row :gutter="16">
-          <el-col :span="12"><el-form-item label="客户" required><el-select v-model="dForm.customerId" placeholder="请选择" filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { dForm.customerId = undefined; router.push('/inventory/customer'); return } onCustomerChange(dForm.customerId as number) }"><el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id ?? ''"/><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="客户" required><RemoteSelect v-model="dForm.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { dForm.customerId = undefined; router.push('/inventory/customer'); return } onCustomerChange(dForm.customerId as number) }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="收款账户" required><el-select v-model="dForm.accountId" placeholder="请选择" filterable style="width:100%"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id"/></el-select></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="收款日期"><el-date-picker v-model="dForm.receiptDate" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="dForm.remark" type="textarea" :rows="2"/></el-form-item></el-col>

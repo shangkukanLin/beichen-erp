@@ -4,10 +4,8 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { getPurchaseOrderItems, type PurchaseOrder, type PurchaseOrderItem, PurchaseStatus, PurchaseStatusLabel } from '@/api/purchase'
-import { useOptionsStore } from '@/stores/options'
 
 const route = useRoute(); const router = useRouter()
-const optionsStore = useOptionsStore()
 const orderId = Number(route.params.id)
 const order = ref<PurchaseOrder>({})
 const items = ref<PurchaseOrderItem[]>([])
@@ -40,15 +38,17 @@ async function loadData() {
     order.value = res || {}
     items.value = itemRes || []
 
-    // 从全局 store 批量查供应商和仓库名称
+    // 本地实时查供应商和仓库名称
     if (order.value.supplierId) {
-      await optionsStore.ensureSuppliers('product')
-      const s = optionsStore.suppliers['suppliers:product'].find((x: any) => x.id === order.value.supplierId)
+      const res: any = await request.get('/supplier/page', { params: { pageSize: 500, name: '' } })
+      const list = res?.records || []
+      const s = list.find((x: any) => x.id === order.value.supplierId)
       supplierName.value = s?.name || ''
     }
     if (order.value.warehouseId) {
-      await optionsStore.ensureWarehouses()
-      const w = optionsStore.warehouses.find((x: any) => x.id === order.value.warehouseId)
+      const res: any = await request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: '' } })
+      const list = res?.records || []
+      const w = list.find((x: any) => x.id === order.value.warehouseId)
       warehouseName.value = w?.warehouseName || ''
     }
   } finally { loading.value = false }

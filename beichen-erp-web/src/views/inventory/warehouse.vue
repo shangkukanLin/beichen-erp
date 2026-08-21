@@ -4,10 +4,8 @@ import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
-const optionsStore = useOptionsStore()
 
 const query = reactive({ warehouseName: '', warehouseType: '' })
 const allData = ref<any[]>([])
@@ -40,14 +38,14 @@ function handleEdit(row: any) { Object.assign(form, defForm(), row); isEdit.valu
 
 async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('请输入仓库名称'); return }; submitLoading.value = true
   try { if (isEdit.value) { await request.put('/warehouse', form); ElMessage.success('已更新') } else { await request.post('/warehouse', form); ElMessage.success('已新增') }
-    optionsStore.refreshWarehouses(); dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
+    dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
 
 function handleDetail(row: any) { router.push(`/inventory/warehouse/detail/${row.id}`) }
 
 async function handleToggleStatus(row: any) {
   row.status = row.status === 1 ? 0 : 1
   await request.put('/warehouse', row)
-  optionsStore.refreshWarehouses(); ElMessage.success(row.status === 1 ? '已启用' : '已停用'); loadData()
+  ElMessage.success(row.status === 1 ? '已启用' : '已停用'); loadData()
 }
 
 onMounted(() => loadData())

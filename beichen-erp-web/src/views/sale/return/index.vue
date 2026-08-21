@@ -6,9 +6,7 @@
           <el-input v-model="query.code" placeholder="请输入单号" clearable style="width: 180px" />
         </el-form-item>
         <el-form-item label="客户">
-          <el-select v-model="query.customerId" filterable clearable placeholder="请选择客户" style="width: 200px">
-            <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id" />
-          </el-select>
+          <RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="请选择客户" clearable style="width: 200px" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" clearable placeholder="全部" style="width: 130px">
@@ -63,10 +61,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onActivated, reactive, ref, computed } from 'vue'
+import { onMounted, onActivated, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Plus } from '@element-plus/icons-vue'
+import request from '@/utils/request'
+import RemoteSelect from '@/components/RemoteSelect'
 import {
   getSaleReturnPage,
   auditSaleReturn,
@@ -76,16 +76,16 @@ import {
   SaleReturnStatus,
   SaleReturnStatusLabel,
 } from '@/api/sale'
-import { useOptionsStore } from '@/stores/options'
-
-interface Customer { id: number; name: string }
 
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const loading = ref(false)
 const list = ref<any[]>([])
 const total = ref(0)
-const customers = computed<Customer[]>(() => optionsStore.customers || [])
+// Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
+const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
+// 列表/查询显示用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
+const customers = ref<{ id: number; name: string }[]>([])
+async function loadCustomers() { try { const r: any = await fetchCustomers(''); customers.value = r?.records || [] } catch { customers.value = [] } }
 const statusOptions = SaleReturnStatusLabel
 
 const query = reactive({
@@ -201,7 +201,7 @@ function doDelete(row: any) {
 }
 
 onMounted(() => {
-  optionsStore.ensureCustomers()
+  loadCustomers()
   load()
 })
 onActivated(() => { load() })

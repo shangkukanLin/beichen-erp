@@ -8,14 +8,10 @@
           </el-select>
         </el-form-item>
         <el-form-item label="移出仓">
-          <el-select v-model="query.fromWarehouseId" placeholder="全部" clearable filterable style="width:150px">
-            <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
-          </el-select>
+          <RemoteSelect v-model="query.fromWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:150px" />
         </el-form-item>
         <el-form-item label="移入仓">
-          <el-select v-model="query.toWarehouseId" placeholder="全部" clearable filterable style="width:150px">
-            <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
-          </el-select>
+          <RemoteSelect v-model="query.toWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:150px" />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
@@ -89,16 +85,15 @@
 
 <script setup lang="ts">
 import { WarehouseCategory } from '@/api/enums'
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
 const route = useRoute()
-const optionsStore = useOptionsStore()
 const query = reactive({ status: '', fromWarehouseId: undefined as number | undefined, toWarehouseId: undefined as number | undefined })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
@@ -110,14 +105,16 @@ const statusOptions = [
   { label: DocStatusLabel[DocStatus.CANCELLED], value: DocStatus.CANCELLED }
 ]
 
-const warehouses = computed(() => optionsStore.warehouses.filter((w: any) => w.warehouseCategory === WarehouseCategory.INVENTORY))
+// 仓库下拉选项（Odoo 实时查库，组件本地保存）
+const warehouseOptions = ref<any[]>([])
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
 
 const detailVisible = ref(false)
 const detail = ref<any>({})
 const detailItems = ref<any[]>([])
 
 function warehouseName(id?: number) {
-  const w = warehouses.value.find((x: any) => x.id === id)
+  const w = warehouseOptions.value.find((x: any) => x.id === id)
   return w ? w.warehouseName : ''
 }
 function statusType(s?: string) { return DocStatusTag[s || ''] || '' }
@@ -179,7 +176,6 @@ async function handleDetail(row: any) {
 }
 
 onMounted(() => {
-  optionsStore.ensureWarehouses()
   loadData().then(() => {
     // 库存流水链接跳转：自动打开指定单据详情
     const billId = route.query.billId

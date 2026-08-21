@@ -1,20 +1,25 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated, computed } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { IoType, IoTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect'
 
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const loading = ref(false)
 const list = ref<any[]>([])
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const query = reactive({ warehouseId: '' })
 const activeTab = ref(IoType.IN)
-const warehouses = computed(() => optionsStore.warehouses || [])
+const warehouses = ref<any[]>([])
+
+// Odoo 风格：仓库实时查库
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
+async function loadWarehouses() {
+  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } }); warehouses.value = r?.records || [] } catch { warehouses.value = [] }
+}
 
 async function loadData() {
   loading.value = true
@@ -53,7 +58,7 @@ function goWarehouseDetail(warehousId: number) {
   if (wh?.factoryId != null) router.push(`/outsource/warehouse/detail/${warehousId}`)
   else router.push(`/inventory/warehouse/detail/${warehousId}`)
 }
-onMounted(()=>{ optionsStore.ensureWarehouses(); loadData() })
+onMounted(()=>{ loadWarehouses(); loadData() })
 onActivated(() => { loadData() })
 </script>
 
@@ -61,7 +66,7 @@ onActivated(() => { loadData() })
   <div style="display:flex;flex-direction:column;gap:12px">
     <el-card shadow="never">
       <el-form :inline="true" :model="query">
-        <el-form-item label="仓库"><el-select v-model="query.warehouseId" clearable filterable style="width:200px" placeholder="全部"><el-option v-for="w in warehouses" :key="w.id" :label="`${w.warehouseName}（${w.factoryName||''}）`" :value="w.id"/></el-select></el-form-item>
+        <el-form-item label="仓库"><RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName}（${row.factoryName||''}）`" clearable style="width:200px" placeholder="全部" /></el-form-item>
         <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button type="success" @click="handleAdd">新增</el-button></el-form-item>
       </el-form>
     </el-card>

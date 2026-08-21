@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated, computed } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/enums'
-import { useOptionsStore } from '@/stores/options'
 
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const loading = ref(false)
 const list = ref<any[]>([])
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
-const factoryOptions = computed(() => optionsStore.suppliers['suppliers:factory'] || [])
 
 async function loadData() {
   loading.value = true
@@ -38,7 +35,7 @@ async function handleCancel(row: any) {
 
 function handleAdd() { router.push('/outsource/return-order/add') }
 
-onMounted(() => { optionsStore.ensureSuppliers('factory'); loadData() })
+onMounted(() => { loadData() })
 onActivated(() => { loadData() })
 </script>
 

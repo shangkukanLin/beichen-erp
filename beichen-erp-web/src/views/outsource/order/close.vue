@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { DeliveryType, CloseReportStatus, CloseReportStatusLabel } from '@/api/enums'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 defineOptions({ name: 'OrderClose' })
 const route = useRoute(); const router = useRouter()
@@ -18,8 +19,10 @@ const report = reactive({
 const items = ref<any[]>([])
 const remark = ref('')
 const bomTypes = ref<any[]>([])
-const warehouses = ref<any[]>([])
 const returnWarehouseId = ref<number | null>(null)
+// 退回仓库选择：纯 Odoo 方案，RemoteSelect 实时查库
+const fetchWarehouses = (kw: string) =>
+  request.get('/warehouse/page', { params: { warehouseName: kw, pageSize: 500 } })
 
 // bomTypeId -> 类型名 映射（兜底展示用）
 function typeName(id: number | undefined, fallback?: string) {
@@ -28,12 +31,6 @@ function typeName(id: number | undefined, fallback?: string) {
 }
 async function loadBomTypes() {
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
-}
-async function loadWarehouses() {
-  try {
-    const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200 } })
-    warehouses.value = r?.records || r?.list || []
-  } catch {}
 }
 
 /** 自动计算 */
@@ -132,7 +129,7 @@ async function handleReopen() {
 
 function fmt(v: any) { return v !== undefined && v !== null ? Number(v).toFixed(2) : '0.00' }
 
-onMounted(() => { loadBomTypes(); loadWarehouses(); loadReport() })
+onMounted(() => { loadBomTypes(); loadReport() })
 </script>
 
 <template>
@@ -166,9 +163,7 @@ onMounted(() => { loadBomTypes(); loadWarehouses(); loadReport() })
           <span style="font-weight:600">物料明细</span>
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-size:var(--app-font-sm);color:var(--app-text-regular)">退回仓库：</span>
-            <el-select v-model="returnWarehouseId" placeholder="请选择退回仓库" size="small" style="width:200px" clearable :disabled="report.reportStatus==='已结单'">
-              <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
-            </el-select>
+            <RemoteSelect v-model="returnWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择退回仓库" size="small" style="width:200px" :disabled="report.reportStatus==='已结单'" />
           </div>
         </div>
       </template>

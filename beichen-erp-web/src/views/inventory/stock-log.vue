@@ -3,14 +3,10 @@
     <el-card shadow="never" class="query-card">
       <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="仓库">
-          <el-select v-model="query.warehouseId" placeholder="全部" clearable filterable style="width:160px">
-            <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
-          </el-select>
+          <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:160px" />
         </el-form-item>
         <el-form-item label="产品">
-          <el-select v-model="query.productId" placeholder="全部" clearable filterable remote :remote-method="loadProducts" style="width:200px">
-            <el-option v-for="m in productOptions" :key="m.id" :label="m.name" :value="m.id" />
-          </el-select>
+          <RemoteSelect v-model="query.productId" :fetch="fetchProducts" placeholder="全部" style="width:200px" @pick="(rows:any[])=>onProductPick(rows[0])" />
         </el-form-item>
         <el-form-item label="变动类型">
           <el-select v-model="query.changeType" placeholder="全部" clearable style="width:130px">
@@ -73,10 +69,10 @@
 
 <script setup lang="ts">
 import { WarehouseCategory } from '@/api/enums'
-import { reactive, ref, onMounted, onActivated, computed } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const changeTypeOptions = ['PURCHASE_IN', 'RETURN_OUT', 'SALE_OUT', 'MOVE_OUT', 'MOVE_IN', 'OTHER_IN', 'OTHER_OUT', 'CANCEL_IN', 'CANCEL_OUT', 'INIT']
 
@@ -85,13 +81,15 @@ const pagination = reactive({ pageNum: 1, pageSize: 20, total: 0 })
 const loading = ref(false)
 const tableData = ref<any[]>([])
 
-const optionsStore = useOptionsStore()
-const warehouses = computed(() => optionsStore.warehouses.filter((w: any) => w.warehouseCategory === WarehouseCategory.INVENTORY))
+// 仓库下拉选项（Odoo 实时查库，组件本地保存）
+const warehouseOptions = ref<any[]>([])
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
+const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 100, keyword: kw } })
 const productOptions = ref<any[]>([])
 const productMap = ref<Record<number, string>>({})
 
 function fmt(v?: number) { return v == null ? '-' : Number(v).toLocaleString() }
-function warehouseName(id?: number) { const w = warehouses.value.find(x => x.id === id); return w ? w.warehouseName : '' }
+function warehouseName(id?: number) { const w = warehouseOptions.value.find(x => x.id === id); return w ? w.warehouseName : '' }
 function productName(id?: number) { return (id && productMap.value[id]) || '' }
 
 function logTagType(ct?: string) {
@@ -105,9 +103,13 @@ async function loadProducts(queryStr?: string) {
   try {
     const params: any = { pageSize: 100 }
     if (queryStr) params.name = queryStr
-    const res = await request.get('/product/page', { params })
+    const res = await fetchProducts(queryStr || '')
     productOptions.value = res?.records || []
   } catch { productOptions.value = [] }
+}
+
+function onProductPick(p: any) {
+  if (p) productMap.value[p.id] = p.name || p.productName || ''
 }
 
 async function loadData() {
@@ -165,7 +167,7 @@ function handleBillClick(billType?: string, billId?: number) {
   }
 }
 
-onMounted(() => { optionsStore.ensureWarehouses(); loadData() })
+onMounted(() => { loadData() })
 onActivated(() => { loadData() })
 </script>
 

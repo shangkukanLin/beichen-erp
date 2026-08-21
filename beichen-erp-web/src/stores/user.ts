@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import router from '@/router'
 import { getUserMenuTree, type MenuVO } from '@/api/system'
 import { SUPER_ADMIN_ROLE_CODE, ADMIN_ROLE_CODE } from '@/constants/system'
-import { useOptionsStore } from '@/stores/options'
 
 interface UserInfo {
   id?: number | string
@@ -74,8 +73,6 @@ export const useUserStore = defineStore('user', {
       this.menus = []
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem('beichen_erp_user')
-      // 清空全局选项缓存，防止切换公司后残留旧公司的基础数据
-      useOptionsStore().reset()
       router.push('/login')
     }
   }

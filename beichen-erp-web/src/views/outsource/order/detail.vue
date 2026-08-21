@@ -9,10 +9,9 @@ import { getProjectBom } from '@/api/system'
 import { exportContractPdf } from '@/api/contract-template'
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const route = useRoute(); const router = useRouter()
-const optionsStore = useOptionsStore()
 const loading = ref(true); const saving = ref(false)
 const activeTab = ref('detail')
 const uploadFile = ref<File | null>(null)
@@ -77,9 +76,14 @@ const form = reactive({
 
 const products = ref<any[]>([])
 const factoryOptions = ref<any[]>([])
-const projectOptions = computed(() => optionsStore.projects || [])
-const materialOptions = computed(() => optionsStore.materials || [])
-const bomTypes = computed(() => optionsStore.bomTypes || [])
+const projectOptions = ref<any[]>([])
+const materialOptions = ref<any[]>([])
+const bomTypes = ref<any[]>([])
+const fetchFactories = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw, supplierType: 'factory' } })
+const fetchProjects = (kw: string) => request.get('/dev/project/page', { params: { pageSize: 500, name: kw } })
+const fetchMaterials = (kw: string) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw } })
+const fetchBomTypes = (kw: string) => request.get('/dev/bom-type/enabled', { params: { pageSize: 500, name: kw } })
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
 
 // bomTypeId -> 类型名 映射（兜底展示用）
 function typeName(id: number | undefined, fallback?: string) {
@@ -92,7 +96,11 @@ function fmt(v: any) { return v !== undefined && v !== null ? Number(v).toFixed(
 const deliveries = ref<any[]>([])
 
 async function loadOptions() {
-  await optionsStore.ensureSuppliers('factory'); factoryOptions.value = optionsStore.suppliers['suppliers:factory'] || []
+  const [f, p, m, b]: any[] = await Promise.all([fetchFactories(''), fetchProjects(''), fetchMaterials(''), fetchBomTypes('')])
+  factoryOptions.value = f?.records || []
+  projectOptions.value = p?.records || []
+  materialOptions.value = m?.records || []
+  bomTypes.value = b?.records || []
 }
 
 async function loadData() {
@@ -238,7 +246,7 @@ async function loadDeliveryData() {
   } catch (e: any) { console.warn('加载交货数据失败', e?.message || e) }
 }
 async function loadDelWarehouses() {
-  await optionsStore.ensureWarehouses(); delWarehouseOptions.value = optionsStore.warehouses || []
+  const r = await fetchWarehouses(''); delWarehouseOptions.value = r?.records || []
 }
 function delOpenAdd() {
   delIsEdit.value = false; delEditId.value = undefined; delWarehouseId.value = undefined; delUploadFile.value = null
@@ -374,7 +382,7 @@ async function loadCloseReport() {
   finally { closeLoading.value = false }
 }
 
-onMounted(() => { loadOptions(); optionsStore.ensureProjects(); optionsStore.ensureMaterials(); optionsStore.ensureBomTypes(); loadData() })
+onMounted(() => { loadOptions(); loadData() })
 </script>
 
 <template>
@@ -393,7 +401,7 @@ onMounted(() => { loadOptions(); optionsStore.ensureProjects(); optionsStore.ens
           <el-row :gutter="12">
             <el-col :span="8"><el-form-item label="单号"><el-input :model-value="form.code" readonly /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="状态"><el-tag :type="OutsourceOrderStatusTag[form.status]||'info'" size="small">{{ OutsourceOrderStatusLabel[form.status] || form.status }}</el-tag></el-form-item></el-col>
-            <el-col :span="8"><el-form-item label="加工厂"><el-select v-model="form.factoryId" filterable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="计划开始"><el-input v-model="form.planStartDate" type="date" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="计划完成"><el-input v-model="form.planEndDate" type="date" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="实际开始"><el-input :model-value="form.actualStartDate" readonly /></el-form-item></el-col>
@@ -417,7 +425,7 @@ onMounted(() => { loadOptions(); optionsStore.ensureProjects(); optionsStore.ens
         <template #header><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-weight:600">加工产品 #{{ pi + 1 }}</span><el-button type="danger" size="small" text @click="removeProduct(pi)" v-if="products.length>1 && form.status===OutsourceOrderStatus.PENDING">删除产品</el-button></div></template>
         <el-form :model="p" label-width="90px" size="small">
           <el-row :gutter="12">
-            <el-col :span="12"><el-form-item label="加工产品"><el-select v-model="p.projectId" filterable clearable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="(v:any)=>onProjectSelect(pi,v)"><el-option v-for="pr in projectOptions" :key="pr.id" :label="pr.assemblyName || pr.name" :value="pr.id" /></el-select></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.assemblyName || row.name" filterable clearable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="(v:any)=>onProjectSelect(pi,v)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="数量"><el-input v-model="p.quantity" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="单价"><el-input v-model="p.unitPrice" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>
@@ -524,7 +532,7 @@ onMounted(() => { loadOptions(); optionsStore.ensureProjects(); optionsStore.ens
               <el-col :span="6"><el-input v-model="delForm.defectQty" type="number"><template #prepend>不良</template></el-input></el-col>
             </el-row>
           </el-form-item>
-          <el-form-item label="收货仓库" required><el-select v-model="delWarehouseId" filterable style="width:100%" placeholder="选择入库仓库"><el-option v-for="w in delWarehouseOptions" :key="w.id" :label="`${w.warehouseName} (${w.code})`" :value="w.id" /></el-select></el-form-item>
+          <el-form-item label="收货仓库" required><RemoteSelect v-model="delWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择入库仓库" /></el-form-item>
           <el-form-item label="交货日期"><el-input v-model="delForm.deliveryDate" type="date" /></el-form-item>
           <el-form-item label="物流单号"><el-input v-model="delForm.trackingNo" placeholder="选填" /></el-form-item>
           <el-form-item label="备注"><el-input v-model="delForm.remark" placeholder="选填" /></el-form-item>
@@ -570,7 +578,7 @@ onMounted(() => { loadOptions(); optionsStore.ensureProjects(); optionsStore.ens
 
     <!-- 退不良弹窗 -->
     <el-dialog v-model="defectVisible" title="退不良（拆分还料）" width="780px" :close-on-click-modal="false">
-      <el-form-item label="退不良仓库" style="margin-bottom:12px"><el-select v-model="defectWarehouseId" filterable style="width:100%" placeholder="选择扣减的成品仓库" @change="onDefectWhChange"><el-option v-for="w in delWarehouseOptions" :key="w.id" :label="`${w.warehouseName} (${w.code})`" :value="w.id" /></el-select></el-form-item>
+      <el-form-item label="退不良仓库" style="margin-bottom:12px"><RemoteSelect v-model="defectWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择扣减的成品仓库" @change="onDefectWhChange" /></el-form-item>
       <el-table :data="defectItems" border size="small">
         <el-table-column prop="productName" label="产品" min-width="160" />
         <el-table-column label="A规" width="130">

@@ -6,16 +6,16 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/enums'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const activeTab = ref('PENDING_PRODUCING')
 const query = reactive({ code: '', factoryId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])
 const tableLoading = ref(false)
-const factoryOptions = computed(() => optionsStore.suppliers['suppliers:factory'] || [])
+
+const fetchFactories = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw, supplierType: 'factory' } })
 
 async function loadData() {
   tableLoading.value = true
@@ -38,11 +38,8 @@ async function handleCancel(row: any) {
   try { await ElMessageBox.confirm('确定取消该加工单吗？', '提示', { type: 'warning' }); await request.put(`/outsource/order/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
-function refresh() { optionsStore.ensureSuppliers('factory'); loadData() }
-onMounted(refresh)
-onActivated(() => {
-  loadData()
-})
+onMounted(loadData)
+onActivated(() => { loadData() })
 </script>
 
 <template>
@@ -50,7 +47,7 @@ onActivated(() => {
     <el-card shadow="never" class="query-card">
       <el-form :inline="true" :model="query">
         <el-form-item label="单号"><el-input v-model="query.code" placeholder="加工单号" clearable @keyup.enter="handleQuery" /></el-form-item>
-        <el-form-item label="加工厂"><el-select v-model="query.factoryId" placeholder="全部" clearable filterable style="width:180px"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item>
+        <el-form-item label="加工厂"><RemoteSelect v-model="query.factoryId" :fetch="fetchFactories" placeholder="全部" clearable style="width:180px" /></el-form-item>
         <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button @click="handleReset">重置</el-button><el-button type="success" @click="router.push('/outsource/order/add')">新增加工单</el-button></el-form-item>
       </el-form>
     </el-card>

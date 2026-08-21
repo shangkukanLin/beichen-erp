@@ -5,10 +5,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { WarehouseCategory, WarehouseCategoryLabel, MaterialPlaceType, MaterialPlaceTypeLabel } from '@/api/enums'
 import request from '@/utils/request'
-import { useOptionsStore } from '@/stores/options'
 
 const route = useRoute()
-const optionsStore = useOptionsStore()
 const materialId = Number(route.params.id)
 
 // ===================== 物料基础信息 =====================
@@ -80,8 +78,8 @@ async function loadFlowList() {
 
 async function loadPlaceOptions() {
   try { const res: any = await request.get('/dev/purchase-item/warehouse-options'); warehouseOptions.value = res || [] } catch (e) { /* ignore */ }
-  await optionsStore.ensureSuppliers('all'); supplierOptions.value = optionsStore.suppliers['suppliers:all'] || []
-  await optionsStore.ensureCustomers(); customerOptions.value = optionsStore.customers || []
+  try { const r: any = await request.get('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch (e) { /* ignore */ }
+  try { const r: any = await request.get('/inventory/customer/page', { params: { pageSize: 500 } }); customerOptions.value = r?.records || [] } catch (e) { /* ignore */ }
 }
 
 // 新增/编辑流转记录弹窗

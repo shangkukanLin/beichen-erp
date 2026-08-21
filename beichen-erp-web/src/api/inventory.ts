@@ -56,11 +56,6 @@ export interface OtherIoItem extends BaseItem {
   quantity?: number
 }
 
-// 仓库
-export function getWarehouseOptions() {
-  return request.get('/warehouse/page', { params: { pageSize: 200 } })
-}
-
 // 库存查询与流水
 export function getStockPage(params: any) {
   return request.get<PageResult<StockRow>>('/warehouse/stock/page', { params })

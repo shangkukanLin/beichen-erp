@@ -6,6 +6,7 @@ import request from '@/utils/request'
 import { exportMaterialOrderPdf } from '@/api/contract-template'
 import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import RemoteSelect from '@/components/RemoteSelect'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
@@ -14,8 +15,11 @@ const order = reactive({ id: 0, code: '', status: '', orderType: '采购', suppl
 const items = ref<any[]>([])
 const activeTab = ref('detail')
 const saving = ref(false)
-const supplierOptions = ref<any[]>([])
 const bomTypes = ref<any[]>([])
+
+// Odoo 风格：下拉框实时查库
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
 
 // bomTypeId -> 类型名 映射（兜底展示用）
 function typeName(bid: number | undefined, fallback?: string) {
@@ -26,18 +30,11 @@ async function loadBomTypes() {
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
 }
 
-async function loadOptions() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || [] } catch { }
-  // 确保当前供应商在选项中（即使不是对应类型）
-  if (order.supplierId && !supplierOptions.value.some((s: any) => s.id === order.supplierId)) {
-    try { const s = await request.get<any, any>(`/supplier/${order.supplierId}`); if (s) supplierOptions.value.unshift(s) } catch {}
-  }
-}
+async function loadOptions() {}
 
 const recVisible = ref(false); const recSaving = ref(false)
 const recWarehouseId = ref<number>()
 const recItems = ref<any[]>([])
-const warehouseOptions = ref<any[]>([])
 
 const defectVisible = ref(false); const defectSaving = ref(false)
 const defectItems = ref<any[]>([])
@@ -128,7 +125,6 @@ async function openReceive() {
     receivedQuantity: it.receivedQuantity, quantity: undefined as any,
     components: (it.components || []).map((c: any) => ({ childMaterialName: c.childMaterialName, childUnit: c.childUnit, stockQuantity: c.stockQuantity || 0, quantity: c.quantity || 1 }))
   }))
-  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } }); warehouseOptions.value = (r?.records || []) } catch { warehouseOptions.value = [] }
   recVisible.value = true
 }
 async function handleReceive(force?: boolean) {
@@ -294,9 +290,7 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
             <el-col :span="8"><el-form-item label="订单类型"><el-input :model-value="order.orderType" readonly class="readonly-input" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="状态"><el-tag :type="MaterialOrderStatusTag[order.status]||'info'" size="small">{{ MaterialOrderStatusLabel[order.status] || order.status }}</el-tag></el-form-item></el-col>
             <el-col :span="8"><el-form-item :label="order.orderType==='委外'?'加工厂':'供应商'">
-              <el-select v-model="order.supplierId" filterable style="width:100%" :disabled="order.status!==MaterialOrderStatus.PENDING" @focus="loadOptions">
-                <el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" />
-              </el-select>
+              <RemoteSelect v-model="order.supplierId" :fetch="fetchSuppliers" style="width:100%" :disabled="order.status!==MaterialOrderStatus.PENDING" placeholder="选择供应商" />
             </el-form-item></el-col>
             <el-col :span="8"><el-form-item label="交期"><el-input v-model="order.deliveryDate" type="date" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="订单完成时间"><el-input :model-value="$fmtDate(order.finishTime) || '-'" readonly class="readonly-input" /></el-form-item></el-col>
@@ -418,7 +412,7 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
       <div style="margin-bottom:8px;display:flex;align-items:center;gap:16px">
         <span style="font-size:var(--app-font-sm);color:var(--app-text-regular)">供应商：<b>{{ order.supplierName || '-' }}</b></span>
         <span style="font-size:var(--app-font-sm)">收货仓库：</span>
-        <el-select v-model="recWarehouseId" filterable size="small" style="width:180px" placeholder="选择仓库"><el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName || w.name || '仓库'+w.id" :value="w.id" /></el-select>
+        <RemoteSelect v-model="recWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName || row.name" size="small" style="width:180px" placeholder="选择仓库" />
       </div>
       <el-table :data="recItems" border size="small" row-key="itemId">
         <el-table-column type="expand" v-if="recItems.some((it: any) => it.components && it.components.length > 0)">

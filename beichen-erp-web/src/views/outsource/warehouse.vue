@@ -4,10 +4,9 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const query = reactive({ warehouseName: '', factoryId: undefined as any })
 const allData = ref<any[]>([])
 const activeTab = ref('active')
@@ -16,8 +15,10 @@ const factoryOptions = ref<any[]>([])
 const activeData = computed(() => allData.value.filter(v => v.status === 1))
 const stoppedData = computed(() => allData.value.filter(v => v.status === 0))
 
+const fetchFactories = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
+
 async function loadFactories() {
-  await optionsStore.ensureSuppliers('all'); factoryOptions.value = optionsStore.suppliers['suppliers:all'] || []
+  const r = await fetchFactories(''); factoryOptions.value = r?.records || []
 }
 
 async function loadData() {
@@ -43,12 +44,12 @@ function handleEdit(row: any) { Object.assign(form, defForm(), row); isEdit.valu
 
 async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('请输入仓库名称'); return }; submitLoading.value = true
   try { if (isEdit.value) { await request.put('/warehouse', form); ElMessage.success('修改成功') } else { await request.post('/warehouse', form); ElMessage.success('新增成功') }
-    optionsStore.refreshWarehouses(); dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
+    dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
 
 async function handleToggleStatus(row: any) {
   row.status = row.status === 1 ? 0 : 1
   await request.put('/warehouse', row)
-  optionsStore.refreshWarehouses(); ElMessage.success(row.status === 1 ? '已启用' : '已停用'); loadData()
+  ElMessage.success(row.status === 1 ? '已启用' : '已停用'); loadData()
 }
 
 function handleDetail(row: any) { router.push(`/outsource/warehouse/detail/${row.id}`) }
@@ -61,7 +62,7 @@ onMounted(() => { loadFactories(); loadData() })
     <el-card shadow="never" class="query-card">
       <el-form :inline="true" :model="query">
         <el-form-item label="仓库名称"><el-input v-model="query.warehouseName" placeholder="仓库名称" clearable @keyup.enter="handleQuery" /></el-form-item>
-        <el-form-item label="供应商"><el-select v-model="query.factoryId" placeholder="全部" clearable filterable style="width:200px"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item>
+        <el-form-item label="供应商"><RemoteSelect v-model="query.factoryId" :fetch="fetchFactories" placeholder="全部" clearable style="width:200px" /></el-form-item>
         <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button @click="handleReset">重置</el-button><el-button type="success" @click="handleAdd">新增</el-button></el-form-item>
       </el-form>
     </el-card>
@@ -97,7 +98,7 @@ onMounted(() => { loadFactories(); loadData() })
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px">
-        <el-form-item label="供应商" required><el-select v-model="form.factoryId" filterable style="width:100%"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item>
+        <el-form-item label="供应商" required><RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" style="width:100%" /></el-form-item>
         <el-form-item label="仓库名称"><el-input v-model="form.warehouseName" /></el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
         <el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item>

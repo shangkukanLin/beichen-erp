@@ -1,29 +1,29 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { getPurchaseReturn, getPurchaseReturnItems, ReturnStatus, ReturnStatusLabel, type PurchaseReturn, type PurchaseReturnItem } from '@/api/purchase'
-import { useOptionsStore } from '@/stores/options'
 
 const route = useRoute(); const router = useRouter()
-const optionsStore = useOptionsStore()
 const id = Number(route.params.id)
 const loading = ref(false)
 const detail = ref<Partial<PurchaseReturn>>({})
 const items = ref<PurchaseReturnItem[]>([])
-const warehouses = computed(() => optionsStore.warehouses || [])
+const warehouseOptions = ref<any[]>([])
 const products = ref<Record<number, string>>({})
 
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
-function warehouseName(wid?: number) { const w = warehouses.value.find(x => x.id === wid); return w ? (w.warehouseName || w.name || '') : '' }
+function warehouseName(wid?: number) { const w = warehouseOptions.value.find(x => x.id === wid); return w ? (w.warehouseName || w.name || '') : '' }
 function productName(pid?: number) { return pid ? (products.value[pid] || `#${pid}`) : '' }
 function statusLabel(s?: number) { return s != null ? (ReturnStatusLabel[s] || '') : '' }
-function statusType(s?: number): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
+function statusType(s?: any): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
   if (s === ReturnStatus.DRAFT) return 'info'
   if (s === ReturnStatus.AUDITED) return 'success'
   if (s === ReturnStatus.CANCELLED) return 'danger'
   return undefined
 }
+
+async function loadWarehouseOptions() { try { const r: any = await request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: '' } }); warehouseOptions.value = r?.records || [] } catch { warehouseOptions.value = [] } }
 
 async function loadData() {
   loading.value = true
@@ -40,7 +40,7 @@ async function loadData() {
   } finally { loading.value = false }
 }
 
-onMounted(() => { optionsStore.ensureWarehouses(); loadData() })
+onMounted(() => { loadWarehouseOptions(); loadData() })
 </script>
 
 <template>

@@ -4,14 +4,12 @@ import { reactive, ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { useOptionsStore } from '@/stores/options'
 import { getProjectBom } from '@/api/system'
 import {
   OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag,
   MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag
 } from '@/api/enums'
 const route = useRoute(); const router = useRouter()
-const optionsStore = useOptionsStore()
 const id = Number(route.params.id)
 const loading = ref(true)
 const saving = ref(false)
@@ -163,7 +161,6 @@ async function handleSave() {
   try {
     const body: any = { ...form, typeCodes: form.checkedTypes }
     await request.put('/supplier', body)
-    optionsStore.refreshAllSuppliers()
     ElMessage.success('保存成功')
     loadData()
   } finally { saving.value = false }

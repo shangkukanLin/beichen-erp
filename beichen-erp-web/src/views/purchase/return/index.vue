@@ -6,9 +6,7 @@
           <el-input v-model="query.code" placeholder="退货单号" clearable style="width:180px" />
         </el-form-item>
         <el-form-item label="供应商">
-          <el-select v-model="query.supplierId" placeholder="请选择" clearable filterable style="width:180px">
-            <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
-          </el-select>
+          <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="请选择" clearable style="width:180px" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="请选择" clearable style="width:120px">
@@ -93,7 +91,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -102,17 +100,21 @@ import {
   ReturnStatus, ReturnStatusLabel,
   type PurchaseReturn, type PurchaseReturnItem
 } from '@/api/purchase'
-import { useOptionsStore } from '@/stores/options'
+import request from '@/utils/request'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const list = ref<PurchaseReturn[]>([])
 const loading = ref(false)
 const query = reactive({ code: '', supplierId: '' as string | number, status: '' as string | number })
 const pagination = reactive({ pageNum: 1, pageSize: 20, total: 0 })
 
-const suppliers = computed(() => optionsStore.suppliers['suppliers:product'] || [])
-const warehouses = computed(() => optionsStore.warehouses || [])
+const supplierOptions = ref<any[]>([])
+const warehouseOptions = ref<any[]>([])
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw, supplierType: 'product' } })
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
+const loadSupplierOptions = async () => { try { const r: any = await fetchSuppliers(''); supplierOptions.value = r?.records || [] } catch { supplierOptions.value = [] } }
+const loadWarehouseOptions = async () => { try { const r: any = await fetchWarehouses(''); warehouseOptions.value = r?.records || [] } catch { warehouseOptions.value = [] } }
 
 const statusOptions = [
   { label: ReturnStatusLabel[ReturnStatus.DRAFT], value: ReturnStatus.DRAFT },
@@ -120,15 +122,15 @@ const statusOptions = [
   { label: ReturnStatusLabel[ReturnStatus.CANCELLED], value: ReturnStatus.CANCELLED },
 ]
 function statusLabel(s?: number) { return s != null ? (ReturnStatusLabel[s] || '') : '' }
-function statusType(s?: number): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
+function statusType(s?: any): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
   if (s === ReturnStatus.DRAFT) return 'info'
   if (s === ReturnStatus.AUDITED) return 'success'
   if (s === ReturnStatus.CANCELLED) return 'danger'
   return undefined
 }
 function warehouseName(id?: number) {
-  const w = warehouses.value.find((x: any) => x.id === id)
-  return w ? w.name || w.warehouseName : ''
+  const w = warehouseOptions.value.find((x: any) => x.id === id)
+  return w ? w.warehouseName : ''
 }
 
 const detailVisible = ref(false)
@@ -189,8 +191,8 @@ async function handleCancel(row: PurchaseReturn) {
 }
 
 onMounted(() => {
-  optionsStore.ensureSuppliers('product')
-  optionsStore.ensureWarehouses()
+  loadSupplierOptions()
+  loadWarehouseOptions()
   loadData()
 })
 onActivated(() => { loadData() })

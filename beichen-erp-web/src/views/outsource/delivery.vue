@@ -4,16 +4,15 @@ defineOptions({ name: 'OutsourceDelivery' })
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import RemoteSelect from '@/components/RemoteSelect'
 
 const query = reactive({ code: '', factoryId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])
 const tableLoading = ref(false)
-const factoryOptions = ref<any[]>([])
 
-async function loadOptions() {
-  try { const r = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } }); factoryOptions.value = r?.records || [] } catch (e: any) { console.warn('加载工厂失败', e?.message || e) }
-}
+// Odoo 风格：加工厂筛选实时查库（supplierType=factory）
+const fetchFactories = (kw: string) => request.get('/supplier/page', { params: { supplierType: 'factory', pageSize: 500, name: kw } })
 
 async function loadData() {
   tableLoading.value = true
@@ -41,9 +40,9 @@ async function handleDelete(row: any) {
   try { await ElMessageBox.confirm('确定删除该收发单吗？', '提示', { type: 'warning' }); await request.delete(`/outsource/delivery/${row.id}/attach`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
-function refresh() { loadOptions(); loadData() }
+function refresh() { loadData() }
 onMounted(refresh)
-onActivated(() => { loadOptions() })
+onActivated(() => { loadData() })
 </script>
 
 <template>
@@ -51,7 +50,7 @@ onActivated(() => { loadOptions() })
     <el-card shadow="never" class="query-card">
       <el-form :inline="true" :model="query">
         <el-form-item label="单号"><el-input v-model="query.code" placeholder="收发单号" clearable @keyup.enter="handleQuery" /></el-form-item>
-        <el-form-item label="加工厂"><el-select v-model="query.factoryId" placeholder="全部" clearable filterable style="width:180px"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item>
+        <el-form-item label="加工厂"><RemoteSelect v-model="query.factoryId" :fetch="fetchFactories" placeholder="全部" clearable style="width:180px" /></el-form-item>
         <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button @click="handleReset">重置</el-button></el-form-item>
       </el-form>
     </el-card>

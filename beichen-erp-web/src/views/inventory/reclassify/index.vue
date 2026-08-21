@@ -3,7 +3,7 @@ import { WarehouseCategory } from '@/api/enums'
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { getProductPage, type Product } from '@/api/product'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 import { getQualityTypes, type QualityOption } from '@/api/product'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import {
@@ -19,7 +19,9 @@ const tableLoading = ref(false)
 const tableData = ref<any[]>([])
 const warehouseOptions = ref<any[]>([])
 const qualityOptions = ref<QualityOption[]>([])
-const productOptions = ref<Product[]>([])
+const productOptions = ref<any[]>([])
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
+const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 50, keyword: kw } })
 
 // 列表
 async function loadData() {
@@ -66,16 +68,17 @@ function addItem() {
 }
 function removeItem(index: number) { items.value.splice(index, 1) }
 
-async function onProductChange(val: number, row: any) {
-  const p = productOptions.value.find(x => x.id === val)
-  if (p) { row.productName = p.name; row.spec = p.spec; row.unit = p.unit }
+async function onProductPick(p: any, row: any) {
+  if (!p) return
+  row.productId = p.id
+  row.productName = p.name
+  row.spec = p.spec
+  row.unit = p.unit
 }
 
 async function loadProductOptions(query?: string) {
   try {
-    const params: any = { pageSize: 50 }
-    if (query) params.keyword = query
-    const res = await getProductPage(params)
+    const res = await fetchProducts(query || '')
     productOptions.value = res?.records || []
   } catch { productOptions.value = [] }
 }
@@ -141,9 +144,7 @@ onActivated(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProduc
       <el-form :inline="true" :model="query">
         <el-form-item label="单号"><el-input v-model="query.code" placeholder="单号" clearable /></el-form-item>
         <el-form-item label="仓库">
-          <el-select v-model="query.warehouseId" placeholder="全部" clearable filterable style="width:160px">
-            <el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" />
-          </el-select>
+          <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" clearable style="width:160px" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="全部" clearable style="width:120px">
@@ -194,9 +195,7 @@ onActivated(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProduc
         <el-row :gutter="12">
           <el-col :span="8">
             <el-form-item label="仓库" required>
-              <el-select v-model="form.warehouseId" placeholder="选择仓库" filterable style="width:100%">
-                <el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" />
-              </el-select>
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择仓库" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -218,10 +217,7 @@ onActivated(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProduc
         <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column label="产品" min-width="200">
           <template #default="{ row }">
-            <el-select v-model="row.productId" placeholder="搜索产品" filterable remote :remote-method="loadProductOptions"
-              style="width:100%" @change="(v: number) => onProductChange(v, row)">
-              <el-option v-for="p in productOptions" :key="p.id" :label="p.name" :value="p.id ?? ''" />
-            </el-select>
+            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" placeholder="搜索产品" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" />
           </template>
         </el-table-column>
         <el-table-column prop="spec" label="规格" width="100" />

@@ -3,9 +3,7 @@
     <el-card shadow="never" class="query-card">
       <el-form :inline="true" :model="stockQuery" class="query-form">
         <el-form-item label="仓库">
-          <el-select v-model="stockQuery.warehouseId" placeholder="全部" clearable filterable style="width:160px">
-            <el-option v-for="w in stockWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
-          </el-select>
+          <RemoteSelect v-model="stockQuery.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" :option-disabled="(row:any)=>row.warehouseType === WarehouseType.AUXILIARY" placeholder="全部" style="width:160px" />
         </el-form-item>
         <el-form-item label="产品">
           <el-input v-model="stockQuery.productName" placeholder="产品名称" clearable @keyup.enter="stockQuery_" />
@@ -63,16 +61,16 @@
 
 <script setup lang="ts">
 import { WarehouseCategory, WarehouseType } from '@/api/enums'
-import { reactive, ref, onMounted, onActivated, computed } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import request from '@/utils/request'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
-const optionsStore = useOptionsStore()
-const warehouses = computed(() => optionsStore.warehouses.filter(w => w.warehouseCategory === WarehouseCategory.INVENTORY))
-const stockWarehouses = computed(() => warehouses.value.filter(w => w.warehouseType !== WarehouseType.AUXILIARY))
+// 仓库下拉选项（Odoo 实时查库，组件本地保存）
+const warehouseOptions = ref<any[]>([])
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
 
 function warehouseName(id?: number) {
-  const w = warehouses.value.find(x => x.id === id)
+  const w = warehouseOptions.value.find(x => x.id === id)
   return w ? w.warehouseName : ''
 }
 function fmt(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
@@ -99,7 +97,7 @@ async function loadStock() {
 function stockQuery_() { stockPage.pageNum = 1; loadStock() }
 function stockReset() { stockQuery.warehouseId = undefined; stockQuery.productName = ''; stockPage.pageNum = 1; loadStock() }
 
-onMounted(() => { optionsStore.ensureWarehouses(); loadStock() })
+onMounted(() => { loadStock() })
 onActivated(() => { loadStock() })
 </script>
 

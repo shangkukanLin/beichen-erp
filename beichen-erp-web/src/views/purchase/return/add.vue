@@ -5,16 +5,12 @@
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="供应商" prop="supplierId">
-              <el-select v-model="form.supplierId" placeholder="请选择" filterable style="width:100%">
-                <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
-              </el-select>
+              <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="退货仓库" prop="warehouseId">
-              <el-select v-model="form.warehouseId" placeholder="请选择" filterable style="width:100%">
-                <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName || w.name" :value="w.id" />
-              </el-select>
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" placeholder="请选择" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -86,6 +82,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
 import request from '@/utils/request'
 import { getQualityTypes, type QualityOption } from '@/api/product'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 interface ReturnItem {
   productId?: number
@@ -102,11 +99,11 @@ const tabStore = useTabStore()
 const isEdit = !!route.query.id
 const formRef = ref<FormInstance>()
 const submitLoading = ref(false)
-const suppliers = ref<any[]>([])
-const warehouses = ref<any[]>([])
 const qualityOptions = ref<QualityOption[]>([])
 const productOptions = ref<any[]>([])
 const items = ref<ReturnItem[]>([])
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw, supplierType: 'product' } })
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
 
 const form = reactive({
   supplierId: undefined as number | undefined,
@@ -127,7 +124,7 @@ function addItem() {
 async function loadProducts(query?: string) {
   try {
     const params: any = { pageSize: 100 }
-    if (query) params.name = query
+    if (query) params.keyword = query
     const res = await request.get<any, any>('/product/page', { params })
     productOptions.value = res?.records || []
   } catch { productOptions.value = [] }
@@ -157,20 +154,6 @@ async function onProductChange(val: number, row: ReturnItem) {
 }
 
 function calcAmount() { /* 金额由模板计算 */ }
-
-async function loadSuppliers() {
-  try {
-    const res = await request.get('/supplier/page', { params: { pageSize: 200, supplierType: 'product' } })
-    suppliers.value = res?.records || []
-  } catch { suppliers.value = [] }
-}
-
-async function loadWarehouses() {
-  try {
-    const res = await request.get('/warehouse/page', { params: { pageSize: 200 } })
-    warehouses.value = res?.records || []
-  } catch { warehouses.value = [] }
-}
 
 async function loadReturnData() {
   const id = Number(route.query.id)
@@ -252,8 +235,6 @@ function handleCancel() {
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
 onMounted(() => {
-  loadSuppliers()
-  loadWarehouses()
   loadProducts()
   loadQualityTypes()
   if (isEdit) {

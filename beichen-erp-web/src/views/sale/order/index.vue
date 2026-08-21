@@ -1,20 +1,20 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
-import { getOutsourceMaterialPage, type OutsourceMaterialOption } from '@/api/purchase'
+import type { OutsourceMaterialOption } from '@/api/purchase'
 import { getQualityTypes, type QualityOption } from '@/api/product'
-import { listCustomers, type Customer } from '@/api/customer'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-
-const router = useRouter()
-const qualityOptions = ref<QualityOption[]>([])
+import RemoteSelect from '@/components/RemoteSelect'
 import {
   getSaleOrderPage, getSaleOrderItems, createSaleOrder, updateSaleOrder, auditSaleOrder, cancelSaleOrder, checkSaleOrderStock,
   type SaleOrder, type SaleOrderItem
 } from '@/api/sale'
+
+const router = useRouter()
+const qualityOptions = ref<QualityOption[]>([])
 
 const query = reactive({ code: '', customerId: '' as string | number, status: '' as string })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -27,9 +27,18 @@ const statusOptions = [
   { label: DocStatusLabel[DocStatus.CANCELLED], value: DocStatus.CANCELLED }
 ]
 
-const customers = ref<Customer[]>([])
-const warehouses = ref<{ id: number; warehouseName: string }[]>([])
+// Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
+const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
+const fetchMaterials = (kw: string) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw } })
+
+// 列表/详情显示与拼装用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
+const customers = ref<any[]>([])
+const warehouses = ref<any[]>([])
 const materialOptions = ref<OutsourceMaterialOption[]>([])
+
+async function loadCustomers() { try { const r: any = await fetchCustomers(''); customers.value = r?.records || [] } catch { customers.value = [] } }
+async function loadWarehouses() { try { const r: any = await fetchWarehouses(''); warehouses.value = r?.records || [] } catch { warehouses.value = [] } }
 
 const dialogVisible = ref(false)
 const dialogTitle = ref('新增销售单')
@@ -52,9 +61,7 @@ const rules: FormRules = {
   warehouseId: [{ required: true, message: '请选择出库仓库', trigger: 'change' }]
 }
 
-async function loadCustomers() { try { const res = await listCustomers(); customers.value = res || [] } catch { customers.value = [] } }
-async function loadWarehouses() { try { const res = await request.get('/warehouse/page', { params: { pageSize: 200 } }); warehouses.value = res?.records || [] } catch { warehouses.value = [] } }
-async function loadMaterials(keyword?: string) { try { const res = await getOutsourceMaterialPage({ pageNum: 1, pageSize: 100, materialName: keyword || '' }); materialOptions.value = res?.records || [] } catch { materialOptions.value = [] } }
+async function loadMaterials(keyword?: string) { try { const res: any = await fetchMaterials(keyword || ''); materialOptions.value = res?.records || [] } catch { materialOptions.value = [] } }
 
 async function loadData() {
   tableLoading.value = true
@@ -166,9 +173,7 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQual
           <el-input v-model="query.code" placeholder="请输入单号" clearable @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="客户">
-          <el-select v-model="query.customerId" placeholder="请选择" clearable filterable style="width:160px">
-            <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id ?? ''" />
-          </el-select>
+          <RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="请选择" clearable style="width:160px" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="请选择" clearable style="width:120px">
@@ -222,18 +227,16 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQual
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="客户" prop="customerId">
-              <el-select v-model="form.customerId" placeholder="请选择" filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer'); return } }">
-                <el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id ?? ''" />
+              <RemoteSelect v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer'); return } }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
-              </el-select>
+              </RemoteSelect>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="出库仓库" prop="warehouseId">
-              <el-select v-model="form.warehouseId" placeholder="请选择" filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
-                <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
-              </el-select>
+              </RemoteSelect>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -259,11 +262,10 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQual
           <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="物料" min-width="180">
             <template #default="{ row }">
-              <el-select v-model="row.materialId" placeholder="选择物料" filterable remote :remote-method="loadMaterials"
+              <RemoteSelect v-model="row.materialId" :fetch="fetchMaterials" placeholder="选择物料"
                 style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
-                <el-option v-for="m in materialOptions" :key="m.id" :label="m.materialName" :value="m.id ?? ''" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
-              </el-select>
+              </RemoteSelect>
             </template>
           </el-table-column>
           <el-table-column prop="spec" label="规格" width="100" />

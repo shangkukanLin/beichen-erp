@@ -3,11 +3,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
-import { useOptionsStore } from '@/stores/options'
 
 const route = useRoute()
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const warehouseId = Number(route.params.id)
 const warehouse = ref<any>(null)
 const loading = ref(false)
@@ -23,8 +21,10 @@ function getProjectNames(projectIds: string): string {
 }
 
 async function loadProjects() {
-  await optionsStore.ensureProjects()
-  optionsStore.projects.forEach((p: any) => { projectMap.value[p.id] = p.name })
+  const r = await request.get('/dev/project/page', { params: { pageSize: 9999, name: '' } })
+  const map: Record<number, string> = {}
+  ;(r?.records || []).forEach((p: any) => { map[p.id] = p.name })
+  projectMap.value = map
 }
 
 const PRIORITY_TYPES = ['玻璃', '驱动IC']

@@ -5,10 +5,9 @@ import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { getPaymentPage, getPaymentItems, auditPayment, cancelPayment, type FinancePayment, type FinancePaymentItem } from '@/api/finance'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect'
 
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const activeTab = ref('supplier')
 
 // ========== Tab1 供应商汇总 ==========
@@ -29,8 +28,13 @@ const query = reactive({ supplierId: '' as string|number, status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinancePayment[]>([])
-const suppliers = computed(() => optionsStore.suppliers['suppliers:all'] || [])
+const suppliersOptions = ref<any[]>([])
 const accounts = ref<{id:number;accountName:string}[]>([])
+
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
+async function loadSuppliersOptions() {
+  try { const r: any = await fetchSuppliers(''); suppliersOptions.value = r?.records || [] } catch { suppliersOptions.value = [] }
+}
 
 const statusOpts = [{l:DocStatusLabel[DocStatus.DRAFT],v:DocStatus.DRAFT},{l:DocStatusLabel[DocStatus.AUDITED],v:DocStatus.AUDITED},{l:DocStatusLabel[DocStatus.CANCELLED],v:DocStatus.CANCELLED}]
 
@@ -49,7 +53,7 @@ async function loadAccounts() {
 }
 function query_() { page.pageNum = 1; loadData() }
 function reset_() { query.supplierId = ''; query.status = ''; page.pageNum = 1; loadData() }
-function sName(id?: number) { return suppliers.value.find(x => x.id === id)?.name || '' }
+function sName(id?: number) { return suppliersOptions.value.find(x => x.id === id)?.name || '' }
 function aName(id?: number) { return accounts.value.find(x => x.id === id)?.accountName || '' }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { return DocStatusTag[s || ''] || undefined }
@@ -88,7 +92,7 @@ async function handleUploadAttach(e: Event) {
 }
 function openAttach(url: string) { window.open(url + '?inline=true') }
 
-onMounted(() => { optionsStore.ensureSuppliers('all'); loadAccounts(); loadSummary(); loadData() })
+onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadData() })
 onActivated(() => { loadSummary(); loadData() })
 </script>
 
@@ -118,7 +122,7 @@ onActivated(() => { loadSummary(); loadData() })
     <!-- Tab2 付款记录 -->
     <template v-if="activeTab==='records'">
       <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
-        <el-form-item label="供应商"><el-select v-model="query.supplierId" placeholder="全部" clearable filterable style="width:160px"><el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id"/></el-select></el-form-item>
+        <el-form-item label="供应商"><RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" /></el-form-item>
         <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="o in statusOpts" :key="o.v" :label="o.l" :value="o.v"/></el-select></el-form-item>
         <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button></el-form-item>
       </el-form></el-card>

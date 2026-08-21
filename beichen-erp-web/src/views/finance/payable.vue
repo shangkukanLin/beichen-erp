@@ -1,17 +1,22 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { SettlementStatus, SettlementStatusLabel } from '@/api/enums'
 import { getPayablePage, type FinancePayable } from '@/api/finance'
-import { useOptionsStore } from '@/stores/options'
+import request from '@/utils/request'
+import RemoteSelect from '@/components/RemoteSelect'
 
-const optionsStore = useOptionsStore()
 const query = reactive({ supplierId: '' as string|number, status: '', billNo: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinancePayable[]>([])
-const suppliers = computed(() => optionsStore.suppliers['suppliers:all'] || [])
+const suppliersOptions = ref<any[]>([])
 const detailVisible = ref(false)
 const detail = ref<FinancePayable>({})
+
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
+async function loadSuppliersOptions() {
+  try { const r: any = await fetchSuppliers(''); suppliersOptions.value = r?.records || [] } catch { suppliersOptions.value = [] }
+}
 
 async function load() {
   loading.value = true
@@ -24,11 +29,11 @@ async function load() {
     data.value = res?.records || []; page.total = res?.total || 0
   } catch { data.value = [] } finally { loading.value = false }
 }
-onMounted(() => { optionsStore.ensureSuppliers('all'); load() })
+onMounted(() => { loadSuppliersOptions(); load() })
 onActivated(() => { load() })
 function query_() { page.pageNum = 1; load() }
 function reset_() { query.supplierId = ''; query.status = ''; query.billNo = ''; page.pageNum = 1; load() }
-function sName(id?: number) { return suppliers.value.find(x => x.id === id)?.name || '' }
+function sName(id?: number) { return suppliersOptions.value.find(x => x.id === id)?.name || '' }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 // 来源单据类型 code -> 中文（finance SourceBillType + 委外 OutsourceSourceBillType）
 const SOURCE_TYPE_LABEL: Record<string, string> = {
@@ -45,7 +50,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
 <template>
   <div class="p">
     <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
-      <el-form-item label="供应商"><el-select v-model="query.supplierId" placeholder="全部" clearable filterable style="width:160px"><el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id"/></el-select></el-form-item>
+      <el-form-item label="供应商"><RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" /></el-form-item>
       <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="s in [{l:SettlementStatusLabel[SettlementStatus.UNSETTLED],v:SettlementStatus.UNSETTLED},{l:SettlementStatusLabel[SettlementStatus.PARTIAL],v:SettlementStatus.PARTIAL},{l:SettlementStatusLabel[SettlementStatus.SETTLED],v:SettlementStatus.SETTLED}]" :key="s.v" :label="s.l" :value="s.v"/></el-select></el-form-item>
       <el-form-item label="单号"><el-input v-model="query.billNo" placeholder="单据号" clearable @keyup.enter="query_"/></el-form-item>
       <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button></el-form-item>

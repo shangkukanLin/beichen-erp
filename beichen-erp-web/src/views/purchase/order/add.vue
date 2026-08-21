@@ -5,20 +5,18 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="供应商" prop="supplierId">
-              <el-select v-model="form.supplierId" placeholder="请选择" filterable style="width:100%"
+              <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" :initial-options="suppliers" placeholder="请选择" style="width:100%"
                 @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/supplier/manage'); return } }">
-                <el-option v-for="s in suppliers" :key="s.id" :label="s.name" :value="s.id" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
-              </el-select>
+              </RemoteSelect>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="入库仓库" prop="warehouseId">
-              <el-select v-model="form.warehouseId" placeholder="请选择" filterable style="width:100%"
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :initial-options="warehouses" placeholder="请选择" style="width:100%"
                 @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
-                <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
-              </el-select>
+              </RemoteSelect>
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -117,6 +115,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import type { PurchaseOrder } from '@/api/purchase'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 /** 明细行数据结构（前端用，含4个品质的数量+单价） */
 interface ItemRow {
@@ -184,7 +183,7 @@ function rowTotalAmount(row: ItemRow): number {
 async function loadMaterials(query?: string) {
   try {
     const params: any = { pageSize: 100 }
-    if (query) params.name = query
+    if (query) params.keyword = query
     const res = await request.get<any, any>('/product/page', { params })
     materialOptions.value = res?.records || []
   } catch { materialOptions.value = [] }
@@ -200,18 +199,14 @@ function onMaterialChange(val: any, row: ItemRow) {
   }
 }
 
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw, supplierType: 'product' } })
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
+
 async function loadSuppliers() {
   try {
     const res = await request.get('/supplier/page', { params: { pageSize: 200, supplierType: 'product' } })
     suppliers.value = res?.records || []
   } catch { suppliers.value = [] }
-}
-
-async function loadWarehouses() {
-  try {
-    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } })
-    warehouses.value = res?.records || []
-  } catch { warehouses.value = [] }
 }
 
 /** 将一行明细按品质等级拆分为多条提交项（每条带各自的数量+单价） */
@@ -311,7 +306,6 @@ async function initFromQuery() {
 
 onMounted(async () => {
   await loadSuppliers()
-  loadWarehouses()
   loadMaterials()
   initFromQuery()
 })

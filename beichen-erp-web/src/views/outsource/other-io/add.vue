@@ -1,18 +1,26 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { IoType, IoTypeLabel, WarehouseCategory } from '@/api/enums'
-import { useOptionsStore } from '@/stores/options'
 
 const route = useRoute(); const router = useRouter()
-const optionsStore = useOptionsStore()
 const editId = Number(route.query.id) || 0
-const warehouses = computed(() => optionsStore.warehouses.map((w: any) => ({ ...w, _type: w.warehouseCategory === WarehouseCategory.INVENTORY ? '我方仓' : '委外仓' })))
-const materialOptions = computed(() => optionsStore.materials || [])
-const bomTypes = computed(() => optionsStore.bomTypes || [])
+const warehouses = ref<any[]>([])
+const materialOptions = ref<any[]>([])
+const bomTypes = ref<any[]>([])
 const saving = ref(false)
+
+async function loadWarehouses() {
+  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } }); warehouses.value = (r?.records || []).map((w: any) => ({ ...w, _type: w.warehouseCategory === WarehouseCategory.INVENTORY ? '我方仓' : '委外仓' })) } catch { warehouses.value = [] }
+}
+async function loadMaterials() {
+  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); materialOptions.value = r?.records || [] } catch { materialOptions.value = [] }
+}
+async function loadBomTypes() {
+  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch { bomTypes.value = [] }
+}
 const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN, ioDate: new Date().toISOString().slice(0,10), remark: '' })
 const items = ref<any[]>([{ materialId: undefined, materialName: '', bomTypeId: undefined, unit: '', unit_price: '', quantity: undefined, remark: '' }])
 
@@ -67,7 +75,7 @@ async function handleSubmit() {
   } catch (e: any) { ElMessage.error(e?.message||'保存失败') } finally { saving.value = false }
 }
 
-onMounted(()=>{ optionsStore.ensureWarehouses(); optionsStore.ensureMaterials(); optionsStore.ensureBomTypes(); loadDetail() })
+onMounted(()=>{ loadWarehouses(); loadMaterials(); loadBomTypes(); loadDetail() })
 </script>
 
 <template>

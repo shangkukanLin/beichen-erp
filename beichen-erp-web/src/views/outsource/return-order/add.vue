@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
 const tabStore = useTabStore()
-const optionsStore = useOptionsStore()
 
 const form = reactive({ factoryId: undefined as any, warehouseId: undefined as any, returnDate: new Date().toISOString().slice(0, 10), remark: '' })
 const factoryOptions = ref<any[]>([])
@@ -30,9 +29,16 @@ function usedProducts(idx: number) {
   return rows.value.filter((_, i) => i !== idx).map(r => r.productName).filter(Boolean) as string[]
 }
 
+// ===== 纯 Odoo 方案：本地轻量列表 + RemoteSelect 实时查库 =====
+const fetchSuppliers = (kw: string) =>
+  request.get('/supplier/page', { params: { supplierType: 'factory', name: kw, pageSize: 500 } })
+const fetchWarehouses = (kw: string) =>
+  request.get('/warehouse/page', { params: { warehouseName: kw, pageSize: 500 } })
+
 async function loadFactories() {
-  await optionsStore.ensureSuppliers('factory'); factoryOptions.value = optionsStore.suppliers['suppliers:factory'] || []
-  await optionsStore.ensureWarehouses(); warehouseOptions.value = optionsStore.warehouses || []
+  const [sf, wf]: any[] = await Promise.all([fetchSuppliers(''), fetchWarehouses('')])
+  factoryOptions.value = sf?.records || []
+  warehouseOptions.value = wf?.records || []
 }
 
 async function onFactoryChange(v: any) {
@@ -130,7 +136,7 @@ function resetForm() {
 
 onMounted(() => { loadFactories(); loadBomTypes() })
 async function loadBomTypes() {
-  await optionsStore.ensureBomTypes(); bomTypes.value = optionsStore.bomTypes || []
+  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch { bomTypes.value = [] }
 }
 onActivated(() => { loadFactories(); resetForm() })
 </script>
@@ -141,8 +147,8 @@ onActivated(() => { loadFactories(); resetForm() })
       <template #header><span style="font-weight:600">退货信息</span></template>
       <el-form :model="form" label-width="90px" size="small">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="加工厂"><el-select v-model="form.factoryId" filterable clearable style="width:100%" @change="onFactoryChange"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /></el-select></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="成品出库仓"><el-select v-model="form.warehouseId" filterable clearable style="width:100%"><el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" placeholder="请选择加工厂" @update:modelValue="onFactoryChange" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="成品出库仓"><RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择出库仓" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="退货日期"><el-input v-model="form.returnDate" type="date" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
         </el-row>

@@ -4,6 +4,7 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const route = useRoute(); const router = useRouter()
 const orderId = Number(route.params.id)
@@ -31,6 +32,9 @@ const warehouseOptions = ref<any[]>([])
 async function loadWarehouses() {
   try { const r = await request.get<any,any>('/warehouse/page', { params: { pageSize: 200 } }); warehouseOptions.value = r?.records || [] } catch (e: any) { console.warn('加载仓库失败', e?.message || e) }
 }
+// 收货仓库选择：纯 Odoo 方案，RemoteSelect 实时查库
+const fetchWarehouses = (kw: string) =>
+  request.get('/warehouse/page', { params: { warehouseName: kw, pageSize: 500 } })
 
 async function loadData() {
   loading.value = true
@@ -246,9 +250,7 @@ onMounted(loadData)
           </div>
         </el-form-item>
         <el-form-item label="收货仓库" required>
-          <el-select v-model="warehouseId" filterable style="width:100%" placeholder="选择入库仓库">
-            <el-option v-for="w in warehouseOptions" :key="w.id" :label="`${w.warehouseName} (${w.code})`" :value="w.id" />
-          </el-select>
+          <RemoteSelect v-model="warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" placeholder="选择入库仓库" />
         </el-form-item>
         <el-form-item label="交货日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item>
         <el-form-item label="物流单号"><el-input v-model="form.trackingNo" placeholder="选填" /></el-form-item>

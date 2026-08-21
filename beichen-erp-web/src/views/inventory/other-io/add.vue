@@ -4,27 +4,26 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { getQualityTypes, type QualityOption } from '@/api/product'
-import { IoType, IoTypeLabel } from '@/api/enums'
+import { IoType, IoTypeLabel, WarehouseCategory } from '@/api/enums'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const route = useRoute(); const router = useRouter()
 const editId = Number(route.query.id) || 0
-const warehouses = ref<any[]>([])
-const materialOptions = ref<any[]>([])
 const qualityOptions = ref<QualityOption[]>([])
 const saving = ref(false)
 const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN, ioDate: new Date().toISOString().slice(0,10), remark: '' })
 const items = ref<any[]>([{ materialId: undefined, materialName: '', spec: '', unit: '', quantity: undefined, remark: '' }])
 
-async function loadWarehouses() {
-  try { const r = await request.get<any,any>('/warehouse/page',{params:{pageSize:500,warehouseCategory: WarehouseCategory.INVENTORY}}); warehouses.value = r?.records||[] } catch {}
-}
-async function loadMaterials() {
-  try { const r = await request.get<any,any>('/product/page',{params:{pageSize:500}}); materialOptions.value = r?.records||[] } catch {}
-}
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
+const fetchMaterials = (kw: string) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw } })
+
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
-function onMatSelect(idx: number, matId: number) {
-  const m = materialOptions.value.find((v:any)=>v.id===matId)
-  if (m) { items.value[idx].materialName=m.name||m.materialName; items.value[idx].spec=m.spec||''; items.value[idx].unit=m.unit||'' }
+function onMatPick(row: any, idx: number) {
+  if (!row) return
+  items.value[idx].materialId = row.id
+  items.value[idx].materialName = row.materialName
+  items.value[idx].spec = row.spec || ''
+  items.value[idx].unit = row.unit || ''
 }
 function addItem() { items.value.push({ materialId: undefined, qualityType: 'A', materialName: '', spec: '', unit: '', quantity: undefined, remark: '' }) }
 function removeItem(i: number) { items.value.splice(i,1) }
@@ -56,7 +55,7 @@ async function handleSubmit() {
   } catch (e: any) { ElMessage.error(e?.message||'保存失败') } finally { saving.value = false }
 }
 
-onMounted(()=>{ loadWarehouses(); loadMaterials(); loadQualityTypes(); loadDetail() })
+onMounted(()=>{ loadQualityTypes(); loadDetail() })
 </script>
 
 <template>
@@ -65,7 +64,7 @@ onMounted(()=>{ loadWarehouses(); loadMaterials(); loadQualityTypes(); loadDetai
     <el-card shadow="never">
       <el-form :model="form" label-width="80px">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item label="仓库"><el-select v-model="form.warehouseId" filterable style="width:100%"><el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id"/></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="仓库"><RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="类型"><el-select v-model="form.ioType" style="width:100%"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="form.ioDate" type="date"/></el-form-item></el-col>
         </el-row>
@@ -76,7 +75,7 @@ onMounted(()=>{ loadWarehouses(); loadMaterials(); loadQualityTypes(); loadDetai
       <template #header><span style="font-weight:600">物料明细</span></template>
       <el-button type="primary" size="small" @click="addItem" style="margin-bottom:8px">+ 添加物料</el-button>
       <el-table :data="items" border size="small">
-        <el-table-column label="物料" min-width="160"><template #default="{row,$index}"><el-select v-model="row.materialId" filterable style="width:100%" @change="(v:any)=>onMatSelect($index,v)"><el-option v-for="m in materialOptions" :key="m.id" :label="m.name||m.materialName" :value="m.id"/></el-select></template></el-table-column>
+        <el-table-column label="物料" min-width="160"><template #default="{row,$index}"><RemoteSelect v-model="row.materialId" :fetch="fetchMaterials" :label-key="(row:any)=>row.materialName" style="width:100%" @pick="(rows:any[])=>onMatPick(rows[0],$index)" /></template></el-table-column>
         <el-table-column label="规格" width="100"><template #default="{row}"><el-input v-model="row.spec" size="small"/></template></el-table-column>
         <el-table-column label="单位" width="70"><template #default="{row}"><el-input v-model="row.unit" size="small"/></template></el-table-column>
         <el-table-column label="品质" width="90"><template #default="{row}"><el-select v-model="row.qualityType" size="small" style="width:100%"><el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value"/></el-select></template></el-table-column>

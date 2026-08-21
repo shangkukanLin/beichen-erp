@@ -6,12 +6,11 @@ import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { getProjectBom } from '@/api/system'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
 const route = useRoute()
 const tabStore = useTabStore()
-const optionsStore = useOptionsStore()
 const saving = ref(false)
 
 const form = reactive({
@@ -38,10 +37,19 @@ function typeName(id: number | undefined, fallback?: string) {
   return fallback || '-'
 }
 
+// ===== 纯 Odoo 方案：本地轻量列表 + RemoteSelect 实时查库 =====
+const fetchSuppliers = (kw: string) =>
+  request.get('/supplier/page', { params: { supplierType: 'factory', name: kw, pageSize: 500 } })
+const fetchProjects = (kw: string) =>
+  request.get('/dev/project/page', { params: { name: kw, pageSize: 500 } })
+const fetchMaterials = (kw: string) =>
+  request.get('/outsource/material/page', { params: { materialName: kw, pageSize: 500 } })
+
 async function loadOptions() {
-  await optionsStore.ensureSuppliers('factory'); factoryOptions.value = optionsStore.suppliers['suppliers:factory'] || []
-  await optionsStore.ensureProjects(); projectOptions.value = optionsStore.projects || []
-  await optionsStore.ensureMaterials(); materialOptions.value = optionsStore.materials || []
+  const [sf, pf, mf]: any[] = await Promise.all([fetchSuppliers(''), fetchProjects(''), fetchMaterials('')])
+  factoryOptions.value = sf?.records || []
+  projectOptions.value = pf?.records || []
+  materialOptions.value = mf?.records || []
 }
 
 function addProduct() {
@@ -66,6 +74,16 @@ function onProjectSelect(idx: number, pid: number) {
     products.value[idx].productName = proj.assemblyName || proj.name || ''
     loadBomMaterials(idx, pid)
   }
+}
+
+// 加工厂选择：选中"+ 新增"占位则跳转加工厂管理页
+function onFactoryChangeProxy(v: any) {
+  if (v === ADD_MARKER) { form.factoryId = undefined; router.push('/supplier/manage'); return }
+}
+// 加工产品选择：选中"+ 新增"占位则跳转研发项目页
+function onProjectSelectProxy(idx: number, v: any) {
+  if (v === ADD_MARKER) { products.value[idx].projectId = undefined; router.push('/dev/project'); return }
+  onProjectSelect(idx, v)
 }
 
 async function loadBomMaterials(idx: number, pid: number) {
@@ -222,7 +240,7 @@ onActivated(initPage)
       <template #header><span style="font-weight:600">基础信息</span></template>
       <el-form :model="form" label-width="90px" size="small">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="加工厂"><el-select v-model="form.factoryId" filterable style="width:100%" placeholder="请选择" @change="(v: any) => { if (v === ADD_MARKER) { form.factoryId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" placeholder="请选择" @update:modelValue="onFactoryChangeProxy"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="计划开始"><el-input v-model="form.planStartDate" type="date" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="计划完成"><el-input v-model="form.planEndDate" type="date" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="是否含税"><el-switch v-model="form.taxIncluded" :active-value="1" :inactive-value="0" /></el-form-item></el-col>
@@ -242,7 +260,7 @@ onActivated(initPage)
       </template>
       <el-form :model="p" label-width="90px" size="small">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item label="加工产品"><el-select v-model="p.projectId" filterable clearable style="width:100%" placeholder="选择产品" @change="(v: any) => { if (v === ADD_MARKER) { p.projectId = undefined; router.push('/dev/project'); return } onProjectSelect(pi, v) }"><el-option v-for="pr in projectOptions" :key="pr.id" :label="pr.assemblyName || pr.name" :value="pr.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.assemblyName || row.name" placeholder="选择产品" @update:modelValue="(v:any)=>onProjectSelectProxy(pi, v)"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
           <el-col :span="5"><el-form-item label="数量"><el-input v-model="p.quantity" type="number" @change="onQuantityChange(pi)" /></el-form-item></el-col>
           <el-col :span="5"><el-form-item label="单价"><el-input v-model="p.unitPrice" type="number" @change="calcAmount(pi)" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>

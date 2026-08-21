@@ -2,9 +2,7 @@
 import { ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { useOptionsStore } from '@/stores/options'
 
-const optionsStore = useOptionsStore()
 interface Brand { id?: number; brandName: string; status: number }
 const tableData = ref<Brand[]>([])
 const loading = ref(false)
@@ -26,7 +24,7 @@ async function handleSubmit() {
   try {
     if (isEdit.value && editId.value) { await request.put('/brand', { id: editId.value, ...form.value }); ElMessage.success('已更新') }
     else { await request.post('/brand', form.value); ElMessage.success('已添加') }
-    optionsStore.refreshBrands(); dialogVisible.value = false; loadData()
+    dialogVisible.value = false; loadData()
   } catch (e: any) { ElMessage.error('操作失败: ' + (e?.message || '未知错误')) }
 }
 
@@ -42,7 +40,7 @@ async function handleDelete(row: any) {
   } catch {
     // check-delete 失败时，让后端 delete 端点自行校验
   }
-  try { await ElMessageBox.confirm(`确定删除品牌「${row.brandName}」吗？`, '提示', { type: 'warning' }); await request.delete(`/brand/${row.id}`); optionsStore.refreshBrands(); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { ElMessage.error(e?.message || '删除失败') } }
+  try { await ElMessageBox.confirm(`确定删除品牌「${row.brandName}」吗？`, '提示', { type: 'warning' }); await request.delete(`/brand/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { ElMessage.error(e?.message || '删除失败') } }
 }
 
 onMounted(() => loadData())

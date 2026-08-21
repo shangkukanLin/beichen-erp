@@ -5,11 +5,10 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect'
 
 const router = useRouter(); const route = useRoute()
 const tabStore = useTabStore()
-const optionsStore = useOptionsStore()
 const isEdit = ref(false)
 const editId = route.params.id ? Number(route.params.id) : 0
 const saving = ref(false)
@@ -21,13 +20,17 @@ const materialOptions = ref<any[]>([])
 const bomTypes = ref<any[]>([])
 const itemTypes = ref<Record<number, string>>({})
 
+// Odoo 风格：下拉框实时查库
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
+const fetchMaterials = (kw: string) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw } })
+
 async function loadSuppliers() {
-  await optionsStore.ensureSuppliers('all'); supplierOptions.value = optionsStore.suppliers['suppliers:all'] || []
+  const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || []
 }
 
 async function loadOptions() {
   await loadSuppliers()
-  await optionsStore.ensureMaterials(); materialOptions.value = optionsStore.materials || []
+  const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); materialOptions.value = r?.records || []
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch { }
 }
 
@@ -173,7 +176,11 @@ onMounted(async () => {
               <el-radio value="委外">委外</el-radio>
             </el-radio-group>
           </el-form-item></el-col>
-          <el-col :span="8"><el-form-item :label="form.orderType==='委外'?'加工厂':'供应商'"><el-select v-model="form.supplierId" filterable clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item :label="form.orderType==='委外'?'加工厂':'供应商'">
+            <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" clearable style="width:100%" placeholder="选择供应商">
+              <el-option label="+ 新增" :value="ADD_MARKER" @click="router.push('/supplier/manage')" />
+            </RemoteSelect>
+          </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="交期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
         </el-row>

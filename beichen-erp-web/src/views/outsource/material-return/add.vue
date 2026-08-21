@@ -4,21 +4,21 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect'
 
 const router = useRouter()
 const tabStore = useTabStore()
-const optionsStore = useOptionsStore()
 
 const form = reactive({ supplierId: undefined as any, fromWarehouseId: undefined as any, returnDate: new Date().toISOString().slice(0, 10), remark: '' })
-const supplierOptions = ref<any[]>([])
 const warehouseOptions = ref<any[]>([])
 const stockList = ref<any[]>([])
 const loading = ref(false)
 const submitting = ref(false)
 
+// Odoo 风格：退回对象（物料商）实时查库
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
+
 async function loadOptions() {
-  await optionsStore.ensureSuppliers('material'); supplierOptions.value = optionsStore.suppliers['suppliers:material'] || []
   try { const r = await request.get<any, any>('/outsource/material-return/warehouse-options'); warehouseOptions.value = r || [] } catch {}
 }
 
@@ -64,7 +64,7 @@ onActivated(loadOptions)
       <template #header><span style="font-weight:600">退货信息</span></template>
       <el-form :model="form" label-width="100px" size="small">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="退回对象"><el-select v-model="form.supplierId" filterable clearable style="width:100%" placeholder="选择物料商"><el-option v-for="s in supplierOptions" :key="s.id" :label="s.name" :value="s.id" /></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="退回对象"><RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="选择物料商" style="width:100%" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="出库源仓"><el-select v-model="form.fromWarehouseId" filterable clearable style="width:100%" placeholder="选择物料所在仓库" @change="onWarehouseChange"><el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="退货日期"><el-input v-model="form.returnDate" type="date" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>

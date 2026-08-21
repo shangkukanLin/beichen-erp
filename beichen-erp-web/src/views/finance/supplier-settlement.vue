@@ -3,10 +3,9 @@ import { ref, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect'
 
 const route = useRoute(); const router = useRouter()
-const optionsStore = useOptionsStore()
 const supplierId = Number(route.params.id)
 const loading = ref(false)
 const data = ref<any>({})
@@ -22,11 +21,10 @@ async function loadAll() {
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 
 // ========== 一键退料 ==========
-const invWarehouses = ref<any[]>([])
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
 const returnSaving = ref(false)
 async function openReturn() {
   returnWarehouseId.value = undefined
-  await optionsStore.ensureWarehouses(); invWarehouses.value = optionsStore.warehouses || []
   returnVisible.value = true
 }
 async function handleReturn() {
@@ -163,9 +161,7 @@ onActivated(async () => { await loadAll(); refreshChecks() })
       </el-alert>
       <el-form label-width="90px">
         <el-form-item label="退回目标仓" required>
-          <el-select v-model="returnWarehouseId" filterable placeholder="选择我方仓库" style="width:100%">
-            <el-option v-for="w in invWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
-          </el-select>
+          <RemoteSelect v-model="returnWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择我方仓库" style="width:100%" />
         </el-form-item>
       </el-form>
       <template #footer><el-button @click="returnVisible=false">取消</el-button><el-button type="warning" :loading="returnSaving" @click="handleReturn">确认退料</el-button></template>

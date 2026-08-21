@@ -1,22 +1,34 @@
 ﻿<script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getBillPage, getBillItems, generateBill, auditBill, unAuditBill, cancelBill, type FinanceBill, type FinanceBillItem } from '@/api/finance'
 import { BillType, BillTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import { useOptionsStore } from '@/stores/options'
+import request from '@/utils/request'
+import RemoteSelect from '@/components/RemoteSelect'
 
 // 账单状态 code → 中文 label（后端存 DocStatus code，前端展示中文）
 const StatusLabel: Record<string, string> = DocStatusLabel
 const StatusTag: Record<string, 'info' | 'success' | 'warning' | 'danger' | 'primary'> = DocStatusTag
 
-const optionsStore = useOptionsStore()
 const query = reactive({ billType: BillType.RECEIVABLE, partnerId: '' as string|number })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinanceBill[]>([])
-const customers = computed(() => optionsStore.customers || [])
-const suppliers = computed(() => optionsStore.suppliers['suppliers:all'] || [])
+const customersOptions = ref<any[]>([])
+const suppliersOptions = ref<any[]>([])
+
+const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
+async function loadCustomersOptions() {
+  try { const r: any = await fetchCustomers(''); customersOptions.value = r?.records || [] } catch { customersOptions.value = [] }
+}
+async function loadSuppliersOptions() {
+  try { const r: any = await fetchSuppliers(''); suppliersOptions.value = r?.records || [] } catch { suppliersOptions.value = [] }
+}
+
+// 往来单位下拉：按当前单据类型切换查询客户/供应商
+const fetchPartner = (kw: string) => (query.billType === BillType.RECEIVABLE ? fetchCustomers(kw) : fetchSuppliers(kw))
 
 async function loadData() {
   loading.value = true
@@ -28,13 +40,13 @@ async function loadData() {
     data.value = res?.records || []; page.total = res?.total || 0
   } catch { data.value = [] } finally { loading.value = false }
 }
-onMounted(() => { optionsStore.ensureCustomers(); optionsStore.ensureSuppliers('all'); loadData() })
+onMounted(() => { loadCustomersOptions(); loadSuppliersOptions(); loadData() })
 onActivated(() => { loadData() })
 function query_() { page.pageNum = 1; loadData() }
 function reset_() { query.partnerId = ''; page.pageNum = 1; loadData() }
 function partnerName(id?: number) {
-  if (query.billType === BillType.RECEIVABLE) return customers.value.find(x => x.id === id)?.name || ''
-  return suppliers.value.find(x => x.id === id)?.name || ''
+  if (query.billType === BillType.RECEIVABLE) return customersOptions.value.find(x => x.id === id)?.name || ''
+  return suppliersOptions.value.find(x => x.id === id)?.name || ''
 }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 
@@ -43,9 +55,8 @@ const genLoading = ref(false)
 const genDialog = ref(false)
 
 function onBillTypeChange() { genForm.partnerId = undefined; genForm.partnerName = '' }
-async function onPartnerSelect(id: number) {
-  if (genForm.billType === BillType.RECEIVABLE) { const c = customers.value.find(x => x.id === id); genForm.partnerName = c?.name || '' }
-  else { const s = suppliers.value.find(x => x.id === id); genForm.partnerName = s?.name || '' }
+function onPartnerPick(rows: any[]) {
+  genForm.partnerName = rows?.[0]?.name || ''
 }
 async function handleGenerate() {
   if (!genForm.partnerId) { ElMessage.warning('请选择往来单位'); return }
@@ -69,7 +80,7 @@ async function handleCancel(row: FinanceBill) { try { await cancelBill(row.id as
   <div class="p">
     <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
       <el-form-item label="类型"><el-select v-model="query.billType" style="width:120px"><el-option :label="BillTypeLabel[BillType.RECEIVABLE]" :value="BillType.RECEIVABLE"/><el-option :label="BillTypeLabel[BillType.PAYABLE]" :value="BillType.PAYABLE"/></el-select></el-form-item>
-      <el-form-item label="往来单位"><el-select v-model="query.partnerId" placeholder="全部" clearable filterable style="width:160px"><el-option v-for="c in (query.billType===BillType.RECEIVABLE?customers:suppliers)" :key="c.id" :label="(c as any).name||(c as any).companyName" :value="c.id ?? ''"/></el-select></el-form-item>
+      <el-form-item label="往来单位"><RemoteSelect v-model="query.partnerId" :fetch="fetchPartner" placeholder="全部" style="width:160px" /></el-form-item>
       <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button><el-button type="success" @click="genDialog=true">生成账单</el-button></el-form-item>
     </el-form></el-card>
     <el-card shadow="never">
@@ -97,7 +108,7 @@ async function handleCancel(row: FinanceBill) { try { await cancelBill(row.id as
     <el-dialog v-model="genDialog" title="生成账单" width="550px">
       <el-form :model="genForm" label-width="90px">
         <el-form-item label="类型"><el-select v-model="genForm.billType" style="width:100%" @change="onBillTypeChange"><el-option :label="BillTypeLabel[BillType.RECEIVABLE]" :value="BillType.RECEIVABLE"/><el-option :label="BillTypeLabel[BillType.PAYABLE]" :value="BillType.PAYABLE"/></el-select></el-form-item>
-        <el-form-item label="往来单位"><el-select v-model="genForm.partnerId" placeholder="请选择" filterable style="width:100%" @change="onPartnerSelect"><el-option v-for="c in (genForm.billType===BillType.RECEIVABLE?customers:suppliers)" :key="c.id" :label="(c as any).name||(c as any).companyName" :value="c.id ?? ''"/></el-select></el-form-item>
+        <el-form-item label="往来单位"><RemoteSelect v-model="genForm.partnerId" :fetch="fetchPartner" placeholder="请选择" style="width:100%" @pick="onPartnerPick" /></el-form-item>
         <el-form-item label="账期起"><el-date-picker v-model="genForm.periodStart" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>
         <el-form-item label="账期止"><el-date-picker v-model="genForm.periodEnd" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>
       </el-form>

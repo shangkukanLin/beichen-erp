@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { useOptionsStore } from '@/stores/options'
 import {
   getCustomerPage,
   updateCustomerStatus,
@@ -10,8 +9,6 @@ import {
   type Customer,
   type PageResult
 } from '@/api/customer'
-
-const optionsStore = useOptionsStore()
 
 const query = reactive({
   code: '',
@@ -135,7 +132,6 @@ async function handleSubmit() {
         await createCustomer(form)
         ElMessage.success('新增成功')
       }
-      optionsStore.refreshCustomers()
       dialogVisible.value = false
       loadData()
     } catch {
@@ -156,7 +152,6 @@ async function handleToggleStatus(row: Customer) {
       type: 'warning'
     })
     await updateCustomerStatus(row.id as number, target)
-    optionsStore.refreshCustomers()
     ElMessage.success('操作成功')
     loadData()
   } catch {

@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
@@ -46,16 +46,15 @@ const router = useRouter()
 const loading = ref(false)
 const rows = ref<any[]>([])
 const total = ref(0)
-const warehouses = ref<Record<number, string>>({})
+// 仓库名称映射（组件本地轻量列表，Odoo 风格）
+const warehouseMap = ref<Record<number, string>>({})
+
+async function loadWarehouseMap() {
+  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } }); const map: Record<number, string> = {}; (r?.records || []).forEach((w: any) => { map[w.id] = w.warehouseName || w.name }); warehouseMap.value = map } catch { warehouseMap.value = {} }
+}
 
 const query = reactive({ pageNum: 1, pageSize: 10, productName: '' })
 
-async function loadWarehouses() {
-  const res = await request.get('/warehouse/page', { params: { pageNum: 1, pageSize: 1000 } })
-  const map: Record<number, string> = {}
-  ;(res.records || []).forEach((w: any) => { map[w.id] = w.name })
-  warehouses.value = map
-}
 
 async function load(page = query.pageNum) {
   loading.value = true
@@ -65,7 +64,7 @@ async function load(page = query.pageNum) {
     })
     rows.value = (res.records || []).map((r: any) => ({
       ...r,
-      warehouseName: r.warehouseId ? warehouses.value[r.warehouseId] || '' : '',
+      warehouseName: r.warehouseId ? warehouseMap.value[r.warehouseId] || '' : '',
     }))
     total.value = res.total || 0
   } finally {
@@ -85,7 +84,7 @@ async function remove(row: any) {
 }
 
 onMounted(async () => {
-  await loadWarehouses()
+  await loadWarehouseMap()
   await load(1)
 })
 </script>

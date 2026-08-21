@@ -5,16 +5,18 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { addProject, checkProjectAssembly, type ProjectDTO } from '@/api/system'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
-import { useOptionsStore } from '@/stores/options'
+import request from '@/utils/request'
 
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const route = useRoute()
 const tabStore = useTabStore()
 
-const solutionSuppliers = ref<{ id: number; name: string }[]>([])
+const solutionSupplierOptions = ref<{ id: number; name: string }[]>([])
 const factoryOptions = ref<{ id: number; name: string }[]>([])
 const saving = ref(false)
+
+const fetchSolutionSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, supplierType: 'solution', name: kw } })
+const fetchFactorySuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, supplierType: 'factory', name: kw } })
 
 const defForm = (): ProjectDTO => ({
   name: '', status: '立项', displaySupplierName: '', touchSupplierName: '',
@@ -30,8 +32,8 @@ function resetForm() {
 }
 
 async function loadData() {
-  await optionsStore.ensureSuppliers('solution'); solutionSuppliers.value = (optionsStore.suppliers['suppliers:solution'] || []).map((s: any) => ({ id: s.id, name: s.name }))
-  await optionsStore.ensureSuppliers('factory'); factoryOptions.value = (optionsStore.suppliers['suppliers:factory'] || []).map((s: any) => ({ id: s.id, name: s.name }))
+  const sr: any = await fetchSolutionSuppliers(''); solutionSupplierOptions.value = (sr?.records || []).map((s: any) => ({ id: s.id, name: s.name }))
+  const fr: any = await fetchFactorySuppliers(''); factoryOptions.value = (fr?.records || []).map((s: any) => ({ id: s.id, name: s.name }))
 }
 
 async function handleSubmit() {
@@ -66,7 +68,6 @@ async function handleSubmit() {
   saving.value = true
   try {
     await addProject(form as any, linkExistingProductId)
-    optionsStore.refreshProjects()
     ElMessage.success('项目创建成功')
     resetForm()
     tabStore.removeTab(route.path)
@@ -97,18 +98,18 @@ onMounted(() => loadData())
           <el-col :span="8"><el-form-item label="总成名称" prop="assemblyName" :rules="[{ required: true, message: '请输入总成名称', trigger: 'blur' }]"><el-input v-model="form.assemblyName" placeholder="请输入总成名称" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="适配机型"><el-input v-model="form.adaptModel" placeholder="如 iPhone 15" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="显示方案">
-            <el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%" placeholder="选择或输入" @change="(v: string) => { if (v === ADD_MARKER) { form.displaySupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
+            <el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%" placeholder="选择或输入" @change="(v: string) => { if (v === ADD_MARKER) { form.displaySupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSupplierOptions" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="触摸方案">
-            <el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%" placeholder="选择或输入" @change="(v: string) => { if (v === ADD_MARKER) { form.touchSupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
+            <el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%" placeholder="选择或输入" @change="(v: string) => { if (v === ADD_MARKER) { form.touchSupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSupplierOptions" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="原机尺寸"><el-input v-model="form.originalSize" placeholder="如 6.1寸" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="原分辨率"><el-input v-model="form.originalResolution" placeholder="如 1080×2400" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="打样工厂">
-            <el-select v-model="form.sampleFactoryId" clearable filterable style="width:100%" placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.sampleFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
+            <RemoteSelect v-model="form.sampleFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.sampleFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="委外工厂">
-            <el-select v-model="form.outsourceFactoryId" clearable filterable style="width:100%" placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.outsourceFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
+            <RemoteSelect v-model="form.outsourceFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.outsourceFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
           </el-form-item></el-col>
         </el-row>
       </el-form>

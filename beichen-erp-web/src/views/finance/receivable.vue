@@ -1,17 +1,22 @@
 ﻿<script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { getReceivablePage, type FinanceReceivable, type PageResult } from '@/api/finance'
 import { SettlementStatus, SettlementStatusLabel } from '@/api/enums'
-import { useOptionsStore } from '@/stores/options'
+import request from '@/utils/request'
+import RemoteSelect from '@/components/RemoteSelect'
 
-const optionsStore = useOptionsStore()
 const query = reactive({ customerId: '' as string|number, status: '', billNo: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinanceReceivable[]>([])
-const customers = computed(() => optionsStore.customers || [])
+const customersOptions = ref<any[]>([])
 const detailVisible = ref(false)
 const detail = ref<FinanceReceivable>({})
+
+const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
+async function loadCustomersOptions() {
+  try { const r: any = await fetchCustomers(''); customersOptions.value = r?.records || [] } catch { customersOptions.value = [] }
+}
 
 async function load() {
   loading.value = true
@@ -24,18 +29,18 @@ async function load() {
     data.value = res?.records || []; page.total = res?.total || 0
   } catch { data.value = [] } finally { loading.value = false }
 }
-onMounted(() => { optionsStore.ensureCustomers(); load() })
+onMounted(() => { loadCustomersOptions(); load() })
 onActivated(() => { load() })
 function query_() { page.pageNum = 1; load() }
 function reset_() { query.customerId = ''; query.status = ''; query.billNo = ''; page.pageNum = 1; load() }
-function cName(id?: number) { return customers.value.find(x => x.id === id)?.name || '' }
+function cName(id?: number) { return customersOptions.value.find(x => x.id === id)?.name || '' }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === SettlementStatus.UNSETTLED) return 'danger'; if (s === SettlementStatus.PARTIAL) return 'warning'; if (s === SettlementStatus.SETTLED) return 'success'; if (s === SettlementStatus.CANCELLED) return 'info'; return undefined }
 </script>
 <template>
   <div class="p">
     <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
-      <el-form-item label="客户"><el-select v-model="query.customerId" placeholder="全部" clearable filterable style="width:160px"><el-option v-for="c in customers" :key="c.id" :label="c.name" :value="c.id ?? ''"/></el-select></el-form-item>
+      <el-form-item label="客户"><RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="全部" style="width:160px" /></el-form-item>
       <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="s in [{l:SettlementStatusLabel[SettlementStatus.UNSETTLED],v:SettlementStatus.UNSETTLED},{l:SettlementStatusLabel[SettlementStatus.PARTIAL],v:SettlementStatus.PARTIAL},{l:SettlementStatusLabel[SettlementStatus.SETTLED],v:SettlementStatus.SETTLED}]" :key="s.v" :label="s.l" :value="s.v"/></el-select></el-form-item>
       <el-form-item label="单号"><el-input v-model="query.billNo" placeholder="单据号" clearable @keyup.enter="query_"/></el-form-item>
       <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button></el-form-item>

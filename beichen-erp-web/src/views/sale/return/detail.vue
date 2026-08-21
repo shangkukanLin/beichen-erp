@@ -53,6 +53,7 @@
 import { onMounted, reactive, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import request from '@/utils/request'
 import {
   getSaleReturn,
   getSaleReturnItems,
@@ -62,13 +63,14 @@ import {
   SaleReturnStatus,
   SaleReturnStatusLabel,
 } from '@/api/sale'
-import { useOptionsStore } from '@/stores/options'
 
 const route = useRoute()
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const acting = ref(false)
-const warehouses = computed(() => optionsStore.warehouses || [])
+// 仓库显示用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
+const warehouses = ref<{ id: number; warehouseName?: string; name?: string }[]>([])
+async function loadWarehouses() { try { const r: any = await fetchWarehouses(''); warehouses.value = r?.records || [] } catch { warehouses.value = [] } }
 const items = ref<any[]>([])
 
 const head = reactive({
@@ -158,7 +160,7 @@ async function doCancel() {
 }
 
 onMounted(async () => {
-  optionsStore.ensureWarehouses()
+  loadWarehouses()
   await loadDetail(Number(route.params.id))
 })
 </script>

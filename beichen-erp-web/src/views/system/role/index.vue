@@ -14,9 +14,7 @@ import {
   type RoleQueryParams,
   type MenuVO
 } from '@/api/system'
-import { useOptionsStore } from '@/stores/options'
 
-const optionsStore = useOptionsStore()
 
 // 查询参数
 const query = reactive<RoleQueryParams>({
@@ -141,7 +139,6 @@ async function handleSubmit() {
         await addRole(form)
         ElMessage.success('新增成功')
       }
-      optionsStore.refreshRoles()
       dialogVisible.value = false
       loadData()
     } catch {
@@ -160,7 +157,6 @@ async function handleDelete(row: Role) {
       type: 'warning'
     })
     await deleteRole(row.id as number | string)
-    optionsStore.refreshRoles()
     ElMessage.success('删除成功')
     if (tableData.value.length === 1 && pagination.pageNum > 1) {
       pagination.pageNum--

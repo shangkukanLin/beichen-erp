@@ -5,16 +5,12 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="移出仓库" prop="fromWarehouseId">
-              <el-select v-model="form.fromWarehouseId" placeholder="请选择" filterable style="width:100%">
-                <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
-              </el-select>
+              <RemoteSelect v-model="form.fromWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="移入仓库" prop="toWarehouseId">
-              <el-select v-model="form.toWarehouseId" placeholder="请选择" filterable style="width:100%">
-                <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
-              </el-select>
+              <RemoteSelect v-model="form.toWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -37,10 +33,8 @@
           <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="产品" min-width="220">
             <template #default="{ row }">
-              <el-select v-model="row.productId" placeholder="选择产品" filterable remote :remote-method="loadProducts"
-                style="width:100%" @change="(v: number) => onProductChange(v, row)">
-                <el-option v-for="m in productOptions" :key="m.id" :label="m.name" :value="m.id" />
-              </el-select>
+              <RemoteSelect v-model="row.productId" :fetch="fetchProducts" placeholder="选择产品" style="width:100%"
+                @pick="(rows:any[]) => onProductPick(rows[0], row)" />
             </template>
           </el-table-column>
           <el-table-column label="规格" width="100">
@@ -86,6 +80,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
 import request from '@/utils/request'
 import { getQualityTypes, type QualityOption } from '@/api/product'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 interface MoveItem {
   productId?: number
@@ -119,34 +114,31 @@ const rules: FormRules = {
   toWarehouseId: [{ required: true, message: '请选择移入仓库', trigger: 'change' }]
 }
 
-const warehouses = ref<any[]>([])
 const qualityOptions = ref<QualityOption[]>([])
 const productOptions = ref<any[]>([])
 
-async function loadWarehouses() {
-  try {
-    const res = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } })
-    warehouses.value = res?.records || []
-  } catch { warehouses.value = [] }
-}
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
+const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 100, keyword: kw } })
 
 async function loadProducts(query?: string) {
   try {
     const params: any = { pageSize: 100 }
     if (query) params.name = query
-    const res = await request.get('/product/page', { params })
+    const res = await fetchProducts(query || '')
     productOptions.value = res?.records || []
   } catch { productOptions.value = [] }
 }
 
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
-function onProductChange(val: number, row: MoveItem) {
-  const m = productOptions.value.find((x: any) => x.id === val)
-  if (m) { row._spec = m.spec; row._unit = m.unit }
+function onProductPick(p: any, row: MoveItem) {
+  if (!p) return
+  row.productId = p.id
+  row._spec = p.spec
+  row._unit = p.unit
   // 查询该产品在移出仓库的现有库存
-  if (val && form.fromWarehouseId) {
-    request.get<any, any>('/warehouse/stock/page', { params: { productId: val, warehouseId: form.fromWarehouseId, pageSize: 1 } })
+  if (p.id && form.fromWarehouseId) {
+    request.get<any, any>('/warehouse/stock/page', { params: { productId: p.id, warehouseId: form.fromWarehouseId, pageSize: 1 } })
       .then(r => { row._stock = (r?.records || [])[0]?.quantity || 0 })
       .catch(() => { row._stock = undefined })
   }
@@ -240,7 +232,6 @@ function handleCancel() {
 }
 
 onMounted(() => {
-  loadWarehouses()
   loadProducts()
   loadQualityTypes()
   if (isEdit.value) {

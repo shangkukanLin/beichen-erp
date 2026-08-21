@@ -6,17 +6,13 @@
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="退回仓库" prop="warehouseId">
-              <el-select v-model="form.warehouseId" filterable placeholder="请选择仓库" style="width: 100%">
-                <el-option v-for="w in warehouses" :key="w.id" :label="w.name" :value="w.id" />
-              </el-select>
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName || row.name" placeholder="请选择仓库" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="退回产品" prop="productId">
-              <el-select v-model="form.productId" filterable placeholder="请选择产品" style="width: 100%"
-                @change="onProductChange">
-                <el-option v-for="p in products" :key="p.id" :label="`${p.name}`" :value="p.id" />
-              </el-select>
+              <RemoteSelect v-model="form.productId" :fetch="fetchProducts" placeholder="请选择产品" style="width: 100%"
+                @pick="onProductPick" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -58,14 +54,17 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import RemoteSelect from '@/components/RemoteSelect'
 
 interface Opt { id: number; name: string }
 
 const router = useRouter()
 const formRef = ref()
 const saving = ref(false)
-const warehouses = ref<Opt[]>([])
-const products = ref<Opt[]>([])
+
+// Odoo 风格：实时查库
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
+const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 500, keyword: kw } })
 
 const form = reactive({
   warehouseId: undefined as number | undefined,
@@ -82,18 +81,9 @@ const rules = {
   quantity: [{ required: true, message: '请输入退回数量', trigger: 'blur' }],
 }
 
-function onProductChange(id: number) {
-  const p = products.value.find((x) => x.id === id)
+function onProductPick(opts: any[]) {
+  const p = opts?.[0]
   form.productName = p ? p.name : ''
-}
-
-async function loadWarehouses() {
-  const res = await request.get('/warehouse/page', { params: { pageNum: 1, pageSize: 1000 } })
-  warehouses.value = res.records || []
-}
-async function loadProducts() {
-  const res = await request.get('/product/page', { params: { pageNum: 1, pageSize: 1000 } })
-  products.value = res.records || []
 }
 
 async function submit() {
@@ -120,9 +110,7 @@ function goBack() {
   router.push('/outsource/after-sale')
 }
 
-onMounted(async () => {
-  await Promise.all([loadWarehouses(), loadProducts()])
-})
+onMounted(() => {})
 </script>
 
 <style scoped>

@@ -6,12 +6,11 @@ import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel, WarehouseCategory } from '@/api/enums'
-import { useOptionsStore } from '@/stores/options'
+import RemoteSelect from '@/components/RemoteSelect'
 
 const router = useRouter()
 const route = useRoute()
 const tabStore = useTabStore()
-const optionsStore = useOptionsStore()
 const saving = ref(false)
 const form = reactive({
   deliveryType: DeliveryType.DELIVERY as string, factoryId: undefined as any, supplierId: undefined as any,
@@ -19,25 +18,25 @@ const form = reactive({
   logisticsCompany: '', logisticsNo: '', attachUrl: '',
   deliveryDate: new Date().toISOString().split('T')[0], contact: '', phone: '', remark: ''
 })
-const factoryOptions = ref<any[]>([])
 const outsourceWarehouses = ref<any[]>([])
 const targetOutsourceWarehouses = ref<any[]>([])
 const inventoryWarehouses = ref<any[]>([])
-const allOutsourceWarehouses = computed(() => optionsStore.warehouses.filter((w: any) => w.warehouseCategory === WarehouseCategory.OUTSOURCE))
+const allWarehouses = ref<any[]>([])   // 全部仓库（组件本地，Odoo 风格）
+const allOutsourceWarehouses = computed(() => allWarehouses.value.filter((w: any) => w.warehouseCategory === WarehouseCategory.OUTSOURCE))
 const combinedFromWhs = computed(() => [...inventoryWarehouses.value, ...allOutsourceWarehouses.value])
-const materialOptions = computed(() => optionsStore.materials || [])
-const bomTypes = computed(() => optionsStore.bomTypes || [])
+const materialOptions = ref<any[]>([])
+const bomTypes = ref<any[]>([])
 const items = ref<any[]>([])
 const uploadFile = ref<File | null>(null)
+
+// Odoo 风格：工厂实时查库
+const fetchFactories = (kw: string) => request.get('/supplier/page', { params: { supplierType: 'factory', pageSize: 500, name: kw } })
 
 // 类型选择器按 bomTypeId 过滤；bomTypeId -> 类型名 映射供展示
 const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any) => m.bomTypeId).filter(Boolean))] as number[])
 function materialsByType(type: number) { return materialOptions.value.filter((m: any) => m.bomTypeId === type) }
 function typeName(id: number | undefined) { if (id == null) return '-'; const t = bomTypes.value.find((v: any) => v.id === id); return t ? t.typeName : (id as any) }
 
-async function loadFactories() {
-  await optionsStore.ensureSuppliers('factory'); factoryOptions.value = optionsStore.suppliers['suppliers:factory'] || []
-}
 async function loadWarehouses(factoryId: number) {
   try { const r = await request.get<any, any>('/warehouse/by-factory/' + factoryId); outsourceWarehouses.value = r || [] } catch { outsourceWarehouses.value = [] }
 }
@@ -46,6 +45,15 @@ async function loadTargetWarehouses(factoryId: number) {
 }
 async function loadInventoryWarehouses() {
   try { const r = await request.get<any, any>('/warehouse/inventory'); inventoryWarehouses.value = r || [] } catch {}
+}
+async function loadAllWarehouses() {
+  try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } }); allWarehouses.value = r?.records || [] } catch { allWarehouses.value = [] }
+}
+async function loadMaterials() {
+  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); materialOptions.value = r?.records || [] } catch { materialOptions.value = [] }
+}
+async function loadBomTypes() {
+  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch { bomTypes.value = [] }
 }
 function onTypeChange() { form.factoryId = undefined; form.supplierId = undefined; form.fromWarehouseId = undefined; form.toWarehouseId = undefined; outsourceWarehouses.value = []; targetOutsourceWarehouses.value = [] }
 async function onFactoryChange(id: number) {
@@ -99,7 +107,7 @@ async function handleSubmit() {
   } finally { saving.value = false }
 }
 
-onMounted(() => { loadFactories(); optionsStore.ensureWarehouses(); optionsStore.ensureMaterials(); optionsStore.ensureBomTypes(); loadInventoryWarehouses() })
+onMounted(() => { loadInventoryWarehouses(); loadAllWarehouses(); loadMaterials(); loadBomTypes() })
 </script>
 
 <template>
@@ -109,8 +117,14 @@ onMounted(() => { loadFactories(); optionsStore.ensureWarehouses(); optionsStore
       <el-form :model="form" label-width="100px">
         <el-row :gutter="16">
           <el-col :span="6"><el-form-item label="类型"><el-select v-model="form.deliveryType" style="width:100%" @change="onTypeChange"><el-option :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :value="DeliveryType.DELIVERY"/><el-option :label="DeliveryTypeLabel[DeliveryType.RETURN]" :value="DeliveryType.RETURN"/><el-option :label="DeliveryTypeLabel[DeliveryType.TRANSFER]" :value="DeliveryType.TRANSFER"/></el-select></el-form-item></el-col>
-          <el-col :span="6"><el-form-item :label="form.deliveryType===DeliveryType.TRANSFER?'来源工厂':'收货工厂'"><el-select v-model="form.factoryId" filterable style="width:100%" @change="(v:any)=>{if(v===ADD_MARKER){form.factoryId=undefined;router.push('/supplier/manage');return};onFactoryChange(v)}"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id ?? ''" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item label="目标工厂"><el-select v-model="form.supplierId" filterable style="width:100%" @change="(v:any)=>{if(v===ADD_MARKER){form.supplierId=undefined;router.push('/supplier/manage');return};onTargetFactoryChange(v)}"><el-option v-for="f in factoryOptions" :key="f.id" :label="f.name" :value="f.id ?? ''" /></el-select></el-form-item></el-col>
+          <el-col :span="6"><el-form-item :label="form.deliveryType===DeliveryType.TRANSFER?'来源工厂':'收货工厂'">
+            <RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" style="width:100%" placeholder="选择工厂" @pick="()=>onFactoryChange(form.factoryId)">
+              <el-option label="+ 新增" :value="ADD_MARKER" @click="router.push('/supplier/manage')" />
+            </RemoteSelect>
+          </el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item label="目标工厂">
+            <RemoteSelect v-model="form.supplierId" :fetch="fetchFactories" style="width:100%" placeholder="选择目标工厂" @pick="()=>onTargetFactoryChange(form.supplierId)" />
+          </el-form-item></el-col>
           <el-col :span="6"><el-form-item label="日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
           <el-col :span="6" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item label="发出仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id"/></el-select></el-form-item></el-col>
           <el-col :span="6" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item label="目标委外仓库"><el-select v-model="form.toWarehouseId" style="width:100%" disabled><el-option v-for="w in outsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>

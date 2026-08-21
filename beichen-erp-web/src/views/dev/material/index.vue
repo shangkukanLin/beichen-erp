@@ -1,22 +1,22 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { DevMaterialTypeLabel } from '@/api/enums'
 import MaterialFormDialog from '@/components/dev/MaterialFormDialog.vue'
-import { useOptionsStore } from '@/stores/options'
 
 const loading = ref(false)
 const router = useRouter()
-const optionsStore = useOptionsStore()
 const list = ref<any[]>([])
 const total = ref(0)
 const pageNum = ref(1)
 const pageSize = ref(10)
 
 const materialTypeOptions = Object.values(DevMaterialTypeLabel)
-const projectOptions = computed(() => optionsStore.projects || [])
+const fetchProjects = (kw: string) => request.get('/dev/project/page', { params: { pageSize: 500, name: kw } })
+const projectOptions = ref<any[]>([])
+async function loadProjectOptions() { const r: any = await fetchProjects(''); projectOptions.value = (r?.records || []) as any[] }
 const materialDialog = ref<any>(null)
 
 const query = reactive<{ name: string; projectId: number | '' ; type: string }>({
@@ -53,7 +53,7 @@ async function handleDelete(row: any) {
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
-onMounted(() => { optionsStore.ensureProjects(); loadList() })
+onMounted(() => { loadProjectOptions(); loadList() })
 onActivated(() => { loadList() })
 </script>
 
@@ -63,10 +63,10 @@ onActivated(() => { loadList() })
       <el-form :inline="true" @submit.prevent>
         <el-form-item label="物料名称"><el-input v-model="query.name" placeholder="模糊搜索" clearable style="width:160px" @keyup.enter="handleSearch" /></el-form-item>
         <el-form-item label="关联项目">
-          <el-select v-model="query.projectId" placeholder="全部" clearable style="width:160px">
+          <RemoteSelect v-model="query.projectId" :fetch="fetchProjects" placeholder="全部" clearable style="width:160px">
             <el-option label="未关联项目" :value="''" />
             <el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" />
-          </el-select>
+          </RemoteSelect>
         </el-form-item>
         <el-form-item label="类型">
           <el-select v-model="query.type" placeholder="全部" clearable style="width:140px">
