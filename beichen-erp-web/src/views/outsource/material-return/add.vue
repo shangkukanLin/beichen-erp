@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
 const tabStore = useTabStore()

@@ -14,7 +14,7 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="退货仓库" prop="warehouseId">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" placeholder="请选择仓库" style="width: 100%" />
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择仓库" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -84,7 +84,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 import {
   getSaleReturn,
   getSaleReturnItems,

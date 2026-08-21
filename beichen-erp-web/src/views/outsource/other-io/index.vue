@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { IoType, IoTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
 const loading = ref(false)

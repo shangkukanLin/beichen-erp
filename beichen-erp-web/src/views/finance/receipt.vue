@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
 import { getReceiptPage, getReceiptItems, createReceipt, auditReceipt, cancelReceipt, getUnpaidReceivables, type FinanceReceipt, type FinanceReceiptItem, type FinanceReceivable } from '@/api/finance'

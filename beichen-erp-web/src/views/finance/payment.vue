@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { getPaymentPage, getPaymentItems, auditPayment, cancelPayment, type FinancePayment, type FinancePaymentItem } from '@/api/finance'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
 const activeTab = ref('supplier')

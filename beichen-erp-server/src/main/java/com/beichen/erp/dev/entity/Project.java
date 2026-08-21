@@ -1,6 +1,7 @@
 package com.beichen.erp.dev.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -30,6 +31,12 @@ public class Project {
     private Long projectLeaderId;
     private Long sampleFactoryId;
     private Long outsourceFactoryId;
+    /** 打样工厂名称（关联 supplier，不落库，随详情/列表一起返回） */
+    @TableField(exist = false)
+    private String sampleFactoryName;
+    /** 委外工厂名称（关联 supplier，不落库，随详情/列表一起返回） */
+    @TableField(exist = false)
+    private String outsourceFactoryName;
     private LocalDate startDate;
     private LocalDate expectedEndDate;
     private LocalDate actualEndDate;

@@ -56,6 +56,7 @@ async function loadProject() {
     displaySupplierName: p.displaySupplierName, touchSupplierName: p.touchSupplierName,
     adaptModel: p.adaptModel, originalSize: p.originalSize, originalResolution: p.originalResolution,
     sampleFactoryId: p.sampleFactoryId, outsourceFactoryId: p.outsourceFactoryId,
+    sampleFactoryName: p.sampleFactoryName, outsourceFactoryName: p.outsourceFactoryName,
     startDate: p.startDate, expectedEndDate: p.expectedEndDate,
     status: p.status, remark: p.remark
   })
@@ -192,6 +193,10 @@ const bomTypes = ref<any[]>([])
 const allMaterials = ref<any[]>([])
 const fetchBomTypes = (kw: string) => request.get('/dev/bom-type/enabled', { params: { kw } })
 const fetchMaterials = (kw: string) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw } })
+// 按 BOM 类型过滤物料（实时查库，供 BOM 物料名称下拉使用）
+function fetchMaterialsByType(kw: string, row: any) {
+  return request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw, bomTypeId: row.bomTypeId || undefined } })
+}
 async function loadBomTypes() {
   const bt: any = await fetchBomTypes(''); bomTypes.value = bt || []
   const m: any = await fetchMaterials(''); allMaterials.value = (m?.records || []) as any[]
@@ -434,13 +439,13 @@ function onNameBlur() {
               <el-col :span="8"><el-form-item label="原分辨率"><el-input v-model="form.originalResolution" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="打样工厂">
                 <div style="display:flex;gap:4px;align-items:center">
-                  <RemoteSelect v-model="form.sampleFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.sampleFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
+                  <RemoteSelect v-model="form.sampleFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" :preset="form.sampleFactoryId ? { id: form.sampleFactoryId, name: form.sampleFactoryName } : null" @change="(v: any) => { if (v === ADD_MARKER) { form.sampleFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
                   <el-button v-if="form.sampleFactoryId" type="success" @click="goCreateOrder('sample')">下单</el-button>
                 </div>
               </el-form-item></el-col>
               <el-col :span="8"><el-form-item label="委外工厂">
                 <div style="display:flex;gap:4px;align-items:center">
-                  <RemoteSelect v-model="form.outsourceFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.outsourceFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
+                  <RemoteSelect v-model="form.outsourceFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" :preset="form.outsourceFactoryId ? { id: form.outsourceFactoryId, name: form.outsourceFactoryName } : null" @change="(v: any) => { if (v === ADD_MARKER) { form.outsourceFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
                   <el-button v-if="form.outsourceFactoryId" type="success" @click="goCreateOrder('outsource')">下单</el-button>
                 </div>
               </el-form-item></el-col>
@@ -542,8 +547,7 @@ function onNameBlur() {
             <el-table-column label="类型" width="100">
               <template #default="{row}">
                 <span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ row.bomTypeName }}</span>
-                <RemoteSelect v-else v-model="row.bomTypeId" :fetch="fetchBomTypes" size="small" clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.bomTypeId = ''; router.push('/dev/bom-type'); return } row.materialName = '' }">
-                  <el-option v-for="t in bomTypes" :key="t.id" :label="t.typeName" :value="t.id" />
+                <RemoteSelect v-else v-model="row.bomTypeId" :fetch="fetchBomTypes" label-key="typeName" size="small" clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.bomTypeId = ''; router.push('/dev/bom-type'); return } row.outsourceMaterialId = undefined; row.materialName = '' }">
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </template>
@@ -551,8 +555,7 @@ function onNameBlur() {
             <el-table-column label="物料名称" min-width="130">
               <template #default="{row}">
                 <span v-if="row._isChild" style="color:var(--app-color-primary);font-size:var(--app-font-xs)">└ {{ row.materialName }}</span>
-                <RemoteSelect v-else v-model="row.outsourceMaterialId" :fetch="fetchMaterials" size="small" filterable clearable style="width:100%" placeholder="选择" @change="(v: any) => { if (v === ADD_MARKER) { row.outsourceMaterialId = undefined; router.push('/outsource/material-info'); return } onBomMaterialChange(v, row) }">
-                  <el-option v-for="m in allMaterials" :key="m.id" :label="m.materialName" :value="m.id" />
+                <RemoteSelect v-else v-model="row.outsourceMaterialId" :fetch="(kw: string) => fetchMaterialsByType(kw, row)" label-key="materialName" size="small" filterable clearable style="width:100%" placeholder="选择" :preset="row.outsourceMaterialId ? { id: row.outsourceMaterialId, name: row.materialName } : null" @change="(v: any) => { if (v === ADD_MARKER) { row.outsourceMaterialId = undefined; router.push('/outsource/material-info'); return } onBomMaterialChange(v, row) }">
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </template>
@@ -561,7 +564,6 @@ function onNameBlur() {
               <template #default="{row}">
                 <span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">-</span>
                 <RemoteSelect v-else v-model="row.supplierId" :fetch="fetchAllSuppliers" size="small" clearable filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.supplierId = undefined; router.push('/supplier/manage'); return } }">
-                  <el-option v-for="s in allSuppliers" :key="s.id" :label="s.name" :value="s.id" />
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </template>

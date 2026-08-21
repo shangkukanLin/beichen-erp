@@ -7,7 +7,7 @@ import type { OutsourceMaterialOption } from '@/api/purchase'
 import { getQualityTypes, type QualityOption } from '@/api/product'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 import {
   getSaleOrderPage, getSaleOrderItems, createSaleOrder, updateSaleOrder, auditSaleOrder, cancelSaleOrder, checkSaleOrderStock,
   type SaleOrder, type SaleOrderItem
@@ -234,7 +234,7 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQual
           </el-col>
           <el-col :span="12">
             <el-form-item label="出库仓库" prop="warehouseId">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </el-form-item>
@@ -262,7 +262,7 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQual
           <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="物料" min-width="180">
             <template #default="{ row }">
-              <RemoteSelect v-model="row.materialId" :fetch="fetchMaterials" placeholder="选择物料"
+              <RemoteSelect v-model="row.materialId" :fetch="fetchMaterials" label-key="materialName" placeholder="选择物料"
                 style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>

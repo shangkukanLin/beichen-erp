@@ -10,7 +10,7 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="退货仓库" prop="warehouseId">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" placeholder="请选择" style="width:100%" />
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">

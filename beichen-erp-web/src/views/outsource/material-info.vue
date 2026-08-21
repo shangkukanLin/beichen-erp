@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const query = reactive({ materialName: '', projectId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })

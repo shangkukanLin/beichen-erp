@@ -116,6 +116,13 @@ public class ProjectProductSyncServiceImpl implements ProjectProductSyncService 
         Product product = productMapper.selectOne(
                 new LambdaQueryWrapper<Product>()
                         .eq(Product::getProjectId, projectId));
+        // 兜底：若产品.projectId 未回写，则按项目.productId 反查关联产品
+        if (product == null) {
+            Project project = projectMapper.selectById(projectId);
+            if (project != null && project.getProductId() != null) {
+                product = productMapper.selectById(project.getProductId());
+            }
+        }
         if (product == null) {
             log.info("未找到项目关联的产品: projectId={}", projectId);
             return;

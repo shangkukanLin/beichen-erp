@@ -13,7 +13,7 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="入库仓库" prop="warehouseId">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :initial-options="warehouses" placeholder="请选择" style="width:100%"
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%"
                 @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
@@ -134,7 +134,6 @@ const router = useRouter()
 const formRef = ref<FormInstance>()
 const submitLoading = ref(false)
 const suppliers = ref<any[]>([])
-const warehouses = ref<any[]>([])
 const materialOptions = ref<any[]>([])
 const items = ref<ItemRow[]>([])
 

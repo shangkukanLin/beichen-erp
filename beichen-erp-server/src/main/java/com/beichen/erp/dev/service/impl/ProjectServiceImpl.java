@@ -18,11 +18,14 @@ import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
 import com.beichen.erp.outsource.mapper.OutsourceOrderMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
+import com.beichen.erp.supplier.entity.Supplier;
+import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -40,6 +43,15 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     private final DevPurchaseItemMapper devPurchaseItemMapper;
     private final OutsourceOrderProductMapper outsourceOrderProductMapper;
     private final OutsourceOrderMapper outsourceOrderMapper;
+    private final SupplierMapper supplierMapper;
+
+    @Override
+    public Project getById(Serializable id) {
+        Project p = projectMapper.selectById(id);
+        if (p != null) fillFactoryNames(List.of(p));
+        return p;
+    }
+
     public Page<Project> page(PageParam param, String keyword, String status) {
         LambdaQueryWrapper<Project> w = new LambdaQueryWrapper<>();
         if (keyword != null && !keyword.isBlank()) {
@@ -51,7 +63,30 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
             w.eq(Project::getStatus, status);
         }
         w.orderByDesc(Project::getId);
-        return projectMapper.selectPage(new Page<>(param.getPageNum(), param.getPageSize()), w);
+        Page<Project> page = projectMapper.selectPage(new Page<>(param.getPageNum(), param.getPageSize()), w);
+        fillFactoryNames(page.getRecords());
+        return page;
+    }
+
+    /**
+     * 批量回填打样工厂/委外工厂名称：一次性 IN 查询 supplier，避免 N+1。
+     * 名称随详情/列表接口一起返回，前端无需再发请求解析。
+     */
+    private void fillFactoryNames(List<Project> list) {
+        if (list == null || list.isEmpty()) return;
+        java.util.Set<Long> ids = new java.util.LinkedHashSet<>();
+        for (Project p : list) {
+            if (p.getSampleFactoryId() != null) ids.add(p.getSampleFactoryId());
+            if (p.getOutsourceFactoryId() != null) ids.add(p.getOutsourceFactoryId());
+        }
+        if (ids.isEmpty()) return;
+        List<Supplier> suppliers = supplierMapper.selectBatchIds(ids);
+        Map<Long, String> nameMap = suppliers.stream()
+                .collect(java.util.stream.Collectors.toMap(Supplier::getId, Supplier::getName, (a, b) -> a));
+        for (Project p : list) {
+            if (p.getSampleFactoryId() != null) p.setSampleFactoryName(nameMap.get(p.getSampleFactoryId()));
+            if (p.getOutsourceFactoryId() != null) p.setOutsourceFactoryName(nameMap.get(p.getOutsourceFactoryId()));
+        }
     }
 
     @Override

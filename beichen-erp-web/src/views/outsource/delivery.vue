@@ -4,7 +4,7 @@ defineOptions({ name: 'OutsourceDelivery' })
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const query = reactive({ code: '', factoryId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })

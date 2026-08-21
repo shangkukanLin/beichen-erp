@@ -6,7 +6,7 @@ import request from '@/utils/request'
 import { exportMaterialOrderPdf } from '@/api/contract-template'
 import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)

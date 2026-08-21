@@ -5,7 +5,7 @@ import { getBillPage, getBillItems, generateBill, auditBill, unAuditBill, cancel
 import { BillType, BillTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import request from '@/utils/request'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 // 账单状态 code → 中文 label（后端存 DocStatus code，前端展示中文）
 const StatusLabel: Record<string, string> = DocStatusLabel

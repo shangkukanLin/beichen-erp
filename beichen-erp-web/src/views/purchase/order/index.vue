@@ -293,7 +293,7 @@ onActivated(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials
           </el-col>
           <el-col :span="12">
             <el-form-item label="入库仓库" prop="warehouseId">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </el-form-item>
@@ -323,7 +323,7 @@ onActivated(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials
           <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="产品" min-width="180">
             <template #default="{ row, $index }">
-              <RemoteSelect v-model="row.productId" :fetch="fetchMaterials" :label-key="(row:any)=>row.materialName" placeholder="选择物料" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
+              <RemoteSelect v-model="row.productId" :fetch="fetchMaterials" label-key="name" placeholder="选择物料" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </template>

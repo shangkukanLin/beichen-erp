@@ -100,7 +100,7 @@ async function loadOptions() {
   factoryOptions.value = f?.records || []
   projectOptions.value = p?.records || []
   materialOptions.value = m?.records || []
-  bomTypes.value = b?.records || []
+  bomTypes.value = Array.isArray(b) ? b : (b?.records || [])
 }
 
 async function loadData() {

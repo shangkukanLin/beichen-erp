@@ -65,7 +65,6 @@ onActivated(() => { loadList() })
         <el-form-item label="关联项目">
           <RemoteSelect v-model="query.projectId" :fetch="fetchProjects" placeholder="全部" clearable style="width:160px">
             <el-option label="未关联项目" :value="''" />
-            <el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" />
           </RemoteSelect>
         </el-form-item>
         <el-form-item label="类型">

@@ -316,6 +316,8 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
             project.setStatus(ProjectStatus.CLOSED.getCode());
             projectMapper.updateById(project);
             log.info("项目自动结项: projectId={}", projectId);
+            // 结项时同步关联产品状态（研发中→正常），避免产品停留在研发中
+            projectProductSyncService.syncProductStatus(projectId);
         }
     }
 
@@ -323,8 +325,13 @@ public class ProjectTimelineServiceImpl extends ServiceImpl<ProjectTimelineMappe
         PhaseTemplate tpl = phaseTemplateMapper.selectOne(
                 new LambdaQueryWrapper<PhaseTemplate>()
                         .eq(PhaseTemplate::getName, statusName));
-        if (tpl != null && tpl.getProductStatusSync() != null && tpl.getProductStatusSync() == 1) {
+        if (tpl != null && PhaseTemplate.SYNC_PRODUCT_STATUS == valueOf(tpl.getProductStatusSync())) {
             projectProductSyncService.syncProductStatus(projectId);
         }
+    }
+
+    /** 将可能为 null 的 Integer 规整为语义值，避免 null 拆箱与魔法值比较 */
+    private static int valueOf(Integer v) {
+        return v == null ? 0 : v;
     }
 }

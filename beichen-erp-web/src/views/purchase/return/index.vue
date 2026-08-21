@@ -78,7 +78,7 @@
         <el-descriptions-item label="备注" :span="2">{{ detailData.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
       <el-table :data="detailItems" border style="margin-top:16px">
-        <el-table-column prop="productId" label="产品ID" width="80" />
+        <el-table-column prop="productName" label="产品" min-width="140" />
         <el-table-column prop="quantity" label="数量" width="100" />
         <el-table-column prop="unitPrice" label="单价" width="100" />
         <el-table-column label="金额" width="120">

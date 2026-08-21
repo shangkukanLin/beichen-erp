@@ -17,6 +17,10 @@ public class PurchaseReturnItem {
 
     private Long productId;
 
+    /** 产品名称（关联 product，不落库，随明细接口一起返回） */
+    @TableField(exist = false)
+    private String productName;
+
     /** 品质等级: A/B/C/DEFECT */
     private String qualityType;
 

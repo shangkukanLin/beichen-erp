@@ -147,8 +147,20 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
 
     @Override
     public List<PurchaseReturnItem> getItems(Long returnId) {
-        return itemMapper.selectList(
+        List<PurchaseReturnItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<PurchaseReturnItem>().eq(PurchaseReturnItem::getReturnId, returnId));
+        // 批量回填产品名称，随明细一起返回，前端免查库
+        Set<Long> pids = items.stream().map(PurchaseReturnItem::getProductId).filter(Objects::nonNull).collect(Collectors.toSet());
+        if (!pids.isEmpty()) {
+            Map<Long, Product> pm = productMapper.selectBatchIds(pids).stream()
+                    .collect(Collectors.toMap(Product::getId, p -> p, (a, b) -> a));
+            for (PurchaseReturnItem it : items) {
+                if (it.getProductId() != null && pm.containsKey(it.getProductId())) {
+                    it.setProductName(pm.get(it.getProductId()).getName());
+                }
+            }
+        }
+        return items;
     }
 
     @Override

@@ -6,7 +6,7 @@ import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel, WarehouseCategory } from '@/api/enums'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
 const route = useRoute()

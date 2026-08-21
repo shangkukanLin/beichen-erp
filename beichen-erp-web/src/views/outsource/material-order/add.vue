@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter(); const route = useRoute()
 const tabStore = useTabStore()
@@ -199,10 +199,10 @@ onMounted(async () => {
             </el-select>
           </template>
         </el-table-column>
-        <el-table-column label="物料" min-width="180">
+        <el-table-column label="物料名称" min-width="180">
           <template #default="{row,$index}">
             <el-select v-model="row.materialId" filterable size="small" style="width:100%" :disabled="!row.bomTypeId" @change="(v: any) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMatChange($index, v) }">
-              <el-option v-for="m in filteredMaterials(row.bomTypeId)" :key="m.id" :label="`${m.materialName} (${m.unit||''})`" :value="m.id" />
+              <el-option v-for="m in filteredMaterials(row.bomTypeId)" :key="m.id" :label="m.materialName" :value="m.id" />
               <el-option label="+ 新增" :value="ADD_MARKER" />
             </el-select>
           </template>

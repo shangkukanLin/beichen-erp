@@ -5,11 +5,8 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { TimelineStatus, ProjectStatus, ProjectStatusLabel, ProjectStatusTag } from '@/api/enums'
 import {
   getProjectPage, addProject, updateProject,
-  getProjectBom, saveProjectBom,
-  getProjectBugs, addProjectBug, updateProjectBug, deleteProjectBug,
-  getProjectDrawings, addProjectDrawing, deleteProjectDrawing,
   getSupplierPage,
-  type ProjectVO, type ProjectDTO, type BomDTO, type BugDTO, type DrawingVO
+  type ProjectVO, type ProjectDTO
 } from '@/api/system'
 import request from '@/utils/request'
 
@@ -147,48 +144,8 @@ async function handleReactivate(row: any) {
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
-// ===================== 详情(BOM/BUG/图纸) =====================
-const detailVisible = ref(false)
-const detailProject = ref<ProjectVO | null>(null)
-const detailTab = ref('bom')
-const bomList = ref<any[]>([])
-const bomTypes = ref<any[]>([])
-const allMaterials = ref<any[]>([])
-async function loadBomTypes() {
-  try { const res = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = (res || []).map((t:any) => ({ id: t.id, typeName: t.typeName })) } catch (e: any) { console.warn('加载BOM类型失败', e?.message || e) }
-  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = (r?.records || []) } catch (e: any) { console.warn('加载物料失败', e?.message || e) }
-}
-function getMaterialsByType(type: any) { return allMaterials.value.filter((m:any) => m.bomTypeId != null && m.bomTypeId === type) }
-/** 选中物料后回填显示字段 */
-function onDetailMaterialChange(materialId: number, row: any) {
-  if (!materialId) { row.materialName = ''; return }
-  const m = allMaterials.value.find((mat: any) => mat.id === materialId)
-  if (m) { row.materialName = m.materialName; if (m.spec) row.spec = m.spec; if (m.unit) row.unit = m.unit }
-}
-async function loadBom() { if (detailProject.value) { const res: any = await getProjectBom(detailProject.value.id!); const list = res?.records || res || []; bomList.value = list.map((b: any) => ({ outsourceMaterialId: b.outsourceMaterialId, materialName: b.materialName, spec: b.spec || b.specification, unit: b.unit, quantityPerSet: b.quantityPerSet || b.quantity, lossRate: b.lossRate, bomTypeId: b.bomTypeId, remark: b.remark })) } }
-function addBomRow() { bomList.value.push({ outsourceMaterialId: undefined, materialName: '', spec: '', unit: '', quantityPerSet: 1, lossRate: 2, bomTypeId: '', remark: '' }) }
-function removeBomRow(i: number) { bomList.value.splice(i, 1) }
-async function saveBom() { if (detailProject.value) { const emptyType = bomList.value.find((b: any) => !b.bomTypeId); if (emptyType) { ElMessage.warning('物料类型不能为空'); return }; const emptyId = bomList.value.find((b: any) => !b.outsourceMaterialId); if (emptyId) { ElMessage.warning('物料名称不能为空'); return }; const zeroQty = bomList.value.find((b: any) => !b.quantityPerSet || Number(b.quantityPerSet) <= 0); if (zeroQty) { ElMessage.warning('物料用量必须大于0'); return }; const bomData = bomList.value.map((b: any) => ({ outsourceMaterialId: b.outsourceMaterialId, quantity: b.quantityPerSet, lossRate: b.lossRate, specification: b.spec, unit: b.unit })); await saveProjectBom(detailProject.value.id!, bomData); ElMessage.success('BOM已保存'); loadBom() } }
-
-const bugList = ref<BugDTO[]>([]); const bugDialogVisible = ref(false)
-const bugForm = reactive<BugDTO>({ title: '', severity: '一般', status: '待处理', description: '', assignedTo: undefined }); const isBugEdit = ref(false)
-async function loadBugs() { if (detailProject.value) { const res: any = await getProjectBugs(detailProject.value.id!); bugList.value = res?.records || res || [] } }
-function handleAddBug() { Object.assign(bugForm, { id: undefined, title: '', severity: '一般', status: '待处理', description: '', assignedTo: undefined }); isBugEdit.value = false; bugDialogVisible.value = true }
-function handleEditBug(row: BugDTO) { Object.assign(bugForm, row); isBugEdit.value = true; bugDialogVisible.value = true }
-async function handleBugSubmit() { if (!detailProject.value) return; if (isBugEdit.value && bugForm.id) { await updateProjectBug(detailProject.value.id!, bugForm); ElMessage.success('已更新') } else { await addProjectBug(detailProject.value.id!, bugForm); ElMessage.success('已添加') }; bugDialogVisible.value = false; loadBugs() }
-async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectBug(detailProject.value!.id!, row.id!); ElMessage.success('已删除'); loadBugs() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
-
-const drawingList = ref<DrawingVO[]>([])
-async function loadDrawings() { if (detailProject.value) { const res: any = await getProjectDrawings(detailProject.value.id!); drawingList.value = res?.records || res || [] } }
-const drawingForm = reactive({ docName: '', docType: '图纸', version: '', fileUrl: '' }); const drawingVisible = ref(false)
-function handleAddDrawing() { Object.assign(drawingForm, { id: undefined, docName: '', docType: '图纸', version: '', fileUrl: '' }); drawingVisible.value = true }
-async function handleDrawingSubmit() { if (detailProject.value) { await addProjectDrawing(detailProject.value.id!, drawingForm as any); ElMessage.success('已添加'); drawingVisible.value = false; loadDrawings() } }
-async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(detailProject.value!.id!, row.id!); ElMessage.success('已删除'); loadDrawings() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
-
-async function openDetail(row: ProjectVO) { detailProject.value = row; detailTab.value = 'bom'; detailVisible.value = true; loadBom(); loadBugs(); loadDrawings() }
-
-onMounted(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBomTypes() })
-onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBomTypes() })
+onMounted(() => { loadData(); loadSolutionSuppliers(); loadFactories() })
+onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories() })
 </script>
 
 <template>
@@ -246,9 +203,8 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
         <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
         <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
         <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'success'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="140" align="center" fixed="right">
+        <el-table-column label="操作" width="100" align="center" fixed="right">
           <template #default="{row}">
-            <el-button type="primary" link size="small" @click="openDetail(row as ProjectVO)">详情</el-button>
             <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">详细</el-button>
           </template>
         </el-table-column>
@@ -263,9 +219,8 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
         <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
         <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
         <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'danger'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="180" align="center" fixed="right">
+        <el-table-column label="操作" width="160" align="center" fixed="right">
           <template #default="{row}">
-            <el-button type="primary" link size="small" @click="openDetail(row as ProjectVO)">详情</el-button>
             <el-button type="success" link size="small" @click="handleEdit(row as ProjectVO)">详细</el-button>
             <el-button type="warning" link size="small" @click="handleReactivate(row as ProjectVO)">重新激活</el-button>
           </template>
@@ -300,69 +255,6 @@ onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBo
       <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="detailVisible" :title="'项目详情: '+(detailProject?.name||'')" width="900px" :close-on-click-modal="false">
-      <el-tabs v-model="detailTab">
-        <el-tab-pane label="BOM物料清单" name="bom">
-          <el-button type="primary" size="small" @click="addBomRow" style="margin-bottom:8px">+ 添加物料</el-button>
-          <el-button type="success" size="small" @click="saveBom" style="margin-left:8px">保存</el-button>
-          <el-table :data="bomList" border size="small">
-            <el-table-column label="类型" width="100">
-              <template #default="{row}">
-                <el-select v-model="row.bomTypeId" size="small" style="width:100%" @change="row.materialName = ''">
-                  <el-option v-for="t in bomTypes" :key="t.id" :label="t.typeName" :value="t.id ?? ''" />
-                </el-select>
-              </template>
-            </el-table-column>
-            <el-table-column label="物料名称" min-width="130"><template #default="{row}"><el-select v-model="row.outsourceMaterialId" size="small" filterable clearable style="width:100%" placeholder="选择" @change="(v: number) => onDetailMaterialChange(v, row)"><el-option v-for="m in getMaterialsByType(row.bomTypeId || '')" :key="m.id" :label="m.materialName" :value="m.id" /></el-select></template></el-table-column>
-            <el-table-column label="规格" width="100"><template #default="{row}"><el-input v-model="row.spec" size="small" /></template></el-table-column>
-            <el-table-column label="单位" width="70"><template #default="{row}"><el-input v-model="row.unit" size="small" /></template></el-table-column>
-            <el-table-column label="用量" width="80"><template #default="{row}"><el-input v-model="row.quantityPerSet" size="small" /></template></el-table-column>
-            <el-table-column label="损耗率%" width="85"><template #default="{row}"><el-input v-model="row.lossRate" size="small" /></template></el-table-column>
-            <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeBomRow($index)">删除</el-button></template></el-table-column>
-          </el-table>
-        </el-tab-pane>
-        <el-tab-pane label="BUG 列表" name="bug">
-          <el-button type="primary" size="small" @click="handleAddBug" style="margin-bottom:8px">+ 新增BUG</el-button>
-          <el-table :data="bugList" border size="small">
-            <el-table-column prop="code" label="编号" width="140" />
-            <el-table-column prop="title" label="标题" min-width="150" />
-            <el-table-column prop="severity" label="严重程度" width="90" />
-            <el-table-column label="状态" width="90"><template #default="{row}"><el-tag size="small">{{row.status}}</el-tag></template></el-table-column>
-            <el-table-column label="操作" width="120" align="center"><template #default="{row}"><el-button type="primary" link @click="handleEditBug(row as BugDTO)">编辑</el-button><el-button type="danger" link @click="handleDeleteBug(row as BugDTO)">删除</el-button></template></el-table-column>
-          </el-table>
-        </el-tab-pane>
-        <el-tab-pane label="图纸文档" name="drawing">
-          <el-button type="primary" size="small" @click="handleAddDrawing" style="margin-bottom:8px">+ 添加图纸</el-button>
-          <el-table :data="drawingList" border size="small">
-            <el-table-column prop="docName" label="名称" min-width="150" />
-            <el-table-column prop="docType" label="类型" width="90" />
-            <el-table-column prop="version" label="版本" width="80" />
-            <el-table-column label="上传时间" width="160"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
-            <el-table-column label="操作" width="80" align="center"><template #default="{row}"><el-button type="danger" link @click="handleDeleteDrawing(row as DrawingVO)">删除</el-button></template></el-table-column>
-          </el-table>
-        </el-tab-pane>
-      </el-tabs>
-    </el-dialog>
-
-    <el-dialog v-model="bugDialogVisible" :title="isBugEdit?'编辑BUG':'新增BUG'" width="500px">
-      <el-form :model="bugForm" label-width="80px">
-        <el-form-item label="标题"><el-input v-model="bugForm.title" /></el-form-item>
-        <el-form-item label="严重程度"><el-select v-model="bugForm.severity" style="width:100%"><el-option label="致命" value="致命"/><el-option label="严重" value="严重"/><el-option label="一般" value="一般"/><el-option label="轻微" value="轻微"/></el-select></el-form-item>
-        <el-form-item label="状态"><el-select v-model="bugForm.status" style="width:100%"><el-option label="待处理" value="待处理"/><el-option label="处理中" value="处理中"/><el-option label="已修复" value="已修复"/><el-option label="已验证" value="已验证"/><el-option label="已关闭" value="已关闭"/></el-select></el-form-item>
-        <el-form-item label="描述"><el-input v-model="bugForm.description" type="textarea" :rows="3" /></el-form-item>
-      </el-form>
-      <template #footer><el-button @click="bugDialogVisible=false">取消</el-button><el-button type="primary" @click="handleBugSubmit">确定</el-button></template>
-    </el-dialog>
-
-    <el-dialog v-model="drawingVisible" title="添加图纸" width="450px">
-      <el-form :model="drawingForm" label-width="80px">
-        <el-form-item label="名称"><el-input v-model="drawingForm.docName" /></el-form-item>
-        <el-form-item label="类型"><el-select v-model="drawingForm.docType" style="width:100%"><el-option label="排线图" value="排线图"/><el-option label="结构图" value="结构图"/><el-option label="规格书" value="规格书"/><el-option label="测试报告" value="测试报告"/><el-option label="其他" value="其他"/></el-select></el-form-item>
-        <el-form-item label="版本"><el-input v-model="drawingForm.version" /></el-form-item>
-        <el-form-item label="文件URL"><el-input v-model="drawingForm.fileUrl" /></el-form-item>
-      </el-form>
-      <template #footer><el-button @click="drawingVisible=false">取消</el-button><el-button type="primary" @click="handleDrawingSubmit">确定</el-button></template>
-    </el-dialog>
   </div>
 </template>
 

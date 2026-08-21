@@ -10,11 +10,10 @@ const loading = ref(false)
 const detail = ref<Partial<PurchaseReturn>>({})
 const items = ref<PurchaseReturnItem[]>([])
 const warehouseOptions = ref<any[]>([])
-const products = ref<Record<number, string>>({})
 
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function warehouseName(wid?: number) { const w = warehouseOptions.value.find(x => x.id === wid); return w ? (w.warehouseName || w.name || '') : '' }
-function productName(pid?: number) { return pid ? (products.value[pid] || `#${pid}`) : '' }
+function productName(it?: PurchaseReturnItem) { return it?.productName || (it?.productId != null ? `#${it.productId}` : '') }
 function statusLabel(s?: number) { return s != null ? (ReturnStatusLabel[s] || '') : '' }
 function statusType(s?: any): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
   if (s === ReturnStatus.DRAFT) return 'info'
@@ -30,13 +29,8 @@ async function loadData() {
   try {
     const d = await getPurchaseReturn(id)
     detail.value = d || {}
+    // 后端随明细返回 productName，前端不再逐条查库
     items.value = await getPurchaseReturnItems(id) || []
-    // 回填产品名称
-    const pidSet = new Set<number>()
-    items.value.forEach(it => { if (it.productId != null) pidSet.add(it.productId) })
-    for (const pid of pidSet) {
-      try { const p = await request.get(`/product/${pid}`); if (p) products.value[pid] = p.productName || p.name } catch { /* */ }
-    }
   } finally { loading.value = false }
 }
 

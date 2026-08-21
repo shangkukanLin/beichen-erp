@@ -33,6 +33,7 @@ const props = withDefaults(defineProps<{
   pageSize?: number
   lazy?: boolean                              // true: 展开才查（Odoo 默认）；false: 挂载即查
   optionDisabled?: (row: any) => boolean      // 自定义禁用（如子物料下拉排除自身）
+  preset?: any                                // 编辑回显预置当前项 {valueKey, labelKey}，后端已随详情返回名称，免查库
 }>(), {
   valueKey: 'id',
   labelKey: 'name',
@@ -49,7 +50,38 @@ const emit = defineEmits<{
 }>()
 
 const model = ref<any>(props.modelValue)
-watch(() => props.modelValue, v => { model.value = v })
+/** 当前 options 是否已包含所选值（用于编辑回显判断） */
+function isResolved(v: any): boolean {
+  if (v == null || v === '') return true
+  if (Array.isArray(v)) {
+    if (v.length === 0) return true
+    return v.every((x: any) => options.value.some(o => getVal(o) === x))
+  }
+  return options.value.some(o => getVal(o) === v)
+}
+/** 用后端随详情返回的预置项直接回填，避免额外查库；命中返回 true */
+function seedPreset(v: any): boolean {
+  if (props.preset == null || v == null || v === '') return false
+  const pv = getVal(props.preset)
+  const targets = Array.isArray(v) ? v : [v]
+  if (!targets.includes(pv)) return false
+  if (targets.every(t => options.value.some(o => getVal(o) === t))) return true
+  if (Array.isArray(v)) {
+    if (!options.value.some(o => getVal(o) === pv)) options.value = [...options.value, props.preset]
+  } else {
+    options.value = [...options.value, props.preset]
+  }
+  return true
+}
+watch(() => props.modelValue, v => {
+  model.value = v
+  // 编辑回显：后端已随详情返回名称时，优先用 preset 免查库；否则懒查一次解析 label
+  if (!isResolved(v) && !seedPreset(v) && props.lazy) load('')
+})
+// 父组件带着正确名称重渲染后，立即把 preset 注入选项，避免依赖下拉的类型过滤
+watch(() => props.preset, () => {
+  if (!isResolved(props.modelValue)) seedPreset(props.modelValue)
+})
 
 const options = ref<any[]>([])
 const loading = ref(false)
@@ -84,10 +116,12 @@ function onUpdate(val: any) {
   emit('pick', picked)
 }
 
-// 编辑时已有值：挂载即查一次，确保已选项显示 label（仅显示用途）
+// 编辑时已有值：后端已返回名称则直接预置免查库；否则挂载即查一次以确保显示 label
 onMounted(() => {
   if (!props.lazy) { load(''); return }
   const mv = props.modelValue
-  if (mv != null && mv !== '' && !(Array.isArray(mv) && mv.length === 0)) load('')
+  if (mv != null && mv !== '' && !(Array.isArray(mv) && mv.length === 0)) {
+    if (!seedPreset(mv)) load('')
+  }
 })
 </script>

@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { getReceivablePage, type FinanceReceivable, type PageResult } from '@/api/finance'
 import { SettlementStatus, SettlementStatusLabel } from '@/api/enums'
 import request from '@/utils/request'
-import RemoteSelect from '@/components/RemoteSelect'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const query = reactive({ customerId: '' as string|number, status: '', billNo: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
