@@ -1,5 +1,5 @@
-﻿<script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+<script setup lang="ts">
+import { reactive, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { TimelineStatus, ProjectStatus, ProjectStatusLabel, ProjectStatusTag } from '@/api/enums'
@@ -145,7 +145,7 @@ async function handleReactivate(row: any) {
 }
 
 onMounted(() => { loadData(); loadSolutionSuppliers(); loadFactories() })
-onActivated(() => { loadData(); loadSolutionSuppliers(); loadFactories() })
+
 </script>
 
 <template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onActivated } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -63,7 +63,7 @@ function refreshChecks() {
 }
 
 onMounted(async () => { await loadAll(); refreshChecks() })
-onActivated(async () => { await loadAll(); refreshChecks() })
+
 </script>
 
 <template>

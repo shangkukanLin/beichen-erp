@@ -495,7 +495,7 @@ onMounted(() => { loadOptions(); loadData() })
         <el-table :data="deliveries" border stripe size="small" :row-class-name="deliveryRowClass">
           <el-table-column label="交货日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
           <el-table-column label="产品名称" min-width="120"><template #default="{row}">{{ delProducts.find((p:any)=>p.id===row.productId)?.productName || '-' }}</template></el-table-column>
-          <el-table-column label="类型" width="80" align="center"><template #default="{row}"><el-tag v-if="row.deliveryType===DeliveryType.DEFECT_RETURN" type="warning" size="small">{{ DeliveryTypeLabel[DeliveryType.DEFECT_RETURN] }}</el-tag><span v-else style="color:var(--app-text-secondary)">—</span></template></el-table-column>
+          <el-table-column label="类型" width="80" align="center"><template #default="{row}"><el-tag v-if="row.deliveryType" :type="row.deliveryType===DeliveryType.DEFECT_RETURN?'warning':'info'" size="small">{{ row.deliveryType===DeliveryType.DELIVERY ? '交货' : (DeliveryTypeLabel[row.deliveryType] || row.deliveryType) }}</el-tag><span v-else style="color:var(--app-text-secondary)">—</span></template></el-table-column>
           <el-table-column label="收货仓库" width="120">
             <template #default="{row}"><span v-if="row.warehouseId">{{ delWarehouseOptions.find((w:any)=>w.id===row.warehouseId)?.warehouseName || row.warehouseId }}</span><span v-else style="color:var(--app-text-placeholder)">—</span></template>
           </el-table-column>

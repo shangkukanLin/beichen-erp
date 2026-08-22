@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
@@ -9,7 +9,7 @@ import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import {
-  getSaleOrderPage, getSaleOrderItems, createSaleOrder, updateSaleOrder, auditSaleOrder, cancelSaleOrder, checkSaleOrderStock,
+  getSaleOrderPage, getSaleOrderItems, createSaleOrder, updateSaleOrder, auditSaleOrder, cancelSaleOrder, unAuditSaleOrder, checkSaleOrderStock,
   type SaleOrder, type SaleOrderItem
 } from '@/api/sale'
 
@@ -147,6 +147,12 @@ async function handleCancel(row: SaleOrder) {
     await cancelSaleOrder(row.id as number); ElMessage.success('已作废'); loadData()
   } catch { }
 }
+async function handleUnAudit(row: SaleOrder) {
+  try {
+    await ElMessageBox.confirm(`确认反审核销售单「${row.code}」？将冲回出库与应收。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    await unAuditSaleOrder(row.id as number); ElMessage.success('已反审核'); loadData()
+  } catch { }
+}
 async function handleDetail(row: SaleOrder) {
   detailData.value = { ...row }
   try { const res = await getSaleOrderItems(row.id as number); detailItems.value = res || [] } catch { detailItems.value = [] }
@@ -162,7 +168,7 @@ function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Numbe
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
 onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualityTypes(); loadData() })
-onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualityTypes(); loadData() })
+
 </script>
 
 <template>
@@ -205,10 +211,11 @@ onActivated(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQual
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="220" align="center" fixed="right">
+        <el-table-column label="操作" width="280" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
           </template>

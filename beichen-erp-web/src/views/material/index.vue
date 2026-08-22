@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
@@ -213,7 +213,7 @@ onMounted(() => {
   loadBrands()
   loadData()
 })
-onActivated(() => { loadBrands(); loadData() })
+
 </script>
 
 <template>

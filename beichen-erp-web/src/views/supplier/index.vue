@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated, computed, watch } from 'vue'
+import { reactive, ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
@@ -157,7 +157,7 @@ async function saveProducts() {
 }
 
 onMounted(() => { loadData() })
-onActivated(() => { loadData() })
+
 </script>
 
 <template>

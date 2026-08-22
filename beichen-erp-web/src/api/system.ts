@@ -284,6 +284,7 @@ export interface ProjectVO {
   adaptModel?: string
   originalSize?: string; originalResolution?: string; projectLeaderId?: number
   sampleFactoryId?: number; outsourceFactoryId?: number
+  sampleFactoryName?: string; outsourceFactoryName?: string
   startDate?: string; expectedEndDate?: string; actualEndDate?: string
   status?: string; remark?: string; createTime?: string; updateTime?: string
 }
@@ -295,6 +296,7 @@ export interface ProjectDTO {
   adaptModel?: string
   originalSize?: string; originalResolution?: string; projectLeaderId?: number
   sampleFactoryId?: number; outsourceFactoryId?: number
+  sampleFactoryName?: string; outsourceFactoryName?: string
   startDate?: string; expectedEndDate?: string; actualEndDate?: string
   status?: string; remark?: string
 }

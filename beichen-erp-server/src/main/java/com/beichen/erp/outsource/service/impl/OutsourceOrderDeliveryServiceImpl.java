@@ -176,6 +176,7 @@ public class OutsourceOrderDeliveryServiceImpl
 
         // 草稿态存盘，不扣物料/不入库存/不生成应付，审核通过后由 audit() 统一落账
         delivery.setIsReverse(false);
+        delivery.setDeliveryType(DeliveryType.DELIVERY.getCode());
         delivery.setStatus(DocStatus.DRAFT.getCode());
         baseMapper.insert(delivery);
         log.info("交货记录已保存(草稿): id={}", delivery.getId());

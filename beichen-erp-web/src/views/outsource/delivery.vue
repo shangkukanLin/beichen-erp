@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'OutsourceDelivery' })
 
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
@@ -42,7 +42,7 @@ async function handleDelete(row: any) {
 
 function refresh() { loadData() }
 onMounted(refresh)
-onActivated(() => { loadData() })
+
 </script>
 
 <template>

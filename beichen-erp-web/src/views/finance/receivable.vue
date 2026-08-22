@@ -1,5 +1,5 @@
-﻿<script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+<script setup lang="ts">
+import { reactive, ref, onMounted } from 'vue'
 import { getReceivablePage, type FinanceReceivable, type PageResult } from '@/api/finance'
 import { SettlementStatus, SettlementStatusLabel } from '@/api/enums'
 import request from '@/utils/request'
@@ -30,7 +30,7 @@ async function load() {
   } catch { data.value = [] } finally { loading.value = false }
 }
 onMounted(() => { loadCustomersOptions(); load() })
-onActivated(() => { load() })
+
 function query_() { page.pageNum = 1; load() }
 function reset_() { query.customerId = ''; query.status = ''; query.billNo = ''; page.pageNum = 1; load() }
 function cName(id?: number) { return customersOptions.value.find(x => x.id === id)?.name || '' }

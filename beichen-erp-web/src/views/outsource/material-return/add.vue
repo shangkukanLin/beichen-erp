@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -55,7 +55,7 @@ async function handleSubmit() {
 }
 
 onMounted(loadOptions)
-onActivated(loadOptions)
+
 </script>
 
 <template>

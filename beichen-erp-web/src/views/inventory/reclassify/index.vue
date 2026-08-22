@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { WarehouseCategory } from '@/api/enums'
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
@@ -117,9 +117,9 @@ async function handleAudit(row: any) {
 }
 async function handleCancel(row: any) {
   try {
-    await ElMessageBox.confirm(`确认取消单号「${row.code}」？取消后将逆向恢复库存。`, '取消确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确认反审核单号「${row.code}」？反审核后将逆向恢复库存。`, '反审核确认', { type: 'warning' })
     await cancelReclassify(row.id)
-    ElMessage.success('已取消')
+    ElMessage.success('已反审核')
     loadData()
   } catch { /* 取消 */ }
 }
@@ -135,7 +135,7 @@ function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Numbe
 function warehouseName(id?: number) { const w = warehouseOptions.value.find((x: any) => x.id === id); return w ? w.warehouseName : '' }
 
 onMounted(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProductOptions() })
-onActivated(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProductOptions() })
+
 </script>
 
 <template>
@@ -179,7 +179,7 @@ onActivated(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProduc
           <template #default="{ row }">
             <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click="handleEdit(row)">编辑</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" type="danger" link @click="handleCancel(row)">取消</el-button>
+            <el-button v-if="row.status === DocStatus.AUDITED" type="danger" link @click="handleCancel(row)">反审核</el-button>
           </template>
         </el-table-column>
       </el-table>

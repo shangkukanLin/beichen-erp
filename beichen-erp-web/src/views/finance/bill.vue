@@ -1,5 +1,5 @@
-﻿<script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+<script setup lang="ts">
+import { reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getBillPage, getBillItems, generateBill, auditBill, unAuditBill, cancelBill, type FinanceBill, type FinanceBillItem } from '@/api/finance'
 import { BillType, BillTypeLabel } from '@/api/enums'
@@ -41,7 +41,7 @@ async function loadData() {
   } catch { data.value = [] } finally { loading.value = false }
 }
 onMounted(() => { loadCustomersOptions(); loadSuppliersOptions(); loadData() })
-onActivated(() => { loadData() })
+
 function query_() { page.pageNum = 1; loadData() }
 function reset_() { query.partnerId = ''; page.pageNum = 1; loadData() }
 function partnerName(id?: number) {

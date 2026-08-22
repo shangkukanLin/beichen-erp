@@ -69,7 +69,8 @@ public class OtherIoServiceImpl implements OtherIoService {
         if (otherIo.getWarehouseId() == null) throw new BusinessException("仓库不能为空");
         if (otherIo.getIoType() == null || otherIo.getIoType().isBlank()) throw new BusinessException("出入库类型不能为空");
         otherIo.setCode(gen(BillPrefix.INVENTORY_OTHER_IO));
-        otherIo.setStatus(DocStatus.AUDITED.getCode());
+        // 统一流程：创建为草稿，审核时才应用库存
+        otherIo.setStatus(DocStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) otherIo.setCompanyId(cid);
         ioMapper.insert(otherIo);
@@ -79,7 +80,6 @@ public class OtherIoServiceImpl implements OtherIoService {
             if (cid != null && cid > 0) it.setCompanyId(cid);
             itemMapper.insert(it);
         }
-        applyStock(otherIo, items);
     }
 
     @Override
@@ -87,15 +87,10 @@ public class OtherIoServiceImpl implements OtherIoService {
     public void update(InventoryOtherIo otherIo, List<InventoryOtherIoItem> items) {
         InventoryOtherIo old = ioMapper.selectById(otherIo.getId());
         if (old == null) throw new BusinessException("其他出入库单不存在");
-        if (DocStatus.CANCELLED.getCode().equals(old.getStatus())) throw new BusinessException("已取消的单据不可编辑");
+        // 统一流程：仅草稿可编辑（草稿未应用库存，直接更新主表与明细）
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("仅草稿状态可编辑");
 
-        // 回滚旧库存
-        List<InventoryOtherIoItem> oldItems = itemMapper.selectList(
-            new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, otherIo.getId()));
-        revertStock(old, oldItems);
-
-        // 更新主表
-        otherIo.setCode(old.getCode()); otherIo.setStatus(DocStatus.AUDITED.getCode());
+        otherIo.setCode(old.getCode()); otherIo.setStatus(DocStatus.DRAFT.getCode());
         ioMapper.updateById(otherIo);
 
         // 删旧明细 + 插新明细
@@ -106,7 +101,6 @@ public class OtherIoServiceImpl implements OtherIoService {
             if (cid != null && cid > 0) it.setCompanyId(cid);
             itemMapper.insert(it);
         }
-        applyStock(otherIo, items);
     }
 
     @Override
@@ -114,10 +108,8 @@ public class OtherIoServiceImpl implements OtherIoService {
     public void cancel(Long id) {
         InventoryOtherIo old = ioMapper.selectById(id);
         if (old == null) throw new BusinessException("其他出入库单不存在");
-        if (DocStatus.CANCELLED.getCode().equals(old.getStatus())) throw new BusinessException("单据已取消");
-        List<InventoryOtherIoItem> items = itemMapper.selectList(
-            new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
-        revertStock(old, items);
+        // 统一流程：仅草稿可作废（草稿未应用库存，无需逆向）；已审核单据请先反审核
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("仅草稿状态可作废，已审核单据请先反审核");
         InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode());
         ioMapper.updateById(u);
     }
@@ -125,10 +117,29 @@ public class OtherIoServiceImpl implements OtherIoService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
-        // 其他出入库单采用"提交即生效"模式：create 已直接置 AUDITED 并应用库存，无需审核。
-        // 保留接口仅为兼容 Controller 路由，空实现杜绝二次库存增减。
         InventoryOtherIo io = ioMapper.selectById(id);
         if (io == null) throw new BusinessException("其他出入库单不存在");
+        if (!DocStatus.DRAFT.getCode().equals(io.getStatus())) throw new BusinessException("仅草稿状态可审核");
+        // 审核时应用库存
+        List<InventoryOtherIoItem> items = itemMapper.selectList(
+            new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
+        applyStock(io, items);
+        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
+        ioMapper.updateById(u);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unAudit(Long id) {
+        InventoryOtherIo io = ioMapper.selectById(id);
+        if (io == null) throw new BusinessException("其他出入库单不存在");
+        if (!DocStatus.AUDITED.getCode().equals(io.getStatus())) throw new BusinessException("仅已审核状态可反审核");
+        // 反审核时逆向库存，回到草稿
+        List<InventoryOtherIoItem> items = itemMapper.selectList(
+            new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
+        revertStock(io, items);
+        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus(DocStatus.DRAFT.getCode());
+        ioMapper.updateById(u);
     }
 
     /** 应用库存变更 */

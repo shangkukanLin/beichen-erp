@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated, computed, watch } from 'vue'
+import { reactive, ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { TimelineStatus, TimelineStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/enums'
@@ -405,7 +405,7 @@ async function loadRelatedOrders() {
 watch(activeTab, async (tab) => { if (tab === 'bom') await loadBom() })
 
 onMounted(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBomTypes(); loadTimeline(); loadBom(); loadBugs(); loadDrawings(); loadDevMaterials(); loadRelatedOrders() })
-onActivated(() => { loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBomTypes() })
+
 
 
 
@@ -555,7 +555,7 @@ function onNameBlur() {
             <el-table-column label="物料名称" min-width="130">
               <template #default="{row}">
                 <span v-if="row._isChild" style="color:var(--app-color-primary);font-size:var(--app-font-xs)">└ {{ row.materialName }}</span>
-                <RemoteSelect v-else v-model="row.outsourceMaterialId" :fetch="(kw: string) => fetchMaterialsByType(kw, row)" label-key="materialName" size="small" filterable clearable style="width:100%" placeholder="选择" :preset="row.outsourceMaterialId ? { id: row.outsourceMaterialId, name: row.materialName } : null" @change="(v: any) => { if (v === ADD_MARKER) { row.outsourceMaterialId = undefined; router.push('/outsource/material-info'); return } onBomMaterialChange(v, row) }">
+                <RemoteSelect v-else v-model="row.outsourceMaterialId" :fetch="(kw: string) => fetchMaterialsByType(kw, row)" label-key="materialName" size="small" filterable clearable disable-cache style="width:100%" placeholder="选择" :preset="row.outsourceMaterialId ? { id: row.outsourceMaterialId, materialName: row.materialName } : null" @change="(v: any) => { if (v === ADD_MARKER) { row.outsourceMaterialId = undefined; router.push('/outsource/material-info'); return } onBomMaterialChange(v, row) }">
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </template>

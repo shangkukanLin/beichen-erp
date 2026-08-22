@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getCustomerPage,
@@ -186,9 +186,7 @@ function fmtMoney(v?: number) {
 onMounted(() => {
   loadData()
 })
-onActivated(() => {
-  loadData()
-})
+
 </script>
 
 <template>

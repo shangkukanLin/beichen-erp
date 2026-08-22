@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -28,8 +28,8 @@ async function handleAudit(row: any) {
 }
 
 async function handleUnAudit(row: any) {
-  try { await ElMessageBox.confirm('确认取消审核？将物料回源仓并冲销应付', '确认取消审核', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-return/${row.id}/un-audit`); ElMessage.success('已取消审核'); loadData() } catch (e: any) { ElMessage.error(e?.message || '取消审核失败') }
+  try { await ElMessageBox.confirm('确认反审核？将物料回源仓并冲销应付', '确认反审核', { type: 'warning' }) } catch { return }
+  try { await request.put(`/outsource/material-return/${row.id}/un-audit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 
 async function handleCancel(row: any) {
@@ -40,7 +40,7 @@ async function handleCancel(row: any) {
 function handleAdd() { router.push('/outsource/material-return/add') }
 
 onMounted(loadData)
-onActivated(() => { loadData() })
+
 </script>
 
 <template>
@@ -82,7 +82,7 @@ onActivated(() => { loadData() })
           <template #default="{ row }">
             <el-button type="primary" link @click="router.push(`/outsource/material-return/detail/${row.id}`)">详情</el-button>
             <el-button type="success" link v-if="row.status===DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
-            <el-button type="warning" link v-if="row.status===DocStatus.AUDITED" @click="handleUnAudit(row)">取消审核</el-button>
+            <el-button type="warning" link v-if="row.status===DocStatus.AUDITED" @click="handleUnAudit(row)">反审核</el-button>
             <el-button type="danger" link v-if="row.status===DocStatus.DRAFT" @click="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>

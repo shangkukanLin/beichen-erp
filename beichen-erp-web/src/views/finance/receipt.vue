@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
@@ -8,7 +8,7 @@ import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
-import { getReceiptPage, getReceiptItems, createReceipt, auditReceipt, cancelReceipt, getUnpaidReceivables, type FinanceReceipt, type FinanceReceiptItem, type FinanceReceivable } from '@/api/finance'
+import { getReceiptPage, getReceiptItems, createReceipt, auditReceipt, cancelReceipt, unAuditReceipt, getUnpaidReceivables, type FinanceReceipt, type FinanceReceiptItem, type FinanceReceivable } from '@/api/finance'
 
 const query = reactive({ customerId: '' as string|number, status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -38,7 +38,7 @@ async function loadAccounts() {
   try { const r = await request.get('/finance/account/list'); accounts.value = r || [] } catch {}
 }
 onMounted(() => { loadCustomersOptions(); loadAccounts(); loadData() })
-onActivated(() => { loadData() })
+
 function query_() { page.pageNum = 1; loadData() }
 function reset_() { query.customerId = ''; query.status = ''; page.pageNum = 1; loadData() }
 function cName(id?: number) { return customersOptions.value.find(x => x.id === id)?.name || '' }
@@ -83,6 +83,10 @@ async function handleCancel(row: FinanceReceipt) {
   try { await ElMessageBox.confirm(`确认作废收款单「${row.code}」？`, '提示', { type: 'warning' })
     await cancelReceipt(row.id as number); ElMessage.success('已作废'); loadData() } catch {}
 }
+async function handleUnAudit(row: FinanceReceipt) {
+  try { await ElMessageBox.confirm(`确认反审核收款单「${row.code}」？将冲销核销与账户余额`, '提示', { type: 'warning' })
+    await unAuditReceipt(row.id as number); ElMessage.success('已反审核'); loadData() } catch {}
+}
 const detailVisible = ref(false)
 const detail = ref<FinanceReceipt>({})
 const detailItems = ref<FinanceReceiptItem[]>([])
@@ -106,8 +110,8 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
         <el-table-column prop="receiptDate" label="日期" width="120" align="center"/>
         <el-table-column prop="amount" label="金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="180" align="center" fixed="right">
-          <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button></template>
+        <el-table-column label="操作" width="250" align="center" fixed="right">
+          <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button></template>
         </el-table-column>
       </el-table>
       <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>

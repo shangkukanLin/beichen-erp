@@ -96,8 +96,8 @@ public class CloseReportController {
         CellStyle labelStyle = createStyle(wb, true, HorizontalAlignment.LEFT, (short)11, null);
         CellStyle valueStyle = createStyle(wb, false, HorizontalAlignment.LEFT, (short)11, null);
         CellStyle headerStyle = createStyle(wb, true, HorizontalAlignment.CENTER, (short)10, null);
-        CellStyle numStyle = createStyle(wb, false, HorizontalAlignment.RIGHT, (short)10, "#,##0.00");
-        CellStyle pctStyle = createStyle(wb, false, HorizontalAlignment.RIGHT, (short)10, "0.00");
+        CellStyle numStyle = createStyle(wb, false, HorizontalAlignment.RIGHT, (short)10, "#,##0.##");
+        CellStyle pctStyle = createStyle(wb, false, HorizontalAlignment.RIGHT, (short)10, "0.##");
         CellStyle textStyle = createStyle(wb, false, HorizontalAlignment.LEFT, (short)10, null);
         CellStyle sectionStyle = createStyle(wb, true, HorizontalAlignment.LEFT, (short)12, null);
 
@@ -165,8 +165,8 @@ public class CloseReportController {
             numCell(dRow, 9, it, "targetYieldRate", pctStyle);
             // 生产良率% = 出货/(用料总数-留存-良退)*100
             formulaCell(dRow, 10, "IF(C" + curRow + "-H" + curRow + "-F" + curRow + ">0,E" + curRow + "/(C" + curRow + "-H" + curRow + "-F" + curRow + ")*100,0)", pctStyle);
-            // 良率超损% = 加工良率-生产良率
-            formulaCell(dRow, 11, "J" + curRow + "-K" + curRow, pctStyle);
+            // 良率超损% = MAX(0, 加工良率-生产良率)（最小0，不允许负值）
+            formulaCell(dRow, 11, "MAX(0,J" + curRow + "-K" + curRow + ")", pctStyle);
             // 超损数量 = (出货+不良退+缺失)*(良率超损%/100)
             formulaCell(dRow, 12, "MAX(0,(E" + curRow + "+G" + curRow + "+I" + curRow + ")*(L" + curRow + "/100))", numStyle);
             // 最大超损 = MAX(0, (用料总数-良退-留存)*(1-加工良率/100))

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -46,8 +46,8 @@ async function handleUnapprove(row: any) {
   try { await request.put(`/outsource/other-io/${row.id}/unapprove`); ElMessage.success('已反审核'); loadData() } catch (e: any) { ElMessage.error(e?.message||'失败') }
 }
 async function handleCancel(row: any) {
-  try { await ElMessageBox.confirm('确认取消？', '确认',{type:'warning'}) } catch { return }
-  try { await request.put(`/outsource/other-io/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch (e: any) { ElMessage.error(e?.message||'失败') }
+  try { await ElMessageBox.confirm('确认作废？', '作废确认',{type:'warning'}) } catch { return }
+  try { await request.put(`/outsource/other-io/${row.id}/cancel`); ElMessage.success('已作废'); loadData() } catch (e: any) { ElMessage.error(e?.message||'失败') }
 }
 function handleTabChange() { pagination.pageNum=1; loadData() }
 function handleQuery() { pagination.pageNum=1; loadData() }
@@ -59,7 +59,7 @@ function goWarehouseDetail(warehousId: number) {
   else router.push(`/inventory/warehouse/detail/${warehousId}`)
 }
 onMounted(()=>{ loadWarehouses(); loadData() })
-onActivated(() => { loadData() })
+
 </script>
 
 <template>
@@ -96,7 +96,7 @@ onActivated(() => { loadData() })
             <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleApprove(row)">审核</el-button>
             <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click="handleUnapprove(row)">反审核</el-button>
             <el-button type="primary" link @click="handleEdit(row)">{{ row.status===DocStatus.DRAFT ? '编辑' : '详细' }}</el-button>
-            <el-button type="danger" link @click="handleCancel(row)" :disabled="row.status===DocStatus.CANCELLED || row.status===DocStatus.AUDITED">取消</el-button>
+            <el-button type="danger" link @click="handleCancel(row)" :disabled="row.status===DocStatus.CANCELLED || row.status===DocStatus.AUDITED">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

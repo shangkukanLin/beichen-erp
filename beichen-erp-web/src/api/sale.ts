@@ -89,6 +89,9 @@ export function auditSaleOrder(id: number) {
 export function cancelSaleOrder(id: number) {
   return request.put<void>(`/inventory/sale/${id}/cancel`)
 }
+export function unAuditSaleOrder(id: number) {
+  return request.put<void>(`/inventory/sale/${id}/un-audit`)
+}
 
 /** 库存检查：传入 warehouseId + items，返回各物料库存对比 */
 export function checkSaleOrderStock(data: { warehouseId?: number; items: SaleOrderItem[] }) {
@@ -185,5 +188,8 @@ export function auditSaleOutbound(id: number) {
 }
 export function cancelSaleOutbound(id: number) {
   return request.put<void>(`/inventory/outbound/${id}/cancel`)
+}
+export function unAuditSaleOutbound(id: number) {
+  return request.put<void>(`/inventory/outbound/${id}/un-audit`)
 }
 

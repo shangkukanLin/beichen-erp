@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
@@ -215,7 +215,7 @@ function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Numbe
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
 onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials(); loadQualityTypes(); loadData() })
-onActivated(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials(); loadQualityTypes(); loadData() })
+
 </script>
 
 <template>

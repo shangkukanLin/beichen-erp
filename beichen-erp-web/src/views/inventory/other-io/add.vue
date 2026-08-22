@@ -47,9 +47,9 @@ async function handleSubmit() {
   try {
     const body: any = { ...form, items: validItems }
     if (editId) {
-      await request.put(`/inventory/other/${editId}`, body); ElMessage.success('已更新')
+      await request.put(`/inventory/other/${editId}`, body); ElMessage.success('已更新（待审核）')
     } else {
-      await request.post('/inventory/other', body); ElMessage.success('已创建')
+      await request.post('/inventory/other', body); ElMessage.success('已保存（待审核）')
     }
     router.push('/inventory/other-io')
   } catch (e: any) { ElMessage.error(e?.message||'保存失败') } finally { saving.value = false }

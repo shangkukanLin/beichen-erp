@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -138,7 +138,7 @@ onMounted(() => { loadFactories(); loadBomTypes() })
 async function loadBomTypes() {
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch { bomTypes.value = [] }
 }
-onActivated(() => { loadFactories(); resetForm() })
+
 </script>
 
 <template>

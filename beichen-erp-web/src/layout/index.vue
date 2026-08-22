@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
-import { Fold, Expand, User, ArrowDown } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Fold, Expand, User, ArrowDown, Refresh } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useTabStore } from '@/stores/tabs'
 import { logout as logoutApi } from '@/api/auth'
@@ -86,6 +86,17 @@ function handleTabMouseUp(path: string, e: MouseEvent) {
   }
 }
 
+// 刷新数据：列表/详情页整页刷新；新增/修改页仅清空下拉缓存（避免丢失未保存表单内容）
+function handleRefreshData() {
+  const p = route.path
+  if (p.includes('/add') || p.includes('/edit')) {
+    window.dispatchEvent(new Event('refresh:dropdown-data'))
+    ElMessage.success('下拉数据已刷新')
+  } else {
+    window.location.reload()
+  }
+}
+
 async function handleLogout() {
   try {
     await ElMessageBox.confirm('确定要退出登录吗？', '提示', {
@@ -143,6 +154,9 @@ watch(() => userStore.userInfo?.companyName, (name) => {
           </el-icon>
         </div>
         <div class="header-right">
+          <el-button text size="small" class="refresh-btn" @click="handleRefreshData" title="刷新数据">
+            <el-icon style="margin-right:4px"><Refresh /></el-icon>刷新数据
+          </el-button>
           <el-dropdown trigger="click">
             <span class="user-info">
               <el-icon><User /></el-icon>
@@ -178,8 +192,8 @@ watch(() => userStore.userInfo?.companyName, (name) => {
 
       <el-main class="layout-main">
         <router-view v-slot="{ Component, route: r }">
-          <keep-alive :exclude="['PurchaseAdd', 'PurchaseReturnAdd', 'InventoryWarehouseMoveAdd']">
-            <component :is="Component" :key="r.path" />
+          <keep-alive :exclude="['PurchaseAdd', 'PurchaseReturnAdd', 'InventoryWarehouseMoveAdd']" :max="30">
+            <component :is="Component" :key="r.fullPath + '-' + (tabStore.tabSeq[r.path] || 1)" />
           </keep-alive>
         </router-view>
       </el-main>
@@ -201,6 +215,7 @@ watch(() => userStore.userInfo?.companyName, (name) => {
 .header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .collapse-btn { font-size: 20px; cursor: pointer; color: var(--app-text-regular); }
 .header-right { display: flex; align-items: center; }
+.refresh-btn { margin-right: 12px; color: var(--app-text-regular); }
 .user-info { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--app-text-regular); }
 .username { font-size: var(--app-font-base); }
 

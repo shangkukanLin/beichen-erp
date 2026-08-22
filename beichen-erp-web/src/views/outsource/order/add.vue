@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated, watch } from 'vue'
+import { reactive, ref, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -230,7 +230,7 @@ async function initPage() {
   }
 }
 onMounted(initPage)
-onActivated(initPage)
+
 </script>
 
 <template>

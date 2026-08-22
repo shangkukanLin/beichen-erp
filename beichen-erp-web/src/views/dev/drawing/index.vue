@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onActivated } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -35,7 +35,7 @@ async function loadProjects() {
 function goToDrawing(projectId: number) { router.push(`/dev/project/edit/${projectId}?tab=drawing`) }
 
 onMounted(() => loadProjects())
-onActivated(() => loadProjects())
+
 </script>
 
 <template>

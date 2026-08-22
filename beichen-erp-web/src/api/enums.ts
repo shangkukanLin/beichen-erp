@@ -23,7 +23,7 @@ export const OutsourceOrderStatusLabel: Record<string, string> = {
   [OutsourceOrderStatus.PENDING]: '待审核',
   [OutsourceOrderStatus.PRODUCING]: '生产中',
   [OutsourceOrderStatus.FINISHED]: '已完成',
-  [OutsourceOrderStatus.CANCELLED]: '已取消'
+  [OutsourceOrderStatus.CANCELLED]: '已作废'
 }
 
 export const OutsourceOrderStatusTag: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
@@ -42,10 +42,10 @@ export const MaterialOrderStatus = {
 } as const
 
 export const MaterialOrderStatusLabel: Record<string, string> = {
-  [MaterialOrderStatus.PENDING]: '待确认',
+  [MaterialOrderStatus.PENDING]: '待审核',
   [MaterialOrderStatus.RECEIVING]: '收货中',
   [MaterialOrderStatus.FINISHED]: '已完成',
-  [MaterialOrderStatus.CANCELLED]: '已取消'
+  [MaterialOrderStatus.CANCELLED]: '已作废'
 }
 
 export const MaterialOrderStatusTag: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: 'OutsourceOrderIndex' })
 
-import { reactive, ref, onMounted, onActivated, computed } from 'vue'
+import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -35,11 +35,11 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.factoryId = undefined; loadData() }
 
 async function handleCancel(row: any) {
-  try { await ElMessageBox.confirm('确定取消该加工单吗？', '提示', { type: 'warning' }); await request.put(`/outsource/order/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('确定作废该加工单吗？', '提示', { type: 'warning' }); await request.put(`/outsource/order/${row.id}/cancel`); ElMessage.success('已作废'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
 onMounted(loadData)
-onActivated(() => { loadData() })
+
 </script>
 
 <template>
@@ -56,7 +56,7 @@ onActivated(() => { loadData() })
       <el-tabs v-model="activeTab" @tab-change="onTabChange">
         <el-tab-pane label="进行中" name="PENDING_PRODUCING" />
         <el-tab-pane label="已完成" name="FINISHED" />
-        <el-tab-pane label="已取消" name="CANCELLED" />
+        <el-tab-pane label="已作废" name="CANCELLED" />
       </el-tabs>
 
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%">
@@ -87,7 +87,7 @@ onActivated(() => { loadData() })
         <el-table-column label="操作" width="130" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click="router.push(`/outsource/order/detail/${row.id}`)">详情</el-button>
-            <el-button type="danger" link v-if="row.status!==OutsourceOrderStatus.CANCELLED" @click="handleCancel(row)">取消</el-button>
+            <el-button type="danger" link v-if="row.status!==OutsourceOrderStatus.CANCELLED" @click="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

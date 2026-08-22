@@ -15,8 +15,8 @@ public enum OutsourceOrderStatus {
     PRODUCING("生产中"),
     /** 已完成：加工完成，成品已入库 */
     FINISHED("已完成"),
-    /** 已取消：加工单被取消 */
-    CANCELLED("已取消");
+    /** 已作废：加工单被作废 */
+    CANCELLED("已作废");
 
     private final String label;
 

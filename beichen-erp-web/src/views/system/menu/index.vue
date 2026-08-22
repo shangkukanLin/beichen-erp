@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { MenuType, MenuTypeLabel } from '@/api/enums'
@@ -190,9 +190,7 @@ function statusType(status: number) {
 onMounted(() => {
   loadData()
 })
-onActivated(() => {
-  loadData()
-})
+
 </script>
 
 <template>

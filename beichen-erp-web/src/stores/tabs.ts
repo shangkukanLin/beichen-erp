@@ -28,7 +28,10 @@ export const useTabStore = defineStore('tabs', {
       tabs: saved.tabs || [] as Tab[],
       activePath: saved.activePath || '' as string,
       /** 上一个活跃的 tab 路径，用于关闭当前 tab 时回退 */
-      lastActivePath: (saved as any).lastActivePath || '' as string
+      lastActivePath: (saved as any).lastActivePath || '' as string,
+      /** 每个路由 path 的打开序号（仅内存态，不持久化）：
+       *  用于 keep-alive 的组件 key —— 关闭 Tab 后重新打开时序号 +1，key 变化使组件重新挂载，不残留上次状态 */
+      tabSeq: {} as Record<string, number>
     }
   },
   actions: {
@@ -36,6 +39,7 @@ export const useTabStore = defineStore('tabs', {
       const exists = this.tabs.find(t => t.path === path)
       if (!exists) {
         this.tabs.push({ path, title })
+        this.tabSeq[path] = (this.tabSeq[path] || 0) + 1
       }
       // 记录上一个活跃 tab
       if (this.activePath && this.activePath !== path) {
@@ -80,6 +84,7 @@ export const useTabStore = defineStore('tabs', {
       this.tabs = []
       this.activePath = ''
       this.lastActivePath = ''
+      this.tabSeq = {}
       localStorage.removeItem(STORAGE_KEY)
     }
   }

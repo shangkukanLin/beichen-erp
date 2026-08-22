@@ -22,8 +22,8 @@ async function handleAudit() {
 }
 
 async function handleUnAudit() {
-  try { await ElMessageBox.confirm('确认取消审核？将物料回源仓并冲销应付', '确认取消审核', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-return/${id}/un-audit`); ElMessage.success('已取消审核'); loadData() } catch (e: any) { ElMessage.error(e?.message || '取消审核失败') }
+  try { await ElMessageBox.confirm('确认反审核？将物料回源仓并冲销应付', '确认反审核', { type: 'warning' }) } catch { return }
+  try { await request.put(`/outsource/material-return/${id}/un-audit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 
 async function handleCancel() {
@@ -42,7 +42,7 @@ onMounted(loadData)
           <span style="font-weight:600">委外物料退货详情</span>
           <div>
             <el-button type="success" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
-            <el-button type="warning" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">取消审核</el-button>
+            <el-button type="warning" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
             <el-button type="danger" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
             <el-button @click="router.back()">返回</el-button>
           </div>

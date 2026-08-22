@@ -206,9 +206,10 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         BigDecimal lossRate = mat.getLossRate() != null ? mat.getLossRate() : BigDecimal.ZERO;
         item.put("targetYieldRate", new BigDecimal(100).subtract(lossRate));
 
-        // 发料数量（仅用于 FIFO 单价计算，不再作为展示字段）
+        // 发料数量（仅用于 FIFO 单价计算，不再作为展示字段）：委外发料/收货 + 其他出入库入库
         BigDecimal deliveredQty = sumDeliveryQuantity(factoryWhIds, mat.getMaterialId(), DeliveryType.DELIVERY.getCode())
-                .add(sumDeliveryQuantity(factoryWhIds, mat.getMaterialId(), DeliveryType.RECEIVE.getCode()));
+                .add(sumDeliveryQuantity(factoryWhIds, mat.getMaterialId(), DeliveryType.RECEIVE.getCode()))
+                .add(sumOtherIoQuantity(factoryWhIds, mat.getMaterialId()));
 
         // 退料数量 = 从该工厂仓库退出的退料总和
         BigDecimal returnedQty = sumDeliveryQuantity(factoryWhIds, mat.getMaterialId(), DeliveryType.RETURN.getCode());
@@ -225,8 +226,11 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         item.put("shippedQuantity", shippedTotal);
 
         // 良品退料/不良退料/留存工厂/缺失默认=0（用户可修改）
-        // 物料单价：先进先出，按交期升序取最早订单的单价
-        BigDecimal unitPrice = calcFifoPrice(mat.getMaterialId(), null, deliveredQty);
+        // 物料单价：优先取发往该工厂其他出入库入库的填写价；无则按物料订单先进先出
+        BigDecimal unitPrice = calcOtherIoPrice(factoryWhIds, mat.getMaterialId());
+        if (unitPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            unitPrice = calcFifoPrice(mat.getMaterialId(), null, deliveredQty);
+        }
         item.put("unitPrice", unitPrice);
 
         item.put("goodReturnQty", BigDecimal.ZERO);
@@ -258,6 +262,36 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         return result != null ? result : BigDecimal.ZERO;
     }
 
+    /** 其他出入库入库量：发往该工厂委外仓库的已审核 IN 单物料数量（纳入结单发料量/单价计算） */
+    private BigDecimal sumOtherIoQuantity(List<Long> warehouseIds, Long materialId) {
+        if (warehouseIds == null || warehouseIds.isEmpty() || materialId == null) return BigDecimal.ZERO;
+        String sql = "SELECT COALESCE(SUM(ii.quantity), 0) " +
+            "FROM outsource_other_io_item ii " +
+            "INNER JOIN outsource_other_io io ON ii.other_io_id = io.id " +
+            "WHERE io.io_type = ? AND io.status = '" + DocStatus.AUDITED.getCode() + "' " +
+            "AND io.warehouse_id IN (" + warehouseIds.stream().map(Object::toString).collect(java.util.stream.Collectors.joining(",")) + ") " +
+            "AND ii.outsource_material_id = ?";
+        BigDecimal result = jdbcTemplate.queryForObject(sql, BigDecimal.class, IoType.IN.getCode(), materialId);
+        return result != null ? result : BigDecimal.ZERO;
+    }
+
+    /** 其他出入库入库加权单价：发往该工厂委外仓库的已审核 IN 单明细（仅取单价>0）的 Σ数量×单价/Σ数量 */
+    private BigDecimal calcOtherIoPrice(List<Long> warehouseIds, Long materialId) {
+        if (warehouseIds == null || warehouseIds.isEmpty() || materialId == null) return BigDecimal.ZERO;
+        String sql = "SELECT COALESCE(SUM(ii.quantity * ii.unit_price), 0) AS total_amount, " +
+            "COALESCE(SUM(ii.quantity), 0) AS total_qty " +
+            "FROM outsource_other_io_item ii " +
+            "INNER JOIN outsource_other_io io ON ii.other_io_id = io.id " +
+            "WHERE io.io_type = ? AND io.status = '" + DocStatus.AUDITED.getCode() + "' " +
+            "AND io.warehouse_id IN (" + warehouseIds.stream().map(Object::toString).collect(java.util.stream.Collectors.joining(",")) + ") " +
+            "AND ii.outsource_material_id = ? AND ii.unit_price > 0";
+        Map<String, Object> row = jdbcTemplate.queryForMap(sql, IoType.IN.getCode(), materialId);
+        BigDecimal amount = toBD(row.get("total_amount"));
+        BigDecimal qty = toBD(row.get("total_qty"));
+        if (qty.compareTo(BigDecimal.ZERO) > 0) return amount.divide(qty, 4, RoundingMode.HALF_UP);
+        return BigDecimal.ZERO;
+    }
+
     /** 重新计算生产良率、超损等 */
     private void recalcItem(Map<String, Object> item) {
         BigDecimal shipped = toBD(item.get("shippedQuantity"));
@@ -283,8 +317,9 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             actualYield = shipped.divide(denom, 6, RoundingMode.HALF_UP).multiply(new BigDecimal(100));
         }
         item.put("actualYieldRate", actualYield.setScale(2, RoundingMode.HALF_UP));
-        // 良率超损% = 加工良率 - 生产良率
+        // 良率超损% = 加工良率 - 生产良率（最小0，不允许负值）
         BigDecimal yieldLoss = targetYield.subtract(actualYield);
+        if (yieldLoss.compareTo(BigDecimal.ZERO) < 0) yieldLoss = BigDecimal.ZERO;
         item.put("yieldLoss", yieldLoss.setScale(2, RoundingMode.HALF_UP));
 
         // 超损数量 = (出货消耗 + 不良退料 + 缺失) × (良率超损%/100)（最小0）

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -54,7 +54,7 @@ async function handleDelete(row: any) {
 }
 
 onMounted(() => { loadProjectOptions(); loadList() })
-onActivated(() => { loadList() })
+
 </script>
 
 <template>

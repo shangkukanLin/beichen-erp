@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import { getPaymentPage, getPaymentItems, auditPayment, cancelPayment, type FinancePayment, type FinancePaymentItem } from '@/api/finance'
+import { getPaymentPage, getPaymentItems, auditPayment, cancelPayment, unAuditPayment, type FinancePayment, type FinancePaymentItem } from '@/api/finance'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
@@ -66,6 +66,10 @@ async function handleCancel(row: FinancePayment) {
   try { await ElMessageBox.confirm(`确认作废付款单「${row.code}」？`, '提示', { type: 'warning' })
     await cancelPayment(row.id as number); ElMessage.success('已作废'); loadData() } catch {}
 }
+async function handleUnAudit(row: FinancePayment) {
+  try { await ElMessageBox.confirm(`确认反审核付款单「${row.code}」？将冲销核销与账户余额`, '提示', { type: 'warning' })
+    await unAuditPayment(row.id as number); ElMessage.success('已反审核'); loadData() } catch {}
+}
 
 // ========== 付款单详情 + 凭证 ==========
 const detailVisible = ref(false)
@@ -93,7 +97,7 @@ async function handleUploadAttach(e: Event) {
 function openAttach(url: string) { window.open(url + '?inline=true') }
 
 onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadData() })
-onActivated(() => { loadSummary(); loadData() })
+
 </script>
 
 <template>
@@ -136,8 +140,8 @@ onActivated(() => { loadSummary(); loadData() })
           <el-table-column prop="amount" label="金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
           <el-table-column label="凭证" width="70" align="center"><template #default="{row}"><el-link v-if="row.attachUrl" type="primary" @click="openAttach(row.attachUrl)">查看</el-link><span v-else style="color:#c0c4cc">—</span></template></el-table-column>
           <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
-          <el-table-column label="操作" width="140" align="center" fixed="right">
-            <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button></template>
+          <el-table-column label="操作" width="210" align="center" fixed="right">
+            <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button></template>
           </el-table-column>
         </el-table>
         <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>

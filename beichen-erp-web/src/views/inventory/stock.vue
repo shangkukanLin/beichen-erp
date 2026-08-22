@@ -61,7 +61,7 @@
 
 <script setup lang="ts">
 import { WarehouseCategory, WarehouseType } from '@/api/enums'
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
@@ -98,7 +98,7 @@ function stockQuery_() { stockPage.pageNum = 1; loadStock() }
 function stockReset() { stockQuery.warehouseId = undefined; stockQuery.productName = ''; stockPage.pageNum = 1; loadStock() }
 
 onMounted(() => { loadStock() })
-onActivated(() => { loadStock() })
+
 </script>
 
 <style scoped>

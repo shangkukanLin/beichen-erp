@@ -50,8 +50,8 @@ function recalc(row: any) {
   } else {
     row.actualYieldRate = 0
   }
-  // 良率超损% = 加工良率 - 生产良率
-  row.yieldLoss = +(targetYield - row.actualYieldRate).toFixed(2)
+  // 良率超损% = 加工良率 - 生产良率（最小0，不允许负值）
+  row.yieldLoss = Math.max(0, +(targetYield - row.actualYieldRate).toFixed(2))
   // 超损数量 = (出货消耗 + 不良退料 + 缺失) × (良率超损%/100)（最小0）
   row.excessLossQty = Math.max(0, +((shipped + defect + missing) * (row.yieldLoss / 100)).toFixed(2))
   // 最大超损 = (用料总数 - 良品退料 - 工厂留存) × (1 - 加工良率/100)（最小0）
@@ -134,15 +134,14 @@ onMounted(() => { loadBomTypes(); loadReport() })
 
 <template>
   <div class="close-page" v-loading="loading">
-    <div class="page-header">
-      <el-tag v-if="report.reportStatus === CloseReportStatus.FINISHED" type="success">{{ CloseReportStatusLabel[CloseReportStatus.FINISHED] }}</el-tag>
-      <el-tag v-else-if="report.reportStatus === CloseReportStatus.DRAFT" type="warning">{{ CloseReportStatusLabel[CloseReportStatus.DRAFT] }}</el-tag>
-      <el-tag v-else type="info">未生成</el-tag>
-    </div>
-
     <!-- 表头 -->
     <el-card shadow="never" style="margin-bottom:12px">
       <el-descriptions :column="4" border size="small">
+        <el-descriptions-item label="状态">
+          <el-tag v-if="report.reportStatus === CloseReportStatus.FINISHED" type="success">{{ CloseReportStatusLabel[CloseReportStatus.FINISHED] }}</el-tag>
+          <el-tag v-else-if="report.reportStatus === CloseReportStatus.DRAFT" type="warning">{{ CloseReportStatusLabel[CloseReportStatus.DRAFT] }}</el-tag>
+          <el-tag v-else type="info">未生成</el-tag>
+        </el-descriptions-item>
         <el-descriptions-item label="加工单号">{{ report.orderCode }}</el-descriptions-item>
         <el-descriptions-item label="代工厂">{{ report.factoryName }}</el-descriptions-item>
         <el-descriptions-item label="产品">

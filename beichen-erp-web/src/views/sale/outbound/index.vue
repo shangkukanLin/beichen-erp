@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
@@ -12,7 +12,7 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 const router = useRouter()
 const qualityOptions = ref<QualityOption[]>([])
 import {
-  getSaleOutboundPage, getSaleOutboundItems, createSaleOutbound, updateSaleOutbound, auditSaleOutbound, cancelSaleOutbound,
+  getSaleOutboundPage, getSaleOutboundItems, createSaleOutbound, updateSaleOutbound, auditSaleOutbound, cancelSaleOutbound, unAuditSaleOutbound,
   type SaleOutbound, type SaleOutboundItem
 } from '@/api/sale'
 
@@ -112,6 +112,12 @@ async function handleCancel(row: SaleOutbound) {
     await cancelSaleOutbound(row.id as number); ElMessage.success('已作废'); loadData()
   } catch { }
 }
+async function handleUnAudit(row: SaleOutbound) {
+  try {
+    await ElMessageBox.confirm(`确认反审核销售出库「${row.code}」？将回补库存并冲回应收。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    await unAuditSaleOutbound(row.id as number); ElMessage.success('已反审核'); loadData()
+  } catch { }
+}
 async function handleDetail(row: SaleOutbound) {
   detailData.value = { ...row }
   try { const res = await getSaleOutboundItems(row.id as number); detailItems.value = res || [] } catch { detailItems.value = [] }
@@ -127,7 +133,7 @@ function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Numbe
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
 onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualityTypes(); loadData() })
-onActivated(() => { loadData() })
+
 </script>
 
 <template>
@@ -170,10 +176,11 @@ onActivated(() => { loadData() })
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="210" align="center" fixed="right">
+        <el-table-column label="操作" width="280" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
           </template>

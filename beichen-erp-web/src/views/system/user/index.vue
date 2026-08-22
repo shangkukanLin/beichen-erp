@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getUserPage,
@@ -270,10 +270,7 @@ onMounted(() => {
   loadRoles()
   loadData()
 })
-onActivated(() => {
-  loadRoles()
-  loadData()
-})
+
 </script>
 
 <template>

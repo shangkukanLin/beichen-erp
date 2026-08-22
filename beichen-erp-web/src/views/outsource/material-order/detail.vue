@@ -20,6 +20,18 @@ const bomTypes = ref<any[]>([])
 // Odoo 风格：下拉框实时查库
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
+const fetchBomTypes = (kw: string) => request.get('/dev/bom-type/enabled', { params: { kw } })
+const fetchMaterialsByType = (kw: string, row: any) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw, bomTypeId: row.bomTypeId || undefined } })
+
+// 待审核状态行内编辑物料明细
+const allMaterials = ref<any[]>([])
+function addItem() { items.value.push({ bomTypeId: undefined, materialId: undefined, materialName: '', unit: '', orderQuantity: 1, unitPrice: undefined, remark: '' }) }
+function removeItem(i: number) { items.value.splice(i, 1) }
+function onMatChange(v: any, row: any) {
+  if (!v) { row.materialName = ''; row.unit = ''; return }
+  const m = allMaterials.value.find((x: any) => x.id === v)
+  if (m) { row.materialName = m.materialName; row.unit = m.unit }
+}
 
 // bomTypeId -> 类型名 映射（兜底展示用）
 function typeName(bid: number | undefined, fallback?: string) {
@@ -30,7 +42,10 @@ async function loadBomTypes() {
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
 }
 
-async function loadOptions() {}
+async function loadOptions() {
+  loadBomTypes()
+  try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = r?.records || [] } catch { allMaterials.value = [] }
+}
 
 const recVisible = ref(false); const recSaving = ref(false)
 const recWarehouseId = ref<number>()
@@ -241,13 +256,16 @@ async function handleSave() {
 }
 
 async function handleConfirm() {
-  try { await ElMessageBox.confirm('确认后进入收货中', '确认', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/confirm`); ElMessage.success('已确认'); loadAll() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('审核后进入收货中', '审核', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/audit`); ElMessage.success('已审核'); loadAll() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+}
+async function handleUnAudit() {
+  try { await ElMessageBox.confirm('确认反审核？将回到待审核状态', '反审核', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/un-audit`); ElMessage.success('已反审核'); loadAll() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleFinish() {
   try { await ElMessageBox.confirm('结单后订单将标记为已完成，不可再修改。', '结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/finish`); ElMessage.success('已结单'); loadAll() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleCancel() {
-  try { await ElMessageBox.confirm('确定取消？', '取消', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/cancel`); ElMessage.success('已取消'); loadAll() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('确定作废？', '作废', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/cancel`); ElMessage.success('已作废'); loadAll() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
 function exportPdf() {
@@ -297,17 +315,17 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
             <el-col :span="24"><el-form-item label="备注"><el-input v-model="order.remark" type="textarea" :rows="2" /></el-form-item></el-col>
           </el-row>
           <div style="display:flex;gap:8px;margin-top:12px">
-            <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="primary" size="small" @click="router.push(`/outsource/material-order/add/${id}`)">编辑物料</el-button>
             <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="order.status===MaterialOrderStatus.CANCELLED">保存</el-button>
-            <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">确认</el-button>
+            <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">审核</el-button>
+            <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
             <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleFinish">结单</el-button>
-            <el-button v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">取消</el-button>
+            <el-button v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">作废</el-button>
           </div>
         </el-form>
       </el-card>
 
       <el-card shadow="never">
-        <template #header><span style="font-weight:600">物料明细</span></template>
+        <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">物料明细</span><el-button v-if="order.status===MaterialOrderStatus.PENDING" type="primary" size="small" @click="addItem">+ 添加物料</el-button></div></template>
         <el-table :data="items" border size="small" row-key="id" default-expand-all>
           <el-table-column type="expand" v-if="items.some((it: any) => it.components && it.components.length > 0)">
             <template #default="{row}">
@@ -328,14 +346,27 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
               </div>
             </template>
           </el-table-column>
-          <el-table-column label="类型" width="80"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
-          <el-table-column prop="materialName" label="物料名称" min-width="130" />
+          <el-table-column label="类型" width="130"><template #default="{row}">
+            <RemoteSelect v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.bomTypeId" :fetch="fetchBomTypes" label-key="typeName" size="small" clearable style="width:100%" @change="() => { row.materialId = undefined; row.materialName = ''; row.unit = '' }" />
+            <span v-else>{{ typeName(row.bomTypeId) }}</span>
+          </template></el-table-column>
+          <el-table-column label="物料名称" min-width="150"><template #default="{row}">
+            <RemoteSelect v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.materialId" :fetch="(kw:string)=>fetchMaterialsByType(kw,row)" label-key="materialName" size="small" filterable clearable disable-cache style="width:100%" :preset="row.materialId?{id:row.materialId,materialName:row.materialName}:null" @change="(v:any)=>onMatChange(v,row)" />
+            <span v-else>{{ row.materialName }}</span>
+          </template></el-table-column>
           <el-table-column prop="unit" label="单位" width="60" />
-          <el-table-column prop="orderQuantity" label="下单数" width="90" />
+          <el-table-column label="下单数" width="110"><template #default="{row}">
+            <el-input-number v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.orderQuantity" :min="0" size="small" style="width:100%" />
+            <span v-else>{{ row.orderQuantity }}</span>
+          </template></el-table-column>
           <el-table-column label="已出货" width="90"><template #default="{row}"><span :style="{color:row.receivedQuantity>0?'var(--app-color-success)':''}">{{ row.receivedQuantity || 0 }}</span></template></el-table-column>
           <el-table-column label="已退(不良)" width="90"><template #default="{row}"><span :style="{color:row.defectReturnedQty>0?'var(--app-color-danger)':''}">{{ row.defectReturnedQty || 0 }}</span></template></el-table-column>
-          <el-table-column prop="unitPrice" label="单价" width="80" />
+          <el-table-column label="单价" width="110"><template #default="{row}">
+            <el-input-number v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.unitPrice" :min="0" :precision="2" size="small" style="width:100%" />
+            <span v-else>{{ row.unitPrice }}</span>
+          </template></el-table-column>
           <el-table-column prop="amount" label="金额" width="100" />
+          <el-table-column v-if="order.status===MaterialOrderStatus.PENDING" label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link size="small" @click="removeItem($index)">删除</el-button></template></el-table-column>
         </el-table>
       </el-card>
 

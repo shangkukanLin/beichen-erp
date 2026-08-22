@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated, computed } from 'vue'
+import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -68,6 +68,8 @@ function handleCancel() {
 
 async function handleSubmit() {
   if (items.value.length === 0) { ElMessage.warning('请添加物料'); return }
+  const label = form.orderType === '委外' ? '加工厂' : '供应商'
+  if (!form.supplierId) { ElMessage.warning(`请选择${label}`); return }
   saving.value = true
   try {
     if (isEdit.value) { await request.put(`/outsource/material-order/${editId}`, { ...form, items: items.value }); ElMessage.success('已更新') }
@@ -132,19 +134,7 @@ function resetForm() {
   addItem()
 }
 
-onActivated(async () => {
-  await loadOptions()
-  // keep-alive 缓存恢复：非编辑模式需按来源重新初始化（避免残留上次填写信息）
-  if (!editId) {
-    const hasQuery = !!route.query.materialId || !!route.query.supplierId || !!route.query.bomTypeId
-    if (hasQuery) {
-      await initFromQuery()
-      if (items.value.length === 0) addItem()
-    } else {
-      resetForm()
-    }
-  }
-})
+
 onMounted(async () => {
   await loadOptions()
   if (editId) {

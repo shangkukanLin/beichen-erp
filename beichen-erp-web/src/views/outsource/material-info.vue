@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -140,7 +140,7 @@ function onSupplierChange(val: any[]) {
 }
 
 onMounted(() => { loadOptions(); loadData() })
-onActivated(() => { loadOptions(); loadData() })
+
 </script>
 
 <template>

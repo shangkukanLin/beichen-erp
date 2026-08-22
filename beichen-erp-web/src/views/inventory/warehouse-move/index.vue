@@ -85,7 +85,7 @@
 
 <script setup lang="ts">
 import { WarehouseCategory } from '@/api/enums'
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -185,7 +185,7 @@ onMounted(() => {
     }
   })
 })
-onActivated(() => { loadData() })
+
 </script>
 
 <style scoped>

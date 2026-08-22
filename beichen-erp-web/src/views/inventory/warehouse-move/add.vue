@@ -74,7 +74,7 @@
 import { WarehouseCategory } from '@/api/enums'
 defineOptions({ name: 'InventoryWarehouseMoveAdd' })
 
-import { reactive, ref, watch, onMounted, onBeforeUnmount, onActivated } from 'vue'
+import { reactive, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
@@ -241,17 +241,7 @@ onMounted(() => {
   }
 })
 
-onActivated(() => {
-  // 每次激活时根据路由重置状态
-  editId.value = route.query.id ? Number(route.query.id) : undefined
-  isEdit.value = !!editId.value
-  resetForm()
-  if (isEdit.value) {
-    tabStore.updateTabTitle(route.fullPath, '编辑移仓单')
-    document.title = '编辑移仓单 - 北辰ERP管理系统'
-    loadMoveData()
-  }
-})
+
 
 onBeforeUnmount(() => {
   resetForm()

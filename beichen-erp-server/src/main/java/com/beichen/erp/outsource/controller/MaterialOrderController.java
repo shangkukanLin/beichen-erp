@@ -143,7 +143,7 @@ public class MaterialOrderController {
     public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         MaterialOrder old = orderMapper.selectById(id);
         if (old == null) throw new BusinessException("订单不存在");
-        if (MaterialOrderStatus.CANCELLED.getCode().equals(old.getStatus())) throw new BusinessException("已取消的订单不可编辑");
+        if (MaterialOrderStatus.CANCELLED.getCode().equals(old.getStatus())) throw new BusinessException("已作废的订单不可编辑");
         MaterialOrder o = parseOrder(body);
         o.setId(id);
         orderMapper.updateById(o);
@@ -161,13 +161,30 @@ public class MaterialOrderController {
         return R.ok();
     }
 
-    @PutMapping("/{id}/confirm")
+    @PutMapping("/{id}/audit")
     @Transactional(rollbackFor = Exception.class)
-    public R<Void> confirm(@PathVariable Long id) {
+    public R<Void> audit(@PathVariable Long id) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        if (!MaterialOrderStatus.PENDING.getCode().equals(o.getStatus())) throw new BusinessException("只有待确认状态可确认");
+        if (!MaterialOrderStatus.PENDING.getCode().equals(o.getStatus())) throw new BusinessException("只有待审核状态可审核");
         MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.RECEIVING.getCode());
+        orderMapper.updateById(upd);
+        return R.ok();
+    }
+
+    /** 反审核：收货中且无交货记录时回到待审核（与作废逻辑一致，保护已产生库存/应付的单据） */
+    @PutMapping("/{id}/un-audit")
+    @Transactional(rollbackFor = Exception.class)
+    public R<Void> unAudit(@PathVariable Long id) {
+        MaterialOrder o = orderMapper.selectById(id);
+        if (o == null) throw new BusinessException("订单不存在");
+        if (!MaterialOrderStatus.RECEIVING.getCode().equals(o.getStatus()))
+            throw new BusinessException("仅收货中状态可反审核");
+        List<MaterialOrderItem> items = itemMapper.selectList(
+            new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
+        boolean hasDelivery = items.stream().anyMatch(it -> it.getReceivedQuantity() != null && it.getReceivedQuantity().compareTo(BigDecimal.ZERO) > 0);
+        if (hasDelivery) throw new BusinessException("该订单已有交货记录，不可反审核");
+        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.PENDING.getCode());
         orderMapper.updateById(upd);
         return R.ok();
     }
@@ -179,13 +196,13 @@ public class MaterialOrderController {
         boolean force = Boolean.TRUE.equals(body.get("force"));
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        // 仅已确认(收货中)的订单可收货；待确认/已结单/已取消均禁止
+        // 仅已审核(收货中)的订单可收货；待审核/已结单/已作废均禁止
         if (MaterialOrderStatus.PENDING.getCode().equals(o.getStatus()))
-            throw new BusinessException("订单尚未确认，请先确认订单再收货");
+            throw new BusinessException("订单尚未审核，请先审核订单再收货");
         if (MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus()))
             throw new BusinessException("订单已结单，不可再收货");
         if (MaterialOrderStatus.CANCELLED.getCode().equals(o.getStatus()))
-            throw new BusinessException("订单已取消，不可收货");
+            throw new BusinessException("订单已作废，不可收货");
 
         // 供应商（加工厂）仓库：子物料从该仓扣减
         List<Warehouse> supWhs = warehouseMapper.selectList(
@@ -314,7 +331,7 @@ public class MaterialOrderController {
     public R<?> returnDefect(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        // 已确认(收货中)或已完成的订单可退不良；待确认/已取消禁止
+        // 已审核(收货中)或已完成的订单可退不良；待审核/已作废禁止
         if (!MaterialOrderStatus.RECEIVING.getCode().equals(o.getStatus())
                 && !MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus()))
             throw new BusinessException("仅收货中或已完成的订单可退不良");
@@ -392,7 +409,7 @@ public class MaterialOrderController {
     public R<Void> finish(@PathVariable Long id) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        if (MaterialOrderStatus.CANCELLED.getCode().equals(o.getStatus())) throw new BusinessException("已取消的订单不可结单");
+        if (MaterialOrderStatus.CANCELLED.getCode().equals(o.getStatus())) throw new BusinessException("已作废的订单不可结单");
         if (MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus())) throw new BusinessException("订单已完成");
         MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.FINISHED.getCode()); upd.setFinishTime(java.time.LocalDateTime.now());
         orderMapper.updateById(upd);
@@ -405,11 +422,11 @@ public class MaterialOrderController {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
         if (MaterialOrderStatus.CANCELLED.getCode().equals(o.getStatus()) || MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus()))
-            throw new BusinessException("当前状态不可取消");
+            throw new BusinessException("当前状态不可作废");
         List<MaterialOrderItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
         boolean hasDelivery = items.stream().anyMatch(it -> it.getReceivedQuantity() != null && it.getReceivedQuantity().compareTo(BigDecimal.ZERO) > 0);
-        if (hasDelivery) throw new BusinessException("该订单已有交货记录，不可取消");
+        if (hasDelivery) throw new BusinessException("该订单已有交货记录，不可作废");
         MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.CANCELLED.getCode());
         orderMapper.updateById(upd);
         return R.ok();

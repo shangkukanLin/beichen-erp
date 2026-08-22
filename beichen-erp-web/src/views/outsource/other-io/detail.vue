@@ -175,12 +175,12 @@ onMounted(() => { loadWarehouses(); loadMaterials(); loadBomTypes(); loadDetail(
           <template #default="{row}">{{ getMatName(row.materialId) }}</template>
         </el-table-column>
         <el-table-column prop="unit" label="单位" width="80"/>
-        <el-table-column prop="unitPrice" label="单价" width="110" align="right">
-          <template #default="{row}">{{ row.unitPrice ?? '-' }}</template>
+        <el-table-column prop="unit_price" label="单价" width="110" align="right">
+          <template #default="{row}">{{ row.unit_price ?? '-' }}</template>
         </el-table-column>
         <el-table-column prop="quantity" label="数量" width="110" align="right"/>
         <el-table-column label="金额" width="120" align="right">
-          <template #default="{row}">{{ row.unitPrice != null && row.quantity != null ? (Number(row.unitPrice) * Number(row.quantity)).toFixed(2) : '-' }}</template>
+          <template #default="{row}">{{ row.unit_price != null && row.quantity != null ? (Number(row.unit_price) * Number(row.quantity)).toFixed(2) : '-' }}</template>
         </el-table-column>
         <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip>
           <template #default="{row}">{{ row.remark || '-' }}</template>

@@ -31,12 +31,14 @@ export function getReceiptItems(id: number) { return request.get<FinanceReceiptI
 export function createReceipt(data: any) { return request.post<void>('/finance/receipt', data) }
 export function auditReceipt(id: number) { return request.put<void>(`/finance/receipt/${id}/audit`) }
 export function cancelReceipt(id: number) { return request.put<void>(`/finance/receipt/${id}/cancel`) }
+export function unAuditReceipt(id: number) { return request.put<void>(`/finance/receipt/${id}/un-audit`) }
 
 export function getPaymentPage(params: any) { return request.get<PageResult<FinancePayment>>('/finance/payment/page', { params }) }
 export function getPaymentItems(id: number) { return request.get<FinancePaymentItem[]>(`/finance/payment/${id}/items`) }
 export function createPayment(data: any) { return request.post<void>('/finance/payment', data) }
 export function auditPayment(id: number) { return request.put<void>(`/finance/payment/${id}/audit`) }
 export function cancelPayment(id: number) { return request.put<void>(`/finance/payment/${id}/cancel`) }
+export function unAuditPayment(id: number) { return request.put<void>(`/finance/payment/${id}/un-audit`) }
 
 export function getBillPage(params: any) { return request.get<PageResult<FinanceBill>>('/finance/bill/page', { params }) }
 export function getBillItems(id: number) { return request.get<FinanceBillItem[]>(`/finance/bill/${id}/items`) }

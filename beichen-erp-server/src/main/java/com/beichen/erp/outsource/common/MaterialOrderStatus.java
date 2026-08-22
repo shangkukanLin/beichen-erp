@@ -9,14 +9,14 @@ package com.beichen.erp.outsource.common;
  */
 public enum MaterialOrderStatus {
 
-    /** 待确认：订单刚创建，等待确认 */
-    PENDING("待确认"),
-    /** 收货中：已确认，正在收货 */
+    /** 待审核：订单刚创建，等待审核 */
+    PENDING("待审核"),
+    /** 收货中：已审核，正在收货 */
     RECEIVING("收货中"),
     /** 已完成：全部收货完成 */
     FINISHED("已完成"),
-    /** 已取消：订单被取消 */
-    CANCELLED("已取消");
+    /** 已作废：订单被作废 */
+    CANCELLED("已作废");
 
     private final String label;
 

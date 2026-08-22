@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -13,11 +13,11 @@ const tableData = ref<any[]>([])
 const loading = ref(false)
 const activeTab = ref('进行中')
 
-// 状态 Tab 定义 - 进行中：待确认 + 收货中
+// 状态 Tab 定义 - 进行中：待审核 + 收货中
 const STATUS_TABS = [
   { key: '进行中', label: '进行中', type: 'warning', statuses: [MaterialOrderStatus.PENDING, MaterialOrderStatus.RECEIVING] },
   { key: '已完成', label: '已完成', type: 'success', statuses: [MaterialOrderStatus.FINISHED] },
-  { key: '已取消', label: '已取消', type: 'danger', statuses: [MaterialOrderStatus.CANCELLED] }
+  { key: '已作废', label: '已作废', type: 'danger', statuses: [MaterialOrderStatus.CANCELLED] }
 ]
 const tabPanes = computed(() => STATUS_TABS.map(t => ({ tab: t.key, name: t.key })))
 
@@ -41,13 +41,16 @@ function handleReset() { query.code = ''; loadData() }
 function onTabChange() { pagination.pageNum = 1; loadData() }
 
 async function handleConfirm(row: any) {
-  try { await ElMessageBox.confirm('确认后将进入收货中状态', '确认订单', { type: 'warning' }); await request.put(`/outsource/material-order/${row.id}/confirm`); ElMessage.success('已确认'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('审核后将进入收货中状态', '审核订单', { type: 'warning' }); await request.put(`/outsource/material-order/${row.id}/audit`); ElMessage.success('已审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+}
+async function handleUnAudit(row: any) {
+  try { await ElMessageBox.confirm('确认反审核？将回到待审核状态', '反审核', { type: 'warning' }); await request.put(`/outsource/material-order/${row.id}/un-audit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleCancel(row: any) {
-  try { await ElMessageBox.confirm('确定取消该订单？', '取消订单', { type: 'warning' }); await request.put(`/outsource/material-order/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('确定作废该订单？', '作废订单', { type: 'warning' }); await request.put(`/outsource/material-order/${row.id}/cancel`); ElMessage.success('已作废'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 onMounted(() => { loadData() })
-onActivated(() => { loadData() })
+
 </script>
 
 <template>
@@ -95,11 +98,12 @@ onActivated(() => { loadData() })
         <el-table-column label="最近交货" width="85" align="center"><template #default="{row}">{{ $fmtDate(row.lastDeliveryTime) || '-' }}</template></el-table-column>
         <el-table-column label="交期" width="90" align="center"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column label="状态" width="70" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status]||'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="145" align="center" fixed="right">
+        <el-table-column label="操作" width="185" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click="router.push(`/outsource/material-order/detail/${row.id}`)" style="padding:0 4px">详情</el-button>
-            <el-button v-if="row.status===MaterialOrderStatus.PENDING" type="success" link size="small" @click="handleConfirm(row)" style="padding:0 4px">确认</el-button>
-            <el-button v-if="row.status!==MaterialOrderStatus.FINISHED && row.status!==MaterialOrderStatus.CANCELLED" type="danger" link size="small" @click="handleCancel(row)" style="padding:0 4px">取消</el-button>
+            <el-button v-if="row.status===MaterialOrderStatus.PENDING" type="success" link size="small" @click="handleConfirm(row)" style="padding:0 4px">审核</el-button>
+            <el-button v-if="row.status===MaterialOrderStatus.RECEIVING" type="warning" link size="small" @click="handleUnAudit(row)" style="padding:0 4px">反审核</el-button>
+            <el-button v-if="row.status!==MaterialOrderStatus.FINISHED && row.status!==MaterialOrderStatus.CANCELLED" type="danger" link size="small" @click="handleCancel(row)" style="padding:0 4px">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

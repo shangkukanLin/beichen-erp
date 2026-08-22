@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -28,15 +28,23 @@ async function loadData() {
 }
 function handleAdd() { router.push('/inventory/other-io/add') }
 function handleEdit(row: any) { router.push(`/inventory/other-io/add?id=${row.id}`) }
+async function handleAudit(row: any) {
+  try { await ElMessageBox.confirm('确认审核？审核后按明细增减库存', '审核确认', { type: 'warning' }) } catch { return }
+  try { await request.put(`/inventory/other/${row.id}/audit`); ElMessage.success('已审核'); loadData() } catch (e: any) { ElMessage.error(e?.message || '失败') }
+}
+async function handleUnAudit(row: any) {
+  try { await ElMessageBox.confirm('确认反审核？将逆向增减库存并回到草稿', '反审核确认', { type: 'warning' }) } catch { return }
+  try { await request.put(`/inventory/other/${row.id}/un-audit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { ElMessage.error(e?.message || '失败') }
+}
 async function handleCancel(row: any) {
-  try { await ElMessageBox.confirm('确认取消？取消后将逆向库存', '确认',{type:'warning'}) } catch { return }
-  try { await request.put(`/inventory/other/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch (e: any) { ElMessage.error(e?.message||'失败') }
+  try { await ElMessageBox.confirm('确认作废？作废后不可恢复', '作废确认', { type: 'warning' }) } catch { return }
+  try { await request.put(`/inventory/other/${row.id}/cancel`); ElMessage.success('已作废'); loadData() } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 function handleQuery() { pagination.pageNum=1; loadData() }
 
 function getWhName(id: number) { return warehouseOptions.value.find((w:any)=>w.id===id)?.warehouseName || id }
 onMounted(()=>{ loadData() })
-onActivated(() => { loadData() })
+
 </script>
 
 <template>
@@ -55,8 +63,13 @@ onActivated(() => { loadData() })
         <el-table-column label="类型" width="80"><template #default="{row}"><el-tag :type="row.ioType===IoType.IN?'success':'danger'" size="small">{{ IoTypeLabel[row.ioType] || row.ioType }}</el-tag></template></el-table-column>
         <el-table-column label="日期" width="110"><template #default="{row}">{{ $fmtDate(row.ioDate) }}</template></el-table-column>
         <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip/>
-        <el-table-column label="操作" width="140" align="center">
-          <template #default="{row}"><el-button type="primary" link @click="handleEdit(row)" :disabled="row.status===DocStatus.CANCELLED">编辑</el-button><el-button type="danger" link @click="handleCancel(row)" :disabled="row.status===DocStatus.CANCELLED">取消</el-button></template>
+        <el-table-column label="操作" width="260" align="center">
+          <template #default="{row}">
+            <el-button type="primary" link @click="handleEdit(row)" v-if="row.status===DocStatus.DRAFT">编辑</el-button>
+            <el-button type="success" link @click="handleAudit(row)" v-if="row.status===DocStatus.DRAFT">审核</el-button>
+            <el-button type="warning" link @click="handleUnAudit(row)" v-if="row.status===DocStatus.AUDITED">反审核</el-button>
+            <el-button type="danger" link @click="handleCancel(row)" v-if="row.status===DocStatus.DRAFT">作废</el-button>
+          </template>
         </el-table-column>
       </el-table>
       <div style="margin-top:16px;display:flex;justify-content:flex-end"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleQuery"/></div>

@@ -69,7 +69,7 @@
 
 <script setup lang="ts">
 import { WarehouseCategory } from '@/api/enums'
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
@@ -168,7 +168,7 @@ function handleBillClick(billType?: string, billId?: number) {
 }
 
 onMounted(() => { loadData() })
-onActivated(() => { loadData() })
+
 </script>
 
 <style scoped>

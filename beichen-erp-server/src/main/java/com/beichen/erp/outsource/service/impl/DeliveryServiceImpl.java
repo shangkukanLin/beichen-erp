@@ -166,6 +166,9 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (orderId == null) throw new BusinessException("收货单缺少关联物料订单");
         MaterialOrder order = materialOrderMapper.selectById(orderId);
         if (order == null) throw new BusinessException("关联物料订单不存在");
+        if (MaterialOrderStatus.CANCELLED.getCode().equals(order.getStatus())) {
+            throw new BusinessException("关联物料订单已作废，不可审核");
+        }
         List<OutsourceDeliveryItem> items = getItems(id);
         if (items.isEmpty()) throw new BusinessException("单据无明细，无法审核");
 
