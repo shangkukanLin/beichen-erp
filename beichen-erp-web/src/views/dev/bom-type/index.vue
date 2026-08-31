@@ -24,6 +24,7 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row: any) {
+  if (row.isDefault === 1) { ElMessage.warning('默认类型不可删除'); return }
   try { await ElMessageBox.confirm(`确定删除「${row.typeName}」吗？`, '提示', { type: 'warning' }); await request.delete(`/dev/bom-type/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
@@ -35,17 +36,19 @@ onMounted(() => loadData())
   <div class="bom-type-page">
     <el-card shadow="never">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-        <el-button type="primary" @click="handleAdd">新增类型</el-button>
+        <el-button type="primary" :icon="'Plus'" @click="handleAdd">新增类型</el-button>
         <el-tag type="info">类型数据被 BOM 物料清单共用</el-tag>
       </div>
       <el-table :data="tableData" border stripe>
         <el-table-column prop="sortOrder" label="排序" width="60" align="center" />
-        <el-table-column prop="typeName" label="类型名称" min-width="200" />
+        <el-table-column prop="typeName" label="类型名称" min-width="200">
+          <template #default="{row}">{{ row.typeName }}<el-tag v-if="row.isDefault===1" type="info" size="small" style="margin-left:6px">默认</el-tag></template>
+        </el-table-column>
         <el-table-column label="状态" width="100" align="center">
           <template #default="{row}"><el-tag :type="row.status===1?'success':'info'">{{row.status===1?'启用':'禁用'}}</el-tag></template>
         </el-table-column>
         <el-table-column label="操作" width="120" align="center">
-          <template #default="{row}"><el-button type="primary" link @click="handleEdit(row)">编辑</el-button><el-button type="danger" link @click="handleDelete(row)">删除</el-button></template>
+          <template #default="{row}"><el-button type="primary" link @click="handleEdit(row)">编辑</el-button><el-button type="danger" link :disabled="row.isDefault===1" @click="handleDelete(row)">删除</el-button></template>
         </el-table-column>
       </el-table>
     </el-card>

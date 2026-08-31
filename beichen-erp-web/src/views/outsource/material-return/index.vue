@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY } from '@/api/enums'
 
 const router = useRouter()
 const loading = ref(false)
@@ -39,6 +39,13 @@ async function handleCancel(row: any) {
 
 function handleAdd() { router.push('/outsource/material-return/add') }
 
+onActivated(() => {
+  // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+  if (sessionStorage.getItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY)
+    loadData()
+  }
+})
 onMounted(loadData)
 
 </script>
@@ -56,14 +63,14 @@ onMounted(loadData)
         </el-select>
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
-        <el-button type="success" @click="handleAdd">新增物料退货</el-button>
+        <el-button type="success" :icon="'Plus'" @click="handleAdd">新增物料退货</el-button>
       </div>
     </el-card>
     <el-card shadow="never">
-      <el-table :data="list" border stripe v-loading="loading">
+      <el-table :data="list" border stripe v-loading="loading" @row-click="(row: any) => router.push(`/outsource/material-return/detail/${row.id}`)">
         <el-table-column prop="code" label="退货单号" width="180" />
         <el-table-column label="供应商" width="130" show-overflow-tooltip>
-          <template #default="{row}"><el-button type="primary" link @click="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName }}</el-button></template>
+          <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName }}</el-button></template>
         </el-table-column>
         <el-table-column prop="warehouseName" label="出库源仓" width="130" show-overflow-tooltip />
         <el-table-column label="退货物料" min-width="160" show-overflow-tooltip>
@@ -80,10 +87,10 @@ onMounted(loadData)
         </el-table-column>
         <el-table-column label="操作" width="180" align="center">
           <template #default="{ row }">
-            <el-button type="primary" link @click="router.push(`/outsource/material-return/detail/${row.id}`)">详情</el-button>
-            <el-button type="success" link v-if="row.status===DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
-            <el-button type="warning" link v-if="row.status===DocStatus.AUDITED" @click="handleUnAudit(row)">反审核</el-button>
-            <el-button type="danger" link v-if="row.status===DocStatus.DRAFT" @click="handleCancel(row)">作废</el-button>
+            <el-button type="primary" link @click.stop="router.push(`/outsource/material-return/detail/${row.id}`)">详情</el-button>
+            <el-button type="success" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleAudit(row)">审核</el-button>
+            <el-button type="warning" link v-if="row.status===DocStatus.AUDITED" @click.stop="handleUnAudit(row)">反审核</el-button>
+            <el-button type="danger" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

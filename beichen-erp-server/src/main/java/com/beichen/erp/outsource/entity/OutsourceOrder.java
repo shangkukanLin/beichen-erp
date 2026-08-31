@@ -18,8 +18,13 @@ public class OutsourceOrder {
     private LocalDate actualStartDate;
     private LocalDate actualEndDate;
     private String status;
+    /** 供料模式：OURS来料加工 FACTORY包工包料 */
+    private String supplyMode;
     private Integer taxIncluded;
     private BigDecimal taxRate;
+
+    /** 税额（taxIncluded=1 时按税率从含税总额中拆出：total × rate/(100+rate)） */
+    private BigDecimal taxAmount;
     private BigDecimal totalAmount;
     private String remark;
     private String attachUrl;

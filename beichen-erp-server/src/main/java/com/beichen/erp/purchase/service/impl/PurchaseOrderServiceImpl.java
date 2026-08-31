@@ -77,6 +77,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             m.put("status", o.getStatus());
             m.put("taxIncluded", o.getTaxIncluded());
             m.put("taxRate", o.getTaxRate());
+            m.put("taxAmount", o.getTaxAmount());
             m.put("totalAmount", o.getTotalAmount());
             m.put("remark", o.getRemark());
             m.put("createTime", o.getCreateTime());
@@ -121,14 +122,26 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 List<Product> products = productMapper.selectBatchIds(productIds);
                 Map<Long, String> nameMap = products.stream()
                         .collect(Collectors.toMap(Product::getId, Product::getName, (a, b) -> a));
+                Map<Long, String> skuMap = products.stream()
+                        .collect(Collectors.toMap(Product::getId, p -> p.getSku() != null ? p.getSku() : "", (a, b) -> a));
                 items.forEach(it -> {
                     if (it.getProductId() != null) {
                         it.setProductName(nameMap.getOrDefault(it.getProductId(), ""));
+                        it.setSku(skuMap.getOrDefault(it.getProductId(), ""));
                     }
                 });
             }
         }
         return items;
+    }
+
+    /** 税额拆分（单价含税口径）：打开收税时从含税总额中按税率拆出税额 = total × rate/(100+rate) */
+    private BigDecimal calcTaxAmount(BigDecimal total, Integer taxIncluded, BigDecimal taxRate) {
+        if (!Integer.valueOf(1).equals(taxIncluded) || taxRate == null || taxRate.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal rate = taxRate.divide(new BigDecimal("100"), 6, BigDecimal.ROUND_HALF_UP);
+        return total.multiply(rate).divide(BigDecimal.ONE.add(rate), 2, BigDecimal.ROUND_HALF_UP);
     }
 
     @Override
@@ -154,6 +167,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         PurchaseOrder u = new PurchaseOrder();
         u.setId(order.getId());
         u.setTotalAmount(total);
+        u.setTaxAmount(calcTaxAmount(total, order.getTaxIncluded(), order.getTaxRate()));
         orderMapper.updateById(u);
     }
 
@@ -181,6 +195,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         PurchaseOrder u = new PurchaseOrder();
         u.setId(order.getId());
         u.setTotalAmount(total);
+        u.setTaxAmount(calcTaxAmount(total, order.getTaxIncluded(), order.getTaxRate()));
         orderMapper.updateById(u);
     }
 

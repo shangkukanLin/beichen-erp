@@ -163,8 +163,10 @@ CREATE TABLE IF NOT EXISTS outsource_order (
     actual_start_date DATE COMMENT '实际开始日期',
     actual_end_date DATE COMMENT '实际结束日期',
     status VARCHAR(20) DEFAULT '待处理' COMMENT '状态',
+    supply_mode VARCHAR(20) DEFAULT 'OURS' COMMENT '供料模式:OURS来料加工 FACTORY包工包料',
     tax_included TINYINT DEFAULT 0 COMMENT '0未含税 1含税',
     tax_rate DECIMAL(18,4) DEFAULT 0 COMMENT '税率',
+    tax_amount DECIMAL(18,4) DEFAULT 0 COMMENT '税额(含税总额按税率拆分)',
     total_amount DECIMAL(18,4) DEFAULT 0 COMMENT '总金额',
     remark VARCHAR(500) COMMENT '备注',
     attach_url VARCHAR(500) COMMENT '附件URL',
@@ -205,6 +207,7 @@ CREATE TABLE IF NOT EXISTS outsource_order_material (
     unit VARCHAR(20) COMMENT '单位',
     demand_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '需求数量',
     loss_rate DECIMAL(18,4) DEFAULT 0 COMMENT '损耗率',
+    supply_type VARCHAR(20) DEFAULT 'OURS' COMMENT '供料方:OURS我方供 FACTORY工厂包',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -215,7 +218,8 @@ CREATE TABLE IF NOT EXISTS outsource_order_material (
 
 CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
-    order_id BIGINT NOT NULL COMMENT '订单ID',
+    -- 收费售后(source_type=AFTER_SALE)不关联加工单，order_id 可为空；仅普通交货/委外退货来源必填
+    order_id BIGINT DEFAULT NULL COMMENT '订单ID',
     warehouse_id BIGINT DEFAULT NULL COMMENT '收货仓库ID',
     delivery_date DATE COMMENT '发货日期',
     product_id BIGINT COMMENT '产品ID(关联outsource_order_product)',
@@ -298,6 +302,7 @@ CREATE TABLE IF NOT EXISTS outsource_material (
     spec VARCHAR(100) COMMENT '规格型号',
     unit VARCHAR(20) COMMENT '单位',
     status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',
+    price DECIMAL(18,2) DEFAULT 0 COMMENT '单价',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -379,7 +384,7 @@ CREATE TABLE IF NOT EXISTS warehouse_stock (
     warehouse_id BIGINT NOT NULL COMMENT '仓库ID',
     product_id BIGINT DEFAULT NULL COMMENT '产品ID(关联product表，自有仓成品库存)',
     material_id BIGINT DEFAULT NULL COMMENT '物料ID(关联outsource_material表，委外仓物料库存)',
-    quality_type VARCHAR(20) DEFAULT 'A' COMMENT '品质等级(A/B/C/DEFECT/GOOD/DEFECT)',
+    quality_type VARCHAR(20) DEFAULT 'A' COMMENT '品质等级：成品(product_id非空)用 A/B/C/DEFECT/PENDING；委外物料(material_id非空)用 GOOD/DEFECT。两体系互斥，GOOD 仅用于物料',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '库存数量',
     available_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '可用数量(预留,目前等于quantity)',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
@@ -398,7 +403,7 @@ CREATE TABLE IF NOT EXISTS warehouse_stock_log (
     product_id BIGINT DEFAULT NULL COMMENT '产品ID(自有仓成品流水)',
     material_id BIGINT DEFAULT NULL COMMENT '物料ID(委外仓物料流水)',
     material_name VARCHAR(100) COMMENT '物料名称',
-    quality_type VARCHAR(20) COMMENT '品质等级',
+    quality_type VARCHAR(20) COMMENT '品质等级：成品(product_id非空)用 A/B/C/DEFECT/PENDING；委外物料(material_id非空)用 GOOD/DEFECT。两体系互斥，GOOD 仅用于物料',
     change_type VARCHAR(50) NOT NULL COMMENT '变动类型',
     change_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变更数量',
     before_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '变更前库存',
@@ -553,18 +558,26 @@ CREATE TABLE IF NOT EXISTS dev_project (
     name VARCHAR(100) NOT NULL COMMENT '项目名称',
     assembly_name VARCHAR(100) COMMENT '总成名称',
     product_id BIGINT DEFAULT NULL COMMENT '关联产品ID(product.id)，与产品表双向关联',
+    brand_id BIGINT DEFAULT NULL COMMENT '品牌ID(brand.id)',
     display_supplier_name VARCHAR(100) COMMENT '显示方案供应商',
     touch_supplier_name VARCHAR(100) COMMENT '触摸方案供应商',
     adapt_model VARCHAR(100) COMMENT '适配机型',
     original_size VARCHAR(50) COMMENT '原始尺寸',
     original_resolution VARCHAR(50) COMMENT '原始分辨率',
+    original_drive_ic VARCHAR(100) COMMENT '原机驱动IC型号',
+    original_touch_ic VARCHAR(100) COMMENT '原机触摸IC型号',
+    glass_size VARCHAR(50) COMMENT '玻璃尺寸',
+    glass_resolution VARCHAR(50) COMMENT '玻璃分辨率',
+    config_drive_ic_id BIGINT DEFAULT NULL COMMENT '改配驱动IC物料ID(outsource_material.id)',
+    config_touch_ic_id BIGINT DEFAULT NULL COMMENT '改配触摸IC物料ID(outsource_material.id)',
+    config_code_ic_id BIGINT DEFAULT NULL COMMENT '改配码片IC物料ID(outsource_material.id)',
     project_leader_id BIGINT COMMENT '项目负责人ID',
     sample_factory_id BIGINT COMMENT '样品工厂ID',
     outsource_factory_id BIGINT COMMENT '外协工厂ID',
     start_date DATE COMMENT '开始日期',
     expected_end_date DATE COMMENT '预计结束日期',
     actual_end_date DATE COMMENT '实际结束日期',
-    status VARCHAR(20) DEFAULT 'IN_PROGRESS' COMMENT '项目状态(时间线自动推导)',
+    status VARCHAR(20) DEFAULT 'IN_PROGRESS' COMMENT '项目状态(项目阶段自动推导)',
     cancelled_at DATETIME COMMENT '取消时间',
     remark VARCHAR(500) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
@@ -576,10 +589,10 @@ CREATE TABLE IF NOT EXISTS dev_project (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目表';
 
-CREATE TABLE IF NOT EXISTS dev_project_timeline (
+CREATE TABLE IF NOT EXISTS dev_project_phase (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     project_id BIGINT NOT NULL COMMENT '项目ID',
-    status_name VARCHAR(50) NOT NULL COMMENT '节点名称',
+    phase_name VARCHAR(50) NOT NULL COMMENT '节点名称',
     sort_order INT DEFAULT 0 COMMENT '排序',
     default_days INT DEFAULT 0 COMMENT '默认天数',
     planned_end DATE COMMENT '计划完成日期',
@@ -590,7 +603,7 @@ CREATE TABLE IF NOT EXISTS dev_project_timeline (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_project_id (project_id),
     INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目时间线表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目阶段表';
 
 CREATE TABLE IF NOT EXISTS dev_phase_template (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
@@ -669,6 +682,7 @@ CREATE TABLE IF NOT EXISTS dev_bom_type (
     type_name VARCHAR(50) NOT NULL COMMENT '类型名称',
     sort_order INT DEFAULT 0 COMMENT '排序',
     status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',
+    is_default TINYINT DEFAULT 0 COMMENT '1默认类型(不可删除) 0自定义',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_company_id (company_id)
@@ -740,6 +754,7 @@ CREATE TABLE IF NOT EXISTS purchase_order (
     status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废',
     tax_included TINYINT DEFAULT 0 COMMENT '0未含税 1含税',
     tax_rate DECIMAL(18,4) DEFAULT 0 COMMENT '税率',
+    tax_amount DECIMAL(18,4) DEFAULT 0 COMMENT '税额(含税总额按税率拆分)',
     total_amount DECIMAL(18,4) DEFAULT 0 COMMENT '总金额',
     remark VARCHAR(500) COMMENT '备注',
     auditor_id BIGINT DEFAULT NULL COMMENT '审核人ID',
@@ -771,13 +786,15 @@ CREATE TABLE IF NOT EXISTS purchase_order_item (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购订单明细表';
 
--- ==================== 成品退货单 ====================
+-- ==================== 采购退货单 ====================
 
 CREATE TABLE IF NOT EXISTS purchase_return (
     id              BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
     code            VARCHAR(50) NOT NULL               COMMENT '退货单号',
     supplier_id     BIGINT                            COMMENT '供应商ID',
     warehouse_id    BIGINT                            COMMENT '退货仓库ID',
+    purchase_order_id   BIGINT                        COMMENT '关联采购单ID',
+    purchase_order_code VARCHAR(30)                   COMMENT '关联采购单号',
     return_date     DATE                              COMMENT '退货日期',
     status          VARCHAR(20) DEFAULT 'DRAFT'       COMMENT '状态: DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废',
     total_amount    DECIMAL(18,2) DEFAULT 0            COMMENT '退货总金额',
@@ -793,11 +810,12 @@ CREATE TABLE IF NOT EXISTS purchase_return (
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_status (status),
     INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品退货单主表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购退货单主表';
 
 CREATE TABLE IF NOT EXISTS purchase_return_item (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY  COMMENT '主键ID',
     return_id    BIGINT NOT NULL                   COMMENT '退货单ID(关联主表)',
+    purchase_order_item_id BIGINT                  COMMENT '关联采购单明细ID',
     product_id   BIGINT                            COMMENT '产品ID(联查product表)',
     quality_type VARCHAR(10) DEFAULT 'A'           COMMENT '品质等级: A/B/C/DEFECT',
     quantity     DECIMAL(18,4) DEFAULT 0           COMMENT '退货数量',
@@ -809,7 +827,7 @@ CREATE TABLE IF NOT EXISTS purchase_return_item (
     INDEX idx_return_id (return_id),
     INDEX idx_product_id (product_id),
     INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品退货单明细表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购退货单明细表';
 
 -- ==================== 销售模块 ====================
 
@@ -822,6 +840,7 @@ CREATE TABLE IF NOT EXISTS sale_order (
     status VARCHAR(20) DEFAULT '草稿' COMMENT '状态: 草稿/已审核/已出库/已作废',
     tax_included TINYINT DEFAULT 0 COMMENT '0未含税 1含税',
     tax_rate DECIMAL(18,4) DEFAULT 0 COMMENT '税率',
+    tax_amount DECIMAL(18,4) DEFAULT 0 COMMENT '税额(含税总额按税率拆分)',
     total_amount DECIMAL(18,4) DEFAULT 0 COMMENT '总金额',
     remark VARCHAR(500) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
@@ -839,7 +858,7 @@ CREATE TABLE IF NOT EXISTS sale_order_item (
     order_id BIGINT NOT NULL COMMENT '销售单ID',
     product_id BIGINT COMMENT '产品ID',
     quality_type VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT',
-    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
+    quantity DECIMAL(18,0) DEFAULT 0 COMMENT '数量',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
     amount DECIMAL(18,4) DEFAULT 0 COMMENT '金额',
     remark VARCHAR(255) COMMENT '备注',
@@ -895,9 +914,16 @@ CREATE TABLE IF NOT EXISTS sale_return (
     code VARCHAR(30) COMMENT '退货单号',
     customer_id BIGINT COMMENT '客户ID',
     warehouse_id BIGINT COMMENT '退货入库仓库ID',
+    sale_order_id BIGINT COMMENT '关联销售单ID',
+    sale_order_code VARCHAR(30) COMMENT '关联销售单号',
     return_date DATE COMMENT '退货日期',
     status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废',
     total_amount DECIMAL(18,2) DEFAULT 0 COMMENT '退货总金额',
+    loss_amount DECIMAL(18,2) DEFAULT 0 COMMENT '折损收款金额(整理后B/C/不良的折损，向客户收取，审核生成正向应收)',
+    charge_flag TINYINT DEFAULT 0 COMMENT '是否收费: 0否 1是(收费则审核生成一条正向应收，单号后缀 -FEE)',
+    charge_type VARCHAR(20) DEFAULT NULL COMMENT '收费类型: SERVICE服务费/DIFF品质差价/FULL全额货值/OTHER其他',
+    charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '收费金额(手工填写，审核后生成正向应收，单号后缀 -FEE)',
+    charge_reason VARCHAR(200) COMMENT '收费说明(原因备注)',
     remark VARCHAR(500) COMMENT '备注',
     auditor_id BIGINT COMMENT '审核人ID',
     auditor_name VARCHAR(50) COMMENT '审核人姓名',
@@ -914,9 +940,11 @@ CREATE TABLE IF NOT EXISTS sale_return (
 CREATE TABLE IF NOT EXISTS sale_return_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '退货单明细ID',
     return_id BIGINT COMMENT '退货单ID',
+    sale_order_item_id BIGINT COMMENT '关联销售单明细ID',
     product_id BIGINT COMMENT '产品ID',
-    quality_type VARCHAR(10) DEFAULT 'DEFECT' COMMENT '品质等级: 固定DEFECT(不良品)',
+    quality_type VARCHAR(10) DEFAULT 'PENDING' COMMENT '品质等级: A/B/C/DEFECT/PENDING，销售退货默认PENDING(待分类)',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '退货数量',
+    sorted_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '已整理数量(退货整理单审核后累加、反审核扣回)',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
     amount DECIMAL(18,2) DEFAULT 0 COMMENT '金额',
     remark VARCHAR(500) COMMENT '备注',
@@ -1061,6 +1089,130 @@ CREATE TABLE IF NOT EXISTS product_reclassify_item (
     INDEX idx_product_id (product_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='品质重分类明细表';
+
+CREATE TABLE IF NOT EXISTS return_sort (
+    id                    BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    code                  VARCHAR(50) NOT NULL               COMMENT '单号(TS-yyyyMMdd-001)',
+    warehouse_id          BIGINT NOT NULL                    COMMENT '源仓库(售后仓)ID',
+    sort_date             DATE                               COMMENT '整理日期',
+    target_warehouse_a    BIGINT DEFAULT NULL                COMMENT 'A规入库仓库',
+    target_warehouse_b    BIGINT DEFAULT NULL                COMMENT 'B规入库仓库',
+    target_warehouse_c    BIGINT DEFAULT NULL                COMMENT 'C规入库仓库',
+    target_warehouse_defect BIGINT DEFAULT NULL              COMMENT '不良入库仓库',
+    status                VARCHAR(20) DEFAULT 'DRAFT'        COMMENT '状态: DRAFT/AUDITED/CANCELLED',
+    loss_amount           DECIMAL(18,2) DEFAULT 0            COMMENT '折损收款金额(整理后B/C/不良品的折损，向客户收取，审核后生成正向应收，单号后缀 -LOSS)',
+    loss_remark           VARCHAR(200)                       COMMENT '折损收款说明',
+    remark                VARCHAR(500)                       COMMENT '备注',
+    company_id            BIGINT DEFAULT NULL                COMMENT '公司ID',
+    create_time           DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time           DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='退货整理主表';
+
+CREATE TABLE IF NOT EXISTS return_sort_item (
+    id                    BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    sort_id               BIGINT NOT NULL                    COMMENT '退货整理单ID',
+    product_id            BIGINT NOT NULL                    COMMENT '产品ID',
+    pending_id            BIGINT DEFAULT NULL                COMMENT '来源售后待整理批次ID(after_sale_pending.id)，整理数量回写的唯一追溯锚点',
+    sale_return_item_id   BIGINT DEFAULT NULL                COMMENT '[已废弃，保留兼容]来源销售退货明细ID，追溯统一走 pending_id',
+    product_name          VARCHAR(200)                       COMMENT '产品名称(冗余)',
+    spec                  VARCHAR(100)                       COMMENT '规格(冗余)',
+    unit                  VARCHAR(20)                        COMMENT '单位(冗余)',
+    total_quantity        DECIMAL(18,4) DEFAULT 0            COMMENT '待整理数量',
+    qty_a                 DECIMAL(18,4) DEFAULT 0            COMMENT 'A规数量',
+    qty_b                 DECIMAL(18,4) DEFAULT 0            COMMENT 'B规数量',
+    qty_c                 DECIMAL(18,4) DEFAULT 0            COMMENT 'C规数量',
+    qty_defect            DECIMAL(18,4) DEFAULT 0            COMMENT '不良数量',
+    remark                VARCHAR(255)                       COMMENT '备注',
+    company_id            BIGINT DEFAULT NULL                COMMENT '公司ID',
+    create_time           DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_sort_id (sort_id),
+    INDEX idx_product_id (product_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='退货整理明细表';
+
+-- 售后待整理批次（销售退单/销售换货单统一入口）
+-- 设计说明：售后仓的待分类(PENDING)库存按 (仓库,产品,品质) 聚合，本身不记录来源，无法追溯。
+-- 退单与换货单审核时各写入一条待整理批次，退货整理单消费本表并回写 sorted_quantity，
+-- 从而统一追溯「这批待分类品来自哪张单据、是否已整理完」。新增售后单据类型只需扩展 source_type。
+CREATE TABLE IF NOT EXISTS after_sale_pending (
+    id                    BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '待整理批次ID',
+    source_type           VARCHAR(20) NOT NULL              COMMENT '来源单据类型: SALE_RETURN(销售退单)/SALE_EXCHANGE(销售换货单)',
+    source_id             BIGINT NOT NULL                   COMMENT '来源单据ID(sale_return.id / sale_exchange.id)',
+    source_item_id        BIGINT NOT NULL                   COMMENT '来源单据明细ID(sale_return_item.id / sale_exchange_item.id)',
+    source_code           VARCHAR(64)                       COMMENT '来源单号(冗余，便于列表展示与检索)',
+    source_date           DATE                              COMMENT '来源单据业务日期(退单的退货日期/换货的换货日期，冗余展示)',
+    warehouse_id          BIGINT NOT NULL                   COMMENT '售后仓ID(待分类品所在仓)',
+    customer_id           BIGINT DEFAULT NULL               COMMENT '客户ID(冗余，整理后生成折损应收用)',
+    product_id            BIGINT NOT NULL                   COMMENT '产品ID',
+    product_name          VARCHAR(200)                      COMMENT '产品名称(冗余)',
+    spec                  VARCHAR(100)                      COMMENT '规格(冗余)',
+    unit                  VARCHAR(20)                       COMMENT '单位(冗余)',
+    quantity              DECIMAL(18,4) DEFAULT 0           COMMENT '待整理数量(来源单据审核时的入库数量)',
+    sorted_quantity       DECIMAL(18,4) DEFAULT 0           COMMENT '已整理数量(整理单审核累加、反审核扣回)',
+    unit_price            DECIMAL(18,4) DEFAULT 0           COMMENT '来源单价(冗余，折损计算与展示用)',
+    company_id            BIGINT DEFAULT NULL               COMMENT '公司ID',
+    create_time           DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time           DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_source_item (source_type, source_item_id),
+    INDEX idx_warehouse_product (warehouse_id, product_id),
+    INDEX idx_source (source_type, source_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='售后待整理批次表(退单/换货统一入口)';
+
+-- 销售换货单（只支持同品换货，强关联销售单：审核时退回入售后仓 + 换出从成品仓扣减）
+CREATE TABLE IF NOT EXISTS sale_exchange (
+    id                    BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    code                  VARCHAR(64) UNIQUE                 COMMENT '换货单号(HH-yyyyMMdd-NNN)',
+    sale_order_id         BIGINT DEFAULT NULL                COMMENT '来源销售单ID(sale_order.id)，强关联',
+    sale_order_code       VARCHAR(64)                        COMMENT '来源销售单号(冗余，便于检索)',
+    customer_id           BIGINT DEFAULT NULL                COMMENT '客户ID',
+    warehouse_in_id       BIGINT DEFAULT NULL                COMMENT '换入仓：退回货品入此仓(须为售后仓)',
+    warehouse_out_id      BIGINT DEFAULT NULL                COMMENT '换出仓：发出新货从此仓扣减(须为成品仓)',
+    exchange_date         DATE                               COMMENT '换货日期',
+    status                VARCHAR(20) DEFAULT 'DRAFT'        COMMENT '状态: DRAFT/AUDITED/CANCELLED',
+    total_amount          DECIMAL(18,2) DEFAULT 0            COMMENT '换出货值合计(Σ换出数量×换出单价，仅展示，不参与结算)',
+    charge_flag           TINYINT DEFAULT 0                  COMMENT '是否收费: 0否 1是',
+    charge_type           VARCHAR(20) DEFAULT NULL           COMMENT '收费类型: SERVICE服务费/DIFF品质差价/FULL全额货值/OTHER其他',
+    charge_amount         DECIMAL(18,2) DEFAULT 0            COMMENT '收费金额(手工填写，审核后生成正向应收，单号后缀 -FEE)',
+    charge_reason         VARCHAR(200)                       COMMENT '收费说明(原因备注)',
+    remark                VARCHAR(500)                       COMMENT '备注',
+    auditor_id            BIGINT DEFAULT NULL                COMMENT '审核人ID',
+    auditor_name          VARCHAR(50)                        COMMENT '审核人姓名',
+    audit_time            DATETIME                           COMMENT '审核时间',
+    company_id            BIGINT DEFAULT NULL                COMMENT '公司ID',
+    create_time           DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_sale_order_id (sale_order_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售换货单';
+
+-- 销售换货明细（退回侧 + 换出侧：只支持同品换货，换出产品固定为退回产品）
+CREATE TABLE IF NOT EXISTS sale_exchange_item (
+    id                    BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    exchange_id           BIGINT NOT NULL                   COMMENT '换货单ID',
+    sale_order_item_id    BIGINT DEFAULT NULL               COMMENT '来源销售单明细ID(sale_order_item.id)，可换量校验与追溯锚点',
+    -- ===== 退回侧（客户退回的货品，入售后仓待整理）=====
+    product_id            BIGINT NOT NULL                   COMMENT '退回产品ID(取自销售单明细行)',
+    product_name          VARCHAR(200)                      COMMENT '退回产品名称(冗余)',
+    quantity              DECIMAL(18,4) DEFAULT 0           COMMENT '退回数量(可换量校验以此为准)',
+    unit_price            DECIMAL(18,4) DEFAULT 0           COMMENT '原销售单价(冗余，仅展示)',
+    amount                DECIMAL(18,2) DEFAULT 0           COMMENT '退回金额(退回数量×原销售单价，仅展示)',
+    -- ===== 换出侧（发给客户的新货，从成品仓扣减；只支持同品，产品固定为退回产品）=====
+    out_quantity          DECIMAL(18,4) DEFAULT 0           COMMENT '换出数量(可与退回数量不等，如退2换1)',
+    out_unit_price        DECIMAL(18,4) DEFAULT 0           COMMENT '换出单价(默认取原销售单价，可手工改，仅用于展示与差价参考)',
+    out_amount            DECIMAL(18,2) DEFAULT 0           COMMENT '换出金额(换出数量×换出单价，仅展示)',
+    out_quality_type      VARCHAR(10) DEFAULT 'A'           COMMENT '换出品质: A/B/C/DEFECT(退回统一记 PENDING 待分类)',
+    remark                VARCHAR(500)                      COMMENT '备注',
+    company_id            BIGINT DEFAULT NULL               COMMENT '公司ID',
+    create_time           DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_exchange_id (exchange_id),
+    INDEX idx_sale_order_item_id (sale_order_item_id),
+    INDEX idx_product_id (product_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售换货明细表(退回侧+换出侧，只支持同品换货)';
 
 -- ==================== 财务模块 ====================
 
@@ -1217,6 +1369,51 @@ CREATE TABLE IF NOT EXISTS finance_cashflow (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='资金流水表';
 
+CREATE TABLE IF NOT EXISTS finance_expense (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '费用单ID',
+    expense_no VARCHAR(50) NOT NULL COMMENT '费用单号',
+    expense_type VARCHAR(50) COMMENT '费用类型: 办公费/房租水电/工资社保/运输费/差旅费/业务招待/其他',
+    amount DECIMAL(18,4) NOT NULL COMMENT '费用金额',
+    expense_date DATE COMMENT '费用日期（利润表按此归月）',
+    account_id BIGINT COMMENT '支出账户ID',
+    account_name VARCHAR(100) COMMENT '支出账户名称',
+    remark VARCHAR(500) COMMENT '备注',
+    status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT/AUDITED/CANCELLED',
+    company_id BIGINT COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_expense_type (expense_type),
+    INDEX idx_expense_date (expense_date),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='费用登记表';
+
+-- ==================== 发票登记表（税务口径：销项/进项） ====================
+
+CREATE TABLE IF NOT EXISTS finance_invoice (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '发票ID',
+    invoice_no VARCHAR(50) NOT NULL COMMENT '发票号码',
+    direction VARCHAR(20) NOT NULL COMMENT '方向: SALE=销项 PURCHASE=进项',
+    invoice_kind VARCHAR(30) COMMENT '发票类型: 增值税专用发票/增值税普通发票/电子专票/电子普票',
+    invoice_date DATE COMMENT '开票日期',
+    partner_name VARCHAR(100) COMMENT '对方单位(销项=购买方, 进项=销售方)',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '不含税金额',
+    tax_rate DECIMAL(18,4) DEFAULT 0 COMMENT '税率(%)',
+    tax_amount DECIMAL(18,4) DEFAULT 0 COMMENT '税额',
+    total_amount DECIMAL(18,4) DEFAULT 0 COMMENT '价税合计',
+    source_bill_code VARCHAR(50) COMMENT '关联业务单号(销售单/采购单号, 可选)',
+    remark VARCHAR(500) COMMENT '备注',
+    status VARCHAR(20) DEFAULT 'REGISTERED' COMMENT '状态: REGISTERED=已登记 CANCELLED=已作废',
+    company_id BIGINT COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_invoice_no (invoice_no),
+    INDEX idx_direction (direction),
+    INDEX idx_invoice_date (invoice_date),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='发票登记表';
+
 CREATE TABLE IF NOT EXISTS finance_bill (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '账单ID',
     bill_no VARCHAR(50) NOT NULL COMMENT '账单号',
@@ -1360,6 +1557,7 @@ CREATE TABLE IF NOT EXISTS outsource_material_component (
 CREATE TABLE IF NOT EXISTS product (
     id              BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '产品ID',
     name            VARCHAR(100) NOT NULL              COMMENT '产品名称',
+    sku             VARCHAR(64) DEFAULT NULL           COMMENT 'SKU编码(产品级唯一；新增留空由后端自动生成 SKU-000001)',
     brand_id        BIGINT DEFAULT NULL               COMMENT '品牌ID',
     category        VARCHAR(30)                       COMMENT '分类',
     spec            VARCHAR(100)                      COMMENT '规格型号',
@@ -1372,7 +1570,8 @@ CREATE TABLE IF NOT EXISTS product (
     company_id      BIGINT DEFAULT NULL               COMMENT '公司ID',
     create_time     DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+    UNIQUE KEY uk_company_sku (company_id, sku)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品主数据表';
 
 -- ==================== 备忘录模块 ====================

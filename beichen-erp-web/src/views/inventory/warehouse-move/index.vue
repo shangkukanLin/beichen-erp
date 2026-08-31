@@ -1,6 +1,7 @@
 <template>
   <div class="page">
     <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="全部" clearable style="width:120px">
@@ -13,26 +14,27 @@
         <el-form-item label="移入仓">
           <RemoteSelect v-model="query.toWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:150px" />
         </el-form-item>
-        <el-form-item>
+        </el-form>
+        <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
           <el-button type="success" :icon="'Plus'" @click="handleAdd">新增移仓</el-button>
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="table-card">
-      <el-table v-loading="loading" :data="tableData" border stripe>
+      <el-table v-loading="loading" :data="tableData" border stripe @row-click="handleDetail">
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="code" label="单号" min-width="150" />
         <el-table-column label="移出仓库" min-width="140">
           <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="$router.push(`/inventory/warehouse/detail/${row.fromWarehouseId}`)">{{ warehouseName(row.fromWarehouseId) }}</el-link>
+            <el-link type="primary" :underline="false" @click.stop="$router.push(`/inventory/warehouse/detail/${row.fromWarehouseId}`)">{{ warehouseName(row.fromWarehouseId) }}</el-link>
           </template>
         </el-table-column>
         <el-table-column label="移入仓库" min-width="140">
           <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="$router.push(`/inventory/warehouse/detail/${row.toWarehouseId}`)">{{ warehouseName(row.toWarehouseId) }}</el-link>
+            <el-link type="primary" :underline="false" @click.stop="$router.push(`/inventory/warehouse/detail/${row.toWarehouseId}`)">{{ warehouseName(row.toWarehouseId) }}</el-link>
           </template>
         </el-table-column>
         <el-table-column prop="itemsSummary" label="产品明细" min-width="200" show-overflow-tooltip />
@@ -44,11 +46,11 @@
         </el-table-column>
         <el-table-column label="操作" width="230" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
-                <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
-                <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
-                <el-button v-if="row.status === DocStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button>
-                <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
+            <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
+                <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
+                <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
+                <el-button v-if="row.status === DocStatus.DRAFT" type="warning" link @click.stop="handleEdit(row)">编辑</el-button>
+                <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -74,6 +76,7 @@
       <el-divider content-position="left">明细</el-divider>
       <el-table :data="detailItems" border>
         <el-table-column type="index" label="#" width="50" align="center" />
+        <el-table-column prop="sku" label="SKU" width="130" />
         <el-table-column prop="productName" label="产品" min-width="140" />
         <el-table-column prop="spec" label="规格" width="100" />
         <el-table-column prop="unit" label="单位" width="70" />
@@ -84,8 +87,8 @@
 </template>
 
 <script setup lang="ts">
-import { WarehouseCategory } from '@/api/enums'
-import { reactive, ref, onMounted } from 'vue'
+import { WarehouseCategory, INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY } from '@/api/enums'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -175,6 +178,13 @@ async function handleDetail(row: any) {
   detailVisible.value = true
 }
 
+onActivated(() => {
+  // 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+  if (sessionStorage.getItem(INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY)
+    loadData()
+  }
+})
 onMounted(() => {
   loadData().then(() => {
     // 库存流水链接跳转：自动打开指定单据详情

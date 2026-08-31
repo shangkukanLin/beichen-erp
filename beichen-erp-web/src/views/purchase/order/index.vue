@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { PURCHASE_ORDER_DIRTY_KEY } from '@/api/enums'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
-import { getQualityTypes, type QualityOption } from '@/api/product'
+import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
@@ -58,7 +59,7 @@ const form = reactive<PurchaseOrder>({
 const items = ref<PurchaseOrderItem[]>([])
 
 const rules: FormRules = {
-  supplierId: [{ required: true, message: '请选择供应商', trigger: 'change' }],
+  supplierId: [{ required: true, message: '请选择供货商', trigger: 'change' }],
   warehouseId: [{ required: true, message: '请选择入库仓库', trigger: 'change' }]
 }
 
@@ -137,6 +138,14 @@ function itemAmount(row: PurchaseOrderItem) {
   return (q * p).toFixed(2)
 }
 
+// 税额拆分（单价含税口径）：应付总额不变，按税率从总额中拆出税额
+const goodsTotal = computed(() => items.value.reduce((s, r) => s + (Number(r.quantity) || 0) * (Number(r.unitPrice) || 0), 0))
+const taxAmount = computed(() => form.taxIncluded === 1 && Number(form.taxRate) > 0
+  ? Math.round(goodsTotal.value * (Number(form.taxRate) / (100 + Number(form.taxRate))) * 100) / 100
+  : 0)
+const noTaxAmount = computed(() => Math.round((goodsTotal.value - taxAmount.value) * 100) / 100)
+function onTaxSwitch(v: any) { form.taxIncluded = v ? 1 : 0; form.taxRate = v ? (form.taxRate || 13) : 0 }
+
 async function handleSubmit() {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
@@ -196,7 +205,7 @@ function handleWarehouseClick(id?: number) {
 function handleSizeChange(val: number) { pagination.pageSize = val; pagination.pageNum = 1; loadData() }
 function handleCurrentChange(val: number) { pagination.pageNum = val; loadData() }
 
-function statusType(s?: number): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
+function statusType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
   if (s === PurchaseStatus.DRAFT) return 'info'
   if (s === PurchaseStatus.AUDITED) return 'success'
   if (s === PurchaseStatus.CANCELLED) return 'danger'
@@ -214,6 +223,13 @@ function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Numbe
 
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
+onActivated(() => {
+  // 新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+  if (sessionStorage.getItem(PURCHASE_ORDER_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(PURCHASE_ORDER_DIRTY_KEY)
+    loadData()
+  }
+})
 onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials(); loadQualityTypes(); loadData() })
 
 </script>
@@ -221,11 +237,12 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
 <template>
   <div class="page">
     <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="单号">
           <el-input v-model="query.code" placeholder="请输入单号" clearable @keyup.enter="handleQuery" style="width:160px" />
         </el-form-item>
-        <el-form-item label="供应商">
+        <el-form-item label="供货商">
           <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="请选择" clearable style="width:160px" />
         </el-form-item>
         <el-form-item label="状态">
@@ -233,26 +250,27 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
             <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleQuery">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="handleAdd">新增</el-button>
-        </el-form-item>
-      </el-form>
+        </el-form>
+        <div class="toolbar">
+          <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
+          <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
+          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+        </div>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="table-card">
-      <el-table v-loading="tableLoading" :data="tableData" border stripe>
+      <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="handleDetail">
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="code" label="单号" min-width="150" />
-        <el-table-column label="供应商" min-width="140">
+        <el-table-column label="供货商" min-width="140">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleSupplierClick(row.supplierId)">{{ supplierName(row.supplierId) }}</el-button>
+            <el-button type="primary" link @click.stop="handleSupplierClick(row.supplierId)">{{ supplierName(row.supplierId) }}</el-button>
           </template>
         </el-table-column>
         <el-table-column label="入库仓库" min-width="120">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleWarehouseClick(row.warehouseId)">{{ warehouseName(row.warehouseId) }}</el-button>
+            <el-button type="primary" link @click.stop="handleWarehouseClick(row.warehouseId)">{{ warehouseName(row.warehouseId) }}</el-button>
           </template>
         </el-table-column>
         <el-table-column prop="orderDate" label="订单日期" width="120" align="center" />
@@ -265,11 +283,11 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
         </el-table-column>
         <el-table-column label="操作" width="240" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
-            <el-button v-if="row.status === PurchaseStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === PurchaseStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
-            <el-button v-if="row.status === PurchaseStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button>
-            <el-button v-if="row.status === PurchaseStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
+            <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
+            <el-button v-if="row.status === PurchaseStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === PurchaseStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
+            <el-button v-if="row.status === PurchaseStatus.DRAFT" type="warning" link @click.stop="handleEdit(row)">编辑</el-button>
+            <el-button v-if="row.status === PurchaseStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -285,8 +303,8 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="供应商" prop="supplierId">
-              <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/supplier/manage'); return } }">
+            <el-form-item label="供货商" prop="supplierId">
+              <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/outsource/supplier/manage'); return } }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </el-form-item>
@@ -303,9 +321,14 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
               <el-date-picker v-model="form.orderDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width:100%" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="6">
+            <el-form-item label="收税">
+              <el-switch :model-value="form.taxIncluded === 1" @change="onTaxSwitch" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
             <el-form-item label="税率(%)">
-              <el-input-number v-model="form.taxRate" :min="0" :max="100" :precision="2" controls-position="right" style="width:100%" />
+              <el-input-number v-model="form.taxRate" :min="0" :max="100" :precision="2" :disabled="form.taxIncluded !== 1" controls-position="right" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="24">
@@ -323,7 +346,7 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
           <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="产品" min-width="180">
             <template #default="{ row, $index }">
-              <RemoteSelect v-model="row.productId" :fetch="fetchMaterials" label-key="name" placeholder="选择物料" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
+              <RemoteSelect v-model="row.productId" :fetch="fetchMaterials" :label-key="productLabel" placeholder="选择物料（可输SKU）" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </template>
@@ -350,6 +373,13 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
             <template #default="{ $index }"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template>
           </el-table-column>
         </el-table>
+        <div class="sum-bar">
+          <span>应付总额（含税）：<b>{{ goodsTotal.toFixed(2) }}</b></span>
+          <template v-if="form.taxIncluded === 1">
+            <span>税额（{{ form.taxRate }}%）： <b class="tax-num">{{ taxAmount.toFixed(2) }}</b></span>
+            <span>不含税金额： <b>{{ noTaxAmount.toFixed(2) }}</b></span>
+          </template>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -364,4 +394,7 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
 .query-card :deep(.el-card__body), .table-card :deep(.el-card__body) { padding: 16px; }
 .query-form { align-items: center; }
 .pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
+.sum-bar { margin-top: 12px; display: flex; justify-content: flex-end; gap: 24px; font-size: 14px; color: var(--app-text-secondary); }
+.sum-bar b { color: var(--app-text-primary); font-size: 16px; }
+.tax-num { color: var(--app-color-danger); }
 </style>

@@ -139,6 +139,7 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
 <template>
   <div class="page">
     <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="单号">
           <el-input v-model="query.code" placeholder="请输入单号" clearable @keyup.enter="handleQuery" />
@@ -151,16 +152,17 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
             <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
-        <el-form-item>
+        </el-form>
+        <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
           <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="table-card">
-      <el-table v-loading="tableLoading" :data="tableData" border stripe>
+      <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="handleDetail">
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="code" label="单号" min-width="150" />
         <el-table-column label="客户" min-width="140">
@@ -178,11 +180,11 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
         </el-table-column>
         <el-table-column label="操作" width="280" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
+            <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="warning" link @click.stop="handleEdit(row)">编辑</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

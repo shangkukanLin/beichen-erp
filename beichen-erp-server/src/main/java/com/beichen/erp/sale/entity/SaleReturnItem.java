@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 
 /**
  * 销售退货单明细表
- * <p>退回商品均为不良品，qualityType 固定为 DEFECT。</p>
+ * <p>退回商品品质默认"待分类"(PENDING)，待退货整理重新分类。</p>
  */
 @Data
 @TableName("sale_return_item")
@@ -23,18 +23,28 @@ public class SaleReturnItem {
     /** 退货单ID */
     private Long returnId;
 
+    /** 关联销售单明细ID（可选，用于追溯） */
+    private Long saleOrderItemId;
+
     /** 产品ID */
     private Long productId;
+
+    /** SKU（展示用，非表字段；明细接口按 productId 批量回填） */
+    @TableField(exist = false)
+    private String sku;
 
     /** 产品名称（实时查名，不落库） */
     @TableField(exist = false)
     private String productName;
 
-    /** 品质等级：销售退货固定为 DEFECT(不良品) */
+    /** 品质等级：销售退货默认 PENDING(待分类)，退回后待退货整理重新分类 */
     private String qualityType;
 
     /** 退货数量 */
     private BigDecimal quantity;
+
+    /** 已整理数量（退货整理单审核时累加、反审核时扣回；用于追溯该明细是否已整理完） */
+    private BigDecimal sortedQuantity;
 
     /** 单价 */
     private BigDecimal unitPrice;
@@ -49,6 +59,6 @@ public class SaleReturnItem {
     private Long companyId;
 
     public SaleReturnItem() {
-        this.qualityType = ProductQualityType.DEFECT.getCode();
+        this.qualityType = ProductQualityType.PENDING.getCode();
     }
 }

@@ -2,6 +2,7 @@ package com.beichen.erp.outsource.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -10,7 +11,6 @@ public class OutsourceMaterial {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String projectIds;
-    private Long warehouseId;
     private String materialName;
     /** BOM类型ID（关联 dev_bom_type.id），物料按此ID归类 */
     private Long bomTypeId;
@@ -18,6 +18,8 @@ public class OutsourceMaterial {
     private String unit;
     private Integer status;
     private String remark;
+    /** 单价 */
+    private BigDecimal price;
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;
     private LocalDateTime createTime;

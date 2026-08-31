@@ -1,20 +1,17 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import type { OutsourceMaterialOption } from '@/api/purchase'
-import { getQualityTypes, type QualityOption } from '@/api/product'
-import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import {
-  getSaleOrderPage, getSaleOrderItems, createSaleOrder, updateSaleOrder, auditSaleOrder, cancelSaleOrder, unAuditSaleOrder, checkSaleOrderStock,
-  type SaleOrder, type SaleOrderItem
+  getSaleOrderPage, auditSaleOrder, cancelSaleOrder, unAuditSaleOrder, SALE_ORDER_DIRTY_KEY,
+  type SaleOrder
 } from '@/api/sale'
 
 const router = useRouter()
-const qualityOptions = ref<QualityOption[]>([])
 
 const query = reactive({ code: '', customerId: '' as string | number, status: '' as string })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -29,39 +26,18 @@ const statusOptions = [
 
 // Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
-const fetchMaterials = (kw: string) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw } })
 
-// 列表/详情显示与拼装用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
+// 列表显示用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
 const customers = ref<any[]>([])
 const warehouses = ref<any[]>([])
-const materialOptions = ref<OutsourceMaterialOption[]>([])
 
 async function loadCustomers() { try { const r: any = await fetchCustomers(''); customers.value = r?.records || [] } catch { customers.value = [] } }
-async function loadWarehouses() { try { const r: any = await fetchWarehouses(''); warehouses.value = r?.records || [] } catch { warehouses.value = [] } }
-
-const dialogVisible = ref(false)
-const dialogTitle = ref('新增销售单')
-const submitLoading = ref(false)
-const formRef = ref<FormInstance>()
-const form = reactive<SaleOrder>({ customerId: undefined, warehouseId: undefined, orderDate: '', taxIncluded: 0, taxRate: 0, remark: '' })
-const items = ref<SaleOrderItem[]>([])
-
-const detailVisible = ref(false)
-const detailData = ref<SaleOrder>({})
-const detailItems = ref<SaleOrderItem[]>([])
-
-// 库存检查相关
-const stockCheckResult = ref<{ materialName: string; spec: string; unit: string; required: number; available: number; shortage: number; sufficient: boolean }[]>([])
-const stockCheckVisible = ref(false)
-const pendingSubmit = ref(false)  // 标记是否等待确认后提交
-
-const rules: FormRules = {
-  customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
-  warehouseId: [{ required: true, message: '请选择出库仓库', trigger: 'change' }]
+async function loadWarehouses() {
+  try {
+    const r: any = await request.get('/warehouse/page', { params: { pageSize: 500, warehouseType: '成品仓' } })
+    warehouses.value = r?.records || []
+  } catch { warehouses.value = [] }
 }
-
-async function loadMaterials(keyword?: string) { try { const res: any = await fetchMaterials(keyword || ''); materialOptions.value = res?.records || [] } catch { materialOptions.value = [] } }
 
 async function loadData() {
   tableLoading.value = true
@@ -77,64 +53,7 @@ async function loadData() {
 }
 function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.customerId = ''; query.status = ''; pagination.pageNum = 1; loadData() }
-function resetForm() { Object.assign(form, { id: undefined, customerId: undefined, warehouseId: undefined, orderDate: new Date().toISOString().slice(0, 10), taxIncluded: 0, taxRate: 0, remark: '' }); items.value = [] }
-function handleAdd() { resetForm(); dialogTitle.value = '新增销售单'; dialogVisible.value = true; formRef.value?.clearValidate() }
-async function handleEdit(row: SaleOrder) {
-  resetForm(); Object.assign(form, row); dialogTitle.value = '编辑销售单'; dialogVisible.value = true; formRef.value?.clearValidate()
-  try { const res = await getSaleOrderItems(row.id as number); items.value = res || [] } catch { items.value = [] }
-}
-function addItem() { items.value.push({ materialId: undefined, qualityType: 'A', materialName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' }) }
-function removeItem(index: number) { items.value.splice(index, 1) }
-function onMaterialChange(val: number, row: SaleOrderItem) {
-  const m = materialOptions.value.find(x => x.id === val)
-  if (m) { row.materialId = m.id as number; row.materialName = m.materialName; row.spec = m.spec; row.unit = m.unit }
-}
-function itemAmount(row: SaleOrderItem) { const q = Number(row.quantity) || 0; const p = Number(row.unitPrice) || 0; return (q * p).toFixed(2) }
 
-async function handleSubmit() {
-  if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return
-    if (items.value.length === 0) { ElMessage.warning('请至少添加一条明细'); return }
-    // 库存检查
-    if (form.warehouseId) {
-      try {
-        const res = await checkSaleOrderStock({ warehouseId: form.warehouseId, items: items.value })
-        if (res && res.length > 0) {
-          const hasShortage = res.some(r => !r.sufficient)
-          if (hasShortage) {
-            stockCheckResult.value = res
-            stockCheckVisible.value = true
-            pendingSubmit.value = true
-            return
-          }
-        }
-      } catch { /* 检查失败不阻塞 */ }
-    }
-    await doSubmit()
-  })
-}
-
-async function doSubmit() {
-  submitLoading.value = true
-  try {
-    const payload = { order: { ...form }, items: items.value }
-    if (form.id) { await updateSaleOrder(form.id as number, payload); ElMessage.success('修改成功') }
-    else { await createSaleOrder(payload); ElMessage.success('新增成功') }
-    dialogVisible.value = false; loadData()
-  } catch { } finally { submitLoading.value = false }
-}
-
-function confirmStockProceed() {
-  stockCheckVisible.value = false
-  pendingSubmit.value = false
-  doSubmit()
-}
-
-function confirmStockCancel() {
-  stockCheckVisible.value = false
-  pendingSubmit.value = false
-}
 async function handleAudit(row: SaleOrder) {
   try {
     await ElMessageBox.confirm(`确认审核销售单「${row.code}」？审核后将直接出库并生成应收。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
@@ -153,11 +72,7 @@ async function handleUnAudit(row: SaleOrder) {
     await unAuditSaleOrder(row.id as number); ElMessage.success('已反审核'); loadData()
   } catch { }
 }
-async function handleDetail(row: SaleOrder) {
-  detailData.value = { ...row }
-  try { const res = await getSaleOrderItems(row.id as number); detailItems.value = res || [] } catch { detailItems.value = [] }
-  detailVisible.value = true
-}
+
 function handleSizeChange(val: number) { pagination.pageSize = val; pagination.pageNum = 1; loadData() }
 function handleCurrentChange(val: number) { pagination.pageNum = val; loadData() }
 function statusType(s?: string) { return DocStatusTag[s || ''] || '' }
@@ -165,37 +80,48 @@ function customerName(id?: number) { const c = customers.value.find(x => x.id ==
 function warehouseName(id?: number) { const w = warehouses.value.find(x => x.id === id); return w ? w.warehouseName : '' }
 function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Number(v).toFixed(2) }
 
-async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
+function goDetail(row: SaleOrder) { router.push('/inventory/sale/detail/' + row.id) }
+/** 新增/编辑统一走独立页面 /inventory/sale/add（带 id 为编辑） */
+function goAdd() { router.push('/inventory/sale/add') }
+function goEdit(row: SaleOrder) { router.push('/inventory/sale/add?id=' + row.id) }
 
-onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualityTypes(); loadData() })
-
+onMounted(() => { loadCustomers(); loadWarehouses(); loadData() })
+// 数据变动（新增/编辑页、详情页编辑/审核/反审核/作废）后返回列表时按需刷新，保留查询条件与分页现场
+onActivated(() => {
+  if (sessionStorage.getItem(SALE_ORDER_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(SALE_ORDER_DIRTY_KEY)
+    loadData()
+  }
+})
 </script>
 
 <template>
   <div class="page">
     <el-card shadow="never" class="query-card">
-      <el-form :inline="true" :model="query" class="query-form">
-        <el-form-item label="单号">
-          <el-input v-model="query.code" placeholder="请输入单号" clearable @keyup.enter="handleQuery" />
-        </el-form-item>
-        <el-form-item label="客户">
-          <RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="请选择" clearable style="width:160px" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="query.status" placeholder="请选择" clearable style="width:120px">
-            <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
+      <div class="query-bar">
+        <el-form :inline="true" :model="query" class="query-form">
+          <el-form-item label="单号">
+            <el-input v-model="query.code" placeholder="请输入单号" clearable @keyup.enter="handleQuery" />
+          </el-form-item>
+          <el-form-item label="客户">
+            <RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="请选择" clearable style="width:160px" />
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-select v-model="query.status" placeholder="请选择" clearable style="width:120px">
+              <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
-          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
-        </el-form-item>
-      </el-form>
+          <el-button type="success" :icon="'Plus'" @click="goAdd">新增</el-button>
+        </div>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="table-card">
-      <el-table v-loading="tableLoading" :data="tableData" border stripe>
+      <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="goDetail">
         <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="code" label="单号" min-width="150" />
         <el-table-column label="客户" min-width="140">
@@ -209,15 +135,15 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
           <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="90" align="center">
-          <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
+          <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[String(row.status)] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="280" align="center" fixed="right">
+        <el-table-column label="操作" width="320" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
+            <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click.stop="goEdit(row)">编辑</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -228,137 +154,9 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
           @size-change="handleSizeChange" @current-change="handleCurrentChange" />
       </div>
     </el-card>
-
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="900px" :close-on-click-modal="false" @open="loadMaterials()">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="客户" prop="customerId">
-              <RemoteSelect v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer'); return } }">
-                <el-option label="+ 新增" :value="ADD_MARKER" />
-              </RemoteSelect>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="出库仓库" prop="warehouseId">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
-                <el-option label="+ 新增" :value="ADD_MARKER" />
-              </RemoteSelect>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="订单日期">
-              <el-date-picker v-model="form.orderDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="税率(%)">
-              <el-input-number v-model="form.taxRate" :min="0" :max="100" :precision="2" controls-position="right" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="24">
-            <el-form-item label="备注">
-              <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="请输入备注" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-divider content-position="left">明细</el-divider>
-        <div style="margin-bottom:8px"><el-button type="primary" :icon="'Plus'" @click="addItem">添加明细</el-button></div>
-        <el-table :data="items" border>
-          <el-table-column type="index" label="#" width="50" align="center" />
-          <el-table-column label="物料" min-width="180">
-            <template #default="{ row }">
-              <RemoteSelect v-model="row.materialId" :fetch="fetchMaterials" label-key="materialName" placeholder="选择物料"
-                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
-                <el-option label="+ 新增" :value="ADD_MARKER" />
-              </RemoteSelect>
-            </template>
-          </el-table-column>
-          <el-table-column prop="spec" label="规格" width="100" />
-          <el-table-column prop="unit" label="单位" width="70" />
-          <el-table-column label="品质" width="90">
-            <template #default="{ row }">
-              <el-select v-model="row.qualityType" size="small" style="width:100%">
-                <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column label="数量" width="120">
-            <template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :precision="2" controls-position="right" style="width:100%" /></template>
-          </el-table-column>
-          <el-table-column label="单价" width="120">
-            <template #default="{ row }"><el-input-number v-model="row.unitPrice" :min="0" :precision="2" controls-position="right" style="width:100%" /></template>
-          </el-table-column>
-          <el-table-column label="金额" width="110" align="right">
-            <template #default="{ row }">{{ itemAmount(row) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="70" align="center">
-            <template #default="{ $index }"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template>
-          </el-table-column>
-        </el-table>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
-      </template>
-    </el-dialog>
-
-    <el-drawer v-model="detailVisible" title="销售单详情" size="60%">
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="单号">{{ detailData.code }}</el-descriptions-item>
-        <el-descriptions-item label="状态"><el-tag :type="statusType(detailData.status)">{{ detailData.status }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="客户">{{ customerName(detailData.customerId) }}</el-descriptions-item>
-        <el-descriptions-item label="出库仓库">{{ warehouseName(detailData.warehouseId) }}</el-descriptions-item>
-        <el-descriptions-item label="订单日期">{{ detailData.orderDate }}</el-descriptions-item>
-        <el-descriptions-item label="总金额">{{ fmt(detailData.totalAmount) }}</el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ detailData.remark }}</el-descriptions-item>
-      </el-descriptions>
-      <el-divider content-position="left">明细</el-divider>
-      <el-table :data="detailItems" border>
-        <el-table-column type="index" label="#" width="50" align="center" />
-        <el-table-column prop="materialName" label="物料" min-width="140" />
-        <el-table-column prop="spec" label="规格" width="100" />
-        <el-table-column prop="unit" label="单位" width="70" />
-        <el-table-column prop="quantity" label="数量" width="90" align="right" />
-        <el-table-column prop="unitPrice" label="单价" width="90" align="right" />
-        <el-table-column prop="amount" label="金额" width="100" align="right" />
-      </el-table>
-    </el-drawer>
-
-    <!-- 库存不足确认弹窗 -->
-    <el-dialog v-model="stockCheckVisible" title="库存不足提醒" width="650px" :close-on-click-modal="false">
-      <el-alert type="warning" :closable="false" show-icon style="margin-bottom:16px">
-        <template #title>以下物料的订单数量超过当前库存量，确认仍要继续创建订单吗？</template>
-      </el-alert>
-      <el-table :data="stockCheckResult.filter(r => !r.sufficient)" border>
-        <el-table-column prop="materialName" label="物料名称" min-width="140" />
-        <el-table-column prop="spec" label="规格" width="100" />
-        <el-table-column prop="unit" label="单位" width="70" />
-        <el-table-column label="订购数量" width="100" align="right">
-          <template #default="{ row }">{{ row.required }}</template>
-        </el-table-column>
-        <el-table-column label="当前库存" width="100" align="right">
-          <template #default="{ row }">{{ row.available }}</template>
-        </el-table-column>
-        <el-table-column label="缺口" width="100" align="right">
-          <template #default="{ row }">
-            <span style="color:red;font-weight:bold">{{ row.shortage }}</span>
-          </template>
-        </el-table-column>
-      </el-table>
-      <template #footer>
-        <el-button @click="confirmStockCancel">取消</el-button>
-        <el-button type="primary" @click="confirmStockProceed">仍然创建订单</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 12px; }
-.query-card :deep(.el-card__body), .table-card :deep(.el-card__body) { padding: 16px; }
-.query-form { display: flex; flex-wrap: wrap; }
-.pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
+.pagination { margin-top: 12px; display: flex; justify-content: flex-end; }
 </style>
-

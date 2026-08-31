@@ -41,7 +41,7 @@ function groupProductStocks(rows: any[]) {
   for (const r of rows || []) {
     if (r.productId == null) continue // 仅统计成品库存
     if (!map.has(r.productId)) {
-      map.set(r.productId, { productId: r.productId, productName: r.productName || '', qtyA: 0, qtyB: 0, qtyC: 0, qtyDefect: 0 })
+      map.set(r.productId, { productId: r.productId, sku: r.sku || '', productName: r.productName || '', qtyA: 0, qtyB: 0, qtyC: 0, qtyDefect: 0, qtyPending: 0 })
     }
     const row = map.get(r.productId)
     const q = Number(r.quantity) || 0
@@ -50,7 +50,9 @@ function groupProductStocks(rows: any[]) {
     if (qt === ProductQualityType.A || qt === ProductQualityTypeLabel[ProductQualityType.A]) row.qtyA += q
     else if (qt === ProductQualityType.B || qt === ProductQualityTypeLabel[ProductQualityType.B]) row.qtyB += q
     else if (qt === ProductQualityType.C || qt === ProductQualityTypeLabel[ProductQualityType.C]) row.qtyC += q
-    else row.qtyDefect += q // DEFECT / 不良 / 不良品 等归入不良
+    else if (qt === ProductQualityType.PENDING || qt === ProductQualityTypeLabel[ProductQualityType.PENDING]) row.qtyPending += q
+    else if (qt === ProductQualityType.DEFECT || qt === ProductQualityTypeLabel[ProductQualityType.DEFECT]) row.qtyDefect += q
+    // 其余未知品质不计数：不可用 else 兜底，否则待分类等会被误算成不良品
   }
   return Array.from(map.values())
 }
@@ -69,7 +71,8 @@ function goLog(row: any) { router.push(`/inventory/warehouse/product-history/${w
 function goMaterialLog(row: any) { router.push(`/inventory/warehouse/material-history/${warehouseId}/${row.materialId}`) }
 function fmt(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
 function totalQty(row: any) {
-  return (Number(row.qtyA) || 0) + (Number(row.qtyB) || 0) + (Number(row.qtyC) || 0) + (Number(row.qtyDefect) || 0)
+  return (Number(row.qtyA) || 0) + (Number(row.qtyB) || 0) + (Number(row.qtyC) || 0)
+    + (Number(row.qtyDefect) || 0) + (Number(row.qtyPending) || 0)
 }
 
 
@@ -116,6 +119,7 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
         <el-tab-pane label="产品信息" name="product">
           <el-table :data="products" border stripe v-loading="matLoading" size="small">
             <el-table-column type="index" label="#" width="50" align="center" />
+            <el-table-column prop="sku" label="SKU" width="130" />
             <el-table-column prop="productName" label="产品名称" min-width="160" show-overflow-tooltip />
         <el-table-column label="A规" width="90" align="right">
           <template #default="{row}">
@@ -138,6 +142,12 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
         <el-table-column label="不良" width="90" align="right">
           <template #default="{row}">
             <el-tag v-if="Number(row.qtyDefect)>0" type="danger" size="small">{{ fmt(row.qtyDefect) }}</el-tag>
+            <span v-else style="color:#999">0</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="待分类" width="90" align="right">
+          <template #default="{row}">
+            <el-tag v-if="Number(row.qtyPending)>0" type="primary" size="small" title="等待退货整理的库存">{{ fmt(row.qtyPending) }}</el-tag>
             <span v-else style="color:#999">0</span>
           </template>
         </el-table-column>

@@ -9,7 +9,11 @@ import java.util.Map;
 
 public interface SaleReturnService {
 
-    IPage<Map<String, Object>> page(Integer status, Long customerId, String code, int pageNum, int pageSize);
+    /**
+     * 分页列表：status 为字符串编码（DRAFT/AUDITED/CANCELLED），与 sale_return.status(varchar) 一致
+     * @param saleOrderId 非空时只返回关联该销售单的退货单（供销售单详情展示售后记录）
+     */
+    IPage<Map<String, Object>> page(String status, Long customerId, String code, Long saleOrderId, int pageNum, int pageSize);
 
     SaleReturn getById(Long id);
 
@@ -26,4 +30,10 @@ public interface SaleReturnService {
     void cancel(Long id);
 
     void delete(Long id);
+
+    /** 查询某客户已审核的销售单（供退货关联选择） */
+    List<Map<String, Object>> saleOrders(Long customerId);
+
+    /** 查询销售单明细（含已退/可退数量，供退货带入） */
+    List<Map<String, Object>> saleOrderItems(Long saleOrderId);
 }

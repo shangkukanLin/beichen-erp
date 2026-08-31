@@ -11,9 +11,9 @@ public enum StockChangeType {
     PURCHASE_IN("采购入库"),
     /** 采购反审核：采购单反审核后，冲回已入库的库存 */
     PURCHASE_UN_AUDIT("采购反审核"),
-    /** 退货出库：成品退货单审核后，退货出库扣减库存 */
+    /** 退货出库：采购退货单审核后，退货出库扣减库存 */
     RETURN_OUT("退货出库"),
-    /** 退货反审核：成品退货单反审核后，恢复已扣减的库存 */
+    /** 退货反审核：采购退货单反审核后，恢复已扣减的库存 */
     RETURN_UN_AUDIT("退货反审核"),
 
     // ===== 销售相关 =====
@@ -25,6 +25,12 @@ public enum StockChangeType {
     SALE_RETURN_IN("销售退货入库"),
     /** 销售退货反审核：销售退货单反审核后，扣减已入库的不良品库存 */
     SALE_RETURN_UN_AUDIT("销售退货反审核"),
+    /** 换货退回入库：销售换货单审核后，客户退回货品入售后仓（品质 PENDING 待分类） */
+    EXCHANGE_IN("换货退回入库"),
+    /** 换货出库：销售换货单审核后，换出货品从成品仓按指定品质扣减 */
+    EXCHANGE_OUT("换货出库"),
+    /** 换货反审核：销售换货单反审核后，扣回换出库存并扣减已退回库存 */
+    EXCHANGE_UN_AUDIT("换货反审核"),
 
     // ===== 移仓相关 =====
     /** 移仓出：移仓单审核后，从移出仓库扣减库存 */
@@ -106,7 +112,13 @@ public enum StockChangeType {
     RECLASSIFY_OUT("重分类出"),
     RECLASSIFY_IN("重分类入"),
     CANCEL_RECLASSIFY_OUT("取消重分类出"),
-    CANCEL_RECLASSIFY_IN("取消重分类入");
+    CANCEL_RECLASSIFY_IN("取消重分类入"),
+
+    // ===== 退货整理 =====
+    RETURN_SORT_OUT("退货整理出"),
+    RETURN_SORT_IN("退货整理入"),
+    CANCEL_RETURN_SORT_OUT("取消退货整理出"),
+    CANCEL_RETURN_SORT_IN("取消退货整理入");
 
     private final String label;
 

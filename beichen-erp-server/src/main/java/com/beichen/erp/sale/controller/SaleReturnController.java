@@ -24,12 +24,13 @@ public class SaleReturnController {
     }
 
     @GetMapping("/page")
-    public R<IPage<Map<String, Object>>> page(@RequestParam(required = false) Integer status,
+    public R<IPage<Map<String, Object>>> page(@RequestParam(required = false) String status,
                                               @RequestParam(required = false) Long customerId,
                                               @RequestParam(required = false) String code,
+                                              @RequestParam(required = false) Long saleOrderId,
                                               @RequestParam(defaultValue = "1") int pageNum,
                                               @RequestParam(defaultValue = "10") int pageSize) {
-        return R.ok(service.page(status, customerId, code, pageNum, pageSize));
+        return R.ok(service.page(status, customerId, code, saleOrderId, pageNum, pageSize));
     }
 
     @GetMapping("/{id}")
@@ -54,6 +55,16 @@ public class SaleReturnController {
         SaleReturn order = extractOrder(body);
         List<Map<String, Object>> items = extractItems(body);
         return R.ok(service.update(id, order, items));
+    }
+
+    @GetMapping("/sale-orders")
+    public R<List<Map<String, Object>>> saleOrders(@RequestParam(required = false) Long customerId) {
+        return R.ok(service.saleOrders(customerId));
+    }
+
+    @GetMapping("/sale-order-items")
+    public R<List<Map<String, Object>>> saleOrderItems(@RequestParam(required = false) Long saleOrderId) {
+        return R.ok(service.saleOrderItems(saleOrderId));
     }
 
     @PutMapping("/{id}/audit")
@@ -86,9 +97,17 @@ public class SaleReturnController {
         if (body.get("code") != null) order.setCode(body.get("code").toString());
         if (body.get("customerId") != null) order.setCustomerId(Long.valueOf(body.get("customerId").toString()));
         if (body.get("warehouseId") != null) order.setWarehouseId(Long.valueOf(body.get("warehouseId").toString()));
+        if (body.get("saleOrderId") != null) order.setSaleOrderId(Long.valueOf(body.get("saleOrderId").toString()));
+        if (body.get("saleOrderCode") != null) order.setSaleOrderCode(body.get("saleOrderCode").toString());
         if (body.get("returnDate") != null) order.setReturnDate(java.time.LocalDate.parse(body.get("returnDate").toString()));
         if (body.get("remark") != null) order.setRemark(body.get("remark").toString());
         if (body.get("totalAmount") != null) order.setTotalAmount(new java.math.BigDecimal(body.get("totalAmount").toString()));
+        if (body.get("lossAmount") != null) order.setLossAmount(new java.math.BigDecimal(body.get("lossAmount").toString()));
+        // 收费（与换货单一致：chargeFlag 控制，金额手工填写，审核后生成 -FEE 正向应收）
+        if (body.get("chargeFlag") != null) order.setChargeFlag(Integer.valueOf(body.get("chargeFlag").toString()));
+        if (body.get("chargeType") != null) order.setChargeType(body.get("chargeType").toString());
+        if (body.get("chargeAmount") != null) order.setChargeAmount(new java.math.BigDecimal(body.get("chargeAmount").toString()));
+        if (body.get("chargeReason") != null) order.setChargeReason(body.get("chargeReason").toString());
         return order;
     }
 

@@ -3,7 +3,7 @@ package com.beichen.erp.dev.controller;
 import com.beichen.erp.common.PageParam;
 import com.beichen.erp.common.R;
 import com.beichen.erp.dev.entity.Project;
-import com.beichen.erp.dev.entity.ProjectTimeline;
+import com.beichen.erp.dev.entity.ProjectPhase;
 import com.beichen.erp.dev.service.ProjectService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
@@ -42,8 +42,9 @@ public class ProjectController {
     @GetMapping("/page")
     public R<?> page(PageParam param,
                      @RequestParam(required = false) String keyword,
-                     @RequestParam(required = false) String status) {
-        return R.ok(projectService.page(param, keyword, status));
+                     @RequestParam(required = false) String status,
+                     @RequestParam(required = false) Long brandId) {
+        return R.ok(projectService.page(param, keyword, status, brandId));
     }
 
     @GetMapping("/{id}")
@@ -75,14 +76,14 @@ public class ProjectController {
         return R.ok();
     }
 
-    @GetMapping("/{projectId}/timelines")
-    public R<List<ProjectTimeline>> timelines(@PathVariable Long projectId) {
+    @GetMapping("/{projectId}/phases")
+    public R<List<ProjectPhase>> phases(@PathVariable Long projectId) {
         return R.ok(projectService.listByProject(projectId));
     }
 
-    @PostMapping("/batch-timelines")
-    public R<Map<Long, List<ProjectTimeline>>> batchTimelines(@RequestBody List<Long> projectIds) {
-        return R.ok(projectService.batchTimelines(projectIds));
+    @PostMapping("/batch-phases")
+    public R<Map<Long, List<ProjectPhase>>> batchPhases(@RequestBody List<Long> projectIds) {
+        return R.ok(projectService.batchPhases(projectIds));
     }
 
     @GetMapping("/{projectId}/related-orders")

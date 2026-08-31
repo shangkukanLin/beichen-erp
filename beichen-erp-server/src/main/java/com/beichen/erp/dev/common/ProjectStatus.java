@@ -2,7 +2,7 @@ package com.beichen.erp.dev.common;
 
 /**
  * 研发项目状态枚举
- * <p>项目状态由时间线自动推导：有进行中阶段=IN_PROGRESS，全部完成/跳过=CLOSED，取消=CANCELLED</p>
+ * <p>项目状态由项目阶段自动推导：有进行中阶段=IN_PROGRESS，全部完成/跳过=CLOSED，取消=CANCELLED</p>
  */
 public enum ProjectStatus {
 

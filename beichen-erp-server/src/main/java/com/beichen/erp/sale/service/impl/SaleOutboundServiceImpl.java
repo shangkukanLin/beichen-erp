@@ -13,6 +13,7 @@ import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
+import com.beichen.erp.material.service.ProductService;
 import com.beichen.erp.sale.entity.SaleOutbound;
 import com.beichen.erp.sale.entity.SaleOutboundItem;
 import com.beichen.erp.sale.mapper.SaleOutboundMapper;
@@ -37,6 +38,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     private final CustomerMapper customerMapper;
     private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
+    private final ProductService productService;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long customerId, String code, int pageNum, int pageSize) {
@@ -77,7 +79,21 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
 
     @Override
     public List<SaleOutboundItem> getItems(Long outboundId) {
-        return itemMapper.selectList(new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, outboundId));
+        List<SaleOutboundItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, outboundId));
+        // 回填产品名称与 SKU（两者都是非表字段），前端免查库
+        Set<Long> pids = items.stream().map(SaleOutboundItem::getProductId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        if (!pids.isEmpty()) {
+            Map<Long, Product> pm = productMapper.selectBatchIds(pids).stream()
+                    .collect(Collectors.toMap(Product::getId, p -> p, (a, b) -> a));
+            for (SaleOutboundItem it : items) {
+                Product p = it.getProductId() != null ? pm.get(it.getProductId()) : null;
+                it.setProductName(p != null && p.getName() != null ? p.getName() : "");
+                it.setSku(p != null && p.getSku() != null ? p.getSku() : "");
+            }
+        }
+        return items;
     }
 
     @Override

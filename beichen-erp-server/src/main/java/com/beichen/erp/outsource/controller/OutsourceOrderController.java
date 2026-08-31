@@ -78,10 +78,11 @@ public class OutsourceOrderController {
         if (o == null) return R.ok(null);
         Map<String, Object> m = new HashMap<>();
         m.put("id", o.getId()); m.put("code", o.getCode()); m.put("status", o.getStatus());
+        m.put("supplyMode", o.getSupplyMode());
         m.put("factoryId", o.getFactoryId());
         m.put("planStartDate", o.getPlanStartDate()); m.put("planEndDate", o.getPlanEndDate());
         m.put("actualStartDate", o.getActualStartDate()); m.put("actualEndDate", o.getActualEndDate());
-        m.put("taxIncluded", o.getTaxIncluded()); m.put("taxRate", o.getTaxRate());
+        m.put("taxIncluded", o.getTaxIncluded()); m.put("taxRate", o.getTaxRate()); m.put("taxAmount", o.getTaxAmount());
         m.put("totalAmount", o.getTotalAmount()); m.put("remark", o.getRemark());
         m.put("attachUrl", o.getAttachUrl());
         m.put("logisticsCompany", o.getLogisticsCompany());
@@ -326,6 +327,8 @@ public class OutsourceOrderController {
             o.setPlanStartDate(LocalDate.parse(dBody.get("planStartDate").toString()));
         if (dBody.get("planEndDate") != null && !dBody.get("planEndDate").toString().isBlank())
             o.setPlanEndDate(LocalDate.parse(dBody.get("planEndDate").toString()));
+        if (dBody.get("supplyMode") != null && !dBody.get("supplyMode").toString().isBlank())
+            o.setSupplyMode(dBody.get("supplyMode").toString());
         if (dBody.get("taxIncluded") != null) o.setTaxIncluded(Integer.valueOf(dBody.get("taxIncluded").toString()));
         if (dBody.get("taxRate") != null && !dBody.get("taxRate").toString().isBlank())
             o.setTaxRate(new BigDecimal(dBody.get("taxRate").toString()));
@@ -368,6 +371,8 @@ public class OutsourceOrderController {
                                     mat.setDemandQuantity(new BigDecimal(mm.get("demandQuantity").toString()));
                                 if (mm.get("lossRate") != null && !mm.get("lossRate").toString().isBlank())
                                     mat.setLossRate(new BigDecimal(mm.get("lossRate").toString()));
+                                if (mm.get("supplyType") != null && !mm.get("supplyType").toString().isBlank())
+                                    mat.setSupplyType(mm.get("supplyType").toString());
                                 mat.setRemark((String) mm.get("remark"));
                                 materials.add(mat);
                             }

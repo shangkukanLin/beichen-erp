@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag } from '@/api/enums'
+import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
 
 const router = useRouter()
 function typeName(id: any): string { return String(id ?? '') }
@@ -50,16 +50,29 @@ async function handleCancel(row: any) {
   try { await ElMessageBox.confirm('确定作废该订单？', '作废订单', { type: 'warning' }); await request.put(`/outsource/material-order/${row.id}/cancel`); ElMessage.success('已作废'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 onMounted(() => { loadData() })
+onActivated(() => {
+  // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+  if (sessionStorage.getItem(OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY)
+    loadData()
+  }
+})
 
 </script>
 
 <template>
   <div class="mo-page">
     <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query">
         <el-form-item label="单号"><el-input v-model="query.code" placeholder="订单号" clearable @keyup.enter="handleQuery" /></el-form-item>
-        <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button @click="handleReset">重置</el-button><el-button type="success" @click="router.push('/outsource/material-order/add')">新增</el-button></el-form-item>
       </el-form>
+      <div class="toolbar">
+        <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
+        <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
+        <el-button type="success" :icon="'Plus'" @click="router.push('/outsource/material-order/add')">新增</el-button>
+      </div>
+      </div>
     </el-card>
 
     <el-tabs v-model="activeTab" class="status-tabs" @tab-change="onTabChange">
@@ -73,10 +86,10 @@ onMounted(() => { loadData() })
     </el-tabs>
 
     <el-card shadow="never" class="table-card">
-      <el-table :data="tableData" border stripe v-loading="loading" row-key="id" size="small">
+      <el-table :data="tableData" border stripe v-loading="loading" row-key="id" size="small" @row-click="(row: any) => router.push(`/outsource/material-order/detail/${row.id}`)">
         <el-table-column prop="code" label="订单号" width="170" />
         <el-table-column label="供应商" width="170" show-overflow-tooltip>
-          <template #default="{row}"><el-button type="primary" link @click="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName }}</el-button></template>
+          <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName }}</el-button></template>
         </el-table-column>
         <el-table-column label="下单日期" width="90" align="center"><template #default="{row}">{{ $fmtDate(row.createTime) || '-' }}</template></el-table-column>
         <el-table-column label="物料名称" min-width="50" show-overflow-tooltip>
@@ -100,10 +113,10 @@ onMounted(() => { loadData() })
         <el-table-column label="状态" width="70" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status]||'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="185" align="center" fixed="right">
           <template #default="{row}">
-            <el-button type="primary" link size="small" @click="router.push(`/outsource/material-order/detail/${row.id}`)" style="padding:0 4px">详情</el-button>
-            <el-button v-if="row.status===MaterialOrderStatus.PENDING" type="success" link size="small" @click="handleConfirm(row)" style="padding:0 4px">审核</el-button>
-            <el-button v-if="row.status===MaterialOrderStatus.RECEIVING" type="warning" link size="small" @click="handleUnAudit(row)" style="padding:0 4px">反审核</el-button>
-            <el-button v-if="row.status!==MaterialOrderStatus.FINISHED && row.status!==MaterialOrderStatus.CANCELLED" type="danger" link size="small" @click="handleCancel(row)" style="padding:0 4px">作废</el-button>
+            <el-button type="primary" link size="small" @click.stop="router.push(`/outsource/material-order/detail/${row.id}`)" style="padding:0 4px">详情</el-button>
+            <el-button v-if="row.status===MaterialOrderStatus.PENDING" type="success" link size="small" @click.stop="handleConfirm(row)" style="padding:0 4px">审核</el-button>
+            <el-button v-if="row.status===MaterialOrderStatus.RECEIVING" type="warning" link size="small" @click.stop="handleUnAudit(row)" style="padding:0 4px">反审核</el-button>
+            <el-button v-if="row.status!==MaterialOrderStatus.FINISHED && row.status!==MaterialOrderStatus.CANCELLED" type="danger" link size="small" @click.stop="handleCancel(row)" style="padding:0 4px">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

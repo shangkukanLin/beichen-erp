@@ -65,12 +65,13 @@ public class CompanyServiceImpl implements CompanyService {
         }
 
         // 初始化默认BOM类型
-        String[] defaultTypes = {"玻璃", "驱动IC", "码片IC", "触摸IC", "排线", "背贴", "盖板"};
+        String[] defaultTypes = com.beichen.erp.common.DefaultBomTypes.TYPES;
         for (int i = 0; i < defaultTypes.length; i++) {
             BomType bt = new BomType();
             bt.setTypeName(defaultTypes[i]);
             bt.setSortOrder(i + 1);
             bt.setStatus(1);
+            bt.setIsDefault(1);
             bt.setCompanyId(company.getId());
             bomTypeMapper.insert(bt);
         }

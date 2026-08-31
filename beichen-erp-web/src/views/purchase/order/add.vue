@@ -4,9 +4,9 @@
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="供应商" prop="supplierId">
+            <el-form-item label="供货商" prop="supplierId">
               <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" :initial-options="suppliers" placeholder="请选择" style="width:100%"
-                @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/supplier/manage'); return } }">
+                @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/outsource/supplier/manage'); return } }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </el-form-item>
@@ -24,9 +24,14 @@
               <el-date-picker v-model="form.orderDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width:100%" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="6">
+            <el-form-item label="收税">
+              <el-switch :model-value="form.taxIncluded === 1" @change="onTaxSwitch" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
             <el-form-item label="税率(%)">
-              <el-input-number v-model="form.taxRate" :min="0" :max="100" :precision="2" controls-position="right" style="width:100%" />
+              <el-input-number v-model="form.taxRate" :min="0" :max="100" :precision="2" :disabled="form.taxIncluded !== 1" controls-position="right" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="24">
@@ -42,11 +47,17 @@
         </div>
         <el-table :data="items" border>
           <el-table-column type="index" label="#" width="50" align="center" />
+          <el-table-column label="SKU" width="130">
+            <template #default="{ row }">
+              <span v-if="row.sku">{{ row.sku }}</span>
+              <span v-else style="color:var(--app-text-secondary)">自动生成</span>
+            </template>
+          </el-table-column>
           <el-table-column label="产品" min-width="160">
             <template #default="{ row }">
-              <el-select v-model="row.productId" placeholder="选择产品" filterable remote :remote-method="loadMaterials"
+              <el-select v-model="row.productId" placeholder="选择产品（可输SKU）" filterable remote :remote-method="loadMaterials"
                 style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row as ItemRow) }">
-                <el-option v-for="m in materialOptions" :key="m.id" :label="m.name" :value="m.id" />
+                <el-option v-for="m in materialOptions" :key="m.id" :label="productLabel(m)" :value="m.id" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </template>
@@ -96,6 +107,13 @@
             <template #default="{ $index }"><el-button type="danger" link @click="items.splice($index, 1)">删除</el-button></template>
           </el-table-column>
         </el-table>
+        <div class="sum-bar">
+          <span>应付总额（含税）：<b>{{ goodsTotal.toFixed(2) }}</b></span>
+          <template v-if="form.taxIncluded === 1">
+            <span>税额（{{ form.taxRate }}%）： <b class="tax-num">{{ taxAmount.toFixed(2) }}</b></span>
+            <span>不含税金额： <b>{{ noTaxAmount.toFixed(2) }}</b></span>
+          </template>
+        </div>
       </el-form>
 
       <div style="text-align:center;margin-top:24px">
@@ -107,19 +125,21 @@
 </template>
 
 <script setup lang="ts">
-import { WarehouseCategory } from '@/api/enums'
+import { WarehouseCategory, PURCHASE_ORDER_DIRTY_KEY } from '@/api/enums'
 defineOptions({ name: 'PurchaseAdd' })
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+import { productLabel } from '@/api/product'
 import type { PurchaseOrder } from '@/api/purchase'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 /** 明细行数据结构（前端用，含4个品质的数量+单价） */
 interface ItemRow {
   productId: any
+  sku?: string
   materialName: string
   spec: string
   unit: string
@@ -147,7 +167,7 @@ const form = reactive<PurchaseOrder>({
 })
 
 const rules: FormRules = {
-  supplierId: [{ required: true, message: '请选择供应商', trigger: 'change' }],
+  supplierId: [{ required: true, message: '请选择供货商', trigger: 'change' }],
   warehouseId: [{ required: true, message: '请选择入库仓库', trigger: 'change' }],
 }
 
@@ -179,6 +199,14 @@ function rowTotalAmount(row: ItemRow): number {
        + (Number(row.defectQty) || 0) * (Number(row.defectPrice) || 0)
 }
 
+// 税额拆分（单价含税口径）：应付总额不变，按税率从总额中拆出税额
+const goodsTotal = computed(() => items.value.reduce((s, r) => s + rowTotalAmount(r), 0))
+const taxAmount = computed(() => form.taxIncluded === 1 && Number(form.taxRate) > 0
+  ? Math.round(goodsTotal.value * (Number(form.taxRate) / (100 + Number(form.taxRate))) * 100) / 100
+  : 0)
+const noTaxAmount = computed(() => Math.round((goodsTotal.value - taxAmount.value) * 100) / 100)
+function onTaxSwitch(v: any) { form.taxIncluded = v ? 1 : 0; form.taxRate = v ? (form.taxRate || 13) : 0 }
+
 async function loadMaterials(query?: string) {
   try {
     const params: any = { pageSize: 100 }
@@ -193,6 +221,7 @@ function onMaterialChange(val: any, row: ItemRow) {
   if (m) {
     row.productId = m.id
     row.materialName = m.name
+    row.sku = m.sku || ''
     row.spec = m.spec
     row.unit = m.unit
   }
@@ -259,21 +288,21 @@ async function handleSubmit() {
         items: flatItems,
       }
       await request.post('/inventory/purchase', body)
-      ElMessage.success('新增成功')
+      ElMessage.success('新增成功'); sessionStorage.setItem(PURCHASE_ORDER_DIRTY_KEY, '1')
       router.back()
     } catch (e: any) { ElMessage.error(e?.message || '新增失败') }
     finally { submitLoading.value = false }
   })
 }
 
-// 从 URL query 预填：供应商 + 产品/物料（来自供应商详情页"去采购"）
+// 从 URL query 预填：供货商 + 产品/物料（来自供货商详情页"去采购"）
 async function initFromQuery() {
   const q = router.currentRoute.value.query
   if (q.supplierId) {
     form.supplierId = Number(q.supplierId)
     if (!suppliers.value.some(s => s.id === form.supplierId)) {
       try {
-        // 按ID查单个供应商，确保 select 能匹配显示名称（不依赖 supplierType 过滤）
+        // 按ID查单个供货商，确保 select 能匹配显示名称（不依赖 supplierType 过滤）
         const supplier = await request.get<any, any>('/supplier/' + form.supplierId)
         if (supplier) suppliers.value.unshift({ id: supplier.id, name: supplier.name })
       } catch { /* 忽略 */ }
@@ -311,5 +340,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-
+.sum-bar { margin-top: 12px; display: flex; justify-content: flex-end; gap: 24px; font-size: 14px; color: var(--app-text-secondary); }
+.sum-bar b { color: var(--app-text-primary); font-size: 16px; }
+.tax-num { color: var(--app-color-danger); }
 </style>

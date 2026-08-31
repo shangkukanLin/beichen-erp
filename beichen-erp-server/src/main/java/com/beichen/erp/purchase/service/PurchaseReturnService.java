@@ -17,4 +17,10 @@ public interface PurchaseReturnService {
     void unAudit(Long id);
     void cancel(Long id);
     void delete(Long id);
+
+    /** 按采购单查询关联的退货单列表 */
+    List<Map<String, Object>> byOrder(Long purchaseOrderId);
+
+    /** 查询采购单明细（含已退/可退数量，供退货带入） */
+    List<Map<String, Object>> purchaseOrderItems(Long purchaseOrderId);
 }

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { IoType, IoTypeLabel, WarehouseCategory } from '@/api/enums'
+import { IoType, IoTypeLabel, WarehouseCategory, OUTSOURCE_OTHER_IO_DIRTY_KEY } from '@/api/enums'
 import { DocStatus } from '@/api/common'
 
 const route = useRoute(); const router = useRouter()
@@ -70,12 +70,15 @@ async function handleSubmit() {
   try {
     const body: any = { ...form, items: validItems }
     await request.put(`/outsource/other-io/${editId}`, body)
-    ElMessage.success('已更新')
+    ElMessage.success('已更新'); sessionStorage.setItem(OUTSOURCE_OTHER_IO_DIRTY_KEY, '1')
     router.push('/outsource/other-io')
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
 
-onMounted(() => { loadWarehouses(); loadMaterials(); loadBomTypes(); loadDetail() })
+// 顶栏"刷新数据"：重新加载仓库/物料/类型下拉
+async function handleRefreshData() { await Promise.all([loadWarehouses(), loadMaterials(), loadBomTypes()]) }
+onMounted(() => { loadWarehouses(); loadMaterials(); loadBomTypes(); loadDetail(); window.addEventListener('refresh:dropdown-data', handleRefreshData) })
+onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 </script>
 
 <template>

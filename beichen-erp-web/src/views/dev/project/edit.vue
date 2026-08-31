@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, computed, watch } from 'vue'
+import { reactive, ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { TimelineStatus, TimelineStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/enums'
+import { PhaseStatus, PhaseStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DEV_PROJECT_DIRTY_KEY } from '@/api/enums'
 import {
   getProject, updateProject,
   getProjectBom, saveProjectBom,
@@ -26,13 +26,22 @@ const form = reactive<ProjectDTO>({
   name: '', displaySupplierName: '', touchSupplierName: '',
   assemblyName: '',
   adaptModel: '', originalSize: '', originalResolution: '',
+  originalDriveIc: '', originalTouchIc: '',
+  glassSize: '', glassResolution: '',
+  configDriveIcId: undefined, configTouchIcId: undefined, configCodeIcId: undefined,
   startDate: '', expectedEndDate: '', status: '立项', remark: '',
-  sampleFactoryId: undefined, outsourceFactoryId: undefined
+  sampleFactoryId: undefined, outsourceFactoryId: undefined,
+  brandId: undefined
 })
 // 显示方案/触摸方案：可自由输入，选项取自方案商列表
 const solutionSupplierOptions = ref<{ id: number; name: string }[]>([])
 const allSuppliers = ref<any[]>([])
 const factoryOptions = ref<{ id: number; name: string }[]>([])
+// 品牌下拉（/brand/enabled）
+const brandOptions = ref<{ id: number; brandName: string }[]>([])
+async function loadBrandOptions() {
+  try { brandOptions.value = (await request.get('/brand/enabled')) || [] } catch { /* 忽略 */ }
+}
 
 const fetchSolutionSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, supplierType: 'solution', name: kw } })
 const fetchFactorySuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, supplierType: 'factory', name: kw } })
@@ -55,11 +64,30 @@ async function loadProject() {
     assemblyName: p.assemblyName,
     displaySupplierName: p.displaySupplierName, touchSupplierName: p.touchSupplierName,
     adaptModel: p.adaptModel, originalSize: p.originalSize, originalResolution: p.originalResolution,
+    originalDriveIc: p.originalDriveIc, originalTouchIc: p.originalTouchIc,
+    glassSize: p.glassSize, glassResolution: p.glassResolution,
+    configDriveIcId: p.configDriveIcId, configTouchIcId: p.configTouchIcId, configCodeIcId: p.configCodeIcId,
     sampleFactoryId: p.sampleFactoryId, outsourceFactoryId: p.outsourceFactoryId,
     sampleFactoryName: p.sampleFactoryName, outsourceFactoryName: p.outsourceFactoryName,
     startDate: p.startDate, expectedEndDate: p.expectedEndDate,
     status: p.status, remark: p.remark
   })
+  await loadConfigNames()
+}
+
+// 改配信息物料名称回显
+const configDriveIcName = ref(''), configTouchIcName = ref(''), configCodeIcName = ref('')
+async function loadConfigNames() {
+  const ids = [form.configDriveIcId, form.configTouchIcId, form.configCodeIcId].filter((v: any) => v != null)
+  if (!ids.length) return
+  try {
+    const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } })
+    const mats = (r?.records || [])
+    const find = (id: any) => { const m = mats.find((x: any) => x.id === id); return m ? m.materialName : '' }
+    configDriveIcName.value = find(form.configDriveIcId)
+    configTouchIcName.value = find(form.configTouchIcId)
+    configCodeIcName.value = find(form.configCodeIcId)
+  } catch { /* 忽略 */ }
 }
 
 async function handleSave() {
@@ -68,7 +96,7 @@ async function handleSave() {
   saving.value = true
   try {
     await updateProject(form as any)
-    ElMessage.success('保存成功')
+    ElMessage.success('保存成功'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
     await loadProject()
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')); await loadProject() }
   saving.value = false
@@ -80,39 +108,39 @@ function goCreateOrder(type: 'sample' | 'outsource') {
   router.push({ path: '/outsource/order/add', query: { factoryId, projectId } })
 }
 
-// ===================== 时间线 =====================
-interface TimelineItem { id?: number; statusName: string; sortOrder: number; defaultDays?: number; plannedEnd?: string; actualEnd?: string; status?: string; remark?: string }
-const timelineStatusOptions = [TimelineStatus.NOT_STARTED, TimelineStatus.IN_PROGRESS, TimelineStatus.FINISHED]
-const timelineList = ref<TimelineItem[]>([])
-const timelineCompleting = ref<Record<number, boolean>>({})
+// ===================== 项目阶段 =====================
+interface PhaseItem { id?: number; phaseName: string; sortOrder: number; defaultDays?: number; plannedEnd?: string; actualEnd?: string; status?: string; remark?: string }
+const phaseStatusOptions = [PhaseStatus.NOT_STARTED, PhaseStatus.IN_PROGRESS, PhaseStatus.FINISHED]
+const phaseList = ref<PhaseItem[]>([])
+const phaseCompleting = ref<Record<number, boolean>>({})
 
-async function loadTimeline() {
-  const res = await request.get<TimelineItem[]>(`/dev/project/${projectId}/timeline`)
-  timelineList.value = res || []
+async function loadPhase() {
+  const res = await request.get<PhaseItem[]>(`/dev/project/${projectId}/phase`)
+  phaseList.value = res || []
 }
 
-// 从时间线推导当前项目阶段
+// 从项目阶段推导当前项目阶段
 const currentPhaseName = computed(() => {
   // 优先找"进行中"的阶段
-  const active = timelineList.value.find(t => t.status === TimelineStatus.IN_PROGRESS)
-  if (active) return active.statusName
+  const active = phaseList.value.find(t => t.status === PhaseStatus.IN_PROGRESS)
+  if (active) return active.phaseName
   // 没有进行中的，找最后一个已完成/已跳过的
-  for (let i = timelineList.value.length - 1; i >= 0; i--) {
-    if (timelineList.value[i].status === TimelineStatus.FINISHED
-        || timelineList.value[i].status === TimelineStatus.SKIPPED) {
-      return timelineList.value[i].statusName
+  for (let i = phaseList.value.length - 1; i >= 0; i--) {
+    if (phaseList.value[i].status === PhaseStatus.FINISHED
+        || phaseList.value[i].status === PhaseStatus.SKIPPED) {
+      return phaseList.value[i].phaseName
     }
   }
   // 都没有，返回模板第一项
-  return timelineList.value.length > 0 ? timelineList.value[0].statusName : '-'
+  return phaseList.value.length > 0 ? phaseList.value[0].phaseName : '-'
 })
 
-async function saveTimelineRow(row: any) {
+async function savePhaseRow(row: any) {
   try {
-    await request.put(`/dev/project/timeline/${row.id}`, {
+    await request.put(`/dev/project/phase/${row.id}`, {
       id: row.id,
       projectId: projectId,
-      statusName: row.statusName,
+      phaseName: row.phaseName,
       sortOrder: row.sortOrder,
       defaultDays: row.defaultDays,
       plannedEnd: row.plannedEnd || null,
@@ -121,39 +149,39 @@ async function saveTimelineRow(row: any) {
       remark: row.remark || null
     })
     // 更新日期或状态后刷新列表（后端可能后推了后续阶段）
-    await loadTimeline()
+    await loadPhase()
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '')) }
 }
 
-async function completePhase(timelineId: number) {
-  timelineCompleting.value[timelineId] = true
+async function completePhase(phaseId: number) {
+  phaseCompleting.value[phaseId] = true
   try {
-    await request.put(`/dev/project/timeline/${timelineId}/complete`)
-    ElMessage.success('阶段已完成')
-    await loadTimeline()
+    await request.put(`/dev/project/phase/${phaseId}/complete`)
+    ElMessage.success('阶段已完成'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    await loadPhase()
     await loadProject()
   } catch (e: any) { ElMessage.error('操作失败: ' + (e?.message || '')) }
-  finally { timelineCompleting.value[timelineId] = false }
+  finally { phaseCompleting.value[phaseId] = false }
 }
 
-async function skipPhase(timelineId: number) {
-  timelineCompleting.value[timelineId] = true
+async function skipPhase(phaseId: number) {
+  phaseCompleting.value[phaseId] = true
   try {
-    await request.put(`/dev/project/timeline/${timelineId}/skip`)
-    ElMessage.success('阶段已跳过')
-    await loadTimeline()
+    await request.put(`/dev/project/phase/${phaseId}/skip`)
+    ElMessage.success('阶段已跳过'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    await loadPhase()
     await loadProject()
   } catch (e: any) { ElMessage.error('操作失败: ' + (e?.message || '')) }
-  finally { timelineCompleting.value[timelineId] = false }
+  finally { phaseCompleting.value[phaseId] = false }
 }
 
 /** 撤销阶段 */
-async function revertPhase(timelineId: number) {
+async function revertPhase(phaseId: number) {
   try {
     await ElMessageBox.confirm('撤销后将恢复该阶段为进行中，后续阶段将全部重置为未开始。确认撤销？', '确认撤销', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
-    await request.put(`/dev/project/timeline/${timelineId}/revert`)
-    ElMessage.success('阶段已撤销')
-    await loadTimeline()
+    await request.put(`/dev/project/phase/${phaseId}/revert`)
+    ElMessage.success('阶段已撤销'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    await loadPhase()
     await loadProject()
   } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('操作失败: ' + (e?.message || ''))
@@ -164,26 +192,26 @@ async function revertPhase(timelineId: number) {
 async function recalcPlannedEnds() {
   try {
     await ElMessageBox.confirm('将以第一个进行中阶段为起点，级联推算后续所有未开始阶段的计划日期。确认重算？', '确认重算', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'info' })
-    await request.put(`/dev/project/timeline/recalc`, null, { params: { projectId } })
-    ElMessage.success('计划日期已重算')
-    await loadTimeline()
+    await request.put(`/dev/project/phase/recalc`, null, { params: { projectId } })
+    ElMessage.success('计划日期已重算'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    await loadPhase()
   } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('操作失败: ' + (e?.message || ''))
   }
 }
 
 // 进度统计（使用枚举比较）
-const timelineProgress = computed(() => {
-  const total = timelineList.value.length
-  const completed = timelineList.value.filter(t => t.status === TimelineStatus.FINISHED || t.status === TimelineStatus.SKIPPED).length
-  const inProgress = timelineList.value.filter(t => t.status === TimelineStatus.IN_PROGRESS).length
+const phaseProgress = computed(() => {
+  const total = phaseList.value.length
+  const completed = phaseList.value.filter(t => t.status === PhaseStatus.FINISHED || t.status === PhaseStatus.SKIPPED).length
+  const inProgress = phaseList.value.filter(t => t.status === PhaseStatus.IN_PROGRESS).length
   return { total, completed, inProgress, pct: total > 0 ? Math.round(completed / total * 100) : 0 }
 })
 
 // 行样式（使用枚举比较）
-function timelineRowClass({ row }: { row: TimelineItem }) {
-  if (row.status === TimelineStatus.FINISHED || row.status === TimelineStatus.SKIPPED) return 'timeline-row-done'
-  if (row.status === TimelineStatus.IN_PROGRESS) return 'timeline-row-active'
+function phaseRowClass({ row }: { row: PhaseItem }) {
+  if (row.status === PhaseStatus.FINISHED || row.status === PhaseStatus.SKIPPED) return 'phase-row-done'
+  if (row.status === PhaseStatus.IN_PROGRESS) return 'phase-row-active'
   return ''
 }
 
@@ -200,6 +228,20 @@ function fetchMaterialsByType(kw: string, row: any) {
 async function loadBomTypes() {
   const bt: any = await fetchBomTypes(''); bomTypes.value = bt || []
   const m: any = await fetchMaterials(''); allMaterials.value = (m?.records || []) as any[]
+}
+// BOM类型名 -> id 映射，用于改配信息物料下拉按类型过滤
+const bomTypeIdMap = computed<Record<string, number>>(() => {
+  const m: Record<string, number> = {}
+  for (const t of bomTypes.value) m[t.typeName] = t.id
+  return m
+})
+function fetchConfigMaterials(kw: string, typeName: string) {
+  const typeId = bomTypeIdMap.value[typeName]
+  return request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw, bomTypeId: typeId || undefined } })
+}
+// 跳转到物料信息管理并定位到对应 BOM 类型 TAB
+function goMaterialInfo(typeName: string) {
+  router.push({ path: '/outsource/material-info', query: { bomTypeId: bomTypeIdMap.value[typeName] } })
 }
 // BOM类型 id -> 类型名 映射，用于回显
 const bomTypeNameMap = computed<Record<number, string>>(() => {
@@ -272,8 +314,14 @@ async function saveBom() {
     unit: b.unit
   }))
   await saveProjectBom(projectId, bomData)
-  ElMessage.success('BOM已保存')
+  ElMessage.success('BOM已保存'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
   await loadBom()
+  // BOM 为准：同步刷新改配信息（驱动IC/触摸IC/码片IC）回显
+  const p: any = await getProject(projectId)
+  form.configDriveIcId = p.configDriveIcId
+  form.configTouchIcId = p.configTouchIcId
+  form.configCodeIcId = p.configCodeIcId
+  await loadConfigNames()
 }
 
 // ===================== BUG =====================
@@ -299,11 +347,11 @@ async function loadBugs() {
 function handleAddBug() { Object.assign(bugForm, { id: undefined, title: '', severity: SeverityType.NORMAL, bugType: BugTypeEnum.DISPLAY, status: BugStatus.OPEN, description: '' }); isBugEdit.value = false; bugDialogVisible.value = true }
 function handleEditBug(row: BugDTO) { Object.assign(bugForm, row); isBugEdit.value = true; bugDialogVisible.value = true }
 async function handleBugSubmit() {
-  if (isBugEdit.value && bugForm.id) { await updateProjectBug(projectId, bugForm); ElMessage.success('已更新') }
-  else { await addProjectBug(projectId, bugForm); ElMessage.success('已添加') }
+  if (isBugEdit.value && bugForm.id) { await updateProjectBug(projectId, bugForm); ElMessage.success('已更新'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1') }
+  else { await addProjectBug(projectId, bugForm); ElMessage.success('已添加'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1') }
   bugDialogVisible.value = false; loadBugs()
 }
-async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectBug(projectId, row.id!); ElMessage.success('已删除'); loadBugs() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
+async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectBug(projectId, row.id!); ElMessage.success('已删除'); loadBugs(); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1') } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
 // ===================== 图纸（含排线图纸上传） =====================
 const drawingList = ref<DrawingVO[]>([])
@@ -343,11 +391,11 @@ async function handleDrawingSubmit() {
       drawingForm.fileUrl = res as unknown as string
     }
     await addProjectDrawing(projectId, drawingForm as any)
-    ElMessage.success('图纸已上传'); drawingVisible.value = false; loadDrawings()
+    ElMessage.success('图纸已上传'); drawingVisible.value = false; loadDrawings(); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
   } catch (e: any) { ElMessage.error('上传失败: ' + (e?.message || '未知错误')) } finally { uploading.value = false }
 }
 function downloadFile(url: string) { window.open(url) }
-async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(projectId, row.id!); ElMessage.success('已删除'); loadDrawings() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
+async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(projectId, row.id!); ElMessage.success('已删除'); loadDrawings(); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1') } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
 // ===================== 项目物料 =====================
 interface DevPurchaseItem {
@@ -385,26 +433,18 @@ async function handleDeleteDevMaterial(row: any) {
   try {
     await ElMessageBox.confirm('确定删除该记录吗？', '提示', { type: 'warning' })
     await request.delete(`/dev/purchase-item/${row.id}`)
-    ElMessage.success('已删除')
+    ElMessage.success('已删除'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
     loadDevMaterials()
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
-}
-
-// ===================== 关联委外订单 =====================
-interface RelatedOrder { id: number; code: string; status: string; createTime: string; productName: string }
-const relatedOrders = ref<RelatedOrder[]>([])
-async function loadRelatedOrders() {
-  try {
-    const res = await request.get<any, any>(`/dev/project/${projectId}/related-orders`)
-    relatedOrders.value = res?.outsourceOrders || []
-    // devMaterial 由 loadDevMaterials 负责加载
-  } catch (e: any) { ElMessage.error('加载关联订单失败：' + (e?.msg || e?.message || '未知错误')) }
 }
 
 // 切换 Tab 时自动加载 BOM 数据
 watch(activeTab, async (tab) => { if (tab === 'bom') await loadBom() })
 
-onMounted(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBomTypes(); loadTimeline(); loadBom(); loadBugs(); loadDrawings(); loadDevMaterials(); loadRelatedOrders() })
+// 顶栏"刷新数据"：重新加载方案供应商下拉
+async function handleRefreshData() { await loadSolutionSuppliers() }
+onMounted(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBrandOptions(); loadBomTypes(); loadPhase(); loadBom(); loadBugs(); loadDrawings(); loadDevMaterials(); window.addEventListener('refresh:dropdown-data', handleRefreshData) })
+onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 
 
 
@@ -426,17 +466,20 @@ function onNameBlur() {
           <template #header><span style="font-weight:600">基础信息</span></template>
           <el-form :model="form" label-width="100px" size="default">
             <el-row :gutter="16">
+              <el-col :span="8"><el-form-item label="项目编码"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="项目名称"><el-input v-model="form.name" @blur="onNameBlur" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="总成名称" prop="assemblyName" :rules="[{ required: true, message: '请输入总成名称', trigger: 'blur' }]"><el-input v-model="form.assemblyName" /></el-form-item></el-col>
-              <el-col :span="8"><el-form-item label="项目编码"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
+
+              <el-col :span="8"><el-form-item label="立项日期"><el-input v-model="form.startDate" type="date" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="预计完成"><el-input v-model="form.expectedEndDate" type="date" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="当前阶段">
                 <el-tag type="warning" size="default">{{ currentPhaseName }}</el-tag>
               </el-form-item></el-col>
+
               <el-col :span="8"><el-form-item label="适配机型"><el-input v-model="form.adaptModel" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="显示方案"><el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%" @change="(v: string) => { if (v === ADD_MARKER) { form.displaySupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSupplierOptions" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="触摸方案"><el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%" @change="(v: string) => { if (v === ADD_MARKER) { form.touchSupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSupplierOptions" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
-              <el-col :span="8"><el-form-item label="原机尺寸"><el-input v-model="form.originalSize" /></el-form-item></el-col>
-              <el-col :span="8"><el-form-item label="原分辨率"><el-input v-model="form.originalResolution" /></el-form-item></el-col>
+
               <el-col :span="8"><el-form-item label="打样工厂">
                 <div style="display:flex;gap:4px;align-items:center">
                   <RemoteSelect v-model="form.sampleFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" :preset="form.sampleFactoryId ? { id: form.sampleFactoryId, name: form.sampleFactoryName } : null" @change="(v: any) => { if (v === ADD_MARKER) { form.sampleFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
@@ -449,18 +492,36 @@ function onNameBlur() {
                   <el-button v-if="form.outsourceFactoryId" type="success" @click="goCreateOrder('outsource')">下单</el-button>
                 </div>
               </el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="品牌"><el-select v-model="form.brandId" filterable clearable placeholder="选择品牌" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.brandId = undefined; router.push('/inventory/brand'); return } }"><el-option v-for="b in brandOptions" :key="b.id" :label="b.brandName" :value="b.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
             </el-row>
-          </el-form>
-        </el-card>
 
-        <!-- 时间节点 -->
-        <el-card shadow="never" style="margin-top:12px">
-          <template #header><span style="font-weight:600">时间节点</span></template>
-          <el-form :model="form" label-width="100px" size="default">
             <el-row :gutter="16">
-              <el-col :span="8"><el-form-item label="立项日期"><el-input v-model="form.startDate" type="date" /></el-form-item></el-col>
-              <el-col :span="8"><el-form-item label="预计完成"><el-input v-model="form.expectedEndDate" type="date" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item></el-col>
+            </el-row>
+
+            <!-- 原机配置 -->
+            <el-divider content-position="left">原机配置</el-divider>
+            <el-row :gutter="16">
+              <el-col :span="8"><el-form-item label="原机尺寸"><el-input v-model="form.originalSize" placeholder="如 6.1寸" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="原分辨率"><el-input v-model="form.originalResolution" placeholder="如 1080×2400" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="驱动IC"><el-input v-model="form.originalDriveIc" placeholder="原机驱动IC型号" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="触摸IC"><el-input v-model="form.originalTouchIc" placeholder="原机触摸IC型号" /></el-form-item></el-col>
+            </el-row>
+
+            <!-- 改配信息 -->
+            <el-divider content-position="left">改配信息</el-divider>
+            <el-row :gutter="16">
+              <el-col :span="8"><el-form-item label="玻璃尺寸"><el-input v-model="form.glassSize" placeholder="如 6.1寸" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="玻璃分辨率"><el-input v-model="form.glassResolution" placeholder="如 1080×2400" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="驱动IC">
+                <RemoteSelect v-model="form.configDriveIcId" :fetch="(kw: string) => fetchConfigMaterials(kw, '驱动IC')" label-key="materialName" clearable filterable :preset="form.configDriveIcId ? { id: form.configDriveIcId, materialName: configDriveIcName } : null" style="width:100%" placeholder="选择驱动IC物料" @change="(v: any) => { if (v === ADD_MARKER) { form.configDriveIcId = undefined; goMaterialInfo('驱动IC'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
+              </el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="触摸IC">
+                <RemoteSelect v-model="form.configTouchIcId" :fetch="(kw: string) => fetchConfigMaterials(kw, '触摸IC')" label-key="materialName" clearable filterable :preset="form.configTouchIcId ? { id: form.configTouchIcId, materialName: configTouchIcName } : null" style="width:100%" placeholder="选择触摸IC物料" @change="(v: any) => { if (v === ADD_MARKER) { form.configTouchIcId = undefined; goMaterialInfo('触摸IC'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
+              </el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="码片IC">
+                <RemoteSelect v-model="form.configCodeIcId" :fetch="(kw: string) => fetchConfigMaterials(kw, '码片IC')" label-key="materialName" clearable filterable :preset="form.configCodeIcId ? { id: form.configCodeIcId, materialName: configCodeIcName } : null" style="width:100%" placeholder="选择码片IC物料" @change="(v: any) => { if (v === ADD_MARKER) { form.configCodeIcId = undefined; goMaterialInfo('码片IC'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
+              </el-form-item></el-col>
             </el-row>
           </el-form>
         </el-card>
@@ -468,64 +529,64 @@ function onNameBlur() {
         <div style="margin-top:12px"><el-button type="primary" :loading="saving" @click="handleSave">保存基础信息</el-button></div>
       </el-tab-pane>
 
-      <!-- 阶段时间线 Tab -->
-      <el-tab-pane label="阶段时间线" name="timeline">
+      <!-- 项目阶段 Tab -->
+      <el-tab-pane label="项目阶段" name="phase">
         <el-card shadow="never">
           <!-- 进度概览 + 操作按钮 -->
           <div style="margin-bottom:12px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
             <span style="font-size:var(--app-font-base);font-weight:600">进度概览</span>
             <div style="flex:1;max-width:360px">
-              <el-progress :percentage="timelineProgress.pct" :stroke-width="16" 
-                :color="timelineProgress.pct === 100 ? 'var(--app-color-success)' : 'var(--app-color-primary)'">
-                <span style="font-size:var(--app-font-xs)">{{ timelineProgress.completed }} / {{ timelineProgress.total }} 已完成</span>
+              <el-progress :percentage="phaseProgress.pct" :stroke-width="16" 
+                :color="phaseProgress.pct === 100 ? 'var(--app-color-success)' : 'var(--app-color-primary)'">
+                <span style="font-size:var(--app-font-xs)">{{ phaseProgress.completed }} / {{ phaseProgress.total }} 已完成</span>
               </el-progress>
             </div>
-            <el-tag v-if="timelineProgress.inProgress > 0" type="warning" size="small">{{ timelineProgress.inProgress }} 个进行中</el-tag>
+            <el-tag v-if="phaseProgress.inProgress > 0" type="warning" size="small">{{ phaseProgress.inProgress }} 个进行中</el-tag>
             <el-button type="primary" size="small" plain @click="recalcPlannedEnds">重算计划日期</el-button>
           </div>
 
-          <el-table :data="timelineList" border size="small" :row-class-name="timelineRowClass">
+          <el-table :data="phaseList" border size="small" :row-class-name="phaseRowClass">
             <el-table-column label="排序" width="55" align="center"><template #default="{row}">{{ row.sortOrder }}</template></el-table-column>
-            <el-table-column prop="statusName" label="阶段名称" width="140" />
+            <el-table-column prop="phaseName" label="阶段名称" width="140" />
             <el-table-column label="默认天数" width="75" align="center"><template #default="{row}">{{ row.defaultDays || '-' }}</template></el-table-column>
             <el-table-column label="计划完成" width="150">
               <template #default="{row}">
                 <el-input v-model="row.plannedEnd" type="date" size="small" 
-                  :disabled="row.status === TimelineStatus.FINISHED || row.status === TimelineStatus.SKIPPED" @change="saveTimelineRow(row)" />
+                  :disabled="row.status === PhaseStatus.FINISHED || row.status === PhaseStatus.SKIPPED" @change="savePhaseRow(row)" />
               </template>
             </el-table-column>
             <el-table-column label="实际完成" width="150">
               <template #default="{row}">
-                <el-input v-model="row.actualEnd" type="date" size="small" @change="saveTimelineRow(row)" />
+                <el-input v-model="row.actualEnd" type="date" size="small" @change="savePhaseRow(row)" />
               </template>
             </el-table-column>
             <el-table-column label="备注" min-width="140">
               <template #default="{row}">
-                <el-input v-model="row.remark" size="small" placeholder="可选" @change="saveTimelineRow(row)" />
+                <el-input v-model="row.remark" size="small" placeholder="可选" @change="savePhaseRow(row)" />
               </template>
             </el-table-column>
             <el-table-column label="状态" width="100" align="center">
               <template #default="{row}">
-                <el-tag v-if="row.status === TimelineStatus.FINISHED" type="success" size="small">{{ TimelineStatusLabel[row.status] }}</el-tag>
-                <el-tag v-else-if="row.status === TimelineStatus.IN_PROGRESS" type="warning" size="small">{{ TimelineStatusLabel[row.status] }}</el-tag>
-                <el-tag v-else-if="row.status === TimelineStatus.SKIPPED" type="info" size="small" style="border-style:dashed">{{ TimelineStatusLabel[row.status] }}</el-tag>
-                <el-select v-else v-model="row.status" size="small" style="width:90px" @change="saveTimelineRow(row)">
-                  <el-option v-for="o in timelineStatusOptions" :key="o" :label="TimelineStatusLabel[o]" :value="o" />
+                <el-tag v-if="row.status === PhaseStatus.FINISHED" type="success" size="small">{{ PhaseStatusLabel[row.status] }}</el-tag>
+                <el-tag v-else-if="row.status === PhaseStatus.IN_PROGRESS" type="warning" size="small">{{ PhaseStatusLabel[row.status] }}</el-tag>
+                <el-tag v-else-if="row.status === PhaseStatus.SKIPPED" type="info" size="small" style="border-style:dashed">{{ PhaseStatusLabel[row.status] }}</el-tag>
+                <el-select v-else v-model="row.status" size="small" style="width:90px" @change="savePhaseRow(row)">
+                  <el-option v-for="o in phaseStatusOptions" :key="o" :label="PhaseStatusLabel[o]" :value="o" />
                 </el-select>
               </template>
             </el-table-column>
             <el-table-column label="操作" width="170" align="center">
               <template #default="{row}">
                 <div style="display:flex;justify-content:center;align-items:center;gap:4px">
-                <el-button v-if="row.id && row.status === TimelineStatus.IN_PROGRESS" type="success" size="small"
-                  :loading="timelineCompleting[row.id]" @click="completePhase(row.id)">
+                <el-button v-if="row.id && row.status === PhaseStatus.IN_PROGRESS" type="success" size="small"
+                  :loading="phaseCompleting[row.id]" @click="completePhase(row.id)">
                   完成
                 </el-button>
-                <el-button v-if="row.id && row.status === TimelineStatus.IN_PROGRESS" type="warning" size="small"
+                <el-button v-if="row.id && row.status === PhaseStatus.IN_PROGRESS" type="warning" size="small"
                   plain @click="skipPhase(row.id)">
                   跳过
                 </el-button>
-                <el-button v-if="row.id && (row.status === TimelineStatus.FINISHED || row.status === TimelineStatus.SKIPPED)" type="danger" size="small"
+                <el-button v-if="row.id && (row.status === PhaseStatus.FINISHED || row.status === PhaseStatus.SKIPPED)" type="danger" size="small"
                   plain @click="revertPhase(row.id)">
                   撤销
                 </el-button>
@@ -536,8 +597,49 @@ function onNameBlur() {
         </el-card>
       </el-tab-pane>
 
-      <!-- BOM物料清单 Tab -->
-      <el-tab-pane label="BOM物料清单" name="bom">
+      <!-- BUG Tab -->
+      <el-tab-pane label="BUG 列表" name="bug">
+        <el-card shadow="never">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+            <el-button type="primary" size="small" @click="handleAddBug">+ 新增BUG</el-button>
+            <el-select v-model="bugListFilter" size="small" style="width:100px" @change="()=>{}">
+              <el-option label="全部" value="全部"/>
+              <el-option :label="BugTypeEnumLabel[BugTypeEnum.DISPLAY]" :value="BugTypeEnum.DISPLAY"/>
+              <el-option :label="BugTypeEnumLabel[BugTypeEnum.TOUCH]" :value="BugTypeEnum.TOUCH"/>
+              <el-option :label="BugTypeEnumLabel[BugTypeEnum.STRUCTURE]" :value="BugTypeEnum.STRUCTURE"/>
+            </el-select>
+            <el-radio-group v-model="bugTab" size="small" style="margin-left:8px">
+              <el-radio-button value="active">处理中 ({{ filteredBugs.active.length }})</el-radio-button>
+              <el-radio-button value="closed">已关闭 ({{ filteredBugs.closed.length }})</el-radio-button>
+            </el-radio-group>
+          </div>
+
+          <!-- 处理中 -->
+          <el-table v-show="bugTab === 'active'" :data="filteredBugs.active" border size="small">
+            <el-table-column prop="code" label="编号" width="240" />
+            <el-table-column prop="title" label="标题" min-width="150" />
+            <el-table-column prop="bugType" label="类型" width="70"><template #default="{row}">{{ BugTypeEnumLabel[row.bugType] || row.bugType }}</template></el-table-column>
+            <el-table-column prop="severity" label="严重程度" width="90"><template #default="{row}">{{ SeverityTypeLabel[row.severity] || row.severity }}</template></el-table-column>
+            <el-table-column label="状态" width="90"><template #default="{row}"><el-tag size="small" :type="BugStatusTag[row.status] || 'info'">{{ BugStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+            <el-table-column label="操作" width="120" align="center"><template #default="{row}"><el-button type="primary" link @click="handleEditBug(row as BugDTO)">编辑</el-button><el-button type="danger" link @click="handleDeleteBug(row as BugDTO)">删除</el-button></template></el-table-column>
+            <template #empty><div style="color:var(--app-text-secondary);padding:16px;text-align:center">暂无处理中的BUG</div></template>
+          </el-table>
+
+          <!-- 已关闭 -->
+          <el-table v-show="bugTab === 'closed'" :data="filteredBugs.closed" border size="small">
+            <el-table-column prop="code" label="编号" width="240" />
+            <el-table-column prop="title" label="标题" min-width="150" />
+            <el-table-column prop="bugType" label="类型" width="70"><template #default="{row}">{{ BugTypeEnumLabel[row.bugType] || row.bugType }}</template></el-table-column>
+            <el-table-column prop="severity" label="严重程度" width="90"><template #default="{row}">{{ SeverityTypeLabel[row.severity] || row.severity }}</template></el-table-column>
+            <el-table-column label="状态" width="90"><template #default="{row}"><el-tag size="small" type="info">{{ BugStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+            <el-table-column label="操作" width="120" align="center"><template #default="{row}"><el-button type="primary" link @click="handleEditBug(row as BugDTO)">编辑</el-button><el-button type="danger" link @click="handleDeleteBug(row as BugDTO)">删除</el-button></template></el-table-column>
+            <template #empty><div style="color:var(--app-text-secondary);padding:16px;text-align:center">暂无已关闭的BUG</div></template>
+          </el-table>
+        </el-card>
+      </el-tab-pane>
+
+      <!-- BOM信息 Tab -->
+      <el-tab-pane label="BOM信息" name="bom">
         <el-card shadow="never">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
             <el-button type="primary" size="small" @click="addBomRow">+ 添加物料</el-button>
@@ -642,67 +744,6 @@ function onNameBlur() {
         </el-card>
       </el-tab-pane>
 
-      <!-- 关联订单 Tab -->
-      <el-tab-pane label="关联订单" name="relatedOrders">
-        <el-card shadow="never">
-          <el-table :data="relatedOrders" border size="small" empty-text="暂无关联的委外订单">
-            <el-table-column prop="code" label="订单号" width="180" />
-            <el-table-column prop="productName" label="产品" min-width="120" />
-            <el-table-column label="状态" width="90" align="center">
-              <template #default="{row}">
-                <el-tag size="small" :type="OutsourceOrderStatusTag[row.status] || 'primary'">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="createTime" label="创建时间" width="160" />
-            <el-table-column label="操作" width="100" align="center">
-              <template #default="{row}">
-                <el-button type="primary" link @click="router.push(`/outsource/order/detail/${row.id}`)">查看</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-      </el-tab-pane>
-
-      <!-- BUG Tab -->
-      <el-tab-pane label="BUG 列表" name="bug">
-        <el-card shadow="never">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-            <el-button type="primary" size="small" @click="handleAddBug">+ 新增BUG</el-button>
-            <el-select v-model="bugListFilter" size="small" style="width:100px" @change="()=>{}">
-              <el-option label="全部" value="全部"/>
-              <el-option :label="BugTypeEnumLabel[BugTypeEnum.DISPLAY]" :value="BugTypeEnum.DISPLAY"/>
-              <el-option :label="BugTypeEnumLabel[BugTypeEnum.TOUCH]" :value="BugTypeEnum.TOUCH"/>
-              <el-option :label="BugTypeEnumLabel[BugTypeEnum.STRUCTURE]" :value="BugTypeEnum.STRUCTURE"/>
-            </el-select>
-            <el-radio-group v-model="bugTab" size="small" style="margin-left:8px">
-              <el-radio-button value="active">处理中 ({{ filteredBugs.active.length }})</el-radio-button>
-              <el-radio-button value="closed">已关闭 ({{ filteredBugs.closed.length }})</el-radio-button>
-            </el-radio-group>
-          </div>
-
-          <!-- 处理中 -->
-          <el-table v-show="bugTab === 'active'" :data="filteredBugs.active" border size="small">
-            <el-table-column prop="code" label="编号" width="240" />
-            <el-table-column prop="title" label="标题" min-width="150" />
-            <el-table-column prop="bugType" label="类型" width="70"><template #default="{row}">{{ BugTypeEnumLabel[row.bugType] || row.bugType }}</template></el-table-column>
-            <el-table-column prop="severity" label="严重程度" width="90"><template #default="{row}">{{ SeverityTypeLabel[row.severity] || row.severity }}</template></el-table-column>
-            <el-table-column label="状态" width="90"><template #default="{row}"><el-tag size="small" :type="BugStatusTag[row.status] || 'info'">{{ BugStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-            <el-table-column label="操作" width="120" align="center"><template #default="{row}"><el-button type="primary" link @click="handleEditBug(row as BugDTO)">编辑</el-button><el-button type="danger" link @click="handleDeleteBug(row as BugDTO)">删除</el-button></template></el-table-column>
-            <template #empty><div style="color:var(--app-text-secondary);padding:16px;text-align:center">暂无处理中的BUG</div></template>
-          </el-table>
-
-          <!-- 已关闭 -->
-          <el-table v-show="bugTab === 'closed'" :data="filteredBugs.closed" border size="small">
-            <el-table-column prop="code" label="编号" width="240" />
-            <el-table-column prop="title" label="标题" min-width="150" />
-            <el-table-column prop="bugType" label="类型" width="70"><template #default="{row}">{{ BugTypeEnumLabel[row.bugType] || row.bugType }}</template></el-table-column>
-            <el-table-column prop="severity" label="严重程度" width="90"><template #default="{row}">{{ SeverityTypeLabel[row.severity] || row.severity }}</template></el-table-column>
-            <el-table-column label="状态" width="90"><template #default="{row}"><el-tag size="small" type="info">{{ BugStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-            <el-table-column label="操作" width="120" align="center"><template #default="{row}"><el-button type="primary" link @click="handleEditBug(row as BugDTO)">编辑</el-button><el-button type="danger" link @click="handleDeleteBug(row as BugDTO)">删除</el-button></template></el-table-column>
-            <template #empty><div style="color:var(--app-text-secondary);padding:16px;text-align:center">暂无已关闭的BUG</div></template>
-          </el-table>
-        </el-card>
-      </el-tab-pane>
     </el-tabs>
 
     <!-- BUG 弹窗 -->
@@ -758,8 +799,8 @@ function onNameBlur() {
 .drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:32px; text-align:center; transition:all .3s; cursor:pointer }
 .drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }
 
-/* 时间线行样式 */
-:deep(.timeline-row-done) { background-color: #f0f9eb; }
-:deep(.timeline-row-active) { background-color: #fdf6ec; }
+/* 项目阶段行样式 */
+:deep(.phase-row-done) { background-color: #f0f9eb; }
+:deep(.phase-row-active) { background-color: #fdf6ec; }
 </style>
 

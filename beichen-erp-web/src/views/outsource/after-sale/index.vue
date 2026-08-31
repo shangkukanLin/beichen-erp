@@ -17,6 +17,7 @@
       </el-form>
       <el-table :data="rows" border stripe size="small" v-loading="loading">
         <el-table-column type="index" label="#" width="50" />
+        <el-table-column label="SKU" prop="sku" width="130" />
         <el-table-column label="产品" prop="productName" min-width="180" />
         <el-table-column label="退回数量" prop="quantity" width="120" align="right" />
         <el-table-column label="退回仓库" prop="warehouseName" min-width="150" />
@@ -36,7 +37,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, computed } from 'vue'
+import { onMounted, onActivated, reactive, ref, computed } from 'vue'
+import { OUTSOURCE_AFTER_SALE_DIRTY_KEY } from '@/api/enums'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
@@ -83,6 +85,13 @@ async function remove(row: any) {
   load(1)
 }
 
+onActivated(() => {
+  // 新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+  if (sessionStorage.getItem(OUTSOURCE_AFTER_SALE_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(OUTSOURCE_AFTER_SALE_DIRTY_KEY)
+    load(1)
+  }
+})
 onMounted(async () => {
   await loadWarehouseMap()
   await load(1)

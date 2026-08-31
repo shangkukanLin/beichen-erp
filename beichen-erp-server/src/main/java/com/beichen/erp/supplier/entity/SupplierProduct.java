@@ -20,6 +20,10 @@ public class SupplierProduct {
 
     private Long productId;
 
+    /** SKU（展示用，非表字段；明细接口按 productId 批量回填） */
+    @TableField(exist = false)
+    private String sku;
+
     @TableField(exist = false)
     private String productName;
 

@@ -42,18 +42,23 @@ export interface PurchaseOrder {
   status?: number
   taxIncluded?: number
   taxRate?: number
+  taxAmount?: number
   totalAmount?: number
   remark?: string
   itemsSummary?: string
   items?: PurchaseOrderItem[]
 }
 
-// ---- 成品退货单 ----
+// ---- 采购退货单 ----
 
 export interface PurchaseReturnItem {
   id?: number
   returnId?: number
+  /** 关联采购单明细ID（用于追溯） */
+  purchaseOrderItemId?: number
   productId?: number
+  /** 产品名称（展示字段，后端回填） */
+  productName?: string
   qualityType?: string
   quantity?: number
   unitPrice?: number
@@ -67,6 +72,9 @@ export interface PurchaseReturn {
   supplierId?: number
   supplierName?: string
   warehouseId?: number
+  /** 关联采购单ID（可选） */
+  purchaseOrderId?: number
+  purchaseOrderCode?: string
   returnDate?: string
   status?: number
   totalAmount?: number
@@ -123,7 +131,7 @@ export function unAuditPurchaseOrder(id: number) {
   return request.put<void>(`/inventory/purchase/${id}/un-audit`)
 }
 
-// ---- 成品退货单 API ----
+// ---- 采购退货单 API ----
 export function getPurchaseReturnPage(params: any) {
   return request.get<PageResult<PurchaseReturn>>('/inventory/purchase-return/page', { params })
 }
@@ -150,4 +158,12 @@ export function unAuditPurchaseReturn(id: number) {
 }
 export function deletePurchaseReturn(id: number) {
   return request.delete<void>(`/inventory/purchase-return/${id}`)
+}
+/** 按采购单查询关联的退货单列表 */
+export function getPurchaseReturnByOrder(purchaseOrderId: number) {
+  return request.get<any[]>(`/inventory/purchase-return/by-order`, { params: { purchaseOrderId } })
+}
+/** 查询采购单明细（含已退/可退数量，供退货带入） */
+export function getPurchaseReturnPurchaseOrderItems(purchaseOrderId: number) {
+  return request.get<any[]>(`/inventory/purchase-return/purchase-order-items`, { params: { purchaseOrderId } })
 }

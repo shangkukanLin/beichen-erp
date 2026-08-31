@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { getQualityTypes, type QualityOption } from '@/api/product'
-import { IoType, IoTypeLabel } from '@/api/enums'
+import { IoType, IoTypeLabel, WarehouseCategory } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 
 const route = useRoute(); const router = useRouter()
@@ -66,7 +66,10 @@ async function loadDetail() {
   } finally { loading.value = false }
 }
 
-onMounted(() => { loadWarehouses(); loadProducts(); loadQualityTypes(); loadDetail() })
+// 字典类只需加载一次
+onMounted(() => { loadWarehouses(); loadProducts(); loadQualityTypes() })
+// 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
+onActivated(() => { loadDetail() })
 </script>
 
 <template>

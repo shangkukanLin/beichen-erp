@@ -6,9 +6,17 @@ import request from '@/utils/request'
 
 const router = useRouter()
 const route = useRoute()
-const activeType = ref(route.path.startsWith('/outsource/') ? 'all' : 'product')
-
 import { TYPE_TABS, TYPE_OPTIONS, TYPE_MAP, TYPE_TAG } from '@/constants/supplier'
+
+// 双模式：/supplier/manage=供应商（方案商/加工厂/辅料商）；/outsource/supplier/manage=供货商（成品商）
+const isVendor = route.path === '/outsource/supplier/manage'
+const activeType = ref(isVendor ? 'product' : 'all')
+const TYPE_TABS_CUSTOM = isVendor
+  ? [{ name: 'product', label: TYPE_MAP.product }]
+  : TYPE_TABS.filter(t => t.name === 'all' || t.name !== 'product')
+const TYPE_OPTIONS_CUSTOM = isVendor
+  ? [{ name: 'product', label: TYPE_MAP.product }]
+  : TYPE_OPTIONS.filter(t => t.name !== 'product')
 
 const query = reactive({ name: '', phone: '', status: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -22,6 +30,7 @@ async function loadData() {
     if (query.name) p.name = query.name
     if (query.phone) p.phone = query.phone
     if (activeType.value !== 'all') p.supplierType = activeType.value
+    else if (!isVendor) p.excludeSupplierType = 'product' // 供应商模式"全部"排除成品商
     if (query.status !== undefined) p.status = query.status
     const r = await request.get<any, any>('/supplier/page', { params: p })
     tableData.value = r?.records || []
@@ -35,7 +44,7 @@ watch(activeType, () => { pagination.pageNum = 1; loadData() })
 
 const dialogVisible = ref(false); const dialogTitle = ref(''); const saving = ref(false)
 const form = reactive({
-  id: undefined as any, name: '', contact: '', phone: '', address: '', remark: '',
+  id: undefined as any, code: '', name: '', contact: '', phone: '', address: '', remark: '',
   checkedTypes: [] as string[], status: 1,
   creditPeriodMonths: undefined as any, creditPeriod: undefined as any
 })
@@ -45,33 +54,51 @@ const isEdit = ref(false)
 const isType = computed(() => (type: string) => form.checkedTypes.includes(type))
 
 function resetForm() {
-  Object.assign(form, { id: undefined, name: '', contact: '', phone: '', address: '', remark: '',
+  Object.assign(form, { id: undefined, code: '', name: '', contact: '', phone: '', address: '', remark: '',
     checkedTypes: [] as string[], status: 1,
     creditPeriodMonths: undefined, creditPeriod: undefined })
 }
 
 function handleAdd() {
-  resetForm(); isEdit.value = false; dialogTitle.value = '新增供应商'
-  if (activeType.value !== 'all') form.checkedTypes = [activeType.value]
+  resetForm(); isEdit.value = false; dialogTitle.value = isVendor ? '新增供货商' : '新增供应商'
+  if (isVendor) form.checkedTypes = ['product']
+  else if (activeType.value !== 'all') form.checkedTypes = [activeType.value]
   dialogVisible.value = true
 }
 
 function handleEdit(row: any) {
   resetForm()
   Object.assign(form, {
-    id: row.id, name: row.name || '', contact: row.contact || '', phone: row.phone || '',
+    id: row.id, code: row.code || '', name: row.name || '', contact: row.contact || '', phone: row.phone || '',
     address: row.address || '', remark: row.remark || '',
     checkedTypes: row.typeCodes || [],
     status: row.status ?? 1,
     creditPeriodMonths: row.creditPeriodMonths, creditPeriod: row.creditPeriod
   })
-  isEdit.value = true; dialogTitle.value = '编辑供应商'
+  isEdit.value = true; dialogTitle.value = isVendor ? '编辑供货商' : '编辑供应商'
   dialogVisible.value = true
 }
 
 async function handleSubmit() {
   if (!form.name) { ElMessage.warning('请输入名称'); return }
   if (form.checkedTypes.length === 0) { ElMessage.warning('请选择至少一个类型'); return }
+  // 新增时同名提示：供应商与供货商允许重名（各自独立建档），但需用户确认避免误录
+  if (!isEdit.value) {
+    saving.value = true
+    let dupInfo = ''
+    try {
+      const dup = await request.get<any, any>('/supplier/page', { params: { name: form.name, pageSize: 5 } })
+      const list = dup?.records || []
+      if (list.length > 0) {
+        dupInfo = list.map((s: any) => `${s.name}（${(s.typeCodes || []).map((t: string) => TYPE_MAP[t] || t).join('/')}）`).join('、')
+      }
+    } catch { /* 查重失败不阻塞创建 */ } finally { saving.value = false }
+    if (dupInfo) {
+      try {
+        await ElMessageBox.confirm(`已存在同名往来单位：${dupInfo}。同名将创建为各自独立的往来单位，确认继续新增吗？`, '存在同名', { type: 'warning', confirmButtonText: '仍要新增', cancelButtonText: '取消' })
+      } catch { return }
+    }
+  }
   saving.value = true
   try {
     const body: any = { ...form, typeCodes: form.checkedTypes }
@@ -109,19 +136,26 @@ onMounted(loadData)
 <template>
   <div class="sup-page">
     <el-card shadow="never" class="query-card">
-      <el-tabs v-model="activeType">
-        <el-tab-pane v-for="t in TYPE_TABS" :key="t.name" :label="t.label" :name="t.name" />
+      <el-tabs v-if="!isVendor" v-model="activeType">
+        <el-tab-pane v-for="t in TYPE_TABS_CUSTOM" :key="t.name" :label="t.label" :name="t.name" />
       </el-tabs>
+      <div class="query-bar">
       <el-form :inline="true" :model="query">
-        <el-form-item label="名称"><el-input v-model="query.name" placeholder="供应商名称" clearable @keyup.enter="handleQuery" /></el-form-item>
+        <el-form-item label="名称"><el-input v-model="query.name" :placeholder="isVendor ? '供货商名称' : '供应商名称'" clearable @keyup.enter="handleQuery" /></el-form-item>
         <el-form-item label="手机号"><el-input v-model="query.phone" placeholder="手机号" clearable @keyup.enter="handleQuery" /></el-form-item>
         <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:100px"><el-option label="合作中" :value="1" /><el-option label="已停用" :value="0" /></el-select></el-form-item>
-        <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button @click="handleReset">重置</el-button><el-button type="success" @click="handleAdd">新增</el-button></el-form-item>
-      </el-form>
+        </el-form>
+        <div class="toolbar">
+          <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
+          <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
+          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+        </div>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="table-card">
-      <el-table :data="tableData" border stripe v-loading="loading">
+      <el-table :data="tableData" border stripe v-loading="loading" @row-click="(row: any) => router.push({ path: `/supplier/detail/${row.id}`, query: isVendor ? { mode: 'vendor' } : { mode: 'supplier' } })">
+        <el-table-column prop="code" label="编码" width="150" />
         <el-table-column label="类型" width="180">
           <template #default="{ row }">
             <el-tag v-for="t in (row.typeCodes||[])" :key="t" size="small" style="margin-right:4px"
@@ -135,8 +169,8 @@ onMounted(loadData)
         <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag size="small" :type="row.status===1?'success':'danger'">{{ row.status===1?'启用':'停用' }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="120" align="center" fixed="right">
           <template #default="{row}">
-            <el-button type="primary" link size="small" @click="router.push(`/supplier/detail/${row.id}`)">详情</el-button>
-            <el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button>
+            <el-button type="primary" link size="small" @click.stop="router.push({ path: `/supplier/detail/${row.id}`, query: isVendor ? { mode: 'vendor' } : { mode: 'supplier' } })">详情</el-button>
+            <el-button type="danger" link size="small" @click.stop="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -147,8 +181,12 @@ onMounted(loadData)
       <el-form :model="form" label-width="90px" size="small">
         <el-form-item label="类型" required>
           <el-checkbox-group v-model="form.checkedTypes">
-            <el-checkbox v-for="t in TYPE_OPTIONS" :key="t.name" :label="t.name" :value="t.name">{{ t.label }}</el-checkbox>
+            <el-checkbox v-for="t in TYPE_OPTIONS_CUSTOM" :key="t.name" :label="t.name" :value="t.name">{{ t.label }}</el-checkbox>
           </el-checkbox-group>
+        </el-form-item>
+        <el-form-item label="编码">
+          <!-- 唯一编码由系统按类型前缀自动生成（如 GYS-20260831-001），不可修改 -->
+          <el-input v-model="form.code" disabled :placeholder="isEdit ? '' : '保存后自动生成'" />
         </el-form-item>
         <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
         <el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item>

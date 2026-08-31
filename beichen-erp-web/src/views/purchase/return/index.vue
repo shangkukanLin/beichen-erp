@@ -1,11 +1,12 @@
 <template>
   <div class="page">
     <el-card class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" class="query-form">
         <el-form-item label="单号">
           <el-input v-model="query.code" placeholder="退货单号" clearable style="width:180px" />
         </el-form-item>
-        <el-form-item label="供应商">
+        <el-form-item label="供货商">
           <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="请选择" clearable style="width:180px" />
         </el-form-item>
         <el-form-item label="状态">
@@ -13,28 +14,32 @@
             <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
-      </el-form>
-      <div class="query-actions">
-        <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
-        <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
-        <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+        </el-form>
+        <div class="toolbar">
+          <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
+          <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
+          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+        </div>
       </div>
     </el-card>
 
     <el-card style="margin-top:16px">
-      <el-table :data="list" border stripe v-loading="loading" row-key="id">
+      <el-table :data="list" border stripe v-loading="loading" row-key="id" @row-click="handleDetail">
         <el-table-column prop="code" label="退货单号" width="180" />
-        <el-table-column label="供应商" min-width="140">
+        <el-table-column label="供货商" min-width="140">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleSupplierClick(row.supplierId)">{{ row.supplierName }}</el-button>
+            <el-button type="primary" link @click.stop="handleSupplierClick(row.supplierId)">{{ row.supplierName }}</el-button>
           </template>
         </el-table-column>
         <el-table-column label="退货仓库" min-width="120">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleWarehouseClick(row.warehouseId)">{{ warehouseName(row.warehouseId) }}</el-button>
+            <el-button type="primary" link @click.stop="handleWarehouseClick(row.warehouseId)">{{ warehouseName(row.warehouseId) }}</el-button>
           </template>
         </el-table-column>
         <el-table-column prop="returnDate" label="退货日期" width="120" align="center" />
+        <el-table-column label="来源采购单" width="150">
+          <template #default="{ row }">{{ row.purchaseOrderCode || '—' }}</template>
+        </el-table-column>
         <el-table-column prop="itemsSummary" label="退货明细" min-width="200" show-overflow-tooltip />
         <el-table-column prop="totalAmount" label="退货总金额" width="130" align="right">
           <template #default="{ row }">{{ row.totalAmount ? Number(row.totalAmount).toFixed(2) : '0.00' }}</template>
@@ -44,11 +49,11 @@
         </el-table-column>
         <el-table-column label="操作" width="220" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
-            <el-button v-if="row.status === ReturnStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === ReturnStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
-            <el-button v-if="row.status === ReturnStatus.DRAFT" type="warning" link @click="handleEdit(row)">编辑</el-button>
-            <el-button v-if="row.status === ReturnStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
+            <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
+            <el-button v-if="row.status === ReturnStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === ReturnStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
+            <el-button v-if="row.status === ReturnStatus.DRAFT" type="warning" link @click.stop="handleEdit(row)">编辑</el-button>
+            <el-button v-if="row.status === ReturnStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -69,7 +74,7 @@
       <el-descriptions :column="2" border>
         <el-descriptions-item label="退货单号">{{ detailData.code }}</el-descriptions-item>
         <el-descriptions-item label="退货日期">{{ detailData.returnDate }}</el-descriptions-item>
-        <el-descriptions-item label="供应商">{{ detailData.supplierName }}</el-descriptions-item>
+        <el-descriptions-item label="供货商">{{ detailData.supplierName }}</el-descriptions-item>
         <el-descriptions-item label="退货仓库">{{ warehouseName(detailData.warehouseId) }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="statusType(detailData.status)">{{ statusLabel(detailData.status) }}</el-tag>
@@ -78,6 +83,7 @@
         <el-descriptions-item label="备注" :span="2">{{ detailData.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
       <el-table :data="detailItems" border style="margin-top:16px">
+        <el-table-column prop="sku" label="SKU" width="130" />
         <el-table-column prop="productName" label="产品" min-width="140" />
         <el-table-column prop="quantity" label="数量" width="100" />
         <el-table-column prop="unitPrice" label="单价" width="100" />
@@ -91,7 +97,8 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
+import { PURCHASE_RETURN_DIRTY_KEY } from '@/api/enums'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -190,6 +197,13 @@ async function handleCancel(row: PurchaseReturn) {
   } catch { /* */ }
 }
 
+onActivated(() => {
+  // 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+  if (sessionStorage.getItem(PURCHASE_RETURN_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(PURCHASE_RETURN_DIRTY_KEY)
+    loadData()
+  }
+})
 onMounted(() => {
   loadSupplierOptions()
   loadWarehouseOptions()

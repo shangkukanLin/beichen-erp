@@ -16,6 +16,7 @@ import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.inventory.service.WarehouseMoveService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
+import com.beichen.erp.material.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
     private final InventoryWarehouseMoveItemMapper itemMapper;
     private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
+    private final ProductService productService;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long fromWarehouseId, Long toWarehouseId, int pageNum, int pageSize) {
@@ -94,7 +96,11 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
 
     @Override
     public List<InventoryWarehouseMoveItem> getItems(Long moveId) {
-        return itemMapper.selectList(new LambdaQueryWrapper<InventoryWarehouseMoveItem>().eq(InventoryWarehouseMoveItem::getMoveId, moveId));
+        List<InventoryWarehouseMoveItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<InventoryWarehouseMoveItem>().eq(InventoryWarehouseMoveItem::getMoveId, moveId));
+        // 回填 SKU（非表字段），前端免查库即可展示
+        productService.fillSku(items, InventoryWarehouseMoveItem::getProductId, InventoryWarehouseMoveItem::setSku);
+        return items;
     }
 
     @Override

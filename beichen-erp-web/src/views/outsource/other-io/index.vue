@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { IoType, IoTypeLabel } from '@/api/enums'
+import { IoType, IoTypeLabel, OUTSOURCE_OTHER_IO_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
@@ -58,26 +58,38 @@ function goWarehouseDetail(warehousId: number) {
   if (wh?.factoryId != null) router.push(`/outsource/warehouse/detail/${warehousId}`)
   else router.push(`/inventory/warehouse/detail/${warehousId}`)
 }
+onActivated(() => {
+  // 详情/编辑/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+  if (sessionStorage.getItem(OUTSOURCE_OTHER_IO_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(OUTSOURCE_OTHER_IO_DIRTY_KEY)
+    loadData()
+  }
+})
 onMounted(()=>{ loadWarehouses(); loadData() })
 
 </script>
 
 <template>
   <div style="display:flex;flex-direction:column;gap:12px">
-    <el-card shadow="never">
+    <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query">
         <el-form-item label="仓库"><RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName}（${row.factoryName||''}）`" clearable style="width:200px" placeholder="全部" /></el-form-item>
-        <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button type="success" @click="handleAdd">新增</el-button></el-form-item>
       </el-form>
+      <div class="toolbar">
+        <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
+        <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+      </div>
+      </div>
     </el-card>
     <el-tabs v-model="activeTab" @tab-change="handleTabChange">
       <el-tab-pane :label="IoTypeLabel[IoType.IN]" :name="IoType.IN"/>
       <el-tab-pane :label="IoTypeLabel[IoType.OUT]" :name="IoType.OUT"/>
     </el-tabs>
     <el-card shadow="never" style="margin-top:-12px">
-      <el-table :data="list" border stripe v-loading="loading">
+      <el-table :data="list" border stripe v-loading="loading" @row-click="handleEdit">
         <el-table-column prop="code" label="单号" width="160"/>
-        <el-table-column label="仓库" width="180"><template #default="{row}"><el-button type="primary" link @click="goWarehouseDetail(row.warehouseId)">{{ getWhName(row.warehouseId) }}</el-button></template></el-table-column>
+        <el-table-column label="仓库" width="180"><template #default="{row}"><el-button type="primary" link @click.stop="goWarehouseDetail(row.warehouseId)">{{ getWhName(row.warehouseId) }}</el-button></template></el-table-column>
         <el-table-column label="日期" width="110"><template #default="{row}">{{ $fmtDate(row.ioDate) }}</template></el-table-column>
         <el-table-column label="物料明细" min-width="160" show-overflow-tooltip>
           <template #default="{row}"><span v-if="row.itemSummary">{{row.itemSummary}}</span><span v-else style="color:var(--app-text-placeholder)">-</span></template>
@@ -93,10 +105,10 @@ onMounted(()=>{ loadWarehouses(); loadData() })
         </el-table-column>
         <el-table-column label="操作" width="200" align="center">
           <template #default="{row}">
-            <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleApprove(row)">审核</el-button>
-            <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click="handleUnapprove(row)">反审核</el-button>
-            <el-button type="primary" link @click="handleEdit(row)">{{ row.status===DocStatus.DRAFT ? '编辑' : '详细' }}</el-button>
-            <el-button type="danger" link @click="handleCancel(row)" :disabled="row.status===DocStatus.CANCELLED || row.status===DocStatus.AUDITED">作废</el-button>
+            <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleApprove(row)">审核</el-button>
+            <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnapprove(row)">反审核</el-button>
+            <el-button type="primary" link @click.stop="handleEdit(row)">{{ row.status===DocStatus.DRAFT ? '编辑' : '详细' }}</el-button>
+            <el-button type="danger" link @click.stop="handleCancel(row)" :disabled="row.status===DocStatus.CANCELLED || row.status===DocStatus.AUDITED">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

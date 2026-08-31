@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { WarehouseCategory } from '@/api/enums'
 import { reactive, ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import { getQualityTypes, type QualityOption } from '@/api/product'
+import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import {
   getReclassifyPage, getReclassify, getReclassifyItems,
@@ -72,6 +73,7 @@ async function onProductPick(p: any, row: any) {
   if (!p) return
   row.productId = p.id
   row.productName = p.name
+  row.sku = p.sku || ''
   row.spec = p.spec
   row.unit = p.unit
 }
@@ -134,14 +136,23 @@ async function loadQualityTypes() {
 function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Number(v).toFixed(2) }
 function warehouseName(id?: number) { const w = warehouseOptions.value.find((x: any) => x.id === id); return w ? w.warehouseName : '' }
 
-onMounted(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProductOptions() })
+const route = useRoute()
+// 从库存流水点击关联单号跳转：定位当前页单据并打开详情弹窗
+function openFromStockLog() {
+  const billId = route.query.billId
+  if (!billId) return
+  const row = tableData.value.find((r: any) => r.id === Number(billId))
+  if (row) handleEdit(row)
+}
+onMounted(async () => { await loadData(); loadWarehouses(); loadQualityTypes(); loadProductOptions(); openFromStockLog() })
 
 </script>
 
 <template>
   <div>
-    <el-card>
-      <el-form :inline="true" :model="query">
+    <el-card class="query-card">
+      <div class="query-bar">
+      <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="单号"><el-input v-model="query.code" placeholder="单号" clearable /></el-form-item>
         <el-form-item label="仓库">
           <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" clearable style="width:160px" />
@@ -151,17 +162,16 @@ onMounted(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProductO
             <el-option :label="DocStatusLabel[DocStatus.DRAFT]" :value="DocStatus.DRAFT" /><el-option :label="DocStatusLabel[DocStatus.AUDITED]" :value="DocStatus.AUDITED" /><el-option :label="DocStatusLabel[DocStatus.CANCELLED]" :value="DocStatus.CANCELLED" />
           </el-select>
         </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleQuery">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
-        </el-form-item>
-      </el-form>
+        </el-form>
+        <div class="toolbar">
+          <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
+          <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
+          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增品质重分类</el-button>
+        </div>
+      </div>
     </el-card>
 
     <el-card style="margin-top:12px">
-      <div style="margin-bottom:12px">
-        <el-button type="success" @click="handleAdd">新增品质重分类</el-button>
-      </div>
       <el-table :data="tableData" border v-loading="tableLoading" row-key="id">
         <el-table-column prop="code" label="单号" width="160" />
         <el-table-column label="仓库" width="140">
@@ -215,9 +225,15 @@ onMounted(() => { loadData(); loadWarehouses(); loadQualityTypes(); loadProductO
       </div>
       <el-table :data="items" border>
         <el-table-column type="index" label="#" width="50" align="center" />
+        <el-table-column label="SKU" width="130">
+          <template #default="{ row }">
+            <span v-if="row.sku">{{ row.sku }}</span>
+            <span v-else style="color:var(--app-text-secondary)">自动生成</span>
+          </template>
+        </el-table-column>
         <el-table-column label="产品" min-width="200">
           <template #default="{ row }">
-            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" placeholder="搜索产品" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" />
+            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="搜索产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" />
           </template>
         </el-table-column>
         <el-table-column prop="spec" label="规格" width="100" />

@@ -101,7 +101,7 @@ public class MaterialOrderController {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", o.getId()); m.put("code", o.getCode());
         m.put("supplierId", o.getSupplierId());
-        m.put("orderType", o.getOrderType() != null ? o.getOrderType() : OrderType.PURCHASE.getCode());
+        m.put("orderType", o.getOrderType() != null ? o.getOrderType() : OrderType.PURCHASE.getLabel());
         m.put("targetWarehouseId", o.getTargetWarehouseId());
         m.put("deliveryDate", o.getDeliveryDate()); m.put("status", o.getStatus());
         m.put("remark", o.getRemark()); m.put("createTime", o.getCreateTime());
@@ -268,7 +268,9 @@ public class MaterialOrderController {
         // 2. 创建收货草稿单（库存/应付/订单明细的更新推迟到审核时统一处理，支持反审核）
         OutsourceDelivery delivery = new OutsourceDelivery();
         delivery.setDeliveryType(DeliveryType.RECEIVE.getCode());
-        delivery.setFactoryId(o.getSupplierId());
+        // 收货工厂 = 收货仓库所属工厂（采购类订单供应商≠仓库所属工厂，如向盟迪采购收货到捷鹤委外仓）
+        Warehouse toWh = whId != null ? warehouseMapper.selectById(whId) : null;
+        delivery.setFactoryId(toWh != null && toWh.getFactoryId() != null ? toWh.getFactoryId() : o.getSupplierId());
         delivery.setToWarehouseId(whId);
         delivery.setDeliveryDate(LocalDate.now());
         delivery.setStatus(DocStatus.DRAFT.getCode());

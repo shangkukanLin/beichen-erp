@@ -1,9 +1,9 @@
 package com.beichen.erp.dev.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.beichen.erp.dev.entity.ProjectTimeline;
+import com.beichen.erp.dev.entity.ProjectPhase;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface ProjectTimelineMapper extends BaseMapper<ProjectTimeline> {
+public interface ProjectPhaseMapper extends BaseMapper<ProjectPhase> {
 }

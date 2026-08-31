@@ -197,7 +197,11 @@ onMounted(() => {
   <div class="menu-page">
     <!-- 操作栏 -->
     <el-card shadow="never" class="query-card">
-      <el-button type="primary" :icon="'Plus'" @click="handleAdd">新增菜单</el-button>
+      <div class="query-bar">
+        <div class="toolbar">
+          <el-button type="primary" :icon="'Plus'" @click="handleAdd">新增菜单</el-button>
+        </div>
+      </div>
     </el-card>
 
     <!-- 列表 -->

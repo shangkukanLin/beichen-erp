@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.beichen.erp.common.PageParam;
 import com.beichen.erp.dev.entity.Project;
-import com.beichen.erp.dev.entity.ProjectTimeline;
+import com.beichen.erp.dev.entity.ProjectPhase;
 
 import java.util.List;
 import java.util.Map;
@@ -12,9 +12,9 @@ import java.util.Map;
 public interface ProjectService extends IService<Project> {
 
     /** 分页查询项目 */
-    Page<Project> page(PageParam param, String keyword, String status);
+    Page<Project> page(PageParam param, String keyword, String status, Long brandId);
 
-    /** 新增项目（含时间线初始化，第一个阶段自动激活）
+    /** 新增项目（含项目阶段初始化，第一个阶段自动激活）
      *  @param linkExistingProductId 可选：关联已有产品ID（重名时用户选择关联），null=按总成名称新建 */
     Project create(Project project, Long linkExistingProductId);
 
@@ -30,12 +30,12 @@ public interface ProjectService extends IService<Project> {
     /** 更新项目，并同步总成名称变更到关联产品（同一事务，避免部分成功） */
     void updateProject(Project project);
 
-    /** 批量查询多个项目的时间线，一次 in 查询后按 projectId 分组（消除 N+1） */
-    Map<Long, List<ProjectTimeline>> batchTimelines(List<Long> projectIds);
+    /** 批量查询多个项目的项目阶段，一次 in 查询后按 projectId 分组（消除 N+1） */
+    Map<Long, List<ProjectPhase>> batchPhases(List<Long> projectIds);
 
     /** 聚合项目相关的销售/采购/委外/研发物料单据，按模块分组返回 */
     Map<String, Object> getRelatedOrders(Long projectId);
 
-    /** 查询单个项目的时间线列表（委托时间线服务） */
-    List<ProjectTimeline> listByProject(Long projectId);
+    /** 查询单个项目的项目阶段列表（委托项目阶段服务） */
+    List<ProjectPhase> listByProject(Long projectId);
 }

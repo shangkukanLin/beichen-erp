@@ -109,7 +109,7 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
 
     <!-- Tab1 供应商汇总 -->
     <el-card v-if="activeTab==='supplier'" shadow="never">
-      <el-table v-loading="summaryLoading" :data="summaryData" border stripe>
+      <el-table v-loading="summaryLoading" :data="summaryData" border stripe @row-click="goSupplierDetail">
         <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="supplierName" label="供应商" min-width="180" />
         <el-table-column label="应付总额" width="130" align="right"><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
@@ -117,7 +117,7 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
         <el-table-column label="未付" width="130" align="right"><template #default="{row}"><span style="color:var(--app-color-warning);font-weight:600">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column label="逾期金额" width="130" align="right"><template #default="{row}"><span :style="{color: Number(row.overdueAmount)>0?'var(--app-color-danger)':'var(--app-text-secondary)', fontWeight: Number(row.overdueAmount)>0?600:400}">{{ fmt(row.overdueAmount) }}</span></template></el-table-column>
         <el-table-column label="操作" width="100" align="center">
-          <template #default="{row}"><el-button type="primary" link @click="goSupplierDetail(row)">详情</el-button></template>
+          <template #default="{row}"><el-button type="primary" link @click.stop="goSupplierDetail(row)">详情</el-button></template>
         </el-table-column>
       </el-table>
       <el-empty v-if="!summaryLoading && summaryData.length===0" description="暂无应付数据" />
@@ -125,23 +125,30 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
 
     <!-- Tab2 付款记录 -->
     <template v-if="activeTab==='records'">
-      <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
+      <el-card shadow="never" class="query-card">
+        <div class="query-bar">
+        <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="供应商"><RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" /></el-form-item>
         <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="o in statusOpts" :key="o.v" :label="o.l" :value="o.v"/></el-select></el-form-item>
-        <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button></el-form-item>
-      </el-form></el-card>
+        </el-form>
+        <div class="toolbar">
+          <el-button type="primary" :icon="'Search'" @click="query_">查询</el-button>
+          <el-button :icon="'Refresh'" @click="reset_">重置</el-button>
+        </div>
+        </div>
+      </el-card>
       <el-card shadow="never">
-        <el-table v-loading="loading" :data="data" border stripe>
+        <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
           <el-table-column type="index" width="55" align="center"/>
           <el-table-column prop="code" label="单号" min-width="150"/>
           <el-table-column label="供应商" min-width="140"><template #default="{row}">{{ sName(row.supplierId) }}</template></el-table-column>
           <el-table-column label="账户" min-width="120"><template #default="{row}">{{ aName(row.accountId) }}</template></el-table-column>
           <el-table-column prop="paymentDate" label="日期" width="110" align="center"/>
           <el-table-column prop="amount" label="金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
-          <el-table-column label="凭证" width="70" align="center"><template #default="{row}"><el-link v-if="row.attachUrl" type="primary" @click="openAttach(row.attachUrl)">查看</el-link><span v-else style="color:#c0c4cc">—</span></template></el-table-column>
+          <el-table-column label="凭证" width="70" align="center"><template #default="{row}"><el-link v-if="row.attachUrl" type="primary" @click.stop="openAttach(row.attachUrl)">查看</el-link><span v-else style="color:#c0c4cc">—</span></template></el-table-column>
           <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
           <el-table-column label="操作" width="210" align="center" fixed="right">
-            <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button></template>
+            <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button></template>
           </el-table-column>
         </el-table>
         <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>

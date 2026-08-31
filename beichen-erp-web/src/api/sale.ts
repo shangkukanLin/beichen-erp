@@ -4,9 +4,9 @@ export interface SaleOrderItem {
   id?: number
   orderId?: number
   productId?: number
-  materialId?: number
-  materialCode?: string
-  materialName?: string
+  productName?: string
+  /** SKU（展示用；后端按 productId 回填，新增行未选产品时为空） */
+  sku?: string
   spec?: string
   unit?: string
   qualityType?: string
@@ -26,6 +26,7 @@ export interface SaleOrder {
   status?: string
   taxIncluded?: number
   taxRate?: number
+  taxAmount?: number
   totalAmount?: number
   remark?: string
   items?: SaleOrderItem[]
@@ -77,6 +78,8 @@ export function getSaleOrder(id: number) {
 export function getSaleOrderItems(id: number) {
   return request.get<SaleOrderItem[]>(`/inventory/sale/${id}/items`)
 }
+/** 标记销售单列表需刷新（详情页数据变动后置位，列表页 onActivated 消费） */
+export const SALE_ORDER_DIRTY_KEY = 'saleOrderListDirty'
 export function createSaleOrder(data: any) {
   return request.post<void>('/inventory/sale', data)
 }
@@ -93,9 +96,9 @@ export function unAuditSaleOrder(id: number) {
   return request.put<void>(`/inventory/sale/${id}/un-audit`)
 }
 
-/** 库存检查：传入 warehouseId + items，返回各物料库存对比 */
+/** 库存检查：传入 warehouseId + items，返回各产品库存对比 */
 export function checkSaleOrderStock(data: { warehouseId?: number; items: SaleOrderItem[] }) {
-  return request.post<{ materialName: string; spec: string; unit: string; required: number; available: number; shortage: number; sufficient: boolean }[]>(
+  return request.post<{ productName: string; spec: string; unit: string; required: number; available: number; shortage: number; sufficient: boolean }[]>(
     '/inventory/sale/check-stock', data
   )
 }
@@ -103,8 +106,8 @@ export function checkSaleOrderStock(data: { warehouseId?: number; items: SaleOrd
 export function getSaleOutboundPage(params: any) {
   return request.get<PageResult<SaleOutbound>>('/inventory/outbound/page', { params })
 }
-// ==================== 销售退货单 ====================
-/** 销售退货单状态：DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废（与后端 DocStatus 一致） */
+// ==================== 销售退单（售后：只退不换） ====================
+/** 销售退单状态：DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废（与后端 DocStatus 一致） */
 export const SaleReturnStatus = {
   DRAFT: 'DRAFT',
   AUDITED: 'AUDITED',
@@ -120,6 +123,8 @@ export const SaleReturnStatusLabel: Record<string, string> = {
 export interface SaleReturnItem {
   id?: number
   returnId?: number
+  /** 关联销售单明细ID（用于追溯） */
+  saleOrderItemId?: number
   productId?: number
   productName?: string
   /** 品质等级：销售退货固定为 DEFECT(不良品) */
@@ -136,9 +141,19 @@ export interface SaleReturn {
   customerId?: number
   customerName?: string
   warehouseId?: number
+  /** 关联销售单ID（可选） */
+  saleOrderId?: number
+  saleOrderCode?: string
   returnDate?: string
   status?: number
   totalAmount?: number
+  /** 折损收款金额：整理后 B/C/不良 的折损，向客户收取，审核生成正向应收 */
+  lossAmount?: number
+  /** 是否收费：0否 1是（收费则审核生成一条正向应收，单号后缀 -FEE） */
+  chargeFlag?: number
+  chargeType?: string
+  chargeAmount?: number
+  chargeReason?: string
   remark?: string
   auditorId?: number
   auditorName?: string
@@ -173,6 +188,41 @@ export function cancelSaleReturn(id: number) {
 }
 export function deleteSaleReturn(id: number) {
   return request.delete<void>(`/sale/return/${id}`)
+}
+/** 查询某客户已审核的销售单（供退货关联选择） */
+export function getSaleReturnSaleOrders(customerId: number) {
+  return request.get<any[]>('/sale/return/sale-orders', { params: { customerId } })
+}
+/** 查询销售单明细（含可退数量，供退货带入） */
+export function getSaleReturnSaleOrderItems(saleOrderId: number) {
+  return request.get<any[]>(`/sale/return/sale-order-items`, { params: { saleOrderId } })
+}
+
+// ==================== 销售换货单（同品换货，强关联销售单） ====================
+export function getSaleExchangePage(params: any) {
+  return request.get<PageResult<any>>('/sale/exchange/page', { params })
+}
+export function getSaleExchange(id: number) {
+  return request.get<any>(`/sale/exchange/${id}`)
+}
+export function createSaleExchange(data: any) {
+  return request.post<any>('/sale/exchange', data)
+}
+export function updateSaleExchange(id: number, data: any) {
+  return request.put<any>(`/sale/exchange`, { ...data, id })
+}
+export function auditSaleExchange(id: number) {
+  return request.put<void>(`/sale/exchange/${id}/audit`)
+}
+export function unAuditSaleExchange(id: number) {
+  return request.put<void>(`/sale/exchange/${id}/unaudit`)
+}
+export function deleteSaleExchange(id: number) {
+  return request.delete<void>(`/sale/exchange/${id}`)
+}
+/** 查询销售单明细（含已售/已退/已换/可换数量，供换货带入；可换量 = 已售 − 已退 − 已换） */
+export function getSaleExchangeSaleOrderItems(saleOrderId: number) {
+  return request.get<any[]>(`/sale/exchange/sale-order-items`, { params: { saleOrderId } })
 }
 export function getSaleOutboundItems(id: number) {
   return request.get<SaleOutboundItem[]>(`/inventory/outbound/${id}/items`)

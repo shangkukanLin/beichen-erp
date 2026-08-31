@@ -2,7 +2,7 @@
 export const TYPE_MAP: Record<string, string> = {
   solution: '方案商',
   factory: '加工厂',
-  product: '成品商',
+  product: '供货商',
   material: '辅料商',
 }
 

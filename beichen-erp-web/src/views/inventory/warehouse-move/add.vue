@@ -31,9 +31,15 @@
         </div>
         <el-table :data="items" border>
           <el-table-column type="index" label="#" width="50" align="center" />
+          <el-table-column label="SKU" width="130">
+            <template #default="{ row }">
+              <span v-if="row.sku">{{ row.sku }}</span>
+              <span v-else style="color:var(--app-text-secondary)">自动生成</span>
+            </template>
+          </el-table-column>
           <el-table-column label="产品" min-width="220">
             <template #default="{ row }">
-              <RemoteSelect v-model="row.productId" :fetch="fetchProducts" placeholder="选择产品" style="width:100%"
+              <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="选择产品（可输SKU）" style="width:100%"
                 @pick="(rows:any[]) => onProductPick(rows[0], row)" />
             </template>
           </el-table-column>
@@ -71,19 +77,20 @@
 </template>
 
 <script setup lang="ts">
-import { WarehouseCategory } from '@/api/enums'
+import { WarehouseCategory, INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY } from '@/api/enums'
 defineOptions({ name: 'InventoryWarehouseMoveAdd' })
 
-import { reactive, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { reactive, ref, watch, onMounted, onUnmounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
 import request from '@/utils/request'
-import { getQualityTypes, type QualityOption } from '@/api/product'
+import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 interface MoveItem {
   productId?: number
+  sku?: string
   qualityType?: string
   _spec?: string
   _unit?: string
@@ -134,6 +141,7 @@ async function loadQualityTypes() { try { qualityOptions.value = await getQualit
 function onProductPick(p: any, row: MoveItem) {
   if (!p) return
   row.productId = p.id
+  row.sku = p.sku || ''
   row._spec = p.spec
   row._unit = p.unit
   // 查询该产品在移出仓库的现有库存
@@ -216,7 +224,7 @@ async function handleSubmit() {
       const payload = { move: { ...form }, items: items.value }
       if (isEdit.value) await request.put(`/inventory/warehouse-move/${editId.value}`, payload)
       else await request.post('/inventory/warehouse-move', payload)
-      ElMessage.success('保存成功')
+      ElMessage.success('保存成功'); sessionStorage.setItem(INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY, '1')
       resetForm()
       tabStore.removeTab(route.fullPath)
       router.push('/inventory/warehouse-move')
@@ -231,6 +239,8 @@ function handleCancel() {
   router.push('/inventory/warehouse-move')
 }
 
+// 顶栏"刷新数据"：重新加载品质下拉
+async function handleRefreshData() { await loadQualityTypes() }
 onMounted(() => {
   loadProducts()
   loadQualityTypes()
@@ -239,7 +249,9 @@ onMounted(() => {
     document.title = '编辑移仓单 - 北辰ERP管理系统'
     loadMoveData()
   }
+  window.addEventListener('refresh:dropdown-data', handleRefreshData)
 })
+onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 
 
 

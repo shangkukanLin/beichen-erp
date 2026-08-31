@@ -18,7 +18,11 @@ public enum CashflowType {
     /** 付款冲正 */
     PAYMENT_REVERSE("付款冲正"),
     /** 收款冲正 */
-    RECEIPT_REVERSE("收款冲正");
+    RECEIPT_REVERSE("收款冲正"),
+    /** 费用支出（费用登记单审核） */
+    EXPENSE("费用支出"),
+    /** 费用冲正（费用登记单反审核） */
+    EXPENSE_REVERSE("费用冲正");
 
     private final String label;
 

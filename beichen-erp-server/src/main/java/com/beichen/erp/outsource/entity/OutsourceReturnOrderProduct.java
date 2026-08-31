@@ -22,6 +22,10 @@ public class OutsourceReturnOrderProduct {
     /** 产品ID（关联 product.id） */
     private Long productId;
 
+    /** SKU（展示用，非表字段；明细接口按 productId 批量回填） */
+    @TableField(exist = false)
+    private String sku;
+
     /** 产品名称快照 */
     private String productName;
 

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, computed, watch } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed, watch } from 'vue'
+import { SUPPLIER_DIRTY_KEY } from '@/api/enums'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
+import { productLabel } from '@/api/product'
 import {
   getSupplierPage, addSupplier, updateSupplier, toggleSupplierStatus,
   getSupplierProducts, saveSupplierProducts,
@@ -156,6 +158,13 @@ async function saveProducts() {
   productDialogVisible.value = false
 }
 
+onActivated(() => {
+  // 详情页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+  if (sessionStorage.getItem(SUPPLIER_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(SUPPLIER_DIRTY_KEY)
+    loadData()
+  }
+})
 onMounted(() => { loadData() })
 
 </script>
@@ -164,6 +173,7 @@ onMounted(() => { loadData() })
   <div class="supplier-page">
     <!-- 查询栏 -->
     <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="名称">
           <el-input v-model="query.name" placeholder="供应商名称" clearable @keyup.enter="handleQuery" />
@@ -177,12 +187,13 @@ onMounted(() => { loadData() })
             <el-option label="已停用" :value="0" />
           </el-select>
         </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleQuery">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="handleAdd">新增</el-button>
-        </el-form-item>
-      </el-form>
+        </el-form>
+        <div class="toolbar">
+          <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
+          <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
+          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+        </div>
+      </div>
     </el-card>
 
     <!-- 列表 -->
@@ -193,7 +204,7 @@ onMounted(() => { loadData() })
         <el-tab-pane label="已停用" name="disabled" />
       </el-tabs>
 
-      <el-table v-loading="tableLoading" :data="tableData" border stripe>
+      <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="(row: any) => handleDetail(row)">
         <el-table-column type="index" label="序号" width="55" align="center" />
         <el-table-column prop="code" label="编码" min-width="130" show-overflow-tooltip />
         <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
@@ -206,9 +217,9 @@ onMounted(() => { loadData() })
         </el-table-column>
         <el-table-column label="操作" width="280" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleDetail(row as SupplierVO)">详细</el-button>
-            <el-button type="warning" link @click="openProducts(row as SupplierVO)">产品</el-button>
-            <el-button type="success" link @click="handleToggleStatus(row as SupplierVO)">{{ row.status===1?'停用':'启用' }}</el-button>
+            <el-button type="primary" link @click.stop="handleDetail(row as SupplierVO)">详细</el-button>
+            <el-button type="warning" link @click.stop="openProducts(row as SupplierVO)">产品</el-button>
+            <el-button type="success" link @click.stop="handleToggleStatus(row as SupplierVO)">{{ row.status===1?'停用':'启用' }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -291,8 +302,8 @@ onMounted(() => { loadData() })
       <el-table :data="productList" border>
         <el-table-column label="产品" min-width="220">
           <template #default="{ row }">
-            <el-select v-model="row.productId" placeholder="搜索选择产品" filterable remote :remote-method="loadProductOptions" style="width:100%" size="small">
-              <el-option v-for="p in productOptions" :key="p.id" :label="p.name" :value="p.id" />
+            <el-select v-model="row.productId" placeholder="搜索选择产品（可输SKU）" filterable remote :remote-method="loadProductOptions" style="width:100%" size="small">
+              <el-option v-for="p in productOptions" :key="p.id" :label="productLabel(p)" :value="p.id" />
             </el-select>
           </template>
         </el-table-column>

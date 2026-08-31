@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, computed } from 'vue'
+import { reactive, ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import { OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
 
 const router = useRouter(); const route = useRoute()
 const tabStore = useTabStore()
@@ -81,6 +82,7 @@ async function handleSubmit() {
       onOrderTypeChange()
     }
     tabStore.removeTab(route.fullPath)
+    sessionStorage.setItem(OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY, '1')
     if (isEdit.value) { router.replace(`/outsource/material-order/detail/${editId}`) }
     else { router.replace('/outsource/material-order') }
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
@@ -135,6 +137,8 @@ function resetForm() {
 }
 
 
+// 顶栏"刷新数据"：重新加载供应商/物料/类型下拉
+async function handleRefreshData() { await loadOptions() }
 onMounted(async () => {
   await loadOptions()
   if (editId) {
@@ -151,7 +155,9 @@ onMounted(async () => {
     await initFromQuery()
     if (items.value.length === 0) addItem()
   }
+  window.addEventListener('refresh:dropdown-data', handleRefreshData)
 })
+onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 </script>
 
 <template>

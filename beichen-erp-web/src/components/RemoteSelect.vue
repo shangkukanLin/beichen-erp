@@ -5,8 +5,10 @@
     filterable
     clearable
     :loading="loading"
+    :disabled="disabled"
     :placeholder="placeholder"
     :collapse-tags="collapseTags"
+    :collapse-tags-tooltip="collapseTagsTooltip"
     @update:model-value="onUpdate"
     @visible-change="onVisible"
     @filter-method="onSearch"
@@ -30,20 +32,24 @@ const props = withDefaults(defineProps<{
   placeholder?: string
   multiple?: boolean
   collapseTags?: boolean
+  collapseTagsTooltip?: boolean   // 多选折叠时 hover 显示全部已选项（需配合 multiple）
   pageSize?: number
   lazy?: boolean                              // true: 展开才查（Odoo 默认）；false: 挂载即查
   optionDisabled?: (row: any) => boolean      // 自定义禁用（如子物料下拉排除自身）
   preset?: any                                // 编辑回显预置当前项 {valueKey, labelKey}，后端已随详情返回名称，免查库
   disableCache?: boolean                      // true: 不启用会话缓存，每次展开实时查库（用于 fetch 依赖行参数的过滤下拉）
+  disabled?: boolean                          // 禁用整个下拉
 }>(), {
   valueKey: 'id',
   labelKey: 'name',
   placeholder: '请选择',
   multiple: false,
   collapseTags: true,
+  collapseTagsTooltip: false,
   pageSize: 500,
   lazy: true,
   disableCache: false,
+  disabled: false,
 })
 
 const emit = defineEmits<{
@@ -68,7 +74,13 @@ function seedPreset(v: any): boolean {
   const targets = Array.isArray(v) ? v : [v]
   if (!targets.includes(pv)) return false
   // 规范化为 {valueKey, labelKey}：label 为空时兜底取 preset.name，避免与 label-key 不一致时显示成 ID
-  const normalized: any = { ...props.preset, [props.valueKey]: pv, [props.labelKey]: props.preset[props.labelKey] ?? props.preset.name ?? '' }
+  const normalized: any = { ...props.preset } as Record<string, any>
+  normalized[props.valueKey as string] = pv
+  if (typeof props.labelKey === 'string') {
+    normalized[props.labelKey] = props.preset[props.labelKey] ?? props.preset.name ?? ''
+  } else {
+    normalized.name = props.preset.name ?? ''
+  }
   if (targets.every(t => options.value.some(o => getVal(o) === t))) return true
   if (Array.isArray(v)) {
     if (!options.value.some(o => getVal(o) === pv)) options.value = [...options.value, normalized]
@@ -84,8 +96,31 @@ watch(() => props.modelValue, v => {
 })
 // 父组件带着正确名称重渲染后，立即把 preset 注入选项，避免依赖下拉的类型过滤
 watch(() => props.preset, () => {
-  if (!isResolved(props.modelValue)) seedPreset(props.modelValue)
+  const mv = props.modelValue
+  if (mv == null || mv === '' || (Array.isArray(mv) && mv.length === 0)) return
+  if (!isResolved(mv)) { seedPreset(mv); return }
+  // 已存在但 label 可能为空（先以空名 seed，名称随后异步返回）：用最新 preset 刷新选中项 label
+  refreshPresetLabels()
 })
+
+/** 刷新 options 中已存在的选中项 label（字符串 labelKey 场景，名称异步返回后回显） */
+function refreshPresetLabels() {
+  if (props.preset == null || typeof props.labelKey !== 'string') return
+  const pv = getVal(props.preset)
+  const label = props.preset[props.labelKey] ?? props.preset.name ?? ''
+  if (label === '') return
+  const targets = Array.isArray(props.modelValue) ? props.modelValue : [props.modelValue]
+  let changed = false
+  for (const t of targets) {
+    if (t !== pv) continue
+    const idx = options.value.findIndex(o => getVal(o) === pv)
+    if (idx >= 0 && options.value[idx][props.labelKey] !== label) {
+      options.value[idx] = { ...options.value[idx], [props.labelKey]: label }
+      changed = true
+    }
+  }
+  if (changed) options.value = [...options.value]
+}
 
 const options = ref<any[]>([])
 const loading = ref(false)

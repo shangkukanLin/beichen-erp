@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -69,6 +70,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
             m.put("status", o.getStatus());
             m.put("taxIncluded", o.getTaxIncluded());
             m.put("taxRate", o.getTaxRate());
+            m.put("taxAmount", o.getTaxAmount());
             m.put("totalAmount", o.getTotalAmount());
             m.put("remark", o.getRemark());
             m.put("createTime", o.getCreateTime());
@@ -82,9 +84,43 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     @Override
     public SaleOrder getById(Long id) { return orderMapper.selectById(id); }
 
+    /**
+     * 明细查询：批量关联 product 回填名称/规格/单位。
+     * <p>sale_order_item 只存 product_id（不冗余名称），若直接返回原始行，前端需自行翻译；
+     * 一旦前端字典未就绪就会显示空白。此处统一在后端回填，前端可直接展示。</p>
+     */
     @Override
     public List<SaleOrderItem> getItems(Long orderId) {
-        return itemMapper.selectList(new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, orderId));
+        List<SaleOrderItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, orderId));
+        if (items.isEmpty()) return items;
+        fillProductInfo(items);
+        return items;
+    }
+
+    /** 批量回填产品名称/规格/单位，消除 N+1 */
+    private void fillProductInfo(List<SaleOrderItem> items) {
+        List<Long> productIds = items.stream().map(SaleOrderItem::getProductId)
+                .filter(Objects::nonNull).distinct().toList();
+        if (productIds.isEmpty()) return;
+        Map<Long, Product> productMap = productMapper.selectBatchIds(productIds).stream()
+                .collect(Collectors.toMap(Product::getId, p -> p, (a, b) -> a));
+        for (SaleOrderItem it : items) {
+            Product p = it.getProductId() != null ? productMap.get(it.getProductId()) : null;
+            it.setProductName(p != null && p.getName() != null ? p.getName() : "");
+            it.setSku(p != null && p.getSku() != null ? p.getSku() : "");
+            it.setSpec(p != null && p.getSpec() != null ? p.getSpec() : "");
+            it.setUnit(p != null && p.getUnit() != null ? p.getUnit() : "");
+        }
+    }
+
+    /** 税额拆分（单价含税口径）：打开收税时从含税总额中按税率拆出税额 = total × rate/(100+rate) */
+    private BigDecimal calcTaxAmount(BigDecimal total, Integer taxIncluded, BigDecimal taxRate) {
+        if (!Integer.valueOf(1).equals(taxIncluded) || taxRate == null || taxRate.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal rate = taxRate.divide(new BigDecimal("100"), 6, BigDecimal.ROUND_HALF_UP);
+        return total.multiply(rate).divide(BigDecimal.ONE.add(rate), 2, BigDecimal.ROUND_HALF_UP);
     }
 
     @Override
@@ -110,6 +146,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         SaleOrder u = new SaleOrder();
         u.setId(order.getId());
         u.setTotalAmount(total);
+        u.setTaxAmount(calcTaxAmount(total, order.getTaxIncluded(), order.getTaxRate()));
         orderMapper.updateById(u);
     }
 
@@ -137,6 +174,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         SaleOrder u = new SaleOrder();
         u.setId(order.getId());
         u.setTotalAmount(total);
+        u.setTaxAmount(calcTaxAmount(total, order.getTaxIncluded(), order.getTaxRate()));
         orderMapper.updateById(u);
     }
 
@@ -163,7 +201,10 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         if (items.isEmpty()) throw new BusinessException("订单明细不能为空");
 
         // 1) 生成应收台账（销售订单仅负责成交与应收，真实出库由"销售出库单"审核统一扣库存，避免双重扣减）
-        FinanceReceivable fr = new FinanceReceivable();
+        // 反审核后重新审核时该单号台账已存在（冲销仅置 CANCELLED 并未删除），此处复用并重置，避免 bill_no 唯一键冲突
+        FinanceReceivable exist = receivableMapper.selectOne(new LambdaQueryWrapper<FinanceReceivable>()
+                .eq(FinanceReceivable::getBillNo, order.getCode()));
+        FinanceReceivable fr = exist != null ? exist : new FinanceReceivable();
         fr.setBillNo(order.getCode());
         fr.setCustomerId(order.getCustomerId());
         // 应收台账留痕：固化开单时的客户名（实时查一次）
@@ -179,11 +220,13 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         fr.setStatus(SettlementStatus.UNSETTLED.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) fr.setCompanyId(cid);
-        receivableMapper.insert(fr);
-        // 4) 更新订单状态为"已完成"（审核即出库）
+        if (exist != null) receivableMapper.updateById(fr);
+        else receivableMapper.insert(fr);
+        // 4) 更新订单状态为"已完成"（审核即出库）；记录审核时间供财务分析按月归集收入
         SaleOrder u = new SaleOrder();
         u.setId(id);
         u.setStatus(DocStatus.AUDITED.getCode());
+        u.setAuditTime(LocalDateTime.now());
         orderMapper.updateById(u);
     }
 
@@ -193,8 +236,10 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         SaleOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("销售单不存在");
         if (!DocStatus.AUDITED.getCode().equals(order.getStatus())) throw new BusinessException("只有已审核的销售单可反审核");
-        // 1) 冲销应收台账（反审核，已收款单据会校验拦截）
-        receivableHelper.reverseReceivable(order.getCode());
+        // 1) 冲销应收台账（反审核，已收款单据会校验拦截）；台账不存在时跳过（历史单据可能未生成）
+        FinanceReceivable exist = receivableMapper.selectOne(new LambdaQueryWrapper<FinanceReceivable>()
+                .eq(FinanceReceivable::getBillNo, order.getCode()));
+        if (exist != null) receivableHelper.reverseReceivable(order.getCode());
         // 3) 订单状态回退为草稿（库存由"销售出库单"反审核统一回补，订单本身不触碰库存）
         SaleOrder u = new SaleOrder();
         u.setId(id);

@@ -232,6 +232,7 @@ onMounted(() => {
   <div class="role-page">
     <!-- 查询栏 -->
     <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="角色名称">
           <el-input v-model="query.roleName" placeholder="请输入角色名称" clearable @keyup.enter="handleQuery" />
@@ -241,12 +242,13 @@ onMounted(() => {
             <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
-        <el-form-item>
+        </el-form>
+        <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
           <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
     </el-card>
 
     <!-- 列表 -->

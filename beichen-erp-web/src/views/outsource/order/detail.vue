@@ -1,13 +1,13 @@
 <script setup lang="ts">
 defineOptions({ name: 'OutsourceOrderDetail' })
 
-import { reactive, ref, computed, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { getProjectBom } from '@/api/system'
 import { exportContractPdf } from '@/api/contract-template'
-import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
+import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DeliveryType, DeliveryTypeLabel, OUTSOURCE_ORDER_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
@@ -67,12 +67,27 @@ function goOutsource(row: any) {
 const form = reactive({
   id: undefined as any, code: '', status: '',
   factoryId: undefined as any,
+  supplyMode: 'OURS',
   planStartDate: '', planEndDate: '',
   actualStartDate: '', actualEndDate: '',
-  taxIncluded: 0, taxRate: '',
+  taxIncluded: 0, taxRate: '', taxAmount: '',
   totalAmount: '', remark: '',
   attachUrl: '', logisticsCompany: '', logisticsNo: ''
 })
+// 供料模式：OURS来料加工 / FACTORY包工包料
+const SUPPLY_MODE_OPTIONS = [{ label: '来料加工', value: 'OURS' }, { label: '包工包料', value: 'FACTORY' }]
+const SUPPLY_TYPE_OPTIONS = [{ label: '我方供', value: 'OURS' }, { label: '工厂包', value: 'FACTORY' }]
+// 包工包料默认规则：仅玻璃（按BOM类型ID对比）我方供，其余物料默认工厂包
+const glassTypeId = computed(() => bomTypes.value.find((t: any) => t.typeName === '玻璃')?.id)
+function defaultSupplyType(bomTypeId: any) {
+  return glassTypeId.value != null && bomTypeId === glassTypeId.value ? 'OURS' : 'FACTORY'
+}
+function onSupplyModeChange() {
+  // 来料加工：全部我方供；包工包料：玻璃我方供、其余默认工厂包
+  products.value.forEach((p: any) => (p.materials || []).forEach((m: any) => {
+    m.supplyType = form.supplyMode === 'OURS' ? 'OURS' : defaultSupplyType(m.bomTypeId)
+  }))
+}
 
 const products = ref<any[]>([])
 const factoryOptions = ref<any[]>([])
@@ -83,7 +98,8 @@ const fetchFactories = (kw: string) => request.get('/supplier/page', { params: {
 const fetchProjects = (kw: string) => request.get('/dev/project/page', { params: { pageSize: 500, name: kw } })
 const fetchMaterials = (kw: string) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw } })
 const fetchBomTypes = (kw: string) => request.get('/dev/bom-type/enabled', { params: { pageSize: 500, name: kw } })
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
+// 收货/退不良仓库限定为我方（自有）成品仓
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: '成品仓' } })
 
 // bomTypeId -> 类型名 映射（兜底展示用）
 function typeName(id: number | undefined, fallback?: string) {
@@ -110,9 +126,10 @@ async function loadData() {
     if (d) {
       Object.assign(form, {
         id: d.id, code: d.code, status: d.status, factoryId: d.factoryId,
+        supplyMode: d.supplyMode || 'OURS',
         planStartDate: d.planStartDate || '', planEndDate: d.planEndDate || '',
         actualStartDate: d.actualStartDate || '', actualEndDate: d.actualEndDate || '',
-        taxIncluded: d.taxIncluded || 0, taxRate: d.taxRate || '',
+        taxIncluded: d.taxIncluded || 0, taxRate: d.taxRate || '', taxAmount: d.taxAmount || '',
         totalAmount: d.totalAmount || '', remark: d.remark || '',
         attachUrl: d.attachUrl || '', logisticsCompany: d.logisticsCompany || '', logisticsNo: d.logisticsNo || ''
       })
@@ -120,7 +137,7 @@ async function loadData() {
     const ps = await request.get<any,any>(`/outsource/order/${route.params.id}/products`)
     products.value = (ps || []).map((p:any) => ({
       ...p, _key: p.id || Date.now() + Math.random(),
-      materials: (p.materials || []).map((m:any) => ({ ...m }))
+      materials: (p.materials || []).map((m:any) => ({ ...m, price: materialOptions.value.find((o:any) => o.id === m.materialId)?.price ?? null }))
     }))
     if (form.factoryId && !factoryOptions.value.some((f:any)=>f.id===form.factoryId)) {
       try { const sup = await request.get<any,any>(`/supplier/${form.factoryId}`); if (sup) factoryOptions.value.push({id:sup.id,name:sup.name}) } catch (e: any) { console.warn('加载工厂信息失败', e?.message || e) }
@@ -150,14 +167,14 @@ async function loadBomMaterials(idx: number, pid: number) {
       const qty = Number(products.value[idx].quantity) || 1
       products.value[idx].materials = mats.map((m:any) => {
         const opt = materialOptions.value.find((o:any) => o.id === m.outsourceMaterialId)
-        return { materialId: m.outsourceMaterialId || null, materialName: opt?.materialName || '', bomTypeId: m.bomTypeId || null, unit: m.unit || '', demandQuantity: +(qty * Number(m.quantity || 0)).toFixed(4), lossRate: m.lossRate || 0, remark: '' }
+        return { materialId: m.outsourceMaterialId || null, materialName: opt?.materialName || '', price: opt?.price ?? null, bomTypeId: m.bomTypeId || null,  unit: m.unit || '', demandQuantity: +(qty * Number(m.quantity || 0)).toFixed(4), lossRate: m.lossRate || 0, supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(m.bomTypeId) : 'OURS', remark: '' }
       })
     }
   } catch { products.value[idx].materials = [] }
 }
 function calcAmount(idx: number) { const p = products.value[idx]; p.amount = (Number(p.quantity) || 0) * (Number(p.unitPrice) || 0) }
 function onMatSelect(idx: number, mi: number, mat: any) { const m = materialOptions.value.find((v:any) => v.id === mi); if (m) { mat.materialName = m.materialName; mat.bomTypeId = m.bomTypeId; mat.unit = m.unit } }
-function addMaterial(idx: number) { products.value[idx].materials.push({ materialId: undefined, materialName: '', bomTypeId: undefined, unit: '', demandQuantity: 1, lossRate: 0, remark: '' }) }
+function addMaterial(idx: number) { products.value[idx].materials.push({ materialId: undefined, materialName: '', bomTypeId: undefined, unit: '', demandQuantity: 1, lossRate: 0, supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(undefined) : 'OURS', remark: '' }) }
 function removeMaterial(pi: number, mi: number) { products.value[pi].materials.splice(mi, 1) }
 
 function openAttach(url:string) { window.open(url + '?inline=true') }
@@ -176,7 +193,7 @@ async function handleSave() {
   saving.value = true
   try {
     if (uploadFile.value) { const fd = new FormData(); fd.append('file', uploadFile.value); const res = await request.post<any,string>('/dev/file/upload', fd); form.attachUrl = res as unknown as string }
-    await request.put(`/outsource/order/${form.id}`, { ...form, products: products.value }); ElMessage.success('保存成功'); await loadData()
+    await request.put(`/outsource/order/${form.id}`, { ...form, products: products.value }); ElMessage.success('保存成功'); await loadData(); sessionStorage.setItem(OUTSOURCE_ORDER_DIRTY_KEY, '1')
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) } finally { saving.value = false }
 }
 async function handleAudit() {
@@ -382,7 +399,13 @@ async function loadCloseReport() {
   finally { closeLoading.value = false }
 }
 
-onMounted(() => { loadOptions(); loadData() })
+/**
+ * 每次进入详情页都重新拉取字典与单据数据：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发。
+ * 只写在 onActivated —— 首次挂载时 onActivated 同样会触发，若 onMounted 也写一份会导致首次重复请求两次。
+ * 注意 loadOptions 必须先于 loadData：明细单价依赖物料字典（materialOptions），
+ * 两者并发会因字典未就绪导致 price 为空，故这里串行 await。
+ */
+onActivated(async () => { await loadOptions(); await loadData() })
 </script>
 
 <template>
@@ -402,6 +425,7 @@ onMounted(() => { loadOptions(); loadData() })
             <el-col :span="8"><el-form-item label="单号"><el-input :model-value="form.code" readonly /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="状态"><el-tag :type="OutsourceOrderStatusTag[form.status]||'info'" size="small">{{ OutsourceOrderStatusLabel[form.status] || form.status }}</el-tag></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" /></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="供料模式"><el-select v-model="form.supplyMode" style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="onSupplyModeChange"><el-option v-for="m in SUPPLY_MODE_OPTIONS" :key="m.value" :label="m.label" :value="m.value" /></el-select></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="计划开始"><el-input v-model="form.planStartDate" type="date" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="计划完成"><el-input v-model="form.planEndDate" type="date" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="实际开始"><el-input :model-value="form.actualStartDate" readonly /></el-form-item></el-col>
@@ -409,6 +433,7 @@ onMounted(() => { loadOptions(); loadData() })
             <el-col :span="8"><el-form-item label="总金额"><el-input :model-value="Number(form.totalAmount||0).toFixed(2)" readonly /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="含税"><el-switch v-model="form.taxIncluded" :active-value="1" :inactive-value="0" disabled /></el-form-item></el-col>
             <el-col :span="8" v-if="form.taxIncluded"><el-form-item label="税率(%)"><el-input :model-value="form.taxRate" disabled /></el-form-item></el-col>
+            <el-col :span="8" v-if="form.taxIncluded"><el-form-item label="税额"><el-input :model-value="form.taxAmount" disabled /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
           </el-row>
           <div style="display:flex;gap:8px;margin-top:12px">
@@ -427,7 +452,7 @@ onMounted(() => { loadOptions(); loadData() })
           <el-row :gutter="12">
             <el-col :span="12"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.assemblyName || row.name" filterable clearable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="(v:any)=>onProjectSelect(pi,v)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="数量"><el-input v-model="p.quantity" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
-            <el-col :span="6"><el-form-item label="单价"><el-input v-model="p.unitPrice" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
+            <el-col :span="6"><el-form-item :label="form.supplyMode==='FACTORY' ? '包工包料单价' : '单价'"><el-input v-model="p.unitPrice" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="备注"><el-input v-model="p.remark" :disabled="form.status!==OutsourceOrderStatus.PENDING" /></el-form-item></el-col>
           </el-row>
@@ -438,6 +463,9 @@ onMounted(() => { loadOptions(); loadData() })
             <el-table-column label="类型" width="70"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
             <el-table-column label="物料名称" min-width="120"><template #default="{row}">{{ matName(row.materialId) }}</template></el-table-column>
             <el-table-column prop="unit" label="单位" width="55" />
+            <el-table-column label="单价" width="90" align="right">
+              <template #default="{row}">{{ row.price != null ? Number(row.price).toFixed(2) : '-' }}</template>
+            </el-table-column>
             <el-table-column label="需求" width="70"><template #default="{row}">{{ row.demandQuantity }}</template></el-table-column>
             <el-table-column label="已出货消耗" width="80"><template #default="{row}"><span :style="{color: Number(getStock(row.materialId).shippedConsumed||0)>0?'var(--app-color-primary)':''}">{{ getStock(row.materialId).shippedConsumed || 0 }}</span></template></el-table-column>
             <el-table-column label="剩余需求" width="75"><template #default="{row}">{{ getStock(row.materialId).remainingDemand || row.demandQuantity }}</template></el-table-column>
@@ -445,6 +473,13 @@ onMounted(() => { loadOptions(); loadData() })
             <el-table-column label="可能在途" width="80"><template #default="{row}"><span :style="{color: Number(getStock(row.materialId).inTransit||0) > 0 ? 'var(--app-color-primary)' : ''}">{{ getStock(row.materialId).inTransit || 0 }}</span></template></el-table-column>
             <el-table-column label="缺料" width="70"><template #default="{row}"><span :style="{color: Number(getStock(row.materialId).shortage||0) > 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ getStock(row.materialId).shortage || 0 }}</span></template></el-table-column>
             <el-table-column label="损耗率(%)" width="85"><template #default="{row}"><el-input v-model="row.lossRate" size="small" :disabled="form.status!==OutsourceOrderStatus.PENDING" /></template></el-table-column>
+            <el-table-column label="供料方" width="90" align="center">
+              <template #default="{row}">
+                <el-select v-model="row.supplyType" size="small" style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING || form.supplyMode==='OURS'">
+                  <el-option v-for="t in SUPPLY_TYPE_OPTIONS" :key="t.value" :label="t.label" :value="t.value" />
+                </el-select>
+              </template>
+            </el-table-column>
             <el-table-column label="备注" min-width="80"><template #default="{row}"><el-input v-model="row.remark" size="small" :disabled="form.status!==OutsourceOrderStatus.PENDING" /></template></el-table-column>
             <el-table-column label="操作" width="130" align="center" class-name="action-col" v-if="form.status===OutsourceOrderStatus.PRODUCING"><template #default="{row}"><div v-if="Number(getStock(row.materialId).shortage||0) > 0" style="display:flex;align-items:center;justify-content:center;gap:4px"><el-button type="warning" link size="small" @click="goPurchase(row)">去采购</el-button><el-button v-if="getStock(row.materialId).hasComponents" type="primary" link size="small" @click="goOutsource(row)">去委外</el-button></div></template></el-table-column>
           </el-table>
@@ -477,6 +512,7 @@ onMounted(() => { loadOptions(); loadData() })
       <el-card shadow="never" style="margin-bottom:12px" v-if="delSummary.productStats && delSummary.productStats.length > 1">
         <template #header><span style="font-weight:600">按产品分类统计</span></template>
         <el-table :data="delSummary.productStats" border size="small">
+          <el-table-column prop="sku" label="SKU" width="130" />
           <el-table-column prop="productName" label="产品名称" min-width="150" />
           <el-table-column prop="totalQuantity" label="订单数量" width="100" />
           <el-table-column label="已交数量" width="100"><template #default="{row}"><span style="color:var(--app-color-success);font-weight:500">{{ row.deliveredQuantity }}</span></template></el-table-column>

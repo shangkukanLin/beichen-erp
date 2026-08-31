@@ -16,6 +16,7 @@ import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.inventory.service.ReclassifyService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
+import com.beichen.erp.material.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
     private final InventoryProductReclassifyItemMapper itemMapper;
     private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
+    private final ProductService productService;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long warehouseId, int pageNum, int pageSize) {
@@ -58,8 +60,11 @@ public class ReclassifyServiceImpl implements ReclassifyService {
 
     @Override
     public List<InventoryProductReclassifyItem> getItems(Long reclassifyId) {
-        return itemMapper.selectList(new LambdaQueryWrapper<InventoryProductReclassifyItem>()
+        List<InventoryProductReclassifyItem> items = itemMapper.selectList(new LambdaQueryWrapper<InventoryProductReclassifyItem>()
                 .eq(InventoryProductReclassifyItem::getReclassifyId, reclassifyId));
+        // 回填 SKU（非表字段），前端免查库即可展示
+        productService.fillSku(items, InventoryProductReclassifyItem::getProductId, InventoryProductReclassifyItem::setSku);
+        return items;
     }
 
     @Override

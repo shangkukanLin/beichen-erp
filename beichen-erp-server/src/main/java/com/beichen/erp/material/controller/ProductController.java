@@ -24,16 +24,18 @@ public class ProductController {
     private final ProductService service;
     private final ProjectProductSyncService projectProductSyncService;
 
-    /** 分页查询（支持关键字/分类/状态筛选） */
+    /** 分页查询（支持关键字(名称/SKU)/SKU精确/品牌/分类/状态筛选） */
     @GetMapping("/page")
     public R<Page<Product>> page(
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String sku,
+            @RequestParam(required = false) Long brandId,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String status) {
         ProductStatus ps = status != null ? ProductStatus.fromValue(status) : null;
-        return R.ok(service.page(keyword, category, ps, pageNum, pageSize));
+        return R.ok(service.page(keyword, category, brandId, ps, sku, pageNum, pageSize));
     }
 
     /** 单条查询 */

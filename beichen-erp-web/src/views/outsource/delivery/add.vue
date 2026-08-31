@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, computed } from 'vue'
+import { reactive, ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -68,7 +68,7 @@ async function onTargetFactoryChange(id: number) {
   if (id) { await loadTargetWarehouses(id); if (targetOutsourceWarehouses.value.length > 0) form.toWarehouseId = targetOutsourceWarehouses.value[0].id }
 }
 
-function addItem() { items.value.push({ material_id: undefined, material_name: '', bomTypeId: undefined, unit: '', unit_price: '', quantity: undefined, qualityType: QualityType.GOOD }) }
+function addItem() { items.value.push({ material_id: undefined, material_name: '', bomTypeId: undefined, unit: '', unit_price: '', quantity: undefined, qualityType: QualityType.GOOD, stock: '' }) }
 function removeItem(i: number) { items.value.splice(i, 1) }
 function onTypeChangeMtl(idx: number) { items.value[idx].material_id = undefined; items.value[idx].material_name = ''; items.value[idx].unit = '' }
 function onMaterialSelect(idx: number, mid: number) {
@@ -80,7 +80,22 @@ function onMaterialSelect(idx: number, mid: number) {
       if (r) items.value[idx].unit_price = r
     }).catch(() => {})
   }
+  loadStock(idx)
 }
+
+// 查询该物料在发出仓库的库存（汇总全部质量）
+async function loadStock(idx: number) {
+  const row = items.value[idx]
+  if (!row) return
+  row.stock = ''
+  if (!form.fromWarehouseId || !row.material_id) return
+  try {
+    const r = await request.get<any, any>('/warehouse/stock/page', { params: { warehouseId: form.fromWarehouseId, materialId: row.material_id, stockType: 'MATERIAL', pageSize: 100 } })
+    const recs = r?.records || []
+    row.stock = recs.reduce((s: number, it: any) => s + (Number(it.quantity) || 0), 0)
+  } catch { row.stock = '' }
+}
+watch(() => form.fromWarehouseId, () => { items.value.forEach((_: any, i: number) => loadStock(i)) })
 
 function handleDragOver(e: DragEvent) { e.preventDefault() }
 function handleDrop(e: DragEvent) { e.preventDefault(); const file = e.dataTransfer?.files?.[0]; if (file) uploadFile.value = file }
@@ -107,7 +122,15 @@ async function handleSubmit() {
   } finally { saving.value = false }
 }
 
-onMounted(() => { loadInventoryWarehouses(); loadAllWarehouses(); loadMaterials(); loadBomTypes() })
+// 点击顶栏"刷新数据"：重新加载仓库/物料/类型下拉（不丢失已填表单）
+async function handleRefreshData() {
+  await Promise.all([loadInventoryWarehouses(), loadAllWarehouses(), loadMaterials(), loadBomTypes()])
+}
+onMounted(() => {
+  loadInventoryWarehouses(); loadAllWarehouses(); loadMaterials(); loadBomTypes()
+  window.addEventListener('refresh:dropdown-data', handleRefreshData)
+})
+onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 </script>
 
 <template>
@@ -145,6 +168,7 @@ onMounted(() => { loadInventoryWarehouses(); loadAllWarehouses(); loadMaterials(
         <el-table-column label="物料类型" width="110"><template #default="{row,$index}"><el-select v-model="row.bomTypeId" filterable style="width:100%" clearable @change="onTypeChangeMtl($index)"><el-option v-for="t in uniqueTypes" :key="t" :label="typeName(t)" :value="t" /></el-select></template></el-table-column>
         <el-table-column label="物料名称" min-width="140"><template #default="{row,$index}"><el-select v-model="row.material_id" filterable style="width:100%" :disabled="!row.bomTypeId" @change="(v: any) => { if (v === ADD_MARKER) { row.material_id = undefined; router.push('/material'); return } onMaterialSelect($index, v) }"><el-option v-for="m in materialsByType(row.bomTypeId)" :key="m.id" :label="m.materialName" :value="m.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></template></el-table-column>
         <el-table-column label="单位" width="70"><template #default="{row}">{{row.unit}}</template></el-table-column>
+        <el-table-column label="发出仓库库存" width="110" align="right"><template #default="{row}"><span :style="{ color: row.stock !== '' && Number(row.quantity) > Number(row.stock) ? 'var(--app-color-danger)' : undefined }">{{ row.stock === '' ? '-' : row.stock }}</span></template></el-table-column>
         <el-table-column label="单价" width="100"><template #default="{row}"><el-input v-model="row.unit_price" size="small" placeholder="单价" /></template></el-table-column>
         <el-table-column label="数量" width="120"><template #default="{row}"><el-input v-model="row.quantity" size="small" placeholder="数量" /></template></el-table-column>
         <el-table-column label="质量" width="90" align="center"><template #default="{row}"><el-select v-model="row.qualityType" size="small" style="width:100%"><el-option :label="QualityTypeLabel[QualityType.GOOD]" :value="QualityType.GOOD" /><el-option :label="QualityTypeLabel[QualityType.DEFECT]" :value="QualityType.DEFECT" /></el-select></template></el-table-column>

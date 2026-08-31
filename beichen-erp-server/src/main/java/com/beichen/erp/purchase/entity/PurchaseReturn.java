@@ -20,6 +20,12 @@ public class PurchaseReturn {
 
     private Long warehouseId;
 
+    /** 关联采购单ID（可选，用于追溯） */
+    private Long purchaseOrderId;
+
+    /** 关联采购单号（冗余展示） */
+    private String purchaseOrderCode;
+
     private LocalDate returnDate;
 
     private String status;

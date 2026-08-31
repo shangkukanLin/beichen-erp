@@ -44,7 +44,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -227,10 +226,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
             materialOrderItemMapper.updateById(oi);
         }
-        // 5. 重算订单状态
-        recomputeMaterialOrderStatus(orderId);
-
-        // 6. 单据置为已审核
+        // 5. 单据置为已审核
         OutsourceDelivery up = new OutsourceDelivery();
         up.setId(id);
         up.setStatus(DocStatus.AUDITED.getCode());
@@ -305,10 +301,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
             materialOrderItemMapper.updateById(oi);
         }
-        // 4. 重算订单状态
-        recomputeMaterialOrderStatus(orderId);
-
-        // 5. 单据回到草稿
+        // 4. 单据回到草稿
         OutsourceDelivery up = new OutsourceDelivery();
         up.setId(id);
         up.setStatus(DocStatus.DRAFT.getCode());
@@ -324,42 +317,6 @@ public class DeliveryServiceImpl implements DeliveryService {
     private BigDecimal safeSubtract(BigDecimal a, BigDecimal b) {
         BigDecimal r = (a == null ? BigDecimal.ZERO : a).subtract(b == null ? BigDecimal.ZERO : b);
         return r.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : r;
-    }
-
-    /**
-     * 根据累计收货/退不良数量重算物料订单状态。
-     * 仅用于"已确认(RECEIVING)及以上"的订单：全部收满→FINISHED，否则保持 RECEIVING。
-     * 注意：已确认的订单不会因单张收货单反审而退回 PENDING(未确认)，
-     * 避免反审核一张收货单就把整张订单打回未确认态。
-     */
-    private void recomputeMaterialOrderStatus(Long orderId) {
-        MaterialOrder order = materialOrderMapper.selectById(orderId);
-        if (order == null) return;
-        if (MaterialOrderStatus.CANCELLED.getCode().equals(order.getStatus())) return;
-        // 非已确认流程的订单(如 PENDING)不在此维护状态，避免误退回未确认
-        if (!MaterialOrderStatus.RECEIVING.getCode().equals(order.getStatus())
-                && !MaterialOrderStatus.FINISHED.getCode().equals(order.getStatus())) {
-            return;
-        }
-        List<MaterialOrderItem> items = materialOrderItemMapper.selectList(
-                new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, orderId));
-        boolean allDone = true;
-        for (MaterialOrderItem it : items) {
-            BigDecimal ord = it.getOrderQuantity() != null ? it.getOrderQuantity() : BigDecimal.ZERO;
-            BigDecimal rec = it.getReceivedQuantity() != null ? it.getReceivedQuantity() : BigDecimal.ZERO;
-            BigDecimal def = it.getDefectReturnedQty() != null ? it.getDefectReturnedQty() : BigDecimal.ZERO;
-            // 有效交货 = 收货数 - 退不良数，必须 >= 下单数才算交齐
-            if (rec.subtract(def).compareTo(ord) < 0) allDone = false;
-        }
-        if (allDone && !items.isEmpty()) {
-            order.setStatus(MaterialOrderStatus.FINISHED.getCode());
-            order.setFinishTime(LocalDateTime.now());
-        } else {
-            // 关键：保持 RECEIVING，不退回 PENDING
-            order.setStatus(MaterialOrderStatus.RECEIVING.getCode());
-            order.setFinishTime(null);
-        }
-        materialOrderMapper.updateById(order);
     }
 
     /** 变更外协库存（outsource_warehouse_stock）并写流水日志（outsource_stock_log），供物料订单收货/退不良使用 */
@@ -382,9 +339,8 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (DocStatus.CANCELLED.getCode().equals(delivery.getStatus())) {
             throw new BusinessException("单据已取消，不可重复取消");
         }
-        // 已审核单据作废前先逆向库存（统一入口 reverseDeliveryStock，内含库存冲减与发料已发数量回滚，禁止重复冲减）
-        if (DocStatus.AUDITED.getCode().equals(delivery.getStatus())) {
-            reverseDeliveryStock(delivery, getItems(id));
+        if (!DocStatus.DRAFT.getCode().equals(delivery.getStatus())) {
+            throw new BusinessException("只有草稿状态可作废，已审核单据请先反审核");
         }
         // 更新状态
         OutsourceDelivery update = new OutsourceDelivery();
@@ -674,9 +630,23 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Override
     public java.math.BigDecimal calcWeightedPrice(Long factoryId, Long materialId) {
         if (factoryId == null || materialId == null) return java.math.BigDecimal.ZERO;
+        // 优先按工厂（供应商）维度取价
+        java.math.BigDecimal price = calcWeightedPriceInternal(
+            new LambdaQueryWrapper<MaterialOrder>().eq(MaterialOrder::getSupplierId, factoryId), materialId);
+        // 工厂维度查不到时回退：该物料全部物料订单的加权均价（保证新增单据有默认单价）
+        if (price == null || price.compareTo(java.math.BigDecimal.ZERO) <= 0) {
+            price = calcWeightedPriceInternal(null, materialId);
+        }
+        return price != null ? price : java.math.BigDecimal.ZERO;
+    }
+
+    /** 按指定订单范围计算某物料的加权均价；无有效数量/无订单返回 null */
+    private java.math.BigDecimal calcWeightedPriceInternal(LambdaQueryWrapper<MaterialOrder> orderWrapper, Long materialId) {
+        if (materialId == null) return null;
         try {
-            List<MaterialOrder> orders = materialOrderMapper.selectList(
-                new LambdaQueryWrapper<MaterialOrder>().eq(MaterialOrder::getSupplierId, factoryId));
+            List<MaterialOrder> orders = orderWrapper != null
+                ? materialOrderMapper.selectList(orderWrapper)
+                : materialOrderMapper.selectList(new LambdaQueryWrapper<>());
             java.math.BigDecimal totalAmount = java.math.BigDecimal.ZERO, totalQty = java.math.BigDecimal.ZERO;
             for (MaterialOrder o : orders) {
                 LambdaQueryWrapper<MaterialOrderItem> itemW = new LambdaQueryWrapper<MaterialOrderItem>()
@@ -693,6 +663,6 @@ public class DeliveryServiceImpl implements DeliveryService {
             if (totalQty.compareTo(java.math.BigDecimal.ZERO) > 0)
                 return totalAmount.divide(totalQty, 4, java.math.RoundingMode.HALF_UP);
         } catch (Exception e) { log.warn("计算加权均价失败: {}", e.getMessage()); }
-        return java.math.BigDecimal.ZERO;
+        return null;
     }
 }

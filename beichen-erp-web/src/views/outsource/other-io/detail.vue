@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { IoType, IoTypeLabel, WarehouseCategory } from '@/api/enums'
+import { IoType, IoTypeLabel, WarehouseCategory, OUTSOURCE_OTHER_IO_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 
 const route = useRoute(); const router = useRouter()
@@ -103,13 +103,16 @@ async function handleSave() {
   try {
     const body: any = { ...form.value, items: validItems }
     await request.put(`/outsource/other-io/${id}`, body)
-    ElMessage.success('已更新')
+    ElMessage.success('已更新'); sessionStorage.setItem(OUTSOURCE_OTHER_IO_DIRTY_KEY, '1')
     editing.value = false
     await loadDetail()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
 
-onMounted(() => { loadWarehouses(); loadMaterials(); loadBomTypes(); loadDetail() })
+// 字典类只需加载一次
+onMounted(() => { loadWarehouses(); loadMaterials(); loadBomTypes() })
+// 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
+onActivated(() => { loadDetail() })
 </script>
 
 <template>

@@ -73,6 +73,10 @@ public class BomTypeServiceImpl implements BomTypeService {
     public void delete(Long id) {
         BomType type = bomTypeMapper.selectById(id);
         if (type != null) {
+            // 默认类型不可删除
+            if (type.getIsDefault() != null && type.getIsDefault() == 1) {
+                throw new BusinessException("默认类型不可删除");
+            }
             // 按 bom_type_id 统计该类型下是否还有外协物料，避免误删
             Long count = outsourceMaterialMapper.selectCount(
                     new LambdaQueryWrapper<OutsourceMaterial>().eq(OutsourceMaterial::getBomTypeId, type.getId()));

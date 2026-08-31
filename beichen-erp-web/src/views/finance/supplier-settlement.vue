@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import { sourceBillTypeLabel, SourceBillDetailRoute, SettlementStatus, SettlementStatusLabel, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, MaterialOrderStatusLabel, MaterialOrderStatusTag } from '@/api/enums'
 
 const route = useRoute(); const router = useRouter()
 const supplierId = Number(route.params.id)
@@ -19,6 +20,31 @@ async function loadAll() {
 }
 
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
+
+// 结算状态 code -> 中文 + 标签色
+const STATUS_LABEL: Record<string, string> = SettlementStatusLabel
+function statusLabel(code?: string) { return code ? (STATUS_LABEL[code] || code) : '' }
+function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined {
+  if (s === SettlementStatus.UNSETTLED) return 'danger'
+  if (s === SettlementStatus.PARTIAL) return 'warning'
+  if (s === SettlementStatus.SETTLED) return 'success'
+  if (s === SettlementStatus.CANCELLED) return 'info'
+  return undefined
+}
+
+// 来源单据类型 -> 详情路由前缀（公共映射见 @/api/enums）
+async function goSourceDetail(row: any) {
+  const base = SourceBillDetailRoute[row.sourceBillType]
+  if (!base || row.sourceBillNo == null) return
+  let targetId = row.sourceId
+  // 委外加工交货/超损的 sourceId 是交货记录/结单报表ID，需按单号反查加工单ID
+  if (row.sourceBillType === 'OUTSOURCE_DELIVERY' || row.sourceBillType === 'OUTSOURCE_EXCESS_LOSS') {
+    const res: any = await request.get('/outsource/order/page', { params: { code: row.sourceBillNo, pageSize: 1 } })
+    targetId = res?.records?.[0]?.id
+  }
+  if (targetId == null) return
+  router.push(`${base}/${targetId}`)
+}
 
 // ========== 一键退料 ==========
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
@@ -83,14 +109,14 @@ onMounted(async () => { await loadAll(); refreshChecks() })
           </span>
         </div>
       </template>
-      <el-table :data="data.payables || []" border stripe size="small" max-height="260">
+      <el-table :data="data.payables || []" border stripe size="small" max-height="260" @row-click="goSourceDetail">
         <el-table-column prop="billNo" label="应付单号" width="150" />
-        <el-table-column prop="sourceBillType" label="来源" width="110" />
-        <el-table-column prop="sourceBillNo" label="来源单号" width="150" show-overflow-tooltip />
+        <el-table-column label="来源" width="110"><template #default="{row}">{{ sourceBillTypeLabel(row.sourceBillType) }}</template></el-table-column>
+        <el-table-column label="来源单号" width="160" show-overflow-tooltip><template #default="{row}"><a v-if="row.sourceId != null" class="bill-link" @click.stop="goSourceDetail(row)">{{ row.sourceBillNo }}</a><span v-else>{{ row.sourceBillNo }}</span></template></el-table-column>
         <el-table-column label="金额" width="100" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column label="未付" width="100" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column label="到期日" width="100" align="center"><template #default="{row}">{{ $fmtDate(row.dueDate) }}</template></el-table-column>
-        <el-table-column prop="status" label="状态" width="90" align="center" />
+        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
       </el-table>
       <el-empty v-if="(data.payables||[]).length===0" description="应付已结清" :image-size="50" />
     </el-card>
@@ -100,22 +126,22 @@ onMounted(async () => { await loadAll(); refreshChecks() })
       <template #header><span style="font-weight:600">② 未完成订单（需完成或取消）</span></template>
       <template v-if="(data.activeOrders||[]).length > 0">
         <div class="section-title">委外加工单</div>
-        <el-table :data="data.activeOrders" border stripe size="small">
+        <el-table :data="data.activeOrders" border stripe size="small" @row-click="(row: any) => router.push(`/outsource/order/detail/${row.id}`)">
           <el-table-column prop="code" label="单号" width="170" />
-          <el-table-column prop="status" label="状态" width="90" align="center" />
+          <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="OutsourceOrderStatusTag[row.status] || 'info'" size="small">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
           <el-table-column label="计划完成" width="110" align="center"><template #default="{row}">{{ $fmtDate(row.planEndDate) }}</template></el-table-column>
           <el-table-column label="总金额" width="110" align="right"><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
-          <el-table-column label="操作" width="90" align="center"><template #default="{row}"><el-button type="primary" link size="small" @click="router.push(`/outsource/order/detail/${row.id}`)">去处理</el-button></template></el-table-column>
+          <el-table-column label="操作" width="90" align="center"><template #default="{row}"><el-button type="primary" link size="small" @click.stop="router.push(`/outsource/order/detail/${row.id}`)">去处理</el-button></template></el-table-column>
         </el-table>
       </template>
       <template v-if="(data.activeMaterialOrders||[]).length > 0">
         <div class="section-title" style="margin-top:12px">物料订单</div>
-        <el-table :data="data.activeMaterialOrders" border stripe size="small">
+        <el-table :data="data.activeMaterialOrders" border stripe size="small" @row-click="(row: any) => router.push(`/outsource/material-order/detail/${row.id}`)">
           <el-table-column prop="code" label="单号" width="170" />
           <el-table-column label="类型" width="80" align="center"><template #default="{row}">{{ row.orderType || '采购' }}</template></el-table-column>
-          <el-table-column prop="status" label="状态" width="90" align="center" />
+          <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
           <el-table-column label="交期" width="110" align="center"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-          <el-table-column label="操作" width="90" align="center"><template #default="{row}"><el-button type="primary" link size="small" @click="router.push(`/outsource/material-order/detail/${row.id}`)">去处理</el-button></template></el-table-column>
+          <el-table-column label="操作" width="90" align="center"><template #default="{row}"><el-button type="primary" link size="small" @click.stop="router.push(`/outsource/material-order/detail/${row.id}`)">去处理</el-button></template></el-table-column>
         </el-table>
       </template>
       <el-empty v-if="(data.activeOrders||[]).length===0 && (data.activeMaterialOrders||[]).length===0" description="无未完成订单" :image-size="50" />

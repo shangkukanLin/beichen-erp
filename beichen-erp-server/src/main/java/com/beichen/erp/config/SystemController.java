@@ -104,7 +104,7 @@ public class SystemController {
                 "sale_outbound_item", "sale_order_item",
                 "warehouse_stock_log", "warehouse_stock",
                 "warehouse_move_item", "inventory_other_io_item",
-                "project_timeline", "bom", "project",
+                "project_phase", "bom", "project",
                 "product", "brand", "supplier", "warehouse",
                 "sys_role_menu", "sys_user_role",
                 "sys_menu", "sys_role", "sys_user", "sys_config"

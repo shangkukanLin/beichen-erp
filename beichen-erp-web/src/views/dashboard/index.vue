@@ -82,7 +82,10 @@
             </el-table-column>
             <el-table-column prop="factoryName" label="加工厂" min-width="140" show-overflow-tooltip />
             <el-table-column label="产品" min-width="160" show-overflow-tooltip>
-              <template #default="{row}">{{ row.productNames || ((row.productCount || 0) + '项') }}</template>
+              <template #default="{row}">
+                <div>{{ row.productNames || ((row.productCount || 0) + '项') }}</div>
+                <div v-if="row.productSkus" style="font-size:12px;color:var(--app-text-secondary)">{{ row.productSkus }}</div>
+              </template>
             </el-table-column>
             <el-table-column label="金额" width="110" align="right">
               <template #default="{row}">{{ row.totalAmount ? Number(row.totalAmount).toFixed(2) : '-' }}</template>
@@ -156,7 +159,7 @@
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
           <el-button v-if="hasMenu['InventoryPurchase']" type="primary" size="small" text @click="$router.push('/inventory/purchase')">成品采购单</el-button>
-          <el-button v-if="hasMenu['SupplierManage']" type="primary" size="small" text @click="$router.push('/supplier/manage')">供应商管理</el-button>
+          <el-button v-if="hasMenu['OutsourceSupplierManage']" type="primary" size="small" text @click="$router.push('/outsource/supplier/manage')">供货商管理</el-button>
         </div>
       </el-tab-pane>
 
@@ -220,7 +223,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
-import { ProjectStatus, TimelineStatus, OutsourceOrderStatus, MaterialOrderStatus } from '@/api/enums'
+import { ProjectStatus, PhaseStatus, OutsourceOrderStatus, MaterialOrderStatus } from '@/api/enums'
 import MemoPanel from '@/views/memo/index.vue'
 
 const router = useRouter()
@@ -238,27 +241,27 @@ const devBomCount = ref(0)
 const devFinished = ref(0)
 const today = new Date().toISOString().split('T')[0]
 const inProgressProjects = ref<any[]>([])
-const dashboardTimelineMap = ref<Record<number, any[]>>({})
+const dashboardPhaseMap = ref<Record<number, any[]>>({})
 
 function getDashboardPhase(row: any) {
-  const timelines = dashboardTimelineMap.value[row.id]
-  if (!timelines || !timelines.length) return '-'
-  const active = timelines.find((t: any) => t.status === TimelineStatus.IN_PROGRESS)
-  return active ? active.statusName : '-'
+  const phases = dashboardPhaseMap.value[row.id]
+  if (!phases || !phases.length) return '-'
+  const active = phases.find((t: any) => t.status === PhaseStatus.IN_PROGRESS)
+  return active ? active.phaseName : '-'
 }
 
 function getDashboardPlannedEnd(row: any) {
-  const timelines = dashboardTimelineMap.value[row.id]
-  if (!timelines || !timelines.length) return ''
-  const active = timelines.find((t: any) => t.status === TimelineStatus.IN_PROGRESS)
+  const phases = dashboardPhaseMap.value[row.id]
+  if (!phases || !phases.length) return ''
+  const active = phases.find((t: any) => t.status === PhaseStatus.IN_PROGRESS)
   return active?.plannedEnd || ''
 }
 
 function getDashboardProgress(row: any) {
-  const timelines = dashboardTimelineMap.value[row.id]
-  if (!timelines || !timelines.length) return '0/0'
-  const done = timelines.filter((t: any) => t.status === TimelineStatus.FINISHED || t.status === TimelineStatus.SKIPPED).length
-  return `${done}/${timelines.length}`
+  const phases = dashboardPhaseMap.value[row.id]
+  if (!phases || !phases.length) return '0/0'
+  const done = phases.filter((t: any) => t.status === PhaseStatus.FINISHED || t.status === PhaseStatus.SKIPPED).length
+  return `${done}/${phases.length}`
 }
 const osPending = ref(0)
 const osInProgress = ref(0)
@@ -327,11 +330,11 @@ async function loadStats() {
       devInProgress.value = inProgress
       devBomCount.value = bomProjectCount
       devFinished.value = finished
-      // 加载进行中项目的时间线
+      // 加载进行中项目的项目阶段
       if (activeProjects.length > 0) {
         try {
-          const tlRes = await request.post('/dev/project/batch-timelines', activeProjects.map((p: any) => p.id))
-          dashboardTimelineMap.value = tlRes || {}
+          const tlRes = await request.post('/dev/project/batch-phases', activeProjects.map((p: any) => p.id))
+          dashboardPhaseMap.value = tlRes || {}
         } catch { /* ignore */}
       }
     }

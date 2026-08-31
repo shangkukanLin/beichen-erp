@@ -40,7 +40,7 @@ public class DeliveryController {
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
-            @RequestParam String deliveryType,
+            @RequestParam(required = false) String deliveryType,
             @RequestParam(required = false) Long factoryId,
             @RequestParam(required = false) String code,
             @RequestParam(defaultValue = "1") int pageNum,

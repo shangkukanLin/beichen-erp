@@ -139,6 +139,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         for (OutsourceOrderProduct p : products) {
             List<OutsourceOrderMaterial> mats = orderMaterialMapper.selectList(
                 new LambdaQueryWrapper<OutsourceOrderMaterial>().eq(OutsourceOrderMaterial::getProductId, p.getId()));
+            // 工厂包料（包工包料）不纳入我方超损/用料考核
+            mats = mats.stream().filter(m -> !"FACTORY".equals(m.getSupplyType())).collect(java.util.stream.Collectors.toList());
             for (OutsourceOrderMaterial mat : mats) {
                 Long mid = mat.getMaterialId();
                 if (mid == null || !seenMaterials.add(mid)) continue;
@@ -226,10 +228,16 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         item.put("shippedQuantity", shippedTotal);
 
         // 良品退料/不良退料/留存工厂/缺失默认=0（用户可修改）
-        // 物料单价：优先取发往该工厂其他出入库入库的填写价；无则按物料订单先进先出
-        BigDecimal unitPrice = calcOtherIoPrice(factoryWhIds, mat.getMaterialId());
-        if (unitPrice.compareTo(BigDecimal.ZERO) <= 0) {
-            unitPrice = calcFifoPrice(mat.getMaterialId(), null, deliveredQty);
+        // 物料单价：优先取物料信息主数据 price；无则按发料成本（其他出入库填写价 → 物料订单先进先出）
+        BigDecimal unitPrice = BigDecimal.ZERO;
+        OutsourceMaterial matInfo = outsourceMaterialMapper.selectById(mat.getMaterialId());
+        if (matInfo != null && matInfo.getPrice() != null && matInfo.getPrice().compareTo(BigDecimal.ZERO) > 0) {
+            unitPrice = matInfo.getPrice();
+        } else {
+            unitPrice = calcOtherIoPrice(factoryWhIds, mat.getMaterialId());
+            if (unitPrice.compareTo(BigDecimal.ZERO) <= 0) {
+                unitPrice = calcFifoPrice(mat.getMaterialId(), null, deliveredQty);
+            }
         }
         item.put("unitPrice", unitPrice);
 

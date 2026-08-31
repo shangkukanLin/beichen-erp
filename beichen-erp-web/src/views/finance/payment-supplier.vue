@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { getPaymentPage, createPayment, getUnpaidPayables, type FinancePaymentItem } from '@/api/finance'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import { SettlementStatus, SettlementStatusLabel } from '@/api/enums'
+import { SettlementStatus, SettlementStatusLabel, sourceBillTypeLabel, SourceBillDetailRoute } from '@/api/enums'
 
 const route = useRoute(); const router = useRouter()
 const supplierId = Number(route.params.id)
@@ -18,32 +18,22 @@ const accounts = ref<any[]>([])
 
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 
-// 来源单据类型 code -> 中文（finance SourceBillType + 委外 OutsourceSourceBillType）
-const SOURCE_TYPE_LABEL: Record<string, string> = {
-  SALE_OUTBOUND: '销售出库', SALE_ORDER: '销售单', PURCHASE_ORDER: '采购单',
-  PURCHASE_INBOUND: '采购入库', PURCHASE_RETURN: '成品退货单', SALE_RETURN: '销售退货',
-  OUTSOURCE_DELIVERY: '委外加工交货', OUTSOURCE_MATERIAL_DELIVERY: '委外物料收发', OUTSOURCE_RETURN: '委外退料'
-}
-function sourceBillTypeLabel(code?: string) { return code ? (SOURCE_TYPE_LABEL[code] || code) : '' }
 // 结算状态 code -> 中文
 const STATUS_LABEL: Record<string, string> = SettlementStatusLabel
 function statusLabel(code?: string) { return code ? (STATUS_LABEL[code] || code) : '' }
 
-// 来源单据类型 -> 详情路由前缀（用于点击来源单号跳转）
-const SOURCE_DETAIL_ROUTE: Record<string, string> = {
-  PURCHASE_ORDER: '/inventory/purchase/detail',
-  PURCHASE_RETURN: '/inventory/purchase-return/detail',
-  OUTSOURCE_DELIVERY: '/outsource/order/detail',
-  OUTSOURCE_MATERIAL_DELIVERY: '/outsource/delivery/detail',
-  OUTSOURCE_RETURN: '/outsource/return-order/detail',
-  SALE_ORDER: '/sale/order',
-  SALE_OUTBOUND: '/sale/outbound',
-  SALE_RETURN: '/sale/return/detail'
-}
-function goSourceDetail(row: any) {
-  const base = SOURCE_DETAIL_ROUTE[row.sourceBillType]
-  if (!base || row.sourceId == null) return
-  router.push(`${base}/${row.sourceId}`)
+// 来源单据类型 -> 详情路由前缀（用于点击来源单号跳转，公共映射见 @/api/enums）
+async function goSourceDetail(row: any) {
+  const base = SourceBillDetailRoute[row.sourceBillType]
+  if (!base || row.sourceBillNo == null) return
+  let targetId = row.sourceId
+  // 委外加工交货/超损的 sourceId 是交货记录/结单报表ID，需按单号反查加工单ID
+  if (row.sourceBillType === 'OUTSOURCE_DELIVERY' || row.sourceBillType === 'OUTSOURCE_EXCESS_LOSS') {
+    const res: any = await request.get('/outsource/order/page', { params: { code: row.sourceBillNo, pageSize: 1 } })
+    targetId = res?.records?.[0]?.id
+  }
+  if (targetId == null) return
+  router.push(`${base}/${targetId}`)
 }
 
 async function loadAll() {
@@ -117,7 +107,7 @@ onMounted(() => loadAll())
   <div class="p" v-loading="loading">
     <div class="page-header">
       <div>
-        <el-button type="primary" @click="openAddPayment">新增付款</el-button>
+        <el-button type="primary" :icon="'Plus'" @click="openAddPayment">新增付款</el-button>
         <el-button type="danger" plain @click="goSettlement">清算</el-button>
       </div>
     </div>

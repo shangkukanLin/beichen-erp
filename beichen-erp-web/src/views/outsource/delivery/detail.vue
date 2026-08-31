@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, computed } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel } from '@/api/enums'
+import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel, OUTSOURCE_DELIVERY_DIRTY_KEY } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const route = useRoute(); const router = useRouter()
 const loading = ref(true); const saving = ref(false)
 const uploadFile = ref<File | null>(null)
 
-const form = reactive({ id: undefined as any, code: '', deliveryType: DeliveryType.DELIVERY, factoryId: undefined as any, fromWarehouseId: undefined as any, toWarehouseId: undefined as any, supplierDirect: 0, supplierId: undefined as any, logisticsCompany: '', logisticsNo: '', deliveryDate: '', contact: '', phone: '', remark: '', attachUrl: '', status: '' })
+const form = reactive({ id: undefined as any, code: '', deliveryType: DeliveryType.DELIVERY, factoryId: undefined as any, factoryName: '', supplierId: undefined as any, supplierName: '', fromWarehouseId: undefined as any, toWarehouseId: undefined as any, supplierDirect: 0, logisticsCompany: '', logisticsNo: '', deliveryDate: '', contact: '', phone: '', remark: '', attachUrl: '', status: '' })
 const items = ref<any[]>([])
 
 // Odoo 风格：工厂 / 供应商实时查库
@@ -32,7 +33,7 @@ async function loadData() {
   loading.value = true
   const d = await request.get<any,any>(`/outsource/delivery/${route.params.id}`)
   items.value = (await request.get<any,any>(`/outsource/delivery/${route.params.id}/items`) || []).map((i:any)=>({...i, material_id: i.materialId, material_name: i.materialName, bomTypeId: i.bomTypeId}))
-  Object.assign(form, { id:d.id, code:d.code, deliveryType:d.deliveryType, factoryId:d.factoryId, fromWarehouseId:d.fromWarehouseId, toWarehouseId:d.toWarehouseId, supplierDirect:d.supplierDirect||0, supplierId:d.supplierId, logisticsCompany:d.logisticsCompany||'', logisticsNo:d.logisticsNo||'', deliveryDate:d.deliveryDate, contact:d.contact||'', phone:d.phone||'', remark:d.remark||'', attachUrl:d.attachUrl||'', status:d.status })
+  Object.assign(form, { id:d.id, code:d.code, deliveryType:d.deliveryType, factoryId:d.factoryId, factoryName:d.factoryName||'', supplierId:d.supplierId, supplierName:d.supplierName||'', fromWarehouseId:d.fromWarehouseId, toWarehouseId:d.toWarehouseId, supplierDirect:d.supplierDirect||0, logisticsCompany:d.logisticsCompany||'', logisticsNo:d.logisticsNo||'', deliveryDate:d.deliveryDate, contact:d.contact||'', phone:d.phone||'', remark:d.remark||'', attachUrl:d.attachUrl||'', status:d.status })
   if (form.factoryId) await loadOutsourceWarehouses(form.factoryId)
   // 补丁：确保选项列表包含当前值（本地 el-select 用）
   if (form.fromWarehouseId && !inventoryWarehouses.value.some((w:any)=>w.id===form.fromWarehouseId) && d.fromWarehouseName) inventoryWarehouses.value.push({id:form.fromWarehouseId, warehouseName:d.fromWarehouseName})
@@ -42,6 +43,9 @@ async function loadData() {
 
 async function loadOutsourceWarehouses(fid:number){ try{const r=await request.get<any,any>('/warehouse/by-factory/'+fid);outsourceWarehouses.value=r||[]}catch(e: any){ console.warn('加载委外仓库失败', e?.message || e) } }
 async function onFactoryChange(fid:number){ form.fromWarehouseId=undefined;form.toWarehouseId=undefined;await loadOutsourceWarehouses(fid);if(outsourceWarehouses.value.length>0){form.toWarehouseId=outsourceWarehouses.value[0].id} }
+
+// 非草稿（已审核/已作废）只读，仅草稿可编辑
+const readonly = computed(() => form.status !== DocStatus.DRAFT)
 
 function addItem(){ items.value.push({material_id:undefined,material_name:'',bomTypeId:undefined,unit:'',quantity:undefined,qualityType:QualityType.GOOD}) }
 function removeItem(i:number){ items.value.splice(i,1) }
@@ -58,7 +62,7 @@ async function handleSave() {
     if (uploadFile.value) { const fd = new FormData(); fd.append('file', uploadFile.value); const res = await request.post<any,string>('/dev/file/upload', fd); form.attachUrl = res as unknown as string }
     const body = { ...form, items: items.value }
     await request.put(`/outsource/delivery/${form.id}`, body)
-    ElMessage.success('保存成功，库存已同步'); loadData()
+    ElMessage.success('保存成功，库存已同步'); loadData(); sessionStorage.setItem(OUTSOURCE_DELIVERY_DIRTY_KEY, '1')
   } finally { saving.value = false }
 }
 
@@ -72,28 +76,28 @@ async function handleDeleteAttach() {
   try {
     await ElMessageBox.confirm('确定删除附件吗？删除后将无法恢复。', '删除附件', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
     await request.delete(`/outsource/delivery/${form.id}/attach`)
-    ElMessage.success('附件已删除')
+    ElMessage.success('附件已删除'); sessionStorage.setItem(OUTSOURCE_DELIVERY_DIRTY_KEY, '1')
     await loadData()
   } catch (e: any) { /* 取消 */ }
 }
 
-onMounted(()=>{ loadOptions(); loadData() })
+// 字典类只需加载一次
+onMounted(()=>{ loadOptions() })
+// 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
+onActivated(()=>{ loadData() })
 </script>
 
 <template>
   <div class="detail-page">
-    <div class="page-header">
-      <el-tag :type="form.status==='已确认'?'success':'info'" size="small">{{ form.status }}</el-tag>
-    </div>
-
     <el-card shadow="never" v-loading="loading">
-      <el-form :model="form" label-width="90px" size="small">
+      <el-form :model="form" label-width="90px" size="small" :disabled="readonly">
         <el-row :gutter="12">
+          <el-col :span="8"><el-form-item label="状态"><el-tag :type="DocStatusTag[form.status] || 'info'">{{ DocStatusLabel[form.status] || form.status }}</el-tag></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="类型"><el-select v-model="form.deliveryType" style="width:100%"><el-option :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :value="DeliveryType.DELIVERY"/><el-option :label="DeliveryTypeLabel[DeliveryType.RECEIVE]" :value="DeliveryType.RECEIVE"/><el-option :label="DeliveryTypeLabel[DeliveryType.RETURN]" :value="DeliveryType.RETURN"/></el-select></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="收货工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" style="width:100%" placeholder="选择收货工厂" @pick="(opts:any[])=>onFactoryChange(form.factoryId, opts)" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="收货工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" :preset="{ id: form.factoryId, name: form.factoryName }" :disabled="readonly" style="width:100%" placeholder="选择收货工厂" @pick="()=>onFactoryChange(form.factoryId)" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
           <el-col :span="8" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item label="供应商直发"><el-switch v-model="form.supplierDirect" :active-value="1" :inactive-value="0" /></el-form-item></el-col>
-          <el-col :span="8" v-if="form.deliveryType===DeliveryType.DELIVERY && form.supplierDirect"><el-form-item label="供应商"><RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" style="width:100%" placeholder="选择供应商" /></el-form-item></el-col>
+          <el-col :span="8" v-if="form.deliveryType===DeliveryType.DELIVERY && form.supplierDirect"><el-form-item label="供应商"><RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" :preset="{ id: form.supplierId, name: form.supplierName }" :disabled="readonly" style="width:100%" placeholder="选择供应商" /></el-form-item></el-col>
           <el-col :span="8" v-if="form.deliveryType!==DeliveryType.DELIVERY || !form.supplierDirect"><el-form-item label="来源仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in inventoryWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
           <el-col :span="8" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%" disabled><el-option v-for="w in outsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item></el-col>
@@ -106,42 +110,41 @@ onMounted(()=>{ loadOptions(); loadData() })
     <!-- 物料明细 -->
     <el-card shadow="never" style="margin-top:12px">
       <template #header><span style="font-weight:600">物料明细</span></template>
-      <el-button type="primary" size="small" @click="addItem" style="margin-bottom:8px">+ 添加物料</el-button>
+      <el-button type="primary" size="small" :disabled="readonly" @click="addItem" style="margin-bottom:8px">+ 添加物料</el-button>
       <el-table :data="items" border size="small">
-        <el-table-column label="物料类型" width="110"><template #default="{row,$index}"><el-select v-model="row.bomTypeId" filterable style="width:100%" clearable @change="onTypeChange($index)"><el-option v-for="t in uniqueTypes" :key="t" :label="typeName(t)" :value="t" /></el-select></template></el-table-column>
-        <el-table-column label="物料名称" min-width="130"><template #default="{row,$index}"><el-select v-model="row.material_id" filterable style="width:100%" :disabled="!row.bomTypeId" @change="(v:any)=>onMatSelect($index,v)"><el-option v-for="m in materialsByType(row.bomTypeId)" :key="m.id" :label="m.materialName" :value="m.id" /></el-select></template></el-table-column>
+        <el-table-column label="物料类型" width="110"><template #default="{row,$index}"><el-select v-model="row.bomTypeId" filterable style="width:100%" clearable :disabled="readonly" @change="onTypeChange($index)"><el-option v-for="t in uniqueTypes" :key="t" :label="typeName(t)" :value="t" /></el-select></template></el-table-column>
+        <el-table-column label="物料名称" min-width="130"><template #default="{row,$index}"><el-select v-model="row.material_id" filterable style="width:100%" :disabled="readonly || !row.bomTypeId" @change="(v:any)=>onMatSelect($index,v)"><el-option v-for="m in materialsByType(row.bomTypeId)" :key="m.id" :label="m.materialName" :value="m.id" /></el-select></template></el-table-column>
         <el-table-column label="单位" width="60"><template #default="{row}">{{row.unit}}</template></el-table-column>
-        <el-table-column label="单价" width="90"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" /></template></el-table-column>
-        <el-table-column label="数量" width="100"><template #default="{row}"><el-input v-model="row.quantity" size="small" /></template></el-table-column>
-        <el-table-column label="质量" width="90" align="center"><template #default="{row}"><el-select v-model="row.qualityType" size="small" style="width:100%"><el-option :label="QualityTypeLabel[QualityType.GOOD]" :value="QualityType.GOOD" /><el-option :label="QualityTypeLabel[QualityType.DEFECT]" :value="QualityType.DEFECT" /></el-select></template></el-table-column>
-        <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>
+        <el-table-column label="单价" width="90"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" :disabled="readonly" /></template></el-table-column>
+        <el-table-column label="数量" width="100"><template #default="{row}"><el-input v-model="row.quantity" size="small" :disabled="readonly" /></template></el-table-column>
+        <el-table-column label="质量" width="90" align="center"><template #default="{row}"><el-select v-model="row.qualityType" size="small" style="width:100%" :disabled="readonly"><el-option :label="QualityTypeLabel[QualityType.GOOD]" :value="QualityType.GOOD" /><el-option :label="QualityTypeLabel[QualityType.DEFECT]" :value="QualityType.DEFECT" /></el-select></template></el-table-column>
+        <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link :disabled="readonly" @click="removeItem($index)">删除</el-button></template></el-table-column>
       </el-table>
     </el-card>
 
     <!-- 物流信息 & 附件 -->
     <el-card shadow="never" style="margin-top:12px">
       <template #header><span style="font-weight:600">物流信息 & 附件</span></template>
-      <el-form :model="form" label-width="90px" size="small">
+      <el-form :model="form" label-width="90px" size="small" :disabled="readonly">
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item label="物流公司"><el-input v-model="form.logisticsCompany" placeholder="如顺丰" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="物流单号"><el-input v-model="form.logisticsNo" /></el-form-item></el-col>
         </el-row>
       </el-form>
       <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'var(--app-color-success)':'var(--app-border-color)', background: uploadFile?'#f0f9eb':'#fafafa' }">
-        <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:var(--app-color-success);font-weight:600">📎 {{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
-        <template v-else-if="form.attachUrl"><div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap"><span style="color:var(--app-color-primary)">📎 已有附件</span><el-button type="primary" size="small" @click.stop="openAttach(form.attachUrl)">查看</el-button><el-button type="success" size="small"><a :href="form.attachUrl" download style="color:inherit;text-decoration:none">下载</a></el-button><el-button type="danger" size="small" @click.stop="handleDeleteAttach">删除</el-button><span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">可拖拽新文件替换</span></div></template>
-        <template v-else><p style="color:var(--app-text-secondary);margin:0">拖拽文件到此处，或点击选择</p></template>
-        <input v-if="!form.attachUrl && !uploadFile" type="file" @change="handleFileSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
+        <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:var(--app-color-success);font-weight:600">📎 {{ uploadFile.name }}</span><el-button v-if="!readonly" type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
+        <template v-else-if="form.attachUrl"><div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap"><span style="color:var(--app-color-primary)">📎 已有附件</span><el-button type="primary" size="small" @click.stop="openAttach(form.attachUrl)">查看</el-button><el-button type="success" size="small"><a :href="form.attachUrl" download style="color:inherit;text-decoration:none">下载</a></el-button><el-button v-if="!readonly" type="danger" size="small" @click.stop="handleDeleteAttach">删除</el-button><span v-if="!readonly" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">可拖拽新文件替换</span></div></template>
+        <template v-else-if="!readonly"><p style="color:var(--app-text-secondary);margin:0">拖拽文件到此处，或点击选择</p></template>
+        <input v-if="!readonly && !form.attachUrl && !uploadFile" type="file" @change="handleFileSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
       </div>
     </el-card>
 
-    <div style="margin-top:16px;display:flex;justify-content:flex-end"><el-button type="primary" size="large" :loading="saving" @click="handleSave">保存并同步库存</el-button></div>
+    <div style="margin-top:16px;display:flex;justify-content:flex-end"><el-button type="primary" size="large" :loading="saving" :disabled="readonly" @click="handleSave">保存并同步库存</el-button></div>
   </div>
 </template>
 
 <style scoped>
 .detail-page { display:flex; flex-direction:column; gap:12px; }
-.page-header { display:flex; align-items:center; gap:16px; padding-bottom:8px; }
 
 .drop-zone { position:relative; border:2px dashed var(--app-border-color); border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
 .drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }

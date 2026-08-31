@@ -1,4 +1,4 @@
-<script setup lang="ts">
+ <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -152,16 +152,18 @@ onMounted(() => loadMemoList())
 
 <template>
   <div class="memo-page">
-    <el-card shadow="never">
+    <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true">
         <el-form-item label="标题">
           <el-input v-model="keyword" placeholder="关键字" clearable style="width:180px" @keyup.enter="loadMemoList" />
         </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadMemoList">查询</el-button>
-          <el-button type="success" @click="openAdd">新增备忘录</el-button>
-        </el-form-item>
       </el-form>
+      <div class="toolbar">
+        <el-button type="primary" :icon="'Search'" @click="loadMemoList">查询</el-button>
+        <el-button type="success" :icon="'Plus'" @click="openAdd">新增备忘录</el-button>
+      </div>
+      </div>
     </el-card>
 
     <div class="memo-body">

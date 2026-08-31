@@ -1,35 +1,48 @@
 <template>
   <div class="app-container">
-    <el-card shadow="never">
+    <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query" class="search-form">
-        <el-form-item label="退货单号">
+        <el-form-item label="退单号">
           <el-input v-model="query.code" placeholder="请输入单号" clearable style="width: 180px" />
         </el-form-item>
         <el-form-item label="客户">
           <RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="请选择客户" clearable style="width: 200px" />
         </el-form-item>
         <el-form-item label="状态">
+          <!-- 状态值为字符串编码（DRAFT/AUDITED/CANCELLED），不能再 Number() 转换（会变成 NaN 导致筛选失效） -->
           <el-select v-model="query.status" clearable placeholder="全部" style="width: 130px">
-            <el-option v-for="(label, val) in statusOptions" :key="val" :label="label" :value="Number(val)" />
+            <el-option v-for="(label, val) in statusOptions" :key="val" :label="label" :value="val" />
           </el-select>
         </el-form-item>
-        <el-form-item>
+        </el-form>
+        <div class="toolbar">
           <el-button type="primary" :icon="Search" @click="load(1)">查询</el-button>
           <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
-        </el-form-item>
-      </el-form>
-      <div class="toolbar">
-        <el-button type="primary" :icon="Plus" @click="goAdd">新增退货单</el-button>
+          <el-button type="primary" :icon="Plus" @click="goAdd">新增销售退单</el-button>
+        </div>
       </div>
-      <el-table :data="list" v-loading="loading" border stripe>
-        <el-table-column prop="code" label="退货单号" width="150" />
+      <el-table :data="list" v-loading="loading" border stripe @row-click="goDetail">
+        <el-table-column prop="code" label="退单号" width="150" />
         <el-table-column prop="customerName" label="客户" min-width="140" />
         <el-table-column prop="returnDate" label="退货日期" width="120" />
+        <el-table-column label="关联销售单" width="150">
+          <template #default="{ row }">{{ row.saleOrderCode || '—' }}</template>
+        </el-table-column>
         <el-table-column label="退货概况" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">{{ row.itemsSummary }}</template>
         </el-table-column>
         <el-table-column prop="totalAmount" label="金额" width="120" align="right">
           <template #default="{ row }">{{ formatMoney(row.totalAmount) }}</template>
+        </el-table-column>
+        <el-table-column label="收费" width="150" align="center">
+          <template #default="{ row }">
+            <span v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0">
+              <el-tag type="warning" size="small">收费 {{ formatMoney(row.chargeAmount) }}</el-tag>
+              <span style="margin-left:4px;color:#909399">{{ ExchangeChargeTypeLabel[row.chargeType] || '' }}</span>
+            </span>
+            <span v-else style="color:#c0c4cc">不收费</span>
+          </template>
         </el-table-column>
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
@@ -38,12 +51,12 @@
         </el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="goDetail(row)">详情</el-button>
-            <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="primary" @click="goEdit(row)">编辑</el-button>
-            <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="success" @click="doAudit(row)">审核</el-button>
-            <el-button v-if="row.status === SaleReturnStatus.AUDITED" link type="warning" @click="doUnAudit(row)">反审核</el-button>
-            <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="danger" @click="doCancel(row)">作废</el-button>
-            <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="danger" @click="doDelete(row)">删除</el-button>
+            <el-button link type="primary" @click.stop="goDetail(row)">详情</el-button>
+            <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="primary" @click.stop="goEdit(row)">编辑</el-button>
+            <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="success" @click.stop="doAudit(row)">审核</el-button>
+            <el-button v-if="row.status === SaleReturnStatus.AUDITED" link type="warning" @click.stop="doUnAudit(row)">反审核</el-button>
+            <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="danger" @click.stop="doCancel(row)">作废</el-button>
+            <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="danger" @click.stop="doDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -61,7 +74,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onActivated, reactive, ref } from 'vue'
+import { SALE_RETURN_DIRTY_KEY, ExchangeChargeTypeLabel } from '@/api/enums'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Plus } from '@element-plus/icons-vue'
@@ -91,17 +105,18 @@ const statusOptions = SaleReturnStatusLabel
 const query = reactive({
   code: '',
   customerId: undefined as number | undefined,
-  status: undefined as number | undefined,
+  status: '' as string,
   pageNum: 1,
   pageSize: 10,
 })
 
-function statusLabel(s: number) {
-  return SaleReturnStatusLabel[s as 0 | 1 | 2] ?? '未知'
+function statusLabel(s: any) {
+  return SaleReturnStatusLabel[String(s)] ?? '未知'
 }
-function statusTagType(s: number) {
-  if (s === SaleReturnStatus.AUDITED) return 'success'
-  if (s === SaleReturnStatus.CANCELLED) return 'info'
+/** 状态为字符串编码（DRAFT/AUDITED/CANCELLED），与后端 status 字段(varchar)一致 */
+function statusTagType(s: any) {
+  if (String(s) === SaleReturnStatus.AUDITED) return 'success'
+  if (String(s) === SaleReturnStatus.CANCELLED) return 'info'
   return 'warning'
 }
 function formatMoney(v: any) {
@@ -116,7 +131,7 @@ async function load(p?: number) {
     const res = await getSaleReturnPage({
       code: query.code || undefined,
       customerId: query.customerId,
-      status: query.status,
+      status: query.status || undefined,
       pageNum: query.pageNum,
       pageSize: query.pageSize,
     })
@@ -130,7 +145,7 @@ async function load(p?: number) {
 function resetQuery() {
   query.code = ''
   query.customerId = undefined
-  query.status = undefined
+  query.status = ''
   load(1)
 }
 
@@ -145,7 +160,7 @@ function goDetail(row: any) {
 }
 
 function doAudit(row: any) {
-  ElMessageBox.confirm(`确认审核退货单 ${row.code}？审核后客户退回的不良品将入库增加库存。`, '提示', {
+  ElMessageBox.confirm(`确认审核销售退单 ${row.code}？审核后客户退回的待分类品将入库售后仓增加库存。`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',
@@ -159,7 +174,7 @@ function doAudit(row: any) {
 }
 
 function doUnAudit(row: any) {
-  ElMessageBox.confirm(`确认反审核退货单 ${row.code}？将扣减已入库的不良品库存。`, '提示', {
+  ElMessageBox.confirm(`确认反审核销售退单 ${row.code}？将扣减已入库的待分类品库存。`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',
@@ -173,7 +188,7 @@ function doUnAudit(row: any) {
 }
 
 function doCancel(row: any) {
-  ElMessageBox.confirm(`确认作废退货单 ${row.code}？`, '提示', {
+  ElMessageBox.confirm(`确认作废销售退单 ${row.code}？`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',
@@ -187,7 +202,7 @@ function doCancel(row: any) {
 }
 
 function doDelete(row: any) {
-  ElMessageBox.confirm(`确认删除退货单 ${row.code}？`, '提示', {
+  ElMessageBox.confirm(`确认删除销售退单 ${row.code}？`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',
@@ -200,6 +215,13 @@ function doDelete(row: any) {
     .catch(() => {})
 }
 
+onActivated(() => {
+  // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+  if (sessionStorage.getItem(SALE_RETURN_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(SALE_RETURN_DIRTY_KEY)
+    load()
+  }
+})
 onMounted(() => {
   loadCustomers()
   load()

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { IoType, IoTypeLabel, WarehouseCategory } from '@/api/enums'
+import { IoType, IoTypeLabel, WarehouseCategory, INVENTORY_OTHER_IO_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
@@ -43,18 +43,30 @@ async function handleCancel(row: any) {
 function handleQuery() { pagination.pageNum=1; loadData() }
 
 function getWhName(id: number) { return warehouseOptions.value.find((w:any)=>w.id===id)?.warehouseName || id }
+onActivated(() => {
+  // 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+  if (sessionStorage.getItem(INVENTORY_OTHER_IO_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(INVENTORY_OTHER_IO_DIRTY_KEY)
+    loadData()
+  }
+})
 onMounted(()=>{ loadData() })
 
 </script>
 
 <template>
   <div style="display:flex;flex-direction:column;gap:12px">
-    <el-card shadow="never">
+    <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query">
         <el-form-item label="仓库"><RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" clearable style="width:180px" placeholder="全部" /></el-form-item>
         <el-form-item label="类型"><el-select v-model="query.ioType" clearable style="width:120px"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item>
-        <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button type="success" @click="handleAdd">新增</el-button></el-form-item>
-      </el-form>
+        </el-form>
+        <div class="toolbar">
+          <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
+          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+        </div>
+      </div>
     </el-card>
     <el-card shadow="never">
       <el-table :data="list" border stripe v-loading="loading">

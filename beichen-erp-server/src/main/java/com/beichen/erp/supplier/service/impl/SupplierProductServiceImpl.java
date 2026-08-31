@@ -82,7 +82,7 @@ public class SupplierProductServiceImpl extends ServiceImpl<SupplierProductMappe
         if (!toDelete.isEmpty()) this.removeByIds(toDelete);
     }
 
-    /** 通过 productId 批量填充产品名称/规格/单位 */
+    /** 通过 productId 批量填充产品名称/SKU/规格/单位 */
     private void fillProductInfo(List<SupplierProduct> list) {
         List<Long> productIds = list.stream().map(SupplierProduct::getProductId)
                 .filter(id -> id != null).distinct().collect(Collectors.toList());
@@ -95,6 +95,7 @@ public class SupplierProductServiceImpl extends ServiceImpl<SupplierProductMappe
                 Product p = productMap.get(sp.getProductId());
                 if (p != null) {
                     sp.setProductName(p.getName());
+                    sp.setSku(p.getSku() != null ? p.getSku() : "");
                     sp.setSpec(p.getSpec());
                     sp.setUnit(p.getUnit());
                 }

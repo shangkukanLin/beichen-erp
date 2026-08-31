@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY } from '@/api/enums'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,20 +18,22 @@ async function loadData() {
 
 async function handleAudit() {
   try { await ElMessageBox.confirm('确认审核该退货单？', '确认审核', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-return/${id}/audit`); ElMessage.success('审核成功'); loadData() } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
+  try { await request.put(`/outsource/material-return/${id}/audit`); ElMessage.success('审核成功'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 
 async function handleUnAudit() {
   try { await ElMessageBox.confirm('确认反审核？将物料回源仓并冲销应付', '确认反审核', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-return/${id}/un-audit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
+  try { await request.put(`/outsource/material-return/${id}/un-audit`); ElMessage.success('已反审核'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 
 async function handleCancel() {
   try { await ElMessageBox.confirm('确认作废该退货单？', '确认作废', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-return/${id}/cancel`); ElMessage.success('已作废'); loadData() } catch (e: any) { ElMessage.error(e?.message || '失败') }
+  try { await request.put(`/outsource/material-return/${id}/cancel`); ElMessage.success('已作废'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
-onMounted(loadData)
+// 业务数据放在 onActivated 加载：layout 用 keep-alive 缓存页面，再次进入详情页会复用组件、
+// onMounted 不再触发，只靠 onMounted 会停留在上次缓存的状态
+onActivated(loadData)
 </script>
 
 <template>

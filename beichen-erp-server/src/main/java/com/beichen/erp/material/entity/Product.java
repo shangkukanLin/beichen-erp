@@ -15,6 +15,11 @@ public class Product {
     private Long id;
     @NotBlank(message = "产品名称不能为空")
     private String name;
+    /**
+     * SKU 编码（产品级唯一，公司内不重复）。
+     * 新增时留空则由后端按最大流水自动生成（SKU-000001），也可手工填写（需唯一）。
+     */
+    private String sku;
     private Long brandId;
     private String category;
     private String spec;

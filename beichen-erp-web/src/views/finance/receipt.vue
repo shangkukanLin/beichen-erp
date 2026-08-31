@@ -96,13 +96,21 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
 </script>
 <template>
   <div class="p">
-    <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
+    <el-card shadow="never" class="query-card">
+      <div class="query-bar">
+      <el-form :inline="true" :model="query" class="query-form">
       <el-form-item label="客户"><RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="全部" style="width:160px" @change="(v: any) => { if (v === ADD_MARKER) { query.customerId = ''; router.push('/inventory/customer'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
       <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="o in statusOpts" :key="o.v" :label="o.l" :value="o.v"/></el-select></el-form-item>
-      <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button><el-button type="success" @click="handleAdd">新增收款</el-button></el-form-item>
-    </el-form></el-card>
+      </el-form>
+      <div class="toolbar">
+        <el-button type="primary" :icon="'Search'" @click="query_">查询</el-button>
+        <el-button :icon="'Refresh'" @click="reset_">重置</el-button>
+        <el-button type="success" :icon="'Plus'" @click="handleAdd">新增收款</el-button>
+      </div>
+      </div>
+    </el-card>
     <el-card shadow="never">
-      <el-table v-loading="loading" :data="data" border stripe>
+      <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
         <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="code" label="单号" min-width="150"/>
         <el-table-column label="客户" min-width="140"><template #default="{row}">{{ cName(row.customerId) }}</template></el-table-column>
@@ -111,7 +119,7 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
         <el-table-column prop="amount" label="金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="250" align="center" fixed="right">
-          <template #default="{row}"><el-button type="primary" link @click="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button></template>
+          <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button></template>
         </el-table-column>
       </el-table>
       <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>

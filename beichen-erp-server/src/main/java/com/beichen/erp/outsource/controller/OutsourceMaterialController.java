@@ -37,13 +37,11 @@ public class OutsourceMaterialController {
             @RequestParam(defaultValue = "10") Integer pageSize,
             @RequestParam(required = false) String materialName,
             @RequestParam(required = false) String projectId,
-            @RequestParam(required = false) Long bomTypeId,
-            @RequestParam(required = false) Long warehouseId) {
+            @RequestParam(required = false) Long bomTypeId) {
         LambdaQueryWrapper<OutsourceMaterial> w = new LambdaQueryWrapper<OutsourceMaterial>()
                 .like(materialName != null && !materialName.isBlank(), OutsourceMaterial::getMaterialName, materialName)
                 .like(projectId != null && !projectId.isBlank(), OutsourceMaterial::getProjectIds, projectId)
                 .eq(bomTypeId != null, OutsourceMaterial::getBomTypeId, bomTypeId)
-                .eq(warehouseId != null, OutsourceMaterial::getWarehouseId, warehouseId)
                 .orderByDesc(OutsourceMaterial::getId);
         Page<OutsourceMaterial> page = mapper.selectPage(new Page<>(pageNum, pageSize), w);
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, page.getTotal());
@@ -51,7 +49,6 @@ public class OutsourceMaterialController {
             Map<String, Object> map = new HashMap<>();
             map.put("id", m.getId());
             map.put("projectIds", m.getProjectIds());
-            map.put("warehouseId", m.getWarehouseId());
             map.put("projectName", idsToNames(m.getProjectIds(), projectMapper));
             map.put("materialName", m.getMaterialName());
             map.put("bomTypeId", m.getBomTypeId());
@@ -62,6 +59,7 @@ public class OutsourceMaterialController {
             map.put("unit", m.getUnit());
             map.put("status", m.getStatus());
             map.put("remark", m.getRemark());
+            map.put("price", m.getPrice());
             return map;
         }).toList());
         return R.ok(result);
@@ -135,7 +133,6 @@ public class OutsourceMaterialController {
 
     private void fill(OutsourceMaterial m, Map<String, Object> body) {
         m.setProjectIds(body.get("projectIds") != null ? body.get("projectIds").toString() : null);
-        if (body.get("warehouseId") != null) m.setWarehouseId(Long.valueOf(body.get("warehouseId").toString()));
         m.setMaterialName((String) body.get("materialName"));
         // 仅存储 BOM 类型ID，类型名称在展示时关联 dev_bom_type 查名
         if (body.get("bomTypeId") != null) {
@@ -146,6 +143,7 @@ public class OutsourceMaterialController {
         m.setUnit(body.get("unit") != null ? body.get("unit").toString() : "PCS");
         m.setStatus(body.get("status") != null ? Integer.valueOf(body.get("status").toString()) : 1);
         m.setRemark((String) body.get("remark"));
+        m.setPrice(body.get("price") != null ? new BigDecimal(body.get("price").toString()) : null);
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) m.setCompanyId(cid);
     }

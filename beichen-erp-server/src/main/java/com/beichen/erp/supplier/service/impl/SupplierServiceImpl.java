@@ -66,6 +66,11 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
             w.exists("SELECT 1 FROM supplier_type_ref r WHERE r.supplier_id = supplier.id AND r.type_code = {0}",
                     query.getSupplierType());
         }
+        // 排除指定类型（如供应商列表"全部"排除成品商）
+        if (StringUtils.hasText(query.getExcludeSupplierType())) {
+            w.notExists("SELECT 1 FROM supplier_type_ref r2 WHERE r2.supplier_id = supplier.id AND r2.type_code = {0}",
+                    query.getExcludeSupplierType());
+        }
         w.orderByDesc(Supplier::getCreateTime);
         Page<Supplier> page = new Page<>(query.getPageNum(), query.getPageSize());
         page(page, w);
@@ -145,21 +150,8 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long create(SupplierDTO dto) {
-        // 校验同名（同公司内）
-        Long cid = CompanyContext.get();
-        LambdaQueryWrapper<Supplier> existW = Wrappers.lambdaQuery();
-        existW.eq(Supplier::getName, dto.getName());
-        if (cid != null) {
-            existW.eq(Supplier::getCompanyId, cid);
-        }
-        Supplier exist = getOne(existW);
-        if (exist != null) {
-            // 同名供应商：仅追加类型，返回已存在的ID
-            saveTypeRefs(exist.getId(), dto.getTypeCodes());
-            dto.setId(exist.getId());
-            return exist.getId();
-        }
-
+        // 同名不再自动合并（2026-08-31）：供应商/供货商是两类往来单位，允许重名各自独立建档；
+        // 重名确认由前端在提交前完成（查询同名并弹窗让用户确认）
         String primaryType = dto.getTypeCodes().get(0);
         Supplier supplier = new Supplier();
         BeanUtils.copyProperties(dto, supplier, "typeCodes", "code");
@@ -268,8 +260,22 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         exist.setRemark(dto.getRemark());
         updateById(exist);
 
-        // 类型编码：差量更新（新增缺失的，其余保留）
-        saveTypeRefs(exist.getId(), dto.getTypeCodes());
+        // 类型编码：全量同步（删除旧的重新插入，保证取消勾选生效）
+        saveTypeRefsFull(exist.getId(), dto.getTypeCodes());
+    }
+
+    /** 全量同步类型引用（先删后插，编辑保存时取消勾选即生效） */
+    private void saveTypeRefsFull(Long supplierId, List<String> typeCodes) {
+        supplierTypeRefMapper.delete(Wrappers.<SupplierTypeRef>lambdaQuery().eq(SupplierTypeRef::getSupplierId, supplierId));
+        if (typeCodes != null) {
+            for (String code : typeCodes) {
+                if (code == null || code.isBlank()) continue;
+                SupplierTypeRef ref = new SupplierTypeRef();
+                ref.setSupplierId(supplierId);
+                ref.setTypeCode(code);
+                supplierTypeRefMapper.insert(ref);
+            }
+        }
     }
 
     @Override

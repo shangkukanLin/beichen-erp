@@ -1,13 +1,15 @@
 <script setup lang="ts">
 defineOptions({ name: 'SupplierDetail' })
-import { reactive, ref, computed, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { productLabel } from '@/api/product'
 import { getProjectBom } from '@/api/system'
 import {
   OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag,
-  MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag
+  MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag,
+  SUPPLIER_DIRTY_KEY
 } from '@/api/enums'
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
@@ -16,6 +18,11 @@ const saving = ref(false)
 const activeTab = ref('info')
 
 import { TYPE_OPTIONS, TYPE_MAP } from '@/constants/supplier'
+// 详情类型按来源区分：供应商(非product) / 供货商(仅product)
+const isVendor = route.query.mode === 'vendor'
+const TYPE_OPTIONS_CUSTOM = isVendor
+  ? [{ name: 'product', label: TYPE_MAP.product }]
+  : TYPE_OPTIONS.filter(t => t.name !== 'product')
 
 const form = reactive({
   id: undefined as any,
@@ -61,7 +68,7 @@ async function saveMaterials() {
   try {
     const body = materials.value.map((m: any) => ({ materialId: m.materialId, unitPrice: m.unitPrice, remark: m.remark }))
     await request.put(`/supplier/${id}/materials`, body)
-    ElMessage.success('供应物料已保存')
+    ElMessage.success('供应物料已保存'); sessionStorage.setItem(SUPPLIER_DIRTY_KEY, '1')
     loadMaterials()
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) }
 }
@@ -70,7 +77,8 @@ const hasFactory = ref(false)
 
 function formatTypes(types: string[]): string {
   if (!types || types.length === 0) return ''
-  return types.map(t => TYPE_MAP[t] || t).join(' + ')
+  const list = isVendor ? types.filter(t => t === 'product') : types.filter(t => t !== 'product')
+  return list.map(t => TYPE_MAP[t] || t).join(' + ')
 }
 
 // 仓库/订单/缺料
@@ -161,7 +169,7 @@ async function handleSave() {
   try {
     const body: any = { ...form, typeCodes: form.checkedTypes }
     await request.put('/supplier', body)
-    ElMessage.success('保存成功')
+    ElMessage.success('保存成功'); sessionStorage.setItem(SUPPLIER_DIRTY_KEY, '1')
     loadData()
   } finally { saving.value = false }
 }
@@ -172,7 +180,7 @@ function removeProduct(i:number) { products.value.splice(i,1) }
 async function saveProducts() {
   try {
     await request.put(`/supplier/${id}/products`, products.value)
-    ElMessage.success('产品列表已保存')
+    ElMessage.success('产品列表已保存'); sessionStorage.setItem(SUPPLIER_DIRTY_KEY, '1')
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) }
 }
 
@@ -259,7 +267,9 @@ async function markBomFlags() {
   }
 }
 
-onMounted(loadData)
+// 业务数据放在 onActivated 加载：layout 用 keep-alive 缓存页面，再次进入详情页会复用组件、
+// onMounted 不再触发，只靠 onMounted 会停留在上次缓存的状态
+onActivated(loadData)
 </script>
 
 <template>
@@ -284,7 +294,7 @@ onMounted(loadData)
               <el-col :span="24">
                 <el-form-item label="类型" required>
                   <el-checkbox-group v-model="form.checkedTypes">
-                    <el-checkbox v-for="t in TYPE_OPTIONS" :key="t.name" :label="t.name" :value="t.name">{{ t.label }}</el-checkbox>
+                    <el-checkbox v-for="t in TYPE_OPTIONS_CUSTOM" :key="t.name" :label="t.name" :value="t.name">{{ t.label }}</el-checkbox>
                   </el-checkbox-group>
                 </el-form-item>
               </el-col>
@@ -317,8 +327,8 @@ onMounted(loadData)
             <el-table-column label="产品" min-width="160">
               <template #default="{row}">
                 <span v-if="row.productName">{{ row.productName }}</span>
-                <el-select v-else v-model="row.productId" placeholder="搜索产品" filterable remote :remote-method="searchProducts" size="small" style="width:100%">
-                  <el-option v-for="p in prodOptions" :key="p.id" :label="p.name" :value="p.id" />
+                <el-select v-else v-model="row.productId" placeholder="搜索产品（可输SKU）" filterable remote :remote-method="searchProducts" size="small" style="width:100%">
+                  <el-option v-for="p in prodOptions" :key="p.id" :label="productLabel(p)" :value="p.id" />
                 </el-select>
               </template>
             </el-table-column>

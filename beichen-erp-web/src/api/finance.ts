@@ -26,6 +26,21 @@ export function getUnpaidPayables(supplierId: number) { return request.get<Finan
 
 export function getCashflowPage(params: any) { return request.get<PageResult<FinanceCashflow>>('/finance/cashflow/page', { params }) }
 
+export interface FinanceExpense { id?: number; expenseNo?: string; expenseType?: string; amount?: number; expenseDate?: string; accountId?: number; accountName?: string; status?: string; remark?: string; createTime?: string }
+export function getExpensePage(params?: any) { return request.get<PageResult<FinanceExpense>>('/finance/expense/page', { params }) }
+export function createExpense(data: any) { return request.post<void>('/finance/expense', data) }
+export function updateExpense(data: any) { return request.put<void>('/finance/expense', data) }
+export function auditExpense(id: number) { return request.post<void>(`/finance/expense/${id}/audit`) }
+export function unAuditExpense(id: number) { return request.post<void>(`/finance/expense/${id}/unAudit`) }
+export function cancelExpense(id: number) { return request.post<void>(`/finance/expense/${id}/cancel`) }
+
+// 发票管理（税务口径：销项/进项发票登记，登记即生效，作废仅标记）
+export interface FinanceInvoice { id?: number; invoiceNo?: string; direction?: string; invoiceKind?: string; invoiceDate?: string; partnerName?: string; amount?: number; taxRate?: number; taxAmount?: number; totalAmount?: number; sourceBillCode?: string; remark?: string; status?: string; createTime?: string }
+export function getInvoicePage(params?: any) { return request.get<PageResult<FinanceInvoice>>('/finance/invoice/page', { params }) }
+export function createInvoice(data: any) { return request.post<void>('/finance/invoice', data) }
+export function updateInvoice(data: any) { return request.put<void>('/finance/invoice', data) }
+export function cancelInvoice(id: number) { return request.post<void>(`/finance/invoice/${id}/cancel`) }
+
 export function getReceiptPage(params: any) { return request.get<PageResult<FinanceReceipt>>('/finance/receipt/page', { params }) }
 export function getReceiptItems(id: number) { return request.get<FinanceReceiptItem[]>(`/finance/receipt/${id}/items`) }
 export function createReceipt(data: any) { return request.post<void>('/finance/receipt', data) }

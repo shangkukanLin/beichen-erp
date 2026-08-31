@@ -48,11 +48,16 @@ onMounted(refresh)
 <template>
   <div class="delivery-page">
     <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query">
         <el-form-item label="单号"><el-input v-model="query.code" placeholder="收发单号" clearable @keyup.enter="handleQuery" /></el-form-item>
         <el-form-item label="加工厂"><RemoteSelect v-model="query.factoryId" :fetch="fetchFactories" placeholder="全部" clearable style="width:180px" /></el-form-item>
-        <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button @click="handleReset">重置</el-button></el-form-item>
       </el-form>
+      <div class="toolbar">
+        <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
+        <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
+      </div>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="table-card">

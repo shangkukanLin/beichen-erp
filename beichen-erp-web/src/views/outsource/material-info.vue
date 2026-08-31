@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
@@ -16,7 +16,6 @@ const MATERIAL_TYPES = ref<any[]>([])
 
 // Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
 const fetchProjects = (kw: string) => request.get('/dev/project/page', { params: { pageSize: 500, name: kw } })
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
 const fetchBomTypes = (kw: string) => request.get('/dev/bom-type/enabled')
 const selectedProjects = ref<any[]>([])
@@ -62,7 +61,7 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.materialName = ''; query.projectId = undefined; pagination.pageNum = 1; loadData() }
 
 const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoading = ref(false)
-const defForm = () => ({ id: undefined as any, projectIds: '', projectIdArr: [] as number[], warehouseId: undefined as any, materialName: '', bomTypeId: undefined as any, supplierIdArr: [] as number[], unit: 'PCS', remark: '' })
+const defForm = () => ({ id: undefined as any, projectIds: '', projectIdArr: [] as number[], materialName: '', bomTypeId: undefined as any, supplierIdArr: [] as number[], unit: 'PCS', price: undefined as any, remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
 // 子物料组成
@@ -88,14 +87,13 @@ async function handleEdit(row: any) {
   Object.assign(form, defForm(), row)
   form.projectIdArr = (row.projectIds || '').split(',').filter(Boolean).map(Number)
   form.supplierIdArr = (row.supplierIds || '').split(',').filter(Boolean).map(Number)
-  form.warehouseId = row.warehouseId || undefined
   isEdit.value = true; dialogTitle.value = '编辑物料'; dialogVisible.value = true
   loadAllMaterials()
   loadComponents(row.id)
   // 编辑时填充已选项名称（用于提交拼装 projectName）
   if (form.projectIdArr.length) {
     const r = await fetchProjects('')
-    selectedProjects.value = (r?.records || []).filter(p => form.projectIdArr.includes(p.id))
+    selectedProjects.value = (r?.records || []).filter((p: any) => form.projectIdArr.includes(p.id))
   }
 }
 
@@ -117,18 +115,13 @@ async function handleSubmit() {
 async function handleDelete(row: any) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await request.delete(`/outsource/material/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
 const router = useRouter()
+const route = useRoute()
 
 // 三个下拉「+ 新增」项：识别到标记后移除占位并跳转到对应列表页
 function onProjectChange(val: any[]) {
   if (val.includes(ADD_MARKER)) {
     form.projectIdArr = val.filter(v => v !== ADD_MARKER)
     router.push('/dev/project')
-  }
-}
-function onWarehouseChange(val: any) {
-  if (val === ADD_MARKER) {
-    form.warehouseId = undefined
-    router.push('/outsource/warehouse')
   }
 }
 function onSupplierChange(val: any[]) {
@@ -139,18 +132,33 @@ function onSupplierChange(val: any[]) {
   }
 }
 
-onMounted(() => { loadOptions(); loadData() })
+// 支持从外部跳转（如研发项目改配信息"+ 新增"）定位到对应 BOM 类型 TAB
+onMounted(async () => {
+  await loadOptions()
+  const q = route.query.bomTypeId
+  if (q != null && q !== '') {
+    const id = Number(q)
+    if (MATERIAL_TYPES.value.some(t => t.id === id)) activeTab.value = id
+  }
+  loadData()
+})
 
 </script>
 
 <template>
   <div class="mat-page">
     <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query">
         <el-form-item label="物料名称"><el-input v-model="query.materialName" placeholder="物料名称" clearable @keyup.enter="handleQuery" /></el-form-item>
         <el-form-item label="所属项目"><RemoteSelect v-model="query.projectId" :fetch="fetchProjects" placeholder="全部" style="width:180px" /></el-form-item>
-        <el-form-item><el-button type="primary" @click="handleQuery">查询</el-button><el-button @click="handleReset">重置</el-button><el-button type="success" @click="handleAdd">新增</el-button></el-form-item>
       </el-form>
+      <div class="toolbar">
+        <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
+        <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
+        <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+      </div>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="table-card">
@@ -168,6 +176,7 @@ onMounted(() => { loadOptions(); loadData() })
           <template #default="{ row }">{{ supplierNames(row.supplierIds) }}</template>
         </el-table-column>
         <el-table-column prop="unit" label="单位" width="70" />
+        <el-table-column prop="price" label="单价" width="90" />
         <el-table-column label="操作" width="130" align="center" fixed="right">
           <template #default="{row}"><el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button><el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button></template>
         </el-table-column>
@@ -180,9 +189,9 @@ onMounted(() => { loadOptions(); loadData() })
         <el-form-item label="所属项目"><RemoteSelect v-model="form.projectIdArr" multiple :fetch="fetchProjects" placeholder="可多选" style="width:100%" @pick="onPickProjects" @change="onProjectChange"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
         <el-form-item label="物料类型"><RemoteSelect v-model="form.bomTypeId" :fetch="fetchBomTypes" :label-key="(t: any) => t.typeName" placeholder="请选择" style="width:100%" /></el-form-item>
         <el-form-item label="物料名称" required><el-input v-model="form.materialName" /></el-form-item>
-        <el-form-item label="委外仓库"><RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(w: any) => (w.factoryName || '') + ' - ' + (w.warehouseName || '')" placeholder="可选" style="width:100%" @change="onWarehouseChange"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
         <el-form-item label="供应商"><RemoteSelect v-model="form.supplierIdArr" multiple :fetch="fetchSuppliers" placeholder="可多选" style="width:100%" @change="onSupplierChange"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
         <el-form-item label="单位"><el-input v-model="form.unit" /></el-form-item>
+        <el-form-item label="单价"><el-input-number v-model="form.price" :precision="2" :min="0" controls-position="right" style="width:100%" placeholder="可选" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
       </el-form>
 

@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
-import { ElMessage, type FormInstance } from 'element-plus'
-import { getCashflowPage, getAccountPage, createAccount, updateAccount, type FinanceCashflow, type FinanceAccount, type PageResult } from '@/api/finance'
+import { getCashflowPage, getAccountPage, type FinanceCashflow, type FinanceAccount } from '@/api/finance'
 
-const tab = ref('cashflow')
-// cashflow
+// 资金流水（资金账户已拆分为独立子菜单 /finance/account，账户下拉仅用于筛选）
 const fquery = reactive({ accountId: undefined as number|undefined, flowType: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
@@ -13,13 +11,16 @@ const data = ref<FinanceCashflow[]>([])
 const flowTypes = [
   { label: '收款', value: 'RECEIPT' },
   { label: '付款', value: 'PAYMENT' },
+  { label: '费用支出', value: 'EXPENSE' },
   { label: '期初', value: 'OPENING' },
   { label: '收款冲正', value: 'RECEIPT_REVERSE' },
   { label: '付款冲正', value: 'PAYMENT_REVERSE' },
+  { label: '费用冲正', value: 'EXPENSE_REVERSE' },
 ]
 const flowTypeLabelMap: Record<string, string> = {
   RECEIPT: '收款', PAYMENT: '付款', OPENING: '期初',
   RECEIPT_REVERSE: '收款冲正', PAYMENT_REVERSE: '付款冲正',
+  EXPENSE: '费用支出', EXPENSE_REVERSE: '费用冲正',
 }
 function flowTypeLabel(code?: string) { return code ? (flowTypeLabelMap[code] ?? code) : '' }
 
@@ -37,67 +38,42 @@ function fq_() { page.pageNum = 1; loadFlow() }
 function fr_() { fquery.accountId = undefined; fquery.flowType = ''; page.pageNum = 1; loadFlow() }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 
-// accounts
+// 账户下拉（仅筛选用）
 const accounts = ref<FinanceAccount[]>([])
-const aDialog = ref(false)
-const aForm = reactive<FinanceAccount>({ accountName: '', accountType: '银行', bankName: '', accountNo: '', openingBalance: 0, status: 1 })
-const aRef = ref<FormInstance>()
 async function loadAccounts() { try { const r = await getAccountPage({pageSize:200}); accounts.value = r?.records || [] } catch {} }
-function addAccount() { Object.assign(aForm, { id: undefined, accountName: '', accountType: '银行', bankName: '', accountNo: '', openingBalance: 0, status: 1 }); aDialog.value = true }
-function editAccount(row: FinanceAccount) { Object.assign(aForm, row); aDialog.value = true }
-async function saveAccount() {
-  try { if (aForm.id) { await updateAccount(aForm); ElMessage.success('修改成功') } else { await createAccount(aForm); ElMessage.success('新增成功') }; aDialog.value = false; loadAccounts() } catch {}
-}
 
 onMounted(() => { loadFlow(); loadAccounts() })
 
 </script>
 <template>
   <div class="p">
-    <el-card shadow="never"><el-tabs v-model="tab">
-      <el-tab-pane label="资金流水" name="cashflow">
-        <el-form :inline="true" :model="fquery" class="qf">
-          <el-form-item label="账户"><el-select v-model="fquery.accountId" placeholder="全部" clearable style="width:150px"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id ?? ''"/></el-select></el-form-item>
-          <el-form-item label="类型"><el-select v-model="fquery.flowType" placeholder="全部" clearable style="width:130px"><el-option v-for="t in flowTypes" :key="t.value" :label="t.label" :value="t.value"/></el-select></el-form-item>
-          <el-form-item><el-button type="primary" @click="fq_">查询</el-button><el-button @click="fr_">重置</el-button></el-form-item>
-        </el-form>
-        <el-table v-loading="loading" :data="data" border stripe>
-          <el-table-column type="index" width="55" align="center"/>
-          <el-table-column prop="flowNo" label="流水号" width="150"/>
-          <el-table-column label="时间" width="170"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
-          <el-table-column prop="accountName" label="账户" min-width="120"/>
-          <el-table-column label="类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.flowType==='RECEIPT'||row.flowType==='OPENING'?'success':'danger'">{{flowTypeLabel(row.flowType)}}</el-tag></template></el-table-column>
-          <el-table-column label="收入" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{fmt(row.income)}}</span></template></el-table-column>
-          <el-table-column label="支出" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{fmt(row.expense)}}</span></template></el-table-column>
-          <el-table-column prop="balance" label="余额" width="130" align="right"><template #default="{row}">{{fmt(row.balance)}}</template></el-table-column>
-          <el-table-column prop="relatedBillNo" label="关联单据" min-width="150"/>
-        </el-table>
-        <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadFlow" @current-change="loadFlow"/></div>
-      </el-tab-pane>
-      <el-tab-pane label="资金账户" name="accounts">
-        <div style="margin-bottom:12px"><el-button type="success" @click="addAccount">新增账户</el-button></div>
-        <el-table :data="accounts" border stripe>
-          <el-table-column type="index" width="55" align="center"/>
-          <el-table-column prop="accountName" label="账户名称" min-width="140"/>
-          <el-table-column label="类型" width="80" align="center"><template #default="{row}"><el-tag>{{row.accountType}}</el-tag></template></el-table-column>
-          <el-table-column prop="bankName" label="开户行" min-width="120"/>
-          <el-table-column prop="accountNo" label="账号" min-width="150"/>
-          <el-table-column prop="balance" label="余额" width="130" align="right"><template #default="{row}">{{fmt(row.balance)}}</template></el-table-column>
-          <el-table-column label="操作" width="80" align="center"><template #default="{row}"><el-button type="primary" link @click="editAccount(row)">编辑</el-button></template></el-table-column>
-        </el-table>
-      </el-tab-pane>
-    </el-tabs></el-card>
-
-    <el-dialog v-model="aDialog" title="资金账户" width="500px">
-      <el-form ref="aRef" :model="aForm" label-width="80px">
-        <el-form-item label="名称"><el-input v-model="aForm.accountName"/></el-form-item>
-        <el-form-item label="类型"><el-select v-model="aForm.accountType" style="width:100%"><el-option label="现金" value="现金"/><el-option label="银行" value="银行"/></el-select></el-form-item>
-        <el-form-item label="开户行"><el-input v-model="aForm.bankName"/></el-form-item>
-        <el-form-item label="账号"><el-input v-model="aForm.accountNo"/></el-form-item>
-        <el-form-item label="期初余额"><el-input-number v-model="aForm.openingBalance" :min="0" :precision="2" :disabled="!!aForm.id" controls-position="right" style="width:100%"/></el-form-item>
+    <el-card shadow="never" class="query-card">
+      <div class="query-bar">
+      <el-form :inline="true" :model="fquery" class="qf">
+        <el-form-item label="账户"><el-select v-model="fquery.accountId" placeholder="全部" clearable style="width:150px"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id ?? ''"/></el-select></el-form-item>
+        <el-form-item label="类型"><el-select v-model="fquery.flowType" placeholder="全部" clearable style="width:130px"><el-option v-for="t in flowTypes" :key="t.value" :label="t.label" :value="t.value"/></el-select></el-form-item>
       </el-form>
-      <template #footer><el-button @click="aDialog=false">取消</el-button><el-button type="primary" @click="saveAccount">确定</el-button></template>
-    </el-dialog>
+      <div class="toolbar">
+        <el-button type="primary" :icon="'Search'" @click="fq_">查询</el-button>
+        <el-button :icon="'Refresh'" @click="fr_">重置</el-button>
+      </div>
+      </div>
+    </el-card>
+
+    <el-card shadow="never" class="table-card">
+      <el-table v-loading="loading" :data="data" border stripe>
+        <el-table-column type="index" width="55" align="center"/>
+        <el-table-column prop="flowNo" label="流水号" width="150"/>
+        <el-table-column label="时间" width="170"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
+        <el-table-column prop="accountName" label="账户" min-width="120"/>
+        <el-table-column label="类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.flowType==='RECEIPT'||row.flowType==='OPENING'?'success':'danger'">{{flowTypeLabel(row.flowType)}}</el-tag></template></el-table-column>
+        <el-table-column label="收入" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{fmt(row.income)}}</span></template></el-table-column>
+        <el-table-column label="支出" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{fmt(row.expense)}}</span></template></el-table-column>
+        <el-table-column prop="balance" label="余额" width="130" align="right"><template #default="{row}">{{fmt(row.balance)}}</template></el-table-column>
+        <el-table-column prop="relatedBillNo" label="关联单据" min-width="150"/>
+      </el-table>
+      <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadFlow" @current-change="loadFlow"/></div>
+    </el-card>
   </div>
 </template>
 <style scoped>.p{display:flex;flex-direction:column;gap:12px}.qf{display:flex;flex-wrap:wrap}.pg{margin-top:16px;display:flex;justify-content:flex-end}</style>

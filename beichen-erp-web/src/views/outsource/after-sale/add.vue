@@ -11,7 +11,7 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="退回产品" prop="productId">
-              <RemoteSelect v-model="form.productId" :fetch="fetchProducts" placeholder="请选择产品" style="width: 100%"
+              <RemoteSelect v-model="form.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="请选择产品（可输SKU）" style="width: 100%"
                 @pick="onProductPick" />
             </el-form-item>
           </el-col>
@@ -51,10 +51,12 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { OUTSOURCE_AFTER_SALE_DIRTY_KEY } from '@/api/enums'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import { productLabel } from '@/api/product'
 
 interface Opt { id: number; name: string }
 
@@ -99,7 +101,7 @@ async function submit() {
       remark: form.remark,
     }
     await request.post('/outsource/after-sale/return-defect', payload)
-    ElMessage.success('退回成功，已入库不良品')
+    ElMessage.success('退回成功，已入库不良品'); sessionStorage.setItem(OUTSOURCE_AFTER_SALE_DIRTY_KEY, '1')
     router.push('/outsource/after-sale')
   } finally {
     saving.value = false

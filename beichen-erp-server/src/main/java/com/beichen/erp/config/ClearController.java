@@ -1,6 +1,7 @@
 package com.beichen.erp.config;
 
 import com.beichen.erp.common.R;
+import com.beichen.erp.common.DefaultBomTypes;
 import com.beichen.erp.common.DefaultContractTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -106,7 +107,7 @@ public class ClearController {
                 "DELETE FROM dev_bom_type WHERE company_id = " + companyId,
                 "DELETE FROM dev_purchase_item WHERE company_id = " + companyId,
                 "DELETE FROM dev_phase_template WHERE company_id = " + companyId,
-                "DELETE FROM dev_project_timeline WHERE company_id = " + companyId,
+                "DELETE FROM dev_project_phase WHERE company_id = " + companyId,
                 "DELETE FROM dev_project WHERE company_id = " + companyId,
                 // === 基础数据 ===
                 "DELETE FROM supplier_product WHERE company_id = " + companyId,
@@ -118,10 +119,10 @@ public class ClearController {
                 "DELETE FROM brand WHERE company_id = " + companyId,
             };
             for (String s : sqls) { stmt.execute(s); }
-                // 重新初始化BOM类型默认数据
-            String[] defaultTypes = {"玻璃", "驱动IC", "码片IC", "触摸IC", "排线", "背贴", "盖板"};
+                // 重新初始化BOM类型默认数据（统一用 DefaultBomTypes，避免与 DataInitializer 不一致）
+            String[] defaultTypes = DefaultBomTypes.TYPES;
             for (int i = 0; i < defaultTypes.length; i++) {
-                stmt.execute("INSERT INTO dev_bom_type (type_name, sort_order, status, company_id) VALUES ('" + defaultTypes[i] + "', " + (i + 1) + ", 1, " + companyId + ")");
+                stmt.execute("INSERT INTO dev_bom_type (type_name, sort_order, status, is_default, company_id) VALUES ('" + defaultTypes[i] + "', " + (i + 1) + ", 1, 1, " + companyId + ")");
             }
             // 重新初始化阶段模板默认数据
             String[][] phaseDefaults = {

@@ -10,6 +10,7 @@ import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.material.common.ProductQualityType;
+import com.beichen.erp.material.service.ProductService;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.finance.common.SourceBillType;
@@ -69,6 +70,7 @@ public class OutsourceOrderDeliveryServiceImpl
     private final WarehouseStockLogMapper stockLogMapper;
     private final PayableHelper payableHelper;
     private final SupplierMapper supplierMapper;
+    private final ProductService productService;
 
     /** 获取某加工单的所有交货记录 */
     @Override
@@ -100,6 +102,8 @@ public class OutsourceOrderDeliveryServiceImpl
         result.put("remainingQuantity", totalQty.subtract(deliveredQty));
         result.put("deliveryCount", deliveries.size());
 
+        // 统计行回填 SKU（非表字段），前端可直接展示
+        productService.fillSku(products, OutsourceOrderProduct::getProductId, OutsourceOrderProduct::setSku);
         List<Map<String, Object>> productStats = new ArrayList<>();
         for (OutsourceOrderProduct p : products) {
             String pn = p.getProductName() != null ? p.getProductName() : "未命名产品";
@@ -109,6 +113,7 @@ public class OutsourceOrderDeliveryServiceImpl
                     .map(d -> d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             Map<String, Object> ps = new HashMap<>();
+            ps.put("sku", p.getSku() != null ? p.getSku() : "");
             ps.put("productName", pn);
             ps.put("totalQuantity", pQty);
             ps.put("deliveredQuantity", pDelivered);
@@ -131,6 +136,9 @@ public class OutsourceOrderDeliveryServiceImpl
         OutsourceOrder order = orderService.getById(delivery.getOrderId());
         if (order == null) throw new BusinessException("加工单不存在");
         if (!OutsourceOrderStatus.PRODUCING.getCode().equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可录入交货");
+        // 工厂必须有委外仓库，否则交货时无法正确扣减我方物料
+        if (resolveOutsourceWarehouseId(order) == null)
+            throw new BusinessException("工厂无委外仓库，请先在【委外仓库】页面为该工厂创建委外仓库");
         if (delivery.getQuantity() == null || delivery.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
             throw new BusinessException("交货数量必须大于0");
         // 强制四等级校验
@@ -518,6 +526,7 @@ public class OutsourceOrderDeliveryServiceImpl
             for (OutsourceOrderMaterial mat : orderMaterials) {
                 Long materialId = mat.getMaterialId();
                 if (materialId == null) continue; // 无物料ID则跳过（BOM快照已删名称字段，无法按名兜底）
+                if ("FACTORY".equals(mat.getSupplyType())) continue; // 工厂包料（包工包料）不扣我方仓
                 BigDecimal perUnit = mat.getDemandQuantity() != null
                         ? mat.getDemandQuantity().divide(productQty, 6, RoundingMode.HALF_UP)
                         : BigDecimal.ZERO;

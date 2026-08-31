@@ -10,6 +10,7 @@ import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
+import com.beichen.erp.material.service.ProductService;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
@@ -50,6 +51,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     private final SupplierMapper supplierMapper;
     /** 产品主数据Mapper(product表)，与加工单产品明细Mapper(productMapper)区分 */
     private final ProductMapper masterProductMapper;
+    private final ProductService productService;
     private final ProjectMapper projectMapper;
     private final JdbcTemplate jdbcTemplate;
     /** 交货记录服务与本服务互相依赖，使用 @Lazy 字段注入打破循环依赖 */
@@ -75,6 +77,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
         result.setRecords(rawPage.getRecords().stream().map(o -> {
             Map<String, Object> m = new HashMap<>();
             m.put("id", o.getId()); m.put("code", o.getCode()); m.put("status", o.getStatus());
+            m.put("supplyMode", o.getSupplyMode());
             m.put("factoryId", o.getFactoryId());
             m.put("planStartDate", o.getPlanStartDate()); m.put("planEndDate", o.getPlanEndDate());
             m.put("actualStartDate", o.getActualStartDate()); m.put("actualEndDate", o.getActualEndDate());
@@ -89,8 +92,14 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
             List<OutsourceOrderProduct> products = productMapper.selectList(
                     new LambdaQueryWrapper<OutsourceOrderProduct>().eq(OutsourceOrderProduct::getOrderId, o.getId()));
             m.put("productCount", (long) products.size());
+            // 列表汇总展示：回填 SKU 后与名称一起拼串，便于一眼识别具体型号
+            productService.fillSku(products, OutsourceOrderProduct::getProductId, OutsourceOrderProduct::setSku);
             m.put("productNames", products.stream()
                     .map(p -> p.getProductName() != null ? p.getProductName() : "")
+                    .filter(s -> !s.isEmpty())
+                    .collect(java.util.stream.Collectors.joining(" / ")));
+            m.put("productSkus", products.stream()
+                    .map(p -> p.getSku() != null ? p.getSku() : "")
                     .filter(s -> !s.isEmpty())
                     .collect(java.util.stream.Collectors.joining(" / ")));
             return m;
@@ -125,8 +134,11 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
 
     @Override
     public List<OutsourceOrderProduct> getProducts(Long orderId) {
-        return productMapper.selectList(
+        List<OutsourceOrderProduct> items = productMapper.selectList(
                 new LambdaQueryWrapper<OutsourceOrderProduct>().eq(OutsourceOrderProduct::getOrderId, orderId));
+        // 回填 SKU（非表字段），前端免查库即可展示
+        productService.fillSku(items, OutsourceOrderProduct::getProductId, OutsourceOrderProduct::setSku);
+        return items;
     }
 
     @Override
@@ -169,11 +181,21 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
                 }
             }
         }
-        // 更新总金额
+        // 更新总金额与税额
         OutsourceOrder update = new OutsourceOrder();
         update.setId(order.getId());
         update.setTotalAmount(total);
+        update.setTaxAmount(calcTaxAmount(total, order.getTaxIncluded(), order.getTaxRate()));
         orderMapper.updateById(update);
+    }
+
+    /** 税额拆分（单价含税口径）：打开收税时从含税总额中按税率拆出税额 = total × rate/(100+rate) */
+    private BigDecimal calcTaxAmount(BigDecimal total, Integer taxIncluded, BigDecimal taxRate) {
+        if (!Integer.valueOf(1).equals(taxIncluded) || taxRate == null || taxRate.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal rate = taxRate.divide(new BigDecimal("100"), 6, BigDecimal.ROUND_HALF_UP);
+        return total.multiply(rate).divide(BigDecimal.ONE.add(rate), 2, BigDecimal.ROUND_HALF_UP);
     }
 
     @Override
@@ -220,10 +242,11 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
                 }
             }
         }
-        // 更新总金额
+        // 更新总金额与税额
         OutsourceOrder amountUpdate = new OutsourceOrder();
         amountUpdate.setId(order.getId());
         amountUpdate.setTotalAmount(total);
+        amountUpdate.setTaxAmount(calcTaxAmount(total, order.getTaxIncluded(), order.getTaxRate()));
         orderMapper.updateById(amountUpdate);
     }
 

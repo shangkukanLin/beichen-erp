@@ -91,7 +91,7 @@ onMounted(() => loadData())
     </el-tabs>
 
     <el-card shadow="never">
-      <div style="margin-bottom:12px"><el-button type="primary" @click="openAdd">新增模板</el-button></div>
+      <div style="margin-bottom:12px"><el-button type="primary" :icon="'Plus'" @click="openAdd">新增模板</el-button></div>
       <el-table :data="list" border stripe v-loading="loading">
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="templateName" label="模板名称" min-width="200" />

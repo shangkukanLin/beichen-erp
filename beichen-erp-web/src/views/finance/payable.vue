@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
-import { SettlementStatus, SettlementStatusLabel } from '@/api/enums'
+import { SettlementStatus, SettlementStatusLabel, sourceBillTypeLabel } from '@/api/enums'
 import { getPayablePage, type FinancePayable } from '@/api/finance'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
@@ -35,13 +35,6 @@ function query_() { page.pageNum = 1; load() }
 function reset_() { query.supplierId = ''; query.status = ''; query.billNo = ''; page.pageNum = 1; load() }
 function sName(id?: number) { return suppliersOptions.value.find(x => x.id === id)?.name || '' }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
-// 来源单据类型 code -> 中文（finance SourceBillType + 委外 OutsourceSourceBillType）
-const SOURCE_TYPE_LABEL: Record<string, string> = {
-  SALE_OUTBOUND: '销售出库', SALE_ORDER: '销售单', PURCHASE_ORDER: '采购单',
-  PURCHASE_INBOUND: '采购入库', PURCHASE_RETURN: '成品退货单', SALE_RETURN: '销售退货',
-  OUTSOURCE_DELIVERY: '委外加工交货', OUTSOURCE_MATERIAL_DELIVERY: '委外物料收发', OUTSOURCE_RETURN: '委外退料'
-}
-function sourceBillTypeLabel(code?: string) { return code ? (SOURCE_TYPE_LABEL[code] || code) : '' }
 // 结算状态 code -> 中文
 const STATUS_LABEL: Record<string, string> = SettlementStatusLabel
 function statusLabel(code?: string) { return code ? (STATUS_LABEL[code] || code) : '' }
@@ -49,14 +42,21 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
 </script>
 <template>
   <div class="p">
-    <el-card shadow="never"><el-form :inline="true" :model="query" class="qf">
+    <el-card shadow="never" class="query-card">
+      <div class="query-bar">
+      <el-form :inline="true" :model="query" class="query-form">
       <el-form-item label="供应商"><RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" /></el-form-item>
       <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="s in [{l:SettlementStatusLabel[SettlementStatus.UNSETTLED],v:SettlementStatus.UNSETTLED},{l:SettlementStatusLabel[SettlementStatus.PARTIAL],v:SettlementStatus.PARTIAL},{l:SettlementStatusLabel[SettlementStatus.SETTLED],v:SettlementStatus.SETTLED}]" :key="s.v" :label="s.l" :value="s.v"/></el-select></el-form-item>
       <el-form-item label="单号"><el-input v-model="query.billNo" placeholder="单据号" clearable @keyup.enter="query_"/></el-form-item>
-      <el-form-item><el-button type="primary" @click="query_">查询</el-button><el-button @click="reset_">重置</el-button></el-form-item>
-    </el-form></el-card>
+      </el-form>
+      <div class="toolbar">
+        <el-button type="primary" :icon="'Search'" @click="query_">查询</el-button>
+        <el-button :icon="'Refresh'" @click="reset_">重置</el-button>
+      </div>
+      </div>
+    </el-card>
     <el-card shadow="never">
-      <el-table v-loading="loading" :data="data" border stripe>
+      <el-table v-loading="loading" :data="data" border stripe @row-click="(row: any) => { detail = row; detailVisible = true }">
         <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="billNo" label="单据号" min-width="150"/>
         <el-table-column label="供应商" min-width="140"><template #default="{row}">{{ sName(row.supplierId) }}</template></el-table-column>
@@ -66,7 +66,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-table-column prop="unpaidAmount" label="未付" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column prop="dueDate" label="到期日" width="120" align="center"/>
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{statusLabel(row.status)}}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="80" align="center"><template #default="{row}"><el-button type="primary" link @click="detail=row;detailVisible=true">详情</el-button></template></el-table-column>
+        <el-table-column label="操作" width="80" align="center"><template #default="{row}"><el-button type="primary" link @click.stop="detail=row;detailVisible=true">详情</el-button></template></el-table-column>
       </el-table>
       <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="load" @current-change="load"/></div>
     </el-card>

@@ -291,7 +291,7 @@ function bodySection() {
   children.push(bulletItem("研发项目(dev_project)：管理全生命周期（进行中→已关闭/已取消），含项目基本信息、适配机型、屏体参数、关联成品"));
   children.push(bulletItem("BOM物料清单(dev_bom)：按类型（玻璃/驱动IC/码片IC/触摸IC/排线/背贴/盖板）分组，含单套用量、损耗率、版本管理"));
   children.push(bulletItem("BOM类型(dev_bom_type)：独立管理物料分类体系，与物料类型枚举解耦"));
-  children.push(bulletItem("阶段模板(dev_phase_template)：预定义项目阶段（EVT/DVT/PVT），自动生成时间线，支持触发产品状态同步"));
+  children.push(bulletItem("阶段模板(dev_phase_template)：预定义项目阶段（EVT/DVT/PVT），自动生成项目阶段，支持触发产品状态同步"));
   children.push(bulletItem("图纸文档(dev_drawing)：关联项目的设计图纸和技术文档，支持版本控制"));
   children.push(bulletItem("缺陷管理(dev_bug)：记录研发过程中的 Bug，按严重等级分类跟踪（严重/一般/轻微）"));
   children.push(bulletItem("研发物料(dev_purchase_item)：独立管理研发用物料，支持关联项目或独立存档，按仓库类型实时定位"));

@@ -26,7 +26,8 @@ async function loadBrands() {
 
 // 查询参数
 const query = reactive<ProductQueryParams>({
-  keyword: ''
+  keyword: '',
+  brandId: undefined
 })
 
 // Tab 切换
@@ -65,6 +66,7 @@ const formRef = ref<FormInstance>()
 const defaultForm = (): Product => ({
   id: undefined,
   name: '',
+  sku: '',
   brandId: undefined,
   category: '',
   spec: '',
@@ -89,6 +91,7 @@ async function loadData() {
       pageSize: pagination.pageSize
     }
     if (query.keyword) params.keyword = query.keyword
+    if (query.brandId) params.brandId = query.brandId
     if (activeTab.value) params.status = activeTab.value
 
     const res = await getProductPage(params)
@@ -114,6 +117,7 @@ function handleQuery() {
 
 function handleReset() {
   query.keyword = ''
+  query.brandId = undefined
   pagination.pageNum = 1
   loadData()
 }
@@ -220,16 +224,23 @@ onMounted(() => {
   <div class="material-page">
     <!-- 查询栏 -->
     <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
-        <el-form-item label="名称">
-          <el-input v-model="query.keyword" placeholder="请输入产品名称" clearable @keyup.enter="handleQuery" />
+        <el-form-item label="名称/SKU">
+          <el-input v-model="query.keyword" placeholder="产品名称或 SKU" clearable @keyup.enter="handleQuery" />
         </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleQuery">查询</el-button>
-          <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="handleAdd">新增</el-button>
+        <el-form-item label="品牌">
+          <el-select v-model="query.brandId" placeholder="全部品牌" clearable style="width:160px" @change="handleQuery">
+            <el-option v-for="b in brandOptions" :key="b.id" :label="b.brandName" :value="b.id" />
+          </el-select>
         </el-form-item>
-      </el-form>
+        </el-form>
+        <div class="toolbar">
+          <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
+          <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
+          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+        </div>
+      </div>
     </el-card>
 
     <!-- 列表 -->
@@ -242,6 +253,7 @@ onMounted(() => {
 
       <el-table v-loading="tableLoading" :data="tableData" border stripe :row-class-name="rowClass">
         <el-table-column type="index" label="序号" width="60" align="center" />
+        <el-table-column prop="sku" label="SKU" width="140" />
         <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip />
         <el-table-column label="品牌" min-width="120">
           <template #default="{ row }">{{ getBrandName(row.brandId) }}</template>
@@ -283,6 +295,12 @@ onMounted(() => {
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px" :close-on-click-modal="false">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="SKU">
+              <!-- SKU 由系统自动生成且不可修改：新增时提示"保存后自动生成"，编辑时展示已生成的编码 -->
+              <el-input v-model="form.sku" :placeholder="form.id ? '' : '保存后自动生成'" disabled />
+            </el-form-item>
+          </el-col>
           <el-col :span="12">
             <el-form-item label="名称" prop="name">
               <el-input v-model="form.name" placeholder="请输入产品名称" />

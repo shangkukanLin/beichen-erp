@@ -15,6 +15,11 @@ public class OutsourceOrderProduct {
     private Long projectId;
     /** 关联产品主数据ID(product.id)，交货/库存落账用主表ID */
     private Long productId;
+
+    /** SKU（展示用，非表字段；明细接口按 productId 批量回填） */
+    @TableField(exist = false)
+    private String sku;
+
     private String productName;
     private String productSpec;
     private BigDecimal quantity;

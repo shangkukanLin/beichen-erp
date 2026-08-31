@@ -192,24 +192,26 @@ onMounted(() => {
 <template>
   <div class="customer-page">
     <el-card shadow="never" class="query-card">
-      <el-form :inline="true" :model="query" class="query-form">
-        <el-form-item label="编码">
-          <el-input v-model="query.code" placeholder="请输入客户编码" clearable @keyup.enter="handleQuery" />
-        </el-form-item>
-        <el-form-item label="名称">
-          <el-input v-model="query.name" placeholder="请输入客户名称" clearable @keyup.enter="handleQuery" />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="query.status" placeholder="请选择状态" clearable style="width: 120px">
-            <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
+      <div class="query-bar">
+        <el-form :inline="true" :model="query" class="query-form">
+          <el-form-item label="编码">
+            <el-input v-model="query.code" placeholder="请输入客户编码" clearable @keyup.enter="handleQuery" />
+          </el-form-item>
+          <el-form-item label="名称">
+            <el-input v-model="query.name" placeholder="请输入客户名称" clearable @keyup.enter="handleQuery" />
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-select v-model="query.status" placeholder="请选择状态" clearable style="width: 120px">
+              <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
           <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="table-card">
@@ -261,7 +263,8 @@ onMounted(() => {
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="编码" prop="code">
-              <el-input v-model="form.code" placeholder="留空自动生成" />
+              <!-- 唯一编码由系统自动生成（CU-yyyyMMdd-序号），不可修改 -->
+              <el-input v-model="form.code" disabled :placeholder="form.id ? '' : '保存后自动生成'" />
             </el-form-item>
           </el-col>
           <el-col :span="12">

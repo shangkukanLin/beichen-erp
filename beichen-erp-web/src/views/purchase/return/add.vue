@@ -2,9 +2,11 @@
   <div class="purchase-add">
     <el-card shadow="never" style="margin-top:16px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+        <el-alert v-if="form.purchaseOrderCode" type="success" :closable="false" style="margin-bottom:12px"
+          :title="`来源采购单：${form.purchaseOrderCode}（已自动带入采购明细，可修改）`" />
         <el-row :gutter="16">
           <el-col :span="8">
-            <el-form-item label="供应商" prop="supplierId">
+            <el-form-item label="供货商" prop="supplierId">
               <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" />
             </el-form-item>
           </el-col>
@@ -27,15 +29,22 @@
 
         <el-divider content-position="left">退货明细</el-divider>
         <div style="margin-bottom:8px">
-          <el-button type="primary" @click="addItem">添加明细</el-button>
+          <el-button type="primary" :icon="'Plus'" @click="addItem">添加明细</el-button>
+          <el-button type="success" :icon="'Download'" :disabled="!form.purchaseOrderId" @click="loadFromPurchaseOrder()">从采购单带入明细</el-button>
         </div>
         <el-table :data="items" border>
           <el-table-column type="index" label="#" width="50" align="center" />
+          <el-table-column label="SKU" width="130">
+            <template #default="{ row }">
+              <span v-if="row.sku">{{ row.sku }}</span>
+              <span v-else style="color:var(--app-text-secondary)">自动生成</span>
+            </template>
+          </el-table-column>
           <el-table-column label="产品" min-width="200" prop="productId">
             <template #default="{ row }">
-              <el-select v-model="row.productId" placeholder="选择产品" filterable remote :remote-method="loadProducts"
+              <el-select v-model="row.productId" placeholder="选择产品（可输SKU）" filterable remote :remote-method="loadProducts"
                 style="width:100%" @change="(v: number) => onProductChange(v, row)">
-                <el-option v-for="m in productOptions" :key="m.id" :label="m.name" :value="m.id" />
+                <el-option v-for="m in productOptions" :key="m.id" :label="productLabel(m)" :value="m.id" />
               </el-select>
             </template>
           </el-table-column>
@@ -51,8 +60,14 @@
               </el-select>
             </template>
           </el-table-column>
+          <el-table-column label="可退数量" width="100" align="center">
+            <template #default="{ row }">
+              <span v-if="row.canReturn !== undefined">{{ row.canReturn }}</span>
+              <span v-else>—</span>
+            </template>
+          </el-table-column>
           <el-table-column label="退货数量" width="140">
-            <template #default="{ row }"><el-input-number v-model="row.quantity" :min="1" :step="1" :precision="0" controls-position="right" style="width:100%" @change="calcAmount" /></template>
+            <template #default="{ row }"><el-input-number v-model="row.quantity" :min="1" :step="1" :precision="0" :max="row.canReturn !== undefined ? row.canReturn : undefined" controls-position="right" style="width:100%" @change="calcAmount" /></template>
           </el-table-column>
           <el-table-column label="单价" width="140">
             <template #default="{ row }"><el-input-number v-model="row.unitPrice" :min="0" :precision="2" controls-position="right" style="width:100%" @change="calcAmount" /></template>
@@ -76,17 +91,22 @@
 
 <script setup lang="ts">
 defineOptions({ name: 'PurchaseReturnAdd' })
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { PURCHASE_RETURN_DIRTY_KEY, WarehouseCategory } from '@/api/enums'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
 import request from '@/utils/request'
-import { getQualityTypes, type QualityOption } from '@/api/product'
+import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
+import { getPurchaseReturnPurchaseOrderItems } from '@/api/purchase'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 interface ReturnItem {
   productId?: number
+  sku?: string
   qualityType?: string
+  purchaseOrderItemId?: number
+  canReturn?: number
   _stock?: number
   quantity?: number
   unitPrice?: number
@@ -97,6 +117,7 @@ const router = useRouter()
 const route = useRoute()
 const tabStore = useTabStore()
 const isEdit = !!route.query.id
+const fromOrder = Number(route.query.fromOrder || 0)
 const formRef = ref<FormInstance>()
 const submitLoading = ref(false)
 const qualityOptions = ref<QualityOption[]>([])
@@ -108,12 +129,40 @@ const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params:
 const form = reactive({
   supplierId: undefined as number | undefined,
   warehouseId: undefined as number | undefined,
+  purchaseOrderId: undefined as number | undefined,
+  purchaseOrderCode: '' as string,
   returnDate: new Date().toISOString().slice(0, 10) as string,
   remark: '' as string,
 })
 
+/** 从采购单带入明细（含可退数量），退货仓库默认取采购单入库仓库 */
+async function loadFromPurchaseOrder(orderId?: number) {
+  const oid = orderId || form.purchaseOrderId
+  if (!oid) { ElMessage.warning('未关联采购单'); return }
+  try {
+    const order: any = await request.get(`/inventory/purchase/${oid}`)
+    if (order) {
+      form.supplierId = order.supplierId
+      form.warehouseId = order.warehouseId
+      form.purchaseOrderId = order.id
+      form.purchaseOrderCode = order.code
+    }
+    const rows = await getPurchaseReturnPurchaseOrderItems(oid)
+    items.value = (rows || []).map((r: any) => ({
+      productId: r.productId,
+      qualityType: r.qualityType || 'A',
+      purchaseOrderItemId: r.purchaseOrderItemId,
+      canReturn: Number(r.canReturn),
+      quantity: 0,
+      unitPrice: Number(r.unitPrice || 0),
+      remark: '',
+    }))
+    if (!items.value.length) ElMessage.info('该采购单暂无明细')
+  } catch (e: any) { ElMessage.error(e?.message || '加载采购单失败') }
+}
+
 const rules: FormRules = {
-  supplierId: [{ required: true, message: '请选择供应商', trigger: 'change' }],
+  supplierId: [{ required: true, message: '请选择供货商', trigger: 'change' }],
   warehouseId: [{ required: true, message: '请选择退货仓库', trigger: 'change' }],
 }
 
@@ -134,6 +183,7 @@ async function onProductChange(val: number, row: ReturnItem) {
   const m = productOptions.value.find((x: any) => x.id === val)
   if (m) {
     row.productId = m.id
+    row.sku = m.sku || ''
   }
   // 查询该产品库存
   row._stock = undefined
@@ -163,12 +213,16 @@ async function loadReturnData() {
     if (order) {
       form.supplierId = order.supplierId
       form.warehouseId = order.warehouseId
+      form.purchaseOrderId = order.purchaseOrderId
+      form.purchaseOrderCode = order.purchaseOrderCode || ''
       form.returnDate = order.returnDate
       form.remark = order.remark || ''
     }
     const its = await request.get(`/inventory/purchase-return/${id}/items`) || []
     items.value = (Array.isArray(its) ? its : (its?.records || [])).map((it: any) => ({
       productId: it.productId,
+      qualityType: it.qualityType,
+      purchaseOrderItemId: it.purchaseOrderItemId,
       quantity: it.quantity,
       unitPrice: it.unitPrice,
       amount: it.amount,
@@ -196,18 +250,30 @@ async function handleSubmit() {
     if (items.value.length === 0) { ElMessage.warning('请至少添加一条明细'); return }
     if (items.value.some(it => !it.productId)) { ElMessage.warning('请选择产品'); return }
     if (items.value.some(it => !it.quantity || Number(it.quantity) <= 0)) { ElMessage.warning('产品数量必须大于0'); return }
+    // 关联采购单时：数量不能超过可退数量
+    if (form.purchaseOrderId) {
+      for (const it of items.value) {
+        if (it.purchaseOrderItemId != null && it.canReturn !== undefined && (Number(it.quantity) || 0) > Number(it.canReturn)) {
+          ElMessage.warning(`产品（${it.productId}）退货数量不能超过可退数量 ${it.canReturn}`)
+          return
+        }
+      }
+    }
     const total = items.value.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0)
     submitLoading.value = true
     try {
       const body = {
         supplierId: form.supplierId,
         warehouseId: form.warehouseId,
+        purchaseOrderId: form.purchaseOrderId,
+        purchaseOrderCode: form.purchaseOrderCode,
         returnDate: form.returnDate,
         remark: form.remark,
         totalAmount: total,
         items: items.value.map(it => ({
           productId: it.productId,
           qualityType: it.qualityType,
+          purchaseOrderItemId: it.purchaseOrderItemId,
           quantity: it.quantity,
           unitPrice: it.unitPrice,
           amount: (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0),
@@ -219,7 +285,7 @@ async function handleSubmit() {
       } else {
         await request.post('/inventory/purchase-return', body)
       }
-      ElMessage.success(isEdit ? '更新成功' : '新增成功')
+      ElMessage.success(isEdit ? '更新成功' : '新增成功'); sessionStorage.setItem(PURCHASE_RETURN_DIRTY_KEY, '1')
       tabStore.removeTab(route.fullPath)
       router.push('/inventory/purchase-return')
     } catch (e: any) { ElMessage.error(e?.message || (isEdit ? '更新失败' : '新增失败')) }
@@ -234,15 +300,23 @@ function handleCancel() {
 
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
+// 顶栏"刷新数据"：重新加载品质下拉
+async function handleRefreshData() { await loadQualityTypes() }
 onMounted(() => {
   loadProducts()
   loadQualityTypes()
-  if (isEdit) {
-    tabStore.updateTabTitle(route.fullPath, '编辑成品退货单')
-    document.title = '编辑成品退货单 - 北辰ERP管理系统'
+  if (fromOrder) {
+    tabStore.updateTabTitle(route.fullPath, '从采购单开退货单')
+    document.title = '从采购单开退货单 - 北辰ERP管理系统'
+    loadFromPurchaseOrder(fromOrder)
+  } else if (isEdit) {
+    tabStore.updateTabTitle(route.fullPath, '编辑采购退货单')
+    document.title = '编辑采购退货单 - 北辰ERP管理系统'
     loadReturnData()
   }
+  window.addEventListener('refresh:dropdown-data', handleRefreshData)
 })
+onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 </script>
 
 <style scoped>

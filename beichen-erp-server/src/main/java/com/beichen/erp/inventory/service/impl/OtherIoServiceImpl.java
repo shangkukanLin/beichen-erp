@@ -17,6 +17,7 @@ import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.OtherIoService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
+import com.beichen.erp.material.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,7 @@ public class OtherIoServiceImpl implements OtherIoService {
     private final InventoryOtherIoItemMapper itemMapper;
     private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
+    private final ProductService productService;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long warehouseId, String ioType, int pageNum, int pageSize) {
@@ -60,7 +62,11 @@ public class OtherIoServiceImpl implements OtherIoService {
 
     @Override
     public List<InventoryOtherIoItem> getItems(Long otherIoId) {
-        return itemMapper.selectList(new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, otherIoId));
+        List<InventoryOtherIoItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, otherIoId));
+        // 回填 SKU（非表字段），前端免查库即可展示
+        productService.fillSku(items, InventoryOtherIoItem::getProductId, InventoryOtherIoItem::setSku);
+        return items;
     }
 
     @Override

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, computed } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { exportMaterialOrderPdf } from '@/api/contract-template'
-import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
+import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
@@ -107,13 +107,13 @@ async function handleSaveAttach() {
     const fd = new FormData(); fd.append('file', uploadFile.value)
     const res = await request.post<any, string>('/dev/file/upload', fd)
     await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, attachUrl: res as unknown as string, items: items.value })
-    ElMessage.success('合同文件已保存'); uploadFile.value = null; await loadAll()
+    ElMessage.success('合同文件已保存'); uploadFile.value = null; await loadAll(); markOrderDirty()
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) } finally { attachSaving.value = false }
 }
 async function handleDeleteAttach() {
   try {
     await ElMessageBox.confirm('确定删除附件吗？', '删除附件', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
-    await request.delete(`/outsource/material-order/${id}/attach`); ElMessage.success('附件已删除'); await loadAll()
+    await request.delete(`/outsource/material-order/${id}/attach`); ElMessage.success('附件已删除'); await loadAll(); markOrderDirty()
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
@@ -132,6 +132,8 @@ async function loadAll() {
     loadOptions()
   } finally { loading.value = false }
 }
+
+function markOrderDirty() { sessionStorage.setItem(OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY, '1') }
 
 async function openReceive() {
   recWarehouseId.value = undefined
@@ -182,7 +184,7 @@ async function handleReceive(force?: boolean) {
       catch (err: any) { ElMessage.warning('草稿已保存但审核失败：' + (err?.message || '')); }
     }
     ElMessage.success(force ? '缺料交货完成（子物料库存已为负数）' : '交货完成')
-    recVisible.value = false; loadAll()
+    recVisible.value = false; loadAll(); markOrderDirty()
   }
   catch (e: any) { ElMessage.error(e?.message || '交货失败') } finally { recSaving.value = false }
 }
@@ -192,7 +194,7 @@ async function auditDelivery(row: any) {
   try { await ElMessageBox.confirm('审核后将扣减库存并生成应付，是否继续？', '审核收货单', { type: 'warning' }) } catch { return }
   try {
     await request.put(`/outsource/material-order/delivery/${row.id}/audit`)
-    ElMessage.success('审核成功'); loadAll()
+    ElMessage.success('审核成功'); loadAll(); markOrderDirty()
   } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 // 收货/退不良已审核单反审核（逆向回滚库存与应付）
@@ -200,7 +202,7 @@ async function unauditDelivery(row: any) {
   try { await ElMessageBox.confirm('反审核将回滚库存并冲回应付，是否继续？', '反审核收货单', { type: 'warning' }) } catch { return }
   try {
     await request.put(`/outsource/material-order/delivery/${row.id}/unaudit`)
-    ElMessage.success('反审核成功'); loadAll()
+    ElMessage.success('反审核成功'); loadAll(); markOrderDirty()
   } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 // 是否为可审核/反审核的物料订单收发明细（收货/退不良）
@@ -241,7 +243,7 @@ async function handleDefectReturn() {
       try { await request.put(`/outsource/material-order/delivery/${deliveryId}/audit`) }
       catch (err: any) { ElMessage.warning('草稿已保存但审核失败：' + (err?.message || '')); }
     }
-    ElMessage.success('退不良完成'); defectVisible.value = false; loadAll()
+    ElMessage.success('退不良完成'); defectVisible.value = false; loadAll(); markOrderDirty()
   }
   catch (e: any) { ElMessage.error(e?.message || '退料失败') } finally { defectSaving.value = false }
 }
@@ -251,21 +253,21 @@ async function handleSave() {
   try {
     await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, items: items.value })
     ElMessage.success('保存成功')
-    await loadAll()
+    await loadAll(); markOrderDirty()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
 
 async function handleConfirm() {
-  try { await ElMessageBox.confirm('审核后进入收货中', '审核', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/audit`); ElMessage.success('已审核'); loadAll() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('审核后进入收货中', '审核', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/audit`); ElMessage.success('已审核'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleUnAudit() {
-  try { await ElMessageBox.confirm('确认反审核？将回到待审核状态', '反审核', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/un-audit`); ElMessage.success('已反审核'); loadAll() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('确认反审核？将回到待审核状态', '反审核', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/un-audit`); ElMessage.success('已反审核'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleFinish() {
-  try { await ElMessageBox.confirm('结单后订单将标记为已完成，不可再修改。', '结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/finish`); ElMessage.success('已结单'); loadAll() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('结单后订单将标记为已完成，不可再修改。', '结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/finish`); ElMessage.success('已结单'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleCancel() {
-  try { await ElMessageBox.confirm('确定作废？', '作废', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/cancel`); ElMessage.success('已作废'); loadAll() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('确定作废？', '作废', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/cancel`); ElMessage.success('已作废'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
 function exportPdf() {
@@ -288,7 +290,14 @@ function exportPdf() {
   }).catch(() => { ElMessage.error('导出失败') })
 }
 
-onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
+// BOM 类型字典只需加载一次
+onMounted(() => { loadBomTypes() })
+/**
+ * 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发，
+ * 只靠 onMounted 会停留在上次缓存的状态（如在列表改单后再进详情看到的还是旧数据）。
+ * loadAll 内部会自行调用 loadOptions 补齐物料字典，故此处无需额外 await loadOptions。
+ */
+onActivated(() => { loadAll() })
 </script>
 
 <template>
@@ -412,7 +421,7 @@ onMounted(async () => { await loadOptions(); loadBomTypes(); loadAll() })
               </el-table>
             </template>
           </el-table-column>
-          <el-table-column prop="code" label="单号" width="150" />
+          <el-table-column label="单号" width="150"><template #default="{row}"><a v-if="row.id != null" class="bill-link" @click="router.push(`/outsource/delivery/detail/${row.id}`)">{{ row.code }}</a><span v-else>{{ row.code }}</span></template></el-table-column>
           <el-table-column prop="deliveryType" label="类型" width="70"><template #default="{row}"><el-tag :type="row.deliveryType===DeliveryType.RECEIVE?'success':'warning'" size="small">{{ DeliveryTypeLabel[row.deliveryType] || row.deliveryType }}</el-tag></template></el-table-column>
           <el-table-column label="状态" width="80"><template #default="{row}">
             <el-tag v-if="row.status===DocStatus.AUDITED" :type="DocStatusTag[row.status]" size="small">{{ DocStatusLabel[row.status] }}</el-tag>

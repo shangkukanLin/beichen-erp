@@ -1,23 +1,25 @@
 <template>
   <div class="page">
     <el-card shadow="never" class="query-card">
+      <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="仓库">
           <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:160px" />
         </el-form-item>
         <el-form-item label="产品">
-          <RemoteSelect v-model="query.productId" :fetch="fetchProducts" placeholder="全部" style="width:200px" @pick="(rows:any[])=>onProductPick(rows[0])" />
+          <RemoteSelect v-model="query.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="全部（可输SKU）" style="width:200px" @pick="(rows:any[])=>onProductPick(rows[0])" />
         </el-form-item>
         <el-form-item label="变动类型">
           <el-select v-model="query.changeType" placeholder="全部" clearable style="width:130px">
             <el-option v-for="o in changeTypeOptions" :key="o" :label="o" :value="o" />
           </el-select>
         </el-form-item>
-        <el-form-item>
+        </el-form>
+        <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
     </el-card>
 
     <el-card shadow="never" class="table-card">
@@ -44,7 +46,7 @@
         <el-table-column label="关联单号" width="150">
           <template #default="{ row }">
             <el-link v-if="billLink(row.relatedBillType, row.relatedBillId)" type="primary" :underline="false"
-              @click="handleBillClick(row.relatedBillType, row.relatedBillId)">
+              @click="handleBillClick(row)">
               {{ row.relatedBillNo }}
             </el-link>
             <span v-else>{{ row.relatedBillNo }}</span>
@@ -73,6 +75,7 @@ import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import { productLabel } from '@/api/product'
 
 const changeTypeOptions = ['PURCHASE_IN', 'RETURN_OUT', 'SALE_OUT', 'MOVE_OUT', 'MOVE_IN', 'OTHER_IN', 'OTHER_OUT', 'CANCEL_IN', 'CANCEL_OUT', 'INIT']
 
@@ -138,32 +141,47 @@ async function loadData() {
 function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.warehouseId = undefined; query.productId = undefined; query.changeType = ''; pagination.pageNum = 1; loadData() }
 
-// 关联单号可点击跳转映射(根据 relatedBillType → 单据详情路由)
+// 关联单号可点击跳转映射：relatedBillType → 详情页路由前缀（/detail 结尾的直接带 ID 跳详情页；
+// 无独立详情页的类型跳列表页并传 billId，由对应列表页挂载时定位打开详情弹窗）
 const router = useRouter()
 const billDetailRouteMap: Record<string, string> = {
+  // 采购/销售/出入库 → 独立详情页
   PURCHASE_ORDER: '/inventory/purchase/detail', PURCHASE_INBOUND: '/inventory/purchase/detail',
-  PURCHASE_RETURN: '/inventory/purchase-return', SALE_ORDER: '/inventory/sale',
-  SALE_OUTBOUND: '/inventory/sale', WAREHOUSE_MOVE: '/inventory/warehouse-move',
-  WAREHOUSE_MOVE_UN_AUDIT: '/inventory/warehouse-move', OTHER_IO: '/inventory/other-io',
-  // 委外模块有独立详情页
+  PURCHASE_RETURN: '/inventory/purchase-return/detail',
+  SALE_ORDER: '/inventory/sale/detail', SALE_OUTBOUND: '/inventory/sale/detail',
+  SALE_RETURN: '/sale/return/detail', SALE_EXCHANGE: '/sale/exchange/detail',
+  OTHER_IO: '/inventory/other-io/detail',
+  // 委外模块独立详情页
   OUTSOURCE_DELIVERY: '/outsource/delivery/detail', MATERIAL_IO: '/outsource/delivery/detail',
   OUTSOURCE_ORDER: '/outsource/order/detail', OUTSOURCE_DEFECT: '/outsource/order/detail',
   OUTSOURCE_RETURN: '/outsource/return-order/detail',
+  OUTSOURCE_MATERIAL_RETURN: '/outsource/material-return/detail',
+  // 无独立详情页 → 跳列表页定位
+  WAREHOUSE_MOVE: '/inventory/warehouse-move', WAREHOUSE_MOVE_UN_AUDIT: '/inventory/warehouse-move',
+  PRODUCT_RECLASSIFY: '/inventory/reclassify', RETURN_SORT: '/inventory/return-sort',
   SUPPLIER_SETTLEMENT: '/supplier/manage',
+}
+/**
+ * 详情目标ID：默认取 relatedBillId；
+ * 销售出库单（SALE_OUTBOUND）的 relatedBillId 指出库单，后端已映射为关联销售单ID（relatedBillDetailId）
+ */
+function billTargetId(row: any): number | undefined {
+  return row?.relatedBillDetailId ?? row?.relatedBillId
 }
 function billLink(billType?: string, billId?: number): boolean {
   return !!(billType && billId && billDetailRouteMap[billType])
 }
-function handleBillClick(billType?: string, billId?: number) {
+function handleBillClick(row: any) {
+  const billType = row?.relatedBillType
+  const billId = billTargetId(row)
   if (!billType || !billId) return
   const route = billDetailRouteMap[billType]
   if (!route) return
-  // 委外模块有独立详情页，带上ID
   if (route.includes('/detail')) {
     router.push(`${route}/${billId}`)
   } else {
-    // 其他模块跳列表页并传递 billId（可被页面接受后打开详情弹窗）
-    router.push({ path: route, query: { billId: String(billId), billType: billType } })
+    // 无独立详情页：跳列表页并传 billId（页面挂载时定位打开详情弹窗）
+    router.push({ path: route, query: { billId: String(billId), billType } })
   }
 }
 

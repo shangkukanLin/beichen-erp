@@ -123,3 +123,68 @@ export function cancelReclassify(id: number) {
   return request.put<void>(`/inventory/reclassify/${id}/cancel`)
 }
 
+// ==================== 退货整理 ====================
+export interface ReturnSortItem {
+  id?: number
+  productId?: number
+  productName?: string
+  /** SKU（展示用；待整理清单按 productId 回填） */
+  sku?: string
+  spec?: string
+  unit?: string
+  totalQuantity?: number
+  qtyA?: number
+  qtyB?: number
+  qtyC?: number
+  qtyDefect?: number
+  remark?: string
+  /**
+   * 来源售后待整理批次ID（after_sale_pending.id）：提交后端，退单/换货退回货品统一的追溯锚点。
+   * 取代原 saleReturnItemId（后者只能追溯到销售退单，换货退回的货品无对应记录）。
+   */
+  pendingId?: number
+  /** [已废弃] 来源销售退货明细ID，追溯统一走 pendingId */
+  saleReturnItemId?: number
+  /** 本地字段：来源单据类型（SALE_RETURN 销售退单 / SALE_EXCHANGE 销售换货单），展示用 */
+  sourceType?: string
+  /** 本地字段：来源单号（退单号/换货单号），展示用，不提交 */
+  sourceCode?: string
+  /** 本地字段：来源单据业务日期，展示用，不提交 */
+  sourceDate?: string
+  /** 本地字段：该批次原始数量（展示用，不提交） */
+  batchQuantity?: number
+  /** 本地字段：已整理数量（展示用，不提交） */
+  sortedQuantity?: number
+  /** 本地字段：售后仓待分类可用库存，仅用于前端可用量校验，不提交后端 */
+  available?: number
+  /** 本地字段：实物在售后仓的停留天数（按最早待分类入库日期计算），用于超期预警 */
+  stayDays?: number
+}
+export function getReturnSortPage(params: any) {
+  return request.get<PageResult<any>>('/inventory/return-sort/page', { params })
+}
+export function getReturnSort(id: number) {
+  return request.get<any>(`/inventory/return-sort/${id}`)
+}
+export function getReturnSortItems(id: number) {
+  return request.get<ReturnSortItem[]>(`/inventory/return-sort/${id}/items`)
+}
+export function getReturnSortDefectStock(warehouseId: number) {
+  return request.get<any[]>(`/inventory/return-sort/defect-stock`, { params: { warehouseId } })
+}
+export function createReturnSort(data: any) {
+  return request.post<void>('/inventory/return-sort', data)
+}
+export function updateReturnSort(id: number, data: any) {
+  return request.put<void>(`/inventory/return-sort/${id}`, data)
+}
+export function auditReturnSort(id: number) {
+  return request.put<void>(`/inventory/return-sort/${id}/audit`)
+}
+export function cancelReturnSort(id: number) {
+  return request.put<void>(`/inventory/return-sort/${id}/cancel`)
+}
+export function deleteReturnSort(id: number) {
+  return request.delete<void>(`/inventory/return-sort/${id}`)
+}
+

@@ -24,6 +24,9 @@ export interface ProductQueryParams {
   pageNum?: number
   pageSize?: number
   keyword?: string
+  /** SKU 精确查询 */
+  sku?: string
+  brandId?: number
   category?: string
   status?: string
 }
@@ -32,6 +35,8 @@ export interface ProductQueryParams {
 export interface Product {
   id?: number | string
   name: string
+  /** SKU 编码（产品级唯一；新增留空由后端自动生成 SKU-000001） */
+  sku?: string
   brandId?: number
   category?: string
   spec?: string
@@ -50,6 +55,16 @@ export interface PageResult<T> {
   total: number
   current: number
   size: number
+}
+
+/**
+ * 产品统一展示标签：`SKU | 名称`（无 SKU 时只显示名称）。
+ * <p>用于产品下拉与选品控件，便于直接按 SKU 识别产品；搜索侧后端已支持 keyword 同时匹配名称与 SKU。</p>
+ */
+export function productLabel(row: any): string {
+  if (!row) return ''
+  const name = row.name ?? row.productName ?? ''
+  return row.sku ? `${row.sku} | ${name}` : String(name)
 }
 
 export function getProductPage(params: ProductQueryParams) {

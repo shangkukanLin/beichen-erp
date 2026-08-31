@@ -15,7 +15,14 @@ public class PurchaseReturnItem {
 
     private Long returnId;
 
+    /** 关联采购单明细ID（可选，用于追溯） */
+    private Long purchaseOrderItemId;
+
     private Long productId;
+
+    /** SKU（展示用，非表字段；明细接口按 productId 批量回填） */
+    @TableField(exist = false)
+    private String sku;
 
     /** 产品名称（关联 product，不落库，随明细接口一起返回） */
     @TableField(exist = false)

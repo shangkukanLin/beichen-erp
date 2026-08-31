@@ -76,9 +76,12 @@ public class BrandController {
     public R<Map<String, Object>> checkDelete(@PathVariable Long id) {
         int materialCount = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM product WHERE brand_id = ?", Integer.class, id);
+        int projectCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM dev_project WHERE brand_id = ?", Integer.class, id);
         Map<String, Object> result = new LinkedHashMap<>();
         Map<String, Integer> associations = new LinkedHashMap<>();
         if (materialCount > 0) associations.put("物料", materialCount);
+        if (projectCount > 0) associations.put("研发项目", projectCount);
         result.put("canDelete", associations.isEmpty());
         result.put("associations", associations);
         return R.ok(result);

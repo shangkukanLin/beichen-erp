@@ -31,6 +31,16 @@ a {
   color: inherit;
 }
 
+/* 可点击单据链接（如应付明细来源单号跳转） */
+.bill-link {
+  color: var(--app-color-primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.bill-link:hover {
+  color: var(--app-color-primary-hover);
+}
+
 ul,
 ol {
   list-style: none;
@@ -95,6 +105,43 @@ ol {
   }
   .layout-main {
     padding: 6px !important;
+  }
+}
+
+/* ===================== 列表查询区统一布局（两段式） ===================== */
+/* 查询条件在左（占满剩余空间）、操作按钮在右；桌面端单行，窄屏换行 */
+.query-card .query-bar {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.query-card .query-bar .el-form,
+.query-card .query-bar .query-form {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.query-card .query-bar .el-form .el-form-item,
+.query-card .query-bar .query-form .el-form-item {
+  margin-bottom: 0;
+}
+
+.query-card .query-bar .toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 768px) {
+  /* 窄屏：toolbar 换行到下一行，靠右 */
+  .query-card .query-bar {
+    grid-template-columns: 1fr;
+  }
+  .query-card .query-bar .toolbar {
+    justify-self: end;
   }
 }
 

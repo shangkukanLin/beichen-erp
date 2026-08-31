@@ -54,6 +54,18 @@ public class PurchaseReturnController {
         return R.ok(service.getItems(id));
     }
 
+    /** 按采购单查询关联的退货单列表 */
+    @GetMapping("/by-order")
+    public R<List<Map<String, Object>>> byOrder(@RequestParam(required = false) Long purchaseOrderId) {
+        return R.ok(service.byOrder(purchaseOrderId));
+    }
+
+    /** 查询采购单明细（含已退/可退数量，供退货带入） */
+    @GetMapping("/purchase-order-items")
+    public R<List<Map<String, Object>>> purchaseOrderItems(@RequestParam(required = false) Long purchaseOrderId) {
+        return R.ok(service.purchaseOrderItems(purchaseOrderId));
+    }
+
     @PutMapping("/{id}/audit")
     public R<Void> audit(@PathVariable Long id) {
         service.audit(id);
@@ -83,6 +95,8 @@ public class PurchaseReturnController {
         if (body.get("id") != null) o.setId(Long.valueOf(body.get("id").toString()));
         if (body.get("supplierId") != null) o.setSupplierId(Long.valueOf(body.get("supplierId").toString()));
         if (body.get("warehouseId") != null) o.setWarehouseId(Long.valueOf(body.get("warehouseId").toString()));
+        if (body.get("purchaseOrderId") != null) o.setPurchaseOrderId(Long.valueOf(body.get("purchaseOrderId").toString()));
+        if (body.get("purchaseOrderCode") != null) o.setPurchaseOrderCode(body.get("purchaseOrderCode").toString());
         if (body.get("returnDate") != null) o.setReturnDate(java.time.LocalDate.parse(body.get("returnDate").toString()));
         if (body.get("totalAmount") != null) o.setTotalAmount(new java.math.BigDecimal(body.get("totalAmount").toString()));
         if (body.get("remark") != null) o.setRemark(body.get("remark").toString());

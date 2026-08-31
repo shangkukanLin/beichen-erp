@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
+import { OUTSOURCE_RETURN_ORDER_DIRTY_KEY } from '@/api/enums'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -120,7 +121,7 @@ async function handleSubmit() {
   if (items.some((m: any) => !m.materialId)) { ElMessage.warning('存在未关联委外物料的明细，无法保存，请检查BOM物料是否已登记'); return }
   try {
     await request.post('/outsource/return-order', { factoryId: form.factoryId, warehouseId: form.warehouseId, returnDate: form.returnDate, remark: form.remark, items, products: rows.value.filter((r: any) => r.productName && Number(r.returnQuantity) > 0).map((r: any) => ({ productName: r.productName, productId: r.selectedVersion?.productId || null, quantity: Number(r.returnQuantity) })) })
-    ElMessage.success('退货单草稿已保存，请在列表中审核生效')
+    ElMessage.success('退货单草稿已保存，请在列表中审核生效'); sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
     resetForm()
     tabStore.removeTab(window.location.hash.replace('#', ''))
     router.replace('/outsource/return-order')

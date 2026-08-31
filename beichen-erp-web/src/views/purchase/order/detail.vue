@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineOptions({ name: 'PurchaseDetail' })
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { getPurchaseOrderItems, type PurchaseOrder, type PurchaseOrderItem, PurchaseStatus, PurchaseStatusLabel } from '@/api/purchase'
@@ -9,11 +9,12 @@ const route = useRoute(); const router = useRouter()
 const orderId = Number(route.params.id)
 const order = ref<PurchaseOrder>({})
 const items = ref<PurchaseOrderItem[]>([])
+const returns = ref<any[]>([])
 const loading = ref(false)
 const supplierName = ref('')
 const warehouseName = ref('')
 
-function statusType(s?: number) {
+function statusType(s?: string | number) {
   if (s === PurchaseStatus.DRAFT) return 'info'
   if (s === PurchaseStatus.AUDITED) return 'success'
   if (s === PurchaseStatus.CANCELLED) return 'danger'
@@ -38,7 +39,7 @@ async function loadData() {
     order.value = res || {}
     items.value = itemRes || []
 
-    // 本地实时查供应商和仓库名称
+    // 本地实时查供货商和仓库名称
     if (order.value.supplierId) {
       const res: any = await request.get('/supplier/page', { params: { pageSize: 500, name: '' } })
       const list = res?.records || []
@@ -51,27 +52,39 @@ async function loadData() {
       const w = list.find((x: any) => x.id === order.value.warehouseId)
       warehouseName.value = w?.warehouseName || ''
     }
+    // 该采购单的退货情况
+    try {
+      const rr: any = await request.get('/inventory/purchase-return/by-order', { params: { purchaseOrderId: orderId } })
+      returns.value = (rr as any[]) || []
+    } catch { returns.value = [] }
   } finally { loading.value = false }
 }
 
 function goSupplier(id?: number) { if (id) router.push(`/supplier/detail/${id}`) }
 function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
+function addReturn() { router.push({ path: '/inventory/purchase-return/add', query: { fromOrder: orderId } }) }
+function goReturnDetail(id: number) { router.push(`/inventory/purchase-return/detail/${id}`) }
 
-onMounted(() => loadData())
+// 本页的供货商名/仓库名是在 loadData 内按需查询填充的（字典与业务耦合），故整体放到 onActivated：
+// keep-alive 缓存下再次进入会复用组件、onMounted 不再触发，只靠 onMounted 会停留在上次缓存的状态
+onActivated(() => { loadData() })
 </script>
 
 <template>
   <div class="detail-page" v-loading="loading">
     <el-card shadow="never">
       <template #header>
-        <span style="font-weight:600">采购单详情 — {{ order.code }}</span>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600">采购单详情 — {{ order.code }}</span>
+          <el-button type="primary" :icon="'Plus'" @click="addReturn">发起退货</el-button>
+        </div>
       </template>
       <el-descriptions :column="2" border size="small">
         <el-descriptions-item label="单号">{{ order.code }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="statusType(order.status)">{{ statusLabel(order.status) }}</el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="供应商">
+        <el-descriptions-item label="供货商">
           <el-button v-if="order.supplierId" type="primary" link @click="goSupplier(order.supplierId)">{{ supplierName }}</el-button>
           <span v-else>—</span>
         </el-descriptions-item>
@@ -80,6 +93,7 @@ onMounted(() => loadData())
           <span v-else>—</span>
         </el-descriptions-item>
         <el-descriptions-item label="订单日期">{{ order.orderDate }}</el-descriptions-item>
+        <el-descriptions-item label="税额">{{ fmt(order.taxAmount) }}</el-descriptions-item>
         <el-descriptions-item label="总金额">{{ fmt(order.totalAmount) }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ order.remark || '—' }}</el-descriptions-item>
       </el-descriptions>
@@ -87,6 +101,7 @@ onMounted(() => loadData())
       <el-divider content-position="left">明细</el-divider>
       <el-table :data="items" border stripe size="small">
         <el-table-column type="index" label="#" width="50" align="center" />
+        <el-table-column prop="sku" label="SKU" width="130" />
         <el-table-column prop="productName" label="成品名称" min-width="160" show-overflow-tooltip />
         <el-table-column label="品质" width="80" align="center">
           <template #default="{ row }">{{ qualityLabel(row.qualityType) }}</template>
@@ -96,6 +111,28 @@ onMounted(() => loadData())
         <el-table-column prop="amount" label="金额" width="100" align="right" />
         <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
       </el-table>
+    </el-card>
+
+    <el-card shadow="never">
+      <template #header><span style="font-weight:600">退货情况</span></template>
+      <el-table v-if="returns.length" :data="returns" border stripe size="small">
+        <el-table-column prop="code" label="退货单号" width="180" />
+        <el-table-column prop="returnDate" label="退货日期" width="120" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="退货金额" width="120" align="right">
+          <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="90" align="center">
+          <template #default="{ row }">
+            <el-button type="primary" link @click="goReturnDetail(row.id)">详情</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-else description="暂无退货记录" :image-size="60" />
     </el-card>
 
     <div style="text-align:center;margin-top:20px">

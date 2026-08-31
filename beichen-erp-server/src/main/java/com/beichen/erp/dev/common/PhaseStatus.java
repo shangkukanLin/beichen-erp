@@ -1,13 +1,13 @@
 package com.beichen.erp.dev.common;
 
 /**
- * 项目时间线状态枚举
+ * 项目项目阶段状态枚举
  * <p>
- * 管理 dev_project_timeline.status 字段。
- * 描述研发项目中各阶段/时间线的进展状态。
+ * 管理 dev_project_phase.status 字段。
+ * 描述研发项目中各阶段/项目阶段的进展状态。
  * </p>
  */
-public enum TimelineStatus {
+public enum PhaseStatus {
 
     /** 未开始：阶段尚未启动 */
     NOT_STARTED("未开始"),
@@ -20,7 +20,7 @@ public enum TimelineStatus {
 
     private final String label;
 
-    TimelineStatus(String label) { this.label = label; }
+    PhaseStatus(String label) { this.label = label; }
 
     /** 前端显示的中文名称 */
     public String getLabel() { return label; }

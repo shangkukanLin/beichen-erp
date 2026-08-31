@@ -10,8 +10,8 @@ public enum RelatedBillType {
     PURCHASE_ORDER("采购单"),
     /** 采购入库：采购入库单审核触发 */
     PURCHASE_INBOUND("采购入库"),
-    /** 成品退货单：退货单审核/反审核触发 */
-    PURCHASE_RETURN("成品退货单"),
+    /** 采购退货单：退货单审核/反审核触发 */
+    PURCHASE_RETURN("采购退货单"),
 
     /** 销售单：销售订单审核触发 */
     SALE_ORDER("销售单"),
@@ -19,6 +19,8 @@ public enum RelatedBillType {
     SALE_OUTBOUND("销售出库"),
     /** 销售退货：销售退货单审核/反审核触发 */
     SALE_RETURN("销售退货单"),
+    /** 销售换货：销售换货单审核/反审核触发（退回入库 + 换出扣减） */
+    SALE_EXCHANGE("销售换货单"),
 
     /** 移仓单：移仓审核/反审核触发 */
     WAREHOUSE_MOVE("移仓单"),
@@ -46,7 +48,10 @@ public enum RelatedBillType {
     SUPPLIER_SETTLEMENT("供应商清算"),
 
     /** 品质重分类：品质调整单审核触发 */
-    PRODUCT_RECLASSIFY("品质重分类");
+    PRODUCT_RECLASSIFY("品质重分类"),
+
+    /** 退货整理：退货整理单审核/反审核触发 */
+    RETURN_SORT("退货整理");
 
     private final String label;
 

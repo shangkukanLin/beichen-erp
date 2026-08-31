@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { getPurchaseReturn, getPurchaseReturnItems, ReturnStatus, ReturnStatusLabel, type PurchaseReturn, type PurchaseReturnItem } from '@/api/purchase'
@@ -34,18 +34,22 @@ async function loadData() {
   } finally { loading.value = false }
 }
 
-onMounted(() => { loadWarehouseOptions(); loadData() })
+// 字典类只需加载一次
+onMounted(() => { loadWarehouseOptions() })
+// 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
+onActivated(() => { loadData() })
 </script>
 
 <template>
   <div class="detail-page" v-loading="loading">
     <el-card shadow="never">
-      <template #header><span style="font-weight:600">成品退货单详情 — {{ detail.code }}</span></template>
+      <template #header><span style="font-weight:600">采购退货单详情 — {{ detail.code }}</span></template>
       <el-descriptions :column="2" border size="small">
         <el-descriptions-item label="退货单号">{{ detail.code }}</el-descriptions-item>
         <el-descriptions-item label="状态"><el-tag :type="statusType(detail.status)">{{ statusLabel(detail.status) }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="供应商">{{ detail.supplierName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="供货商">{{ detail.supplierName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="退货仓库">{{ warehouseName(detail.warehouseId) || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="来源采购单">{{ detail.purchaseOrderCode || '—' }}</el-descriptions-item>
         <el-descriptions-item label="退货日期">{{ detail.returnDate }}</el-descriptions-item>
         <el-descriptions-item label="退货总金额">{{ fmt(detail.totalAmount) }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ detail.remark || '—' }}</el-descriptions-item>
@@ -54,6 +58,7 @@ onMounted(() => { loadWarehouseOptions(); loadData() })
       <el-divider content-position="left">退货明细</el-divider>
       <el-table :data="items" border stripe size="small">
         <el-table-column type="index" label="#" width="50" align="center" />
+        <el-table-column prop="sku" label="SKU" width="130" />
         <el-table-column label="产品" min-width="140">
           <template #default="{ row }">{{ productName(row.productId) }}</template>
         </el-table-column>

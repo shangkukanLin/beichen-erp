@@ -3,27 +3,37 @@
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>销售退货单详情</span>
+          <span>销售退单详情</span>
           <el-tag :type="statusTagType(header.status)">{{ statusLabel(header.status) }}</el-tag>
         </div>
       </template>
       <el-descriptions :column="3" border>
-        <el-descriptions-item label="退货单号">{{ header.code }}</el-descriptions-item>
+        <el-descriptions-item label="退单号">{{ header.code }}</el-descriptions-item>
         <el-descriptions-item label="客户">{{ header.customerName }}</el-descriptions-item>
         <el-descriptions-item label="退货仓库">{{ warehouseName }}</el-descriptions-item>
+        <el-descriptions-item label="关联销售单">{{ head.saleOrderCode || '—' }}</el-descriptions-item>
         <el-descriptions-item label="退货日期">{{ head.returnDate }}</el-descriptions-item>
         <el-descriptions-item label="退货金额">{{ formatMoney(head.totalAmount) }}</el-descriptions-item>
         <el-descriptions-item label="审核人">{{ head.auditorName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="收费" :span="2">
+          <template v-if="Number(head.chargeFlag) === 1 && Number(head.chargeAmount) > 0">
+            <span style="color:#e6a23c;font-weight:600">{{ formatMoney(head.chargeAmount) }}</span>
+            <span style="margin-left:6px;color:#909399">{{ ExchangeChargeTypeLabel[String(head.chargeType)] || head.chargeType || '' }}</span>
+          </template>
+          <span v-else style="color:#c0c4cc">不收费</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="收费说明" :span="3">{{ head.chargeReason || '—' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ head.remark || '—' }}</el-descriptions-item>
       </el-descriptions>
 
-      <el-divider content-position="left">退货明细（退回均为不良品）</el-divider>
+      <el-divider content-position="left">退货明细</el-divider>
       <el-table :data="items" border>
         <el-table-column type="index" label="#" width="50" />
+        <el-table-column prop="sku" label="SKU" width="130" />
         <el-table-column prop="productName" label="产品" min-width="200" />
         <el-table-column label="品质等级" width="110" align="center">
-          <template #default>
-            <el-tag type="danger">不良品</el-tag>
+          <template #default="{ row }">
+            <el-tag :type="ProductQualityTypeTag[row.qualityType] || 'info'">{{ ProductQualityTypeLabel[row.qualityType] || '待分类' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="quantity" label="退货数量" width="130" align="right" />
@@ -50,10 +60,11 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, computed } from 'vue'
+import { onMounted, onActivated, reactive, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { ProductQualityTypeLabel, ProductQualityTypeTag, ExchangeChargeTypeLabel } from '@/api/enums'
 import {
   getSaleReturn,
   getSaleReturnItems,
@@ -68,7 +79,7 @@ const route = useRoute()
 const router = useRouter()
 const acting = ref(false)
 // 仓库显示用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: '售后仓' } })
 const warehouses = ref<{ id: number; warehouseName?: string; name?: string }[]>([])
 async function loadWarehouses() { try { const r: any = await fetchWarehouses(''); warehouses.value = r?.records || [] } catch { warehouses.value = [] } }
 const items = ref<any[]>([])
@@ -77,8 +88,13 @@ const head = reactive({
   code: '',
   customerName: '',
   warehouseId: undefined as number | undefined,
+  saleOrderCode: '',
   returnDate: '',
   totalAmount: 0,
+  chargeFlag: 0,
+  chargeType: '',
+  chargeAmount: 0,
+  chargeReason: '',
   auditorName: '',
   remark: '',
   status: SaleReturnStatus.DRAFT,
@@ -90,10 +106,11 @@ const warehouseName = computed(() => {
   return w ? (w.warehouseName || w.name) : '—'
 })
 
-function statusLabel(s: number) {
-  return SaleReturnStatusLabel[s as 0 | 1 | 2] ?? '未知'
+/** 单据状态为字符串编码（DRAFT/AUDITED/CANCELLED），与后端 status 字段(varchar)一致 */
+function statusLabel(s: string) {
+  return SaleReturnStatusLabel[s] ?? '未知'
 }
-function statusTagType(s: number) {
+function statusTagType(s: string) {
   if (s === SaleReturnStatus.AUDITED) return 'success'
   if (s === SaleReturnStatus.CANCELLED) return 'info'
   return 'warning'
@@ -109,8 +126,13 @@ async function loadDetail(id: number) {
     code: h.code,
     customerName: h.customerName,
     warehouseId: h.warehouseId,
+    saleOrderCode: h.saleOrderCode,
     returnDate: h.returnDate,
     totalAmount: h.totalAmount,
+    chargeFlag: Number(h.chargeFlag || 0),
+    chargeType: h.chargeType || '',
+    chargeAmount: Number(h.chargeAmount || 0),
+    chargeReason: h.chargeReason || '',
     auditorName: h.auditorName,
     remark: h.remark,
     status: h.status,
@@ -126,7 +148,7 @@ function goEdit() {
 }
 
 async function doAudit() {
-  await ElMessageBox.confirm('确认审核？审核后客户退回的不良品将入库增加库存。', '提示', { type: 'warning' })
+  await ElMessageBox.confirm('确认审核？审核后客户退回的待分类品将入库售后仓增加库存。', '提示', { type: 'warning' })
   acting.value = true
   try {
     await auditSaleReturn(Number(route.params.id))
@@ -137,7 +159,7 @@ async function doAudit() {
   }
 }
 async function doUnAudit() {
-  await ElMessageBox.confirm('确认反审核？将扣减已入库的不良品库存。', '提示', { type: 'warning' })
+  await ElMessageBox.confirm('确认反审核？将扣减已入库的待分类品库存。', '提示', { type: 'warning' })
   acting.value = true
   try {
     await unAuditSaleReturn(Number(route.params.id))
@@ -148,7 +170,7 @@ async function doUnAudit() {
   }
 }
 async function doCancel() {
-  await ElMessageBox.confirm('确认作废该退货单？', '提示', { type: 'warning' })
+  await ElMessageBox.confirm('确认作废该销售退单？', '提示', { type: 'warning' })
   acting.value = true
   try {
     await cancelSaleReturn(Number(route.params.id))
@@ -159,10 +181,10 @@ async function doCancel() {
   }
 }
 
-onMounted(async () => {
-  loadWarehouses()
-  await loadDetail(Number(route.params.id))
-})
+// 字典类只需加载一次
+onMounted(() => { loadWarehouses() })
+// 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
+onActivated(() => { loadDetail(Number(route.params.id)) })
 </script>
 
 <style scoped>

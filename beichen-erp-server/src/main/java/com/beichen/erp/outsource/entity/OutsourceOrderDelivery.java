@@ -28,6 +28,15 @@ public class OutsourceOrderDelivery {
     private Long orderId;
     /** 关联加工单产品ID(outsource_order_product.id) */
     private Long productId;
+
+    /** SKU（展示用，非表字段；明细接口按 productId 批量回填） */
+    @TableField(exist = false)
+    private String sku;
+
+    /** 产品名称（展示用，非表字段；原 product_name 列已删除，改为关联 product 表回填） */
+    @TableField(exist = false)
+    private String productName;
+
     /** 关联产品主数据ID(product.id)，成品库存/流水落账用 */
     private Long productMasterId;
     /** 成品入库仓库ID（选了仓库才做成品入库） */

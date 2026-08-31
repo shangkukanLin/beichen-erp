@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, computed } from 'vue'
+import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-import { WarehouseCategory, WarehouseCategoryLabel, MaterialPlaceType, MaterialPlaceTypeLabel } from '@/api/enums'
+import { WarehouseCategory, WarehouseCategoryLabel, MaterialPlaceType, MaterialPlaceTypeLabel, DEV_MATERIAL_DIRTY_KEY } from '@/api/enums'
 import request from '@/utils/request'
 
 const route = useRoute()
@@ -37,7 +37,7 @@ async function handleSaveMaterial() {
       status: material.status, remark: material.remark
     }
     await request.put(`/dev/purchase-item/${material.id}`, payload)
-    ElMessage.success('已保存')
+    ElMessage.success('已保存'); sessionStorage.setItem(DEV_MATERIAL_DIRTY_KEY, '1')
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '')) } finally { saving.value = false }
 }
 
@@ -123,10 +123,10 @@ async function handleFlowSubmit() {
   try {
     if (isFlowEdit.value && flowForm.id) {
       await request.put(`/dev/material-flow/${flowForm.id}`, payload)
-      ElMessage.success('已更新')
+      ElMessage.success('已更新'); sessionStorage.setItem(DEV_MATERIAL_DIRTY_KEY, '1')
     } else {
       await request.post('/dev/material-flow', payload)
-      ElMessage.success('已添加')
+      ElMessage.success('已添加'); sessionStorage.setItem(DEV_MATERIAL_DIRTY_KEY, '1')
     }
     flowDialogVisible.value = false
     loadFlowList()
@@ -137,7 +137,7 @@ async function handleDeleteFlow(row: FlowRecord) {
   try {
     await ElMessageBox.confirm('确定删除该流转记录吗？', '提示', { type: 'warning' })
     await request.delete(`/dev/material-flow/${row.id}`)
-    ElMessage.success('已删除')
+    ElMessage.success('已删除'); sessionStorage.setItem(DEV_MATERIAL_DIRTY_KEY, '1')
     loadFlowList()
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
@@ -160,11 +160,15 @@ function previewImage(url: string) { window.open(url + '?inline=true') }
 // 当前位置
 const currentPlace = computed(() => flowList.value[0] || null)
 
+// 字典类只需加载一次
 onMounted(() => {
   loadMaterialType()
+  loadPlaceOptions()
+})
+// 物料详情与流水每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
+onActivated(() => {
   loadMaterialDetail()
   loadFlowList()
-  loadPlaceOptions()
 })
 
 async function loadMaterialType() {

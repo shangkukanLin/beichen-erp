@@ -280,9 +280,13 @@ export function saveSupplierProducts(id: number | string, products: SupplierProd
 export interface ProjectVO {
   id?: number | string; code: string; name: string
   assemblyName?: string
+  brandId?: number; brandName?: string
   displaySupplierName?: string; touchSupplierName?: string
   adaptModel?: string
   originalSize?: string; originalResolution?: string; projectLeaderId?: number
+  originalDriveIc?: string; originalTouchIc?: string
+  glassSize?: string; glassResolution?: string
+  configDriveIcId?: number; configTouchIcId?: number; configCodeIcId?: number
   sampleFactoryId?: number; outsourceFactoryId?: number
   sampleFactoryName?: string; outsourceFactoryName?: string
   startDate?: string; expectedEndDate?: string; actualEndDate?: string
@@ -292,9 +296,13 @@ export interface ProjectVO {
 export interface ProjectDTO {
   id?: number | string; code?: string; name: string
   assemblyName?: string
+  brandId?: number; brandName?: string
   displaySupplierName?: string; touchSupplierName?: string
   adaptModel?: string
   originalSize?: string; originalResolution?: string; projectLeaderId?: number
+  originalDriveIc?: string; originalTouchIc?: string
+  glassSize?: string; glassResolution?: string
+  configDriveIcId?: number; configTouchIcId?: number; configCodeIcId?: number
   sampleFactoryId?: number; outsourceFactoryId?: number
   sampleFactoryName?: string; outsourceFactoryName?: string
   startDate?: string; expectedEndDate?: string; actualEndDate?: string
@@ -302,7 +310,7 @@ export interface ProjectDTO {
 }
 
 export interface ProjectQueryParams {
-  name?: string; status?: string; pageNum?: number; pageSize?: number
+  name?: string; brandId?: number; status?: string; pageNum?: number; pageSize?: number
 }
 
 export interface BomVO {

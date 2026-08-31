@@ -11,15 +11,15 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("dev_project_timeline")
-public class ProjectTimeline {
+@TableName("dev_project_phase")
+public class ProjectPhase {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
     private Long projectId;
 
-    private String statusName;
+    private String phaseName;
 
     private Integer sortOrder;
     private Integer defaultDays;

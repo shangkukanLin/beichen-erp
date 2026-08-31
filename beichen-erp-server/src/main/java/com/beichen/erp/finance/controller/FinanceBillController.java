@@ -5,6 +5,7 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.finance.entity.FinanceBill;
 import com.beichen.erp.finance.entity.FinanceBillItem;
 import com.beichen.erp.finance.service.FinanceBillService;
+import com.beichen.erp.finance.task.FinanceBillAutoTask;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,6 +19,7 @@ import java.util.Map;
 public class FinanceBillController {
 
     private final FinanceBillService service;
+    private final FinanceBillAutoTask autoTask;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -43,6 +45,10 @@ public class FinanceBillController {
         LocalDate periodEnd = body.get("periodEnd") != null ? LocalDate.parse(body.get("periodEnd").toString()) : null;
         return R.ok(service.generate(billType, partnerId, partnerName, periodStart, periodEnd));
     }
+
+    /** 手动触发一轮自动账单生成（与每日凌晨 2 点定时任务同逻辑，供"立即执行"与排查使用） */
+    @PostMapping("/auto-generate")
+    public R<String> autoGenerate() { return R.ok(autoTask.run(LocalDate.now())); }
 
     @PostMapping("/{id}/audit")
     public R<Void> audit(@PathVariable Long id) { service.audit(id); return R.ok(); }

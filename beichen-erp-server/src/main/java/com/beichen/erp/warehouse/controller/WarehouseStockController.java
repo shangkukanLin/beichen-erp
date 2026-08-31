@@ -2,16 +2,21 @@ package com.beichen.erp.warehouse.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.beichen.erp.brand.entity.Brand;
+import com.beichen.erp.brand.mapper.BrandMapper;
 import com.beichen.erp.common.R;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.dev.entity.BomType;
 import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.common.QualityType;
+import com.beichen.erp.sale.entity.SaleOutbound;
+import com.beichen.erp.sale.mapper.SaleOutboundMapper;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
 import com.beichen.erp.warehouse.entity.WarehouseStockLog;
@@ -23,6 +28,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 统一库存 Controller（替代 InventoryStockController）
@@ -39,6 +45,8 @@ public class WarehouseStockController {
     private final WarehouseMapper warehouseMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final BomTypeMapper bomTypeMapper;
+    private final BrandMapper brandMapper;
+    private final SaleOutboundMapper saleOutboundMapper;
 
     /** 库存分页查询（stockType: PRODUCT=成品库存 / MATERIAL=物料库存，不传则全量） */
     @GetMapping("/page")
@@ -47,16 +55,147 @@ public class WarehouseStockController {
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) Long warehouseId,
             @RequestParam(required = false) Long productId,
+            @RequestParam(required = false) Long materialId,
             @RequestParam(required = false) String qualityType,
             @RequestParam(required = false) String stockType) {
         return R.ok(stockMapper.selectPage(new Page<>(pageNum, pageSize),
             new LambdaQueryWrapper<WarehouseStock>()
                 .eq(warehouseId != null, WarehouseStock::getWarehouseId, warehouseId)
                 .eq(productId != null, WarehouseStock::getProductId, productId)
+                .eq(materialId != null, WarehouseStock::getMaterialId, materialId)
                 .eq(qualityType != null && !qualityType.isBlank(), WarehouseStock::getQualityType, qualityType)
                 .isNotNull("PRODUCT".equals(stockType), WarehouseStock::getProductId)
                 .isNotNull("MATERIAL".equals(stockType), WarehouseStock::getMaterialId)
                 .orderByDesc(WarehouseStock::getId)));
+    }
+
+    /**
+     * 成品库存聚合查询：按（仓库×产品）聚合为一行，展示各品质数量与名称，供成品库存查询页使用。
+     * 不影响 /page（明细结构，供其他页面使用）。
+     */
+    @GetMapping("/product-stock/page")
+    public R<Page<Map<String, Object>>> productStockPage(
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) Long warehouseId,
+            @RequestParam(required = false) List<Long> warehouseIds,
+            @RequestParam(required = false) Long brandId,
+            @RequestParam(required = false) String productName) {
+
+        // 仓库筛选支持多选（warehouseIds，逗号分隔）；warehouseId 单值参数保留向后兼容
+        Set<Long> whFilter = new LinkedHashSet<>();
+        if (warehouseIds != null) {
+            warehouseIds.stream().filter(Objects::nonNull).forEach(whFilter::add);
+        }
+        if (warehouseId != null) whFilter.add(warehouseId);
+
+        LambdaQueryWrapper<WarehouseStock> qw = new LambdaQueryWrapper<WarehouseStock>()
+                .in(!whFilter.isEmpty(), WarehouseStock::getWarehouseId, whFilter)
+                .isNotNull(WarehouseStock::getProductId);
+
+        // 品牌/产品名称过滤：先按条件查产品主键集合，再按集合过滤库存（两者同时存在时取交集）
+        Set<Long> filteredProductIds = null;
+        if (brandId != null) {
+            filteredProductIds = productMapper.selectList(
+                    new LambdaQueryWrapper<Product>().eq(Product::getBrandId, brandId))
+                    .stream().map(Product::getId).collect(Collectors.toSet());
+        }
+        if (productName != null && !productName.isBlank()) {
+            // 关键字同时匹配产品名称与 SKU，便于直接粘贴 SKU 检索
+            Set<Long> nameIds = productMapper.selectList(
+                    new LambdaQueryWrapper<Product>()
+                            .like(Product::getName, productName)
+                            .or().like(Product::getSku, productName))
+                    .stream().map(Product::getId).collect(Collectors.toSet());
+            filteredProductIds = (filteredProductIds == null)
+                    ? nameIds
+                    : filteredProductIds.stream().filter(nameIds::contains).collect(Collectors.toSet());
+        }
+        if (filteredProductIds != null) {
+            if (filteredProductIds.isEmpty()) {
+                Page<Map<String, Object>> empty = new Page<>(pageNum, pageSize, 0);
+                empty.setRecords(Collections.emptyList());
+                return R.ok(empty);
+            }
+            qw.in(WarehouseStock::getProductId, filteredProductIds);
+        }
+
+        List<WarehouseStock> all = stockMapper.selectList(qw);
+
+        // 聚合：键 = 仓库ID + 产品ID
+        Map<String, Map<String, Object>> agg = new LinkedHashMap<>();
+        Set<Long> whIds = new HashSet<>();
+        Set<Long> pIds = new HashSet<>();
+        for (WarehouseStock s : all) {
+            Long whId = s.getWarehouseId();
+            Long pId = s.getProductId();
+            if (whId == null || pId == null) continue;
+            whIds.add(whId);
+            pIds.add(pId);
+            String key = whId + "_" + pId;
+            Map<String, Object> row = agg.computeIfAbsent(key, k -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("warehouseId", whId);
+                m.put("productId", pId);
+                m.put("qtyA", BigDecimal.ZERO);
+                m.put("qtyB", BigDecimal.ZERO);
+                m.put("qtyC", BigDecimal.ZERO);
+                m.put("qtyDefect", BigDecimal.ZERO);
+                m.put("qtyPending", BigDecimal.ZERO);
+                return m;
+            });
+            BigDecimal q = s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
+            // 按成品品质枚举显式归类：不可用 else 兜底，否则 PENDING(待分类) 等会被静默算成不良品
+            ProductQualityType type = ProductQualityType.of(s.getQualityType());
+            if (type == null) continue;
+            switch (type) {
+                case A -> row.put("qtyA", ((BigDecimal) row.get("qtyA")).add(q));
+                case B -> row.put("qtyB", ((BigDecimal) row.get("qtyB")).add(q));
+                case C -> row.put("qtyC", ((BigDecimal) row.get("qtyC")).add(q));
+                case DEFECT -> row.put("qtyDefect", ((BigDecimal) row.get("qtyDefect")).add(q));
+                case PENDING -> row.put("qtyPending", ((BigDecimal) row.get("qtyPending")).add(q));
+            }
+        }
+
+        // 批量补齐名称
+        Map<Long, String> whNameMap = new HashMap<>();
+        if (!whIds.isEmpty()) {
+            warehouseMapper.selectBatchIds(whIds).forEach(w -> whNameMap.put(w.getId(), w.getWarehouseName()));
+        }
+        Map<Long, String> pNameMap = new HashMap<>();
+        Map<Long, String> pSkuMap = new HashMap<>();
+        Map<Long, Long> pBrandMap = new HashMap<>();
+        if (!pIds.isEmpty()) {
+            productMapper.selectBatchIds(pIds).forEach(p -> {
+                pNameMap.put(p.getId(), p.getName() != null ? p.getName() : "");
+                pSkuMap.put(p.getId(), p.getSku() != null ? p.getSku() : "");
+                if (p.getBrandId() != null) pBrandMap.put(p.getId(), p.getBrandId());
+            });
+        }
+        Map<Long, String> brandNameMap = new HashMap<>();
+        if (!pBrandMap.isEmpty()) {
+            Set<Long> brandIds = new HashSet<>(pBrandMap.values());
+            brandMapper.selectBatchIds(brandIds).forEach(b -> brandNameMap.put(b.getId(), b.getBrandName()));
+        }
+        for (Map<String, Object> row : agg.values()) {
+            row.put("warehouseName", whNameMap.getOrDefault(row.get("warehouseId"), ""));
+            row.put("sku", pSkuMap.getOrDefault(row.get("productId"), ""));
+            row.put("productName", pNameMap.getOrDefault(row.get("productId"), ""));
+            Long pid = (Long) row.get("productId");
+            Long bid = pBrandMap.get(pid);
+            row.put("brandId", bid);
+            row.put("brandName", bid != null ? brandNameMap.getOrDefault(bid, "") : "");
+        }
+
+        List<Map<String, Object>> list = new ArrayList<>(agg.values());
+        long total = list.size();
+        int from = (pageNum - 1) * pageSize;
+        List<Map<String, Object>> records = (from < list.size())
+                ? list.subList(from, Math.min(from + pageSize, list.size()))
+                : Collections.emptyList();
+        Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, total);
+        result.setRecords(new ArrayList<>(records));
+        return R.ok(result);
     }
 
     /** 库存流水追溯（stockType: PRODUCT=成品流水 / MATERIAL=物料流水，不传则全量） */
@@ -113,6 +252,16 @@ public class WarehouseStockController {
                 log.setChangeTypeLabel(StockChangeType.labelOf(log.getChangeType()));
                 RelatedBillType rbt = RelatedBillType.fromCode(log.getRelatedBillType());
                 log.setRelatedBillTypeLabel(rbt != null ? rbt.getLabel() : log.getRelatedBillType());
+                // 详情跳转目标ID：销售出库单无独立详情页，映射为其关联销售单ID；其余类型直接用单据ID
+                Long billId = log.getRelatedBillId();
+                if (billId != null) {
+                    Long detailId = billId;
+                    if ("SALE_OUTBOUND".equals(log.getRelatedBillType())) {
+                        SaleOutbound ob = saleOutboundMapper.selectById(billId);
+                        if (ob != null && ob.getOrderId() != null) detailId = ob.getOrderId();
+                    }
+                    log.setRelatedBillDetailId(detailId);
+                }
             }
 
             if (singleProduct) {
@@ -181,9 +330,12 @@ public class WarehouseStockController {
             if (s.getProductId() != null) productIds.add(s.getProductId());
         }
         Map<Long, String> productNameMap = new HashMap<>();
+        Map<Long, String> productSkuMap = new HashMap<>();
         if (!productIds.isEmpty()) {
-            productMapper.selectBatchIds(productIds).forEach(p -> productNameMap.put(p.getId(),
-                p.getName() != null ? p.getName() : ""));
+            productMapper.selectBatchIds(productIds).forEach(p -> {
+                productNameMap.put(p.getId(), p.getName() != null ? p.getName() : "");
+                productSkuMap.put(p.getId(), p.getSku() != null ? p.getSku() : "");
+            });
         }
 
         List<Map<String, Object>> list = new ArrayList<>();
@@ -193,10 +345,11 @@ public class WarehouseStockController {
             m.put("warehouseId", s.getWarehouseId());
             m.put("productId", s.getProductId());
             m.put("materialId", s.getMaterialId());
-            m.put("qualityType", qualityTypeLabel(s.getQualityType()));
+            m.put("qualityType", qualityTypeLabel(s.getQualityType(), s.getProductId() == null));
             m.put("quantity", s.getQuantity());
             if (s.getProductId() != null) {
                 m.put("productName", productNameMap.getOrDefault(s.getProductId(), ""));
+                m.put("sku", productSkuMap.getOrDefault(s.getProductId(), ""));
             }
             if (s.getMaterialId() != null) {
                 m.put("materialName", materialNameMap.getOrDefault(s.getMaterialId(), ""));
@@ -249,9 +402,16 @@ public class WarehouseStockController {
         return R.ok(page);
     }
 
-    /** 品质类型枚举转中文标签 */
-    private String qualityTypeLabel(String code) {
+    /**
+     * 品质编码转中文标签：成品与委外物料的品质值域不同，必须按记录类型选用对应枚举，不可混用。
+     * @param isMaterial true=委外物料记录（materialId 非空），false=成品记录（productId 非空）
+     */
+    private String qualityTypeLabel(String code, boolean isMaterial) {
         if (code == null) return "";
-        try { return QualityType.valueOf(code).getLabel(); } catch (Exception e) { return code; }
+        if (isMaterial) {
+            try { return QualityType.valueOf(code).getLabel(); } catch (Exception e) { return code; }
+        }
+        ProductQualityType p = ProductQualityType.of(code);
+        return p != null ? p.getLabel() : code;
     }
 }

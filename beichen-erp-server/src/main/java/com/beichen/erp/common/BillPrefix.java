@@ -30,6 +30,8 @@ public final class BillPrefix {
     public static final String PAYABLE = "YF-";
     /** 财务账单 */
     public static final String BILL = "ZD-";
+    /** 费用登记单 */
+    public static final String EXPENSE = "FY-";
     /** 资金流水 */
     public static final String CASHFLOW = "FL-";
     /** 委外加工单 */
@@ -64,6 +66,10 @@ public final class BillPrefix {
     public static final String DEV_BUG = "DEV_BUG-";
     /** 其他出入库单（委外关单遗失，历史遗留，保留兼容） */
     public static final String OTHER_IO = "IO-";
-    /** 库存盘点重分类单 */
-    public static final String STOCK_RECLASS = "FL-";
+    /** 退货整理单 */
+    public static final String RETURN_SORT = "TS-";
+    /** 销售换货单 */
+    public static final String SALE_EXCHANGE = "HH-";
+    /** 产品 SKU（产品级唯一编码，新增产品时自动生成：SKU-000001） */
+    public static final String PRODUCT_SKU = "SKU-";
 }

@@ -19,12 +19,15 @@ import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.purchase.entity.*;
+import com.beichen.erp.purchase.mapper.PurchaseOrderItemMapper;
+import com.beichen.erp.purchase.mapper.PurchaseOrderMapper;
 import com.beichen.erp.purchase.mapper.PurchaseReturnItemMapper;
 import com.beichen.erp.purchase.mapper.PurchaseReturnMapper;
 import com.beichen.erp.purchase.service.PurchaseReturnService;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +50,9 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     private final FinancePayableMapper payableMapper;
     private final UserMapper userMapper;
     private final com.beichen.erp.finance.service.PayableHelper payableHelper;
+    private final PurchaseOrderMapper purchaseOrderMapper;
+    private final PurchaseOrderItemMapper purchaseOrderItemMapper;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     public Page<Map<String, Object>> page(Integer status, Long supplierId, String code, int pageNum, int pageSize) {
@@ -85,6 +91,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
             m.put("code", o.getCode());
             m.put("supplierId", o.getSupplierId());
             m.put("warehouseId", o.getWarehouseId());
+            m.put("purchaseOrderId", o.getPurchaseOrderId());
+            m.put("purchaseOrderCode", o.getPurchaseOrderCode());
             m.put("returnDate", o.getReturnDate());
             m.put("status", o.getStatus());
             m.put("totalAmount", o.getTotalAmount());
@@ -123,6 +131,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         order.setId(null);
         order.setStatus(DocStatus.DRAFT.getCode());
         order.setCode(generateCode());
+        fillPurchaseOrderInfo(order);
+        validateReturnQuantity(order, itemMaps);
         if (order.getTotalAmount() == null) order.setTotalAmount(BigDecimal.ZERO);
         returnMapper.insert(order);
         saveItems(order.getId(), itemMaps);
@@ -138,6 +148,8 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         order.setId(id);
         order.setCode(null); // 单号不可修改
         order.setStatus(null);
+        fillPurchaseOrderInfo(order);
+        validateReturnQuantity(order, itemMaps);
         if (order.getTotalAmount() == null) order.setTotalAmount(BigDecimal.ZERO);
         returnMapper.updateById(order);
         itemMapper.delete(new LambdaQueryWrapper<PurchaseReturnItem>().eq(PurchaseReturnItem::getReturnId, id));
@@ -156,7 +168,9 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     .collect(Collectors.toMap(Product::getId, p -> p, (a, b) -> a));
             for (PurchaseReturnItem it : items) {
                 if (it.getProductId() != null && pm.containsKey(it.getProductId())) {
-                    it.setProductName(pm.get(it.getProductId()).getName());
+                    Product p = pm.get(it.getProductId());
+                    it.setProductName(p.getName());
+                    it.setSku(p.getSku() != null ? p.getSku() : "");
                 }
             }
         }
@@ -273,11 +287,117 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         returnMapper.deleteById(id);
     }
 
+    @Override
+    public List<Map<String, Object>> byOrder(Long purchaseOrderId) {
+        if (purchaseOrderId == null) return List.of();
+        List<PurchaseReturn> list = returnMapper.selectList(new LambdaQueryWrapper<PurchaseReturn>()
+                .eq(PurchaseReturn::getPurchaseOrderId, purchaseOrderId)
+                .orderByDesc(PurchaseReturn::getId));
+        List<Map<String, Object>> res = new ArrayList<>();
+        for (PurchaseReturn o : list) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", o.getId());
+            m.put("code", o.getCode());
+            m.put("returnDate", o.getReturnDate());
+            m.put("status", o.getStatus());
+            m.put("totalAmount", o.getTotalAmount());
+            m.put("warehouseId", o.getWarehouseId());
+            res.add(m);
+        }
+        return res;
+    }
+
+    @Override
+    public List<Map<String, Object>> purchaseOrderItems(Long purchaseOrderId) {
+        if (purchaseOrderId == null) return List.of();
+        List<PurchaseOrderItem> oiList = purchaseOrderItemMapper.selectList(new LambdaQueryWrapper<PurchaseOrderItem>()
+                .eq(PurchaseOrderItem::getOrderId, purchaseOrderId));
+        Map<Long, Product> pMap = new HashMap<>();
+        Set<Long> pids = oiList.stream().map(PurchaseOrderItem::getProductId).filter(Objects::nonNull).collect(Collectors.toSet());
+        if (!pids.isEmpty()) productMapper.selectBatchIds(pids).forEach(p -> pMap.put(p.getId(), p));
+        List<Map<String, Object>> res = new ArrayList<>();
+        for (PurchaseOrderItem oi : oiList) {
+            Product p = pMap.get(oi.getProductId());
+            BigDecimal sold = oi.getQuantity() == null ? BigDecimal.ZERO : oi.getQuantity();
+            BigDecimal returned = alreadyReturned(oi.getId());
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("purchaseOrderItemId", oi.getId());
+            m.put("productId", oi.getProductId());
+            m.put("productName", p != null ? p.getName() : "");
+            m.put("spec", p != null ? p.getSpec() : "");
+            m.put("unit", p != null ? p.getUnit() : "");
+            m.put("qualityType", oi.getQualityType());
+            m.put("quantity", oi.getQuantity());
+            m.put("unitPrice", oi.getUnitPrice());
+            m.put("amount", oi.getAmount());
+            m.put("returnedQuantity", returned);
+            m.put("canReturn", sold.subtract(returned));
+            res.add(m);
+        }
+        return res;
+    }
+
+    /** 已退累计数量：关联该采购单明细的已审核退货单数量之和 */
+    private BigDecimal alreadyReturned(Long purchaseOrderItemId) {
+        return jdbcTemplate.query(
+                "SELECT COALESCE(SUM(ri.quantity), 0) FROM purchase_return_item ri " +
+                "JOIN purchase_return sr ON sr.id = ri.return_id " +
+                "WHERE ri.purchase_order_item_id = ? AND sr.status = 'AUDITED'",
+                rs -> rs.next() ? rs.getBigDecimal(1) : BigDecimal.ZERO, purchaseOrderItemId);
+    }
+
+    /** 填充关联采购单号（按 purchaseOrderId 实时查名） */
+    private void fillPurchaseOrderInfo(PurchaseReturn order) {
+        if (order.getPurchaseOrderId() != null) {
+            PurchaseOrder po = purchaseOrderMapper.selectById(order.getPurchaseOrderId());
+            order.setPurchaseOrderCode(po != null ? po.getCode() : null);
+        } else {
+            order.setPurchaseOrderCode(null);
+        }
+    }
+
+    /** 关联采购单时校验：本次退货 ≤ 已购 - 已退（仅校验带 purchaseOrderItemId 的行） */
+    private void validateReturnQuantity(PurchaseReturn order, List<Map<String, Object>> itemMaps) {
+        if (order.getPurchaseOrderId() == null || itemMaps == null || itemMaps.isEmpty()) return;
+        Map<Long, BigDecimal> qtyMap = new HashMap<>();
+        Map<Long, String> nameMap = new HashMap<>();
+        for (Map<String, Object> map : itemMaps) {
+            Object poiObj = map.get("purchaseOrderItemId");
+            if (poiObj == null || poiObj.toString().isBlank()) continue;
+            Long poiId = Long.valueOf(poiObj.toString());
+            BigDecimal qty = map.get("quantity") != null ? new BigDecimal(map.get("quantity").toString()) : BigDecimal.ZERO;
+            qtyMap.merge(poiId, qty, BigDecimal::add);
+            if (map.get("productId") != null) {
+                Product p = productMapper.selectById(Long.valueOf(map.get("productId").toString()));
+                if (p != null) nameMap.put(poiId, p.getName());
+            }
+        }
+        if (qtyMap.isEmpty()) return;
+        List<PurchaseOrderItem> oiList = purchaseOrderItemMapper.selectBatchIds(qtyMap.keySet());
+        for (PurchaseOrderItem oi : oiList) {
+            BigDecimal sold = oi.getQuantity() == null ? BigDecimal.ZERO : oi.getQuantity();
+            BigDecimal returned = alreadyReturned(oi.getId());
+            BigDecimal canReturn = sold.subtract(returned);
+            BigDecimal thisQty = qtyMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
+            if (thisQty.compareTo(canReturn) > 0) {
+                String name = nameMap.getOrDefault(oi.getId(), String.valueOf(oi.getProductId()));
+                throw new BusinessException("产品[" + name + "]退货数量超过可退数量（已购" + fmt(sold)
+                        + "，已退" + fmt(returned) + "，可退" + fmt(canReturn) + "）");
+            }
+        }
+    }
+
+    private String fmt(BigDecimal v) {
+        return v == null ? "0" : v.stripTrailingZeros().toPlainString();
+    }
+
     private void saveItems(Long returnId, List<Map<String, Object>> itemMaps) {
         if (itemMaps != null) {
             for (Map<String, Object> map : itemMaps) {
                 PurchaseReturnItem it = new PurchaseReturnItem();
                 it.setReturnId(returnId);
+                if (map.get("purchaseOrderItemId") != null && !map.get("purchaseOrderItemId").toString().isBlank())
+                    it.setPurchaseOrderItemId(Long.valueOf(map.get("purchaseOrderItemId").toString()));
                 if (map.get("productId") != null) it.setProductId(Long.valueOf(map.get("productId").toString()));
                 if (map.get("quantity") != null) it.setQuantity(new BigDecimal(map.get("quantity").toString()));
                 if (map.get("unitPrice") != null) it.setUnitPrice(new BigDecimal(map.get("unitPrice").toString()));

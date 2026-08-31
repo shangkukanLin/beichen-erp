@@ -28,9 +28,15 @@ public class SaleOrder {
 
     private String status;
 
+    /** 审核时间（财务分析利润表按此归月；存量单据为 NULL 时按 createTime 兜底） */
+    private LocalDateTime auditTime;
+
     private Integer taxIncluded;
 
     private BigDecimal taxRate;
+
+    /** 税额（taxIncluded=1 时按税率从含税总额中拆出：total × rate/(100+rate)） */
+    private BigDecimal taxAmount;
 
     private BigDecimal totalAmount;
 

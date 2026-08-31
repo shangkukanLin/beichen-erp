@@ -17,8 +17,8 @@ public enum SourceBillType {
     PURCHASE_ORDER("采购单"),
     /** 采购入库 */
     PURCHASE_INBOUND("采购入库"),
-    /** 成品退货单 */
-    PURCHASE_RETURN("成品退货单"),
+    /** 采购退货单 */
+    PURCHASE_RETURN("采购退货单"),
     /** 销售退货 */
     SALE_RETURN("销售退货"),
     /** 委外加工单交货（成品报工入库产生应付） */
@@ -30,7 +30,16 @@ public enum SourceBillType {
     /** 委外物料退货（退回物料商，负向应付冲减） */
     OUTSOURCE_MATERIAL_RETURN("委外物料退货"),
     /** 委外超损赔偿（结单超损总价生成负应付） */
-    OUTSOURCE_EXCESS_LOSS("委外超损");
+    OUTSOURCE_EXCESS_LOSS("委外超损"),
+
+    /** 销售换货收费：换货单选择收费时生成的正向应收（单号后缀 -FEE） */
+    SALE_EXCHANGE_CHARGE("销售换货收费"),
+
+    /** 销售退货收费：退单选择收费时生成的正向应收（单号后缀 -FEE） */
+    SALE_RETURN_CHARGE("销售退货收费"),
+
+    /** 退货整理折损收款：整理后 B/C/不良品的折损，向客户收取（单号后缀 -LOSS） */
+    RETURN_SORT_LOSS("退货整理折损");
 
     private final String label;
 

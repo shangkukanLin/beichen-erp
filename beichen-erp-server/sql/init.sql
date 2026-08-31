@@ -416,10 +416,10 @@ CREATE TABLE IF NOT EXISTS dev_project (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目表';
 
-CREATE TABLE IF NOT EXISTS dev_project_timeline (
+CREATE TABLE IF NOT EXISTS dev_project_phase (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     project_id BIGINT NOT NULL COMMENT '项目ID',
-    status_name VARCHAR(50) NOT NULL COMMENT '节点名称',
+    phase_name VARCHAR(50) NOT NULL COMMENT '节点名称',
     sort_order INT DEFAULT 0 COMMENT '排序',
     planned_end DATE COMMENT '计划完成日期',
     actual_end DATE COMMENT '实际完成日期',
@@ -428,7 +428,7 @@ CREATE TABLE IF NOT EXISTS dev_project_timeline (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_project_id (project_id),
     INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目时间线表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目项目阶段表';
 
 CREATE TABLE IF NOT EXISTS dev_bom (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'BOM ID',

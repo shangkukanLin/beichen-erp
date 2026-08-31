@@ -83,15 +83,8 @@ public class CustomerServiceImpl implements CustomerService {
         if (customer.getCreditLimit() != null && customer.getCreditLimit().compareTo(BigDecimal.ZERO) < 0) {
             throw new BusinessException("信用额度不能为负");
         }
-        if (customer.getCode() != null && !customer.getCode().isBlank()) {
-            // 编码唯一性需限定本公司内
-            Long cnt = customerMapper.selectCount(new LambdaQueryWrapper<Customer>()
-                    .eq(Customer::getCode, customer.getCode())
-                    .eq(Customer::getCompanyId, CompanyContext.get()));
-            if (cnt != null && cnt > 0) throw new BusinessException("客户编码已存在");
-        } else {
-            customer.setCode(generateCode());
-        }
+        // 编码由系统统一生成（CU-yyyyMMdd-序号），不接受调用方传入（前端输入框已置灰，此处兜底防接口绕过）
+        customer.setCode(generateCode());
         // 账期/信用额度默认值（应收余额由应收台账实时汇总，不在此维护）
         if (customer.getCreditPeriod() == null) customer.setCreditPeriod(0);
         if (customer.getCreditLimit() == null) customer.setCreditLimit(BigDecimal.ZERO);
@@ -108,12 +101,8 @@ public class CustomerServiceImpl implements CustomerService {
                 .eq(Customer::getId, customer.getId())
                 .eq(Customer::getCompanyId, CompanyContext.get()));
         if (old == null) throw new BusinessException("客户不存在");
-        if (customer.getCode() != null && !customer.getCode().equals(old.getCode())) {
-            Long cnt = customerMapper.selectCount(new LambdaQueryWrapper<Customer>()
-                    .eq(Customer::getCode, customer.getCode())
-                    .eq(Customer::getCompanyId, CompanyContext.get()));
-            if (cnt != null && cnt > 0) throw new BusinessException("客户编码已存在");
-        }
+        // 编码不可修改：一律以库中现有值为准（updateById 会写入传入值，必须显式回填旧编码）
+        customer.setCode(old.getCode());
         // 账期、信用额度非负校验
         if (customer.getCreditPeriod() != null && customer.getCreditPeriod() < 0) {
             throw new BusinessException("账期天数不能为负");

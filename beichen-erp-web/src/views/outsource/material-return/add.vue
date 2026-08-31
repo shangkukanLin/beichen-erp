@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onUnmounted } from 'vue'
+import { OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY } from '@/api/enums'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -48,13 +49,19 @@ async function handleSubmit() {
       supplierId: form.supplierId, fromWarehouseId: form.fromWarehouseId,
       returnDate: form.returnDate, remark: form.remark, returnType: 'MATERIAL', items
     })
-    ElMessage.success('退货单草稿已保存，请在列表中审核生效')
+    ElMessage.success('退货单草稿已保存，请在列表中审核生效'); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
     tabStore.removeTab(window.location.hash.replace('#', ''))
     router.replace('/outsource/material-return')
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { submitting.value = false }
 }
 
-onMounted(loadOptions)
+// 顶栏"刷新数据"：重新加载出库源仓下拉
+async function handleRefreshData() { await loadOptions() }
+onMounted(() => {
+  loadOptions()
+  window.addEventListener('refresh:dropdown-data', handleRefreshData)
+})
+onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 
 </script>
 

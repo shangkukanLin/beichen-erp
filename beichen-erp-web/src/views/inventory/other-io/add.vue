@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { getQualityTypes, type QualityOption } from '@/api/product'
-import { IoType, IoTypeLabel, WarehouseCategory } from '@/api/enums'
+import { IoType, IoTypeLabel, WarehouseCategory, INVENTORY_OTHER_IO_DIRTY_KEY } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const route = useRoute(); const router = useRouter()
@@ -47,15 +47,18 @@ async function handleSubmit() {
   try {
     const body: any = { ...form, items: validItems }
     if (editId) {
-      await request.put(`/inventory/other/${editId}`, body); ElMessage.success('已更新（待审核）')
+      await request.put(`/inventory/other/${editId}`, body); ElMessage.success('已更新（待审核）'); sessionStorage.setItem(INVENTORY_OTHER_IO_DIRTY_KEY, '1')
     } else {
-      await request.post('/inventory/other', body); ElMessage.success('已保存（待审核）')
+      await request.post('/inventory/other', body); ElMessage.success('已保存（待审核）'); sessionStorage.setItem(INVENTORY_OTHER_IO_DIRTY_KEY, '1')
     }
     router.push('/inventory/other-io')
   } catch (e: any) { ElMessage.error(e?.message||'保存失败') } finally { saving.value = false }
 }
 
-onMounted(()=>{ loadQualityTypes(); loadDetail() })
+// 顶栏"刷新数据"：重新加载品质下拉
+async function handleRefreshData() { await loadQualityTypes() }
+onMounted(()=>{ loadQualityTypes(); loadDetail(); window.addEventListener('refresh:dropdown-data', handleRefreshData) })
+onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 </script>
 
 <template>

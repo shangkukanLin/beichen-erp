@@ -17,6 +17,7 @@ import com.beichen.erp.outsource.mapper.OutsourceOrderDeliveryMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
+import com.beichen.erp.material.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -42,6 +45,7 @@ public class AfterSaleController {
     private final OutsourceOrderProductMapper orderProductMapper;
     private final WarehouseStockService warehouseStockService;
     private final ProductMapper productMapper;
+    private final ProductService productService;
 
     /** 收费售后退不良：客户退回不良品 → 入库增不良品库存（立即生效，不关联加工单） */
     @PostMapping("/return-defect")
@@ -116,6 +120,18 @@ public class AfterSaleController {
         w.orderByDesc(OutsourceOrderDelivery::getId);
         Page<OutsourceOrderDelivery> res = deliveryMapper.selectPage(
                 new Page<>(pageNum, pageSize), w);
+        // 回填产品名称与 SKU（两者都是非表字段，前端免查库即可展示）
+        Set<Long> pids = res.getRecords().stream().map(OutsourceOrderDelivery::getProductId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        if (!pids.isEmpty()) {
+            Map<Long, String> nameMap = productMapper.selectBatchIds(pids).stream()
+                    .collect(Collectors.toMap(Product::getId,
+                            p -> p.getName() != null ? p.getName() : "", (a, b) -> a));
+            for (OutsourceOrderDelivery d : res.getRecords()) {
+                if (d.getProductId() != null) d.setProductName(nameMap.getOrDefault(d.getProductId(), ""));
+            }
+        }
+        productService.fillSku(res.getRecords(), OutsourceOrderDelivery::getProductId, OutsourceOrderDelivery::setSku);
         return R.ok(res);
     }
 

@@ -32,6 +32,9 @@ public class PurchaseOrder {
 
     private BigDecimal taxRate;
 
+    /** 税额（taxIncluded=1 时按税率从含税总额中拆出：total × rate/(100+rate)） */
+    private BigDecimal taxAmount;
+
     private BigDecimal totalAmount;
 
     private String remark;
