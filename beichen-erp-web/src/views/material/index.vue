@@ -72,6 +72,10 @@ const defaultForm = (): Product => ({
   spec: '',
   generalModel: '',
   unit: 'pcs',
+  safetyStock: undefined,
+  costPrice: undefined,
+  costManual: 0,
+  lastInPrice: undefined,
   status: ProductStatus.NORMAL,
   remark: '',
 } as Product)
@@ -261,6 +265,15 @@ onMounted(() => {
         <el-table-column prop="spec" label="规格" width="120" />
         <el-table-column prop="generalModel" label="通用型号" width="120" />
         <el-table-column prop="safetyStock" label="安全库存" width="100" align="right" />
+        <el-table-column label="成本价" width="110" align="right">
+          <template #default="{ row }">
+            <span>{{ row.costPrice != null ? Number(row.costPrice).toFixed(2) : '—' }}</span>
+            <el-tag v-if="row.costManual === 1" size="small" type="info" style="margin-left:4px">手工</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="最近进价" width="110" align="right">
+          <template #default="{ row }">{{ row.lastInPrice != null ? Number(row.lastInPrice).toFixed(2) : '—' }}</template>
+        </el-table-column>
         <el-table-column label="当前库存" width="130" align="right">
           <template #default="{ row }">
             <span :style="{ color: isLowStock(row) ? 'var(--app-color-danger)' : '', fontWeight: isLowStock(row) ? 'bold' : '' }">
@@ -344,6 +357,14 @@ onMounted(() => {
           <el-col :span="12">
             <el-form-item label="安全库存">
               <el-input-number v-model="form.safetyStock" :min="0" :precision="0" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="成本价">
+              <!-- 成本价默认由入库自动加权；手填后标记为手工锁定，自动加权将跳过 -->
+              <el-input-number v-model="form.costPrice" :min="0" :precision="2" controls-position="right" style="width:100%"
+                placeholder="入库后自动计算" @change="(v: any) => { if (v != null && form.id) form.costManual = 1 }" />
+              <div v-if="form.lastInPrice != null" style="font-size:12px;color:var(--el-text-color-secondary)">最近进价 {{ Number(form.lastInPrice).toFixed(2) }}</div>
             </el-form-item>
           </el-col>
           <el-col :span="24">

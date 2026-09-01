@@ -71,6 +71,7 @@ public class OutsourceOrderDeliveryServiceImpl
     private final PayableHelper payableHelper;
     private final SupplierMapper supplierMapper;
     private final ProductService productService;
+    private final com.beichen.erp.warehouse.service.CostService costService;
 
     /** 获取某加工单的所有交货记录 */
     @Override
@@ -213,11 +214,21 @@ public class OutsourceOrderDeliveryServiceImpl
                     .filter(p -> delivery.getProductId() != null && delivery.getProductId().equals(p.getId()))
                     .findFirst().orElse(null);
             if (matchedProduct == null) throw new BusinessException("加工单中未找到该产品");
-            applyMaterialDeduction(order, matchedProduct, delivery.getQuantity(), matchedProduct.getProductName());
+            BigDecimal materialCost = applyMaterialDeduction(order, matchedProduct, delivery.getQuantity(), matchedProduct.getProductName());
             if (delivery.getWarehouseId() != null) {
                 addInventoryStock(delivery, order.getCode());
             }
             createDeliveryPayable(order, matchedProduct, delivery);
+            // 移动加权成本：本批单位成本 = (加工费 + 耗用材料成本) ÷ 交货数量（包工包料时材料成本为 0）
+            BigDecimal totalQty = delivery.getQuantity() != null ? delivery.getQuantity() : BigDecimal.ZERO;
+            if (totalQty.compareTo(BigDecimal.ZERO) > 0 && delivery.getProductMasterId() != null) {
+                BigDecimal fee = matchedProduct.getUnitPrice() != null
+                        ? matchedProduct.getUnitPrice().multiply(totalQty) : BigDecimal.ZERO;
+                BigDecimal unitCost = fee.add(materialCost == null ? BigDecimal.ZERO : materialCost)
+                        .divide(totalQty, 4, RoundingMode.HALF_UP);
+                costService.applyProduct(delivery.getProductMasterId(), totalQty, unitCost,
+                        StockChangeType.OUTSOURCE_FINISH_IN.getCode(), delivery.getId(), order.getCode());
+            }
         }
         OutsourceOrderDelivery upd = new OutsourceOrderDelivery();
         upd.setId(id);
@@ -239,6 +250,8 @@ public class OutsourceOrderDeliveryServiceImpl
             revertDefectStock(order, delivery);
         } else {
             revertDeliveryStock(order, delivery);
+            // 成本冲销：删除本批交货入库批次并反加权
+            costService.reverseByBill(StockChangeType.OUTSOURCE_FINISH_IN.getCode(), delivery.getId());
         }
         // 同步冲回应付（置已作废，保留审计；已付款的会被阻止并抛异常）
         payableHelper.reversePayable(id);
@@ -645,26 +658,33 @@ public class OutsourceOrderDeliveryServiceImpl
         return sb.toString();
     }
 
-    /** 执行物料扣减（允许负数） */
-    private void applyMaterialDeduction(OutsourceOrder order, OutsourceOrderProduct product,
+    /** 执行物料扣减（允许负数）；返回本批耗用材料总成本（按物料加权成本计价，供产品成本归集） */
+    private BigDecimal applyMaterialDeduction(OutsourceOrder order, OutsourceOrderProduct product,
                                         BigDecimal deliveryQty, String productName) {
         List<MaterialReq> materials = loadMaterialRequirements(product);
         if (materials.isEmpty()) {
             log.warn("产品「{}」无物料需求，跳过物料扣除", productName);
-            return;
+            return BigDecimal.ZERO;
         }
         Long whId = resolveOutsourceWarehouseId(order);
         if (whId == null) {
             log.warn("无法确定委外仓库，跳过物料扣除 (factoryId={})", order.getFactoryId());
-            return;
+            return BigDecimal.ZERO;
         }
 
+        BigDecimal totalMaterialCost = BigDecimal.ZERO;
         for (MaterialReq mat : materials) {
             if (mat.materialId() == null) {
                 log.warn("物料「{}」在委外物料表中未找到，跳过扣减", mat.materialName());
                 continue;
             }
             BigDecimal needed = mat.perUnit().multiply(deliveryQty);
+            // 材料成本取物料移动加权成本价，未建立时退回主数据参考单价
+            OutsourceMaterial matMaster = outsourceMaterialMapper.selectById(mat.materialId());
+            BigDecimal matUnitCost = matMaster != null && matMaster.getCostPrice() != null
+                    ? matMaster.getCostPrice()
+                    : (matMaster != null && matMaster.getPrice() != null ? matMaster.getPrice() : BigDecimal.ZERO);
+            totalMaterialCost = totalMaterialCost.add(matUnitCost.multiply(needed));
             WarehouseStock stock = stockMapper.selectOne(
                     new LambdaQueryWrapper<WarehouseStock>()
                             .eq(WarehouseStock::getWarehouseId, whId)
@@ -689,6 +709,7 @@ public class OutsourceOrderDeliveryServiceImpl
                     needed.negate(), before, after, order.getCode());
             log.info("扣减物料: {} x{} (仓库ID={})", mat.materialName(), needed.setScale(2, RoundingMode.HALF_UP), whId);
         }
+        return totalMaterialCost;
     }
 
     /** 回滚交货记录的物料扣减（加回委外仓库） */

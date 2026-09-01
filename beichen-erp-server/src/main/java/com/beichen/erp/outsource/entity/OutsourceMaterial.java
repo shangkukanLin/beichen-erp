@@ -20,6 +20,15 @@ public class OutsourceMaterial {
     private String remark;
     /** 单价 */
     private BigDecimal price;
+
+    /** 移动加权平均成本价（委外仓入库自动更新；cost_manual=1 时以手填为准） */
+    private BigDecimal costPrice;
+
+    /** 成本价是否手工锁定（1=手改，自动加权跳过） */
+    private Integer costManual;
+
+    /** 最近一次入库单价（参考价） */
+    private BigDecimal lastInPrice;
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;
     private LocalDateTime createTime;

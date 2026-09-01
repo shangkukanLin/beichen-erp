@@ -27,6 +27,16 @@ public class Product {
     private String generalModel;
     private String unit;
     private BigDecimal safetyStock;
+
+    /** 移动加权平均成本价（入库自动更新；cost_manual=1 时以手填为准） */
+    private BigDecimal costPrice;
+
+    /** 成本价是否手工锁定（1=手改，自动加权跳过） */
+    private Integer costManual;
+
+    /** 最近一次入库单价（参考价） */
+    private BigDecimal lastInPrice;
+
     private ProductStatus status;
     private Long projectId;
     private String remark;

@@ -53,6 +53,7 @@ public class OutsourceOtherIoController {
     private final OutsourceMaterialMapper materialMapper;
     private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
     private final WarehouseMapper warehouseMapper;
+    private final com.beichen.erp.warehouse.service.CostService costService;
     private final WarehouseStockService warehouseStockService;
 
     @GetMapping("/page")
@@ -150,6 +151,13 @@ public class OutsourceOtherIoController {
         List<OutsourceOtherIoItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, id));
         applyStock(old, items);
+        // 移动加权成本：IN 单按明细单价入库加权（OUT 单不影响成本）
+        if (IoType.IN.getCode().equals(old.getIoType())) {
+            for (OutsourceOtherIoItem it : items) {
+                costService.applyMaterial(it.getMaterialId(), it.getQuantity(), it.getUnitPrice(),
+                        StockChangeType.OTHER_IN.getCode(), old.getId(), old.getCode());
+            }
+        }
         OutsourceOtherIo u = new OutsourceOtherIo(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
         ioMapper.updateById(u);
         return R.ok();
@@ -165,6 +173,10 @@ public class OutsourceOtherIoController {
         List<OutsourceOtherIoItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, id));
         revertStock(old, items);
+        // 成本冲销：IN 单删除入库批次并反加权
+        if (IoType.IN.getCode().equals(old.getIoType())) {
+            costService.reverseByBill(StockChangeType.OTHER_IN.getCode(), id);
+        }
         OutsourceOtherIo u = new OutsourceOtherIo(); u.setId(id); u.setStatus(DocStatus.DRAFT.getCode());
         ioMapper.updateById(u);
         return R.ok();

@@ -295,6 +295,9 @@ CREATE TABLE IF NOT EXISTS outsource_delivery_item (
 
 CREATE TABLE IF NOT EXISTS outsource_material (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    cost_price DECIMAL(18,4) DEFAULT NULL COMMENT '移动加权平均成本价(委外仓入库自动更新)',
+    cost_manual TINYINT DEFAULT 0 COMMENT '成本价是否手工锁定 0否 1是',
+    last_in_price DECIMAL(18,4) DEFAULT NULL COMMENT '最近入库单价',
     project_ids VARCHAR(500) COMMENT '关联项目ID列表(逗号分隔)',
     warehouse_id BIGINT COMMENT '仓库ID',
     material_name VARCHAR(100) NOT NULL COMMENT '物料名称',
@@ -1414,6 +1417,26 @@ CREATE TABLE IF NOT EXISTS finance_invoice (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='发票登记表';
 
+-- ==================== 入库批次成本记录（移动加权平均成本回滚依据） ====================
+
+CREATE TABLE IF NOT EXISTS cost_inbound_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    target_type VARCHAR(20) NOT NULL COMMENT '成本对象类型: PRODUCT/MATERIAL',
+    target_id BIGINT NOT NULL COMMENT '成本对象ID',
+    change_type VARCHAR(50) COMMENT '库存变动类型',
+    related_bill_id BIGINT COMMENT '关联单据ID(反审核冲销依据)',
+    related_bill_no VARCHAR(50) COMMENT '关联单号',
+    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '入库数量',
+    unit_cost DECIMAL(18,4) DEFAULT 0 COMMENT '入库单价',
+    total_cost DECIMAL(18,4) DEFAULT 0 COMMENT '入库总成本',
+    cost_after DECIMAL(18,4) COMMENT '入库后加权成本快照',
+    company_id BIGINT COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_target (target_type, target_id),
+    INDEX idx_bill (change_type, related_bill_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='入库批次成本记录表';
+
 CREATE TABLE IF NOT EXISTS finance_bill (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '账单ID',
     bill_no VARCHAR(50) NOT NULL COMMENT '账单号',
@@ -1564,6 +1587,9 @@ CREATE TABLE IF NOT EXISTS product (
     general_model   VARCHAR(100) DEFAULT NULL          COMMENT '通用型号(适用多款机型)',
     unit            VARCHAR(20) DEFAULT 'pcs'          COMMENT '单位',
     safety_stock    DECIMAL(18,4) DEFAULT 0           COMMENT '安全库存',
+    cost_price      DECIMAL(18,4) DEFAULT NULL         COMMENT '移动加权平均成本价(入库自动更新)',
+    cost_manual     TINYINT DEFAULT 0                  COMMENT '成本价是否手工锁定 0否 1是',
+    last_in_price   DECIMAL(18,4) DEFAULT NULL         COMMENT '最近入库单价',
     status          VARCHAR(20) DEFAULT 'NORMAL'         COMMENT '状态: NORMAL/DISCONTINUED/DEVELOPING',
     project_id      BIGINT DEFAULT NULL               COMMENT '关联项目ID',
     remark          VARCHAR(255)                      COMMENT '备注',

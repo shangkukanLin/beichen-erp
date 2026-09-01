@@ -44,6 +44,12 @@ export interface Product {
   generalModel?: string
   unit?: string
   safetyStock?: number
+  /** 移动加权平均成本价（采购/委外入库自动更新；costManual=1 时以手填为准） */
+  costPrice?: number
+  /** 成本价是否手工锁定（1=手改，自动加权跳过） */
+  costManual?: number
+  /** 最近一次入库单价（参考价） */
+  lastInPrice?: number
   currentStock?: number
   status: typeof ProductStatus[keyof typeof ProductStatus] | string
   projectId?: number

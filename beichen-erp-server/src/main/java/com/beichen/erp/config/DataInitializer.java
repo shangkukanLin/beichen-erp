@@ -50,6 +50,7 @@ public class DataInitializer implements ApplicationRunner {
     private final PhaseTemplateMapper phaseTemplateMapper;
     private final ContractTemplateMapper contractTemplateMapper;
     private final JdbcTemplate jdbcTemplate;
+    private final com.beichen.erp.warehouse.service.CostService costService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Override
@@ -240,6 +241,37 @@ public class DataInitializer implements ApplicationRunner {
                 "    INDEX idx_status (status),\n" +
                 "    INDEX idx_company_id (company_id)\n" +
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='费用登记表'");
+        // 移动加权平均成本：产品/物料成本列 + 入库批次记录表（存量回填见 backfillCostPrice）
+        addColumnIfAbsent("product", "cost_price",
+                "ALTER TABLE product ADD COLUMN cost_price DECIMAL(18,4) DEFAULT NULL COMMENT '移动加权平均成本价' AFTER safety_stock");
+        addColumnIfAbsent("product", "cost_manual",
+                "ALTER TABLE product ADD COLUMN cost_manual TINYINT DEFAULT 0 COMMENT '成本价是否手工锁定 0否 1是' AFTER cost_price");
+        addColumnIfAbsent("product", "last_in_price",
+                "ALTER TABLE product ADD COLUMN last_in_price DECIMAL(18,4) DEFAULT NULL COMMENT '最近入库单价' AFTER cost_manual");
+        addColumnIfAbsent("outsource_material", "cost_price",
+                "ALTER TABLE outsource_material ADD COLUMN cost_price DECIMAL(18,4) DEFAULT NULL COMMENT '移动加权平均成本价' AFTER price");
+        addColumnIfAbsent("outsource_material", "cost_manual",
+                "ALTER TABLE outsource_material ADD COLUMN cost_manual TINYINT DEFAULT 0 COMMENT '成本价是否手工锁定 0否 1是' AFTER cost_price");
+        addColumnIfAbsent("outsource_material", "last_in_price",
+                "ALTER TABLE outsource_material ADD COLUMN last_in_price DECIMAL(18,4) DEFAULT NULL COMMENT '最近入库单价' AFTER cost_manual");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS cost_inbound_log (\n" +
+                "    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',\n" +
+                "    target_type VARCHAR(20) NOT NULL COMMENT '成本对象类型: PRODUCT/MATERIAL',\n" +
+                "    target_id BIGINT NOT NULL COMMENT '成本对象ID',\n" +
+                "    change_type VARCHAR(50) COMMENT '库存变动类型',\n" +
+                "    related_bill_id BIGINT COMMENT '关联单据ID(反审核冲销依据)',\n" +
+                "    related_bill_no VARCHAR(50) COMMENT '关联单号',\n" +
+                "    quantity DECIMAL(18,4) DEFAULT 0 COMMENT '入库数量',\n" +
+                "    unit_cost DECIMAL(18,4) DEFAULT 0 COMMENT '入库单价',\n" +
+                "    total_cost DECIMAL(18,4) DEFAULT 0 COMMENT '入库总成本',\n" +
+                "    cost_after DECIMAL(18,4) COMMENT '入库后加权成本快照',\n" +
+                "    company_id BIGINT COMMENT '公司ID',\n" +
+                "    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',\n" +
+                "    INDEX idx_target (target_type, target_id),\n" +
+                "    INDEX idx_bill (change_type, related_bill_id),\n" +
+                "    INDEX idx_company_id (company_id)\n" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='入库批次成本记录表'");
+        backfillCostPrice();
         // 发票登记表（销项/进项，税务口径；存量库幂等补建）
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS finance_invoice (\n" +
                 "    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '发票ID',\n" +
@@ -479,6 +511,122 @@ public class DataInitializer implements ApplicationRunner {
         } catch (Exception e) {
             log.warn("修改列 {}.{} 为可空失败: {}", table, column, e.getMessage());
         }
+    }
+
+    /**
+     * 存量成本回填（幂等：cost_inbound_log 已有记录则整体跳过）。
+     * 顺序：先物料类入库（其他出入库 IN/物料收货/委外发料），再采购入库，最后委外交货
+     * （交货依赖物料成本；材料成本按当前物料加权成本估算，包工包料为 0）。
+     */
+    private void backfillCostPrice() {
+        try {
+            Long done = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM cost_inbound_log", Long.class);
+            if (done != null && done > 0) return;
+            int n = 0;
+            // 1) 委外物料：其他出入库 IN
+            for (Map<String, Object> r : jdbcTemplate.queryForList(
+                    "SELECT io.id AS bill_id, io.code AS bill_no, io.company_id, it.material_id, it.quantity, it.unit_price " +
+                    "FROM outsource_other_io io JOIN outsource_other_io_item it ON it.other_io_id = io.id " +
+                    "WHERE io.status = 'AUDITED' AND io.io_type = 'IN' ORDER BY io.id, it.id")) {
+                n += replayMaterial(r, "OTHER_IN");
+            }
+            // 2) 委外物料：物料订单收货单
+            for (Map<String, Object> r : jdbcTemplate.queryForList(
+                    "SELECT d.id AS bill_id, d.code AS bill_no, d.company_id, it.material_id, it.quantity, it.unit_price " +
+                    "FROM outsource_delivery d JOIN outsource_delivery_item it ON it.delivery_id = d.id " +
+                    "WHERE d.status = 'AUDITED' AND d.delivery_type = 'RECEIVE' ORDER BY d.id, it.id")) {
+                n += replayMaterial(r, "RECEIVE_IN");
+            }
+            // 3) 委外物料：委外收发单发料
+            for (Map<String, Object> r : jdbcTemplate.queryForList(
+                    "SELECT d.id AS bill_id, d.code AS bill_no, d.company_id, it.material_id, it.quantity, it.unit_price " +
+                    "FROM outsource_delivery d JOIN outsource_delivery_item it ON it.delivery_id = d.id " +
+                    "WHERE d.status = 'AUDITED' AND d.delivery_type = 'DELIVERY' ORDER BY d.id, it.id")) {
+                n += replayMaterial(r, "DELIVERY_IN");
+            }
+            // 4) 产品：已审核采购单明细
+            for (Map<String, Object> r : jdbcTemplate.queryForList(
+                    "SELECT o.id AS bill_id, o.code AS bill_no, o.company_id, it.product_id, it.quantity, it.unit_price " +
+                    "FROM purchase_order o JOIN purchase_order_item it ON it.order_id = o.id " +
+                    "WHERE o.status = 'AUDITED' ORDER BY o.id, it.id")) {
+                Long cid = num(r.get("company_id"));
+                try {
+                    if (cid != null && cid > 0) CompanyContext.set(cid);
+                    costService.applyProduct(num(r.get("product_id")), toBd(r.get("quantity")), toBd(r.get("unit_price")),
+                            "PURCHASE_IN", num(r.get("bill_id")), (String) r.get("bill_no"));
+                    n++;
+                } finally {
+                    CompanyContext.clear();
+                }
+            }
+            // 5) 产品：已审核委外交货（单价 = (加工费+材料成本估算) ÷ 数量）
+            for (Map<String, Object> r : jdbcTemplate.queryForList(
+                    "SELECT d.id AS bill_id, d.company_id, d.quantity, p.product_master_id, p.unit_price, d.order_id " +
+                    "FROM outsource_order_delivery d JOIN outsource_order_product p ON p.id = d.product_id " +
+                    "WHERE d.status = 'AUDITED' AND IFNULL(d.is_reverse, 0) = 0 AND d.warehouse_id IS NOT NULL " +
+                    "AND p.product_master_id IS NOT NULL ORDER BY d.id")) {
+                java.math.BigDecimal qty = toBd(r.get("quantity"));
+                if (qty.compareTo(java.math.BigDecimal.ZERO) <= 0) continue;
+                java.math.BigDecimal fee = toBd(r.get("unit_price")).multiply(qty);
+                java.math.BigDecimal matCost = estimateMaterialCost(num(r.get("order_id")), qty);
+                java.math.BigDecimal unitCost = fee.add(matCost).divide(qty, 4, java.math.RoundingMode.HALF_UP);
+                Long cid = num(r.get("company_id"));
+                try {
+                    if (cid != null && cid > 0) CompanyContext.set(cid);
+                    costService.applyProduct(num(r.get("product_master_id")), qty, unitCost,
+                            "OUTSOURCE_FINISH_IN", num(r.get("bill_id")), null);
+                    n++;
+                } finally {
+                    CompanyContext.clear();
+                }
+            }
+            if (n > 0) log.info("成本回填完成：共 {} 条入库批次", n);
+        } catch (Exception e) {
+            log.warn("成本回填失败(不影响启动): {}", e.getMessage());
+        }
+    }
+
+    /** 重放一行物料入库批次（设置公司上下文） */
+    private int replayMaterial(Map<String, Object> r, String changeType) {
+        Long cid = num(r.get("company_id"));
+        try {
+            if (cid != null && cid > 0) CompanyContext.set(cid);
+            costService.applyMaterial(num(r.get("material_id")), toBd(r.get("quantity")), toBd(r.get("unit_price")),
+                    changeType, num(r.get("bill_id")), (String) r.get("bill_no"));
+            return 1;
+        } catch (Exception e) {
+            log.warn("回填单行失败 bill={}: {}", r.get("bill_id"), e.getMessage());
+            return 0;
+        } finally {
+            CompanyContext.clear();
+        }
+    }
+
+    /** 估算委外交货的材料成本（BOM 需求 × 物料当前加权成本；无法解析时返回 0） */
+    private java.math.BigDecimal estimateMaterialCost(Long orderId, java.math.BigDecimal qty) {
+        try {
+            java.math.BigDecimal total = java.math.BigDecimal.ZERO;
+            for (Map<String, Object> m : jdbcTemplate.queryForList(
+                    "SELECT it.material_id, it.demand_quantity FROM outsource_order_material it " +
+                    "WHERE it.order_id = ? AND IFNULL(it.supply_type, 'OURS') = 'OURS'", orderId)) {
+                Long mid = num(m.get("material_id"));
+                if (mid == null) continue;
+                java.math.BigDecimal demand = toBd(m.get("demand_quantity")).multiply(qty);
+                java.math.BigDecimal cost = jdbcTemplate.queryForObject(
+                        "SELECT IFNULL(cost_price, IFNULL(price, 0)) FROM outsource_material WHERE id = ?",
+                        java.math.BigDecimal.class, mid);
+                total = total.add((cost == null ? java.math.BigDecimal.ZERO : cost).multiply(demand));
+            }
+            return total;
+        } catch (Exception e) {
+            return java.math.BigDecimal.ZERO;
+        }
+    }
+
+    private Long num(Object v) { return v == null ? null : Long.valueOf(v.toString()); }
+
+    private java.math.BigDecimal toBd(Object v) {
+        return v == null ? java.math.BigDecimal.ZERO : new java.math.BigDecimal(v.toString());
     }
 
     /** 判断索引是否存在，不存在则执行 ALTER 加索引 */

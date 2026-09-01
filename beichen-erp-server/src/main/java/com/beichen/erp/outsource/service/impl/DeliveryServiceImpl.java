@@ -65,6 +65,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final WarehouseStockService warehouseStockService;
     private final PayableHelper payableHelper;
     private final SupplierMapper supplierMapper;
+    private final com.beichen.erp.warehouse.service.CostService costService;
 
     @Override
     public Page<OutsourceDelivery> page(String deliveryType, Long factoryId, String code, int pageNum, int pageSize) {
@@ -125,6 +126,13 @@ public class DeliveryServiceImpl implements DeliveryService {
         List<OutsourceDeliveryItem> items = getItems(id);
         // 审核通过：扣/增库存 + 写流水 + 同步已发数量
         applyDeliveryStock(delivery, items);
+        // 移动加权成本：发料到委外仓按明细单价加权（退料/移仓不影响成本）
+        if (DeliveryType.DELIVERY.getCode().equals(delivery.getDeliveryType())) {
+            for (OutsourceDeliveryItem item : items) {
+                costService.applyMaterial(item.getMaterialId(), item.getQuantity(), item.getUnitPrice(),
+                        StockChangeType.DELIVERY_IN.getCode(), delivery.getId(), delivery.getCode());
+            }
+        }
         OutsourceDelivery update = new OutsourceDelivery();
         update.setId(id);
         update.setStatus(DocStatus.AUDITED.getCode());
@@ -142,6 +150,10 @@ public class DeliveryServiceImpl implements DeliveryService {
         // 反审核：逆向库存 + 回滚已发数量，回到草稿
         List<OutsourceDeliveryItem> items = getItems(id);
         reverseDeliveryStock(delivery, items);
+        // 成本冲销：发料单删除入库批次并反加权
+        if (DeliveryType.DELIVERY.getCode().equals(delivery.getDeliveryType())) {
+            costService.reverseByBill(StockChangeType.DELIVERY_IN.getCode(), id);
+        }
         OutsourceDelivery update = new OutsourceDelivery();
         update.setId(id);
         update.setStatus(DocStatus.DRAFT.getCode());
@@ -226,6 +238,13 @@ public class DeliveryServiceImpl implements DeliveryService {
             }
             materialOrderItemMapper.updateById(oi);
         }
+        // 4.1 移动加权成本：收货入库按明细单价加权（退不良出库不影响成本）
+        if (isReceive) {
+            for (OutsourceDeliveryItem item : items) {
+                costService.applyMaterial(item.getMaterialId(), item.getQuantity(), item.getUnitPrice(),
+                        StockChangeType.RECEIVE_IN.getCode(), delivery.getId(), delivery.getCode());
+            }
+        }
         // 5. 单据置为已审核
         OutsourceDelivery up = new OutsourceDelivery();
         up.setId(id);
@@ -272,6 +291,8 @@ public class DeliveryServiceImpl implements DeliveryService {
             if (order != null && OrderType.OUTSOURCE.getLabel().equals(order.getOrderType())) {
                 restoreComponents(order, items, delivery);
             }
+            // 成本冲销：删除本单收货批次并反加权
+            costService.reverseByBill(StockChangeType.RECEIVE_IN.getCode(), id);
         }
 
         // 3. 冲回应付（已付款的阻止）+ 回退供应商应付余额

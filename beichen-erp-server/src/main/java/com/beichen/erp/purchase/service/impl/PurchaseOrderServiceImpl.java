@@ -48,6 +48,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final ProductMapper productMapper;
     private final com.beichen.erp.finance.service.PayableHelper payableHelper;
     private final WarehouseStockService stockService;
+    private final com.beichen.erp.warehouse.service.CostService costService;
 
     @Override
     public Page<Map<String, Object>> page(Integer status, Long supplierId, String code, int pageNum, int pageSize) {
@@ -246,6 +247,9 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     StockChangeType.PURCHASE_IN, order.getCode(), RelatedBillType.PURCHASE_ORDER,
                     product != null ? product.getSpec() : "",
                     order.getId(), it.getQualityType());
+            // 3) 移动加权成本：按明细单价入库加权
+            costService.applyProduct(it.getProductId(), it.getQuantity(), it.getUnitPrice(),
+                    StockChangeType.PURCHASE_IN.getCode(), order.getId(), order.getCode());
         }
         // 3) 更新订单状态为"已完成"，记录审核人
         PurchaseOrder u = new PurchaseOrder();
@@ -303,7 +307,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             payableMapper.deleteById(fp.getId());
         }
 
-        // 5) 回退状态到草稿，清除审核信息
+        // 5) 成本冲销：删除本单入库批次并反加权
+        costService.reverseByBill(StockChangeType.PURCHASE_IN.getCode(), id);
+
+        // 6) 回退状态到草稿，清除审核信息
         PurchaseOrder u = new PurchaseOrder();
         u.setId(id);
         u.setStatus(DocStatus.DRAFT.getCode());
