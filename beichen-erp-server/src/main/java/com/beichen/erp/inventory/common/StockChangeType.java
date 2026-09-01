@@ -114,6 +114,12 @@ public enum StockChangeType {
     CANCEL_RECLASSIFY_OUT("取消重分类出"),
     CANCEL_RECLASSIFY_IN("取消重分类入"),
 
+    // ===== 库存盘点 =====
+    /** 盘点盘盈：实盘大于账面，补记入库 */
+    STOCK_TAKE_IN("盘点盘盈"),
+    /** 盘点盘亏：实盘小于账面，冲减库存 */
+    STOCK_TAKE_OUT("盘点盘亏"),
+
     // ===== 退货整理 =====
     RETURN_SORT_OUT("退货整理出"),
     RETURN_SORT_IN("退货整理入"),

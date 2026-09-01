@@ -4,8 +4,22 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { getStockTakeStatus, type StockTakeStatus } from '@/api/inventory'
 
 const router = useRouter()
+
+// 月度盘点：本月待盘点/超期提示（应盘日=当月最后一天）
+const takeStatus = ref<StockTakeStatus[]>([])
+const takeMap = computed(() => {
+  const m: Record<number, StockTakeStatus> = {}
+  takeStatus.value.forEach(s => { if (s.warehouseId) m[s.warehouseId] = s })
+  return m
+})
+const pendingCount = computed(() => takeStatus.value.filter(s => !s.taken).length)
+const overdueCount = computed(() => takeStatus.value.filter(s => !s.taken && (s.overdueDays || 0) > 0).length)
+const curPeriod = computed(() => takeStatus.value[0]?.period || '')
+const curDue = computed(() => takeStatus.value[0]?.dueDate || '')
+async function loadTakeStatus() { try { takeStatus.value = await getStockTakeStatus() } catch { takeStatus.value = [] } }
 
 const query = reactive({ warehouseName: '', warehouseType: '' })
 const allData = ref<any[]>([])
@@ -48,12 +62,21 @@ async function handleToggleStatus(row: any) {
   ElMessage.success(row.status === 1 ? '已启用' : '已停用'); loadData()
 }
 
-onMounted(() => loadData())
+onMounted(() => { loadData(); loadTakeStatus() })
 
 </script>
 
 <template>
   <div class="wh-page">
+    <el-alert v-if="pendingCount" :type="overdueCount ? 'error' : 'warning'" show-icon :closable="false" class="tip">
+      <template #title>
+        {{ curPeriod }} 待盘点 <b>{{ pendingCount }}</b> 个仓库
+        <span v-if="overdueCount" style="color:var(--app-color-danger)">，其中已超期 <b>{{ overdueCount }}</b> 个</span>
+        <span v-else>，应盘日 {{ curDue }}</span>
+        <el-button type="primary" link style="margin-left:8px" @click="router.push('/inventory/stock-take')">去盘点</el-button>
+      </template>
+    </el-alert>
+    <el-alert v-else-if="curPeriod" type="success" show-icon :closable="false" class="tip" :title="`${curPeriod} 所有仓库均已完成盘点`" />
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query">
@@ -78,6 +101,18 @@ onMounted(() => loadData())
         <el-table-column prop="code" label="编码" width="160" />
         <el-table-column prop="warehouseName" label="名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="warehouseType" label="仓型" width="90" />
+        <el-table-column label="本月盘点" width="120" align="center">
+          <template #default="{row}">
+            <el-tag v-if="takeMap[row.id]?.taken" type="success" size="small">已盘点</el-tag>
+            <el-tag v-else-if="(takeMap[row.id]?.overdueDays || 0) > 0" type="danger" size="small">
+              超期 {{ takeMap[row.id]?.overdueDays }} 天
+            </el-tag>
+            <el-tag v-else type="warning" size="small">待盘点</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="上次盘点" width="110" align="center">
+          <template #default="{row}">{{ takeMap[row.id]?.lastTakeDate ? String(takeMap[row.id].lastTakeDate).slice(0,10) : '—' }}</template>
+        </el-table-column>
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="manager" label="负责人" width="80" />
         <el-table-column prop="phone" label="电话" width="120" />

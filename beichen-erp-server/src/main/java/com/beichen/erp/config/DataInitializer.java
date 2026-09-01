@@ -272,6 +272,47 @@ public class DataInitializer implements ApplicationRunner {
                 "    INDEX idx_company_id (company_id)\n" +
                 ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='入库批次成本记录表'");
         backfillCostPrice();
+        // 库存盘点单（每月每仓一次；存量库幂等补建）
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS inventory_stock_take (\n" +
+                "    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '盘点单ID',\n" +
+                "    take_no VARCHAR(50) NOT NULL COMMENT '盘点单号(PD-yyyyMMddNNN)',\n" +
+                "    warehouse_id BIGINT NOT NULL COMMENT '盘点仓库ID',\n" +
+                "    warehouse_name VARCHAR(100) COMMENT '盘点仓库名称(冗余)',\n" +
+                "    period VARCHAR(7) NOT NULL COMMENT '盘点月份(yyyy-MM)',\n" +
+                "    take_date DATE COMMENT '盘点日期',\n" +
+                "    status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT/AUDITED/CANCELLED',\n" +
+                "    remark VARCHAR(500) COMMENT '备注',\n" +
+                "    auditor_id BIGINT COMMENT '审核人ID',\n" +
+                "    auditor_name VARCHAR(50) COMMENT '审核人姓名',\n" +
+                "    audit_time DATETIME COMMENT '审核时间',\n" +
+                "    company_id BIGINT COMMENT '公司ID',\n" +
+                "    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',\n" +
+                "    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',\n" +
+                "    UNIQUE KEY uk_take_no (take_no),\n" +
+                "    INDEX idx_warehouse (warehouse_id),\n" +
+                "    INDEX idx_period (period),\n" +
+                "    INDEX idx_status (status),\n" +
+                "    INDEX idx_company_id (company_id)\n" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存盘点单主表'");
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS inventory_stock_take_item (\n" +
+                "    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '明细ID',\n" +
+                "    take_id BIGINT NOT NULL COMMENT '盘点单ID',\n" +
+                "    product_id BIGINT COMMENT '产品ID(成品仓盘点)',\n" +
+                "    product_name VARCHAR(100) COMMENT '产品名称(冗余)',\n" +
+                "    sku VARCHAR(64) COMMENT 'SKU(冗余)',\n" +
+                "    material_id BIGINT COMMENT '委外物料ID(委外仓盘点)',\n" +
+                "    material_name VARCHAR(100) COMMENT '物料名称(冗余)',\n" +
+                "    quality_type VARCHAR(20) COMMENT '品质/等级',\n" +
+                "    spec VARCHAR(100) COMMENT '规格(冗余)',\n" +
+                "    unit VARCHAR(20) COMMENT '单位(冗余)',\n" +
+                "    book_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '账面数量(建单时快照)',\n" +
+                "    actual_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '实盘数量',\n" +
+                "    diff_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '差异数量(实盘-账面)',\n" +
+                "    remark VARCHAR(255) COMMENT '备注',\n" +
+                "    company_id BIGINT COMMENT '公司ID',\n" +
+                "    INDEX idx_take_id (take_id),\n" +
+                "    INDEX idx_company_id (company_id)\n" +
+                ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存盘点单明细'");
         // 发票登记表（销项/进项，税务口径；存量库幂等补建）
         jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS finance_invoice (\n" +
                 "    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '发票ID',\n" +
@@ -769,6 +810,8 @@ public class DataInitializer implements ApplicationRunner {
             {704L, 7L, "成品其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 4},
             {705L, 7L, "成品品质重分类", "menu", "/inventory/reclassify", "InventoryReclassify", "Refresh", 5},
             {706L, 7L, "成品移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 6},
+            // 库存盘点：每月每仓一次，仓库列表与盘点页显示待盘点/超期提醒
+            {711L, 7L, "库存盘点", "menu", "/inventory/stock-take", "InventoryStockTake", "Files", 7},
             // 退货整理归属「销售」模块（售后链路的一环：退单/换货退回 → 整理分选 → 入成品仓/不良仓）
             // ID 仍保留 707（存量角色授权按 ID 关联，换 ID 会导致历史授权失效），仅迁移 parent_id
             {707L, 6L, "退货整理", "menu", "/inventory/return-sort", "InventoryReturnSort", "RefreshRight", 4},
@@ -814,7 +857,7 @@ public class DataInitializer implements ApplicationRunner {
         log.info("同步菜单完成，处理 {} 条", processed);
 
         // 删除非标准菜单（旧ID已废弃）
-        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,105L,106L,107L,301L,302L,303L,304L,401L,402L,403L,404L,405L,406L,407L,408L,409L,410L,411L,501L,502L,503L,601L,602L,603L,604L,605L,701L,702L,703L,704L,705L,706L,707L,801L,802L,803L,804L,805L,806L,807L,808L,809L,810L,901L,902L,903L,904L,905L,906L,907L,908L};
+        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,105L,106L,107L,301L,302L,303L,304L,401L,402L,403L,404L,405L,406L,407L,408L,409L,410L,411L,501L,502L,503L,601L,602L,603L,604L,605L,701L,702L,703L,704L,705L,706L,707L,711L,801L,802L,803L,804L,805L,806L,807L,808L,809L,810L,901L,902L,903L,904L,905L,906L,907L,908L};
         Set<Long> newIds = new HashSet<>(Arrays.asList(newMenuIds));
         jdbcTemplate.update("DELETE FROM sys_role_menu WHERE menu_id NOT IN (" +
             String.join(",", newIds.stream().map(String::valueOf).toArray(String[]::new)) + ")");
@@ -867,7 +910,7 @@ public class DataInitializer implements ApplicationRunner {
                 1L, 6L, 601L, 602L, 603L, 604L, 101L));
         // 仓管员：进货+库存 + 仓库
         assignRoleMenus("warehouse", Arrays.asList(
-                1L, 5L, 7L, 501L, 502L, 701L, 702L, 703L, 704L, 705L, 706L, 603L, 604L, 101L));
+                1L, 5L, 7L, 501L, 502L, 701L, 702L, 703L, 704L, 705L, 706L, 711L, 603L, 604L, 101L));
         // 跟单专员：委外加工全部
         assignRoleMenus("merchandiser", Arrays.asList(
                 1L, 4L, 401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L, 410L, 101L, 602L, 502L, 702L, 705L));
@@ -876,6 +919,18 @@ public class DataInitializer implements ApplicationRunner {
                 1L, 8L, 801L, 802L, 803L, 804L, 805L, 806L, 807L, 808L, 809L, 810L, 101L));
         ensureReturnSortMenuAuth();
         ensureFinanceExtraMenuAuth();
+        ensureStockTakeMenuAuth();
+    }
+
+    /** 存量库补齐授权：库存盘点（711），admin/warehouse 角色需能看到 */
+    private void ensureStockTakeMenuAuth() {
+        try {
+            jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, 711 FROM sys_role r WHERE r.role_code IN ('admin', 'warehouse')");
+        } catch (Exception e) {
+            log.warn("补齐库存盘点菜单授权失败: {}", e.getMessage());
+        }
     }
 
     /**

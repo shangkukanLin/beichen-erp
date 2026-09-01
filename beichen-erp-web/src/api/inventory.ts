@@ -188,3 +188,34 @@ export function deleteReturnSort(id: number) {
   return request.delete<void>(`/inventory/return-sort/${id}`)
 }
 
+// ==================== 库存盘点（每月每仓一次） ====================
+export interface StockTake { id?: number; takeNo?: string; warehouseId?: number; warehouseName?: string; period?: string; takeDate?: string; status?: string; remark?: string; itemCount?: number; diffCount?: number; diffSum?: number }
+export interface StockTakeItem { id?: number; takeId?: number; productId?: number; productName?: string; sku?: string; materialId?: number; materialName?: string; qualityType?: string; spec?: string; unit?: string; bookQuantity?: number; actualQuantity?: number; diffQuantity?: number; remark?: string }
+/** 仓库盘点看板行：当月是否已盘点 + 超期天数 + 上次盘点日期 */
+export interface StockTakeStatus { warehouseId?: number; warehouseName?: string; warehouseType?: string; warehouseCategory?: string; period?: string; taken?: boolean; lastTakeDate?: string; dueDate?: string; overdueDays?: number; remind?: boolean }
+/** 各仓库当月盘点状态与超期天数 */
+export function getStockTakeStatus() {
+  return request.get<StockTakeStatus[]>('/inventory/stock-take/status')
+}
+export function getStockTakePage(params?: any) {
+  return request.get<PageResult<StockTake>>('/inventory/stock-take/page', { params })
+}
+export function getStockTakeItems(id: number) {
+  return request.get<StockTakeItem[]>(`/inventory/stock-take/${id}/items`)
+}
+export function createStockTake(data: any) {
+  return request.post<StockTake>('/inventory/stock-take', data)
+}
+export function saveStockTakeItems(id: number, items: StockTakeItem[]) {
+  return request.put<void>(`/inventory/stock-take/${id}/items`, items)
+}
+export function auditStockTake(id: number) {
+  return request.post<void>(`/inventory/stock-take/${id}/audit`)
+}
+export function unAuditStockTake(id: number) {
+  return request.post<void>(`/inventory/stock-take/${id}/unAudit`)
+}
+export function cancelStockTake(id: number) {
+  return request.post<void>(`/inventory/stock-take/${id}/cancel`)
+}
+

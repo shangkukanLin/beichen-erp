@@ -962,6 +962,50 @@ CREATE TABLE IF NOT EXISTS sale_return_item (
 -- 库存流水表已统一迁移至 warehouse_stock_log
 
 -- ==================== 成品移仓单主表 ====================
+-- ==================== 库存盘点单（每月每仓一次） ====================
+
+CREATE TABLE IF NOT EXISTS inventory_stock_take (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '盘点单ID',
+    take_no VARCHAR(50) NOT NULL COMMENT '盘点单号(PD-yyyyMMddNNN)',
+    warehouse_id BIGINT NOT NULL COMMENT '盘点仓库ID',
+    warehouse_name VARCHAR(100) COMMENT '盘点仓库名称(冗余)',
+    period VARCHAR(7) NOT NULL COMMENT '盘点月份(yyyy-MM)',
+    take_date DATE COMMENT '盘点日期',
+    status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废',
+    remark VARCHAR(500) COMMENT '备注',
+    auditor_id BIGINT COMMENT '审核人ID',
+    auditor_name VARCHAR(50) COMMENT '审核人姓名',
+    audit_time DATETIME COMMENT '审核时间',
+    company_id BIGINT COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_take_no (take_no),
+    INDEX idx_warehouse (warehouse_id),
+    INDEX idx_period (period),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存盘点单主表';
+
+CREATE TABLE IF NOT EXISTS inventory_stock_take_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '明细ID',
+    take_id BIGINT NOT NULL COMMENT '盘点单ID',
+    product_id BIGINT COMMENT '产品ID(成品仓盘点)',
+    product_name VARCHAR(100) COMMENT '产品名称(冗余)',
+    sku VARCHAR(64) COMMENT 'SKU(冗余)',
+    material_id BIGINT COMMENT '委外物料ID(委外仓盘点)',
+    material_name VARCHAR(100) COMMENT '物料名称(冗余)',
+    quality_type VARCHAR(20) COMMENT '品质/等级(成品 A/B/C/DEFECT/PENDING；物料 GOOD/DEFECT)',
+    spec VARCHAR(100) COMMENT '规格(冗余)',
+    unit VARCHAR(20) COMMENT '单位(冗余)',
+    book_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '账面数量(建单时快照)',
+    actual_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '实盘数量',
+    diff_quantity DECIMAL(18,4) DEFAULT 0 COMMENT '差异数量(实盘-账面)',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT COMMENT '公司ID',
+    INDEX idx_take_id (take_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存盘点单明细';
+
 CREATE TABLE IF NOT EXISTS inventory_warehouse_move (
     id                BIGINT AUTO_INCREMENT PRIMARY KEY  COMMENT '主键ID',
     code              VARCHAR(50) NOT NULL               COMMENT '移仓单号(YC-yyyyMMdd-NNN)',

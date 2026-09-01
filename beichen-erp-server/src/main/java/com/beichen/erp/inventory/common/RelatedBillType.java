@@ -51,7 +51,10 @@ public enum RelatedBillType {
     PRODUCT_RECLASSIFY("品质重分类"),
 
     /** 退货整理：退货整理单审核/反审核触发 */
-    RETURN_SORT("退货整理");
+    RETURN_SORT("退货整理"),
+
+    /** 库存盘点：盘点单审核/反审核触发（盘盈盘亏调整） */
+    STOCK_TAKE("库存盘点");
 
     private final String label;
 

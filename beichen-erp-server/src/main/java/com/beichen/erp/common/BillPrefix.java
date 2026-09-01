@@ -72,4 +72,6 @@ public final class BillPrefix {
     public static final String SALE_EXCHANGE = "HH-";
     /** 产品 SKU（产品级唯一编码，新增产品时自动生成：SKU-000001） */
     public static final String PRODUCT_SKU = "SKU-";
+    /** 库存盘点单（每月每仓一次，周期 yyyy-MM） */
+    public static final String STOCK_TAKE = "PD-";
 }
