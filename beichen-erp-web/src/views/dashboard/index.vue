@@ -1,6 +1,46 @@
 <template>
   <div class="dashboard">
-    <el-tabs v-model="activeTab" type="border-card">
+    <el-tabs v-model="activeTab" type="border-card" @tab-change="onTabChange">
+      <!-- 经营总览（默认首页） -->
+      <el-tab-pane label="经营总览" name="overview">
+        <!-- 财务区块：仅「财务分析」菜单权限可见（数据安全） -->
+        <template v-if="hasMenu['FinanceAnalysis']">
+          <div class="stat-grid">
+            <div class="stat-card" v-for="k in kpiCards" :key="k.label">
+              <div class="stat-value" :style="{ color: k.tone }">{{ k.value }}</div>
+              <div class="stat-label">
+                {{ k.label }}
+                <span v-if="k.chg" :class="'chg ' + k.chgCls">{{ k.chg }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="stat-grid">
+            <div class="stat-card mini" v-for="y in ytdCards" :key="y.label">
+              <div class="stat-value sm" :style="{ color: y.tone }">{{ y.value }}</div>
+              <div class="stat-label">{{ y.label }}</div>
+            </div>
+          </div>
+          <div id="dashTrendChart" class="chart"/>
+        </template>
+
+        <!-- 待办与预警（所有角色可见） -->
+        <el-card shadow="never" class="section-card">
+          <template #header>
+            <span class="section-title">待办与预警</span>
+            <span style="float:right;font-size:12px;color:var(--app-text-secondary)">
+              {{ pendingCount ? `共 ${pendingCount} 项待处理` : '暂无待处理事项' }}
+            </span>
+          </template>
+          <div class="todo-grid">
+            <div class="todo-card clickable" v-for="t in todoItems" :key="t.label" @click="router.push(t.path)">
+              <div class="todo-value" :style="{ color: t.count ? t.tone : 'var(--app-text-secondary)' }">{{ t.count }}</div>
+              <div class="todo-label">{{ t.label }}</div>
+              <div class="todo-sub" v-if="t.sub">{{ t.sub }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-tab-pane>
+
       <el-tab-pane label="备忘录" name="memo">
         <memo-panel />
       </el-tab-pane>
@@ -219,16 +259,113 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import * as echarts from 'echarts'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
 import { ProjectStatus, PhaseStatus, OutsourceOrderStatus, MaterialOrderStatus } from '@/api/enums'
+import { getDashboardPending, type DashboardPending } from '@/api/dashboard'
 import MemoPanel from '@/views/memo/index.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
-const activeTab = ref('memo')
+const activeTab = ref('overview')
+
+// ==================== 经营总览 ====================
+const finSummary = ref<any>({})
+const pending = ref<DashboardPending>({})
+let trendChart: echarts.ECharts | null = null
+
+async function loadOverview() {
+  if (hasMenu.value['FinanceAnalysis']) {
+    try { finSummary.value = await request.get<any, any>('/finance/analysis/summary') } catch { finSummary.value = {} }
+  }
+  try { pending.value = await getDashboardPending() } catch { pending.value = {} }
+  await nextTick()
+  if (activeTab.value === 'overview') setTimeout(renderTrend, 60)
+}
+async function loadPending() { try { pending.value = await getDashboardPending() } catch {} }
+
+function fmtN(v?: any) { return v == null ? '0.00' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+function chg(cur: any, prev: any, goodDir: boolean) {
+  const c = Number(cur) || 0, p = Number(prev) || 0
+  if (p === 0) return { text: '', cls: '' }
+  const rate = Math.round(((c - p) / Math.abs(p)) * 1000) / 10
+  if (rate === 0) return { text: '持平', cls: 'dim' }
+  const up = rate > 0
+  return { text: (up ? '▲' : '▼') + Math.abs(rate) + '%', cls: (goodDir ? up : !up) ? 'good' : 'bad' }
+}
+const kpiCards = computed(() => {
+  const cur = finSummary.value.cur || {}, prev = finSummary.value.prev || {}
+  return [
+    { label: '本月销售额', value: fmtN(cur.revenue), chg: chg(cur.revenue, prev.revenue, true), tone: 'var(--app-color-success)' },
+    { label: '本月毛利', value: fmtN(cur.grossProfit), chg: chg(cur.grossProfit, prev.grossProfit, true), tone: 'var(--app-color-primary)' },
+    { label: '本月净利润', value: fmtN(cur.netProfit), chg: chg(cur.netProfit, prev.netProfit, true), tone: Number(cur.netProfit) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)' },
+    { label: '本月净现金流', value: fmtN(finSummary.value.curCashNet), chg: chg(finSummary.value.curCashNet, finSummary.value.prevCashNet, true), tone: Number(finSummary.value.curCashNet) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)' },
+  ].map((k: any) => ({ ...k, chgCls: k.chg?.cls || '' }))
+})
+const ytdCards = computed(() => {
+  const y = finSummary.value.ytd || {}
+  return [
+    { label: '本年累计销售额', value: fmtN(y.revenue), tone: 'var(--app-color-success)' },
+    { label: '本年累计毛利', value: fmtN(y.grossProfit), tone: 'var(--app-color-primary)' },
+    { label: '本年累计费用', value: fmtN(y.expense), tone: 'var(--app-color-warning)' },
+    { label: '本年累计净利润', value: fmtN(y.netProfit), tone: Number(y.netProfit) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)' },
+  ]
+})
+
+// 待办与预警：卡片点击进入对应页面
+const todoItems = computed(() => {
+  const c = pending.value.counts || {}
+  const take = pending.value.stockTake || {}
+  const overdueSort = (pending.value.returnSort?.overdue) || 0
+  const overdueRec = Number(pending.value.overdueReceivable || 0)
+  const items: any[] = []
+  if (c.saleOrder) items.push({ label: '销售单待审核', count: c.saleOrder, path: '/inventory/sale', tone: 'var(--app-color-primary)', sub: '草稿待审核' })
+  if (c.purchaseOrder) items.push({ label: '采购单待审核', count: c.purchaseOrder, path: '/inventory/purchase', tone: 'var(--app-color-primary)', sub: '草稿待审核' })
+  if (c.outsourceOrder) items.push({ label: '委外加工单待审核', count: c.outsourceOrder, path: '/outsource/order', tone: 'var(--app-color-primary)', sub: '待审核' })
+  if (c.materialOrder) items.push({ label: '委外物料订单待审核', count: c.materialOrder, path: '/outsource/material-order', tone: 'var(--app-color-primary)', sub: '待审核' })
+  if (c.stockTake) items.push({ label: '盘点单待审核', count: c.stockTake, path: '/inventory/stock-take', tone: 'var(--app-color-primary)', sub: '草稿待审核' })
+  if (c.warehouseMove) items.push({ label: '移仓单待审核', count: c.warehouseMove, path: '/inventory/warehouse-move', tone: 'var(--app-color-primary)', sub: '草稿待审核' })
+  if (c.otherIo) items.push({ label: '其他出入库待审核', count: c.otherIo, path: '/inventory/other-io', tone: 'var(--app-color-primary)', sub: '草稿待审核' })
+  if (c.saleReturn) items.push({ label: '销售退货单待审核', count: c.saleReturn, path: '/sale/return', tone: 'var(--app-color-primary)', sub: '草稿待审核' })
+  if (c.purchaseReturn) items.push({ label: '采购退货单待审核', count: c.purchaseReturn, path: '/inventory/purchase-return', tone: 'var(--app-color-primary)', sub: '草稿待审核' })
+  if (c.expense) items.push({ label: '费用单待审核', count: c.expense, path: '/finance/expense', tone: 'var(--app-color-primary)', sub: '草稿待审核' })
+  // 预警类
+  if (take.pending) items.push({
+    label: `${take.period || '本月'}待盘点仓库`, count: take.pending, path: '/inventory/stock-take',
+    tone: take.overdue ? 'var(--app-color-danger)' : 'var(--app-color-warning)',
+    sub: take.overdue ? `其中超期 ${take.overdue} 个` : `应盘日 ${take.period || ''}`,
+  })
+  if (overdueSort) items.push({ label: '售后仓超期待整理', count: overdueSort, path: '/inventory/return-sort', tone: 'var(--app-color-danger)', sub: '停留超过 3 天' })
+  if (overdueRec > 0) items.push({ label: '超期应收', count: fmtN(overdueRec), path: '/finance/receivable', tone: 'var(--app-color-danger)', sub: '已过到期日未收' })
+  return items
+})
+const pendingCount = computed(() => todoItems.value.length)
+
+/** 近 6 月经营趋势（echarts 单例；无数据时固定 y 轴上限避免文字重叠） */
+function renderTrend() {
+  const el = document.getElementById('dashTrendChart')
+  if (!el) return
+  const t = finSummary.value.trend || []
+  trendChart = trendChart || echarts.init(el)
+  const vals = t.flatMap((x: any) => [Number(x.revenue), Number(x.netProfit), Number(x.cashNet)])
+  trendChart.setOption({
+    tooltip: { trigger: 'axis' },
+    grid: { left: 60, right: 20, top: 16, bottom: 24 },
+    xAxis: { type: 'category', data: t.map((x: any) => x.month) },
+    yAxis: { type: 'value', max: vals.some((v: number) => v !== 0) ? undefined : 100 },
+    series: [
+      { name: '销售额', type: 'bar', barMaxWidth: 28, itemStyle: { color: '#91cc75' }, data: t.map((x: any) => Number(x.revenue)) },
+      { name: '净利润', type: 'line', smooth: true, itemStyle: { color: '#5470c6' }, data: t.map((x: any) => Number(x.netProfit)) },
+      { name: '净现金流', type: 'line', smooth: true, itemStyle: { color: '#ee6666' }, data: t.map((x: any) => Number(x.cashNet)) },
+    ],
+  })
+  trendChart.resize()
+}
+// Tab 切换后容器尺寸恢复再渲染，避免按 0 宽度布局
+function onTabChange() { nextTick(() => setTimeout(renderTrend, 60)) }
 
 // 根据用户菜单权限判断可见模块
 const hasMenu = ref<Record<string, boolean>>({})
@@ -292,17 +429,17 @@ function checkUserMenus() {
   // 可见模块判断
   hasModule.dev = names.has('DevProject') || names.has('DevBom')
   hasModule.outsource = names.has('OutsourceOrder') || names.has('OutsourceMaterialOrder')
-  hasModule.purchase = names.has('InventoryPurchase') || names.has('SupplierManage')
+  hasModule.purchase = names.has('InventoryPurchase') || names.has('SupplierManage') || names.has('OutsourceSupplierManage')
   hasModule.sale = names.has('InventorySale') || names.has('InventoryCustomer')
   hasModule.stock = names.has('InventoryStock') || names.has('InventoryWarehouse') || names.has('MaterialManage')
   hasModule.finance = names.has('FinanceReceivable') || names.has('FinancePayable')
 
   // 快捷入口可见性
-  const menuNames = ['DevProject','DevBom','DevPhaseTemplate','OutsourceOrder','OutsourceMaterialOrder','OutsourceMaterialInfo','OutsourceWarehouse','OutsourceContractTemplate','OutsourceDelivery','InventoryPurchase','SupplierManage','InventorySale','InventoryCustomer','InventoryStock','InventoryWarehouse','MaterialManage','FinanceReceivable','FinancePayable','FinanceCashflow']
+  const menuNames = ['DevProject','DevBom','DevPhaseTemplate','OutsourceOrder','OutsourceMaterialOrder','OutsourceMaterialInfo','OutsourceWarehouse','OutsourceContractTemplate','OutsourceDelivery','InventoryPurchase','SupplierManage','OutsourceSupplierManage','InventorySale','InventoryCustomer','InventoryStock','InventoryWarehouse','MaterialManage','FinanceReceivable','FinancePayable','FinanceCashflow','FinanceAnalysis']
   menuNames.forEach(n => { hasMenu.value[n] = names.has(n) })
 
-  // 默认激活第一个Tab：备忘录（个人功能，始终可见）
-  activeTab.value = 'memo'
+  // 默认激活「经营总览」（进来先看全貌；财务区块按 FinanceAnalysis 权限显隐）
+  activeTab.value = 'overview'
 }
 
 async function loadStats() {
@@ -311,13 +448,12 @@ async function loadStats() {
     if (hasModule.dev) {
       const [projRes, bomRes, allProjRes] = await Promise.all([
         request.get<any, any>('/dev/project/page', { params: { pageSize: 1 } }).catch(() => ({})),
-        request.get<any, any>('/dev/bom/page', { params: { pageSize: 500 } }).catch(() => ({})),
-        request.get<any, any>('/dev/project/page', { params: { pageSize: 500 } }).catch(() => ({})),
+        // BOM 总数只需 total，无需拉全量明细
+        request.get<any, any>('/dev/bom/page', { params: { pageSize: 1 } }).catch(() => ({})),
+        request.get<any, any>('/dev/project/page', { params: { pageSize: 200 } }).catch(() => ({})),
       ])
       const projTotal = projRes?.total || 0
-      const bomRecords = bomRes?.records || []
-      const uniqueProjectIds = new Set(bomRecords.map((r: any) => r.projectId))
-      const bomProjectCount = uniqueProjectIds.size
+      const bomProjectCount = bomRes?.total || 0
       const allRecords = allProjRes?.records || []
       let inProgress = 0, finished = 0
       const activeProjects: any[] = []
@@ -342,8 +478,8 @@ async function loadStats() {
   try {
     if (hasModule.outsource) {
       const [allOrderRes, allMatRes] = await Promise.all([
-        request.get<any, any>('/outsource/order/page', { params: { pageSize: 500 } }).catch(() => ({})),
-        request.get<any, any>('/outsource/material-order/page', { params: { pageSize: 500 } }).catch(() => ({})),
+        request.get<any, any>('/outsource/order/page', { params: { pageSize: 200 } }).catch(() => ({})),
+        request.get<any, any>('/outsource/material-order/page', { params: { pageSize: 200 } }).catch(() => ({})),
       ])
       const allOrders = allOrderRes?.records || []
       let pending = 0, inProd = 0
@@ -413,7 +549,8 @@ async function loadStats() {
 
 onMounted(async () => {
   checkUserMenus()
-  await loadStats()
+  // 总览与分模块统计并行加载，互不阻塞
+  await Promise.all([loadOverview(), loadStats()])
 })
 </script>
 
@@ -435,4 +572,23 @@ onMounted(async () => {
 
 .section-card { margin-bottom: 16px; }
 .section-title { font-weight: 600; font-size: var(--app-font-base); }
+
+/* 经营总览 */
+.stat-card.mini { padding: 12px 16px; }
+.stat-value.sm { font-size: 16px; font-weight: 700; }
+.chart { width: 100%; height: 220px; margin-bottom: 16px; }
+.chg { margin-left: 6px; font-weight: 600; }
+.chg.good { color: var(--app-color-success); }
+.chg.bad { color: var(--app-color-danger); }
+.chg.dim { color: var(--app-text-secondary); }
+.todo-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+.todo-card {
+  min-width: 150px; max-width: 200px; flex: 1;
+  background: #f5f7fa; border-radius: 8px; padding: 14px 16px; text-align: center;
+}
+.todo-card.clickable { cursor: pointer; transition: box-shadow 0.2s; }
+.todo-card.clickable:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.todo-value { font-size: 20px; font-weight: 700; }
+.todo-label { font-size: var(--app-font-sm); color: var(--app-text-secondary); margin-top: 4px; }
+.todo-sub { font-size: 12px; color: var(--app-text-secondary); margin-top: 2px; }
 </style>
