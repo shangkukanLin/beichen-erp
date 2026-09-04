@@ -77,6 +77,8 @@ public class ReturnOrderController {
             m.put("factoryId", o.getFactoryId()); m.put("orderId", o.getOrderId());
             m.put("returnDate", o.getReturnDate()); m.put("status", o.getStatus());
             m.put("remark", o.getRemark()); m.put("createTime", o.getCreateTime());
+            m.put("chargeFlag", o.getChargeFlag()); m.put("chargeType", o.getChargeType());
+            m.put("chargeAmount", o.getChargeAmount()); m.put("chargeReason", o.getChargeReason());
             if (o.getFactoryId() != null) {
                 Supplier f = supplierMapper.selectById(o.getFactoryId());
                 m.put("factoryName", f != null ? f.getName() : "");
@@ -109,6 +111,8 @@ public class ReturnOrderController {
         m.put("id", o.getId()); m.put("code", o.getCode()); m.put("factoryId", o.getFactoryId());
         m.put("orderId", o.getOrderId()); m.put("returnDate", o.getReturnDate());
         m.put("status", o.getStatus()); m.put("remark", o.getRemark());
+        m.put("chargeFlag", o.getChargeFlag()); m.put("chargeType", o.getChargeType());
+        m.put("chargeAmount", o.getChargeAmount()); m.put("chargeReason", o.getChargeReason());
         m.put("createTime", o.getCreateTime());
         if (o.getFactoryId() != null) {
             Supplier f = supplierMapper.selectById(o.getFactoryId());
@@ -138,6 +142,8 @@ public class ReturnOrderController {
         Object invWhObj = body.get("warehouseId");
         if (invWhObj != null && !invWhObj.toString().isBlank()) order.setWarehouseId(Long.valueOf(invWhObj.toString()));
         order.setRemark((String) body.get("remark"));
+        // 收费字段（我方支付给加工厂的费用）：不收费归零，收费则类型必须合法且金额 > 0
+        normalizeCharge(order, body);
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) order.setCompanyId(cid);
         returnOrderMapper.insert(order);
@@ -226,6 +232,17 @@ public class ReturnOrderController {
             payableHelper.createPayable(order.getFactoryId(), SourceBillType.OUTSOURCE_RETURN.getCode(),
                 order.getCode(), order.getId(), totalReturnAmount.negate(), order.getReturnDate(),
                 "委外退料 - " + order.getCode());
+        }
+
+        // 4. 收费应付（正向）：我方支付给加工厂的费用，与退料冲减分开记账，便于对账
+        //    两笔共用 sourceId=退货单ID，反审核时 reversePayable(id) 会一并冲销
+        if (order.getChargeFlag() != null && order.getChargeFlag() == 1
+                && order.getChargeAmount() != null && order.getChargeAmount().compareTo(BigDecimal.ZERO) > 0) {
+            payableHelper.createPayable(order.getFactoryId(), SourceBillType.OUTSOURCE_RETURN_CHARGE.getCode(),
+                order.getCode(), order.getId(), order.getChargeAmount(), order.getReturnDate(),
+                "委外加工退货收费"
+                    + (order.getChargeReason() != null && !order.getChargeReason().isBlank()
+                        ? "：" + order.getChargeReason() : ""));
         }
 
         // 4. 更新状态与审计
@@ -486,6 +503,34 @@ public class ReturnOrderController {
         if (bomTypeId == null) return "-";
         com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
         return bt != null ? bt.getTypeName() : "-";
+    }
+
+    /**
+     * 收费字段归一化（与销售退货 SaleReturnServiceImpl.normalizeCharge 同策略）：
+     * 不收费则金额归零、类型清空；收费则类型必须合法且金额必须 > 0。
+     * 收费是「我方支付给加工厂」的费用，审核后生成正向应付。
+     */
+    private void normalizeCharge(ReturnOrder order, Map<String, Object> body) {
+        Long flagVal = toLong(body.get("chargeFlag"));
+        if (flagVal == null || flagVal != 1) {
+            order.setChargeFlag(0);
+            order.setChargeType(null);
+            order.setChargeAmount(BigDecimal.ZERO);
+            order.setChargeReason(null);
+            return;
+        }
+        Object t = body.get("chargeType");
+        String type = t == null ? null : t.toString().trim();
+        if (type == null || type.isEmpty()) throw new BusinessException("已选择收费，请选择收费类型");
+        if (!com.beichen.erp.outsource.common.OutsourceChargeType.isValid(type))
+            throw new BusinessException("非法的收费类型：" + type);
+        BigDecimal amount = toBigDecimal(body.get("chargeAmount"));
+        if (amount.compareTo(BigDecimal.ZERO) <= 0)
+            throw new BusinessException("已选择收费，收费金额必须大于 0");
+        order.setChargeFlag(1);
+        order.setChargeType(com.beichen.erp.outsource.common.OutsourceChargeType.fromCode(type).getCode());
+        order.setChargeAmount(amount);
+        order.setChargeReason((String) body.get("chargeReason"));
     }
 
     private String generateCode() {

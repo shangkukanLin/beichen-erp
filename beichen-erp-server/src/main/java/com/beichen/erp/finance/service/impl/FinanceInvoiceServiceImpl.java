@@ -20,7 +20,7 @@ import java.util.List;
  * 发票登记 Service（税务口径）：
  * - 登记即生效（REGISTERED），作废仅标记不删除
  * - 发票号码在未作废范围内唯一（同公司）
- * - 金额联动兜底：传价税合计按「价税合计×税率/(100+税率)」拆税（与收税开关同口径）；
+ * - 金额联动兜底：传价税合计按「价税合计×税率/(100+税率)」拆税（与含税开关同口径）；
  *   传不含税金额则价税合计 = 不含税 × (100+税率)/100
  */
 @Service
@@ -102,7 +102,7 @@ public class FinanceInvoiceServiceImpl implements FinanceInvoiceService {
             throw new BusinessException("金额不能为负数");
     }
 
-    /** 金额联动兜底：优先按价税合计拆税（与收税开关口径一致），否则按不含税金额正算 */
+    /** 金额联动兜底：优先按价税合计拆税（与含税开关口径一致），否则按不含税金额正算 */
     private void calcAmount(FinanceInvoice invoice) {
         BigDecimal rate = invoice.getTaxRate() != null ? invoice.getTaxRate() : BigDecimal.ZERO;
         BigDecimal hundred = new BigDecimal("100");

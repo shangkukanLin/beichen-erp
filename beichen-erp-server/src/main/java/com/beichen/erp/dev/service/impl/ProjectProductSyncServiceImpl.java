@@ -7,6 +7,7 @@ import com.beichen.erp.dev.service.ProjectProductSyncService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.material.common.ProductStatus;
+import com.beichen.erp.material.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,8 @@ public class ProjectProductSyncServiceImpl implements ProjectProductSyncService 
 
     private final ProductMapper productMapper;
     private final ProjectMapper projectMapper;
+    /** 写产品走 Service（save/updateById 内统一生成/补全 SKU），不要直接 productMapper.insert */
+    private final ProductService productService;
 
     @Override
     @Transactional
@@ -68,7 +71,8 @@ public class ProjectProductSyncServiceImpl implements ProjectProductSyncService 
         product.setStatus(ProductStatus.DEVELOPING);
         product.setUnit("pcs");
         product.setSafetyStock(java.math.BigDecimal.ZERO);
-        productMapper.insert(product);
+        // 走 ProductService.save：SKU 由服务层统一生成（ProductMapper.insert 会绕过该逻辑导致 SKU 为空）
+        productService.save(product);
 
         // 回写项目 product_id
         project.setProductId(product.getId());
@@ -87,7 +91,8 @@ public class ProjectProductSyncServiceImpl implements ProjectProductSyncService 
         if (product == null) return;
         if (newAssemblyName != null && !newAssemblyName.equals(product.getName())) {
             product.setName(newAssemblyName);
-            productMapper.updateById(product);
+            // 走 Service：历史产品 SKU 缺失时 updateById 会兜底补生成
+            productService.updateById(product);
             log.info("项目总成名称变更同步更新产品名称: projectId={}, productId={}, newName={}",
                     projectId, product.getId(), newAssemblyName);
         }
@@ -131,7 +136,8 @@ public class ProjectProductSyncServiceImpl implements ProjectProductSyncService 
         if (product.getStatus() != null
                 && ProductStatus.DEVELOPING.getValue().equals(product.getStatus().getValue())) {
             product.setStatus(ProductStatus.NORMAL);
-            productMapper.updateById(product);
+            // 走 Service：历史产品 SKU 缺失时 updateById 会兜底补生成
+            productService.updateById(product);
             log.info("同步产品状态为正常: projectId={}, productId={}, productName={}",
                     projectId, product.getId(), product.getName());
         }

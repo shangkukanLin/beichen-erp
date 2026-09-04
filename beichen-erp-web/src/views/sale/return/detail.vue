@@ -9,9 +9,18 @@
       </template>
       <el-descriptions :column="3" border>
         <el-descriptions-item label="退单号">{{ header.code }}</el-descriptions-item>
-        <el-descriptions-item label="客户">{{ header.customerName }}</el-descriptions-item>
-        <el-descriptions-item label="退货仓库">{{ warehouseName }}</el-descriptions-item>
-        <el-descriptions-item label="关联销售单">{{ head.saleOrderCode || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="客户">
+          <el-button v-if="head.customerId" type="primary" link @click="goCustomer(head.customerId)">{{ header.customerName || '—' }}</el-button>
+          <span v-else>{{ header.customerName || '—' }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="退货仓库">
+          <el-button v-if="head.warehouseId" type="primary" link @click="goWarehouse(head.warehouseId)">{{ warehouseName }}</el-button>
+          <span v-else>{{ warehouseName }}</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="关联销售单">
+          <el-button v-if="head.saleOrderId" type="primary" link @click="goSaleOrder(head.saleOrderId)">{{ head.saleOrderCode || '—' }}</el-button>
+          <span v-else>{{ head.saleOrderCode || '—' }}</span>
+        </el-descriptions-item>
         <el-descriptions-item label="退货日期">{{ head.returnDate }}</el-descriptions-item>
         <el-descriptions-item label="退货金额">{{ formatMoney(head.totalAmount) }}</el-descriptions-item>
         <el-descriptions-item label="审核人">{{ head.auditorName || '—' }}</el-descriptions-item>
@@ -29,7 +38,12 @@
       <el-divider content-position="left">退货明细</el-divider>
       <el-table :data="items" border>
         <el-table-column type="index" label="#" width="50" />
-        <el-table-column prop="sku" label="SKU" width="130" />
+        <el-table-column label="SKU" width="130">
+          <template #default="{ row }">
+            <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ row.sku || '—' }}</el-button>
+            <span v-else>{{ row.sku || '—' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="productName" label="产品" min-width="200" />
         <el-table-column label="品质等级" width="110" align="center">
           <template #default="{ row }">
@@ -86,8 +100,10 @@ const items = ref<any[]>([])
 
 const head = reactive({
   code: '',
+  customerId: undefined as number | undefined,
   customerName: '',
   warehouseId: undefined as number | undefined,
+  saleOrderId: undefined as number | undefined,
   saleOrderCode: '',
   returnDate: '',
   totalAmount: 0,
@@ -124,8 +140,10 @@ async function loadDetail(id: number) {
   const h = await getSaleReturn(id)
   Object.assign(head, {
     code: h.code,
+    customerId: h.customerId,
     customerName: h.customerName,
     warehouseId: h.warehouseId,
+    saleOrderId: h.saleOrderId,
     saleOrderCode: h.saleOrderCode,
     returnDate: h.returnDate,
     totalAmount: h.totalAmount,
@@ -146,6 +164,10 @@ function goBack() {
 function goEdit() {
   router.push(`/sale/return/add?id=${route.params.id}`)
 }
+function goCustomer(id?: number) { if (id) router.push(`/inventory/customer/detail/${id}`) }
+function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
+function goSaleOrder(id?: number) { if (id) router.push(`/inventory/sale/detail/${id}`) }
+function goProduct(id?: number) { if (id) router.push(`/product/detail/${id}`) }
 
 async function doAudit() {
   await ElMessageBox.confirm('确认审核？审核后客户退回的待分类品将入库售后仓增加库存。', '提示', { type: 'warning' })

@@ -18,11 +18,19 @@ const saving = ref(false)
 const activeTab = ref('info')
 
 import { TYPE_OPTIONS, TYPE_MAP } from '@/constants/supplier'
-// 详情类型按来源区分：供应商(非product) / 供货商(仅product)
-const isVendor = route.query.mode === 'vendor'
-const TYPE_OPTIONS_CUSTOM = isVendor
+// 供货商(仅product) / 供应商(方案商·加工厂·辅料商)：先按入口路径判定，加载后再按实际类型校正
+// 供货商只供应产品，无「供应物料」页签
+const isVendor = ref(route.query.mode === 'vendor' || route.path.startsWith('/outsource/supplier'))
+const TYPE_OPTIONS_CUSTOM = computed(() => isVendor.value
   ? [{ name: 'product', label: TYPE_MAP.product }]
-  : TYPE_OPTIONS.filter(t => t.name !== 'product')
+  : TYPE_OPTIONS.filter(t => t.name !== 'product'))
+
+/** 同步页面标题（面包屑与浏览器标签均取自 route.meta.title） */
+function applyVendorTitle() {
+  const title = isVendor.value ? '供货商详情' : '供应商详情'
+  route.meta.title = title
+  document.title = `${title} - 北辰ERP管理系统`
+}
 
 const form = reactive({
   id: undefined as any,
@@ -77,7 +85,7 @@ const hasFactory = ref(false)
 
 function formatTypes(types: string[]): string {
   if (!types || types.length === 0) return ''
-  const list = isVendor ? types.filter(t => t === 'product') : types.filter(t => t !== 'product')
+  const list = isVendor.value ? types.filter(t => t === 'product') : types.filter(t => t !== 'product')
   return list.map(t => TYPE_MAP[t] || t).join(' + ')
 }
 
@@ -112,13 +120,25 @@ async function loadData() {
       Object.assign(form, res)
       // 类型编码列表
       form.checkedTypes = res.typeCodes || []
+      // 实际类型校正：只勾选了"成品商"即供货商（从业务单据跳进来时入口路径不可靠）
+      const codes: string[] = res.typeCodes || []
+      if (codes.length > 0) isVendor.value = codes.every((t: string) => t === 'product')
       typeName.value = formatTypes(form.checkedTypes || [])
       hasFactory.value = form.checkedTypes.includes('factory')
+      applyVendorTitle()
     }
-    const prods = await request.get<any,any>(`/supplier/${id}/products`)
-    products.value = prods || []
-    const mats = await request.get<any,any>(`/supplier/${id}/materials`)
-    materials.value = mats || []
+    // 供应商只供应物料、供货商只供应产品：各自跳过对方数据的加载（对应页签已隐藏）
+    if (isVendor.value) {
+      const prods = await request.get<any,any>(`/supplier/${id}/products`)
+      products.value = prods || []
+    } else {
+      products.value = []
+    }
+    if (isVendor) materials.value = []
+    else {
+      const mats = await request.get<any,any>(`/supplier/${id}/materials`)
+      materials.value = mats || []
+    }
     await markBomFlags()
   } finally { loading.value = false }
 }
@@ -163,7 +183,7 @@ async function loadMaterialSummary() {
 }
 
 async function handleSave() {
-  if (!form.name) { ElMessage.warning('请输入供应商名称'); return }
+  if (!form.name) { ElMessage.warning(isVendor.value ? '请输入供货商名称' : '请输入供应商名称'); return }
   if (form.checkedTypes.length === 0) { ElMessage.warning('请选择至少一个类型'); return }
   saving.value = true
   try {
@@ -314,7 +334,8 @@ onActivated(loadData)
         </el-card>
       </el-tab-pane>
 
-      <el-tab-pane label="供应产品" name="product">
+      <!-- 供应产品：仅供货商（成品商）；供应商（方案商/加工厂/辅料商）只供应物料 -->
+      <el-tab-pane v-if="isVendor" label="供应产品" name="product">
         <el-card shadow="never">
           <template #header>
             <div style="display:flex;justify-content:space-between;align-items:center">
@@ -345,7 +366,8 @@ onActivated(loadData)
         </el-card>
       </el-tab-pane>
 
-      <el-tab-pane label="供应物料" name="material-supply">
+      <!-- 供应物料：仅供应商（方案商/加工厂/辅料商）；供货商只供应产品 -->
+      <el-tab-pane v-if="!isVendor" label="供应物料" name="material-supply">
         <el-card shadow="never" v-loading="matLoading">
           <template #header>
             <div style="display:flex;justify-content:space-between;align-items:center">

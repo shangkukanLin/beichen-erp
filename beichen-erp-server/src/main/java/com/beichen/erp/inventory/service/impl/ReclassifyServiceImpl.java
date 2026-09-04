@@ -14,6 +14,7 @@ import com.beichen.erp.inventory.mapper.InventoryProductReclassifyMapper;
 import com.beichen.erp.inventory.mapper.InventoryProductReclassifyItemMapper;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.inventory.service.ReclassifyService;
+import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.material.service.ProductService;
@@ -119,6 +120,8 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         if (!DocStatus.DRAFT.getCode().equals(rc.getStatus())) throw new BusinessException("只有草稿状态可审核");
         List<InventoryProductReclassifyItem> items = getItems(id);
         if (items.isEmpty()) throw new BusinessException("重分类明细不能为空");
+        // 审核前校验原品质库存：一次列清所有不足项，避免落到 changeStock 只报「产品ID=xx」
+        checkStockBeforeAudit(rc, items);
 
         // 执行库存变更：from_quality 扣减，to_quality 增加
         for (InventoryProductReclassifyItem it : items) {
@@ -137,6 +140,35 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         }
         InventoryProductReclassify u = new InventoryProductReclassify(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
         rcMapper.updateById(u);
+    }
+
+    /**
+     * 审核前校验「原品质」的可用库存（目标品质是增加库存，无需校验）。
+     * changeStock 本身也会拦（SQL 带 quantity + delta >= 0），但报错只有「产品ID=xx」，
+     * 用户看不出是哪个产品、差多少。这里前置一次性检查全部明细，给出产品名/品质/需量/库存/缺口。
+     */
+    private void checkStockBeforeAudit(InventoryProductReclassify rc, List<InventoryProductReclassifyItem> items) {
+        List<String> shortage = new ArrayList<>();
+        for (InventoryProductReclassifyItem it : items) {
+            BigDecimal need = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
+            if (need.compareTo(BigDecimal.ZERO) <= 0) continue;
+            String fq = it.getFromQuality() != null && !it.getFromQuality().isBlank()
+                    ? it.getFromQuality() : ProductQualityType.A.getCode();
+            BigDecimal avail = stockService.getQuantity(rc.getWarehouseId(), it.getProductId(), fq);
+            if (avail.compareTo(need) < 0) {
+                Product p = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+                shortage.add(String.format("%s（%s规，需 %s，库存 %s，缺 %s）",
+                        p != null ? p.getName() : "ID=" + it.getProductId(),
+                        fq,
+                        need.stripTrailingZeros().toPlainString(),
+                        avail.stripTrailingZeros().toPlainString(),
+                        need.subtract(avail).stripTrailingZeros().toPlainString()));
+            }
+        }
+        if (!shortage.isEmpty()) {
+            throw new BusinessException("原品质库存不足，无法审核：" + String.join("；", shortage)
+                    + (shortage.size() > 5 ? " 等 " + shortage.size() + " 项" : ""));
+        }
     }
 
     @Override

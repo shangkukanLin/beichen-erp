@@ -12,6 +12,7 @@ import com.beichen.erp.inventory.entity.InventoryWarehouseMove;
 import com.beichen.erp.inventory.entity.InventoryWarehouseMoveItem;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseMoveMapper;
 import com.beichen.erp.inventory.mapper.InventoryWarehouseMoveItemMapper;
+import com.beichen.erp.warehouse.service.CostService;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.inventory.service.WarehouseMoveService;
 import com.beichen.erp.material.entity.Product;
@@ -36,6 +37,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
     private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
     private final ProductService productService;
+    private final CostService costService;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long fromWarehouseId, Long toWarehouseId, int pageNum, int pageSize) {
@@ -171,6 +173,8 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
                     StockChangeType.MOVE_OUT, move.getCode(), RelatedBillType.WAREHOUSE_MOVE, it.getProductId(), "", move.getId(), it.getQualityType());
             stockService.changeStock(move.getToWarehouseId(), productName, q,
                     StockChangeType.MOVE_IN, move.getCode(), RelatedBillType.WAREHOUSE_MOVE, it.getProductId(), "", move.getId(), it.getQualityType());
+            // 移仓不改变加权价（总量不变），但目标仓新出现的库存若产品无成本，用最近进价兜底
+            costService.fillProductCostIfEmpty(it.getProductId());
         }
         InventoryWarehouseMove u = new InventoryWarehouseMove(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
         moveMapper.updateById(u);

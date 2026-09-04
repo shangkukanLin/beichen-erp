@@ -210,6 +210,13 @@ async function loadReturnData() {
   if (!id) return
   try {
     const order = await request.get(`/inventory/purchase-return/${id}`)
+    // 仅草稿可编辑：已审核/已作废的单据禁止进入编辑
+    if (order && order.status !== 'DRAFT') {
+      ElMessage.warning('仅草稿状态的退货单可编辑')
+      tabStore.removeTab(route.fullPath)
+      router.push(`/inventory/purchase-return/detail/${id}`)
+      return
+    }
     if (order) {
       form.supplierId = order.supplierId
       form.warehouseId = order.warehouseId

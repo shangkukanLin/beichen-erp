@@ -92,18 +92,23 @@ onMounted(() => { loadProjectOptions(); loadList() })
     <el-card shadow="never" style="margin-top:12px">
       <el-table :data="list" v-loading="loading" border stripe @row-click="handleDetail">
         <el-table-column type="index" label="#" width="50" />
-        <el-table-column prop="name" label="名称" min-width="140" />
         <el-table-column prop="type" label="类型" width="120" />
+        <el-table-column prop="name" label="名称" min-width="140" />
         <el-table-column prop="quantity" label="数量" width="90" />
-        <el-table-column prop="amount" label="金额" width="110" />
-        <el-table-column label="存放位置" width="140">
+        <el-table-column label="存放位置" width="160">
           <template #default="{ row }">{{ row.warehouseName || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="90" />
         <el-table-column label="关联项目" min-width="150">
-          <template #default="{ row }">{{ row.projectName || projectName(row.projectId) }}</template>
+          <template #default="{ row }">
+            <el-link
+              v-if="row.projectId"
+              type="primary"
+              @click.stop="$router.push(`/dev/project/edit/${row.projectId}`)"
+            >{{ row.projectName || projectName(row.projectId) }}</el-link>
+            <span v-else style="color:var(--app-text-placeholder)">未关联</span>
+          </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="status" label="状态" width="90" />
         <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="handleDetail(row)">详情</el-button>

@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getProductPage,
-  addProduct,
-  updateProduct,
   deleteProduct,
   ProductStatus,
   ProductStatusLabel,
@@ -14,7 +12,6 @@ import {
   type ProductQueryParams
 } from '@/api/product'
 import request from '@/utils/request'
-import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
 const router = useRouter()
 
@@ -57,36 +54,6 @@ const statusOptions = [
   { label: ProductStatusLabel.DEVELOPING, value: ProductStatus.DEVELOPING }
 ]
 
-// 弹窗
-const dialogVisible = ref(false)
-const dialogTitle = ref('新增产品')
-const submitLoading = ref(false)
-const formRef = ref<FormInstance>()
-
-const defaultForm = (): Product => ({
-  id: undefined,
-  name: '',
-  sku: '',
-  brandId: undefined,
-  category: '',
-  spec: '',
-  generalModel: '',
-  unit: 'pcs',
-  safetyStock: undefined,
-  costPrice: undefined,
-  costManual: 0,
-  lastInPrice: undefined,
-  status: ProductStatus.NORMAL,
-  remark: '',
-} as Product)
-
-const form = reactive<Product>(defaultForm())
-
-const rules: FormRules = {
-  name: [{ required: true, message: '请输入物料名称', trigger: 'blur' }],
-  status: [{ required: true, message: '请选择状态', trigger: 'change' }]
-}
-
 async function loadData() {
   tableLoading.value = true
   try {
@@ -126,49 +93,14 @@ function handleReset() {
   loadData()
 }
 
-function handleAdd() {
-  Object.assign(form, defaultForm())
-  dialogTitle.value = '新增产品'
-  dialogVisible.value = true
-  formRef.value?.clearValidate()
-}
+/** 新增/编辑统一走独立页面（/product/add、/product/detail/:id），列表不再弹框 */
+function handleAdd() { router.push('/product/add') }
+function handleEdit(row: any) { router.push(`/product/detail/${row.id}`) }
 
 function getBrandName(brandId: number | string | undefined) {
   if (brandId == null) return ''
   const b = brandOptions.value.find(o => o.id === Number(brandId))
   return b ? b.brandName : ''
-}
-
-async function handleEdit(row: any) {
-  const defaults = defaultForm()
-  Object.assign(form, defaults, row)
-  // 合并服务端返回的等级数据
-  dialogTitle.value = '编辑产品'
-  dialogVisible.value = true
-  formRef.value?.clearValidate()
-}
-
-async function handleSubmit() {
-  if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return
-    submitLoading.value = true
-    try {
-      if (form.id) {
-        await updateProduct(form.id, form)
-        ElMessage.success('修改成功')
-      } else {
-        await addProduct(form)
-        ElMessage.success('新增成功')
-      }
-      dialogVisible.value = false
-      loadData()
-    } catch {
-      // 错误已在拦截器中提示
-    } finally {
-      submitLoading.value = false
-    }
-  })
 }
 
 async function handleDelete(row: any) {
@@ -284,6 +216,7 @@ onMounted(() => {
         </el-table-column>
         <el-table-column label="操作" width="150" align="center" fixed="right">
           <template #default="{ row }">
+            <!-- 详情页即编辑页，列表只需一个「编辑」入口 -->
             <el-button type="primary" link @click="handleEdit(row as Product)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row as Product)">删除</el-button>
           </template>
@@ -304,82 +237,6 @@ onMounted(() => {
       </div>
     </el-card>
 
-    <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="800px" :close-on-click-modal="false">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="SKU">
-              <!-- SKU 由系统自动生成且不可修改：新增时提示"保存后自动生成"，编辑时展示已生成的编码 -->
-              <el-input v-model="form.sku" :placeholder="form.id ? '' : '保存后自动生成'" disabled />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="名称" prop="name">
-              <el-input v-model="form.name" placeholder="请输入产品名称" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="品牌">
-              <el-select v-model="form.brandId" placeholder="请选择品牌" clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.brandId = undefined; router.push('/inventory/brand'); return } }">
-                <el-option v-for="b in brandOptions" :key="b.id" :label="b.brandName" :value="b.id" />
-                <el-option label="+ 新增" :value="ADD_MARKER" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="分类">
-              <el-input v-model="form.category" placeholder="如：成品/半成品/原料" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="规格">
-              <el-input v-model="form.spec" placeholder="规格型号" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="通用型号">
-              <el-input v-model="form.generalModel" placeholder="适用多款机型" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="单位">
-              <el-input v-model="form.unit" placeholder="pcs" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="状态" prop="status">
-              <el-select v-model="form.status" placeholder="请选择状态" style="width: 100%">
-                <el-option v-for="o in statusOptions" :key="o.value" :label="o.label" :value="o.value" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="安全库存">
-              <el-input-number v-model="form.safetyStock" :min="0" :precision="0" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="成本价">
-              <!-- 成本价默认由入库自动加权；手填后标记为手工锁定，自动加权将跳过 -->
-              <el-input-number v-model="form.costPrice" :min="0" :precision="2" controls-position="right" style="width:100%"
-                placeholder="入库后自动计算" @change="(v: any) => { if (v != null && form.id) form.costManual = 1 }" />
-              <div v-if="form.lastInPrice != null" style="font-size:12px;color:var(--el-text-color-secondary)">最近进价 {{ Number(form.lastInPrice).toFixed(2) }}</div>
-            </el-form-item>
-          </el-col>
-          <el-col :span="24">
-            <el-form-item label="备注" prop="remark">
-              <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="请输入备注" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </el-form>
-
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 

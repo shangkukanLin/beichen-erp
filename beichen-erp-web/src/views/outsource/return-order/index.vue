@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeTypeLabel } from '@/api/enums'
 
 const router = useRouter()
 const loading = ref(false)
@@ -60,6 +60,15 @@ onMounted(() => { loadData() })
         <el-table-column prop="orderCode" label="关联加工单" width="170" />
         <el-table-column label="退货物料" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ row.itemSummary || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="收费" width="130" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0" type="warning" size="small"
+              :title="OutsourceChargeTypeLabel[String(row.chargeType)] || ''">
+              收费 {{ Number(row.chargeAmount).toFixed(2) }}
+            </el-tag>
+            <span v-else style="color:#c0c4cc">不收费</span>
+          </template>
         </el-table-column>
         <el-table-column label="退货日期" width="110" align="center">
           <template #default="{ row }">{{ $fmtDate(row.returnDate) }}</template>

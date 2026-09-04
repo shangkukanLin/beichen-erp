@@ -59,6 +59,38 @@ public class CostService {
         apply(TYPE_MATERIAL, materialId, qty, unitPrice, changeType, relatedBillId, relatedBillNo);
     }
 
+    /**
+     * 成本兜底：无单价入库（移仓/其他入库/盘盈）后调用。
+     * <p>
+     * 这些途径本身没有采购单价，若对象此前从未有过带单价入库，成本价会一直为 NULL，
+     * 造成"有库存、无成本"，毛利与库存金额失真。此处用最近参考价补齐：
+     * 产品取 {@code last_in_price}；物料取 {@code last_in_price}，再退回主数据 {@code price}。
+     * </p>
+     * <p>
+     * 只写主数据成本、<b>不写入库批次</b>：本类途径无来源单价，写批次会让反审核按单据冲销时算错。
+     * </p>
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void fillCostIfEmpty(String type, Long id) {
+        if (id == null) return;
+        if (!isBlank(currentCost(type, id))) return; // 已有成本不动（0 视为未定价）
+        if (isManual(type, id)) return;              // 手工锁定不动
+        BigDecimal ref = lastKnownPrice(type, id);
+        if (ref == null || ref.compareTo(ZERO) <= 0) return;
+        updateCost(type, id, ref, null);
+        log.info("成本兜底 {}#{} 无单价入库，按参考价 {} 补齐", type, id, ref);
+    }
+
+    /** 产品成本兜底（移仓/其他入库/盘盈入库后） */
+    public void fillProductCostIfEmpty(Long productId) {
+        fillCostIfEmpty(TYPE_PRODUCT, productId);
+    }
+
+    /** 委外物料成本兜底 */
+    public void fillMaterialCostIfEmpty(Long materialId) {
+        fillCostIfEmpty(TYPE_MATERIAL, materialId);
+    }
+
     /** 反审核冲销：按 变动类型+单据ID 删除批次并反加权（同单多产品/多明细全部处理） */
     @Transactional(rollbackFor = Exception.class)
     public void reverseByBill(String changeType, Long relatedBillId) {
@@ -85,11 +117,13 @@ public class CostService {
         BigDecimal curCost = currentCost(type, id);
         boolean manual = isManual(type, id);
 
-        BigDecimal costAfter = curCost == null ? ZERO : curCost;
+        BigDecimal costAfter = isBlank(curCost) ? ZERO : curCost;
         if (!manual) {
             // 注意：apply 在库存变更之后调用，stockQty 已包含本批；入库前数量 = stockQty - qty
             BigDecimal beforeQty = stockQty.subtract(qty);
-            if (beforeQty.compareTo(ZERO) <= 0 || curCost == null) {
+            // 历史成本为 0/NULL 视为"未定价"（如反审核冲销后归零），不参与加权，直接采用本次入库单价，
+            // 否则 0 会拉低加权结果（例：库存 80 成本 0 + 入库 20 @9 → 1.8，严重低估）
+            if (beforeQty.compareTo(ZERO) <= 0 || isBlank(curCost)) {
                 costAfter = unitPrice;
             } else {
                 BigDecimal total = curCost.multiply(beforeQty).add(unitPrice.multiply(qty));
@@ -152,6 +186,23 @@ public class CostService {
             if (r.getQuantity() != null) sum = sum.add(r.getQuantity());
         }
         return sum;
+    }
+
+    /** 成本是否视为"未定价"：NULL 或 0（反审核冲销归零、历史库列默认 0 都属此类） */
+    private boolean isBlank(BigDecimal cost) {
+        return cost == null || cost.compareTo(ZERO) == 0;
+    }
+
+    /** 参考价：物料 last_in_price → 主数据 price；产品 last_in_price */
+    private BigDecimal lastKnownPrice(String type, Long id) {
+        if (TYPE_PRODUCT.equals(type)) {
+            Product p = productMapper.selectById(id);
+            return p != null ? p.getLastInPrice() : null;
+        }
+        OutsourceMaterial m = materialMapper.selectById(id);
+        if (m == null) return null;
+        if (m.getLastInPrice() != null && m.getLastInPrice().compareTo(ZERO) > 0) return m.getLastInPrice();
+        return m.getPrice();
     }
 
     private BigDecimal currentCost(String type, Long id) {

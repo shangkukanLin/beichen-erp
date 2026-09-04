@@ -108,18 +108,14 @@ public class WarehouseStockService {
         String qt = QualityType.GOOD.getCode();
         int rows = warehouseStockMapper.updateMaterialQuantity(warehouseId, materialId, companyId, quantity);
         if (rows == 0) {
-            WarehouseStock exist = selectMaterialExist(warehouseId, materialId, companyId);
-            if (exist != null) {
-                throw new BusinessException("物料库存不足");
-            }
-            if (quantity.compareTo(BigDecimal.ZERO) < 0) {
-                throw new BusinessException("物料库存不足");
+            if (selectMaterialExist(warehouseId, materialId, companyId) != null || quantity.compareTo(BigDecimal.ZERO) < 0) {
+                throw materialShortage(warehouseId, materialId);
             }
             try {
                 insertMaterialStock(warehouseId, materialId, companyId, quantity);
             } catch (org.springframework.dao.DuplicateKeyException e) {
                 int retry = warehouseStockMapper.updateMaterialQuantity(warehouseId, materialId, companyId, quantity);
-                if (retry == 0) throw new BusinessException("物料库存不足");
+                if (retry == 0) throw materialShortage(warehouseId, materialId);
             }
         }
 
@@ -131,8 +127,8 @@ public class WarehouseStockService {
         log.setWarehouseId(warehouseId);
         log.setMaterialId(materialId);
         // 固化物料名称，避免流水展示时物料名为空
-        OutsourceMaterial mat = outsourceMaterialMapper.selectById(materialId);
-        if (mat != null) log.setMaterialName(mat.getMaterialName());
+        String matName = materialNameOf(materialId);
+        if (matName != null) log.setMaterialName(matName);
         log.setQualityType(qt);
         log.setChangeType(changeType);
         log.setChangeQuantity(quantity);
@@ -152,6 +148,18 @@ public class WarehouseStockService {
         if (companyId != null && companyId <= 0) companyId = null;
         WarehouseStock exist = selectExist(warehouseId, productId, qualityType, companyId);
         return exist != null && exist.getQuantity() != null ? exist.getQuantity() : BigDecimal.ZERO;
+    }
+
+    /** 物料库存不足异常（带物料名，便于定位是哪一行扣不动） */
+    private BusinessException materialShortage(Long warehouseId, Long materialId) {
+        String name = materialNameOf(materialId);
+        return new BusinessException("物料[" + (name != null ? name : "ID=" + materialId) + "]库存不足，无法出库：仓库ID=" + warehouseId);
+    }
+
+    private String materialNameOf(Long materialId) {
+        if (materialId == null) return null;
+        OutsourceMaterial mat = outsourceMaterialMapper.selectById(materialId);
+        return mat != null ? mat.getMaterialName() : null;
     }
 
     private WarehouseStock selectExist(Long warehouseId, Long productId, String qualityType, Long companyId) {

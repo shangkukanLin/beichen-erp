@@ -62,6 +62,8 @@ const submitLoading = ref(false)
 const stockCheckResult = ref<{ productName: string; spec: string; unit: string; required: number; available: number; shortage: number; sufficient: boolean }[]>([])
 const stockCheckVisible = ref(false)
 const pendingSubmit = ref(false)
+/** 审核前的库存不足阻断弹窗（库存不足不允许审核，只能关闭） */
+const auditBlockVisible = ref(false)
 
 function onProductChange(val: number, row: SaleOrderItem) {
   const p = products.value.find(x => x.id === val)
@@ -180,6 +182,9 @@ function statusType(s?: string) { return DocStatusTag[s || ''] || '' }
 function customerName(id?: number) { const c = customers.value.find(x => x.id === id); return c ? c.name : '' }
 function warehouseName(id?: number) { const w = warehouses.value.find(x => x.id === id); return w ? w.warehouseName : '' }
 function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Number(v).toFixed(2) }
+function goCustomer(id?: number) { if (id) router.push(`/inventory/customer/detail/${id}`) }
+function goProduct(id?: number) { if (id) router.push(`/product/detail/${id}`) }
+function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 
 async function loadData() {
   loading.value = true
@@ -248,6 +253,15 @@ function confirmStockCancel() { stockCheckVisible.value = false; pendingSubmit.v
 
 async function handleAudit() {
   try {
+    // 审核前校验库存：库存不足直接阻断（后端 audit 亦有兜底校验）
+    if (form.warehouseId && items.value.length) {
+      const res = await checkSaleOrderStock({ warehouseId: form.warehouseId, items: items.value })
+      if ((res || []).some((r: any) => !r.sufficient)) {
+        stockCheckResult.value = res
+        auditBlockVisible.value = true
+        return
+      }
+    }
     await ElMessageBox.confirm(`确认审核销售单「${head.value.code}」？审核后将直接出库并生成应收。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
     await auditSaleOrder(orderId); ElMessage.success('审核成功'); sessionStorage.setItem(SALE_ORDER_DIRTY_KEY, '1'); loadData()
   } catch { }
@@ -305,7 +319,7 @@ onActivated(() => { loadData() })
           <el-row :gutter="16">
             <el-col :span="12">
               <el-form-item label="客户" prop="customerId">
-                <RemoteSelect v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer'); return } }">
+                <RemoteSelect v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer/add'); return } }">
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </el-form-item>
@@ -323,7 +337,7 @@ onActivated(() => { loadData() })
               </el-form-item>
             </el-col>
             <el-col :span="6">
-              <el-form-item label="收税">
+              <el-form-item label="含税">
                 <el-switch :model-value="form.taxIncluded === 1" @change="onTaxSwitch" />
               </el-form-item>
             </el-col>
@@ -357,8 +371,8 @@ onActivated(() => { loadData() })
             <el-table-column label="产品" min-width="180">
               <template #default="{ row }">
                 <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="选择产品（可输SKU）"
-                  :preset="{ id: row.productId, name: row.productName }"
-                  style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onProductChange(v, row) }">
+                  :preset="{ id: row.productId, name: row.productName, sku: row.sku }"
+                  style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } onProductChange(v, row) }">
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </template>
@@ -396,10 +410,19 @@ onActivated(() => { loadData() })
             </el-table-column>
           </el-table>
           <div class="sum-bar">
-            <span>应付总额（含税）：<b>{{ goodsTotal.toFixed(2) }}</b></span>
+            <div class="sum-item sum-main">
+              <span class="sum-label">应收总额（含税）</span>
+              <span class="sum-value">{{ goodsTotal.toFixed(2) }}</span>
+            </div>
             <template v-if="form.taxIncluded === 1">
-              <span>税额（{{ form.taxRate }}%）： <b class="tax-num">{{ taxAmount.toFixed(2) }}</b></span>
-              <span>不含税金额： <b>{{ noTaxAmount.toFixed(2) }}</b></span>
+              <div class="sum-item">
+                <span class="sum-label">税额（{{ form.taxRate }}%）</span>
+                <span class="sum-value tax-num">{{ taxAmount.toFixed(2) }}</span>
+              </div>
+              <div class="sum-item">
+                <span class="sum-label">不含税金额</span>
+                <span class="sum-value">{{ noTaxAmount.toFixed(2) }}</span>
+              </div>
             </template>
           </div>
         </el-form>
@@ -413,10 +436,16 @@ onActivated(() => { loadData() })
       <template v-else>
         <el-descriptions :column="2" border style="margin-top:16px">
           <el-descriptions-item label="单号">{{ head.code }}</el-descriptions-item>
-          <el-descriptions-item label="客户">{{ customerName(head.customerId) }}</el-descriptions-item>
-          <el-descriptions-item label="出库仓库">{{ warehouseName(head.warehouseId) }}</el-descriptions-item>
+          <el-descriptions-item label="客户">
+            <el-button v-if="head.customerId" type="primary" link @click="goCustomer(head.customerId)">{{ customerName(head.customerId) }}</el-button>
+            <span v-else>—</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="出库仓库">
+            <el-button v-if="head.warehouseId" type="primary" link @click="goWarehouse(head.warehouseId)">{{ warehouseName(head.warehouseId) }}</el-button>
+            <span v-else>—</span>
+          </el-descriptions-item>
           <el-descriptions-item label="订单日期">{{ head.orderDate }}</el-descriptions-item>
-          <el-descriptions-item label="收税">{{ head.taxIncluded === 1 ? '是（' + head.taxRate + '%）' : '否' }}</el-descriptions-item>
+          <el-descriptions-item label="含税">{{ head.taxIncluded === 1 ? '是（' + head.taxRate + '%）' : '否' }}</el-descriptions-item>
           <el-descriptions-item label="总金额（含税）">{{ fmt(head.totalAmount) }}</el-descriptions-item>
           <el-descriptions-item label="税额">{{ fmt(head.taxAmount) }}</el-descriptions-item>
           <el-descriptions-item label="备注" :span="2">{{ head.remark }}</el-descriptions-item>
@@ -424,7 +453,12 @@ onActivated(() => { loadData() })
         <el-divider content-position="left">产品明细</el-divider>
         <el-table :data="items" border>
           <el-table-column type="index" label="#" width="50" align="center" />
-          <el-table-column prop="sku" label="SKU" width="130" />
+          <el-table-column label="SKU" width="130">
+          <template #default="{ row }">
+            <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ row.sku || '—' }}</el-button>
+            <span v-else>{{ row.sku || '—' }}</span>
+          </template>
+        </el-table-column>
           <el-table-column prop="productName" label="产品" min-width="140" />
           <el-table-column prop="spec" label="规格" width="100" />
           <el-table-column prop="unit" label="单位" width="70" />
@@ -474,9 +508,6 @@ onActivated(() => { loadData() })
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column prop="totalAmount" label="换出货值" width="110" align="right">
-                <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
-              </el-table-column>
               <el-table-column label="收费" width="140" align="right">
                 <template #default="{ row }">
                   <span v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0" style="color:#e6a23c;font-weight:600">
@@ -523,6 +554,30 @@ onActivated(() => { loadData() })
         <el-button type="primary" @click="confirmStockProceed">仍然保存订单</el-button>
       </template>
     </el-dialog>
+
+    <!-- 审核阻断：库存不足不允许审核 -->
+    <el-dialog v-model="auditBlockVisible" title="库存不足，无法审核" width="650px" :close-on-click-modal="false">
+      <el-alert type="error" :closable="false" show-icon style="margin-bottom:16px">
+        <template #title>以下产品的订单数量超过当前库存，请先补货或调整数量后再审核。</template>
+      </el-alert>
+      <el-table :data="stockCheckResult.filter(r => !r.sufficient)" border>
+        <el-table-column prop="productName" label="产品名称" min-width="140" />
+        <el-table-column prop="spec" label="规格" width="100" />
+        <el-table-column prop="unit" label="单位" width="70" />
+        <el-table-column label="订购数量" width="100" align="right">
+          <template #default="{ row }">{{ row.required }}</template>
+        </el-table-column>
+        <el-table-column label="当前库存" width="100" align="right">
+          <template #default="{ row }">{{ row.available }}</template>
+        </el-table-column>
+        <el-table-column label="缺口" width="100" align="right">
+          <template #default="{ row }"><span style="color:red;font-weight:bold">{{ row.shortage }}</span></template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button type="primary" @click="auditBlockVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -532,4 +587,35 @@ onActivated(() => { loadData() })
 .title { display: flex; align-items: center; gap: 8px; }
 .title-text { font-size: 16px; font-weight: 600; }
 .footer { margin-top: 16px; display: flex; justify-content: flex-end; gap: 12px; }
+/* 金额汇总：标签在上、数值在下，块间竖线分隔，避免多项挤在一行 */
+.sum-bar {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 20px;
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+.sum-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 150px;
+  padding: 0 20px;
+}
+.sum-item + .sum-item { border-left: 1px solid var(--el-border-color-lighter); }
+.sum-item:first-child { padding-left: 0; }
+.sum-item:last-child { padding-right: 0; }
+.sum-label { font-size: 12px; color: var(--app-text-secondary); white-space: nowrap; }
+.sum-value {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--app-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.sum-main .sum-value { font-size: 24px; color: var(--app-color-primary); }
+.tax-num { color: var(--app-color-danger); }
 </style>

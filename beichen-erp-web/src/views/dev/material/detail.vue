@@ -68,6 +68,11 @@ const placeTypeLabelMap: Record<string, string> = MaterialPlaceTypeLabel
 const warehouseOptions = ref<any[]>([])
 const supplierOptions = ref<any[]>([])
 const customerOptions = ref<any[]>([])
+const projectOptions = ref<any[]>([])
+
+async function loadProjectOptions() {
+  try { const r: any = await request.get('/dev/project/page', { params: { pageSize: 500 } }); projectOptions.value = r?.records || [] } catch (e) { /* ignore */ }
+}
 
 async function loadFlowList() {
   try {
@@ -164,6 +169,7 @@ const currentPlace = computed(() => flowList.value[0] || null)
 onMounted(() => {
   loadMaterialType()
   loadPlaceOptions()
+  loadProjectOptions()
 })
 // 物料详情与流水每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
 onActivated(() => {
@@ -197,6 +203,11 @@ async function loadMaterialType() {
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="采购日期"><el-input v-model="material.purchaseDate" type="date" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="金额"><el-input-number v-model="material.amount" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="关联项目">
+            <el-select v-model="material.projectId" style="width:100%" placeholder="未关联项目" clearable filterable>
+              <el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" />
+            </el-select>
+          </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="当前所在">
             <el-tag v-if="currentPlace" type="primary">{{ placeTypeLabelMap[currentPlace.placeType] || currentPlace.placeType }}：{{ currentPlace.placeName || currentPlace.placeDetail || '-' }}</el-tag>
             <span v-else style="color:var(--app-text-secondary)">暂无流转记录</span>

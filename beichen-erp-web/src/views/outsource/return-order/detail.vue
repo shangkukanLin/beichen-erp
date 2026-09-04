@@ -3,7 +3,7 @@ import { ref, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeTypeLabel } from '@/api/enums'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,7 +56,15 @@ onActivated(loadData)
         <el-descriptions-item label="关联加工单">{{ detail.orderCode || '-' }}</el-descriptions-item>
         <el-descriptions-item label="退货日期">{{ $fmtDate(detail.returnDate) }}</el-descriptions-item>
         <el-descriptions-item label="状态"><el-tag :type="DocStatusTag[detail.status] || 'info'" size="small">{{ DocStatusLabel[detail.status] || detail.status }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="收费（付加工厂）">
+          <template v-if="Number(detail.chargeFlag) === 1 && Number(detail.chargeAmount) > 0">
+            <span style="color:#e6a23c;font-weight:600">{{ Number(detail.chargeAmount).toFixed(2) }}</span>
+            <span style="margin-left:6px;color:#909399">{{ OutsourceChargeTypeLabel[String(detail.chargeType)] || detail.chargeType || '' }}</span>
+          </template>
+          <span v-else style="color:#c0c4cc">不收费</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="收费说明" :span="3">{{ detail.chargeReason || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="3">{{ detail.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
 

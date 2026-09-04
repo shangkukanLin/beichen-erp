@@ -81,6 +81,8 @@ function warehouseName(id?: number) { const w = warehouses.value.find(x => x.id 
 function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Number(v).toFixed(2) }
 
 function goDetail(row: SaleOrder) { router.push('/inventory/sale/detail/' + row.id) }
+function goCustomer(id?: number) { if (id) router.push(`/inventory/customer/detail/${id}`) }
+function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 /** 新增/编辑统一走独立页面 /inventory/sale/add（带 id 为编辑） */
 function goAdd() { router.push('/inventory/sale/add') }
 function goEdit(row: SaleOrder) { router.push('/inventory/sale/add?id=' + row.id) }
@@ -122,15 +124,20 @@ onActivated(() => {
 
     <el-card shadow="never" class="table-card">
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="goDetail">
-        <el-table-column type="index" label="序号" width="60" align="center" />
+        <el-table-column prop="orderDate" label="订单日期" width="120" align="center" />
         <el-table-column prop="code" label="单号" min-width="150" />
         <el-table-column label="客户" min-width="140">
-          <template #default="{ row }">{{ customerName(row.customerId) }}</template>
+          <template #default="{ row }">
+            <el-button v-if="row.customerId" type="primary" link @click.stop="goCustomer(row.customerId)">{{ customerName(row.customerId) }}</el-button>
+            <span v-else>—</span>
+          </template>
         </el-table-column>
         <el-table-column label="出库仓库" min-width="120">
-          <template #default="{ row }">{{ warehouseName(row.warehouseId) }}</template>
+          <template #default="{ row }">
+            <el-button v-if="row.warehouseId" type="primary" link @click.stop="goWarehouse(row.warehouseId)">{{ warehouseName(row.warehouseId) }}</el-button>
+            <span v-else>—</span>
+          </template>
         </el-table-column>
-        <el-table-column prop="orderDate" label="订单日期" width="120" align="center" />
         <el-table-column prop="totalAmount" label="总金额" width="120" align="right">
           <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
         </el-table-column>

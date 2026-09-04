@@ -136,7 +136,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         return items;
     }
 
-    /** 税额拆分（单价含税口径）：打开收税时从含税总额中按税率拆出税额 = total × rate/(100+rate) */
+    /** 税额拆分（单价含税口径）：打开含税时从含税总额中按税率拆出税额 = total × rate/(100+rate) */
     private BigDecimal calcTaxAmount(BigDecimal total, Integer taxIncluded, BigDecimal taxRate) {
         if (!Integer.valueOf(1).equals(taxIncluded) || taxRate == null || taxRate.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO;

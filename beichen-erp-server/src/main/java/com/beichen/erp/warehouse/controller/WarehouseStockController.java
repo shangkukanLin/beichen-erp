@@ -70,6 +70,22 @@ public class WarehouseStockController {
     }
 
     /**
+     * 库存变动类型下拉选项：直接取 StockChangeType 枚举，保证与写入数据库的值一致。
+     * 前端不再硬编码枚举名——此前硬编码既显示英文，又因只列了 10 个导致多数类型无法筛选。
+     */
+    @GetMapping("/change-types")
+    public R<List<Map<String, String>>> changeTypes() {
+        List<Map<String, String>> list = new ArrayList<>();
+        for (StockChangeType t : StockChangeType.values()) {
+            Map<String, String> m = new LinkedHashMap<>();
+            m.put("code", t.getCode());
+            m.put("label", t.getLabel());
+            list.add(m);
+        }
+        return R.ok(list);
+    }
+
+    /**
      * 成品库存聚合查询：按（仓库×产品）聚合为一行，展示各品质数量与名称，供成品库存查询页使用。
      * 不影响 /page（明细结构，供其他页面使用）。
      */

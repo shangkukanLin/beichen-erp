@@ -1,18 +1,15 @@
 <script setup lang="ts">
-import { WarehouseCategory } from '@/api/enums'
-import { reactive, ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { WarehouseCategory, INVENTORY_RECLASSIFY_DIRTY_KEY } from '@/api/enums'
+import { reactive, ref, onMounted, onActivated } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
+import { getQualityTypes, type QualityOption } from '@/api/product'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import {
-  getReclassifyPage, getReclassify, getReclassifyItems,
-  createReclassify, updateReclassify,
-  auditReclassify, cancelReclassify,
-  type ReclassifyItem
-} from '@/api/inventory'
+import { getReclassifyPage, auditReclassify, cancelReclassify } from '@/api/inventory'
+
+const router = useRouter()
 
 const query = reactive({ code: '', status: '' as string | number, warehouseId: '' as string | number })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -40,74 +37,9 @@ async function loadData() {
 function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.status = ''; query.warehouseId = ''; pagination.pageNum = 1; loadData() }
 
-// 弹窗
-const dialogVisible = ref(false)
-const dialogTitle = ref('新增品质重分类')
-const submitLoading = ref(false)
-const form = reactive({ id: undefined as any, warehouseId: undefined as any, reclassifyDate: new Date().toISOString().slice(0, 10), remark: '' })
-const items = ref<ReclassifyItem[]>([])
-
-function resetForm() {
-  Object.assign(form, { id: undefined, warehouseId: undefined, reclassifyDate: new Date().toISOString().slice(0, 10), remark: '' })
-  items.value = []
-}
-function handleAdd() { resetForm(); dialogTitle.value = '新增品质重分类'; dialogVisible.value = true }
-async function handleEdit(row: any) {
-  resetForm()
-  dialogTitle.value = '编辑品质重分类'
-  try {
-    const io = await getReclassify(row.id)
-    Object.assign(form, { id: io.id, warehouseId: io.warehouseId, reclassifyDate: io.reclassifyDate, remark: io.remark })
-    const its = await getReclassifyItems(row.id)
-    items.value = its || []
-  } catch { ElMessage.error('获取详情失败') }
-  dialogVisible.value = true
-}
-
-function addItem() {
-  items.value.push({ productId: undefined, fromQuality: 'A', toQuality: 'B', quantity: 0 })
-}
-function removeItem(index: number) { items.value.splice(index, 1) }
-
-async function onProductPick(p: any, row: any) {
-  if (!p) return
-  row.productId = p.id
-  row.productName = p.name
-  row.sku = p.sku || ''
-  row.spec = p.spec
-  row.unit = p.unit
-}
-
-async function loadProductOptions(query?: string) {
-  try {
-    const res = await fetchProducts(query || '')
-    productOptions.value = res?.records || []
-  } catch { productOptions.value = [] }
-}
-
-async function handleSubmit() {
-  if (!form.warehouseId) { ElMessage.warning('请选择仓库'); return }
-  if (items.value.length === 0) { ElMessage.warning('请添加重分类明细'); return }
-  for (const it of items.value) {
-    if (!it.productId) { ElMessage.warning('请选择产品'); return }
-    if (!it.fromQuality || !it.toQuality) { ElMessage.warning('请选择品质'); return }
-    if (it.fromQuality === it.toQuality) { ElMessage.warning('原品质和目标品质不能相同'); return }
-    if (!it.quantity || it.quantity <= 0) { ElMessage.warning('数量必须大于0'); return }
-  }
-  submitLoading.value = true
-  try {
-    const data = { ...form, items: items.value }
-    if (form.id) {
-      await updateReclassify(form.id, data)
-      ElMessage.success('修改成功')
-    } else {
-      await createReclassify(data)
-      ElMessage.success('新增成功')
-    }
-    dialogVisible.value = false
-    loadData()
-  } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { submitLoading.value = false }
-}
+// 新增与详情已拆成独立页面：详情页在草稿态可直接编辑（与成品其他出入库一致）
+function handleAdd() { router.push('/inventory/reclassify/add') }
+function handleDetail(row: any) { router.push(`/inventory/reclassify/detail/${row.id}`) }
 
 async function handleAudit(row: any) {
   try {
@@ -137,14 +69,19 @@ function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Numbe
 function warehouseName(id?: number) { const w = warehouseOptions.value.find((x: any) => x.id === id); return w ? w.warehouseName : '' }
 
 const route = useRoute()
-// 从库存流水点击关联单号跳转：定位当前页单据并打开详情弹窗
+// 从库存流水点击关联单号跳转：直接进入该单据的独立详情页
 function openFromStockLog() {
   const billId = route.query.billId
-  if (!billId) return
-  const row = tableData.value.find((r: any) => r.id === Number(billId))
-  if (row) handleEdit(row)
+  if (billId) router.push(`/inventory/reclassify/detail/${billId}`)
 }
-onMounted(async () => { await loadData(); loadWarehouses(); loadQualityTypes(); loadProductOptions(); openFromStockLog() })
+onMounted(async () => { await loadData(); loadWarehouses(); loadQualityTypes(); openFromStockLog() })
+// 新增/详情页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+onActivated(() => {
+  if (sessionStorage.getItem(INVENTORY_RECLASSIFY_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(INVENTORY_RECLASSIFY_DIRTY_KEY)
+    loadData()
+  }
+})
 
 </script>
 
@@ -187,7 +124,7 @@ onMounted(async () => { await loadData(); loadWarehouses(); loadQualityTypes(); 
         <el-table-column prop="createTime" label="创建时间" width="160" />
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click="handleEdit(row)">编辑</el-button>
+            <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
             <el-button v-if="row.status === DocStatus.AUDITED" type="danger" link @click="handleCancel(row)">反审核</el-button>
           </template>
@@ -198,70 +135,5 @@ onMounted(async () => { await loadData(); loadWarehouses(); loadQualityTypes(); 
           :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" @change="loadData" />
       </div>
     </el-card>
-
-    <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="900px" :close-on-click-modal="false" destroy-on-close>
-      <el-form :model="form" label-width="80px">
-        <el-row :gutter="12">
-          <el-col :span="8">
-            <el-form-item label="仓库" required>
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择仓库" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="日期">
-              <el-input v-model="form.reclassifyDate" type="date" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="备注"><el-input v-model="form.remark" placeholder="备注" /></el-form-item>
-          </el-col>
-        </el-row>
-      </el-form>
-
-      <el-divider content-position="left">重分类明细</el-divider>
-      <div style="margin-bottom:8px">
-        <el-button type="primary" @click="addItem">添加明细</el-button>
-      </div>
-      <el-table :data="items" border>
-        <el-table-column type="index" label="#" width="50" align="center" />
-        <el-table-column label="SKU" width="130">
-          <template #default="{ row }">
-            <span v-if="row.sku">{{ row.sku }}</span>
-            <span v-else style="color:var(--app-text-secondary)">自动生成</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="产品" min-width="200">
-          <template #default="{ row }">
-            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="搜索产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="spec" label="规格" width="100" />
-        <el-table-column label="原品质" width="100">
-          <template #default="{ row }">
-            <el-select v-model="row.fromQuality" size="small" style="width:100%">
-              <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
-            </el-select>
-          </template>
-        </el-table-column>
-        <el-table-column label="目标品质" width="100">
-          <template #default="{ row }">
-            <el-select v-model="row.toQuality" size="small" style="width:100%">
-              <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
-            </el-select>
-          </template>
-        </el-table-column>
-        <el-table-column label="数量" width="120">
-          <template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :precision="0" controls-position="right" style="width:100%" /></template>
-        </el-table-column>
-        <el-table-column label="操作" width="70" align="center">
-          <template #default="{ $index }"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template>
-        </el-table-column>
-      </el-table>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>

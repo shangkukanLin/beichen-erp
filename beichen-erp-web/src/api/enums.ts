@@ -363,6 +363,26 @@ export const ExchangeChargeTypeLabel: Record<string, string> = {
   [ExchangeChargeType.OTHER]: '其他'
 }
 
+/**
+ * 委外加工退货收费类型（对应 OutsourceChargeType 枚举，存储值为 REWORK/FREIGHT/INSPECTION/EXCESS_LOSS/OTHER）
+ * 注意：与销售侧 ExchangeChargeType 方向相反——这里是「加工厂向我方收取」，审核生成正向应付。
+ */
+export const OutsourceChargeType = {
+  REWORK: 'REWORK',              // 返工费
+  FREIGHT: 'FREIGHT',            // 运费
+  INSPECTION: 'INSPECTION',      // 检测费
+  EXCESS_LOSS: 'EXCESS_LOSS',    // 超损赔偿
+  OTHER: 'OTHER'                 // 其他
+} as const
+
+export const OutsourceChargeTypeLabel: Record<string, string> = {
+  [OutsourceChargeType.REWORK]: '返工费',
+  [OutsourceChargeType.FREIGHT]: '运费',
+  [OutsourceChargeType.INSPECTION]: '检测费',
+  [OutsourceChargeType.EXCESS_LOSS]: '超损赔偿',
+  [OutsourceChargeType.OTHER]: '其他'
+}
+
 /** 售后待整理批次来源单据类型（对应 AfterSaleSourceType 枚举） */
 export const AfterSaleSourceType = {
   SALE_RETURN: 'SALE_RETURN',     // 销售退单
@@ -449,9 +469,9 @@ export const OUTSOURCE_DELIVERY_DIRTY_KEY = 'outsourceDeliveryListDirty'
 export const OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY = 'outsourceMaterialReturnListDirty'
 export const OUTSOURCE_RETURN_ORDER_DIRTY_KEY = 'outsourceReturnOrderListDirty'
 export const OUTSOURCE_OTHER_IO_DIRTY_KEY = 'outsourceOtherIoListDirty'
-export const OUTSOURCE_AFTER_SALE_DIRTY_KEY = 'outsourceAfterSaleListDirty'
 export const INVENTORY_OTHER_IO_DIRTY_KEY = 'inventoryOtherIoListDirty'
 export const INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY = 'inventoryWarehouseMoveListDirty'
+export const INVENTORY_RECLASSIFY_DIRTY_KEY = 'inventoryReclassifyListDirty'
 export const DEV_PROJECT_DIRTY_KEY = 'devProjectListDirty'
 export const DEV_MATERIAL_DIRTY_KEY = 'devMaterialListDirty'
 export const SUPPLIER_DIRTY_KEY = 'supplierListDirty'

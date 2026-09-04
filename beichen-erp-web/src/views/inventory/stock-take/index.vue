@@ -4,23 +4,17 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { DocStatusLabel, DocStatusTag } from '@/api/common'
 import {
   getStockTakePage, getStockTakeItems, createStockTake, saveStockTakeItems,
-  auditStockTake, unAuditStockTake, cancelStockTake, getStockTakeStatus,
-  type StockTake, type StockTakeItem, type StockTakeStatus,
+  auditStockTake, unAuditStockTake, cancelStockTake,
+  type StockTake, type StockTakeItem,
 } from '@/api/inventory'
 import request from '@/utils/request'
 
-// 库存盘点：每月每仓一次。应盘日=当月最后一天，25 号起提示待盘点，未盘点则显示超期天数。
+// 库存盘点：每月每仓一次
 const query = reactive({ warehouseId: undefined as number | undefined, period: '', status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<StockTake[]>([])
 const warehouses = ref<any[]>([])
-const statusList = ref<StockTakeStatus[]>([])
-
-// 汇总：本月待盘点 / 超期仓库数
-const pending = computed(() => statusList.value.filter(s => !s.taken))
-const overdue = computed(() => pending.value.filter(s => (s.overdueDays || 0) > 0))
-const remindCount = computed(() => pending.value.filter(s => s.remind).length)
 
 async function loadData() {
   loading.value = true
@@ -33,9 +27,6 @@ async function loadData() {
     data.value = res?.records || []
     page.total = res?.total || 0
   } catch { data.value = [] } finally { loading.value = false }
-}
-async function loadStatus() {
-  try { statusList.value = await getStockTakeStatus() } catch { statusList.value = [] }
 }
 async function loadWarehouses() {
   try {
@@ -95,11 +86,11 @@ async function audit(row: StockTake) {
     ? `该盘点单有 ${row.diffCount} 行差异（合计 ${Number(row.diffSum || 0).toFixed(2)}），审核后将按实盘数量调整库存（盘盈入库、盘亏出库）。确认审核？`
     : `确认审核盘点单 ${row.takeNo}？（无差异，库存不变）`
   try { await ElMessageBox.confirm(tips, '审核确认', { type: 'warning' }) } catch { return }
-  try { await auditStockTake(row.id!); ElMessage.success('审核成功，库存已按实盘调整'); loadData(); loadStatus() } catch {}
+  try { await auditStockTake(row.id!); ElMessage.success('审核成功，库存已按实盘调整'); loadData() } catch {}
 }
 async function unAudit(row: StockTake) {
   try { await ElMessageBox.confirm('反审核将按差异反向冲回库存，确认继续？', '反审核确认', { type: 'warning' }) } catch { return }
-  try { await unAuditStockTake(row.id!); ElMessage.success('已反审核，库存已回滚'); loadData(); loadStatus() } catch {}
+  try { await unAuditStockTake(row.id!); ElMessage.success('已反审核，库存已回滚'); loadData() } catch {}
 }
 async function cancel(row: StockTake) {
   try { await ElMessageBox.confirm('确认作废该盘点单？', '作废确认', { type: 'warning' }) } catch { return }
@@ -108,21 +99,11 @@ async function cancel(row: StockTake) {
 function fmt(v?: number) { return v == null ? '0' : Number(v).toFixed(2) }
 function fmtDate(v?: string) { return v ? String(v).slice(0, 10) : '' }
 function nameOf(it: StockTakeItem) { return it.productName || it.materialName || '' }
-onMounted(() => { loadData(); loadStatus(); loadWarehouses() })
+onMounted(() => { loadData(); loadWarehouses() })
 </script>
 
 <template>
   <div class="p">
-    <!-- 本月盘点提醒 -->
-    <el-alert v-if="pending.length" :type="overdue.length ? 'error' : 'warning'" show-icon :closable="false" class="tip">
-      <template #title>
-        本月（{{ statusList[0]?.period }}）待盘点 <b>{{ pending.length }}</b> 个仓库
-        <span v-if="overdue.length" style="color:var(--app-color-danger)">，其中已超期 <b>{{ overdue.length }}</b> 个</span>
-        <span v-else>，应盘日为 {{ statusList[0]?.dueDate }}</span>
-      </template>
-    </el-alert>
-    <el-alert v-else type="success" show-icon :closable="false" class="tip" title="本月所有仓库均已完成盘点" />
-
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
         <el-form :inline="true" :model="query" class="qf">
@@ -229,5 +210,4 @@ onMounted(() => { loadData(); loadStatus(); loadWarehouses() })
 .p { display: flex; flex-direction: column; gap: 12px; }
 .qf { display: flex; flex-wrap: wrap; }
 .pg { margin-top: 16px; display: flex; justify-content: flex-end; }
-.tip { border-radius: 6px; }
 </style>

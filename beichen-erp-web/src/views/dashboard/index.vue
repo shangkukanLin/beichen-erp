@@ -10,7 +10,7 @@
               <div class="stat-value" :style="{ color: k.tone }">{{ k.value }}</div>
               <div class="stat-label">
                 {{ k.label }}
-                <span v-if="k.chg" :class="'chg ' + k.chgCls">{{ k.chg }}</span>
+                <span v-if="k.chg?.text" :class="'chg ' + k.chgCls">{{ k.chg.text }}</span>
               </div>
             </div>
           </div>
@@ -87,6 +87,9 @@
           <span class="links-label">快捷入口：</span>
           <el-button v-if="hasMenu['DevProject']" type="primary" size="small" text @click="$router.push('/dev/project')">研发项目</el-button>
           <el-button v-if="hasMenu['DevBom']" type="primary" size="small" text @click="$router.push('/dev/bom')">BOM管理</el-button>
+          <el-button v-if="hasMenu['DevDrawing']" type="primary" size="small" text @click="$router.push('/dev/drawing')">图纸文档</el-button>
+          <el-button v-if="hasMenu['DevMaterial']" type="primary" size="small" text @click="$router.push('/dev/material')">研发物料管理</el-button>
+          <el-button v-if="hasMenu['DevBomType']" type="primary" size="small" text @click="$router.push('/dev/bom-type')">BOM表类型</el-button>
           <el-button v-if="hasMenu['DevPhaseTemplate']" type="primary" size="small" text @click="$router.push('/dev/phase-template')">阶段模板</el-button>
         </div>
       </el-tab-pane>
@@ -134,7 +137,7 @@
             <el-table-column label="计划完成" width="110"><template #default="{row}">{{ row.planEndDate || '-' }}</template></el-table-column>
             <el-table-column label="最近交货" width="110"><template #default="{row}">{{ row.latestDeliveryDate || '-' }}</template></el-table-column>
             <el-table-column label="状态" width="90" align="center">
-              <template #default="{row}"><el-tag :type="row.status==='待确认'?'info':row.status==='生产中'?undefined:row.status==='已完成'?'success':'danger'" size="small">{{ row.status }}</el-tag></template>
+              <template #default="{row}"><el-tag :type="OutsourceOrderStatusTag[row.status] || 'info'" size="small">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag></template>
             </el-table-column>
           </el-table>
         </el-card>
@@ -168,7 +171,7 @@
             <el-table-column label="最近交货" width="100" align="center"><template #default="{row}">{{ row.lastDeliveryTime ? row.lastDeliveryTime.slice(0,10) : '-' }}</template></el-table-column>
             <el-table-column label="交期" width="100" align="center"><template #default="{row}">{{ row.deliveryDate || '-' }}</template></el-table-column>
             <el-table-column label="状态" width="80" align="center">
-              <template #default="{row}"><el-tag :type="row.status==='待确认'?'info':row.status==='收货中'?'warning':row.status==='已完成'?'success':'danger'" size="small">{{ row.status }}</el-tag></template>
+              <template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template>
             </el-table-column>
           </el-table>
         </el-card>
@@ -177,28 +180,76 @@
           <span class="links-label">快捷入口：</span>
           <el-button v-if="hasMenu['OutsourceOrder']" type="primary" size="small" text @click="$router.push('/outsource/order')">委外加工单</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialOrder']" type="primary" size="small" text @click="$router.push('/outsource/material-order')">委外物料订单</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialInfo']" type="primary" size="small" text @click="$router.push('/outsource/material-info')">物料信息管理</el-button>
-          <el-button v-if="hasMenu['OutsourceWarehouse']" type="primary" size="small" text @click="$router.push('/outsource/warehouse')">委外仓库</el-button>
-          <el-button v-if="hasMenu['OutsourceContractTemplate']" type="primary" size="small" text @click="$router.push('/outsource/contract-template')">加工合同模板</el-button>
           <el-button v-if="hasMenu['OutsourceDelivery']" type="primary" size="small" text @click="$router.push('/outsource/delivery')">物料收发单</el-button>
+          <el-button v-if="hasMenu['OutsourceOtherIo']" type="primary" size="small" text @click="$router.push('/outsource/other-io')">物料其他出入库</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialInfo']" type="primary" size="small" text @click="$router.push('/outsource/material-info')">物料信息管理</el-button>
+          <el-button v-if="hasMenu['OutsourceReturnOrder']" type="primary" size="small" text @click="$router.push('/outsource/return-order')">加工退货</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialReturn']" type="primary" size="small" text @click="$router.push('/outsource/material-return')">物料退货</el-button>
+          <el-button v-if="hasMenu['Warehouse']" type="primary" size="small" text @click="$router.push('/outsource/warehouse')">委外仓库</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialWarehouse']" type="primary" size="small" text @click="$router.push('/outsource/material-warehouse')">自有物料仓</el-button>
+          <el-button v-if="hasMenu['OutsourceSupplierManage']" type="primary" size="small" text @click="$router.push('/outsource/supplier/manage')">供货商管理</el-button>
+          <el-button v-if="hasMenu['OutsourceContractTemplate']" type="primary" size="small" text @click="$router.push('/outsource/contract-template')">加工合同模板</el-button>
         </div>
       </el-tab-pane>
 
       <el-tab-pane v-if="hasModule['purchase']" label="进货业务" name="purchase">
         <div class="stat-grid">
           <div class="stat-card clickable" @click="$router.push('/inventory/purchase')">
-            <div class="stat-value" style="color:var(--app-color-primary)">{{ purchaseTotal }}</div>
-            <div class="stat-label">成品采购单</div>
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ fmtN(purchaseMonthAmount) }}</div>
+            <div class="stat-label">本月采购金额</div>
+          </div>
+          <div class="stat-card clickable" @click="$router.push('/inventory/purchase-return')">
+            <div class="stat-value" style="color:var(--app-color-warning)">{{ fmtN(purchaseReturnMonthAmount) }}</div>
+            <div class="stat-label">本月采购退货</div>
+          </div>
+          <div class="stat-card clickable" @click="$router.push('/inventory/purchase')">
+            <div class="stat-value" style="color:var(--app-color-danger)">{{ purchasePending }}</div>
+            <div class="stat-label">待审核采购单</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/supplier/manage')">
             <div class="stat-value" style="color:var(--app-color-success)">{{ supplierTotal }}</div>
             <div class="stat-label">供应商</div>
           </div>
-          
         </div>
+        <el-card shadow="never" class="section-card">
+          <template #header>
+            <span class="section-title">最近采购单</span>
+            <el-button size="small" text style="float:right" @click="$router.push('/inventory/purchase')">查看更多 →</el-button>
+          </template>
+          <el-table :data="recentPurchases" size="small" stripe>
+            <el-table-column label="单号" min-width="150">
+              <template #default="{row}"><el-link type="primary" @click="$router.push('/inventory/purchase')">{{ row.code }}</el-link></template>
+            </el-table-column>
+            <el-table-column prop="supplierName" label="供应商" min-width="130" show-overflow-tooltip />
+            <el-table-column prop="itemsSummary" label="明细" min-width="160" show-overflow-tooltip />
+            <el-table-column label="金额" width="110" align="right"><template #default="{row}">{{ fmtN(row.totalAmount) }}</template></el-table-column>
+            <el-table-column label="日期" width="100"><template #default="{row}">{{ row.orderDate || '-' }}</template></el-table-column>
+            <el-table-column label="状态" width="90" align="center">
+              <template #default="{row}"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+        <el-card shadow="never" class="section-card" v-if="pendingPurchaseReturns.length">
+          <template #header>
+            <span class="section-title">待处理采购退货</span>
+            <el-button size="small" text style="float:right" @click="$router.push('/inventory/purchase-return')">查看更多 →</el-button>
+          </template>
+          <el-table :data="pendingPurchaseReturns" size="small" stripe>
+            <el-table-column label="单号" min-width="150"><template #default="{row}">{{ row.code }}</template></el-table-column>
+            <el-table-column prop="supplierName" label="供应商" min-width="130" show-overflow-tooltip />
+            <el-table-column prop="itemsSummary" label="明细" min-width="160" show-overflow-tooltip />
+            <el-table-column label="关联采购单" min-width="150"><template #default="{row}">{{ row.purchaseOrderCode || '-' }}</template></el-table-column>
+            <el-table-column label="日期" width="100"><template #default="{row}">{{ row.returnDate || '-' }}</template></el-table-column>
+            <el-table-column label="状态" width="90" align="center">
+              <template #default="{row}"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
+            </el-table-column>
+          </el-table>
+        </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
           <el-button v-if="hasMenu['InventoryPurchase']" type="primary" size="small" text @click="$router.push('/inventory/purchase')">成品采购单</el-button>
+          <el-button v-if="hasMenu['InventoryPurchaseReturn']" type="primary" size="small" text @click="$router.push('/inventory/purchase-return')">采购退货单</el-button>
+          <el-button v-if="hasMenu['SupplierManage']" type="primary" size="small" text @click="$router.push('/supplier/manage')">供应商管理</el-button>
           <el-button v-if="hasMenu['OutsourceSupplierManage']" type="primary" size="small" text @click="$router.push('/outsource/supplier/manage')">供货商管理</el-button>
         </div>
       </el-tab-pane>
@@ -206,52 +257,170 @@
       <el-tab-pane v-if="hasModule['sale']" label="销售业务" name="sale">
         <div class="stat-grid">
           <div class="stat-card clickable" @click="$router.push('/inventory/sale')">
-            <div class="stat-value" style="color:var(--app-color-primary)">{{ saleTotal }}</div>
-            <div class="stat-label">销售单</div>
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ fmtN(saleMonthAmount) }}</div>
+            <div class="stat-label">本月销售额</div>
+          </div>
+          <div class="stat-card clickable" @click="$router.push('/inventory/sale')">
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ saleMonthCount }}</div>
+            <div class="stat-label">本月销售单</div>
+          </div>
+          <div class="stat-card clickable" @click="$router.push('/inventory/sale')">
+            <div class="stat-value" style="color:var(--app-color-danger)">{{ salePending }}</div>
+            <div class="stat-label">待审核销售单</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/inventory/customer')">
             <div class="stat-value" style="color:var(--app-color-success)">{{ customerTotal }}</div>
             <div class="stat-label">客户</div>
           </div>
         </div>
+        <el-card shadow="never" class="section-card">
+          <template #header>
+            <span class="section-title">最近销售单</span>
+            <el-button size="small" text style="float:right" @click="$router.push('/inventory/sale')">查看更多 →</el-button>
+          </template>
+          <el-table :data="recentSales" size="small" stripe>
+            <el-table-column label="单号" min-width="150">
+              <template #default="{row}"><el-link type="primary" @click="$router.push('/inventory/sale')">{{ row.code }}</el-link></template>
+            </el-table-column>
+            <el-table-column prop="customerName" label="客户" min-width="130" show-overflow-tooltip />
+            <el-table-column label="金额" width="120" align="right"><template #default="{row}">{{ fmtN(row.totalAmount) }}</template></el-table-column>
+            <el-table-column label="下单日期" width="100"><template #default="{row}">{{ row.orderDate || '-' }}</template></el-table-column>
+            <el-table-column label="状态" width="90" align="center">
+              <template #default="{row}"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+        <el-card shadow="never" class="section-card">
+          <template #header><span class="section-title">本年客户销售 TOP5</span></template>
+          <el-table :data="topCustomers" size="small" stripe>
+            <el-table-column type="index" label="#" width="50" align="center" />
+            <el-table-column prop="name" label="客户" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="count" label="单数" width="80" align="center" />
+            <el-table-column label="销售金额" width="130" align="right"><template #default="{row}">{{ fmtN(row.amount) }}</template></el-table-column>
+            <el-table-column label="占比" min-width="140">
+              <template #default="{row}">
+                <el-progress :percentage="row.pct" :stroke-width="10" :show-text="false" />
+                <span style="font-size:12px;color:var(--app-text-secondary)">{{ row.pct }}%</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
           <el-button v-if="hasMenu['InventorySale']" type="primary" size="small" text @click="$router.push('/inventory/sale')">销售单</el-button>
+          <el-button v-if="hasMenu['SaleReturn']" type="primary" size="small" text @click="$router.push('/sale/return')">销售退单</el-button>
+          <el-button v-if="hasMenu['SaleExchange']" type="primary" size="small" text @click="$router.push('/sale/exchange')">销售换货单</el-button>
           <el-button v-if="hasMenu['InventoryCustomer']" type="primary" size="small" text @click="$router.push('/inventory/customer')">客户管理</el-button>
         </div>
       </el-tab-pane>
 
       <el-tab-pane v-if="hasModule['stock']" label="成品库存业务" name="stock">
         <div class="stat-grid">
-          <div class="stat-card clickable" @click="$router.push('/material')">
-            <div class="stat-value" style="color:var(--app-color-primary)">{{ productTotal }}</div>
-            <div class="stat-label">产品</div>
+          <div class="stat-card clickable" @click="$router.push('/inventory/stock')">
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ fmtN(stockTotalQty) }}</div>
+            <div class="stat-label">库存总件数</div>
           </div>
-          <div class="stat-card clickable" @click="$router.push('/inventory/warehouse')">
-            <div class="stat-value" style="color:var(--app-color-success)">{{ warehouseTotal }}</div>
-            <div class="stat-label">仓库</div>
+          <div class="stat-card clickable" @click="$router.push('/inventory/stock')">
+            <div class="stat-value" style="color:var(--app-color-success)">{{ fmtN(stockTotalValue) }}</div>
+            <div class="stat-label">库存总金额</div>
+          </div>
+          <div class="stat-card clickable" @click="$router.push('/inventory/return-sort')">
+            <div class="stat-value" style="color:var(--app-color-warning)">{{ fmtN(stockPendingQty) }}</div>
+            <div class="stat-label">待整理件数</div>
+          </div>
+          <div class="stat-card clickable" @click="$router.push('/inventory/stock')">
+            <div class="stat-value" style="color:var(--app-color-danger)">{{ fmtN(stockDefectQty) }}</div>
+            <div class="stat-label">不良品件数</div>
           </div>
         </div>
+        <el-card shadow="never" class="section-card">
+          <template #header><span class="section-title">仓库库存分布</span></template>
+          <el-table :data="whStockRows" size="small" stripe>
+            <el-table-column prop="name" label="仓库" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="rows" label="产品行数" width="90" align="center" />
+            <el-table-column label="库存件数" width="110" align="right"><template #default="{row}">{{ fmtN(row.qty) }}</template></el-table-column>
+            <el-table-column label="库存金额" width="130" align="right"><template #default="{row}">{{ fmtN(row.value) }}</template></el-table-column>
+          </el-table>
+        </el-card>
+        <el-card shadow="never" class="section-card" v-if="lowStockItems.length">
+          <template #header>
+            <span class="section-title" style="color:var(--app-color-danger)">低库存预警（可用量 ≤ 安全库存）</span>
+            <el-button size="small" text style="float:right" @click="$router.push('/inventory/stock')">查看库存 →</el-button>
+          </template>
+          <el-table :data="lowStockItems" size="small" stripe>
+            <el-table-column prop="productName" label="产品" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="warehouseName" label="仓库" min-width="130" show-overflow-tooltip />
+            <el-table-column label="A品可用" width="100" align="right">
+              <template #default="{row}"><span style="color:var(--app-color-danger);font-weight:600">{{ fmtN(row.qtyA) }}</span></template>
+            </el-table-column>
+            <el-table-column label="安全库存" width="100" align="right"><template #default="{row}">{{ fmtN(row.safetyStock) }}</template></el-table-column>
+            <el-table-column label="缺口" width="100" align="right">
+              <template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmtN(row.gap) }}</span></template>
+            </el-table-column>
+          </el-table>
+        </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
           <el-button v-if="hasMenu['InventoryStock']" type="primary" size="small" text @click="$router.push('/inventory/stock')">成品库存</el-button>
-          <el-button v-if="hasMenu['InventoryWarehouse']" type="primary" size="small" text @click="$router.push('/inventory/warehouse')">成品仓库管理</el-button>
-          <el-button v-if="hasMenu['MaterialManage']" type="primary" size="small" text @click="$router.push('/material')">产品管理</el-button>
+          <el-button v-if="hasMenu['WarehouseStockLog']" type="primary" size="small" text @click="$router.push('/inventory/stock-log')">库存流水</el-button>
+          <el-button v-if="hasMenu['InventoryOtherIo']" type="primary" size="small" text @click="$router.push('/inventory/other-io')">其他出入库</el-button>
+          <el-button v-if="hasMenu['InventoryWarehouseMove']" type="primary" size="small" text @click="$router.push('/inventory/warehouse-move')">移仓单</el-button>
+          <el-button v-if="hasMenu['InventoryStockTake']" type="primary" size="small" text @click="$router.push('/inventory/stock-take')">库存盘点</el-button>
+          <el-button v-if="hasMenu['InventoryReturnSort']" type="primary" size="small" text @click="$router.push('/inventory/return-sort')">退货整理</el-button>
+          <el-button v-if="hasMenu['InventoryReclassify']" type="primary" size="small" text @click="$router.push('/inventory/reclassify')">品质重分类</el-button>
+          <el-button v-if="hasMenu['Warehouse']" type="primary" size="small" text @click="$router.push('/inventory/warehouse')">成品仓库管理</el-button>
+          <el-button v-if="hasMenu['ProductManage']" type="primary" size="small" text @click="$router.push('/product')">产品管理</el-button>
         </div>
       </el-tab-pane>
 
       <el-tab-pane v-if="hasModule['finance']" label="财务" name="finance">
         <div class="stat-grid">
-          <div class="stat-card" v-for="s in financeStats" :key="s.label">
-            <div class="stat-value" :style="{color:s.color}">{{ s.value }}</div>
-            <div class="stat-label">{{ s.label }}</div>
+          <div class="stat-card" v-for="c in finCards" :key="c.label">
+            <div class="stat-value" :style="{color:c.color}">{{ fmtN(c.value) }}</div>
+            <div class="stat-label">{{ c.label }}</div>
           </div>
         </div>
+        <div class="stat-grid">
+          <div class="stat-card clickable" @click="$router.push('/finance/receivable')" style="background:#fdf0f0">
+            <div class="stat-value" style="color:var(--app-color-danger)">{{ fmtN(healthInfo.receivableUnpaid || 0) }}</div>
+            <div class="stat-label">应收未收</div>
+            <div class="stat-label" v-if="healthInfo.receivableOverdue > 0" style="color:var(--app-color-danger)">逾期 {{ fmtN(healthInfo.receivableOverdue) }}</div>
+          </div>
+          <div class="stat-card clickable" @click="$router.push('/finance/payable')" style="background:#fdf6ec">
+            <div class="stat-value" style="color:var(--app-color-warning)">{{ fmtN(healthInfo.payableUnpaid || 0) }}</div>
+            <div class="stat-label">应付未付</div>
+          </div>
+          <div class="stat-card clickable" @click="$router.push('/finance/cashflow')" style="background:#f0f9eb">
+            <div class="stat-value" style="color:var(--app-color-success)">{{ fmtN(healthInfo.cashTotal || 0) }}</div>
+            <div class="stat-label">账户总额</div>
+          </div>
+        </div>
+        <el-card shadow="never" class="section-card">
+          <template #header>
+            <span class="section-title">账户余额</span>
+            <el-button size="small" text style="float:right" @click="$router.push('/finance/cashflow')">资金流水 →</el-button>
+          </template>
+          <el-table :data="financeAccounts" size="small" stripe>
+            <el-table-column prop="accountName" label="账户" min-width="140" />
+            <el-table-column prop="accountType" label="类型" width="100" align="center" />
+            <el-table-column label="期初余额" width="130" align="right"><template #default="{row}">{{ fmtN(row.openingBalance) }}</template></el-table-column>
+            <el-table-column label="当前余额" width="130" align="right">
+              <template #default="{row}"><span style="font-weight:600">{{ fmtN(row.balance) }}</span></template>
+            </el-table-column>
+          </el-table>
+        </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
           <el-button v-if="hasMenu['FinanceReceivable']" type="primary" size="small" text @click="$router.push('/finance/receivable')">应收管理</el-button>
           <el-button v-if="hasMenu['FinancePayable']" type="primary" size="small" text @click="$router.push('/finance/payable')">应付管理</el-button>
+          <el-button v-if="hasMenu['FinanceReceipt']" type="primary" size="small" text @click="$router.push('/finance/receipt')">收款管理</el-button>
+          <el-button v-if="hasMenu['FinancePayment']" type="primary" size="small" text @click="$router.push('/finance/payment')">付款管理</el-button>
+          <el-button v-if="hasMenu['FinanceExpense']" type="primary" size="small" text @click="$router.push('/finance/expense')">费用管理</el-button>
+          <el-button v-if="hasMenu['FinanceInvoice']" type="primary" size="small" text @click="$router.push('/finance/invoice')">发票管理</el-button>
+          <el-button v-if="hasMenu['FinanceBill']" type="primary" size="small" text @click="$router.push('/finance/bill')">账单生成</el-button>
+          <el-button v-if="hasMenu['FinanceAccount']" type="primary" size="small" text @click="$router.push('/finance/account')">资金账户</el-button>
           <el-button v-if="hasMenu['FinanceCashflow']" type="primary" size="small" text @click="$router.push('/finance/cashflow')">资金流水</el-button>
+          <el-button v-if="hasMenu['FinanceAnalysis']" type="primary" size="small" text @click="$router.push('/finance/analysis')">财务分析</el-button>
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -264,7 +433,8 @@ import * as echarts from 'echarts'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
-import { ProjectStatus, PhaseStatus, OutsourceOrderStatus, MaterialOrderStatus } from '@/api/enums'
+import { ProjectStatus, PhaseStatus, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { getDashboardPending, type DashboardPending } from '@/api/dashboard'
 import MemoPanel from '@/views/memo/index.vue'
 
@@ -414,6 +584,36 @@ const productTotal = ref(0)
 const warehouseTotal = ref(0)
 const financeStats = ref<{label:string,value:any,color:string}[]>([])
 
+// ===== 四大业务 tab 扩展数据 =====
+const purchaseMonthAmount = ref(0)
+const purchaseReturnMonthAmount = ref(0)
+const purchasePending = ref(0)
+const recentPurchases = ref<any[]>([])
+const pendingPurchaseReturns = ref<any[]>([])
+const saleMonthAmount = ref(0)
+const saleMonthCount = ref(0)
+const salePending = ref(0)
+const recentSales = ref<any[]>([])
+const topCustomers = ref<any[]>([])
+const stockTotalQty = ref(0)
+const stockTotalValue = ref(0)
+const stockPendingQty = ref(0)
+const stockDefectQty = ref(0)
+const whStockRows = ref<any[]>([])
+const lowStockItems = ref<any[]>([])
+const financeAccounts = ref<any[]>([])
+const healthInfo = computed(() => finSummary.value.health || {})
+const finCards = computed(() => {
+  const c = finSummary.value.cur || {}
+  return [
+    { label: '本月收入', value: c.revenue, color: 'var(--app-color-success)' },
+    { label: '本月成本', value: c.cost, color: 'var(--app-color-warning)' },
+    { label: '本月净利润', value: c.netProfit, color: Number(c.netProfit) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)' },
+    { label: '本月净现金流', value: finSummary.value.curCashNet, color: Number(finSummary.value.curCashNet) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)' },
+  ]
+})
+const curMonth = new Date().toISOString().slice(0, 7)
+
 function checkUserMenus() {
   const menus = userStore.menus || []
   const names = new Set<string>()
@@ -431,11 +631,11 @@ function checkUserMenus() {
   hasModule.outsource = names.has('OutsourceOrder') || names.has('OutsourceMaterialOrder')
   hasModule.purchase = names.has('InventoryPurchase') || names.has('SupplierManage') || names.has('OutsourceSupplierManage')
   hasModule.sale = names.has('InventorySale') || names.has('InventoryCustomer')
-  hasModule.stock = names.has('InventoryStock') || names.has('InventoryWarehouse') || names.has('MaterialManage')
+  hasModule.stock = names.has('InventoryStock') || names.has('Warehouse') || names.has('ProductManage')
   hasModule.finance = names.has('FinanceReceivable') || names.has('FinancePayable')
 
-  // 快捷入口可见性
-  const menuNames = ['DevProject','DevBom','DevPhaseTemplate','OutsourceOrder','OutsourceMaterialOrder','OutsourceMaterialInfo','OutsourceWarehouse','OutsourceContractTemplate','OutsourceDelivery','InventoryPurchase','SupplierManage','OutsourceSupplierManage','InventorySale','InventoryCustomer','InventoryStock','InventoryWarehouse','MaterialManage','FinanceReceivable','FinancePayable','FinanceCashflow','FinanceAnalysis']
+  // 快捷入口可见性（route_name 与 sys_menu 完全一致；注意委外仓库/成品仓库管理共用 "Warehouse"）
+  const menuNames = ['Dashboard','DevProject','DevBom','DevDrawing','DevMaterial','DevBomType','DevPhaseTemplate','ProductManage','InventoryBrand','InventoryCustomer','SupplierManage','OutsourceSupplierManage','OutsourceOrder','OutsourceMaterialOrder','OutsourceMaterialInfo','OutsourceDelivery','OutsourceOtherIo','OutsourceReturnOrder','OutsourceMaterialReturn','Warehouse','OutsourceMaterialWarehouse','OutsourceContractTemplate','InventoryPurchase','InventoryPurchaseReturn','InventorySale','SaleReturn','SaleExchange','InventoryStock','WarehouseStockLog','InventoryOtherIo','InventoryReclassify','InventoryWarehouseMove','InventoryStockTake','InventoryReturnSort','FinanceReceivable','FinancePayable','FinanceBill','FinanceCashflow','FinanceAccount','FinanceReceipt','FinancePayment','FinanceExpense','FinanceAnalysis','FinanceInvoice','SystemSmart','SystemUser','SystemPermission','SystemSettings','SystemDataManage','SystemRole','SystemMenu','SystemClearData']
   menuNames.forEach(n => { hasMenu.value[n] = names.has(n) })
 
   // 默认激活「经营总览」（进来先看全貌；财务区块按 FinanceAnalysis 权限显隐）
@@ -505,44 +705,101 @@ async function loadStats() {
   } catch { /* ignore */}
   try {
     if (hasModule.purchase) {
-      const [purRes, supRes] = await Promise.all([
-        request.get<any, any>('/inventory/purchase/page', { params: { pageSize: 1 } }).catch(() => ({})),
+      const [purRes, retRes, supRes] = await Promise.all([
+        request.get<any, any>('/inventory/purchase/page', { params: { pageSize: 200 } }).catch(() => ({})),
+        request.get<any, any>('/inventory/purchase-return/page', { params: { pageSize: 200 } }).catch(() => ({})),
         request.get<any, any>('/supplier/page', { params: { pageSize: 1 } }).catch(() => ({})),
       ])
-      purchaseTotal.value = purRes?.total || 0
+      const purchases = purRes?.records || []
+      purchaseMonthAmount.value = purchases
+        .filter((p: any) => p.status === 'AUDITED' && (p.orderDate || '').startsWith(curMonth))
+        .reduce((s: number, p: any) => s + (Number(p.totalAmount) || 0), 0)
+      purchasePending.value = purchases.filter((p: any) => p.status === 'DRAFT').length
+      recentPurchases.value = purchases.slice(0, 8)
+      const rets = retRes?.records || []
+      purchaseReturnMonthAmount.value = rets
+        .filter((p: any) => p.status === 'AUDITED' && (p.returnDate || '').startsWith(curMonth))
+        .reduce((s: number, p: any) => s + (Number(p.totalAmount) || 0), 0)
+      pendingPurchaseReturns.value = rets.filter((p: any) => p.status === 'DRAFT').slice(0, 5)
       supplierTotal.value = supRes?.total || 0
+      purchaseTotal.value = purRes?.total || 0
     }
   } catch { /* ignore */}
   try {
     if (hasModule.sale) {
       const [saleRes, cusRes] = await Promise.all([
-        request.get<any, any>('/inventory/sale/page', { params: { pageSize: 1 } }).catch(() => ({})),
-        request.get<any, any>('/inventory/customer/page', { params: { pageSize: 1 } }).catch(() => ({})),
+        request.get<any, any>('/inventory/sale/page', { params: { pageSize: 200 } }).catch(() => ({})),
+        request.get<any, any>('/inventory/customer/page', { params: { pageSize: 200 } }).catch(() => ({})),
       ])
-      saleTotal.value = saleRes?.total || 0
+      const sales = saleRes?.records || []
+      const custNameMap: Record<number, string> = {}
+      ;(cusRes?.records || []).forEach((c: any) => { custNameMap[c.id] = c.name })
+      const audited = sales.filter((s: any) => s.status === 'AUDITED')
+      const monthSales = audited.filter((s: any) => (s.orderDate || '').startsWith(curMonth))
+      saleMonthAmount.value = monthSales.reduce((s: number, x: any) => s + (Number(x.totalAmount) || 0), 0)
+      saleMonthCount.value = monthSales.length
+      salePending.value = sales.filter((s: any) => s.status === 'DRAFT').length
+      recentSales.value = sales.slice(0, 8)
+      // 本年客户销售 TOP5（已审核单聚合）
+      const byCust: Record<number, { amount: number, count: number }> = {}
+      audited.forEach((s: any) => {
+        const k = s.customerId
+        if (k == null) return
+        if (!byCust[k]) byCust[k] = { amount: 0, count: 0 }
+        byCust[k].amount += Number(s.totalAmount) || 0
+        byCust[k].count++
+      })
+      const totalAmt = Object.values(byCust).reduce((s: number, v: any) => s + v.amount, 0)
+      topCustomers.value = Object.entries(byCust)
+        .map(([id, v]: any) => ({ name: custNameMap[Number(id)] || ('客户#' + id), amount: v.amount, count: v.count, pct: totalAmt > 0 ? Math.round(v.amount / totalAmt * 100) : 0 }))
+        .sort((a: any, b: any) => b.amount - a.amount)
+        .slice(0, 5)
       customerTotal.value = cusRes?.total || 0
+      saleTotal.value = saleRes?.total || 0
     }
   } catch { /* ignore */}
   try {
     if (hasModule.stock) {
-      const [prodRes, whRes] = await Promise.all([
-        request.get<any, any>('/product/page', { params: { pageSize: 1 } }).catch(() => ({})),
-        request.get<any, any>('/warehouse/page', { params: { pageSize: 1 } }).catch(() => ({})),
+      const [prodRes, whRes, stkRes] = await Promise.all([
+        request.get<any, any>('/product/page', { params: { pageSize: 200 } }).catch(() => ({})),
+        request.get<any, any>('/warehouse/page', { params: { pageSize: 200 } }).catch(() => ({})),
+        request.get<any, any>('/warehouse/stock/product-stock/page', { params: { pageSize: 200 } }).catch(() => ({})),
       ])
       productTotal.value = prodRes?.total || 0
       warehouseTotal.value = whRes?.total || 0
+      const prodMap: Record<number, any> = {}
+      ;(prodRes?.records || []).forEach((p: any) => { prodMap[p.id] = p })
+      const rows = stkRes?.records || []
+      let totalQty = 0, totalValue = 0, pendingQty = 0, defectQty = 0
+      const byWh: Record<number, { name: string, rows: number, qty: number, value: number }> = {}
+      const low: any[] = []
+      rows.forEach((r: any) => {
+        const qtyA = Number(r.qtyA) || 0
+        const qty = qtyA + (Number(r.qtyB) || 0) + (Number(r.qtyC) || 0) + (Number(r.qtyDefect) || 0) + (Number(r.qtyPending) || 0)
+        const cost = Number(prodMap[r.productId]?.costPrice) || 0
+        totalQty += qty
+        totalValue += qty * cost
+        pendingQty += Number(r.qtyPending) || 0
+        defectQty += Number(r.qtyDefect) || 0
+        const wh = byWh[r.warehouseId] || (byWh[r.warehouseId] = { name: r.warehouseName || ('仓库#' + r.warehouseId), rows: 0, qty: 0, value: 0 })
+        wh.rows++; wh.qty += qty; wh.value += qty * cost
+        const safety = Number(prodMap[r.productId]?.safetyStock) || 0
+        if (safety > 0 && qtyA <= safety) {
+          low.push({ productName: r.productName || ('产品#' + r.productId), warehouseName: r.warehouseName || '', qtyA, safetyStock: safety, gap: safety - qtyA })
+        }
+      })
+      stockTotalQty.value = totalQty
+      stockTotalValue.value = Math.round(totalValue * 100) / 100
+      stockPendingQty.value = pendingQty
+      stockDefectQty.value = defectQty
+      whStockRows.value = Object.values(byWh).sort((a: any, b: any) => b.value - a.value)
+      lowStockItems.value = low.sort((a: any, b: any) => a.gap - b.gap).slice(0, 5)
     }
   } catch { /* ignore */}
   try {
     if (hasModule.finance) {
-      const [recRes, payRes] = await Promise.all([
-        request.get<any, any>('/finance/receivable/page', { params: { pageSize: 1 } }).catch(() => ({})),
-        request.get<any, any>('/finance/payable/page', { params: { pageSize: 1 } }).catch(() => ({})),
-      ])
-      financeStats.value = [
-        { label:'应收记录', value: recRes?.total || 0, color: 'var(--app-color-danger)' },
-        { label:'应付记录', value: payRes?.total || 0, color: 'var(--app-color-warning)' },
-      ]
+      const accRes = await request.get<any, any>('/finance/account/page', { params: { pageSize: 100 } }).catch(() => ({}))
+      financeAccounts.value = accRes?.records || []
     }
   } catch { /* ignore */}
 }

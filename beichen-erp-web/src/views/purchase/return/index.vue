@@ -25,29 +25,21 @@
 
     <el-card style="margin-top:16px">
       <el-table :data="list" border stripe v-loading="loading" row-key="id" @row-click="handleDetail">
-        <el-table-column prop="code" label="退货单号" width="180" />
-        <el-table-column label="供货商" min-width="140">
-          <template #default="{ row }">
-            <el-button type="primary" link @click.stop="handleSupplierClick(row.supplierId)">{{ row.supplierName }}</el-button>
-          </template>
-        </el-table-column>
-        <el-table-column label="退货仓库" min-width="120">
+        <el-table-column prop="returnDate" label="退货日期" width="100" align="center" />
+        <el-table-column prop="code" label="退货单号" width="150" />
+        <el-table-column label="退货仓库" min-width="100">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleWarehouseClick(row.warehouseId)">{{ warehouseName(row.warehouseId) }}</el-button>
           </template>
         </el-table-column>
-        <el-table-column prop="returnDate" label="退货日期" width="120" align="center" />
-        <el-table-column label="来源采购单" width="150">
-          <template #default="{ row }">{{ row.purchaseOrderCode || '—' }}</template>
-        </el-table-column>
-        <el-table-column prop="itemsSummary" label="退货明细" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="totalAmount" label="退货总金额" width="130" align="right">
+        <el-table-column prop="itemsSummary" label="退货明细" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="totalAmount" label="退货总金额" width="100" align="right">
           <template #default="{ row }">{{ row.totalAmount ? Number(row.totalAmount).toFixed(2) : '0.00' }}</template>
         </el-table-column>
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="220" align="center" fixed="right">
+        <el-table-column label="操作" width="200" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
             <el-button v-if="row.status === ReturnStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
@@ -68,31 +60,6 @@
         @current-change="loadData"
       />
     </el-card>
-
-    <!-- 详情弹窗 -->
-    <el-dialog v-model="detailVisible" title="退货单详情" width="700px">
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="退货单号">{{ detailData.code }}</el-descriptions-item>
-        <el-descriptions-item label="退货日期">{{ detailData.returnDate }}</el-descriptions-item>
-        <el-descriptions-item label="供货商">{{ detailData.supplierName }}</el-descriptions-item>
-        <el-descriptions-item label="退货仓库">{{ warehouseName(detailData.warehouseId) }}</el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag :type="statusType(detailData.status)">{{ statusLabel(detailData.status) }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="退货总金额">{{ detailData.totalAmount ? Number(detailData.totalAmount).toFixed(2) : '0.00' }}</el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ detailData.remark || '-' }}</el-descriptions-item>
-      </el-descriptions>
-      <el-table :data="detailItems" border style="margin-top:16px">
-        <el-table-column prop="sku" label="SKU" width="130" />
-        <el-table-column prop="productName" label="产品" min-width="140" />
-        <el-table-column prop="quantity" label="数量" width="100" />
-        <el-table-column prop="unitPrice" label="单价" width="100" />
-        <el-table-column label="金额" width="120">
-          <template #default="{ row }">{{ row.amount ? Number(row.amount).toFixed(2) : '' }}</template>
-        </el-table-column>
-        <el-table-column prop="remark" label="备注" />
-      </el-table>
-    </el-dialog>
   </div>
 </template>
 
@@ -102,10 +69,10 @@ import { PURCHASE_RETURN_DIRTY_KEY } from '@/api/enums'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  getPurchaseReturnPage, getPurchaseReturnItems,
+  getPurchaseReturnPage,
   auditPurchaseReturn, cancelPurchaseReturn, unAuditPurchaseReturn,
   ReturnStatus, ReturnStatusLabel,
-  type PurchaseReturn, type PurchaseReturnItem
+  type PurchaseReturn
 } from '@/api/purchase'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
@@ -140,10 +107,6 @@ function warehouseName(id?: number) {
   return w ? w.warehouseName : ''
 }
 
-const detailVisible = ref(false)
-const detailData = ref<Partial<PurchaseReturn>>({})
-const detailItems = ref<PurchaseReturnItem[]>([])
-
 async function loadData() {
   loading.value = true
   try {
@@ -161,15 +124,10 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.supplierId = ''; query.status = ''; handleQuery() }
 function handleAdd() { router.push('/inventory/purchase-return/add') }
 function handleEdit(row: PurchaseReturn) { router.push({ path: '/inventory/purchase-return/add', query: { id: row.id } }) }
-function handleSupplierClick(id?: number) { if (id) router.push(`/supplier/detail/${id}`) }
 function handleWarehouseClick(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 
 async function handleDetail(row: PurchaseReturn) {
-  detailData.value = { ...row }
-  try {
-    detailItems.value = await getPurchaseReturnItems(row.id as number) || []
-  } catch { detailItems.value = [] }
-  detailVisible.value = true
+  router.push(`/inventory/purchase-return/detail/${row.id}`)
 }
 
 async function handleAudit(row: PurchaseReturn) {

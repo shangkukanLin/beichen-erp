@@ -23,40 +23,42 @@
         </div>
       </div>
       <el-table :data="list" v-loading="loading" border stripe @row-click="goDetail">
-        <el-table-column prop="code" label="退单号" width="150" />
-        <el-table-column prop="customerName" label="客户" min-width="140" />
-        <el-table-column prop="returnDate" label="退货日期" width="120" />
-        <el-table-column label="关联销售单" width="150">
-          <template #default="{ row }">{{ row.saleOrderCode || '—' }}</template>
+        <el-table-column prop="returnDate" label="退货日期" width="110" />
+        <el-table-column prop="code" label="退单号" width="140" />
+        <el-table-column label="客户" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button v-if="row.customerId" type="primary" link @click.stop="goCustomer(row.customerId)">{{ row.customerName || '—' }}</el-button>
+            <span v-else>{{ row.customerName || '—' }}</span>
+          </template>
         </el-table-column>
-        <el-table-column label="退货概况" min-width="220" show-overflow-tooltip>
+        <!-- 概况为弹性列：超长自动省略并 tooltip，保证整表尽量不出现横向滚动 -->
+        <el-table-column label="退货概况" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ row.itemsSummary }}</template>
         </el-table-column>
-        <el-table-column prop="totalAmount" label="金额" width="120" align="right">
+        <el-table-column prop="totalAmount" label="金额" width="110" align="right">
           <template #default="{ row }">{{ formatMoney(row.totalAmount) }}</template>
         </el-table-column>
-        <el-table-column label="收费" width="150" align="center">
+        <el-table-column label="收费" width="120" align="center">
           <template #default="{ row }">
-            <span v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0">
-              <el-tag type="warning" size="small">收费 {{ formatMoney(row.chargeAmount) }}</el-tag>
-              <span style="margin-left:4px;color:#909399">{{ ExchangeChargeTypeLabel[row.chargeType] || '' }}</span>
-            </span>
+            <el-tag v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0" type="warning" size="small"
+              :title="ExchangeChargeTypeLabel[row.chargeType] || ''">
+              收费 {{ formatMoney(row.chargeAmount) }}
+            </el-tag>
             <span v-else style="color:#c0c4cc">不收费</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100" align="center">
+        <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="260" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="goDetail(row)">详情</el-button>
-            <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="primary" @click.stop="goEdit(row)">编辑</el-button>
             <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="success" @click.stop="doAudit(row)">审核</el-button>
             <el-button v-if="row.status === SaleReturnStatus.AUDITED" link type="warning" @click.stop="doUnAudit(row)">反审核</el-button>
+            <!-- 销售退单不提供删除：单据需留痕，只能作废（后端 delete 语义也等同作废） -->
             <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="danger" @click.stop="doCancel(row)">作废</el-button>
-            <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="danger" @click.stop="doDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -86,7 +88,6 @@ import {
   auditSaleReturn,
   unAuditSaleReturn,
   cancelSaleReturn,
-  deleteSaleReturn,
   SaleReturnStatus,
   SaleReturnStatusLabel,
 } from '@/api/sale'
@@ -152,11 +153,13 @@ function resetQuery() {
 function goAdd() {
   router.push('/sale/return/add')
 }
-function goEdit(row: any) {
-  router.push(`/sale/return/add?id=${row.id}`)
-}
+/** 草稿态点进去直接编辑（列表不再单独放「编辑」按钮）；其余状态进只读详情 */
 function goDetail(row: any) {
-  router.push(`/sale/return/detail/${row.id}`)
+  if (row.status === SaleReturnStatus.DRAFT) router.push(`/sale/return/add?id=${row.id}`)
+  else router.push(`/sale/return/detail/${row.id}`)
+}
+function goCustomer(id?: number) {
+  if (id) router.push(`/inventory/customer/detail/${id}`)
 }
 
 function doAudit(row: any) {
@@ -201,19 +204,6 @@ function doCancel(row: any) {
     .catch(() => {})
 }
 
-function doDelete(row: any) {
-  ElMessageBox.confirm(`确认删除销售退单 ${row.code}？`, '提示', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'warning',
-  })
-    .then(async () => {
-      await deleteSaleReturn(row.id)
-      ElMessage.success('删除成功')
-      load()
-    })
-    .catch(() => {})
-}
 
 onActivated(() => {
   // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场

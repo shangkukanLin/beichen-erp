@@ -275,7 +275,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
           <el-col :span="8"><el-form-item label="供料模式"><el-select v-model="form.supplyMode" style="width:100%" @change="onSupplyModeChange"><el-option v-for="m in SUPPLY_MODE_OPTIONS" :key="m.value" :label="m.label" :value="m.value" /></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="计划开始"><el-input v-model="form.planStartDate" type="date" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="计划完成"><el-input v-model="form.planEndDate" type="date" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="是否收税"><el-switch v-model="form.taxIncluded" :active-value="1" :inactive-value="0" @change="(v: any) => { form.taxRate = v ? (form.taxRate || '13') : '' }" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="是否含税"><el-switch v-model="form.taxIncluded" :active-value="1" :inactive-value="0" @change="(v: any) => { form.taxRate = v ? (form.taxRate || '13') : '' }" /></el-form-item></el-col>
           <el-col :span="8" v-if="form.taxIncluded"><el-form-item label="税率(%)"><el-input v-model="form.taxRate" placeholder="如13" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
         </el-row>

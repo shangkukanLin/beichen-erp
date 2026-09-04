@@ -628,24 +628,28 @@ public class DeliveryServiceImpl implements DeliveryService {
         return BillPrefix.OUTSOURCE_DELIVERY + dateStr + String.format("%03d", seq);
     }
 
-    /** 调整库存：自动判断仓库类型（我方仓用 changeStock，委外仓用 updateStock） */
+    /**
+     * 调整库存：按仓库类别分派。
+     * <p>
+     * 关键：无论是自有仓还是委外仓，物料库存行在 warehouse_stock 中一律按 material_id 存储
+     * （product_id 与 material_id 互斥，委外物料不在 product 表内）。因此自有仓不能走
+     * changeStock(productId) 口径，否则会把物料ID当产品ID扣减，必然报"库存不足"。
+     * </p>
+     * <ul>
+     *   <li>自有仓：走 changeMaterialStock，带库存不足校验，不允许扣成负数</li>
+     *   <li>委外仓：走 updateStock，沿用委外仓允许强制出库（负库存）的既有口径</li>
+     * </ul>
+     */
     private void adjustSourceStock(Long warehouseId, Long materialId, BigDecimal delta, String materialName,
                                     String qualityType, String changeType, String orderCode) {
-        // 按仓库类别区分：INVENTORY(自有仓)走进销存 changeStock，OUTSOURCE(委外仓)走委外库存 updateStock
-        Warehouse wh = warehouseId != null ? warehouseMapper.selectById(warehouseId) : null;
+        if (warehouseId == null || materialId == null) return;
+        Warehouse wh = warehouseMapper.selectById(warehouseId);
         if (wh != null && WarehouseCategory.INVENTORY.getCode().equals(wh.getWarehouseCategory())) {
-            StockChangeType type = StockChangeType.fromCode(changeType);
-            if (type == null) type = StockChangeType.DELIVERY_OUT; // 兜底
-            warehouseStockService.changeStock(warehouseId, materialId, delta, type, orderCode, RelatedBillType.MATERIAL_IO, null, null, null);
+            warehouseStockService.changeMaterialStock(warehouseId, materialId, delta, changeType, orderCode,
+                    RelatedBillType.MATERIAL_IO, null, null);
         } else {
             updateStock(warehouseId, materialId, delta, qualityType, materialName, changeType, orderCode);
         }
-    }
-
-    /** 扣减进销存仓库库存（统一走 changeStock，自动写 inventory_stock_log） */
-    private void deductInventoryStock(Long warehouseId, Long materialId, java.math.BigDecimal qty, String materialName, String qualityType, String deliveryCode) {
-        warehouseStockService.changeStock(warehouseId, materialId, qty.negate(),
-            StockChangeType.OUTSOURCE_DELIVERY_OUT, deliveryCode, RelatedBillType.OUTSOURCE_DELIVERY, null, null, null);
     }
 
     @Override

@@ -8,17 +8,13 @@ import { getStockTakeStatus, type StockTakeStatus } from '@/api/inventory'
 
 const router = useRouter()
 
-// 月度盘点：本月待盘点/超期提示（应盘日=当月最后一天）
+// 月度盘点状态：仅用于表格「本月盘点 / 上次盘点」两列
 const takeStatus = ref<StockTakeStatus[]>([])
 const takeMap = computed(() => {
   const m: Record<number, StockTakeStatus> = {}
   takeStatus.value.forEach(s => { if (s.warehouseId) m[s.warehouseId] = s })
   return m
 })
-const pendingCount = computed(() => takeStatus.value.filter(s => !s.taken).length)
-const overdueCount = computed(() => takeStatus.value.filter(s => !s.taken && (s.overdueDays || 0) > 0).length)
-const curPeriod = computed(() => takeStatus.value[0]?.period || '')
-const curDue = computed(() => takeStatus.value[0]?.dueDate || '')
 async function loadTakeStatus() { try { takeStatus.value = await getStockTakeStatus() } catch { takeStatus.value = [] } }
 
 const query = reactive({ warehouseName: '', warehouseType: '' })
@@ -68,15 +64,6 @@ onMounted(() => { loadData(); loadTakeStatus() })
 
 <template>
   <div class="wh-page">
-    <el-alert v-if="pendingCount" :type="overdueCount ? 'error' : 'warning'" show-icon :closable="false" class="tip">
-      <template #title>
-        {{ curPeriod }} 待盘点 <b>{{ pendingCount }}</b> 个仓库
-        <span v-if="overdueCount" style="color:var(--app-color-danger)">，其中已超期 <b>{{ overdueCount }}</b> 个</span>
-        <span v-else>，应盘日 {{ curDue }}</span>
-        <el-button type="primary" link style="margin-left:8px" @click="router.push('/inventory/stock-take')">去盘点</el-button>
-      </template>
-    </el-alert>
-    <el-alert v-else-if="curPeriod" type="success" show-icon :closable="false" class="tip" :title="`${curPeriod} 所有仓库均已完成盘点`" />
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query">

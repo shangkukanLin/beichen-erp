@@ -114,7 +114,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         }
     }
 
-    /** 税额拆分（单价含税口径）：打开收税时从含税总额中按税率拆出税额 = total × rate/(100+rate) */
+    /** 税额拆分（单价含税口径）：打开含税时从含税总额中按税率拆出税额 = total × rate/(100+rate) */
     private BigDecimal calcTaxAmount(BigDecimal total, Integer taxIncluded, BigDecimal taxRate) {
         if (!Integer.valueOf(1).equals(taxIncluded) || taxRate == null || taxRate.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO;
@@ -199,6 +199,20 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         List<SaleOrderItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, id));
         if (items.isEmpty()) throw new BusinessException("订单明细不能为空");
+
+        // 库存校验：库存不足不允许审核（真实出库走"销售出库单"，此处按当前库存把关；
+        // 前端详情页审核前已预校验，此处兜底，避免从列表页等其它入口绕过）
+        List<Map<String, Object>> shortage = checkStock(order.getWarehouseId(), items).stream()
+                .filter(m -> !Boolean.TRUE.equals(m.get("sufficient")))
+                .toList();
+        if (!shortage.isEmpty()) {
+            String detail = shortage.stream().limit(5)
+                    .map(m -> String.format("%s（需 %s，库存 %s，缺 %s）",
+                            m.get("productName"), m.get("required"), m.get("available"), m.get("shortage")))
+                    .collect(Collectors.joining("；"));
+            throw new BusinessException("库存不足，无法审核：" + detail
+                    + (shortage.size() > 5 ? " 等 " + shortage.size() + " 项" : ""));
+        }
 
         // 1) 生成应收台账（销售订单仅负责成交与应收，真实出库由"销售出库单"审核统一扣库存，避免双重扣减）
         // 反审核后重新审核时该单号台账已存在（冲销仅置 CANCELLED 并未删除），此处复用并重置，避免 bill_no 唯一键冲突

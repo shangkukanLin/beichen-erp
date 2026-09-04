@@ -59,6 +59,9 @@ function resetForm() {
     creditPeriodMonths: undefined, creditPeriod: undefined })
 }
 
+/** 供应商→/supplier/detail/:id；供货商→/outsource/supplier/detail/:id（两者路由与页面标题分开） */
+function goDetail(id: number) { router.push(isVendor ? `/outsource/supplier/detail/${id}` : `/supplier/detail/${id}`) }
+
 function handleAdd() {
   resetForm(); isEdit.value = false; dialogTitle.value = isVendor ? '新增供货商' : '新增供应商'
   if (isVendor) form.checkedTypes = ['product']
@@ -154,7 +157,7 @@ onMounted(loadData)
     </el-card>
 
     <el-card shadow="never" class="table-card">
-      <el-table :data="tableData" border stripe v-loading="loading" @row-click="(row: any) => router.push({ path: `/supplier/detail/${row.id}`, query: isVendor ? { mode: 'vendor' } : { mode: 'supplier' } })">
+      <el-table :data="tableData" border stripe v-loading="loading" @row-click="(row: any) => goDetail(row.id)">
         <el-table-column prop="code" label="编码" width="150" />
         <el-table-column label="类型" width="180">
           <template #default="{ row }">
@@ -164,12 +167,12 @@ onMounted(loadData)
           </template>
         </el-table-column>
         <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="contact" label="联系人" width="100" />
+        <el-table-column prop="contact" label="联系人" width="120" />
         <el-table-column prop="phone" label="电话" width="130" />
         <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag size="small" :type="row.status===1?'success':'danger'">{{ row.status===1?'启用':'停用' }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="120" align="center" fixed="right">
           <template #default="{row}">
-            <el-button type="primary" link size="small" @click.stop="router.push({ path: `/supplier/detail/${row.id}`, query: isVendor ? { mode: 'vendor' } : { mode: 'supplier' } })">详情</el-button>
+            <el-button type="primary" link size="small" @click.stop="goDetail(row.id)">详情</el-button>
             <el-button type="danger" link size="small" @click.stop="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>

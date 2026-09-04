@@ -32,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -122,7 +123,15 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     public PurchaseReturn getById(Long id) {
         PurchaseReturn order = returnMapper.selectById(id);
         if (order == null) throw new BusinessException("退货单不存在");
+        fillSupplierName(order);
         return order;
+    }
+
+    /** 按 supplierId 回填供货商名称（实体字段非表字段，供详情接口返回） */
+    private void fillSupplierName(PurchaseReturn order) {
+        if (order == null || order.getSupplierId() == null) return;
+        Supplier s = supplierMapper.selectById(order.getSupplierId());
+        order.setSupplierName(s != null ? s.getName() : "");
     }
 
     @Override
@@ -136,6 +145,9 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         if (order.getTotalAmount() == null) order.setTotalAmount(BigDecimal.ZERO);
         returnMapper.insert(order);
         saveItems(order.getId(), itemMaps);
+        // 金额以明细 数量×单价 为准，避免前端未传 totalAmount 导致金额为 0
+        recalcTotalAmount(order.getId());
+        fillSupplierName(order);
         return order;
     }
 
@@ -154,7 +166,10 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         returnMapper.updateById(order);
         itemMapper.delete(new LambdaQueryWrapper<PurchaseReturnItem>().eq(PurchaseReturnItem::getReturnId, id));
         saveItems(id, itemMaps);
-        return returnMapper.selectById(id);
+        recalcTotalAmount(id);
+        PurchaseReturn updated = returnMapper.selectById(id);
+        fillSupplierName(updated);
+        return updated;
     }
 
     @Override
@@ -196,6 +211,9 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     StockChangeType.RETURN_OUT, order.getCode(), RelatedBillType.PURCHASE_RETURN, it.getProductId(),
                     product != null ? product.getSpec() : "", order.getId(), it.getQualityType());
         }
+        // 1.5) 重算金额（兜底存量数据：totalAmount 按明细 数量×单价 重新计算，应付随之正确）
+        BigDecimal totalAmount = recalcTotalAmount(id);
+        order.setTotalAmount(totalAmount);
         // 2) 冲减应付：新增负数应付台账
         FinancePayable fp = new FinancePayable();
         fp.setBillNo(order.getCode());
@@ -221,6 +239,34 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         u.setAuditorName(getCurrentUserName());
         u.setAuditTime(LocalDateTime.now());
         returnMapper.updateById(u);
+    }
+
+    /**
+     * 按明细重算金额：回填每行 amount = 数量 × 单价，并汇总主表 totalAmount。
+     * 前端提交的明细不含金额，历史数据 totalAmount 恒为 0，审核生成应付时必须先重算。
+     * @return 重算后的总金额
+     */
+    private BigDecimal recalcTotalAmount(Long returnId) {
+        List<PurchaseReturnItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<PurchaseReturnItem>().eq(PurchaseReturnItem::getReturnId, returnId));
+        BigDecimal total = BigDecimal.ZERO;
+        for (PurchaseReturnItem it : items) {
+            BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
+            BigDecimal price = it.getUnitPrice() != null ? it.getUnitPrice() : BigDecimal.ZERO;
+            BigDecimal amount = qty.multiply(price).setScale(2, RoundingMode.HALF_UP);
+            if (it.getAmount() == null || it.getAmount().compareTo(amount) != 0) {
+                PurchaseReturnItem u = new PurchaseReturnItem();
+                u.setId(it.getId());
+                u.setAmount(amount);
+                itemMapper.updateById(u);
+            }
+            total = total.add(amount);
+        }
+        PurchaseReturn u = new PurchaseReturn();
+        u.setId(returnId);
+        u.setTotalAmount(total);
+        returnMapper.updateById(u);
+        return total;
     }
 
     @Override

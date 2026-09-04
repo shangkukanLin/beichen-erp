@@ -197,7 +197,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
         </el-table-column>
         <el-table-column label="物料名称" min-width="180">
           <template #default="{row,$index}">
-            <el-select v-model="row.materialId" filterable size="small" style="width:100%" :disabled="!row.bomTypeId" @change="(v: any) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/material'); return } onMatChange($index, v) }">
+            <el-select v-model="row.materialId" filterable size="small" style="width:100%" :disabled="!row.bomTypeId" @change="(v: any) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/product/add'); return } onMatChange($index, v) }">
               <el-option v-for="m in filteredMaterials(row.bomTypeId)" :key="m.id" :label="m.materialName" :value="m.id" />
               <el-option label="+ 新增" :value="ADD_MARKER" />
             </el-select>

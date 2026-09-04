@@ -9,12 +9,14 @@ import com.beichen.erp.inventory.entity.InventoryOtherIo;
 import com.beichen.erp.inventory.entity.InventoryOtherIoItem;
 import com.beichen.erp.inventory.mapper.InventoryOtherIoMapper;
 import com.beichen.erp.inventory.mapper.InventoryOtherIoItemMapper;
+import com.beichen.erp.warehouse.service.CostService;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.IoType;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.service.OtherIoService;
+import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.material.service.ProductService;
@@ -36,6 +38,7 @@ public class OtherIoServiceImpl implements OtherIoService {
     private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
     private final ProductService productService;
+    private final CostService costService;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long warehouseId, String ioType, int pageNum, int pageSize) {
@@ -52,9 +55,25 @@ public class OtherIoServiceImpl implements OtherIoService {
             m.put("warehouseId", o.getWarehouseId()); m.put("ioType", o.getIoType());
             m.put("ioDate", o.getIoDate()); m.put("status", o.getStatus()); m.put("remark", o.getRemark());
             m.put("createTime", o.getCreateTime());
+            // 概况：成品名称×数量，供列表直接展示，免去前端逐条拉明细
+            m.put("itemSummary", buildItemSummary(o.getId()));
             return m;
         }).toList());
         return res;
+    }
+
+    /** 明细概况：成品名称×数量，顿号分隔（与委外加工退货列表 itemSummary 同风格） */
+    private String buildItemSummary(Long ioId) {
+        List<InventoryOtherIoItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, ioId));
+        StringBuilder sb = new StringBuilder();
+        for (InventoryOtherIoItem it : items) {
+            Product p = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+            BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
+            if (sb.length() > 0) sb.append("、");
+            sb.append(p != null ? p.getName() : "-").append("×").append(qty.stripTrailingZeros().toPlainString());
+        }
+        return sb.toString();
     }
 
     @Override
@@ -129,6 +148,8 @@ public class OtherIoServiceImpl implements OtherIoService {
         // 审核时应用库存
         List<InventoryOtherIoItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
+        // 出库前校验库存：一次列清所有不足项，避免落到 changeStock 只报「产品ID=xx」
+        checkStockBeforeOut(io, items);
         applyStock(io, items);
         InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
         ioMapper.updateById(u);
@@ -148,16 +169,49 @@ public class OtherIoServiceImpl implements OtherIoService {
         ioMapper.updateById(u);
     }
 
+    /**
+     * 出库前的库存校验（仅出库单生效）。
+     * changeStock 本身也会拦（SQL 带 quantity + delta >= 0），但报错只有「产品ID=xx」，
+     * 用户看不出是哪个产品、差多少。这里前置一次性检查全部明细，给出产品名/品质/需量/库存/缺口。
+     */
+    private void checkStockBeforeOut(InventoryOtherIo io, List<InventoryOtherIoItem> items) {
+        if (!IoType.OUT.getCode().equals(io.getIoType())) return;
+        List<String> shortage = new ArrayList<>();
+        for (InventoryOtherIoItem it : items) {
+            BigDecimal need = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
+            if (need.compareTo(BigDecimal.ZERO) <= 0) continue;
+            String qt = it.getQualityType() != null && !it.getQualityType().isBlank()
+                    ? it.getQualityType() : ProductQualityType.A.getCode();
+            BigDecimal avail = stockService.getQuantity(io.getWarehouseId(), it.getProductId(), qt);
+            if (avail.compareTo(need) < 0) {
+                Product p = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+                shortage.add(String.format("%s（%s规，需 %s，库存 %s，缺 %s）",
+                        p != null ? p.getName() : "ID=" + it.getProductId(),
+                        qt,
+                        need.stripTrailingZeros().toPlainString(),
+                        avail.stripTrailingZeros().toPlainString(),
+                        need.subtract(avail).stripTrailingZeros().toPlainString()));
+            }
+        }
+        if (!shortage.isEmpty()) {
+            throw new BusinessException("库存不足，无法审核：" + String.join("；", shortage)
+                    + (shortage.size() > 5 ? " 等 " + shortage.size() + " 项" : ""));
+        }
+    }
+
     /** 应用库存变更 */
     private void applyStock(InventoryOtherIo io, List<InventoryOtherIoItem> items) {
             StockChangeType type = IoType.IN.getCode().equals(io.getIoType()) ? StockChangeType.OTHER_IN : StockChangeType.OTHER_OUT;
+        boolean isIn = IoType.IN.getCode().equals(io.getIoType());
         for (InventoryOtherIoItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
-            BigDecimal delta = IoType.IN.getCode().equals(io.getIoType()) ? q : q.negate();
+            BigDecimal delta = isIn ? q : q.negate();
             Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
                     delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),
                     prod != null ? prod.getSpec() : "", io.getId(), it.getQualityType());
+            // 其他入库单无单价：成本为空时用最近进价兜底，避免"有库存无成本"
+            if (isIn) costService.fillProductCostIfEmpty(it.getProductId());
         }
     }
 

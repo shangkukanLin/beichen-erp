@@ -43,6 +43,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 退货整理：销售退货先入售后仓(待分类品/待整理)，再按 A/B/C/不良品 分选后分别入库（A/B/C 入成品仓）。
@@ -71,6 +72,14 @@ public class ReturnSortServiceImpl implements ReturnSortService {
                 .eq(warehouseId != null, ReturnSort::getWarehouseId, warehouseId)
                 .orderByDesc(ReturnSort::getId);
         Page<ReturnSort> raw = rsMapper.selectPage(new Page<>(pageNum, pageSize), w);
+        // 整理概况（产品名 + 分选结果）为非表字段，按本页单据批量查明细后拼接，避免逐条查库
+        List<ReturnSortItem> allItems = raw.getRecords().isEmpty() ? Collections.emptyList()
+                : itemMapper.selectList(new LambdaQueryWrapper<ReturnSortItem>()
+                        .in(ReturnSortItem::getSortId,
+                                raw.getRecords().stream().map(ReturnSort::getId).collect(Collectors.toList())));
+        fillItemDisplay(allItems);
+        Map<Long, List<ReturnSortItem>> itemsMap = allItems.stream()
+                .collect(Collectors.groupingBy(ReturnSortItem::getSortId));
         Page<Map<String, Object>> res = new Page<>(pageNum, pageSize, raw.getTotal());
         res.setRecords(raw.getRecords().stream().map(o -> {
             Map<String, Object> m = new HashMap<>();
@@ -84,6 +93,18 @@ public class ReturnSortServiceImpl implements ReturnSortService {
             m.put("lossAmount", o.getLossAmount());
             m.put("lossRemark", o.getLossRemark());
             m.put("remark", o.getRemark()); m.put("createTime", o.getCreateTime());
+            // 整理概况：产品名 整理合计（A x/B y/C z/不良 d），多条明细用「；」连接
+            List<ReturnSortItem> its = itemsMap.getOrDefault(o.getId(), Collections.emptyList());
+            String summary = its.stream()
+                    .map(it -> String.format("%s 整理%s（A%s/B%s/C%s/不良%s）",
+                            it.getProductName() != null ? it.getProductName() : "",
+                            nz(it.getQtyA()).add(nz(it.getQtyB())).add(nz(it.getQtyC())).add(nz(it.getQtyDefect())).stripTrailingZeros().toPlainString(),
+                            nz(it.getQtyA()).stripTrailingZeros().toPlainString(),
+                            nz(it.getQtyB()).stripTrailingZeros().toPlainString(),
+                            nz(it.getQtyC()).stripTrailingZeros().toPlainString(),
+                            nz(it.getQtyDefect()).stripTrailingZeros().toPlainString()))
+                    .collect(Collectors.joining("；"));
+            m.put("sortSummary", summary);
             return m;
         }).toList());
         return res;
@@ -92,12 +113,33 @@ public class ReturnSortServiceImpl implements ReturnSortService {
     @Override
     public ReturnSort getById(Long id) { return rsMapper.selectById(id); }
 
+    /** 回填明细展示字段：SKU、来源追溯（来源单据/日期/产品名存于售后待整理批次，明细表不落库），按 pendingId 批量取 */
+    private void fillItemDisplay(List<ReturnSortItem> items) {
+        if (items == null || items.isEmpty()) return;
+        // SKU（非表字段）
+        productService.fillSku(items, ReturnSortItem::getProductId, ReturnSortItem::setSku);
+        List<Long> pendingIds = items.stream().map(ReturnSortItem::getPendingId)
+                .filter(Objects::nonNull).collect(Collectors.toList());
+        Map<Long, AfterSalePending> pendingMap = pendingIds.isEmpty() ? Collections.emptyMap()
+                : afterSalePendingMapper.selectBatchIds(pendingIds).stream()
+                        .collect(Collectors.toMap(AfterSalePending::getId, p -> p, (a, b) -> a));
+        for (ReturnSortItem it : items) {
+            AfterSalePending p = it.getPendingId() != null ? pendingMap.get(it.getPendingId()) : null;
+            if (p == null) continue;
+            it.setSourceType(p.getSourceType());
+            it.setSourceCode(p.getSourceCode());
+            it.setSourceId(p.getSourceId());
+            it.setSourceDate(p.getSourceDate() != null ? p.getSourceDate().toString() : "");
+            if (it.getProductName() == null || it.getProductName().isBlank()) it.setProductName(p.getProductName());
+        }
+    }
+
     @Override
     public List<ReturnSortItem> getItems(Long sortId) {
         List<ReturnSortItem> items = itemMapper.selectList(new LambdaQueryWrapper<ReturnSortItem>()
                 .eq(ReturnSortItem::getSortId, sortId));
-        // 回填 SKU（非表字段），前端免查库即可展示
-        productService.fillSku(items, ReturnSortItem::getProductId, ReturnSortItem::setSku);
+        // 回填 SKU 与来源追溯
+        fillItemDisplay(items);
         return items;
     }
 

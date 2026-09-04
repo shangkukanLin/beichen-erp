@@ -1,6 +1,7 @@
 package com.beichen.erp.outsource.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import java.math.BigDecimal;
@@ -20,6 +21,11 @@ import java.time.LocalDateTime;
  */
 @Data
 @TableName("outsource_order_delivery")
+// 只按字段序列化：否则 Lombok getAQty() 会被 Jackson 推断为 "aqty"，与字段上的
+// @JsonProperty("aQty") 形成两个属性，JSON 里同时输出 aqty/aQty 重复键
+@JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY,
+        getterVisibility = JsonAutoDetect.Visibility.NONE,
+        isGetterVisibility = JsonAutoDetect.Visibility.NONE)
 public class OutsourceOrderDelivery {
     /** 主键ID */
     @TableId(type = IdType.AUTO)

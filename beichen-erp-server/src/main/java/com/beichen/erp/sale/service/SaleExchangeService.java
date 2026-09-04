@@ -33,7 +33,10 @@ public interface SaleExchangeService {
     /** 反审核：对称回滚，状态回到草稿 */
     void unAudit(Long id);
 
-    /** 删除（仅草稿） */
+    /** 作废（仅草稿）：单据留痕不物理删除 */
+    void cancel(Long id);
+
+    /** 兼容旧接口：语义等同作废（不做物理删除） */
     void delete(Long id);
 
     /**

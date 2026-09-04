@@ -27,6 +27,8 @@ public enum SourceBillType {
     OUTSOURCE_MATERIAL_DELIVERY("委外物料收发"),
     /** 委外退料（负向应付冲减） */
     OUTSOURCE_RETURN("委外退料"),
+    /** 委外加工退货收费：我方支付给加工厂的费用（与退料负向冲减分开记账，同为 sourceId=退货单ID） */
+    OUTSOURCE_RETURN_CHARGE("委外加工退货收费"),
     /** 委外物料退货（退回物料商，负向应付冲减） */
     OUTSOURCE_MATERIAL_RETURN("委外物料退货"),
     /** 委外超损赔偿（结单超损总价生成负应付） */

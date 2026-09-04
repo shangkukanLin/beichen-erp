@@ -415,7 +415,7 @@ onMounted(() => { loadAll() })
         </div>
         <div class="toolbar" style="margin:8px 0;display:flex;align-items:center;justify-content:space-between">
           <span style="font-size:12px;color:var(--el-text-color-secondary)">
-            说明：已税=单据打开「收税」开关（总金额中已按税率拆出税额）；未税=未打开开关，不做税额拆分。历史单据未开收税的全部计入未税。
+            说明：已税=单据打开「含税」开关（总金额中已按税率拆出税额）；未税=未打开开关，不做税额拆分。历史单据未开含税的全部计入未税。
           </span>
           <el-button type="primary" plain size="small" @click="exportTax">导出 Excel</el-button>
         </div>

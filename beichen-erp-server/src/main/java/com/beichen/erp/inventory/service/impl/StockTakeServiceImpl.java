@@ -21,6 +21,7 @@ import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
+import com.beichen.erp.warehouse.service.CostService;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -60,6 +61,7 @@ public class StockTakeServiceImpl implements StockTakeService {
     private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
     private final OutsourceMaterialMapper materialMapper;
+    private final CostService costService;
 
     @Override
     public Page<Map<String, Object>> page(Long warehouseId, String period, String status, int pageNum, int pageSize) {
@@ -293,10 +295,13 @@ public class StockTakeServiceImpl implements StockTakeService {
                 stockService.changeStock(t.getWarehouseId(), it.getProductId(), delta,
                         delta.compareTo(BigDecimal.ZERO) > 0 ? StockChangeType.STOCK_TAKE_IN : StockChangeType.STOCK_TAKE_OUT,
                         t.getTakeNo(), RelatedBillType.STOCK_TAKE, null, t.getId(), it.getQualityType());
+                // 盘盈无单价：成本为空时用最近进价兜底，避免"有库存无成本"
+                if (delta.compareTo(BigDecimal.ZERO) > 0) costService.fillProductCostIfEmpty(it.getProductId());
             } else if (it.getMaterialId() != null) {
                 stockService.changeMaterialStock(t.getWarehouseId(), it.getMaterialId(), delta,
                         delta.compareTo(BigDecimal.ZERO) > 0 ? StockChangeType.STOCK_TAKE_IN.getCode() : StockChangeType.STOCK_TAKE_OUT.getCode(),
                         t.getTakeNo(), RelatedBillType.STOCK_TAKE, null, t.getId());
+                if (delta.compareTo(BigDecimal.ZERO) > 0) costService.fillMaterialCostIfEmpty(it.getMaterialId());
             }
         }
         log.info("盘点{} {} 差异调整 {} 行", reverse ? "反审核回滚" : "审核", t.getTakeNo(), items.size());

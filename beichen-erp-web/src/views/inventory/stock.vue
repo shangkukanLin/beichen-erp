@@ -93,9 +93,20 @@ const fetchWarehouses = (kw: string) =>
 // 品牌下拉
 const fetchBrands = (kw: string) => request.get('/brand/page', { params: { pageSize: 200, brandName: kw } })
 
+/**
+ * 仓库名称映射：库存记录只返回 warehouseId，需要一次性拉仓库列表做本地映射。
+ * 这里不按类别过滤——下拉筛选只给成品类仓库，但名称映射要能覆盖到任意仓，避免列显示为空。
+ */
+async function loadWarehouses() {
+  try {
+    const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500, warehouseName: '' } })
+    warehouseOptions.value = r?.records || []
+  } catch { warehouseOptions.value = [] }
+}
+
 function warehouseName(id?: number) {
   const w = warehouseOptions.value.find(x => x.id === id)
-  return w ? w.warehouseName : ''
+  return w ? w.warehouseName : '-'
 }
 function fmt(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
 function totalQty(row: any) {
@@ -124,7 +135,7 @@ async function loadStock() {
 function stockQuery_() { stockPage.pageNum = 1; loadStock() }
 function stockReset() { stockQuery.warehouseIds = []; stockQuery.brandId = undefined; stockQuery.productName = ''; stockPage.pageNum = 1; loadStock() }
 
-onMounted(() => { loadStock() })
+onMounted(async () => { await loadWarehouses(); loadStock() })
 
 </script>
 

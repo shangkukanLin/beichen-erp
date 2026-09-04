@@ -48,6 +48,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -103,6 +104,15 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
                 .eq(saleOrderId != null, SaleExchange::getSaleOrderId, saleOrderId)
                 .orderByDesc(SaleExchange::getId);
         IPage<SaleExchange> p = exchangeMapper.selectPage(pg, w);
+        // 换货概况（退回侧 → 换出侧）为非表字段，按本页单据批量查明细后拼接，避免逐条查库
+        Map<Long, List<SaleExchangeItem>> itemsMap = new HashMap<>();
+        if (!p.getRecords().isEmpty()) {
+            List<Long> ids = p.getRecords().stream().map(SaleExchange::getId).collect(Collectors.toList());
+            itemsMap = exchangeItemMapper.selectList(
+                            new LambdaQueryWrapper<SaleExchangeItem>().in(SaleExchangeItem::getExchangeId, ids))
+                    .stream().collect(Collectors.groupingBy(SaleExchangeItem::getExchangeId));
+        }
+        Map<Long, List<SaleExchangeItem>> finalItemsMap = itemsMap;
         List<Map<String, Object>> rows = new ArrayList<>();
         for (SaleExchange e : p.getRecords()) {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -117,7 +127,16 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             m.put("warehouseOutName", warehouseName(e.getWarehouseOutId()));
             m.put("exchangeDate", e.getExchangeDate() != null ? e.getExchangeDate().toString() : "");
             m.put("status", e.getStatus());
-            m.put("totalAmount", e.getTotalAmount());
+            // 换货概况：产品名 退N → 换M(品质)，多条明细用「；」连接
+            List<SaleExchangeItem> exItems = finalItemsMap.getOrDefault(e.getId(), Collections.emptyList());
+            String summary = exItems.stream()
+                    .map(it -> String.format("%s 退%s → 换%s(%s)",
+                            it.getProductName() != null ? it.getProductName() : "",
+                            it.getQuantity() != null ? it.getQuantity().stripTrailingZeros().toPlainString() : "0",
+                            it.getOutQuantity() != null ? it.getOutQuantity().stripTrailingZeros().toPlainString() : "0",
+                            it.getOutQualityType() != null ? it.getOutQualityType() : ""))
+                    .collect(Collectors.joining("；"));
+            m.put("exchangeSummary", summary);
             m.put("chargeFlag", e.getChargeFlag());
             m.put("chargeType", e.getChargeType());
             m.put("chargeAmount", e.getChargeAmount());
@@ -234,10 +253,8 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         if (cid != null) exchange.setCompanyId(cid);
         validate(exchange, itemMaps);
         normalizeCharge(exchange);
-        // 换货类型与货值合计依赖落库后的明细（saveItems 会对换出侧做默认回填），故先插主表再回写
         exchangeMapper.insert(exchange);
         saveItems(exchange.getId(), itemMaps);
-        refreshDerivedFields(exchange.getId());
         return exchangeMapper.selectById(exchange.getId());
     }
 
@@ -255,24 +272,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         exchange.setStatus(old.getStatus());
         exchangeMapper.updateById(exchange);
         saveItems(exchange.getId(), itemMaps);
-        refreshDerivedFields(exchange.getId());
         return exchangeMapper.selectById(exchange.getId());
-    }
-
-    /**
-     * 按已落库的明细回写派生字段：换出货值合计。
-     * <p>必须在 saveItems 之后调用——换出数量/单价的默认值是在保存明细时才回填的。</p>
-     */
-    private void refreshDerivedFields(Long exchangeId) {
-        List<SaleExchangeItem> items = getItems(exchangeId);
-        BigDecimal total = BigDecimal.ZERO;
-        for (SaleExchangeItem it : items) {
-            total = total.add(outQtyOf(it).multiply(nz(it.getOutUnitPrice())));
-        }
-        SaleExchange u = new SaleExchange();
-        u.setId(exchangeId);
-        u.setTotalAmount(total);
-        exchangeMapper.updateById(u);
     }
 
     /**
@@ -408,12 +408,21 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void delete(Long id) {
+    public void cancel(Long id) {
         SaleExchange e = exchangeMapper.selectById(id);
         if (e == null) throw new BusinessException("换货单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(e.getStatus())) throw new BusinessException("只有草稿状态可删除");
-        exchangeItemMapper.delete(new LambdaQueryWrapper<SaleExchangeItem>().eq(SaleExchangeItem::getExchangeId, id));
-        exchangeMapper.deleteById(id);
+        if (!DocStatus.DRAFT.getCode().equals(e.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        SaleExchange u = new SaleExchange();
+        u.setId(id);
+        u.setStatus(DocStatus.CANCELLED.getCode());
+        exchangeMapper.updateById(u);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void delete(Long id) {
+        // 换货单不做物理删除（避免留下孤儿明细/关联数据），语义等同于作废：单据留痕
+        cancel(id);
     }
 
     // ==================== 校验 ====================

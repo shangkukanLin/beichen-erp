@@ -116,9 +116,20 @@ const detailVisible = ref(false)
 const detail = ref<any>({})
 const detailItems = ref<any[]>([])
 
+/**
+ * 仓库名称映射：移仓单只返回 from/toWarehouseId，需要一次性拉仓库列表做本地映射。
+ * 这里不按 warehouseCategory 过滤——下拉筛选仍只给自有仓，但名称映射要能覆盖到任意仓，避免列显示为空。
+ */
+async function loadWarehouses() {
+  try {
+    const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500, warehouseName: '' } })
+    warehouseOptions.value = r?.records || []
+  } catch { warehouseOptions.value = [] }
+}
+
 function warehouseName(id?: number) {
   const w = warehouseOptions.value.find((x: any) => x.id === id)
-  return w ? w.warehouseName : ''
+  return w ? w.warehouseName : '-'
 }
 function statusType(s?: string) { return DocStatusTag[s || ''] || '' }
 
@@ -185,7 +196,8 @@ onActivated(() => {
     loadData()
   }
 })
-onMounted(() => {
+onMounted(async () => {
+  await loadWarehouses()
   loadData().then(() => {
     // 库存流水链接跳转：自动打开指定单据详情
     const billId = route.query.billId

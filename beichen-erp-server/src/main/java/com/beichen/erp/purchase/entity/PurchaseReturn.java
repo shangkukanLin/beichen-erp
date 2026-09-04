@@ -18,6 +18,10 @@ public class PurchaseReturn {
 
     private Long supplierId;
 
+    /** 供货商名称（非表字段，查询时按 supplierId 回填） */
+    @TableField(exist = false)
+    private String supplierName;
+
     private Long warehouseId;
 
     /** 关联采购单ID（可选，用于追溯） */

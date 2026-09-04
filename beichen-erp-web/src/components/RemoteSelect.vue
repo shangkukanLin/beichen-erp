@@ -100,8 +100,24 @@ watch(() => props.preset, () => {
   if (mv == null || mv === '' || (Array.isArray(mv) && mv.length === 0)) return
   if (!isResolved(mv)) { seedPreset(mv); return }
   // 已存在但 label 可能为空（先以空名 seed，名称随后异步返回）：用最新 preset 刷新选中项 label
+  // 函数型 labelKey（如 productLabel 输出 "SKU | 名称"）无法按字段名局部刷新，整项替换
+  if (typeof props.labelKey === 'function') { replacePresetOption(mv); return }
   refreshPresetLabels()
 })
+
+/** 函数型 labelKey 场景：用最新 preset 替换 options 中的选中项，保证回显与选择后的显示一致 */
+function replacePresetOption(v: any) {
+  if (props.preset == null) return
+  const pv = getVal(props.preset)
+  const targets = Array.isArray(v) ? v : [v]
+  if (!targets.includes(pv)) return
+  const normalized: any = { ...(props.preset as Record<string, any>) }
+  normalized[props.valueKey as string] = pv
+  const idx = options.value.findIndex(o => getVal(o) === pv)
+  if (idx >= 0) options.value[idx] = normalized
+  else options.value = [...options.value, normalized]
+  options.value = [...options.value]
+}
 
 /** 刷新 options 中已存在的选中项 label（字符串 labelKey 场景，名称异步返回后回显） */
 function refreshPresetLabels() {

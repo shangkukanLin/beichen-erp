@@ -10,8 +10,8 @@
           <RemoteSelect v-model="query.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="全部（可输SKU）" style="width:200px" @pick="(rows:any[])=>onProductPick(rows[0])" />
         </el-form-item>
         <el-form-item label="变动类型">
-          <el-select v-model="query.changeType" placeholder="全部" clearable style="width:130px">
-            <el-option v-for="o in changeTypeOptions" :key="o" :label="o" :value="o" />
+          <el-select v-model="query.changeType" placeholder="全部" clearable filterable style="width:160px">
+            <el-option v-for="o in changeTypeOptions" :key="o.code" :label="o.label" :value="o.code" />
           </el-select>
         </el-form-item>
         </el-form>
@@ -24,24 +24,11 @@
 
     <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="tableData" border stripe max-height="calc(100vh - 260px)">
-        <el-table-column type="index" label="序号" width="60" align="center" />
-        <el-table-column prop="changeType" label="变动类型" width="120" align="center">
+        <el-table-column prop="createTime" label="时间" width="160">
+          <template #default="{ row }">{{ $fmtDate(row.createTime) }}</template>
+        </el-table-column>
+        <el-table-column prop="changeType" label="变动类型" width="130" align="center">
           <template #default="{ row }"><el-tag :type="logTagType(row.changeType)" size="small">{{ row.changeTypeLabel || row.changeType }}</el-tag></template>
-        </el-table-column>
-        <el-table-column label="产品名称" min-width="140">
-          <template #default="{ row }">{{ productName(row.productId) }}</template>
-        </el-table-column>
-        <el-table-column label="仓库" width="120">
-          <template #default="{ row }">{{ warehouseName(row.warehouseId) }}</template>
-        </el-table-column>
-        <el-table-column prop="changeQuantity" label="变动数量" width="110" align="right">
-          <template #default="{ row }">{{ fmt(row.changeQuantity) }}</template>
-        </el-table-column>
-        <el-table-column prop="beforeQuantity" label="变动前库存" width="120" align="right">
-          <template #default="{ row }">{{ fmt(row.beforeQuantity) }}</template>
-        </el-table-column>
-        <el-table-column prop="afterQuantity" label="变动后库存" width="120" align="right">
-          <template #default="{ row }">{{ fmt(row.afterQuantity) }}</template>
         </el-table-column>
         <el-table-column label="关联单号" width="150">
           <template #default="{ row }">
@@ -52,12 +39,25 @@
             <span v-else>{{ row.relatedBillNo }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="relatedBillType" label="关联类型" width="120">
-          <template #default="{ row }">{{ row.relatedBillTypeLabel || row.relatedBillType }}</template>
+        <el-table-column label="产品名称" min-width="140">
+          <template #default="{ row }">{{ productName(row.productId) }}</template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="createTime" label="操作时间" width="160">
-          <template #default="{ row }">{{ $fmtDate(row.createTime) }}</template>
+        <el-table-column label="仓库" width="120">
+          <template #default="{ row }">
+            <el-button v-if="row.warehouseId" type="primary" link @click.stop="router.push(`/inventory/warehouse/detail/${row.warehouseId}`)">
+              {{ warehouseName(row.warehouseId) }}
+            </el-button>
+            <span v-else>{{ warehouseName(row.warehouseId) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="changeQuantity" label="变动数量" width="110" align="right">
+          <template #default="{ row }">{{ fmt(row.changeQuantity) }}</template>
+        </el-table-column>
+        <el-table-column prop="beforeQuantity" label="变动前库存" width="120" align="right">
+          <template #default="{ row }">{{ fmt(row.beforeQuantity) }}</template>
+        </el-table-column>
+        <el-table-column prop="afterQuantity" label="变动后库存" width="120" align="right">
+          <template #default="{ row }">{{ fmt(row.afterQuantity) }}</template>
         </el-table-column>
       </el-table>
       <div class="pagination">
@@ -77,7 +77,14 @@ import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { productLabel } from '@/api/product'
 
-const changeTypeOptions = ['PURCHASE_IN', 'RETURN_OUT', 'SALE_OUT', 'MOVE_OUT', 'MOVE_IN', 'OTHER_IN', 'OTHER_OUT', 'CANCEL_IN', 'CANCEL_OUT', 'INIT']
+// 变动类型选项取自后端 StockChangeType 枚举（code + 中文 label），避免前端硬编码枚举名导致显示英文、选项缺失
+const changeTypeOptions = ref<{ code: string; label: string }[]>([])
+async function loadChangeTypes() {
+  try {
+    const r = await request.get<any, any>('/warehouse/stock/change-types')
+    changeTypeOptions.value = r?.data ?? r ?? []
+  } catch { changeTypeOptions.value = [] }
+}
 
 const query = reactive({ warehouseId: undefined as number | undefined, productId: undefined as number | undefined, changeType: '' })
 const pagination = reactive({ pageNum: 1, pageSize: 20, total: 0 })
@@ -92,7 +99,7 @@ const productOptions = ref<any[]>([])
 const productMap = ref<Record<number, string>>({})
 
 function fmt(v?: number) { return v == null ? '-' : Number(v).toLocaleString() }
-function warehouseName(id?: number) { const w = warehouseOptions.value.find(x => x.id === id); return w ? w.warehouseName : '' }
+function warehouseName(id?: number) { const w = warehouseOptions.value.find(x => x.id === id); return w ? w.warehouseName : '-' }
 function productName(id?: number) { return (id && productMap.value[id]) || '' }
 
 function logTagType(ct?: string) {
@@ -100,6 +107,17 @@ function logTagType(ct?: string) {
   if (ct.includes('_IN')) return 'success'
   if (ct.includes('_OUT') || ct.includes('RETURN')) return 'danger'
   return 'info'
+}
+
+/**
+ * 仓库名称映射：流水只返回 warehouseId，需要一次性拉仓库列表做本地映射。
+ * 这里不按 warehouseCategory 过滤——下拉筛选仍只给自有仓，但名称映射要能覆盖到任意仓，避免列显示为空。
+ */
+async function loadWarehouses() {
+  try {
+    const res = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500, warehouseName: '' } })
+    warehouseOptions.value = res?.records || []
+  } catch { warehouseOptions.value = [] }
 }
 
 async function loadProducts(queryStr?: string) {
@@ -185,7 +203,7 @@ function handleBillClick(row: any) {
   }
 }
 
-onMounted(() => { loadData() })
+onMounted(async () => { await loadWarehouses(); loadChangeTypes(); loadData() })
 
 </script>
 

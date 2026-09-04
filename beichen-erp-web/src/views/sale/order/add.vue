@@ -230,7 +230,7 @@ onMounted(async () => {
           <el-col :span="8">
             <el-form-item label="客户" prop="customerId">
               <RemoteSelect v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%"
-                @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer'); return } }">
+                @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer/add'); return } }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </el-form-item>
@@ -249,7 +249,7 @@ onMounted(async () => {
             </el-form-item>
           </el-col>
           <el-col :span="4">
-            <el-form-item label="收税">
+            <el-form-item label="含税">
               <el-switch :model-value="form.taxIncluded === 1" @change="onTaxSwitch" />
             </el-form-item>
           </el-col>
@@ -285,8 +285,8 @@ onMounted(async () => {
           <el-table-column label="产品" min-width="180">
             <template #default="{ row }">
               <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="选择产品（可输SKU）"
-                :preset="{ id: row.productId, name: row.productName }"
-                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onProductChange(v, row) }">
+                :preset="{ id: row.productId, name: row.productName, sku: row.sku }"
+                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } onProductChange(v, row) }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </template>
@@ -324,10 +324,19 @@ onMounted(async () => {
           </el-table-column>
         </el-table>
         <div class="sum-bar">
-          <span>应付总额（含税）：<b>{{ goodsTotal.toFixed(2) }}</b></span>
+          <div class="sum-item sum-main">
+            <span class="sum-label">应收总额（含税）</span>
+            <span class="sum-value">{{ goodsTotal.toFixed(2) }}</span>
+          </div>
           <template v-if="form.taxIncluded === 1">
-            <span>税额（{{ form.taxRate }}%）： <b class="tax-num">{{ taxAmount.toFixed(2) }}</b></span>
-            <span>不含税金额： <b>{{ noTaxAmount.toFixed(2) }}</b></span>
+            <div class="sum-item">
+              <span class="sum-label">税额（{{ form.taxRate }}%）</span>
+              <span class="sum-value tax-num">{{ taxAmount.toFixed(2) }}</span>
+            </div>
+            <div class="sum-item">
+              <span class="sum-label">不含税金额</span>
+              <span class="sum-value">{{ noTaxAmount.toFixed(2) }}</span>
+            </div>
           </template>
         </div>
       </el-form>
@@ -368,7 +377,35 @@ onMounted(async () => {
 <style scoped>
 .card-header { display: flex; align-items: center; justify-content: space-between; }
 .footer { margin-top: 16px; display: flex; justify-content: flex-end; gap: 12px; }
-.sum-bar { margin-top: 12px; display: flex; justify-content: flex-end; gap: 24px; font-size: 14px; color: var(--app-text-secondary); }
-.sum-bar b { color: var(--app-text-primary); font-size: 16px; }
+/* 金额汇总：标签在上、数值在下，块间竖线分隔，避免多项挤在一行 */
+.sum-bar {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 20px;
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+.sum-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 150px;
+  padding: 0 20px;
+}
+.sum-item + .sum-item { border-left: 1px solid var(--el-border-color-lighter); }
+.sum-item:first-child { padding-left: 0; }
+.sum-item:last-child { padding-right: 0; }
+.sum-label { font-size: 12px; color: var(--app-text-secondary); white-space: nowrap; }
+.sum-value {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--app-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.sum-main .sum-value { font-size: 24px; color: var(--app-color-primary); }
 .tax-num { color: var(--app-color-danger); }
 </style>

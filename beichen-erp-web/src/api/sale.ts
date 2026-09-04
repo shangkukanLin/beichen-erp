@@ -217,8 +217,8 @@ export function auditSaleExchange(id: number) {
 export function unAuditSaleExchange(id: number) {
   return request.put<void>(`/sale/exchange/${id}/unaudit`)
 }
-export function deleteSaleExchange(id: number) {
-  return request.delete<void>(`/sale/exchange/${id}`)
+export function cancelSaleExchange(id: number) {
+  return request.put<void>(`/sale/exchange/${id}/cancel`)
 }
 /** 查询销售单明细（含已售/已退/已换/可换数量，供换货带入；可换量 = 已售 − 已退 − 已换） */
 export function getSaleExchangeSaleOrderItems(saleOrderId: number) {

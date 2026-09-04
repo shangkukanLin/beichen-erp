@@ -77,7 +77,14 @@ public class SaleExchangeController {
         return R.ok();
     }
 
-    /** 删除（仅草稿） */
+    /** 作废（仅草稿）：单据留痕，不做物理删除 */
+    @PutMapping("/{id}/cancel")
+    public R<Void> cancel(@PathVariable Long id) {
+        exchangeService.cancel(id);
+        return R.ok();
+    }
+
+    /** 兼容旧接口：语义等同作废 */
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
         exchangeService.delete(id);

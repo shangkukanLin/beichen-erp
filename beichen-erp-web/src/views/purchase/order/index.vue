@@ -322,7 +322,7 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
             </el-form-item>
           </el-col>
           <el-col :span="6">
-            <el-form-item label="收税">
+            <el-form-item label="含税">
               <el-switch :model-value="form.taxIncluded === 1" @change="onTaxSwitch" />
             </el-form-item>
           </el-col>
@@ -346,7 +346,7 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
           <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="产品" min-width="180">
             <template #default="{ row, $index }">
-              <RemoteSelect v-model="row.productId" :fetch="fetchMaterials" :label-key="productLabel" placeholder="选择物料（可输SKU）" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row) }">
+              <RemoteSelect v-model="row.productId" :fetch="fetchMaterials" :label-key="productLabel" placeholder="选择物料（可输SKU）" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } onMaterialChange(v, row) }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </template>

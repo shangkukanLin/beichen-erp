@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { DocStatus, DocStatusLabel, DocStatusTag,
   ExchangeChargeTypeLabel, SALE_EXCHANGE_DIRTY_KEY } from '@/api/enums'
-import { getSaleExchangePage, auditSaleExchange, unAuditSaleExchange, deleteSaleExchange } from '@/api/sale'
+import { getSaleExchangePage, auditSaleExchange, unAuditSaleExchange, cancelSaleExchange } from '@/api/sale'
 
 const route = useRoute()
 const router = useRouter()
@@ -45,8 +45,9 @@ onActivated(() => {
 function goAdd() { router.push('/sale/exchange/add') }
 function goEdit(row: any) { router.push(`/sale/exchange/add?id=${row.id}`) }
 function goDetail(row: any) { router.push(`/sale/exchange/detail/${row.id}`) }
+function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 
-// ============ 审核/反审核/删除 ============
+// ============ 审核/反审核/作废 ============
 async function handleAudit(row: any) {
   const charged = Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0
   const chargeTip = charged
@@ -61,10 +62,10 @@ async function handleUnAudit(row: any) {
   await unAuditSaleExchange(row.id)
   ElMessage.success('已反审核'); sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1'); loadData()
 }
-async function handleDelete(row: any) {
-  await ElMessageBox.confirm(`确认删除换货单「${row.code}」？`, '提示', { type: 'warning' })
-  await deleteSaleExchange(row.id)
-  ElMessage.success('已删除'); sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1'); loadData()
+async function handleCancel(row: any) {
+  await ElMessageBox.confirm(`确认作废换货单「${row.code}」？作废后单据留痕，不可恢复。`, '提示', { type: 'warning' })
+  await cancelSaleExchange(row.id)
+  ElMessage.success('已作废'); sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1'); loadData()
 }
 </script>
 
@@ -89,16 +90,26 @@ async function handleDelete(row: any) {
         </el-form-item>
       </el-form>
 
-      <el-table v-loading="loading" :data="list" border stripe size="small">
-        <el-table-column prop="code" label="换货单号" width="160" />
-        <el-table-column prop="saleOrderCode" label="来源销售单" width="150" />
-        <el-table-column prop="warehouseInName" label="换入仓(售后)" min-width="140" />
-        <el-table-column prop="warehouseOutName" label="换出仓(成品)" min-width="140" />
+      <el-table v-loading="loading" :data="list" border stripe size="small" @row-click="goDetail">
         <el-table-column prop="exchangeDate" label="换货日期" width="110" />
-        <el-table-column label="货值" width="110" align="right">
-          <template #default="{ row }">{{ Number(row.totalAmount || 0).toFixed(2) }}</template>
+        <el-table-column prop="code" label="换货单号" width="160" />
+        <!-- 换货概况：退回侧 → 换出侧（来源销售单在详情中可见） -->
+        <el-table-column label="换货概况" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.exchangeSummary || '—' }}</template>
         </el-table-column>
-        <el-table-column label="收费" width="140" align="center">
+        <el-table-column label="换入仓(售后)" min-width="140">
+          <template #default="{ row }">
+            <el-button v-if="row.warehouseInId" type="primary" link @click.stop="goWarehouse(row.warehouseInId)">{{ row.warehouseInName || '—' }}</el-button>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="换出仓(成品)" min-width="140">
+          <template #default="{ row }">
+            <el-button v-if="row.warehouseOutId" type="primary" link @click.stop="goWarehouse(row.warehouseOutId)">{{ row.warehouseOutName || '—' }}</el-button>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="收费" width="130" align="center">
           <template #default="{ row }">
             <span v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0">
               <el-tag type="warning" size="small">收费 {{ Number(row.chargeAmount).toFixed(2) }}</el-tag>
@@ -114,14 +125,13 @@ async function handleDelete(row: any) {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
-        <el-table-column label="操作" width="250" align="center" fixed="right">
+        <el-table-column label="操作" width="240" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="goDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click="goEdit(row)">编辑</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
             <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click="handleDelete(row)">删除</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

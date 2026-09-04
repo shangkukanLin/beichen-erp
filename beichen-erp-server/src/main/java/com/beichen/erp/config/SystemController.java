@@ -52,6 +52,9 @@ public class SystemController {
                         for (int i = 1; i <= colCount; i++) {
                             String colName = dataRs.getMetaData().getColumnName(i);
                             Object val = dataRs.getObject(i);
+                            // JDBC 对 TINYINT(1)/BIT 返回 Boolean，统一转 1/0，
+                            // 否则导入时 quoteVal 会生成 'true'/'false' 字符串导致整型列报错
+                            if (val instanceof Boolean) val = (Boolean) val ? 1 : 0;
                             row.put(colName, val);
                         }
                         rows.add(row);
@@ -94,22 +97,6 @@ public class SystemController {
             Map<String, Object> exportInfo = (infoObj instanceof Map)
                 ? (Map<String, Object>) infoObj : new HashMap<>();
 
-            // 依赖顺序（先删依赖表，再删主表）
-            List<String> deleteOrder = Arrays.asList(
-                "outsource_delivery_item", "warehouse_stock",
-                "outsource_order_material", "outsource_order_product", "outsource_order_delivery",
-                "outsource_order", "outsource_material_component", "outsource_material",
-                "material_order_item", "material_order",
-                "purchase_order_item",
-                "sale_outbound_item", "sale_order_item",
-                "warehouse_stock_log", "warehouse_stock",
-                "warehouse_move_item", "inventory_other_io_item",
-                "project_phase", "bom", "project",
-                "product", "brand", "supplier", "warehouse",
-                "sys_role_menu", "sys_user_role",
-                "sys_menu", "sys_role", "sys_user", "sys_config"
-            );
-
             try (Connection conn = dataSource.getConnection()) {
                 conn.setAutoCommit(false);
                 Statement stmt = conn.createStatement();
@@ -117,29 +104,32 @@ public class SystemController {
                 // 禁用外键检查
                 stmt.execute("SET FOREIGN_KEY_CHECKS = 0");
 
-                // 按依赖倒序清空表
-                for (String table : deleteOrder) {
-                    try {
-                        stmt.executeUpdate("DELETE FROM " + wrap(table));
-                    } catch (Exception ignored) {}
-                }
-                // 清空不在 deleteOrder 中的表
-                for (String table : tables.keySet()) {
-                    if (!deleteOrder.contains(table)) {
-                        try { stmt.executeUpdate("DELETE FROM " + wrap(table)); } catch (Exception ignored) {}
-                    }
+                // 语义：导入 = 用备份完全替换当前库。
+                // 动态获取全库 BASE TABLE（与导出对称，避免硬编码表清单过时导致漏清/漏导），
+                // 禁用外键 + 显式主键插入，删除/插入顺序无关紧要。
+                List<String> allTables = new ArrayList<>();
+                ResultSet rs = stmt.executeQuery(
+                    "SELECT TABLE_NAME FROM information_schema.TABLES " +
+                    "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' " +
+                    "AND TABLE_NAME NOT LIKE 'flyway%' ORDER BY TABLE_NAME");
+                while (rs.next()) allTables.add(rs.getString("TABLE_NAME"));
+                rs.close();
+
+                // 全库清空（含备份文件里没有的表，避免残留脏数据与备份不一致）
+                for (String table : allTables) {
+                    stmt.executeUpdate("DELETE FROM " + wrap(table));
                 }
 
-                // 按依赖正序插入数据
-                List<String> insertOrder = new ArrayList<>();
-                for (int i = deleteOrder.size() - 1; i >= 0; i--) insertOrder.add(deleteOrder.get(i));
-                for (String table : tables.keySet()) {
-                    if (!insertOrder.contains(table)) insertOrder.add(table);
-                }
+                // 按备份文件顺序插入
+                List<String> insertOrder = new ArrayList<>(tables.keySet());
 
                 Map<String, Object> result = new LinkedHashMap<>();
                 int totalInserted = 0;
                 for (String table : insertOrder) {
+                    if (!allTables.contains(table)) {
+                        result.put(table, "跳过: 当前库无此表（可能为旧版本备份）");
+                        continue;
+                    }
                     Object rowsObj = tables.get(table);
                     if (!(rowsObj instanceof List)) continue;
                     @SuppressWarnings("unchecked")
@@ -214,6 +204,9 @@ public class SystemController {
 
     private String quoteVal(Object val) {
         if (val == null) return "NULL";
+        // 布尔 → 1/0（TINYINT 列）；数字直接原样输出，避免隐式转换歧义
+        if (val instanceof Boolean) return (Boolean) val ? "1" : "0";
+        if (val instanceof Number) return val.toString();
         String s = val.toString().replace("\\", "\\\\").replace("'", "\\'");
         return "'" + s + "'";
     }

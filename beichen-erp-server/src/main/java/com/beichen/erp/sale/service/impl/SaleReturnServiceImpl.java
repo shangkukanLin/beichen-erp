@@ -83,6 +83,14 @@ public class SaleReturnServiceImpl implements SaleReturnService {
                 .like(code != null && !code.isBlank(), SaleReturn::getCode, code)
                 .orderByDesc(SaleReturn::getId);
         Page<SaleReturn> raw = returnMapper.selectPage(new Page<>(pageNum, pageSize), w);
+        // 客户名称是非表字段，按 customerId 批量回填（避免逐条 selectById）
+        final Map<Long, String> customerNameMap = new HashMap<>();
+        Set<Long> customerIds = raw.getRecords().stream().map(SaleReturn::getCustomerId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        if (!customerIds.isEmpty()) {
+            customerMapper.selectBatchIds(customerIds)
+                    .forEach(c -> customerNameMap.put(c.getId(), c.getName() != null ? c.getName() : ""));
+        }
         // 批量查明细与产品
         Map<Long, Product> productMap = new HashMap<>();
         Map<Long, List<SaleReturnItem>> itemsMap = new HashMap<>();
@@ -104,7 +112,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             m.put("id", o.getId());
             m.put("code", o.getCode());
             m.put("customerId", o.getCustomerId());
-            m.put("customerName", o.getCustomerName());
+            m.put("customerName", customerNameMap.getOrDefault(o.getCustomerId(), ""));
             m.put("warehouseId", o.getWarehouseId());
             m.put("saleOrderId", o.getSaleOrderId());
             m.put("saleOrderCode", o.getSaleOrderCode());
@@ -136,7 +144,15 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     public SaleReturn getById(Long id) {
         SaleReturn order = returnMapper.selectById(id);
         if (order == null) throw new BusinessException("销售退单不存在");
+        fillCustomerName(order);
         return order;
+    }
+
+    /** 客户名称为非表字段，详情接口按 customerId 回填，供前端直接展示 */
+    private void fillCustomerName(SaleReturn order) {
+        if (order == null || order.getCustomerId() == null) return;
+        Customer c = customerMapper.selectById(order.getCustomerId());
+        order.setCustomerName(c != null && c.getName() != null ? c.getName() : "");
     }
 
     @Override

@@ -207,7 +207,7 @@ public class DataInitializer implements ApplicationRunner {
             {106L, 2L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "OfficeBuilding", 2},
             {107L, 2L, "供货商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "Van", 3},
             {103L, 2L, "BOM表类型管理", "menu", "/dev/bom-type", "DevBomType", "Tickets", 4},
-            {101L, 2L, "产品管理", "menu", "/material", "MaterialManage", "TakeawayBox", 5},
+            {101L, 2L, "产品管理", "menu", "/product", "ProductManage", "TakeawayBox", 5},
             {102L, 2L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 6},
             {104L, 2L, "阶段模板管理", "menu", "/dev/phase-template", "DevPhaseTemplate", "Timer", 7},
             {301L, 3L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 1},
@@ -234,8 +234,6 @@ public class DataInitializer implements ApplicationRunner {
             // 售后：销售退单 → 退货整理 → 销售换货单（换货可选择性收费）
             {603L, 6L, "销售退单", "menu", "/sale/return", "SaleReturn", "Refund", 2},
             {605L, 6L, "销售换货单", "menu", "/sale/exchange", "SaleExchange", "Refresh", 3},
-            // 委外域售后：仅退回不良品入不良仓，与销售的换货收费不是同一概念，改名避免混淆
-            {604L, 6L, "委外售后退不良", "menu", "/outsource/after-sale", "AfterSale", "Service", 6},
             {701L, 7L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 1},
             {702L, 7L, "成品仓库管理", "menu", "/inventory/warehouse", "Warehouse", "Odometer", 2},
             {703L, 7L, "成品库存流水", "menu", "/inventory/stock-log", "WarehouseStockLog", "TrendCharts", 3},

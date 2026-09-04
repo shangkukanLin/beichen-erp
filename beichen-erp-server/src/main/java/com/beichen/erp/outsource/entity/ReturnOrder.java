@@ -21,6 +21,14 @@ public class ReturnOrder {
     private String auditorName;
     private LocalDateTime auditTime;
     private String remark;
+    /** 是否收费：0否 1是（我方支付给加工厂的加工退货费用） */
+    private Integer chargeFlag;
+    /** 收费类型：见 OutsourceChargeType */
+    private String chargeType;
+    /** 收费金额（手工填写，审核后生成正向应付） */
+    private BigDecimal chargeAmount;
+    /** 收费说明 */
+    private String chargeReason;
     private Long companyId;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;

@@ -16,6 +16,17 @@ const query = reactive({ warehouseId: '', ioType: '' })
 const warehouseOptions = ref<any[]>([])
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
 
+/**
+ * 仓库名称映射：列表只返回 warehouseId，需要一次性拉仓库列表做本地映射。
+ * 这里不按 warehouseCategory 过滤——下拉筛选仍只给自有仓，但名称映射要能覆盖到任意仓，避免列显示成 ID。
+ */
+async function loadWarehouses() {
+  try {
+    const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500, warehouseName: '' } })
+    warehouseOptions.value = r?.records || []
+  } catch { warehouseOptions.value = [] }
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -27,7 +38,8 @@ async function loadData() {
   } finally { loading.value = false }
 }
 function handleAdd() { router.push('/inventory/other-io/add') }
-function handleEdit(row: any) { router.push(`/inventory/other-io/add?id=${row.id}`) }
+// 编辑入口收拢到详情页（草稿态才有），列表只保留查看详情
+function handleDetail(row: any) { router.push(`/inventory/other-io/detail/${row.id}`) }
 async function handleAudit(row: any) {
   try { await ElMessageBox.confirm('确认审核？审核后按明细增减库存', '审核确认', { type: 'warning' }) } catch { return }
   try { await request.put(`/inventory/other/${row.id}/audit`); ElMessage.success('已审核'); loadData() } catch (e: any) { ElMessage.error(e?.message || '失败') }
@@ -42,7 +54,7 @@ async function handleCancel(row: any) {
 }
 function handleQuery() { pagination.pageNum=1; loadData() }
 
-function getWhName(id: number) { return warehouseOptions.value.find((w:any)=>w.id===id)?.warehouseName || id }
+function getWhName(id: number) { return warehouseOptions.value.find((w:any)=>w.id===id)?.warehouseName || '-' }
 onActivated(() => {
   // 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
   if (sessionStorage.getItem(INVENTORY_OTHER_IO_DIRTY_KEY) === '1') {
@@ -50,7 +62,7 @@ onActivated(() => {
     loadData()
   }
 })
-onMounted(()=>{ loadData() })
+onMounted(async ()=>{ await loadWarehouses(); loadData() })
 
 </script>
 
@@ -70,14 +82,23 @@ onMounted(()=>{ loadData() })
     </el-card>
     <el-card shadow="never">
       <el-table :data="list" border stripe v-loading="loading">
-        <el-table-column prop="code" label="单号" width="160"/>
-        <el-table-column label="仓库" width="140"><template #default="{row}">{{ getWhName(row.warehouseId) }}</template></el-table-column>
-        <el-table-column label="类型" width="80"><template #default="{row}"><el-tag :type="row.ioType===IoType.IN?'success':'danger'" size="small">{{ IoTypeLabel[row.ioType] || row.ioType }}</el-tag></template></el-table-column>
         <el-table-column label="日期" width="110"><template #default="{row}">{{ $fmtDate(row.ioDate) }}</template></el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip/>
-        <el-table-column label="操作" width="260" align="center">
+        <el-table-column prop="code" label="单号" width="160"/>
+        <el-table-column label="仓库" width="140">
           <template #default="{row}">
-            <el-button type="primary" link @click="handleEdit(row)" v-if="row.status===DocStatus.DRAFT">编辑</el-button>
+            <el-button v-if="row.warehouseId" type="primary" link @click.stop="router.push(`/inventory/warehouse/detail/${row.warehouseId}`)">
+              {{ getWhName(row.warehouseId) }}
+            </el-button>
+            <span v-else>{{ getWhName(row.warehouseId) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="类型" width="80"><template #default="{row}"><el-tag :type="row.ioType===IoType.IN?'success':'danger'" size="small">{{ IoTypeLabel[row.ioType] || row.ioType }}</el-tag></template></el-table-column>
+        <el-table-column label="其他出入库概况" min-width="200" show-overflow-tooltip>
+          <template #default="{row}">{{ row.itemSummary || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="220" align="center">
+          <template #default="{row}">
+            <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
             <el-button type="success" link @click="handleAudit(row)" v-if="row.status===DocStatus.DRAFT">审核</el-button>
             <el-button type="warning" link @click="handleUnAudit(row)" v-if="row.status===DocStatus.AUDITED">反审核</el-button>
             <el-button type="danger" link @click="handleCancel(row)" v-if="row.status===DocStatus.DRAFT">作废</el-button>

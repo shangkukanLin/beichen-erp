@@ -50,9 +50,6 @@ public class SaleExchange {
     /** 状态：DRAFT / AUDITED / CANCELLED */
     private String status;
 
-    /** 换出货值合计 = Σ(换出数量 × 换出单价)：仅用于展示，换货本身不参与结算（收费走 chargeAmount） */
-    private BigDecimal totalAmount;
-
     /** 是否收费：0否 1是（收费则审核后生成一条正向应收，单号后缀 -FEE） */
     private Integer chargeFlag;
 

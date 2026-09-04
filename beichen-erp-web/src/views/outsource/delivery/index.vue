@@ -88,10 +88,10 @@ onMounted(() => { loadWarehouseOptions(); loadData() })
 
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%" size="small" @row-click="(row: any) => router.push(`/outsource/delivery/detail/${row.id}`)">
         <el-table-column prop="code" label="单号" width="170" />
-        <el-table-column label="发出仓库" width="130" show-overflow-tooltip>
+        <el-table-column label="发出仓库" width="150" show-overflow-tooltip>
           <template #default="{row}"><span v-if="row.supplierDirect" style="color:var(--app-color-primary)">{{row.supplierName||'供应商直发'}}</span><el-button v-else type="primary" link @click.stop="goWhDetail(row.fromWarehouseId)">{{row.fromWarehouseName||'-'}}</el-button></template>
         </el-table-column>
-        <el-table-column label="目标仓库" width="130" show-overflow-tooltip>
+        <el-table-column label="目标仓库" width="150" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="goWhDetail(row.toWarehouseId)">{{row.toWarehouseName||'-'}}</el-button></template>
         </el-table-column>
         <el-table-column label="物料" min-width="180" show-overflow-tooltip>

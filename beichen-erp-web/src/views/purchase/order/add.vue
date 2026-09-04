@@ -25,7 +25,7 @@
             </el-form-item>
           </el-col>
           <el-col :span="6">
-            <el-form-item label="收税">
+            <el-form-item label="含税">
               <el-switch :model-value="form.taxIncluded === 1" @change="onTaxSwitch" />
             </el-form-item>
           </el-col>
@@ -56,7 +56,7 @@
           <el-table-column label="产品" min-width="160">
             <template #default="{ row }">
               <el-select v-model="row.productId" placeholder="选择产品（可输SKU）" filterable remote :remote-method="loadMaterials"
-                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/material'); return } onMaterialChange(v, row as ItemRow) }">
+                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } onMaterialChange(v, row as ItemRow) }">
                 <el-option v-for="m in materialOptions" :key="m.id" :label="productLabel(m)" :value="m.id" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>

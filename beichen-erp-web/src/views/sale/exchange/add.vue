@@ -49,11 +49,6 @@
             </el-form-item>
           </el-col>
           <el-col :span="6">
-            <el-form-item label="货值合计">
-              <span style="font-weight:600">{{ itemsTotalAmount.toFixed(2) }}</span>
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
             <el-form-item label="收费类型" :required="form.chargeFlag === 1">
               <el-select v-model="form.chargeType" placeholder="请选择" clearable
                 style="width:100%" :disabled="form.chargeFlag !== 1">
@@ -192,12 +187,6 @@ const chargeTypeOptions = computed(() =>
   Object.values(ExchangeChargeType).map((v) => ({
     value: v, label: ExchangeChargeTypeLabel[v] || v
   }))
-)
-
-/** 换出货值合计 = Σ(换出数量 × 换出单价)，仅展示（与后端 refreshDerivedFields 口径一致） */
-const itemsTotalAmount = computed(() =>
-  items.value.reduce((sum: number, it: any) =>
-    sum + (Number(it.outQuantity ?? it.quantity) || 0) * (Number(it.outUnitPrice ?? it.unitPrice) || 0), 0)
 )
 // ===== 下拉 =====
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 200, name: kw } })

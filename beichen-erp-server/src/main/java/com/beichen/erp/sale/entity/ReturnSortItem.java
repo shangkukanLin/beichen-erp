@@ -32,6 +32,24 @@ public class ReturnSortItem {
     /** 来源售后待整理批次ID（after_sale_pending.id）：唯一追溯锚点，退单/换货退回的货品共用 */
     private Long pendingId;
 
+    // ==================== 来源追溯（非表字段，getItems 按 pendingId 从售后待整理批次回填） ====================
+
+    /** 来源单据类型：SALE_RETURN / SALE_EXCHANGE */
+    @TableField(exist = false)
+    private String sourceType;
+
+    /** 来源单号 */
+    @TableField(exist = false)
+    private String sourceCode;
+
+    /** 来源单据ID（sale_return.id / sale_exchange.id，供前端跳转来源单据详情） */
+    @TableField(exist = false)
+    private Long sourceId;
+
+    /** 来源单据业务日期（退单的退货日期 / 换货的换货日期） */
+    @TableField(exist = false)
+    private String sourceDate;
+
     /** [已废弃，保留兼容] 来源销售退货明细ID，追溯统一走 pendingId */
     private Long saleReturnItemId;
 

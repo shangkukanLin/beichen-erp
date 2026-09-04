@@ -156,6 +156,8 @@ public class OutsourceOtherIoController {
             for (OutsourceOtherIoItem it : items) {
                 costService.applyMaterial(it.getMaterialId(), it.getQuantity(), it.getUnitPrice(),
                         StockChangeType.OTHER_IN.getCode(), old.getId(), old.getCode());
+                // 未填单价的入库不产生批次：成本仍为空时用主数据参考价兜底
+                costService.fillMaterialCostIfEmpty(it.getMaterialId());
             }
         }
         OutsourceOtherIo u = new OutsourceOtherIo(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
