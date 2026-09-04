@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { WarehouseCategory, ProductQualityType, ProductQualityTypeLabel } from '@/api/enums'
+import { WarehouseCategory, ProductQualityType, ProductQualityTypeLabel, WarehouseTypeLabel } from '@/api/enums'
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
@@ -89,7 +89,7 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
           <el-descriptions v-if="warehouse" :column="2" border size="small">
             <el-descriptions-item label="仓库名称" :span="2">{{ warehouse.warehouseName }}</el-descriptions-item>
             <el-descriptions-item label="编码">{{ warehouse.code }}</el-descriptions-item>
-            <el-descriptions-item label="类型"><el-tag :type="warehouse.warehouseType==='成品仓'?'success':warehouse.warehouseType==='不良仓'?'danger':'info'" size="small">{{ warehouse.warehouseType }}</el-tag></el-descriptions-item>
+            <el-descriptions-item label="类型"><el-tag :type="warehouse.warehouseType==='FINISHED'?'success':warehouse.warehouseType==='DEFECT'?'danger':'info'" size="small">{{ WarehouseTypeLabel[warehouse.warehouseType] || warehouse.warehouseType }}</el-tag></el-descriptions-item>
             <el-descriptions-item label="地址" :span="2">{{ warehouse.address || '-' }}</el-descriptions-item>
             <el-descriptions-item label="联系人">{{ warehouse.contact || '-' }}</el-descriptions-item>
             <el-descriptions-item label="电话">{{ warehouse.phone || '-' }}</el-descriptions-item>

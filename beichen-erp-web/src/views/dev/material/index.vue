@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { DevMaterialTypeLabel, DEV_MATERIAL_DIRTY_KEY } from '@/api/enums'
+import { DevMaterialTypeLabel, DevMaterialStatusLabel, DEV_MATERIAL_DIRTY_KEY } from '@/api/enums'
 import MaterialFormDialog from '@/components/dev/MaterialFormDialog.vue'
 
 const loading = ref(false)
@@ -13,7 +13,7 @@ const total = ref(0)
 const pageNum = ref(1)
 const pageSize = ref(10)
 
-const materialTypeOptions = Object.values(DevMaterialTypeLabel)
+const materialTypeOptions = Object.entries(DevMaterialTypeLabel).map(([value, label]) => ({ value, label }))
 const fetchProjects = (kw: string) => request.get('/dev/project/page', { params: { pageSize: 500, name: kw } })
 const projectOptions = ref<any[]>([])
 async function loadProjectOptions() { const r: any = await fetchProjects(''); projectOptions.value = (r?.records || []) as any[] }
@@ -77,7 +77,7 @@ onMounted(() => { loadProjectOptions(); loadList() })
         </el-form-item>
         <el-form-item label="类型">
           <el-select v-model="query.type" placeholder="全部" clearable style="width:140px">
-            <el-option v-for="t in materialTypeOptions" :key="t" :label="t" :value="t" />
+            <el-option v-for="t in materialTypeOptions" :key="t.value" :label="t.label" :value="t.value" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -92,7 +92,7 @@ onMounted(() => { loadProjectOptions(); loadList() })
     <el-card shadow="never" style="margin-top:12px">
       <el-table :data="list" v-loading="loading" border stripe @row-click="handleDetail">
         <el-table-column type="index" label="#" width="50" />
-        <el-table-column prop="type" label="类型" width="120" />
+        <el-table-column label="类型" width="120"><template #default="{ row }">{{ DevMaterialTypeLabel[row.type] || row.type }}</template></el-table-column>
         <el-table-column prop="name" label="名称" min-width="140" />
         <el-table-column prop="quantity" label="数量" width="90" />
         <el-table-column label="存放位置" width="160">
@@ -108,7 +108,7 @@ onMounted(() => { loadProjectOptions(); loadList() })
             <span v-else style="color:var(--app-text-placeholder)">未关联</span>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="90" />
+        <el-table-column label="状态" width="90"><template #default="{ row }">{{ DevMaterialStatusLabel[row.status] || row.status }}</template></el-table-column>
         <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="handleDetail(row)">详情</el-button>

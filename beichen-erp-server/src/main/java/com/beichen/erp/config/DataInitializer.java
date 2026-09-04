@@ -64,7 +64,57 @@ public class DataInitializer implements ApplicationRunner {
         initSuperAdmin();
         initBomTypes();
         initPhaseTemplates();
+        // 枚举值迁移须在合同模板初始化之前：先刷成 code，initContractTemplates 才能按 code 正确识别已有默认模板
+        migrateEnumChineseLabelsToCodes();
         initContractTemplates();
+    }
+
+    /**
+     * 幂等迁移：历史以中文存储的枚举字段统一刷成 code（规范：DB 存枚举 code，前端映射中文 label）。
+     * 每条 UPDATE 仅命中中文旧值，已迁移的数据不受影响，可重复执行。
+     */
+    private void migrateEnumChineseLabelsToCodes() {
+        migrateColumnEnums("warehouse", "warehouse_type", new String[][]{
+                {"辅料仓", "AUXILIARY"}, {"成品仓", "FINISHED"}, {"不良仓", "DEFECT"}, {"售后仓", "AFTER_SALE"}});
+        migrateColumnEnums("finance_expense", "expense_type", new String[][]{
+                {"办公费", "OFFICE"}, {"房租水电", "RENT"}, {"工资社保", "SALARY"}, {"运输费", "TRANSPORT"},
+                {"差旅费", "TRAVEL"}, {"业务招待", "ENTERTAIN"}, {"其他", "OTHER"}});
+        migrateColumnEnums("finance_cashflow", "related_bill_type", new String[][]{
+                {"收款单", "RECEIPT"}, {"付款单", "PAYMENT"}, {"费用单", "EXPENSE"}, {"期初余额", "OPENING"}});
+        migrateColumnEnums("outsource_contract_template", "template_type", new String[][]{
+                {"加工合同", "PROCESSING"}, {"采购合同", "PURCHASE"}});
+        migrateColumnEnums("warehouse_stock_log", "change_type", new String[][]{
+                {"其他入库", "OTHER_IN"}, {"其他出库", "OTHER_OUT"}, {"取消入库", "CANCEL_IN"}, {"取消出库", "CANCEL_OUT"},
+                {"出货扣料", "OUTSOURCE_CONSUME"}, {"出货扣料-回滚", "CANCEL_OUTSOURCE_CONSUME"},
+                {"退不良反审核扣回还料", "OUTSOURCE_DEFECT_RETURN_UN_AUDIT"}});
+        migrateColumnEnums("outsource_material_order", "order_type", new String[][]{
+                {"采购", "PURCHASE"}, {"委外", "OUTSOURCE"}});
+        migrateColumnEnums("outsource_delivery_item", "handle_type", new String[][]{
+                {"维修返还", "REPAIR_RETURN"}, {"折现退款", "CASH_REFUND"}});
+        migrateColumnEnums("dev_purchase_item", "status", new String[][]{
+                {"完好", "GOOD"}, {"已损坏", "DAMAGED"}, {"已使用", "USED"}});
+        migrateColumnEnums("dev_purchase_item", "type", new String[][]{
+                {"基板", "BOARD"}, {"屏幕", "SCREEN"}, {"测试架", "TEST_FIXTURE"},
+                {"触摸资料盒", "TOUCH_BOX"}, {"显示资料盒", "DISPLAY_BOX"}, {"其他", "OTHER"}});
+        migrateColumnEnums("dev_drawing", "doc_type", new String[][]{
+                {"排线图", "DRAWING"}, {"结构图", "STRUCTURE"}, {"规格书", "SPEC"},
+                {"测试报告", "TEST_REPORT"}, {"其他", "OTHER"}});
+    }
+
+    private void migrateColumnEnums(String table, String column, String[][] mapping) {
+        for (String[] m : mapping) {
+            int n = jdbcTemplate.update("UPDATE `" + table + "` SET `" + column + "` = ? WHERE `" + column + "` = ?", m[1], m[0]);
+            if (n > 0) log.info("===== 枚举迁移：{}.{} 「{}」-> {}（{} 行） =====", table, column, m[0], m[1], n);
+        }
+        // 合同模板迁移后可能出现同类型多条默认模板（迁移前 init 已按 code 插入过一条），去重保留最早一条
+        if ("outsource_contract_template".equals(table)) {
+            int d = jdbcTemplate.update(
+                "DELETE t1 FROM outsource_contract_template t1 " +
+                "JOIN outsource_contract_template t2 " +
+                "  ON t1.template_type = t2.template_type AND t1.company_id = t2.company_id AND t1.id > t2.id " +
+                "WHERE t1.template_type IS NOT NULL");
+            if (d > 0) log.info("===== 合同模板去重：删除 {} 条同类型重复模板 =====", d);
+        }
     }
 
     /** 幂等初始化默认合同模板：加工合同、采购合同各建一条默认模板（无默认模板时才插入） */

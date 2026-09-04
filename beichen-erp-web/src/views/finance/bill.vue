@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getBillPage, getBillItems, generateBill, auditBill, unAuditBill, cancelBill, type FinanceBill, type FinanceBillItem } from '@/api/finance'
-import { BillType, BillTypeLabel, sourceBillTypeLabel } from '@/api/enums'
+import { getBillPage, generateBill, auditBill, unAuditBill, cancelBill, type FinanceBill } from '@/api/finance'
+import { BillType, BillTypeLabel, sourceBillTypeLabel, FINANCE_BILL_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
@@ -11,6 +12,7 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 const StatusLabel: Record<string, string> = DocStatusLabel
 const StatusTag: Record<string, 'info' | 'success' | 'warning' | 'danger' | 'primary'> = DocStatusTag
 
+const router = useRouter()
 const query = reactive({ billType: BillType.RECEIVABLE, partnerId: '' as string|number })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
@@ -40,7 +42,21 @@ async function loadData() {
     data.value = res?.records || []; page.total = res?.total || 0
   } catch { data.value = [] } finally { loading.value = false }
 }
+/**
+ * 数据变动后刷新：置脏标志并重新拉取。
+ * 脏标志供从其它页面切回本页时按需刷新——只在有变动时才刷，避免每次切换菜单都重新请求。
+ */
+function afterChange() {
+  sessionStorage.setItem(FINANCE_BILL_DIRTY_KEY, '1')
+  loadData()
+}
 onMounted(() => { loadCustomersOptions(); loadSuppliersOptions(); loadData() })
+onActivated(() => {
+  if (sessionStorage.getItem(FINANCE_BILL_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(FINANCE_BILL_DIRTY_KEY)
+    loadData()
+  }
+})
 
 function query_() { page.pageNum = 1; loadData() }
 function reset_() { query.partnerId = ''; page.pageNum = 1; loadData() }
@@ -65,16 +81,21 @@ async function handleGenerate() {
   try {
     const res = await generateBill(genForm)
     ElMessage.success(`账单「${res.billNo}」生成成功，共${fmt(res.totalAmount)}元`)
-    genDialog.value = false; loadData()
+    genDialog.value = false
+    // 把列表筛选对齐到刚生成的账单并回到第一页：
+    // 否则账单类型/往来单位与当前筛选不符、或正停在其他页时，新账单会被过滤掉看不见
+    query.billType = genForm.billType
+    query.partnerId = genForm.partnerId ?? ''
+    page.pageNum = 1
+    afterChange()
   } catch {} finally { genLoading.value = false }
 }
-const detailVisible = ref(false)
-const detail = ref<FinanceBill>({})
-const detailItems = ref<FinanceBillItem[]>([])
-async function handleDetail(row: FinanceBill) { detail.value = { ...row }; try { detailItems.value = await getBillItems(row.id as number) || [] } catch {}; detailVisible.value = true }
-async function handleAudit(row: FinanceBill) { try { await auditBill(row.id as number); ElMessage.success('账单已审核'); loadData() } catch {} }
-async function handleUnAudit(row: FinanceBill) { try { await unAuditBill(row.id as number); ElMessage.success('账单已反审核'); loadData() } catch {} }
-async function handleCancel(row: FinanceBill) { try { await cancelBill(row.id as number); ElMessage.success('账单已作废'); loadData() } catch {} }
+
+// 详情已独立成页，列表不再用抽屉展示
+function handleDetail(row: FinanceBill) { router.push(`/finance/bill/detail/${row.id}`) }
+async function handleAudit(row: FinanceBill) { try { await auditBill(row.id as number); ElMessage.success('账单已审核'); afterChange() } catch {} }
+async function handleUnAudit(row: FinanceBill) { try { await unAuditBill(row.id as number); ElMessage.success('账单已反审核'); afterChange() } catch {} }
+async function handleCancel(row: FinanceBill) { try { await cancelBill(row.id as number); ElMessage.success('账单已作废'); afterChange() } catch {} }
 </script>
 <template>
   <div class="p">
@@ -93,7 +114,6 @@ async function handleCancel(row: FinanceBill) { try { await cancelBill(row.id as
     </el-card>
     <el-card shadow="never">
       <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
-        <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="billNo" label="账单号" min-width="140"/>
         <el-table-column label="类型" width="70" align="center"><template #default="{row}"><el-tag :type="row.billType===BillType.RECEIVABLE?undefined:'warning'">{{ BillTypeLabel[row.billType] || row.billType }}</el-tag></template></el-table-column>
         <el-table-column prop="partnerName" label="往来单位" min-width="140"/>
@@ -122,27 +142,6 @@ async function handleCancel(row: FinanceBill) { try { await cancelBill(row.id as
       </el-form>
       <template #footer><el-button @click="genDialog=false">取消</el-button><el-button type="primary" :loading="genLoading" @click="handleGenerate">生成</el-button></template>
     </el-dialog>
-    <el-drawer v-model="detailVisible" title="账单详情" size="50%">
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="账单号">{{ detail.billNo }}</el-descriptions-item>
-        <el-descriptions-item label="类型"><el-tag :type="detail.billType===BillType.RECEIVABLE?undefined:'warning'">{{ BillTypeLabel[detail.billType ?? 0] || detail.billType }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="往来单位">{{ detail.partnerName }}</el-descriptions-item>
-        <el-descriptions-item label="账期">{{ detail.periodStart }} ~ {{ detail.periodEnd }}</el-descriptions-item>
-        <el-descriptions-item label="总额">{{ fmt(detail.totalAmount) }}</el-descriptions-item>
-        <el-descriptions-item label="已收付">{{ fmt(detail.paidAmount) }}</el-descriptions-item>
-        <el-descriptions-item label="未收付"><span style="color:var(--app-color-danger)">{{ fmt(detail.unpaidAmount) }}</span></el-descriptions-item>
-      </el-descriptions>
-      <el-divider>明细</el-divider>
-      <el-table :data="detailItems" border>
-        <el-table-column type="index" width="50" align="center"/>
-        <el-table-column label="来源类型" width="110"><template #default="{row}">{{ sourceBillTypeLabel(row.sourceBillType) }}</template></el-table-column>
-        <el-table-column prop="sourceBillNo" label="来源单号" min-width="150"/>
-        <el-table-column prop="amount" label="金额" width="110" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
-        <el-table-column prop="paidAmount" label="已收付" width="110" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
-        <el-table-column prop="unpaidAmount" label="未收付" width="110" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
-        <el-table-column prop="dueDate" label="到期日" width="120" align="center"/>
-      </el-table>
-    </el-drawer>
   </div>
 </template>
 <style scoped>.p{display:flex;flex-direction:column;gap:12px}.qf{display:flex;flex-wrap:wrap}.pg{margin-top:16px;display:flex;justify-content:flex-end}</style>

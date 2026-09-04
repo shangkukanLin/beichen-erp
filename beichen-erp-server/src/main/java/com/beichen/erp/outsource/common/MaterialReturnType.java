@@ -33,9 +33,6 @@ public enum MaterialReturnType {
         for (MaterialReturnType t : values()) {
             if (t.name().equalsIgnoreCase(code)) return t;
         }
-        for (MaterialReturnType t : values()) {
-            if (t.label.equals(code)) return t;
-        }
         return null;
     }
 }

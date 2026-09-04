@@ -22,10 +22,10 @@ public enum ProductStatus {
         this.label = label;
     }
 
-    /** 根据数据库存储的值反查枚举 */
+    /** 根据数据库存储的值反查枚举（DB 存 code，不支持中文） */
     public static ProductStatus fromValue(String value) {
         for (ProductStatus s : values()) {
-            if (s.value.equals(value) || s.label.equals(value)) {
+            if (s.value.equals(value)) {
                 return s;
             }
         }

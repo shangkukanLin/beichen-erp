@@ -4,7 +4,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getInvoicePage, createInvoice, updateInvoice, cancelInvoice, type FinanceInvoice } from '@/api/finance'
 
 // 发票管理（税务口径）：销项=我方开出的发票，进项=我方收到的发票。登记即生效，作废仅标记可重新登记同号。
-const INVOICE_KINDS = ['增值税专用发票', '增值税普通发票', '电子专票', '电子普票']
+// 发票类型存枚举 code，显示用 label 映射
+const INVOICE_KIND_LABELS: Record<string, string> = { special: '增值税专用发票', normal: '增值税普通发票', e_special: '电子专票', e_normal: '电子普票' }
+const INVOICE_KINDS = Object.keys(INVOICE_KIND_LABELS)
 const DIRECTION_LABEL: Record<string, string> = { SALE: '销项', PURCHASE: '进项' }
 const STATUS_LABEL: Record<string, string> = { REGISTERED: '已登记', CANCELLED: '已作废' }
 const STATUS_TAG: Record<string, string> = { REGISTERED: 'success', CANCELLED: 'info' }
@@ -20,7 +22,7 @@ const form = reactive<FinanceInvoice>({})
 const inputMode = ref<'total' | 'net'>('total')
 
 const emptyForm = (): FinanceInvoice => ({
-  id: undefined, invoiceNo: '', direction: 'SALE', invoiceKind: '增值税专用发票',
+  id: undefined, invoiceNo: '', direction: 'SALE', invoiceKind: 'special',
   invoiceDate: new Date().toISOString().slice(0, 10), partnerName: '',
   amount: undefined, taxRate: 13, taxAmount: undefined, totalAmount: undefined,
   sourceBillCode: '', remark: '',
@@ -112,12 +114,11 @@ onMounted(() => { loadData() })
     </el-card>
     <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="data" border stripe>
-        <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="invoiceNo" label="发票号码" width="160"/>
         <el-table-column label="方向" width="80" align="center">
           <template #default="{row}"><el-tag :type="row.direction==='SALE'?'success':'warning'" size="small">{{ DIRECTION_LABEL[row.direction] || row.direction }}</el-tag></template>
         </el-table-column>
-        <el-table-column prop="invoiceKind" label="发票类型" width="130"/>
+        <el-table-column label="发票类型" width="130"><template #default="{row}">{{ INVOICE_KIND_LABELS[row.invoiceKind] || row.invoiceKind }}</template></el-table-column>
         <el-table-column label="开票日期" width="110"><template #default="{row}">{{ fmtDate(row.invoiceDate) }}</template></el-table-column>
         <el-table-column prop="partnerName" label="对方单位" min-width="140" show-overflow-tooltip/>
         <el-table-column prop="amount" label="不含税金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
@@ -147,7 +148,7 @@ onMounted(() => { loadData() })
         </el-form-item>
         <el-form-item label="发票号码" required><el-input v-model="form.invoiceNo" placeholder="请输入发票号码"/></el-form-item>
         <el-form-item label="发票类型">
-          <el-select v-model="form.invoiceKind" style="width:100%"><el-option v-for="k in INVOICE_KINDS" :key="k" :label="k" :value="k"/></el-select>
+          <el-select v-model="form.invoiceKind" style="width:100%"><el-option v-for="k in INVOICE_KINDS" :key="k" :label="INVOICE_KIND_LABELS[k]" :value="k"/></el-select>
         </el-form-item>
         <el-form-item label="开票日期"><el-date-picker v-model="form.invoiceDate" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>
         <el-form-item :label="form.direction==='SALE' ? '购买方' : '销售方'"><el-input v-model="form.partnerName" placeholder="对方单位名称"/></el-form-item>

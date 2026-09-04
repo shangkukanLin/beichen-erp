@@ -75,9 +75,6 @@ public enum RelatedBillType {
         for (RelatedBillType t : values()) {
             if (t.name().equalsIgnoreCase(code)) return t;
         }
-        for (RelatedBillType t : values()) {
-            if (t.label.equals(code)) return t;
-        }
         return null;
     }
 }

@@ -402,7 +402,7 @@
           </template>
           <el-table :data="financeAccounts" size="small" stripe>
             <el-table-column prop="accountName" label="账户" min-width="140" />
-            <el-table-column prop="accountType" label="类型" width="100" align="center" />
+            <el-table-column label="类型" width="100" align="center"><template #default="{row}">{{ ACCOUNT_TYPE_LABELS[row.accountType] || row.accountType }}</template></el-table-column>
             <el-table-column label="期初余额" width="130" align="right"><template #default="{row}">{{ fmtN(row.openingBalance) }}</template></el-table-column>
             <el-table-column label="当前余额" width="130" align="right">
               <template #default="{row}"><span style="font-weight:600">{{ fmtN(row.balance) }}</span></template>
@@ -602,6 +602,7 @@ const stockDefectQty = ref(0)
 const whStockRows = ref<any[]>([])
 const lowStockItems = ref<any[]>([])
 const financeAccounts = ref<any[]>([])
+const ACCOUNT_TYPE_LABELS: Record<string, string> = { cash: '现金', bank: '银行', wechat: '微信', alipay: '支付宝' }
 const healthInfo = computed(() => finSummary.value.health || {})
 const finCards = computed(() => {
   const c = finSummary.value.cur || {}

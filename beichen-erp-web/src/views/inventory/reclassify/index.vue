@@ -109,24 +109,32 @@ onActivated(() => {
     </el-card>
 
     <el-card style="margin-top:12px">
-      <el-table :data="tableData" border v-loading="tableLoading" row-key="id">
+      <el-table :data="tableData" border v-loading="tableLoading" row-key="id" @row-click="handleDetail">
+        <el-table-column label="日期" width="110">
+          <template #default="{ row }">{{ row.reclassifyDate ? $fmtDate(row.reclassifyDate) : '-' }}</template>
+        </el-table-column>
         <el-table-column prop="code" label="单号" width="160" />
         <el-table-column label="仓库" width="140">
-          <template #default="{ row }">{{ warehouseName(row.warehouseId) }}</template>
+          <template #default="{ row }">
+            <el-button v-if="row.warehouseId" type="primary" link @click.stop="router.push(`/inventory/warehouse/detail/${row.warehouseId}`)">
+              {{ warehouseName(row.warehouseId) }}
+            </el-button>
+            <span v-else>{{ warehouseName(row.warehouseId) }}</span>
+          </template>
         </el-table-column>
-        <el-table-column prop="reclassifyDate" label="日期" width="110" />
+        <el-table-column label="重分类概况" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.itemSummary || '-' }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="DocStatusTag[row.status]||'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="createTime" label="创建时间" width="160" />
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" type="danger" link @click="handleCancel(row)">反审核</el-button>
+            <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === DocStatus.AUDITED" type="danger" link @click.stop="handleCancel(row)">反审核</el-button>
           </template>
         </el-table-column>
       </el-table>

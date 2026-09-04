@@ -491,7 +491,7 @@ public class OutsourceOrderDeliveryServiceImpl
                 } else {
                     stockMapper.updateById(stock);
                 }
-                writeStockLog(whId, mat.materialId(), mat.materialName(), "退不良反审核扣回还料",
+                writeStockLog(whId, mat.materialId(), mat.materialName(), StockChangeType.OUTSOURCE_DEFECT_RETURN_UN_AUDIT.getCode(),
                         restoreQty.negate(), before, stock.getQuantity(), order.getCode());
             }
         }
@@ -705,7 +705,7 @@ public class OutsourceOrderDeliveryServiceImpl
                 stock.setQuantity(after);
                 stockMapper.updateById(stock);
             }
-            writeStockLog(whId, mat.materialId(), mat.materialName(), "出货扣料",
+            writeStockLog(whId, mat.materialId(), mat.materialName(), StockChangeType.OUTSOURCE_CONSUME.getCode(),
                     needed.negate(), before, after, order.getCode());
             log.info("扣减物料: {} x{} (仓库ID={})", mat.materialName(), needed.setScale(2, RoundingMode.HALF_UP), whId);
         }
@@ -741,7 +741,7 @@ public class OutsourceOrderDeliveryServiceImpl
                 BigDecimal after = before.add(toRestore);
                 stock.setQuantity(after);
                 stockMapper.updateById(stock);
-                writeStockLog(whId, mat.materialId(), mat.materialName(), "出货扣料-回滚",
+                writeStockLog(whId, mat.materialId(), mat.materialName(), StockChangeType.CANCEL_OUTSOURCE_CONSUME.getCode(),
                         toRestore, before, after, order.getCode());
                 log.info("回滚物料: {} +{}", mat.materialName(), toRestore.setScale(2, RoundingMode.HALF_UP));
             }

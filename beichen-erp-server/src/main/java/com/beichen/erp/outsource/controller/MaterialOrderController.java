@@ -101,7 +101,7 @@ public class MaterialOrderController {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", o.getId()); m.put("code", o.getCode());
         m.put("supplierId", o.getSupplierId());
-        m.put("orderType", o.getOrderType() != null ? o.getOrderType() : OrderType.PURCHASE.getLabel());
+        m.put("orderType", o.getOrderType() != null ? o.getOrderType() : OrderType.PURCHASE.getCode());
         m.put("targetWarehouseId", o.getTargetWarehouseId());
         m.put("deliveryDate", o.getDeliveryDate()); m.put("status", o.getStatus());
         m.put("remark", o.getRemark()); m.put("createTime", o.getCreateTime());
@@ -228,7 +228,7 @@ public class MaterialOrderController {
         // 1. 校验委外单的子物料库存
         List<Map<String, Object>> shortages = new ArrayList<>();
         log.info("收货: orderId={}, orderType={}, force={}", id, o.getOrderType(), force);
-        if (OrderType.OUTSOURCE.getLabel().equals(o.getOrderType())) {
+        if (OrderType.OUTSOURCE.getCode().equals(o.getOrderType())) {
             for (Map<String, Object> it : items) {
                 BigDecimal qty = new BigDecimal(it.get("quantity").toString());
                 if (qty.compareTo(BigDecimal.ZERO) <= 0) continue;
@@ -274,7 +274,7 @@ public class MaterialOrderController {
         delivery.setToWarehouseId(whId);
         delivery.setDeliveryDate(LocalDate.now());
         delivery.setStatus(DocStatus.DRAFT.getCode());
-        delivery.setRemark((OrderType.OUTSOURCE.getLabel().equals(o.getOrderType()) ? "委外收货 - " : "采购收货 - ") + o.getCode());
+        delivery.setRemark((OrderType.OUTSOURCE.getCode().equals(o.getOrderType()) ? "委外收货 - " : "采购收货 - ") + o.getCode());
         // 强关联来源订单ID，便于财务/库存回查（替代 remark LIKE 弱关联）
         delivery.setSourceOrderId(id);
         // 来源标记：供应商（列表页会自动查名称）
@@ -361,7 +361,7 @@ public class MaterialOrderController {
         delivery.setToWarehouseId(whId);
         delivery.setDeliveryDate(LocalDate.now());
         delivery.setStatus(DocStatus.DRAFT.getCode());
-        delivery.setRemark("不良退料(" + handleType + ") - " + o.getCode());
+        delivery.setRemark("不良退料(" + labelOfHandleType(handleType) + ") - " + o.getCode());
         // 强关联来源订单ID，便于退不良记录回查（替代 remark LIKE 弱关联）
         delivery.setSourceOrderId(id);
         delivery.setCode(generateDeliveryCode());
@@ -778,6 +778,12 @@ public class MaterialOrderController {
             try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception ignored) {}
         }
         return BillPrefix.OUTSOURCE_MATERIAL_ORDER + ds + String.format("%03d", seq);
+    }
+
+    /** 处理方式 code → 中文名（用于备注展示） */
+    private String labelOfHandleType(String code) {
+        for (DefectHandleType t : DefectHandleType.values()) { if (t.getCode().equals(code)) return t.getLabel(); }
+        return code;
     }
 
     private String generateDeliveryCode() {

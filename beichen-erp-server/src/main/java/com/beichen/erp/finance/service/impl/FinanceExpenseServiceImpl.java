@@ -6,6 +6,7 @@ import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.common.CashflowRelatedType;
 import com.beichen.erp.finance.common.CashflowType;
 import com.beichen.erp.finance.entity.FinanceAccount;
 import com.beichen.erp.finance.entity.FinanceCashflow;
@@ -101,7 +102,7 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
         cf.setAccountName(expense.getAccountName());
         cf.setFlowType(CashflowType.EXPENSE.getCode());
         cf.setRelatedBillNo(expense.getExpenseNo());
-        cf.setRelatedBillType("费用单");
+        cf.setRelatedBillType(CashflowRelatedType.EXPENSE.getCode());
         cf.setIncome(BigDecimal.ZERO);
         cf.setExpense(amount);
         if (expense.getRemark() != null && !expense.getRemark().isBlank()) cf.setRemark(expense.getRemark());
@@ -125,7 +126,7 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
         cf.setAccountName(expense.getAccountName());
         cf.setFlowType(CashflowType.EXPENSE_REVERSE.getCode());
         cf.setRelatedBillNo(expense.getExpenseNo());
-        cf.setRelatedBillType("费用单");
+        cf.setRelatedBillType(CashflowRelatedType.EXPENSE.getCode());
         cf.setIncome(expense.getAmount());
         cf.setExpense(BigDecimal.ZERO);
         cf.setRemark("反审核冲正");

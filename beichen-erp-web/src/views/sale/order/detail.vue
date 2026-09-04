@@ -29,7 +29,7 @@ const customers = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const products = ref<any[]>([])
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: '成品仓' } })
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: 'FINISHED' } })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 500, keyword: kw } })
 
 async function loadCustomers() { try { const r: any = await fetchCustomers(''); customers.value = r?.records || [] } catch { customers.value = [] } }

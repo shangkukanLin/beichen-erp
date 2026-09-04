@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
+import { QualityType, QualityTypeLabel } from '@/api/enums'
 
 const route = useRoute()
 const router = useRouter()
@@ -60,7 +61,7 @@ function exportExcel() {
     cols,
   ]
   sortedMaterials.value.forEach(m => {
-    rows.push([m.bomTypeName || '', m.materialName || '', m.unit || '', m.qualityType || '良品', m.quantity ?? 0, getProjectNames(m.projectIds), m.remark || ''])
+    rows.push([m.bomTypeName || '', m.materialName || '', m.unit || '', QualityTypeLabel[m.qualityType] || '良品', m.quantity ?? 0, getProjectNames(m.projectIds), m.remark || ''])
   })
 
   const ws = XLSX.utils.aoa_to_sheet(rows)
@@ -125,7 +126,7 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
         <el-table-column prop="bomTypeName" label="物料类型" width="100" />
         <el-table-column prop="materialName" label="物料名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="unit" label="单位" width="70" align="center" />
-        <el-table-column label="质量类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.qualityType==='良品'?'success':'danger'" size="small">{{ row.qualityType || '良品' }}</el-tag></template></el-table-column>
+        <el-table-column label="质量类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.qualityType===QualityType.DEFECT?'danger':'success'" size="small">{{ QualityTypeLabel[row.qualityType] || '良品' }}</el-tag></template></el-table-column>
         <el-table-column label="库存数量" width="110" align="right"><template #default="{row}"><span :style="{color: Number(row.quantity)<0?'var(--app-color-danger)':'',fontWeight:Number(row.quantity)<0?600:400}">{{ row.quantity }}</span></template></el-table-column>
         <el-table-column label="操作" width="80" align="center">
           <template #default="{row}"><el-button type="primary" link size="small" @click="router.push(`/outsource/material-history/${warehouseId}/${row.materialId}`)">详细</el-button></template>

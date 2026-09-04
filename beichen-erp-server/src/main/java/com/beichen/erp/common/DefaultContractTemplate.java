@@ -15,10 +15,10 @@ public final class DefaultContractTemplate {
 
     private DefaultContractTemplate() {}
 
-    /** 委外加工合同模板类型 */
-    public static final String TYPE_PROCESSING = "加工合同";
-    /** 物料采购合同模板类型 */
-    public static final String TYPE_PURCHASE = "采购合同";
+    /** 委外加工合同模板类型（DB 存 code） */
+    public static final String TYPE_PROCESSING = "PROCESSING";
+    /** 物料采购合同模板类型（DB 存 code） */
+    public static final String TYPE_PURCHASE = "PURCHASE";
 
     /** 委外加工合同默认模板名称 */
     public static final String NAME_PROCESSING = "委外加工合同";

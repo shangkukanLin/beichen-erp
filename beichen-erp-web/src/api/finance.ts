@@ -56,6 +56,7 @@ export function cancelPayment(id: number) { return request.put<void>(`/finance/p
 export function unAuditPayment(id: number) { return request.put<void>(`/finance/payment/${id}/un-audit`) }
 
 export function getBillPage(params: any) { return request.get<PageResult<FinanceBill>>('/finance/bill/page', { params }) }
+export function getBill(id: number) { return request.get<FinanceBill>(`/finance/bill/${id}`) }
 export function getBillItems(id: number) { return request.get<FinanceBillItem[]>(`/finance/bill/${id}/items`) }
 export function generateBill(data: any) { return request.post<FinanceBill>('/finance/bill/generate', data) }
 export function auditBill(id: number) { return request.post<void>(`/finance/bill/${id}/audit`) }

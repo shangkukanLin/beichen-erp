@@ -5,7 +5,7 @@ import { getExpensePage, createExpense, updateExpense, auditExpense, unAuditExpe
 import { DocStatusLabel, DocStatusTag } from '@/api/common'
 
 // 费用管理：审核后扣减资金账户并生成「费用支出」流水；反审核冲回（模式与收款单一致）
-const EXPENSE_TYPES = ['办公费', '房租水电', '工资社保', '运输费', '差旅费', '业务招待', '其他']
+const EXPENSE_TYPE_LABELS: Record<string, string> = { OFFICE: '办公费', RENT: '房租水电', SALARY: '工资社保', TRANSPORT: '运输费', TRAVEL: '差旅费', ENTERTAIN: '业务招待', OTHER: '其他' }
 const query = reactive({ expenseType: '', status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
@@ -13,7 +13,7 @@ const data = ref<FinanceExpense[]>([])
 const accounts = ref<FinanceAccount[]>([])
 const dialog = ref(false)
 const dialogTitle = ref('新增费用')
-const form = reactive<FinanceExpense>({ id: undefined, expenseType: '办公费', amount: undefined, expenseDate: new Date().toISOString().slice(0, 10), accountId: undefined, remark: '' })
+const form = reactive<FinanceExpense>({ id: undefined, expenseType: 'OFFICE', amount: undefined, expenseDate: new Date().toISOString().slice(0, 10), accountId: undefined, remark: '' })
 
 async function loadData() {
   loading.value = true
@@ -26,7 +26,7 @@ async function loadData() {
   } catch { data.value = [] } finally { loading.value = false }
 }
 async function loadAccounts() { try { const r = await getAccountPage({pageSize:200}); accounts.value = (r?.records || []).filter((a:any)=>a.status===1) } catch { accounts.value = [] } }
-function handleAdd() { Object.assign(form, { id: undefined, expenseType: '办公费', amount: undefined, expenseDate: new Date().toISOString().slice(0, 10), accountId: undefined, remark: '' }); dialogTitle.value = '新增费用'; dialog.value = true }
+function handleAdd() { Object.assign(form, { id: undefined, expenseType: 'OFFICE', amount: undefined, expenseDate: new Date().toISOString().slice(0, 10), accountId: undefined, remark: '' }); dialogTitle.value = '新增费用'; dialog.value = true }
 function handleEdit(row: FinanceExpense) { Object.assign(form, { id: row.id, expenseType: row.expenseType, amount: row.amount, expenseDate: row.expenseDate, accountId: row.accountId, remark: row.remark }); dialogTitle.value = '编辑费用'; dialog.value = true }
 async function save() {
   if (!form.expenseType) { ElMessage.warning('请选择费用类型'); return }
@@ -57,7 +57,7 @@ onMounted(() => { loadData(); loadAccounts() })
         <el-form :inline="true" :model="query" class="qf">
           <el-form-item label="费用类型">
             <el-select v-model="query.expenseType" placeholder="全部" clearable style="width:130px">
-              <el-option v-for="t in EXPENSE_TYPES" :key="t" :label="t" :value="t"/>
+              <el-option v-for="(lb, code) in EXPENSE_TYPE_LABELS" :key="code" :label="lb" :value="code"/>
             </el-select>
           </el-form-item>
           <el-form-item label="状态">
@@ -75,9 +75,8 @@ onMounted(() => { loadData(); loadAccounts() })
     </el-card>
     <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="data" border stripe>
-        <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="expenseNo" label="费用单号" width="150"/>
-        <el-table-column prop="expenseType" label="费用类型" width="110"><template #default="{row}"><el-tag size="small">{{ row.expenseType }}</el-tag></template></el-table-column>
+        <el-table-column prop="expenseType" label="费用类型" width="110"><template #default="{row}"><el-tag size="small">{{ EXPENSE_TYPE_LABELS[row.expenseType] || row.expenseType }}</el-tag></template></el-table-column>
         <el-table-column prop="amount" label="金额" width="130" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.amount) }}</span></template></el-table-column>
         <el-table-column label="费用日期" width="110"><template #default="{row}">{{ fmtDate(row.expenseDate) }}</template></el-table-column>
         <el-table-column prop="accountName" label="支出账户" min-width="120"/>
@@ -97,7 +96,7 @@ onMounted(() => { loadData(); loadAccounts() })
     <el-dialog v-model="dialog" :title="dialogTitle" width="520px" :close-on-click-modal="false">
       <el-form :model="form" label-width="80px">
         <el-form-item label="费用类型">
-          <el-select v-model="form.expenseType" style="width:100%"><el-option v-for="t in EXPENSE_TYPES" :key="t" :label="t" :value="t"/></el-select>
+          <el-select v-model="form.expenseType" style="width:100%"><el-option v-for="(lb, code) in EXPENSE_TYPE_LABELS" :key="code" :label="lb" :value="code"/></el-select>
         </el-form-item>
         <el-form-item label="金额"><el-input-number v-model="form.amount" :min="0.01" :precision="2" controls-position="right" style="width:100%"/></el-form-item>
         <el-form-item label="费用日期"><el-date-picker v-model="form.expenseDate" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>

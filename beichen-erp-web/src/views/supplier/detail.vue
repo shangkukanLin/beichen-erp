@@ -9,7 +9,8 @@ import { getProjectBom } from '@/api/system'
 import {
   OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag,
   MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag,
-  SUPPLIER_DIRTY_KEY
+  SUPPLIER_DIRTY_KEY,
+  OrderTypeLabel
 } from '@/api/enums'
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
@@ -160,7 +161,7 @@ async function loadOrders() {
       request.get<any,any>('/outsource/material-order/page', { params: { supplierId: id, pageSize: 200 } })
     ])
     orders.value = (r1?.records || []).map((o: any) => ({ ...o, _type: '加工单', _route: `/outsource/order/detail/${o.id}` }))
-    materialOrders.value = (r2?.records || []).map((o: any) => ({ ...o, _type: o.orderType || '物料单', _route: `/outsource/material-order/detail/${o.id}` }))
+    materialOrders.value = (r2?.records || []).map((o: any) => ({ ...o, _type: OrderTypeLabel[o.orderType] || '物料单', _route: `/outsource/material-order/detail/${o.id}` }))
   } catch { orders.value = []; materialOrders.value = [] }
   finally { orderLoading.value = false }
 }

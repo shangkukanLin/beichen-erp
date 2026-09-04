@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { WarehouseCategory, WarehouseType } from '@/api/enums'
+import { WarehouseCategory, WarehouseType, WarehouseTypeLabel } from '@/api/enums'
 import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -75,7 +75,7 @@ onMounted(() => loadData())
       <el-table v-if="activeTab==='active'" :data="activeData" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleDetail">
         <el-table-column prop="code" label="编码" width="160" />
         <el-table-column prop="warehouseName" label="名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="warehouseType" label="仓型" width="90" />
+        <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="manager" label="负责人" width="80" />
         <el-table-column prop="phone" label="电话" width="120" />
@@ -87,7 +87,7 @@ onMounted(() => loadData())
       <el-table v-if="activeTab==='stopped'" :data="stoppedData" border stripe style="width:100%" @row-click="handleDetail">
         <el-table-column prop="code" label="编码" width="160" />
         <el-table-column prop="warehouseName" label="名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="warehouseType" label="仓型" width="90" />
+        <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="manager" label="负责人" width="80" />
         <el-table-column prop="phone" label="电话" width="120" />

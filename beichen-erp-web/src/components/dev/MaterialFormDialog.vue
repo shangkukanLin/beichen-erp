@@ -2,6 +2,7 @@
 import { reactive, ref, onMounted, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { DevMaterialStatus, DevMaterialStatusLabel } from '@/api/enums'
 
 interface Props {
   // 项目页传入当前项目ID时，新增物料自动关联且下拉禁用；物料管理页不传，用户可选/留空
@@ -12,8 +13,8 @@ const props = withDefaults(defineProps<Props>(), { defaultProjectId: undefined, 
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void; (e: 'saved'): void }>()
 
 const todayStr = new Date().toISOString().split('T')[0]
-const materialStatusOptions = ['完好', '已损坏', '已使用']
-const materialTypeOptions = ref<string[]>([])
+const materialStatusOptions = Object.entries(DevMaterialStatusLabel).map(([value, label]) => ({ value, label }))
+const materialTypeOptions = ref<{ code: string; label: string }[]>([])
 const projectOptions = ref<any[]>([])
 
 const isEdit = ref(false)
@@ -24,7 +25,7 @@ const form = reactive<any>({
   id: undefined,
   projectId: undefined,
   name: '', type: '', quantity: 1, locationDetail: '',
-  purchaseDate: todayStr, amount: 0, status: '完好', remark: ''
+  purchaseDate: todayStr, amount: 0, status: DevMaterialStatus.GOOD, remark: ''
 })
 
 // 是否锁定项目（项目页传入时锁定）
@@ -34,7 +35,7 @@ function resetForm() {
   Object.assign(form, {
     id: undefined, projectId: lockedProject.value ? props.defaultProjectId : undefined,
     name: '', type: '', quantity: 1, locationDetail: '',
-    purchaseDate: todayStr, amount: 0, status: '完好', remark: ''
+    purchaseDate: todayStr, amount: 0, status: DevMaterialStatus.GOOD, remark: ''
   })
   isEdit.value = false
 }
@@ -99,7 +100,7 @@ onMounted(() => { if (props.visible) open() })
         <el-col :span="14"><el-form-item label="名称"><el-input v-model="form.name" /></el-form-item></el-col>
         <el-col :span="10"><el-form-item label="类型">
           <el-select v-model="form.type" style="width:100%" placeholder="请选择类型">
-            <el-option v-for="t in materialTypeOptions" :key="t" :label="t" :value="t" />
+            <el-option v-for="t in materialTypeOptions" :key="t.code" :label="t.label" :value="t.code" />
           </el-select>
         </el-form-item></el-col>
         <el-col :span="24"><el-form-item label="关联项目">
@@ -111,7 +112,7 @@ onMounted(() => { if (props.visible) open() })
         <el-col :span="12"><el-form-item label="金额"><el-input-number v-model="form.amount" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
         <el-col :span="12"><el-form-item label="状态">
           <el-select v-model="form.status" style="width:100%">
-            <el-option v-for="s in materialStatusOptions" :key="s" :label="s" :value="s" />
+            <el-option v-for="s in materialStatusOptions" :key="s.value" :label="s.label" :value="s.value" />
           </el-select>
         </el-form-item></el-col>
         <el-col :span="12"><el-form-item label="采购日期"><el-input v-model="form.purchaseDate" type="date" /></el-form-item></el-col>

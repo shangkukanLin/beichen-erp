@@ -5,6 +5,7 @@ import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import { DocStatusLabel } from '@/api/common'
 
 const query = reactive({ code: '', factoryId: undefined as any })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -30,7 +31,7 @@ function handleReset() { query.code = ''; query.factoryId = undefined; loadData(
 
 const deliveryTypeMap: Record<string, string> = { 'IN': '入库', 'OUT': '出库' }
 // 注意：此页面的 deliveryTypeMap 映射的是库存出入库方向，不是收发类型，保留不变
-const statusTagMap: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = { '待确认': 'info', '已确认': 'success', '已取消': 'danger' }
+const statusTagMap: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = { DRAFT: 'info', AUDITED: 'success', CANCELLED: 'danger' }
 
 async function handleCancel(row: any) {
   try { await ElMessageBox.confirm('确定取消该收发单吗？', '提示', { type: 'warning' }); await request.put(`/outsource/delivery/${row.id}/cancel`); ElMessage.success('已取消'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
@@ -77,7 +78,7 @@ onMounted(refresh)
         <el-table-column label="操作" width="150" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click="ElMessage.info('详情开发中')">详情</el-button>
-            <el-button type="danger" link v-if="row.status !== '已取消'" @click="handleCancel(row)">取消</el-button>
+            <el-button type="danger" link v-if="row.status !== 'CANCELLED'" @click="handleCancel(row)">取消</el-button>
           </template>
         </el-table-column>
       </el-table>

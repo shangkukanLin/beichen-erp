@@ -81,7 +81,7 @@ onMounted(async ()=>{ await loadWarehouses(); loadData() })
       </div>
     </el-card>
     <el-card shadow="never">
-      <el-table :data="list" border stripe v-loading="loading">
+      <el-table :data="list" border stripe v-loading="loading" @row-click="handleDetail">
         <el-table-column label="日期" width="110"><template #default="{row}">{{ $fmtDate(row.ioDate) }}</template></el-table-column>
         <el-table-column prop="code" label="单号" width="160"/>
         <el-table-column label="仓库" width="140">
@@ -98,10 +98,10 @@ onMounted(async ()=>{ await loadWarehouses(); loadData() })
         </el-table-column>
         <el-table-column label="操作" width="220" align="center">
           <template #default="{row}">
-            <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
-            <el-button type="success" link @click="handleAudit(row)" v-if="row.status===DocStatus.DRAFT">审核</el-button>
-            <el-button type="warning" link @click="handleUnAudit(row)" v-if="row.status===DocStatus.AUDITED">反审核</el-button>
-            <el-button type="danger" link @click="handleCancel(row)" v-if="row.status===DocStatus.DRAFT">作废</el-button>
+            <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
+            <el-button type="success" link @click.stop="handleAudit(row)" v-if="row.status===DocStatus.DRAFT">审核</el-button>
+            <el-button type="warning" link @click.stop="handleUnAudit(row)" v-if="row.status===DocStatus.AUDITED">反审核</el-button>
+            <el-button type="danger" link @click.stop="handleCancel(row)" v-if="row.status===DocStatus.DRAFT">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

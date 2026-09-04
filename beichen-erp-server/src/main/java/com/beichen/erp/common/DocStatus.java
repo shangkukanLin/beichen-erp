@@ -30,14 +30,12 @@ public enum DocStatus {
     public String getCode() { return name(); }
 
     /**
-     * 根据数据库存储的 code（枚举名）或中文 label 反向查找。
-     * 优先按枚举名匹配，回退按中文 label 匹配（兼容存量数据）。
+     * 根据数据库存储的 code（枚举名）反向查找。
      */
     public static DocStatus fromCode(String code) {
         if (code == null || code.isBlank()) return null;
         for (DocStatus s : values()) {
             if (s.name().equalsIgnoreCase(code)) return s;
-            if (s.label.equals(code)) return s;
         }
         return null;
     }

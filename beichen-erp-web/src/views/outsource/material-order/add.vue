@@ -6,7 +6,7 @@ import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import { OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
+import { OrderType, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
 
 const router = useRouter(); const route = useRoute()
 const tabStore = useTabStore()
@@ -14,7 +14,7 @@ const isEdit = ref(false)
 const editId = route.params.id ? Number(route.params.id) : 0
 const saving = ref(false)
 
-const form = reactive({ orderType: '采购', supplierId: undefined as any, targetWarehouseId: undefined as any, deliveryDate: '', remark: '' })
+const form = reactive({ orderType: OrderType.PURCHASE as string, supplierId: undefined as any, targetWarehouseId: undefined as any, deliveryDate: '', remark: '' })
 const items = ref<any[]>([])
 const supplierOptions = ref<any[]>([])
 const materialOptions = ref<any[]>([])
@@ -69,7 +69,7 @@ function handleCancel() {
 
 async function handleSubmit() {
   if (items.value.length === 0) { ElMessage.warning('请添加物料'); return }
-  const label = form.orderType === '委外' ? '加工厂' : '供应商'
+  const label = form.orderType === OrderType.OUTSOURCE ? '加工厂' : '供应商'
   if (!form.supplierId) { ElMessage.warning(`请选择${label}`); return }
   saving.value = true
   try {
@@ -77,7 +77,7 @@ async function handleSubmit() {
     else {
       await request.post('/outsource/material-order', { ...form, items: items.value }); ElMessage.success('已创建')
       // 重置表单，避免 keep-alive 缓存残留数据
-      Object.assign(form, { orderType: '采购', supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '' })
+      Object.assign(form, { orderType: OrderType.PURCHASE, supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '' })
       items.value = []
       onOrderTypeChange()
     }
@@ -91,8 +91,8 @@ async function handleSubmit() {
 async function initFromQuery() {
   const q = route.query
   console.log('[initFromQuery] query:', JSON.stringify(q))
-  if (q.orderType === '委外') {
-    form.orderType = '委外'
+  if (q.orderType === OrderType.OUTSOURCE) {
+    form.orderType = OrderType.OUTSOURCE
     await loadSuppliers()
   }
   // 供应商：如果不在已加载选项中（可能不是 material 类型），主动拉取并加入选项
@@ -131,7 +131,7 @@ async function initFromQuery() {
 
 // 重置为空白表单（供 keep-alive 缓存恢复时清空上次填写信息）
 function resetForm() {
-  Object.assign(form, { orderType: '采购', supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '' })
+  Object.assign(form, { orderType: OrderType.PURCHASE, supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '' })
   items.value = []
   addItem()
 }
@@ -146,7 +146,7 @@ onMounted(async () => {
     try {
       const r = await request.get<any, any>(`/outsource/material-order/${editId}`)
       if (r) {
-        Object.assign(form, { orderType: r.orderType || '采购', supplierId: r.supplierId, targetWarehouseId: r.targetWarehouseId, deliveryDate: r.deliveryDate, remark: r.remark })
+        Object.assign(form, { orderType: r.orderType || OrderType.PURCHASE, supplierId: r.supplierId, targetWarehouseId: r.targetWarehouseId, deliveryDate: r.deliveryDate, remark: r.remark })
         await loadSuppliers()
         items.value = (r.items || []).map((it: any) => ({ bomTypeId: it.bomTypeId, materialId: it.materialId, materialName: it.materialName, unit: it.unit, orderQuantity: it.orderQuantity, unitPrice: it.unitPrice, remark: it.remark }))
       }
@@ -168,11 +168,11 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="订单类型">
             <el-radio-group v-model="form.orderType" @change="onOrderTypeChange">
-              <el-radio value="采购">采购</el-radio>
-              <el-radio value="委外">委外</el-radio>
+              <el-radio :value="OrderType.PURCHASE">采购</el-radio>
+              <el-radio :value="OrderType.OUTSOURCE">委外</el-radio>
             </el-radio-group>
           </el-form-item></el-col>
-          <el-col :span="8"><el-form-item :label="form.orderType==='委外'?'加工厂':'供应商'">
+          <el-col :span="8"><el-form-item :label="form.orderType===OrderType.OUTSOURCE?'加工厂':'供应商'">
             <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" clearable style="width:100%" placeholder="选择供应商">
               <el-option label="+ 新增" :value="ADD_MARKER" @click="router.push('/supplier/manage')" />
             </RemoteSelect>
@@ -205,7 +205,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
         </el-table-column>
         <el-table-column label="单位" width="60"><template #default="{row}">{{ row.unit }}</template></el-table-column>
         <el-table-column label="数量" width="110"><template #default="{row}"><el-input v-model="row.orderQuantity" size="small" type="number" /></template></el-table-column>
-        <el-table-column :label="form.orderType==='委外'?'加工费单价':'单价'" width="100"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" /></template></el-table-column>
+        <el-table-column :label="form.orderType===OrderType.OUTSOURCE?'加工费单价':'单价'" width="100"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" /></template></el-table-column>
         <el-table-column label="备注" min-width="100"><template #default="{row}"><el-input v-model="row.remark" size="small" /></template></el-table-column>
         <el-table-column label="操作" width="70" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>
       </el-table>

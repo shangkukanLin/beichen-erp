@@ -110,7 +110,6 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
     <!-- Tab1 供应商汇总 -->
     <el-card v-if="activeTab==='supplier'" shadow="never">
       <el-table v-loading="summaryLoading" :data="summaryData" border stripe @row-click="goSupplierDetail">
-        <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="supplierName" label="供应商" min-width="180" />
         <el-table-column label="应付总额" width="130" align="right"><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
         <el-table-column label="已付" width="130" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.paidAmount) }}</span></template></el-table-column>
@@ -139,7 +138,6 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
       </el-card>
       <el-card shadow="never">
         <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
-          <el-table-column type="index" width="55" align="center"/>
           <el-table-column prop="code" label="单号" min-width="150"/>
           <el-table-column label="供应商" min-width="140"><template #default="{row}">{{ sName(row.supplierId) }}</template></el-table-column>
           <el-table-column label="账户" min-width="120"><template #default="{row}">{{ aName(row.accountId) }}</template></el-table-column>

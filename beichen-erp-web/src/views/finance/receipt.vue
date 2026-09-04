@@ -111,7 +111,6 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
     </el-card>
     <el-card shadow="never">
       <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
-        <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="code" label="单号" min-width="150"/>
         <el-table-column label="客户" min-width="140"><template #default="{row}">{{ cName(row.customerId) }}</template></el-table-column>
         <el-table-column label="账户" min-width="130"><template #default="{row}">{{ aName(row.accountId) }}</template></el-table-column>

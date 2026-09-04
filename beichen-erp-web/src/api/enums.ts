@@ -236,19 +236,53 @@ export const DeliveryItemStatusLabel: Record<string, string> = {
   [DeliveryItemStatus.REVERSED]: '已回滚'
 }
 
-/** 研发项目物料类型（对应 DevMaterialTypeEnum 枚举，存储值为中文标签） */
+/** 研发项目物料类型（对应 DevMaterialTypeEnum 枚举，DB 存 code） */
 export const DevMaterialType = {
-  BOARD: '基板',
-  SCREEN: '屏幕',
-  TEST_FIXTURE: '测试架',
-  OTHER: '其他'
+  BOARD: 'BOARD',
+  SCREEN: 'SCREEN',
+  TEST_FIXTURE: 'TEST_FIXTURE',
+  TOUCH_BOX: 'TOUCH_BOX',
+  DISPLAY_BOX: 'DISPLAY_BOX',
+  OTHER: 'OTHER'
 } as const
 
 export const DevMaterialTypeLabel: Record<string, string> = {
   [DevMaterialType.BOARD]: '基板',
   [DevMaterialType.SCREEN]: '屏幕',
   [DevMaterialType.TEST_FIXTURE]: '测试架',
+  [DevMaterialType.TOUCH_BOX]: '触摸资料盒',
+  [DevMaterialType.DISPLAY_BOX]: '显示资料盒',
   [DevMaterialType.OTHER]: '其他'
+}
+
+/** 研发物料状态（dev_purchase_item.status，DB 存 code） */
+export const DevMaterialStatus = {
+  GOOD: 'GOOD',
+  DAMAGED: 'DAMAGED',
+  USED: 'USED'
+} as const
+
+export const DevMaterialStatusLabel: Record<string, string> = {
+  [DevMaterialStatus.GOOD]: '完好',
+  [DevMaterialStatus.DAMAGED]: '已损坏',
+  [DevMaterialStatus.USED]: '已使用'
+}
+
+/** 研发图纸文档类型（dev_drawing.doc_type，DB 存 code） */
+export const DevDrawingDocType = {
+  DRAWING: 'DRAWING',
+  STRUCTURE: 'STRUCTURE',
+  SPEC: 'SPEC',
+  TEST_REPORT: 'TEST_REPORT',
+  OTHER: 'OTHER'
+} as const
+
+export const DevDrawingDocTypeLabel: Record<string, string> = {
+  [DevDrawingDocType.DRAWING]: '排线图',
+  [DevDrawingDocType.STRUCTURE]: '结构图',
+  [DevDrawingDocType.SPEC]: '规格书',
+  [DevDrawingDocType.TEST_REPORT]: '测试报告',
+  [DevDrawingDocType.OTHER]: '其他'
 }
 
 /** 仓库类别（对应 Warehouse 实体 warehouse_category 字段） */
@@ -315,13 +349,20 @@ export const MaterialPlaceTypeLabel: Record<string, string> = {
   [MaterialPlaceType.TEXT]: '自定义'
 }
 
-/** 仓库类型（对应 Warehouse.warehouseType 字段，存储值为中文，须与仓库创建选项一致） */
+/** 仓库类型（对应 Warehouse.warehouse_type 字段，DB 存 code） */
 export const WarehouseType = {
-  AUXILIARY: '辅料仓',  // 辅料仓
-  FINISHED: '成品仓',   // 成品仓
-  DEFECT: '不良仓',     // 不良仓
-  AFTER_SALE: '售后仓'  // 售后仓
+  AUXILIARY: 'AUXILIARY',  // 辅料仓
+  FINISHED: 'FINISHED',    // 成品仓
+  DEFECT: 'DEFECT',        // 不良仓
+  AFTER_SALE: 'AFTER_SALE' // 售后仓
 } as const
+
+export const WarehouseTypeLabel: Record<string, string> = {
+  [WarehouseType.AUXILIARY]: '辅料仓',
+  [WarehouseType.FINISHED]: '成品仓',
+  [WarehouseType.DEFECT]: '不良仓',
+  [WarehouseType.AFTER_SALE]: '售后仓'
+}
 
 /** 产品品质等级（对应 ProductQualityType 枚举，存储值为 A/B/C/DEFECT/PENDING） */
 export const ProductQualityType = {
@@ -472,6 +513,7 @@ export const OUTSOURCE_OTHER_IO_DIRTY_KEY = 'outsourceOtherIoListDirty'
 export const INVENTORY_OTHER_IO_DIRTY_KEY = 'inventoryOtherIoListDirty'
 export const INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY = 'inventoryWarehouseMoveListDirty'
 export const INVENTORY_RECLASSIFY_DIRTY_KEY = 'inventoryReclassifyListDirty'
+export const FINANCE_BILL_DIRTY_KEY = 'financeBillListDirty'
 export const DEV_PROJECT_DIRTY_KEY = 'devProjectListDirty'
 export const DEV_MATERIAL_DIRTY_KEY = 'devMaterialListDirty'
 export const SUPPLIER_DIRTY_KEY = 'supplierListDirty'

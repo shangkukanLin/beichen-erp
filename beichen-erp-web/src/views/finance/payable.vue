@@ -57,7 +57,6 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
     </el-card>
     <el-card shadow="never">
       <el-table v-loading="loading" :data="data" border stripe @row-click="(row: any) => { detail = row; detailVisible = true }">
-        <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="billNo" label="单据号" min-width="150"/>
         <el-table-column label="供应商" min-width="140"><template #default="{row}">{{ sName(row.supplierId) }}</template></el-table-column>
         <el-table-column label="来源" width="130"><template #default="{row}">{{ sourceBillTypeLabel(row.sourceBillType) }}</template></el-table-column>

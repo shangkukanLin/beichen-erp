@@ -79,7 +79,8 @@ async function loadReport() {
   } finally { loading.value = false }
 }
 
-const canConfirm = computed(() => report.reportStatus !== '已结单' && report.reportStatus !== '未生成')
+// 只有草稿可确认结单（未生成/已结单都不可）
+const canConfirm = computed(() => report.reportStatus === CloseReportStatus.DRAFT)
 
 async function handleSave() {
   try {
@@ -162,7 +163,7 @@ onMounted(() => { loadBomTypes(); loadReport() })
           <span style="font-weight:600">物料明细</span>
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-size:var(--app-font-sm);color:var(--app-text-regular)">退回仓库：</span>
-            <RemoteSelect v-model="returnWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择退回仓库" size="small" style="width:200px" :disabled="report.reportStatus==='已结单'" />
+            <RemoteSelect v-model="returnWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择退回仓库" size="small" style="width:200px" :disabled="report.reportStatus===CloseReportStatus.FINISHED" />
           </div>
         </div>
       </template>
@@ -230,9 +231,9 @@ onMounted(() => { loadBomTypes(); loadReport() })
 
     <!-- 操作 -->
     <div style="display:flex;gap:12px;align-items:center">
-      <el-button type="primary" :disabled="report.reportStatus==='已结单'" @click="handleSave">保存草稿</el-button>
+      <el-button type="primary" :disabled="report.reportStatus===CloseReportStatus.FINISHED" @click="handleSave">保存草稿</el-button>
       <el-button type="success" :disabled="!canConfirm" @click="handleConfirm">确认结单</el-button>
-      <el-button v-if="report.reportStatus==='已结单'" type="warning" @click="handleReopen">反结单</el-button>
+      <el-button v-if="report.reportStatus===CloseReportStatus.FINISHED" type="warning" @click="handleReopen">反结单</el-button>
       <el-button type="info" @click="handleExport">导出Excel</el-button>
     </div>
   </div>

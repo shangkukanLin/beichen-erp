@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-import { WarehouseCategory, WarehouseCategoryLabel, MaterialPlaceType, MaterialPlaceTypeLabel, DEV_MATERIAL_DIRTY_KEY } from '@/api/enums'
+import { WarehouseCategory, WarehouseCategoryLabel, MaterialPlaceType, MaterialPlaceTypeLabel, DevMaterialStatus, DevMaterialStatusLabel, DEV_MATERIAL_DIRTY_KEY } from '@/api/enums'
 import request from '@/utils/request'
 
 const route = useRoute()
@@ -12,10 +12,10 @@ const materialId = Number(route.params.id)
 // ===================== 物料基础信息 =====================
 const material = reactive<any>({
   id: undefined, projectId: undefined, name: '', type: '', quantity: 1,
-  purchaseDate: '', amount: 0, status: '完好', remark: ''
+  purchaseDate: '', amount: 0, status: DevMaterialStatus.GOOD, remark: ''
 })
-const materialTypeOptions = ref<string[]>([])
-const materialStatusOptions = ['完好', '已损坏', '已使用']
+const materialTypeOptions = ref<{ code: string; label: string }[]>([])
+const materialStatusOptions = Object.entries(DevMaterialStatusLabel).map(([value, label]) => ({ value, label }))
 const saving = ref(false)
 
 async function loadMaterialDetail() {
@@ -192,13 +192,13 @@ async function loadMaterialType() {
           <el-col :span="8"><el-form-item label="名称"><el-input v-model="material.name" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="类型">
             <el-select v-model="material.type" style="width:100%" placeholder="请选择类型">
-              <el-option v-for="t in materialTypeOptions" :key="t" :label="t" :value="t" />
+              <el-option v-for="t in materialTypeOptions" :key="t.code" :label="t.label" :value="t.code" />
             </el-select>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="数量"><el-input-number v-model="material.quantity" :min="0" :precision="0" style="width:100%" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="状态">
             <el-select v-model="material.status" style="width:100%">
-              <el-option v-for="s in materialStatusOptions" :key="s" :label="s" :value="s" />
+              <el-option v-for="s in materialStatusOptions" :key="s.value" :label="s.label" :value="s.value" />
             </el-select>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="采购日期"><el-input v-model="material.purchaseDate" type="date" /></el-form-item></el-col>

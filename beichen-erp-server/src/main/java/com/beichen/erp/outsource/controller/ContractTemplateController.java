@@ -63,7 +63,7 @@ public class ContractTemplateController {
             @RequestParam(required = false) Long templateId) {
         OutsourceOrder order = orderService.getById(orderId);
         if (order == null) throw new BusinessException("加工单不存在");
-        ContractTemplate template = templateId != null ? templateService.getById(templateId) : templateService.getDefault("加工合同");
+        ContractTemplate template = templateId != null ? templateService.getById(templateId) : templateService.getDefault(com.beichen.erp.common.DefaultContractTemplate.TYPE_PROCESSING);
         if (template == null || template.getContent() == null) throw new BusinessException("未找到合同模板");
         byte[] docxBytes = buildProcessingDocx(order, template);
         return docxResponse("委外加工合同-" + order.getCode() + ".docx", docxBytes);
@@ -75,7 +75,7 @@ public class ContractTemplateController {
             @RequestParam(required = false) Long templateId) {
         MaterialOrder order = materialOrderMapper.selectById(orderId);
         if (order == null) throw new BusinessException("物料订单不存在");
-        ContractTemplate template = templateId != null ? templateService.getById(templateId) : templateService.getDefault("采购合同");
+        ContractTemplate template = templateId != null ? templateService.getById(templateId) : templateService.getDefault(com.beichen.erp.common.DefaultContractTemplate.TYPE_PURCHASE);
         if (template == null || template.getContent() == null) throw new BusinessException("未找到采购合同模板");
         byte[] docxBytes = buildPurchaseDocx(order, template);
         return docxResponse("物料采购合同-" + order.getCode() + ".docx", docxBytes);

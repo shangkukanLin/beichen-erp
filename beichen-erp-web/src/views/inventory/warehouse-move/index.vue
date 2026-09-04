@@ -44,12 +44,11 @@
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="230" align="center" fixed="right">
+        <el-table-column label="操作" width="180" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
                 <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
                 <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
-                <el-button v-if="row.status === DocStatus.DRAFT" type="warning" link @click.stop="handleEdit(row)">编辑</el-button>
                 <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
@@ -61,28 +60,6 @@
       </div>
     </el-card>
 
-    <!-- 详情抽屉 -->
-    <el-drawer v-model="detailVisible" title="移仓单详情" size="60%">
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="单号">{{ detail.code }}</el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag :type="statusType(detail.status)">{{ detail.status }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="移出仓库">{{ warehouseName(detail.fromWarehouseId) }}</el-descriptions-item>
-        <el-descriptions-item label="移入仓库">{{ warehouseName(detail.toWarehouseId) }}</el-descriptions-item>
-        <el-descriptions-item label="移仓日期">{{ detail.moveDate }}</el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ detail.remark }}</el-descriptions-item>
-      </el-descriptions>
-      <el-divider content-position="left">明细</el-divider>
-      <el-table :data="detailItems" border>
-        <el-table-column type="index" label="#" width="50" align="center" />
-        <el-table-column prop="sku" label="SKU" width="130" />
-        <el-table-column prop="productName" label="产品" min-width="140" />
-        <el-table-column prop="spec" label="规格" width="100" />
-        <el-table-column prop="unit" label="单位" width="70" />
-        <el-table-column prop="quantity" label="数量" width="100" align="right" />
-      </el-table>
-    </el-drawer>
   </div>
 </template>
 
@@ -111,10 +88,6 @@ const statusOptions = [
 // 仓库下拉选项（Odoo 实时查库，组件本地保存）
 const warehouseOptions = ref<any[]>([])
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
-
-const detailVisible = ref(false)
-const detail = ref<any>({})
-const detailItems = ref<any[]>([])
 
 /**
  * 仓库名称映射：移仓单只返回 from/toWarehouseId，需要一次性拉仓库列表做本地映射。
@@ -151,7 +124,8 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.status = ''; query.fromWarehouseId = undefined; query.toWarehouseId = undefined; pagination.pageNum = 1; loadData() }
 
 function handleAdd() { router.push('/inventory/warehouse-move/add') }
-function handleEdit(row: any) { router.push(`/inventory/warehouse-move/add?id=${row.id}`) }
+// 详情已独立成页：草稿态在详情页内直接编辑，列表不再提供「编辑」入口
+function handleDetail(row: any) { router.push(`/inventory/warehouse-move/detail/${row.id}`) }
 
 async function handleAudit(row: any) {
   try {
@@ -180,15 +154,6 @@ async function handleCancel(row: any) {
   } catch { }
 }
 
-async function handleDetail(row: any) {
-  detail.value = { ...row }
-  try {
-    const r = await request.get<any, any>(`/inventory/warehouse-move/${row.id}/items`)
-    detailItems.value = r || []
-  } catch { detailItems.value = [] }
-  detailVisible.value = true
-}
-
 onActivated(() => {
   // 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
   if (sessionStorage.getItem(INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY) === '1') {
@@ -199,12 +164,9 @@ onActivated(() => {
 onMounted(async () => {
   await loadWarehouses()
   loadData().then(() => {
-    // 库存流水链接跳转：自动打开指定单据详情
+    // 库存流水链接跳转：直接进入该单据的独立详情页
     const billId = route.query.billId
-    if (billId) {
-      const row = tableData.value.find((r: any) => r.id === Number(billId))
-      if (row) handleDetail(row)
-    }
+    if (billId) router.push(`/inventory/warehouse-move/detail/${billId}`)
   })
 })
 

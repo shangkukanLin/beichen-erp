@@ -43,7 +43,7 @@ const fetchSuppliers = (kw: string) =>
   request.get('/supplier/page', { params: { supplierType: 'factory', name: kw, pageSize: 500 } })
 // 成品出库仓只取我方成品仓：自有仓库(INVENTORY) + 类型=成品仓，排除委外仓/不良仓/售后仓等
 const fetchWarehouses = (kw: string) =>
-  request.get('/warehouse/page', { params: { warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: '成品仓', pageSize: 500 } })
+  request.get('/warehouse/page', { params: { warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: 'FINISHED', pageSize: 500 } })
 
 async function loadFactories() {
   const [sf, wf]: any[] = await Promise.all([fetchSuppliers(''), fetchWarehouses('')])

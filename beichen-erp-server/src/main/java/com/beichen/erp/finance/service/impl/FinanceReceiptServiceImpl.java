@@ -9,6 +9,7 @@ import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.entity.*;
+import com.beichen.erp.finance.common.CashflowRelatedType;
 import com.beichen.erp.finance.common.CashflowType;
 import com.beichen.erp.finance.common.SettlementDirection;
 import com.beichen.erp.finance.common.SettlementSourceType;
@@ -168,7 +169,7 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         cf.setAccountName(receipt.getAccountName());
         cf.setFlowType(CashflowType.RECEIPT.getCode());
         cf.setRelatedBillNo(receipt.getCode());
-        cf.setRelatedBillType("收款单");
+        cf.setRelatedBillType(CashflowRelatedType.RECEIPT.getCode());
         cf.setIncome(receipt.getAmount());
         cf.setExpense(BigDecimal.ZERO);
         cashflowMapper.insert(cf);
@@ -281,7 +282,7 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         cf.setAccountName(receipt.getAccountName());
         cf.setFlowType(CashflowType.RECEIPT_REVERSE.getCode());
         cf.setRelatedBillNo(receipt.getCode());
-        cf.setRelatedBillType("收款单");
+        cf.setRelatedBillType(CashflowRelatedType.RECEIPT.getCode());
         cf.setIncome(BigDecimal.ZERO);
         cf.setExpense(receipt.getAmount());
         cf.setRemark("反审核冲正");

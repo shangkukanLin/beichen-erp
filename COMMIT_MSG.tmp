@@ -1,0 +1,33 @@
+统一枚举字段为「数据库存 code、前端显示中文 label」并清理财务/库存页面
+
+【枚举改造（全链路：DDL→写入→存储→读取→前端）】
+- warehouse.warehouse_type：WarehouseType.getCode() 改返回枚举名，前后端同步为 AUXILIARY/FINISHED/DEFECT/AFTER_SALE，联动 9 个前端文件与 6 处仓库类型查询参数
+- finance_expense.expense_type：改 OFFICE/RENT/SALARY/TRANSPORT/TRAVEL/ENTERTAIN/OTHER，前端本地 label 映射
+- finance_cashflow.related_bill_type：新增 CashflowRelatedType 枚举（RECEIPT/PAYMENT/EXPENSE/OPENING），收款/付款/费用/期初 7 处写入点改枚举
+- outsource_contract_template.template_type：默认模板常量改 PROCESSING/PURCHASE，合同导出按 code 取默认模板
+- outsource_material_order.order_type：读取比较由 getLabel()（中文）改为 getCode()，修复委外收货扣子料库存从未生效的潜伏 bug；前端订单类型 radio 提交 code
+- outsource_delivery_item.handle_type：前端提交 code，后端比较同步，备注经 labelOfHandleType() 显示中文
+- dev_purchase_item.status/type：物料类型下拉接口改返回 {code,label}，补 TOUCH_BOX/DISPLAY_BOX 两项，前端全部 code+label
+- dev_drawing.doc_type：新增 DevDrawingDocType/Label（DRAWING/STRUCTURE/SPEC/TEST_REPORT/OTHER）
+- warehouse_stock_log.change_type：修复 OutsourceOtherIoController 两处 setChangeType(label)；OutsourceOrderDeliveryServiceImpl 三处中文自由串（出货扣料/出货扣料-回滚/退不良反审核扣回还料）新增枚举 OUTSOURCE_CONSUME、CANCEL_OUTSOURCE_CONSUME、OUTSOURCE_DEFECT_RETURN_UN_AUDIT
+- finance_account.account_type：前端提交 code（DB 本就是 code），dashboard 账户表显示中文
+- finance_invoice.invoice_kind：前端 INVOICE_KIND_LABELS 映射，DB 存 special 等 code
+- 数据迁移：DataInitializer.migrateEnumChineseLabelsToCodes() 幂等刷历史中文为 code，置于合同模板初始化之前并按类型去重默认模板
+- 清除 6 处 fromCode 中文 label 回退兼容逻辑，删除 DevMaterialTypeEnum.fromLabel 死代码
+- schema.sql：21 处中文列 DEFAULT 改为对应 code
+
+【功能修复】
+- SupplierMaterialSummaryServiceImpl：6 处原生 SQL 中文状态过滤改枚举 code，修复供应商物料汇总统计静默查空
+- outsource/order/close.vue：结单状态中文比较改 code，修复已结单可重复确认、反结单按钮永不显示；未生成哨兵值「未生成」改 null
+- outsource/delivery.vue：状态标签/取消按钮比较改 DocStatus code 并显示中文
+- outsource/delivery/add.vue：调拨类型判断 '调拨' 改 TRANSFER，修复调拨目标工厂校验失效
+- 委外仓品质「良品/不良品」改 QualityTypeLabel 映射（warehouse-detail、material-order/detail）
+
+【页面调整与清理】
+- 财务模块 9 个列表页删除序号列（应收/应付/账单/资金流水/资金账户/收款/付款/费用/发票）
+- 应收管理状态显示中文（与应付对齐）；成品库存流水删除序号/关联类型/备注列并修复仓库列空白（映射列表加载缺失）
+- 成品仓库管理、库存盘点页移除顶部盘点提示条
+- 成品移仓单详情由抽屉改为独立页面 /inventory/warehouse-move/detail/:id，草稿态可直接编辑
+- 账单详情由抽屉改为独立页面 /finance/bill/detail/:id，带审核/反审核/作废联动
+- 成品品质重分类新增/详情拆独立页面，审核前校验原品质可用库存
+- 账单生成成功后列表筛选自动对齐生成条件并按脏标志刷新

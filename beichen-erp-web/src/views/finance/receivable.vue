@@ -54,7 +54,6 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
     </el-card>
     <el-card shadow="never">
       <el-table v-loading="loading" :data="data" border stripe @row-click="(row: any) => { detail = row; detailVisible = true }">
-        <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="billNo" label="单据号" min-width="150"/>
         <el-table-column label="客户" min-width="140"><template #default="{row}">{{ cName(row.customerId) }}</template></el-table-column>
         <el-table-column label="来源" width="110"><template #default="{row}">{{ sourceBillTypeLabel(row.sourceBillType) }}</template></el-table-column>
@@ -62,7 +61,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-table-column prop="paidAmount" label="已收" width="120" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
         <el-table-column prop="unpaidAmount" label="未收" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column prop="dueDate" label="到期日" width="120" align="center"/>
-        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{row.status}}</el-tag></template></el-table-column>
+        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{ SettlementStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="80" align="center"><template #default="{row}"><el-button type="primary" link @click.stop="detail=row;detailVisible=true">详情</el-button></template></el-table-column>
       </el-table>
       <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="load" @current-change="load"/></div>
@@ -70,7 +69,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
     <el-drawer v-model="detailVisible" title="应收详情" size="50%">
       <el-descriptions :column="2" border>
         <el-descriptions-item label="单据号">{{ detail.billNo }}</el-descriptions-item>
-        <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ detail.status }}</el-tag></el-descriptions-item>
+        <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ SettlementStatusLabel[String(detail.status)] || detail.status }}</el-tag></el-descriptions-item>
         <el-descriptions-item label="客户">{{ cName(detail.customerId) }}</el-descriptions-item>
         <el-descriptions-item label="来源类型">{{ sourceBillTypeLabel(detail.sourceBillType) }}</el-descriptions-item>
         <el-descriptions-item label="来源单号">{{ detail.sourceBillNo }}</el-descriptions-item>

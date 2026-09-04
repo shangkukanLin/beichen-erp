@@ -34,7 +34,7 @@ const warehouses = ref<any[]>([])
 async function loadCustomers() { try { const r: any = await fetchCustomers(''); customers.value = r?.records || [] } catch { customers.value = [] } }
 async function loadWarehouses() {
   try {
-    const r: any = await request.get('/warehouse/page', { params: { pageSize: 500, warehouseType: '成品仓' } })
+    const r: any = await request.get('/warehouse/page', { params: { pageSize: 500, warehouseType: 'FINISHED' } })
     warehouses.value = r?.records || []
   } catch { warehouses.value = [] }
 }

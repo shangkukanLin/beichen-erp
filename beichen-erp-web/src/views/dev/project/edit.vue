@@ -2,7 +2,7 @@
 import { reactive, ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { PhaseStatus, PhaseStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DEV_PROJECT_DIRTY_KEY } from '@/api/enums'
+import { PhaseStatus, PhaseStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DevMaterialTypeLabel, DevMaterialStatusLabel, DevDrawingDocType, DevDrawingDocTypeLabel, DEV_PROJECT_DIRTY_KEY } from '@/api/enums'
 import {
   getProject, updateProject,
   getProjectBom, saveProjectBom,
@@ -29,7 +29,7 @@ const form = reactive<ProjectDTO>({
   originalDriveIc: '', originalTouchIc: '',
   glassSize: '', glassResolution: '',
   configDriveIcId: undefined, configTouchIcId: undefined, configCodeIcId: undefined,
-  startDate: '', expectedEndDate: '', status: '立项', remark: '',
+  startDate: '', expectedEndDate: '', status: ProjectStatus.IN_PROGRESS, remark: '',
   sampleFactoryId: undefined, outsourceFactoryId: undefined,
   brandId: undefined
 })
@@ -357,12 +357,12 @@ async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('
 const drawingList = ref<DrawingVO[]>([])
 async function loadDrawings() { drawingList.value = (await getProjectDrawings(projectId)) || [] }
 const drawingVisible = ref(false)
-const drawingForm = reactive({ docName: '', docType: '排线图', version: 'v1.0', fileUrl: '' })
+const drawingForm = reactive({ docName: '', docType: DevDrawingDocType.DRAWING, version: 'v1.0', fileUrl: '' })
 const uploadFile = ref<File | null>(null)
 const uploading = ref(false)
 
 function handleAddDrawing() { 
-  Object.assign(drawingForm, { id: undefined, docName: '', docType: '排线图', version: 'v1.0', fileUrl: '' })
+  Object.assign(drawingForm, { id: undefined, docName: '', docType: DevDrawingDocType.DRAWING, version: 'v1.0', fileUrl: '' })
   uploadFile.value = null
   drawingVisible.value = true 
 }
@@ -692,7 +692,7 @@ function onNameBlur() {
           </div>
           <el-table :data="drawingList" border>
             <el-table-column prop="docName" label="文档名称" min-width="160" />
-            <el-table-column prop="docType" label="类型" width="100" />
+            <el-table-column label="类型" width="100"><template #default="{row}">{{ DevDrawingDocTypeLabel[row.docType] || row.docType }}</template></el-table-column>
             <el-table-column label="版本" width="80">
               <template #default="{row}">v{{ row.versionCode || 1 }}</template>
             </el-table-column>
@@ -720,7 +720,7 @@ function onNameBlur() {
           <el-table :data="devMaterialList" border stripe size="small">
             <el-table-column type="index" label="#" width="50" />
             <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
-            <el-table-column prop="type" label="类型" width="120" />
+            <el-table-column label="类型" width="120"><template #default="{ row }">{{ DevMaterialTypeLabel[row.type] || row.type }}</template></el-table-column>
             <el-table-column prop="quantity" label="数量" width="90" align="center" />
             <el-table-column prop="amount" label="金额" width="110" align="right">
               <template #default="{ row }">{{ row.amount ? '¥' + Number(row.amount).toFixed(2) : '-' }}</template>
@@ -730,7 +730,7 @@ function onNameBlur() {
             </el-table-column>
             <el-table-column label="状态" width="90" align="center">
               <template #default="{ row }">
-                <el-tag size="small" :type="row.status === '完好' ? 'success' : row.status === '已损坏' ? 'danger' : 'warning'">{{ row.status }}</el-tag>
+                <el-tag size="small" :type="row.status === 'GOOD' ? 'success' : row.status === 'DAMAGED' ? 'danger' : 'warning'">{{ DevMaterialStatusLabel[row.status] || row.status }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
@@ -781,7 +781,7 @@ function onNameBlur() {
       </div>
       <el-form :model="drawingForm" label-width="80px" style="margin-top:12px">
         <el-form-item label="文档名称"><el-input v-model="drawingForm.docName" /></el-form-item>
-        <el-form-item label="类型"><el-select v-model="drawingForm.docType" style="width:100%"><el-option label="排线图" value="排线图"/><el-option label="结构图" value="结构图"/><el-option label="规格书" value="规格书"/><el-option label="测试报告" value="测试报告"/><el-option label="其他" value="其他"/></el-select></el-form-item>
+        <el-form-item label="类型"><el-select v-model="drawingForm.docType" style="width:100%"><el-option v-for="(lb, code) in DevDrawingDocTypeLabel" :key="code" :label="lb" :value="code"/></el-select></el-form-item>
         <el-form-item label="版本"><el-input v-model="drawingForm.version" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="drawingVisible=false">取消</el-button><el-button type="primary" :loading="uploading" @click="handleDrawingSubmit">确定</el-button></template>

@@ -4,14 +4,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { exportMaterialOrderPdf } from '@/api/contract-template'
-import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
+import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel, DefectHandleType, DefectHandleTypeLabel, OrderType, OrderTypeLabel, QualityType, QualityTypeLabel, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
 const loading = ref(true)
-const order = reactive({ id: 0, code: '', status: '', orderType: '采购', supplierId: undefined as any, supplierName: '', deliveryDate: '', finishTime: '', remark: '', attachUrl: '', targetWarehouseId: undefined as any })
+const order = reactive({ id: 0, code: '', status: '', orderType: OrderType.PURCHASE as string, supplierId: undefined as any, supplierName: '', deliveryDate: '', finishTime: '', remark: '', attachUrl: '', targetWarehouseId: undefined as any })
 const items = ref<any[]>([])
 const activeTab = ref('detail')
 const saving = ref(false)
@@ -53,7 +53,7 @@ const recItems = ref<any[]>([])
 
 const defectVisible = ref(false); const defectSaving = ref(false)
 const defectItems = ref<any[]>([])
-const defectHandleType = ref('维修返还')
+const defectHandleType = ref<string>(DefectHandleType.REPAIR_RETURN)
 const defectWarehouseId = ref<number>()
 const defectWarehouseOptions = ref<any[]>([])
 
@@ -125,7 +125,7 @@ async function loadAll() {
       request.get<any, any>(`/outsource/material-order/${id}/deliveries`)
     ])
     if (o) {
-      Object.assign(order, { id: o.id, code: o.code, status: o.status, orderType: o.orderType || '采购', supplierId: o.supplierId, supplierName: o.supplierName, deliveryDate: o.deliveryDate || '', finishTime: o.finishTime || '', remark: o.remark || '', attachUrl: o.attachUrl || '' })
+      Object.assign(order, { id: o.id, code: o.code, status: o.status, orderType: o.orderType || OrderType.PURCHASE, supplierId: o.supplierId, supplierName: o.supplierName, deliveryDate: o.deliveryDate || '', finishTime: o.finishTime || '', remark: o.remark || '', attachUrl: o.attachUrl || '' })
     }
     items.value = o?.items || []
     deliveries.value = dList || []
@@ -220,7 +220,7 @@ function goPurchaseComponent(comp: any, parentItem: any) {
 }
 
 function openDefectReturn() {
-  defectHandleType.value = '维修返还'
+  defectHandleType.value = DefectHandleType.REPAIR_RETURN
   defectWarehouseId.value = undefined; defectWarehouseOptions.value = []
   defectItems.value = items.value.filter((it: any) => it.receivedQuantity > 0).map((it: any) => ({
     itemId: it.id, materialId: it.materialId, materialName: it.materialName,
@@ -314,9 +314,9 @@ onActivated(() => { loadAll() })
         <el-form :model="order" label-width="90px" size="small">
           <el-row :gutter="12">
             <el-col :span="8"><el-form-item label="订单号"><el-input :model-value="order.code" readonly class="readonly-input" /></el-form-item></el-col>
-            <el-col :span="8"><el-form-item label="订单类型"><el-input :model-value="order.orderType" readonly class="readonly-input" /></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="订单类型"><el-input :model-value="OrderTypeLabel[order.orderType] || order.orderType" readonly class="readonly-input" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="状态"><el-tag :type="MaterialOrderStatusTag[order.status]||'info'" size="small">{{ MaterialOrderStatusLabel[order.status] || order.status }}</el-tag></el-form-item></el-col>
-            <el-col :span="8"><el-form-item :label="order.orderType==='委外'?'加工厂':'供应商'">
+            <el-col :span="8"><el-form-item :label="order.orderType===OrderType.OUTSOURCE?'加工厂':'供应商'">
               <RemoteSelect v-model="order.supplierId" :fetch="fetchSuppliers" style="width:100%" :disabled="order.status!==MaterialOrderStatus.PENDING" placeholder="选择供应商" />
             </el-form-item></el-col>
             <el-col :span="8"><el-form-item label="交期"><el-input v-model="order.deliveryDate" type="date" /></el-form-item></el-col>
@@ -416,8 +416,8 @@ onActivated(() => { loadAll() })
                 <el-table-column prop="materialName" label="物料" min-width="120" />
                 <el-table-column prop="unit" label="单位" width="60" />
                 <el-table-column prop="quantity" label="数量" width="90" />
-                <el-table-column prop="qualityType" label="品质" width="70"><template #default="{row:r}"><el-tag :type="r.qualityType==='良品'?'success':'danger'" size="small">{{ r.qualityType }}</el-tag></template></el-table-column>
-                <el-table-column prop="handleType" label="处理方式" width="100" />
+                <el-table-column prop="qualityType" label="品质" width="70"><template #default="{row:r}"><el-tag :type="r.qualityType===QualityType.DEFECT?'danger':'success'" size="small">{{ QualityTypeLabel[r.qualityType] || r.qualityType }}</el-tag></template></el-table-column>
+                <el-table-column label="处理方式" width="100"><template #default="{row:r}">{{ DefectHandleTypeLabel[r.handleType] || r.handleType }}</template></el-table-column>
               </el-table>
             </template>
           </el-table-column>
@@ -481,10 +481,10 @@ onActivated(() => { loadAll() })
       <div style="margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <span style="font-size:var(--app-font-sm);color:var(--app-text-regular)">供应商：<b>{{ order.supplierName || '-' }}</b></span>
         <span style="font-size:var(--app-font-sm)">处理方式：</span>
-        <el-radio-group v-model="defectHandleType" size="small" @change="defectWarehouseId=undefined"><el-radio label="维修返还" /><el-radio label="折现退款" /></el-radio-group>
+        <el-radio-group v-model="defectHandleType" size="small" @change="defectWarehouseId=undefined"><el-radio :value="DefectHandleType.REPAIR_RETURN">维修返还</el-radio><el-radio :value="DefectHandleType.CASH_REFUND">折现退款</el-radio></el-radio-group>
       </div>
       <div style="margin-bottom:8px"><el-select v-model="defectWarehouseId" filterable style="width:100%" placeholder="选择退料仓库" @change="onDefectWhChange"><el-option v-for="w in defectWarehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></div>
-      <div v-if="defectHandleType==='折现退款'" style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid var(--app-color-warning);font-size:var(--app-font-xs);color:var(--app-color-warning)">折现退款将扣减退料仓库库存，并按退料金额自动冲减供应商应付。</div>
+      <div v-if="defectHandleType===DefectHandleType.CASH_REFUND" style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid var(--app-color-warning);font-size:var(--app-font-xs);color:var(--app-color-warning)">折现退款将扣减退料仓库库存，并按退料金额自动冲减供应商应付。</div>
       <el-table :data="defectItems" border size="small">
         <el-table-column prop="materialName" label="物料" min-width="140" />
         <el-table-column prop="available" label="可退" width="70" />

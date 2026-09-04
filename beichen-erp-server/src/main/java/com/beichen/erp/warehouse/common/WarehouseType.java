@@ -3,7 +3,7 @@ package com.beichen.erp.warehouse.common;
 import lombok.Getter;
 
 /**
- * 仓库类型（对应 warehouse.warehouse_type 字段，存储值为中文）
+ * 仓库类型（对应 warehouse.warehouse_type 字段，DB 存 code）
  * <p>须与前端 api/enums.ts 的 WarehouseType 保持一致，避免前后端过滤口径不一致。</p>
  */
 @Getter
@@ -27,6 +27,6 @@ public enum WarehouseType {
         this.label = label;
     }
 
-    /** 存入数据库的中文类型值 */
-    public String getCode() { return label; }
+    /** 存入数据库的枚举 code */
+    public String getCode() { return name(); }
 }

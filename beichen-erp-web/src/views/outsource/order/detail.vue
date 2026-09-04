@@ -7,7 +7,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { getProjectBom } from '@/api/system'
 import { exportContractPdf } from '@/api/contract-template'
-import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DeliveryType, DeliveryTypeLabel, OUTSOURCE_ORDER_DIRTY_KEY } from '@/api/enums'
+import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DeliveryType, DeliveryTypeLabel, OrderType, OUTSOURCE_ORDER_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
@@ -56,7 +56,7 @@ function goPurchase(row: any) {
 function goOutsource(row: any) {
   const s = getStock(row.materialId)
   const ids = (s.supplierIds || '') as string; const firstId = ids.split(',')[0]?.trim()
-  const p = new URLSearchParams(); p.set('orderType', '委外')
+  const p = new URLSearchParams(); p.set('orderType', OrderType.OUTSOURCE)
   if (firstId) p.set('supplierId', firstId)
   if (s.materialId) p.set('materialId', String(s.materialId))
   p.set('materialName', matName(row.materialId)); p.set('bomTypeId', String(row.bomTypeId ?? ''))
@@ -99,7 +99,7 @@ const fetchProjects = (kw: string) => request.get('/dev/project/page', { params:
 const fetchMaterials = (kw: string) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw } })
 const fetchBomTypes = (kw: string) => request.get('/dev/bom-type/enabled', { params: { pageSize: 500, name: kw } })
 // 收货/退不良仓库限定为我方（自有）成品仓
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: '成品仓' } })
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: 'FINISHED' } })
 
 // bomTypeId -> 类型名 映射（兜底展示用）
 function typeName(id: number | undefined, fallback?: string) {

@@ -43,10 +43,10 @@ public class DevPurchaseItemController {
         return R.ok(devPurchaseItemService.pageMaterial(pageParam, name, projectId, type));
     }
 
-    /** 获取研发物料类型枚举（基板/屏幕/测试架/其他） */
+    /** 获取研发物料类型枚举选项（code+label，value 存 code 显示用 label） */
     @GetMapping("/material-types")
-    public R<List<String>> materialTypes() {
-        return R.ok(DevMaterialTypeEnum.allLabels());
+    public R<List<java.util.Map<String, Object>>> materialTypes() {
+        return R.ok(DevMaterialTypeEnum.allOptions());
     }
 
     /** 获取当前公司全部启用的仓库（自有+委外）下拉选项 */

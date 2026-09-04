@@ -51,9 +51,28 @@ public class ReclassifyServiceImpl implements ReclassifyService {
             m.put("warehouseId", o.getWarehouseId());
             m.put("reclassifyDate", o.getReclassifyDate()); m.put("status", o.getStatus());
             m.put("remark", o.getRemark()); m.put("createTime", o.getCreateTime());
+            // 概况：产品名 + 品质转换 + 数量，供列表直接展示，免去前端逐条拉明细
+            m.put("itemSummary", buildItemSummary(o.getId()));
             return m;
         }).toList());
         return res;
+    }
+
+    /** 明细概况：产品名 原品质→目标品质×数量，顿号分隔（与成品其他出入库列表 itemSummary 同风格） */
+    private String buildItemSummary(Long reclassifyId) {
+        List<InventoryProductReclassifyItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<InventoryProductReclassifyItem>()
+                        .eq(InventoryProductReclassifyItem::getReclassifyId, reclassifyId));
+        StringBuilder sb = new StringBuilder();
+        for (InventoryProductReclassifyItem it : items) {
+            Product p = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+            BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
+            if (sb.length() > 0) sb.append("、");
+            sb.append(p != null ? p.getName() : "-")
+                    .append(" ").append(it.getFromQuality()).append("→").append(it.getToQuality())
+                    .append("×").append(qty.stripTrailingZeros().toPlainString());
+        }
+        return sb.toString();
     }
 
     @Override

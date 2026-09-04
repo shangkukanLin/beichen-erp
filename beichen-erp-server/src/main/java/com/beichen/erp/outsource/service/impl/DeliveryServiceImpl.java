@@ -201,7 +201,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         }
 
         // 2. 委外单收货：扣减子物料库存（从供应商/加工厂委外仓扣，用量×收货数，可扣至负数=强制出库）
-        if (isReceive && OrderType.OUTSOURCE.getLabel().equals(order.getOrderType())) {
+        if (isReceive && OrderType.OUTSOURCE.getCode().equals(order.getOrderType())) {
             deductComponents(order, items, delivery);
         }
 
@@ -217,7 +217,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         } else {
             // 退不良：仅折现退款生成负应付冲减供应商应付
             BigDecimal cashRefundAmount = items.stream()
-                    .filter(it -> DefectHandleType.CASH_REFUND.getLabel().equals(it.getHandleType()))
+                    .filter(it -> DefectHandleType.CASH_REFUND.getCode().equals(it.getHandleType()))
                     .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             if (cashRefundAmount.compareTo(BigDecimal.ZERO) > 0) {
@@ -288,7 +288,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         // 2. 委外单收货反审核：恢复子物料库存（对称加回）
         if (isReceive) {
             MaterialOrder order = materialOrderMapper.selectById(orderId);
-            if (order != null && OrderType.OUTSOURCE.getLabel().equals(order.getOrderType())) {
+            if (order != null && OrderType.OUTSOURCE.getCode().equals(order.getOrderType())) {
                 restoreComponents(order, items, delivery);
             }
             // 成本冲销：删除本单收货批次并反加权
@@ -304,7 +304,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         } else {
             reverseAmount = items.stream()
-                    .filter(it -> DefectHandleType.CASH_REFUND.getLabel().equals(it.getHandleType()))
+                    .filter(it -> DefectHandleType.CASH_REFUND.getCode().equals(it.getHandleType()))
                     .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         }

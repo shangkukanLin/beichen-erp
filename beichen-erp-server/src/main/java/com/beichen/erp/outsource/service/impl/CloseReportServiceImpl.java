@@ -179,7 +179,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
                 }
             }
         } else {
-            result.put("reportStatus", "未生成");
+            // 未生成结单报表：状态置空（前端按空值显示「未生成」），不与 code 体系混用中文哨兵
+            result.put("reportStatus", null);
         }
 
         return result;

@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import { sourceBillTypeLabel, SourceBillDetailRoute, SettlementStatus, SettlementStatusLabel, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, MaterialOrderStatusLabel, MaterialOrderStatusTag } from '@/api/enums'
+import { sourceBillTypeLabel, SourceBillDetailRoute, SettlementStatus, SettlementStatusLabel, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, MaterialOrderStatusLabel, MaterialOrderStatusTag, OrderTypeLabel } from '@/api/enums'
 
 const route = useRoute(); const router = useRouter()
 const supplierId = Number(route.params.id)
@@ -138,7 +138,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
         <div class="section-title" style="margin-top:12px">物料订单</div>
         <el-table :data="data.activeMaterialOrders" border stripe size="small" @row-click="(row: any) => router.push(`/outsource/material-order/detail/${row.id}`)">
           <el-table-column prop="code" label="单号" width="170" />
-          <el-table-column label="类型" width="80" align="center"><template #default="{row}">{{ row.orderType || '采购' }}</template></el-table-column>
+          <el-table-column label="类型" width="80" align="center"><template #default="{row}">{{ OrderTypeLabel[row.orderType] || '物料单' }}</template></el-table-column>
           <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
           <el-table-column label="交期" width="110" align="center"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
           <el-table-column label="操作" width="90" align="center"><template #default="{row}"><el-button type="primary" link size="small" @click.stop="router.push(`/outsource/material-order/detail/${row.id}`)">去处理</el-button></template></el-table-column>

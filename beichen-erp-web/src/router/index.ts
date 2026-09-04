@@ -255,6 +255,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/stock-take', name: 'InventoryStockTake', component: () => import('@/views/inventory/stock-take/index.vue'), meta: { title: '库存盘点', requiresAuth: true } },
       { path: 'inventory/warehouse-move', name: 'InventoryWarehouseMove', component: () => import('@/views/inventory/warehouse-move/index.vue'), meta: { title: '成品移仓单', requiresAuth: true } },
       { path: 'inventory/warehouse-move/add', name: 'InventoryWarehouseMoveAdd', component: () => import('@/views/inventory/warehouse-move/add.vue'), meta: { title: '新增移仓单', requiresAuth: true, operate: true } },
+      // 移仓单详情独立成页（与成品其他出入库一致，草稿态直接可编辑，列表不再有「编辑」）
+      { path: 'inventory/warehouse-move/detail/:id', name: 'InventoryWarehouseMoveDetail', component: () => import('@/views/inventory/warehouse-move/detail.vue'), meta: { title: '移仓单详细', requiresAuth: true, operate: true } },
       { path: 'inventory/material', redirect: '/product' },
       { path: 'inventory/customer', name: 'InventoryCustomer', component: () => import('@/views/customer/index.vue'), meta: { title: '客户管理', requiresAuth: true } },
       // 客户新增与详情共用同一表单页（详情内可直接编辑保存），title 区分
@@ -287,6 +289,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'finance/receivable', name: 'FinanceReceivable', component: () => import('@/views/finance/receivable.vue'), meta: { title: '应收管理', requiresAuth: true } },
       { path: 'finance/payable', name: 'FinancePayable', component: () => import('@/views/finance/payable.vue'), meta: { title: '应付管理', requiresAuth: true } },
       { path: 'finance/bill', name: 'FinanceBill', component: () => import('@/views/finance/bill.vue'), meta: { title: '账单生成', requiresAuth: true } },
+      // 账单详情独立成页（原为抽屉）
+      { path: 'finance/bill/detail/:id', name: 'FinanceBillDetail', component: () => import('@/views/finance/bill/detail.vue'), meta: { title: '账单详细', requiresAuth: true, operate: true } },
       { path: 'finance/cashflow', name: 'FinanceCashflow', component: () => import('@/views/finance/cashflow.vue'), meta: { title: '资金流水', requiresAuth: true } },
       { path: 'finance/account', name: 'FinanceAccount', component: () => import('@/views/finance/account.vue'), meta: { title: '资金账户', requiresAuth: true } },
       { path: 'finance/expense', name: 'FinanceExpense', component: () => import('@/views/finance/expense.vue'), meta: { title: '费用管理', requiresAuth: true } },

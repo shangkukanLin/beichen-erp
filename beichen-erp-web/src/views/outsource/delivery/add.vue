@@ -103,8 +103,8 @@ function handleFileSelect(e: Event) { const file = (e.target as HTMLInputElement
 function handleRemoveUploadFile() { uploadFile.value = null }
 
 async function handleSubmit() {
-  if (!form.factoryId) { ElMessage.warning(form.deliveryType === '调拨' ? '请选择来源工厂' : '请选择工厂'); return }
-  if (form.deliveryType === '调拨' && !form.supplierId) { ElMessage.warning('请选择目标工厂'); return }
+  if (!form.factoryId) { ElMessage.warning(form.deliveryType === DeliveryType.TRANSFER ? '请选择来源工厂' : '请选择工厂'); return }
+  if (form.deliveryType === DeliveryType.TRANSFER && !form.supplierId) { ElMessage.warning('请选择目标工厂'); return }
   if (form.deliveryType === DeliveryType.DELIVERY && !form.fromWarehouseId) { ElMessage.warning('请选择发出仓库'); return }
   if (form.deliveryType === DeliveryType.DELIVERY && !form.toWarehouseId) { ElMessage.warning('请选择目标仓库'); return }
   if (form.deliveryType !== DeliveryType.DELIVERY && !form.fromWarehouseId) { ElMessage.warning('请选择来源仓库'); return }

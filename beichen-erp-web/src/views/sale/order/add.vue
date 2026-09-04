@@ -44,7 +44,7 @@ const rules: FormRules = {
 
 // Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: '成品仓' } })
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: 'FINISHED' } })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 500, keyword: kw } })
 
 // 本地轻量列表：用于选择产品后回填规格/单位（组件内维护，不依赖全局 store）

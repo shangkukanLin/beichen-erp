@@ -4,13 +4,12 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { PhaseStatus, ProjectStatus, ProjectStatusLabel, ProjectStatusTag, DEV_PROJECT_DIRTY_KEY } from '@/api/enums'
 import {
-  getProjectPage, addProject, updateProject,
+  getProjectPage,
   getSupplierPage,
-  type ProjectVO, type ProjectDTO
+  type ProjectVO
 } from '@/api/system'
 import request from '@/utils/request'
 
-const STATUS_LIST = ['立项', '排线图纸', '排线打样', 'FOG打样', '显示调试', '触摸调试', '背贴盖板打样', '总成样品', '测试', '小批量', '结项']
 const today = new Date().toISOString().split('T')[0]
 const router = useRouter()
 
@@ -77,61 +76,14 @@ async function loadData() {
 function handleQuery() { loadData() }
 function handleReset() { query.name = ''; query.brandId = undefined; loadData() }
 
-// ===================== 方案公司下拉 =====================
-const solutionSuppliers = ref<{ id: number; name: string }[]>([])
-const factoryOptions = ref<{ id: number; name: string }[]>([])
-const fetchFactorySuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, supplierType: 'factory', name: kw } })
-async function loadSolutionSuppliers() {
-  try {
-    const res = await getSupplierPage({ supplierType: 'solution', pageSize: 200 })
-    solutionSuppliers.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name }))
-  } catch (e: any) { console.warn('加载方案商失败', e?.message || e) }
-}
-async function loadFactories() {
-  try {
-    const res = await request.get<any, any>('/supplier/page', { params: { supplierType: 'factory', pageSize: 200 } })
-    factoryOptions.value = (res?.records || []).map((s: any) => ({ id: s.id, name: s.name }))
-  } catch (e: any) { console.warn('加载工厂失败', e?.message || e) }
-}
-
 // ===================== 品牌下拉 =====================
 const brandOptions = ref<{ id: number; brandName: string }[]>([])
 async function loadBrandOptions() {
   try { brandOptions.value = (await request.get('/brand/enabled')) || [] } catch { /* 忽略 */ }
 }
 
-// ===================== 新增/编辑 =====================
-const dialogVisible = ref(false)
-const dialogTitle = ref('')
-const formRef = ref<FormInstance>()
-const submitLoading = ref(false)
-const defForm = (): ProjectDTO => ({
-  name: '', displaySupplierName: '', touchSupplierName: '',
-  assemblyName: '',
-  adaptModel: '',
-  originalSize: '', originalResolution: '', startDate: '', expectedEndDate: '', status: '立项', remark: '',
-  sampleFactoryId: undefined, outsourceFactoryId: undefined,
-  brandId: undefined
-})
-const form = reactive<ProjectDTO>(defForm())
-const isEdit = ref(false)
-const rules: FormRules = { name: [{ required: true, message: '请输入项目名称', trigger: 'blur' }], assemblyName: [{ required: true, message: '请输入总成名称', trigger: 'blur' }] }
-
 function handleAdd() { router.push('/dev/project/add') }
 function handleEdit(row: any) { if (row.id) router.push(`/dev/project/edit/${row.id}`) }
-
-async function handleSubmit() {
-  if (!formRef.value) return
-  await formRef.value.validate(async (valid: any) => {
-    if (!valid) return
-    submitLoading.value = true
-    try {
-      if (isEdit.value && form.id) { await updateProject(form); ElMessage.success('修改成功') }
-      else { await addProject(form); ElMessage.success('新增成功') }
-      dialogVisible.value = false; loadData()
-    } finally { submitLoading.value = false }
-  })
-}
 
 async function handleCancel(row: any) {
   try {
@@ -158,7 +110,7 @@ onActivated(() => {
     loadData()
   }
 })
-onMounted(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBrandOptions() })
+onMounted(() => { loadData(); loadBrandOptions() })
 
 </script>
 
@@ -283,33 +235,6 @@ onMounted(() => { loadData(); loadSolutionSuppliers(); loadFactories(); loadBran
         </el-table-column>
       </el-table>
     </el-card>
-
-    <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="660px" :close-on-click-modal="false" top="3vh">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <el-row :gutter="12">
-          <el-col :span="14"><el-form-item label="项目名称" prop="name"><el-input v-model="form.name" /></el-form-item></el-col>
-          <el-col :span="10"><el-form-item label="总成名称"><el-input v-model="form.assemblyName" /></el-form-item></el-col>
-          <el-col :span="14"><el-form-item label="状态"><el-select v-model="form.status" style="width:100%"><el-option v-for="s in STATUS_LIST" :key="s" :label="s" :value="s" /></el-select></el-form-item></el-col>
-          <el-col :span="10"></el-col>
-          <el-col :span="12"><el-form-item label="显示方案"><el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /></el-select></el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="触摸方案"><el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%"><el-option v-for="s in solutionSuppliers" :key="s.id" :label="s.name" :value="s.name" /></el-select></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="适配机型"><el-input v-model="form.adaptModel" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="原机尺寸"><el-input v-model="form.originalSize" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="原分辨率"><el-input v-model="form.originalResolution" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="打样工厂">
-            <RemoteSelect v-model="form.sampleFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" />
-          </el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="委外工厂">
-            <RemoteSelect v-model="form.outsourceFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" />
-          </el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="立项日期"><el-input v-model="form.startDate" type="date" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="预计完成"><el-input v-model="form.expectedEndDate" type="date" /></el-form-item></el-col>
-          <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
-        </el-row>
-      </el-form>
-      <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button></template>
-    </el-dialog>
 
   </div>
 </template>

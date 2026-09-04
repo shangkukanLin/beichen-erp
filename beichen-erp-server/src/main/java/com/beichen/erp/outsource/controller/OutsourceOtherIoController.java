@@ -222,7 +222,7 @@ public class OutsourceOtherIoController {
             }
             WarehouseStockLog logEntry = new WarehouseStockLog();
             logEntry.setWarehouseId(io.getWarehouseId()); logEntry.setMaterialId(matId);
-            logEntry.setMaterialName(getMaterialNameById(matId)); logEntry.setChangeType(type.getLabel());
+            logEntry.setMaterialName(getMaterialNameById(matId)); logEntry.setChangeType(type.getCode());
             logEntry.setChangeQuantity(delta); logEntry.setBeforeQuantity(before);
             logEntry.setAfterQuantity(after); logEntry.setRelatedOrderCode(io.getCode());
             logEntry.setRelatedBillNo(io.getCode()); logEntry.setRelatedBillType(RelatedBillType.OTHER_IO.getCode());
@@ -250,7 +250,7 @@ public class OutsourceOtherIoController {
             }
             WarehouseStockLog logEntry = new WarehouseStockLog();
             logEntry.setWarehouseId(io.getWarehouseId()); logEntry.setMaterialId(matId);
-            logEntry.setMaterialName(getMaterialNameById(matId)); logEntry.setChangeType(type.getLabel());
+            logEntry.setMaterialName(getMaterialNameById(matId)); logEntry.setChangeType(type.getCode());
             logEntry.setChangeQuantity(delta); logEntry.setBeforeQuantity(before);
             logEntry.setAfterQuantity(before.add(delta)); logEntry.setRelatedOrderCode(io.getCode());
             logEntry.setRelatedBillNo(io.getCode()); logEntry.setRelatedBillType(RelatedBillType.OTHER_IO.getCode());

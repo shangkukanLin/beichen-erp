@@ -2,7 +2,11 @@ package com.beichen.erp.supplier.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.outsource.common.DeliveryType;
+import com.beichen.erp.outsource.common.MaterialOrderStatus;
+import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.dev.entity.BomType;
 import com.beichen.erp.dev.mapper.BomTypeMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
@@ -45,7 +49,7 @@ public class SupplierMaterialSummaryServiceImpl implements SupplierMaterialSumma
                 "FROM outsource_order_material om " +
                 "INNER JOIN outsource_order_product op ON om.product_id = op.id " +
                 "INNER JOIN outsource_order o ON op.order_id = o.id " +
-                "WHERE o.factory_id = ? AND o.status = '生产中' " +
+                "WHERE o.factory_id = ? AND o.status = '" + OutsourceOrderStatus.PRODUCING.getCode() + "' " +
                 "GROUP BY om.outsource_material_id";
         List<Map<String, Object>> demandRows = jdbcTemplate.queryForList(demandSql, factoryId);
 
@@ -55,7 +59,7 @@ public class SupplierMaterialSummaryServiceImpl implements SupplierMaterialSumma
                 "FROM outsource_material_component mc " +
                 "INNER JOIN outsource_material_order_item moi ON moi.outsource_material_id = mc.parent_outsource_material_id " +
                 "INNER JOIN outsource_material_order mo ON moi.order_id = mo.id " +
-                "WHERE mo.supplier_id = ? AND mo.status IN ('待确认', '已确认', '收货中') " +
+                "WHERE mo.supplier_id = ? AND mo.status IN ('" + MaterialOrderStatus.PENDING.getCode() + "', '" + MaterialOrderStatus.RECEIVING.getCode() + "') " +
                 "GROUP BY mc.child_outsource_material_id";
         List<Map<String, Object>> compDemandRows = jdbcTemplate.queryForList(compDemandSql, factoryId);
 
@@ -77,8 +81,8 @@ public class SupplierMaterialSummaryServiceImpl implements SupplierMaterialSumma
                 "FROM outsource_delivery_item di " +
                 "INNER JOIN outsource_delivery d ON di.delivery_id = d.id " +
                 "INNER JOIN warehouse w ON d.to_warehouse_id = w.id " +
-                "WHERE w.factory_id = ? AND d.status = '已确认' " +
-                "AND (d.delivery_type IN ('发料', '收料') OR d.delivery_type IS NULL OR d.delivery_type = '') " +
+                "WHERE w.factory_id = ? AND d.status = '" + DocStatus.AUDITED.getCode() + "' " +
+                "AND (d.delivery_type IN ('" + DeliveryType.DELIVERY.getCode() + "', '" + DeliveryType.RECEIVE.getCode() + "') OR d.delivery_type IS NULL OR d.delivery_type = '') " +
                 "GROUP BY di.material_id";
         List<Map<String, Object>> deliveredRows = jdbcTemplate.queryForList(deliveredSql, factoryId);
         Map<Long, BigDecimal> deliveredMap = new LinkedHashMap<>();
@@ -106,7 +110,7 @@ public class SupplierMaterialSummaryServiceImpl implements SupplierMaterialSumma
                 "FROM outsource_order_material om " +
                 "INNER JOIN outsource_order_product op ON om.product_id = op.id " +
                 "INNER JOIN outsource_order o ON op.order_id = o.id " +
-                "WHERE o.factory_id = ? AND o.status = '生产中'";
+                "WHERE o.factory_id = ? AND o.status = '" + OutsourceOrderStatus.PRODUCING.getCode() + "'";
         List<Map<String, Object>> orderRows = jdbcTemplate.queryForList(orderSql, factoryId);
         String moOrderSql = "SELECT mc.child_outsource_material_id AS material_id, mo.code AS order_code, " +
                 "CONCAT(moi.material_name, ' ×', moi.order_quantity) AS product_name, " +
@@ -115,7 +119,7 @@ public class SupplierMaterialSummaryServiceImpl implements SupplierMaterialSumma
                 "INNER JOIN outsource_material_order_item moi ON moi.outsource_material_id = mc.parent_outsource_material_id " +
                 "INNER JOIN outsource_material_order mo ON moi.order_id = mo.id " +
                 "LEFT JOIN outsource_material cm ON mc.child_outsource_material_id = cm.id " +
-                "WHERE mo.supplier_id = ? AND mo.status IN ('待确认', '已确认', '收货中')";
+                "WHERE mo.supplier_id = ? AND mo.status IN ('" + MaterialOrderStatus.PENDING.getCode() + "', '" + MaterialOrderStatus.RECEIVING.getCode() + "')";
         orderRows.addAll(jdbcTemplate.queryForList(moOrderSql, factoryId));
         Map<Long, List<Map<String, Object>>> orderMap = new LinkedHashMap<>();
         for (Map<String, Object> row : orderRows) {

@@ -61,6 +61,12 @@ public enum StockChangeType {
     OUTSOURCE_DEFECT_RETURN("委外退不良"),
     /** 交货回滚：委外交货回滚，撤销入库操作 */
     OUTSOURCE_ROLLBACK("交货回滚"),
+    /** 交货扣料：委外交货收货时按 BOM 扣减子物料 */
+    OUTSOURCE_CONSUME("交货扣料"),
+    /** 取消交货扣料：委外交货反审核时恢复已扣减的子物料 */
+    CANCEL_OUTSOURCE_CONSUME("取消交货扣料"),
+    /** 委外退不良反审核：退不良反审核时扣回已还的物料 */
+    OUTSOURCE_DEFECT_RETURN_UN_AUDIT("委外退不良反审核"),
     /** 取消发料：收发单取消，恢复已发物料库存 */
     OUTSOURCE_CANCEL_DELIVERY("取消发料"),
     /** 编辑回滚-发料：编辑收发单后回滚已发物料 */
@@ -149,18 +155,12 @@ public enum StockChangeType {
     }
 
     /**
-     * 根据数据库存储的 code（枚举名）反向查找，兼容存量数据迁移。
-     * 如果找不到匹配的 code，则尝试用 label 匹配（兼容尚未迁移的中文旧数据）。
+     * 根据数据库存储的 code（枚举名）反向查找。
      */
     public static StockChangeType fromCode(String code) {
         if (code == null || code.isBlank()) return null;
-        // 优先按枚举名匹配
         for (StockChangeType t : values()) {
             if (t.name().equalsIgnoreCase(code)) return t;
-        }
-        // 回退按中文 label 匹配（兼容未迁移的存量数据）
-        for (StockChangeType t : values()) {
-            if (t.label.equals(code)) return t;
         }
         return null;
     }

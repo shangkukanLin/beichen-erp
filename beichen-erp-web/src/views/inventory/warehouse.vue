@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { WarehouseCategory, WarehouseType } from '@/api/enums'
+import { WarehouseCategory, WarehouseType, WarehouseTypeLabel } from '@/api/enums'
 import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -21,7 +21,8 @@ const query = reactive({ warehouseName: '', warehouseType: '' })
 const allData = ref<any[]>([])
 const activeTab = ref('active')
 const tableLoading = ref(false)
-const WARHOUSE_TYPES = ['成品仓', '不良仓', '售后仓']
+// 仓型下拉（value=code，与后端 WarehouseType 枚举一致）
+const WARHOUSE_TYPES: Record<string, string> = { FINISHED: '成品仓', DEFECT: '不良仓', AFTER_SALE: '售后仓' }
 const activeData = computed(() => allData.value.filter(v => v.status === 1))
 const stoppedData = computed(() => allData.value.filter(v => v.status === 0))
 
@@ -68,7 +69,7 @@ onMounted(() => { loadData(); loadTakeStatus() })
       <div class="query-bar">
       <el-form :inline="true" :model="query">
         <el-form-item label="名称"><el-input v-model="query.warehouseName" placeholder="仓库名称" clearable @keyup.enter="handleQuery" /></el-form-item>
-        <el-form-item label="仓型"><el-select v-model="query.warehouseType" placeholder="全部" clearable style="width:120px"><el-option v-for="t in WARHOUSE_TYPES" :key="t" :label="t" :value="t" /></el-select></el-form-item>
+        <el-form-item label="仓型"><el-select v-model="query.warehouseType" placeholder="全部" clearable style="width:120px"><el-option v-for="(lb, code) in WARHOUSE_TYPES" :key="code" :label="lb" :value="code" /></el-select></el-form-item>
         </el-form>
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
@@ -87,7 +88,7 @@ onMounted(() => { loadData(); loadTakeStatus() })
       <el-table v-if="activeTab==='active'" :data="activeData" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleDetail">
         <el-table-column prop="code" label="编码" width="160" />
         <el-table-column prop="warehouseName" label="名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="warehouseType" label="仓型" width="90" />
+        <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
         <el-table-column label="本月盘点" width="120" align="center">
           <template #default="{row}">
             <el-tag v-if="takeMap[row.id]?.taken" type="success" size="small">已盘点</el-tag>
@@ -111,7 +112,7 @@ onMounted(() => { loadData(); loadTakeStatus() })
       <el-table v-if="activeTab==='stopped'" :data="stoppedData" border stripe style="width:100%" @row-click="handleDetail">
         <el-table-column prop="code" label="编码" width="160" />
         <el-table-column prop="warehouseName" label="名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="warehouseType" label="仓型" width="90" />
+        <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="manager" label="负责人" width="80" />
         <el-table-column prop="phone" label="电话" width="120" />
@@ -124,7 +125,7 @@ onMounted(() => { loadData(); loadTakeStatus() })
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
       <el-form :model="form" label-width="80px">
         <el-form-item label="名称" required><el-input v-model="form.warehouseName" /></el-form-item>
-        <el-form-item label="仓型"><el-select v-model="form.warehouseType" style="width:100%"><el-option v-for="t in WARHOUSE_TYPES" :key="t" :label="t" :value="t" /></el-select></el-form-item>
+        <el-form-item label="仓型"><el-select v-model="form.warehouseType" style="width:100%"><el-option v-for="(lb, code) in WARHOUSE_TYPES" :key="code" :label="lb" :value="code" /></el-select></el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
         <el-form-item label="负责人"><el-input v-model="form.manager" /></el-form-item>
         <el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item>

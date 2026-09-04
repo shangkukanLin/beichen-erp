@@ -62,7 +62,6 @@ onMounted(() => { loadFlow(); loadAccounts() })
 
     <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="data" border stripe>
-        <el-table-column type="index" width="55" align="center"/>
         <el-table-column prop="flowNo" label="流水号" width="150"/>
         <el-table-column label="时间" width="170"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
         <el-table-column prop="accountName" label="账户" min-width="120"/>

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.R;
+import com.beichen.erp.finance.common.CashflowRelatedType;
 import com.beichen.erp.finance.common.CashflowType;
 import com.beichen.erp.finance.entity.FinanceAccount;
 import com.beichen.erp.finance.entity.FinanceCashflow;
@@ -122,7 +123,7 @@ public class FinanceCashflowController {
             cf.setAccountName(a.getAccountName());
             cf.setFlowType(CashflowType.OPENING.getCode());
             cf.setRelatedBillNo(a.getAccountNo());
-            cf.setRelatedBillType("期初余额");
+            cf.setRelatedBillType(CashflowRelatedType.OPENING.getCode());
             cf.setIncome(a.getOpeningBalance());
             cf.setExpense(BigDecimal.ZERO);
             cf.setRemark("期初余额");

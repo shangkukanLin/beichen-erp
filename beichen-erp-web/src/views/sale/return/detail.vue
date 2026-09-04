@@ -93,7 +93,7 @@ const route = useRoute()
 const router = useRouter()
 const acting = ref(false)
 // 仓库显示用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: '售后仓' } })
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: 'AFTER_SALE' } })
 const warehouses = ref<{ id: number; warehouseName?: string; name?: string }[]>([])
 async function loadWarehouses() { try { const r: any = await fetchWarehouses(''); warehouses.value = r?.records || [] } catch { warehouses.value = [] } }
 const items = ref<any[]>([])
