@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 /**
@@ -119,6 +120,159 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
             case "today":
             default:          return new LocalDate[]{today, today};
         }
+    }
+
+    // ==================== 首页经营总览 KPI（区间 4 指标 + 固定本年） ====================
+
+    /**
+     * 首页经营总览 KPI（2026-09-15 新增）：所选区间的 4 指标 + 固定「本年 1/1~今天」的同 4 指标。
+     * 8 张按天聚合表**只查一次**，两个区间在同一份数据上求和（口径与利润表 profitDetail 同源）。
+     */
+    @Override
+    public Map<String, Object> overviewKpi(String preset, String start, String end) {
+        // 区间：自定义 start/end 优先，否则按快捷预设解析；start > end 自动交换（与 profitDetail 同规则）
+        LocalDate s, e;
+        boolean custom = start != null && !start.isBlank() && end != null && !end.isBlank();
+        if (custom) {
+            s = LocalDate.parse(start);
+            e = LocalDate.parse(end);
+            if (s.isAfter(e)) { LocalDate t = s; s = e; e = t; }
+        } else {
+            LocalDate[] r = resolvePresetRange(preset);
+            s = r[0]; e = r[1];
+        }
+        // 防滥用：按天展开，最长 400 天（与 profitDetail 一致）
+        if (s.plusDays(400).isBefore(e)) s = e.minusDays(399);
+
+        Map<String, Map<String, BigDecimal>> dayMaps = kpiDayMaps();
+        LocalDate today = LocalDate.now();
+
+        Map<String, Object> range = new LinkedHashMap<>();
+        range.put("start", s.toString());
+        range.put("end", e.toString());
+        range.put("preset", custom ? "custom" : (preset == null ? "today" : preset));
+
+        // 趋势图区间（2026-09-15 用户确认）：默认与所选区间一致；**不足 7 天**（今日/昨日/短自定义）
+        // 时以结束日为终点向前补足 7 天，避免曲线只有 1 个点。注意卡片数值仍严格按所选区间（range）。
+        LocalDate seriesStart = ChronoUnit.DAYS.between(s, e) + 1 < 7 ? e.minusDays(6) : s;
+
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("range", range);
+        res.put("kpi", sumKpi(dayMaps, s, e));
+        res.put("year", sumKpi(dayMaps, today.withDayOfYear(1), today));
+        res.put("series", buildSeries(dayMaps, seriesStart, e));
+        return res;
+    }
+
+    /** 首页 KPI 所需的 8 张按天聚合表（key 含义见 sumKpi） */
+    private Map<String, Map<String, BigDecimal>> kpiDayMaps() {
+        Map<String, Map<String, BigDecimal>> m = new LinkedHashMap<>();
+        m.put("sale", toDayMap(analysisMapper.saleByDay()));
+        m.put("saleRet", toDayMap(analysisMapper.saleReturnByDay()));
+        m.put("loss", toDayMap(analysisMapper.saleReturnLossByDay()));
+        m.put("saleCost", toDayMap(analysisMapper.saleCostByDay()));
+        m.put("retCost", toDayMap(analysisMapper.saleReturnCostByDay()));
+        m.put("expense", toDayMap(analysisMapper.expenseByDay()));
+        m.put("purchase", toDayMap(analysisMapper.purchaseByDay()));
+        m.put("purchaseRet", toDayMap(analysisMapper.purchaseReturnByDay()));
+        return m;
+    }
+
+    /**
+     * 单日 4 指标（**区间汇总 sumKpi 与趋势序列 buildSeries 共用**，避免两处口径漂移）：
+     * 销售金额 = 销售单 − 销售退货 + 折损收款；采购支出 = 采购单 − 采购退货（采购入库属资产、不计入损益）；
+     * 费用支出 = 费用单；净利润 = 销售金额 − 销售成本 − 费用支出（销售成本 = 销售出库成本 − 退货冲回成本）。
+     */
+    private Map<String, BigDecimal> dayKpi(Map<String, Map<String, BigDecimal>> dm, LocalDate d) {
+        String k = d.toString();
+        BigDecimal sale = dm.get("sale").getOrDefault(k, ZERO)
+                .subtract(dm.get("saleRet").getOrDefault(k, ZERO))
+                .add(dm.get("loss").getOrDefault(k, ZERO));
+        BigDecimal cost = dm.get("saleCost").getOrDefault(k, ZERO).subtract(dm.get("retCost").getOrDefault(k, ZERO));
+        BigDecimal purchase = dm.get("purchase").getOrDefault(k, ZERO).subtract(dm.get("purchaseRet").getOrDefault(k, ZERO));
+        BigDecimal expense = dm.get("expense").getOrDefault(k, ZERO);
+        Map<String, BigDecimal> m = new LinkedHashMap<>();
+        m.put("saleAmount", sale);
+        m.put("purchaseSpend", purchase);
+        m.put("expenseSpend", expense);
+        m.put("netProfit", sale.subtract(cost).subtract(expense));
+        return m;
+    }
+
+    /**
+     * 区间 4 指标合计（卡片用；口径与利润表 profitDetail 完全一致）。
+     * 采购入库属资产、不计入损益 → 采购支出与净利润**互不相减**，仅并列展示。
+     */
+    private Map<String, Object> sumKpi(Map<String, Map<String, BigDecimal>> dm, LocalDate s, LocalDate e) {
+        BigDecimal sale = ZERO, purchase = ZERO, expense = ZERO, netProfit = ZERO;
+        for (LocalDate d = s; !d.isAfter(e); d = d.plusDays(1)) {
+            Map<String, BigDecimal> p = dayKpi(dm, d);
+            sale = sale.add(p.get("saleAmount"));
+            purchase = purchase.add(p.get("purchaseSpend"));
+            expense = expense.add(p.get("expenseSpend"));
+            netProfit = netProfit.add(p.get("netProfit"));
+        }
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("saleAmount", sale);
+        m.put("purchaseSpend", purchase);
+        m.put("expenseSpend", expense);
+        m.put("netProfit", netProfit);
+        return m;
+    }
+
+    /** 趋势粒度阈值（天）：区间 ≤ 该值按天，否则按月（2026-09-15 用户确认 62 天） */
+    private static final long SERIES_DAY_MAX = 62;
+
+    /**
+     * 趋势序列（2026-09-15 新增，供首页曲线图**随统计区间变化**）：与卡片同一批按天数据、同一口径。
+     * 粒度：区间 ≤ {@link #SERIES_DAY_MAX} 天 → 按天（label=yyyy-MM-dd）；否则 → 按月（label=yyyy-MM）。
+     */
+    private Map<String, Object> buildSeries(Map<String, Map<String, BigDecimal>> dm, LocalDate s, LocalDate e) {
+        boolean byMonth = ChronoUnit.DAYS.between(s, e) + 1 > SERIES_DAY_MAX;
+        List<Map<String, Object>> points = new ArrayList<>();
+        if (!byMonth) {
+            for (LocalDate d = s; !d.isAfter(e); d = d.plusDays(1)) {
+                Map<String, Object> pt = new LinkedHashMap<>();
+                pt.put("label", d.toString());
+                pt.putAll(dayKpi(dm, d));
+                points.add(pt);
+            }
+        } else {
+            String cur = null;
+            BigDecimal sale = ZERO, purchase = ZERO, expense = ZERO, netProfit = ZERO;
+            for (LocalDate d = s; !d.isAfter(e); d = d.plusDays(1)) {
+                String ym = d.toString().substring(0, 7);
+                if (cur != null && !ym.equals(cur)) {
+                    points.add(monthPoint(cur, sale, purchase, expense, netProfit));
+                    sale = ZERO; purchase = ZERO; expense = ZERO; netProfit = ZERO;
+                }
+                cur = ym;
+                Map<String, BigDecimal> p = dayKpi(dm, d);
+                sale = sale.add(p.get("saleAmount"));
+                purchase = purchase.add(p.get("purchaseSpend"));
+                expense = expense.add(p.get("expenseSpend"));
+                netProfit = netProfit.add(p.get("netProfit"));
+            }
+            if (cur != null) points.add(monthPoint(cur, sale, purchase, expense, netProfit));
+        }
+        Map<String, Object> series = new LinkedHashMap<>();
+        series.put("granularity", byMonth ? "month" : "day");
+        series.put("start", s.toString());
+        series.put("end", e.toString());
+        series.put("points", points);
+        return series;
+    }
+
+    /** 按月聚合的趋势点（label=yyyy-MM） */
+    private Map<String, Object> monthPoint(String ym, BigDecimal sale, BigDecimal purchase,
+                                           BigDecimal expense, BigDecimal netProfit) {
+        Map<String, Object> pt = new LinkedHashMap<>();
+        pt.put("label", ym);
+        pt.put("saleAmount", sale);
+        pt.put("purchaseSpend", purchase);
+        pt.put("expenseSpend", expense);
+        pt.put("netProfit", netProfit);
+        return pt;
     }
 
     @Override
@@ -401,23 +555,87 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         return res;
     }
 
-    @Override
-    public Map<String, Object> cashTrend(int months) {
-        List<String> ms = monthList(months);
-        Map<String, BigDecimal> income = new HashMap<>(), expense = new HashMap<>();
-        for (Map<String, Object> r : analysisMapper.cashflowByMonth()) {
-            Object ym = r.get("ym");
-            if (ym == null) continue;
-            income.put(ym.toString(), toBd(r.get("income")));
-            expense.put(ym.toString(), toBd(r.get("expense")));
+    /**
+     * 区间解析（2026-09-15）：start/end 自定义优先 → preset 快捷预设 → 都没有返回 null（调用方走 months 旧逻辑）。
+     * start &gt; end 自动交换；与 profitDetail / overviewKpi 同一套规则。
+     */
+    private LocalDate[] resolveRange(String preset, LocalDate start, LocalDate end) {
+        if (start != null && end != null) {
+            LocalDate s = start, e = end;
+            if (s.isAfter(e)) { LocalDate t = s; s = e; e = t; }
+            return new LocalDate[]{s, e};
         }
+        if (preset != null && !preset.isBlank()) return resolvePresetRange(preset);
+        return null;
+    }
+
+    /** 往趋势序列追加一个点（label + 收入 / 支出 / 净额） */
+    private void pushPoint(List<String> labels, List<BigDecimal> in, List<BigDecimal> out, List<BigDecimal> net,
+                           String label, BigDecimal income, BigDecimal expense) {
+        labels.add(label);
+        in.add(income);
+        out.add(expense);
+        net.add(income.subtract(expense));
+    }
+
+    /**
+     * 资金趋势（2026-09-15 起支持「统计区间」，供经营分析 → 资金与往来使用）。
+     * 区间模式粒度：≤62 天按天、否则按月（与首页趋势图同一规则，常量 {@link #SERIES_DAY_MAX}）；
+     * 若既无 start/end 也无 preset → 退回"近 N 月按月"（兼容旧调用）。
+     */
+    @Override
+    public Map<String, Object> cashTrend(String preset, int months, LocalDate start, LocalDate end) {
+        LocalDate[] r = resolveRange(preset, start, end);
+        List<String> labels = new ArrayList<>();
         List<BigDecimal> in = new ArrayList<>(), out = new ArrayList<>(), net = new ArrayList<>();
-        for (String ym : ms) {
-            BigDecimal i = income.getOrDefault(ym, ZERO), e = expense.getOrDefault(ym, ZERO);
-            in.add(i); out.add(e); net.add(i.subtract(e));
+        String granularity;
+        if (r == null) {
+            granularity = "month";
+            Map<String, BigDecimal> income = new HashMap<>(), expense = new HashMap<>();
+            for (Map<String, Object> x : analysisMapper.cashflowByMonth()) {
+                Object ym = x.get("ym");
+                if (ym == null) continue;
+                income.put(ym.toString(), toBd(x.get("income")));
+                expense.put(ym.toString(), toBd(x.get("expense")));
+            }
+            for (String ym : monthList(months)) {
+                pushPoint(labels, in, out, net, ym, income.getOrDefault(ym, ZERO), expense.getOrDefault(ym, ZERO));
+            }
+        } else {
+            LocalDate s = r[0], e = r[1];
+            // 防滥用：按天展开，最长 200 天
+            if (s.plusDays(200).isBefore(e)) s = e.minusDays(199);
+            Map<String, BigDecimal> income = new HashMap<>(), expense = new HashMap<>();
+            for (Map<String, Object> x : analysisMapper.cashflowByDay()) {
+                Object d = x.get("d");
+                if (d == null) continue;
+                income.put(d.toString(), toBd(x.get("income")));
+                expense.put(d.toString(), toBd(x.get("expense")));
+            }
+            boolean byMonth = ChronoUnit.DAYS.between(s, e) + 1 > SERIES_DAY_MAX;
+            granularity = byMonth ? "month" : "day";
+            if (byMonth) {
+                // 日 → 月 汇总：始终基于同一份按天数据，避免与按天口径分叉
+                Map<String, BigDecimal> mi = new LinkedHashMap<>(), me = new LinkedHashMap<>();
+                for (LocalDate d = s; !d.isAfter(e); d = d.plusDays(1)) {
+                    String ym = d.toString().substring(0, 7);
+                    mi.merge(ym, income.getOrDefault(d.toString(), ZERO), BigDecimal::add);
+                    me.merge(ym, expense.getOrDefault(d.toString(), ZERO), BigDecimal::add);
+                }
+                for (Map.Entry<String, BigDecimal> en : mi.entrySet()) {
+                    pushPoint(labels, in, out, net, en.getKey(), en.getValue(), me.getOrDefault(en.getKey(), ZERO));
+                }
+            } else {
+                for (LocalDate d = s; !d.isAfter(e); d = d.plusDays(1)) {
+                    String k = d.toString();
+                    pushPoint(labels, in, out, net, k, income.getOrDefault(k, ZERO), expense.getOrDefault(k, ZERO));
+                }
+            }
         }
         Map<String, Object> res = new LinkedHashMap<>();
-        res.put("months", ms);
+        res.put("labels", labels);
+        res.put("months", labels);          // 兼容旧字段名（历史调用方按 months 读标签）
+        res.put("granularity", granularity);
         res.put("income", in);
         res.put("expense", out);
         res.put("net", net);
@@ -436,8 +654,10 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
     }
 
     @Override
-    public Map<String, Object> tax(int months, LocalDate start, LocalDate end) {
-        List<String> ms = (start != null && end != null) ? monthRange(start, end) : monthList(months);
+    public Map<String, Object> tax(String preset, int months, LocalDate start, LocalDate end) {
+        // 税务天然按月统计：区间只决定"取哪些月"（自定义区间按整月计入），故与前端口径一致
+        LocalDate[] rg = resolveRange(preset, start, end);
+        List<String> ms = rg != null ? monthRange(rg[0], rg[1]) : monthList(months);
         // 月 × 业务 × 税状态 → 金额/税额（key: ym|biz|taxed）
         Map<String, BigDecimal> amt = new HashMap<>();
         Map<String, BigDecimal> tax = new HashMap<>();

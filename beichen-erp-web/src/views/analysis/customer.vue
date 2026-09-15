@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onActivated, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
+import StatRange from '@/components/StatRange.vue'
 
 /**
  * 客户分析（经营分析）：客户销售额排行 + 客户明细（含退货、应收余额、账期）。
@@ -40,8 +41,7 @@ async function loadData() {
   await nextTick()
   renderChart()
 }
-function onPresetChange() { range.value = null; if (preset.value !== 'custom') loadData() }
-function onRangeChange() { if (range.value?.length === 2) loadData() }
+// 预设切换/日期变更的"清空 + 触发"逻辑已收口到 StatRange 组件，页面只需 loadData
 
 function renderChart() {
   const el = document.getElementById('customerRankChart')
@@ -76,19 +76,8 @@ onActivated(() => { loadData() })
 <template>
   <div class="p" v-loading="loading">
     <div class="toolbar">
-      <span style="margin-right:8px">统计区间</span>
-      <el-radio-group v-model="preset" @change="onPresetChange">
-        <el-radio-button value="yesterday">昨日</el-radio-button>
-        <el-radio-button value="today">今日</el-radio-button>
-        <el-radio-button value="week">本周</el-radio-button>
-        <el-radio-button value="month">本月</el-radio-button>
-        <el-radio-button value="quarter">本季</el-radio-button>
-        <el-radio-button value="year">本年</el-radio-button>
-        <el-radio-button value="custom">自定义</el-radio-button>
-      </el-radio-group>
-      <el-date-picker v-if="preset === 'custom'" v-model="range" type="daterange" value-format="YYYY-MM-DD"
-        start-placeholder="开始日期" end-placeholder="结束日期" style="width:260px;margin-left:12px"
-        :clearable="false" @change="onRangeChange"/>
+      <!-- 统计区间：统一组件（2026-09-15 全站收口） -->
+      <StatRange v-model:preset="preset" v-model:range="range" @change="loadData"/>
     </div>
     <!-- KPI -->
     <div class="stat-grid">

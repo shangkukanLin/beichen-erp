@@ -1,29 +1,54 @@
 <template>
   <div class="dashboard">
     <el-tabs v-model="activeTab" type="border-card" @tab-change="onTabChange">
-      <!-- 经营总览（默认首页） -->
+      <!-- 备忘录（2026-09-15 用户要求：排在首位，并作为进首页的默认 TAB） -->
+      <el-tab-pane label="备忘录" name="memo">
+        <memo-panel />
+      </el-tab-pane>
+
+      <!-- 经营总览（财务区块按 AnalysisOverview 菜单权限显隐） -->
       <el-tab-pane label="经营总览" name="overview">
         <!-- 财务区块：仅「经营概览」（经营分析）菜单权限可见（数据安全） -->
         <!-- 2026-09-14 修死键：原 gate 用的 route_name「FinanceAnalysis」在最新菜单里**已不存在**
              （财务分析已拆成经营分析 AnalysisOverview/Profit/Cash/Tax/Sale/Customer），
              导致本区块（本月/本年 KPI + 趋势图）对**所有用户都不显示**；改用 AnalysisOverview。 -->
         <template v-if="hasMenu['AnalysisOverview']">
+          <!-- 统计区间：统一组件 StatRange（2026-09-15 全站收口，UI 与利润表一致；本页默认「今日」） -->
+          <div class="kpi-toolbar">
+            <StatRange v-model:preset="ovPreset" v-model:range="ovRange" @change="loadOverviewKpi" />
+            <span class="kpi-range" v-if="ovRangeText">{{ ovRangeText }}</span>
+          </div>
+          <!-- 第一排：所选区间的 4 个指标（悬停右侧问号可看计算公式） -->
           <div class="stat-grid">
             <div class="stat-card" v-for="k in kpiCards" :key="k.label">
               <div class="stat-value" :style="{ color: k.tone }">{{ k.value }}</div>
               <div class="stat-label">
-                {{ k.label }}
-                <span v-if="k.chg?.text" :class="'chg ' + k.chgCls">{{ k.chg.text }}</span>
+                <span>{{ k.label }}</span>
+                <el-tooltip placement="top" effect="dark" :show-after="100">
+                  <template #content><div class="kpi-formula">{{ k.formula }}</div></template>
+                  <el-icon class="kpi-help"><QuestionFilled /></el-icon>
+                </el-tooltip>
               </div>
             </div>
           </div>
+          <!-- 第二排：固定「本年累计」（不随上方区间变化） -->
           <div class="stat-grid">
             <div class="stat-card mini" v-for="y in ytdCards" :key="y.label">
               <div class="stat-value sm" :style="{ color: y.tone }">{{ y.value }}</div>
-              <div class="stat-label">{{ y.label }}</div>
+              <div class="stat-label">
+                <span>{{ y.label }}</span>
+                <el-tooltip placement="top" effect="dark" :show-after="100">
+                  <template #content><div class="kpi-formula">{{ y.formula }}</div></template>
+                  <el-icon class="kpi-help"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </div>
             </div>
           </div>
-          <div id="dashTrendChart" class="chart"/>
+          <div class="chart-wrap">
+            <div class="chart-caption" v-if="trendCaption">{{ trendCaption }}</div>
+            <div id="dashTrendChart" class="chart"/>
+            <div class="chart-empty" v-if="trendEmpty">该区间暂无数据</div>
+          </div>
         </template>
 
         <!-- 待办与预警（所有角色可见） -->
@@ -42,10 +67,6 @@
             </div>
           </div>
         </el-card>
-      </el-tab-pane>
-
-      <el-tab-pane label="备忘录" name="memo">
-        <memo-panel />
       </el-tab-pane>
 
       <el-tab-pane v-if="hasModule['dev']" label="项目研发" name="dev">
@@ -264,56 +285,17 @@
       </el-tab-pane>
 
       <el-tab-pane v-if="hasModule['sale']" label="销售业务" name="sale">
+        <!-- ============ 当日单据量（2026-09-15 用户要求：卡片改为「当日销售单/退单/换货单/退货整理单」，
+             并去掉"今天要处理"小标题与"超期应收"卡） ============ -->
         <div class="stat-grid">
-          <div class="stat-card clickable" @click="$router.push('/inventory/sale')">
-            <div class="stat-value" style="color:var(--app-color-primary)">{{ fmtN(saleMonthAmount) }}</div>
-            <div class="stat-label">本月销售额</div>
-          </div>
-          <div class="stat-card clickable" @click="$router.push('/inventory/sale')">
-            <div class="stat-value" style="color:var(--app-color-primary)">{{ saleMonthCount }}</div>
-            <div class="stat-label">本月销售单</div>
-          </div>
-          <div class="stat-card clickable" @click="$router.push('/inventory/sale')">
-            <div class="stat-value" style="color:var(--app-color-danger)">{{ salePending }}</div>
-            <div class="stat-label">待审核销售单</div>
-          </div>
-          <div class="stat-card clickable" @click="$router.push('/inventory/customer')">
-            <div class="stat-value" style="color:var(--app-color-success)">{{ customerTotal }}</div>
-            <div class="stat-label">客户</div>
+          <div class="stat-card clickable" v-for="t in saleTodayCards" :key="t.label" @click="$router.push(t.path)">
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ t.count }}</div>
+            <div class="stat-label">{{ t.label }}</div>
           </div>
         </div>
-        <!-- 当日销售构成（2026-09-14 由「当日销售单」表格改）：口径 = **单据日期**、**仅已审核**；
-             四饼图 = 产品(数量/金额) + 客户(数量/金额)；Top10 + "其他" 合并见 pieData() -->
-        <el-card shadow="never" class="section-card">
-          <template #header>
-            <span class="section-title">当日销售构成（按单据日期 {{ today }}）</span>
-            <!-- 图形类型切换（2026-09-14 用户要求）：四张图一起切换 -->
-            <span style="float:right">
-              <el-switch v-model="saleChartBar" size="small" active-text="柱状图" inactive-text="饼图"
-                         style="margin-right:14px" @change="renderSaleCharts"/>
-              <el-button size="small" text @click="$router.push('/inventory/sale')">查看更多 →</el-button>
-            </span>
-          </template>
-          <div v-if="salePie.summary && salePie.summary.orderCount" class="pie-grid">
-            <div>
-              <div class="pie-title">产品销售数量</div>
-              <div id="dashPieProdQty" class="chart pie-chart"/>
-            </div>
-            <div>
-              <div class="pie-title">产品销售金额</div>
-              <div id="dashPieProdAmt" class="chart pie-chart"/>
-            </div>
-            <div>
-              <div class="pie-title">客户销售数量</div>
-              <div id="dashPieCustQty" class="chart pie-chart"/>
-            </div>
-            <div>
-              <div class="pie-title">客户销售金额</div>
-              <div id="dashPieCustAmt" class="chart pie-chart"/>
-            </div>
-          </div>
-          <div v-else class="pie-empty">当日暂无已审核销售数据</div>
-        </el-card>
+
+        <!-- 2026-09-15 用户要求：原「出库情况提示行」也已删除（该行曾挂在"什么没做"卡内，后独立成行） -->
+
         <el-card shadow="never" class="section-card">
           <template #header><span class="section-title">本月客户销售 TOP5</span></template>
           <el-table :data="topCustomers" size="small" stripe>
@@ -330,11 +312,11 @@
         </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序 = 使用频率（2026-09-14）：销售单最高频；退货整理（售后仓待处理，菜单 707 属销售业务，原误挂库存 TAB）次之 -->
+          <!-- 顺序 = 使用频率（2026-09-15 用户要求改为：销售单 → 销售换货单 → 销售退单 → 退货整理 → 客户管理） -->
           <el-button v-if="hasMenu['InventorySale']" type="primary" size="small" text @click="$router.push('/inventory/sale')">销售单</el-button>
-          <el-button v-if="hasMenu['InventoryReturnSort']" type="primary" size="small" text @click="$router.push('/inventory/return-sort')">退货整理</el-button>
-          <el-button v-if="hasMenu['SaleReturn']" type="primary" size="small" text @click="$router.push('/sale/return')">销售退单</el-button>
           <el-button v-if="hasMenu['SaleExchange']" type="primary" size="small" text @click="$router.push('/sale/exchange')">销售换货单</el-button>
+          <el-button v-if="hasMenu['SaleReturn']" type="primary" size="small" text @click="$router.push('/sale/return')">销售退单</el-button>
+          <el-button v-if="hasMenu['InventoryReturnSort']" type="primary" size="small" text @click="$router.push('/inventory/return-sort')">退货整理</el-button>
           <el-button v-if="hasMenu['InventoryCustomer']" type="primary" size="small" text @click="$router.push('/inventory/customer')">客户管理</el-button>
         </div>
       </el-tab-pane>
@@ -467,6 +449,7 @@
 <script setup lang="ts">
 import { localDate, localMonth } from '@/utils/date'
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { QuestionFilled } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
@@ -475,10 +458,12 @@ import { ProjectStatus, PhaseStatus, OutsourceOrderStatus, OutsourceOrderStatusL
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { getDashboardPending, type DashboardPending } from '@/api/dashboard'
 import MemoPanel from '@/views/memo/index.vue'
+import StatRange from '@/components/StatRange.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
-const activeTab = ref('overview')
+// 2026-09-15 用户要求：「备忘录」置于 TAB 首位，并作为进首页时的默认选中项（原为「经营总览」）
+const activeTab = ref('memo')
 
 // ==================== 经营总览 ====================
 const finSummary = ref<any>({})
@@ -486,7 +471,12 @@ const pending = ref<DashboardPending>({})
 let trendChart: echarts.ECharts | null = null
 
 async function loadOverview() {
-  if (hasMenu.value['FinanceAnalysis']) {
+  // 经营总览 KPI（第一排区间 4 指标 + 第二排固定本年）：不 await，与其余数据并行加载
+  loadOverviewKpi()
+  // ⚠️ 2026-09-15 修死键：原为 hasMenu['FinanceAnalysis']，该 route_name 在最新菜单里**已不存在**
+  // （模板里的同一处 2026-09-14 已修为 AnalysisOverview，但**这里的取数判断漏了**）→ 导致
+  // finSummary 永远取不到数：「经营总览」趋势图空白、「财务」TAB 卡片恒为 0.00。现与模板 gate 保持一致。
+  if (hasMenu.value['AnalysisOverview']) {
     try { finSummary.value = await request.get<any, any>('/finance/analysis/summary') } catch { finSummary.value = {} }
   }
   try { pending.value = await getDashboardPending() } catch { pending.value = {} }
@@ -496,32 +486,94 @@ async function loadOverview() {
 async function loadPending() { try { pending.value = await getDashboardPending() } catch {} }
 
 function fmtN(v?: any) { return v == null ? '0.00' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
-function chg(cur: any, prev: any, goodDir: boolean) {
-  const c = Number(cur) || 0, p = Number(prev) || 0
-  if (p === 0) return { text: '', cls: '' }
-  const rate = Math.round(((c - p) / Math.abs(p)) * 1000) / 10
-  if (rate === 0) return { text: '持平', cls: 'dim' }
-  const up = rate > 0
-  return { text: (up ? '▲' : '▼') + Math.abs(rate) + '%', cls: (goodDir ? up : !up) ? 'good' : 'bad' }
+// ==================== 经营总览 KPI（2026-09-15 改造，用户确认口径） ====================
+// 第一排 = **所选区间**的 4 个指标（销售金额 / 采购支出 / 费用支出 / 净利润）；
+// 第二排 = **固定本年**（1/1 ~ 今天）的同一批指标。
+// 数据源：后端 /finance/analysis/overview-kpi（与「经营分析 → 利润表」同一批按天聚合，口径完全一致）。
+// 原「本月 vs 上月」的 ▲▼ 涨跌角标按用户要求去掉（区间可自定义后，"上一期"无统一定义）。
+const ovPreset = ref('today')            // 默认「今日」（用户确认）
+const ovRange = ref<[string, string] | null>(null)
+const ovData = ref<any>({ range: {}, kpi: {}, year: {} })
+const OV_RANGE_LABELS: Record<string, string> = {
+  yesterday: '昨日', today: '今日', week: '本周', month: '本月', quarter: '本季', year: '本年'
+}
+/** 卡片标题前缀：自定义区间 →「所选区间」，预设 → 其中文名 */
+const ovPrefix = computed(() =>
+  ovData.value.range?.preset === 'custom' ? '所选区间' : (OV_RANGE_LABELS[ovData.value.range?.preset] || ''))
+/** 实际生效的区间（含首尾），显示在区间选择器右侧便于核对 */
+const ovRangeText = computed(() => {
+  const r = ovData.value.range || {}
+  return r.start ? `${r.start} ~ ${r.end}` : ''
+})
+/** 曲线图占位标记：区间内无数据时显示"该区间暂无数据" */
+const trendEmpty = ref(false)
+/** 曲线图说明：起止 + 粒度；若后端把区间补足到 7 天则额外提示 */
+const trendCaption = computed(() => {
+  const s = ovData.value.series || {}
+  if (!s.start) return ''
+  const granular = s.granularity === 'month' ? '按月' : '按天'
+  const extended = s.start !== ovData.value.range?.start
+  return `趋势：${s.start} ~ ${s.end}（${granular}）` + (extended ? '，因区间不足 7 天已按 7 天显示' : '')
+})
+/** 悬停问号的公式说明：**口径变更时必须与后端注释同步修改** */
+const OV_FORMULA: Record<string, string> = {
+  sale: '销售金额 = 已审核销售单金额 − 销售退货金额 + 退货折损收款\n（销售按审核日、退货与折损按建单日归期）',
+  purchase: '采购支出 = 已审核采购单金额 − 采购退货金额\n（采购按审核日、退货按建单日归期）\n注：采购入库属资产、不计入损益，故与净利润不互减',
+  expense: '费用支出 = 已审核费用单金额（按费用日期归期）\n不含销售成本（销售成本已在净利润中扣减）',
+  profit: '净利润 = 销售金额 − 销售成本 − 费用支出\n销售成本 = 销售出库成本 − 退货冲回成本\n（净销售数量 × 产品当前移动加权成本价）',
+  noAuth: '无「进货业务」权限，不展示采购数据'
 }
 const kpiCards = computed(() => {
-  const cur = finSummary.value.cur || {}, prev = finSummary.value.prev || {}
+  const k = ovData.value.kpi || {}
+  const p = ovPrefix.value
+  const canPurchase = !!hasModule['purchase']   // 采购数据需「进货业务」权限（用户确认）
   return [
-    { label: '本月销售额', value: fmtN(cur.revenue), chg: chg(cur.revenue, prev.revenue, true), tone: 'var(--app-color-success)' },
-    { label: '本月毛利', value: fmtN(cur.grossProfit), chg: chg(cur.grossProfit, prev.grossProfit, true), tone: 'var(--app-color-primary)' },
-    { label: '本月净利润', value: fmtN(cur.netProfit), chg: chg(cur.netProfit, prev.netProfit, true), tone: Number(cur.netProfit) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)' },
-    { label: '本月净现金流', value: fmtN(finSummary.value.curCashNet), chg: chg(finSummary.value.curCashNet, finSummary.value.prevCashNet, true), tone: Number(finSummary.value.curCashNet) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)' },
-  ].map((k: any) => ({ ...k, chgCls: k.chg?.cls || '' }))
-})
-const ytdCards = computed(() => {
-  const y = finSummary.value.ytd || {}
-  return [
-    { label: '本年累计销售额', value: fmtN(y.revenue), tone: 'var(--app-color-success)' },
-    { label: '本年累计毛利', value: fmtN(y.grossProfit), tone: 'var(--app-color-primary)' },
-    { label: '本年累计费用', value: fmtN(y.expense), tone: 'var(--app-color-warning)' },
-    { label: '本年累计净利润', value: fmtN(y.netProfit), tone: Number(y.netProfit) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)' },
+    { label: `${p}销售金额`, value: fmtN(k.saleAmount), tone: 'var(--app-color-success)', formula: OV_FORMULA.sale },
+    {
+      label: `${p}采购支出`, value: canPurchase ? fmtN(k.purchaseSpend) : '-', tone: 'var(--app-color-warning)',
+      formula: canPurchase ? OV_FORMULA.purchase : OV_FORMULA.noAuth
+    },
+    { label: `${p}费用支出`, value: fmtN(k.expenseSpend), tone: 'var(--app-color-warning)', formula: OV_FORMULA.expense },
+    {
+      label: `${p}净利润`, value: fmtN(k.netProfit),
+      tone: Number(k.netProfit) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)',
+      formula: OV_FORMULA.profit
+    },
   ]
 })
+const ytdCards = computed(() => {
+  const y = ovData.value.year || {}
+  const canPurchase = !!hasModule['purchase']
+  const prefix = '本年 1 月 1 日 ~ 今天：'
+  return [
+    { label: '本年累计销售金额', value: fmtN(y.saleAmount), tone: 'var(--app-color-success)', formula: prefix + OV_FORMULA.sale },
+    {
+      label: '本年累计采购支出', value: canPurchase ? fmtN(y.purchaseSpend) : '-', tone: 'var(--app-color-warning)',
+      formula: canPurchase ? prefix + OV_FORMULA.purchase : OV_FORMULA.noAuth
+    },
+    { label: '本年累计费用支出', value: fmtN(y.expenseSpend), tone: 'var(--app-color-warning)', formula: prefix + OV_FORMULA.expense },
+    {
+      label: '本年累计净利润', value: fmtN(y.netProfit),
+      tone: Number(y.netProfit) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)',
+      formula: prefix + OV_FORMULA.profit
+    },
+  ]
+})
+async function loadOverviewKpi() {
+  if (!hasMenu.value['AnalysisOverview']) return
+  if (ovPreset.value === 'custom' && !(ovRange.value?.length === 2)) return
+  const params: any = { preset: ovPreset.value }
+  if (ovPreset.value === 'custom' && ovRange.value?.length === 2) {
+    params.start = ovRange.value[0]; params.end = ovRange.value[1]
+  }
+  try {
+    ovData.value = await request.get<any, any>('/finance/analysis/overview-kpi', { params })
+      || { range: {}, kpi: {}, year: {} }
+  } catch { ovData.value = { range: {}, kpi: {}, year: {} } }
+  // 曲线图随区间联动（延迟一帧等容器尺寸稳定，避免按 0 宽度布局）
+  if (activeTab.value === 'overview') setTimeout(renderTrend, 60)
+}
+// 预设切换/日期变更的"清空 + 触发"逻辑已收口到 StatRange 组件，页面只需 loadOverviewKpi
 
 // 待办与预警：卡片点击进入对应页面
 const todoItems = computed(() => {
@@ -552,117 +604,54 @@ const todoItems = computed(() => {
 })
 const pendingCount = computed(() => todoItems.value.length)
 
-/** 近 6 月经营趋势（echarts 单例；无数据时固定 y 轴上限避免文字重叠） */
+/**
+ * 趋势图（2026-09-15 改造）：**跟随上方统计区间**，4 条曲线与卡片口径完全一致
+ * （销售金额 / 采购支出 / 费用支出 / 净利润）。
+ * 粒度由后端决定：区间 ≤ 62 天按天、否则按月；且区间不足 7 天时后端按 7 天（含所选区间）返回。
+ * 无「进货业务」权限 → **不画采购曲线**（与卡片一致，避免越权看采购数据）。
+ */
 function renderTrend() {
   const el = document.getElementById('dashTrendChart')
   if (!el) return
-  const t = finSummary.value.trend || []
+  const s = ovData.value.series || {}
+  const pts: any[] = s.points || []
+  const byMonth = s.granularity === 'month'
+  const canPurchase = !!hasModule['purchase']
+  const labels = pts.map((p: any) => (byMonth ? p.label : String(p.label).slice(5)))
+  const num = (p: any, k: string) => Number(p[k]) || 0
+  const KEYS = ['saleAmount', 'purchaseSpend', 'expenseSpend', 'netProfit']
+  // 全为 0（或区间内根本没有数据）→ 不画空轴，改为"该区间暂无数据"占位
+  trendEmpty.value = pts.length === 0 || pts.every((p: any) => KEYS.every((k) => num(p, k) === 0))
   trendChart = trendChart || echarts.init(el)
-  const vals = t.flatMap((x: any) => [Number(x.revenue), Number(x.netProfit), Number(x.cashNet)])
+  if (trendEmpty.value) { trendChart.clear(); return }
+  const series: any[] = [
+    { name: '销售金额', type: 'bar', barMaxWidth: 28, itemStyle: { color: '#91cc75' }, data: pts.map((p: any) => num(p, 'saleAmount')) }
+  ]
+  if (canPurchase) {
+    series.push({ name: '采购支出', type: 'bar', barMaxWidth: 28, itemStyle: { color: '#e6a23c' }, data: pts.map((p: any) => num(p, 'purchaseSpend')) })
+  }
+  series.push({ name: '费用支出', type: 'line', smooth: true, itemStyle: { color: '#f56c6c' }, data: pts.map((p: any) => num(p, 'expenseSpend')) })
+  series.push({ name: '净利润', type: 'line', smooth: true, itemStyle: { color: '#5470c6' }, data: pts.map((p: any) => num(p, 'netProfit')) })
+  // ⚠️ setOption 第二参必须 true（notMerge）：区间/粒度切换时曲线条数与 X 轴都会变，否则残留旧系列
   trendChart.setOption({
     tooltip: { trigger: 'axis' },
-    grid: { left: 60, right: 20, top: 16, bottom: 24 },
-    xAxis: { type: 'category', data: t.map((x: any) => x.month) },
-    yAxis: { type: 'value', max: vals.some((v: number) => v !== 0) ? undefined : 100 },
-    series: [
-      { name: '销售额', type: 'bar', barMaxWidth: 28, itemStyle: { color: '#91cc75' }, data: t.map((x: any) => Number(x.revenue)) },
-      { name: '净利润', type: 'line', smooth: true, itemStyle: { color: '#5470c6' }, data: t.map((x: any) => Number(x.netProfit)) },
-      { name: '净现金流', type: 'line', smooth: true, itemStyle: { color: '#ee6666' }, data: t.map((x: any) => Number(x.cashNet)) },
-    ],
-  })
+    legend: { top: 0, itemWidth: 12, itemHeight: 8, textStyle: { fontSize: 12 } },
+    grid: { left: 60, right: 20, top: 30, bottom: 24 },
+    xAxis: { type: 'category', data: labels },
+    yAxis: { type: 'value' },
+    series,
+  }, true)
   trendChart.resize()
 }
 // Tab 切换后容器尺寸恢复再渲染，避免按 0 宽度布局
 function onTabChange() {
   nextTick(() => setTimeout(() => {
     renderTrend()
-    if (activeTab.value === 'sale') renderSaleCharts()
   }, 60))
 }
 
-/** 饼图数据：按度量降序取 Top10，其余合并为"其他"（扇区过多不可读） */
-function pieData(rows: any[], metric: string, nameKey: string) {
-  const sorted = [...(rows || [])].sort((a: any, b: any) => (Number(b[metric]) || 0) - (Number(a[metric]) || 0))
-  const data = sorted.slice(0, 10).map((r: any) => ({ name: r[nameKey] || '未命名', value: Number(r[metric]) || 0 }))
-  const rest = sorted.slice(10).reduce((s: number, r: any) => s + (Number(r[metric]) || 0), 0)
-  if (rest > 0) data.push({ name: '其他', value: rest })
-  return data.filter((d: any) => d.value > 0)
-}
-
-/**
- * 单个图表（饼图 / 横向柱状图，由 `saleChartBar` 切换）：单例 init + setOption + resize（与 renderTrend 同模式）。
- * **注意 `setOption(option, true)` 的第二个参数必须为 true（notMerge）**：切换图形类型时要整体替换配置，
- * 否则饼图的系列/图例会残留在柱状图上。
- */
-function drawChart(id: string, chart: echarts.ECharts | null, data: any[], unit: string) {
-  const el = document.getElementById(id)
-  if (!el) return chart
-  const c = chart || echarts.init(el)
-  if (!data.length) { c.clear(); c.resize(); return c }
-  const total = data.reduce((s: number, d: any) => s + (Number(d.value) || 0), 0)
-  const pctOf = (v: any) => (total > 0 ? ((Number(v) || 0) / total * 100).toFixed(1) : '0.0')
-  // 数值格式：数量按原值（整数不带 .00、最多两位小数），金额沿用 fmtN 的千分位两位小数
-  const fmtVal = (v: any) => (unit === '数量'
-    ? Number(v || 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
-    : fmtN(v))
-
-  // ① 横向柱状图：类目名在左侧、数值+占比标在条尾；升序排列 → 最大值显示在最上方
-  if (saleChartBar.value) {
-    const rows = [...data].sort((a: any, b: any) => (Number(a.value) || 0) - (Number(b.value) || 0))
-    c.setOption({
-      tooltip: {
-        trigger: 'axis', axisPointer: { type: 'shadow' },
-        formatter: (ps: any) => {
-          const p = Array.isArray(ps) ? ps[0] : ps
-          return `${p.name}<br/>${unit} ${fmtVal(p.value)}（${pctOf(p.value)}%）`
-        }
-      },
-      grid: { left: 4, right: 86, top: 8, bottom: 4, containLabel: true },
-      xAxis: { type: 'value', splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { fontSize: 10 } },
-      yAxis: { type: 'category', data: rows.map((d: any) => d.name), axisLabel: { fontSize: 11 }, axisTick: { show: false } },
-      series: [{
-        type: 'bar', barMaxWidth: 14,
-        itemStyle: { borderRadius: [0, 3, 3, 0] },
-        label: { show: true, position: 'right', fontSize: 11, color: '#606266',
-                 formatter: (p: any) => `${fmtVal(p.value)}  ${pctOf(p.value)}%` },
-        data: rows.map((d: any) => ({ name: d.name, value: Number(d.value) || 0 }))
-      }]
-    }, true)
-    c.resize()
-    return c
-  }
-
-  // ② 环形饼图：外侧引出引导线并标注「名称 + 百分比」
-  c.setOption({
-    tooltip: {
-      trigger: 'item',
-      formatter: (p: any) => `${p.name}<br/>${unit} ${fmtVal(p.value)}（${p.percent}%）`
-    },
-    legend: { type: 'scroll', bottom: 0, itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11 } },
-    series: [{
-      // 半径收窄，给外侧标签留出空间
-      type: 'pie', radius: ['38%', '56%'], center: ['50%', '44%'],
-      avoidLabelOverlap: true,
-      percentPrecision: 1,
-      label: { show: true, formatter: '{b} {d}%', fontSize: 11, color: '#606266' },
-      labelLine: { show: true, length: 8, length2: 8, lineStyle: { color: '#c0c4cc' } },
-      // 扇区多时自动隐藏重叠标签（避免 11 个产品标签互相压字）
-      labelLayout: { hideOverlap: true },
-      data
-    }]
-  }, true)
-  c.resize()
-  return c
-}
-
-/** 当日销售构成四图：产品(数量/金额) + 客户(数量/金额)；图形类型由 saleChartBar 决定 */
-function renderSaleCharts() {
-  const s = salePie.value || {}
-  chProdQty = drawChart('dashPieProdQty', chProdQty, pieData(s.byProduct, 'quantity', 'productName'), '数量')
-  chProdAmt = drawChart('dashPieProdAmt', chProdAmt, pieData(s.byProduct, 'amount', 'productName'), '金额')
-  chCustQty = drawChart('dashPieCustQty', chCustQty, pieData(s.byCustomer, 'quantity', 'customerName'), '数量')
-  chCustAmt = drawChart('dashPieCustAmt', chCustAmt, pieData(s.byCustomer, 'amount', 'customerName'), '金额')
-}
+// 2026-09-15 用户要求：删除「当日销售构成」四图（原 pieData / drawChart / renderSaleCharts 及 4 个图表实例），
+// 该区块口径（单据日期）与页面其它卡片（审核日）不同源，易误读；销售 TAB 改为"待办 + 业绩 + 停滞"结构。
 
 // 根据用户菜单权限判断可见模块
 const hasMenu = ref<Record<string, boolean>>({})
@@ -726,17 +715,21 @@ const purchaseReturnMonthAmount = ref(0)
 const purchasePending = ref(0)
 const recentPurchases = ref<any[]>([])
 const pendingPurchaseReturns = ref<any[]>([])
-const saleMonthAmount = ref(0)
-const saleMonthCount = ref(0)
-const salePending = ref(0)
-/** 当日销售构成（按**单据日期**、**仅已审核**）：{ summary, byProduct[], byCustomer[] } */
-const salePie = ref<any>({ summary: {}, byProduct: [], byCustomer: [] })
-/** 卡片右上角 switch：false=饼图（默认）/ true=柱状图（横向条形）—— 2026-09-14 用户要求，四张图一起切换 */
-const saleChartBar = ref(false)
-let chProdQty: echarts.ECharts | null = null
-let chProdAmt: echarts.ECharts | null = null
-let chCustQty: echarts.ECharts | null = null
-let chCustAmt: echarts.ECharts | null = null
+/** 销售工作台（2026-09-15 改版）：只有「当日单据量」4 项（用户明确不要业绩区/沉默客户卡/超期应收卡/出库情况行） */
+const saleWork = ref<any>({ todos: {} })
+/**
+ * 当日单据量卡（2026-09-15 用户口径：业务日期=今天、排除已作废；点击进对应列表）
+ * ⚠️ 这不是"待办"而是"当日业务量"，故不再显示"去处理/已清空"提示。
+ */
+const saleTodayCards = computed(() => {
+  const t = saleWork.value.todos || {}
+  return [
+    { label: '当日销售单', count: Number(t.saleOrderToday) || 0, path: '/inventory/sale' },
+    { label: '当日销售退单', count: Number(t.saleReturnToday) || 0, path: '/sale/return' },
+    { label: '当日销售换货单', count: Number(t.saleExchangeToday) || 0, path: '/sale/exchange' },
+    { label: '当日退货整理单', count: Number(t.returnSortToday) || 0, path: '/inventory/return-sort' },
+  ]
+})
 const topCustomers = ref<any[]>([])
 const stockTotalQty = ref(0)
 const stockTotalValue = ref(0)
@@ -806,8 +799,8 @@ function checkUserMenus() {
     '/inventory/warehouse': paths.has('/inventory/warehouse')
   }
 
-  // 默认激活「经营总览」（进来先看全貌；财务区块按 AnalysisOverview 权限显隐）
-  activeTab.value = 'overview'
+  // 默认激活「备忘录」（2026-09-15 用户要求，原为「经营总览」；财务区块仍按 AnalysisOverview 权限显隐）
+  activeTab.value = 'memo'
 }
 
 async function loadStats() {
@@ -895,27 +888,19 @@ async function loadStats() {
   } catch { /* ignore */}
   try {
     if (hasModule.sale) {
-      const [saleRes, cusRes, custAnRes, draftRes, pieRes] = await Promise.all([
+      const [saleRes, cusRes, custAnRes, workRes] = await Promise.all([
         // 销售单总数：只取 total（pageSize=1，不再拉 200 条明细）
         request.get<any, any>('/inventory/sale/page', { params: { pageSize: 1 } }).catch(() => ({})),
         request.get<any, any>('/inventory/customer/page', { params: { pageSize: 200 } }).catch(() => ({})),
-        // 本月口径（销售额/单数 + 客户 TOP5）：服务端整月聚合（preset=month = 本月 1 日~今天），
-        // 不再从"最近 200 张销售单"里筛 —— 月单量超 200 时会少算（2026-09-14 修正）
+        // 本月客户 TOP5：服务端整月聚合（preset=month = 本月 1 日~今天），不再从"最近 200 张销售单"里筛
         request.get<any, any>('/customer/analysis', { params: { preset: 'month' } }).catch(() => ({})),
-        // 待审核数：服务端 status=DRAFT 计数（pageSize=1 只取 total），**不受 200 条子集限制**
-        request.get<any, any>('/inventory/sale/page', { params: { status: 'DRAFT', pageSize: 1 } }).catch(() => ({})),
-        // 当日销售构成（饼图用）：新增端点，按**单据日期**统计当日**已审核**单的产品/客户（数量 + 金额）
-        request.get<any, any>('/sale/analysis/by-doc-date', { params: { date: today } }).catch(() => ({})),
+        // 销售工作台（2026-09-15）：**当日单据量** 4 项（销售单/退单/换货单/退货整理单）
+        // ——原先"待审核销售单"要单独发一次分页请求，现由该接口一并返回
+        request.get<any, any>('/dashboard/sale-workbench').catch(() => ({})),
       ])
       const mSum: any = custAnRes?.summary || {}
-      saleMonthAmount.value = Number(mSum.totalAmount) || 0
-      saleMonthCount.value = Number(mSum.orderCount) || 0
-      // 待审核销售单：服务端 DRAFT 计数（原先从 200 条子集统计，单量超 200 会静默少算）
-      salePending.value = Number(draftRes?.total) || 0
-      // 当日销售构成饼图（用户确认口径：**单据日期** + **仅已审核**）：
-      // ⚠️ 与上方「本月销售额/单数/客户 TOP5」（服务端按**审核日**聚合）**不同源**，数字不必然可比。
-      salePie.value = pieRes && pieRes.summary ? pieRes : { summary: {}, byProduct: [], byCustomer: [] }
-      if (activeTab.value === 'sale') setTimeout(renderSaleCharts, 60)
+      // 销售工作台数据（服务端一次聚合；口径见 DashboardService.saleWorkbench 注释）
+      saleWork.value = workRes && workRes.todos ? workRes : { todos: {} }
       // 本月客户销售 TOP5（2026-09-14 由「本年」改，用户确认口径）：
       // 口径 = **本月**（1 日~今天）已审核销售单金额；数据取服务端 top（已按金额降序，**不受 200 条上限**影响）；
       // 金额用 amount = **未扣退货**的销售额（与同页其它卡片一致）；占比分母 = 本月销售额合计
@@ -1030,13 +1015,23 @@ onMounted(async () => {
 .section-title { font-weight: 600; font-size: var(--app-font-base); }
 
 /* 经营总览 */
+/* KPI 区间选择器（2026-09-15；选择器本体已收口到公共组件 StatRange） */
+.kpi-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.kpi-range { font-size: var(--app-font-sm); color: var(--app-text-secondary); }
+/* 悬停问号：鼠标移上去显示计算公式 */
+.kpi-help { margin-left: 4px; font-size: 13px; color: var(--app-text-secondary); vertical-align: -2px; cursor: help; }
+.kpi-help:hover { color: var(--app-color-primary); }
 .stat-card.mini { padding: 12px 16px; }
 .stat-value.sm { font-size: 16px; font-weight: 700; }
 .chart { width: 100%; height: 220px; margin-bottom: 16px; }
-.chg { margin-left: 6px; font-weight: 600; }
-.chg.good { color: var(--app-color-success); }
-.chg.bad { color: var(--app-color-danger); }
-.chg.dim { color: var(--app-text-secondary); }
+/* 曲线图容器：说明文字 + 无数据占位（2026-09-15） */
+.chart-wrap { position: relative; }
+.chart-caption { font-size: var(--app-font-sm); color: var(--app-text-secondary); margin-bottom: 6px; }
+.chart-empty {
+  position: absolute; left: 0; right: 0; top: 30px; bottom: 24px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--app-text-secondary); font-size: var(--app-font-sm); pointer-events: none;
+}
 .todo-grid { display: flex; gap: 12px; flex-wrap: wrap; }
 .todo-card {
   min-width: 150px; max-width: 200px; flex: 1;
@@ -1048,16 +1043,18 @@ onMounted(async () => {
 .todo-label { font-size: var(--app-font-sm); color: var(--app-text-secondary); margin-top: 4px; }
 .todo-sub { font-size: 12px; color: var(--app-text-secondary); margin-top: 2px; }
 
-/* 当日销售构成饼图（2026-09-14）：2×2 网格；必须写在 .chart 之后才能覆盖其 height/margin */
-.pie-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
-.pie-title { font-size: var(--app-font-sm); color: var(--app-text-secondary); text-align: center; margin-bottom: 2px; }
-.pie-chart { height: 300px; margin-bottom: 8px; }
-.pie-empty { color: var(--app-text-secondary); font-size: var(--app-font-sm); text-align: center; padding: 28px 0; }
+/* 销售工作台（2026-09-15 改版）：当日单据量 4 卡 */
+
+/* 2026-09-15：原「出库情况提示行」已按用户要求删除，相关 .warn-line 样式一并清理 */
 
 /* 窄屏（≤768px）：快捷入口按钮会折成 2–3 行（委外加工 tab 有 11 个），固定底栏会长期占掉大片屏幕，
-   故回退为"随内容滚动"（与改动前一致）。若要窄屏也固定，删掉这一条即可；饼图改为单列堆叠。 */
+   故回退为"随内容滚动"（与改动前一致）。若要窄屏也固定，删掉这一条即可。 */
 @media (max-width: 768px) {
   .quick-links { position: static; }
-  .pie-grid { grid-template-columns: 1fr; }
 }
+</style>
+
+<style>
+/* KPI 悬停公式说明（2026-09-15）：el-tooltip 的内容渲染在 body 下，scoped 样式盖不到，必须写成全局 */
+.kpi-formula { max-width: 320px; line-height: 1.7; white-space: pre-line; }
 </style>

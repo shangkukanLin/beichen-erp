@@ -4,6 +4,7 @@ import { ref, computed, onMounted, onActivated, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as XLSX from 'xlsx'
 import request from '@/utils/request'
+import StatRange from '@/components/StatRange.vue'
 
 /**
  * 利润表（经营分析）：按天展示收入 / 支出 / 利润三列（成本并入支出）。
@@ -31,8 +32,7 @@ async function loadProfitDetail() {
       || { start: '', end: '', summary: {}, rows: [] }
   } catch { pd.value = { start: '', end: '', summary: {}, rows: [] } } finally { loading.value = false }
 }
-function onPresetChange() { profitRange.value = null; if (preset.value !== 'custom') loadProfitDetail() }
-function onRangeChange() { if (profitRange.value?.length === 2) loadProfitDetail() }
+// 预设切换/日期变更的"清空 + 触发"逻辑已收口到 StatRange 组件，页面只需 loadProfitDetail
 
 // 按天行较多（本年最多 400 行），前端分页；切区间回第 1 页
 const page = ref(1)
@@ -77,19 +77,8 @@ onActivated(() => { loadProfitDetail() })
 <template>
   <div class="p">
     <div class="toolbar">
-      <span style="margin-right:8px">统计区间</span>
-      <el-radio-group v-model="preset" @change="onPresetChange">
-        <el-radio-button value="yesterday">昨日</el-radio-button>
-        <el-radio-button value="today">今日</el-radio-button>
-        <el-radio-button value="week">本周</el-radio-button>
-        <el-radio-button value="month">本月</el-radio-button>
-        <el-radio-button value="quarter">本季</el-radio-button>
-        <el-radio-button value="year">本年</el-radio-button>
-        <el-radio-button value="custom">自定义</el-radio-button>
-      </el-radio-group>
-      <el-date-picker v-if="preset === 'custom'" v-model="profitRange" type="daterange" value-format="YYYY-MM-DD"
-        start-placeholder="开始日期" end-placeholder="结束日期" style="width:260px;margin-left:12px"
-        :clearable="false" @change="onRangeChange"/>
+      <!-- 统计区间：统一组件（2026-09-15 全站收口，本页为基准） -->
+      <StatRange v-model:preset="preset" v-model:range="profitRange" @change="loadProfitDetail"/>
       <el-button type="primary" plain size="small" style="margin-left:12px" @click="exportProfit">导出 Excel</el-button>
     </div>
     <!-- 总计卡：区间合计（成本并入支出） -->

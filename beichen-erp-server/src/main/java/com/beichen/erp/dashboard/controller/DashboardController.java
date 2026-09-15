@@ -25,4 +25,10 @@ public class DashboardController {
     public R<Map<String, Object>> pending() {
         return R.ok(service.pending());
     }
+
+    /** 销售工作台（首页「销售业务」TAB，2026-09-15 新增）：待办数 + 沉默客户 + 业绩（今日/昨日/本月/上月） */
+    @GetMapping("/sale-workbench")
+    public R<Map<String, Object>> saleWorkbench() {
+        return R.ok(service.saleWorkbench());
+    }
 }

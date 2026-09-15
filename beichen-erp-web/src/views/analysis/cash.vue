@@ -3,10 +3,14 @@ import { ref, onMounted, onActivated, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
 import { accountTypeLabel } from '@/api/enums'
+import StatRange from '@/components/StatRange.vue'
 
 /** 资金与往来（经营分析）：资金收支趋势 + 账户余额 + 应收应付账龄 + 主体往来统计 */
 const loading = ref(false)
-const months = ref(12)
+// 统计区间（2026-09-15 统一组件）：作用于「资金收支趋势」图（≤62 天按天、否则按月）；
+// 下方账龄 / 主体往来 / 账户余额是**时点快照**，与所选区间无关。
+const preset = ref('year')
+const range = ref<[string, string] | null>(null)
 const cash = ref<any>({ months: [], income: [], expense: [], net: [], accounts: [] })
 const aging = ref<any>({})
 const subject = ref<any>({})
@@ -24,7 +28,8 @@ function renderCashChart() {
     tooltip: { trigger: 'axis' },
     legend: { data: ['资金收入', '资金支出', '净现金流'], top: 0 },
     grid: { left: 60, right: 20, top: 44, bottom: 30 },
-    xAxis: { type: 'category', data: cash.value.months || [] },
+    // labels 由后端按区间给出（按天 yyyy-MM-dd / 按月 yyyy-MM）；兼容旧字段 months
+    xAxis: { type: 'category', data: cash.value.labels || cash.value.months || [] },
     yAxis: { type: 'value', max: cHas ? undefined : 100 },
     series: [
       { name: '资金收入', type: 'bar', data: (cash.value.income || []).map(Number) },
@@ -36,10 +41,15 @@ function renderCashChart() {
 }
 
 async function loadData() {
+  if (preset.value === 'custom' && !(range.value?.length === 2)) return
   loading.value = true
   try {
+    const params: any = { preset: preset.value }
+    if (preset.value === 'custom' && range.value?.length === 2) {
+      params.start = range.value[0]; params.end = range.value[1]
+    }
     const [c, a, sub] = await Promise.all([
-      request.get<any, any>('/finance/analysis/cash-trend', { params: { months: months.value } }),
+      request.get<any, any>('/finance/analysis/cash-trend', { params }),
       request.get<any, any>('/finance/analysis/aging'),
       request.get<any, any>('/finance/analysis/subject'),
     ])
@@ -59,6 +69,10 @@ onActivated(() => { loadData() })
 </script>
 <template>
   <div class="p" v-loading="loading">
+    <!-- 统计区间：统一组件 StatRange（2026-09-15 全站收口；仅作用于上方资金收支趋势图） -->
+    <div style="margin-bottom:12px">
+      <StatRange v-model:preset="preset" v-model:range="range" @change="loadData"/>
+    </div>
     <div id="cashChart" class="chart"/>
     <el-table :data="cash.accounts" border stripe size="small" style="margin-top:12px">
       <el-table-column prop="name" label="账户名称" min-width="140"/>

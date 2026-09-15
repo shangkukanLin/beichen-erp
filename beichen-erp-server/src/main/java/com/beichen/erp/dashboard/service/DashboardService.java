@@ -78,6 +78,42 @@ public class DashboardService {
         return res;
     }
 
+    // ==================== 销售工作台（首页「销售业务」TAB，2026-09-15 新增） ====================
+
+    /**
+     * 销售工作台（2026-09-15 用户口径）：**当日单据量** 4 项。纯只读聚合。
+     * 「当日」= 各单据的**业务日期列**等于今天（sale_order.order_date / sale_return.return_date /
+     * sale_exchange.exchange_date / return_sort.sort_date），**排除已作废**；草稿与已审核都计（当天开了单）。
+     * 按用户要求：不做业绩数字、不做沉默客户卡、不做超期应收/售后仓超期卡、**不做出库情况提示**。
+     */
+    public Map<String, Object> saleWorkbench() {
+        Long cid = CompanyContext.get();
+        Map<String, Object> res = new LinkedHashMap<>();
+
+        Map<String, Object> todos = new LinkedHashMap<>();
+        todos.put("saleOrderToday", countToday("sale_order", "order_date", cid));
+        todos.put("saleReturnToday", countToday("sale_return", "return_date", cid));
+        todos.put("saleExchangeToday", countToday("sale_exchange", "exchange_date", cid));
+        todos.put("returnSortToday", countToday("return_sort", "sort_date", cid));
+        res.put("todos", todos);
+        return res;
+    }
+
+    /** 当日单据量：业务日期列 = 今天，排除已作废（表名/列名由调用方给定，均为代码常量，非外部输入） */
+    private long countToday(String table, String dateCol, Long cid) {
+        try {
+            StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM ").append(table)
+                    .append(" WHERE ").append(dateCol).append(" = CURDATE() AND status <> 'CANCELLED'");
+            List<Object> args = new ArrayList<>();
+            if (cid != null && cid > 0) { sql.append(" AND company_id = ?"); args.add(cid); }
+            Long n = jdbcTemplate.queryForObject(sql.toString(), Long.class, args.toArray());
+            return n == null ? 0 : n;
+        } catch (Exception e) {
+            // 表/列不存在（旧库）时不影响首页
+            return 0;
+        }
+    }
+
     // ==================== 私有统计 ====================
 
     private long count(String table, String status, Long cid) {

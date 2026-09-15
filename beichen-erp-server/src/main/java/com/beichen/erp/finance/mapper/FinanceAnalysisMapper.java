@@ -171,6 +171,10 @@ public interface FinanceAnalysisMapper {
     @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, IFNULL(SUM(income), 0) AS income, IFNULL(SUM(expense), 0) AS expense FROM finance_cashflow GROUP BY ym")
     List<Map<String, Object>> cashflowByMonth();
 
+    /** 资金收支（按流水时间归日；2026-09-15 新增：资金趋势支持「统计区间」后，短区间需按天展示） */
+    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, IFNULL(SUM(income), 0) AS income, IFNULL(SUM(expense), 0) AS expense FROM finance_cashflow GROUP BY d")
+    List<Map<String, Object>> cashflowByDay();
+
     /** 应收账龄分桶（未结清部分；none=无到期日） */
     @Select("SELECT CASE WHEN due_date IS NULL THEN 'none' WHEN due_date >= CURDATE() THEN 'not_due' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 'd30' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) THEN 'd60' ELSE 'd60p' END AS bucket, IFNULL(SUM(unpaid_amount), 0) AS amt, COUNT(*) AS cnt FROM finance_receivable WHERE status IN ('UNSETTLED', 'PARTIAL') GROUP BY bucket")
     List<Map<String, Object>> receivableAging();

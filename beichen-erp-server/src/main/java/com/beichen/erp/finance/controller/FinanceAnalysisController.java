@@ -57,6 +57,23 @@ public class FinanceAnalysisController {
         return R.ok(service.profitDetail(preset, start, end));
     }
 
+    /**
+     * 首页经营总览 KPI（2026-09-15 新增，供首页「经营总览」第一/第二排卡片使用）：
+     * 快捷区间或自定义日期，返回所选区间的 4 指标 + 固定「本年 1/1~今天」的同 4 指标。
+     */
+    @GetMapping("/overview-kpi")
+    public R<Map<String, Object>> overviewKpi(@RequestParam(defaultValue = "today") String preset,
+            @RequestParam(required = false) String start,
+            @RequestParam(required = false) String end) {
+        try {
+            if (start != null && !start.isBlank()) LocalDate.parse(start);
+            if (end != null && !end.isBlank()) LocalDate.parse(end);
+        } catch (Exception ex) {
+            return R.fail("日期格式无效，应为 yyyy-MM-dd");
+        }
+        return R.ok(service.overviewKpi(preset, start, end));
+    }
+
     /** 利润明细钻取：某一天的每一条单据记录（销售/退货/折损/采购/费用，口径与 profit-detail 一致） */
     @GetMapping("/profit-detail/records")
     public R<Map<String, Object>> profitDetailRecords(@RequestParam String date) {
@@ -68,10 +85,23 @@ public class FinanceAnalysisController {
         return R.ok(service.profitDetailRecords(date));
     }
 
-    /** 资金趋势与账户余额分布 */
+    /**
+     * 资金趋势与账户余额分布（2026-09-15 起支持「统计区间」）：
+     * preset 快捷预设（today/yesterday/week/month/quarter/year）或 start/end 自定义（优先）；都没有时按 months 取近 N 月。
+     */
     @GetMapping("/cash-trend")
-    public R<Map<String, Object>> cashTrend(@RequestParam(defaultValue = "12") int months) {
-        return R.ok(service.cashTrend(months));
+    public R<Map<String, Object>> cashTrend(@RequestParam(defaultValue = "12") int months,
+            @RequestParam(required = false) String preset,
+            @RequestParam(required = false) String start,
+            @RequestParam(required = false) String end) {
+        LocalDate s = null, e = null;
+        try {
+            if (start != null && !start.isBlank()) s = LocalDate.parse(start);
+            if (end != null && !end.isBlank()) e = LocalDate.parse(end);
+        } catch (Exception ex) {
+            return R.fail("日期格式无效，应为 yyyy-MM-dd");
+        }
+        return R.ok(service.cashTrend(preset, months, s, e));
     }
 
     /** 应收应付账龄 + 回款/付款率 + TOP 往来单位 */
@@ -86,9 +116,10 @@ public class FinanceAnalysisController {
         return R.ok(service.subject());
     }
 
-    /** 税务分析：已税/未税按月比例与金额（months 快捷模式默认 12，start/end 自定义区间优先生效） */
+    /** 税务分析：已税/未税按月比例与金额（preset 快捷预设 / start-end 自定义；都没有时按 months 近 N 月） */
     @GetMapping("/tax")
     public R<Map<String, Object>> tax(@RequestParam(defaultValue = "12") int months,
+            @RequestParam(required = false) String preset,
             @RequestParam(required = false) String start,
             @RequestParam(required = false) String end) {
         LocalDate s = null, e = null;
@@ -98,6 +129,6 @@ public class FinanceAnalysisController {
         } catch (Exception ex) {
             return R.fail("日期格式无效，应为 yyyy-MM-dd");
         }
-        return R.ok(service.tax(months, s, e));
+        return R.ok(service.tax(preset, months, s, e));
     }
 }

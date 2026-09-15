@@ -4,11 +4,13 @@ import { ref, computed, onMounted, onActivated, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import * as XLSX from 'xlsx'
 import request from '@/utils/request'
+import StatRange from '@/components/StatRange.vue'
 
 /** 税务分析（经营分析）：发票汇总 + 已税/未税趋势 + 按月明细 + 导出 */
 const loading = ref(false)
-const months = ref(12)
-const dateRange = ref<[string, string] | null>(null)
+// 统计区间（2026-09-15 统一组件）：税务天然按月统计，故只提供 本月/本季/本年/自定义，默认「本年」
+const preset = ref('year')
+const range = ref<[string, string] | null>(null)
 const tax = ref<any>({ months: [], rows: [], summary: {} })
 let taxChart: echarts.ECharts | null = null
 
@@ -64,11 +66,13 @@ function renderTaxChart() {
 }
 
 async function loadData() {
+  if (preset.value === 'custom' && !(range.value?.length === 2)) return
   loading.value = true
   try {
-    const params: any = dateRange.value?.length === 2
-      ? { start: dateRange.value[0], end: dateRange.value[1] }
-      : { months: months.value }
+    const params: any = { preset: preset.value }
+    if (preset.value === 'custom' && range.value?.length === 2) {
+      params.start = range.value[0]; params.end = range.value[1]
+    }
     tax.value = await request.get<any, any>('/finance/analysis/tax', { params }) || { months: [], rows: [], summary: {} }
   } catch { tax.value = { months: [], rows: [], summary: {} } } finally { loading.value = false }
   await nextTick()
@@ -108,6 +112,11 @@ onActivated(() => { loadData() })
 </script>
 <template>
   <div class="p" v-loading="loading">
+    <!-- 统计区间：统一组件 StatRange（2026-09-15 全站收口；税务按月，故只给 本月/本季/本年/自定义） -->
+    <div style="margin-bottom:12px">
+      <StatRange v-model:preset="preset" v-model:range="range"
+        :presets="['month','quarter','year','custom']" @change="loadData"/>
+    </div>
     <!-- 发票汇总 -->
     <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px">
       <div class="stat-card mini">
