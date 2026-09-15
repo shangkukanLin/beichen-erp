@@ -145,3 +145,23 @@ ol {
   }
 }
 
+/* ===================== KPI「悬停问号」公式说明（2026-09-15） ===================== */
+/* 使用方：首页「经营总览」dashboard/index.vue、经营分析「经营概览」analysis/overview.vue。
+   放在全局样式里，避免"只在某个页面 chunk 加载后才生效"导致另一页 tooltip 无样式。 */
+.kpi-help {
+  margin-left: 4px;
+  font-size: 13px;
+  color: var(--app-text-secondary);
+  vertical-align: -2px;
+  cursor: help;
+}
+.kpi-help:hover {
+  color: var(--app-color-primary);
+}
+/* el-tooltip 的内容渲染在 body 下，页面 scoped 样式盖不到 → 必须全局 */
+.kpi-formula {
+  max-width: 320px;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+

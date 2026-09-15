@@ -450,6 +450,8 @@
 import { localDate, localMonth } from '@/utils/date'
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
+// KPI 公式文案公共模块（2026-09-15）：与「经营分析 → 经营概览」共用一份，口径改动只需改这一处
+import { KPI_FORMULA, YEAR_PREFIX, marginPct, fmtPct } from '@/utils/kpiFormula'
 import * as echarts from 'echarts'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
@@ -515,47 +517,51 @@ const trendCaption = computed(() => {
   const extended = s.start !== ovData.value.range?.start
   return `趋势：${s.start} ~ ${s.end}（${granular}）` + (extended ? '，因区间不足 7 天已按 7 天显示' : '')
 })
-/** 悬停问号的公式说明：**口径变更时必须与后端注释同步修改** */
-const OV_FORMULA: Record<string, string> = {
-  sale: '销售金额 = 已审核销售单金额 − 销售退货金额 + 退货折损收款\n（销售按审核日、退货与折损按建单日归期）',
-  purchase: '采购支出 = 已审核采购单金额 − 采购退货金额\n（采购按审核日、退货按建单日归期）\n注：采购入库属资产、不计入损益，故与净利润不互减',
-  expense: '费用支出 = 已审核费用单金额（按费用日期归期）\n不含销售成本（销售成本已在净利润中扣减）',
-  profit: '净利润 = 销售金额 − 销售成本 − 费用支出\n销售成本 = 销售出库成本 − 退货冲回成本\n（净销售数量 × 产品当前移动加权成本价）',
-  noAuth: '无「进货业务」权限，不展示采购数据'
-}
+// 悬停问号的公式文案已抽到公共模块 src/utils/kpiFormula.ts（2026-09-15，与「经营分析 → 经营概览」共用一份）
 const kpiCards = computed(() => {
   const k = ovData.value.kpi || {}
   const p = ovPrefix.value
   const canPurchase = !!hasModule['purchase']   // 采购数据需「进货业务」权限（用户确认）
   return [
-    { label: `${p}销售金额`, value: fmtN(k.saleAmount), tone: 'var(--app-color-success)', formula: OV_FORMULA.sale },
+    { label: `${p}销售金额`, value: fmtN(k.saleAmount), tone: 'var(--app-color-success)', formula: KPI_FORMULA.sale },
     {
       label: `${p}采购支出`, value: canPurchase ? fmtN(k.purchaseSpend) : '-', tone: 'var(--app-color-warning)',
-      formula: canPurchase ? OV_FORMULA.purchase : OV_FORMULA.noAuth
+      formula: canPurchase ? KPI_FORMULA.purchase : KPI_FORMULA.noAuth
     },
-    { label: `${p}费用支出`, value: fmtN(k.expenseSpend), tone: 'var(--app-color-warning)', formula: OV_FORMULA.expense },
+    { label: `${p}费用支出`, value: fmtN(k.expenseSpend), tone: 'var(--app-color-warning)', formula: KPI_FORMULA.expense },
     {
       label: `${p}净利润`, value: fmtN(k.netProfit),
       tone: Number(k.netProfit) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)',
-      formula: OV_FORMULA.profit
+      formula: KPI_FORMULA.profit
+    },
+    // 净利率（2026-09-15 用户要求新增，与「经营分析 → 经营概览」口径一致；销售金额为 0 显示 "-"）
+    {
+      label: `${p}净利率`, value: fmtPct(marginPct(k.netProfit, k.saleAmount)),
+      tone: Number(k.netProfit) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)',
+      formula: KPI_FORMULA.margin
     },
   ]
 })
 const ytdCards = computed(() => {
   const y = ovData.value.year || {}
   const canPurchase = !!hasModule['purchase']
-  const prefix = '本年 1 月 1 日 ~ 今天：'
+  const prefix = YEAR_PREFIX
   return [
-    { label: '本年累计销售金额', value: fmtN(y.saleAmount), tone: 'var(--app-color-success)', formula: prefix + OV_FORMULA.sale },
+    { label: '本年累计销售金额', value: fmtN(y.saleAmount), tone: 'var(--app-color-success)', formula: prefix + KPI_FORMULA.sale },
     {
       label: '本年累计采购支出', value: canPurchase ? fmtN(y.purchaseSpend) : '-', tone: 'var(--app-color-warning)',
-      formula: canPurchase ? prefix + OV_FORMULA.purchase : OV_FORMULA.noAuth
+      formula: canPurchase ? prefix + KPI_FORMULA.purchase : KPI_FORMULA.noAuth
     },
-    { label: '本年累计费用支出', value: fmtN(y.expenseSpend), tone: 'var(--app-color-warning)', formula: prefix + OV_FORMULA.expense },
+    { label: '本年累计费用支出', value: fmtN(y.expenseSpend), tone: 'var(--app-color-warning)', formula: prefix + KPI_FORMULA.expense },
     {
       label: '本年累计净利润', value: fmtN(y.netProfit),
       tone: Number(y.netProfit) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)',
-      formula: prefix + OV_FORMULA.profit
+      formula: prefix + KPI_FORMULA.profit
+    },
+    {
+      label: '本年累计净利率', value: fmtPct(marginPct(y.netProfit, y.saleAmount)),
+      tone: Number(y.netProfit) >= 0 ? 'var(--app-color-success)' : 'var(--app-color-danger)',
+      formula: prefix + KPI_FORMULA.margin
     },
   ]
 })
@@ -605,10 +611,11 @@ const todoItems = computed(() => {
 const pendingCount = computed(() => todoItems.value.length)
 
 /**
- * 趋势图（2026-09-15 改造）：**跟随上方统计区间**，4 条曲线与卡片口径完全一致
- * （销售金额 / 采购支出 / 费用支出 / 净利润）。
+ * 趋势图（2026-09-15 改造）：**跟随上方统计区间**，曲线与卡片口径完全一致
+ * （销售金额 / 采购支出 / 费用支出 / 净利润 + **净利率**）。
  * 粒度由后端决定：区间 ≤ 62 天按天、否则按月；且区间不足 7 天时后端按 7 天（含所选区间）返回。
  * 无「进货业务」权限 → **不画采购曲线**（与卡片一致，避免越权看采购数据）。
+ * 净利率是百分比、与金额量纲不同 → **单独挂右侧 Y 轴**（yAxisIndex:1）。
  */
 function renderTrend() {
   const el = document.getElementById('dashTrendChart')
@@ -632,13 +639,39 @@ function renderTrend() {
   }
   series.push({ name: '费用支出', type: 'line', smooth: true, itemStyle: { color: '#f56c6c' }, data: pts.map((p: any) => num(p, 'expenseSpend')) })
   series.push({ name: '净利润', type: 'line', smooth: true, itemStyle: { color: '#5470c6' }, data: pts.map((p: any) => num(p, 'netProfit')) })
+  // 净利率（2026-09-15 用户要求新增）：挂右侧独立 Y 轴；该点销售金额为 0 → null（折线断开，避免误导性的 0%）
+  series.push({
+    name: '净利率', type: 'line', smooth: true, yAxisIndex: 1, connectNulls: false,
+    itemStyle: { color: '#fac858' },
+    data: pts.map((p: any) => {
+      const sale = num(p, 'saleAmount')
+      return sale === 0 ? null : Number(((num(p, 'netProfit') / sale) * 100).toFixed(2))
+    })
+  })
+  const money = (v: any) => (v == null ? '-' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
   // ⚠️ setOption 第二参必须 true（notMerge）：区间/粒度切换时曲线条数与 X 轴都会变，否则残留旧系列
   trendChart.setOption({
-    tooltip: { trigger: 'axis' },
+    // 两条 Y 轴量纲不同 → tooltip 自定格式化（净利率带 %、金额千分位）
+    tooltip: {
+      trigger: 'axis',
+      formatter: (ps: any) => {
+        const arr = Array.isArray(ps) ? ps : [ps]
+        let html = arr[0]?.axisValueLabel ?? arr[0]?.name ?? ''
+        arr.forEach((it: any) => {
+          const isPct = it.seriesName === '净利率'
+          const v = it.value == null ? '-' : (isPct ? it.value + '%' : money(it.value))
+          html += '<br/>' + it.marker + it.seriesName + '：' + v
+        })
+        return html
+      }
+    },
     legend: { top: 0, itemWidth: 12, itemHeight: 8, textStyle: { fontSize: 12 } },
-    grid: { left: 60, right: 20, top: 30, bottom: 24 },
+    grid: { left: 60, right: 56, top: 30, bottom: 24 },
     xAxis: { type: 'category', data: labels },
-    yAxis: { type: 'value' },
+    yAxis: [
+      { type: 'value', name: '金额' },
+      { type: 'value', name: '净利率', axisLabel: { formatter: '{value}%' }, splitLine: { show: false } }
+    ],
     series,
   }, true)
   trendChart.resize()
@@ -1018,9 +1051,8 @@ onMounted(async () => {
 /* KPI 区间选择器（2026-09-15；选择器本体已收口到公共组件 StatRange） */
 .kpi-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
 .kpi-range { font-size: var(--app-font-sm); color: var(--app-text-secondary); }
-/* 悬停问号：鼠标移上去显示计算公式 */
-.kpi-help { margin-left: 4px; font-size: 13px; color: var(--app-text-secondary); vertical-align: -2px; cursor: help; }
-.kpi-help:hover { color: var(--app-color-primary); }
+/* 悬停问号 .kpi-help 与 tooltip 内容 .kpi-formula 已提到全局样式 src/styles/index.css（2026-09-15）
+   —— 原因：经营分析「经营概览」页也要用，写在某个页面的 style 里会出现"页面各自加载才生效"的样式缺失。 */
 .stat-card.mini { padding: 12px 16px; }
 .stat-value.sm { font-size: 16px; font-weight: 700; }
 .chart { width: 100%; height: 220px; margin-bottom: 16px; }
@@ -1052,9 +1084,4 @@ onMounted(async () => {
 @media (max-width: 768px) {
   .quick-links { position: static; }
 }
-</style>
-
-<style>
-/* KPI 悬停公式说明（2026-09-15）：el-tooltip 的内容渲染在 body 下，scoped 样式盖不到，必须写成全局 */
-.kpi-formula { max-width: 320px; line-height: 1.7; white-space: pre-line; }
 </style>
