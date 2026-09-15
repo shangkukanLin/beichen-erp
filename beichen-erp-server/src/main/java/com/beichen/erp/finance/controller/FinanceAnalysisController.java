@@ -43,20 +43,6 @@ public class FinanceAnalysisController {
         return R.ok(service.profit(months, s, e));
     }
 
-    /** 利润表明细（按天）：快捷区间或自定义日期，返回总计与按天行 */
-    @GetMapping("/profit-detail")
-    public R<Map<String, Object>> profitDetail(@RequestParam(defaultValue = "today") String preset,
-            @RequestParam(required = false) String start,
-            @RequestParam(required = false) String end) {
-        try {
-            if (start != null && !start.isBlank()) LocalDate.parse(start);
-            if (end != null && !end.isBlank()) LocalDate.parse(end);
-        } catch (Exception ex) {
-            return R.fail("日期格式无效，应为 yyyy-MM-dd");
-        }
-        return R.ok(service.profitDetail(preset, start, end));
-    }
-
     /**
      * 首页经营总览 KPI（2026-09-15 新增，供首页「经营总览」第一/第二排卡片使用）：
      * 快捷区间或自定义日期，返回所选区间的 4 指标 + 固定「本年 1/1~今天」的同 4 指标。
@@ -72,17 +58,6 @@ public class FinanceAnalysisController {
             return R.fail("日期格式无效，应为 yyyy-MM-dd");
         }
         return R.ok(service.overviewKpi(preset, start, end));
-    }
-
-    /** 利润明细钻取：某一天的每一条单据记录（销售/退货/折损/采购/费用，口径与 profit-detail 一致） */
-    @GetMapping("/profit-detail/records")
-    public R<Map<String, Object>> profitDetailRecords(@RequestParam String date) {
-        try {
-            LocalDate.parse(date);
-        } catch (Exception ex) {
-            return R.fail("日期格式无效，应为 yyyy-MM-dd");
-        }
-        return R.ok(service.profitDetailRecords(date));
     }
 
     /**

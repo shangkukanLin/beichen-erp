@@ -747,20 +747,7 @@ export const LossReasonLabel: Record<string, string> = {
   [LossReason.OTHER]: '其他'
 }
 
-/** 利润明细行类型（后端 FinanceAnalysisServiceImpl.rec 的 bizType；原由后端回中文 label） */
-export const BizType = {
-  SALE: 'SALE', LOSS_INCOME: 'LOSS_INCOME', SALE_RETURN: 'SALE_RETURN',
-  SALE_COST: 'SALE_COST', SALE_RETURN_COST: 'SALE_RETURN_COST', EXPENSE: 'EXPENSE'
-} as const
-
-export const BizTypeLabel: Record<string, string> = {
-  [BizType.SALE]: '销售单',
-  [BizType.LOSS_INCOME]: '退货折损收款',
-  [BizType.SALE_RETURN]: '销售退货',
-  [BizType.SALE_COST]: '销售出库成本',
-  [BizType.SALE_RETURN_COST]: '退货冲回成本',
-  [BizType.EXPENSE]: '费用'
-}
+/* 2026-09-15：BizType / BizTypeLabel 已随「经营分析 → 利润表」下线一并删除（仅该页明细钻取使用） */
 
 export const INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY = 'inventoryWarehouseMoveListDirty'
 export const INVENTORY_RECLASSIFY_DIRTY_KEY = 'inventoryReclassifyListDirty'

@@ -304,9 +304,6 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/sale/detail/:id', name: 'SaleOrderDetail', component: () => import('@/views/sale/order/detail.vue'), meta: { title: '销售单详情', requiresAuth: true, operate: true } },
       // 经营分析（目录置于首页之下）：原「财务分析」拆分 + 销售分析 / 客户分析
       { path: 'analysis/overview', name: 'AnalysisOverview', component: () => import('@/views/analysis/overview.vue'), meta: { title: '经营概览', requiresAuth: true } },
-      { path: 'analysis/profit', name: 'AnalysisProfit', component: () => import('@/views/analysis/profit.vue'), meta: { title: '利润表', requiresAuth: true } },
-      // 利润明细钻取：利润表行「详细」→ 该天每一条单据记录
-      { path: 'analysis/profit/detail/:date', name: 'AnalysisProfitDetail', component: () => import('@/views/analysis/profit/detail.vue'), meta: { title: '利润明细', requiresAuth: true, operate: true } },
       { path: 'analysis/cash', name: 'AnalysisCash', component: () => import('@/views/analysis/cash.vue'), meta: { title: '资金与往来', requiresAuth: true } },
       { path: 'analysis/tax', name: 'AnalysisTax', component: () => import('@/views/analysis/tax.vue'), meta: { title: '税务分析', requiresAuth: true } },
       { path: 'analysis/sale', name: 'AnalysisSale', component: () => import('@/views/analysis/sale.vue'), meta: { title: '销售分析', requiresAuth: true } },

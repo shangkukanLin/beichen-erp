@@ -3,7 +3,8 @@ package com.beichen.erp.finance.service;
 import java.time.LocalDate;
 import java.util.Map;
 
-/** 财务分析 Service：经营概览 / 利润表 / 资金趋势 / 应收应付账龄。 */
+/** 财务分析 Service：经营概览 KPI / 资金趋势 / 应收应付账龄 / 主体往来 / 税务分析。
+ * （2026-09-15：「利润表」页面已下线，按月聚合方法 profit() 仍保留，供 summary() 计算本月/本年/趋势。） */
 public interface FinanceAnalysisService {
     Map<String, Object> summary();
 
@@ -24,14 +25,8 @@ public interface FinanceAnalysisService {
     Map<String, Object> aging();
 
     /**
-     * 利润表明细（按天）：快捷区间（today/yesterday/week/month/quarter/year）或自定义日期区间。
-     * 返回 start/end、summary（收入/成本/支出/利润合计）与按天的 rows。
-     */
-    Map<String, Object> profitDetail(String preset, String start, String end);
-
-    /**
      * 首页经营总览 KPI：所选区间的 4 个指标 + 固定「本年」的同 4 个指标。
-     * 指标口径（与利润表 profitDetail 完全一致）：销售金额 = 销售单 − 销售退货 + 折损收款；
+     * 指标口径（与利润表口径一致）：销售金额 = 销售单 − 销售退货 + 折损收款；
      * 采购支出 = 已审核采购单 − 采购退货（采购入库属资产、不计入损益）；费用支出 = 费用单；
      * 净利润 = 销售金额 − 销售成本 − 费用支出。
      * @param preset 快捷区间（today/yesterday/week/month/quarter/year），start/end 非空时优先生效
@@ -39,12 +34,6 @@ public interface FinanceAnalysisService {
      * @param end    自定义区间结束日期（含）
      */
     Map<String, Object> overviewKpi(String preset, String start, String end);
-
-    /**
-     * 利润明细钻取：某一天的每一条单据记录（销售/退货/折损/采购/采购退货/费用，口径与 profitDetail 一致）。
-     * @param date 归期日期 yyyy-MM-dd
-     */
-    Map<String, Object> profitDetailRecords(String date);
 
     /**
      * 主体往来统计：供应商应付（按主体类型）、供应商应收未收（应付转应收）、报损损失。

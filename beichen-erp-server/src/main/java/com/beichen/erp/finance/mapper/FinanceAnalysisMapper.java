@@ -81,48 +81,6 @@ public interface FinanceAnalysisMapper {
     @Select("SELECT DATE_FORMAT(expense_date, '%Y-%m-%d') AS d, IFNULL(SUM(amount), 0) AS amt FROM finance_expense WHERE status = 'AUDITED' GROUP BY d")
     List<Map<String, Object>> expenseByDay();
 
-    // ==================== 利润明细钻取（某一天的每条单据，口径与上方聚合完全一致） ====================
-    // 同样全量拉取、Java 侧按归期日 d 过滤：不把日期参数放进 SQL（此前 BETWEEN 参数绑定实测取不到数据）
-    // 注意：sale_order/sale_return/purchase_order/purchase_return 均不落库往来单位名称，需 JOIN 主数据取 name
-
-    // 均含 id：明细页的单号要点击进入对应单据详情，需要主键路由参数
-
-    /** 销售单明细（d=审核日，audit_time 为 NULL 时 create_time 兜底；partner=客户名称） */
-    @Select("SELECT o.id, o.code, DATE_FORMAT(COALESCE(o.audit_time, o.create_time), '%Y-%m-%d') AS d, c.name AS partner, o.total_amount, o.remark FROM sale_order o LEFT JOIN customer c ON c.id = o.customer_id WHERE o.status = 'AUDITED'")
-    List<Map<String, Object>> saleOrderRecords();
-
-    /** 销售退单明细（d=建单日；total_amount 冲减收入、loss_amount 为折损收款） */
-    @Select("SELECT o.id, o.code, DATE_FORMAT(o.create_time, '%Y-%m-%d') AS d, c.name AS partner, o.total_amount, o.loss_amount, o.remark FROM sale_return o LEFT JOIN customer c ON c.id = o.customer_id WHERE o.status = 'AUDITED'")
-    List<Map<String, Object>> saleReturnRecords();
-
-    /** 成品采购单明细（d=审核日；partner=供应商名称） */
-    @Select("SELECT o.id, o.code, DATE_FORMAT(o.audit_time, '%Y-%m-%d') AS d, s.name AS partner, o.total_amount, o.remark FROM purchase_order o LEFT JOIN supplier s ON s.id = o.supplier_id WHERE o.status = 'AUDITED' AND o.audit_time IS NOT NULL")
-    List<Map<String, Object>> purchaseOrderRecords();
-
-    /** 采购退货单明细（d=建单日，冲减成本） */
-    @Select("SELECT o.id, o.code, DATE_FORMAT(o.create_time, '%Y-%m-%d') AS d, s.name AS partner, o.total_amount, o.remark FROM purchase_return o LEFT JOIN supplier s ON s.id = o.supplier_id WHERE o.status = 'AUDITED'")
-    List<Map<String, Object>> purchaseReturnRecords();
-
-    /** 费用单明细（d=费用日期；account_name 落库直接取） */
-    @Select("SELECT id, expense_no AS code, DATE_FORMAT(expense_date, '%Y-%m-%d') AS d, expense_type, account_name AS partner, amount, remark FROM finance_expense WHERE status = 'AUDITED'")
-    List<Map<String, Object>> expenseRecords();
-
-    /** 销售单成本明细（钻取用：单号/客户/当日该单销售出库成本，口径同 saleCostByDay） */
-    @Select("SELECT o.id, o.code, DATE_FORMAT(COALESCE(o.audit_time, o.create_time), '%Y-%m-%d') AS d, c.name AS partner, " +
-            "IFNULL(SUM(i.quantity * IFNULL(p.cost_price, 0)), 0) AS amt, o.remark " +
-            "FROM sale_order o LEFT JOIN sale_order_item i ON i.order_id = o.id LEFT JOIN product p ON p.id = i.product_id " +
-            "LEFT JOIN customer c ON c.id = o.customer_id WHERE o.status = 'AUDITED' " +
-            "GROUP BY o.id, o.code, d, c.name, o.remark")
-    List<Map<String, Object>> saleCostRecords();
-
-    /** 销售退货冲回成本明细（钻取用，口径同 saleReturnCostByDay） */
-    @Select("SELECT r.id, r.code, DATE_FORMAT(r.create_time, '%Y-%m-%d') AS d, c.name AS partner, " +
-            "IFNULL(SUM(i.quantity * IFNULL(p.cost_price, 0)), 0) AS amt, r.remark " +
-            "FROM sale_return r LEFT JOIN sale_return_item i ON i.return_id = r.id LEFT JOIN product p ON p.id = i.product_id " +
-            "LEFT JOIN customer c ON c.id = r.customer_id WHERE r.status = 'AUDITED' " +
-            "GROUP BY r.id, r.code, d, c.name, r.remark")
-    List<Map<String, Object>> saleReturnCostRecords();
-
     // ==================== 税务分析（已税/未税） ====================
 
     /**

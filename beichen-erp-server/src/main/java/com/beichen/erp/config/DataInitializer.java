@@ -306,8 +306,7 @@ public class DataInitializer implements ApplicationRunner {
             {908L, 9L, "清空数据", "menu", "/system/clear-data", "SystemClearData", "Delete", 8},
             // ==================== 经营分析（目录 10）：原「财务分析」5 个 Tab 拆分 + 新增销售/客户分析 ====================
             {1001L, 10L, "经营概览", "menu", "/analysis/overview", "AnalysisOverview", "DataLine", 1},
-            // 利润表：按天明细 + 快捷区间；点行「详细」进 /analysis/profit/detail/:date 看每条单据
-            {1002L, 10L, "利润表", "menu", "/analysis/profit", "AnalysisProfit", "DataAnalysis", 2},
+            // 2026-09-15：原 1002「利润表」(/analysis/profit) 已按用户要求整体下线（页面/路由/接口/菜单均已删除）
             // 资金与往来：资金趋势 + 应收应付账龄 + 主体往来统计（原两个 Tab 合并）
             {1003L, 10L, "资金与往来", "menu", "/analysis/cash", "AnalysisCash", "Wallet", 3},
             {1004L, 10L, "税务分析", "menu", "/analysis/tax", "AnalysisTax", "Stamp", 4},
@@ -365,7 +364,7 @@ public class DataInitializer implements ApplicationRunner {
                 601L, 602L, 603L, 605L,
                 701L, 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L,
                 801L, 802L, 803L, 804L, 805L, 806L, 807L, 809L, 810L, 811L,
-                1001L, 1002L, 1003L, 1004L, 1005L, 1006L,
+                1001L, 1003L, 1004L, 1005L, 1006L,
                 901L, 902L, 903L, 904L, 905L, 906L, 907L, 908L));
         // 研发工程师：项目研发 + BOM + 基础产品（2 基础数据 = 101 产品管理的父目录）
         assignRoleMenus("dev_engineer", Arrays.asList(
@@ -373,7 +372,7 @@ public class DataInitializer implements ApplicationRunner {
         // 销售专员：销售业务 + 客户 + 产品 + 经营分析（605 换货单；2 基础数据）
         assignRoleMenus("sales", Arrays.asList(
                 1L, 2L, 6L, 601L, 602L, 603L, 605L, 101L,
-                10L, 1001L, 1002L, 1003L, 1004L, 1005L, 1006L));
+                10L, 1001L, 1003L, 1004L, 1005L, 1006L));
         // 仓管员：进货 + 库存 + 仓库（2 基础数据 / 6 销售业务 为其子菜单的父目录）
         assignRoleMenus("warehouse", Arrays.asList(
                 1L, 2L, 5L, 6L, 7L, 501L, 502L, 603L, 701L, 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L, 101L));
@@ -385,7 +384,7 @@ public class DataInitializer implements ApplicationRunner {
         // 财务：财务管理 + 经营分析（2 基础数据 = 101 产品管理的父目录）
         assignRoleMenus("finance", Arrays.asList(
                 1L, 2L, 8L, 801L, 802L, 803L, 804L, 805L, 806L, 807L, 809L, 810L, 811L, 101L,
-                10L, 1001L, 1002L, 1003L, 1004L, 1005L, 1006L));
+                10L, 1001L, 1003L, 1004L, 1005L, 1006L));
     }
 
     /** 为指定角色授权菜单（仅当角色尚无菜单权限时执行） */
