@@ -5,6 +5,7 @@ import com.beichen.erp.inventory.entity.InventoryOtherIo;
 import com.beichen.erp.inventory.mapper.InventoryOtherIoMapper;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
+import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
 import com.beichen.erp.purchase.mapper.PurchaseOrderMapper;
 import com.beichen.erp.sale.entity.SaleOrder;
@@ -30,7 +31,8 @@ public class CommonController {
 
     @GetMapping("/resolve-code")
     public R<Map<String, Object>> resolveCode(@RequestParam String code) {
-        if (code == null || code.isBlank()) return R.ok(null);
+        // 参数非法返回 400（原先 R.ok(null) 会让调用方把"参数为空"当成"解析不到单据"）
+        if (code == null || code.isBlank()) throw new BusinessException(400, "单号不能为空");
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("code", code);
 

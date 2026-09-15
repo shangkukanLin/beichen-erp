@@ -82,7 +82,7 @@ public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements Ro
                     if (menu != null && menu.getCompanyId() != null
                             && !menu.getCompanyId().equals(currentCompany)
                             && !menu.getCompanyId().equals(SystemConstants.PLATFORM_COMPANY_ID)) {
-                        throw new BusinessException("存在无权限授权的菜单");
+                        throw new BusinessException(403, "存在无权限授权的菜单");
                     }
                 }
                 RoleMenu rm = new RoleMenu();
@@ -109,10 +109,10 @@ public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements Ro
         Long roleCompany = role.getCompanyId();
         // 平台级共享角色（companyId 为空或等于哨兵值）仅超管可操作，普通租户不可改/删/授权
         if (roleCompany == null || roleCompany.equals(SystemConstants.PLATFORM_COMPANY_ID)) {
-            throw new BusinessException("无权限操作平台级共享角色");
+            throw new BusinessException(403, "无权限操作平台级共享角色");
         }
         if (!roleCompany.equals(currentCompany)) {
-            throw new BusinessException("无权限操作其他公司的角色");
+            throw new BusinessException(403, "无权限操作其他公司的角色");
         }
     }
 

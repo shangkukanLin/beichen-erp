@@ -119,6 +119,11 @@ export function updateReclassify(id: number, data: any) {
 export function auditReclassify(id: number) {
   return request.put<void>(`/inventory/reclassify/${id}/audit`)
 }
+/** 反审核（E2：已审核 → CANCELLED 并逆向库存；原由 /cancel 兼任，2026-09-12 拆出） */
+export function unAuditReclassify(id: number) {
+  return request.put<void>(`/inventory/reclassify/${id}/un-audit`)
+}
+/** 作废（仅草稿；E2 起 /cancel 不再承担反审核） */
 export function cancelReclassify(id: number) {
   return request.put<void>(`/inventory/reclassify/${id}/cancel`)
 }
@@ -181,8 +186,9 @@ export function updateReturnSort(id: number, data: any) {
 export function auditReturnSort(id: number) {
   return request.put<void>(`/inventory/return-sort/${id}/audit`)
 }
+/** 反审核（E2：退货整理的 cancel 本就是反审核语义，调用统一走 canonical /un-audit；后端保留 /cancel 别名） */
 export function cancelReturnSort(id: number) {
-  return request.put<void>(`/inventory/return-sort/${id}/cancel`)
+  return request.put<void>(`/inventory/return-sort/${id}/un-audit`)
 }
 export function deleteReturnSort(id: number) {
   return request.delete<void>(`/inventory/return-sort/${id}`)
@@ -210,10 +216,10 @@ export function saveStockTakeItems(id: number, items: StockTakeItem[]) {
   return request.put<void>(`/inventory/stock-take/${id}/items`, items)
 }
 export function auditStockTake(id: number) {
-  return request.post<void>(`/inventory/stock-take/${id}/audit`)
+  return request.put<void>(`/inventory/stock-take/${id}/audit`)
 }
 export function unAuditStockTake(id: number) {
-  return request.post<void>(`/inventory/stock-take/${id}/unAudit`)
+  return request.put<void>(`/inventory/stock-take/${id}/un-audit`)
 }
 export function cancelStockTake(id: number) {
   return request.post<void>(`/inventory/stock-take/${id}/cancel`)

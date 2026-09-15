@@ -73,7 +73,8 @@ public class SaleReturnController {
         return R.ok("审核成功");
     }
 
-    @PutMapping("/{id}/unaudit")
+    // E1 口径（2026-09-12）：反审核统一 /un-audit，旧路径 /unaudit 保留为别名
+    @PutMapping({"/{id}/un-audit", "/{id}/unaudit"})
     public R<String> unAudit(@PathVariable Long id) {
         service.unAudit(id);
         return R.ok("反审核成功");

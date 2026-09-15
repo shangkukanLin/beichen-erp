@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { getReceivablePage, type FinanceReceivable, type PageResult } from '@/api/finance'
-import { SettlementStatus, SettlementStatusLabel, sourceBillTypeLabel } from '@/api/enums'
+import { SettlementStatus, SettlementStatusLabel, sourceBillTypeLabel, SubjectType, SubjectTypeLabel, SubjectTypeTag } from '@/api/enums'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
-const query = reactive({ customerId: '' as string|number, status: '', billNo: '' })
+const router = useRouter()
+/** 页签：客户应收（销售业务）/ 供应商应收（应付转应收，向对方收款） */
+const activeSubject = ref<'CUSTOMER' | 'SUPPLIER'>('CUSTOMER')
+const query = reactive({ customerId: '' as string|number, supplierId: '' as string|number, status: '', billNo: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinanceReceivable[]>([])
@@ -14,35 +18,62 @@ const detailVisible = ref(false)
 const detail = ref<FinanceReceivable>({})
 
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
 async function loadCustomersOptions() {
   try { const r: any = await fetchCustomers(''); customersOptions.value = r?.records || [] } catch { customersOptions.value = [] }
+}
+const suppliersOptions = ref<any[]>([])
+async function loadSuppliersOptions() {
+  try { const r: any = await fetchSuppliers(''); suppliersOptions.value = r?.records || [] } catch { suppliersOptions.value = [] }
 }
 
 async function load() {
   loading.value = true
   try {
-    const p: any = { pageNum: page.pageNum, pageSize: page.pageSize }
+    const p: any = { pageNum: page.pageNum, pageSize: page.pageSize, subjectType: activeSubject.value }
     if (query.customerId) p.customerId = query.customerId
+    if (query.supplierId) p.supplierId = query.supplierId
     if (query.status) p.status = query.status
     if (query.billNo) p.billNo = query.billNo
     const res = await getReceivablePage(p)
     data.value = res?.records || []; page.total = res?.total || 0
   } catch { data.value = [] } finally { loading.value = false }
 }
-onMounted(() => { loadCustomersOptions(); load() })
+onMounted(() => { loadCustomersOptions(); loadSuppliersOptions(); load() })
+
+// 切页签：清空往来单位筛选回到第一页
+watch(activeSubject, () => {
+  query.customerId = ''; query.supplierId = ''
+  page.pageNum = 1; load()
+})
 
 function query_() { page.pageNum = 1; load() }
-function reset_() { query.customerId = ''; query.status = ''; query.billNo = ''; page.pageNum = 1; load() }
+function reset_() { query.customerId = ''; query.supplierId = ''; query.status = ''; query.billNo = ''; page.pageNum = 1; load() }
 function cName(id?: number) { return customersOptions.value.find(x => x.id === id)?.name || '' }
+/** 往来单位：客户应收看客户名，供应商应收（应付转应收产生）看供应商名 */
+function subjectName(row: any) {
+  return row.subjectType === SubjectType.SUPPLIER
+    ? (row.supplierName || '—')
+    : (row.customerName || cName(row.customerId) || '—')
+}
+function goSubject(row: any) {
+  if (row.subjectType === SubjectType.SUPPLIER && row.supplierId) router.push(`/supplier/detail/${row.supplierId}`)
+}
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === SettlementStatus.UNSETTLED) return 'danger'; if (s === SettlementStatus.PARTIAL) return 'warning'; if (s === SettlementStatus.SETTLED) return 'success'; if (s === SettlementStatus.CANCELLED) return 'info'; return undefined }
 </script>
 <template>
   <div class="p">
     <el-card shadow="never" class="query-card">
+      <!-- 页签：客户应收 / 供应商应收，切换即切换主体类型（与供应商/供货商管理页交互一致） -->
+      <el-tabs v-model="activeSubject">
+        <el-tab-pane label="客户应收" name="CUSTOMER" />
+        <el-tab-pane label="供应商应收" name="SUPPLIER" />
+      </el-tabs>
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
-      <el-form-item label="客户"><RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="全部" style="width:160px" /></el-form-item>
+      <el-form-item v-if="activeSubject === 'CUSTOMER'" label="客户"><RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="全部" style="width:160px" /></el-form-item>
+      <el-form-item v-else label="供应商"><RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" /></el-form-item>
       <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="s in [{l:SettlementStatusLabel[SettlementStatus.UNSETTLED],v:SettlementStatus.UNSETTLED},{l:SettlementStatusLabel[SettlementStatus.PARTIAL],v:SettlementStatus.PARTIAL},{l:SettlementStatusLabel[SettlementStatus.SETTLED],v:SettlementStatus.SETTLED}]" :key="s.v" :label="s.l" :value="s.v"/></el-select></el-form-item>
       <el-form-item label="单号"><el-input v-model="query.billNo" placeholder="单据号" clearable @keyup.enter="query_"/></el-form-item>
       </el-form>
@@ -55,7 +86,12 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
     <el-card shadow="never">
       <el-table v-loading="loading" :data="data" border stripe @row-click="(row: any) => { detail = row; detailVisible = true }">
         <el-table-column prop="billNo" label="单据号" min-width="150"/>
-        <el-table-column label="客户" min-width="140"><template #default="{row}">{{ cName(row.customerId) }}</template></el-table-column>
+        <el-table-column label="往来单位" min-width="140">
+          <template #default="{row}">
+            <el-link v-if="row.subjectType === SubjectType.SUPPLIER && row.supplierId" type="primary" underline="never" @click.stop="goSubject(row)">{{ subjectName(row) }}</el-link>
+            <span v-else>{{ subjectName(row) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="来源" width="110"><template #default="{row}">{{ sourceBillTypeLabel(row.sourceBillType) }}</template></el-table-column>
         <el-table-column prop="amount" label="应收金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column prop="paidAmount" label="已收" width="120" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>

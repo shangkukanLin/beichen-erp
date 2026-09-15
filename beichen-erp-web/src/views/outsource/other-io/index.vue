@@ -39,11 +39,11 @@ function handleEdit(row: any) {
 }
 async function handleApprove(row: any) {
   try { await ElMessageBox.confirm('确认审核？审核后库存生效', '确认',{type:'warning'}) } catch { return }
-  try { await request.put(`/outsource/other-io/${row.id}/approve`); ElMessage.success('已审核'); loadData() } catch (e: any) { ElMessage.error(e?.message||'失败') }
+  try { await request.put(`/outsource/other-io/${row.id}/audit`); ElMessage.success('已审核'); loadData() } catch (e: any) { ElMessage.error(e?.message||'失败') }
 }
 async function handleUnapprove(row: any) {
   try { await ElMessageBox.confirm('确认反审核？将回滚库存', '确认',{type:'warning'}) } catch { return }
-  try { await request.put(`/outsource/other-io/${row.id}/unapprove`); ElMessage.success('已反审核'); loadData() } catch (e: any) { ElMessage.error(e?.message||'失败') }
+  try { await request.put(`/outsource/other-io/${row.id}/un-audit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { ElMessage.error(e?.message||'失败') }
 }
 async function handleCancel(row: any) {
   try { await ElMessageBox.confirm('确认作废？', '作废确认',{type:'warning'}) } catch { return }

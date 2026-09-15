@@ -12,8 +12,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -48,7 +50,42 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements Me
                 .eq(Menu::getStatus, 1)
                 .eq(Menu::getVisible, 1)
                 .orderByAsc(Menu::getSortOrder));
-        return buildTree(menus);
+        return buildTree(withAncestors(menus));
+    }
+
+    /**
+     * 补齐祖先链：历史授权数据可能只授权了子菜单、缺父目录，
+     * 而 buildTree 只返回 parentId=0 的子树，缺父会导致这些子菜单整体丢失 → 向上递归补齐父节点。
+     */
+    private List<Menu> withAncestors(List<Menu> menus) {
+        List<Menu> result = new ArrayList<>(menus);
+        Set<Long> known = menus.stream().map(Menu::getId).collect(Collectors.toSet());
+        Set<Long> missing = menus.stream()
+                .map(Menu::getParentId)
+                .filter(pid -> pid != null && pid != 0L && !known.contains(pid))
+                .collect(Collectors.toSet());
+        while (!missing.isEmpty()) {
+            List<Menu> parents = this.list(new LambdaQueryWrapper<Menu>()
+                    .in(Menu::getId, missing)
+                    .eq(Menu::getStatus, 1)
+                    .eq(Menu::getVisible, 1)
+                    .orderByAsc(Menu::getSortOrder));
+            if (parents.isEmpty()) {
+                break;
+            }
+            Set<Long> next = new HashSet<>();
+            for (Menu p : parents) {
+                if (known.add(p.getId())) {
+                    result.add(p);
+                }
+                Long pid = p.getParentId();
+                if (pid != null && pid != 0L && !known.contains(pid)) {
+                    next.add(pid);
+                }
+            }
+            missing = next;
+        }
+        return result;
     }
 
     @Override

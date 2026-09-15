@@ -1,5 +1,6 @@
 package com.beichen.erp.outsource.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
 import com.beichen.erp.outsource.service.OutsourceOrderDeliveryService;
@@ -26,6 +27,24 @@ public class OrderDeliveryController {
         return R.ok(deliveryService.listByOrder(orderId));
     }
 
+    /**
+     * 成品交货信息：跨加工单分页查询交货/退不良记录（纯查询）
+     *
+     * @param deliveryType 交货类型：空=全部；DELIVERY=普通交货；DEFECT_RETURN=退不良
+     */
+    @GetMapping("/page")
+    public R<Page<Map<String, Object>>> page(@RequestParam(defaultValue = "1") int pageNum,
+                                             @RequestParam(defaultValue = "10") int pageSize,
+                                             @RequestParam(required = false) String orderCode,
+                                             @RequestParam(required = false) String productName,
+                                             @RequestParam(required = false) String deliveryType,
+                                             @RequestParam(required = false) String status,
+                                             @RequestParam(required = false) String startDate,
+                                             @RequestParam(required = false) String endDate) {
+        return R.ok(deliveryService.pageDeliveries(pageNum, pageSize, orderCode, productName,
+                deliveryType, status, startDate, endDate));
+    }
+
     /** 获取交货汇总 */
     @GetMapping("/summary/{orderId}")
     public R<Map<String, Object>> summary(@PathVariable Long orderId) {
@@ -47,7 +66,8 @@ public class OrderDeliveryController {
     }
 
     /** 反审核交货记录 */
-    @PutMapping("/{id}/unaudit")
+    // E1 口径（2026-09-12）：反审核统一 /un-audit，旧路径 /unaudit 保留为别名
+    @PutMapping({"/{id}/un-audit", "/{id}/unaudit"})
     public R<Void> unaudit(@PathVariable Long id) {
         deliveryService.unaudit(id);
         return R.ok();

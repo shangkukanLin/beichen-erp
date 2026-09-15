@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import router from '@/router'
-import { getUserMenuTree, type MenuVO } from '@/api/system'
+import { getUserMenuTree, getMyDashboardTabs, type MenuVO } from '@/api/system'
 import { SUPER_ADMIN_ROLE_CODE, ADMIN_ROLE_CODE } from '@/constants/system'
 
 interface UserInfo {
@@ -18,18 +18,26 @@ interface UserInfo {
 
 const TOKEN_KEY = 'beichen_erp_token'
 const MENUS_KEY = 'beichen_erp_menus'
+const TABS_KEY = 'beichen_erp_dashboard_tabs'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
     token: localStorage.getItem(TOKEN_KEY) || '',
     userInfo: (JSON.parse(localStorage.getItem('beichen_erp_user') || 'null') || null) as UserInfo | null,
-    menus: (JSON.parse(localStorage.getItem(MENUS_KEY) || 'null') || []) as MenuVO[]
+    menus: (JSON.parse(localStorage.getItem(MENUS_KEY) || 'null') || []) as MenuVO[],
+    /** 首页业务 TAB 勾选；null=未配置（全部可见） */
+    dashboardTabs: (JSON.parse(localStorage.getItem(TABS_KEY) || 'null') || null) as string[] | null
   }),
   getters: {
     isLogin: (state) => !!state.token,
     isAdmin: (state) => {
       const roles = state.userInfo?.roles || []
       return roles.includes(SUPER_ADMIN_ROLE_CODE) || roles.includes(ADMIN_ROLE_CODE)
+    },
+    /** P2-34：平台级（跨租户）能力判定 —— 整库导入/导出等仅超级管理员可用 */
+    isSuperAdmin: (state) => {
+      const roles = state.userInfo?.roles || []
+      return roles.includes(SUPER_ADMIN_ROLE_CODE)
     },
     menuPaths: (state) => {
       const paths: string[] = []
@@ -57,6 +65,11 @@ export const useUserStore = defineStore('user', {
       this.menus = menus
       localStorage.setItem(MENUS_KEY, JSON.stringify(menus))
     },
+    setDashboardTabs(tabs: string[] | null | undefined) {
+      this.dashboardTabs = tabs && tabs.length > 0 ? tabs : null
+      if (this.dashboardTabs) localStorage.setItem(TABS_KEY, JSON.stringify(this.dashboardTabs))
+      else localStorage.removeItem(TABS_KEY)
+    },
     /** 从服务端拉取最新菜单（每次页面加载时调用，确保菜单始终最新） */
     async fetchMenus() {
       try {
@@ -65,14 +78,19 @@ export const useUserStore = defineStore('user', {
           this.menus = menus
           localStorage.setItem(MENUS_KEY, JSON.stringify(menus))
         }
+        // 顺带刷新首页 TAB 勾选（管理员可能改过）
+        const tabs = await getMyDashboardTabs()
+        this.setDashboardTabs(tabs)
       } catch { /* 网络异常时保留当前菜单 */ }
     },
     logout() {
       this.token = ''
       this.userInfo = null
       this.menus = []
+      this.dashboardTabs = null
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem('beichen_erp_user')
+      localStorage.removeItem(TABS_KEY)
       router.push('/login')
     }
   }

@@ -129,6 +129,7 @@
 </template>
 
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -380,7 +381,7 @@ onMounted(async () => {
     await loadEdit(Number(id))
     return
   }
-  form.returnDate = new Date().toISOString().slice(0, 10)
+  form.returnDate = localDate()
   // 从销售单详情页「退货」跳转：预填来源销售单并自动带入可退明细
   const soId = route.query.saleOrderId
   if (soId !== undefined && soId !== '') {

@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
   servlet:
     encoding:
       charset: UTF-8
@@ -7,24 +7,32 @@ server:
       force: true
 
 # 文件上传路径（相对于工作目录），在 Windows 上会自动解析为绝对路径
+# P0：生产请用绝对路径（UPLOAD_PATH=/data/beichen/uploads）并纳入备份，见《上线运维手册》§3.1
 file:
   upload:
-    path: ./uploads
+    path: ${UPLOAD_PATH:./uploads}
 
 spring:
   application:
     name: beichen-erp-server
+  # 导入导出闭环：全量导出 JSON 随数据增长很快超过默认 1MB，此前导入直接 500（Maximum upload size exceeded）
+  servlet:
+    multipart:
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:200MB}
+      max-request-size: ${UPLOAD_MAX_FILE_SIZE:200MB}
   datasource:
-    url: jdbc:mysql://localhost:3306/beichen_erp?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_general_ci&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
-    username: root
-    password: root
+    # P0：所有敏感项均可由环境变量覆盖；生产请务必改掉 root/root 默认值
+    url: ${DB_URL:jdbc:mysql://localhost:3306/beichen_erp?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_general_ci&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       auto-commit: true
       read-only: false
   sql:
     init:
-      mode: always
+      # schema.sql 全为 CREATE TABLE IF NOT EXISTS（幂等）；若要"受控发布"，生产可设 SQL_INIT_MODE=never
+      mode: ${SQL_INIT_MODE:always}
       schema-locations: classpath:schema.sql
   jackson:
     time-zone: Asia/Shanghai
@@ -39,8 +47,8 @@ mybatis-plus:
       id-type: auto
 
 sa-token:
-  token-name: Authorization
-  timeout: 86400
+  token-name: ${SA_TOKEN_NAME:Authorization}
+  timeout: ${SA_TOKEN_TIMEOUT:86400}
   is-concurrent: true
   is-share: true
   token-style: uuid
@@ -50,6 +58,26 @@ springdoc:
   swagger-ui:
     path: /doc.html
 
+# 应用级可配置项（P0 配置外置，详见《上线运维手册》§3）
+app:
+  # 跨域白名单（逗号分隔）。默认 * 仅限开发；生产必须显式配置域名，如 https://erp.example.com
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
+  # 初始口令：仅用于"首次创建"平台超管/公司管理员；生产必须由 INIT_ADMIN_PASSWORD 注入
+  init:
+    admin-password: ${INIT_ADMIN_PASSWORD:123}
+  # 定时任务总开关；多实例部署时建议只在一个实例打开（任务内部另有 MySQL 命名锁兜底）
+  scheduling:
+    enabled: ${SCHEDULING_ENABLED:true}
+
 logging:
   level:
-    com.beichen.erp: debug
+    com.beichen.erp: ${LOG_LEVEL:debug}
+  # P0：日志落盘 + 轮转（此前仅控制台 → 审计/告警日志不可追溯）
+  file:
+    name: ${LOG_FILE:./logs/beichen-erp.log}
+  logback:
+    rollingpolicy:
+      max-file-size: 50MB
+      max-history: 30
+      total-size-cap: 2GB

@@ -15,6 +15,8 @@ public class FinancePayment {
     private String code;
     private Long supplierId;
     private String supplierName;
+    /** 往来主体类型：product/factory/material/solution（创建时按供应商标签固化，列表可按类型筛选） */
+    private String supplierType;
     private Long accountId;
     private String accountName;
     private LocalDate paymentDate;

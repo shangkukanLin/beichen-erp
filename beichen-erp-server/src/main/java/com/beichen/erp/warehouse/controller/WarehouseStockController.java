@@ -70,17 +70,15 @@ public class WarehouseStockController {
     }
 
     /**
-     * 库存变动类型下拉选项：直接取 StockChangeType 枚举，保证与写入数据库的值一致。
-     * 前端不再硬编码枚举名——此前硬编码既显示英文，又因只列了 10 个导致多数类型无法筛选。
+     * 库存变动类型 **code 列表**（与写入数据库的值一致）。
+     * <p>2026-09-14：落实「接口只回 code、前端映射中文」口径 —— 原返回 {code,label}，
+     * 现只回 code，中文由前端 `api/enums.ts` 的 `StockChangeTypeLabel` 生成。</p>
      */
     @GetMapping("/change-types")
-    public R<List<Map<String, String>>> changeTypes() {
-        List<Map<String, String>> list = new ArrayList<>();
+    public R<List<String>> changeTypes() {
+        List<String> list = new ArrayList<>();
         for (StockChangeType t : StockChangeType.values()) {
-            Map<String, String> m = new LinkedHashMap<>();
-            m.put("code", t.getCode());
-            m.put("label", t.getLabel());
-            list.add(m);
+            list.add(t.getCode());
         }
         return R.ok(list);
     }
@@ -96,37 +94,16 @@ public class WarehouseStockController {
             @RequestParam(required = false) Long warehouseId,
             @RequestParam(required = false) List<Long> warehouseIds,
             @RequestParam(required = false) Long brandId,
+            @RequestParam(required = false) Long productId,
             @RequestParam(required = false) String productName) {
 
-        // 仓库筛选支持多选（warehouseIds，逗号分隔）；warehouseId 单值参数保留向后兼容
-        Set<Long> whFilter = new LinkedHashSet<>();
-        if (warehouseIds != null) {
-            warehouseIds.stream().filter(Objects::nonNull).forEach(whFilter::add);
-        }
-        if (warehouseId != null) whFilter.add(warehouseId);
-
+        Set<Long> whFilter = buildWarehouseFilter(warehouseId, warehouseIds);
         LambdaQueryWrapper<WarehouseStock> qw = new LambdaQueryWrapper<WarehouseStock>()
                 .in(!whFilter.isEmpty(), WarehouseStock::getWarehouseId, whFilter)
+                .eq(productId != null, WarehouseStock::getProductId, productId)
                 .isNotNull(WarehouseStock::getProductId);
 
-        // 品牌/产品名称过滤：先按条件查产品主键集合，再按集合过滤库存（两者同时存在时取交集）
-        Set<Long> filteredProductIds = null;
-        if (brandId != null) {
-            filteredProductIds = productMapper.selectList(
-                    new LambdaQueryWrapper<Product>().eq(Product::getBrandId, brandId))
-                    .stream().map(Product::getId).collect(Collectors.toSet());
-        }
-        if (productName != null && !productName.isBlank()) {
-            // 关键字同时匹配产品名称与 SKU，便于直接粘贴 SKU 检索
-            Set<Long> nameIds = productMapper.selectList(
-                    new LambdaQueryWrapper<Product>()
-                            .like(Product::getName, productName)
-                            .or().like(Product::getSku, productName))
-                    .stream().map(Product::getId).collect(Collectors.toSet());
-            filteredProductIds = (filteredProductIds == null)
-                    ? nameIds
-                    : filteredProductIds.stream().filter(nameIds::contains).collect(Collectors.toSet());
-        }
+        Set<Long> filteredProductIds = buildProductIdFilter(brandId, productName);
         if (filteredProductIds != null) {
             if (filteredProductIds.isEmpty()) {
                 Page<Map<String, Object>> empty = new Page<>(pageNum, pageSize, 0);
@@ -174,9 +151,10 @@ public class WarehouseStockController {
         }
 
         // 批量补齐名称
-        Map<Long, String> whNameMap = new HashMap<>();
+        // 存整个仓库对象而非仅名称：详情列表的仓库名要能点击进入仓库详情，需要 factoryId 区分钟委外仓/自有仓
+        Map<Long, Warehouse> whMap = new HashMap<>();
         if (!whIds.isEmpty()) {
-            warehouseMapper.selectBatchIds(whIds).forEach(w -> whNameMap.put(w.getId(), w.getWarehouseName()));
+            warehouseMapper.selectBatchIds(whIds).forEach(w -> whMap.put(w.getId(), w));
         }
         Map<Long, String> pNameMap = new HashMap<>();
         Map<Long, String> pSkuMap = new HashMap<>();
@@ -194,7 +172,11 @@ public class WarehouseStockController {
             brandMapper.selectBatchIds(brandIds).forEach(b -> brandNameMap.put(b.getId(), b.getBrandName()));
         }
         for (Map<String, Object> row : agg.values()) {
-            row.put("warehouseName", whNameMap.getOrDefault(row.get("warehouseId"), ""));
+            Warehouse wh = whMap.get(row.get("warehouseId"));
+            row.put("warehouseName", wh != null && wh.getWarehouseName() != null ? wh.getWarehouseName() : "");
+            row.put("warehouseCategory", wh != null ? wh.getWarehouseCategory() : null);
+            // 委外仓存的是物料，正常情况下成品不会落在委外仓；仍一并返回，便于前端按 factoryId 分流详情页
+            row.put("factoryId", wh != null ? wh.getFactoryId() : null);
             row.put("sku", pSkuMap.getOrDefault(row.get("productId"), ""));
             row.put("productName", pNameMap.getOrDefault(row.get("productId"), ""));
             Long pid = (Long) row.get("productId");
@@ -212,6 +194,165 @@ public class WarehouseStockController {
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, total);
         result.setRecords(new ArrayList<>(records));
         return R.ok(result);
+    }
+
+    /**
+     * 成品库存情况：按【产品】聚合，每个产品一行，跨仓库汇总各品质数量、总库存、分布仓库数。
+     * 供「成品库存情况」列表页使用；点进某产品看各仓库分布时，再用 product-stock/page?productId= 查明细。
+     * 只统计成品（product_id 非空），委外物料库存不在本接口范围内。
+     */
+    @GetMapping("/product-summary/page")
+    public R<Page<Map<String, Object>>> productSummaryPage(
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) Long warehouseId,
+            @RequestParam(required = false) List<Long> warehouseIds,
+            @RequestParam(required = false) Long brandId,
+            @RequestParam(required = false) Long productId,
+            @RequestParam(required = false) String productName,
+            @RequestParam(required = false) Boolean onlyLowStock) {
+
+        Set<Long> whFilter = buildWarehouseFilter(warehouseId, warehouseIds);
+        LambdaQueryWrapper<WarehouseStock> qw = new LambdaQueryWrapper<WarehouseStock>()
+                .in(!whFilter.isEmpty(), WarehouseStock::getWarehouseId, whFilter)
+                .eq(productId != null, WarehouseStock::getProductId, productId)
+                .isNotNull(WarehouseStock::getProductId);
+
+        Set<Long> filteredProductIds = buildProductIdFilter(brandId, productName);
+        if (filteredProductIds != null) {
+            if (filteredProductIds.isEmpty()) {
+                Page<Map<String, Object>> empty = new Page<>(pageNum, pageSize, 0);
+                empty.setRecords(Collections.emptyList());
+                return R.ok(empty);
+            }
+            qw.in(WarehouseStock::getProductId, filteredProductIds);
+        }
+
+        List<WarehouseStock> all = stockMapper.selectList(qw);
+
+        // 聚合：键 = 产品ID；同时记录每个产品涉及的仓库，用于统计分布仓库数
+        Map<Long, Map<String, Object>> agg = new LinkedHashMap<>();
+        Map<Long, Set<Long>> productWarehouses = new HashMap<>();
+        Set<Long> pIds = new HashSet<>();
+        for (WarehouseStock s : all) {
+            Long pId = s.getProductId();
+            if (pId == null) continue;
+            pIds.add(pId);
+            if (s.getWarehouseId() != null) {
+                productWarehouses.computeIfAbsent(pId, k -> new HashSet<>()).add(s.getWarehouseId());
+            }
+            Map<String, Object> row = agg.computeIfAbsent(pId, k -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("productId", pId);
+                m.put("qtyA", BigDecimal.ZERO);
+                m.put("qtyB", BigDecimal.ZERO);
+                m.put("qtyC", BigDecimal.ZERO);
+                m.put("qtyDefect", BigDecimal.ZERO);
+                m.put("qtyPending", BigDecimal.ZERO);
+                return m;
+            });
+            BigDecimal q = s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
+            // 按成品品质枚举显式归类：不可用 else 兜底，否则 PENDING(待分类) 等会被静默算成不良品
+            ProductQualityType type = ProductQualityType.of(s.getQualityType());
+            if (type == null) continue;
+            switch (type) {
+                case A -> row.put("qtyA", ((BigDecimal) row.get("qtyA")).add(q));
+                case B -> row.put("qtyB", ((BigDecimal) row.get("qtyB")).add(q));
+                case C -> row.put("qtyC", ((BigDecimal) row.get("qtyC")).add(q));
+                case DEFECT -> row.put("qtyDefect", ((BigDecimal) row.get("qtyDefect")).add(q));
+                case PENDING -> row.put("qtyPending", ((BigDecimal) row.get("qtyPending")).add(q));
+            }
+        }
+
+        // 批量补齐产品档案（名称/SKU/规格/单位/安全库存/品牌）
+        Map<Long, Product> productMap = new HashMap<>();
+        if (!pIds.isEmpty()) {
+            productMapper.selectBatchIds(pIds).forEach(p -> productMap.put(p.getId(), p));
+        }
+        Map<Long, String> brandNameMap = new HashMap<>();
+        Set<Long> brandIds = productMap.values().stream()
+                .map(Product::getBrandId).filter(Objects::nonNull).collect(Collectors.toSet());
+        if (!brandIds.isEmpty()) {
+            brandMapper.selectBatchIds(brandIds).forEach(b -> brandNameMap.put(b.getId(), b.getBrandName()));
+        }
+
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Map<String, Object> row : agg.values()) {
+            Long pid = (Long) row.get("productId");
+            Product p = productMap.get(pid);
+            BigDecimal total = ((BigDecimal) row.get("qtyA")).add((BigDecimal) row.get("qtyB"))
+                    .add((BigDecimal) row.get("qtyC")).add((BigDecimal) row.get("qtyDefect"))
+                    .add((BigDecimal) row.get("qtyPending"));
+            Set<Long> whs = productWarehouses.getOrDefault(pid, Collections.emptySet());
+            BigDecimal safetyStock = p != null ? p.getSafetyStock() : null;
+            // 低库存：设置了安全库存且总库存低于它（安全库存为空或 0 表示未设置，不参与判断）
+            boolean lowStock = safetyStock != null && safetyStock.compareTo(BigDecimal.ZERO) > 0
+                    && total.compareTo(safetyStock) < 0;
+
+            row.put("sku", p != null && p.getSku() != null ? p.getSku() : "");
+            row.put("productName", p != null && p.getName() != null ? p.getName() : "");
+            row.put("spec", p != null && p.getSpec() != null ? p.getSpec() : "");
+            row.put("unit", p != null && p.getUnit() != null ? p.getUnit() : "");
+            row.put("safetyStock", safetyStock);
+            row.put("brandId", p != null ? p.getBrandId() : null);
+            Long bid = p != null ? p.getBrandId() : null;
+            row.put("brandName", bid != null ? brandNameMap.getOrDefault(bid, "") : "");
+            row.put("totalQuantity", total);
+            row.put("warehouseCount", whs.size());
+            row.put("lowStock", lowStock);
+
+            if (Boolean.TRUE.equals(onlyLowStock) && !lowStock) continue;
+            list.add(row);
+        }
+
+        // 库存多的排前面，便于优先关注积压产品；同库存按产品名称稳定排序
+        list.sort(Comparator
+                .comparing((Map<String, Object> r) -> (BigDecimal) r.get("totalQuantity")).reversed()
+                .thenComparing(r -> String.valueOf(r.get("productName"))));
+
+        long total = list.size();
+        int from = (pageNum - 1) * pageSize;
+        List<Map<String, Object>> records = (from < list.size())
+                ? list.subList(from, Math.min(from + pageSize, list.size()))
+                : Collections.emptyList();
+        Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, total);
+        result.setRecords(new ArrayList<>(records));
+        return R.ok(result);
+    }
+
+    /** 仓库筛选：支持单值 warehouseId 与多选 warehouseIds，合并去重（warehouseId 保留向后兼容） */
+    private Set<Long> buildWarehouseFilter(Long warehouseId, List<Long> warehouseIds) {
+        Set<Long> whFilter = new LinkedHashSet<>();
+        if (warehouseIds != null) {
+            warehouseIds.stream().filter(Objects::nonNull).forEach(whFilter::add);
+        }
+        if (warehouseId != null) whFilter.add(warehouseId);
+        return whFilter;
+    }
+
+    /**
+     * 产品筛选：品牌 + 名称/SKU 关键字，两个条件同时存在时取交集。
+     * 返回 null 表示不筛选；返回空集合表示查无结果（调用方直接返回空页，避免 in() 空集合报错）。
+     */
+    private Set<Long> buildProductIdFilter(Long brandId, String productName) {
+        Set<Long> filteredProductIds = null;
+        if (brandId != null) {
+            filteredProductIds = productMapper.selectList(
+                    new LambdaQueryWrapper<Product>().eq(Product::getBrandId, brandId))
+                    .stream().map(Product::getId).collect(Collectors.toSet());
+        }
+        if (productName != null && !productName.isBlank()) {
+            // 关键字同时匹配产品名称与 SKU，便于直接粘贴 SKU 检索
+            Set<Long> nameIds = productMapper.selectList(
+                    new LambdaQueryWrapper<Product>()
+                            .like(Product::getName, productName)
+                            .or().like(Product::getSku, productName))
+                    .stream().map(Product::getId).collect(Collectors.toSet());
+            filteredProductIds = (filteredProductIds == null)
+                    ? nameIds
+                    : filteredProductIds.stream().filter(nameIds::contains).collect(Collectors.toSet());
+        }
+        return filteredProductIds;
     }
 
     /** 库存流水追溯（stockType: PRODUCT=成品流水 / MATERIAL=物料流水，不传则全量） */
@@ -265,9 +406,7 @@ public class WarehouseStockController {
                 if (log.getProductId() != null) {
                     log.setProductName(nameMap.getOrDefault(log.getProductId(), ""));
                 }
-                log.setChangeTypeLabel(StockChangeType.labelOf(log.getChangeType()));
-                RelatedBillType rbt = RelatedBillType.fromCode(log.getRelatedBillType());
-                log.setRelatedBillTypeLabel(rbt != null ? rbt.getLabel() : log.getRelatedBillType());
+                // 2026-09-14：变动类型/关联单据类型的中文改由前端按 code 映射（StockChangeTypeLabel / RelatedBillTypeLabel）
                 // 详情跳转目标ID：销售出库单无独立详情页，映射为其关联销售单ID；其余类型直接用单据ID
                 Long billId = log.getRelatedBillId();
                 if (billId != null) {
@@ -361,7 +500,9 @@ public class WarehouseStockController {
             m.put("warehouseId", s.getWarehouseId());
             m.put("productId", s.getProductId());
             m.put("materialId", s.getMaterialId());
-            m.put("qualityType", qualityTypeLabel(s.getQualityType(), s.getProductId() == null));
+            // 2026-09-14：品质按 code 原样返回（成品=ProductQualityType A/B/C/DEFECT/PENDING，物料=QualityType GOOD/DEFECT），
+            // 中文由前端映射（避免后端回中文后前端无法按 code 归并——见 inventory/warehouse-detail.vue 的按品质归并逻辑）
+            m.put("qualityType", s.getQualityType());
             m.put("quantity", s.getQuantity());
             if (s.getProductId() != null) {
                 m.put("productName", productNameMap.getOrDefault(s.getProductId(), ""));
@@ -389,12 +530,7 @@ public class WarehouseStockController {
                 .eq(WarehouseStockLog::getMaterialId, materialId)
                 .orderByDesc(WarehouseStockLog::getId));
 
-        // 补展示字段：变动类型/关联单据类型中文标签
-        for (WarehouseStockLog log : page.getRecords()) {
-            log.setChangeTypeLabel(StockChangeType.labelOf(log.getChangeType()));
-            RelatedBillType rbt = RelatedBillType.fromCode(log.getRelatedBillType());
-            log.setRelatedBillTypeLabel(rbt != null ? rbt.getLabel() : log.getRelatedBillType());
-        }
+        // 2026-09-14：变动类型/关联单据类型的中文改由前端按 code 映射，后端不再回中文
 
         // 物料名称兜底：流水冗余列 material_name 为空时，按 materialId 实时查补
         Map<Long, String> matNameMap = new HashMap<>();
@@ -418,16 +554,4 @@ public class WarehouseStockController {
         return R.ok(page);
     }
 
-    /**
-     * 品质编码转中文标签：成品与委外物料的品质值域不同，必须按记录类型选用对应枚举，不可混用。
-     * @param isMaterial true=委外物料记录（materialId 非空），false=成品记录（productId 非空）
-     */
-    private String qualityTypeLabel(String code, boolean isMaterial) {
-        if (code == null) return "";
-        if (isMaterial) {
-            try { return QualityType.valueOf(code).getLabel(); } catch (Exception e) { return code; }
-        }
-        ProductQualityType p = ProductQualityType.of(code);
-        return p != null ? p.getLabel() : code;
-    }
 }

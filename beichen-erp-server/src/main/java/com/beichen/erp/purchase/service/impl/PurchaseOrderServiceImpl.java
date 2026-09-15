@@ -2,12 +2,14 @@ package com.beichen.erp.purchase.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.entity.FinancePayable;
@@ -205,7 +207,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public void cancel(Long id) {
         PurchaseOrder old = orderMapper.selectById(id);
         if (old == null) throw new BusinessException("采购单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败
+        if (!DocStatusGuard.claim(orderMapper, PurchaseOrder::getId, id, PurchaseOrder::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("只有草稿状态可作废");
         PurchaseOrder u = new PurchaseOrder();
         u.setId(id);
         u.setStatus(DocStatus.CANCELLED.getCode());
@@ -217,13 +222,23 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public void audit(Long id) {
         PurchaseOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("采购单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免库存/应付/成本重复写
+        if (!DocStatusGuard.claim(orderMapper, PurchaseOrder::getId, id, PurchaseOrder::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
+            throw new BusinessException("只有草稿状态可审核");
         List<PurchaseOrderItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, id));
         if (items.isEmpty()) throw new BusinessException("采购单明细不能为空");
-        // 1) 生成应付台账
+        // P2-33：数量必须为正（负数会被当作"出库"扣库存、0 会生成空台账）；引用主数据必须存在
+        for (PurchaseOrderItem it : items) {
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("采购数量必须大于 0（明细行ID=" + it.getId() + "）");
+        }
+        if (order.getSupplierId() == null || supplierMapper.selectById(order.getSupplierId()) == null)
+            throw new BusinessException("供应商不存在：ID=" + order.getSupplierId());
+        // 1) 生成应付台账（D1 口径 2026-09-12：台账号一律 YF- 流水号，来源单号仍写 source_bill_no）
         FinancePayable fp = new FinancePayable();
-        fp.setBillNo(order.getCode());
+        fp.setBillNo(payableHelper.newBillNo());
         fp.setSupplierId(order.getSupplierId());
         Supplier s = order.getSupplierId() != null ? supplierMapper.selectById(order.getSupplierId()) : null;
         fp.setSupplierName(s != null ? s.getName() : "");
@@ -237,7 +252,9 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         fp.setStatus(SettlementStatus.UNSETTLED.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) fp.setCompanyId(cid);
-        payableMapper.insert(fp);
+        // 按 bill_no 保存：反审核后该单号台账已存在（仅置 CANCELLED 留痕），必须复用重置，
+        // 否则再次审核会撞 finance_payable.uk_bill_no（2026-09-10 审核发现，P1-01）
+        payableHelper.saveByBillNo(fp);
         // 2) 审核直接入库，按品质等级分别增加库存
         for (PurchaseOrderItem it : items) {
             Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
@@ -266,7 +283,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public void unAudit(Long id) {
         PurchaseOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("采购单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(order.getStatus())) throw new BusinessException("只有已完成状态可反审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免库存/成本重复冲销
+        if (!DocStatusGuard.claim(orderMapper, PurchaseOrder::getId, id, PurchaseOrder::getStatus,
+                DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
+            throw new BusinessException("只有已完成状态可反审核");
 
         // 1) 检查应付台账状态
         LambdaQueryWrapper<FinancePayable> payableW = new LambdaQueryWrapper<FinancePayable>()
@@ -274,7 +294,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 .eq(FinancePayable::getSourceBillNo, order.getCode());
         List<FinancePayable> payables = payableMapper.selectList(payableW);
         for (FinancePayable fp : payables) {
-            if (!SettlementStatus.UNSETTLED.getCode().equals(fp.getStatus())) {
+            // 只拦「真正核销过」的（已结清/部分结清/有付款额）；CANCELLED 是反审核自身的冲销留痕，不算核销
+            if (SettlementStatus.isSettled(fp.getStatus(), fp.getPaidAmount())) {
                 throw new BusinessException("该采购单对应的应付账款已核销，无法反审核。请先处理应付账款。");
             }
         }
@@ -297,27 +318,31 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             stockService.changeStock(order.getWarehouseId(),
                     product != null ? product.getId() : it.getProductId(),
                     it.getQuantity().negate(), // 负数冲回
-                    StockChangeType.PURCHASE_IN, order.getCode(), RelatedBillType.PURCHASE_ORDER,
+                    // 反审核流水用专用 code（清单 C1）：原先复用 PURCHASE_IN，只能靠符号判断正反
+                    StockChangeType.PURCHASE_UN_AUDIT, order.getCode(), RelatedBillType.PURCHASE_ORDER,
                     product != null ? product.getSpec() : "",
                     order.getId(), it.getQualityType());
         }
 
-        // 4) 删除应付台账
+        // 4) 冲销应付台账：置「已作废」并保留审计，不再物理删除（与委外交货反审核一致），
+        //    避免账务无留痕、以及反审核后再审核时 bill_no 重复生成
         for (FinancePayable fp : payables) {
-            payableMapper.deleteById(fp.getId());
+            fp.setStatus(SettlementStatus.CANCELLED.getCode());
+            fp.setUnpaidAmount(BigDecimal.ZERO);
+            payableMapper.updateById(fp);
         }
 
         // 5) 成本冲销：删除本单入库批次并反加权
         costService.reverseByBill(StockChangeType.PURCHASE_IN.getCode(), id);
 
         // 6) 回退状态到草稿，清除审核信息
-        PurchaseOrder u = new PurchaseOrder();
-        u.setId(id);
-        u.setStatus(DocStatus.DRAFT.getCode());
-        u.setAuditorId(null);
-        u.setAuditorName(null);
-        u.setAuditTime(null);
-        orderMapper.updateById(u);
+        // 审核信息必须用 UpdateWrapper 显式置 null：updateById 忽略 null 字段，反审核后仍显示审核人/时间
+        orderMapper.update(null, new LambdaUpdateWrapper<PurchaseOrder>()
+                .eq(PurchaseOrder::getId, id)
+                .set(PurchaseOrder::getStatus, DocStatus.DRAFT.getCode())
+                .set(PurchaseOrder::getAuditorId, null)
+                .set(PurchaseOrder::getAuditorName, null)
+                .set(PurchaseOrder::getAuditTime, null));
     }
 
     private String generateCode() {

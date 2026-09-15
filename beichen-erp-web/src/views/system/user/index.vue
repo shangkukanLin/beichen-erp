@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getUserPage,
+  getUser,
   addUser,
+  getDefaultDashboardTabs,
   updateUser,
   deleteUser,
   resetPassword,
   toggleUserStatus,
   getEnabledRoles,
+  DASHBOARD_TABS,
   type UserVO,
   type UserDTO,
   type UserQueryParams,
@@ -56,7 +59,9 @@ const defaultForm = (): UserDTO => ({
   phone: '',
   dept: '',
   status: 1,
-  roleIds: []
+  roleIds: [],
+  // 新增用户默认首页全部业务 TAB 可见
+  dashboardTabs: DASHBOARD_TABS.map((t) => t.key)
 })
 
 const form = reactive<UserDTO>(defaultForm())
@@ -71,6 +76,27 @@ const rules = computed<FormRules>(() => ({
       ],
   status: [{ required: true, message: '请选择状态', trigger: 'change' }]
 }))
+
+/* 新增模式下按所选角色动态推导首页 TAB 默认勾选（多角色并集；编辑模式不覆盖已保存配置） */
+let tabsDeriveTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  () => (form.roleIds || []).join(','),
+  (val) => {
+    if (isEdit.value) return
+    if (tabsDeriveTimer) clearTimeout(tabsDeriveTimer)
+    tabsDeriveTimer = setTimeout(async () => {
+      const roleIds = val ? val.split(',').filter(Boolean) : []
+      if (roleIds.length === 0) {
+        form.dashboardTabs = DASHBOARD_TABS.map((t) => t.key)
+        return
+      }
+      try {
+        const tabs = await getDefaultDashboardTabs(roleIds)
+        if (!isEdit.value) form.dashboardTabs = tabs && tabs.length > 0 ? tabs : DASHBOARD_TABS.map((t) => t.key)
+      } catch { /* 推导失败保持当前勾选 */ }
+    }, 300)
+  }
+)
 
 /* ============== 重置密码弹窗 ============== */
 const resetDialogVisible = ref(false)
@@ -142,18 +168,32 @@ function handleAdd() {
 }
 
 function handleEdit(row: UserVO) {
+  // 先同步填行数据并打开弹窗（详情接口仅用于补 TAB 勾选）
   Object.assign(form, defaultForm(), {
     id: row.id,
     username: row.username,
     phone: row.phone ?? '',
     dept: row.dept ?? '',
     status: row.status,
-    roleIds: (row.roles || []).map((r) => r.id as number | string)
+    roleIds: (row.roles || []).map((r) => r.id as number | string),
+    dashboardTabs: DASHBOARD_TABS.map((t) => t.key)
   })
   isEdit.value = true
   dialogTitle.value = '编辑用户'
   dialogVisible.value = true
   formRef.value?.clearValidate()
+  // 详情接口带回 TAB 勾选（列表接口不携带）；空/缺失视为全部可见
+  getUser(row.id as number | string)
+    .then((detail) => {
+      // 防竞态：请求返回时用户可能已关闭弹窗或切到「新增」，不得回填
+      if (!dialogVisible.value || !isEdit.value || form.id !== row.id) return
+      const tabs = detail?.dashboardTabs
+      form.dashboardTabs = tabs && tabs.length > 0 ? tabs : DASHBOARD_TABS.map((t) => t.key)
+    })
+    .catch(() => {
+      if (!dialogVisible.value || !isEdit.value || form.id !== row.id) return
+      form.dashboardTabs = DASHBOARD_TABS.map((t) => t.key)
+    })
 }
 
 async function handleSubmit() {
@@ -169,7 +209,8 @@ async function handleSubmit() {
           phone: form.phone || null,
           dept: form.dept || null,
           status: form.status,
-          roleIds: form.roleIds
+          roleIds: form.roleIds,
+          dashboardTabs: form.dashboardTabs
         }
         await updateUser(payload)
         ElMessage.success('修改成功')
@@ -307,7 +348,6 @@ onMounted(() => {
     <!-- 列表 -->
     <el-card shadow="never" class="table-card">
       <el-table v-loading="tableLoading" :data="tableData" border stripe>
-        <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="username" label="用户名" min-width="120" show-overflow-tooltip />
         <el-table-column prop="phone" label="手机号" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
@@ -413,6 +453,13 @@ onMounted(() => {
               >
                 <el-option v-for="r in roleOptions" :key="r.id" :label="r.roleName" :value="r.id as number | string" />
               </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="首页TAB">
+              <el-checkbox-group v-model="form.dashboardTabs">
+                <el-checkbox v-for="t in DASHBOARD_TABS" :key="t.key" :value="t.key">{{ t.label }}</el-checkbox>
+              </el-checkbox-group>
             </el-form-item>
           </el-col>
         </el-row>

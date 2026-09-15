@@ -41,7 +41,10 @@ public enum SourceBillType {
     SALE_RETURN_CHARGE("销售退货收费"),
 
     /** 退货整理折损收款：整理后 B/C/不良品的折损，向客户收取（单号后缀 -LOSS） */
-    RETURN_SORT_LOSS("退货整理折损");
+    RETURN_SORT_LOSS("退货整理折损"),
+
+    /** 应付转应收：退货/超损扣款在无货款可抵扣时，转为向供应商收款（应收挂供应商） */
+    PAYABLE_TRANSFER("应付转应收");
 
     private final String label;
 

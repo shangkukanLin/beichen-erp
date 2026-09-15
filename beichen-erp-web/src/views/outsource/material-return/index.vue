@@ -3,6 +3,7 @@ import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY } from '@/api/enums'
 
 const router = useRouter()
@@ -10,6 +11,9 @@ const loading = ref(false)
 const list = ref<any[]>([])
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const query = reactive({ code: '', supplierId: undefined as any, status: '' })
+
+// Odoo 风格：退货对象（物料商）实时查库
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
 
 async function loadData() {
   loading.value = true
@@ -55,7 +59,7 @@ onMounted(loadData)
     <el-card shadow="never">
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         <el-input v-model="query.code" placeholder="退货单号" clearable style="width:200px" @keyup.enter="handleSearch" />
-        <el-input v-model="query.supplierId" placeholder="供应商ID" clearable style="width:150px" @keyup.enter="handleSearch" />
+        <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="供应商" style="width:180px" />
         <el-select v-model="query.status" placeholder="状态" clearable style="width:140px">
           <el-option label="草稿" :value="DocStatus.DRAFT" />
           <el-option label="已审核" :value="DocStatus.AUDITED" />

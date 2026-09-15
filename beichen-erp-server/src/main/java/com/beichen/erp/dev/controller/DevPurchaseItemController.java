@@ -43,9 +43,9 @@ public class DevPurchaseItemController {
         return R.ok(devPurchaseItemService.pageMaterial(pageParam, name, projectId, type));
     }
 
-    /** 获取研发物料类型枚举选项（code+label，value 存 code 显示用 label） */
+    /** 获取研发物料类型 **code 列表**（2026-09-14：「接口只回 code」，中文由前端 `DevMaterialTypeLabel` 映射） */
     @GetMapping("/material-types")
-    public R<List<java.util.Map<String, Object>>> materialTypes() {
+    public R<List<String>> materialTypes() {
         return R.ok(DevMaterialTypeEnum.allOptions());
     }
 

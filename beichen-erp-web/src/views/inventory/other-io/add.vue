@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { ref, computed, onMounted, onActivated, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -20,7 +21,7 @@ function goBack() {
 const qualityOptions = ref<QualityOption[]>([])
 const saving = ref(false)
 // ioType 显式标注为 string：否则 reactive 会推断成字面量 "IN"，与 IoType.OUT 比较会报 TS2367
-const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN as string, ioDate: new Date().toISOString().slice(0,10), remark: '' })
+const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN as string, ioDate: localDate(), remark: '' })
 // 成品其他出入库：明细是成品（后端字段 productId / 表 inventory_other_io_item.product_id），
 // 此前误用委外物料下拉导致 productId 存不进去，这里与详情页保持一致
 // 出库单才需要看库存：入库不消耗库存，不展示也不校验
@@ -115,7 +116,7 @@ function initPage() {
   Object.assign(form, {
     warehouseId: undefined,
     ioType: IoType.IN,
-    ioDate: new Date().toISOString().slice(0, 10),
+    ioDate: localDate(),
     remark: ''
   })
   items.value = [{ productId: undefined, productName: '', spec: '', unit: '', qualityType: 'A', quantity: undefined, remark: '', stockQty: undefined }]

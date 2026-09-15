@@ -45,15 +45,12 @@ public enum DevMaterialTypeEnum {
         return labels;
     }
 
-    /** 返回所有类型的 {code,label} 选项，供前端下拉使用（value=code，显示=label） */
-    public static List<java.util.Map<String, Object>> allOptions() {
-        List<java.util.Map<String, Object>> options = new ArrayList<>();
+    /** 返回所有类型的 **code 列表**，供前端下拉使用（2026-09-14：「接口只回 code」，中文由前端 `DevMaterialTypeLabel` 映射） */
+    public static List<String> allOptions() {
+        List<String> codes = new ArrayList<>();
         for (DevMaterialTypeEnum t : values()) {
-            java.util.Map<String, Object> o = new java.util.LinkedHashMap<>();
-            o.put("code", t.getCode());
-            o.put("label", t.label);
-            options.add(o);
+            codes.add(t.getCode());
         }
-        return options;
+        return codes;
     }
 }

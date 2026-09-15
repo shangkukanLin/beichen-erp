@@ -147,7 +147,7 @@ public class DevPurchaseItemServiceImpl extends ServiceImpl<DevPurchaseItemMappe
             m.put("placeType", DevMaterialPlaceTypeEnum.INVENTORY.getCode());
             m.put("placeName", w.getWarehouseName());
             m.put("address", w.getAddress());
-            m.put("groupLabel", DevMaterialPlaceTypeEnum.INVENTORY.getLabel());
+            // 2026-09-14：不再回 groupLabel（中文分组名由前端按 placeType 映射，见 MaterialPlaceTypeLabel）
             options.add(m);
         }
 
@@ -165,7 +165,7 @@ public class DevPurchaseItemServiceImpl extends ServiceImpl<DevPurchaseItemMappe
             m.put("placeType", DevMaterialPlaceTypeEnum.OUTSOURCE.getCode());
             m.put("placeName", w.getWarehouseName());
             m.put("address", w.getAddress());
-            m.put("groupLabel", DevMaterialPlaceTypeEnum.OUTSOURCE.getLabel());
+            // 2026-09-14：同上，不再回 groupLabel
             options.add(m);
         }
         return options;

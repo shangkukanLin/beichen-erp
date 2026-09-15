@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 defineOptions({ name: 'OutsourceOrderDetail' })
 
 import { reactive, ref, computed, onMounted, onActivated } from 'vue'
@@ -14,7 +15,7 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 const route = useRoute(); const router = useRouter()
 const loading = ref(true); const saving = ref(false)
 const activeTab = ref('detail')
-const uploadFile = ref<File | null>(null)
+const uploadFile = ref<File | null>(null); const attachSaving = ref(false)
 
 // BOM物料库存缺料
 const materialStockMap = ref<Record<string, any>>({})
@@ -183,6 +184,21 @@ function handleDrop(e: DragEvent) { e.preventDefault(); const file = e.dataTrans
 function handleFileSelect(e: Event) { const file = (e.target as HTMLInputElement).files?.[0]; if (file) uploadFile.value = file }
 function handleRemoveUploadFile() { uploadFile.value = null }
 
+// 合同文件单独保存：只提交 attachUrl（走 /{id}/attach），不触发整单更新，避免误清产品明细
+async function handleSaveAttach() {
+  if (!uploadFile.value) return
+  attachSaving.value = true
+  try {
+    const fd = new FormData(); fd.append('file', uploadFile.value)
+    const res = await request.post<any, string>('/dev/file/upload', fd)
+    await request.put(`/outsource/order/${form.id}/attach`, { attachUrl: res as unknown as string })
+    ElMessage.success('合同文件已保存')
+    uploadFile.value = null
+    await loadData()
+    sessionStorage.setItem(OUTSOURCE_ORDER_DIRTY_KEY, '1')
+  } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) } finally { attachSaving.value = false }
+}
+
 async function handleDeleteAttach() {
   try {
     await ElMessageBox.confirm('确定删除附件吗？', '删除附件', { confirmButtonText:'删除', cancelButtonText:'取消', type:'warning' })
@@ -201,7 +217,7 @@ async function handleAudit() {
 }
 
 async function handleUnaudit() {
-  try { await ElMessageBox.confirm('反审核将回滚所有交货记录和库存变动，确认继续？', '反审核加工单', { type:'warning' }); await request.put(`/outsource/order/${form.id}/unaudit`); ElMessage.success('已反审核，回到待审核状态'); await loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('反审核将回滚所有交货记录和库存变动，确认继续？', '反审核加工单', { type:'warning' }); await request.put(`/outsource/order/${form.id}/un-audit`); ElMessage.success('已反审核，回到待审核状态'); await loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
 
@@ -239,7 +255,7 @@ const delProducts = ref<any[]>([])
 const delDialogVisible = ref(false); const delIsEdit = ref(false); const delEditId = ref<number>()
 const delSaving = ref(false); const delUploadFile = ref<File | null>(null)
 const delWarehouseId = ref<number>(); const delWarehouseOptions = ref<any[]>([])
-const delForm = reactive({ productId: undefined as any, quantity: '', aQty: 0 as number, bQty: 0 as number, cQty: 0 as number, defectQty: 0 as number, deliveryDate: new Date().toISOString().split('T')[0], trackingNo: '', remark: '', attachUrl: '' })
+const delForm = reactive({ productId: undefined as any, quantity: '', aQty: 0 as number, bQty: 0 as number, cQty: 0 as number, defectQty: 0 as number, deliveryDate: localDate(), trackingNo: '', remark: '', attachUrl: '' })
 
 // 四等级自动合计
 const delGradeSum = computed(() => {
@@ -267,7 +283,7 @@ async function loadDelWarehouses() {
 }
 function delOpenAdd() {
   delIsEdit.value = false; delEditId.value = undefined; delWarehouseId.value = undefined; delUploadFile.value = null
-  Object.assign(delForm, { productId: undefined, quantity: '', aQty: 0, bQty: 0, cQty: 0, defectQty: 0, deliveryDate: new Date().toISOString().split('T')[0], trackingNo: '', remark: '', attachUrl: '' })
+  Object.assign(delForm, { productId: undefined, quantity: '', aQty: 0, bQty: 0, cQty: 0, defectQty: 0, deliveryDate: localDate(), trackingNo: '', remark: '', attachUrl: '' })
   delDialogVisible.value = true; loadDelWarehouses()
 }
 function delOpenEdit(row: any) {
@@ -340,7 +356,7 @@ async function delHandleAudit(row: any) {
   catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function delHandleUnaudit(row: any) {
-  try { await ElMessageBox.confirm('确定反审核该交货记录吗？反审核后将回滚库存与应付，回到草稿。', '反审核', { type: 'warning' }); await request.put(`/outsource/order-delivery/${row.id}/unaudit`); ElMessage.success('已反审核'); loadDeliveryData() }
+  try { await ElMessageBox.confirm('确定反审核该交货记录吗？反审核后将回滚库存与应付，回到草稿。', '反审核', { type: 'warning' }); await request.put(`/outsource/order-delivery/${row.id}/un-audit`); ElMessage.success('已反审核'); loadDeliveryData() }
   catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
@@ -490,7 +506,7 @@ onActivated(async () => { await loadOptions(); await loadData() })
       <el-card shadow="never" style="margin-top:12px">
         <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">合同文件</span><el-button type="warning" size="small" @click="exportPdf">导出合同模板</el-button></div></template>
         <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile?'#67c23a':'#dcdfe6', background: uploadFile?'#f0f9eb':'#fafafa' }">
-          <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:#67c23a;font-weight:600">{{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
+          <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:#67c23a;font-weight:600">{{ uploadFile.name }}</span><el-button type="primary" size="small" :loading="attachSaving" @click.stop="handleSaveAttach">保存</el-button><el-button type="danger" size="small" @click.stop="handleRemoveUploadFile">移除</el-button></div></template>
           <template v-else-if="form.attachUrl"><div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap"><span style="color:var(--app-color-primary)">已有附件</span><el-button type="primary" size="small" @click.stop="openAttach(form.attachUrl)">查看</el-button><el-button type="success" size="small"><a :href="form.attachUrl" download style="color:inherit;text-decoration:none">下载</a></el-button><el-button type="danger" size="small" @click.stop="handleDeleteAttach">删除</el-button><span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">可拖拽新文件替换</span></div></template>
           <template v-else><p style="color:#909399;margin:0">拖拽文件到此处，或点击选择</p></template>
           <input v-if="!form.attachUrl && !uploadFile" type="file" @change="handleFileSelect" style="position:absolute;inset:0;opacity:0;cursor:pointer" />
@@ -530,7 +546,10 @@ onActivated(async () => { await loadOptions(); await loadData() })
         </div>
         <el-table :data="deliveries" border stripe size="small" :row-class-name="deliveryRowClass">
           <el-table-column label="交货日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-          <el-table-column label="产品名称" min-width="120"><template #default="{row}">{{ delProducts.find((p:any)=>p.id===row.productId)?.productName || '-' }}</template></el-table-column>
+          <el-table-column label="产品名称" min-width="120"><template #default="{row}">
+            <!-- 优先按产品主数据ID匹配：加工单整单编辑会重建产品明细行，行ID会变化（交货记录仍指向原产品） -->
+            {{ (delProducts.find((p:any)=>row.productMasterId && p.productId===row.productMasterId) || delProducts.find((p:any)=>p.id===row.productId))?.productName || '-' }}
+          </template></el-table-column>
           <el-table-column label="类型" width="80" align="center"><template #default="{row}"><el-tag v-if="row.deliveryType" :type="row.deliveryType===DeliveryType.DEFECT_RETURN?'warning':'info'" size="small">{{ row.deliveryType===DeliveryType.DELIVERY ? '交货' : (DeliveryTypeLabel[row.deliveryType] || row.deliveryType) }}</el-tag><span v-else style="color:var(--app-text-secondary)">—</span></template></el-table-column>
           <el-table-column label="收货仓库" width="120">
             <template #default="{row}"><span v-if="row.warehouseId">{{ delWarehouseOptions.find((w:any)=>w.id===row.warehouseId)?.warehouseName || row.warehouseId }}</span><span v-else style="color:var(--app-text-placeholder)">—</span></template>

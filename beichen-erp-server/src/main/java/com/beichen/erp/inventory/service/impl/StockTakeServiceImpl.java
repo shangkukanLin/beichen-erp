@@ -1,9 +1,11 @@
 package com.beichen.erp.inventory.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
@@ -200,7 +202,11 @@ public class StockTakeServiceImpl implements StockTakeService {
     public void audit(Long id) {
         InventoryStockTake t = takeMapper.selectById(id);
         if (t == null) throw new BusinessException("盘点单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(t.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        // P2-29：原子抢占 DRAFT→AUDITED，避免并发/双击重复按差异调整库存
+        if (!DocStatusGuard.claim(takeMapper, InventoryStockTake::getId, id,
+                InventoryStockTake::getStatus, DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode())) {
+            throw new BusinessException("只有草稿状态可审核");
+        }
         applyDiff(t, false);
         InventoryStockTake u = new InventoryStockTake();
         u.setId(id);
@@ -214,13 +220,20 @@ public class StockTakeServiceImpl implements StockTakeService {
     public void unAudit(Long id) {
         InventoryStockTake t = takeMapper.selectById(id);
         if (t == null) throw new BusinessException("盘点单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(t.getStatus())) throw new BusinessException("只有已审核状态可反审核");
+        // P2-29：原子抢占 AUDITED→DRAFT，避免并发反审核重复冲回盘点差异
+        if (!DocStatusGuard.claim(takeMapper, InventoryStockTake::getId, id,
+                InventoryStockTake::getStatus, DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode())) {
+            throw new BusinessException("只有已审核状态可反审核");
+        }
         applyDiff(t, true);
-        InventoryStockTake u = new InventoryStockTake();
-        u.setId(id);
-        u.setStatus(DocStatus.DRAFT.getCode());
-        u.setAuditTime(null);
-        takeMapper.updateById(u);
+        // 审核信息必须用 UpdateWrapper 显式置 null：updateById 会忽略 null 字段，
+        // 否则反审核回草稿后 audit_time/审核人仍残留，单据看着"像已审核"（审计信息失真）。
+        takeMapper.update(null, new LambdaUpdateWrapper<InventoryStockTake>()
+                .eq(InventoryStockTake::getId, id)
+                .set(InventoryStockTake::getStatus, DocStatus.DRAFT.getCode())
+                .set(InventoryStockTake::getAuditTime, null)
+                .set(InventoryStockTake::getAuditorId, null)
+                .set(InventoryStockTake::getAuditorName, null));
     }
 
     @Override
@@ -284,7 +297,15 @@ public class StockTakeServiceImpl implements StockTakeService {
 
     // ==================== 内部实现 ====================
 
-    /** 按差异调整库存；reverse=true 时反向冲回 */
+    /**
+     * 按差异调整库存；reverse=true 时反向冲回。
+     *
+     * <p>【C3 口径 · 2026-09-12 定稿：刻意复用，不再改动】审核/反审核**共用** {@code STOCK_TAKE_IN/STOCK_TAKE_OUT}：
+     * 这两个 code 表意的是"库存因盘点增加/减少"（盘盈/盘亏方向），不表意"审核/反审核"；
+     * 反审核只是把 delta 取反（原盘盈的反审核会写成 {@code STOCK_TAKE_OUT} 的负数），业务动作可用
+     * {@code related_bill_id}（盘点单）+ 盘点单自身的差异正负还原。不新增 {@code STOCK_TAKE_UN_AUDIT_*}：
+     * 历史流水无法回填新 code，报表反而要同时认两套。</p>
+     */
     private void applyDiff(InventoryStockTake t, boolean reverse) {
         List<InventoryStockTakeItem> items = getItems(t.getId());
         for (InventoryStockTakeItem it : items) {

@@ -1,7 +1,17 @@
 package com.beichen.erp.finance.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.beichen.erp.finance.common.SettlementStatus;
+import com.beichen.erp.finance.entity.FinancePayable;
+import com.beichen.erp.finance.entity.FinanceReceivable;
 import com.beichen.erp.finance.mapper.FinanceAnalysisMapper;
+import com.beichen.erp.finance.mapper.FinancePayableMapper;
+import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import com.beichen.erp.finance.service.FinanceAnalysisService;
+import com.beichen.erp.inventory.entity.InventoryStockLoss;
+import com.beichen.erp.inventory.mapper.InventoryStockLossMapper;
+import com.beichen.erp.outsource.entity.OutsourceStockLoss;
+import com.beichen.erp.outsource.mapper.OutsourceStockLossMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -13,15 +23,22 @@ import java.util.*;
 
 /**
  * 财务分析 Service 实现：纯查询聚合，不改任何业务数据。
- * 口径：收入=已审核销售单(audit_time/create_time 归月)-销售退货；
- * 成本=已审核采购单-采购退货；费用=已审核费用单(expense_date 归月)；
- * 净利润=毛利-费用；现金流=资金流水按月收-支。
+ * <p>口径（2026-09-11 起，P2-27 定稿为"销售成本"口径）：
+ * 收入 = 已审核销售单(audit_time/create_time 归月) − 销售退货 + 退货折损收款；
+ * 成本 = Σ(销售明细数量 − 退货明细数量) × 产品当前移动加权成本价 {@code product.cost_price}
+ * （与客户分析/销售分析同源，保证跨页面"毛利"可对账）；
+ * 费用 = 已审核费用单(expense_date 归月)；净利润 = 毛利 − 费用；现金流 = 资金流水按月收 − 支。
+ * <p>注：采购入库属资产、不是当期损益，故利润表**不再把采购金额计为成本**（采购金额见采购与资金模块）。
  */
 @Service
 @RequiredArgsConstructor
 public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
 
     private final FinanceAnalysisMapper analysisMapper;
+    private final FinancePayableMapper payableMapper;
+    private final FinanceReceivableMapper receivableMapper;
+    private final InventoryStockLossMapper inventoryLossMapper;
+    private final OutsourceStockLossMapper outsourceLossMapper;
 
     private static final BigDecimal HUNDRED = new BigDecimal("100");
     private static final BigDecimal ZERO = BigDecimal.ZERO;
@@ -37,6 +54,26 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
     }
 
     private BigDecimal toBd(Object v) { return v == null ? ZERO : new BigDecimal(v.toString()); }
+
+    /** List<Map{d,amt}> → Map<日期, 金额>（按天版，key 是 d 而非 ym） */
+    private Map<String, BigDecimal> toDayMap(List<Map<String, Object>> list) {
+        Map<String, BigDecimal> m = new HashMap<>();
+        if (list != null) for (Map<String, Object> r : list) {
+            Object d = r.get("d");
+            if (d != null) m.put(d.toString(), toBd(r.get("amt")));
+        }
+        return m;
+    }
+
+    /** List<Map{d,amt}> → Map<月, 金额>（把按天聚合结果汇总到月，使按月与按天两条链路口径完全一致） */
+    private Map<String, BigDecimal> dayToMonthMap(List<Map<String, Object>> list) {
+        Map<String, BigDecimal> m = new HashMap<>();
+        if (list != null) for (Map<String, Object> r : list) {
+            Object d = r.get("d");
+            if (d != null) m.merge(d.toString().substring(0, 7), toBd(r.get("amt")), BigDecimal::add);
+        }
+        return m;
+    }
 
     /** 近 months 个月（含本月，升序） */
     private List<String> monthList(int months) {
@@ -68,21 +105,204 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         return part.multiply(HUNDRED).divide(total, 2, RoundingMode.HALF_UP);
     }
 
+    // ==================== 利润表明细（按天） ====================
+
+    /** 快捷区间解析：返回 [start, end]，末日为今天（统计已发生数据） */
+    private LocalDate[] resolvePresetRange(String preset) {
+        LocalDate today = LocalDate.now();
+        switch (preset == null ? "today" : preset) {
+            case "yesterday": LocalDate y = today.minusDays(1); return new LocalDate[]{y, y};
+            case "week":      return new LocalDate[]{today.with(java.time.DayOfWeek.MONDAY), today};
+            case "month":     return new LocalDate[]{today.withDayOfMonth(1), today};
+            case "quarter":   return new LocalDate[]{today.withDayOfMonth(1).withMonth(((today.getMonthValue() - 1) / 3) * 3 + 1), today};
+            case "year":      return new LocalDate[]{today.withDayOfYear(1), today};
+            case "today":
+            default:          return new LocalDate[]{today, today};
+        }
+    }
+
+    @Override
+    public Map<String, Object> profitDetail(String preset, String start, String end) {
+        // 区间：自定义 start/end 优先，否则按快捷预设解析；start > end 自动交换
+        LocalDate s, e;
+        if (start != null && !start.isBlank() && end != null && !end.isBlank()) {
+            s = LocalDate.parse(start); e = LocalDate.parse(end);
+            if (s.isAfter(e)) { LocalDate t = s; s = e; e = t; }
+        } else {
+            LocalDate[] r = resolvePresetRange(preset);
+            s = r[0]; e = r[1];
+        }
+        // 防滥用：明细按天展开，最长 400 天
+        if (s.plusDays(400).isBefore(e)) s = e.minusDays(399);
+
+        // 按天聚合（口径与按月版一致）：全量按天分组，Java 侧按区间取值
+        Map<String, BigDecimal> sale = toDayMap(analysisMapper.saleByDay());
+        Map<String, BigDecimal> saleRet = toDayMap(analysisMapper.saleReturnByDay());
+        Map<String, BigDecimal> loss = toDayMap(analysisMapper.saleReturnLossByDay());
+        // 成本（口径 B）= 销售出库成本 − 退货冲回成本 = 净销售数量 × 产品当前移动加权成本价
+        Map<String, BigDecimal> saleCost = toDayMap(analysisMapper.saleCostByDay());
+        Map<String, BigDecimal> retCost = toDayMap(analysisMapper.saleReturnCostByDay());
+        Map<String, BigDecimal> exp = toDayMap(analysisMapper.expenseByDay());
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        BigDecimal sumRevenue = ZERO, sumCost = ZERO, sumExpense = ZERO;
+        for (LocalDate d = s; !d.isAfter(e); d = d.plusDays(1)) {
+            String key = d.toString();
+            BigDecimal revenue = sale.getOrDefault(key, ZERO).subtract(saleRet.getOrDefault(key, ZERO)).add(loss.getOrDefault(key, ZERO));
+            BigDecimal cost = saleCost.getOrDefault(key, ZERO).subtract(retCost.getOrDefault(key, ZERO));
+            BigDecimal expense = exp.getOrDefault(key, ZERO);
+            BigDecimal profit = revenue.subtract(cost).subtract(expense);
+            sumRevenue = sumRevenue.add(revenue);
+            sumCost = sumCost.add(cost);
+            sumExpense = sumExpense.add(expense);
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("date", key);
+            row.put("revenue", revenue);
+            row.put("cost", cost);
+            row.put("expense", expense);
+            // 支出合并口径（前端列表只展示收入/支出/利润三列）：销售成本 + 运营费用
+            row.put("expenseTotal", cost.add(expense));
+            row.put("profit", profit);
+            row.put("grossRate", rate(revenue.subtract(cost), revenue));
+            rows.add(row);
+        }
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("income", sumRevenue);
+        summary.put("cost", sumCost);
+        summary.put("expense", sumExpense);
+        summary.put("expenseTotal", sumCost.add(sumExpense));
+        summary.put("profit", sumRevenue.subtract(sumCost).subtract(sumExpense));
+
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("start", s.toString());
+        res.put("end", e.toString());
+        res.put("preset", (start != null && !start.isBlank() && end != null && !end.isBlank()) ? "custom" : (preset == null ? "today" : preset));
+        res.put("summary", summary);
+        res.put("rows", rows);
+        return res;
+    }
+
+    /**
+     * 明细行的展示顺序：销售 → 折损收款 → 销售退货（收入组）→ 销售出库成本 → 退货冲回成本（成本组）→ 费用。
+     * 成本组已按 P2-27 定稿口径改为「销售出库成本/退货冲回成本」，采购单不再进入利润表。
+     */
+    private static final Map<String, Integer> RECORD_ORDER = Map.of(
+            "SALE", 0, "LOSS_INCOME", 1, "SALE_RETURN", 2,
+            "SALE_COST", 3, "SALE_RETURN_COST", 4, "EXPENSE", 5);
+
+    private Map<String, Object> rec(String bizType, String subType, String category, Object billId,
+                                    String billNo, String partner, BigDecimal signedAmount, String remark) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("bizType", bizType);
+        // subType：细分类型 code（目前仅费用行使用，存 expense_type 的 code）；中文一律由前端按 code 映射
+        m.put("subType", subType);
+        m.put("category", category);
+        // 单据主键：明细页的单号点击进入对应单据详情需要它
+        m.put("billId", billId);
+        m.put("billNo", billNo);
+        m.put("partner", partner);
+        m.put("amount", signedAmount);
+        m.put("remark", remark);
+        return m;
+    }
+
+    /**
+     * 利润明细钻取：某一天的每一条单据记录（口径与 profitDetail 聚合完全一致）。
+     * 收入 = 销售单 − 销售退货 + 折损收款；成本 = 销售单出库成本 − 退货冲回成本（口径 B）；费用 = 费用单。
+     */
+    @Override
+    public Map<String, Object> profitDetailRecords(String date) {
+        String key = LocalDate.parse(date).toString();
+
+        List<Map<String, Object>> records = new ArrayList<>();
+        for (Map<String, Object> r : analysisMapper.saleOrderRecords()) {
+            if (!key.equals(r.get("d"))) continue;
+            records.add(rec("SALE", null, "REVENUE", r.get("id"),
+                    str(r.get("code")), str(r.get("partner")), toBd(r.get("total_amount")), str(r.get("remark"))));
+        }
+        // 折损收款：退货环节向客户收取的补偿，收入性质（与聚合口径同为 loss_amount > 0）
+        for (Map<String, Object> r : analysisMapper.saleReturnRecords()) {
+            if (!key.equals(r.get("d"))) continue;
+            BigDecimal total = toBd(r.get("total_amount"));
+            if (total.compareTo(ZERO) != 0) {
+                records.add(rec("SALE_RETURN", null, "REVENUE", r.get("id"),
+                        str(r.get("code")), str(r.get("partner")), total.negate(), str(r.get("remark"))));
+            }
+            BigDecimal loss = toBd(r.get("loss_amount"));
+            if (loss.compareTo(ZERO) > 0) {
+                records.add(rec("LOSS_INCOME", null, "REVENUE", r.get("id"),
+                        str(r.get("code")), str(r.get("partner")), loss, str(r.get("remark"))));
+            }
+        }
+        // 成本（口径 B）：销售单的出库成本（明细数量 × 产品当前移动加权成本价）；与收入行同单号，便于对照
+        for (Map<String, Object> r : analysisMapper.saleCostRecords()) {
+            if (!key.equals(r.get("d"))) continue;
+            BigDecimal c = toBd(r.get("amt"));
+            if (c.compareTo(ZERO) == 0) continue; // 产品未维护成本价 → 该单无成本行，避免占位空行
+            records.add(rec("SALE_COST", null, "COST", r.get("id"),
+                    str(r.get("code")), str(r.get("partner")), c, str(r.get("remark"))));
+        }
+        // 退货入库会把成本退回，故冲减成本（负数）
+        for (Map<String, Object> r : analysisMapper.saleReturnCostRecords()) {
+            if (!key.equals(r.get("d"))) continue;
+            BigDecimal c = toBd(r.get("amt"));
+            if (c.compareTo(ZERO) == 0) continue;
+            records.add(rec("SALE_RETURN_COST", null, "COST", r.get("id"),
+                    str(r.get("code")), str(r.get("partner")), c.negate(), str(r.get("remark"))));
+        }
+        for (Map<String, Object> r : analysisMapper.expenseRecords()) {
+            if (!key.equals(r.get("d"))) continue;
+            // subType 存费用类型 code（OFFICE/RENT/...），前端按 ExpenseTypeLabel 映射中文，避免后端硬编码文案
+            records.add(rec("EXPENSE", str(r.get("expense_type")), "EXPENSE", r.get("id"),
+                    str(r.get("code")), str(r.get("partner")), toBd(r.get("amount")), str(r.get("remark"))));
+        }
+
+        records.sort(Comparator
+                .comparing((Map<String, Object> m) -> RECORD_ORDER.getOrDefault(String.valueOf(m.get("bizType")), 99))
+                .thenComparing(m -> String.valueOf(m.get("billNo"))));
+
+        // 区间小计（与 profitDetail 同日聚合值对账）
+        BigDecimal income = ZERO, cost = ZERO, expense = ZERO;
+        for (Map<String, Object> r : records) {
+            BigDecimal a = toBd(r.get("amount"));
+            switch (String.valueOf(r.get("category"))) {
+                case "REVENUE" -> income = income.add(a);
+                case "COST" -> cost = cost.add(a);
+                case "EXPENSE" -> expense = expense.add(a);
+            }
+        }
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("income", income);
+        summary.put("cost", cost);
+        summary.put("expense", expense);
+        summary.put("expenseTotal", cost.add(expense));
+        summary.put("profit", income.subtract(cost).subtract(expense));
+
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("date", key);
+        res.put("summary", summary);
+        res.put("records", records);
+        return res;
+    }
+
+    private String str(Object v) { return v == null ? "" : v.toString(); }
+
     @Override
     public Map<String, Object> profit(int months, LocalDate start, LocalDate end) {
         List<String> ms = (start != null && end != null) ? monthRange(start, end) : monthList(months);
         Map<String, BigDecimal> sale = toAmtMap(analysisMapper.saleByMonth());
-        Map<String, BigDecimal> purchase = toAmtMap(analysisMapper.purchaseByMonth());
         Map<String, BigDecimal> saleRet = toAmtMap(analysisMapper.saleReturnByMonth());
-        Map<String, BigDecimal> purRet = toAmtMap(analysisMapper.purchaseReturnByMonth());
         Map<String, BigDecimal> exp = toAmtMap(analysisMapper.expenseByMonth());
         // 折损收款：退货环节向客户收取的补偿，并入营业收入
         Map<String, BigDecimal> loss = toAmtMap(analysisMapper.saleReturnLossByMonth());
+        // 成本（口径 B）：按天聚合结果汇总到月，保证按月与按天两条链路完全一致
+        Map<String, BigDecimal> saleCost = dayToMonthMap(analysisMapper.saleCostByDay());
+        Map<String, BigDecimal> retCost = dayToMonthMap(analysisMapper.saleReturnCostByDay());
         List<Map<String, Object>> rows = new ArrayList<>();
         for (String ym : ms) {
             BigDecimal lossAmt = loss.getOrDefault(ym, ZERO);
             BigDecimal revenue = sale.getOrDefault(ym, ZERO).subtract(saleRet.getOrDefault(ym, ZERO)).add(lossAmt);
-            BigDecimal cost = purchase.getOrDefault(ym, ZERO).subtract(purRet.getOrDefault(ym, ZERO));
+            BigDecimal cost = saleCost.getOrDefault(ym, ZERO).subtract(retCost.getOrDefault(ym, ZERO));
             BigDecimal gross = revenue.subtract(cost);
             BigDecimal expense = exp.getOrDefault(ym, ZERO);
             Map<String, Object> row = new LinkedHashMap<>();
@@ -119,17 +339,18 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         String yearPrefix = LocalDate.now().getYear() + "-";
         BigDecimal ytdRevenue = ZERO, ytdCost = ZERO, ytdExpense = ZERO;
         Map<String, BigDecimal> sale = toAmtMap(analysisMapper.saleByMonth());
-        Map<String, BigDecimal> purchase = toAmtMap(analysisMapper.purchaseByMonth());
         Map<String, BigDecimal> saleRet = toAmtMap(analysisMapper.saleReturnByMonth());
-        Map<String, BigDecimal> purRet = toAmtMap(analysisMapper.purchaseReturnByMonth());
         Map<String, BigDecimal> exp = toAmtMap(analysisMapper.expenseByMonth());
         Map<String, BigDecimal> loss = toAmtMap(analysisMapper.saleReturnLossByMonth());
+        // 成本（口径 B，与利润表同源）
+        Map<String, BigDecimal> saleCost = dayToMonthMap(analysisMapper.saleCostByDay());
+        Map<String, BigDecimal> retCost = dayToMonthMap(analysisMapper.saleReturnCostByDay());
         Set<String> allYm = new HashSet<>();
-        allYm.addAll(sale.keySet()); allYm.addAll(purchase.keySet()); allYm.addAll(exp.keySet()); allYm.addAll(loss.keySet());
+        allYm.addAll(sale.keySet()); allYm.addAll(saleCost.keySet()); allYm.addAll(exp.keySet()); allYm.addAll(loss.keySet());
         for (String ym : allYm) {
             if (!ym.startsWith(yearPrefix)) continue;
             ytdRevenue = ytdRevenue.add(sale.getOrDefault(ym, ZERO)).subtract(saleRet.getOrDefault(ym, ZERO)).add(loss.getOrDefault(ym, ZERO));
-            ytdCost = ytdCost.add(purchase.getOrDefault(ym, ZERO)).subtract(purRet.getOrDefault(ym, ZERO));
+            ytdCost = ytdCost.add(saleCost.getOrDefault(ym, ZERO)).subtract(retCost.getOrDefault(ym, ZERO));
             ytdExpense = ytdExpense.add(exp.getOrDefault(ym, ZERO));
         }
         BigDecimal ytdGross = ytdRevenue.subtract(ytdCost);
@@ -221,7 +442,11 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         Map<String, BigDecimal> amt = new HashMap<>();
         Map<String, BigDecimal> tax = new HashMap<>();
         collectTax(analysisMapper.saleTaxByMonth(), "sale", amt, tax);
+        // 销售退货冲减销项（取负）：含税标记与税负比例跟随原销售单（P2-26 口径 A）
+        collectTaxNegated(analysisMapper.saleReturnTaxByMonth(), "sale", amt, tax);
         collectTax(analysisMapper.purchaseTaxByMonth(), "purchase", amt, tax);
+        // 采购退货冲减进项（取负）：同上，跟随原采购单
+        collectTaxNegated(analysisMapper.purchaseReturnTaxByMonth(), "purchase", amt, tax);
         collectTax(analysisMapper.outsourceTaxByMonth(), "outsource", amt, tax);
 
         // 区间合计（汇总卡用）
@@ -298,6 +523,22 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         }
     }
 
+    /**
+     * 同 {@link #collectTax}，但金额与税额取负 —— 用于退货冲减销项/进项（P2-26 口径 A）。
+     * 退货单的含税标记与税负比例已在 SQL 内跟随原单，这里只需统一取负后合并。
+     */
+    private void collectTaxNegated(List<Map<String, Object>> list, String biz, Map<String, BigDecimal> amt, Map<String, BigDecimal> tax) {
+        if (list == null) return;
+        for (Map<String, Object> r : list) {
+            Object ym = r.get("ym");
+            if (ym == null) continue;
+            boolean taxed = r.get("tax_included") != null && ((Number) r.get("tax_included")).intValue() == 1;
+            String k = key(ym.toString(), biz, taxed);
+            amt.merge(k, toBd(r.get("amt")).negate(), BigDecimal::add);
+            tax.merge(k, toBd(r.get("tax")).negate(), BigDecimal::add);
+        }
+    }
+
     /** 账龄分桶结果汇总（paid/total 即回款率或付款率） */
     private Map<String, Object> agingSide(List<Map<String, Object>> buckets, Map<String, Object> summary) {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -325,5 +566,51 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         m.put("unpaid", unpaid);
         m.put("settledRate", rate(paid, total));
         return m;
+    }
+
+    /** 未付金额（NULL 安全） */
+    private BigDecimal unpaidOf(FinancePayable p) {
+        return p.getUnpaidAmount() != null ? p.getUnpaidAmount() : ZERO;
+    }
+
+    @Override
+    public Map<String, Object> subject() {
+        Map<String, Object> res = new LinkedHashMap<>();
+
+        // 1) 供应商应付（未付）按主体类型分组；已转应收的负数冲减项剔除，避免与应收重复统计
+        List<FinancePayable> payables = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
+                .ne(FinancePayable::getStatus, SettlementStatus.CANCELLED.getCode())
+                .ne(FinancePayable::getTransferredToReceivable, 1));
+        Map<String, BigDecimal> payableByType = new LinkedHashMap<>();
+        for (String t : new String[]{"product", "factory", "material", "solution", "other"}) payableByType.put(t, ZERO);
+        for (FinancePayable p : payables) {
+            String t = p.getSupplierType() != null && payableByType.containsKey(p.getSupplierType())
+                    ? p.getSupplierType() : "other";
+            payableByType.merge(t, unpaidOf(p), BigDecimal::add);
+        }
+        res.put("payableByType", payableByType);
+
+        // 2) 供应商应收未收（应付转应收单生成，尚未被收款核销的金额）
+        List<FinanceReceivable> recv = receivableMapper.selectList(new LambdaQueryWrapper<FinanceReceivable>()
+                .eq(FinanceReceivable::getSubjectType, "SUPPLIER")
+                .ne(FinanceReceivable::getStatus, SettlementStatus.CANCELLED.getCode()));
+        BigDecimal supplierRecvUnpaid = recv.stream()
+                .map(r -> r.getUnpaidAmount() != null ? r.getUnpaidAmount() : ZERO)
+                .reduce(ZERO, BigDecimal::add);
+        res.put("supplierReceivableUnpaid", supplierRecvUnpaid);
+
+        // 3) 报损损失：已审核报损单金额（成品 + 委外物料）
+        BigDecimal lossTotal = ZERO;
+        for (InventoryStockLoss l : inventoryLossMapper.selectList(new LambdaQueryWrapper<InventoryStockLoss>()
+                .eq(InventoryStockLoss::getStatus, "AUDITED"))) {
+            lossTotal = lossTotal.add(l.getTotalAmount() != null ? l.getTotalAmount() : ZERO);
+        }
+        for (OutsourceStockLoss l : outsourceLossMapper.selectList(new LambdaQueryWrapper<OutsourceStockLoss>()
+                .eq(OutsourceStockLoss::getStatus, "AUDITED"))) {
+            lossTotal = lossTotal.add(l.getTotalAmount() != null ? l.getTotalAmount() : ZERO);
+        }
+        res.put("lossTotal", lossTotal);
+
+        return res;
     }
 }

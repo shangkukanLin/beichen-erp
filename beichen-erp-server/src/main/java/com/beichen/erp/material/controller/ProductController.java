@@ -73,12 +73,12 @@ public class ProductController {
         return R.ok();
     }
 
-    /** 获取品质等级枚举列表 */
+    /** 获取品质等级 **code 列表**（2026-09-14：「接口只回 code」，前端已改为本地 `ProductQualityTypeLabel` 生成下拉） */
     @GetMapping("/quality-types")
-    public R<List<Map<String, String>>> getQualityTypes() {
-        List<Map<String, String>> list = new ArrayList<>();
+    public R<List<String>> getQualityTypes() {
+        List<String> list = new ArrayList<>();
         for (ProductQualityType t : ProductQualityType.values()) {
-            list.add(Map.of("value", t.name(), "label", t.getLabel()));
+            list.add(t.name());
         }
         return R.ok(list);
     }

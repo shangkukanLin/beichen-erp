@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 defineOptions({ name: 'OrderDelivery' })
 import { reactive, ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -18,9 +19,9 @@ const isEdit = ref(false)
 const editId = ref<number>()
 const saving = ref(false)
 const uploadFile = ref<File | null>(null)
-const deliveryDate = ref(new Date().toISOString().split('T')[0])
+const deliveryDate = ref(localDate())
 const warehouseId = ref<number>()
-const form = reactive({ productId: undefined as any, quantity: '', aQty: '', bQty: '', cQty: '', defectQty: '', deliveryDate: new Date().toISOString().split('T')[0], trackingNo: '', remark: '', attachUrl: '' })
+const form = reactive({ productId: undefined as any, quantity: '', aQty: '', bQty: '', cQty: '', defectQty: '', deliveryDate: localDate(), trackingNo: '', remark: '', attachUrl: '' })
 
 // 四等级数量合计（自动填充总数量）
 const totalGrade = computed(() => {
@@ -61,7 +62,7 @@ function openAdd() {
   isEdit.value = false; editId.value = undefined
   warehouseId.value = undefined; uploadFile.value = null
   form.productId = undefined; form.quantity = ''; form.aQty = ''; form.bQty = ''; form.cQty = ''; form.defectQty = ''
-  form.deliveryDate = new Date().toISOString().split('T')[0]
+  form.deliveryDate = localDate()
   form.trackingNo = ''; form.remark = ''; form.attachUrl = ''
   dialogVisible.value = true
   loadWarehouses()
@@ -193,7 +194,10 @@ onMounted(loadData)
       </div>
       <el-table :data="deliveries" border stripe size="small">
         <el-table-column label="交货日期" width="110"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column label="产品名称" min-width="130"><template #default="{row}">{{ products.find((p:any)=>p.id===row.productId)?.productName || '-' }}</template></el-table-column>
+        <el-table-column label="产品名称" min-width="130"><template #default="{row}">
+          <!-- 优先按产品主数据ID匹配：加工单整单编辑会重建产品明细行，行ID会变化（交货记录仍指向原产品） -->
+          {{ (products.find((p:any)=>row.productMasterId && p.productId===row.productMasterId) || products.find((p:any)=>p.id===row.productId))?.productName || '-' }}
+        </template></el-table-column>
         <el-table-column label="收货仓库" width="120">
           <template #default="{row}">
             <span v-if="row.warehouseId">{{ warehouseOptions.find((w:any)=>w.id===row.warehouseId)?.warehouseName || row.warehouseId }}</span>

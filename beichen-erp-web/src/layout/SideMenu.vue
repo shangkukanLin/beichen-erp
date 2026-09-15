@@ -7,7 +7,7 @@ import {
   GoodsFilled, Box, Document, Switch, Timer, TakeawayBox, ShoppingCart,
   Download, Odometer, Sell, Upload, Wallet, CreditCard, Postcard,
   TrendCharts, UserFilled, Avatar, Menu, CollectionTag, Delete, DataBoard,
-  Refresh, Rank, Lock
+  Refresh, Rank, Lock, DataLine, DataAnalysis, Stamp, DeleteFilled, Iphone
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { MenuType } from '@/api/enums'
@@ -18,7 +18,8 @@ const iconMap: Record<string, any> = {
   Files, Connection, OfficeBuilding, GoodsFilled, Box, Document, Switch,
   Timer, TakeawayBox, ShoppingCart, Download, Odometer, Sell, Upload,
   Wallet, CreditCard, Postcard, TrendCharts, UserFilled, Avatar, Menu,
-  CollectionTag, Delete, DataBoard, Refresh, Rank, Lock
+  CollectionTag, Delete, DataBoard, Refresh, Rank, Lock,
+  DataLine, DataAnalysis, Stamp, DeleteFilled, Iphone
 }
 function resolveIcon(iconName: string): any {
   if (!iconName) return Menu

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getInvoicePage, createInvoice, updateInvoice, cancelInvoice, type FinanceInvoice } from '@/api/finance'
@@ -23,7 +24,7 @@ const inputMode = ref<'total' | 'net'>('total')
 
 const emptyForm = (): FinanceInvoice => ({
   id: undefined, invoiceNo: '', direction: 'SALE', invoiceKind: 'special',
-  invoiceDate: new Date().toISOString().slice(0, 10), partnerName: '',
+  invoiceDate: localDate(), partnerName: '',
   amount: undefined, taxRate: 13, taxAmount: undefined, totalAmount: undefined,
   sourceBillCode: '', remark: '',
 })

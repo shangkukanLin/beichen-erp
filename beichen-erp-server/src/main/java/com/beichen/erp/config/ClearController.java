@@ -1,8 +1,13 @@
 package com.beichen.erp.config;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
+import cn.dev33.satoken.annotation.SaMode;
+import cn.dev33.satoken.stp.StpUtil;
 import com.beichen.erp.common.R;
 import com.beichen.erp.common.DefaultBomTypes;
 import com.beichen.erp.common.DefaultContractTemplate;
+import com.beichen.erp.system.common.SystemConstants;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,20 +20,27 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.*;
 
+/**
+ * 数据清空/系统修复接口：均为高危操作。
+ * 全局拦截器只校验登录，角色控制必须在此显式声明（SaTokenConfig 无统一角色鉴权）。
+ *
+ * <p>【P2-34 口径 · 2026-09-12 定稿】按"是否跨租户"划线：</p>
+ * <ul>
+ *   <li>{@code POST /api/system/clear-company-data}：**按 {@code CompanyContext} 过滤**清空本公司业务数据
+ *       → 租户内自服务，保留给公司管理员（类级注解的 {@code ADMIN} 即为此）；</li>
+ *   <li>{@code POST /api/system/clear-data}：**全库清空**（遍历所有表 DELETE，无 company 维度）
+ *       → 平台级且不可逆，已收紧为**仅超级管理员**（方法级注解在类级放行之外再收紧）；</li>
+ *   <li>原 {@code GET /api/system/check-menu} 是遗留调试端点（读 sys_menu/sys_role_menu），无调用方，
+ *       已随本次收口移除。</li>
+ * </ul>
+ */
+@Slf4j
 @RestController
+@SaCheckRole(value = {SystemConstants.SUPER_ADMIN_ROLE_CODE, SystemConstants.ADMIN_ROLE_CODE}, mode = SaMode.OR)
 public class ClearController {
 
     @Autowired private DataSource dataSource;
     @Autowired private JdbcTemplate jdbcTemplate;
-
-    @GetMapping("/api/system/check-menu")
-    public R<Object> checkMenu() {
-        Map<String, Object> r = new HashMap<>();
-        r.put("sys_menu_39", jdbcTemplate.queryForList("SELECT * FROM sys_menu WHERE id=39"));
-        r.put("sys_role_menu_39", jdbcTemplate.queryForList("SELECT * FROM sys_role_menu WHERE menu_id=39"));
-        r.put("menus_under_5", jdbcTemplate.queryForList("SELECT id, menu_name, sort_order FROM sys_menu WHERE parent_id=5 ORDER BY sort_order"));
-        return R.ok(r);
-    }
 
     /** 清空当前公司所有业务数据（保留系统表） */
     @PostMapping("/api/system/clear-company-data")
@@ -48,6 +60,8 @@ public class ClearController {
                 "DELETE FROM finance_settlement WHERE company_id = " + companyId,
                 "DELETE FROM finance_expense WHERE company_id = " + companyId,
                 "DELETE FROM finance_invoice WHERE company_id = " + companyId,
+                // 应付转应收单（引用 finance_payable，须先于应付主表删除）
+                "DELETE FROM finance_payable_transfer WHERE company_id = " + companyId,
                 // === 业务明细 ===
                 "DELETE FROM purchase_order_item WHERE company_id = " + companyId,
                 "DELETE FROM purchase_return_item WHERE company_id = " + companyId,
@@ -60,6 +74,8 @@ public class ClearController {
                 "DELETE FROM inventory_other_io_item WHERE company_id = " + companyId,
                 "DELETE FROM inventory_stock_take_item WHERE company_id = " + companyId,
                 "DELETE FROM inventory_stock_reclass_item WHERE company_id = " + companyId,
+                "DELETE FROM inventory_stock_loss_item WHERE company_id = " + companyId,
+                "DELETE FROM outsource_stock_loss_item WHERE company_id = " + companyId,
                 "DELETE FROM product_reclassify_item WHERE company_id = " + companyId,
                 "DELETE FROM outsource_delivery_item WHERE company_id = " + companyId,
                 "DELETE FROM outsource_material_component WHERE company_id = " + companyId,
@@ -89,6 +105,7 @@ public class ClearController {
                 "DELETE FROM inventory_other_io WHERE company_id = " + companyId,
                 "DELETE FROM inventory_stock_take WHERE company_id = " + companyId,
                 "DELETE FROM inventory_stock_reclass WHERE company_id = " + companyId,
+                "DELETE FROM inventory_stock_loss WHERE company_id = " + companyId,
                 "DELETE FROM product_reclassify WHERE company_id = " + companyId,
                 // === 仓库 ===
                 "DELETE FROM warehouse WHERE company_id = " + companyId,
@@ -108,6 +125,7 @@ public class ClearController {
                 "DELETE FROM outsource_order_close_report WHERE company_id = " + companyId,
                 "DELETE FROM outsource_material_order WHERE company_id = " + companyId,
                 "DELETE FROM outsource_material_return WHERE company_id = " + companyId,
+                "DELETE FROM outsource_stock_loss WHERE company_id = " + companyId,
                 "DELETE FROM outsource_delivery WHERE company_id = " + companyId,
                 "DELETE FROM outsource_order WHERE company_id = " + companyId,
                 "DELETE FROM outsource_contract_template WHERE company_id = " + companyId,
@@ -134,6 +152,8 @@ public class ClearController {
                 "DELETE FROM product WHERE company_id = " + companyId,
                 "DELETE FROM customer WHERE company_id = " + companyId,
                 "DELETE FROM brand WHERE company_id = " + companyId,
+                // 注意：屏幕资料知识库（screen_model）不在此清单中——它是行业基础资料，
+                // 清空公司业务数据时保留，避免辛苦录入的机型屏幕参数被误删。
             };
             for (String s : sqls) { stmt.execute(s); }
                 // 重新初始化BOM类型默认数据（统一用 DefaultBomTypes，避免与 DataInitializer 不一致）
@@ -185,59 +205,36 @@ public class ClearController {
                 + escapedName + "', '" + escapedContent + "', '" + type + "', 1, 1, " + companyId + ", NOW(), NOW())");
     }
 
+    /**
+     * 全库清空（P2-34：**仅超级管理员**）。方法级注解在类级放行范围之外再收紧 ——
+     * Sa-Token 会同时校验类级与方法级注解，公司管理员虽满足类级（admin），仍会被此处拦下（403）。
+     */
+    @SaCheckRole(SystemConstants.SUPER_ADMIN_ROLE_CODE)
     @PostMapping("/api/system/clear-data")
     public R<String> clear() {
+        log.warn("[审计] 全库清空开始：operator={}, companyId={}", StpUtil.getLoginIdDefaultNull(), CompanyContext.get());
         try (Connection conn = dataSource.getConnection()) {
             conn.setAutoCommit(false);
             Statement stmt = conn.createStatement();
             stmt.execute("SET FOREIGN_KEY_CHECKS = 0");
             List<String> dels = new ArrayList<>();
+            // 屏幕资料知识库（screen_model）是行业基础资料、不属于业务数据，清空数据时保留。
+            // 因此这里遍历全库表时排除该表；按公司清空的 clear-company-data 同样不清理它（该表不在下方清单中）。
             ResultSet rs = stmt.executeQuery(
-                "SELECT CONCAT('DELETE FROM ', table_name, ';') FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE'");
+                "SELECT CONCAT('DELETE FROM ', table_name, ';') FROM information_schema.tables "
+                + "WHERE table_schema=DATABASE() AND table_type='BASE TABLE' AND table_name <> 'screen_model'");
             while (rs.next()) dels.add(rs.getString(1));
             rs.close();
             for (String d : dels) { stmt.execute(d); }
             stmt.execute("SET FOREIGN_KEY_CHECKS = 1");
             conn.commit();
             stmt.close();
+            log.warn("[审计] 全库清空完成：operator={}, tables={}", StpUtil.getLoginIdDefaultNull(), dels.size());
             return R.ok("已清空 " + dels.size() + " 张表。请重启后端以重新初始化。");
         } catch (Exception e) {
             return R.fail(e.getMessage());
         }
     }
 
-    @GetMapping("/api/system/fix-menus")
-    public R<String> fixMenus() {
-        try (Connection conn = dataSource.getConnection()) {
-            conn.setAutoCommit(false);
-            Statement stmt = conn.createStatement();
-            stmt.execute("DELETE FROM sys_role_menu WHERE menu_id=38");
-            stmt.execute("DELETE FROM sys_menu WHERE id=38");
-            stmt.execute("INSERT IGNORE INTO sys_menu (id,parent_id,menu_name,menu_type,route_path,route_name,icon,sort_order,visible,status) VALUES (39,5,'品牌管理','menu','/inventory/brand','InventoryBrand','CollectionTag',1,1,1)");
-            stmt.execute("INSERT IGNORE INTO sys_role_menu (role_id,menu_id) SELECT r.id,39 FROM sys_role r WHERE r.role_code='super_admin'");
-            stmt.execute("INSERT IGNORE INTO sys_role_menu (role_id,menu_id) SELECT r.id,39 FROM sys_role r WHERE r.role_code='admin'");
-            stmt.execute("UPDATE sys_menu SET sort_order=2 WHERE id=18");
-            stmt.execute("UPDATE sys_menu SET sort_order=3 WHERE id=19");
-            stmt.execute("UPDATE sys_menu SET sort_order=4 WHERE id=20");
-            stmt.execute("UPDATE sys_menu SET sort_order=5 WHERE id=13");
-            stmt.execute("UPDATE sys_menu SET sort_order=6 WHERE id=22");
-            stmt.execute("UPDATE sys_menu SET sort_order=7 WHERE id=23");
-            conn.commit();
-            stmt.close();
-            return R.ok("品牌管理菜单已创建。请重新登录。");
-        } catch (Exception e) { return R.fail(e.getMessage()); }
-    }
 
-    @GetMapping("/api/system/fix-material-demand")
-    public R<String> fixMaterialDemand() {
-        try (Connection conn = dataSource.getConnection()) {
-            conn.setAutoCommit(false);
-            Statement stmt = conn.createStatement();
-            int rows = stmt.executeUpdate(
-                "UPDATE outsource_order_material m JOIN outsource_order_product p ON m.product_id = p.id SET m.demand_quantity = m.demand_quantity * p.quantity");
-            conn.commit();
-            stmt.close();
-            return R.ok("已修复 " + rows + " 条物料需求数量（乘以产品数量）");
-        } catch (Exception e) { return R.fail(e.getMessage()); }
-    }
 }

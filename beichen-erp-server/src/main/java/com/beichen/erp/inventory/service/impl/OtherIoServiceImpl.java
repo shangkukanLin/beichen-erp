@@ -12,6 +12,7 @@ import com.beichen.erp.inventory.mapper.InventoryOtherIoItemMapper;
 import com.beichen.erp.warehouse.service.CostService;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.inventory.common.IoType;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
@@ -144,15 +145,18 @@ public class OtherIoServiceImpl implements OtherIoService {
     public void audit(Long id) {
         InventoryOtherIo io = ioMapper.selectById(id);
         if (io == null) throw new BusinessException("其他出入库单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(io.getStatus())) throw new BusinessException("仅草稿状态可审核");
+        // P2-29：原子抢占 DRAFT→AUDITED，避免并发/双击重复应用库存
+        if (!DocStatusGuard.claim(ioMapper, InventoryOtherIo::getId, id,
+                InventoryOtherIo::getStatus, DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode())) {
+            throw new BusinessException("仅草稿状态可审核");
+        }
         // 审核时应用库存
         List<InventoryOtherIoItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
         // 出库前校验库存：一次列清所有不足项，避免落到 changeStock 只报「产品ID=xx」
         checkStockBeforeOut(io, items);
         applyStock(io, items);
-        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
-        ioMapper.updateById(u);
+        // 状态已由 DocStatusGuard 在该方法开头原子置为 AUDITED
     }
 
     @Override
@@ -160,13 +164,16 @@ public class OtherIoServiceImpl implements OtherIoService {
     public void unAudit(Long id) {
         InventoryOtherIo io = ioMapper.selectById(id);
         if (io == null) throw new BusinessException("其他出入库单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(io.getStatus())) throw new BusinessException("仅已审核状态可反审核");
+        // P2-29：原子抢占 AUDITED→DRAFT，避免并发反审核重复回滚库存
+        if (!DocStatusGuard.claim(ioMapper, InventoryOtherIo::getId, id,
+                InventoryOtherIo::getStatus, DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode())) {
+            throw new BusinessException("仅已审核状态可反审核");
+        }
         // 反审核时逆向库存，回到草稿
         List<InventoryOtherIoItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
         revertStock(io, items);
-        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus(DocStatus.DRAFT.getCode());
-        ioMapper.updateById(u);
+        // 状态已由 DocStatusGuard 在该方法开头原子置为 DRAFT
     }
 
     /**

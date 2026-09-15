@@ -15,6 +15,12 @@ public class FinanceReceipt {
     private String code;
     private Long customerId;
     private String customerName;
+    /** 往来主体类型：CUSTOMER=客户收款（默认） / SUPPLIER=供应商收款（应付转应收的收款闭环） */
+    private String subjectType;
+    /** 供应商ID（subjectType=SUPPLIER 时有值） */
+    private Long supplierId;
+    /** 供应商名称（冗余留痕） */
+    private String supplierName;
     private Long accountId;
     private String accountName;
     private LocalDate receiptDate;

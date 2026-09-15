@@ -81,7 +81,12 @@ public enum StockChangeType {
     TRANSFER_OUT("调拨出"),
     /** 调拨入：委外交货-调拨入库 */
     TRANSFER_IN("调拨入"),
-    /** 取消发料：收发单取消，恢复已发物料库存 */
+    /**
+     * 取消发料：收发单取消，恢复已发物料库存。
+     * <p>【C5 · 2026-09-12 起停用】发料反审核两个仓已统一用 {@link #OUTSOURCE_CANCEL_DELIVERY}；
+     * 本常量保留仅为兼容历史流水的展示（库中无该 code 的流水）。</p>
+     */
+    @Deprecated
     CANCEL_DELIVERY("取消发料"),
     /** 取消调拨出：取消调拨出库时恢复库存 */
     CANCEL_TRANSFER_OUT("取消调拨出"),
@@ -99,6 +104,10 @@ public enum StockChangeType {
     CANCEL_RECEIVE_IN("取消物料收货入"),
     /** 取消物料退不良出：反审核时恢复目标仓库 */
     CANCEL_DEFECT_OUT("取消物料退不良出"),
+    /** 委外收货扣子物料：委外物料订单收货时按 BOM 子物料从供应商仓扣减（可扣成负数） */
+    OUTSOURCE_COMPONENT_CONSUME("委外收货扣子物料"),
+    /** 退审恢复子物料：委外物料订单收货反审核时把已扣的子物料加回 */
+    CANCEL_OUTSOURCE_COMPONENT_CONSUME("退审恢复子物料"),
     /** 委外物料退货出：委外物料退货单审核，物料从源仓扣减退回物料商 */
     MATERIAL_RETURN_OUT("委外物料退货出"),
     /** 取消委外物料退货出：委外物料退货取消审核，物料恢复源仓 */
@@ -130,7 +139,13 @@ public enum StockChangeType {
     RETURN_SORT_OUT("退货整理出"),
     RETURN_SORT_IN("退货整理入"),
     CANCEL_RETURN_SORT_OUT("取消退货整理出"),
-    CANCEL_RETURN_SORT_IN("取消退货整理入");
+    CANCEL_RETURN_SORT_IN("取消退货整理入"),
+
+    // ===== 报损 =====
+    /** 报损出库：报损单审核，库存报损扣减（成品与委外物料共用同一变动类型） */
+    LOSS_OUT("报损出库"),
+    /** 取消报损出：报损单反审核，把报损扣减的数量加回 */
+    CANCEL_LOSS_OUT("取消报损出");
 
     private final String label;
 

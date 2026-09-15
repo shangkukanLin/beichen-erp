@@ -205,7 +205,6 @@ onMounted(() => { loadData() })
       </el-tabs>
 
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="(row: any) => handleDetail(row)">
-        <el-table-column type="index" label="序号" width="55" align="center" />
         <el-table-column prop="code" label="编码" min-width="130" show-overflow-tooltip />
         <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="100" />

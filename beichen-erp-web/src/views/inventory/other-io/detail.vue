@@ -292,7 +292,6 @@ onActivated(() => { loadDetail() })
 
       <!-- 非草稿：只读明细 -->
       <el-table v-else :data="items" border size="small">
-        <el-table-column type="index" label="#" width="50" align="center"/>
         <el-table-column label="成品名称" min-width="160" show-overflow-tooltip>
           <template #default="{row}">{{ getProdName(row.productId) }}</template>
         </el-table-column>

@@ -6,6 +6,7 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.finance.common.SettlementStatus;
@@ -46,11 +47,15 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     private final ProductMapper productMapper;
 
     @Override
-    public Page<Map<String, Object>> page(String status, Long customerId, String code, int pageNum, int pageSize) {
+    public Page<Map<String, Object>> page(String status, Long customerId, String code,
+                                          String startDate, String endDate, int pageNum, int pageSize) {
         LambdaQueryWrapper<SaleOrder> w = new LambdaQueryWrapper<SaleOrder>()
                 .eq(status != null && !status.isBlank(), SaleOrder::getStatus, status)
                 .eq(customerId != null, SaleOrder::getCustomerId, customerId)
                 .like(code != null && !code.isBlank(), SaleOrder::getCode, code)
+                // 单据日期区间过滤（与报损接口的 startDate/endDate 同写法；order_date 为 DATE，与 yyyy-MM-dd 串比较）
+                .ge(startDate != null && !startDate.isBlank(), SaleOrder::getOrderDate, startDate)
+                .le(endDate != null && !endDate.isBlank(), SaleOrder::getOrderDate, endDate)
                 .orderByDesc(SaleOrder::getId);
         Page<SaleOrder> raw = orderMapper.selectPage(new Page<>(pageNum, pageSize), w);
         // 批量查询客户名称，消除 N+1
@@ -183,7 +188,10 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     public void cancel(Long id) {
         SaleOrder old = orderMapper.selectById(id);
         if (old == null) throw new BusinessException("销售单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败
+        if (!DocStatusGuard.claim(orderMapper, SaleOrder::getId, id, SaleOrder::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("只有草稿状态可作废");
         SaleOrder u = new SaleOrder();
         u.setId(id);
         u.setStatus(DocStatus.CANCELLED.getCode());
@@ -195,10 +203,25 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     public void audit(Long id) {
         SaleOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("销售单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免应收台账重复生成
+        if (!DocStatusGuard.claim(orderMapper, SaleOrder::getId, id, SaleOrder::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
+            throw new BusinessException("只有草稿状态可审核");
         List<SaleOrderItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, id));
         if (items.isEmpty()) throw new BusinessException("订单明细不能为空");
+        // P2-33：数量必须为正（负数量会生成负向应收，边界矩阵实测可审核通过）
+        for (SaleOrderItem it : items) {
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("销售数量必须大于 0（明细行ID=" + it.getId() + "）");
+        }
+        // P2-33：客户与产品必须存在（原先会生成"客户不存在/空名"的应收台账，产品不存在则静默通过）
+        if (order.getCustomerId() == null || customerMapper.selectById(order.getCustomerId()) == null)
+            throw new BusinessException("客户不存在：ID=" + order.getCustomerId());
+        for (SaleOrderItem it : items) {
+            if (it.getProductId() != null && productMapper.selectById(it.getProductId()) == null)
+                throw new BusinessException("产品不存在：ID=" + it.getProductId());
+        }
 
         // 库存校验：库存不足不允许审核（真实出库走"销售出库单"，此处按当前库存把关；
         // 前端详情页审核前已预校验，此处兜底，避免从列表页等其它入口绕过）
@@ -249,7 +272,10 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     public void unAudit(Long id) {
         SaleOrder order = orderMapper.selectById(id);
         if (order == null) throw new BusinessException("销售单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(order.getStatus())) throw new BusinessException("只有已审核的销售单可反审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免应收台账重复冲销
+        if (!DocStatusGuard.claim(orderMapper, SaleOrder::getId, id, SaleOrder::getStatus,
+                DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
+            throw new BusinessException("只有已审核的销售单可反审核");
         // 1) 冲销应收台账（反审核，已收款单据会校验拦截）；台账不存在时跳过（历史单据可能未生成）
         FinanceReceivable exist = receivableMapper.selectOne(new LambdaQueryWrapper<FinanceReceivable>()
                 .eq(FinanceReceivable::getBillNo, order.getCode()));

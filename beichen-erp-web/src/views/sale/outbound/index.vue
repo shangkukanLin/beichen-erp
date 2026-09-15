@@ -163,7 +163,6 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
 
     <el-card shadow="never" class="table-card">
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="handleDetail">
-        <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="code" label="单号" min-width="150" />
         <el-table-column label="客户" min-width="140">
           <template #default="{ row }">{{ customerName(row.customerId) }}</template>
@@ -228,7 +227,6 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
         <el-divider content-position="left">明细</el-divider>
         <div style="margin-bottom:8px"><el-button type="primary" :icon="'Plus'" @click="addItem">添加明细</el-button></div>
         <el-table :data="items" border>
-          <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="物料" min-width="180">
             <template #default="{ row }">
               <RemoteSelect v-model="row.materialId" :fetch="fetchMaterials" label-key="materialName" placeholder="选择物料"
@@ -278,7 +276,6 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
       </el-descriptions>
       <el-divider content-position="left">明细</el-divider>
       <el-table :data="detailItems" border>
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="materialName" label="物料" min-width="140" />
         <el-table-column prop="spec" label="规格" width="100" />
         <el-table-column prop="unit" label="单位" width="70" />

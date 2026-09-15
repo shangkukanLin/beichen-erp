@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -14,7 +15,7 @@ const qualityOptions = ref<QualityOption[]>([])
 
 const form = reactive({
   warehouseId: undefined as any,
-  reclassifyDate: new Date().toISOString().slice(0, 10),
+  reclassifyDate: localDate(),
   remark: ''
 })
 const items = ref<any[]>([])
@@ -103,7 +104,7 @@ async function loadQualityTypes() {
 function resetPage() {
   Object.assign(form, {
     warehouseId: undefined,
-    reclassifyDate: new Date().toISOString().slice(0, 10),
+    reclassifyDate: localDate(),
     remark: ''
   })
   items.value = []
@@ -140,7 +141,6 @@ onActivated(() => { resetPage() })
         </div>
       </template>
       <el-table :data="items" border size="small">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column label="SKU" width="130">
           <template #default="{ row }">
             <span v-if="row.sku">{{ row.sku }}</span>

@@ -8,6 +8,7 @@ import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.customer.service.CustomerService;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.common.SettlementStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,7 +50,9 @@ public class CustomerServiceImpl implements CustomerService {
         if (customers == null || customers.isEmpty()) return;
         List<Long> ids = customers.stream().map(Customer::getId).filter(java.util.Objects::nonNull).toList();
         if (ids.isEmpty()) return;
-        Map<Long, Map<String, Object>> balanceMap = customerMapper.sumReceivableBalance(ids);
+        // 只算未结清台账：排除 已结清(SETTLED) 与 已冲回(CANCELLED)，与 FinanceReceivableController.unpaid 口径一致
+        List<String> excludeStatuses = List.of(SettlementStatus.SETTLED.getCode(), SettlementStatus.CANCELLED.getCode());
+        Map<Long, Map<String, Object>> balanceMap = customerMapper.sumReceivableBalance(ids, excludeStatuses);
         for (Customer c : customers) {
             Map<String, Object> row = balanceMap.get(c.getId());
             if (row != null && row.get("balance") != null) {

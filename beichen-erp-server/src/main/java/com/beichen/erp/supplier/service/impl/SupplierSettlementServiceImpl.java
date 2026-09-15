@@ -17,6 +17,7 @@ import com.beichen.erp.outsource.common.DeliveryStatus;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.MaterialOrderStatus;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
+import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.warehouse.entity.Warehouse;
@@ -86,10 +87,13 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("supplier", s);
 
-        // 1. 未结清应付
+        // 1. 未结清应付（已转应收的冲减项排除：那部分已转为向对方收款，不再参与抵扣）
         List<FinancePayable> payables = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
                 .eq(FinancePayable::getSupplierId, supplierId)
                 .ne(FinancePayable::getStatus, SettlementStatus.SETTLED.getCode())
+                // 2026-09-14：同步排除「已冲回(CANCELLED)」的冲销留痕，与 FinancePayableController.unpaid / 余额汇总口径一致
+                .ne(FinancePayable::getStatus, SettlementStatus.CANCELLED.getCode())
+                .ne(FinancePayable::getTransferredToReceivable, 1)
                 .orderByAsc(FinancePayable::getDueDate));
         BigDecimal unpaidTotal = payables.stream()
                 .map(p -> p.getUnpaidAmount() != null ? p.getUnpaidAmount() : BigDecimal.ZERO)
@@ -203,6 +207,8 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
                 WarehouseStockLog slog = new WarehouseStockLog();
                 slog.setWarehouseId(wh.getId()); slog.setMaterialId(st.getMaterialId());
                 slog.setMaterialName(matName); slog.setChangeType(StockChangeType.SETTLEMENT_RETURN_OUT.getCode());
+                // 品质维度与库存行同口径（委外物料侧固定 GOOD），否则按 (仓库,物料,品质) 对账会错位
+                slog.setQualityType(QualityType.GOOD.getCode());
                 slog.setChangeQuantity(qty.negate()); slog.setBeforeQuantity(before);
                 slog.setAfterQuantity(BigDecimal.ZERO); slog.setRelatedOrderCode(delivery.getCode());
                 stockLogMapper.insert(slog);
@@ -217,9 +223,11 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
                 di.setQualityType(st.getQualityType());
                 deliveryItemMapper.insert(di);
 
-                // 入我方 inventory 仓
-                warehouseStockService.changeStock(dto.getToWarehouseId(), matName, qty,
-                        StockChangeType.SETTLEMENT_RETURN_IN, delivery.getCode(), RelatedBillType.SUPPLIER_SETTLEMENT, st.getMaterialId(), null, delivery.getId(), null);
+                // 入我方 inventory 仓：目标是「物料」入库，必须走 changeMaterialStock（写 material_id）——
+                // 原先用 changeStock 会把 materialId 当 productId 写进成品列，产生对账错位的幽灵库存行（清单 A5）
+                warehouseStockService.changeMaterialStock(dto.getToWarehouseId(), st.getMaterialId(), qty,
+                        StockChangeType.SETTLEMENT_RETURN_IN.getCode(), delivery.getCode(), RelatedBillType.SUPPLIER_SETTLEMENT,
+                        delivery.getId(), null);
             }
         }
         if (count == 0) throw new BusinessException("该供应商委外仓无可退物料");

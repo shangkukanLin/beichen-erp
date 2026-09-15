@@ -201,7 +201,7 @@ async function auditDelivery(row: any) {
 async function unauditDelivery(row: any) {
   try { await ElMessageBox.confirm('反审核将回滚库存并冲回应付，是否继续？', '反审核收货单', { type: 'warning' }) } catch { return }
   try {
-    await request.put(`/outsource/material-order/delivery/${row.id}/unaudit`)
+    await request.put(`/outsource/material-order/delivery/${row.id}/un-audit`)
     ElMessage.success('反审核成功'); loadAll(); markOrderDirty()
   } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }

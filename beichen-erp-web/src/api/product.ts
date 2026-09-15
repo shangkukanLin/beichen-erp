@@ -1,4 +1,5 @@
 ﻿import request from '@/utils/request'
+import { ProductQualityType, ProductQualityTypeLabel } from '@/api/enums'
 
 /** 产品状态（对应 ProductStatus 枚举） */
 export const ProductStatus = {
@@ -99,9 +100,14 @@ export interface QualityOption {
   label: string
 }
 
-/** 获取品质等级枚举列表 */
-export function getQualityTypes() {
-  return request.get<QualityOption[]>('/product/quality-types')
+/**
+ * 品质等级选项（同步返回）
+ * <p>2026-09-14 起由前端枚举映射生成，不再请求后端：后端 `/product/quality-types` 已按
+ * 「接口只回 code」返回 code 列表（仅保留给 API 调用方）。</p>
+ * <p>保留原函数名与返回形状，调用方 `await getQualityTypes()` 无需改动（await 非 Promise 值同样成立）。</p>
+ */
+export function getQualityTypes(): QualityOption[] {
+  return Object.values(ProductQualityType).map(v => ({ value: v, label: ProductQualityTypeLabel[v] || v }))
 }
 
 

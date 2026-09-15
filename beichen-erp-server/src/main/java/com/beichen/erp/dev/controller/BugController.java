@@ -76,21 +76,19 @@ public class BugController {
         return R.ok();
     }
 
-    /** Bug类型枚举 */
+    /** Bug 类型 **code 列表**（2026-09-14：「接口只回 code」，中文由前端 `BugTypeEnumLabel` 映射） */
     @GetMapping("/bug/types")
-    public R<List<Map<String, String>>> bugTypes() {
-        List<Map<String, String>> list = Arrays.stream(BugTypeEnum.values())
-                .map(t -> Map.of("code", t.getCode(), "label", t.getLabel()))
-                .collect(Collectors.toList());
-        return R.ok(list);
+    public R<List<String>> bugTypes() {
+        return R.ok(Arrays.stream(BugTypeEnum.values())
+                .map(BugTypeEnum::getCode)
+                .collect(Collectors.toList()));
     }
 
-    /** Bug严重程度枚举 */
+    /** Bug 严重程度 **code 列表**（中文由前端 `SeverityTypeLabel` 映射） */
     @GetMapping("/bug/severities")
-    public R<List<Map<String, String>>> severities() {
-        List<Map<String, String>> list = Arrays.stream(SeverityType.values())
-                .map(s -> Map.of("code", s.getCode(), "label", s.getLabel()))
-                .collect(Collectors.toList());
-        return R.ok(list);
+    public R<List<String>> severities() {
+        return R.ok(Arrays.stream(SeverityType.values())
+                .map(SeverityType::getCode)
+                .collect(Collectors.toList()));
     }
 }

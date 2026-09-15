@@ -13,6 +13,7 @@ import com.beichen.erp.system.entity.Menu;
 import com.beichen.erp.system.mapper.CompanyMapper;
 import com.beichen.erp.system.service.MenuService;
 import com.beichen.erp.system.service.RoleService;
+import com.beichen.erp.system.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserMapper userMapper;
     private final RoleService roleService;
     private final MenuService menuService;
+    private final UserService userService;
     private final CompanyMapper companyMapper;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -77,6 +79,8 @@ public class AuthServiceImpl implements AuthService {
         result.put("token", tokenInfo.tokenValue);
         result.put("userInfo", userInfo);
         result.put("menus", menus);
+        // 首页业务 TAB 勾选（无记录=全部可见，前端按此语义处理）
+        result.put("dashboardTabs", userService.getDashboardTabsByUserId(user.getId()));
         return result;
     }
 

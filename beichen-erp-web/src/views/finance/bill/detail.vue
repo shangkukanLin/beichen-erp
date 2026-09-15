@@ -96,7 +96,6 @@ onActivated(() => { loadDetail() })
     <el-card shadow="never">
       <template #header><span style="font-weight:600">账单明细</span></template>
       <el-table :data="items" border stripe>
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column label="来源类型" width="120">
           <template #default="{ row }">{{ sourceBillTypeLabel(row.sourceBillType) }}</template>
         </el-table-column>

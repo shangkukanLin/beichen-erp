@@ -100,7 +100,6 @@ onActivated(() => { loadData() })
 
       <el-divider content-position="left">明细</el-divider>
       <el-table :data="items" border stripe size="small">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="sku" label="SKU" width="130" />
         <el-table-column prop="productName" label="成品名称" min-width="160" show-overflow-tooltip />
         <el-table-column label="品质" width="80" align="center">

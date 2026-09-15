@@ -52,7 +52,7 @@ public class BomController {
     /** 删除BOM项 */
     @DeleteMapping("/bom/{id}")
     public R<Void> delete(@PathVariable Long id) {
-        bomService.removeById(id);
+        bomService.deleteItem(id);
         return R.ok();
     }
 

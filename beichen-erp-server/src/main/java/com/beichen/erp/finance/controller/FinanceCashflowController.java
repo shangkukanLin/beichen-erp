@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.R;
+import com.beichen.erp.finance.common.AccountType;
 import com.beichen.erp.finance.common.CashflowRelatedType;
 import com.beichen.erp.finance.common.CashflowType;
 import com.beichen.erp.finance.entity.FinanceAccount;
@@ -114,6 +115,8 @@ public class FinanceCashflowController {
     public R<Void> addAccount(@RequestBody FinanceAccount a) {
         if (a.getOpeningBalance() == null) a.setOpeningBalance(BigDecimal.ZERO);
         if (a.getStatus() == null) a.setStatus(1);
+        // 2026-09-14：类型统一归一化为小写 code 并做白名单校验（此前自由字符串，曾写入大写 BANK）
+        a.setAccountType(AccountType.normalize(a.getAccountType()));
         accountMapper.insert(a);
         // 期初余额落「期初」流水，保证余额可加和、可追溯
         if (a.getOpeningBalance().compareTo(BigDecimal.ZERO) > 0) {
@@ -153,6 +156,10 @@ public class FinanceCashflowController {
         FinanceAccount old = accountMapper.selectById(a.getId());
         if (old != null) {
             a.setOpeningBalance(old.getOpeningBalance());
+        }
+        // 2026-09-14：类型归一化 + 白名单（未传类型时保持原值，避免局部更新被拒）
+        if (a.getAccountType() != null) {
+            a.setAccountType(AccountType.normalize(a.getAccountType()));
         }
         accountMapper.updateById(a);
         return R.ok();

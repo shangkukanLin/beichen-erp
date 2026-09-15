@@ -1,0 +1,46 @@
+# 北辰 ERP 后端 systemd 单元样例（单实例部署；P0 §3.2 内存会话 → 必须单实例）
+#
+# 用法：
+#   1) 复制为 /etc/systemd/system/beichen-erp.service，替换路径/用户
+#   2) 准备环境变量文件 /etc/beichen/erp.env（可从 deploy/prod.env.sample 复制并填值）
+#   3) systemctl daemon-reload && systemctl enable --now beichen-erp
+#
+# 要点：
+#   - 以独立系统用户运行（勿用 root），上传目录与日志目录需对该用户可写
+#   - WorkingDirectory 决定 `./uploads`、`./logs` 的相对路径；此处显式给绝对路径更稳妥
+#   - 单实例：本单元不配副本；多实例前请先解决会话共享（Redis）与定时任务开关
+
+[Unit]
+Description=Beichen ERP Server
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=beichen
+Group=beichen
+WorkingDirectory=/opt/beichen-erp
+
+# 环境变量（DB_URL/DB_USERNAME/DB_PASSWORD/CORS_ALLOWED_ORIGINS/INIT_ADMIN_PASSWORD/LOG_FILE/...）
+EnvironmentFile=/etc/beichen/erp.env
+
+# 生产 profile：敏感项无默认值，未注入会启动失败（fail fast）
+ExecStart=/usr/bin/java -Xms512m -Xmx2g -jar /opt/beichen-erp/beichen-erp-server.jar \
+          --spring.profiles.active=prod
+
+# JVM 崩溃自动重启；发版时用 systemctl restart
+Restart=always
+RestartSec=5
+SuccessExitStatus=143
+
+# 日志：应用自身写文件（logging.file.name）；此处仅兜底 systemd journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=beichen-erp
+
+# 安全加固
+NoNewPrivileges=true
+PrivateTmp=true
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

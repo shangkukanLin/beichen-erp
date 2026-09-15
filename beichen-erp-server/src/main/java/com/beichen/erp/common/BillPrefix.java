@@ -46,6 +46,8 @@ public final class BillPrefix {
     public static final String OUTSOURCE_DEFECT = "DEF-";
     /** 委外物料退货单 */
     public static final String OUTSOURCE_MATERIAL_RETURN = "MR-";
+    /** 委外加工退货单（成品退回；原先 OR- 硬编码在 Service 里，2026-09-12 收进常量表） */
+    public static final String OUTSOURCE_RETURN_ORDER = "OR-";
     /** 委外其他出入库 */
     public static final String OUTSOURCE_OTHER_IO = "OWO-";
     /** 移仓单 */
@@ -74,4 +76,10 @@ public final class BillPrefix {
     public static final String PRODUCT_SKU = "SKU-";
     /** 库存盘点单（每月每仓一次，周期 yyyy-MM） */
     public static final String STOCK_TAKE = "PD-";
+    /** 应付转应收单（负数应付在无货款可抵时转为向供应商收款） */
+    public static final String PAYABLE_TRANSFER = "PZ-";
+    /** 成品报损单 */
+    public static final String INVENTORY_STOCK_LOSS = "BS-";
+    /** 委外物料报损单（W=委外，与成品报损 BS- 区分） */
+    public static final String OUTSOURCE_STOCK_LOSS = "WBS-";
 }

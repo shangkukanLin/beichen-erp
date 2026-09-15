@@ -1,6 +1,8 @@
 package com.beichen.erp.dev.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.beichen.erp.exception.BusinessException;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.dev.common.ProjectStatus;
 import com.beichen.erp.dev.common.PhaseStatus;
@@ -68,10 +70,10 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     public void completePhase(Long projectId, Long phaseId) {
         ProjectPhase current = projectPhaseMapper.selectById(phaseId);
         if (current == null) return;
-        // 已取消项目不允许再推进阶段，避免阶段状态与项目状态脱节
+        // 已取消项目不允许再推进阶段，避免阶段状态与项目状态脱节（必须抛错：静默 return 会让前端误报"完成成功"）
         if (isProjectCancelled(projectId)) {
             log.warn("项目已取消，禁止推进阶段: projectId={}, phaseId={}", projectId, phaseId);
-            return;
+            throw new BusinessException("项目已取消，无法推进阶段；请先重新激活项目");
         }
 
         current.setStatus(PhaseStatus.FINISHED.getCode());
@@ -91,10 +93,10 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     public void skipPhase(Long projectId, Long phaseId) {
         ProjectPhase current = projectPhaseMapper.selectById(phaseId);
         if (current == null) return;
-        // 已取消项目不允许再推进阶段
+        // 已取消项目不允许再推进阶段（必须抛错，避免静默成功）
         if (isProjectCancelled(projectId)) {
             log.warn("项目已取消，禁止推进阶段: projectId={}, phaseId={}", projectId, phaseId);
-            return;
+            throw new BusinessException("项目已取消，无法跳过阶段；请先重新激活项目");
         }
 
         current.setStatus(PhaseStatus.SKIPPED.getCode());
@@ -122,18 +124,20 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
             return;
         }
 
-        // 1. 将当前阶段恢复为进行中
-        current.setStatus(PhaseStatus.IN_PROGRESS.getCode());
-        current.setActualEnd(null);
-        projectPhaseMapper.updateById(current);
+        // 1. 将当前阶段恢复为进行中（actual_end 必须用 UpdateWrapper 显式置 null：updateById 忽略 null）
+        projectPhaseMapper.update(null, new LambdaUpdateWrapper<ProjectPhase>()
+                .eq(ProjectPhase::getId, phaseId)
+                .set(ProjectPhase::getStatus, PhaseStatus.IN_PROGRESS.getCode())
+                .set(ProjectPhase::getActualEnd, null));
 
-        // 2. 将排序在当前之后的所有阶段重置为未开始，清空实际完成日期
+        // 2. 将排序在当前之后的所有阶段重置为未开始，并清空实际完成日期
         List<ProjectPhase> all = listByProject(projectId);
         for (ProjectPhase t : all) {
             if (t.getSortOrder() > current.getSortOrder()) {
-                t.setStatus(PhaseStatus.NOT_STARTED.getCode());
-                t.setActualEnd(null);
-                projectPhaseMapper.updateById(t);
+                projectPhaseMapper.update(null, new LambdaUpdateWrapper<ProjectPhase>()
+                        .eq(ProjectPhase::getId, t.getId())
+                        .set(ProjectPhase::getStatus, PhaseStatus.NOT_STARTED.getCode())
+                        .set(ProjectPhase::getActualEnd, null));
             }
         }
 
@@ -199,10 +203,10 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     public void savePhaseRow(Long projectId, ProjectPhase row) {
         ProjectPhase existing = projectPhaseMapper.selectById(row.getId());
         if (existing == null) return;
-        // 已取消项目不允许通过手动编辑阶段推进状态
+        // 已取消项目不允许通过手动编辑阶段推进状态（必须抛错，避免静默成功）
         if (isProjectCancelled(projectId)) {
             log.warn("项目已取消，禁止编辑阶段: projectId={}, phaseId={}", projectId, row.getId());
-            return;
+            throw new BusinessException("项目已取消，无法编辑阶段；请先重新激活项目");
         }
 
         String oldStatus = existing.getStatus();
@@ -275,10 +279,14 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
 
     // ===== 内部方法 =====
 
-    /** 判断项目是否已取消（取消后阶段不可再推进/编辑） */
+    /**
+     * 判断项目是否已取消（取消后阶段不可再推进/编辑）。
+     * <p>按 <b>status</b> 判定：{@code cancelled_at} 只是取消留痕，若用它判断，
+     * 一旦取消标记未清理（如历史数据残留），项目会"看着已激活但阶段全部失效"。</p>
+     */
     private boolean isProjectCancelled(Long projectId) {
         Project project = projectMapper.selectById(projectId);
-        return project != null && project.getCancelledAt() != null;
+        return project != null && ProjectStatus.CANCELLED.getCode().equals(project.getStatus());
     }
 
     private ProjectPhase findByPhaseName(Long projectId, String phaseName) {
@@ -314,6 +322,8 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
                         || PhaseStatus.SKIPPED.getCode().equals(t.getStatus()));
         if (allDone && !ProjectStatus.CLOSED.getCode().equals(project.getStatus())) {
             project.setStatus(ProjectStatus.CLOSED.getCode());
+            // 结项同时落实际结束日期，供研发周期（计划 vs 实际）统计
+            project.setActualEndDate(LocalDate.now());
             projectMapper.updateById(project);
             log.info("项目自动结项: projectId={}", projectId);
             // 结项时同步关联产品状态（研发中→正常），避免产品停留在研发中

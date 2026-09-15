@@ -20,6 +20,18 @@ public class FinanceReceivable {
 
     private String customerName;
 
+    /**
+     * 往来主体类型：CUSTOMER=客户应收（默认，销售业务） / SUPPLIER=供应商应收（应付转应收产生）。
+     * CUSTOMER 看 customerId，SUPPLIER 看 supplierId。
+     */
+    private String subjectType;
+
+    /** 供应商ID（subjectType=SUPPLIER 时有值；客户应收为空） */
+    private Long supplierId;
+
+    /** 供应商名称（冗余留痕，SUPPLIER 时展示） */
+    private String supplierName;
+
     private String sourceBillType;
 
     private String sourceBillNo;

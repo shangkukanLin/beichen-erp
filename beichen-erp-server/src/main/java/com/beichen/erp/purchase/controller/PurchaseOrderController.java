@@ -42,9 +42,11 @@ public class PurchaseOrderController {
     }
 
     @PostMapping
-    public R<Void> create(@RequestBody Map<String, Object> body) {
-        service.create(parseOrder(body), parseItems(body));
-        return R.ok();
+    public R<Long> create(@RequestBody Map<String, Object> body) {
+        PurchaseOrder o = parseOrder(body);
+        service.create(o, parseItems(body));
+        // 返回新单ID，避免前端"创建后再查列表取ID"导致并发下取错
+        return R.ok(o.getId());
     }
 
     @PutMapping("/{id}")

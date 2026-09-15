@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -13,7 +14,7 @@ const materialOptions = ref<any[]>([])
 const bomTypes = ref<any[]>([])
 const saving = ref(false)
 const loading = ref(false)
-const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN, ioDate: new Date().toISOString().slice(0, 10), remark: '' })
+const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN, ioDate: localDate(), remark: '' })
 const items = ref<any[]>([])
 
 async function loadWarehouses() {

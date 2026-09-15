@@ -24,10 +24,12 @@ public class FinanceReceiptController {
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
             @RequestParam(required = false) Long customerId,
+            @RequestParam(required = false) Long supplierId,
+            @RequestParam(required = false) String subjectType,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return R.ok(service.page(customerId, status, pageNum, pageSize));
+        return R.ok(service.page(customerId, supplierId, subjectType, status, pageNum, pageSize));
     }
 
     @GetMapping("/{id}")
@@ -56,6 +58,8 @@ public class FinanceReceiptController {
         Map<String, Object> d = body.containsKey("receipt") ? (Map<String, Object>) body.get("receipt") : body;
         FinanceReceipt r = new FinanceReceipt();
         if (d.get("customerId") != null) r.setCustomerId(Long.valueOf(d.get("customerId").toString()));
+        if (d.get("subjectType") != null) r.setSubjectType(d.get("subjectType").toString());
+        if (d.get("supplierId") != null) r.setSupplierId(Long.valueOf(d.get("supplierId").toString()));
         if (d.get("accountId") != null) r.setAccountId(Long.valueOf(d.get("accountId").toString()));
         if (d.get("receiptDate") != null && !d.get("receiptDate").toString().isBlank())
             r.setReceiptDate(LocalDate.parse(d.get("receiptDate").toString()));

@@ -6,7 +6,7 @@ import request from '@/utils/request'
 import { WarehouseCategory, INVENTORY_RECLASSIFY_DIRTY_KEY } from '@/api/enums'
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import { getReclassify, getReclassifyItems, updateReclassify, auditReclassify, cancelReclassify } from '@/api/inventory'
+import { getReclassify, getReclassifyItems, updateReclassify, auditReclassify, unAuditReclassify, cancelReclassify } from '@/api/inventory'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const route = useRoute(); const router = useRouter()
@@ -164,7 +164,8 @@ async function handleSave() {
 /**
  * 审核 / 反审核：操作后刷新本页并置脏标志，
  * 返回列表时列表会重新拉取，不会出现「详情已审核、列表还显示未审核」。
- * 注意：重分类无独立 unAudit，反审核由 cancelReclassify 承担（状态置 CANCELLED）。
+ * E2 口径（2026-09-12）：反审核走 /un-audit（逆向库存并置 CANCELLED），
+ * 作废走 /cancel（仅草稿）—— 两者语义拆开，不再由 cancel 兼任反审核。
  */
 async function afterStatusChange() {
   sessionStorage.setItem(INVENTORY_RECLASSIFY_DIRTY_KEY, '1')
@@ -175,10 +176,17 @@ async function handleAudit() {
   try { await auditReclassify(id.value); ElMessage.success('已审核'); await afterStatusChange() }
   catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
-async function handleCancel() {
+/** 反审核（已审核 → 逆向库存 + CANCELLED） */
+async function handleUnAudit() {
   try { await ElMessageBox.confirm('确认反审核？将逆向恢复库存（恢复原品质、冲回目标品质）', '反审核确认', { type: 'warning' }) } catch { return }
-  try { await cancelReclassify(id.value); ElMessage.success('已反审核'); await afterStatusChange() }
+  try { await unAuditReclassify(id.value); ElMessage.success('已反审核'); await afterStatusChange() }
   catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
+}
+/** 作废（仅草稿） */
+async function handleCancel() {
+  try { await ElMessageBox.confirm('确认作废该草稿单？', '作废确认', { type: 'warning' }) } catch { return }
+  try { await cancelReclassify(id.value); ElMessage.success('已作废'); await afterStatusChange() }
+  catch (e: any) { ElMessage.error(e?.message || '作废失败') }
 }
 
 onMounted(() => { loadWarehouses(); loadProducts(); loadQualityTypes() })
@@ -195,7 +203,8 @@ onActivated(() => { loadDetail() })
           <div style="display:flex;align-items:center;gap:8px">
             <el-tag :type="statusTag(detail.status)" size="small">{{ statusLabel(detail.status) }}</el-tag>
             <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
-            <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleCancel">反审核</el-button>
+            <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
+            <el-button type="info" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
           </div>
         </div>
       </template>
@@ -216,6 +225,8 @@ onActivated(() => { loadDetail() })
         <el-descriptions-item label="单号">{{ detail.code || '-' }}</el-descriptions-item>
         <el-descriptions-item label="仓库">{{ getWhName(detail.warehouseId) }}</el-descriptions-item>
         <el-descriptions-item label="日期">{{ detail.reclassifyDate ? $fmtDate(detail.reclassifyDate) : '-' }}</el-descriptions-item>
+        <!-- 整理人=建单时登录的账户（历史单据无记录显示 —） -->
+        <el-descriptions-item label="整理人">{{ detail.createByName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ detail.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
@@ -230,7 +241,6 @@ onActivated(() => { loadDetail() })
 
       <!-- 草稿：可编辑明细（带原品质可用库存） -->
       <el-table v-if="isDraft" :data="editItems" border size="small">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column label="SKU" width="130">
           <template #default="{ row }">
             <span v-if="row.sku">{{ row.sku }}</span>
@@ -278,7 +288,6 @@ onActivated(() => { loadDetail() })
 
       <!-- 非草稿：只读明细 -->
       <el-table v-else :data="items" border size="small">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="sku" label="SKU" width="130">
           <template #default="{ row }">{{ row.sku || '-' }}</template>
         </el-table-column>

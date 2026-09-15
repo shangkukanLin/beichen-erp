@@ -1,6 +1,7 @@
 package com.beichen.erp.dev.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.brand.entity.Brand;
@@ -392,9 +393,12 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     public void reactivate(Long projectId) {
         Project project = projectMapper.selectById(projectId);
         if (project == null) return;
-        project.setStatus(ProjectStatus.IN_PROGRESS.getCode());
-        project.setCancelledAt(null);
-        projectMapper.updateById(project);
+        // cancelled_at 必须显式置 null：updateById 会忽略 null 字段，
+        // 残留的取消标记会让阶段护栏继续把项目当"已取消"，导致阶段永远推不动（死锁）
+        projectMapper.update(null, new LambdaUpdateWrapper<Project>()
+                .eq(Project::getId, projectId)
+                .set(Project::getStatus, ProjectStatus.IN_PROGRESS.getCode())
+                .set(Project::getCancelledAt, null));
         log.info("项目已重新激活: projectId={}", projectId);
     }
 

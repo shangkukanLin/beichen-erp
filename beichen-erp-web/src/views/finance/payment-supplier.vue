@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -57,13 +58,13 @@ async function loadAll() {
 // ========== 新增付款 ==========
 const dVisible = ref(false)
 const dLoading = ref(false)
-const dForm = reactive({ accountId: undefined as any, paymentDate: new Date().toISOString().slice(0,10), remark: '', attachUrl: '' })
+const dForm = reactive({ accountId: undefined as any, paymentDate: localDate(), remark: '', attachUrl: '' })
 const dItems = ref<FinancePaymentItem[]>([])
 const unpaid = ref<any[]>([])
 const uploadFile = ref<File | null>(null)
 
 async function openAddPayment() {
-  Object.assign(dForm, { accountId: undefined, paymentDate: new Date().toISOString().slice(0,10), remark: '', attachUrl: '' })
+  Object.assign(dForm, { accountId: undefined, paymentDate: localDate(), remark: '', attachUrl: '' })
   dItems.value = []; uploadFile.value = null
   try { unpaid.value = await getUnpaidPayables(supplierId) || [] } catch { unpaid.value = [] }
   if (unpaid.value.length === 0) { ElMessage.info('该供应商没有未结清应付'); return }
@@ -169,7 +170,6 @@ onMounted(() => loadAll())
         <el-divider>核销明细（未结清应付）</el-divider>
         <div style="margin-bottom:8px"><el-button type="primary" size="small" @click="addItem">添加核销项</el-button></div>
         <el-table :data="dItems" border size="small">
-          <el-table-column type="index" width="50" align="center"/>
           <el-table-column label="应付单据" min-width="240"><template #default="{row}"><el-select v-model="row.payableId" filterable style="width:100%" @change="(v:number)=>onPayableChange(v,row)"><el-option v-for="u in unpaid" :key="u.id" :label="`${u.billNo} (未付:${u.unpaidAmount}, 到期:${$fmtDate(u.dueDate)})`" :value="u.id"/></el-select></template></el-table-column>
           <el-table-column label="核销金额" width="140"><template #default="{row}"><el-input-number v-model="row.thisAmount" :min="0" :precision="2" controls-position="right" style="width:100%"/></template></el-table-column>
           <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>

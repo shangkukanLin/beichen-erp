@@ -37,7 +37,6 @@
 
       <el-divider content-position="left">退货明细</el-divider>
       <el-table :data="items" border>
-        <el-table-column type="index" label="#" width="50" />
         <el-table-column label="SKU" width="130">
           <template #default="{ row }">
             <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ row.sku || '—' }}</el-button>

@@ -1,7 +1,11 @@
 package com.beichen.erp.config;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
+import cn.dev33.satoken.stp.StpUtil;
 import com.beichen.erp.common.R;
+import com.beichen.erp.system.common.SystemConstants;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,8 +18,20 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
+/**
+ * 数据导出/导入：导出含 sys_user 密码哈希等敏感数据，导入会重建全库，均为高危运维操作。
+ *
+ * <p>【P2-34 口径 · 2026-09-12 定稿：整库导入/导出**仅超级管理员**】</p>
+ * <p>这两个接口的 SQL 没有任何 company 维度（导出 `SELECT * FROM 每张表`；导入先 `DELETE FROM 每张表`
+ * 再重建），是**平台级**能力而非租户内操作 —— 公司管理员是本租户最高权限，不应越出租户边界，
+ * 且导入**不可逆**（误用即毁掉所有租户数据）。故由 {@code SUPER_ADMIN} 独享，并加审计日志留痕。
+ * 公司级操作 `/system/clear-company-data`（按 {@code CompanyContext} 过滤）仍保留给公司管理员，
+ * 见 {@code com.beichen.erp.config.ClearController}。</p>
+ */
+@Slf4j
 @RestController
 @RequestMapping("/api/system")
+@SaCheckRole(SystemConstants.SUPER_ADMIN_ROLE_CODE)
 public class SystemController {
 
     @Autowired private DataSource dataSource;
@@ -70,6 +86,9 @@ public class SystemController {
             exportInfo.put("time", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
             exportInfo.put("tableCount", result.size());
             exportInfo.put("recordCount", totalRecords);
+            // P2-34：高危操作留痕（导出含所有公司的数据 + sys_user 密码哈希）
+            log.warn("[审计] 整库导出：operator={}, companyId={}, tables={}, records={}",
+                    StpUtil.getLoginIdDefaultNull(), CompanyContext.get(), result.size(), totalRecords);
 
         } catch (Exception e) {
             return R.fail("导出失败: " + e.getMessage());
@@ -84,6 +103,10 @@ public class SystemController {
     /** 导入全量数据 */
     @PostMapping("/import-data")
     public R<Map<String, Object>> importData(@RequestParam("file") MultipartFile file) {
+        // P2-34：高危操作留痕（进入即记录，便于事后追溯"谁在何时用哪份备份重建了库"）
+        log.warn("[审计] 整库导入开始：operator={}, companyId={}, file={}, size={}",
+                StpUtil.getLoginIdDefaultNull(), CompanyContext.get(),
+                file != null ? file.getOriginalFilename() : null, file != null ? file.getSize() : 0L);
         try {
             // 解析 JSON
             @SuppressWarnings("unchecked")
@@ -187,6 +210,8 @@ public class SystemController {
                 resp.put("totalRecords", totalInserted);
                 resp.put("exportTime", exportInfo.getOrDefault("time", "未知"));
                 resp.put("details", result);
+                log.warn("[审计] 整库导入完成：operator={}, tables={}, records={}",
+                        StpUtil.getLoginIdDefaultNull(), result.size(), totalInserted);
                 return R.ok(resp);
 
             } catch (Exception e) {

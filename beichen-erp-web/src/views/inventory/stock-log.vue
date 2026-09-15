@@ -18,6 +18,7 @@
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
+          <el-button :icon="'Download'" @click="exportStockLog">导出 Excel</el-button>
         </div>
       </div>
     </el-card>
@@ -28,11 +29,11 @@
           <template #default="{ row }">{{ $fmtDate(row.createTime) }}</template>
         </el-table-column>
         <el-table-column prop="changeType" label="变动类型" width="130" align="center">
-          <template #default="{ row }"><el-tag :type="logTagType(row.changeType)" size="small">{{ row.changeTypeLabel || row.changeType }}</el-tag></template>
+          <template #default="{ row }"><el-tag :type="logTagType(row.changeType)" size="small">{{ StockChangeTypeLabel[row.changeType] || row.changeType }}</el-tag></template>
         </el-table-column>
         <el-table-column label="关联单号" width="150">
           <template #default="{ row }">
-            <el-link v-if="billLink(row.relatedBillType, row.relatedBillId)" type="primary" :underline="false"
+            <el-link v-if="billLink(row.relatedBillType, row.relatedBillId)" type="primary" underline="never"
               @click="handleBillClick(row)">
               {{ row.relatedBillNo }}
             </el-link>
@@ -70,21 +71,67 @@
 </template>
 
 <script setup lang="ts">
-import { WarehouseCategory } from '@/api/enums'
+import { localDate } from '@/utils/date'
+import { WarehouseCategory, StockChangeTypeLabel, codeLabelOptions } from '@/api/enums'
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { productLabel } from '@/api/product'
+import * as XLSX from 'xlsx'
 
-// 变动类型选项取自后端 StockChangeType 枚举（code + 中文 label），避免前端硬编码枚举名导致显示英文、选项缺失
-const changeTypeOptions = ref<{ code: string; label: string }[]>([])
-async function loadChangeTypes() {
-  try {
-    const r = await request.get<any, any>('/warehouse/stock/change-types')
-    changeTypeOptions.value = r?.data ?? r ?? []
-  } catch { changeTypeOptions.value = [] }
+/** 时间格式化（脚本内导出用；模板里的 $fmtDate 是全局属性，脚本中取不到） */
+function fmtDateTime(v: any) {
+  if (!v) return ''
+  const d = new Date(String(v).replace(' ', 'T'))
+  if (isNaN(d.getTime())) return String(v)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
+
+/**
+ * 导出 Excel（**全量**）：按当前筛选条件重新请求全部匹配流水（pageNum=1、pageSize=9999），
+ * 不受列表分页限制；列与页面一致，数量按数值写入（整数不带小数）。
+ * 请求失败时退回当前页已加载数据，保证导出始终可用。
+ */
+async function exportStockLog() {
+  let data: any[] = tableData.value || []
+  try {
+    const params: any = { pageNum: 1, pageSize: 9999, stockType: 'PRODUCT' }
+    if (query.warehouseId) params.warehouseId = query.warehouseId
+    if (query.productId) params.productId = query.productId
+    if (query.changeType) params.changeType = query.changeType
+    const res = await request.get<any, any>('/warehouse/stock/log', { params })
+    if (Array.isArray(res?.records)) data = res.records
+  } catch { /* 拉取失败：退回当前页数据 */ }
+  const cols = ['时间', '变动类型', '关联单号', '产品名称', '仓库', '变动数量', '变动前库存', '变动后库存']
+  const aoa: (string | number)[][] = [
+    [`库存流水（导出时间：${new Date().toLocaleString('zh-CN')}，共 ${data.length} 行）`],
+    [],
+    cols,
+  ]
+  data.forEach((r: any) => {
+    aoa.push([
+      fmtDateTime(r.createTime),
+      StockChangeTypeLabel[r.changeType] || r.changeType || '',
+      r.relatedBillNo || '',
+      productName(r.productId) || '',
+      warehouseName(r.warehouseId) || '',
+      Number(r.changeQuantity ?? 0),
+      Number(r.beforeQuantity ?? 0),
+      Number(r.afterQuantity ?? 0),
+    ])
+  })
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: cols.length - 1 } }]
+  ws['!cols'] = [{ wch: 20 }, { wch: 16 }, { wch: 20 }, { wch: 24 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 12 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '库存流水')
+  XLSX.writeFile(wb, `库存流水_${localDate()}.xlsx`)
+}
+
+// 变动类型选项（2026-09-14：改由前端枚举映射生成；后端 /warehouse/stock/change-types 已只回 code）
+const changeTypeOptions = codeLabelOptions(StockChangeTypeLabel)
 
 const query = reactive({ warehouseId: undefined as number | undefined, productId: undefined as number | undefined, changeType: '' })
 const pagination = reactive({ pageNum: 1, pageSize: 20, total: 0 })
@@ -203,7 +250,7 @@ function handleBillClick(row: any) {
   }
 }
 
-onMounted(async () => { await loadWarehouses(); loadChangeTypes(); loadData() })
+onMounted(async () => { await loadWarehouses(); loadData() })
 
 </script>
 

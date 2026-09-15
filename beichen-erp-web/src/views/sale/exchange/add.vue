@@ -141,6 +141,7 @@
 </template>
 
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { onMounted, reactive, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -169,7 +170,7 @@ const form = reactive({
   customerId: null as number | null,
   warehouseInId: null as number | null,
   warehouseOutId: null as number | null,
-  exchangeDate: new Date().toISOString().slice(0, 10),
+  exchangeDate: localDate(),
   chargeFlag: 0,
   chargeType: '' as string,
   chargeAmount: 0,

@@ -43,7 +43,7 @@ public class CompanyController {
         if (!passwordEncoder.matches(password, user.getPassword())) throw new BusinessException("密码错误");
         if (user.getStatus() != null && user.getStatus() == 0) throw new BusinessException("账号已被禁用");
         List<Long> roleIds = roleService.getRoleIdsByUserId(user.getId());
-        if (!roleIds.contains(getSuperAdminRoleId())) throw new BusinessException("无超级管理员权限");
+        if (!roleIds.contains(getSuperAdminRoleId())) throw new BusinessException(403, "无超级管理员权限");
         // 登录超管
         StpUtil.login(user.getId());
         // 超管公司ID设为0，不受租户限制（仅用于公司管理页）
@@ -122,7 +122,7 @@ public class CompanyController {
     private void checkSuperAdmin() {
         long userId = StpUtil.getLoginIdAsLong();
         List<Long> roleIds = roleService.getRoleIdsByUserId(userId);
-        if (!roleIds.contains(getSuperAdminRoleId())) throw new BusinessException("仅超级管理员可操作");
+        if (!roleIds.contains(getSuperAdminRoleId())) throw new BusinessException(403, "仅超级管理员可操作");
     }
 
     private Long getSuperAdminRoleId() {

@@ -32,6 +32,12 @@ public class OutsourceReturnOrderProduct {
     /** 退货数量 */
     private BigDecimal quantity;
 
+    /**
+     * 退回成品规格：A/B/C/DEFECT（默认 A）。
+     * <p>审核时按该规格从成品仓扣减、反审核按该规格恢复，避免不同等级间账实错位。</p>
+     */
+    private String qualityType;
+
     /** 公司ID */
     private Long companyId;
 }

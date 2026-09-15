@@ -3,11 +3,11 @@
 export interface PageResult<T> { records: T[]; total: number; current: number; size: number }
 
 export interface FinanceAccount { id?: number; accountName?: string; accountType?: string; bankName?: string; accountNo?: string; openingBalance?: number; balance?: number; status?: number }
-export interface FinanceReceivable { id?: number; billNo?: string; customerId?: number; customerName?: string; sourceBillType?: string; sourceBillNo?: string; amount?: number; paidAmount?: number; unpaidAmount?: number; dueDate?: string; status?: string }
-export interface FinancePayable { id?: number; billNo?: string; supplierId?: number; supplierName?: string; sourceBillType?: string; sourceBillNo?: string; amount?: number; paidAmount?: number; unpaidAmount?: number; dueDate?: string; status?: string }
+export interface FinanceReceivable { id?: number; billNo?: string; customerId?: number; customerName?: string; subjectType?: string; supplierId?: number; supplierName?: string; sourceBillType?: string; sourceBillNo?: string; amount?: number; paidAmount?: number; unpaidAmount?: number; dueDate?: string; status?: string }
+export interface FinancePayable { id?: number; billNo?: string; supplierId?: number; supplierName?: string; supplierType?: string; sourceBillType?: string; sourceBillNo?: string; amount?: number; paidAmount?: number; unpaidAmount?: number; dueDate?: string; status?: string; transferredToReceivable?: number }
 export interface FinanceCashflow { id?: number; flowNo?: string; accountId?: number; accountName?: string; flowType?: string; relatedBillNo?: string; income?: number; expense?: number; balance?: number; createTime?: string }
 
-export interface FinanceReceipt { id?: number; code?: string; customerId?: number; customerName?: string; accountId?: number; accountName?: string; receiptDate?: string; amount?: number; status?: string; remark?: string }
+export interface FinanceReceipt { id?: number; code?: string; customerId?: number; customerName?: string; subjectType?: string; supplierId?: number; supplierName?: string; accountId?: number; accountName?: string; receiptDate?: string; amount?: number; status?: string; remark?: string }
 export interface FinanceReceiptItem { id?: number; receiptId?: number; receivableId?: number; receivableBillNo?: string; thisAmount?: number; remark?: string }
 export interface FinancePayment { id?: number; code?: string; supplierId?: number; supplierName?: string; accountId?: number; accountName?: string; paymentDate?: string; amount?: number; status?: string; remark?: string; attachUrl?: string }
 export interface FinancePaymentItem { id?: number; paymentId?: number; payableId?: number; payableBillNo?: string; thisAmount?: number; remark?: string }
@@ -19,7 +19,10 @@ export function createAccount(data: any) { return request.post<void>('/finance/a
 export function updateAccount(data: any) { return request.put<void>('/finance/account', data) }
 
 export function getReceivablePage(params: any) { return request.get<PageResult<FinanceReceivable>>('/finance/receivable/page', { params }) }
-export function getUnpaidReceivables(customerId: number) { return request.get<FinanceReceivable[]>('/finance/receivable/unpaid', { params: { customerId } }) }
+/** 未结清应收：客户收款传 customerId；供应商收款（应付转应收）传 supplierId */
+export function getUnpaidReceivables(customerId?: number, supplierId?: number) {
+  return request.get<FinanceReceivable[]>('/finance/receivable/unpaid', { params: { customerId, supplierId } })
+}
 
 export function getPayablePage(params: any) { return request.get<PageResult<FinancePayable>>('/finance/payable/page', { params }) }
 export function getUnpaidPayables(supplierId: number) { return request.get<FinancePayable[]>('/finance/payable/unpaid', { params: { supplierId } }) }
@@ -30,8 +33,8 @@ export interface FinanceExpense { id?: number; expenseNo?: string; expenseType?:
 export function getExpensePage(params?: any) { return request.get<PageResult<FinanceExpense>>('/finance/expense/page', { params }) }
 export function createExpense(data: any) { return request.post<void>('/finance/expense', data) }
 export function updateExpense(data: any) { return request.put<void>('/finance/expense', data) }
-export function auditExpense(id: number) { return request.post<void>(`/finance/expense/${id}/audit`) }
-export function unAuditExpense(id: number) { return request.post<void>(`/finance/expense/${id}/unAudit`) }
+export function auditExpense(id: number) { return request.put<void>(`/finance/expense/${id}/audit`) }
+export function unAuditExpense(id: number) { return request.put<void>(`/finance/expense/${id}/un-audit`) }
 export function cancelExpense(id: number) { return request.post<void>(`/finance/expense/${id}/cancel`) }
 
 // 发票管理（税务口径：销项/进项发票登记，登记即生效，作废仅标记）
@@ -59,7 +62,7 @@ export function getBillPage(params: any) { return request.get<PageResult<Finance
 export function getBill(id: number) { return request.get<FinanceBill>(`/finance/bill/${id}`) }
 export function getBillItems(id: number) { return request.get<FinanceBillItem[]>(`/finance/bill/${id}/items`) }
 export function generateBill(data: any) { return request.post<FinanceBill>('/finance/bill/generate', data) }
-export function auditBill(id: number) { return request.post<void>(`/finance/bill/${id}/audit`) }
-export function unAuditBill(id: number) { return request.post<void>(`/finance/bill/${id}/unAudit`) }
+export function auditBill(id: number) { return request.put<void>(`/finance/bill/${id}/audit`) }
+export function unAuditBill(id: number) { return request.put<void>(`/finance/bill/${id}/un-audit`) }
 export function cancelBill(id: number) { return request.post<void>(`/finance/bill/${id}/cancel`) }
 

@@ -63,6 +63,16 @@ public class ReclassifyController {
         return R.ok();
     }
 
+    /**
+     * 反审核（E2 口径 · 2026-09-12）：原 /cancel 一身两职（草稿作废 + 已审核反审核），现拆开：
+     * 反审核走 /un-audit（逆向库存 → CANCELLED），/cancel 只负责草稿作废。
+     */
+    @PutMapping("/{id}/un-audit")
+    public R<Void> unAudit(@PathVariable Long id) {
+        service.unAudit(id);
+        return R.ok();
+    }
+
     @PutMapping("/{id}/cancel")
     public R<Void> cancel(@PathVariable Long id) {
         service.cancel(id);

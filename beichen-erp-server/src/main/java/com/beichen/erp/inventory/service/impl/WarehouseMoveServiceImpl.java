@@ -7,6 +7,7 @@ import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.inventory.entity.InventoryWarehouseMove;
 import com.beichen.erp.inventory.entity.InventoryWarehouseMoveItem;
@@ -158,7 +159,11 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
     public void audit(Long id) {
         InventoryWarehouseMove move = moveMapper.selectById(id);
         if (move == null) throw new BusinessException("移仓单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(move.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        // P2-29：原子抢占 DRAFT→AUDITED（原"先查后判再更新"非原子，并发/双击会重复扣加库存）
+        if (!DocStatusGuard.claim(moveMapper, InventoryWarehouseMove::getId, id,
+                InventoryWarehouseMove::getStatus, DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode())) {
+            throw new BusinessException("只有草稿状态可审核");
+        }
         List<InventoryWarehouseMoveItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<InventoryWarehouseMoveItem>().eq(InventoryWarehouseMoveItem::getMoveId, id));
         for (InventoryWarehouseMoveItem it : items) {
@@ -176,8 +181,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
             // 移仓不改变加权价（总量不变），但目标仓新出现的库存若产品无成本，用最近进价兜底
             costService.fillProductCostIfEmpty(it.getProductId());
         }
-        InventoryWarehouseMove u = new InventoryWarehouseMove(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
-        moveMapper.updateById(u);
+        // 状态已由 DocStatusGuard 在该方法开头原子置为 AUDITED，此处无需再更新
     }
 
     @Override
@@ -185,7 +189,11 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
     public void unAudit(Long id) {
         InventoryWarehouseMove move = moveMapper.selectById(id);
         if (move == null) throw new BusinessException("移仓单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(move.getStatus())) throw new BusinessException("只有已审核状态可反审核");
+        // P2-29：原子抢占 AUDITED→DRAFT，避免并发反审核重复回滚库存
+        if (!DocStatusGuard.claim(moveMapper, InventoryWarehouseMove::getId, id,
+                InventoryWarehouseMove::getStatus, DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode())) {
+            throw new BusinessException("只有已审核状态可反审核");
+        }
         List<InventoryWarehouseMoveItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<InventoryWarehouseMoveItem>().eq(InventoryWarehouseMoveItem::getMoveId, id));
         for (InventoryWarehouseMoveItem it : items) {
@@ -196,13 +204,15 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
                 productName = product != null ? product.getName() : "";
             }
             // 反审核：退回移出仓、从移入仓扣回
+            // 【C2 口径 · 2026-09-12 定稿：刻意复用，不再改动】MOVE_IN/MOVE_OUT 表意的是"某仓库存进/出"（方向），
+            // 不是"审核/反审核"（动作）；动作由 related_bill_type 区分：审核=WAREHOUSE_MOVE、反审核=WAREHOUSE_MOVE_UN_AUDIT，
+            // 故四行流水两两可辨。不新增 MOVE_UN_AUDIT_* 的原因：历史流水无法回填新 code，新老并存反而更难核对。
             stockService.changeStock(move.getFromWarehouseId(), productName, q,
                     StockChangeType.MOVE_IN, move.getCode(), RelatedBillType.WAREHOUSE_MOVE_UN_AUDIT, it.getProductId(), "", move.getId(), it.getQualityType());
             stockService.changeStock(move.getToWarehouseId(), productName, q.negate(),
                     StockChangeType.MOVE_OUT, move.getCode(), RelatedBillType.WAREHOUSE_MOVE_UN_AUDIT, it.getProductId(), "", move.getId(), it.getQualityType());
         }
-        InventoryWarehouseMove u = new InventoryWarehouseMove(); u.setId(id); u.setStatus(DocStatus.DRAFT.getCode());
-        moveMapper.updateById(u);
+        // 状态已由 DocStatusGuard 在该方法开头原子置为 DRAFT
     }
 
     private String gen(String prefix) {

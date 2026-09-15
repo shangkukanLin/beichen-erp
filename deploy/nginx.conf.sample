@@ -1,0 +1,67 @@
+# 北辰 ERP 生产 Nginx 样例（P0 §3.6：仓库原先无任何 nginx 配置）
+#
+# 用法：
+#   1) 复制为 /etc/nginx/conf.d/beichen-erp.conf
+#   2) 替换 <域名> 与 dist 路径；证书用 certbot 或替换 listen 为 443 ssl
+#   3) nginx -t && systemctl reload nginx
+#
+# 设计要点：
+#   - 前端为 history 路由 → 必须 try_files 回退 index.html，否则刷新子页面 404
+#   - /api 反代到后端 8080；client_max_body_size 必须 ≥ 后端 multipart 上限（200MB，见 application.yml）
+#   - 静态资源长缓存（带 hash 的文件名），index.html 不缓存
+
+server {
+    listen       80;
+    server_name  <域名>;
+
+    # 前端构建产物目录（pnpm build → beichen-erp-web/dist）
+    root  /usr/share/nginx/html/beichen-erp;
+    index index.html;
+
+    # 导入备份 JSON 可达 200MB；务必与后端 max-file-size 对齐
+    client_max_body_size 200m;
+
+    gzip              on;
+    gzip_min_length   1k;
+    gzip_comp_level   5;
+    gzip_types        text/plain text/css application/json application/javascript application/xml image/svg+xml;
+
+    # ① 前端静态资源（Spa）
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # ② index.html 不缓存，保证发版后立即生效
+    location = /index.html {
+        add_header Cache-Control "no-store, no-cache, must-revalidate";
+    }
+
+    # ③ 带 hash 的构建产物长缓存
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # ④ 接口反代到后端（单实例 8080）
+    location /api/ {
+        proxy_pass         http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        # 导出全库 JSON 属长请求，给足超时
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    # ⑤ 上传附件（后端落盘目录，见 application.yml 的 file.upload.path）
+    #    若上传目录不在 nginx 本机，请删除本段（下载仍可走 /api/dev/file/download/**）
+    location /uploads/ {
+        alias /data/beichen/uploads/;
+        expires 7d;
+    }
+
+    access_log /var/log/nginx/beichen-erp.access.log;
+    error_log  /var/log/nginx/beichen-erp.error.log;
+}

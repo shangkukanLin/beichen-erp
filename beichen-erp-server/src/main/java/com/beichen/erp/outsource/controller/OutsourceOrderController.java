@@ -2,6 +2,7 @@ package com.beichen.erp.outsource.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
@@ -75,7 +76,9 @@ public class OutsourceOrderController {
     @GetMapping("/{id}")
     public R<Map<String, Object>> getById(@PathVariable Long id) {
         OutsourceOrder o = orderService.getById(id);
-        if (o == null) return R.ok(null);
+        // 不存在（含被多租户隔离而查不到）统一返回 404，与 GlobalExceptionHandler 的 404 语义一致；
+        // 原先 R.ok(null) 会让前端呈现空白页而不给出任何提示（见 §12.29 观察项 B）
+        if (o == null) throw new BusinessException(404, "加工单不存在或无权访问");
         Map<String, Object> m = new HashMap<>();
         m.put("id", o.getId()); m.put("code", o.getCode()); m.put("status", o.getStatus());
         m.put("supplyMode", o.getSupplyMode());
@@ -120,7 +123,7 @@ public class OutsourceOrderController {
     @GetMapping("/{id}/material-stock")
     public R<Map<String, Object>> materialStock(@PathVariable Long id) {
         OutsourceOrder order = orderService.getById(id);
-        if (order == null) return R.ok(null);
+        if (order == null) throw new BusinessException(404, "加工单不存在或无权访问");
         // 找到工厂的委外仓库
         List<Warehouse> whs = warehouseMapper.selectList(
             new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
@@ -154,20 +157,28 @@ public class OutsourceOrderController {
             }
         }
         // 计算已交货产品消耗的物料（出货量）
-        java.util.Map<String, java.math.BigDecimal> productDeliveredMap = new java.util.HashMap<>();
+        // 交货记录以「产品主数据ID」为准关联（加工单编辑会重建产品行、行ID变化，主数据ID稳定）；
+        // 历史数据缺失主数据ID时回退按产品行ID匹配，保证新旧数据都能算对
+        java.util.Map<String, java.math.BigDecimal> deliveredByMaster = new java.util.HashMap<>();
+        java.util.Map<String, java.math.BigDecimal> deliveredByRow = new java.util.HashMap<>();
         java.util.List<OutsourceOrderDelivery> deliveries = orderDeliveryMapper.selectList(
             new LambdaQueryWrapper<OutsourceOrderDelivery>()
                 .eq(OutsourceOrderDelivery::getOrderId, id));
         for (OutsourceOrderDelivery d : deliveries) {
-            if (d.getProductId() == null) continue;
             java.math.BigDecimal qty = d.getQuantity() != null ? d.getQuantity() : java.math.BigDecimal.ZERO;
             if (qty.compareTo(java.math.BigDecimal.ZERO) <= 0) continue;
-            productDeliveredMap.merge(String.valueOf(d.getProductId()), qty, java.math.BigDecimal::add);
+            if (d.getProductMasterId() != null)
+                deliveredByMaster.merge(String.valueOf(d.getProductMasterId()), qty, java.math.BigDecimal::add);
+            else if (d.getProductId() != null)
+                deliveredByRow.merge(String.valueOf(d.getProductId()), qty, java.math.BigDecimal::add);
         }
         // 按产品计算每个物料已被出货消耗的数量
         java.util.Map<Long, java.math.BigDecimal> shippedConsumedMap = new java.util.HashMap<>();
         for (OutsourceOrderProduct p : products) {
-            java.math.BigDecimal pDelivered = productDeliveredMap.get(String.valueOf(p.getId()));
+            java.math.BigDecimal pDelivered = p.getProductId() != null
+                    ? deliveredByMaster.get(String.valueOf(p.getProductId())) : null;
+            if (pDelivered == null) pDelivered = deliveredByRow.get(String.valueOf(p.getId()));
+            if (pDelivered == null) pDelivered = java.math.BigDecimal.ZERO;
             if (pDelivered == null || pDelivered.compareTo(java.math.BigDecimal.ZERO) == 0) continue;
             java.math.BigDecimal pTotal = p.getQuantity() != null ? p.getQuantity() : java.math.BigDecimal.ONE;
             java.util.List<OutsourceOrderMaterial> mats = orderService.getMaterials(p.getId());
@@ -275,7 +286,8 @@ public class OutsourceOrderController {
     }
 
     /** 反审核：生产中 → 待确认，回滚交货库存和应付 */
-    @PutMapping("/{id}/unaudit")
+    // E1 口径（2026-09-12）：反审核统一 /un-audit，旧路径 /unaudit 保留为别名
+    @PutMapping({"/{id}/un-audit", "/{id}/unaudit"})
     public R<Void> unaudit(@PathVariable Long id) {
         orderService.unaudit(id);
         return R.ok();
@@ -314,7 +326,25 @@ public class OutsourceOrderController {
         OutsourceOrder update = new OutsourceOrder();
         update.setId(id);
         update.setAttachUrl("");
-        orderMapper.updateById(update);
+        // 校验影响行数：跨公司/不存在的 id 会被租户插件拦截（影响 0 行），不能静默返回成功
+        if (orderMapper.updateById(update) == 0) return R.fail("加工单不存在");
+        return R.ok();
+    }
+
+    /**
+     * 保存合同文件地址：仅更新 attachUrl。
+     * 注意：不可复用 PUT /{id} 整单更新——其会先删除该单全部产品及BOM物料再重建，
+     * 只传 attachUrl 会导致产品明细被清空，故此处单独提供轻量接口。
+     */
+    @PutMapping("/{id}/attach")
+    public R<Void> saveAttach(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        String url = body == null ? null : (String) body.get("attachUrl");
+        if (url == null || url.isBlank()) return R.fail("附件地址不能为空");
+        OutsourceOrder update = new OutsourceOrder();
+        update.setId(id);
+        update.setAttachUrl(url);
+        // 校验影响行数：跨公司/不存在的 id 会被租户插件拦截（影响 0 行），不能静默返回成功
+        if (orderMapper.updateById(update) == 0) return R.fail("加工单不存在");
         return R.ok();
     }
 
@@ -349,6 +379,10 @@ public class OutsourceOrderController {
                     Map<String, Object> map = (Map<String, Object>) itemMap;
                     OutsourceOrderProduct p = new OutsourceOrderProduct();
                     if (map.get("projectId") != null) p.setProjectId(Long.valueOf(map.get("projectId").toString()));
+                    // 产品主数据ID(product.id)：前端按项目带出，用于交货/库存落账。
+                    // 此前未接收该字段，导致不带项目时交货报「未关联产品主数据」。
+                    if (map.get("productId") != null && !map.get("productId").toString().isBlank())
+                        p.setProductId(Long.valueOf(map.get("productId").toString()));
                     p.setProductName((String) map.get("productName"));
                     p.setProductSpec((String) map.get("productSpec"));
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank())

@@ -188,7 +188,7 @@ onMounted(() => {
       </el-tabs>
 
       <el-table v-loading="tableLoading" :data="tableData" border stripe :row-class-name="rowClass">
-        <el-table-column type="index" label="序号" width="60" align="center" />
+        <!-- 2026-09-14 按用户要求移除「序号」列 -->
         <el-table-column prop="sku" label="SKU" width="140" />
         <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip />
         <el-table-column label="品牌" min-width="120">

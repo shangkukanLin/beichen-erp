@@ -49,6 +49,16 @@ async function handleUnAudit(row: any) {
 async function handleCancel(row: any) {
   try { await ElMessageBox.confirm('确定作废该订单？', '作废订单', { type: 'warning' }); await request.put(`/outsource/material-order/${row.id}/cancel`); ElMessage.success('已作废'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
+
+// 下载合同：取该订单已上传的合同文件（attachUrl，非合同模板），未上传则提示
+function handleDownloadContract(row: any) {
+  if (!row.attachUrl) { ElMessage.warning('该订单未上传合同，请先进入订单详情上传合同文件'); return }
+  const a = document.createElement('a')
+  a.href = row.attachUrl
+  a.download = ''
+  a.target = '_blank'
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+}
 onMounted(() => { loadData() })
 onActivated(() => {
   // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
@@ -111,9 +121,10 @@ onActivated(() => {
         <el-table-column label="最近交货" width="85" align="center"><template #default="{row}">{{ $fmtDate(row.lastDeliveryTime) || '-' }}</template></el-table-column>
         <el-table-column label="交期" width="90" align="center"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column label="状态" width="70" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status]||'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="185" align="center" fixed="right">
+        <el-table-column label="操作" width="255" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click.stop="router.push(`/outsource/material-order/detail/${row.id}`)" style="padding:0 4px">详情</el-button>
+            <el-button type="success" link size="small" @click.stop="handleDownloadContract(row)" style="padding:0 4px">下载合同</el-button>
             <el-button v-if="row.status===MaterialOrderStatus.PENDING" type="success" link size="small" @click.stop="handleConfirm(row)" style="padding:0 4px">审核</el-button>
             <el-button v-if="row.status===MaterialOrderStatus.RECEIVING" type="warning" link size="small" @click.stop="handleUnAudit(row)" style="padding:0 4px">反审核</el-button>
             <el-button v-if="row.status!==MaterialOrderStatus.FINISHED && row.status!==MaterialOrderStatus.CANCELLED" type="danger" link size="small" @click.stop="handleCancel(row)" style="padding:0 4px">作废</el-button>

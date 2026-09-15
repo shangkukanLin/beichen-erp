@@ -39,12 +39,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '系统信息', requiresAuth: true }
       },
       {
-        path: 'system/permission',
-        name: 'SystemPermission',
-        component: () => import('@/views/system/permission/index.vue'),
-        meta: { title: '权限管理', requiresAuth: true }
-      },
-      {
         path: 'system/data-manage',
         name: 'SystemDataManage',
         component: () => import('@/views/system/data-manage/index.vue'),
@@ -167,6 +161,13 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/dev/material/detail.vue'),
         meta: { title: '研发物料详情', requiresAuth: true, operate: true }
       },
+      {
+        // 屏幕资料知识库：行业机型屏幕参数（清空数据不清理该知识库）
+        path: 'dev/screen-model',
+        name: 'DevScreenModel',
+        component: () => import('@/views/dev/screen-model.vue'),
+        meta: { title: '屏幕资料知识库', requiresAuth: true }
+      },
       // 委外加工
       {
         path: 'outsource/material-info',
@@ -194,6 +195,8 @@ const routes: RouteRecordRaw[] = [
       // 委外加工退货
       { path: 'outsource/return-order', name: 'OutsourceReturnOrder', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '委外加工退货', requiresAuth: true } },
       { path: 'outsource/return-order/add', name: 'OutsourceReturnOrderAdd', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '新增委外加工退货', requiresAuth: true, operate: true } },
+      // E4：草稿编辑（复用新增页，仅 DRAFT 可编辑）
+      { path: 'outsource/return-order/edit/:id', name: 'OutsourceReturnOrderEdit', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '编辑委外加工退货', requiresAuth: true, operate: true } },
       { path: 'outsource/return-order/detail/:id', name: 'OutsourceReturnOrderDetail', component: () => import('@/views/outsource/return-order/detail.vue'), meta: { title: '委外加工退货详情', requiresAuth: true, operate: true } },
       // 委外物料退货
       { path: 'outsource/material-return', name: 'OutsourceMaterialReturn', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '委外物料退货', requiresAuth: true } },
@@ -229,13 +232,22 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/material-order/add', name: 'OutsourceMaterialOrderAdd', component: () => import('@/views/outsource/material-order/add.vue'), meta: { title: '新增物料订单', requiresAuth: true, operate: true } },
       { path: 'outsource/material-order/add/:id', name: 'OutsourceMaterialOrderEdit', component: () => import('@/views/outsource/material-order/add.vue'), meta: { title: '编辑物料订单', requiresAuth: true, operate: true } },
       { path: 'outsource/material-order/detail/:id', name: 'OutsourceMaterialOrderDetail', component: () => import('@/views/outsource/material-order/detail.vue'), meta: { title: '物料订单详情', requiresAuth: true, operate: true } },
+      { path: 'outsource/delivery-info', name: 'OutsourceDeliveryInfo', component: () => import('@/views/outsource/delivery-info/index.vue'), meta: { title: '交货信息', requiresAuth: true } },
       { path: 'outsource/contract-template', name: 'OutsourceContractTemplate', component: () => import('@/views/outsource/contract-template.vue'), meta: { title: '合同模板设置', requiresAuth: true } },
       { path: 'outsource/other-io', name: 'OutsourceOtherIo', component: () => import('@/views/outsource/other-io/index.vue'), meta: { title: '物料其他出入库', requiresAuth: true } },
+      // 物料报损：委外物料的报损单（与成品报损独立成表，库存按 仓库+物料 扣减）
+      { path: 'outsource/stock-loss', name: 'OutsourceStockLoss', component: () => import('@/views/outsource/stock-loss/index.vue'), meta: { title: '物料报损', requiresAuth: true } },
+      { path: 'outsource/stock-loss/add', name: 'OutsourceStockLossAdd', component: () => import('@/views/outsource/stock-loss/add.vue'), meta: { title: '新增物料报损单', requiresAuth: true, operate: true } },
+      { path: 'outsource/stock-loss/edit/:id', name: 'OutsourceStockLossEdit', component: () => import('@/views/outsource/stock-loss/add.vue'), meta: { title: '编辑物料报损单', requiresAuth: true, operate: true } },
+      { path: 'outsource/stock-loss/detail/:id', name: 'OutsourceStockLossDetail', component: () => import('@/views/outsource/stock-loss/detail.vue'), meta: { title: '物料报损单详情', requiresAuth: true, operate: true } },
       { path: 'outsource/material-warehouse', name: 'OutsourceMaterialWarehouse', component: () => import('@/views/outsource/material-warehouse.vue'), meta: { title: '自有物料仓', requiresAuth: true } },
       { path: 'outsource/other-io/add', name: 'OutsourceOtherIoAdd', component: () => import('@/views/outsource/other-io/add.vue'), meta: { title: '新增物料其他出入库', requiresAuth: true, operate: true } },
       { path: 'outsource/other-io/detail/:id', name: 'OutsourceOtherIoDetail', component: () => import('@/views/outsource/other-io/detail.vue'), meta: { title: '物料其他出入库详细', requiresAuth: true, operate: true } },
       { path: 'outsource/other-io/edit/:id', name: 'OutsourceOtherIoEdit', component: () => import('@/views/outsource/other-io/edit.vue'), meta: { title: '编辑物料其他出入库', requiresAuth: true, operate: true } },
       // 进销存
+      // 成品库存情况：列表按产品汇总跨仓库库存，点行进详情看该产品在各仓库的分布
+      { path: 'inventory/product-stock', name: 'InventoryProductStock', component: () => import('@/views/inventory/product-stock/index.vue'), meta: { title: '成品库存情况', requiresAuth: true } },
+      { path: 'inventory/product-stock/detail/:id', name: 'InventoryProductStockDetail', component: () => import('@/views/inventory/product-stock/detail.vue'), meta: { title: '产品库存分布详情', requiresAuth: true, operate: true } },
       { path: 'inventory/warehouse', name: 'InventoryWarehouse', component: () => import('@/views/inventory/warehouse.vue'), meta: { title: '成品仓库管理', requiresAuth: true } },
       { path: 'inventory/warehouse/detail/:id', name: 'InventoryWarehouseDetail', component: () => import('@/views/inventory/warehouse-detail.vue'), meta: { title: '仓库详情', requiresAuth: true, operate: true } },
       { path: 'inventory/warehouse/product-history/:wid/:pid', name: 'InventoryProductHistory', component: () => import('@/views/inventory/warehouse-product-history.vue'), meta: { title: '产品库存流水详细', requiresAuth: true, operate: true } },
@@ -280,11 +292,31 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '新增采购退货单', requiresAuth: true, operate: true } },
       { path: 'inventory/purchase-return/detail/:id', name: 'InventoryPurchaseReturnDetail', component: () => import('@/views/purchase/return/detail.vue'), meta: { title: '采购退货单详情', requiresAuth: true, operate: true } },
       { path: 'inventory/stock', name: 'InventoryStock', component: () => import('@/views/inventory/stock.vue'), meta: { title: '成品库存查询', requiresAuth: true } },
+      // 成品报损：列表 / 新增 / 编辑（与新增同页）/ 详情
+      { path: 'inventory/stock-loss', name: 'InventoryStockLoss', component: () => import('@/views/inventory/stock-loss/index.vue'), meta: { title: '成品报损', requiresAuth: true } },
+      { path: 'inventory/stock-loss/add', name: 'InventoryStockLossAdd', component: () => import('@/views/inventory/stock-loss/add.vue'), meta: { title: '新增成品报损单', requiresAuth: true, operate: true } },
+      { path: 'inventory/stock-loss/edit/:id', name: 'InventoryStockLossEdit', component: () => import('@/views/inventory/stock-loss/add.vue'), meta: { title: '编辑成品报损单', requiresAuth: true, operate: true } },
+      { path: 'inventory/stock-loss/detail/:id', name: 'InventoryStockLossDetail', component: () => import('@/views/inventory/stock-loss/detail.vue'), meta: { title: '成品报损单详情', requiresAuth: true, operate: true } },
       { path: 'inventory/stock-log', name: 'InventoryStockLog', component: () => import('@/views/inventory/stock-log.vue'), meta: { title: '成品库存流水', requiresAuth: true } },
       { path: 'inventory/sale', name: 'InventorySale', component: () => import('@/views/sale/order/index.vue'), meta: { title: '销售单', requiresAuth: true } },
       // 新增/编辑销售单独立页面（带 ?id= 为编辑），与销售退单的 add 页模式保持一致
       { path: 'inventory/sale/add', name: 'SaleOrderAdd', component: () => import('@/views/sale/order/add.vue'), meta: { title: '新增销售单', requiresAuth: true, operate: true } },
       { path: 'inventory/sale/detail/:id', name: 'SaleOrderDetail', component: () => import('@/views/sale/order/detail.vue'), meta: { title: '销售单详情', requiresAuth: true, operate: true } },
+      // 经营分析（目录置于首页之下）：原「财务分析」拆分 + 销售分析 / 客户分析
+      { path: 'analysis/overview', name: 'AnalysisOverview', component: () => import('@/views/analysis/overview.vue'), meta: { title: '经营概览', requiresAuth: true } },
+      { path: 'analysis/profit', name: 'AnalysisProfit', component: () => import('@/views/analysis/profit.vue'), meta: { title: '利润表', requiresAuth: true } },
+      // 利润明细钻取：利润表行「详细」→ 该天每一条单据记录
+      { path: 'analysis/profit/detail/:date', name: 'AnalysisProfitDetail', component: () => import('@/views/analysis/profit/detail.vue'), meta: { title: '利润明细', requiresAuth: true, operate: true } },
+      { path: 'analysis/cash', name: 'AnalysisCash', component: () => import('@/views/analysis/cash.vue'), meta: { title: '资金与往来', requiresAuth: true } },
+      { path: 'analysis/tax', name: 'AnalysisTax', component: () => import('@/views/analysis/tax.vue'), meta: { title: '税务分析', requiresAuth: true } },
+      { path: 'analysis/sale', name: 'AnalysisSale', component: () => import('@/views/analysis/sale.vue'), meta: { title: '销售分析', requiresAuth: true } },
+      // 销售分析钻取：某产品/仓库在区间的销售单明细（operate 页，不入菜单）
+      { path: 'analysis/sale/detail', name: 'AnalysisSaleDetail', component: () => import('@/views/analysis/sale/detail.vue'), meta: { title: '销售单明细', requiresAuth: true, operate: true } },
+      { path: 'analysis/customer', name: 'AnalysisCustomer', component: () => import('@/views/analysis/customer.vue'), meta: { title: '客户分析', requiresAuth: true } },
+      // 单客户分析：客户分析页点客户名进入（档案 + 图表 + 拿货/品牌/退货明细）
+      { path: 'analysis/customer/:id', name: 'AnalysisCustomerProfile', component: () => import('@/views/analysis/customer/profile.vue'), meta: { title: '单客户分析', requiresAuth: true, operate: true } },
+      // 客户分析钻取：某客户在区间的销售单明细
+      { path: 'analysis/customer/detail', name: 'AnalysisCustomerDetail', component: () => import('@/views/analysis/customer/detail.vue'), meta: { title: '客户销售单明细', requiresAuth: true, operate: true } },
       // 财务管理
       { path: 'finance/receivable', name: 'FinanceReceivable', component: () => import('@/views/finance/receivable.vue'), meta: { title: '应收管理', requiresAuth: true } },
       { path: 'finance/payable', name: 'FinancePayable', component: () => import('@/views/finance/payable.vue'), meta: { title: '应付管理', requiresAuth: true } },
@@ -295,9 +327,15 @@ const routes: RouteRecordRaw[] = [
       { path: 'finance/account', name: 'FinanceAccount', component: () => import('@/views/finance/account.vue'), meta: { title: '资金账户', requiresAuth: true } },
       { path: 'finance/expense', name: 'FinanceExpense', component: () => import('@/views/finance/expense.vue'), meta: { title: '费用管理', requiresAuth: true } },
       { path: 'finance/invoice', name: 'FinanceInvoice', component: () => import('@/views/finance/invoice.vue'), meta: { title: '发票管理', requiresAuth: true } },
-      { path: 'finance/analysis', name: 'FinanceAnalysis', component: () => import('@/views/finance/analysis.vue'), meta: { title: '财务分析', requiresAuth: true } },
+      // 旧地址兼容：财务分析已迁入经营分析，保留重定向避免书签失效
+      { path: 'finance/analysis', redirect: '/analysis/overview' },
       { path: 'finance/receipt', name: 'FinanceReceipt', component: () => import('@/views/finance/receipt.vue'), meta: { title: '收款管理', requiresAuth: true } },
       { path: 'finance/payment', name: 'FinancePayment', component: () => import('@/views/finance/payment.vue'), meta: { title: '付款管理', requiresAuth: true } },
+      // 应付转应收：负数应付（退货/超损扣款）无货款可抵时转为向供应商收款，与报损单同套审核流程
+      { path: 'finance/payable-transfer', name: 'FinancePayableTransfer', component: () => import('@/views/finance/payable-transfer/index.vue'), meta: { title: '应付转应收', requiresAuth: true } },
+      { path: 'finance/payable-transfer/add', name: 'FinancePayableTransferAdd', component: () => import('@/views/finance/payable-transfer/add.vue'), meta: { title: '新增转应收单', requiresAuth: true, operate: true } },
+      { path: 'finance/payable-transfer/edit/:id', name: 'FinancePayableTransferEdit', component: () => import('@/views/finance/payable-transfer/add.vue'), meta: { title: '编辑转应收单', requiresAuth: true, operate: true } },
+      { path: 'finance/payable-transfer/detail/:id', name: 'FinancePayableTransferDetail', component: () => import('@/views/finance/payable-transfer/detail.vue'), meta: { title: '转应收单详情', requiresAuth: true, operate: true } },
       { path: 'finance/payment/supplier/:id', name: 'FinancePaymentSupplier', component: () => import('@/views/finance/payment-supplier.vue'), meta: { title: '供应商应付详情', requiresAuth: true, operate: true } },
       { path: 'finance/supplier-settlement/:id', name: 'SupplierSettlement', component: () => import('@/views/finance/supplier-settlement.vue'), meta: { title: '清算看板', requiresAuth: true, operate: true } },
       // 占位路由：匹配菜单中有但尚未开发的路由

@@ -19,6 +19,17 @@ public class ReceivableHelper {
     private final FinanceReceivableMapper receivableMapper;
 
     /**
+     * 预收台账单号（D5 口径 · 2026-09-12）。
+     * <p>应收台账的命名规则是「来源单据号（+ 业务后缀）」（如销售单 `XS-…`、费用 `…-FEE`、报损 `…-LOSS`），
+     * 预收的来源就是收款单，故取 `收款单号 + "-" + ADVANCE`；与来源的关联另由
+     * `source_bill_type/source_bill_no/source_id` 承载（反审核按 `source_id` 精确定位冲回）。
+     * 与应付侧对称：应付走独立号段（{@code PayableHelper.newBillNo()} → `YF-…`，见 D1）。</p>
+     */
+    public static String advanceBillNo(String receiptBillNo) {
+        return receiptBillNo + "-" + SettlementStatus.ADVANCE.getCode();
+    }
+
+    /**
      * 冲回应收（反审核时使用）：按单据编号定位未结清应收，置为已冲回且不可恢复。
      * 资金安全护栏：已有收款记录的应收禁止冲回，需先退款再反审核。
      */

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { ref, onMounted, onUnmounted, computed, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -21,7 +22,7 @@ async function loadMaterials() {
 async function loadBomTypes() {
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch { bomTypes.value = [] }
 }
-const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN, ioDate: new Date().toISOString().slice(0,10), remark: '' })
+const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN, ioDate: localDate(), remark: '' })
 const items = ref<any[]>([{ materialId: undefined, materialName: '', bomTypeId: undefined, unit: '', unit_price: '', quantity: undefined, remark: '' }])
 
 const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any) => m.bomTypeId).filter(Boolean))] as number[])
@@ -68,7 +69,7 @@ async function handleSubmit() {
       await request.put(`/outsource/other-io/${editId}`, body); ElMessage.success('已更新'); sessionStorage.setItem(OUTSOURCE_OTHER_IO_DIRTY_KEY, '1')
     } else {
       await request.post('/outsource/other-io', body); ElMessage.success('已创建'); sessionStorage.setItem(OUTSOURCE_OTHER_IO_DIRTY_KEY, '1')
-      Object.assign(form, { warehouseId: undefined, ioType: IoType.IN, ioDate: new Date().toISOString().slice(0,10), remark: '' })
+      Object.assign(form, { warehouseId: undefined, ioType: IoType.IN, ioDate: localDate(), remark: '' })
       items.value = [{ materialId: undefined, materialName: '', bomTypeId: undefined, unit: '', unit_price: '', quantity: undefined, remark: '' }]
     }
     router.push('/outsource/other-io')

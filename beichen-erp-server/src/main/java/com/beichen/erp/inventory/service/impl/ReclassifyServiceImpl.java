@@ -1,9 +1,11 @@
 package com.beichen.erp.inventory.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
@@ -18,6 +20,9 @@ import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.material.service.ProductService;
+import com.beichen.erp.auth.entity.User;
+import com.beichen.erp.auth.mapper.UserMapper;
+import cn.dev33.satoken.stp.StpUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +38,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
 
     private final InventoryProductReclassifyMapper rcMapper;
     private final InventoryProductReclassifyItemMapper itemMapper;
+    private final UserMapper userMapper;
     private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
     private final ProductService productService;
@@ -51,6 +57,7 @@ public class ReclassifyServiceImpl implements ReclassifyService {
             m.put("warehouseId", o.getWarehouseId());
             m.put("reclassifyDate", o.getReclassifyDate()); m.put("status", o.getStatus());
             m.put("remark", o.getRemark()); m.put("createTime", o.getCreateTime());
+            m.put("createBy", o.getCreateBy()); m.put("createByName", o.getCreateByName());
             // 概况：产品名 + 品质转换 + 数量，供列表直接展示，免去前端逐条拉明细
             m.put("itemSummary", buildItemSummary(o.getId()));
             return m;
@@ -93,6 +100,9 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         if (rc.getWarehouseId() == null) throw new BusinessException("仓库不能为空");
         rc.setCode(gen(BillPrefix.RECLASSIFY));
         rc.setStatus(DocStatus.DRAFT.getCode());
+        // 整理人=建单时的登录账户（后续编辑/审核不覆盖，保留原始整理人）
+        rc.setCreateBy(getCurrentUserId());
+        rc.setCreateByName(getCurrentUserName());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) rc.setCompanyId(cid);
         rcMapper.insert(rc);
@@ -114,6 +124,8 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         InventoryProductReclassify old = rcMapper.selectById(rc.getId());
         if (old == null) throw new BusinessException("品质重分类单不存在");
         if (DocStatus.AUDITED.getCode().equals(old.getStatus())) throw new BusinessException("已审核的单据不可编辑");
+        // 已作废单据不可编辑：update 会把状态写回 DRAFT，等于让作废单"复活"（作废语义失效）
+        if (DocStatus.CANCELLED.getCode().equals(old.getStatus())) throw new BusinessException("已作废的单据不可编辑");
 
         // 草稿状态更新：直接删旧明细 + 插新
         rc.setCode(old.getCode()); rc.setStatus(DocStatus.DRAFT.getCode());
@@ -136,9 +148,18 @@ public class ReclassifyServiceImpl implements ReclassifyService {
     public void audit(Long id) {
         InventoryProductReclassify rc = rcMapper.selectById(id);
         if (rc == null) throw new BusinessException("品质重分类单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(rc.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        // P2-29：原子抢占 DRAFT→AUDITED，避免并发/双击重复调整品质库存
+        if (!DocStatusGuard.claim(rcMapper, InventoryProductReclassify::getId, id,
+                InventoryProductReclassify::getStatus, DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode())) {
+            throw new BusinessException("只有草稿状态可审核");
+        }
         List<InventoryProductReclassifyItem> items = getItems(id);
         if (items.isEmpty()) throw new BusinessException("重分类明细不能为空");
+        // P2-33：数量必须为正（原先 <=0 被下面的循环静默跳过 → 零/负数量单也能"审核通过"）
+        for (InventoryProductReclassifyItem it : items) {
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("重分类数量必须大于 0（明细行ID=" + it.getId() + "）");
+        }
         // 审核前校验原品质库存：一次列清所有不足项，避免落到 changeStock 只报「产品ID=xx」
         checkStockBeforeAudit(rc, items);
 
@@ -190,15 +211,40 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         }
     }
 
+    /**
+     * 作废（E2 口径 · 2026-09-12）：**仅草稿**可作废。
+     * <p>此前 cancel 一身两职（草稿作废 + 已审核反审核并逆向库存），同名不同义易误用；
+     * 现将"反审核"拆到 {@link #unAudit(Long)}，本方法只保留草稿作废。</p>
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void cancel(Long id) {
-        // 注意：品质重分类单无独立 unAudit，cancel 在此承担"反审核"职责——
-        // 校验已审核后执行逆向库存回滚（恢复原品质、冲回目标品质），再将状态置 CANCELLED。
-        // 与 WarehouseMove.unAudit 语义一致，仅方法命名不同（前端已按 cancel 调用，故不改名）。
         InventoryProductReclassify rc = rcMapper.selectById(id);
         if (rc == null) throw new BusinessException("品质重分类单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(rc.getStatus())) throw new BusinessException("只有已审核状态可取消");
+        if (DocStatus.CANCELLED.getCode().equals(rc.getStatus())) throw new BusinessException("单据已作废");
+        if (!DocStatus.DRAFT.getCode().equals(rc.getStatus()))
+            throw new BusinessException("已审核单据不可直接作废，请先反审核");
+        // 草稿：未应用库存，直接作废即可（与其他四类库存单据的 cancel 语义对齐，
+        // 否则空明细/超量等无效草稿没有任何出路，会永久滞留在列表中）
+        rcMapper.update(null, new LambdaUpdateWrapper<InventoryProductReclassify>()
+                .eq(InventoryProductReclassify::getId, id)
+                .set(InventoryProductReclassify::getStatus, DocStatus.CANCELLED.getCode()));
+    }
+
+    /**
+     * 反审核（E2 口径 · 2026-09-12 从 cancel 拆出）：已审核 → CANCELLED，并逆向库存
+     * （恢复原品质、冲回目标品质）。与 WarehouseMove.unAudit 语义一致。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unAudit(Long id) {
+        InventoryProductReclassify rc = rcMapper.selectById(id);
+        if (rc == null) throw new BusinessException("品质重分类单不存在");
+        // P2-29：已审核分支原子抢占 AUDITED→CANCELLED，避免并发反审核重复逆向库存
+        if (!DocStatusGuard.claim(rcMapper, InventoryProductReclassify::getId, id,
+                InventoryProductReclassify::getStatus, DocStatus.AUDITED.getCode(), DocStatus.CANCELLED.getCode())) {
+            throw new BusinessException("只有已审核状态可反审核");
+        }
         List<InventoryProductReclassifyItem> items = getItems(id);
 
         // 逆向操作：恢复 from_quality，冲回 to_quality
@@ -231,5 +277,18 @@ public class ReclassifyServiceImpl implements ReclassifyService {
             try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
         }
         return prefix + d + String.format("%03d", seq);
+    }
+
+    /** 当前登录账户ID（未登录返回 null） */
+    private Long getCurrentUserId() {
+        try { return StpUtil.getLoginIdAsLong(); } catch (Exception e) { return null; }
+    }
+
+    /** 当前登录账户名（未登录或查不到返回 null） */
+    private String getCurrentUserName() {
+        try {
+            User user = userMapper.selectById(StpUtil.getLoginIdAsLong());
+            return user != null ? user.getUsername() : null;
+        } catch (Exception e) { return null; }
     }
 }

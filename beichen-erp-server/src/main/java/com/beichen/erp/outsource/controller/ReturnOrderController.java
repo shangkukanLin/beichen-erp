@@ -1,63 +1,27 @@
 package com.beichen.erp.outsource.controller;
 
-import cn.dev33.satoken.stp.StpUtil;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.beichen.erp.auth.entity.User;
-import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.common.R;
-import com.beichen.erp.config.CompanyContext;
-import com.beichen.erp.exception.BusinessException;
-import com.beichen.erp.finance.service.PayableHelper;
-import com.beichen.erp.inventory.common.RelatedBillType;
-import com.beichen.erp.common.DocStatus;
-import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.warehouse.service.WarehouseStockService;
-import com.beichen.erp.outsource.common.OutsourceOrderStatus;
-import com.beichen.erp.finance.common.SourceBillType;
-import com.beichen.erp.outsource.common.QualityType;
-import com.beichen.erp.outsource.entity.*;
-import com.beichen.erp.outsource.mapper.*;
-import com.beichen.erp.warehouse.entity.Warehouse;
-import com.beichen.erp.warehouse.mapper.WarehouseMapper;
-import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
-import com.beichen.erp.warehouse.mapper.WarehouseStockLogMapper;
-import com.beichen.erp.supplier.entity.Supplier;
-import com.beichen.erp.supplier.mapper.SupplierMapper;
+import com.beichen.erp.outsource.entity.ReturnOrder;
+import com.beichen.erp.outsource.service.OutsourceReturnOrderService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 
-@Slf4j
+/**
+ * 委外加工退货单接口层
+ * <p>仅做请求解析与结果包装，业务逻辑下沉至 {@link OutsourceReturnOrderService}。</p>
+ */
 @RestController
 @RequestMapping("/api/outsource/return-order")
 @RequiredArgsConstructor
 public class ReturnOrderController {
 
-    private final ReturnOrderMapper returnOrderMapper;
-    private final ReturnOrderItemMapper returnOrderItemMapper;
-    private final OutsourceReturnOrderProductMapper returnProductMapper;
-    private final OutsourceOrderMapper orderMapper;
-    private final OutsourceOrderMaterialMapper orderMaterialMapper;
-    private final OutsourceOrderProductMapper orderProductMapper;
-    private final WarehouseMapper warehouseMapper;
-    private final OutsourceMaterialMapper outsourceMaterialMapper;
-    private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
-    private final SupplierMapper supplierMapper;
-    private final PayableHelper payableHelper;
-    private final WarehouseStockService warehouseStockService;
-    private final MaterialOrderMapper materialOrderMapper;
-    private final MaterialOrderItemMapper materialOrderItemMapper;
-    private final UserMapper userMapper;
-    private final JdbcTemplate jdbcTemplate;
+    private final OutsourceReturnOrderService returnOrderService;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -65,375 +29,68 @@ public class ReturnOrderController {
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) String code,
             @RequestParam(required = false) Long factoryId) {
-        LambdaQueryWrapper<ReturnOrder> w = new LambdaQueryWrapper<ReturnOrder>()
-            .eq(code != null && !code.isBlank(), ReturnOrder::getCode, code)
-            .eq(factoryId != null, ReturnOrder::getFactoryId, factoryId)
-            .orderByDesc(ReturnOrder::getId);
-        Page<ReturnOrder> raw = returnOrderMapper.selectPage(new Page<>(pageNum, pageSize), w);
-        Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, raw.getTotal());
-        result.setRecords(raw.getRecords().stream().map(o -> {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", o.getId()); m.put("code", o.getCode());
-            m.put("factoryId", o.getFactoryId()); m.put("orderId", o.getOrderId());
-            m.put("returnDate", o.getReturnDate()); m.put("status", o.getStatus());
-            m.put("remark", o.getRemark()); m.put("createTime", o.getCreateTime());
-            m.put("chargeFlag", o.getChargeFlag()); m.put("chargeType", o.getChargeType());
-            m.put("chargeAmount", o.getChargeAmount()); m.put("chargeReason", o.getChargeReason());
-            if (o.getFactoryId() != null) {
-                Supplier f = supplierMapper.selectById(o.getFactoryId());
-                m.put("factoryName", f != null ? f.getName() : "");
-            }
-            if (o.getOrderId() != null) {
-                OutsourceOrder ord = orderMapper.selectById(o.getOrderId());
-                m.put("orderCode", ord != null ? ord.getCode() : "");
-            }
-            List<ReturnOrderItem> items = returnOrderItemMapper.selectList(
-                new LambdaQueryWrapper<ReturnOrderItem>().eq(ReturnOrderItem::getReturnOrderId, o.getId()));
-            BigDecimal totalQty = BigDecimal.ZERO;
-            StringBuilder sb = new StringBuilder();
-            for (ReturnOrderItem it : items) {
-                BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
-                totalQty = totalQty.add(qty);
-                if (sb.length() > 0) sb.append("、");
-                sb.append(getMaterialNameById(it.getMaterialId())).append("×").append(qty.stripTrailingZeros().toPlainString());
-            }
-            m.put("totalQuantity", totalQty); m.put("itemSummary", sb.toString());
-            return m;
-        }).toList());
-        return R.ok(result);
+        return R.ok(returnOrderService.page(pageNum, pageSize, code, factoryId));
     }
 
     @GetMapping("/{id}")
     public R<Map<String, Object>> detail(@PathVariable Long id) {
-        ReturnOrder o = returnOrderMapper.selectById(id);
-        if (o == null) return R.ok(null);
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("id", o.getId()); m.put("code", o.getCode()); m.put("factoryId", o.getFactoryId());
-        m.put("orderId", o.getOrderId()); m.put("returnDate", o.getReturnDate());
-        m.put("status", o.getStatus()); m.put("remark", o.getRemark());
-        m.put("chargeFlag", o.getChargeFlag()); m.put("chargeType", o.getChargeType());
-        m.put("chargeAmount", o.getChargeAmount()); m.put("chargeReason", o.getChargeReason());
-        m.put("createTime", o.getCreateTime());
-        if (o.getFactoryId() != null) {
-            Supplier f = supplierMapper.selectById(o.getFactoryId());
-            m.put("factoryName", f != null ? f.getName() : "");
-        }
-        if (o.getOrderId() != null) {
-            OutsourceOrder ord = orderMapper.selectById(o.getOrderId());
-            m.put("orderCode", ord != null ? ord.getCode() : "");
-        }
-        m.put("items", returnOrderItemMapper.selectList(
-            new LambdaQueryWrapper<ReturnOrderItem>().eq(ReturnOrderItem::getReturnOrderId, id)));
-        return R.ok(m);
+        return R.ok(returnOrderService.detail(id));
     }
 
     @PostMapping
-    @Transactional(rollbackFor = Exception.class)
     public R<Void> create(@RequestBody Map<String, Object> body) {
         ReturnOrder order = parseOrder(body);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> itemsRaw = (List<Map<String, Object>>) body.get("items");
-        if (itemsRaw == null || itemsRaw.isEmpty()) throw new BusinessException("请添加退货物料");
+        returnOrderService.create(order, body);
+        return R.ok();
+    }
 
-        order.setCode(generateCode());
-        if (order.getReturnDate() == null) order.setReturnDate(LocalDate.now());
-        order.setStatus(DocStatus.DRAFT.getCode());
-        // 成品出库仓（审核时从我方仓扣减成品）
-        Object invWhObj = body.get("warehouseId");
-        if (invWhObj != null && !invWhObj.toString().isBlank()) order.setWarehouseId(Long.valueOf(invWhObj.toString()));
-        order.setRemark((String) body.get("remark"));
-        // 收费字段（我方支付给加工厂的费用）：不收费归零，收费则类型必须合法且金额 > 0
-        normalizeCharge(order, body);
-        Long cid = CompanyContext.get();
-        if (cid != null && cid > 0) order.setCompanyId(cid);
-        returnOrderMapper.insert(order);
-
-        // 保存退货物料明细（FIFO 价，草稿阶段不动库存/应付）
-        for (Map<String, Object> it : itemsRaw) {
-            BigDecimal qty = toBigDecimal(it.get("quantity"));
-            Long matId = toLong(it.get("materialId"));
-            BigDecimal price = calcFifoPrice(matId, qty);
-
-            ReturnOrderItem item = new ReturnOrderItem();
-            item.setReturnOrderId(order.getId());
-            item.setMaterialId(matId);
-            item.setBomTypeId(toLong(it.get("bomTypeId")));
-            item.setUnit((String) it.get("unit"));
-            item.setQuantity(qty);
-            item.setUnitPrice(price);
-            item.setAmount(qty.multiply(price));
-            item.setRemark((String) it.get("remark"));
-            if (cid != null && cid > 0) item.setCompanyId(cid);
-            returnOrderItemMapper.insert(item);
-        }
-
-        // 保存退货成品明细（审核时扣减成品库存）
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> products = (List<Map<String, Object>>) body.get("products");
-        if (products != null) {
-            for (Map<String, Object> p : products) {
-                BigDecimal qty = toBigDecimal(p.get("quantity"));
-                if (qty.compareTo(BigDecimal.ZERO) <= 0) continue;
-                OutsourceReturnOrderProduct prod = new OutsourceReturnOrderProduct();
-                prod.setReturnOrderId(order.getId());
-                prod.setProductId(toLong(p.get("productId")));
-                prod.setProductName((String) p.get("productName"));
-                prod.setQuantity(qty);
-                if (cid != null && cid > 0) prod.setCompanyId(cid);
-                returnProductMapper.insert(prod);
-            }
-        }
+    /** 编辑草稿（E4：仅草稿可编辑；明细整体替换，草稿不动库存/应付） */
+    @PutMapping("/{id}")
+    public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        ReturnOrder order = parseOrder(body);
+        returnOrderService.update(id, order, body);
         return R.ok();
     }
 
     /** 审核：退货物料入工厂委外仓 + 成品出库 + 负向应付 */
     @PutMapping("/{id}/audit")
-    @Transactional(rollbackFor = Exception.class)
     public R<Void> audit(@PathVariable Long id) {
-        ReturnOrder order = returnOrderMapper.selectById(id);
-        if (order == null) throw new BusinessException("退货单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
-
-        List<ReturnOrderItem> items = returnOrderItemMapper.selectList(
-            new LambdaQueryWrapper<ReturnOrderItem>().eq(ReturnOrderItem::getReturnOrderId, id));
-        if (items.isEmpty()) throw new BusinessException("退货单明细不能为空");
-
-        // 工厂委外仓（物料退回目标仓）
-        Long factoryWhId = null;
-        if (order.getFactoryId() != null) {
-            List<Warehouse> whs = warehouseMapper.selectList(
-                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
-            factoryWhId = whs.isEmpty() ? null : whs.get(0).getId();
-        }
-        Long invWhId = order.getWarehouseId();
-
-        // 1. 退货物料入工厂委外仓 + 流水
-        BigDecimal totalReturnAmount = BigDecimal.ZERO;
-        for (ReturnOrderItem it : items) {
-            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            if (factoryWhId != null && it.getMaterialId() != null) {
-                updateOutsourceStock(factoryWhId, it.getMaterialId(), it.getQuantity(), QualityType.GOOD.getCode(), StockChangeType.RETURN_IN.getCode(), order.getCode());
-            }
-            if (it.getAmount() != null) totalReturnAmount = totalReturnAmount.add(it.getAmount());
-        }
-
-        // 2. 成品从我方仓减少
-        if (invWhId != null) {
-            List<OutsourceReturnOrderProduct> products = returnProductMapper.selectList(
-                new LambdaQueryWrapper<OutsourceReturnOrderProduct>().eq(OutsourceReturnOrderProduct::getReturnOrderId, id));
-            for (OutsourceReturnOrderProduct p : products) {
-                if (p.getQuantity() == null || p.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-                warehouseStockService.changeStock(invWhId, p.getProductId(), p.getQuantity().negate(), StockChangeType.OUTSOURCE_RETURN_OUT, order.getCode(), RelatedBillType.OUTSOURCE_RETURN, null, order.getId(), null);
-            }
-        }
-
-        // 3. 应付冲减（负向应付）
-        if (totalReturnAmount.compareTo(BigDecimal.ZERO) > 0) {
-            payableHelper.createPayable(order.getFactoryId(), SourceBillType.OUTSOURCE_RETURN.getCode(),
-                order.getCode(), order.getId(), totalReturnAmount.negate(), order.getReturnDate(),
-                "委外退料 - " + order.getCode());
-        }
-
-        // 4. 收费应付（正向）：我方支付给加工厂的费用，与退料冲减分开记账，便于对账
-        //    两笔共用 sourceId=退货单ID，反审核时 reversePayable(id) 会一并冲销
-        if (order.getChargeFlag() != null && order.getChargeFlag() == 1
-                && order.getChargeAmount() != null && order.getChargeAmount().compareTo(BigDecimal.ZERO) > 0) {
-            payableHelper.createPayable(order.getFactoryId(), SourceBillType.OUTSOURCE_RETURN_CHARGE.getCode(),
-                order.getCode(), order.getId(), order.getChargeAmount(), order.getReturnDate(),
-                "委外加工退货收费"
-                    + (order.getChargeReason() != null && !order.getChargeReason().isBlank()
-                        ? "：" + order.getChargeReason() : ""));
-        }
-
-        // 4. 更新状态与审计
-        ReturnOrder u = new ReturnOrder();
-        u.setId(id);
-        u.setStatus(DocStatus.AUDITED.getCode());
-        u.setAuditorId(getCurrentUserId());
-        u.setAuditorName(getCurrentUserName());
-        u.setAuditTime(LocalDateTime.now());
-        returnOrderMapper.updateById(u);
+        returnOrderService.audit(id);
         return R.ok();
     }
 
     /** 取消审核：物料出工厂委外仓 + 成品恢复 + 冲销应付 */
     @PutMapping("/{id}/un-audit")
-    @Transactional(rollbackFor = Exception.class)
     public R<Void> unAudit(@PathVariable Long id) {
-        ReturnOrder order = returnOrderMapper.selectById(id);
-        if (order == null) throw new BusinessException("退货单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(order.getStatus())) throw new BusinessException("只有已审核状态可取消审核");
-
-        // 工厂委外仓
-        Long whId = null;
-        if (order.getFactoryId() != null) {
-            List<Warehouse> whs = warehouseMapper.selectList(
-                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
-            whId = whs.isEmpty() ? null : whs.get(0).getId();
-        }
-        // 1. 物料逆向（从工厂委外仓扣回）
-        List<ReturnOrderItem> items = returnOrderItemMapper.selectList(
-            new LambdaQueryWrapper<ReturnOrderItem>().eq(ReturnOrderItem::getReturnOrderId, id));
-        for (ReturnOrderItem it : items) {
-            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            if (whId != null && it.getMaterialId() != null) {
-                updateOutsourceStock(whId, it.getMaterialId(), it.getQuantity().negate(), QualityType.GOOD.getCode(), StockChangeType.CANCEL_RETURN_IN.getCode(), order.getCode());
-            }
-        }
-        // 2. 成品逆向（恢复我方成品库存）
-        Long invWhId = order.getWarehouseId();
-        if (invWhId != null) {
-            List<OutsourceReturnOrderProduct> products = returnProductMapper.selectList(
-                new LambdaQueryWrapper<OutsourceReturnOrderProduct>().eq(OutsourceReturnOrderProduct::getReturnOrderId, id));
-            for (OutsourceReturnOrderProduct p : products) {
-                if (p.getQuantity() == null || p.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-                warehouseStockService.changeStock(invWhId, p.getProductId(), p.getQuantity(), StockChangeType.OUTSOURCE_RETURN_OUT_UN_AUDIT, order.getCode(), RelatedBillType.OUTSOURCE_RETURN, null, order.getId(), null);
-            }
-        }
-        // 3. 冲销应付
-        payableHelper.reversePayable(id);
-        // 4. 回草稿
-        ReturnOrder u = new ReturnOrder();
-        u.setId(id);
-        u.setStatus(DocStatus.DRAFT.getCode());
-        u.setAuditorId(null); u.setAuditorName(null); u.setAuditTime(null);
-        returnOrderMapper.updateById(u);
+        returnOrderService.unAudit(id);
         return R.ok();
     }
 
     @PutMapping("/{id}/cancel")
-    @Transactional(rollbackFor = Exception.class)
     public R<Void> cancel(@PathVariable Long id) {
-        ReturnOrder order = returnOrderMapper.selectById(id);
-        if (order == null) throw new BusinessException("退货单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可作废");
-        ReturnOrder u = new ReturnOrder();
-        u.setId(id);
-        u.setStatus(DocStatus.CANCELLED.getCode());
-        returnOrderMapper.updateById(u);
+        returnOrderService.cancel(id);
         return R.ok();
-    }
-
-    /** 当前登录用户ID */
-    private Long getCurrentUserId() {
-        try { return StpUtil.getLoginIdAsLong(); } catch (Exception e) { return null; }
-    }
-
-    /** 当前登录用户名 */
-    private String getCurrentUserName() {
-        try {
-            Long userId = StpUtil.getLoginIdAsLong();
-            User user = userMapper.selectById(userId);
-            return user != null ? user.getUsername() : null;
-        } catch (Exception e) { return null; }
     }
 
     /** FIFO 物料单价 */
     @GetMapping("/fifo-price")
     public R<BigDecimal> fifoPrice(@RequestParam Long materialId, @RequestParam(defaultValue = "1") BigDecimal qty) {
-        return R.ok(calcFifoPrice(materialId, qty));
+        return R.ok(returnOrderService.fifoPrice(materialId, qty));
     }
 
     /** 获取某工厂的产品列表（含每个产品的BOM版本来源），用于退货选择 */
     @GetMapping("/order-products")
     public R<List<Map<String, Object>>> orderProducts(@RequestParam Long factoryId) {
-        // 查该工厂所有已确认/已结单的加工单
-        List<OutsourceOrder> orders = orderMapper.selectList(
-            new LambdaQueryWrapper<OutsourceOrder>().eq(OutsourceOrder::getFactoryId, factoryId)
-                .in(OutsourceOrder::getStatus, OutsourceOrderStatus.PRODUCING.getCode(), OutsourceOrderStatus.FINISHED.getCode())
-                .orderByDesc(OutsourceOrder::getCreateTime));
-        // 按产品名汇总，每个产品列出可选的BOM版本
-        Map<String, Map<String, Object>> productMap = new LinkedHashMap<>();
-        for (OutsourceOrder o : orders) {
-            List<OutsourceOrderProduct> prods = orderProductMapper.selectList(
-                new LambdaQueryWrapper<OutsourceOrderProduct>().eq(OutsourceOrderProduct::getOrderId, o.getId()));
-            for (OutsourceOrderProduct p : prods) {
-                String pn = p.getProductName() != null ? p.getProductName() : "";
-                if (pn.isBlank()) continue;
-                Map<String, Object> pm = productMap.computeIfAbsent(pn, k -> {
-                    Map<String, Object> x = new LinkedHashMap<>();
-                    x.put("productName", k);
-                    x.put("bomVersions", new ArrayList<Map<String, Object>>());
-                    return x;
-                });
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> versions = (List<Map<String, Object>>) pm.get("bomVersions");
-                Map<String, Object> v = new LinkedHashMap<>();
-                v.put("orderId", o.getId());
-                v.put("orderCode", o.getCode());
-                v.put("productId", p.getId());
-                v.put("createTime", o.getCreateTime());
-                v.put("status", o.getStatus());
-                versions.add(v);
-            }
-        }
-        List<Map<String, Object>> result = new ArrayList<>(productMap.values());
-        // 每个产品的版本按创建时间降序
-        for (Map<String, Object> pm : result) {
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> versions = (List<Map<String, Object>>) pm.get("bomVersions");
-            versions.sort((a, b) -> {
-                Object at = a.get("createTime"), bt = b.get("createTime");
-                if (at == null && bt == null) return 0;
-                if (at == null) return 1;
-                if (bt == null) return -1;
-                return ((java.time.LocalDateTime) bt).compareTo((java.time.LocalDateTime) at);
-            });
-        }
-        return R.ok(result);
+        return R.ok(returnOrderService.orderProducts(factoryId));
     }
 
     /** 获取某产品在某加工单中的BOM快照物料 */
     @GetMapping("/bom-snapshot")
     public R<List<Map<String, Object>>> bomSnapshot(@RequestParam Long orderId, @RequestParam Long productId) {
-        List<OutsourceOrderMaterial> mats = orderMaterialMapper.selectList(
-            new LambdaQueryWrapper<OutsourceOrderMaterial>().eq(OutsourceOrderMaterial::getProductId, productId));
-        Map<Long, Map<String, Object>> map = new LinkedHashMap<>();
-        for (OutsourceOrderMaterial mat : mats) {
-            Long key = mat.getMaterialId();
-            if (key == null) continue;
-            Map<String, Object> m = map.computeIfAbsent(key, k -> {
-                Map<String, Object> x = new LinkedHashMap<>();
-                x.put("outsourceMaterialId", key);
-                x.put("materialName", getMaterialNameById(key));
-                x.put("bomTypeId", mat.getBomTypeId());
-                x.put("bomTypeName", getBomTypeNameById(mat.getBomTypeId()));
-                x.put("unit", mat.getUnit());
-                x.put("perSetQuantity", BigDecimal.ZERO);
-                return x;
-            });
-            BigDecimal d = mat.getDemandQuantity() != null ? mat.getDemandQuantity() : BigDecimal.ZERO;
-            m.put("perSetQuantity", ((BigDecimal) m.get("perSetQuantity")).add(d));
-        }
-        // 计算单套用量 = 总需求 / 产品订单数量
-        OutsourceOrderProduct prod = orderProductMapper.selectById(productId);
-        BigDecimal productQty = prod != null && prod.getQuantity() != null ? prod.getQuantity() : BigDecimal.ONE;
-        for (Map<String, Object> m : map.values()) {
-            BigDecimal total = (BigDecimal) m.get("perSetQuantity");
-            m.put("perSetQuantity", total.divide(productQty, 10, java.math.RoundingMode.HALF_UP));
-        }
-        return R.ok(new ArrayList<>(map.values()));
+        return R.ok(returnOrderService.bomSnapshot(orderId, productId));
     }
 
-    private void updateOutsourceStock(Long warehouseId, Long materialId, BigDecimal delta, String qualityType, String changeType, String orderCode) {
-        if (materialId == null) materialId = -1L; // fallback
-
-        // 查找现有库存记录（按 warehouse + material_id + quality）
-        Integer count = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM warehouse_stock WHERE warehouse_id=? AND material_id=? AND quality_type=?",
-            Integer.class, warehouseId, materialId, qualityType);
-        if (count != null && count > 0) {
-            jdbcTemplate.update("UPDATE warehouse_stock SET quantity=quantity+? WHERE warehouse_id=? AND material_id=? AND quality_type=?",
-                delta, warehouseId, materialId, qualityType);
-        } else {
-            jdbcTemplate.update("INSERT INTO warehouse_stock (warehouse_id, material_id, quality_type, quantity, company_id) VALUES (?,?,?,?,?)",
-                warehouseId, materialId, qualityType, delta, CompanyContext.get());
-        }
-
-        // 写库存流水
-        jdbcTemplate.update("INSERT INTO warehouse_stock_log (warehouse_id, material_id, material_name, change_type, change_quantity, related_order_code, company_id) VALUES (?,?,?,?,?,?,?)",
-            warehouseId, materialId, getMaterialNameById(materialId), changeType, delta, orderCode, CompanyContext.get());
-    }
+    // ===== 请求解析 =====
 
     private ReturnOrder parseOrder(Map<String, Object> body) {
         ReturnOrder o = new ReturnOrder();
@@ -445,98 +102,5 @@ public class ReturnOrderController {
         if (dd != null && !dd.toString().isBlank()) o.setReturnDate(LocalDate.parse(dd.toString()));
         if (body.get("remark") != null) o.setRemark(body.get("remark").toString());
         return o;
-    }
-
-    private BigDecimal calcFifoPrice(Long materialId, BigDecimal requiredQty) {
-        if (materialId == null || requiredQty == null || requiredQty.compareTo(BigDecimal.ZERO) <= 0)
-            return BigDecimal.ZERO;
-        try {
-            List<MaterialOrder> orders = materialOrderMapper.selectList(
-                new LambdaQueryWrapper<MaterialOrder>().orderByAsc(MaterialOrder::getDeliveryDate));
-            BigDecimal accumulatedAmount = BigDecimal.ZERO, accumulatedQty = BigDecimal.ZERO;
-            for (MaterialOrder o : orders) {
-                LambdaQueryWrapper<MaterialOrderItem> itemW = new LambdaQueryWrapper<MaterialOrderItem>()
-                    .eq(MaterialOrderItem::getOrderId, o.getId())
-                    .eq(MaterialOrderItem::getMaterialId, materialId);
-                List<MaterialOrderItem> items = materialOrderItemMapper.selectList(itemW);
-                for (MaterialOrderItem itt : items) {
-                    BigDecimal q = itt.getOrderQuantity() != null ? itt.getOrderQuantity() : BigDecimal.ZERO;
-                    BigDecimal p = itt.getUnitPrice() != null ? itt.getUnitPrice() : BigDecimal.ZERO;
-                    if (q.compareTo(BigDecimal.ZERO) <= 0 || p.compareTo(BigDecimal.ZERO) <= 0) continue;
-                    BigDecimal need = requiredQty.subtract(accumulatedQty);
-                    if (need.compareTo(BigDecimal.ZERO) <= 0) break;
-                    BigDecimal use = q.min(need);
-                    accumulatedAmount = accumulatedAmount.add(use.multiply(p));
-                    accumulatedQty = accumulatedQty.add(use);
-                }
-                if (accumulatedQty.compareTo(requiredQty) >= 0) break;
-            }
-            if (accumulatedQty.compareTo(BigDecimal.ZERO) > 0)
-                return accumulatedAmount.divide(accumulatedQty, 4, java.math.RoundingMode.HALF_UP);
-        } catch (Exception e) { log.warn("FIFO单价计算失败: {}", e.getMessage()); }
-        return BigDecimal.ZERO;
-    }
-
-    private BigDecimal toBigDecimal(Object val) {
-        if (val == null) return BigDecimal.ZERO;
-        String s = val.toString().trim();
-        if (s.isEmpty()) return BigDecimal.ZERO;
-        try { return new BigDecimal(s); } catch (NumberFormatException e) { return BigDecimal.ZERO; }
-    }
-
-    private Long toLong(Object val) {
-        if (val == null) return null;
-        String s = val.toString().trim();
-        if (s.isEmpty()) return null;
-        try { return Long.valueOf(s); } catch (NumberFormatException e) { return null; }
-    }
-
-    /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */
-    private String getMaterialNameById(Long materialId) {
-        if (materialId == null) return "";
-        OutsourceMaterial m = outsourceMaterialMapper.selectById(materialId);
-        return m != null ? m.getMaterialName() : "";
-    }
-
-    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
-    private String getBomTypeNameById(Long bomTypeId) {
-        if (bomTypeId == null) return "-";
-        com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
-        return bt != null ? bt.getTypeName() : "-";
-    }
-
-    /**
-     * 收费字段归一化（与销售退货 SaleReturnServiceImpl.normalizeCharge 同策略）：
-     * 不收费则金额归零、类型清空；收费则类型必须合法且金额必须 > 0。
-     * 收费是「我方支付给加工厂」的费用，审核后生成正向应付。
-     */
-    private void normalizeCharge(ReturnOrder order, Map<String, Object> body) {
-        Long flagVal = toLong(body.get("chargeFlag"));
-        if (flagVal == null || flagVal != 1) {
-            order.setChargeFlag(0);
-            order.setChargeType(null);
-            order.setChargeAmount(BigDecimal.ZERO);
-            order.setChargeReason(null);
-            return;
-        }
-        Object t = body.get("chargeType");
-        String type = t == null ? null : t.toString().trim();
-        if (type == null || type.isEmpty()) throw new BusinessException("已选择收费，请选择收费类型");
-        if (!com.beichen.erp.outsource.common.OutsourceChargeType.isValid(type))
-            throw new BusinessException("非法的收费类型：" + type);
-        BigDecimal amount = toBigDecimal(body.get("chargeAmount"));
-        if (amount.compareTo(BigDecimal.ZERO) <= 0)
-            throw new BusinessException("已选择收费，收费金额必须大于 0");
-        order.setChargeFlag(1);
-        order.setChargeType(com.beichen.erp.outsource.common.OutsourceChargeType.fromCode(type).getCode());
-        order.setChargeAmount(amount);
-        order.setChargeReason((String) body.get("chargeReason"));
-    }
-
-    private String generateCode() {
-        String prefix = "OR-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        Long seq = returnOrderMapper.selectCount(
-            new LambdaQueryWrapper<ReturnOrder>().likeRight(ReturnOrder::getCode, prefix)) + 1;
-        return prefix + String.format("%03d", seq);
     }
 }

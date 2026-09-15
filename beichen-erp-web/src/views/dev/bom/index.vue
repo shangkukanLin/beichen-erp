@@ -31,10 +31,10 @@ async function loadProjects() {
   try {
     const res = await request.get<any, any>('/dev/project/page', { params: { pageSize: 200 } })
     const projects = res?.records || []
-    for (const p of projects) {
-      const boms = await request.get<any, any>(`/dev/project/${p.id}/bom`)
-      p.bomCount = (boms || []).length
-    }
+    // 并发拉取各项目 BOM 数量（原为 for 循环串行 await，项目多时首屏明显变慢）
+    const bomList = await Promise.all(projects.map((p: any) =>
+      request.get<any, any>(`/dev/project/${p.id}/bom`)))
+    projects.forEach((p: any, i: number) => { p.bomCount = (bomList[i] || []).length })
     allProjects.value = projects.filter((p:any) => p.bomCount > 0)
     filteredProjects.value = allProjects.value
     // 批量拉取项目阶段，推导当前阶段

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -16,7 +17,7 @@ const form = reactive({
   deliveryType: DeliveryType.DELIVERY as string, factoryId: undefined as any, supplierId: undefined as any,
   fromWarehouseId: undefined as any, toWarehouseId: undefined as any,
   logisticsCompany: '', logisticsNo: '', attachUrl: '',
-  deliveryDate: new Date().toISOString().split('T')[0], contact: '', phone: '', remark: ''
+  deliveryDate: localDate(), contact: '', phone: '', remark: ''
 })
 const outsourceWarehouses = ref<any[]>([])
 const targetOutsourceWarehouses = ref<any[]>([])

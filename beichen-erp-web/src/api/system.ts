@@ -20,6 +20,7 @@ export interface UserVO {
   status: number
   roles?: Role[]
   roleIds?: number[] | string[]
+  dashboardTabs?: string[]
   [key: string]: unknown
 }
 
@@ -40,6 +41,27 @@ export interface UserDTO {
   dept?: string | null
   status: number
   roleIds: (number | string)[]
+  /** 首页业务 TAB 可见性（空=全部可见） */
+  dashboardTabs?: string[]
+}
+
+/** 首页业务 TAB 标识与名称（与 dashboard/index.vue 的 hasModule 键一致） */
+export const DASHBOARD_TABS: { key: string; label: string }[] = [
+  { key: 'dev', label: '项目研发' },
+  { key: 'outsource', label: '委外加工' },
+  { key: 'purchase', label: '进货业务' },
+  { key: 'sale', label: '销售业务' },
+  { key: 'stock', label: '成品库存' },
+  { key: 'finance', label: '财务' }
+]
+
+export function getMyDashboardTabs() {
+  return request.get<string[]>('/system/dashboard-tabs/mine')
+}
+
+/** 按角色推导首页业务 TAB 默认勾选 */
+export function getDefaultDashboardTabs(roleIds: (number | string)[]) {
+  return request.get<string[]>('/system/user/default-dashboard-tabs', { params: { roleIds: roleIds.join(',') } })
 }
 
 export interface RoleQueryParams {

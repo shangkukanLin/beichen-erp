@@ -33,7 +33,6 @@
           <el-button type="success" :icon="'Download'" :disabled="!form.purchaseOrderId" @click="loadFromPurchaseOrder()">从采购单带入明细</el-button>
         </div>
         <el-table :data="items" border>
-          <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="SKU" width="130">
             <template #default="{ row }">
               <span v-if="row.sku">{{ row.sku }}</span>
@@ -90,6 +89,7 @@
 </template>
 
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 defineOptions({ name: 'PurchaseReturnAdd' })
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { PURCHASE_RETURN_DIRTY_KEY, WarehouseCategory } from '@/api/enums'
@@ -131,7 +131,7 @@ const form = reactive({
   warehouseId: undefined as number | undefined,
   purchaseOrderId: undefined as number | undefined,
   purchaseOrderCode: '' as string,
-  returnDate: new Date().toISOString().slice(0, 10) as string,
+  returnDate: localDate() as string,
   remark: '' as string,
 })
 

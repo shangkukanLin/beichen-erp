@@ -21,6 +21,15 @@ const outsourceWarehouses = ref<any[]>([]); const inventoryWarehouses = ref<any[
 const bomTypes = ref<any[]>([])
 const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any) => m.bomTypeId).filter(Boolean))] as number[])
 function materialsByType(type: number) { return materialOptions.value.filter((m: any) => m.bomTypeId === type) }
+/** 行内下拉选项：按类型过滤；若当前已选物料不在其中（历史数据类型缺失等），附加该物料，避免 el-select 显示数字 ID */
+function optionsForRow(row: any) {
+  const base = materialsByType(row.bomTypeId)
+  if (row.material_id && !base.some((m: any) => m.id === row.material_id)) {
+    const cur = materialOptions.value.find((m: any) => m.id === row.material_id)
+    if (cur) return [...base, cur]
+  }
+  return base
+}
 function typeName(id: number | undefined) { if (id == null) return '-'; const t = bomTypes.value.find((v: any) => v.id === id); return t ? t.typeName : (id as any) }
 
 async function loadOptions() {
@@ -113,7 +122,7 @@ onActivated(()=>{ loadData() })
       <el-button type="primary" size="small" :disabled="readonly" @click="addItem" style="margin-bottom:8px">+ 添加物料</el-button>
       <el-table :data="items" border size="small">
         <el-table-column label="物料类型" width="110"><template #default="{row,$index}"><el-select v-model="row.bomTypeId" filterable style="width:100%" clearable :disabled="readonly" @change="onTypeChange($index)"><el-option v-for="t in uniqueTypes" :key="t" :label="typeName(t)" :value="t" /></el-select></template></el-table-column>
-        <el-table-column label="物料名称" min-width="130"><template #default="{row,$index}"><el-select v-model="row.material_id" filterable style="width:100%" :disabled="readonly || !row.bomTypeId" @change="(v:any)=>onMatSelect($index,v)"><el-option v-for="m in materialsByType(row.bomTypeId)" :key="m.id" :label="m.materialName" :value="m.id" /></el-select></template></el-table-column>
+        <el-table-column label="物料名称" min-width="130"><template #default="{row,$index}"><el-select v-model="row.material_id" filterable style="width:100%" :disabled="readonly || !row.bomTypeId" @change="(v:any)=>onMatSelect($index,v)"><el-option v-for="m in optionsForRow(row)" :key="m.id" :label="m.materialName" :value="m.id" /></el-select></template></el-table-column>
         <el-table-column label="单位" width="60"><template #default="{row}">{{row.unit}}</template></el-table-column>
         <el-table-column label="单价" width="90"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" :disabled="readonly" /></template></el-table-column>
         <el-table-column label="数量" width="100"><template #default="{row}"><el-input v-model="row.quantity" size="small" :disabled="readonly" /></template></el-table-column>

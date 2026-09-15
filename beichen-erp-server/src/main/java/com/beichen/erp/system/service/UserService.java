@@ -44,4 +44,14 @@ public interface UserService extends IService<User> {
      * 切换启用/禁用状态
      */
     void toggleStatus(Long id);
+
+    /**
+     * 查询用户首页业务 TAB 勾选（无记录=全部可见）
+     */
+    java.util.List<String> getDashboardTabsByUserId(Long userId);
+
+    /**
+     * 按角色集合推导首页业务 TAB 默认勾选（与首页可见性同一套映射规则，多角色取并集）
+     */
+    java.util.List<String> deriveDefaultDashboardTabs(java.util.List<Long> roleIds);
 }

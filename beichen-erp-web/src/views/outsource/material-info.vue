@@ -45,6 +45,9 @@ function supplierNames(ids: string | undefined) {
   }).join(', ')
 }
 
+// 数量格式化（保留2位小数，空值显示 0.00）
+function fmtQty(v: any) { return v == null ? '0.00' : Number(v).toFixed(2) }
+
 async function loadData() {
   tableLoading.value = true
   try {
@@ -168,7 +171,6 @@ onMounted(async () => {
       </el-tabs>
 
       <el-table :data="tableData" border stripe v-loading="tableLoading">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="projectName" label="所属项目" width="150" show-overflow-tooltip />
         <el-table-column prop="bomTypeName" label="物料类型" width="100" />
         <el-table-column prop="materialName" label="物料名称" min-width="130" show-overflow-tooltip />
@@ -177,6 +179,14 @@ onMounted(async () => {
         </el-table-column>
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column prop="price" label="单价" width="90" />
+        <el-table-column label="库存总量" width="110" align="right">
+          <template #default="{ row }">{{ fmtQty(row.stockTotal) }}</template>
+        </el-table-column>
+        <el-table-column label="未交数量" width="110" align="right">
+          <template #default="{ row }">
+            <span :style="{ color: Number(row.undeliveredTotal) > 0 ? 'var(--app-color-warning)' : '', fontWeight: Number(row.undeliveredTotal) > 0 ? 600 : 400 }">{{ fmtQty(row.undeliveredTotal) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="130" align="center" fixed="right">
           <template #default="{row}"><el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button><el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button></template>
         </el-table-column>

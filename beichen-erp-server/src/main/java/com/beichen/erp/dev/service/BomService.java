@@ -24,4 +24,7 @@ public interface BomService extends IService<Bom> {
 
     /** 批量保存BOM（全量替换：先删旧版本数据再批量插入） */
     void saveBatch(Long projectId, List<Bom> items);
+
+    /** 删除单个BOM项（禁止删除所在版本的唯一明细，避免版本号回退导致历史版本被改写） */
+    void deleteItem(Long id);
 }

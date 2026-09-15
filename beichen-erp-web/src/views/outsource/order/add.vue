@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { OUTSOURCE_ORDER_DIRTY_KEY } from '@/api/enums'
 import { useRouter, useRoute } from 'vue-router'
@@ -17,7 +18,7 @@ const saving = ref(false)
 const form = reactive({
   factoryId: undefined as any,
   supplyMode: 'OURS',
-  planStartDate: new Date().toISOString().split('T')[0],
+  planStartDate: localDate(),
   planEndDate: '',
   taxIncluded: 0,
   taxRate: '',

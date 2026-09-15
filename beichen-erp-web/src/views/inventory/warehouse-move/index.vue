@@ -25,16 +25,15 @@
 
     <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="tableData" border stripe @row-click="handleDetail">
-        <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="code" label="单号" min-width="150" />
         <el-table-column label="移出仓库" min-width="140">
           <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click.stop="$router.push(`/inventory/warehouse/detail/${row.fromWarehouseId}`)">{{ warehouseName(row.fromWarehouseId) }}</el-link>
+            <el-link type="primary" underline="never" @click.stop="$router.push(`/inventory/warehouse/detail/${row.fromWarehouseId}`)">{{ warehouseName(row.fromWarehouseId) }}</el-link>
           </template>
         </el-table-column>
         <el-table-column label="移入仓库" min-width="140">
           <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click.stop="$router.push(`/inventory/warehouse/detail/${row.toWarehouseId}`)">{{ warehouseName(row.toWarehouseId) }}</el-link>
+            <el-link type="primary" underline="never" @click.stop="$router.push(`/inventory/warehouse/detail/${row.toWarehouseId}`)">{{ warehouseName(row.toWarehouseId) }}</el-link>
           </template>
         </el-table-column>
         <el-table-column prop="itemsSummary" label="产品明细" min-width="200" show-overflow-tooltip />

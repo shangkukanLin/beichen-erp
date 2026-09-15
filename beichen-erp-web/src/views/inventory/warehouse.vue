@@ -47,7 +47,7 @@ const form = reactive(defForm()); const isEdit = ref(false)
 function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dialogTitle.value = '新增仓库'; dialogVisible.value = true }
 function handleEdit(row: any) { Object.assign(form, defForm(), row); isEdit.value = true; dialogTitle.value = '编辑仓库'; dialogVisible.value = true }
 
-async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('请输入仓库名称'); return }; submitLoading.value = true
+async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('请输入仓库名称'); return }; if (!form.warehouseType) { ElMessage.warning('请选择仓型'); return }; submitLoading.value = true
   try { if (isEdit.value) { await request.put('/warehouse', form); ElMessage.success('已更新') } else { await request.post('/warehouse', form); ElMessage.success('已新增') }
     dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
 
@@ -125,7 +125,7 @@ onMounted(() => { loadData(); loadTakeStatus() })
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
       <el-form :model="form" label-width="80px">
         <el-form-item label="名称" required><el-input v-model="form.warehouseName" /></el-form-item>
-        <el-form-item label="仓型"><el-select v-model="form.warehouseType" style="width:100%"><el-option v-for="(lb, code) in WARHOUSE_TYPES" :key="code" :label="lb" :value="code" /></el-select></el-form-item>
+        <el-form-item label="仓型" required><el-select v-model="form.warehouseType" style="width:100%"><el-option v-for="(lb, code) in WARHOUSE_TYPES" :key="code" :label="lb" :value="code" /></el-select></el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
         <el-form-item label="负责人"><el-input v-model="form.manager" /></el-form-item>
         <el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item>

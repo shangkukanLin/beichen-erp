@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
@@ -10,7 +11,7 @@ import {
 } from '@/api/system'
 import request from '@/utils/request'
 
-const today = new Date().toISOString().split('T')[0]
+const today = localDate()
 const router = useRouter()
 
 // ===================== 列表 + Tab =====================
@@ -140,7 +141,6 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 全部 -->
       <el-table v-if="activeTab==='all'" :data="allProjects" border stripe v-loading="tableLoading" style="width:100%" size="default" @row-click="handleEdit">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="code" label="编号" width="140" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="assemblyName" label="总成名称" width="110" show-overflow-tooltip />
@@ -171,7 +171,6 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 进行中 -->
       <el-table v-if="activeTab==='active'" :data="activeProjects" border stripe v-loading="tableLoading" style="width:100%" size="default" :height="undefined" @row-click="handleEdit">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="code" label="编号" width="140" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="assemblyName" label="总成名称" width="110" show-overflow-tooltip />
@@ -202,7 +201,6 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 已结项 -->
       <el-table v-if="activeTab==='finished'" :data="finishedProjects" border stripe v-loading="tableLoading" style="width:100%" size="default" @row-click="handleEdit">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="code" label="编号" width="140" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="100" show-overflow-tooltip />
@@ -219,7 +217,6 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 已取消 -->
       <el-table v-if="activeTab==='cancelled'" :data="cancelledProjects" border stripe v-loading="tableLoading" style="width:100%" size="default" @row-click="handleEdit">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="code" label="编号" width="140" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="100" show-overflow-tooltip />

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted, onUnmounted } from 'vue'
 import { OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY } from '@/api/enums'
 import { useRouter } from 'vue-router'
@@ -10,7 +11,7 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 const router = useRouter()
 const tabStore = useTabStore()
 
-const form = reactive({ supplierId: undefined as any, fromWarehouseId: undefined as any, returnDate: new Date().toISOString().slice(0, 10), remark: '' })
+const form = reactive({ supplierId: undefined as any, fromWarehouseId: undefined as any, returnDate: localDate(), remark: '' })
 const warehouseOptions = ref<any[]>([])
 const stockList = ref<any[]>([])
 const loading = ref(false)

@@ -248,7 +248,6 @@ onActivated(() => { loadDetail() })
 
       <!-- 草稿：可编辑明细（带移出仓可用库存） -->
       <el-table v-if="isDraft" :data="editItems" border size="small">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column label="SKU" width="130">
           <template #default="{ row }">
             <span v-if="row.sku">{{ row.sku }}</span>
@@ -292,7 +291,6 @@ onActivated(() => { loadDetail() })
 
       <!-- 非草稿：只读明细 -->
       <el-table v-else :data="items" border size="small">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="sku" label="SKU" width="130">
           <template #default="{ row }">{{ row.sku || '-' }}</template>
         </el-table-column>

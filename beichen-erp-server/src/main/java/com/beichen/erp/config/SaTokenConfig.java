@@ -4,6 +4,7 @@ import cn.dev33.satoken.interceptor.SaInterceptor;
 import cn.dev33.satoken.stp.StpUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -15,6 +16,14 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  */
 @Configuration
 public class SaTokenConfig implements WebMvcConfigurer {
+
+    /**
+     * 跨域白名单（P0 配置外置 · 2026-09-14）：逗号分隔，默认 {@code *} 仅限开发联调。
+     * <p>生产必须显式配置（如 {@code https://erp.example.com}）—— 此前硬编码 {@code *} + {@code allowCredentials=true}
+     * 等于允许任意站点携带凭证调用接口。</p>
+     */
+    @Value("${app.cors.allowed-origins:*}")
+    private String allowedOrigins;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
@@ -34,8 +43,6 @@ public class SaTokenConfig implements WebMvcConfigurer {
                         "/api/company/admin/verify",
                         "/api/company/list",
                         "/api/system/menu/tree/user",
-                        "/api/system/fix-material-demand",
-                        "/api/system/import-data",
                         "/doc.html",
                         "/swagger-ui/**",
                         "/swagger-ui.html",
@@ -56,7 +63,7 @@ public class SaTokenConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOriginPatterns("*")
+                .allowedOriginPatterns(allowedOrigins.split("\\s*,\\s*"))
                 .allowedMethods("*")
                 .allowedHeaders("*")
                 .allowCredentials(true)

@@ -46,7 +46,6 @@
           <el-button type="primary" @click="addItem">添加明细</el-button>
         </div>
         <el-table :data="items" border>
-          <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="SKU" width="130">
             <template #default="{ row }">
               <span v-if="row.sku">{{ row.sku }}</span>
@@ -125,6 +124,7 @@
 </template>
 
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { WarehouseCategory, PURCHASE_ORDER_DIRTY_KEY } from '@/api/enums'
 defineOptions({ name: 'PurchaseAdd' })
 import { ref, reactive, onMounted } from 'vue'
@@ -160,7 +160,7 @@ const items = ref<ItemRow[]>([])
 const form = reactive<PurchaseOrder>({
   supplierId: undefined,
   warehouseId: undefined,
-  orderDate: new Date().toISOString().slice(0, 10),
+  orderDate: localDate(),
   taxIncluded: 0,
   taxRate: 0,
   remark: ''

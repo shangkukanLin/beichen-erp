@@ -6,6 +6,7 @@ import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.finance.common.CashflowRelatedType;
 import com.beichen.erp.finance.common.CashflowType;
 import com.beichen.erp.finance.entity.FinanceAccount;
@@ -87,7 +88,10 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
         FinanceExpense expense = expenseMapper.selectById(id);
-        if (expense == null || !DocStatus.DRAFT.getCode().equals(expense.getStatus()))
+        if (expense == null) throw new BusinessException("费用单不存在");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免重复写支出流水
+        if (!DocStatusGuard.claim(expenseMapper, FinanceExpense::getId, id, FinanceExpense::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
             throw new BusinessException("只有草稿状态可审核");
         if (expense.getAccountId() == null) throw new BusinessException("支出账户不能为空");
         // 余额校验：账户实时余额（期初+收入-支出）须足够支付本笔费用
@@ -118,7 +122,10 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
     public void unAudit(Long id) {
         FinanceExpense expense = expenseMapper.selectById(id);
         if (expense == null) throw new BusinessException("费用单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(expense.getStatus())) throw new BusinessException("只有已审核的费用单可反审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免重复写冲正流水
+        if (!DocStatusGuard.claim(expenseMapper, FinanceExpense::getId, id, FinanceExpense::getStatus,
+                DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
+            throw new BusinessException("只有已审核的费用单可反审核");
         // 写「费用冲正」流水把钱冲回账户（保留审计轨迹，不删除原流水），与收款单反审核模式对称
         FinanceCashflow cf = new FinanceCashflow();
         cf.setFlowNo(genFlowNo());
@@ -142,7 +149,10 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
     public void cancel(Long id) {
         FinanceExpense old = expenseMapper.selectById(id);
         if (old == null) throw new BusinessException("费用单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败
+        if (!DocStatusGuard.claim(expenseMapper, FinanceExpense::getId, id, FinanceExpense::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("只有草稿状态可作废");
         FinanceExpense u = new FinanceExpense();
         u.setId(id);
         u.setStatus(DocStatus.CANCELLED.getCode());

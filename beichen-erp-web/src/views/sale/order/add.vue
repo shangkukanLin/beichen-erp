@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
@@ -28,7 +29,7 @@ const formRef = ref<FormInstance>()
 
 const form = reactive<SaleOrder>({
   id: undefined, customerId: undefined, warehouseId: undefined,
-  orderDate: new Date().toISOString().slice(0, 10),
+  orderDate: localDate(),
   taxIncluded: 0, taxRate: 0, remark: ''
 })
 const items = ref<SaleOrderItem[]>([])
@@ -54,7 +55,7 @@ async function loadProducts() { try { const res: any = await fetchProducts(''); 
 function resetForm() {
   Object.assign(form, {
     id: undefined, customerId: undefined, warehouseId: undefined,
-    orderDate: new Date().toISOString().slice(0, 10), taxIncluded: 0, taxRate: 0, remark: ''
+    orderDate: localDate(), taxIncluded: 0, taxRate: 0, remark: ''
   })
   items.value = []
 }
@@ -275,7 +276,6 @@ onMounted(async () => {
           <span v-if="!form.warehouseId" style="color:#909399; font-size:12px">请先选择出库仓库，再刷新库存</span>
         </div>
         <el-table :data="items" border>
-          <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="SKU" width="130">
             <template #default="{ row }">
               <span v-if="row.sku">{{ row.sku }}</span>

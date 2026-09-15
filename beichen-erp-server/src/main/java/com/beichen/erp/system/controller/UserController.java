@@ -19,7 +19,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/system/user")
@@ -67,5 +70,11 @@ public class UserController {
     public R<Void> toggleStatus(@PathVariable Long id) {
         userService.toggleStatus(id);
         return R.ok();
+    }
+
+    /** 按角色推导首页业务 TAB 默认勾选（新增用户弹窗用） */
+    @GetMapping("/default-dashboard-tabs")
+    public R<List<String>> defaultDashboardTabs(@RequestParam("roleIds") List<Long> roleIds) {
+        return R.ok(userService.deriveDefaultDashboardTabs(roleIds));
     }
 }

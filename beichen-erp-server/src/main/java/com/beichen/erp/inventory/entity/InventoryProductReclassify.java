@@ -26,6 +26,12 @@ public class InventoryProductReclassify {
 
     private String remark;
 
+    /** 整理人（建单时登录的账户），用于追溯是谁做的品质整理 */
+    private Long createBy;
+
+    /** 整理人名称（冗余展示，账户名快照） */
+    private String createByName;
+
     @TableField(fill = FieldFill.INSERT)
     private Long companyId;
 

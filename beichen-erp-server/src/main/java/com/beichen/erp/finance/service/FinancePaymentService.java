@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 public interface FinancePaymentService {
-    Page<Map<String,Object>> page(Long supplierId, String status, int pageNum, int pageSize);
+    Page<Map<String,Object>> page(Long supplierId, String supplierType, String status, int pageNum, int pageSize);
     FinancePayment getById(Long id);
     List<FinancePaymentItem> getItems(Long paymentId);
     void create(FinancePayment payment, List<FinancePaymentItem> items);

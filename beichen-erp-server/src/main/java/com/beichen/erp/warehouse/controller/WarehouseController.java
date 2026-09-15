@@ -8,6 +8,7 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import com.beichen.erp.warehouse.common.WarehouseCategory;
+import com.beichen.erp.warehouse.common.WarehouseType;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import lombok.RequiredArgsConstructor;
@@ -94,6 +95,14 @@ public class WarehouseController {
         if (w.getWarehouseCategory() == null || w.getWarehouseCategory().isBlank()) {
             w.setWarehouseCategory(WarehouseCategory.INVENTORY.getCode());
         }
+        // 仓型必填：仓型为空会导致按仓型过滤的下拉（销售出库/退货/委外等）都选不到该仓
+        if (w.getWarehouseType() == null || w.getWarehouseType().isBlank()) {
+            if (WarehouseCategory.OUTSOURCE.getCode().equals(w.getWarehouseCategory())) {
+                w.setWarehouseType(WarehouseType.AUXILIARY.getCode());
+            } else {
+                throw new BusinessException("仓型不能为空");
+            }
+        }
         if (w.getStatus() == null) w.setStatus(1);
         warehouseMapper.insert(w);
         return R.ok();
@@ -116,6 +125,10 @@ public class WarehouseController {
     /** 编辑仓库 */
     @PutMapping
     public R<Void> update(@RequestBody Warehouse w) {
+        // 显式传空串=要把仓型清空，需拦截；未传(null)视为不修改，由 MP 忽略
+        if (w.getWarehouseType() != null && w.getWarehouseType().isBlank()) {
+            throw new BusinessException("仓型不能为空");
+        }
         warehouseMapper.updateById(w);
         return R.ok();
     }

@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { getPaymentPage, getPaymentItems, auditPayment, cancelPayment, unAuditPayment, type FinancePayment, type FinancePaymentItem } from '@/api/finance'
+import { TYPE_MAP, TYPE_TAG } from '@/constants/supplier'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
@@ -24,7 +25,7 @@ async function loadSummary() {
 function goSupplierDetail(row: any) { router.push(`/finance/payment/supplier/${row.supplierId}`) }
 
 // ========== Tab2 付款记录 ==========
-const query = reactive({ supplierId: '' as string|number, status: '' })
+const query = reactive({ supplierId: '' as string|number, supplierType: '', status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinancePayment[]>([])
@@ -43,6 +44,7 @@ async function loadData() {
   try {
     const p: any = { pageNum: page.pageNum, pageSize: page.pageSize }
     if (query.supplierId) p.supplierId = query.supplierId
+    if (query.supplierType) p.supplierType = query.supplierType
     if (query.status) p.status = query.status
     const res = await getPaymentPage(p)
     data.value = res?.records || []; page.total = res?.total || 0
@@ -52,8 +54,9 @@ async function loadAccounts() {
   try { const r = await request.get<any, any>('/finance/account/list'); accounts.value = r || [] } catch {}
 }
 function query_() { page.pageNum = 1; loadData() }
-function reset_() { query.supplierId = ''; query.status = ''; page.pageNum = 1; loadData() }
+function reset_() { query.supplierId = ''; query.supplierType = ''; query.status = ''; page.pageNum = 1; loadData() }
 function sName(id?: number) { return suppliersOptions.value.find(x => x.id === id)?.name || '' }
+function typeLabel(code?: string) { return code ? (TYPE_MAP[code] || code) : '—' }
 function aName(id?: number) { return accounts.value.find(x => x.id === id)?.accountName || '' }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { return DocStatusTag[s || ''] || undefined }
@@ -111,6 +114,12 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
     <el-card v-if="activeTab==='supplier'" shadow="never">
       <el-table v-loading="summaryLoading" :data="summaryData" border stripe @row-click="goSupplierDetail">
         <el-table-column prop="supplierName" label="供应商" min-width="180" />
+        <el-table-column label="主体类型" width="100" align="center">
+          <template #default="{row}">
+            <el-tag v-if="row.supplierType" :type="TYPE_TAG[row.supplierType] || 'info'" size="small">{{ typeLabel(row.supplierType) }}</el-tag>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="应付总额" width="130" align="right"><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
         <el-table-column label="已付" width="130" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.paidAmount) }}</span></template></el-table-column>
         <el-table-column label="未付" width="130" align="right"><template #default="{row}"><span style="color:var(--app-color-warning);font-weight:600">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
@@ -128,6 +137,14 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
         <div class="query-bar">
         <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="供应商"><RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" /></el-form-item>
+        <el-form-item label="主体类型">
+          <el-select v-model="query.supplierType" placeholder="全部" clearable style="width:120px">
+            <el-option label="方案商" value="solution" />
+            <el-option label="加工厂" value="factory" />
+            <el-option label="供货商" value="product" />
+            <el-option label="辅料商" value="material" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="o in statusOpts" :key="o.v" :label="o.l" :value="o.v"/></el-select></el-form-item>
         </el-form>
         <div class="toolbar">
@@ -139,7 +156,13 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
       <el-card shadow="never">
         <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
           <el-table-column prop="code" label="单号" min-width="150"/>
-          <el-table-column label="供应商" min-width="140"><template #default="{row}">{{ sName(row.supplierId) }}</template></el-table-column>
+          <el-table-column label="供应商" min-width="140"><template #default="{row}">{{ row.supplierName || sName(row.supplierId) || '—' }}</template></el-table-column>
+          <el-table-column label="主体类型" width="100" align="center">
+            <template #default="{row}">
+              <el-tag v-if="row.supplierType" :type="TYPE_TAG[row.supplierType] || 'info'" size="small">{{ typeLabel(row.supplierType) }}</el-tag>
+              <span v-else>—</span>
+            </template>
+          </el-table-column>
           <el-table-column label="账户" min-width="120"><template #default="{row}">{{ aName(row.accountId) }}</template></el-table-column>
           <el-table-column prop="paymentDate" label="日期" width="110" align="center"/>
           <el-table-column prop="amount" label="金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
@@ -177,7 +200,7 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
         </el-descriptions-item>
       </el-descriptions>
       <el-divider>核销明细</el-divider>
-      <el-table :data="detailItems" border><el-table-column type="index" width="50" align="center"/><el-table-column prop="payableBillNo" label="应付单据" min-width="150"/><el-table-column prop="thisAmount" label="核销金额" width="130" align="right"><template #default="{row}">{{ fmt(row.thisAmount) }}</template></el-table-column></el-table>
+      <el-table :data="detailItems" border><el-table-column prop="payableBillNo" label="应付单据" min-width="150"/><el-table-column prop="thisAmount" label="核销金额" width="130" align="right"><template #default="{row}">{{ fmt(row.thisAmount) }}</template></el-table-column></el-table>
     </el-drawer>
   </div>
 </template>

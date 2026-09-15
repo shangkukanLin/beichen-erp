@@ -3,6 +3,7 @@ package com.beichen.erp.outsource.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.OutsourceDelivery;
@@ -53,6 +54,7 @@ public class DeliveryController {
             m.put("deliveryDate", d.getDeliveryDate()); m.put("status", d.getStatus());
             m.put("supplierDirect", d.getSupplierDirect()); m.put("logisticsCompany", d.getLogisticsCompany());
             m.put("logisticsNo", d.getLogisticsNo()); m.put("remark", d.getRemark());
+            m.put("supplierId", d.getSupplierId());
             // 工厂名
             if (d.getFactoryId() != null) { Supplier sup = supplierMapper.selectById(d.getFactoryId()); m.put("factoryName", sup != null ? sup.getName() : ""); }
             // 直发供应商名
@@ -87,7 +89,8 @@ public class DeliveryController {
     @GetMapping("/{id}")
     public R<Map<String, Object>> getById(@PathVariable Long id) {
         OutsourceDelivery d = deliveryService.getById(id);
-        if (d == null) return R.ok(null);
+        // 不存在（含被多租户隔离）统一返回 404，避免前端空白页无提示（见 §12.29 观察项 B）
+        if (d == null) throw new BusinessException(404, "交货单不存在或无权访问");
         Map<String, Object> m = new HashMap<>();
         m.put("id", d.getId()); m.put("code", d.getCode()); m.put("deliveryType", d.getDeliveryType());
         m.put("deliveryDate", d.getDeliveryDate()); m.put("status", d.getStatus());
@@ -151,7 +154,8 @@ public class DeliveryController {
         return R.ok();
     }
 
-    @PutMapping("/{id}/unaudit")
+    // E1 口径（2026-09-12）：反审核统一 /un-audit，旧路径 /unaudit 保留为别名
+    @PutMapping({"/{id}/un-audit", "/{id}/unaudit"})
     public R<Void> unaudit(@PathVariable Long id) {
         deliveryService.unaudit(id);
         return R.ok();

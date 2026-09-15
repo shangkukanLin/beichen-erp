@@ -216,7 +216,6 @@ onActivated(() => { loadData() })
         <el-button v-if="isDraft()" type="primary" size="small" style="margin-left:12px" @click="openAddRowDialog">+ 添加行</el-button>
       </el-divider>
       <el-table :data="items" border stripe size="small">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="sku" label="SKU" width="130" />
         <el-table-column label="产品" min-width="140">
           <template #default="{ row }">{{ row.productName || productName(row) }}</template>

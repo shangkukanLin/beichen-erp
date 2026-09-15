@@ -40,7 +40,6 @@
 
       <el-divider content-position="left">换货明细（同品换货）</el-divider>
       <el-table :data="items" border>
-        <el-table-column type="index" label="#" width="50" align="center" />
         <!-- ===== 退回侧：客户退回，入售后仓待整理 ===== -->
         <el-table-column label="退回（客户退回，入售后仓）" align="center">
           <el-table-column label="SKU" width="130">

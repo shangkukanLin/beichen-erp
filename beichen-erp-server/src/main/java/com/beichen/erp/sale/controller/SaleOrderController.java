@@ -26,9 +26,12 @@ public class SaleOrderController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long customerId,
             @RequestParam(required = false) String code,
+            // 单据日期区间（yyyy-MM-dd，可选）：首页「当日销售单」传 startDate=endDate=今天，取**全量**当日单
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return R.ok(service.page(status, customerId, code, pageNum, pageSize));
+        return R.ok(service.page(status, customerId, code, startDate, endDate, pageNum, pageSize));
     }
 
     @GetMapping("/{id}")
@@ -38,9 +41,11 @@ public class SaleOrderController {
     public R<List<SaleOrderItem>> getItems(@PathVariable Long id) { return R.ok(service.getItems(id)); }
 
     @PostMapping
-    public R<Void> create(@RequestBody Map<String, Object> body) {
-        service.create(parseOrder(body), parseItems(body));
-        return R.ok();
+    public R<Long> create(@RequestBody Map<String, Object> body) {
+        SaleOrder o = parseOrder(body);
+        service.create(o, parseItems(body));
+        // 返回新单ID，避免前端"创建后再查列表取ID"导致并发下取错
+        return R.ok(o.getId());
     }
 
     @PutMapping("/{id}")

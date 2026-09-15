@@ -277,11 +277,11 @@ public class DeliveryServiceImpl implements DeliveryService {
             if (isReceive) {
                 // 反审核：回滚收货入库（目标仓库良品 -qty）
                 changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity().negate(),
-                        QualityType.GOOD.getCode(), "退审收货入库", delivery.getCode());
+                        QualityType.GOOD.getCode(), StockChangeType.CANCEL_RECEIVE_IN.getCode(), delivery.getCode());
             } else {
                 // 反审核：恢复退不良扣减的库存（+qty，维修返还、折现退款均恢复）
                 changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity(),
-                        QualityType.GOOD.getCode(), "退审退不良", delivery.getCode());
+                        QualityType.GOOD.getCode(), StockChangeType.CANCEL_DEFECT_OUT.getCode(), delivery.getCode());
             }
         }
 
@@ -308,7 +308,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                     .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
-        payableHelper.reversePayable(delivery.getId());
+        payableHelper.reversePayable(delivery.getId(), SourceBillType.OUTSOURCE_MATERIAL_DELIVERY.getCode());
 
         // 3. 回滚订单明细累计数量
         for (OutsourceDeliveryItem item : items) {
@@ -453,8 +453,10 @@ public class DeliveryServiceImpl implements DeliveryService {
                 }
                 // 扣回委外仓库
                 if (delivery.getToWarehouseId() != null)
+                    // C5 口径（2026-09-12）：发料反审核两个仓统一用 OUTSOURCE_CANCEL_DELIVERY
+                    //（原先目标仓另用 CANCEL_DELIVERY，同 label 两个 code，纯属口径不统一）
                     updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
-                            getMaterialNameById(item.getMaterialId()), StockChangeType.CANCEL_DELIVERY.getCode(), delivery.getCode());
+                            getMaterialNameById(item.getMaterialId()), StockChangeType.OUTSOURCE_CANCEL_DELIVERY.getCode(), delivery.getCode());
             } else if (DeliveryType.TRANSFER.getCode().equals(delivery.getDeliveryType())) {
                 // 逆向：来源仓库+，目标仓库-
                 if (delivery.getFromWarehouseId() != null)
@@ -484,7 +486,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (DocStatus.AUDITED.getCode().equals(delivery.getStatus())
                 && (DeliveryType.RECEIVE.getCode().equals(delivery.getDeliveryType())
                     || DeliveryType.DEFECT_RETURN.getCode().equals(delivery.getDeliveryType()))) {
-            payableHelper.reversePayable(delivery.getId());
+            payableHelper.reversePayable(delivery.getId(), SourceBillType.OUTSOURCE_MATERIAL_DELIVERY.getCode());
         }
     }
 
@@ -532,12 +534,19 @@ public class DeliveryServiceImpl implements DeliveryService {
         logEntry.setWarehouseId(warehouseId);
         logEntry.setMaterialId(materialId);
         logEntry.setMaterialName(materialName);
+        // 流水必须带品质（与库存行一致），否则按(仓库,物料,品质)对账会漏行
+        logEntry.setQualityType(qt);
         logEntry.setChangeType(changeType);
         logEntry.setChangeQuantity(delta);
         logEntry.setBeforeQuantity(before);
         logEntry.setAfterQuantity(after);
         logEntry.setRelatedOrderCode(deliveryCode);
         stockLogMapper.insert(logEntry);
+        // A3 负库存告警（2026-09-12）：本条是委外仓"强制出库"的直写通道（放行负数），扣成负数时留告警便于排查
+        if (after.compareTo(BigDecimal.ZERO) < 0) {
+            log.warn("委外仓强制出库导致负库存：warehouseId={}, materialId={}, before={}, after={}, changeType={}, deliveryCode={}",
+                    warehouseId, materialId, before, after, changeType, deliveryCode);
+        }
     }
 
     /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */
@@ -572,7 +581,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 String childName = getMaterialNameById(c.getChildMaterialId());
                 // 负向扣减，可扣至负数
                 updateStock(compWhId, c.getChildMaterialId(), demand.negate(),
-                        QualityType.GOOD.getCode(), childName, "委外收货扣子物料", delivery.getCode());
+                        QualityType.GOOD.getCode(), childName, StockChangeType.OUTSOURCE_COMPONENT_CONSUME.getCode(), delivery.getCode());
             }
         }
     }
@@ -598,7 +607,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 BigDecimal demand = (c.getQuantity() != null ? c.getQuantity() : BigDecimal.ONE).multiply(item.getQuantity());
                 String childName = getMaterialNameById(c.getChildMaterialId());
                 updateStock(compWhId, c.getChildMaterialId(), demand,
-                        QualityType.GOOD.getCode(), childName, "退审恢复子物料", delivery.getCode());
+                        QualityType.GOOD.getCode(), childName, StockChangeType.CANCEL_OUTSOURCE_COMPONENT_CONSUME.getCode(), delivery.getCode());
             }
         }
     }

@@ -30,7 +30,6 @@
           <el-button type="primary" @click="addItem">添加明细</el-button>
         </div>
         <el-table :data="items" border>
-          <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="SKU" width="130">
             <template #default="{ row }">
               <span v-if="row.sku">{{ row.sku }}</span>
@@ -77,6 +76,7 @@
 </template>
 
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { WarehouseCategory, INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY } from '@/api/enums'
 defineOptions({ name: 'InventoryWarehouseMoveAdd' })
 
@@ -112,7 +112,7 @@ const form = reactive({
   id: undefined as number | undefined,
   fromWarehouseId: undefined as number | undefined,
   toWarehouseId: undefined as number | undefined,
-  moveDate: new Date().toISOString().slice(0, 10) as string,
+  moveDate: localDate() as string,
   remark: '' as string,
 })
 const items = ref<MoveItem[]>([])
@@ -169,7 +169,7 @@ async function refreshStock() {
 function addItem() { items.value.push({ productId: undefined, qualityType: 'A', quantity: 1 }) }
 
 function resetForm() {
-  Object.assign(form, { id: undefined, fromWarehouseId: undefined, toWarehouseId: undefined, moveDate: new Date().toISOString().slice(0,10), remark: '' })
+  Object.assign(form, { id: undefined, fromWarehouseId: undefined, toWarehouseId: undefined, moveDate: localDate(), remark: '' })
   items.value = []
   formRef.value?.clearValidate()
 }

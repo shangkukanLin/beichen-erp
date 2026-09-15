@@ -17,21 +17,33 @@
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="stockQuery_">查询</el-button>
           <el-button :icon="'Refresh'" @click="stockReset">重置</el-button>
+          <el-button :icon="'Download'" @click="exportStock">导出 Excel</el-button>
         </div>
       </div>
     </el-card>
 
     <el-card shadow="never" class="table-card">
       <el-table v-loading="stockLoading" :data="stockData" border stripe>
-        <el-table-column type="index" label="序号" width="60" align="center" />
+        <!-- 仓库可点：按 factoryId 分流（有工厂=委外仓，无=自有成品仓） -->
         <el-table-column label="仓库" min-width="140">
-          <template #default="{ row }">{{ row.warehouseName || warehouseName(row.warehouseId) }}</template>
+          <template #default="{ row }">
+            <el-link v-if="row.warehouseId" type="primary" underline="never" @click="goWarehouse(row)">
+              {{ row.warehouseName || warehouseName(row.warehouseId) }}
+            </el-link>
+            <span v-else>—</span>
+          </template>
         </el-table-column>
-        <el-table-column prop="sku" label="SKU" width="140" />
+        <!-- SKU 可点：进该产品在各仓库的库存分布详情 -->
+        <el-table-column label="SKU" width="140">
+          <template #default="{ row }">
+            <el-link v-if="row.productId" type="primary" underline="never" @click="goProduct(row)">{{ row.sku }}</el-link>
+            <span v-else>{{ row.sku }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="productName" label="产品名称" min-width="160" />
         <el-table-column prop="brandName" label="品牌" min-width="110">
           <template #default="{ row }">{{ row.brandName || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="productName" label="产品名称" min-width="160" />
         <el-table-column label="A规" width="90" align="right">
           <template #default="{ row }">
             <el-tag v-if="row.qtyA > 0" type="success" size="small">{{ fmt(row.qtyA) }}</el-tag>
@@ -76,10 +88,59 @@
 </template>
 
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { WarehouseCategory, WarehouseType } from '@/api/enums'
 import { reactive, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import * as XLSX from 'xlsx'
+
+const router = useRouter()
+
+/**
+ * 导出 Excel（**全量**）：按当前筛选条件重新请求全部匹配数据（pageNum=1、pageSize=9999），
+ * 不受列表分页限制；列与页面表格一致，数量按数值写入（整数不带小数）。
+ * 请求失败时退回当前页已加载数据，保证导出始终可用。
+ */
+async function exportStock() {
+  let data: any[] = stockData.value || []
+  try {
+    const params: any = { pageNum: 1, pageSize: 9999, stockType: 'PRODUCT' }
+    // 多选用逗号分隔：与列表查询一致（axios 默认序列化成 warehouseIds[]=1，后端 @RequestParam List 收不到）
+    if (stockQuery.warehouseIds?.length) params.warehouseIds = stockQuery.warehouseIds.join(',')
+    if (stockQuery.brandId) params.brandId = stockQuery.brandId
+    if (stockQuery.productName) params.productName = stockQuery.productName
+    const res = await request.get<any, any>('/warehouse/stock/product-stock/page', { params })
+    if (Array.isArray(res?.records)) data = res.records
+  } catch { /* 拉取失败：退回当前页数据 */ }
+  const cols = ['仓库', 'SKU', '产品名称', '品牌', 'A规', 'B规', 'C规', '不良', '待分类', '总库存']
+  const aoa: (string | number)[][] = [
+    [`成品库存分布（导出时间：${new Date().toLocaleString('zh-CN')}，共 ${data.length} 行）`],
+    [],
+    cols,
+  ]
+  data.forEach((r: any) => {
+    aoa.push([
+      r.warehouseName || warehouseName(r.warehouseId) || '',
+      r.sku || '',
+      r.productName || '',
+      r.brandName || '—',
+      Number(r.qtyA ?? 0),
+      Number(r.qtyB ?? 0),
+      Number(r.qtyC ?? 0),
+      Number(r.qtyDefect ?? 0),
+      Number(r.qtyPending ?? 0),
+      Number(totalQty(r) ?? 0),
+    ])
+  })
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: cols.length - 1 } }]
+  ws['!cols'] = [{ wch: 20 }, { wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '成品库存分布')
+  XLSX.writeFile(wb, `成品库存分布_${localDate()}.xlsx`)
+}
 
 // 仓库下拉选项（Odoo 实时查库，组件本地保存）
 const warehouseOptions = ref<any[]>([])
@@ -107,6 +168,17 @@ async function loadWarehouses() {
 function warehouseName(id?: number) {
   const w = warehouseOptions.value.find(x => x.id === id)
   return w ? w.warehouseName : '-'
+}
+/** 仓库名点击：进仓库详情（委外仓走 outsource 详情页，自有成品仓走 inventory 详情页） */
+function goWarehouse(row: any) {
+  if (!row?.warehouseId) return
+  router.push(row.factoryId
+    ? `/outsource/warehouse/detail/${row.warehouseId}`
+    : `/inventory/warehouse/detail/${row.warehouseId}`)
+}
+/** SKU 点击：进该产品的库存分布详情（该产品在各仓库的库存） */
+function goProduct(row: any) {
+  if (row?.productId) router.push(`/inventory/product-stock/detail/${row.productId}`)
 }
 function fmt(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
 function totalQty(row: any) {

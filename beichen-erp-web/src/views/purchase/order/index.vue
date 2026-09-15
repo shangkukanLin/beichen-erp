@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { PURCHASE_ORDER_DIRTY_KEY } from '@/api/enums'
 import { useRouter } from 'vue-router'
@@ -51,7 +52,7 @@ const formRef = ref<FormInstance>()
 const form = reactive<PurchaseOrder>({
   supplierId: undefined,
   warehouseId: undefined,
-  orderDate: new Date().toISOString().slice(0, 10),
+  orderDate: localDate(),
   taxIncluded: 0,
   taxRate: 0,
   remark: ''
@@ -97,7 +98,7 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.supplierId = ''; query.status = ''; pagination.pageNum = 1; loadData() }
 
 function resetForm() {
-  Object.assign(form, { id: undefined, supplierId: undefined, warehouseId: undefined, orderDate: new Date().toISOString().slice(0, 10), taxIncluded: 0, taxRate: 0, remark: '' })
+  Object.assign(form, { id: undefined, supplierId: undefined, warehouseId: undefined, orderDate: localDate(), taxIncluded: 0, taxRate: 0, remark: '' })
   items.value = []
 }
 
@@ -261,7 +262,6 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
 
     <el-card shadow="never" class="table-card">
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="handleDetail">
-        <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="code" label="单号" min-width="150" />
         <el-table-column label="供货商" min-width="140">
           <template #default="{ row }">
@@ -343,7 +343,6 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
           <el-button type="primary" :icon="'Plus'" @click="addItem">添加明细</el-button>
         </div>
         <el-table :data="items" border>
-          <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="产品" min-width="180">
             <template #default="{ row, $index }">
               <RemoteSelect v-model="row.productId" :fetch="fetchMaterials" :label-key="productLabel" placeholder="选择物料（可输SKU）" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } onMaterialChange(v, row) }">

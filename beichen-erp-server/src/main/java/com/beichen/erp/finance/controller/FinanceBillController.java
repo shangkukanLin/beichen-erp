@@ -50,10 +50,11 @@ public class FinanceBillController {
     @PostMapping("/auto-generate")
     public R<String> autoGenerate() { return R.ok(autoTask.run(LocalDate.now())); }
 
-    @PostMapping("/{id}/audit")
+    // E1 口径（2026-09-12）：审核族统一 PUT（旧 POST 保留为别名）；反审核统一 /un-audit（旧 /unAudit 保留为别名）
+    @RequestMapping(value = "/{id}/audit", method = {RequestMethod.PUT, RequestMethod.POST})
     public R<Void> audit(@PathVariable Long id) { service.audit(id); return R.ok(); }
 
-    @PostMapping("/{id}/unAudit")
+    @RequestMapping(value = {"/{id}/un-audit", "/{id}/unAudit"}, method = {RequestMethod.PUT, RequestMethod.POST})
     public R<Void> unAudit(@PathVariable Long id) { service.unAudit(id); return R.ok(); }
 
     @PostMapping("/{id}/cancel")

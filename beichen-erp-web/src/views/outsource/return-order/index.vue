@@ -34,6 +34,8 @@ async function handleCancel(row: any) {
 }
 
 function handleAdd() { router.push('/outsource/return-order/add') }
+/** E4：草稿可编辑（后端 PUT /outsource/return-order/{id}，仅 DRAFT） */
+function handleEdit(row: any) { router.push(`/outsource/return-order/edit/${row.id}`) }
 
 onActivated(() => {
   // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
@@ -76,9 +78,10 @@ onMounted(() => { loadData() })
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="180" align="center">
+        <el-table-column label="操作" width="240" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="router.push(`/outsource/return-order/detail/${row.id}`)">详情</el-button>
+            <el-button type="warning" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleEdit(row)">编辑</el-button>
             <el-button type="success" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleAudit(row)">审核</el-button>
             <el-button type="warning" link v-if="row.status===DocStatus.AUDITED" @click.stop="handleUnAudit(row)">反审核</el-button>
             <el-button type="danger" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleCancel(row)">作废</el-button>

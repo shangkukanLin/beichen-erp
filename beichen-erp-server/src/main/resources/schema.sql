@@ -72,6 +72,14 @@ CREATE TABLE IF NOT EXISTS sys_role_menu (
     INDEX idx_menu_id (menu_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色菜单关联表';
 
+CREATE TABLE IF NOT EXISTS sys_user_dashboard_tab (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    tab_key VARCHAR(30) NOT NULL COMMENT '首页业务TAB标识: dev/outsource/purchase/sale/stock/finance',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    UNIQUE KEY uk_user_tab (user_id, tab_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户首页业务TAB可见性配置';
+
 CREATE TABLE IF NOT EXISTS sys_company (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '公司ID',
     company_name VARCHAR(100) NOT NULL COMMENT '公司名称',
@@ -501,9 +509,10 @@ CREATE TABLE IF NOT EXISTS outsource_return_order_item (
 CREATE TABLE IF NOT EXISTS outsource_return_order_product (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     return_order_id BIGINT NOT NULL COMMENT '退货单ID',
-    product_id BIGINT COMMENT '产品ID(关联product.id)',
+    product_id BIGINT COMMENT '产品ID(关联product.id，产品主数据ID)',
     product_name VARCHAR(100) COMMENT '产品名称快照',
     quantity DECIMAL(18,4) COMMENT '退货数量',
+    quality_type VARCHAR(20) DEFAULT 'A' COMMENT '退回成品规格(A/B/C/DEFECT)，出库按该规格扣减',
     company_id BIGINT COMMENT '公司ID',
     INDEX idx_return_order_id (return_order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外加工退货成品明细';
@@ -651,6 +660,37 @@ CREATE TABLE IF NOT EXISTS dev_purchase_item (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目物料表';
 
+-- ==================== 屏幕资料知识库 ====================
+-- 行业机型屏幕参数资料（研发管理 → 屏幕资料知识库）：折叠屏 + 直板 AMOLED 机型。
+-- 注意：这是行业基础资料、不是业务数据，**清空数据时一律保留**，
+--       已在 ClearController 的两处清空逻辑中排除（详见该类注释）。
+CREATE TABLE IF NOT EXISTS screen_model (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    category            VARCHAR(20) NOT NULL                COMMENT '机型类别: FOLD折叠屏 / AMOLED直板',
+    brand               VARCHAR(32)                         COMMENT '品牌',
+    model               VARCHAR(64)                         COMMENT '型号',
+    screen_size         VARCHAR(16)                         COMMENT '主屏尺寸',
+    resolution          VARCHAR(64)                         COMMENT '主屏分辨率',
+    screen_type         VARCHAR(32)                         COMMENT '主屏类型(直屏/折叠/水滴/挖孔等)',
+    refresh_rate        VARCHAR(32)                         COMMENT '主屏刷新率',
+    sub_size            VARCHAR(16)                         COMMENT '副屏尺寸(折叠屏专用)',
+    sub_resolution      VARCHAR(64)                         COMMENT '副屏分辨率(折叠屏专用)',
+    sub_screen_type     VARCHAR(32)                         COMMENT '副屏类型(折叠屏专用)',
+    sub_refresh_rate    VARCHAR(32)                         COMMENT '副屏刷新率(折叠屏专用)',
+    fingerprint         VARCHAR(16)                         COMMENT '指纹识别(侧装/屏下/后置等)',
+    panel_supplier      VARCHAR(128)                        COMMENT '屏幕供应商',
+    release_date        VARCHAR(32)                         COMMENT '发布时间(原文文本)',
+    remark              VARCHAR(255)                        COMMENT '备注',
+    company_id          BIGINT DEFAULT NULL                 COMMENT '公司ID',
+    create_time         DATETIME DEFAULT CURRENT_TIMESTAMP   COMMENT '创建时间',
+    update_time         DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_category (category),
+    INDEX idx_brand (brand),
+    INDEX idx_model (model),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='屏幕资料知识库(行业机型屏幕参数)';
+
+-- ==================== 研发物料流转 ====================
 CREATE TABLE IF NOT EXISTS dev_material_flow (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     material_id BIGINT NOT NULL COMMENT '物料ID(dev_purchase_item.id)',
@@ -1112,6 +1152,51 @@ CREATE TABLE IF NOT EXISTS inventory_other_io_item (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='其他出入库明细表';
 
+-- ==================== 成品报损 ====================
+
+CREATE TABLE IF NOT EXISTS inventory_stock_loss (
+    id             BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '报损单ID',
+    code           VARCHAR(50) NOT NULL  COMMENT '报损单号(BS-yyyyMMdd-NNN)',
+    warehouse_id   BIGINT NOT NULL       COMMENT '报损仓库ID',
+    warehouse_name VARCHAR(100)          COMMENT '仓库名称(冗余)',
+    loss_date      DATE                  COMMENT '报损日期',
+    loss_reason    VARCHAR(30)           COMMENT '报损原因: DAMAGE=破损 EXPIRED=变质过期 LOST=丢失 QUALITY=质量不合格 OTHER=其他',
+    total_amount   DECIMAL(18,2) DEFAULT 0 COMMENT '报损总金额(明细金额合计,冗余便于列表展示)',
+    status         VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废',
+    remark         VARCHAR(500)          COMMENT '备注',
+    auditor_id     BIGINT                COMMENT '审核人ID',
+    auditor_name   VARCHAR(50)           COMMENT '审核人姓名',
+    audit_time     DATETIME              COMMENT '审核时间',
+    company_id     BIGINT DEFAULT NULL   COMMENT '公司ID',
+    create_time    DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_loss_reason (loss_reason),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品报损单主表';
+
+CREATE TABLE IF NOT EXISTS inventory_stock_loss_item (
+    id           BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '明细ID',
+    loss_id      BIGINT NOT NULL        COMMENT '报损单ID',
+    product_id   BIGINT NOT NULL        COMMENT '产品ID',
+    product_name VARCHAR(100)           COMMENT '产品名称(冗余)',
+    sku          VARCHAR(64)            COMMENT 'SKU(冗余)',
+    quality_type VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT/PENDING',
+    spec         VARCHAR(100)           COMMENT '规格(冗余)',
+    unit         VARCHAR(20)            COMMENT '单位(冗余)',
+    quantity     DECIMAL(18,4) DEFAULT 0 COMMENT '报损数量',
+    unit_price   DECIMAL(18,4) DEFAULT 0 COMMENT '报损单价(带出产品成本价,可改)',
+    amount       DECIMAL(18,2) DEFAULT 0 COMMENT '报损金额(数量×单价)',
+    remark       VARCHAR(255)           COMMENT '备注',
+    company_id   BIGINT DEFAULT NULL    COMMENT '公司ID',
+    create_time  DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_loss_id (loss_id),
+    INDEX idx_product_id (product_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品报损单明细';
+
 -- ==================== 品质重分类 ====================
 
 CREATE TABLE IF NOT EXISTS product_reclassify (
@@ -1121,6 +1206,8 @@ CREATE TABLE IF NOT EXISTS product_reclassify (
     reclassify_date DATE                               COMMENT '调整日期',
     status          VARCHAR(20) DEFAULT 'DRAFT'         COMMENT '状态: 草稿/已审核/已取消',
     remark          VARCHAR(500)                       COMMENT '备注',
+    create_by       BIGINT DEFAULT NULL                COMMENT '整理人ID(建单账户)',
+    create_by_name  VARCHAR(50) DEFAULT NULL           COMMENT '整理人名称(冗余展示)',
     company_id      BIGINT DEFAULT NULL                COMMENT '公司ID',
     create_time     DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -1292,6 +1379,10 @@ CREATE TABLE IF NOT EXISTS finance_receivable (
     bill_no VARCHAR(50) NOT NULL COMMENT '单据号',
     customer_id BIGINT COMMENT '客户ID',
     customer_name VARCHAR(100) COMMENT '客户名称',
+    -- subject_type: CUSTOMER=客户应收(默认) SUPPLIER=供应商应收(由应付转应收单生成，挂 supplier_id)
+    subject_type VARCHAR(20) DEFAULT 'CUSTOMER' COMMENT '往来主体类型: CUSTOMER=客户 SUPPLIER=供应商',
+    supplier_id BIGINT DEFAULT NULL COMMENT '供应商ID(subject_type=SUPPLIER 时有值，客户应收为空)',
+    supplier_name VARCHAR(100) DEFAULT NULL COMMENT '供应商名称(冗余，subject_type=SUPPLIER 时留痕)',
     source_bill_type VARCHAR(30) COMMENT '来源单据类型: 销售出库/其他应收',
     source_bill_no VARCHAR(50) COMMENT '来源单据号',
     source_id BIGINT DEFAULT NULL COMMENT '来源记录ID',
@@ -1306,6 +1397,8 @@ CREATE TABLE IF NOT EXISTS finance_receivable (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_bill_no (bill_no),
     INDEX idx_customer_id (customer_id),
+    INDEX idx_supplier_id (supplier_id),
+    INDEX idx_subject_type (subject_type),
     INDEX idx_status (status),
     INDEX idx_source_bill_no (source_bill_no),
     INDEX idx_company_id (company_id)
@@ -1316,30 +1409,69 @@ CREATE TABLE IF NOT EXISTS finance_payable (
     bill_no VARCHAR(50) NOT NULL COMMENT '单据号',
     supplier_id BIGINT COMMENT '供应商ID',
     supplier_name VARCHAR(100) COMMENT '供应商名称',
+    -- supplier_type 固化开单时的主体类型（供货商/加工厂/辅料商/方案商）：
+    -- 不实时取 supplier_type_ref，避免供应商类型变更后历史账务被篡改
+    supplier_type VARCHAR(30) DEFAULT NULL COMMENT '往来主体类型: product=供货商 factory=加工厂 material=辅料商 solution=方案商',
     source_bill_type VARCHAR(30) COMMENT '来源单据类型: 采购入库/其他应付',
     source_bill_no VARCHAR(50) COMMENT '来源单据号',
     source_id BIGINT DEFAULT NULL COMMENT '来源记录ID',
-    amount DECIMAL(18,4) DEFAULT 0 COMMENT '应付金额',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '应付金额(负数=退货/扣款等冲减项)',
     paid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '已付金额',
     unpaid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '未付金额',
     due_date DATE COMMENT '到期日',
     status VARCHAR(20) DEFAULT 'UNSETTLED' COMMENT '状态: 未结清/部分结清/已结清',
+    -- transferred_to_receivable=1 表示该笔(负数)冲减项已转成应收向对方收款，付款抵扣时须跳过，避免重复抵扣
+    transferred_to_receivable TINYINT DEFAULT 0 COMMENT '是否已转应收: 0否 1是',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_bill_no (bill_no),
     INDEX idx_supplier_id (supplier_id),
+    INDEX idx_supplier_type (supplier_type),
     INDEX idx_status (status),
     INDEX idx_source_bill_no (source_bill_no),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应付台账表';
+
+-- ==================== 应付转应收单 ====================
+
+-- 场景：退货/超损扣款产生的是负向应付，正常在下次付款时净额抵扣；
+-- 当月无货款可抵时，用它把该笔冲减项转为「向供应商收款」的应收，走收款单核销。
+CREATE TABLE IF NOT EXISTS finance_payable_transfer (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    code            VARCHAR(50) NOT NULL   COMMENT '转应收单号(PZ-yyyyMMdd-NNN)',
+    payable_id      BIGINT NOT NULL        COMMENT '来源应付台账ID(负数冲减项)',
+    payable_bill_no VARCHAR(50)            COMMENT '来源应付台账单号(冗余，便于列表展示)',
+    supplier_id     BIGINT NOT NULL        COMMENT '供应商/加工厂ID',
+    supplier_name   VARCHAR(100)           COMMENT '供应商名称(冗余)',
+    supplier_type   VARCHAR(30)            COMMENT '往来主体类型: product/factory/material/solution',
+    amount          DECIMAL(18,4) DEFAULT 0 COMMENT '转出金额(正数,取来源应付的绝对值)',
+    transfer_date   DATE                   COMMENT '转应收日期',
+    status          VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废',
+    remark          VARCHAR(500)           COMMENT '备注',
+    auditor_id      BIGINT                 COMMENT '审核人ID',
+    auditor_name    VARCHAR(50)            COMMENT '审核人姓名',
+    audit_time      DATETIME               COMMENT '审核时间',
+    company_id      BIGINT DEFAULT NULL    COMMENT '公司ID',
+    create_time     DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_payable_id (payable_id),
+    INDEX idx_supplier_id (supplier_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应付转应收单';
 
 CREATE TABLE IF NOT EXISTS finance_receipt (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '收款单ID',
     code VARCHAR(50) NOT NULL COMMENT '收款单号',
     customer_id BIGINT COMMENT '客户ID',
     customer_name VARCHAR(100) COMMENT '客户名称',
+    -- 供应商收款：应付转应收产生的供应商应收（subject_type=SUPPLIER），向对方收回退货/扣款
+    subject_type VARCHAR(20) DEFAULT 'CUSTOMER' COMMENT '往来主体类型: CUSTOMER=客户 SUPPLIER=供应商',
+    supplier_id BIGINT DEFAULT NULL COMMENT '供应商ID(subject_type=SUPPLIER 时有值)',
+    supplier_name VARCHAR(100) DEFAULT NULL COMMENT '供应商名称(冗余留痕)',
     account_id BIGINT COMMENT '收款账户ID',
     account_name VARCHAR(100) COMMENT '收款账户名称',
     receipt_date DATE COMMENT '收款日期',
@@ -1374,6 +1506,8 @@ CREATE TABLE IF NOT EXISTS finance_payment (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '付款单ID',
     code VARCHAR(50) NOT NULL COMMENT '付款单号',
     supplier_id BIGINT COMMENT '供应商ID',
+    -- 主体类型在创建时按供应商标签/核销应付固化，列表可按类型筛选
+    supplier_type VARCHAR(30) DEFAULT NULL COMMENT '往来主体类型: product/factory/material/solution',
     supplier_name VARCHAR(100) COMMENT '供应商名称',
     account_id BIGINT COMMENT '付款账户ID',
     account_name VARCHAR(100) COMMENT '付款账户名称',
@@ -1536,6 +1670,7 @@ CREATE TABLE IF NOT EXISTS finance_settlement (
     direction VARCHAR(20) NOT NULL COMMENT '核销方向: PAY(付款)/RECEIVE(收款)',
     source_type VARCHAR(30) COMMENT '来源单据类型: PAYMENT/RECEIPT(预留BILL)',
     source_id BIGINT COMMENT '来源单据ID',
+    status VARCHAR(20) NOT NULL DEFAULT 'NORMAL' COMMENT '核销状态: NORMAL=有效/CANCELLED=已冲销(反审核留痕，不物理删除)',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_receipt_payment_id (receipt_payment_id),
@@ -1612,6 +1747,52 @@ CREATE TABLE IF NOT EXISTS outsource_other_io_item (
     INDEX idx_other_io_id (other_io_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协其他出入库明细表';
+
+-- ==================== 委外物料报损 ====================
+
+CREATE TABLE IF NOT EXISTS outsource_stock_loss (
+    id             BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '报损单ID',
+    code           VARCHAR(50) NOT NULL  COMMENT '报损单号(WBS-yyyyMMdd-NNN)',
+    warehouse_id   BIGINT NOT NULL       COMMENT '报损仓库ID(委外仓/自有物料仓)',
+    warehouse_name VARCHAR(100)          COMMENT '仓库名称(冗余)',
+    loss_date      DATE                  COMMENT '报损日期',
+    loss_reason    VARCHAR(30)           COMMENT '报损原因: DAMAGE=破损 EXPIRED=变质过期 LOST=丢失 QUALITY=质量不合格 OTHER=其他',
+    total_amount   DECIMAL(18,2) DEFAULT 0 COMMENT '报损总金额(明细金额合计,冗余便于列表展示)',
+    status         VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废',
+    remark         VARCHAR(500)          COMMENT '备注',
+    auditor_id     BIGINT                COMMENT '审核人ID',
+    auditor_name   VARCHAR(50)           COMMENT '审核人姓名',
+    audit_time     DATETIME              COMMENT '审核时间',
+    company_id     BIGINT DEFAULT NULL   COMMENT '公司ID',
+    create_time    DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_warehouse_id (warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_loss_reason (loss_reason),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外物料报损单主表';
+
+CREATE TABLE IF NOT EXISTS outsource_stock_loss_item (
+    id             BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '明细ID',
+    loss_id        BIGINT NOT NULL        COMMENT '报损单ID',
+    material_id    BIGINT NOT NULL        COMMENT '委外物料ID(关联outsource_material.id)',
+    material_name  VARCHAR(100)           COMMENT '物料名称(冗余)',
+    bom_type_id    BIGINT                 COMMENT 'BOM类型ID(关联dev_bom_type.id)',
+    bom_type_name  VARCHAR(50)            COMMENT 'BOM类型名称(冗余)',
+    quality_type   VARCHAR(10) DEFAULT 'GOOD' COMMENT '品质: GOOD=良品 DEFECT=不良品',
+    spec           VARCHAR(100)           COMMENT '规格(冗余)',
+    unit           VARCHAR(20)            COMMENT '单位(冗余)',
+    quantity       DECIMAL(18,4) DEFAULT 0 COMMENT '报损数量',
+    unit_price     DECIMAL(18,4) DEFAULT 0 COMMENT '报损单价(带出物料最近进价,可改)',
+    amount         DECIMAL(18,2) DEFAULT 0 COMMENT '报损金额(数量×单价)',
+    remark         VARCHAR(255)           COMMENT '备注',
+    company_id     BIGINT DEFAULT NULL    COMMENT '公司ID',
+    create_time    DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_loss_id (loss_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外物料报损单明细';
 
 -- ==================== 外协物料组件 ====================
 

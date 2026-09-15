@@ -122,7 +122,6 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
         <el-button type="primary" size="small" style="margin-left:12px" @click="exportExcel">导出</el-button>
       </template>
       <el-table :data="sortedMaterials" border stripe v-loading="matLoading" size="small">
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column prop="bomTypeName" label="物料类型" width="100" />
         <el-table-column prop="materialName" label="物料名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="unit" label="单位" width="70" align="center" />

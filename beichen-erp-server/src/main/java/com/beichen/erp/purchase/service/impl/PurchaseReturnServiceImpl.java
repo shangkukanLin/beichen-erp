@@ -2,6 +2,7 @@ package com.beichen.erp.purchase.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
@@ -9,6 +10,7 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SourceBillType;
@@ -197,10 +199,18 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     public void audit(Long id) {
         PurchaseReturn order = returnMapper.selectById(id);
         if (order == null) throw new BusinessException("退货单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免库存/台账重复写
+        if (!DocStatusGuard.claim(returnMapper, PurchaseReturn::getId, id, PurchaseReturn::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
+            throw new BusinessException("只有草稿状态可审核");
         List<PurchaseReturnItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<PurchaseReturnItem>().eq(PurchaseReturnItem::getReturnId, id));
         if (items.isEmpty()) throw new BusinessException("退货单明细不能为空");
+        // P2-33：数量必须为正（原先 <=0 被下面的循环静默 continue，会生成负向应付却不减库存 → 账实不符）
+        for (PurchaseReturnItem it : items) {
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("退货数量必须大于 0（明细行ID=" + it.getId() + "）");
+        }
         // 1) 库存联动：退货出库减库存
         for (PurchaseReturnItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
@@ -214,9 +224,9 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         // 1.5) 重算金额（兜底存量数据：totalAmount 按明细 数量×单价 重新计算，应付随之正确）
         BigDecimal totalAmount = recalcTotalAmount(id);
         order.setTotalAmount(totalAmount);
-        // 2) 冲减应付：新增负数应付台账
+        // 2) 冲减应付：新增负数应付台账（D1 口径 2026-09-12：台账号一律 YF- 流水号，来源单号仍写 source_bill_no）
         FinancePayable fp = new FinancePayable();
-        fp.setBillNo(order.getCode());
+        fp.setBillNo(payableHelper.newBillNo());
         fp.setSupplierId(order.getSupplierId());
         Supplier s = order.getSupplierId() != null ? supplierMapper.selectById(order.getSupplierId()) : null;
         fp.setSupplierName(s != null ? s.getName() : "");
@@ -230,7 +240,9 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         fp.setStatus(SettlementStatus.UNSETTLED.getCode());
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) fp.setCompanyId(cid);
-        payableMapper.insert(fp);
+        // 按 bill_no 保存：反审核后该单号台账已存在（仅置 CANCELLED 留痕），必须复用重置，
+        // 否则再次审核会撞 finance_payable.uk_bill_no（2026-09-10 审核发现，P1-01）
+        payableHelper.saveByBillNo(fp);
         // 3) 更新状态
         PurchaseReturn u = new PurchaseReturn();
         u.setId(id);
@@ -274,15 +286,23 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     public void unAudit(Long id) {
         PurchaseReturn order = returnMapper.selectById(id);
         if (order == null) throw new BusinessException("退货单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(order.getStatus())) throw new BusinessException("只有已完成的退货单可反审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免库存/应付重复冲销
+        if (!DocStatusGuard.claim(returnMapper, PurchaseReturn::getId, id, PurchaseReturn::getStatus,
+                DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
+            throw new BusinessException("只有已完成的退货单可反审核");
         // 1) 检查应付台账
         LambdaQueryWrapper<FinancePayable> payableW = new LambdaQueryWrapper<FinancePayable>()
                 .eq(FinancePayable::getSourceBillType, SourceBillType.PURCHASE_RETURN.getCode())
                 .eq(FinancePayable::getSourceBillNo, order.getCode());
         List<FinancePayable> payables = payableMapper.selectList(payableW);
         for (FinancePayable fp : payables) {
-            if (!SettlementStatus.UNSETTLED.getCode().equals(fp.getStatus())) {
+            // 只拦「真正核销过」的（已结清/部分结清/有付款额）；CANCELLED 是反审核自身的冲销留痕，不算核销
+            if (SettlementStatus.isSettled(fp.getStatus(), fp.getPaidAmount())) {
                 throw new BusinessException("该退货单对应的应付账款已核销，无法反审核");
+            }
+            // 已转应收的冲减项挂着供应商应收台账，删除会造成应收悬空，须先反审核对应转应收单
+            if (Integer.valueOf(1).equals(fp.getTransferredToReceivable())) {
+                throw new BusinessException("该退货单的扣款已转应收，请先反审核对应的转应收单");
             }
         }
         // 2) 恢复库存
@@ -297,18 +317,20 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     StockChangeType.RETURN_UN_AUDIT, order.getCode(), RelatedBillType.PURCHASE_RETURN, it.getProductId(),
                     product != null ? product.getSpec() : "", order.getId(), it.getQualityType());
         }
-        // 3) 删除应付台账
+        // 3) 冲销应付台账：置「已作废」并保留审计，不再物理删除（与委外交货反审核一致）
         for (FinancePayable fp : payables) {
-            payableMapper.deleteById(fp.getId());
+            fp.setStatus(SettlementStatus.CANCELLED.getCode());
+            fp.setUnpaidAmount(BigDecimal.ZERO);
+            payableMapper.updateById(fp);
         }
         // 4) 回退到草稿
-        PurchaseReturn u = new PurchaseReturn();
-        u.setId(id);
-        u.setStatus(DocStatus.DRAFT.getCode());
-        u.setAuditorId(null);
-        u.setAuditorName(null);
-        u.setAuditTime(null);
-        returnMapper.updateById(u);
+        // 审核信息必须用 UpdateWrapper 显式置 null：updateById 忽略 null 字段，反审核后仍显示审核人/时间
+        returnMapper.update(null, new LambdaUpdateWrapper<PurchaseReturn>()
+                .eq(PurchaseReturn::getId, id)
+                .set(PurchaseReturn::getStatus, DocStatus.DRAFT.getCode())
+                .set(PurchaseReturn::getAuditorId, null)
+                .set(PurchaseReturn::getAuditorName, null)
+                .set(PurchaseReturn::getAuditTime, null));
     }
 
     @Override
@@ -316,7 +338,10 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     public void cancel(Long id) {
         PurchaseReturn old = returnMapper.selectById(id);
         if (old == null) throw new BusinessException("退货单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败
+        if (!DocStatusGuard.claim(returnMapper, PurchaseReturn::getId, id, PurchaseReturn::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("只有草稿状态可作废");
         PurchaseReturn u = new PurchaseReturn();
         u.setId(id);
         u.setStatus(DocStatus.CANCELLED.getCode());
@@ -326,11 +351,15 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
-        PurchaseReturn old = returnMapper.selectById(id);
-        if (old == null) throw new BusinessException("退货单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可删除");
+        // 原子删除（O-7）：带状态条件的物理删，只有草稿能删；affected=0 说明已被并发删除/审核或状态已变
+        int rows = returnMapper.delete(new LambdaQueryWrapper<PurchaseReturn>()
+                .eq(PurchaseReturn::getId, id)
+                .eq(PurchaseReturn::getStatus, DocStatus.DRAFT.getCode()));
+        if (rows == 0) {
+            if (returnMapper.selectById(id) == null) throw new BusinessException("退货单不存在");
+            throw new BusinessException("只有草稿状态可删除");
+        }
         itemMapper.delete(new LambdaQueryWrapper<PurchaseReturnItem>().eq(PurchaseReturnItem::getReturnId, id));
-        returnMapper.deleteById(id);
     }
 
     @Override

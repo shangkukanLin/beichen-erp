@@ -82,14 +82,6 @@ public class WarehouseStockLog {
     @TableField(exist = false)
     private String productName;
 
-    /** 变动类型中文标签（仅展示用，不映射数据库列） */
-    @TableField(exist = false)
-    private String changeTypeLabel;
-
-    /** 关联单据类型中文标签（仅展示用，不映射数据库列） */
-    @TableField(exist = false)
-    private String relatedBillTypeLabel;
-
     /** 详情跳转目标ID（仅展示用，不映射数据库列）：默认=relatedBillId；销售出库单映射为其关联销售单ID */
     @TableField(exist = false)
     private Long relatedBillDetailId;

@@ -6,6 +6,7 @@ import com.beichen.erp.dev.entity.Bom;
 import com.beichen.erp.dev.mapper.BomMapper;
 import com.beichen.erp.dev.service.BomService;
 import lombok.RequiredArgsConstructor;
+import com.beichen.erp.exception.BusinessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,6 +58,9 @@ public class BomServiceImpl extends ServiceImpl<BomMapper, Bom> implements BomSe
     @Override
     @Transactional
     public void saveBatch(Long projectId, List<Bom> items) {
+        // 空明细会"删旧版且不插入"＝静默清空整个版本的 BOM，必须拦下
+        if (items == null || items.isEmpty())
+            throw new BusinessException("BOM 明细不能为空；如需清空请先新建版本");
         // 删除当前最新版本的所有BOM项，再批量插入
         Integer maxVersion = getMaxVersion(projectId);
         baseMapper.delete(new LambdaQueryWrapper<Bom>()
@@ -92,5 +96,20 @@ public class BomServiceImpl extends ServiceImpl<BomMapper, Bom> implements BomSe
             baseMapper.insert(newBom);
         }
         return listByProjectAndVersion(projectId, newVersion);
+    }
+
+    @Override
+    @Transactional
+    public void deleteItem(Long id) {
+        Bom bom = baseMapper.selectById(id);
+        if (bom == null) return;
+        // 禁止删除所在版本的最后一行：版本被删空后 getMaxVersion() 取不到行、退回默认 1，
+        // 前端随之展示旧版本，之后保存会静默改写历史版本（版本历史失真）
+        Long cnt = baseMapper.selectCount(new LambdaQueryWrapper<Bom>()
+                .eq(Bom::getProjectId, bom.getProjectId())
+                .eq(Bom::getVersion, bom.getVersion()));
+        if (cnt != null && cnt <= 1)
+            throw new BusinessException("该行是版本 V" + bom.getVersion() + " 的唯一明细，不可删除；如需变更请先新建版本");
+        baseMapper.deleteById(id);
     }
 }

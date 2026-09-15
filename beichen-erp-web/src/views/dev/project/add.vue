@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted, onUnmounted } from 'vue'
 import { ProjectStatus, DEV_PROJECT_DIRTY_KEY } from '@/api/enums'
 import { useRouter, useRoute } from 'vue-router'
@@ -26,7 +27,7 @@ const defForm = (): ProjectDTO => ({
   originalDriveIc: '', originalTouchIc: '',
   glassSize: '', glassResolution: '',
   configDriveIcId: undefined, configTouchIcId: undefined, configCodeIcId: undefined,
-  startDate: new Date().toISOString().split('T')[0], expectedEndDate: '', remark: '',
+  startDate: localDate(), expectedEndDate: '', remark: '',
   sampleFactoryId: undefined, outsourceFactoryId: undefined,
   brandId: undefined
 })

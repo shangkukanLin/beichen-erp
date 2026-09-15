@@ -1,0 +1,34 @@
+# 生产 profile（启动加 --spring.profiles.active=prod）
+#
+# 设计原则：**敏感项不给默认值** —— 未注入环境变量时启动直接失败（fail fast），
+# 避免生产误用开发默认值（root/root、口令 123、CORS 全放开）。
+# 所有变量清单与样例见 beichen-erp/deploy/prod.env.sample 与《上线运维手册》§3。
+spring:
+  datasource:
+    # 必填：jdbc:mysql://<host>:3306/beichen_erp?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false
+    url: ${DB_URL}
+    # 必填：严禁 root，请用最小权限专用账号
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  sql:
+    init:
+      # 默认仍为 always（CREATE TABLE IF NOT EXISTS，幂等，保证首次部署可用）；
+      # 若要"结构变更受控发布"，注入 SQL_INIT_MODE=never
+      mode: ${SQL_INIT_MODE:always}
+
+logging:
+  level:
+    com.beichen.erp: ${LOG_LEVEL:info}
+  file:
+    name: ${LOG_FILE:/var/log/beichen/beichen-erp.log}
+
+app:
+  # 必填：生产域名白名单（逗号分隔），如 https://erp.example.com
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  # 必填：首次初始化超管/公司管理员的口令（BCrypt 存储，登录后应立即改密）
+  init:
+    admin-password: ${INIT_ADMIN_PASSWORD}
+  # 多实例部署：仅指定一个实例 SCHEDULING_ENABLED=true（其余 false）
+  scheduling:
+    enabled: ${SCHEDULING_ENABLED:false}

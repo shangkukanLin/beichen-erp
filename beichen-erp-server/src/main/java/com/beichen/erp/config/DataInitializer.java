@@ -19,6 +19,7 @@ import com.beichen.erp.system.mapper.UserRoleMapper;
 import com.beichen.erp.system.service.RoleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -50,13 +51,15 @@ public class DataInitializer implements ApplicationRunner {
     private final JdbcTemplate jdbcTemplate;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
+    /** 默认口令哨兵：出现即启动告警，提醒"生产忘了注入 INIT_ADMIN_PASSWORD" */
+    private static final String DEFAULT_PASSWORD = "123";
+
+    /** 初始口令（P0 配置外置 · 2026-09-14）：仅用于**首次创建**账号，生产必须注入 INIT_ADMIN_PASSWORD */
+    @Value("${app.init.admin-password:123}")
+    private String initAdminPassword;
+
     @Override
     public void run(ApplicationArguments args) {
-        // 清空所有业务数据（保留表结构），仅当启动参数含 --clear-data 时执行
-        if (args.containsOption("clear-data")) {
-            clearAllData();
-            log.info("===== 数据已清空，仅保留表结构 =====");
-        }
         initCompany();
         initRoles();
         syncMenus();
@@ -64,56 +67,50 @@ public class DataInitializer implements ApplicationRunner {
         initSuperAdmin();
         initBomTypes();
         initPhaseTemplates();
-        // 枚举值迁移须在合同模板初始化之前：先刷成 code，initContractTemplates 才能按 code 正确识别已有默认模板
-        migrateEnumChineseLabelsToCodes();
         initContractTemplates();
+        initScreenModels();
     }
 
     /**
-     * 幂等迁移：历史以中文存储的枚举字段统一刷成 code（规范：DB 存枚举 code，前端映射中文 label）。
-     * 每条 UPDATE 仅命中中文旧值，已迁移的数据不受影响，可重复执行。
+     * 屏幕资料知识库初始化：仅在表为空时导入一次种子数据（db/screen_model_data.sql），
+     * 避免覆盖用户后续编辑/新增的内容。种子 SQL 用 INSERT...SELECT...FROM company，
+     * 因此每个公司各导入一份，切换公司也能看到完整知识库。
      */
-    private void migrateEnumChineseLabelsToCodes() {
-        migrateColumnEnums("warehouse", "warehouse_type", new String[][]{
-                {"辅料仓", "AUXILIARY"}, {"成品仓", "FINISHED"}, {"不良仓", "DEFECT"}, {"售后仓", "AFTER_SALE"}});
-        migrateColumnEnums("finance_expense", "expense_type", new String[][]{
-                {"办公费", "OFFICE"}, {"房租水电", "RENT"}, {"工资社保", "SALARY"}, {"运输费", "TRANSPORT"},
-                {"差旅费", "TRAVEL"}, {"业务招待", "ENTERTAIN"}, {"其他", "OTHER"}});
-        migrateColumnEnums("finance_cashflow", "related_bill_type", new String[][]{
-                {"收款单", "RECEIPT"}, {"付款单", "PAYMENT"}, {"费用单", "EXPENSE"}, {"期初余额", "OPENING"}});
-        migrateColumnEnums("outsource_contract_template", "template_type", new String[][]{
-                {"加工合同", "PROCESSING"}, {"采购合同", "PURCHASE"}});
-        migrateColumnEnums("warehouse_stock_log", "change_type", new String[][]{
-                {"其他入库", "OTHER_IN"}, {"其他出库", "OTHER_OUT"}, {"取消入库", "CANCEL_IN"}, {"取消出库", "CANCEL_OUT"},
-                {"出货扣料", "OUTSOURCE_CONSUME"}, {"出货扣料-回滚", "CANCEL_OUTSOURCE_CONSUME"},
-                {"退不良反审核扣回还料", "OUTSOURCE_DEFECT_RETURN_UN_AUDIT"}});
-        migrateColumnEnums("outsource_material_order", "order_type", new String[][]{
-                {"采购", "PURCHASE"}, {"委外", "OUTSOURCE"}});
-        migrateColumnEnums("outsource_delivery_item", "handle_type", new String[][]{
-                {"维修返还", "REPAIR_RETURN"}, {"折现退款", "CASH_REFUND"}});
-        migrateColumnEnums("dev_purchase_item", "status", new String[][]{
-                {"完好", "GOOD"}, {"已损坏", "DAMAGED"}, {"已使用", "USED"}});
-        migrateColumnEnums("dev_purchase_item", "type", new String[][]{
-                {"基板", "BOARD"}, {"屏幕", "SCREEN"}, {"测试架", "TEST_FIXTURE"},
-                {"触摸资料盒", "TOUCH_BOX"}, {"显示资料盒", "DISPLAY_BOX"}, {"其他", "OTHER"}});
-        migrateColumnEnums("dev_drawing", "doc_type", new String[][]{
-                {"排线图", "DRAWING"}, {"结构图", "STRUCTURE"}, {"规格书", "SPEC"},
-                {"测试报告", "TEST_REPORT"}, {"其他", "OTHER"}});
-    }
-
-    private void migrateColumnEnums(String table, String column, String[][] mapping) {
-        for (String[] m : mapping) {
-            int n = jdbcTemplate.update("UPDATE `" + table + "` SET `" + column + "` = ? WHERE `" + column + "` = ?", m[1], m[0]);
-            if (n > 0) log.info("===== 枚举迁移：{}.{} 「{}」-> {}（{} 行） =====", table, column, m[0], m[1], n);
-        }
-        // 合同模板迁移后可能出现同类型多条默认模板（迁移前 init 已按 code 插入过一条），去重保留最早一条
-        if ("outsource_contract_template".equals(table)) {
-            int d = jdbcTemplate.update(
-                "DELETE t1 FROM outsource_contract_template t1 " +
-                "JOIN outsource_contract_template t2 " +
-                "  ON t1.template_type = t2.template_type AND t1.company_id = t2.company_id AND t1.id > t2.id " +
-                "WHERE t1.template_type IS NOT NULL");
-            if (d > 0) log.info("===== 合同模板去重：删除 {} 条同类型重复模板 =====", d);
+    private void initScreenModels() {
+        try {
+            Integer cnt = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM screen_model", Integer.class);
+            if (cnt != null && cnt > 0) return;
+            org.springframework.core.io.Resource res =
+                    new org.springframework.core.io.ClassPathResource("db/screen_model_data.sql");
+            if (!res.exists()) { log.warn("屏幕资料知识库种子文件缺失，跳过导入"); return; }
+            // 按语句执行：种子文件一条 INSERT 占多行、以分号结尾，逐行执行会语法错误。
+            // 这里累积到「以分号结尾」视为一条完整语句再执行（已核验：字段值中不含分号，切分安全）。
+            int n = 0;
+            StringBuilder stmt = new StringBuilder();
+            try (java.io.BufferedReader br = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(res.getInputStream(), java.nio.charset.StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    String s = line.trim();
+                    if (s.isEmpty() || s.startsWith("--")) continue;
+                    if (stmt.length() > 0) stmt.append(' ');
+                    stmt.append(s);
+                    if (s.endsWith(";")) {
+                        jdbcTemplate.execute(stmt.toString());
+                        stmt.setLength(0);
+                        n++;
+                    }
+                }
+                // 兜底：文件末尾若缺少分号，剩余内容也执行一次
+                if (stmt.length() > 0) {
+                    jdbcTemplate.execute(stmt.toString());
+                    n++;
+                }
+            }
+            log.info("屏幕资料知识库初始化完成，导入 {} 条", n);
+        } catch (Exception e) {
+            // 打印完整堆栈：bad SQL grammar 的具体 MySQL 原因在 cause 链里
+            log.warn("初始化屏幕资料知识库异常", e);
         }
     }
 
@@ -124,16 +121,10 @@ public class DataInitializer implements ApplicationRunner {
     }
 
     private void initContractTemplate(String type, String name, String content) {
-        // 清理 company_id 为 NULL 的历史脏数据（早期初始化遗漏 companyId 导致）
-        contractTemplateMapper.delete(new LambdaQueryWrapper<ContractTemplate>()
-                .eq(ContractTemplate::getTemplateType, type)
-                .isNull(ContractTemplate::getCompanyId));
         Long count = contractTemplateMapper.selectCount(new LambdaQueryWrapper<ContractTemplate>()
                 .eq(ContractTemplate::getTemplateType, type)
                 .eq(ContractTemplate::getCompanyId, 1L));
         if (count != null && count > 0) {
-            // 已存在默认模板：若 content 仍是旧版含占位符的内容，重置为新的纯条款内容
-            resetLegacyTemplate(type, content);
             return;
         }
         ContractTemplate tpl = new ContractTemplate();
@@ -145,36 +136,6 @@ public class DataInitializer implements ApplicationRunner {
         tpl.setCompanyId(1L);
         contractTemplateMapper.insert(tpl);
         log.info("===== 已初始化默认合同模板：{} =====", type);
-    }
-
-    /** 旧版模板 content 含占位符（如 {产品表格}/{签名区}），导出改为固定结构后需重置为纯条款内容 */
-    private void resetLegacyTemplate(String type, String content) {
-        ContractTemplate existing = contractTemplateMapper.selectOne(new LambdaQueryWrapper<ContractTemplate>()
-                .eq(ContractTemplate::getTemplateType, type)
-                .eq(ContractTemplate::getCompanyId, 1L)
-                .eq(ContractTemplate::getIsDefault, 1)
-                .last("LIMIT 1"));
-        if (existing == null || existing.getContent() == null) return;
-        // 仅当 content 含旧占位符时才重置，避免覆盖用户已自行编辑的条款
-        if (existing.getContent().contains("{产品表格}") || existing.getContent().contains("{物料明细表格}")
-                || existing.getContent().contains("{签名区}") || existing.getContent().contains("{合同信息}")) {
-            ContractTemplate upd = new ContractTemplate();
-            upd.setId(existing.getId());
-            upd.setContent(content);
-            contractTemplateMapper.updateById(upd);
-            log.info("===== 已重置旧版默认合同模板内容：{} =====", type);
-        }
-    }
-
-    /** 幂等补列：为存量库平滑升级（schema.sql 的 CREATE TABLE IF NOT EXISTS 不会给已存在表加列） */
-    /** 清空所有业务数据（保留表结构） */
-    private void clearAllData() {
-        jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 0");
-        String sql = "SELECT CONCAT('DELETE FROM ', table_name, ';') FROM information_schema.tables WHERE table_schema=DATABASE() AND table_type='BASE TABLE'";
-        jdbcTemplate.queryForList(sql).forEach(row -> {
-            jdbcTemplate.execute(row.values().iterator().next().toString());
-        });
-        jdbcTemplate.execute("SET FOREIGN_KEY_CHECKS = 1");
     }
 
     /** 初始化默认公司：北辰科技 */
@@ -190,9 +151,12 @@ public class DataInitializer implements ApplicationRunner {
         }
     }
 
-    /** 初始化6个角色（管理员/研发工程师/销售专员/仓管员/跟单专员/财务） */
+    /** 初始化7个角色（超级管理员/管理员/研发工程师/销售专员/仓管员/跟单专员/财务） */
     private void initRoles() {
         jdbcTemplate.update("INSERT IGNORE INTO sys_role (role_name, role_code, status, remark, company_id) VALUES " +
+            // P2-34：super_admin 是**平台级**角色（company_id=0），只给平台运维账号（lin）持有；
+            // 用户管理侧禁止分配该角色（UserServiceImpl.saveUserRoles 会跳过），避免公司管理员自提权
+            "('超级管理员', 'super_admin', 1, '平台级最高权限：整库导入/导出等跨租户运维操作', 0), " +
             "('管理员', 'admin', 1, '系统管理员，拥有全部权限', 0), " +
             "('研发工程师', 'dev_engineer', 1, '研发工程师，负责项目研发和BOM管理', 0), " +
             "('销售专员', 'sales', 1, '销售专员，负责销售和客户管理', 0), " +
@@ -203,7 +167,7 @@ public class DataInitializer implements ApplicationRunner {
         log.info("初始化角色数据完成");
     }
 
-    /** 初始化超级管理员 lin（密码123），关联 admin 角色 */
+    /** 初始化超级管理员 lin（初始口令见 {@code app.init.admin-password}，默认 123 仅供开发） */
     private void initSuperAdmin() {
         Long count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM sys_user WHERE username = 'lin'", Long.class);
@@ -215,44 +179,59 @@ public class DataInitializer implements ApplicationRunner {
         jdbcTemplate.update(
                 "INSERT INTO sys_user (username, password, status, company_id, deleted, create_time, update_time) " +
                 "VALUES (?, ?, 1, 1, 0, NOW(), NOW())",
-                "lin", passwordEncoder.encode("123"));
+                "lin", passwordEncoder.encode(initAdminPassword));
         ensureLinRole();
-        log.info("初始化超级管理员 lin 完成（角色: admin）");
+        if (DEFAULT_PASSWORD.equals(initAdminPassword)) {
+            log.warn("安全提示：平台超管 lin 的初始口令仍为默认值 {}，请登录后立即修改，"
+                    + "部署生产请注入 INIT_ADMIN_PASSWORD（见《上线运维手册》§3.3）", DEFAULT_PASSWORD);
+        }
+        log.info("初始化超级管理员 lin 完成（角色: admin + super_admin）");
     }
 
-    /** 确保 lin 用户与 admin 角色关联 */
+    /**
+     * 确保 lin 用户同时持有 admin 与 super_admin 角色。
+     * <p>P2-34（2026-09-12）：整库导入/导出等高危端点要求 {@code super_admin}（平台级）；
+     * 而 super_admin 角色此前**根本没被创建**、lin 只有 admin → 收口后会连平台操作员一起拦掉。
+     * 此处做幂等自愈：启动时补建角色并授予 lin（新库/存量库都会自动修好）。</p>
+     */
     private void ensureLinRole() {
         User lin = userMapper.selectOne(new LambdaQueryWrapper<User>()
                 .eq(User::getUsername, "lin"));
         if (lin == null) return;
+        ensureUserRole(lin.getId(), "admin");
+        ensureUserRole(lin.getId(), "super_admin");
+    }
 
-        Role adminRole = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
-                .eq(Role::getRoleCode, "admin"));
-        if (adminRole == null) return;
-
+    /** 幂等授予：用户已持有该角色则跳过 */
+    private void ensureUserRole(Long userId, String roleCode) {
+        Role role = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
+                .eq(Role::getRoleCode, roleCode));
+        if (role == null) return;
         Long count = userRoleMapper.selectCount(new LambdaQueryWrapper<UserRole>()
-                .eq(UserRole::getUserId, lin.getId())
-                .eq(UserRole::getRoleId, adminRole.getId()));
+                .eq(UserRole::getUserId, userId)
+                .eq(UserRole::getRoleId, role.getId()));
         if (count != null && count > 0) return;
-
         UserRole ur = new UserRole();
-        ur.setUserId(lin.getId());
-        ur.setRoleId(adminRole.getId());
+        ur.setUserId(userId);
+        ur.setRoleId(role.getId());
         userRoleMapper.insert(ur);
+        log.info("已为用户 {} 授予角色 {}", userId, roleCode);
     }
 
     /** 同步标准菜单（upsert）并自动授权给管理员角色 */
     private void syncMenus() {
         Object[][] menus = {
             {1L, 0L, "首页", "menu", "/dashboard", "Dashboard", "HomeFilled", 1},
-            {2L, 0L, "基础数据", "catalog", "", "", "DataBoard", 2},
-            {3L, 0L, "研发管理", "catalog", "", "", "Cpu", 3},
-            {4L, 0L, "委外加工", "catalog", "", "", "Setting", 4},
-            {5L, 0L, "进货业务", "catalog", "", "", "ShoppingCart", 5},
-            {6L, 0L, "销售业务", "catalog", "", "", "Sell", 6},
-            {7L, 0L, "成品库存业务", "catalog", "", "", "Odometer", 7},
-            {8L, 0L, "财务管理", "catalog", "", "", "Money", 8},
-            {9L, 0L, "设置", "catalog", "", "", "Tools", 9},
+            // 经营分析：紧跟首页（用户要求置于首页之下），纯查询报表聚合；原「财务分析」已拆分迁入
+            {10L, 0L, "经营分析", "catalog", "", "", "TrendCharts", 2},
+            {2L, 0L, "基础数据", "catalog", "", "", "DataBoard", 3},
+            {3L, 0L, "研发管理", "catalog", "", "", "Cpu", 4},
+            {4L, 0L, "委外加工", "catalog", "", "", "Setting", 5},
+            {5L, 0L, "进货业务", "catalog", "", "", "ShoppingCart", 6},
+            {6L, 0L, "销售业务", "catalog", "", "", "Sell", 7},
+            {7L, 0L, "成品库存", "catalog", "", "", "Odometer", 8},
+            {8L, 0L, "财务管理", "catalog", "", "", "Money", 9},
+            {9L, 0L, "设置", "catalog", "", "", "Tools", 10},
             {105L, 2L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "UserFilled", 1},
             {106L, 2L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "OfficeBuilding", 2},
             {107L, 2L, "供货商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "Van", 3},
@@ -264,17 +243,22 @@ public class DataInitializer implements ApplicationRunner {
             {302L, 3L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 2},
             {303L, 3L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 3},
             {304L, 3L, "研发物料管理", "menu", "/dev/material", "DevMaterial", "Box", 4},
+            // 屏幕资料知识库：行业机型屏幕参数（折叠屏/直板 AMOLED），可增删改查；清空数据时不清理
+            {305L, 3L, "屏幕资料知识库", "menu", "/dev/screen-model", "DevScreenModel", "Iphone", 5},
             {401L, 4L, "加工订单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1},
             {402L, 4L, "物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2},
-            {403L, 4L, "物料信息", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 3},
-            {406L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 4},
-            {407L, 4L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 5},
-            {408L, 4L, "加工退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 6},
-            {411L, 4L, "物料退货", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Refrigerator", 7},
-            {404L, 4L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 8},
-            {410L, 4L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 9},
-            {409L, 4L, "供应商管理", "menu", "/supplier/manage", "OutsourceSupplierManage", "UserFilled", 10},
-            {405L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 11},
+            {412L, 4L, "交货信息", "menu", "/outsource/delivery-info", "OutsourceDeliveryInfo", "Van", 3},
+            {403L, 4L, "物料信息", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 4},
+            {406L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 5},
+            {407L, 4L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 6},
+            {408L, 4L, "加工退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 7},
+            {411L, 4L, "物料退货", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Refrigerator", 8},
+            {404L, 4L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 9},
+            // 物料报损：与成品报损独立成表（主体为 outsource_material，物料库存不区分品质，固定按良品扣减）
+            {413L, 4L, "物料报损", "menu", "/outsource/stock-loss", "OutsourceStockLoss", "DeleteFilled", 10},
+            {410L, 4L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 10},
+            {409L, 4L, "供应商管理", "menu", "/supplier/manage", "OutsourceSupplierManage", "UserFilled", 11},
+            {405L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 12},
             {501L, 5L, "成品采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1},
             {502L, 5L, "采购退货单", "menu", "/inventory/purchase-return", "InventoryPurchaseReturn", "Refrigerator", 2},
             // 进货业务→供货商管理：指向 /outsource/supplier/manage（供货商=成品商，双模式页面）
@@ -284,14 +268,18 @@ public class DataInitializer implements ApplicationRunner {
             // 售后：销售退单 → 退货整理 → 销售换货单（换货可选择性收费）
             {603L, 6L, "销售退单", "menu", "/sale/return", "SaleReturn", "Refund", 2},
             {605L, 6L, "销售换货单", "menu", "/sale/exchange", "SaleExchange", "Refresh", 3},
-            {701L, 7L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 1},
-            {702L, 7L, "成品仓库管理", "menu", "/inventory/warehouse", "Warehouse", "Odometer", 2},
-            {703L, 7L, "成品库存流水", "menu", "/inventory/stock-log", "WarehouseStockLog", "TrendCharts", 3},
-            {704L, 7L, "成品其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 4},
-            {705L, 7L, "成品品质重分类", "menu", "/inventory/reclassify", "InventoryReclassify", "Refresh", 5},
-            {706L, 7L, "成品移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 6},
+            // 成品库存情况：按产品维度看跨仓库库存汇总，列表置顶；点行进详情看该产品在各仓库的分布
+            {712L, 7L, "成品库存情况", "menu", "/inventory/product-stock", "InventoryProductStock", "Box", 1},
+            {701L, 7L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 2},
+            {702L, 7L, "成品仓库管理", "menu", "/inventory/warehouse", "Warehouse", "Odometer", 3},
+            {703L, 7L, "成品库存流水", "menu", "/inventory/stock-log", "WarehouseStockLog", "TrendCharts", 4},
+            {704L, 7L, "成品其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 5},
+            {705L, 7L, "成品品质重分类", "menu", "/inventory/reclassify", "InventoryReclassify", "Refresh", 6},
+            {706L, 7L, "成品移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 7},
             // 库存盘点：每月每仓一次，仓库列表与盘点页显示待盘点/超期提醒
-            {711L, 7L, "库存盘点", "menu", "/inventory/stock-take", "InventoryStockTake", "Files", 7},
+            {711L, 7L, "库存盘点", "menu", "/inventory/stock-take", "InventoryStockTake", "Files", 8},
+            // 成品报损：草稿→审核扣减成品库存（LOSS_OUT 流水），可反审核回滚
+            {713L, 7L, "成品报损", "menu", "/inventory/stock-loss", "InventoryStockLoss", "DeleteFilled", 9},
             // 退货整理归属「销售」模块（售后链路的一环：退单/换货退回 → 整理分选 → 入成品仓/不良仓）
             // ID 仍保留 707（存量角色授权按 ID 关联，换 ID 会导致历史授权失效），仅迁移 parent_id
             {707L, 6L, "退货整理", "menu", "/inventory/return-sort", "InventoryReturnSort", "RefreshRight", 4},
@@ -305,18 +293,28 @@ public class DataInitializer implements ApplicationRunner {
             {806L, 8L, "付款管理", "menu", "/finance/payment", "FinancePayment", "Sell", 7},
             // 费用登记：审核扣减资金账户并生成「费用支出」流水，供财务分析利润表取数
             {809L, 8L, "费用管理", "menu", "/finance/expense", "FinanceExpense", "Tickets", 8},
-            // 财务分析：经营概览/利润表/资金趋势/应收应付账龄（纯查询报表）
-            {808L, 8L, "财务分析", "menu", "/finance/analysis", "FinanceAnalysis", "DataAnalysis", 9},
             // 发票登记：销项/进项发票（税务口径），供税务分析发票汇总取数
             {810L, 8L, "发票管理", "menu", "/finance/invoice", "FinanceInvoice", "Stamp", 10},
+            // 应付转应收：退货/超损扣款（负向应付）在无货款可抵时，转为向供应商收款
+            {811L, 8L, "应付转应收", "menu", "/finance/payable-transfer", "FinancePayableTransfer", "Refresh", 11},
             {901L, 9L, "智能管理", "menu", "/system/smart", "SystemSmart", "Cpu", 1},
             {902L, 9L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 2},
-            {903L, 9L, "权限管理", "menu", "/system/permission", "SystemPermission", "Lock", 3},
             {904L, 9L, "系统信息", "menu", "/system/settings", "SystemSettings", "Setting", 4},
             {905L, 9L, "数据管理", "menu", "/system/data-manage", "SystemDataManage", "Folder", 5},
             {906L, 9L, "角色管理", "menu", "/system/role", "SystemRole", "Avatar", 6},
             {907L, 9L, "菜单管理", "menu", "/system/menu", "SystemMenu", "Menu", 7},
             {908L, 9L, "清空数据", "menu", "/system/clear-data", "SystemClearData", "Delete", 8},
+            // ==================== 经营分析（目录 10）：原「财务分析」5 个 Tab 拆分 + 新增销售/客户分析 ====================
+            {1001L, 10L, "经营概览", "menu", "/analysis/overview", "AnalysisOverview", "DataLine", 1},
+            // 利润表：按天明细 + 快捷区间；点行「详细」进 /analysis/profit/detail/:date 看每条单据
+            {1002L, 10L, "利润表", "menu", "/analysis/profit", "AnalysisProfit", "DataAnalysis", 2},
+            // 资金与往来：资金趋势 + 应收应付账龄 + 主体往来统计（原两个 Tab 合并）
+            {1003L, 10L, "资金与往来", "menu", "/analysis/cash", "AnalysisCash", "Wallet", 3},
+            {1004L, 10L, "税务分析", "menu", "/analysis/tax", "AnalysisTax", "Stamp", 4},
+            // 销售分析：销售额趋势 + 产品/仓库排行，行可下钻到销售单明细
+            {1005L, 10L, "销售分析", "menu", "/analysis/sale", "AnalysisSale", "Sell", 5},
+            // 客户分析：客户销售额排行 + 欠款/账期，行可下钻到该客户的销售单
+            {1006L, 10L, "客户分析", "menu", "/analysis/customer", "AnalysisCustomer", "UserFilled", 6},
         };
         // ON DUPLICATE KEY UPDATE 实现 upsert
         int processed = 0;
@@ -336,15 +334,6 @@ public class DataInitializer implements ApplicationRunner {
         }
         log.info("同步菜单完成，处理 {} 条", processed);
 
-        // 删除非标准菜单（旧ID已废弃）
-        Long[] newMenuIds = {1L,2L,3L,4L,5L,6L,7L,8L,9L,101L,102L,103L,104L,105L,106L,107L,301L,302L,303L,304L,401L,402L,403L,404L,405L,406L,407L,408L,409L,410L,411L,501L,502L,503L,601L,602L,603L,604L,605L,701L,702L,703L,704L,705L,706L,707L,711L,801L,802L,803L,804L,805L,806L,807L,808L,809L,810L,901L,902L,903L,904L,905L,906L,907L,908L};
-        Set<Long> newIds = new HashSet<>(Arrays.asList(newMenuIds));
-        jdbcTemplate.update("DELETE FROM sys_role_menu WHERE menu_id NOT IN (" +
-            String.join(",", newIds.stream().map(String::valueOf).toArray(String[]::new)) + ")");
-        int deleted = jdbcTemplate.update("DELETE FROM sys_menu WHERE id NOT IN (" +
-            String.join(",", newIds.stream().map(String::valueOf).toArray(String[]::new)) + ")");
-        log.info("已清理 {} 个废弃旧菜单", deleted);
-
         // 为 admin 角色授权所有标准菜单
         for (Object[] m : menus) {
             try {
@@ -355,48 +344,48 @@ public class DataInitializer implements ApplicationRunner {
             } catch (Exception ignored) {}
         }
         log.info("已为管理员角色授权标准菜单");
-
-        // 为研发工程师补充授权研发模块菜单
-        Long[] devMenuIds = {301L, 302L, 303L, 304L, 101L};
-        for (Long mid : devMenuIds) {
-            try {
-                jdbcTemplate.update(
-                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
-                    "SELECT r.id, ? FROM sys_role r WHERE r.role_code = 'dev_engineer'",
-                    mid);
-            } catch (Exception ignored) {}
-        }
-        log.info("已为研发工程师角色补充授权研发模块菜单");
     }
 
-    /** 为6个角色分别授权对应菜单 */
+    /**
+     * 为6个角色分别授权对应菜单（必须包含各自父目录，否则菜单树 buildTree 会把子菜单丢弃）
+     * 注：604「销售换货单」已废弃，现为 605。
+     */
     private void initRoleMenus() {
+        // 清理指向已不存在菜单的脏授权（历史菜单改 id / 删除后残留），幂等自愈
+        jdbcTemplate.update(
+                "DELETE rm FROM sys_role_menu rm LEFT JOIN sys_menu m ON m.id = rm.menu_id WHERE m.id IS NULL");
+
         // 管理员：全部权限
         assignRoleMenus("admin", Arrays.asList(
-                1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L,
+                1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L,
                 101L, 102L, 103L, 104L, 105L, 106L, 107L,
-                301L, 302L, 303L, 304L,
-                401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L, 410L, 411L,
+                301L, 302L, 303L, 304L, 305L,
+                401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L, 410L, 411L, 412L, 413L,
                 501L, 502L, 503L,
-                601L, 602L, 603L, 604L,
-                701L, 702L, 703L, 704L, 705L, 706L,
-                801L, 802L, 803L, 804L, 805L, 806L, 807L, 808L, 809L, 810L,
+                601L, 602L, 603L, 605L,
+                701L, 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L,
+                801L, 802L, 803L, 804L, 805L, 806L, 807L, 809L, 810L, 811L,
+                1001L, 1002L, 1003L, 1004L, 1005L, 1006L,
                 901L, 902L, 903L, 904L, 905L, 906L, 907L, 908L));
-        // 研发工程师：项目研发 + BOM + 基础产品
+        // 研发工程师：项目研发 + BOM + 基础产品（2 基础数据 = 101 产品管理的父目录）
         assignRoleMenus("dev_engineer", Arrays.asList(
-                1L, 3L, 301L, 302L, 303L, 304L, 101L));
-        // 销售专员：销售业务 + 客户 + 产品
+                1L, 2L, 3L, 301L, 302L, 303L, 304L, 305L, 101L));
+        // 销售专员：销售业务 + 客户 + 产品 + 经营分析（605 换货单；2 基础数据）
         assignRoleMenus("sales", Arrays.asList(
-                1L, 6L, 601L, 602L, 603L, 604L, 101L));
-        // 仓管员：进货+库存 + 仓库
+                1L, 2L, 6L, 601L, 602L, 603L, 605L, 101L,
+                10L, 1001L, 1002L, 1003L, 1004L, 1005L, 1006L));
+        // 仓管员：进货 + 库存 + 仓库（2 基础数据 / 6 销售业务 为其子菜单的父目录）
         assignRoleMenus("warehouse", Arrays.asList(
-                1L, 5L, 7L, 501L, 502L, 701L, 702L, 703L, 704L, 705L, 706L, 711L, 603L, 604L, 101L));
-        // 跟单专员：委外加工全部
+                1L, 2L, 5L, 6L, 7L, 501L, 502L, 603L, 701L, 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L, 101L));
+        // 跟单专员：委外加工全部 + 相关基础数据/进货/销售/成品库存页面
         assignRoleMenus("merchandiser", Arrays.asList(
-                1L, 4L, 401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L, 410L, 101L, 602L, 502L, 702L, 705L));
-        // 财务：财务管理
+                1L, 2L, 4L, 5L, 6L, 7L,
+                401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L, 410L, 412L, 413L,
+                101L, 502L, 602L, 702L, 705L));
+        // 财务：财务管理 + 经营分析（2 基础数据 = 101 产品管理的父目录）
         assignRoleMenus("finance", Arrays.asList(
-                1L, 8L, 801L, 802L, 803L, 804L, 805L, 806L, 807L, 808L, 809L, 810L, 101L));
+                1L, 2L, 8L, 801L, 802L, 803L, 804L, 805L, 806L, 807L, 809L, 810L, 811L, 101L,
+                10L, 1001L, 1002L, 1003L, 1004L, 1005L, 1006L));
     }
 
     /** 为指定角色授权菜单（仅当角色尚无菜单权限时执行） */

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { WarehouseCategory, ProductQualityType, ProductQualityTypeLabel, WarehouseTypeLabel } from '@/api/enums'
+import { localDate } from '@/utils/date'
+import { WarehouseCategory, ProductQualityType, WarehouseTypeLabel } from '@/api/enums'
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
+import * as XLSX from 'xlsx'
 
 const route = useRoute(); const router = useRouter()
 const warehouseId = Number(route.params.id)
@@ -45,13 +47,13 @@ function groupProductStocks(rows: any[]) {
     }
     const row = map.get(r.productId)
     const q = Number(r.quantity) || 0
-    // 兼容后端 qualityTypeLabel 对 DEFECT 误转为"不良品"的情况
+    // 2026-09-14：后端已改回返回品质 code（不再回中文），按 code 归并即可
     const qt = r.qualityType
-    if (qt === ProductQualityType.A || qt === ProductQualityTypeLabel[ProductQualityType.A]) row.qtyA += q
-    else if (qt === ProductQualityType.B || qt === ProductQualityTypeLabel[ProductQualityType.B]) row.qtyB += q
-    else if (qt === ProductQualityType.C || qt === ProductQualityTypeLabel[ProductQualityType.C]) row.qtyC += q
-    else if (qt === ProductQualityType.PENDING || qt === ProductQualityTypeLabel[ProductQualityType.PENDING]) row.qtyPending += q
-    else if (qt === ProductQualityType.DEFECT || qt === ProductQualityTypeLabel[ProductQualityType.DEFECT]) row.qtyDefect += q
+    if (qt === ProductQualityType.A) row.qtyA += q
+    else if (qt === ProductQualityType.B) row.qtyB += q
+    else if (qt === ProductQualityType.C) row.qtyC += q
+    else if (qt === ProductQualityType.PENDING) row.qtyPending += q
+    else if (qt === ProductQualityType.DEFECT) row.qtyDefect += q
     // 其余未知品质不计数：不可用 else 兜底，否则待分类等会被误算成不良品
   }
   return Array.from(map.values())
@@ -77,12 +79,68 @@ function totalQty(row: any) {
 
 
 
+/**
+ * 导出"当前页签"为 Excel：列与页面表格一致，数量按数值写入（整数不带小数）。
+ * - 物料信息 → 物料清单（物料名称/BOM类型/数量）
+ * - 产品信息 → 成品清单（SKU/产品名称/A规…待分类/总库存）
+ * - 仓库信息 → 仓库档案（项目/内容），避免"点了导出没反应"
+ */
+function exportExcel() {
+  const wname = warehouse.value?.warehouseName || '仓库'
+  const now = new Date().toLocaleString('zh-CN')
+  let sheetName = ''
+  let cols: string[] = []
+  let body: (string | number)[][] = []
+
+  if (activeTab.value === 'material') {
+    sheetName = '物料库存'
+    cols = ['物料名称', 'BOM类型', '数量']
+    body = (materials.value || []).map((r: any) => [r.materialName || '', r.bomTypeName || '-', Number(r.quantity ?? 0)])
+  } else if (activeTab.value === 'product') {
+    sheetName = '成品库存'
+    cols = ['SKU', '产品名称', 'A规', 'B规', 'C规', '不良', '待分类', '总库存']
+    body = (products.value || []).map((r: any) => [
+      r.sku || '', r.productName || '',
+      Number(r.qtyA ?? 0), Number(r.qtyB ?? 0), Number(r.qtyC ?? 0),
+      Number(r.qtyDefect ?? 0), Number(r.qtyPending ?? 0), Number(totalQty(r) ?? 0),
+    ])
+  } else {
+    sheetName = '仓库信息'
+    cols = ['项目', '内容']
+    const w = warehouse.value || {}
+    body = [
+      ['仓库名称', w.warehouseName || '-'],
+      ['编码', w.code || '-'],
+      ['类型', WarehouseTypeLabel[w.warehouseType] || w.warehouseType || '-'],
+      ['地址', w.address || '-'],
+      ['联系人', w.contact || '-'],
+      ['电话', w.phone || '-'],
+      ['备注', w.remark || '-'],
+    ]
+  }
+
+  const aoa: (string | number)[][] = [
+    [`${wname} - ${sheetName}（导出时间：${now}，共 ${body.length} 行）`],
+    [],
+    cols,
+    ...body,
+  ]
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: cols.length - 1 } }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, sheetName)
+  XLSX.writeFile(wb, `${wname}_${sheetName}_${localDate()}.xlsx`)
+}
+
 onMounted(() => { loadWarehouse(); loadMaterials() })
 </script>
 
 <template>
   <div class="detail-page">
     <el-card shadow="never" v-loading="loading">
+      <div class="toolbar">
+        <el-button :icon="'Download'" @click="exportExcel">导出当前页签</el-button>
+      </div>
       <el-tabs v-model="activeTab">
         <!-- 仓库信息 Tab -->
         <el-tab-pane label="仓库信息" name="info">
@@ -100,7 +158,6 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
         <!-- 物料信息 Tab -->
         <el-tab-pane label="物料信息" name="material">
           <el-table :data="materials" border stripe v-loading="matLoading" size="small">
-            <el-table-column type="index" label="#" width="50" align="center" />
             <el-table-column prop="materialName" label="物料名称" min-width="160" show-overflow-tooltip />
             <el-table-column prop="bomTypeName" label="BOM类型" width="130" align="center">
               <template #default="{row}"><span v-if="row.bomTypeName">{{ row.bomTypeName }}</span><span v-else style="color:#999">-</span></template>
@@ -118,7 +175,6 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
         <!-- 产品信息 Tab -->
         <el-tab-pane label="产品信息" name="product">
           <el-table :data="products" border stripe v-loading="matLoading" size="small">
-            <el-table-column type="index" label="#" width="50" align="center" />
             <el-table-column prop="sku" label="SKU" width="130" />
             <el-table-column prop="productName" label="产品名称" min-width="160" show-overflow-tooltip />
         <el-table-column label="A规" width="90" align="right">
@@ -167,5 +223,7 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
 
 <style scoped>
 .detail-page { display:flex; flex-direction:column; gap:12px; }
+
+.toolbar { display:flex; justify-content:flex-end; margin-bottom:8px; }
 
 </style>

@@ -40,6 +40,12 @@ public class FinanceSettlement {
     /** 来源单据 ID */
     private Long sourceId;
 
+    /**
+     * 核销状态：NORMAL=有效 / CANCELLED=已冲销（来源单据反审核留痕，不物理删除）。
+     * 见 {@link com.beichen.erp.finance.common.SettlementRecordStatus}。
+     */
+    private String status;
+
     /** 公司ID（多租户隔离） */
     private Long companyId;
 

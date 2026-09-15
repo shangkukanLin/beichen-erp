@@ -7,7 +7,7 @@ import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { getQualityTypes, type QualityOption } from '@/api/product'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import { getReclassifyPage, auditReclassify, cancelReclassify } from '@/api/inventory'
+import { getReclassifyPage, auditReclassify, unAuditReclassify, cancelReclassify } from '@/api/inventory'
 
 const router = useRouter()
 
@@ -49,11 +49,21 @@ async function handleAudit(row: any) {
     loadData()
   } catch { /* 取消 */ }
 }
-async function handleCancel(row: any) {
+/** 反审核（E2：走 /un-audit，逆向恢复库存并置 CANCELLED） */
+async function handleUnAudit(row: any) {
   try {
     await ElMessageBox.confirm(`确认反审核单号「${row.code}」？反审核后将逆向恢复库存。`, '反审核确认', { type: 'warning' })
-    await cancelReclassify(row.id)
+    await unAuditReclassify(row.id)
     ElMessage.success('已反审核')
+    loadData()
+  } catch { /* 取消 */ }
+}
+/** 作废（E2：仅草稿走 /cancel，不再承担反审核语义） */
+async function handleCancel(row: any) {
+  try {
+    await ElMessageBox.confirm(`确认作废草稿单「${row.code}」？`, '作废确认', { type: 'warning' })
+    await cancelReclassify(row.id)
+    ElMessage.success('已作废')
     loadData()
   } catch { /* 取消 */ }
 }
@@ -125,16 +135,21 @@ onActivated(() => {
         <el-table-column label="重分类概况" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">{{ row.itemSummary || '-' }}</template>
         </el-table-column>
+        <!-- 整理人=建单时的登录账户；历史单据无此字段显示 — -->
+        <el-table-column label="整理人" width="110" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.createByName || '-' }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="DocStatusTag[row.status]||'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" align="center" fixed="right">
+        <el-table-column label="操作" width="240" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" type="danger" link @click.stop="handleCancel(row)">反审核</el-button>
+            <el-button v-if="row.status === DocStatus.AUDITED" type="danger" link @click.stop="handleUnAudit(row)">反审核</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="info" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

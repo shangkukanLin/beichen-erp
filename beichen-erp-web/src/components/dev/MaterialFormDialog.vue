@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted, watch, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { DevMaterialStatus, DevMaterialStatusLabel } from '@/api/enums'
+import { DevMaterialStatus, DevMaterialStatusLabel, DevMaterialTypeLabel, codeLabelOptions } from '@/api/enums'
 
 interface Props {
   // 项目页传入当前项目ID时，新增物料自动关联且下拉禁用；物料管理页不传，用户可选/留空
@@ -12,7 +13,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), { defaultProjectId: undefined, visible: false })
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void; (e: 'saved'): void }>()
 
-const todayStr = new Date().toISOString().split('T')[0]
+const todayStr = localDate()
 const materialStatusOptions = Object.entries(DevMaterialStatusLabel).map(([value, label]) => ({ value, label }))
 const materialTypeOptions = ref<{ code: string; label: string }[]>([])
 const projectOptions = ref<any[]>([])
@@ -41,10 +42,8 @@ function resetForm() {
 }
 
 async function open(row?: any) {
-  // 加载研发物料类型枚举（基板/屏幕/测试架/其他）
-  if (materialTypeOptions.value.length === 0) {
-    try { const res: any = await request.get('/dev/purchase-item/material-types'); materialTypeOptions.value = res || [] } catch (e) { /* 忽略 */ }
-  }
+  // 类型下拉（2026-09-14：改为前端枚举映射，不再请求后端；后端 /dev/purchase-item/material-types 已只回 code）
+  if (materialTypeOptions.value.length === 0) materialTypeOptions.value = codeLabelOptions(DevMaterialTypeLabel)
   // 锁定项目时，仅加载当前项目作为唯一选项，保证禁用态下拉也能按名称显示（而非退化显示ID）
   if (lockedProject.value) {
     try { const res: any = await request.get('/dev/project/page', { params: { id: props.defaultProjectId, pageSize: 1 } }); projectOptions.value = res?.records || [] } catch (e) { /* 忽略 */ }

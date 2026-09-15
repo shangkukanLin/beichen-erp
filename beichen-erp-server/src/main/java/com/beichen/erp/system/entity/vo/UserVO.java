@@ -17,6 +17,9 @@ public class UserVO extends User {
 
     private List<Role> roles;
 
+    /** 首页业务 TAB 勾选（null/空=全部可见） */
+    private List<String> dashboardTabs;
+
     @Override
     @JsonIgnore
     public String getPassword() {

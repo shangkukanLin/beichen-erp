@@ -3,6 +3,7 @@ package com.beichen.erp.finance.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.finance.entity.FinanceInvoice;
 import com.beichen.erp.finance.mapper.FinanceInvoiceMapper;
 import com.beichen.erp.finance.service.FinanceInvoiceService;
@@ -80,7 +81,10 @@ public class FinanceInvoiceServiceImpl implements FinanceInvoiceService {
     public void cancel(Long id) {
         FinanceInvoice old = invoiceMapper.selectById(id);
         if (old == null) throw new BusinessException("发票不存在");
-        if (STATUS_CANCELLED.equals(old.getStatus())) throw new BusinessException("该发票已作废");
+        // 原子抢占状态（P2-29）：并发作废只会生效一次（from 取当前状态，可覆盖"已登记→作废"）
+        if (!DocStatusGuard.claim(invoiceMapper, FinanceInvoice::getId, id, FinanceInvoice::getStatus,
+                old.getStatus(), STATUS_CANCELLED))
+            throw new BusinessException("该发票已作废");
         FinanceInvoice u = new FinanceInvoice();
         u.setId(id);
         u.setStatus(STATUS_CANCELLED);

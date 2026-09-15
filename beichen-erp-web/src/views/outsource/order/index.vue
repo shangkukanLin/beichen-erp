@@ -38,6 +38,16 @@ async function handleCancel(row: any) {
   try { await ElMessageBox.confirm('确定作废该加工单吗？', '提示', { type: 'warning' }); await request.put(`/outsource/order/${row.id}/cancel`); ElMessage.success('已作废'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
+// 下载合同：取该订单已上传的合同文件（attachUrl，非合同模板），未上传则提示
+function handleDownloadContract(row: any) {
+  if (!row.attachUrl) { ElMessage.warning('该订单未上传合同，请先进入订单详情上传合同文件'); return }
+  const a = document.createElement('a')
+  a.href = row.attachUrl
+  a.download = ''
+  a.target = '_blank'
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+}
+
 onActivated(() => {
   // 新增/修改页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
   if (sessionStorage.getItem(OUTSOURCE_ORDER_DIRTY_KEY) === '1') {
@@ -101,9 +111,10 @@ onMounted(() => {
             <el-tag :type="OutsourceOrderStatusTag[row.status]||'info'">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="130" align="center" fixed="right">
+        <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click.stop="router.push(`/outsource/order/detail/${row.id}`)">详情</el-button>
+            <el-button type="success" link @click.stop="handleDownloadContract(row)">下载合同</el-button>
             <el-button type="danger" link v-if="row.status!==OutsourceOrderStatus.CANCELLED" @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>

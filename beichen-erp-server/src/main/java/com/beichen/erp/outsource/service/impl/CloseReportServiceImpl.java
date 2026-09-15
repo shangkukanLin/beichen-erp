@@ -5,8 +5,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
-import com.beichen.erp.outsource.common.DeliveryStatus;
 import com.beichen.erp.inventory.common.IoType;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
@@ -91,6 +91,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     private final MaterialOrderMapper materialOrderMapper;
     private final MaterialOrderItemMapper materialOrderItemMapper;
     private final PayableHelper payableHelper;
+    private final com.beichen.erp.material.service.ProductService productService;
 
     @Override
     public Map<String, Object> getOrCreateReport(Long orderId) {
@@ -110,6 +111,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         // 产品信息
         List<OutsourceOrderProduct> products = productMapper.selectList(
             new LambdaQueryWrapper<OutsourceOrderProduct>().eq(OutsourceOrderProduct::getOrderId, orderId));
+        // SKU 是非表字段，按产品主数据ID批量回填，供界面/导出展示
+        productService.fillSku(products, OutsourceOrderProduct::getProductId, OutsourceOrderProduct::setSku);
         result.put("products", products);
 
         // 交货记录
@@ -118,11 +121,13 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
                 .orderByDesc(OutsourceOrderDelivery::getId));
         result.put("deliveries", deliveryList);
 
-        // 总交货量（按产品ID汇总，再通过产品列表查名）
+        // 总交货量：**按产品主数据ID汇总**（加工单编辑会重建产品行、行ID变化，主数据ID稳定），
+        // 历史数据缺失主数据ID时回退按产品行ID汇总
         Map<Long, BigDecimal> deliveredByProduct = new HashMap<>();
         for (OutsourceOrderDelivery d : deliveryList) {
-            if (d.getProductId() == null) continue;
-            deliveredByProduct.merge(d.getProductId(), d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO, BigDecimal::add);
+            Long key = d.getProductMasterId() != null ? d.getProductMasterId() : d.getProductId();
+            if (key == null) continue;
+            deliveredByProduct.merge(key, d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO, BigDecimal::add);
         }
 
         // 获取该工厂的所有委外仓库ID
@@ -221,7 +226,10 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         // 出货消耗 = SUM(该产品交货数 × 单套用量)
         BigDecimal shippedTotal = BigDecimal.ZERO;
         if (ownerProduct != null) {
-            BigDecimal pDelivered = deliveredByProduct.getOrDefault(ownerProduct.getId(), BigDecimal.ZERO);
+            // 主数据ID优先，行ID兜底（与上面汇总口径对应）
+            BigDecimal pDelivered = ownerProduct.getProductId() != null
+                    ? deliveredByProduct.get(ownerProduct.getProductId()) : null;
+            if (pDelivered == null) pDelivered = deliveredByProduct.getOrDefault(ownerProduct.getId(), BigDecimal.ZERO);
             if (pDelivered.compareTo(BigDecimal.ZERO) > 0) {
                 shippedTotal = pDelivered.multiply(qps);
             }
@@ -229,10 +237,12 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         item.put("shippedQuantity", shippedTotal);
 
         // 良品退料/不良退料/留存工厂/缺失默认=0（用户可修改）
-        // 物料单价：优先取物料信息主数据 price；无则按发料成本（其他出入库填写价 → 物料订单先进先出）
+        // 物料单价：优先取系统移动加权成本（与退货计价口径一致）→ 物料主数据参考价 → 发料成本（其他出入库填写价 → 物料订单先进先出）
         BigDecimal unitPrice = BigDecimal.ZERO;
         OutsourceMaterial matInfo = outsourceMaterialMapper.selectById(mat.getMaterialId());
-        if (matInfo != null && matInfo.getPrice() != null && matInfo.getPrice().compareTo(BigDecimal.ZERO) > 0) {
+        if (matInfo != null && matInfo.getCostPrice() != null && matInfo.getCostPrice().compareTo(BigDecimal.ZERO) > 0) {
+            unitPrice = matInfo.getCostPrice();
+        } else if (matInfo != null && matInfo.getPrice() != null && matInfo.getPrice().compareTo(BigDecimal.ZERO) > 0) {
             unitPrice = matInfo.getPrice();
         } else {
             unitPrice = calcOtherIoPrice(factoryWhIds, mat.getMaterialId());
@@ -347,6 +357,60 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         item.put("excessLossAmount", excessLossQty.multiply(unitPrice).setScale(2, RoundingMode.HALF_UP));
     }
 
+    /** null 安全的数量/金额取值 */
+    private BigDecimal nz(BigDecimal v) { return v != null ? v : BigDecimal.ZERO; }
+
+    /**
+     * 超损上限校验：超损数量不得超过「最大超损」。
+     * <p>公式与报表展示口径一致（见 {@link #recalcItem}）：
+     * 最大超损 = (用料总数 − 良品退料 − 留存工厂) × (1 − 加工良率/100)，
+     * 用料总数 = 出货消耗 + 良品退料 + 不良退料 + 留存工厂 + 缺失。</p>
+     * <p>报表已经算出该上限，但保存草稿与结单此前都不校验，可填任意超损数量直接生成超损赔偿（负应付）。</p>
+     */
+    private void assertExcessLossWithinLimit(List<CloseReportItem> items) {
+        if (items == null) return;
+        for (CloseReportItem it : items) {
+            BigDecimal qty = nz(it.getExcessLossQty());
+            if (qty.compareTo(BigDecimal.ZERO) <= 0) continue;
+            BigDecimal shipped = nz(it.getShippedQuantity());
+            BigDecimal good = nz(it.getGoodReturnQty());
+            BigDecimal defect = nz(it.getDefectReturnQty());
+            BigDecimal retain = nz(it.getFactoryRetainQty());
+            BigDecimal missing = nz(it.getMissingQty());
+            BigDecimal targetYield = it.getTargetYieldRate() != null ? it.getTargetYieldRate() : new BigDecimal(100);
+            BigDecimal usedTotal = shipped.add(good).add(defect).add(retain).add(missing);
+            BigDecimal maxLossRate = BigDecimal.ONE.subtract(
+                    targetYield.divide(new BigDecimal(100), 6, RoundingMode.HALF_UP));
+            BigDecimal max = usedTotal.subtract(good).subtract(retain).multiply(maxLossRate);
+            if (max.compareTo(BigDecimal.ZERO) < 0) max = BigDecimal.ZERO;
+            max = max.setScale(2, RoundingMode.HALF_UP);
+            if (qty.compareTo(max) > 0) {
+                throw new BusinessException("物料[" + getMaterialNameById(it.getMaterialId()) + "]超损数量 "
+                        + qty.stripTrailingZeros().toPlainString() + " 超过上限 " + max.stripTrailingZeros().toPlainString()
+                        + "（用料总数 " + usedTotal.stripTrailingZeros().toPlainString()
+                        + " − 良品退料 " + good.stripTrailingZeros().toPlainString()
+                        + " − 留存工厂 " + retain.stripTrailingZeros().toPlainString()
+                        + "）× (1 − 加工良率 " + targetYield.stripTrailingZeros().toPlainString() + "%)");
+            }
+        }
+    }
+
+    /** 生成委外其他出入库单号（前缀+日期+3位流水，与委外其他出入库模块一致） */
+    private String generateOtherIoCode() {
+        String dateStr = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String likePattern = BillPrefix.OUTSOURCE_OTHER_IO + dateStr;
+        OutsourceOtherIo last = otherIoMapper.selectOne(new LambdaQueryWrapper<OutsourceOtherIo>()
+                .likeRight(OutsourceOtherIo::getCode, likePattern)
+                .orderByDesc(OutsourceOtherIo::getCode).last("LIMIT 1"));
+        int seq = 1;
+        if (last != null && last.getCode() != null) {
+            try {
+                seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1;
+            } catch (Exception e) { seq = 1; }
+        }
+        return BillPrefix.OUTSOURCE_OTHER_IO + dateStr + String.format("%03d", seq);
+    }
+
     private BigDecimal toBD(Object v) {
         if (v == null) return BigDecimal.ZERO;
         if (v instanceof BigDecimal) return (BigDecimal) v;
@@ -358,6 +422,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     public void saveDraft(Long orderId, List<CloseReportItem> items, String remark) {
         OutsourceOrder order = orderMapper.selectById(orderId);
         if (order == null) throw new BusinessException("加工单不存在");
+        // 超损不得超上限，避免存下"任意超损数量"的报表并在结单时生成超额赔偿
+        assertExcessLossWithinLimit(items);
 
         CloseReport report = reportMapper.selectOne(
             new LambdaQueryWrapper<CloseReport>().eq(CloseReport::getOrderId, orderId));
@@ -393,16 +459,24 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     public void confirmClose(Long orderId, Long returnWarehouseId) {
         OutsourceOrder order = orderMapper.selectById(orderId);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!OutsourceOrderStatus.PRODUCING.getCode().equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可结单");
+        // 原子抢占加工单状态（P2-29）：并发/双击结单只会成功一次，避免重复退料与重复生成超损应付
+        if (!DocStatusGuard.claim(orderMapper, OutsourceOrder::getId, orderId, OutsourceOrder::getStatus,
+                OutsourceOrderStatus.PRODUCING.getCode(), OutsourceOrderStatus.FINISHED.getCode()))
+            throw new BusinessException("只有生产中的加工单可结单");
         if (returnWarehouseId == null) throw new BusinessException("请选择退回仓库");
 
         CloseReport report = reportMapper.selectOne(
             new LambdaQueryWrapper<CloseReport>().eq(CloseReport::getOrderId, orderId));
         if (report == null) throw new BusinessException("请先保存结单报表");
-        if (CloseReportStatus.FINISHED.getCode().equals(report.getStatus())) throw new BusinessException("已结单，不可重复结单");
+        // 报表状态一并原子抢占（P2-29）：DRAFT→FINISHED，双重保护
+        if (!DocStatusGuard.claim(reportMapper, CloseReport::getId, report.getId(), CloseReport::getStatus,
+                CloseReportStatus.DRAFT.getCode(), CloseReportStatus.FINISHED.getCode()))
+            throw new BusinessException("已结单，不可重复结单");
 
         List<CloseReportItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<CloseReportItem>().eq(CloseReportItem::getReportId, report.getId()));
+        // 结单前再校验一次（覆盖"报表保存后才调整过明细"的历史数据）
+        assertExcessLossWithinLimit(items);
 
         // 找到该工厂的委外仓库
         List<Warehouse> warehouses = warehouseMapper.selectList(
@@ -477,9 +551,11 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             io.setWarehouseId(warehouses.get(0).getId());
             io.setIoType(IoType.OUT.getCode());
             io.setIoDate(LocalDate.now());
-            io.setStatus(DeliveryStatus.CONFIRMED.getCode());
+            // E3 口径（2026-09-12）：outsource_other_io.status 一律用 DocStatus（与控制器/前端一致）；
+            // 此前写 DeliveryStatus.CONFIRMED，前端按 DocStatus 渲染 → 状态列显示不出，且 /cancel 会误判为草稿
+            io.setStatus(DocStatus.AUDITED.getCode());
             io.setRemark("加工厂遗失 - " + order.getCode());
-            io.setCode(BillPrefix.OTHER_IO + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-" + (System.currentTimeMillis() % 100000));
+            io.setCode(generateOtherIoCode());
             otherIoMapper.insert(io);
 
             for (OutsourceOtherIoItem oi : missingItems) {
@@ -525,17 +601,21 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     public void reopenClose(Long orderId) {
         OutsourceOrder order = orderMapper.selectById(orderId);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!OutsourceOrderStatus.FINISHED.getCode().equals(order.getStatus()))
+        // 原子抢占加工单状态（P2-29）：并发/双击反结单只会成功一次，避免重复冲回退料与超损应付
+        if (!DocStatusGuard.claim(orderMapper, OutsourceOrder::getId, orderId, OutsourceOrder::getStatus,
+                OutsourceOrderStatus.FINISHED.getCode(), OutsourceOrderStatus.PRODUCING.getCode()))
             throw new BusinessException("只有已完成的加工单可反结单");
 
         CloseReport report = reportMapper.selectOne(
             new LambdaQueryWrapper<CloseReport>().eq(CloseReport::getOrderId, orderId));
         if (report == null) throw new BusinessException("未找到结单报表");
-        if (!CloseReportStatus.FINISHED.getCode().equals(report.getStatus()))
+        // 报表状态一并原子抢占（P2-29）：FINISHED→DRAFT，双重保护
+        if (!DocStatusGuard.claim(reportMapper, CloseReport::getId, report.getId(), CloseReport::getStatus,
+                CloseReportStatus.FINISHED.getCode(), CloseReportStatus.DRAFT.getCode()))
             throw new BusinessException("该订单尚未结单，无需反结单");
 
         // 1. 冲回超损应付（已付款会自动拦截）
-        payableHelper.reversePayable(report.getId());
+        payableHelper.reversePayable(report.getId(), SourceBillType.OUTSOURCE_EXCESS_LOSS.getCode());
 
         // 2. 逆向退料单：作废 + 工厂仓加回、退回仓减回
         List<OutsourceDelivery> returnDeliveries = deliveryMapper.selectList(
@@ -568,7 +648,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             new LambdaQueryWrapper<OutsourceOtherIo>()
                 .eq(OutsourceOtherIo::getRemark, "加工厂遗失 - " + order.getCode()));
         for (OutsourceOtherIo io : missingIos) {
-            if (DeliveryStatus.CANCELLED.getCode().equals(io.getStatus())) continue;
+            // E3 口径：仍用 DocStatus（与结单写入的 AUDITED 同体系）
+            if (DocStatus.CANCELLED.getCode().equals(io.getStatus())) continue;
             List<OutsourceOtherIoItem> ioItems = otherIoItemMapper.selectList(
                 new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, io.getId()));
             for (OutsourceOtherIoItem oi : ioItems) {
@@ -579,7 +660,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             // 作废缺失单
             OutsourceOtherIo updIo = new OutsourceOtherIo();
             updIo.setId(io.getId());
-            updIo.setStatus(DeliveryStatus.CANCELLED.getCode());
+            updIo.setStatus(DocStatus.CANCELLED.getCode());
             otherIoMapper.updateById(updIo);
         }
 

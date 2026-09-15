@@ -71,7 +71,8 @@ public class SaleExchangeController {
     }
 
     /** 反审核：对称回滚，回到草稿 */
-    @PutMapping("/{id}/unaudit")
+    // E1 口径（2026-09-12）：反审核统一 /un-audit，旧路径 /unaudit 保留为别名
+    @PutMapping({"/{id}/un-audit", "/{id}/unaudit"})
     public R<Void> unAudit(@PathVariable Long id) {
         exchangeService.unAudit(id);
         return R.ok();

@@ -254,7 +254,6 @@ onMounted(() => {
     <!-- 列表 -->
     <el-card shadow="never" class="table-card">
       <el-table v-loading="tableLoading" :data="tableData" border stripe>
-        <el-table-column type="index" label="序号" width="60" align="center" />
         <el-table-column prop="roleName" label="角色名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="roleCode" label="角色编码" min-width="140" show-overflow-tooltip />
         <el-table-column label="状态" width="90" align="center">

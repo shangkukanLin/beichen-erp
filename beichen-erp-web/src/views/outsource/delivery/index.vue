@@ -51,7 +51,7 @@ async function handleAudit(row: any) {
   try { await ElMessageBox.confirm('确定审核该收发单吗？审核后将扣减/增加库存并生成流水。', '审核', { type: 'warning' }); await request.put(`/outsource/delivery/${row.id}/audit`); ElMessage.success('已审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleUnaudit(row: any) {
-  try { await ElMessageBox.confirm('确定反审核该收发单吗？反审核后将回滚库存与流水，回到草稿。', '反审核', { type: 'warning' }); await request.put(`/outsource/delivery/${row.id}/unaudit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('确定反审核该收发单吗？反审核后将回滚库存与流水，回到草稿。', '反审核', { type: 'warning' }); await request.put(`/outsource/delivery/${row.id}/un-audit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
 onActivated(() => {
@@ -87,23 +87,23 @@ onMounted(() => { loadWarehouseOptions(); loadData() })
       </el-tabs>
 
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%" size="small" @row-click="(row: any) => router.push(`/outsource/delivery/detail/${row.id}`)">
+        <el-table-column label="日期" width="100"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column prop="code" label="单号" width="170" />
-        <el-table-column label="发出仓库" width="150" show-overflow-tooltip>
-          <template #default="{row}"><span v-if="row.supplierDirect" style="color:var(--app-color-primary)">{{row.supplierName||'供应商直发'}}</span><el-button v-else type="primary" link @click.stop="goWhDetail(row.fromWarehouseId)">{{row.fromWarehouseName||'-'}}</el-button></template>
+        <el-table-column label="发出仓库/供应商" width="170" show-overflow-tooltip>
+          <template #default="{row}"><span v-if="row.supplierDirect"><el-link type="primary" underline="never" @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{row.supplierName||'供应商直发'}}</el-link></span><el-button v-else type="primary" link @click.stop="goWhDetail(row.fromWarehouseId)">{{row.fromWarehouseName||'-'}}</el-button></template>
         </el-table-column>
-        <el-table-column label="目标仓库" width="150" show-overflow-tooltip>
+        <el-table-column label="目标仓库" width="160" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="goWhDetail(row.toWarehouseId)">{{row.toWarehouseName||'-'}}</el-button></template>
         </el-table-column>
         <el-table-column label="物料" min-width="180" show-overflow-tooltip>
           <template #default="{row}"><span v-if="row.itemSummary">{{row.itemSummary}}</span><span v-else style="color:var(--app-text-placeholder)">{{row.itemCount||0}}项</span></template>
         </el-table-column>
-        <el-table-column label="日期" width="100"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column prop="status" label="状态" width="90"><template #default="{row}">
           <el-tag :type="DocStatusTag[row.status] || 'info'">
             {{ DocStatusLabel[row.status] || row.status }}
           </el-tag>
         </template></el-table-column>
-        <el-table-column label="操作" width="220" align="center" fixed="right">
+        <el-table-column label="操作" width="210" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click.stop="router.push(`/outsource/delivery/detail/${row.id}`)">详情</el-button>
             <el-button type="success" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleAudit(row)">审核</el-button>

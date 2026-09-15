@@ -2,6 +2,7 @@ package com.beichen.erp.sale.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.auth.entity.User;
@@ -9,6 +10,7 @@ import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.entity.FinanceReceivable;
@@ -348,6 +350,11 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         if (cid != null && cid > 0) order.setCompanyId(cid);
         returnMapper.insert(order);
         saveItems(order.getId(), itemMaps);
+        // 客户名称是非表字段，列表接口已回填；创建返回同样回填，避免调用方拿到 null
+        if (order.getCustomerName() == null && order.getCustomerId() != null) {
+            Customer c = customerMapper.selectById(order.getCustomerId());
+            if (c != null) order.setCustomerName(c.getName());
+        }
         return order;
     }
 
@@ -376,10 +383,18 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     public void audit(Long id) {
         SaleReturn order = returnMapper.selectById(id);
         if (order == null) throw new BusinessException("销售退单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免库存/应收重复写
+        if (!DocStatusGuard.claim(returnMapper, SaleReturn::getId, id, SaleReturn::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
+            throw new BusinessException("只有草稿状态可审核");
         List<SaleReturnItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleReturnItem>().eq(SaleReturnItem::getReturnId, id));
         if (items.isEmpty()) throw new BusinessException("销售退单明细不能为空");
+        // P2-33：数量必须为正（负数量会生成负向应收/负向库存）
+        for (SaleReturnItem it : items) {
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("退货数量必须大于 0（明细行ID=" + it.getId() + "）");
+        }
         // 售后仓校验：销售退回的待分类品只能入售后仓（前端下拉已过滤，此处防止接口绕过）
         Warehouse wh = warehouseMapper.selectById(order.getWarehouseId());
         if (wh == null) throw new BusinessException("退货仓库不存在");
@@ -416,6 +431,8 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             fr.setPaidAmount(BigDecimal.ZERO);
             // 负向应收：unpaidAmount 与 amount 一致（负数表示冲抵金额），便于应收汇总口径正确
             fr.setUnpaidAmount(order.getTotalAmount().negate());
+            // 到期日必须落库：账单生成按「到期日判期」取数，为空会被整行漏掉（曾致账单金额虚高）
+            fr.setDueDate(order.getReturnDate() != null ? order.getReturnDate() : LocalDate.now());
             fr.setStatus(SettlementStatus.UNSETTLED.getCode());
             fr.setRemark("销售退货冲抵应收");
             saveReceivable(fr);
@@ -437,7 +454,10 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     public void unAudit(Long id) {
         SaleReturn order = returnMapper.selectById(id);
         if (order == null) throw new BusinessException("销售退单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(order.getStatus())) throw new BusinessException("只有已审核的销售退单可反审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免库存/应收重复冲销
+        if (!DocStatusGuard.claim(returnMapper, SaleReturn::getId, id, SaleReturn::getStatus,
+                DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
+            throw new BusinessException("只有已审核的销售退单可反审核");
         // 对称回滚：扣减已入库的待分类品库存
         List<SaleReturnItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleReturnItem>().eq(SaleReturnItem::getReturnId, id));
@@ -462,13 +482,13 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         reverseReceivableIfExists(order.getCode());
         // 财务联动：冲销退货收费台账（未收费时台账不存在，跳过）
         reverseReceivableIfExists(order.getCode() + "-FEE");
-        SaleReturn u = new SaleReturn();
-        u.setId(id);
-        u.setStatus(DocStatus.DRAFT.getCode());
-        u.setAuditorId(null);
-        u.setAuditorName(null);
-        u.setAuditTime(null);
-        returnMapper.updateById(u);
+        // 审核信息必须用 UpdateWrapper 显式置 null：updateById 忽略 null 字段，反审核后仍显示审核人/时间
+        returnMapper.update(null, new LambdaUpdateWrapper<SaleReturn>()
+                .eq(SaleReturn::getId, id)
+                .set(SaleReturn::getStatus, DocStatus.DRAFT.getCode())
+                .set(SaleReturn::getAuditorId, null)
+                .set(SaleReturn::getAuditorName, null)
+                .set(SaleReturn::getAuditTime, null));
     }
 
     @Override
@@ -476,7 +496,10 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     public void cancel(Long id) {
         SaleReturn old = returnMapper.selectById(id);
         if (old == null) throw new BusinessException("销售退单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败
+        if (!DocStatusGuard.claim(returnMapper, SaleReturn::getId, id, SaleReturn::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("只有草稿状态可作废");
         SaleReturn u = new SaleReturn();
         u.setId(id);
         u.setStatus(DocStatus.CANCELLED.getCode());

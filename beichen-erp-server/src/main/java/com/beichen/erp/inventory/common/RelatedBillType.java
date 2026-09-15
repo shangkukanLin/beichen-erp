@@ -54,7 +54,12 @@ public enum RelatedBillType {
     RETURN_SORT("退货整理"),
 
     /** 库存盘点：盘点单审核/反审核触发（盘盈盘亏调整） */
-    STOCK_TAKE("库存盘点");
+    STOCK_TAKE("库存盘点"),
+
+    /** 成品报损：成品报损单审核/反审核触发 */
+    INVENTORY_STOCK_LOSS("成品报损"),
+    /** 物料报损：委外物料报损单审核/反审核触发 */
+    OUTSOURCE_STOCK_LOSS("物料报损");
 
     private final String label;
 

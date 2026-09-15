@@ -5,7 +5,9 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.common.BillPrefix;
+import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.warehouse.common.WarehouseCategory;
+import com.beichen.erp.warehouse.common.WarehouseType;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.supplier.common.SupplierTypeEnum;
@@ -109,7 +111,9 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         if (suppliers == null || suppliers.isEmpty()) return;
         List<Long> ids = suppliers.stream().map(Supplier::getId).filter(java.util.Objects::nonNull).toList();
         if (ids.isEmpty()) return;
-        Map<Long, Map<String, Object>> balanceMap = baseMapper.sumPayableBalance(ids);
+        // 只算未结清台账：排除 已结清(SETTLED) 与 已冲回(CANCELLED)，与 FinancePayableController.unpaid 口径一致
+        List<String> excludeStatuses = List.of(SettlementStatus.SETTLED.getCode(), SettlementStatus.CANCELLED.getCode());
+        Map<Long, Map<String, Object>> balanceMap = baseMapper.sumPayableBalance(ids, excludeStatuses);
         for (Supplier s : suppliers) {
             Map<String, Object> row = balanceMap.get(s.getId());
             if (row != null && row.get("balance") != null) {
@@ -193,6 +197,8 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         int seq = nextWarehouseSeq(date);
         w.setCode(BillPrefix.WAREHOUSE + date + String.format("%03d", seq));
         w.setWarehouseCategory(WarehouseCategory.OUTSOURCE.getCode());
+        // 仓型必填：委外仓固定为辅料仓（原缺失会让按仓型过滤的下拉选不到该仓）
+        w.setWarehouseType(WarehouseType.AUXILIARY.getCode());
         w.setFactoryId(supplierId);
         w.setWarehouseName(supplierName != null ? supplierName + "委外仓库" : "委外仓库");
         w.setStatus(1);

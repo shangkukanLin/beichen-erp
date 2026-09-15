@@ -181,7 +181,7 @@ export function auditSaleReturn(id: number) {
   return request.put<void>(`/sale/return/${id}/audit`)
 }
 export function unAuditSaleReturn(id: number) {
-  return request.put<void>(`/sale/return/${id}/unaudit`)
+  return request.put<void>(`/sale/return/${id}/un-audit`)
 }
 export function cancelSaleReturn(id: number) {
   return request.put<void>(`/sale/return/${id}/cancel`)
@@ -215,7 +215,7 @@ export function auditSaleExchange(id: number) {
   return request.put<void>(`/sale/exchange/${id}/audit`)
 }
 export function unAuditSaleExchange(id: number) {
-  return request.put<void>(`/sale/exchange/${id}/unaudit`)
+  return request.put<void>(`/sale/exchange/${id}/un-audit`)
 }
 export function cancelSaleExchange(id: number) {
   return request.put<void>(`/sale/exchange/${id}/cancel`)

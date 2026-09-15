@@ -361,7 +361,6 @@ onActivated(() => { loadData() })
             <span v-if="!stockWarehouseId" style="color:#909399; font-size:12px">请先选择出库仓库，再刷新库存</span>
           </div>
           <el-table :data="items" border>
-            <el-table-column type="index" label="#" width="50" align="center" />
             <el-table-column label="SKU" width="130">
               <template #default="{ row }">
                 <span v-if="row.sku">{{ row.sku }}</span>
@@ -452,7 +451,6 @@ onActivated(() => { loadData() })
         </el-descriptions>
         <el-divider content-position="left">产品明细</el-divider>
         <el-table :data="items" border>
-          <el-table-column type="index" label="#" width="50" align="center" />
           <el-table-column label="SKU" width="130">
           <template #default="{ row }">
             <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ row.sku || '—' }}</el-button>

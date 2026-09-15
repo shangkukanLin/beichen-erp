@@ -6,6 +6,7 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.inventory.common.RelatedBillType;
@@ -14,10 +15,12 @@ import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.material.service.ProductService;
+import com.beichen.erp.sale.entity.SaleOrder;
 import com.beichen.erp.sale.entity.SaleOutbound;
 import com.beichen.erp.sale.entity.SaleOutboundItem;
 import com.beichen.erp.sale.mapper.SaleOutboundMapper;
 import com.beichen.erp.sale.mapper.SaleOutboundItemMapper;
+import com.beichen.erp.sale.mapper.SaleOrderMapper;
 import com.beichen.erp.sale.service.SaleOutboundService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -35,6 +38,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
 
     private final SaleOutboundMapper outboundMapper;
     private final SaleOutboundItemMapper itemMapper;
+    private final SaleOrderMapper saleOrderMapper;
     private final CustomerMapper customerMapper;
     private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
@@ -155,7 +159,10 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     public void cancel(Long id) {
         SaleOutbound old = outboundMapper.selectById(id);
         if (old == null) throw new BusinessException("销售出库单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("已审核的出库单不可作废");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败
+        if (!DocStatusGuard.claim(outboundMapper, SaleOutbound::getId, id, SaleOutbound::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("已审核的出库单不可作废");
         SaleOutbound u = new SaleOutbound();
         u.setId(id);
         u.setStatus(DocStatus.CANCELLED.getCode());
@@ -167,7 +174,18 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     public void audit(Long id) {
         SaleOutbound outbound = outboundMapper.selectById(id);
         if (outbound == null) throw new BusinessException("销售出库单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(outbound.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免库存重复扣减
+        if (!DocStatusGuard.claim(outboundMapper, SaleOutbound::getId, id, SaleOutbound::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
+            throw new BusinessException("只有草稿状态可审核");
+        // C7：出库前必须挂一张**已审核**的销售单，防"无销售单直接出库"或挂未审核单出库
+        if (outbound.getOrderId() == null)
+            throw new BusinessException("出库单未关联销售单，无法审核（请在出库单上选择销售单）");
+        SaleOrder saleOrder = saleOrderMapper.selectById(outbound.getOrderId());
+        if (saleOrder == null) throw new BusinessException("关联的销售单不存在（ID=" + outbound.getOrderId() + "）");
+        if (!DocStatus.AUDITED.getCode().equals(saleOrder.getStatus()))
+            throw new BusinessException("关联的销售单尚未审核（单号 " + saleOrder.getCode() + "，当前状态 "
+                    + saleOrder.getStatus() + "），请先审核销售单再出库");
         List<SaleOutboundItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, id));
         // 1) 库存联动：出库减库存（changeStock 负数，不足自动抛异常）
@@ -191,7 +209,10 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     public void unAudit(Long id) {
         SaleOutbound outbound = outboundMapper.selectById(id);
         if (outbound == null) throw new BusinessException("销售出库单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(outbound.getStatus())) throw new BusinessException("只有已审核的出库单可反审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免库存重复回补
+        if (!DocStatusGuard.claim(outboundMapper, SaleOutbound::getId, id, SaleOutbound::getStatus,
+                DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
+            throw new BusinessException("只有已审核的出库单可反审核");
         List<SaleOutboundItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, id));
         // 1) 库存回补：出库时按负数扣库存，反审核原路加回（与 audit 的扣减对称）

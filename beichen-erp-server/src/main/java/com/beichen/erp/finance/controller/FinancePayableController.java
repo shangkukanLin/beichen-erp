@@ -27,12 +27,16 @@ public class FinancePayableController {
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
             @RequestParam(required = false) Long supplierId,
+            @RequestParam(required = false) String supplierType,
+            @RequestParam(required = false) String sourceBillType,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String billNo,
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize) {
         LambdaQueryWrapper<FinancePayable> w = new LambdaQueryWrapper<FinancePayable>()
                 .eq(supplierId != null, FinancePayable::getSupplierId, supplierId)
+                .eq(supplierType != null && !supplierType.isBlank(), FinancePayable::getSupplierType, supplierType)
+                .eq(sourceBillType != null && !sourceBillType.isBlank(), FinancePayable::getSourceBillType, sourceBillType)
                 .eq(status != null && !status.isBlank(), FinancePayable::getStatus, status)
                 .like(billNo != null && !billNo.isBlank(), FinancePayable::getBillNo, billNo)
                 .orderByDesc(FinancePayable::getId);
@@ -42,10 +46,12 @@ public class FinancePayableController {
             Map<String, Object> m = new HashMap<>();
             m.put("id", r.getId()); m.put("billNo", r.getBillNo());
             m.put("supplierId", r.getSupplierId()); m.put("supplierName", r.getSupplierName());
+            m.put("supplierType", r.getSupplierType());
             m.put("sourceBillType", r.getSourceBillType()); m.put("sourceBillNo", r.getSourceBillNo()); m.put("sourceId", r.getSourceId());
             m.put("amount", r.getAmount()); m.put("paidAmount", r.getPaidAmount());
             m.put("unpaidAmount", r.getUnpaidAmount()); m.put("dueDate", r.getDueDate());
             m.put("status", r.getStatus()); m.put("remark", r.getRemark());
+            m.put("transferredToReceivable", r.getTransferredToReceivable());
             m.put("createTime", r.getCreateTime());
             return m;
         }).toList());
@@ -57,11 +63,15 @@ public class FinancePayableController {
         return R.ok(payableMapper.selectById(id));
     }
 
+    /** 付款时可选的未结清应付：排除已转应收的记录，避免同一笔既抵扣又向对方收款 */
     @GetMapping("/unpaid")
     public R<?> unpaid(@RequestParam Long supplierId) {
         return R.ok(payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
                 .eq(FinancePayable::getSupplierId, supplierId)
                 .ne(FinancePayable::getStatus, SettlementStatus.SETTLED.getCode())
+                // 已作废(反审核冲销留痕)的台账不可再被选中抵扣；口径与应付汇总/账龄一致（应收侧同样已排除 CANCELLED）
+                .ne(FinancePayable::getStatus, SettlementStatus.CANCELLED.getCode())
+                .ne(FinancePayable::getTransferredToReceivable, 1)
                 .orderByDesc(FinancePayable::getId)));
     }
 
@@ -69,7 +79,9 @@ public class FinancePayableController {
     @GetMapping("/supplier-summary")
     public R<?> supplierSummary() {
         List<FinancePayable> all = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
-                .ne(FinancePayable::getStatus, DocStatus.CANCELLED.getCode()));
+                .ne(FinancePayable::getStatus, DocStatus.CANCELLED.getCode())
+                // 已转应收的冲减项不再参与付款抵扣，应付汇总口径必须同步排除，否则与应收双算
+                .ne(FinancePayable::getTransferredToReceivable, 1));
         Map<Long, Map<String, Object>> map = new LinkedHashMap<>();
         java.time.LocalDate today = java.time.LocalDate.now();
         for (FinancePayable p : all) {
@@ -92,6 +104,18 @@ public class FinancePayableController {
             m.put("unpaidAmount", ((BigDecimal) m.get("unpaidAmount")).add(unpaidAmt));
             if (unpaidAmt.compareTo(BigDecimal.ZERO) > 0 && p.getDueDate() != null && p.getDueDate().isBefore(today))
                 m.put("overdueAmount", ((BigDecimal) m.get("overdueAmount")).add(unpaidAmt));
+        }
+        // 回填往来主体类型：优先取台账上固化的 supplier_type，多类型时取字典序第一个标签
+        java.util.Set<Long> sids = map.keySet();
+        if (!sids.isEmpty()) {
+            Map<Long, String> typeBySupplier = new HashMap<>();
+            for (FinancePayable p : all) {
+                if (p.getSupplierId() != null && p.getSupplierType() != null)
+                    typeBySupplier.merge(p.getSupplierId(), p.getSupplierType(), (a, b) -> a.compareTo(b) <= 0 ? a : b);
+            }
+            for (Map.Entry<Long, Map<String, Object>> e : map.entrySet()) {
+                e.getValue().put("supplierType", typeBySupplier.get(e.getKey()));
+            }
         }
         List<Map<String, Object>> list = new ArrayList<>(map.values());
         list.sort((a, b) -> ((BigDecimal) b.get("unpaidAmount")).compareTo((BigDecimal) a.get("unpaidAmount")));

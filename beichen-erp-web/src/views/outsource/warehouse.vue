@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { WarehouseCategory } from '@/api/enums'
+import { WarehouseCategory, WarehouseType } from '@/api/enums'
 import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -36,7 +36,7 @@ function handleQuery() { loadData() }
 function handleReset() { query.warehouseName = ''; query.factoryId = undefined; loadData() }
 
 const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoading = ref(false)
-const defForm = () => ({ id: undefined as any, factoryId: undefined as any, warehouseName: '', warehouseCategory: WarehouseCategory.OUTSOURCE, address: '', contact: '', phone: '', status: 1, remark: '' })
+const defForm = () => ({ id: undefined as any, factoryId: undefined as any, warehouseName: '', warehouseCategory: WarehouseCategory.OUTSOURCE, warehouseType: WarehouseType.AUXILIARY, address: '', contact: '', phone: '', status: 1, remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
 function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dialogTitle.value = '新增委外仓库'; dialogVisible.value = true }

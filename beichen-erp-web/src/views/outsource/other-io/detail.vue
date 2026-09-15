@@ -170,7 +170,6 @@ onActivated(() => { loadDetail() })
 
       <!-- 只读明细 -->
       <el-table v-if="!editing" :data="items" border size="small">
-        <el-table-column type="index" label="#" width="50" align="center"/>
         <el-table-column label="物料类型" width="120">
           <template #default="{row}">{{ getTypeName(row.bomTypeId) }}</template>
         </el-table-column>

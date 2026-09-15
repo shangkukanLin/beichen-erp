@@ -8,6 +8,7 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.entity.FinanceReceivable;
@@ -251,7 +252,10 @@ public class ReturnSortServiceImpl implements ReturnSortService {
     public void audit(Long id) {
         ReturnSort s = rsMapper.selectById(id);
         if (s == null) throw new BusinessException("退货整理单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(s.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免分选库存重复变动
+        if (!DocStatusGuard.claim(rsMapper, ReturnSort::getId, id, ReturnSort::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
+            throw new BusinessException("只有草稿状态可审核");
         if (s.getTargetWarehouseA() == null || s.getTargetWarehouseB() == null
                 || s.getTargetWarehouseC() == null || s.getTargetWarehouseDefect() == null)
             throw new BusinessException("请选择 A/B/C/不良 的目标入库仓库");
@@ -312,7 +316,10 @@ public class ReturnSortServiceImpl implements ReturnSortService {
     public void cancel(Long id) {
         ReturnSort s = rsMapper.selectById(id);
         if (s == null) throw new BusinessException("退货整理单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(s.getStatus())) throw new BusinessException("只有已审核状态可反审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免分选库存重复冲回
+        if (!DocStatusGuard.claim(rsMapper, ReturnSort::getId, id, ReturnSort::getStatus,
+                DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
+            throw new BusinessException("只有已审核状态可反审核");
         List<ReturnSortItem> items = getItems(id);
 
         for (ReturnSortItem it : items) {
@@ -356,11 +363,15 @@ public class ReturnSortServiceImpl implements ReturnSortService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
-        ReturnSort s = rsMapper.selectById(id);
-        if (s == null) throw new BusinessException("退货整理单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(s.getStatus())) throw new BusinessException("只有草稿状态可删除");
+        // 原子删除（O-7）：带状态条件的物理删，只有草稿能删；affected=0 说明已被并发删除/审核或状态已变
+        int rows = rsMapper.delete(new LambdaQueryWrapper<ReturnSort>()
+                .eq(ReturnSort::getId, id)
+                .eq(ReturnSort::getStatus, DocStatus.DRAFT.getCode()));
+        if (rows == 0) {
+            if (rsMapper.selectById(id) == null) throw new BusinessException("退货整理单不存在");
+            throw new BusinessException("只有草稿状态可删除");
+        }
         itemMapper.delete(new LambdaQueryWrapper<ReturnSortItem>().eq(ReturnSortItem::getSortId, id));
-        rsMapper.deleteById(id);
     }
 
     /** 源仓库必须为售后仓（前端下拉已过滤，此处防止接口绕过） */

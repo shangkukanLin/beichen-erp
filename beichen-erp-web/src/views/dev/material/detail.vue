@@ -3,7 +3,7 @@ import { reactive, ref, onMounted, onActivated, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
-import { WarehouseCategory, WarehouseCategoryLabel, MaterialPlaceType, MaterialPlaceTypeLabel, DevMaterialStatus, DevMaterialStatusLabel, DEV_MATERIAL_DIRTY_KEY } from '@/api/enums'
+import { WarehouseCategory, WarehouseCategoryLabel, MaterialPlaceType, MaterialPlaceTypeLabel, DevMaterialStatus, DevMaterialStatusLabel, DevMaterialTypeLabel, codeLabelOptions, DEV_MATERIAL_DIRTY_KEY } from '@/api/enums'
 import request from '@/utils/request'
 
 const route = useRoute()
@@ -177,9 +177,8 @@ onActivated(() => {
   loadFlowList()
 })
 
-async function loadMaterialType() {
-  try { const res: any = await request.get('/dev/purchase-item/material-types'); materialTypeOptions.value = res || [] } catch (e) { /* ignore */ }
-}
+/** 类型下拉（2026-09-14：改为前端枚举映射，后端接口已只回 code） */
+function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMaterialTypeLabel) }
 </script>
 
 <template>

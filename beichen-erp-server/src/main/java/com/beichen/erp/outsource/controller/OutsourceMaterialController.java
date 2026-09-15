@@ -15,6 +15,7 @@ import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
 import com.beichen.erp.outsource.service.SupplierMaterialService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -30,6 +31,7 @@ public class OutsourceMaterialController {
     private final ProjectMapper projectMapper;
     private final BomTypeMapper bomTypeMapper;
     private final SupplierMaterialService supplierMaterialService;
+    private final JdbcTemplate jdbcTemplate;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -45,6 +47,10 @@ public class OutsourceMaterialController {
                 .orderByDesc(OutsourceMaterial::getId);
         Page<OutsourceMaterial> page = mapper.selectPage(new Page<>(pageNum, pageSize), w);
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, page.getTotal());
+        // 当前页物料的两个聚合：全仓库存总和、交货中订单的未交数量总和（批量查询避免 N+1）
+        List<Long> pageMaterialIds = page.getRecords().stream().map(OutsourceMaterial::getId).toList();
+        Map<Long, BigDecimal> stockTotalMap = aggregateStockTotal(pageMaterialIds);
+        Map<Long, BigDecimal> undeliveredMap = aggregateUndelivered(pageMaterialIds);
         result.setRecords(page.getRecords().stream().map(m -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", m.getId());
@@ -60,9 +66,39 @@ public class OutsourceMaterialController {
             map.put("status", m.getStatus());
             map.put("remark", m.getRemark());
             map.put("price", m.getPrice());
+            map.put("stockTotal", stockTotalMap.getOrDefault(m.getId(), BigDecimal.ZERO));
+            map.put("undeliveredTotal", undeliveredMap.getOrDefault(m.getId(), BigDecimal.ZERO));
             return map;
         }).toList());
         return R.ok(result);
+    }
+
+    /** 全部仓库的库存数量总和（不分品质/仓库，物料维度汇总） */
+    private Map<Long, BigDecimal> aggregateStockTotal(List<Long> materialIds) {
+        if (materialIds.isEmpty()) return Collections.emptyMap();
+        String in = String.join(",", materialIds.stream().map(String::valueOf).toList());
+        Map<Long, BigDecimal> map = new HashMap<>();
+        jdbcTemplate.query("SELECT material_id, SUM(quantity) AS total FROM warehouse_stock WHERE material_id IN (" + in + ") GROUP BY material_id",
+            rs -> { map.put(rs.getLong("material_id"), rs.getBigDecimal("total")); });
+        return map;
+    }
+
+    /** 交货中（RECEIVING）订单的未交数量总和 = Σ(订购量 - 已收量)，仅累计未交完的明细 */
+    private Map<Long, BigDecimal> aggregateUndelivered(List<Long> materialIds) {
+        if (materialIds.isEmpty()) return Collections.emptyMap();
+        String receiving = com.beichen.erp.outsource.common.MaterialOrderStatus.RECEIVING.getCode();
+        String in = String.join(",", materialIds.stream().map(String::valueOf).toList());
+        Map<Long, BigDecimal> map = new HashMap<>();
+        jdbcTemplate.query(
+            "SELECT moi.outsource_material_id AS mid, SUM(moi.order_quantity - IFNULL(moi.received_quantity, 0)) AS undelivered " +
+            "FROM outsource_material_order_item moi " +
+            "INNER JOIN outsource_material_order mo ON moi.order_id = mo.id " +
+            "WHERE moi.deleted = 0 AND mo.status = '" + receiving + "' " +
+            "AND moi.outsource_material_id IN (" + in + ") " +
+            "AND moi.order_quantity > IFNULL(moi.received_quantity, 0) " +
+            "GROUP BY moi.outsource_material_id",
+            rs -> { map.put(rs.getLong("mid"), rs.getBigDecimal("undelivered")); });
+        return map;
     }
 
     private String idsToNames(String ids, ProjectMapper projectMapper) {

@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getExpensePage, createExpense, updateExpense, auditExpense, unAuditExpense, cancelExpense, getAccountPage, type FinanceExpense, type FinanceAccount } from '@/api/finance'
 import { DocStatusLabel, DocStatusTag } from '@/api/common'
+import { ExpenseTypeLabel as EXPENSE_TYPE_LABELS } from '@/api/enums'
 
 // 费用管理：审核后扣减资金账户并生成「费用支出」流水；反审核冲回（模式与收款单一致）
-const EXPENSE_TYPE_LABELS: Record<string, string> = { OFFICE: '办公费', RENT: '房租水电', SALARY: '工资社保', TRANSPORT: '运输费', TRAVEL: '差旅费', ENTERTAIN: '业务招待', OTHER: '其他' }
 const query = reactive({ expenseType: '', status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
@@ -13,7 +14,7 @@ const data = ref<FinanceExpense[]>([])
 const accounts = ref<FinanceAccount[]>([])
 const dialog = ref(false)
 const dialogTitle = ref('新增费用')
-const form = reactive<FinanceExpense>({ id: undefined, expenseType: 'OFFICE', amount: undefined, expenseDate: new Date().toISOString().slice(0, 10), accountId: undefined, remark: '' })
+const form = reactive<FinanceExpense>({ id: undefined, expenseType: 'OFFICE', amount: undefined, expenseDate: localDate(), accountId: undefined, remark: '' })
 
 async function loadData() {
   loading.value = true
@@ -26,7 +27,7 @@ async function loadData() {
   } catch { data.value = [] } finally { loading.value = false }
 }
 async function loadAccounts() { try { const r = await getAccountPage({pageSize:200}); accounts.value = (r?.records || []).filter((a:any)=>a.status===1) } catch { accounts.value = [] } }
-function handleAdd() { Object.assign(form, { id: undefined, expenseType: 'OFFICE', amount: undefined, expenseDate: new Date().toISOString().slice(0, 10), accountId: undefined, remark: '' }); dialogTitle.value = '新增费用'; dialog.value = true }
+function handleAdd() { Object.assign(form, { id: undefined, expenseType: 'OFFICE', amount: undefined, expenseDate: localDate(), accountId: undefined, remark: '' }); dialogTitle.value = '新增费用'; dialog.value = true }
 function handleEdit(row: FinanceExpense) { Object.assign(form, { id: row.id, expenseType: row.expenseType, amount: row.amount, expenseDate: row.expenseDate, accountId: row.accountId, remark: row.remark }); dialogTitle.value = '编辑费用'; dialog.value = true }
 async function save() {
   if (!form.expenseType) { ElMessage.warning('请选择费用类型'); return }

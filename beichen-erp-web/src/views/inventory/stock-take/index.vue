@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate, localMonth } from '@/utils/date'
 import { reactive, ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { DocStatusLabel, DocStatusTag } from '@/api/common'
@@ -37,9 +38,9 @@ async function loadWarehouses() {
 
 // 新建盘点单
 const createDialog = ref(false)
-const createForm = reactive({ warehouseId: undefined as number | undefined, period: '', takeDate: new Date().toISOString().slice(0, 10), remark: '' })
+const createForm = reactive({ warehouseId: undefined as number | undefined, period: '', takeDate: localDate(), remark: '' })
 function openCreate() {
-  Object.assign(createForm, { warehouseId: undefined, period: new Date().toISOString().slice(0, 7), takeDate: new Date().toISOString().slice(0, 10), remark: '' })
+  Object.assign(createForm, { warehouseId: undefined, period: localMonth(), takeDate: localDate(), remark: '' })
   createDialog.value = true
 }
 async function submitCreate() {

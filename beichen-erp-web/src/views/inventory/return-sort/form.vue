@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, computed, onMounted, onActivated, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -24,7 +25,7 @@ const code = ref('')
 const form = reactive({
   id: undefined as any,
   warehouseId: undefined as any,
-  sortDate: new Date().toISOString().slice(0, 10),
+  sortDate: localDate(),
   targetWarehouseA: undefined as any,
   targetWarehouseB: undefined as any,
   targetWarehouseC: undefined as any,
@@ -51,7 +52,7 @@ const warehouseOptions = ref<any[]>([])
 function resetForm() {
   Object.assign(form, {
     id: undefined, warehouseId: undefined,
-    sortDate: new Date().toISOString().slice(0, 10),
+    sortDate: localDate(),
     targetWarehouseA: undefined, targetWarehouseB: undefined,
     targetWarehouseC: undefined, targetWarehouseDefect: undefined,
     lossAmount: 0, lossRemark: '', remark: ''
@@ -247,7 +248,6 @@ watch(() => route.fullPath, () => { init() })
         <el-button type="primary" :icon="'Download'" :disabled="!form.warehouseId" @click="loadDefectStock">加载售后仓待整理库存</el-button>
       </div>
       <el-table :data="items" border>
-        <el-table-column type="index" label="#" width="50" align="center" />
         <el-table-column label="来源单据" width="190" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.sourceType === AfterSaleSourceType.SALE_EXCHANGE ? 'warning' : 'info'" style="margin-right:4px">

@@ -24,10 +24,11 @@ public class FinancePaymentController {
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
             @RequestParam(required = false) Long supplierId,
+            @RequestParam(required = false) String supplierType,
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize) {
-        return R.ok(service.page(supplierId, status, pageNum, pageSize));
+        return R.ok(service.page(supplierId, supplierType, status, pageNum, pageSize));
     }
 
     @GetMapping("/{id}")

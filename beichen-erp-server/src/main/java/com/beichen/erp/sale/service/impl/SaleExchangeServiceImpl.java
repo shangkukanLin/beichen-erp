@@ -9,6 +9,7 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.entity.FinanceReceivable;
@@ -336,7 +337,10 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
     public void audit(Long id) {
         SaleExchange e = exchangeMapper.selectById(id);
         if (e == null) throw new BusinessException("换货单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(e.getStatus())) throw new BusinessException("只有草稿状态可审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免双向库存重复变动
+        if (!DocStatusGuard.claim(exchangeMapper, SaleExchange::getId, id, SaleExchange::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
+            throw new BusinessException("只有草稿状态可审核");
         List<SaleExchangeItem> items = getItems(id);
         if (items.isEmpty()) throw new BusinessException("换货单明细不能为空");
         // 换入仓必须为售后仓，换出仓必须为成品仓
@@ -377,7 +381,10 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
     public void unAudit(Long id) {
         SaleExchange e = exchangeMapper.selectById(id);
         if (e == null) throw new BusinessException("换货单不存在");
-        if (!DocStatus.AUDITED.getCode().equals(e.getStatus())) throw new BusinessException("只有已审核状态可反审核");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免双向库存重复冲回
+        if (!DocStatusGuard.claim(exchangeMapper, SaleExchange::getId, id, SaleExchange::getStatus,
+                DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
+            throw new BusinessException("只有已审核状态可反审核");
         // 已被退货整理的货物不允许反审核：整理单会把售后仓待分类库存转走，反审核将扣不动或造成跨单据不一致
         assertNotSorted(AfterSaleSourceType.SALE_EXCHANGE, id, "销售换货单");
         List<SaleExchangeItem> items = getItems(id);
@@ -411,7 +418,10 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
     public void cancel(Long id) {
         SaleExchange e = exchangeMapper.selectById(id);
         if (e == null) throw new BusinessException("换货单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(e.getStatus())) throw new BusinessException("只有草稿状态可作废");
+        // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败
+        if (!DocStatusGuard.claim(exchangeMapper, SaleExchange::getId, id, SaleExchange::getStatus,
+                DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("只有草稿状态可作废");
         SaleExchange u = new SaleExchange();
         u.setId(id);
         u.setStatus(DocStatus.CANCELLED.getCode());

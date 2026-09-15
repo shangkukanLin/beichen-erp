@@ -1,18 +1,22 @@
 <script setup lang="ts">
+import { localDate } from '@/utils/date'
 import { reactive, ref, computed, onMounted } from 'vue'
-import { OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeType, OutsourceChargeTypeLabel } from '@/api/enums'
-import { useRouter } from 'vue-router'
+import { OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeType, OutsourceChargeTypeLabel, ProductQualityType, ProductQualityTypeLabel } from '@/api/enums'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
+const route = useRoute()
 const tabStore = useTabStore()
+/** E4：编辑草稿模式（路由 /outsource/return-order/edit/:id）；0 = 新增 */
+const editId = Number(route.params.id) || 0
 
 const form = reactive({
   factoryId: undefined as any, warehouseId: undefined as any,
-  returnDate: new Date().toISOString().slice(0, 10), remark: '',
+  returnDate: localDate(), remark: '',
   // 收费（我方支付给加工厂的费用），审核后生成一条正向应付
   chargeFlag: 0, chargeType: '' as string, chargeAmount: 0, chargeReason: ''
 })
@@ -31,8 +35,13 @@ const loading = ref(false)
 function typeName(id: number | undefined) { if (id == null) return '-'; const t = bomTypes.value.find((v: any) => v.id === id); return t ? t.typeName : (id as any) }
 
 function createEmptyRow() {
-  return { productName: undefined as any, selectedVersion: null as any, versions: [] as any[], returnQuantity: undefined as any, materials: [] as any[], stock: undefined as number | undefined }
+  // qualityType：退回成品规格（审核按该规格从成品仓扣减，避免不同等级间账实错位）
+  return { productName: undefined as any, selectedVersion: null as any, versions: [] as any[], qualityType: ProductQualityType.A as string, returnQuantity: undefined as any, materials: [] as any[], stock: undefined as number | undefined }
 }
+
+/** 退回成品规格可选项（加工退货只允许 A/B/C/不良，不含待分类） */
+const qualityOptions = computed(() => [ProductQualityType.A, ProductQualityType.B, ProductQualityType.C, ProductQualityType.DEFECT]
+  .map(v => ({ value: v, label: ProductQualityTypeLabel[v] || v })))
 
 function usedProducts(idx: number) {
   return rows.value.filter((_, i) => i !== idx).map(r => r.productName).filter(Boolean) as string[]
@@ -99,11 +108,12 @@ async function loadBom(idx: number) {
 async function loadStock(idx: number) {
   const row = rows.value[idx]
   row.stock = undefined
-  const productId = row.selectedVersion?.productId
+  // 库存按「产品主数据ID + 所选规格」查询：productId 是订单产品行ID，不能直接用于库存维度
+  const productId = row.selectedVersion?.productMasterId || row.selectedVersion?.productId
   if (!form.warehouseId || !productId) return
   try {
     const r = await request.get<any, any>('/warehouse/stock/page', {
-      params: { warehouseId: form.warehouseId, productId, stockType: 'PRODUCT', pageSize: 500 }
+      params: { warehouseId: form.warehouseId, productId, qualityType: row.qualityType, stockType: 'PRODUCT', pageSize: 500 }
     })
     const recs: any[] = r?.records || []
     row.stock = recs.reduce((s, x) => s + (Number(x.quantity) || 0), 0)
@@ -176,27 +186,30 @@ async function handleSubmit() {
   }))
   if (items.length === 0) { ElMessage.warning('请选择产品并填写退回数量'); return }
   if (items.some((m: any) => !m.materialId)) { ElMessage.warning('存在未关联委外物料的明细，无法保存，请检查BOM物料是否已登记'); return }
+  const payload = {
+    factoryId: form.factoryId, warehouseId: form.warehouseId,
+    returnDate: form.returnDate, remark: form.remark,
+    chargeFlag: Number(form.chargeFlag) === 1 ? 1 : 0,
+    chargeType: Number(form.chargeFlag) === 1 ? form.chargeType : '',
+    chargeAmount: Number(form.chargeFlag) === 1 ? Number(form.chargeAmount) : 0,
+    chargeReason: Number(form.chargeFlag) === 1 ? (form.chargeReason || '') : '',
+    items, products: rows.value.filter((r: any) => r.productName && Number(r.returnQuantity) > 0).map((r: any) => ({ productName: r.productName, productId: r.selectedVersion?.productId || null, productMasterId: r.selectedVersion?.productMasterId || null, qualityType: r.qualityType || ProductQualityType.A, quantity: Number(r.returnQuantity) }))
+  }
   try {
-    await request.post('/outsource/return-order', {
-      factoryId: form.factoryId, warehouseId: form.warehouseId,
-      returnDate: form.returnDate, remark: form.remark,
-      chargeFlag: Number(form.chargeFlag) === 1 ? 1 : 0,
-      chargeType: Number(form.chargeFlag) === 1 ? form.chargeType : '',
-      chargeAmount: Number(form.chargeFlag) === 1 ? Number(form.chargeAmount) : 0,
-      chargeReason: Number(form.chargeFlag) === 1 ? (form.chargeReason || '') : '',
-      items, products: rows.value.filter((r: any) => r.productName && Number(r.returnQuantity) > 0).map((r: any) => ({ productName: r.productName, productId: r.selectedVersion?.productId || null, quantity: Number(r.returnQuantity) }))
-    })
-    ElMessage.success('退货单草稿已保存，请在列表中审核生效'); sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    // E4：编辑草稿走 PUT（后端仅允许 DRAFT 编辑，明细整体替换；草稿不动库存/应付）
+    if (editId) { await request.put(`/outsource/return-order/${editId}`, payload); ElMessage.success('退货单已更新') }
+    else { await request.post('/outsource/return-order', payload); ElMessage.success('退货单草稿已保存，请在列表中审核生效') }
+    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
     resetForm()
     tabStore.removeTab(window.location.hash.replace('#', ''))
     router.replace('/outsource/return-order')
-  } catch (e: any) { ElMessage.error(e?.message || '创建失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '保存失败') }
 }
 
 function resetForm() {
   Object.assign(form, {
     factoryId: undefined, warehouseId: undefined,
-    returnDate: new Date().toISOString().slice(0, 10), remark: '',
+    returnDate: localDate(), remark: '',
     chargeFlag: 0, chargeType: '', chargeAmount: 0, chargeReason: ''
   })
   rows.value = [createEmptyRow()]
@@ -204,7 +217,39 @@ function resetForm() {
   productList.value = []
 }
 
-onMounted(() => { loadFactories(); loadBomTypes() })
+/** E4：编辑草稿——回填表头 + 按 BOM 版本重建产品行（明细整体替换交由后端） */
+async function loadForEdit(id: number) {
+  loading.value = true
+  try {
+    const d: any = await request.get(`/outsource/return-order/${id}`)
+    Object.assign(form, {
+      factoryId: d.factoryId, warehouseId: d.warehouseId,
+      returnDate: d.returnDate || localDate(), remark: d.remark || '',
+      chargeFlag: Number(d.chargeFlag) === 1 ? 1 : 0, chargeType: d.chargeType || '',
+      chargeAmount: Number(d.chargeAmount) || 0, chargeReason: d.chargeReason || ''
+    })
+    const r: any = await request.get('/outsource/return-order/order-products', { params: { factoryId: d.factoryId } })
+    productList.value = r || []
+    const products: any[] = d.products || []
+    rows.value = products.length
+      ? products.map((p: any) => {
+        const row: any = createEmptyRow()
+        row.productName = p.productName
+        const info = productList.value.find((x: any) => x.productName === p.productName)
+        row.versions = info?.bomVersions || []
+        row.selectedVersion = row.versions[0] || null
+        row.qualityType = p.qualityType || ProductQualityType.A
+        row.returnQuantity = Number(p.quantity) || undefined
+        return row
+      })
+      : [createEmptyRow()]
+    // 逐行拉 BOM 物料（mergedItems 与提交都依赖它）与库存
+    for (let i = 0; i < rows.value.length; i++) await loadBom(i)
+    for (let i = 0; i < rows.value.length; i++) await loadStock(i)
+  } catch (e: any) { ElMessage.error(e?.message || '加载退货单失败') } finally { loading.value = false }
+}
+
+onMounted(async () => { await loadFactories(); loadBomTypes(); if (editId) await loadForEdit(editId) })
 async function loadBomTypes() {
   try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch { bomTypes.value = [] }
 }
@@ -268,6 +313,13 @@ async function loadBomTypes() {
           <template #default="{row,$index}">
             <el-select v-model="row.selectedVersion" size="small" style="width:100%" @change="onVersionChange($index)" value-key="orderId">
               <el-option v-for="v in row.versions" :key="v.orderId" :label="v.orderCode + ' (' + $fmtDate(v.createTime) + ')'" :value="v" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="退回规格" width="100">
+          <template #default="{row,$index}">
+            <el-select v-model="row.qualityType" size="small" style="width:100%" @change="loadStock($index)">
+              <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
             </el-select>
           </template>
         </el-table-column>
