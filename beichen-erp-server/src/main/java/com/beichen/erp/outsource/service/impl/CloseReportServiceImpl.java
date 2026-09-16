@@ -155,6 +155,19 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         }
         result.put("items", items);
 
+        // 退料可行性预检（2026-09-16 问题①）：把"工厂委外仓当前账面库存"一并返回，
+        // 让结单页在提交前就能把"账面不足/为负"的物料标出来（不勾强制退料时，后端会直接拦住结单）
+        for (Map<String, Object> item : items) {
+            Object midObj = item.get("materialId");
+            if (midObj == null) continue;
+            Long mid = Long.valueOf(midObj.toString());
+            BigDecimal stock = BigDecimal.ZERO;
+            for (Long whId : factoryWhIds) {
+                stock = stock.add(warehouseStockService.getMaterialQuantity(whId, mid));
+            }
+            item.put("factoryStockQty", stock);
+        }
+
         // 已保存的报表数据（如果有）
         CloseReport existing = reportMapper.selectOne(
             new LambdaQueryWrapper<CloseReport>().eq(CloseReport::getOrderId, orderId));
@@ -219,8 +232,10 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
                 .add(sumDeliveryQuantity(factoryWhIds, mat.getMaterialId(), DeliveryType.RECEIVE.getCode()))
                 .add(sumOtherIoQuantity(factoryWhIds, mat.getMaterialId()));
 
-        // 退料数量 = 从该工厂仓库退出的退料总和
-        BigDecimal returnedQty = sumDeliveryQuantity(factoryWhIds, mat.getMaterialId(), DeliveryType.RETURN.getCode());
+        // 退料数量 = 历史退料(RETURN，已下线但历史单据仍计入) + 本加工单结单产生的调拨量
+        // （2026-09-16 流程重构：结单"自动退料"改生成调拨单，故口径按 source_order_id 精确归属追平）
+        BigDecimal returnedQty = sumDeliveryQuantity(factoryWhIds, mat.getMaterialId(), DeliveryType.RETURN.getCode())
+                .add(sumCloseReturnQuantity(order.getId(), mat.getMaterialId()));
         item.put("returnedQuantity", returnedQty);
 
         // 出货消耗 = SUM(该产品交货数 × 单套用量)
@@ -231,7 +246,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
                     ? deliveredByProduct.get(ownerProduct.getProductId()) : null;
             if (pDelivered == null) pDelivered = deliveredByProduct.getOrDefault(ownerProduct.getId(), BigDecimal.ZERO);
             if (pDelivered.compareTo(BigDecimal.ZERO) > 0) {
-                shippedTotal = pDelivered.multiply(qps);
+                // 2026-09-16：数量一律为整数 —— 单套用量 qps 是比率，乘出来的数量需取整（四舍五入）
+                shippedTotal = pDelivered.multiply(qps).setScale(0, RoundingMode.HALF_UP);
             }
         }
         item.put("shippedQuantity", shippedTotal);
@@ -268,9 +284,27 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         return sumDeliveryQuantityById(warehouseIds, deliveryType, materialId);
     }
 
+    /**
+     * 本加工单结单产生的"退料量"（2026-09-16 起为**调拨单**，按 source_order_id 精确归属）。
+     * <p>只统计已审核；清算一键退料生成的调拨单没有 source_order_id，故不会误计入加工单退料。</p>
+     */
+    private BigDecimal sumCloseReturnQuantity(Long orderId, Long materialId) {
+        if (orderId == null || materialId == null) return BigDecimal.ZERO;
+        String sql = "SELECT COALESCE(SUM(di.quantity), 0) " +
+            "FROM outsource_delivery_item di " +
+            "INNER JOIN outsource_delivery d ON di.delivery_id = d.id " +
+            "WHERE d.delivery_type = ? AND d.source_order_id = ? AND d.status = '" + DocStatus.AUDITED.getCode() + "' " +
+            "AND di.outsource_material_id = ?";
+        BigDecimal r = jdbcTemplate.queryForObject(sql, BigDecimal.class,
+                DeliveryType.TRANSFER.getCode(), orderId, materialId);
+        return r != null ? r : BigDecimal.ZERO;
+    }
+
     private BigDecimal sumDeliveryQuantityById(List<Long> warehouseIds, String deliveryType, Long materialId) {
         // SQL 直接按 material_id 聚合，避免全量加载
-        String whColumn = DeliveryType.RETURN.getCode().equals(deliveryType) ? "from_warehouse_id" : "to_warehouse_id";
+        // 退料/调拨都是从工厂仓"出"，取 from_warehouse_id；发料/收料是"进"，取 to_warehouse_id
+        String whColumn = (DeliveryType.RETURN.getCode().equals(deliveryType)
+                || DeliveryType.TRANSFER.getCode().equals(deliveryType)) ? "from_warehouse_id" : "to_warehouse_id";
         String sql = "SELECT COALESCE(SUM(di.quantity), 0) " +
             "FROM outsource_delivery_item di " +
             "INNER JOIN outsource_delivery d ON di.delivery_id = d.id " +
@@ -341,16 +375,17 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         if (yieldLoss.compareTo(BigDecimal.ZERO) < 0) yieldLoss = BigDecimal.ZERO;
         item.put("yieldLoss", yieldLoss.setScale(2, RoundingMode.HALF_UP));
 
-        // 超损数量 = (出货消耗 + 不良退料 + 缺失) × (良率超损%/100)（最小0）
+        // 超损数量 = (出货消耗 + 不良退料 + 缺失) × (良率超损%/100)（最小0）；2026-09-16 数量取整为整数
         BigDecimal excessLossQty = shipped.add(defectReturn).add(missing).multiply(yieldLoss.divide(new BigDecimal(100), 6, RoundingMode.HALF_UP));
         if (excessLossQty.compareTo(BigDecimal.ZERO) < 0) excessLossQty = BigDecimal.ZERO;
-        item.put("excessLossQty", excessLossQty.setScale(2, RoundingMode.HALF_UP));
+        excessLossQty = excessLossQty.setScale(0, RoundingMode.HALF_UP);
+        item.put("excessLossQty", excessLossQty);
 
-        // 最大超损 = (用料总数 - 良品退料 - 工厂留存) × (1 - 加工良率/100)（最小0）
+        // 最大超损 = (用料总数 - 良品退料 - 工厂留存) × (1 - 加工良率/100)（最小0）；数量取整为整数
         BigDecimal maxLossRate = BigDecimal.ONE.subtract(targetYield.divide(new BigDecimal(100), 6, RoundingMode.HALF_UP));
         BigDecimal maxExcessLoss = usedTotal.subtract(goodReturn).subtract(factoryRetain).multiply(maxLossRate);
         if (maxExcessLoss.compareTo(BigDecimal.ZERO) < 0) maxExcessLoss = BigDecimal.ZERO;
-        item.put("maxExcessLossQty", maxExcessLoss.setScale(2, RoundingMode.HALF_UP));
+        item.put("maxExcessLossQty", maxExcessLoss.setScale(0, RoundingMode.HALF_UP));
 
         // 超损总价 = 超损数量 × 物料单价
         BigDecimal unitPrice = toBD(item.get("unitPrice"));
@@ -454,9 +489,16 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         }
     }
 
+    /**
+     * 确认结单。
+     *
+     * @param force 2026-09-16（问题①）：委外交货领料走"允许负"口径（clamp 到负数），而结单退料原先走严格口径，
+     *              导致"工厂账面无料（负/无库存行）但实际有料"时退不回来，必须先补入库单。
+     *              {@code force=true}（前端「强制退料」勾选）时退料与缺失按"强制出库"口径扣减（允许负数，流水留痕）。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void confirmClose(Long orderId, Long returnWarehouseId) {
+    public void confirmClose(Long orderId, Long returnWarehouseId, boolean force) {
         OutsourceOrder order = orderMapper.selectById(orderId);
         if (order == null) throw new BusinessException("加工单不存在");
         // 原子抢占加工单状态（P2-29）：并发/双击结单只会成功一次，避免重复退料与重复生成超损应付
@@ -502,16 +544,16 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             }
         }
 
-        // 生成退料单
+        // 生成"退料"单据（2026-09-16 流程重构：退料下线，改生成**调拨单**：工厂委外仓 → 退回仓）
         if (!returnItems.isEmpty()) {
             OutsourceDelivery returnDelivery = new OutsourceDelivery();
-            returnDelivery.setDeliveryType(DeliveryType.RETURN.getCode());
+            returnDelivery.setDeliveryType(DeliveryType.TRANSFER.getCode());
             returnDelivery.setFactoryId(order.getFactoryId());
             returnDelivery.setFromWarehouseId(factoryWhId);
             returnDelivery.setToWarehouseId(returnWarehouseId);
             returnDelivery.setDeliveryDate(LocalDate.now());
             returnDelivery.setStatus(DocStatus.AUDITED.getCode());
-            returnDelivery.setRemark("结单自动退料 - " + order.getCode());
+            returnDelivery.setRemark("结单自动退料（调拨）- " + order.getCode());
             returnDelivery.setCode(generateDeliveryCode());
             // 关联加工单，便于反结单精确定位退料单
             returnDelivery.setSourceOrderId(orderId);
@@ -521,9 +563,17 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
                 di.setDeliveryId(returnDelivery.getId());
                 deliveryItemMapper.insert(di);
                 // 退料：工厂委外仓减少（消耗）
-                warehouseStockService.changeMaterialStock(factoryWhId, di.getMaterialId(), di.getQuantity().negate(),
-                        StockChangeType.OUTSOURCE_RETURN_OUT.getCode(), order.getCode(),
-                        RelatedBillType.OUTSOURCE_RETURN, returnDelivery.getId(), orderId);
+                // 问题①（2026-09-16）：严格口径下账面不足会直接抛错（"物料[X]库存不足…"）；force=true 时
+                // 按"强制出库"口径扣减（允许负数，流水以 changeType/单据号留痕），与调拨的强制出库同规格
+                if (force) {
+                    warehouseStockService.changeMaterialStockAllowNegative(factoryWhId, di.getMaterialId(), di.getQuantity().negate(),
+                            StockChangeType.OUTSOURCE_RETURN_OUT.getCode(), order.getCode(),
+                            RelatedBillType.OUTSOURCE_RETURN, returnDelivery.getId(), orderId, returnDelivery.getId());
+                } else {
+                    warehouseStockService.changeMaterialStock(factoryWhId, di.getMaterialId(), di.getQuantity().negate(),
+                            StockChangeType.OUTSOURCE_RETURN_OUT.getCode(), order.getCode(),
+                            RelatedBillType.OUTSOURCE_RETURN, returnDelivery.getId(), orderId);
+                }
                 // 退回仓库增加
                 warehouseStockService.changeMaterialStock(returnWarehouseId, di.getMaterialId(), di.getQuantity(),
                         StockChangeType.SETTLEMENT_RETURN_IN.getCode(), order.getCode(),
@@ -561,7 +611,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             for (OutsourceOtherIoItem oi : missingItems) {
                 oi.setOtherIoId(io.getId());
                 otherIoItemMapper.insert(oi);
-                deductStockById(warehouses.get(0).getId(), oi.getMaterialId(), oi.getQuantity(), order.getCode(), orderId);
+                deductStockById(warehouses.get(0).getId(), oi.getMaterialId(), oi.getQuantity(), order.getCode(), orderId, force);
             }
             log.info("加工单(ID={}) 结单生成缺失出库{}项", orderId, missingItems.size());
         }
@@ -618,23 +668,26 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         payableHelper.reversePayable(report.getId(), SourceBillType.OUTSOURCE_EXCESS_LOSS.getCode());
 
         // 2. 逆向退料单：作废 + 工厂仓加回、退回仓减回
+        // （2026-09-16 起结单生成的是"调拨单"，故同时匹配历史 RETURN 与新的 TRANSFER）
         List<OutsourceDelivery> returnDeliveries = deliveryMapper.selectList(
             new LambdaQueryWrapper<OutsourceDelivery>()
                 .eq(OutsourceDelivery::getSourceOrderId, orderId)
-                .eq(OutsourceDelivery::getDeliveryType, DeliveryType.RETURN.getCode()));
+                .in(OutsourceDelivery::getDeliveryType, DeliveryType.RETURN.getCode(), DeliveryType.TRANSFER.getCode()));
         for (OutsourceDelivery rd : returnDeliveries) {
             if (DocStatus.CANCELLED.getCode().equals(rd.getStatus())) continue;
             List<OutsourceDeliveryItem> rItems = deliveryItemMapper.selectList(
                 new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getDeliveryId, rd.getId()));
             for (OutsourceDeliveryItem di : rItems) {
                 // 工厂委外仓加回（结单时是减）
-                warehouseStockService.changeMaterialStock(rd.getFromWarehouseId(), di.getMaterialId(), di.getQuantity(),
+                // 2026-09-16 修复（问题①连带的死锁）：逆向腿必须用"允许负"口径 —— 严格口径的 SQL 带
+                // quantity+delta>=0 护栏，账面为负时**连"往回加"都会被判"库存不足"**（实测：强制退料后反结单 500 卡死）
+                warehouseStockService.changeMaterialStockAllowNegative(rd.getFromWarehouseId(), di.getMaterialId(), di.getQuantity(),
                         StockChangeType.OUTSOURCE_RETURN_OUT.getCode(), order.getCode(),
-                        RelatedBillType.OUTSOURCE_RETURN, rd.getId(), orderId);
-                // 退回仓减回（结单时是加）
-                warehouseStockService.changeMaterialStock(rd.getToWarehouseId(), di.getMaterialId(), di.getQuantity().negate(),
+                        RelatedBillType.OUTSOURCE_RETURN, rd.getId(), orderId, rd.getId());
+                // 退回仓减回（结单时是加）；同为纯回滚，与调拨反审核同口径（不因库存被消耗而拦死）
+                warehouseStockService.changeMaterialStockAllowNegative(rd.getToWarehouseId(), di.getMaterialId(), di.getQuantity().negate(),
                         StockChangeType.SETTLEMENT_RETURN_IN.getCode(), order.getCode(),
-                        RelatedBillType.OUTSOURCE_RETURN, rd.getId(), orderId);
+                        RelatedBillType.OUTSOURCE_RETURN, rd.getId(), orderId, rd.getId());
             }
             // 作废退料单
             OutsourceDelivery updD = new OutsourceDelivery();
@@ -653,9 +706,10 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             List<OutsourceOtherIoItem> ioItems = otherIoItemMapper.selectList(
                 new LambdaQueryWrapper<OutsourceOtherIoItem>().eq(OutsourceOtherIoItem::getOtherIoId, io.getId()));
             for (OutsourceOtherIoItem oi : ioItems) {
-                warehouseStockService.changeMaterialStock(io.getWarehouseId(), oi.getMaterialId(), oi.getQuantity(),
+                // 缺失单逆向（加回工厂仓）：同"纯回滚"，用允许负口径（见上，避免负库存时被护栏拦死）
+                warehouseStockService.changeMaterialStockAllowNegative(io.getWarehouseId(), oi.getMaterialId(), oi.getQuantity(),
                         StockChangeType.OUTSOURCE_RETURN_OUT.getCode(), order.getCode(),
-                        RelatedBillType.OUTSOURCE_RETURN, io.getId(), orderId);
+                        RelatedBillType.OUTSOURCE_RETURN, io.getId(), orderId, io.getId());
             }
             // 作废缺失单
             OutsourceOtherIo updIo = new OutsourceOtherIo();
@@ -689,12 +743,18 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         return di;
     }
 
-    /** 缺失扣库存：工厂委外仓减少（消耗） */
-    private void deductStockById(Long warehouseId, Long materialId, BigDecimal qty, String orderCode, Long orderId) {
+    /** 缺失扣库存：工厂委外仓减少（消耗）；force=true 时按强制出库口径（允许负数，与退料腿一致） */
+    private void deductStockById(Long warehouseId, Long materialId, BigDecimal qty, String orderCode, Long orderId, boolean force) {
         if (materialId == null || qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) return;
-        warehouseStockService.changeMaterialStock(warehouseId, materialId, qty.negate(),
-                StockChangeType.OUTSOURCE_RETURN_OUT.getCode(), orderCode,
-                RelatedBillType.OUTSOURCE_RETURN, null, orderId);
+        if (force) {
+            warehouseStockService.changeMaterialStockAllowNegative(warehouseId, materialId, qty.negate(),
+                    StockChangeType.OUTSOURCE_RETURN_OUT.getCode(), orderCode,
+                    RelatedBillType.OUTSOURCE_RETURN, null, orderId, null);
+        } else {
+            warehouseStockService.changeMaterialStock(warehouseId, materialId, qty.negate(),
+                    StockChangeType.OUTSOURCE_RETURN_OUT.getCode(), orderCode,
+                    RelatedBillType.OUTSOURCE_RETURN, null, orderId);
+        }
     }
 
     private String generateDeliveryCode() {

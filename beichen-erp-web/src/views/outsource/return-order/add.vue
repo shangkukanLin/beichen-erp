@@ -331,7 +331,7 @@ async function loadMaterialTypes() {
         </el-table-column>
         <el-table-column label="退回数量" width="110">
           <template #default="{row}">
-            <el-input v-model="row.returnQuantity" size="small" type="number" @change="onQtyChange()" />
+            <el-input-number v-model="row.returnQuantity" size="small" :controls="false" :precision="0" :step="1" style="width:100%" @change="onQtyChange()" />
             <div v-if="overStock(row)" style="color:#f56c6c;font-size:var(--app-font-xs);line-height:1.2;margin-top:2px">超出库存</div>
           </template>
         </el-table-column>

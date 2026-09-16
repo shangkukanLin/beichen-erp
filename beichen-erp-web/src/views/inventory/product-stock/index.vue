@@ -164,7 +164,8 @@ async function exportProductStock() {
   XLSX.writeFile(wb, `成品库存汇总_${localDate()}.xlsx`)
 }
 
-function fmt(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
+// 数量一律整数（2026-09-16）
+function fmt(v?: number) { return v == null ? '0' : String(Math.round(Number(v))) }
 
 /** 品质数量配色：有量用品质色加粗，为 0 统一置灰，避免满屏色块干扰阅读 */
 function qtyClass(v: number, type: 'a' | 'b' | 'c' | 'defect' | 'pending') {

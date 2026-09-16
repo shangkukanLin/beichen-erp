@@ -365,7 +365,7 @@ onActivated(() => { loadAll() })
           </template></el-table-column>
           <el-table-column prop="unit" label="单位" width="60" />
           <el-table-column label="下单数" width="110"><template #default="{row}">
-            <el-input-number v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.orderQuantity" :min="0" size="small" style="width:100%" />
+            <el-input-number v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.orderQuantity" :min="0" :precision="0" :step="1" size="small" style="width:100%" />
             <span v-else>{{ row.orderQuantity }}</span>
           </template></el-table-column>
           <el-table-column label="已出货" width="90"><template #default="{row}"><span :style="{color:row.receivedQuantity>0?'var(--app-color-success)':''}">{{ row.receivedQuantity || 0 }}</span></template></el-table-column>
@@ -470,7 +470,7 @@ onActivated(() => { loadAll() })
         </el-table-column>
         <el-table-column prop="materialName" label="物料" min-width="140" />
         <el-table-column label="已收" width="70" align="right"><template #default="{row}">{{ (row.receivedQuantity || 0) - (row.defectReturnedQty || 0) }}</template></el-table-column>
-        <el-table-column label="本次交货" width="140"><template #default="{row}"><el-input v-model="row.quantity" size="small" type="number" placeholder="数量" /></template></el-table-column>
+        <el-table-column label="本次交货" width="140"><template #default="{row}"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" style="width:100%" placeholder="数量" /></template></el-table-column>
         <el-table-column prop="orderQuantity" label="下单数" width="80" />
       </el-table>
       <template #footer><el-button @click="recVisible=false">取消</el-button><el-button type="primary" :loading="recSaving" @click="() => handleReceive()">确认交货</el-button></template>
@@ -489,7 +489,7 @@ onActivated(() => { loadAll() })
         <el-table-column prop="materialName" label="物料" min-width="140" />
         <el-table-column prop="available" label="可退" width="70" />
         <el-table-column label="仓库库存" width="90" align="right"><template #default="{row}"><span v-if="row.stockLoading">加载中...</span><span v-else-if="row.warehouseStock===undefined" style="color:var(--app-text-placeholder)">—</span><span v-else :style="{color:row.warehouseStock<row.quantity?'var(--app-color-danger)':'var(--app-color-success)'}">{{ row.warehouseStock }}</span></template></el-table-column>
-        <el-table-column label="退料数量" width="140"><template #default="{row}"><el-input v-model="row.quantity" size="small" type="number" placeholder="数量" /></template></el-table-column>
+        <el-table-column label="退料数量" width="140"><template #default="{row}"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" style="width:100%" placeholder="数量" /></template></el-table-column>
       </el-table>
       <template #footer><el-button @click="defectVisible=false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认退料</el-button></template>
     </el-dialog>

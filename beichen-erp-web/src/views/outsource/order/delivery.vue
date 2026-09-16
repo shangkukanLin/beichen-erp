@@ -243,12 +243,13 @@ onMounted(loadData)
         <el-form-item label="等级数量">
           <div style="width:100%">
             <el-row :gutter="8">
-              <el-col :span="12"><el-input v-model="form.aQty" type="number" placeholder="A规数量" /></el-col>
-              <el-col :span="12"><el-input v-model="form.bQty" type="number" placeholder="B规数量" /></el-col>
+              <!-- 数量一律整数：该字段为 string 类型，故保留 el-input + change 取整（2026-09-16） -->
+              <el-col :span="12"><el-input v-model="form.aQty" type="number" placeholder="A规数量" @change="form.aQty = String(Math.round(Number(form.aQty) || 0))" /></el-col>
+              <el-col :span="12"><el-input v-model="form.bQty" type="number" placeholder="B规数量" @change="form.bQty = String(Math.round(Number(form.bQty) || 0))" /></el-col>
             </el-row>
             <el-row :gutter="8" style="margin-top:6px">
-              <el-col :span="12"><el-input v-model="form.cQty" type="number" placeholder="C规数量" /></el-col>
-              <el-col :span="12"><el-input v-model="form.defectQty" type="number" placeholder="不良数量" /></el-col>
+              <el-col :span="12"><el-input v-model="form.cQty" type="number" placeholder="C规数量" @change="form.cQty = String(Math.round(Number(form.cQty) || 0))" /></el-col>
+              <el-col :span="12"><el-input v-model="form.defectQty" type="number" placeholder="不良数量" @change="form.defectQty = String(Math.round(Number(form.defectQty) || 0))" /></el-col>
             </el-row>
             <div style="margin-top:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">合计：<b style="color:var(--app-text-primary)">{{ totalGrade }}</b>（自动作为总数量）</div>
           </div>

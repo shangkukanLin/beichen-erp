@@ -212,7 +212,7 @@ onActivated(() => { loadDetail() })
           <template #default="{row}"><el-input v-model="row.unit_price" size="small" placeholder="单价"/></template>
         </el-table-column>
         <el-table-column label="数量" width="110">
-          <template #default="{row}"><el-input v-model="row.quantity" size="small" type="number"/></template>
+          <template #default="{row}"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" style="width:100%" /></template>
         </el-table-column>
         <el-table-column label="操作" width="70" align="center">
           <template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template>

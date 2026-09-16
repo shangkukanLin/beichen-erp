@@ -33,6 +33,11 @@ public class OutsourceDelivery {
     private Long toWarehouseId;
     /** 是否供应商直发：0=否(从我方仓发) / 1=是(供应商直发工厂)，仅发料使用 */
     private Integer supplierDirect;
+    /**
+     * 是否允许强制出库（把来源仓扣成负库存）：0/null=否（默认严格校验，库存不足直接报错）。
+     * 2026-09-16 流程重构新增，仅「调拨」使用 —— 工厂实际有货但账面未记时的显式旁路。
+     */
+    private Integer allowNegative;
     /** 供应商ID（供应商直发时记录） */
     private Long supplierId;
     /** 物流公司（选填） */

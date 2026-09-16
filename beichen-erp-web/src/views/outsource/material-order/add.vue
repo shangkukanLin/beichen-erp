@@ -204,7 +204,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
           </template>
         </el-table-column>
         <el-table-column label="单位" width="60"><template #default="{row}">{{ row.unit }}</template></el-table-column>
-        <el-table-column label="数量" width="110"><template #default="{row}"><el-input v-model="row.orderQuantity" size="small" type="number" /></template></el-table-column>
+        <el-table-column label="数量" width="110"><template #default="{row}"><el-input-number v-model="row.orderQuantity" size="small" :controls="false" :precision="0" :step="1" style="width:100%" /></template></el-table-column>
         <el-table-column :label="form.orderType===OrderType.OUTSOURCE?'加工费单价':'单价'" width="100"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" /></template></el-table-column>
         <el-table-column label="备注" min-width="100"><template #default="{row}"><el-input v-model="row.remark" size="small" /></template></el-table-column>
         <el-table-column label="操作" width="70" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>

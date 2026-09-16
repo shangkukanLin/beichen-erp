@@ -61,7 +61,7 @@
         </el-table-column>
         <el-table-column label="报损数量" width="120" align="right">
           <template #default="{ row }">
-            <el-input-number v-model="row.quantity" :min="0" :precision="4" :controls="false"
+            <el-input-number v-model="row.quantity" :min="0" :precision="0" :step="1" :controls="false"
               size="small" style="width:100%" @change="() => calcAmount(row)" />
             <div v-if="overStock(row)" class="warn">超出可用库存</div>
           </template>
@@ -135,7 +135,8 @@ const form = reactive({
 })
 const items = ref<any[]>([])
 
-function fmtQty(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
+// 数量一律整数（2026-09-16）
+function fmtQty(v?: number) { return v == null ? '0' : String(Math.round(Number(v))) }
 function money(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 const totalAmount = computed(() => items.value.reduce((s, r) => s + (Number(r.amount) || 0), 0))
 

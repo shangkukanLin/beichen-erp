@@ -20,6 +20,17 @@ const items = ref<any[]>([])
 const remark = ref('')
 const materialTypes = ref<any[]>([])
 const returnWarehouseId = ref<number | null>(null)
+// 强制退料（2026-09-16 问题①）：委外交货领料走"允许负"口径 → 工厂仓账面常为负/无库存行；
+// 此时严格口径会直接拦住结单，需显式勾选"强制退料"（按强制出库口径扣减，允许负数，流水留痕）
+const forceReturn = ref(false)
+const showForceDialog = ref(false)
+/** 退料数量是否超过工厂委外仓账面库存（后端返回 factoryStockQty） */
+function rowShortage(row: any) {
+  const ret = (Number(row.goodReturnQty) || 0) + (Number(row.defectReturnQty) || 0)
+  const stock = Number(row.factoryStockQty) || 0
+  return ret > stock + 0.000005
+}
+const shortageRows = computed(() => (items.value || []).filter((r: any) => rowShortage(r)))
 // 退回仓库选择：纯 Odoo 方案，RemoteSelect 实时查库
 const fetchWarehouses = (kw: string) =>
   request.get('/warehouse/page', { params: { warehouseName: kw, pageSize: 500 } })
@@ -101,13 +112,26 @@ async function handleConfirm() {
     ElMessage.warning('请选择退回仓库')
     return
   }
+  // 2026-09-16 问题①：退料超过工厂仓账面库存时，先弹窗列明细 + 勾选强制退料，
+  // 而不是让用户直接吃后端"库存不足，无法出库"的报错
+  if (shortageRows.value.length > 0) {
+    forceReturn.value = false
+    showForceDialog.value = true
+    return
+  }
   try {
     await ElMessageBox.confirm('确认结单？结单后将自动生成退料单，加工单状态变为"已完成"。', '确认结单', { type: 'warning' })
   } catch { return }
+  await doConfirm(false)
+}
+
+/** force=true：按"强制出库"口径退料（允许把委外仓扣成负数） */
+async function doConfirm(force: boolean) {
   try {
     // 先保存最终数据
     await request.put(`/outsource/order/${orderId}/close-report`, { items: items.value, remark: remark.value })
-    await request.post(`/outsource/order/${orderId}/close-report/confirm`, { returnWarehouseId: returnWarehouseId.value })
+    await request.post(`/outsource/order/${orderId}/close-report/confirm`, { returnWarehouseId: returnWarehouseId.value, force })
+    showForceDialog.value = false
     ElMessage.success('结单完成')
     loadReport()
   } catch (e: any) {
@@ -129,6 +153,8 @@ async function handleReopen() {
 }
 
 function fmt(v: any) { return v !== undefined && v !== null ? Number(v).toFixed(2) : '0.00' }
+/** 数量列展示：整数（2026-09-16 数量一律为整数；金额/单价/良率仍用 fmt） */
+function fmtQty(v: any) { return v !== undefined && v !== null ? String(Math.round(Number(v))) : '0' }
 
 onMounted(() => { loadMaterialTypes(); loadReport() })
 </script>
@@ -169,23 +195,35 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
       </template>
       <el-table :data="items" border size="small" stripe show-summary :summary-method="() => []">
         <el-table-column label="类目" width="70"><template #default="{row}">{{ typeName(row.materialTypeId) }}</template></el-table-column>
-        <el-table-column prop="materialName" label="物料名称" min-width="120" />
+        <el-table-column prop="materialName" label="物料名称" min-width="120">
+          <template #default="{row}">
+            {{ row.materialName }}
+            <el-tooltip v-if="rowShortage(row)" content="退料数量超过工厂委外仓账面库存，需勾选「强制退料」才能结单" placement="top">
+              <el-tag type="danger" size="small" effect="plain" style="margin-left:4px">账面不足</el-tag>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+        <el-table-column label="工厂仓账面" width="110" align="right">
+          <template #default="{row}">
+            <span :style="{color: Number(row.factoryStockQty) < 0 ? 'var(--app-color-danger)' : 'var(--app-text-regular)'}">{{ fmtQty(row.factoryStockQty) }}</span>
+          </template>
+        </el-table-column>
 
 
-        <el-table-column label="用料总数" width="90"><template #default="{row}">{{ fmt(row.usedTotalQuantity) }}</template></el-table-column>
-        <el-table-column label="退料总计" width="90" align="right"><template #default="{row}">{{ fmt((+row.goodReturnQty||0) + (+row.defectReturnQty||0)) }}</template></el-table-column>
-        <el-table-column label="出货消耗" width="90"><template #default="{row}">{{ fmt(row.shippedQuantity) }}</template></el-table-column>
+        <el-table-column label="用料总数" width="90"><template #default="{row}">{{ fmtQty(row.usedTotalQuantity) }}</template></el-table-column>
+        <el-table-column label="退料总计" width="90" align="right"><template #default="{row}">{{ fmtQty((+row.goodReturnQty||0) + (+row.defectReturnQty||0)) }}</template></el-table-column>
+        <el-table-column label="出货消耗" width="90"><template #default="{row}">{{ fmtQty(row.shippedQuantity) }}</template></el-table-column>
         <el-table-column label="良品退料" width="100">
-          <template #default="{row}"><el-input v-model="row.goodReturnQty" size="small" type="number" @change="onGoodChange(row)" /></template>
+          <template #default="{row}"><el-input-number v-model="row.goodReturnQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" @change="onGoodChange(row)" /></template>
         </el-table-column>
         <el-table-column label="不良退料" width="100">
-          <template #default="{row}"><el-input v-model="row.defectReturnQty" size="small" type="number" @change="onDefectChange(row)" /></template>
+          <template #default="{row}"><el-input-number v-model="row.defectReturnQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" @change="onDefectChange(row)" /></template>
         </el-table-column>
         <el-table-column label="留存工厂" width="90">
-          <template #default="{row}"><el-input v-model="row.factoryRetainQty" size="small" type="number" @change="onRetainChange(row)" /></template>
+          <template #default="{row}"><el-input-number v-model="row.factoryRetainQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" @change="onRetainChange(row)" /></template>
         </el-table-column>
         <el-table-column label="缺失" width="90">
-          <template #default="{row}"><el-input v-model="row.missingQty" size="small" type="number" @change="recalc(row)" /></template>
+          <template #default="{row}"><el-input-number v-model="row.missingQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" @change="recalc(row)" /></template>
         </el-table-column>
         <el-table-column label="加工良率%" width="90">
           <template #default="{row}"><span style="color:var(--app-color-primary)">{{ fmt(row.targetYieldRate) }}</span></template>
@@ -197,10 +235,10 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
           <template #default="{row}"><span :style="{color: row.yieldLoss > 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ fmt(row.yieldLoss) }}</span></template>
         </el-table-column>
         <el-table-column label="超损数量" width="90">
-          <template #default="{row}"><span :style="{color: row.excessLossQty > 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ fmt(row.excessLossQty) }}</span></template>
+          <template #default="{row}"><span :style="{color: row.excessLossQty > 0 ? 'var(--app-color-danger)' : 'var(--app-color-success)'}">{{ fmtQty(row.excessLossQty) }}</span></template>
         </el-table-column>
         <el-table-column label="最大超损" width="90">
-          <template #default="{row}">{{ fmt(row.maxExcessLossQty) }}</template>
+          <template #default="{row}">{{ fmtQty(row.maxExcessLossQty) }}</template>
         </el-table-column>
         <el-table-column label="物料单价" width="100">
           <template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" @change="recalc(row)" /></template>
@@ -236,6 +274,32 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
       <el-button v-if="report.reportStatus===CloseReportStatus.FINISHED" type="warning" @click="handleReopen">反结单</el-button>
       <el-button type="info" @click="handleExport">导出Excel</el-button>
     </div>
+
+    <!-- 强制退料确认（2026-09-16 问题①）：账面库存不足时的显式旁路 -->
+    <el-dialog v-model="showForceDialog" title="存在退料超出工厂仓账面库存的物料" width="640px">
+      <el-alert type="warning" :closable="false" show-icon
+        title="以下物料的退料数量超过工厂委外仓账面库存"
+        description="委外交货领料走「允许负」口径，工厂仓账面常为负或没有库存行，此时严格口径会阻止结单。如需按实际情况退料，请勾选下方「强制退料」；否则请先补入库单或下调退料数量。" />
+      <el-table :data="shortageRows" border size="small" max-height="240" style="margin-top:12px">
+        <el-table-column prop="materialName" label="物料" min-width="130" />
+        <el-table-column label="工厂仓账面" width="110" align="right">
+          <template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmtQty(row.factoryStockQty) }}</span></template>
+        </el-table-column>
+        <el-table-column label="拟退料" width="100" align="right">
+          <template #default="{row}">{{ fmtQty((+row.goodReturnQty||0) + (+row.defectReturnQty||0)) }}</template>
+        </el-table-column>
+        <el-table-column label="缺口" width="100" align="right">
+          <template #default="{row}">{{ fmtQty(Math.max(0, (+row.goodReturnQty||0) + (+row.defectReturnQty||0) - (+row.factoryStockQty||0))) }}</template>
+        </el-table-column>
+      </el-table>
+      <el-checkbox v-model="forceReturn" style="margin-top:12px">
+        <span style="color:var(--app-color-danger)">强制退料</span>（按强制出库口径扣减，允许把工厂委外仓扣成负数，库存流水会留痕）
+      </el-checkbox>
+      <template #footer>
+        <el-button @click="showForceDialog=false">取消</el-button>
+        <el-button type="danger" :disabled="!forceReturn" @click="doConfirm(true)">确认结单（强制退料）</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

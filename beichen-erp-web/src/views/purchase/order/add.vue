@@ -67,25 +67,25 @@
               <div style="font-size:var(--app-font-xs);line-height:28px">
                 <div style="display:flex;align-items:center;gap:4px">
                   <span style="width:36px;text-align:right;color:var(--app-text-secondary)">A规</span>
-                  <el-input v-model="row.aQty" type="number" size="small" placeholder="数量" style="flex:1;min-width:56px" />
+                  <el-input-number v-model="row.aQty" :controls="false" :precision="0" :step="1" size="small" placeholder="数量" style="flex:1;min-width:56px" />
                   <el-input v-model="row.aPrice" type="number" size="small" placeholder="单价" style="flex:1;min-width:56px" />
                   <span style="width:64px;text-align:right">{{ gradeSubtotal(row.aQty, row.aPrice) }}</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px">
                   <span style="width:36px;text-align:right;color:var(--app-text-secondary)">B规</span>
-                  <el-input v-model="row.bQty" type="number" size="small" placeholder="数量" style="flex:1;min-width:56px" />
+                  <el-input-number v-model="row.bQty" :controls="false" :precision="0" :step="1" size="small" placeholder="数量" style="flex:1;min-width:56px" />
                   <el-input v-model="row.bPrice" type="number" size="small" placeholder="单价" style="flex:1;min-width:56px" />
                   <span style="width:64px;text-align:right">{{ gradeSubtotal(row.bQty, row.bPrice) }}</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px">
                   <span style="width:36px;text-align:right;color:var(--app-text-secondary)">C规</span>
-                  <el-input v-model="row.cQty" type="number" size="small" placeholder="数量" style="flex:1;min-width:56px" />
+                  <el-input-number v-model="row.cQty" :controls="false" :precision="0" :step="1" size="small" placeholder="数量" style="flex:1;min-width:56px" />
                   <el-input v-model="row.cPrice" type="number" size="small" placeholder="单价" style="flex:1;min-width:56px" />
                   <span style="width:64px;text-align:right">{{ gradeSubtotal(row.cQty, row.cPrice) }}</span>
                 </div>
                 <div style="display:flex;align-items:center;gap:4px">
                   <span style="width:36px;text-align:right;color:var(--app-text-secondary)">不良</span>
-                  <el-input v-model="row.defectQty" type="number" size="small" placeholder="数量" style="flex:1;min-width:56px" />
+                  <el-input-number v-model="row.defectQty" :controls="false" :precision="0" :step="1" size="small" placeholder="数量" style="flex:1;min-width:56px" />
                   <el-input v-model="row.defectPrice" type="number" size="small" placeholder="单价" style="flex:1;min-width:56px" />
                   <span style="width:64px;text-align:right">{{ gradeSubtotal(row.defectQty, row.defectPrice) }}</span>
                 </div>

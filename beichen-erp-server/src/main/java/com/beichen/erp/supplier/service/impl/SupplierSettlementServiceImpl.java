@@ -2,6 +2,7 @@ package com.beichen.erp.supplier.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.common.BillPrefix;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.common.R;
 import com.beichen.erp.dev.entity.MaterialType;
 import com.beichen.erp.dev.mapper.MaterialTypeMapper;
@@ -22,10 +23,8 @@ import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
-import com.beichen.erp.warehouse.entity.WarehouseStockLog;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
-import com.beichen.erp.warehouse.mapper.WarehouseStockLogMapper;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.entity.dto.ReturnMaterialDTO;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
@@ -67,8 +66,6 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
     private OutsourceDeliveryMapper deliveryMapper;
     @Resource
     private OutsourceDeliveryItemMapper deliveryItemMapper;
-    @Resource
-    private WarehouseStockLogMapper stockLogMapper;
     @Resource
     private WarehouseStockService warehouseStockService;
     @Resource
@@ -185,12 +182,17 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
             if (list.isEmpty()) continue;
 
             OutsourceDelivery delivery = new OutsourceDelivery();
-            delivery.setDeliveryType(DeliveryType.RETURN.getCode());
+            // 2026-09-16 流程重构：退料(RETURN)整体下线，清算"一键退料"改生成**调拨单**（委外仓 → 我方物料仓）。
+            // 库存效果与原先完全一致（委外仓清零 + 我方仓回补），只是单据类型换成 调拨、语义为"仓库间转移"。
+            delivery.setDeliveryType(DeliveryType.TRANSFER.getCode());
             delivery.setFactoryId(supplierId);
             delivery.setFromWarehouseId(wh.getId());
+            delivery.setToWarehouseId(dto.getToWarehouseId());
             delivery.setDeliveryDate(LocalDate.now());
-            delivery.setStatus(DeliveryStatus.CONFIRMED.getCode());
-            delivery.setRemark("清算退料 - " + s.getName());
+            // 用 DocStatus（原先写 DeliveryStatus.CONFIRMED，前端状态列渲染不出、反审核也不成立；
+            // 同 2026-09-12 对"加工厂遗失"出库单的修正口径）
+            delivery.setStatus(DocStatus.AUDITED.getCode());
+            delivery.setRemark("清算退料（调拨）- " + s.getName());
             delivery.setCode(count == 0 ? code : generateDeliveryCode());
             deliveryMapper.insert(delivery);
             count++;
@@ -198,20 +200,14 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
             for (WarehouseStock st : list) {
                 BigDecimal qty = st.getQuantity();
                 OutsourceMaterial mat = st.getMaterialId() != null ? materialMapper.selectById(st.getMaterialId()) : null;
-                String matName = mat != null ? mat.getMaterialName() : "未知物料";
 
-                // 委外仓扣减 + 流水
-                BigDecimal before = st.getQuantity();
-                st.setQuantity(BigDecimal.ZERO);
-                warehouseStockMapper.updateById(st);
-                WarehouseStockLog slog = new WarehouseStockLog();
-                slog.setWarehouseId(wh.getId()); slog.setMaterialId(st.getMaterialId());
-                slog.setMaterialName(matName); slog.setChangeType(StockChangeType.SETTLEMENT_RETURN_OUT.getCode());
-                // 品质维度与库存行同口径（委外物料侧固定 GOOD），否则按 (仓库,物料,品质) 对账会错位
-                slog.setQualityType(QualityType.GOOD.getCode());
-                slog.setChangeQuantity(qty.negate()); slog.setBeforeQuantity(before);
-                slog.setAfterQuantity(BigDecimal.ZERO); slog.setRelatedOrderCode(delivery.getCode());
-                stockLogMapper.insert(slog);
+                // 委外仓扣减 + 流水（2026-09-16 问题③：原先此处直写 mapper + 手写流水，只写了 related_order_code，
+                // 导致**同一张单据两条腿口径不一致** —— 出库腿 related_bill_type 为 NULL，按单据类型对账会漏行。
+                // 现统一走 WarehouseStockService（物料侧唯一写入口，自动补 before/after、物料名、单据类型/单据号）；
+                // 沿用"允许负数"口径（清算对象都是正库存行，语义等价于原先的"清零"）。
+                warehouseStockService.changeMaterialStockAllowNegative(wh.getId(), st.getMaterialId(), qty.negate(),
+                        StockChangeType.SETTLEMENT_RETURN_OUT.getCode(), delivery.getCode(),
+                        RelatedBillType.SUPPLIER_SETTLEMENT, delivery.getId(), null, null);
 
                 // 收发单明细
                 OutsourceDeliveryItem di = new OutsourceDeliveryItem();

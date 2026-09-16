@@ -90,7 +90,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
           <template #default="{row}">{{ Number(row.quantity || 0) }}</template>
         </el-table-column>
         <el-table-column label="退货数量" width="120">
-          <template #default="{row}"><el-input v-model="row.returnQuantity" size="small" type="number" placeholder="数量" /></template>
+          <template #default="{row}"><el-input-number v-model="row.returnQuantity" size="small" :controls="false" :precision="0" :step="1" style="width:100%" placeholder="数量" /></template>
         </el-table-column>
         <el-table-column label="单价（留空自动FIFO）" width="150">
           <template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" placeholder="自动" /></template>

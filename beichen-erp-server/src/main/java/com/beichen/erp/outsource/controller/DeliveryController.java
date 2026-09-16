@@ -202,6 +202,9 @@ public class DeliveryController {
         if (dBody.get("supplierDirect") != null) {
             d.setSupplierDirect(Integer.valueOf(dBody.get("supplierDirect").toString()));
         }
+        // 2026-09-16：调拨"强制出库"开关（默认 0=严格校验；1=允许把来源仓扣成负数）
+        d.setAllowNegative(dBody.get("allowNegative") != null
+                ? Integer.valueOf(dBody.get("allowNegative").toString()) : 0);
         if (dBody.get("supplierId") != null) {
             d.setSupplierId(Long.valueOf(dBody.get("supplierId").toString()));
         }

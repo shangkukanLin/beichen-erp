@@ -92,7 +92,7 @@
           </el-table-column>
           <el-table-column label="退回数量" width="130">
             <template #default="{ row }">
-              <el-input-number v-model="row.quantity" :min="0" :precision="2" controls-position="right" style="width:100%" />
+              <el-input-number v-model="row.quantity" :min="0" :precision="0" :step="1" controls-position="right" style="width:100%" />
             </template>
           </el-table-column>
           <el-table-column prop="unitPrice" label="原单价" width="90" align="right" />
@@ -102,7 +102,7 @@
         <el-table-column label="换出（同品换货，从成品仓扣减）" align="center">
           <el-table-column label="换出数量" width="130">
             <template #default="{ row }">
-              <el-input-number v-model="row.outQuantity" :min="0" :precision="2" controls-position="right" style="width:100%" />
+              <el-input-number v-model="row.outQuantity" :min="0" :precision="0" :step="1" controls-position="right" style="width:100%" />
             </template>
           </el-table-column>
           <el-table-column label="换出品质" width="120">

@@ -68,7 +68,10 @@ public class CloseReportController {
     public R<Void> confirm(@PathVariable Long orderId, @RequestBody Map<String, Object> body) {
         Long returnWarehouseId = body != null && body.get("returnWarehouseId") != null
                 ? Long.valueOf(body.get("returnWarehouseId").toString()) : null;
-        reportService.confirmClose(orderId, returnWarehouseId);
+        // 2026-09-16（问题①）：强制退料开关 —— 账面负库存时允许按"强制出库"口径退料（不传=旧行为：严格校验）
+        boolean force = body != null && body.get("force") != null
+                && Boolean.parseBoolean(body.get("force").toString());
+        reportService.confirmClose(orderId, returnWarehouseId, force);
         return R.ok();
     }
 

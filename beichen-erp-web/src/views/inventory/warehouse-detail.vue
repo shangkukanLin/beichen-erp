@@ -71,7 +71,8 @@ async function loadMaterials() {
 
 function goLog(row: any) { router.push(`/inventory/warehouse/product-history/${warehouseId}/${row.productId}`) }
 function goMaterialLog(row: any) { router.push(`/inventory/warehouse/material-history/${warehouseId}/${row.materialId}`) }
-function fmt(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
+// 数量一律整数（2026-09-16）
+function fmt(v?: number) { return v == null ? '0' : String(Math.round(Number(v))) }
 function totalQty(row: any) {
   return (Number(row.qtyA) || 0) + (Number(row.qtyB) || 0) + (Number(row.qtyC) || 0)
     + (Number(row.qtyDefect) || 0) + (Number(row.qtyPending) || 0)

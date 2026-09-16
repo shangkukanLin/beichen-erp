@@ -89,7 +89,7 @@
           </el-table-column>
           <el-table-column label="退货数量" width="150">
             <template #default="{ row }">
-              <el-input-number v-model="row.quantity" :min="0" :precision="2" :step="1" :max="row.canReturn !== undefined ? row.canReturn : undefined" style="width: 100%" />
+              <el-input-number v-model="row.quantity" :min="0" :precision="0" :step="1" :max="row.canReturn !== undefined ? row.canReturn : undefined" style="width: 100%" />
             </template>
           </el-table-column>
           <el-table-column label="单价" width="150">

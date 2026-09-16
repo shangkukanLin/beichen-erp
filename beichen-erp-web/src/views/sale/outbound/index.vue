@@ -245,7 +245,7 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
             </template>
           </el-table-column>
           <el-table-column label="数量" width="120">
-            <template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :precision="2" controls-position="right" style="width:100%" /></template>
+            <template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :precision="0" :step="1" controls-position="right" style="width:100%" /></template>
           </el-table-column>
           <el-table-column label="单价" width="120">
             <template #default="{ row }"><el-input-number v-model="row.unitPrice" :min="0" :precision="2" controls-position="right" style="width:100%" /></template>

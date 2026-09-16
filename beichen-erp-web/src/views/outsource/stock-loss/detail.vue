@@ -84,7 +84,8 @@ const tableLoading = ref(false)
 const info = ref<any>(null)
 const items = ref<any[]>([])
 
-function fmtQty(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
+// 数量一律整数（2026-09-16）
+function fmtQty(v?: number) { return v == null ? '0' : String(Math.round(Number(v))) }
 function money(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 
 /** 合计行（列序固定：0物料 1物料类型 2规格 3单位 4数量 5单价 6金额 7备注） */

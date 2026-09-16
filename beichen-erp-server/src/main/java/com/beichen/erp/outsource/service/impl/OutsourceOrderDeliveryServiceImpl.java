@@ -445,7 +445,8 @@ public class OutsourceOrderDeliveryServiceImpl
         List<MaterialReq> materials = loadMaterialRequirements(matchedProduct != null ? matchedProduct : new OutsourceOrderProduct());
         for (MaterialReq mat : materials) {
             if (mat.materialId() == null) continue;
-            BigDecimal restoreQty = mat.perUnit().multiply(defectQty);
+            // 2026-09-16 数量一律为整数：单套用量(比率) × 交货数量 → 取整
+            BigDecimal restoreQty = mat.perUnit().multiply(defectQty).setScale(0, RoundingMode.HALF_UP);
 
             // 物料写入统一到 WarehouseStockService（架构债 A2）
             stockService.changeMaterialStockAllowNegative(whId, mat.materialId(), restoreQty,
@@ -475,7 +476,7 @@ public class OutsourceOrderDeliveryServiceImpl
         List<MaterialReq> materials = loadMaterialRequirements(matchedProduct != null ? matchedProduct : new OutsourceOrderProduct());
         for (MaterialReq mat : materials) {
             if (mat.materialId() == null) continue;
-            BigDecimal restoreQty = mat.perUnit().multiply(defectQty);
+            BigDecimal restoreQty = mat.perUnit().multiply(defectQty).setScale(0, RoundingMode.HALF_UP);
             // 反审核扣回还料：扣减量按"不超过当前库存"夹住（不产生负数、也不物理删行，清单 A2/B3），
             // 库存写入统一到 WarehouseStockService（架构债 A2）
             BigDecimal before = stockService.getMaterialQuantity(whId, mat.materialId());
@@ -663,7 +664,8 @@ public class OutsourceOrderDeliveryServiceImpl
                 log.warn("物料「{}」在委外物料表中未找到，跳过库存检查", mat.materialName());
                 continue;
             }
-            BigDecimal needed = mat.perUnit().multiply(deliveryQty);
+            // 2026-09-16 数量一律为整数：单套用量(比率) × 交货数量 → 取整（缺料判断与提示都用整数）
+            BigDecimal needed = mat.perUnit().multiply(deliveryQty).setScale(0, RoundingMode.HALF_UP);
 
             WarehouseStock stock = stockMapper.selectOne(
                     new LambdaQueryWrapper<WarehouseStock>()
@@ -675,9 +677,9 @@ public class OutsourceOrderDeliveryServiceImpl
             if (currentStock.compareTo(needed) < 0) {
                 Map<String, Object> s = new LinkedHashMap<>();
                 s.put("materialName", mat.materialName());
-                s.put("needed", needed.setScale(2, RoundingMode.HALF_UP));
-                s.put("stock", currentStock.setScale(2, RoundingMode.HALF_UP));
-                s.put("gap", needed.subtract(currentStock).setScale(2, RoundingMode.HALF_UP));
+                s.put("needed", needed.setScale(0, RoundingMode.HALF_UP));
+                s.put("stock", currentStock.setScale(0, RoundingMode.HALF_UP));
+                s.put("gap", needed.subtract(currentStock).setScale(0, RoundingMode.HALF_UP));
                 shortages.add(s);
             }
         }
@@ -717,7 +719,7 @@ public class OutsourceOrderDeliveryServiceImpl
                 log.warn("物料「{}」在委外物料表中未找到，跳过扣减", mat.materialName());
                 continue;
             }
-            BigDecimal needed = mat.perUnit().multiply(deliveryQty);
+            BigDecimal needed = mat.perUnit().multiply(deliveryQty).setScale(0, RoundingMode.HALF_UP);
             // 材料成本取物料移动加权成本价，未建立时退回主数据参考单价
             OutsourceMaterial matMaster = outsourceMaterialMapper.selectById(mat.materialId());
             BigDecimal matUnitCost = matMaster != null && matMaster.getCostPrice() != null
@@ -755,7 +757,7 @@ public class OutsourceOrderDeliveryServiceImpl
         BigDecimal oldQty = delivery.getQuantity() != null ? delivery.getQuantity() : BigDecimal.ZERO;
         for (MaterialReq mat : materials) {
             if (mat.materialId() == null) continue;
-            BigDecimal toRestore = mat.perUnit().multiply(oldQty);
+            BigDecimal toRestore = mat.perUnit().multiply(oldQty).setScale(0, RoundingMode.HALF_UP);
 
             // 物料写入统一到 WarehouseStockService（架构债 A2）：回补为正数，仍走"允许负数"口径以保持与领料侧对称
             stockService.changeMaterialStockAllowNegative(whId, mat.materialId(), toRestore,

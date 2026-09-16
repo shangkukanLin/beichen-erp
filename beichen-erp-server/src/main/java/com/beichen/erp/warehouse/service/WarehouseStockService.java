@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
  * 统一库存变更 Service（合并 inventory_warehouse_stock + outsource_warehouse_stock）
@@ -60,6 +61,7 @@ public class WarehouseStockService {
                             StockChangeType type, String relatedBillNo, RelatedBillType relatedBillType,
                             String spec, Long relatedBillId, String qualityType) {
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) == 0) return;
+        quantity = intQty(quantity, "成品库存"); // 数量一律为整数（2026-09-16）
         assertRefsExist(warehouseId, productId, null); // P2-33：拒绝往不存在的仓库/产品写库存
         if (qualityType == null) qualityType = ProductQualityType.A.getCode();
         Long companyId = CompanyContext.get();
@@ -163,6 +165,7 @@ public class WarehouseStockService {
                                              Long relatedDeliveryId, Long relatedOrderId, Long relatedBillId,
                                              boolean allowNegative) {
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) == 0) return;
+        quantity = intQty(quantity, "物料库存"); // 数量一律为整数（2026-09-16）
         assertRefsExist(warehouseId, null, materialId); // P2-33：拒绝往不存在的仓库/物料写库存
         Long companyId = CompanyContext.get();
 
@@ -269,6 +272,21 @@ public class WarehouseStockService {
                 + "，可用 " + avail.stripTrailingZeros().toPlainString()
                 + "，需求 " + need.stripTrailingZeros().toPlainString()
                 + "，缺口 " + gap.stripTrailingZeros().toPlainString());
+    }
+
+    /**
+     * 数量统一取整（四舍五入）。2026-09-16 用户要求：**物料与产品数量都是整数**。
+     * <p>数量列已统一为 DECIMAL(18,0)；此处再兜底一次，避免调用方漏取整把小数写进库存/流水
+     * （一旦出现小数会打 WARN，便于回溯是哪个调用方漏了取整）。</p>
+     */
+    private BigDecimal intQty(BigDecimal qty, String scene) {
+        if (qty == null) return null;
+        BigDecimal rounded = qty.setScale(0, RoundingMode.HALF_UP);
+        if (rounded.compareTo(qty) != 0) {
+            log.warn("{}写入小数数量 {} → 取整为 {}（数量一律为整数，请检查调用方）",
+                    scene, qty.stripTrailingZeros().toPlainString(), rounded.toPlainString());
+        }
+        return rounded;
     }
 
     private String materialNameOf(Long materialId) {

@@ -6,7 +6,7 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
-import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel, WarehouseCategory } from '@/api/enums'
+import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel, WarehouseCategory, WarehouseType } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
@@ -16,6 +16,8 @@ const saving = ref(false)
 const form = reactive({
   deliveryType: DeliveryType.DELIVERY as string, factoryId: undefined as any, supplierId: undefined as any,
   fromWarehouseId: undefined as any, toWarehouseId: undefined as any,
+  // 强制出库（仅调拨）：来源仓库存不足时允许扣成负数；后端默认严格校验
+  allowNegative: 0 as number,
   logisticsCompany: '', logisticsNo: '', attachUrl: '',
   deliveryDate: localDate(), contact: '', phone: '', remark: ''
 })
@@ -24,7 +26,16 @@ const targetOutsourceWarehouses = ref<any[]>([])
 const inventoryWarehouses = ref<any[]>([])
 const allWarehouses = ref<any[]>([])   // 全部仓库（组件本地，Odoo 风格）
 const allOutsourceWarehouses = computed(() => allWarehouses.value.filter((w: any) => w.warehouseCategory === WarehouseCategory.OUTSOURCE))
-const combinedFromWhs = computed(() => [...inventoryWarehouses.value, ...allOutsourceWarehouses.value])
+/**
+ * 2026-09-16 流程重构后的仓库范围：
+ *  - 发料：发出仓 = **我方物料仓**（自有仓 + 辅料仓）；目标仓 = 所选工厂的委外仓
+ *  - 调拨：两端都在「物料相关仓库」内互转（我方物料仓 / 委外仓），允许 委外↔委外、委外→我方、我方↔我方
+ *    （我方仓 → 委外仓 属发料，后端会拦，故这里不提供该组合）
+ */
+const materialOwnWarehouses = computed(() =>
+  inventoryWarehouses.value.filter((w: any) => w.warehouseType === WarehouseType.AUXILIARY))
+const materialTransferWhs = computed(() => [...materialOwnWarehouses.value, ...allOutsourceWarehouses.value])
+const targetTransferWhs = computed(() => materialTransferWhs.value.filter((w: any) => w.id !== form.fromWarehouseId))
 const materialOptions = ref<any[]>([])
 const materialTypes = ref<any[]>([])
 const items = ref<any[]>([])
@@ -56,17 +67,13 @@ async function loadMaterials() {
 async function loadMaterialTypes() {
   try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch { materialTypes.value = [] }
 }
-function onTypeChange() { form.factoryId = undefined; form.supplierId = undefined; form.fromWarehouseId = undefined; form.toWarehouseId = undefined; outsourceWarehouses.value = []; targetOutsourceWarehouses.value = [] }
+function onTypeChange() { form.factoryId = undefined; form.supplierId = undefined; form.fromWarehouseId = undefined; form.toWarehouseId = undefined; form.allowNegative = 0; outsourceWarehouses.value = []; targetOutsourceWarehouses.value = [] }
 async function onFactoryChange(id: number) {
-  form.fromWarehouseId = undefined; form.toWarehouseId = undefined; outsourceWarehouses.value = []
-  if (id) { await loadWarehouses(id); if (outsourceWarehouses.value.length > 0) {
-    if (form.deliveryType === DeliveryType.DELIVERY) form.toWarehouseId = outsourceWarehouses.value[0].id
-    else form.fromWarehouseId = outsourceWarehouses.value[0].id
-  }}
-}
-async function onTargetFactoryChange(id: number) {
-  form.toWarehouseId = undefined; targetOutsourceWarehouses.value = []
-  if (id) { await loadTargetWarehouses(id); if (targetOutsourceWarehouses.value.length > 0) form.toWarehouseId = targetOutsourceWarehouses.value[0].id }
+  form.toWarehouseId = undefined; outsourceWarehouses.value = []; targetOutsourceWarehouses.value = []
+  if (!id) return
+  await loadWarehouses(id)
+  await loadTargetWarehouses(id)
+  if (targetOutsourceWarehouses.value.length > 0) form.toWarehouseId = targetOutsourceWarehouses.value[0].id
 }
 
 function addItem() { items.value.push({ material_id: undefined, material_name: '', materialTypeId: undefined, unit: '', unit_price: '', quantity: undefined, qualityType: QualityType.GOOD, stock: '' }) }
@@ -104,12 +111,21 @@ function handleFileSelect(e: Event) { const file = (e.target as HTMLInputElement
 function handleRemoveUploadFile() { uploadFile.value = null }
 
 async function handleSubmit() {
-  if (!form.factoryId) { ElMessage.warning(form.deliveryType === DeliveryType.TRANSFER ? '请选择来源工厂' : '请选择工厂'); return }
-  if (form.deliveryType === DeliveryType.TRANSFER && !form.supplierId) { ElMessage.warning('请选择目标工厂'); return }
-  if (form.deliveryType === DeliveryType.DELIVERY && !form.fromWarehouseId) { ElMessage.warning('请选择发出仓库'); return }
-  if (form.deliveryType === DeliveryType.DELIVERY && !form.toWarehouseId) { ElMessage.warning('请选择目标仓库'); return }
-  if (form.deliveryType !== DeliveryType.DELIVERY && !form.fromWarehouseId) { ElMessage.warning('请选择来源仓库'); return }
-  if (form.deliveryType === DeliveryType.TRANSFER && !form.toWarehouseId) { ElMessage.warning('请选择目标仓库'); return }
+  // 2026-09-16 流程重构：只有 发料 / 调拨 两种手工单据
+  if (form.deliveryType === DeliveryType.DELIVERY) {
+    if (!form.factoryId) { ElMessage.warning('请选择收货工厂'); return }
+    if (!form.fromWarehouseId) { ElMessage.warning('请选择发出仓库（我方物料仓）'); return }
+    if (!form.toWarehouseId) { ElMessage.warning('请选择目标委外仓'); return }
+  } else {
+    if (!form.fromWarehouseId) { ElMessage.warning('请选择来源仓库'); return }
+    if (!form.toWarehouseId) { ElMessage.warning('请选择目标仓库'); return }
+    if (form.fromWarehouseId === form.toWarehouseId) { ElMessage.warning('来源仓库与目标仓库不能相同'); return }
+    const from = materialTransferWhs.value.find((w: any) => w.id === form.fromWarehouseId)
+    const to = materialTransferWhs.value.find((w: any) => w.id === form.toWarehouseId)
+    if (from && to && from.factoryId == null && to.factoryId != null) {
+      ElMessage.warning('我方物料仓 → 委外仓 请使用「发料」类型'); return
+    }
+  }
   if (items.value.length === 0) { ElMessage.warning('请添加物料'); return }
   const invalid = items.value.some((i: any) => !i.quantity || Number(i.quantity) <= 0)
   if (invalid) { ElMessage.warning('物料数量必须大于0'); return }
@@ -140,22 +156,21 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <template #header><span style="font-weight:600">基础信息</span></template>
       <el-form :model="form" label-width="100px">
         <el-row :gutter="16">
-          <el-col :span="6"><el-form-item label="类型"><el-select v-model="form.deliveryType" style="width:100%" @change="onTypeChange"><el-option :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :value="DeliveryType.DELIVERY"/><el-option :label="DeliveryTypeLabel[DeliveryType.RETURN]" :value="DeliveryType.RETURN"/><el-option :label="DeliveryTypeLabel[DeliveryType.TRANSFER]" :value="DeliveryType.TRANSFER"/></el-select></el-form-item></el-col>
-          <el-col :span="6"><el-form-item required :label="form.deliveryType===DeliveryType.TRANSFER?'来源工厂':'收货工厂'">
+          <!-- 2026-09-16 流程重构：手工单据只有 发料 / 调拨（收料/退不良由物料订单自动生成、退料已下线） -->
+          <el-col :span="6"><el-form-item label="类型"><el-select v-model="form.deliveryType" style="width:100%" @change="onTypeChange"><el-option :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :value="DeliveryType.DELIVERY"/><el-option :label="DeliveryTypeLabel[DeliveryType.TRANSFER]" :value="DeliveryType.TRANSFER"/></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item required label="收货工厂">
             <RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" style="width:100%" placeholder="选择工厂" @pick="()=>onFactoryChange(form.factoryId)">
               <el-option label="+ 新增" :value="ADD_MARKER" @click="router.push('/supplier/manage')" />
             </RemoteSelect>
           </el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item required label="目标工厂">
-            <RemoteSelect v-model="form.supplierId" :fetch="fetchFactories" style="width:100%" placeholder="选择目标工厂" @pick="()=>onTargetFactoryChange(form.supplierId)" />
-          </el-form-item></el-col>
           <el-col :span="6"><el-form-item label="日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item required label="发出仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id"/></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item required label="目标委外仓库"><el-select v-model="form.toWarehouseId" style="width:100%" disabled><el-option v-for="w in outsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.RETURN"><el-form-item required label="来源仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id ?? ''"/></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.RETURN"><el-form-item required label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id ?? ''"/></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item required label="来源仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id ?? ''"/></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item required label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id ?? ''"/></el-select></el-form-item></el-col>
+          <!-- 发料：发出仓 = 我方物料仓（自有+辅料仓）；目标仓 = 所选工厂的委外仓（可多选其一） -->
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item required label="发出仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in materialOwnWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id"/></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item required label="目标委外仓"><el-select v-model="form.toWarehouseId" style="width:100%"><el-option v-for="w in targetOutsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
+          <!-- 调拨：两端都在「物料相关仓库」内互转（委外仓↔委外仓 / 委外仓→我方物料仓 / 我方物料仓↔我方物料仓） -->
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item required label="来源仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in materialTransferWhs" :key="w.id" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方物料仓'}）`" :value="w.id"/></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item required label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%"><el-option v-for="w in targetTransferWhs" :key="w.id" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方物料仓'}）`" :value="w.id"/></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item label="强制出库"><el-switch v-model="form.allowNegative" :active-value="1" :inactive-value="0" /><span style="margin-left:6px;font-size:var(--app-font-xs);color:var(--app-text-secondary)">来源仓库存不足时允许扣成负数</span></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item></el-col>
         </el-row>

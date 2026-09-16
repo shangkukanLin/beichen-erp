@@ -219,7 +219,7 @@ onMounted(async () => {
           </template>
         </el-table-column>
         <el-table-column label="用量" width="90">
-          <template #default="{ row }"><el-input v-model="row.quantity" size="small" style="width:100%" /></template>
+          <template #default="{ row }"><el-input-number v-model="row.quantity" :controls="false" :precision="0" :step="1" size="small" style="width:100%" /></template>
         </el-table-column>
         <el-table-column label="损耗率%" width="100">
           <template #default="{ row }"><el-input v-model="row.lossRate" size="small" style="width:100%" /></template>

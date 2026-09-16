@@ -125,7 +125,8 @@ async function cancel(row: StockTake) {
   try { await ElMessageBox.confirm('确认作废该盘点单？', '作废确认', { type: 'warning' }) } catch { return }
   try { await cancelStockTake(row.id!); ElMessage.success('已作废'); loadData() } catch {}
 }
-function fmt(v?: number) { return v == null ? '0' : Number(v).toFixed(2) }
+// 数量一律整数（2026-09-16）
+function fmt(v?: number) { return v == null ? '0' : String(Math.round(Number(v))) }
 function fmtDate(v?: string) { return v ? String(v).slice(0, 10) : '' }
 function nameOf(it: StockTakeItem) { return it.productName || it.materialName || '' }
 onMounted(() => { loadData(); loadWarehouses() })
@@ -221,7 +222,7 @@ onMounted(() => { loadData(); loadWarehouses() })
         <el-table-column prop="bookQuantity" label="账面数量" width="100" align="right" />
         <el-table-column label="实盘数量" width="140" align="right">
           <template #default="{row}">
-            <el-input-number v-model="row.actualQuantity" :min="0" :precision="2" controls-position="right" size="small" style="width:100%" :disabled="curTake.status!=='DRAFT'" />
+            <el-input-number v-model="row.actualQuantity" :min="0" :precision="0" :step="1" controls-position="right" size="small" style="width:100%" :disabled="curTake.status!=='DRAFT'" />
           </template>
         </el-table-column>
         <el-table-column label="差异" width="100" align="right">

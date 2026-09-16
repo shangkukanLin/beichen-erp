@@ -167,7 +167,7 @@ async function loadBomMaterials(idx: number, pid: number) {
       const qty = Number(products.value[idx].quantity) || 1
       products.value[idx].materials = mats.map((m:any) => {
         const opt = materialOptions.value.find((o:any) => o.id === m.outsourceMaterialId)
-        return { materialId: m.outsourceMaterialId || null, materialName: opt?.materialName || '', price: opt?.price ?? null, materialTypeId: m.materialTypeId || null,  unit: m.unit || '', demandQuantity: +(qty * Number(m.quantity || 0)).toFixed(4), lossRate: m.lossRate || 0, supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(m.materialTypeId) : 'OURS', remark: '' }
+        return { materialId: m.outsourceMaterialId || null, materialName: opt?.materialName || '', price: opt?.price ?? null, materialTypeId: m.materialTypeId || null,  unit: m.unit || '', demandQuantity: Math.round(qty * Number(m.quantity || 0)), lossRate: m.lossRate || 0, supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(m.materialTypeId) : 'OURS', remark: '' }
       })
     }
   } catch { products.value[idx].materials = [] }
@@ -466,7 +466,7 @@ onActivated(async () => { await loadOptions(); await loadData() })
         <el-form :model="p" label-width="90px" size="small">
           <el-row :gutter="12">
             <el-col :span="12"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.assemblyName || row.name" filterable clearable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="(v:any)=>onProjectSelect(pi,v)" /></el-form-item></el-col>
-            <el-col :span="6"><el-form-item label="数量"><el-input v-model="p.quantity" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
+            <el-col :span="6"><el-form-item label="数量"><el-input-number v-model="p.quantity" :controls="false" :precision="0" :step="1" style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item :label="form.supplyMode==='FACTORY' ? '包工包料单价' : '单价'"><el-input v-model="p.unitPrice" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="备注"><el-input v-model="p.remark" :disabled="form.status!==OutsourceOrderStatus.PENDING" /></el-form-item></el-col>
@@ -580,10 +580,11 @@ onActivated(async () => { await loadOptions(); await loadData() })
           <el-form-item label="总数量"><el-input :model-value="delGradeSum" readonly placeholder="由等级数量自动合计" /></el-form-item>
           <el-form-item label="等级数量">
             <el-row :gutter="8">
-              <el-col :span="6"><el-input v-model="delForm.aQty" type="number"><template #prepend>A规</template></el-input></el-col>
-              <el-col :span="6"><el-input v-model="delForm.bQty" type="number"><template #prepend>B规</template></el-input></el-col>
-              <el-col :span="6"><el-input v-model="delForm.cQty" type="number"><template #prepend>C规</template></el-input></el-col>
-              <el-col :span="6"><el-input v-model="delForm.defectQty" type="number"><template #prepend>不良</template></el-input></el-col>
+              <!-- 数量一律整数：el-input-number 无 prepend 插槽，故保留 el-input + change 取整（2026-09-16） -->
+              <el-col :span="6"><el-input v-model="delForm.aQty" type="number" @change="delForm.aQty = Math.round(Number(delForm.aQty) || 0)"><template #prepend>A规</template></el-input></el-col>
+              <el-col :span="6"><el-input v-model="delForm.bQty" type="number" @change="delForm.bQty = Math.round(Number(delForm.bQty) || 0)"><template #prepend>B规</template></el-input></el-col>
+              <el-col :span="6"><el-input v-model="delForm.cQty" type="number" @change="delForm.cQty = Math.round(Number(delForm.cQty) || 0)"><template #prepend>C规</template></el-input></el-col>
+              <el-col :span="6"><el-input v-model="delForm.defectQty" type="number" @change="delForm.defectQty = Math.round(Number(delForm.defectQty) || 0)"><template #prepend>不良</template></el-input></el-col>
             </el-row>
           </el-form-item>
           <el-form-item label="收货仓库" required><RemoteSelect v-model="delWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择入库仓库" /></el-form-item>
@@ -638,25 +639,25 @@ onActivated(async () => { await loadOptions(); await loadData() })
         <el-table-column label="A规" width="130">
           <template #default="{row}">
             <div style="font-size:12px;color:var(--app-text-regular)">库存 {{ row.stocks?.a ?? 0 }}</div>
-            <el-input v-model="row.aQty" size="small" type="number" placeholder="数量" />
+            <el-input-number v-model="row.aQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" />
           </template>
         </el-table-column>
         <el-table-column label="B规" width="130">
           <template #default="{row}">
             <div style="font-size:12px;color:var(--app-text-regular)">库存 {{ row.stocks?.b ?? 0 }}</div>
-            <el-input v-model="row.bQty" size="small" type="number" placeholder="数量" />
+            <el-input-number v-model="row.bQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" />
           </template>
         </el-table-column>
         <el-table-column label="C规" width="130">
           <template #default="{row}">
             <div style="font-size:12px;color:var(--app-text-regular)">库存 {{ row.stocks?.c ?? 0 }}</div>
-            <el-input v-model="row.cQty" size="small" type="number" placeholder="数量" />
+            <el-input-number v-model="row.cQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" />
           </template>
         </el-table-column>
         <el-table-column label="不良" width="130">
           <template #default="{row}">
             <div style="font-size:12px;color:var(--app-text-regular)">库存 {{ row.stocks?.defect ?? 0 }}</div>
-            <el-input v-model="row.defectQty" size="small" type="number" placeholder="数量" />
+            <el-input-number v-model="row.defectQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" />
           </template>
         </el-table-column>
       </el-table>

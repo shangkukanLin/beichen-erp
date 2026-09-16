@@ -83,7 +83,8 @@ onMounted(() => { loadWarehouseOptions(); loadData() })
 
     <el-card shadow="never" class="table-card">
       <el-tabs v-model="activeTab" @tab-change="onTabChange">
-        <el-tab-pane label="全部" name="" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :name="DeliveryType.DELIVERY" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.RECEIVE]" :name="DeliveryType.RECEIVE" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.RETURN]" :name="DeliveryType.RETURN" />
+        <!-- 2026-09-16 流程重构：手工单据只有 发料/调拨；收料/退不良为物料订单自动生成、退料已下线（页签保留以便查历史） -->
+        <el-tab-pane label="全部" name="" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :name="DeliveryType.DELIVERY" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.TRANSFER]" :name="DeliveryType.TRANSFER" /><el-tab-pane :label="`${DeliveryTypeLabel[DeliveryType.RECEIVE]}（自动）`" :name="DeliveryType.RECEIVE" /><el-tab-pane :label="`${DeliveryTypeLabel[DeliveryType.DEFECT_RETURN]}（自动）`" :name="DeliveryType.DEFECT_RETURN" /><el-tab-pane :label="`${DeliveryTypeLabel[DeliveryType.RETURN]}（已下线）`" :name="DeliveryType.RETURN" />
       </el-tabs>
 
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%" size="small" @row-click="(row: any) => router.push(`/outsource/delivery/detail/${row.id}`)">

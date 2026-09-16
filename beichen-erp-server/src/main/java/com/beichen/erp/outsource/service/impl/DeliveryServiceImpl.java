@@ -12,7 +12,9 @@ import com.beichen.erp.outsource.entity.MaterialOrderItem;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
 import com.beichen.erp.warehouse.entity.WarehouseStockLog;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.warehouse.common.WarehouseCategory;
+import com.beichen.erp.warehouse.common.WarehouseType;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
@@ -89,20 +91,15 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (delivery.getDeliveryType() == null || delivery.getDeliveryType().isBlank()) {
             throw new BusinessException("收发类型不能为空");
         }
-        if (delivery.getFactoryId() == null) {
-            throw new BusinessException("加工厂不能为空");
+        // ==== 2026-09-16 流程重构：手工单据只允许「发料 / 调拨」 ====
+        // 退料(RETURN)/收料(RECEIVE)/退不良(DEFECT_RETURN) 不再允许手工新建：
+        //   收料/退不良由物料订单流程自动生成；退料整体下线（历史单据仍可查询/反审核）
+        if (!MANUAL_TYPES.contains(delivery.getDeliveryType())) {
+            throw new BusinessException("该收发类型已不再支持手工新建（" + delivery.getDeliveryType() + "），手工单据仅支持 发料 / 调拨");
         }
-        // 校验
-        if (DeliveryType.TRANSFER.getCode().equals(delivery.getDeliveryType())) {
-            if (delivery.getFromWarehouseId() == null) throw new BusinessException("来源仓库不能为空");
-            if (delivery.getToWarehouseId() == null) throw new BusinessException("目标仓库不能为空");
-        } else if (DeliveryType.DELIVERY.getCode().equals(delivery.getDeliveryType())) {
-            if (delivery.getSupplierDirect() != null && delivery.getSupplierDirect() == 0 && delivery.getFromWarehouseId() == null)
-                throw new BusinessException("非直发时来源仓库不能为空");
-            if (delivery.getToWarehouseId() == null) throw new BusinessException("目标仓库不能为空");
-        } else {
-            if (delivery.getFromWarehouseId() == null) throw new BusinessException("来源仓库不能为空");
-        }
+        // 供应商直发已下线：发料一律从我方物料仓发出（与"发料=我方仓→供应商委外仓"的定义一致）
+        delivery.setSupplierDirect(0);
+        validateWarehouses(delivery);
         // 生成编码，草稿态存盘，不落库存
         delivery.setCode(generateCode());
         delivery.setStatus(DocStatus.DRAFT.getCode());
@@ -120,7 +117,9 @@ public class DeliveryServiceImpl implements DeliveryService {
     public void audit(Long id) {
         OutsourceDelivery delivery = deliveryMapper.selectById(id);
         if (delivery == null) throw new BusinessException("单据不存在");
-        if (!DocStatus.DRAFT.getCode().equals(delivery.getStatus())) {
+        // 2026-09-16：原子抢占 DRAFT→AUDITED（与盘点单/移仓单统一），避免双击/并发重复落库存
+        if (!DocStatusGuard.claim(deliveryMapper, OutsourceDelivery::getId, id,
+                OutsourceDelivery::getStatus, DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode())) {
             throw new BusinessException("仅草稿状态可以审核");
         }
         List<OutsourceDeliveryItem> items = getItems(id);
@@ -406,34 +405,93 @@ public class DeliveryServiceImpl implements DeliveryService {
         deliveryMapper.updateById(update);
     }
 
+    /** 手工可新建的单据类型（2026-09-16 流程重构）：只有 发料 / 调拨 */
+    private static final List<String> MANUAL_TYPES = List.of(
+            DeliveryType.DELIVERY.getCode(), DeliveryType.TRANSFER.getCode());
+
+    /**
+     * 新流程的仓库规则校验（**后端强校验**，不依赖前端下拉过滤）：
+     * <ul>
+     *   <li>发料：发出仓 = 我方物料仓（自有+辅料仓）；目标仓 = 所选工厂的委外仓</li>
+     *   <li>调拨：两端都必须是物料相关仓库（我方物料仓 / 委外仓）、不能同仓；
+     *       「我方物料仓 → 委外仓」直接拦掉（那是发料）。允许 委外仓↔委外仓、委外仓→我方仓、我方仓↔我方仓</li>
+     * </ul>
+     */
+    private void validateWarehouses(OutsourceDelivery delivery) {
+        boolean isDelivery = DeliveryType.DELIVERY.getCode().equals(delivery.getDeliveryType());
+        if (delivery.getFromWarehouseId() == null) throw new BusinessException(isDelivery ? "发出仓库不能为空" : "来源仓库不能为空");
+        if (delivery.getToWarehouseId() == null) throw new BusinessException(isDelivery ? "目标委外仓不能为空" : "目标仓库不能为空");
+        Warehouse from = warehouseMapper.selectById(delivery.getFromWarehouseId());
+        Warehouse to = warehouseMapper.selectById(delivery.getToWarehouseId());
+        if (from == null) throw new BusinessException("发出/来源仓库不存在");
+        if (to == null) throw new BusinessException("目标仓库不存在");
+        if (isDelivery) {
+            if (delivery.getFactoryId() == null) throw new BusinessException("收货工厂不能为空");
+            if (!isMaterialOwnWarehouse(from)) throw new BusinessException("发料的发出仓库只能是我方物料仓");
+            if (!isOutsourceWarehouse(to)) throw new BusinessException("发料的目标仓库必须是委外仓");
+            if (!delivery.getFactoryId().equals(to.getFactoryId())) throw new BusinessException("目标委外仓不属于所选工厂");
+        } else {
+            if (!isMaterialWarehouse(from) || !isMaterialWarehouse(to))
+                throw new BusinessException("调拨的两端必须是物料相关仓库（我方物料仓 / 委外仓）");
+            if (from.getId().equals(to.getId())) throw new BusinessException("来源仓库与目标仓库不能相同");
+            if (isMaterialOwnWarehouse(from) && isOutsourceWarehouse(to))
+                throw new BusinessException("我方物料仓 → 委外仓 请使用「发料」单据");
+            // 调拨不再手选工厂：按委外仓自动带出（两端皆我方仓时保持 null）
+            if (isOutsourceWarehouse(from)) delivery.setFactoryId(from.getFactoryId());
+            else if (isOutsourceWarehouse(to)) delivery.setFactoryId(to.getFactoryId());
+        }
+    }
+
+    /** 我方物料仓 = 自有仓 + 辅料仓（物料专用仓） */
+    private boolean isMaterialOwnWarehouse(Warehouse w) {
+        return w != null
+                && WarehouseCategory.INVENTORY.getCode().equals(w.getWarehouseCategory())
+                && WarehouseType.AUXILIARY.getCode().equals(w.getWarehouseType());
+    }
+
+    /** 委外仓（供应商/工厂处） */
+    private boolean isOutsourceWarehouse(Warehouse w) {
+        return w != null && WarehouseCategory.OUTSOURCE.getCode().equals(w.getWarehouseCategory());
+    }
+
+    /** 物料相关仓库 = 我方物料仓 或 委外仓（收发单只允许在这两类仓库之间搬运） */
+    private boolean isMaterialWarehouse(Warehouse w) {
+        return isMaterialOwnWarehouse(w) || isOutsourceWarehouse(w);
+    }
+
     // ==================== 私有方法 ====================
 
     /**
-     * 审核通过：扣/增库存 + 写流水 + 发料时同步加工单已发数量
-     * 抽取自原 create，使库存动作统一在审核时发生
+     * 审核通过：扣/增库存 + 写流水。
+     * <p>抽取自原 create，使库存动作统一在审核时发生。</p>
+     * <p>2026-09-16 口径：发料 = 我方物料仓 − / 该厂委外仓 +；调拨 = 来源仓 − / 目标仓 +；
+     * 其余历史类型（退料等）保留逆向语义，仅供历史单据反审核使用。</p>
      */
     private void applyDeliveryStock(OutsourceDelivery delivery, List<OutsourceDeliveryItem> items) {
+        // 注意：字段是 Integer(0/1)，不能用 Boolean.TRUE.equals(...)（恒为 false）
+        boolean allowNegative = delivery.getAllowNegative() != null && delivery.getAllowNegative() == 1;
         for (OutsourceDeliveryItem item : items) {
             BigDecimal qty = item.getQuantity();
             if (DeliveryType.DELIVERY.getCode().equals(delivery.getDeliveryType())) {
-                // 扣减来源仓库（我方仓或委外仓）
+                // 发料：扣减我方物料仓（严格校验，不允许负库存）
                 if (delivery.getFromWarehouseId() != null) {
-                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), getMaterialNameById(item.getMaterialId()), item.getQualityType(), StockChangeType.DELIVERY_OUT.getCode(), delivery.getCode());
+                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), getMaterialNameById(item.getMaterialId()), item.getQualityType(), StockChangeType.DELIVERY_OUT.getCode(), delivery.getCode(), false);
                 }
-                // 增加目标仓库（委外仓）
+                // 增加目标委外仓
                 if (delivery.getToWarehouseId() != null)
                     updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
                             getMaterialNameById(item.getMaterialId()), StockChangeType.DELIVERY_IN.getCode(), delivery.getCode());
             } else if (DeliveryType.TRANSFER.getCode().equals(delivery.getDeliveryType())) {
-                // 来源仓库-，目标仓库+
+                // 调拨：来源仓库-，目标仓库+（是否允许扣成负数由单据上的"强制出库"开关决定）
                 if (delivery.getFromWarehouseId() != null)
-                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), getMaterialNameById(item.getMaterialId()), item.getQualityType(), StockChangeType.TRANSFER_OUT.getCode(), delivery.getCode());
+                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), getMaterialNameById(item.getMaterialId()), item.getQualityType(), StockChangeType.TRANSFER_OUT.getCode(), delivery.getCode(), allowNegative);
                 if (delivery.getToWarehouseId() != null)
-                    adjustSourceStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, getMaterialNameById(item.getMaterialId()), item.getQualityType(), StockChangeType.TRANSFER_IN.getCode(), delivery.getCode());
+                    adjustSourceStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, getMaterialNameById(item.getMaterialId()), item.getQualityType(), StockChangeType.TRANSFER_IN.getCode(), delivery.getCode(), false);
             } else {
+                // 历史类型（退料等）：仅历史单据反审核/重审会走到这里，新建入口已关闭
                 String type = delivery.getDeliveryType();
                 if (delivery.getFromWarehouseId() != null)
-                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), getMaterialNameById(item.getMaterialId()), item.getQualityType(), type != null ? type : "退料", delivery.getCode());
+                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty.negate(), getMaterialNameById(item.getMaterialId()), item.getQualityType(), type != null ? type : "RETURN", delivery.getCode(), allowNegative);
             }
         }
     }
@@ -449,7 +507,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 if (delivery.getFromWarehouseId() != null && item.getMaterialId() != null) {
                     adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty,
                             getMaterialNameById(item.getMaterialId()), item.getQualityType(),
-                            StockChangeType.OUTSOURCE_CANCEL_DELIVERY.getCode(), delivery.getCode());
+                            StockChangeType.OUTSOURCE_CANCEL_DELIVERY.getCode(), delivery.getCode(), false);
                 }
                 // 扣回委外仓库
                 if (delivery.getToWarehouseId() != null)
@@ -459,12 +517,12 @@ public class DeliveryServiceImpl implements DeliveryService {
                             getMaterialNameById(item.getMaterialId()), StockChangeType.OUTSOURCE_CANCEL_DELIVERY.getCode(), delivery.getCode());
             } else if (DeliveryType.TRANSFER.getCode().equals(delivery.getDeliveryType())) {
                 // 逆向：来源仓库+，目标仓库-
+                // 2026-09-16：改走 adjustSourceStock（我方仓腿也能写标准流水+related_bill_type），
+                // 且对称回滚一律 allowNegative=true —— 否则"强制出库"产生的负库存会导致反审核失败
                 if (delivery.getFromWarehouseId() != null)
-                    updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
-                            getMaterialNameById(item.getMaterialId()), StockChangeType.CANCEL_TRANSFER_OUT.getCode(), delivery.getCode());
+                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty, getMaterialNameById(item.getMaterialId()), item.getQualityType(), StockChangeType.CANCEL_TRANSFER_OUT.getCode(), delivery.getCode(), true);
                 if (delivery.getToWarehouseId() != null)
-                    updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty.negate(), item.getQualityType(),
-                            getMaterialNameById(item.getMaterialId()), StockChangeType.CANCEL_TRANSFER_IN.getCode(), delivery.getCode());
+                    adjustSourceStock(delivery.getToWarehouseId(), item.getMaterialId(), qty.negate(), getMaterialNameById(item.getMaterialId()), item.getQualityType(), StockChangeType.CANCEL_TRANSFER_IN.getCode(), delivery.getCode(), true);
             } else if (DeliveryType.RECEIVE.getCode().equals(delivery.getDeliveryType())) {
                 // 收料入库，取消则出库（方向同 unauditMaterialDelivery：目标仓库 -qty）
                 if (delivery.getToWarehouseId() != null)
@@ -476,10 +534,9 @@ public class DeliveryServiceImpl implements DeliveryService {
                     updateStock(delivery.getToWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
                             getMaterialNameById(item.getMaterialId()), StockChangeType.CANCEL_DEFECT_OUT.getCode(), delivery.getCode());
             } else {
-                // 其他退料类（以 fromWarehouseId 出库方向逆向）
+                // 历史退料类（以 fromWarehouseId 出库方向逆向）
                 if (delivery.getFromWarehouseId() != null)
-                    updateStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty, item.getQualityType(),
-                            getMaterialNameById(item.getMaterialId()), StockChangeType.RETURN_IN.getCode(), delivery.getCode());
+                    adjustSourceStock(delivery.getFromWarehouseId(), item.getMaterialId(), qty, getMaterialNameById(item.getMaterialId()), item.getQualityType(), StockChangeType.RETURN_IN.getCode(), delivery.getCode(), true);
             }
         }
         // 已审核的收料/退不良单作废或反审核时，冲销对应应付（避免应付悬空；现金退款退不良单审核未生成应付，reversePayable 内部安全拦截）
@@ -645,20 +702,28 @@ public class DeliveryServiceImpl implements DeliveryService {
      * changeStock(productId) 口径，否则会把物料ID当产品ID扣减，必然报"库存不足"。
      * </p>
      * <ul>
-     *   <li>自有仓：走 changeMaterialStock，带库存不足校验，不允许扣成负数</li>
-     *   <li>委外仓：走 updateStock，沿用委外仓允许强制出库（负库存）的既有口径</li>
+     *   <li>默认（allowNegative=false）：统一走 changeMaterialStock，带库存不足校验，**不允许扣成负数**</li>
+     *   <li>allowNegative=true（单据显式勾选「强制出库」，或反审核对称回滚）：
+     *       走直写通道，允许扣成负数并打告警日志</li>
      * </ul>
+     * 2026-09-16 流程重构：原先"委外仓一律允许负库存"改为**按单据显式开关**，
+     * 避免调拨把供应商委外仓默默搬成负数（历史通道保留，只是需要显式勾选）。
      */
     private void adjustSourceStock(Long warehouseId, Long materialId, BigDecimal delta, String materialName,
-                                    String qualityType, String changeType, String orderCode) {
+                                    String qualityType, String changeType, String orderCode, boolean allowNegative) {
         if (warehouseId == null || materialId == null) return;
-        Warehouse wh = warehouseMapper.selectById(warehouseId);
-        if (wh != null && WarehouseCategory.INVENTORY.getCode().equals(wh.getWarehouseCategory())) {
-            warehouseStockService.changeMaterialStock(warehouseId, materialId, delta, changeType, orderCode,
-                    RelatedBillType.MATERIAL_IO, null, null);
-        } else {
-            updateStock(warehouseId, materialId, delta, qualityType, materialName, changeType, orderCode);
+        if (allowNegative) {
+            Warehouse wh = warehouseMapper.selectById(warehouseId);
+            if (wh != null && WarehouseCategory.INVENTORY.getCode().equals(wh.getWarehouseCategory())) {
+                warehouseStockService.changeMaterialStockAllowNegative(warehouseId, materialId, delta, changeType, orderCode,
+                        RelatedBillType.MATERIAL_IO, null, null, null);
+            } else {
+                updateStock(warehouseId, materialId, delta, qualityType, materialName, changeType, orderCode);
+            }
+            return;
         }
+        warehouseStockService.changeMaterialStock(warehouseId, materialId, delta, changeType, orderCode,
+                RelatedBillType.MATERIAL_IO, null, null);
     }
 
     @Override

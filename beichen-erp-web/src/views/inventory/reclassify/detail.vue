@@ -268,7 +268,7 @@ onActivated(() => { loadDetail() })
         </el-table-column>
         <el-table-column label="数量" width="130">
           <template #default="{ row }">
-            <el-input v-model="row.quantity" size="small" type="number" />
+            <el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" style="width:100%" />
             <div v-if="overStock(row)" style="color:#f56c6c;font-size:var(--app-font-xs);line-height:1.2;margin-top:2px">超出库存</div>
           </template>
         </el-table-column>

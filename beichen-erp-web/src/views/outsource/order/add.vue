@@ -118,7 +118,7 @@ async function loadBomMaterials(idx: number, pid: number) {
           materialTypeId: m.materialTypeId || null,
           unit: m.unit || '',
           bomQuantityPerSet: Number(m.quantity || 0),
-          demandQuantity: +(qty * Number(m.quantity || 0)).toFixed(4),
+          demandQuantity: Math.round(qty * Number(m.quantity || 0)), // 用料需求数量：整数（2026-09-16）
           lossRate: m.lossRate || 0,
           supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(m.materialTypeId) : 'OURS',
           remark: ''
@@ -133,7 +133,7 @@ function onQuantityChange(idx: number) {
   calcAmount(idx)
   const qty = Number(products.value[idx].quantity) || 1
   products.value[idx].materials.forEach((mat:any) => {
-    mat.demandQuantity = +(qty * Number(mat.bomQuantityPerSet || 0)).toFixed(4)
+    mat.demandQuantity = Math.round(qty * Number(mat.bomQuantityPerSet || 0)) // 数量整数（2026-09-16）
   })
 }
 
@@ -205,7 +205,7 @@ async function loadMaterialAsProduct(idx: number, materialId: number) {
         materialTypeId: c.materialTypeId || null,
         unit: c.unit || '',
         bomQuantityPerSet: Number(c.bomQuantityPerSet || 0),
-        demandQuantity: +(qty * Number(c.bomQuantityPerSet || 0)).toFixed(4),
+        demandQuantity: Math.round(qty * Number(c.bomQuantityPerSet || 0)), // 数量整数（2026-09-16）
         lossRate: 0,
         supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(c.materialTypeId) : 'OURS',
         remark: ''
@@ -294,7 +294,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <el-form :model="p" label-width="90px" size="small">
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.assemblyName || row.name" placeholder="选择产品" @update:modelValue="(v:any)=>onProjectSelectProxy(pi, v)"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
-          <el-col :span="5"><el-form-item label="数量"><el-input v-model="p.quantity" type="number" @change="onQuantityChange(pi)" /></el-form-item></el-col>
+          <el-col :span="5"><el-form-item label="数量"><el-input-number v-model="p.quantity" :controls="false" :precision="0" :step="1" style="width:100%" @change="onQuantityChange(pi)" /></el-form-item></el-col>
           <el-col :span="5"><el-form-item :label="form.supplyMode==='FACTORY' ? '包工包料单价' : '加工单价'"><el-input v-model="p.unitPrice" type="number" @change="calcAmount(pi)" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>
         </el-row>
