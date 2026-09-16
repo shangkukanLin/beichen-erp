@@ -31,12 +31,12 @@ const products = ref<any[]>([])
 const factoryOptions = ref<any[]>([])
 const projectOptions = ref<any[]>([])
 const materialOptions = ref<any[]>([])
-const bomTypes = ref<any[]>([])
+const materialTypes = ref<any[]>([])
 const uploadFile = ref<File | null>(null)
 
-// bomTypeId -> 类型名 映射（兜底展示用）
+// materialTypeId -> 类型名 映射（兜底展示用）
 function typeName(id: number | undefined, fallback?: string) {
-  if (id != null) { const t = bomTypes.value.find((v: any) => v.id === id); if (t) return t.typeName }
+  if (id != null) { const t = materialTypes.value.find((v: any) => v.id === id); if (t) return t.typeName }
   return fallback || '-'
 }
 
@@ -70,15 +70,15 @@ function addProduct() {
 // 供料模式：OURS来料加工 / FACTORY包工包料
 const SUPPLY_MODE_OPTIONS = [{ label: '来料加工', value: 'OURS' }, { label: '包工包料', value: 'FACTORY' }]
 const SUPPLY_TYPE_OPTIONS = [{ label: '我方供', value: 'OURS' }, { label: '工厂包', value: 'FACTORY' }]
-// 包工包料默认规则：仅玻璃（按BOM类型ID对比）我方供，其余物料默认工厂包
-const glassTypeId = computed(() => bomTypes.value.find((t: any) => t.typeName === '玻璃')?.id)
-function defaultSupplyType(bomTypeId: any) {
-  return glassTypeId.value != null && bomTypeId === glassTypeId.value ? 'OURS' : 'FACTORY'
+// 包工包料默认规则：仅玻璃（按物料类型ID对比）我方供，其余物料默认工厂包
+const glassTypeId = computed(() => materialTypes.value.find((t: any) => t.typeName === '玻璃')?.id)
+function defaultSupplyType(materialTypeId: any) {
+  return glassTypeId.value != null && materialTypeId === glassTypeId.value ? 'OURS' : 'FACTORY'
 }
 function onSupplyModeChange() {
   // 来料加工：全部我方供；包工包料：玻璃我方供、其余默认工厂包
   products.value.forEach((p: any) => (p.materials || []).forEach((m: any) => {
-    m.supplyType = form.supplyMode === 'OURS' ? 'OURS' : defaultSupplyType(m.bomTypeId)
+    m.supplyType = form.supplyMode === 'OURS' ? 'OURS' : defaultSupplyType(m.materialTypeId)
   }))
 }
 
@@ -115,12 +115,12 @@ async function loadBomMaterials(idx: number, pid: number) {
           materialId: m.outsourceMaterialId || null,
           materialName:  opt?.materialName || '',
           price: opt?.price ?? null,
-          bomTypeId: m.bomTypeId || null,
+          materialTypeId: m.materialTypeId || null,
           unit: m.unit || '',
           bomQuantityPerSet: Number(m.quantity || 0),
           demandQuantity: +(qty * Number(m.quantity || 0)).toFixed(4),
           lossRate: m.lossRate || 0,
-          supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(m.bomTypeId) : 'OURS',
+          supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(m.materialTypeId) : 'OURS',
           remark: ''
         }
       })
@@ -167,7 +167,7 @@ async function handleSubmit() {
     // 提交时映射 productName 为项目总成名称(与产品主数据一致)，并携带产品主数据ID(用于交货/库存落账)
     const submitProducts = products.value.map((p:any) => {
       const proj = projectOptions.value.find((pr:any) => pr.id === p.projectId)
-      return { ...p, productName: proj?.assemblyName || proj?.name || '', productSpec: proj?.productSpec || '', productId: proj?.productId || null }
+      return { ...p, productName: proj?.assemblyName || proj?.name || '', productId: proj?.productId || null }
     })
     await request.post('/outsource/order', { ...cleanForm, products: submitProducts })
     ElMessage.success('加工单创建成功')
@@ -183,8 +183,8 @@ async function handleSubmit() {
   } finally { saving.value = false }
 }
 
-async function loadBomTypes() {
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
+async function loadMaterialTypes() {
+  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch {}
 }
 
 // 物料直挂模式：以某物料名作为加工产品，并将其子料作为 BOM 清单（不关联研发项目）
@@ -202,12 +202,12 @@ async function loadMaterialAsProduct(idx: number, materialId: number) {
         materialId: c.materialId || null,
         materialName: c.materialName || '',
         price: opt?.price ?? null,
-        bomTypeId: c.bomTypeId || null,
+        materialTypeId: c.materialTypeId || null,
         unit: c.unit || '',
         bomQuantityPerSet: Number(c.bomQuantityPerSet || 0),
         demandQuantity: +(qty * Number(c.bomQuantityPerSet || 0)).toFixed(4),
         lossRate: 0,
-        supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(c.bomTypeId) : 'OURS',
+        supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(c.materialTypeId) : 'OURS',
         remark: ''
       }
     })
@@ -216,7 +216,7 @@ async function loadMaterialAsProduct(idx: number, materialId: number) {
 
 async function initPage() {
   await loadOptions()
-  await loadBomTypes()
+  await loadMaterialTypes()
   if (products.value.length === 0) addProduct()
   const q = route.query
   // 供应商详情页"去委外"带入：供应商即加工厂
@@ -256,7 +256,7 @@ async function initPage() {
   }
 }
 // 顶栏"刷新数据"：重新加载工厂/项目/物料/类型下拉
-async function handleRefreshData() { await loadOptions(); await loadBomTypes() }
+async function handleRefreshData() { await loadOptions(); await loadMaterialTypes() }
 onMounted(() => {
   initPage()
   window.addEventListener('refresh:dropdown-data', handleRefreshData)
@@ -272,7 +272,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <template #header><span style="font-weight:600">基础信息</span></template>
       <el-form :model="form" label-width="90px" size="small">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" placeholder="请选择" @update:modelValue="onFactoryChangeProxy"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" placeholder="请选择" @update:modelValue="onFactoryChangeProxy"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="供料模式"><el-select v-model="form.supplyMode" style="width:100%" @change="onSupplyModeChange"><el-option v-for="m in SUPPLY_MODE_OPTIONS" :key="m.value" :label="m.label" :value="m.value" /></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="计划开始"><el-input v-model="form.planStartDate" type="date" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="计划完成"><el-input v-model="form.planEndDate" type="date" /></el-form-item></el-col>
@@ -304,7 +304,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <div style="margin-top:8px" v-if="p.materials.length > 0">
         <div style="margin-bottom:6px"><span style="font-weight:500;font-size:var(--app-font-sm)">BOM物料清单</span></div>
         <el-table :data="p.materials" border size="small">
-          <el-table-column label="类型" width="80"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
+          <el-table-column label="类型" width="80"><template #default="{row}">{{ typeName(row.materialTypeId) }}</template></el-table-column>
           <el-table-column prop="materialName" label="物料名称" min-width="150" />
           <el-table-column prop="unit" label="单位" width="60" />
           <el-table-column label="单价" width="90" align="right"><template #default="{row}">{{ row.price != null ? Number(row.price).toFixed(2) : '-' }}</template></el-table-column>

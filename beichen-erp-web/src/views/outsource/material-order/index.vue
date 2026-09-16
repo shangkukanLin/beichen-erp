@@ -106,7 +106,7 @@ onActivated(() => {
           <template #default="{row}">
             <el-tooltip placement="top" :show-after="300" raw-content>
               <template #content>
-                <div v-for="(it,i) in (row.items||[])" :key="i" style="line-height:1.6">{{ typeName(it.bomTypeId) }} {{ it.materialName }} ×{{ it.orderQuantity }}{{it.unit}}（已收{{it.receivedQuantity||0}}）</div>
+                <div v-for="(it,i) in (row.items||[])" :key="i" style="line-height:1.6">{{ typeName(it.materialTypeId) }} {{ it.materialName }} ×{{ it.orderQuantity }}{{it.unit}}（已收{{it.receivedQuantity||0}}）</div>
               </template>
               <span>{{ (row.items || []).map((it: any) => it.materialName).filter(Boolean).join('、') || '-' }}</span>
             </el-tooltip>

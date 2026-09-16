@@ -96,12 +96,12 @@ onMounted(() => { loadData(); loadAccounts() })
     </el-card>
     <el-dialog v-model="dialog" :title="dialogTitle" width="520px" :close-on-click-modal="false">
       <el-form :model="form" label-width="80px">
-        <el-form-item label="费用类型">
+        <el-form-item required label="费用类型">
           <el-select v-model="form.expenseType" style="width:100%"><el-option v-for="(lb, code) in EXPENSE_TYPE_LABELS" :key="code" :label="lb" :value="code"/></el-select>
         </el-form-item>
-        <el-form-item label="金额"><el-input-number v-model="form.amount" :min="0.01" :precision="2" controls-position="right" style="width:100%"/></el-form-item>
+        <el-form-item required label="金额"><el-input-number v-model="form.amount" :min="0.01" :precision="2" controls-position="right" style="width:100%"/></el-form-item>
         <el-form-item label="费用日期"><el-date-picker v-model="form.expenseDate" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>
-        <el-form-item label="支出账户">
+        <el-form-item required label="支出账户">
           <el-select v-model="form.accountId" placeholder="请选择" style="width:100%">
             <el-option v-for="a in accounts" :key="a.id" :label="`${a.accountName}（余额 ${fmt(a.balance)}）`" :value="a.id ?? ''"/>
           </el-select>

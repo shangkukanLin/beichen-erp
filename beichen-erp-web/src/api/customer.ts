@@ -10,7 +10,6 @@ export interface Customer {
   creditPeriod?: number
   creditPeriodMonths?: number
   creditLimit?: number
-  receivableBalance?: number
   status: number
   remark?: string
 }

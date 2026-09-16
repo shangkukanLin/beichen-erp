@@ -13,9 +13,9 @@ public class OutsourceDeliveryItem {
     private Long deliveryId;
     @TableField("outsource_material_id")
     private Long materialId;
-    /** BOM类型ID（关联 dev_bom_type.id） */
-    @TableField("bom_type_id")
-    private Long bomTypeId;
+    /** 物料类型ID（关联 material_type.id） */
+    @TableField("material_type_id")
+    private Long materialTypeId;
     /** 来源订单明细行ID（关联 outsource_material_order_item.id），用于回写累计收货/退不良数量 */
     private Long itemId;
     private String unit;

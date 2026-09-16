@@ -34,8 +34,6 @@ public class InventoryStockTakeItem {
     /** 品质等级（成品 A/B/C/DEFECT/PENDING；物料 GOOD/DEFECT） */
     private String qualityType;
 
-    private String spec;
-
     private String unit;
 
     /** 账面数量（建单时快照） */

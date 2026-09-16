@@ -46,7 +46,7 @@ public class OutsourceOtherIoController {
     private final OutsourceOtherIoMapper ioMapper;
     private final OutsourceOtherIoItemMapper itemMapper;
     private final OutsourceMaterialMapper materialMapper;
-    private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
+    private final com.beichen.erp.dev.mapper.MaterialTypeMapper materialTypeMapper;
     private final WarehouseMapper warehouseMapper;
     private final com.beichen.erp.warehouse.service.CostService costService;
     private final WarehouseStockService warehouseStockService;
@@ -260,7 +260,7 @@ public class OutsourceOtherIoController {
                     Map<String, Object> map = (Map<String, Object>) m;
                     OutsourceOtherIoItem it = new OutsourceOtherIoItem();
                     if (map.get("materialId") != null) it.setMaterialId(Long.valueOf(map.get("materialId").toString()));
-                    if (map.get("bomTypeId") != null) it.setBomTypeId(Long.valueOf(map.get("bomTypeId").toString()));
+                    if (map.get("materialTypeId") != null) it.setMaterialTypeId(Long.valueOf(map.get("materialTypeId").toString()));
                     it.setUnit((String) map.get("unit"));
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank())
                         it.setQuantity(new BigDecimal(map.get("quantity").toString()));
@@ -294,10 +294,10 @@ public class OutsourceOtherIoController {
         return m != null ? m.getMaterialName() : "";
     }
 
-    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
-    private String getBomTypeNameById(Long bomTypeId) {
-        if (bomTypeId == null) return "-";
-        com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
+    /** 根据 物料类型ID 查询类型名称，空安全返回 "-" */
+    private String getMaterialTypeNameById(Long materialTypeId) {
+        if (materialTypeId == null) return "-";
+        com.beichen.erp.dev.entity.MaterialType bt = materialTypeMapper.selectById(materialTypeId);
         return bt != null ? bt.getTypeName() : "-";
     }
 }

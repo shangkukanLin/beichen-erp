@@ -35,7 +35,7 @@ const form = reactive<SaleOrder>({
 const items = ref<SaleOrderItem[]>([])
 
 // 库存不足确认弹窗
-const stockCheckResult = ref<{ productName: string; spec: string; unit: string; required: number; available: number; shortage: number; sufficient: boolean }[]>([])
+const stockCheckResult = ref<{ productName: string; unit: string; required: number; available: number; shortage: number; sufficient: boolean }[]>([])
 const stockCheckVisible = ref(false)
 
 const rules: FormRules = {
@@ -59,11 +59,11 @@ function resetForm() {
   })
   items.value = []
 }
-function addItem() { items.value.push({ productId: undefined, qualityType: 'A', productName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' }) }
+function addItem() { items.value.push({ productId: undefined, qualityType: 'A', productName: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' }) }
 function removeItem(index: number) { items.value.splice(index, 1) }
 function onProductChange(val: number, row: SaleOrderItem) {
   const p = products.value.find(x => x.id === val)
-  if (p) { row.productId = p.id as number; row.productName = p.name; row.sku = p.sku || ''; row.spec = p.spec; row.unit = p.unit }
+  if (p) { row.productId = p.id as number; row.productName = p.name; row.sku = p.sku || ''; row.unit = p.unit }
   // 切换产品后自动刷新该行库存
   refreshRowStock(row)
 }
@@ -237,7 +237,7 @@ onMounted(async () => {
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="出库仓库" prop="warehouseId">
+            <el-form-item required label="出库仓库" prop="warehouseId">
               <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%"
                 @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
                 <el-option label="+ 新增" :value="ADD_MARKER" />
@@ -291,7 +291,6 @@ onMounted(async () => {
               </RemoteSelect>
             </template>
           </el-table-column>
-          <el-table-column prop="spec" label="规格" width="100" />
           <el-table-column prop="unit" label="单位" width="70" />
           <el-table-column label="品质" width="90">
             <template #default="{ row }">
@@ -354,7 +353,6 @@ onMounted(async () => {
       </el-alert>
       <el-table :data="stockCheckResult.filter(r => !r.sufficient)" border>
         <el-table-column prop="productName" label="产品名称" min-width="140" />
-        <el-table-column prop="spec" label="规格" width="100" />
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column label="订购数量" width="100" align="right">
           <template #default="{ row }">{{ row.required }}</template>

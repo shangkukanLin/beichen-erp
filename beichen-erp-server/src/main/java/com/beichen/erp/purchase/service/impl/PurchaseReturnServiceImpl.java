@@ -219,7 +219,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     product != null ? product.getName() : "",
                     it.getQuantity().negate(),
                     StockChangeType.RETURN_OUT, order.getCode(), RelatedBillType.PURCHASE_RETURN, it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId(), it.getQualityType());
+                    "", order.getId(), it.getQualityType());
         }
         // 1.5) 重算金额（兜底存量数据：totalAmount 按明细 数量×单价 重新计算，应付随之正确）
         BigDecimal totalAmount = recalcTotalAmount(id);
@@ -315,7 +315,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     product != null ? product.getName() : "",
                     it.getQuantity(),
                     StockChangeType.RETURN_UN_AUDIT, order.getCode(), RelatedBillType.PURCHASE_RETURN, it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId(), it.getQualityType());
+                    "", order.getId(), it.getQualityType());
         }
         // 3) 冲销应付台账：置「已作废」并保留审计，不再物理删除（与委外交货反审核一致）
         for (FinancePayable fp : payables) {
@@ -399,7 +399,6 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
             m.put("purchaseOrderItemId", oi.getId());
             m.put("productId", oi.getProductId());
             m.put("productName", p != null ? p.getName() : "");
-            m.put("spec", p != null ? p.getSpec() : "");
             m.put("unit", p != null ? p.getUnit() : "");
             m.put("qualityType", oi.getQualityType());
             m.put("quantity", oi.getQuantity());

@@ -153,9 +153,7 @@ onActivated(() => { loadData() })
         <el-table-column prop="creditLimit" label="信用额度" width="120" align="right">
           <template #default="{ row }">{{ fmtMoney(row.creditLimit) }}</template>
         </el-table-column>
-        <el-table-column prop="receivableBalance" label="应收余额" width="120" align="right">
-          <template #default="{ row }"><span style="color:var(--app-color-danger)">{{ fmtMoney(row.receivableBalance) }}</span></template>
-        </el-table-column>
+        <!-- 2026-09-15 用户要求：删除「应收余额」列（余额在客户详情页仍可查看） -->
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>

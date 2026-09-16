@@ -228,8 +228,8 @@ onActivated(() => { loadData() })
         <el-table-column prop="sku" label="SKU" min-width="100" show-overflow-tooltip/>
         <el-table-column prop="productName" label="产品" min-width="110" show-overflow-tooltip/>
         <el-table-column prop="brandName" label="品牌" min-width="90" show-overflow-tooltip/>
-        <el-table-column label="规格/型号" min-width="110" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.spec || row.model || '—' }}</template>
+        <el-table-column label="型号" min-width="110" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.model || '—' }}</template>
         </el-table-column>
         <el-table-column prop="unit" label="单位" min-width="56" align="center"/>
         <el-table-column label="数量" min-width="80" align="right"><template #default="{row}">{{ fmt(row.quantity) }}</template></el-table-column>

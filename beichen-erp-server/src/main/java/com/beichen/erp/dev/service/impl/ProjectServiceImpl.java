@@ -11,11 +11,11 @@ import com.beichen.erp.common.PageParam;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.common.ProjectStatus;
 import com.beichen.erp.dev.entity.Bom;
-import com.beichen.erp.dev.entity.BomType;
+import com.beichen.erp.dev.entity.MaterialType;
 import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.entity.ProjectPhase;
 import com.beichen.erp.dev.mapper.BomMapper;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.dev.mapper.DevPurchaseItemMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.dev.mapper.ProjectPhaseMapper;
@@ -58,7 +58,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     private final SupplierMapper supplierMapper;
     private final BrandMapper brandMapper;
     private final BomMapper bomMapper;
-    private final BomTypeMapper bomTypeMapper;
+    private final MaterialTypeMapper materialTypeMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final OutsourceMaterialComponentMapper outsourceMaterialComponentMapper;
 
@@ -155,18 +155,18 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
      */
     private void syncConfigToBom(Project project) {
         if (project == null || project.getId() == null) return;
-        Map<String, Long> typeMap = bomTypeIdMap();
+        Map<String, Long> typeMap = materialTypeIdMap();
         int version = maxBomVersion(project.getId());
         upsertBomRow(project.getId(), typeMap.get("驱动IC"), project.getConfigDriveIcId(), version);
         syncPaixianComponents(project, version);
     }
 
     /** 更新/新增 BOM 独立行（物料未选择时不处理） */
-    private void upsertBomRow(Long projectId, Long bomTypeId, Long materialId, int version) {
-        if (projectId == null || bomTypeId == null || materialId == null) return;
+    private void upsertBomRow(Long projectId, Long materialTypeId, Long materialId, int version) {
+        if (projectId == null || materialTypeId == null || materialId == null) return;
         Bom row = bomMapper.selectOne(new LambdaQueryWrapper<Bom>()
                 .eq(Bom::getProjectId, projectId)
-                .eq(Bom::getBomTypeId, bomTypeId)
+                .eq(Bom::getMaterialTypeId, materialTypeId)
                 .orderByDesc(Bom::getVersion)
                 .last("LIMIT 1"));
         if (row != null) {
@@ -176,7 +176,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         } else {
             Bom nb = new Bom();
             nb.setProjectId(projectId);
-            nb.setBomTypeId(bomTypeId);
+            nb.setMaterialTypeId(materialTypeId);
             nb.setOutsourceMaterialId(materialId);
             nb.setQuantity(java.math.BigDecimal.ONE);
             nb.setVersion(version);
@@ -192,7 +192,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
      * 保留排线上原有的其他子物料，仅更新触摸IC/码片IC。
      */
     private void syncPaixianComponents(Project project, int version) {
-        Map<String, Long> typeMap = bomTypeIdMap();
+        Map<String, Long> typeMap = materialTypeIdMap();
         Long paixianTypeId = typeMap.get("排线");
         Long touchTypeId = typeMap.get("触摸IC");
         Long codeTypeId = typeMap.get("码片IC");
@@ -203,7 +203,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         //    排线行被删除、或排线行引用的物料被删除时，自动重建/复用，保证触摸IC/码片IC 有宿主
         Bom paixianRow = bomMapper.selectOne(new LambdaQueryWrapper<Bom>()
                 .eq(Bom::getProjectId, projectId)
-                .eq(Bom::getBomTypeId, paixianTypeId)
+                .eq(Bom::getMaterialTypeId, paixianTypeId)
                 .orderByDesc(Bom::getVersion)
                 .last("LIMIT 1"));
         Long paixianMatId = paixianRow != null ? paixianRow.getOutsourceMaterialId() : null;
@@ -222,14 +222,14 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
             OutsourceMaterial existing = outsourceMaterialMapper.selectOne(
                     new LambdaQueryWrapper<OutsourceMaterial>()
                             .eq(OutsourceMaterial::getMaterialName, matName)
-                            .eq(OutsourceMaterial::getBomTypeId, paixianTypeId)
+                            .eq(OutsourceMaterial::getMaterialTypeId, paixianTypeId)
                             .last("LIMIT 1"));
             if (existing != null) {
                 paixianMatId = existing.getId();
             } else {
                 OutsourceMaterial mat = new OutsourceMaterial();
                 mat.setMaterialName(matName);
-                mat.setBomTypeId(paixianTypeId);
+                mat.setMaterialTypeId(paixianTypeId);
                 mat.setStatus(1);
                 mat.setUnit("PCS");
                 mat.setCompanyId(CompanyContext.get());
@@ -243,7 +243,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
             } else {
                 Bom nb = new Bom();
                 nb.setProjectId(projectId);
-                nb.setBomTypeId(paixianTypeId);
+                nb.setMaterialTypeId(paixianTypeId);
                 nb.setOutsourceMaterialId(paixianMatId);
                 nb.setQuantity(java.math.BigDecimal.ONE);
                 nb.setVersion(version);
@@ -257,13 +257,13 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         if (project.getConfigTouchIcId() != null && touchTypeId != null) {
             bomMapper.delete(new LambdaQueryWrapper<Bom>()
                     .eq(Bom::getProjectId, projectId)
-                    .eq(Bom::getBomTypeId, touchTypeId)
+                    .eq(Bom::getMaterialTypeId, touchTypeId)
                     .eq(Bom::getVersion, version));
         }
         if (project.getConfigCodeIcId() != null && codeTypeId != null) {
             bomMapper.delete(new LambdaQueryWrapper<Bom>()
                     .eq(Bom::getProjectId, projectId)
-                    .eq(Bom::getBomTypeId, codeTypeId)
+                    .eq(Bom::getMaterialTypeId, codeTypeId)
                     .eq(Bom::getVersion, version));
         }
 
@@ -277,7 +277,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         Map<Long, Long> childType = new HashMap<>();
         if (!childIds.isEmpty()) {
             for (OutsourceMaterial c : outsourceMaterialMapper.selectBatchIds(childIds)) {
-                childType.put(c.getId(), c.getBomTypeId());
+                childType.put(c.getId(), c.getMaterialTypeId());
             }
         }
         List<OutsourceMaterialComponent> keep = existing.stream()
@@ -318,7 +318,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     private void fillConfigFromBom(Project p) {
         if (p == null || p.getId() == null) return;
         List<Bom> boms = bomMapper.selectList(new LambdaQueryWrapper<Bom>().eq(Bom::getProjectId, p.getId()));
-        Map<String, Long> typeMap = bomTypeIdMap();
+        Map<String, Long> typeMap = materialTypeIdMap();
         p.setConfigDriveIcId(null);
         p.setConfigTouchIcId(null);
         p.setConfigCodeIcId(null);
@@ -327,7 +327,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         Map<Long, Long> typeToMat = new HashMap<>();
         for (Bom b : boms) {
             if (Objects.equals(b.getVersion(), maxVersion) && b.getOutsourceMaterialId() != null) {
-                typeToMat.putIfAbsent(b.getBomTypeId(), b.getOutsourceMaterialId());
+                typeToMat.putIfAbsent(b.getMaterialTypeId(), b.getOutsourceMaterialId());
             }
         }
         p.setConfigDriveIcId(typeToMat.get(typeMap.get("驱动IC")));
@@ -345,7 +345,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         Map<Long, Long> childType = new HashMap<>();
         if (!childIds.isEmpty()) {
             for (OutsourceMaterial c : outsourceMaterialMapper.selectBatchIds(childIds)) {
-                childType.put(c.getId(), c.getBomTypeId());
+                childType.put(c.getId(), c.getMaterialTypeId());
             }
         }
         for (OutsourceMaterialComponent c : comps) {
@@ -359,10 +359,10 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         }
     }
 
-    /** BOM 类型名 -> id 映射 */
-    private Map<String, Long> bomTypeIdMap() {
+    /** 物料类型名 -> id 映射 */
+    private Map<String, Long> materialTypeIdMap() {
         Map<String, Long> m = new HashMap<>();
-        for (BomType t : bomTypeMapper.selectList(null)) {
+        for (MaterialType t : materialTypeMapper.selectList(null)) {
             m.put(t.getTypeName(), t.getId());
         }
         return m;

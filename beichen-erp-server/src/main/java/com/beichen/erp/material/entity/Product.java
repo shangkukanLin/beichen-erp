@@ -22,7 +22,6 @@ public class Product {
     private String sku;
     private Long brandId;
     private String category;
-    private String spec;
     /** 通用型号（适用多款机型） */
     private String generalModel;
     private String unit;

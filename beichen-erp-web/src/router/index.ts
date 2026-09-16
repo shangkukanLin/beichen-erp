@@ -110,50 +110,43 @@ const routes: RouteRecordRaw[] = [
         path: 'dev/project',
         name: 'DevProject',
         component: () => import('@/views/dev/project/index.vue'),
-        meta: { title: '研发项目', requiresAuth: true }
+        // 标题与菜单名保持一致（2026-09-16「研发项目」→「研发立项」，仅文案）
+        meta: { title: '研发立项', requiresAuth: true }
       },
       {
         path: 'dev/project/add',
         name: 'DevProjectAdd',
         component: () => import('@/views/dev/project/add.vue'),
-        meta: { title: '新增研发项目', requiresAuth: true, operate: true }
+        meta: { title: '新增研发立项', requiresAuth: true, operate: true }
       },
       {
         path: 'dev/project/edit/:id',
         name: 'DevProjectEdit',
         component: () => import('@/views/dev/project/edit.vue'),
-        meta: { title: '研发项目详细', requiresAuth: true, operate: true }
+        meta: { title: '研发立项详细', requiresAuth: true, operate: true }
       },
-      // BOM管理
+      // BOM管理 总览页 2026-09-16 按用户要求下线（页面已删）：BOM 仍在「研发立项」编辑页的 BOM 页签内维护
+      // 旧地址保留为重定向 —— 菜单下线＝收走前端白名单，不做重定向会让老书签直接吃 403
+      { path: 'dev/bom', redirect: '/dev/project' },
       {
-        path: 'dev/bom',
-        name: 'DevBom',
-        component: () => import('@/views/dev/bom/index.vue'),
-        meta: { title: 'BOM管理', requiresAuth: true }
+        path: 'dev/material-type',
+        name: 'MaterialType',
+        component: () => import('@/views/dev/material-type/index.vue'),
+        meta: { title: '物料类型管理', requiresAuth: true }
       },
-      {
-        path: 'dev/bom-type',
-        name: 'DevBomType',
-        component: () => import('@/views/dev/bom-type/index.vue'),
-        meta: { title: 'BOM类型管理', requiresAuth: true }
-      },
-      {
-        path: 'dev/phase-template',
-        name: 'DevPhaseTemplate',
-        component: () => import('@/views/dev/phase-template/index.vue'),
-        meta: { title: '阶段模板管理', requiresAuth: true }
-      },
-      {
-        path: 'dev/drawing',
-        name: 'DevDrawing',
-        component: () => import('@/views/dev/drawing/index.vue'),
-        meta: { title: '图纸文档', requiresAuth: true }
-      },
+      // 物料类型（2026-09-15 由「BOM表类型」改名，表/接口/字段同步 material_type）：旧地址兼容重定向
+      { path: 'dev/bom-type', redirect: '/dev/material-type' },
+      // 模版管理（基础数据，2026-09-15 用户要求）：阶段模板管理 + 加工合同模板 合并为一个页面，用 TAB 区分。
+      // 旧地址 /dev/phase-template 保留为重定向（书签/历史页签不失效，也不绕过菜单白名单），带 tab 参数直达对应页签
+      { path: 'template', name: 'TemplateManage', component: () => import('@/views/template/index.vue'), meta: { title: '模版管理', requiresAuth: true } },
+      { path: 'dev/phase-template', redirect: '/template?tab=phase' },
+      // 图纸文档 总览页 2026-09-16 按用户要求下线（页面已删）：图纸仍在「研发立项」编辑页的 图纸 页签内维护
+      { path: 'dev/drawing', redirect: '/dev/project' },
       {
         path: 'dev/material',
         name: 'DevMaterial',
         component: () => import('@/views/dev/material/index.vue'),
-        meta: { title: '研发物料管理', requiresAuth: true }
+        meta: { title: '研发物料', requiresAuth: true }
       },
       {
         path: 'dev/material/detail/:id',
@@ -162,11 +155,11 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '研发物料详情', requiresAuth: true, operate: true }
       },
       {
-        // 屏幕资料知识库：行业机型屏幕参数（清空数据不清理该知识库）
+        // 屏幕资料（2026-09-16 由「屏幕资料知识库」改名，仅显示文案）：行业机型屏幕参数（清空数据不清理该库）
         path: 'dev/screen-model',
         name: 'DevScreenModel',
         component: () => import('@/views/dev/screen-model.vue'),
-        meta: { title: '屏幕资料知识库', requiresAuth: true }
+        meta: { title: '屏幕资料', requiresAuth: true }
       },
       // 委外加工
       {
@@ -232,8 +225,13 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/material-order/add', name: 'OutsourceMaterialOrderAdd', component: () => import('@/views/outsource/material-order/add.vue'), meta: { title: '新增物料订单', requiresAuth: true, operate: true } },
       { path: 'outsource/material-order/add/:id', name: 'OutsourceMaterialOrderEdit', component: () => import('@/views/outsource/material-order/add.vue'), meta: { title: '编辑物料订单', requiresAuth: true, operate: true } },
       { path: 'outsource/material-order/detail/:id', name: 'OutsourceMaterialOrderDetail', component: () => import('@/views/outsource/material-order/detail.vue'), meta: { title: '物料订单详情', requiresAuth: true, operate: true } },
-      { path: 'outsource/delivery-info', name: 'OutsourceDeliveryInfo', component: () => import('@/views/outsource/delivery-info/index.vue'), meta: { title: '交货信息', requiresAuth: true } },
-      { path: 'outsource/contract-template', name: 'OutsourceContractTemplate', component: () => import('@/views/outsource/contract-template.vue'), meta: { title: '合同模板设置', requiresAuth: true } },
+      // 交货信息 总览页 2026-09-16 按用户要求下线（页面已删）：交货记录改在
+      // 「加工订单详情 → 交货管理」与「物料订单详情 → 交货管理」页签内查看。旧地址重定向，避免老书签吃 403
+      { path: 'outsource/delivery-info', redirect: '/outsource/order' },
+      // 物料库存盘点（物料仓库，2026-09-16 新增）：与成品「库存盘点」共用面板，scope=MATERIAL 只盘物料仓
+      { path: 'outsource/material-stock-take', name: 'OutsourceMaterialStockTake', component: () => import('@/views/outsource/material-stock-take/index.vue'), meta: { title: '物料库存盘点', requiresAuth: true } },
+      // 加工合同模板已并入「基础数据 → 模版管理」（2026-09-15）；旧地址重定向到该页的「加工合同模板」页签
+      { path: 'outsource/contract-template', redirect: '/template?tab=contract' },
       { path: 'outsource/other-io', name: 'OutsourceOtherIo', component: () => import('@/views/outsource/other-io/index.vue'), meta: { title: '物料其他出入库', requiresAuth: true } },
       // 物料报损：委外物料的报损单（与成品报损独立成表，库存按 仓库+物料 扣减）
       { path: 'outsource/stock-loss', name: 'OutsourceStockLoss', component: () => import('@/views/outsource/stock-loss/index.vue'), meta: { title: '物料报损', requiresAuth: true } },
@@ -304,12 +302,14 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/sale/detail/:id', name: 'SaleOrderDetail', component: () => import('@/views/sale/order/detail.vue'), meta: { title: '销售单详情', requiresAuth: true, operate: true } },
       // 经营分析（目录置于首页之下）：原「财务分析」拆分 + 销售分析 / 客户分析
       { path: 'analysis/overview', name: 'AnalysisOverview', component: () => import('@/views/analysis/overview.vue'), meta: { title: '经营概览', requiresAuth: true } },
-      { path: 'analysis/cash', name: 'AnalysisCash', component: () => import('@/views/analysis/cash.vue'), meta: { title: '资金与往来', requiresAuth: true } },
+      { path: 'analysis/cash', name: 'AnalysisCash', component: () => import('@/views/analysis/cash.vue'), meta: { title: '资金往来', requiresAuth: true } },
       { path: 'analysis/tax', name: 'AnalysisTax', component: () => import('@/views/analysis/tax.vue'), meta: { title: '税务分析', requiresAuth: true } },
       { path: 'analysis/sale', name: 'AnalysisSale', component: () => import('@/views/analysis/sale.vue'), meta: { title: '销售分析', requiresAuth: true } },
       // 销售分析钻取：某产品/仓库在区间的销售单明细（operate 页，不入菜单）
       { path: 'analysis/sale/detail', name: 'AnalysisSaleDetail', component: () => import('@/views/analysis/sale/detail.vue'), meta: { title: '销售单明细', requiresAuth: true, operate: true } },
       { path: 'analysis/customer', name: 'AnalysisCustomer', component: () => import('@/views/analysis/customer.vue'), meta: { title: '客户分析', requiresAuth: true } },
+      // 进货分析（2026-09-15 新增）：区间采购 KPI + 趋势 + 单据明细（点单号进对应单据详情）
+      { path: 'analysis/purchase', name: 'AnalysisPurchase', component: () => import('@/views/analysis/purchase.vue'), meta: { title: '进货分析', requiresAuth: true } },
       // 单客户分析：客户分析页点客户名进入（档案 + 图表 + 拿货/品牌/退货明细）
       { path: 'analysis/customer/:id', name: 'AnalysisCustomerProfile', component: () => import('@/views/analysis/customer/profile.vue'), meta: { title: '单客户分析', requiresAuth: true, operate: true } },
       // 客户分析钻取：某客户在区间的销售单明细

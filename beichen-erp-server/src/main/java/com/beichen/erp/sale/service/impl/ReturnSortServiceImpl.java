@@ -195,7 +195,6 @@ public class ReturnSortServiceImpl implements ReturnSortService {
             m.put("productId", pending.getProductId());
             m.put("sku", pending.getSku() != null ? pending.getSku() : "");
             m.put("productName", pending.getProductName() != null ? pending.getProductName() : "");
-            m.put("spec", pending.getSpec() != null ? pending.getSpec() : "");
             m.put("unit", pending.getUnit() != null ? pending.getUnit() : "");
             m.put("quantity", alloc);
             m.put("totalQuantity", nz(pending.getQuantity()));
@@ -277,32 +276,30 @@ public class ReturnSortServiceImpl implements ReturnSortService {
                         + " 超过售后仓可用待分类库存 " + avail + "，请刷新待整理库存后重试");
             assertSourceAvailable(it);
 
-            Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
-            String spec = prod != null ? prod.getSpec() : (it.getSpec() != null ? it.getSpec() : "");
 
             // 扣售后仓 待分类品（changeStock 内部校验库存不足）
             stockService.changeStock(s.getWarehouseId(), it.getProductId(), it.getTotalQuantity().negate(),
                     StockChangeType.RETURN_SORT_OUT, s.getCode(), RelatedBillType.RETURN_SORT,
-                    spec, s.getId(), ProductQualityType.PENDING.getCode());
+                    "", s.getId(), ProductQualityType.PENDING.getCode());
             // 追溯：累加来源待整理批次的已整理数量
             applySortedQuantity(it.getPendingId(), it.getTotalQuantity(), true);
 
             if (a.compareTo(BigDecimal.ZERO) > 0)
                 stockService.changeStock(s.getTargetWarehouseA(), it.getProductId(), a,
                         StockChangeType.RETURN_SORT_IN, s.getCode(), RelatedBillType.RETURN_SORT,
-                        spec, s.getId(), ProductQualityType.A.getCode());
+                        "", s.getId(), ProductQualityType.A.getCode());
             if (b.compareTo(BigDecimal.ZERO) > 0)
                 stockService.changeStock(s.getTargetWarehouseB(), it.getProductId(), b,
                         StockChangeType.RETURN_SORT_IN, s.getCode(), RelatedBillType.RETURN_SORT,
-                        spec, s.getId(), ProductQualityType.B.getCode());
+                        "", s.getId(), ProductQualityType.B.getCode());
             if (c.compareTo(BigDecimal.ZERO) > 0)
                 stockService.changeStock(s.getTargetWarehouseC(), it.getProductId(), c,
                         StockChangeType.RETURN_SORT_IN, s.getCode(), RelatedBillType.RETURN_SORT,
-                        spec, s.getId(), ProductQualityType.C.getCode());
+                        "", s.getId(), ProductQualityType.C.getCode());
             if (d.compareTo(BigDecimal.ZERO) > 0)
                 stockService.changeStock(s.getTargetWarehouseDefect(), it.getProductId(), d,
                         StockChangeType.RETURN_SORT_IN, s.getCode(), RelatedBillType.RETURN_SORT,
-                        spec, s.getId(), ProductQualityType.DEFECT.getCode());
+                        "", s.getId(), ProductQualityType.DEFECT.getCode());
         }
         // 财务联动：折损收款生成独立正向应收（单号 -LOSS 后缀，与整理单本体区分）
         saveLossReceivable(s, items);
@@ -325,32 +322,30 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         for (ReturnSortItem it : items) {
             if (it.getTotalQuantity() == null || it.getTotalQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
             BigDecimal a = nz(it.getQtyA()), b = nz(it.getQtyB()), c = nz(it.getQtyC()), d = nz(it.getQtyDefect());
-            Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
-            String spec = prod != null ? prod.getSpec() : (it.getSpec() != null ? it.getSpec() : "");
 
             // 加回售后仓 待分类品
             stockService.changeStock(s.getWarehouseId(), it.getProductId(), it.getTotalQuantity(),
                     StockChangeType.CANCEL_RETURN_SORT_OUT, s.getCode(), RelatedBillType.RETURN_SORT,
-                    spec, s.getId(), ProductQualityType.PENDING.getCode());
+                    "", s.getId(), ProductQualityType.PENDING.getCode());
             // 追溯：扣回来源待整理批次的已整理数量
             applySortedQuantity(it.getPendingId(), it.getTotalQuantity(), false);
             // 冲回目标仓库各品质
             if (a.compareTo(BigDecimal.ZERO) > 0)
                 stockService.changeStock(s.getTargetWarehouseA(), it.getProductId(), a.negate(),
                         StockChangeType.CANCEL_RETURN_SORT_IN, s.getCode(), RelatedBillType.RETURN_SORT,
-                        spec, s.getId(), ProductQualityType.A.getCode());
+                        "", s.getId(), ProductQualityType.A.getCode());
             if (b.compareTo(BigDecimal.ZERO) > 0)
                 stockService.changeStock(s.getTargetWarehouseB(), it.getProductId(), b.negate(),
                         StockChangeType.CANCEL_RETURN_SORT_IN, s.getCode(), RelatedBillType.RETURN_SORT,
-                        spec, s.getId(), ProductQualityType.B.getCode());
+                        "", s.getId(), ProductQualityType.B.getCode());
             if (c.compareTo(BigDecimal.ZERO) > 0)
                 stockService.changeStock(s.getTargetWarehouseC(), it.getProductId(), c.negate(),
                         StockChangeType.CANCEL_RETURN_SORT_IN, s.getCode(), RelatedBillType.RETURN_SORT,
-                        spec, s.getId(), ProductQualityType.C.getCode());
+                        "", s.getId(), ProductQualityType.C.getCode());
             if (d.compareTo(BigDecimal.ZERO) > 0)
                 stockService.changeStock(s.getTargetWarehouseDefect(), it.getProductId(), d.negate(),
                         StockChangeType.CANCEL_RETURN_SORT_IN, s.getCode(), RelatedBillType.RETURN_SORT,
-                        spec, s.getId(), ProductQualityType.DEFECT.getCode());
+                        "", s.getId(), ProductQualityType.DEFECT.getCode());
         }
         // 财务联动：冲销折损收款台账（未填折损金额时台账不存在，跳过）
         reverseReceivableIfExists(s.getCode() + "-LOSS");

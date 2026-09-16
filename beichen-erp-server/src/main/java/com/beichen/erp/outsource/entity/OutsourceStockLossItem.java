@@ -26,12 +26,12 @@ public class OutsourceStockLossItem {
     /** 物料名称（冗余快照） */
     private String materialName;
 
-    /** BOM类型ID（关联 dev_bom_type.id） */
-    @TableField("bom_type_id")
-    private Long bomTypeId;
+    /** 物料类型ID（关联 material_type.id） */
+    @TableField("material_type_id")
+    private Long materialTypeId;
 
-    /** BOM类型名称（冗余，前端免查） */
-    private String bomTypeName;
+    /** 物料类型名称（冗余，前端免查） */
+    private String materialTypeName;
 
     /** 品质（QualityType：GOOD 良品 / DEFECT 不良品） */
     private String qualityType;

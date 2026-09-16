@@ -96,7 +96,6 @@ public class SupplierProductServiceImpl extends ServiceImpl<SupplierProductMappe
                 if (p != null) {
                     sp.setProductName(p.getName());
                     sp.setSku(p.getSku() != null ? p.getSku() : "");
-                    sp.setSpec(p.getSpec());
                     sp.setUnit(p.getUnit());
                 }
             }

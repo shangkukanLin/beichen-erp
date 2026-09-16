@@ -1,4 +1,4 @@
-﻿import request from '@/utils/request'
+import request from '@/utils/request'
 import type { PageResult } from '@/api/product'
 
 /* ============================ 类型定义 ============================ */
@@ -51,6 +51,8 @@ export const DASHBOARD_TABS: { key: string; label: string }[] = [
   { key: 'outsource', label: '委外加工' },
   { key: 'purchase', label: '进货业务' },
   { key: 'sale', label: '销售业务' },
+  // 物料仓库（2026-09-16 新增，与左侧栏新一级菜单同名；顺序与左侧栏一致：物料仓库在成品库存之前）
+  { key: 'materialWarehouse', label: '物料仓库' },
   { key: 'stock', label: '成品库存' },
   { key: 'finance', label: '财务' }
 ]
@@ -337,11 +339,11 @@ export interface ProjectQueryParams {
 
 export interface BomVO {
   id?: number | string; projectId?: number; supplierId?: number; spec?: string; specification?: string; materialName: string
-  unit?: string; quantityPerSet?: number; lossRate?: number; outsourceMaterialId?: number; bomTypeId?: number; quantity?: number; bomTypeName?: string
+  unit?: string; quantityPerSet?: number; lossRate?: number; outsourceMaterialId?: number; materialTypeId?: number; quantity?: number; materialTypeName?: string
   remark?: string
 }
 
-export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialName?: string; spec?: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; outsourceMaterialId?: number; bomTypeId?: number; quantity?: number; remark?: string }
+export interface BomDTO { id?: number; parentId?: number; sortOrder?: number; materialName?: string; spec?: string; supplierId?: number; unit?: string; quantityPerSet?: number; lossRate?: number; outsourceMaterialId?: number; materialTypeId?: number; quantity?: number; remark?: string }
 
 export interface BugVO {
   id?: number | string; projectId?: number; code?: string; title: string

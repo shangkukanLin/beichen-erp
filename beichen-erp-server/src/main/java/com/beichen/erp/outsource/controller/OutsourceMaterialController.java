@@ -4,9 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.config.CompanyContext;
-import com.beichen.erp.dev.entity.BomType;
+import com.beichen.erp.dev.entity.MaterialType;
 import com.beichen.erp.dev.entity.Project;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
@@ -29,7 +29,7 @@ public class OutsourceMaterialController {
 
     private final OutsourceMaterialMapper mapper;
     private final ProjectMapper projectMapper;
-    private final BomTypeMapper bomTypeMapper;
+    private final MaterialTypeMapper materialTypeMapper;
     private final SupplierMaterialService supplierMaterialService;
     private final JdbcTemplate jdbcTemplate;
 
@@ -39,11 +39,11 @@ public class OutsourceMaterialController {
             @RequestParam(defaultValue = "10") Integer pageSize,
             @RequestParam(required = false) String materialName,
             @RequestParam(required = false) String projectId,
-            @RequestParam(required = false) Long bomTypeId) {
+            @RequestParam(required = false) Long materialTypeId) {
         LambdaQueryWrapper<OutsourceMaterial> w = new LambdaQueryWrapper<OutsourceMaterial>()
                 .like(materialName != null && !materialName.isBlank(), OutsourceMaterial::getMaterialName, materialName)
                 .like(projectId != null && !projectId.isBlank(), OutsourceMaterial::getProjectIds, projectId)
-                .eq(bomTypeId != null, OutsourceMaterial::getBomTypeId, bomTypeId)
+                .eq(materialTypeId != null, OutsourceMaterial::getMaterialTypeId, materialTypeId)
                 .orderByDesc(OutsourceMaterial::getId);
         Page<OutsourceMaterial> page = mapper.selectPage(new Page<>(pageNum, pageSize), w);
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, page.getTotal());
@@ -57,8 +57,8 @@ public class OutsourceMaterialController {
             map.put("projectIds", m.getProjectIds());
             map.put("projectName", idsToNames(m.getProjectIds(), projectMapper));
             map.put("materialName", m.getMaterialName());
-            map.put("bomTypeId", m.getBomTypeId());
-            map.put("bomTypeName", getBomTypeNameById(m.getBomTypeId()));
+            map.put("materialTypeId", m.getMaterialTypeId());
+            map.put("materialTypeName", getMaterialTypeNameById(m.getMaterialTypeId()));
             map.put("spec", m.getSpec());
             // supplierIds 统一由 supplier_material 居间表联查生成（弃用字段 outsource_material.supplier_ids）
             map.put("supplierIds", supplierMaterialService.listSupplierIdsByMaterial(m.getId()));
@@ -115,10 +115,10 @@ public class OutsourceMaterialController {
                 }).collect(Collectors.joining(", "));
     }
 
-    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
-    private String getBomTypeNameById(Long bomTypeId) {
-        if (bomTypeId == null) return "-";
-        BomType bt = bomTypeMapper.selectById(bomTypeId);
+    /** 根据 物料类型ID 查询类型名称，空安全返回 "-" */
+    private String getMaterialTypeNameById(Long materialTypeId) {
+        if (materialTypeId == null) return "-";
+        MaterialType bt = materialTypeMapper.selectById(materialTypeId);
         return bt != null ? bt.getTypeName() : "-";
     }
 
@@ -170,9 +170,9 @@ public class OutsourceMaterialController {
     private void fill(OutsourceMaterial m, Map<String, Object> body) {
         m.setProjectIds(body.get("projectIds") != null ? body.get("projectIds").toString() : null);
         m.setMaterialName((String) body.get("materialName"));
-        // 仅存储 BOM 类型ID，类型名称在展示时关联 dev_bom_type 查名
-        if (body.get("bomTypeId") != null) {
-            m.setBomTypeId(Long.valueOf(body.get("bomTypeId").toString()));
+        // 仅存储 物料类型ID，类型名称在展示时关联 material_type 查名
+        if (body.get("materialTypeId") != null) {
+            m.setMaterialTypeId(Long.valueOf(body.get("materialTypeId").toString()));
         }
         m.setSpec((String) body.get("spec"));
         // 注意：supplierIds 不再写入 outsource_material 实体，改由 supplier_material 居间表维护
@@ -261,7 +261,7 @@ public class OutsourceMaterialController {
                     m.put("childMaterialId", c.getChildMaterialId());
                     OutsourceMaterial child = mapper.selectById(c.getChildMaterialId());
                     m.put("childName", child != null ? child.getMaterialName() : "");
-                    m.put("childType", child != null ? getBomTypeNameById(child.getBomTypeId()) : "");
+                    m.put("childType", child != null ? getMaterialTypeNameById(child.getMaterialTypeId()) : "");
                     m.put("quantity", c.getQuantity());
                     m.put("lossRate", c.getLossRate());
                     m.put("remark", c.getRemark());

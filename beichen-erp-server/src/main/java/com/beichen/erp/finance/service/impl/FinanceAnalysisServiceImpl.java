@@ -24,11 +24,11 @@ import java.util.*;
 
 /**
  * 财务分析 Service 实现：纯查询聚合，不改任何业务数据。
- * <p>口径（2026-09-11 起，P2-27 定稿为"销售成本"口径）：
- * 收入 = 已审核销售单(audit_time/create_time 归月) − 销售退货 + 退货折损收款；
+ * <p>口径（2026-09-11 起，P2-27 定稿为"销售成本"口径；**归期 2026-09-15 全站统一为「建单日」create_time**）：
+ * 收入 = 已审核销售单(create_time 归月) − 销售退货(create_time) + 退货折损收款；
  * 成本 = Σ(销售明细数量 − 退货明细数量) × 产品当前移动加权成本价 {@code product.cost_price}
  * （与客户分析/销售分析同源，保证跨页面"毛利"可对账）；
- * 费用 = 已审核费用单(expense_date 归月)；净利润 = 毛利 − 费用；现金流 = 资金流水按月收 − 支。
+ * 费用 = 已审核费用单(create_time 归月)；净利润 = 毛利 − 费用；现金流 = 资金流水按月收 − 支。
  * <p>注：采购入库属资产、不是当期损益，故利润表**不再把采购金额计为成本**（采购金额见采购与资金模块）。
  */
 @Service
@@ -274,6 +274,230 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         pt.put("netProfit", netProfit);
         return pt;
     }
+
+    // ==================== 进货分析（2026-09-15 新增，供「经营分析 → 进货分析」） ====================
+
+    /**
+     * 进货分析：所选区间的采购 KPI + 趋势序列 + 单据明细（下钻）。
+     * 口径（与 overview-kpi 的采购项完全一致）：采购金额 = 已审核采购单（按审核日）；
+     * 采购退货 = 已审核采购退货（按建单日）；净采购额 = 采购金额 − 采购退货；采购单数 = 已审核采购单笔数。
+     * 注：采购入库属资产、不计入损益，本页只做采购视角统计。
+     */
+    @Override
+    public Map<String, Object> purchaseAnalysis(String preset, String start, String end) {
+        LocalDate s, e;
+        boolean custom = start != null && !start.isBlank() && end != null && !end.isBlank();
+        if (custom) {
+            s = LocalDate.parse(start); e = LocalDate.parse(end);
+            if (s.isAfter(e)) { LocalDate t = s; s = e; e = t; }
+        } else {
+            LocalDate[] r = resolvePresetRange(preset);
+            s = r[0]; e = r[1];
+        }
+        // 防滥用：按天展开，最长 400 天（与其余区间接口同规则）
+        if (s.plusDays(400).isBefore(e)) s = e.minusDays(399);
+
+        Map<String, Map<String, BigDecimal>> dm = new LinkedHashMap<>();
+        dm.put("pur", toDayMap(analysisMapper.purchaseByDay()));
+        dm.put("purRet", toDayMap(analysisMapper.purchaseReturnByDay()));
+        dm.put("purCnt", toDayMap(analysisMapper.purchaseCountByDay()));
+
+        BigDecimal amount = ZERO, retAmount = ZERO, cnt = ZERO;
+        for (LocalDate d = s; !d.isAfter(e); d = d.plusDays(1)) {
+            String k = d.toString();
+            amount = amount.add(dm.get("pur").getOrDefault(k, ZERO));
+            retAmount = retAmount.add(dm.get("purRet").getOrDefault(k, ZERO));
+            cnt = cnt.add(dm.get("purCnt").getOrDefault(k, ZERO));
+        }
+
+        Map<String, Object> range = new LinkedHashMap<>();
+        range.put("start", s.toString());
+        range.put("end", e.toString());
+        range.put("preset", custom ? "custom" : (preset == null ? "month" : preset));
+
+        Map<String, Object> kpi = new LinkedHashMap<>();
+        kpi.put("purchaseAmount", amount);
+        kpi.put("purchaseReturnAmount", retAmount);
+        kpi.put("netPurchase", amount.subtract(retAmount));
+        kpi.put("purchaseOrderCount", cnt);
+
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("range", range);
+        res.put("kpi", kpi);
+        res.put("series", purchaseSeries(dm, s, e));
+        // 两个饼图（2026-09-15 用户要求）：直接采购成品 / 委外加工成品入库，放在「采购单据明细（下钻）」上方
+        fillPurchasePies(res, s, e);
+        res.put("details", purchaseDetails(s, e));
+        return res;
+    }
+
+    /**
+     * 进货分析的两个饼图（用户口径：**两张分开做**，各按**产品**分片，每卡一个「金额 / 件数」switch）：
+     * <ul>
+     *   <li>① **直接采购成品**（**净额**口径）= Σ采购单明细 − Σ采购退货明细，按产品；
+     *       归期与采购聚合一致（采购单按**审核日**、采购退货按**建单日**）。</li>
+     *   <li>② **委外加工成品入库** = Σ(交货数量 × 加工单价)，按**成品产品**分片；归期 = **建单日**
+     *       （2026-09-15 全站统一，原为交货日期）；退不良数量为负 → 自动冲减（与生成的应付同口径）。</li>
+     * </ul>
+     * 金额与件数**两套一次返回** → 前端切换不重发请求。
+     * ⚠️ 净额为负（退货 &gt; 采购）的产品**不出分片**，但合计仍按净额算（可能小于分片合计），
+     * 故不要用「分片合计 = 合计」做断言。
+     */
+    private void fillPurchasePies(Map<String, Object> res, LocalDate s, LocalDate e) {
+        String from = s.toString(), to = e.toString();
+
+        // ① 直接采购成品（净额 = 采购明细 − 采购退货明细）
+        Map<Long, BigDecimal> purAmt = new HashMap<>(), purQty = new HashMap<>();
+        Map<Long, String> purName = new HashMap<>();
+        for (Map<String, Object> r : analysisMapper.purchaseItemByProduct()) {
+            if (!inRange(txt(r.get("d")), from, to) || r.get("product_id") == null) continue;
+            Long pid = toBd(r.get("product_id")).longValue();
+            purAmt.merge(pid, toBd(r.get("amt")), BigDecimal::add);
+            purQty.merge(pid, toBd(r.get("qty")), BigDecimal::add);
+            purName.put(pid, txt(r.get("product_name")));
+        }
+        for (Map<String, Object> r : analysisMapper.purchaseReturnItemByProduct()) {
+            if (!inRange(txt(r.get("d")), from, to) || r.get("product_id") == null) continue;
+            Long pid = toBd(r.get("product_id")).longValue();
+            purAmt.merge(pid, toBd(r.get("amt")).negate(), BigDecimal::add);
+            purQty.merge(pid, toBd(r.get("qty")).negate(), BigDecimal::add);
+            purName.putIfAbsent(pid, txt(r.get("product_name")));
+        }
+
+        // ② 委外加工成品入库（Σ 数量 × 加工单价；退不良数量为负 → 自动冲减）
+        Map<Long, BigDecimal> outAmt = new HashMap<>(), outQty = new HashMap<>();
+        Map<Long, String> outName = new HashMap<>();
+        for (Map<String, Object> r : analysisMapper.outsourceInByProduct()) {
+            if (!inRange(txt(r.get("d")), from, to) || r.get("product_master_id") == null) continue;
+            Long pid = toBd(r.get("product_master_id")).longValue();
+            outAmt.merge(pid, toBd(r.get("amt")), BigDecimal::add);
+            outQty.merge(pid, toBd(r.get("qty")), BigDecimal::add);
+            outName.put(pid, txt(r.get("product_name")));
+        }
+
+        res.put("directPurchaseByProduct", toProductPie(purAmt, purName));        // 直接采购成品 饼图（金额口径）
+        res.put("directPurchaseByProductQty", toProductPie(purQty, purName));     // 直接采购成品 饼图（件数口径）
+        res.put("outsourceInByProduct", toProductPie(outAmt, outName));           // 委外加工成品入库 饼图（金额口径）
+        res.put("outsourceInByProductQty", toProductPie(outQty, outName));        // 委外加工成品入库 饼图（件数口径）
+        Map<String, Object> pieTotals = new LinkedHashMap<>();
+        pieTotals.put("directPurchaseAmount", sumAll(purAmt));                    // 净额合计（含冲减）
+        pieTotals.put("directPurchaseQuantity", sumAll(purQty));
+        pieTotals.put("outsourceInAmount", sumAll(outAmt));
+        pieTotals.put("outsourceInQuantity", sumAll(outQty));
+        res.put("pieTotals", pieTotals);
+    }
+
+    /** 日期是否落在区间内（空串视为不在区间） */
+    private boolean inRange(String d, String from, String to) {
+        return d != null && !d.isEmpty() && d.compareTo(from) >= 0 && d.compareTo(to) <= 0;
+    }
+
+    /** 累加 map 中所有金额（含负数） */
+    private BigDecimal sumAll(Map<Long, BigDecimal> m) {
+        BigDecimal t = ZERO;
+        for (BigDecimal v : m.values()) t = t.add(v == null ? ZERO : v);
+        return t;
+    }
+
+    /**
+     * 产品维度 map → 饼图分片 `[{name, value}]`（按 value 倒序）。
+     * **值 ≤ 0 的产品不产出分片**（饼图不能有负片；净额为负 = 退货大于采购，其影响已体现在合计里）。
+     */
+    private List<Map<String, Object>> toProductPie(Map<Long, BigDecimal> valueByKey, Map<Long, String> nameByKey) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Map.Entry<Long, BigDecimal> en : valueByKey.entrySet()) {
+            BigDecimal v = en.getValue();
+            if (v == null || v.signum() <= 0) continue;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("name", nameByKey.getOrDefault(en.getKey(), "（未知）"));
+            m.put("value", v);
+            list.add(m);
+        }
+        list.sort((a, b) -> ((BigDecimal) b.get("value")).compareTo((BigDecimal) a.get("value")));
+        return list;
+    }
+
+    /** 进货趋势序列：区间 ≤ 62 天按天、否则按月（与首页/经营概览同一粒度规则） */
+    private Map<String, Object> purchaseSeries(Map<String, Map<String, BigDecimal>> dm, LocalDate s, LocalDate e) {
+        boolean byMonth = ChronoUnit.DAYS.between(s, e) + 1 > SERIES_DAY_MAX;
+        List<Map<String, Object>> points = new ArrayList<>();
+        Map<String, BigDecimal> pur = dm.get("pur"), purRet = dm.get("purRet");
+        if (!byMonth) {
+            for (LocalDate d = s; !d.isAfter(e); d = d.plusDays(1)) {
+                String k = d.toString();
+                points.add(purchasePoint(k, pur.getOrDefault(k, ZERO), purRet.getOrDefault(k, ZERO)));
+            }
+        } else {
+            String cur = null;
+            BigDecimal a = ZERO, r = ZERO;
+            for (LocalDate d = s; !d.isAfter(e); d = d.plusDays(1)) {
+                String ym = d.toString().substring(0, 7);
+                if (cur != null && !ym.equals(cur)) {
+                    points.add(purchasePoint(cur, a, r));
+                    a = ZERO; r = ZERO;
+                }
+                cur = ym;
+                String k = d.toString();
+                a = a.add(pur.getOrDefault(k, ZERO));
+                r = r.add(purRet.getOrDefault(k, ZERO));
+            }
+            if (cur != null) points.add(purchasePoint(cur, a, r));
+        }
+        Map<String, Object> series = new LinkedHashMap<>();
+        series.put("granularity", byMonth ? "month" : "day");
+        series.put("start", s.toString());
+        series.put("end", e.toString());
+        series.put("points", points);
+        return series;
+    }
+
+    /** 按月/按天的进货趋势点 */
+    private Map<String, Object> purchasePoint(String label, BigDecimal amount, BigDecimal retAmount) {
+        Map<String, Object> pt = new LinkedHashMap<>();
+        pt.put("label", label);
+        pt.put("purchaseAmount", amount);
+        pt.put("purchaseReturnAmount", retAmount);
+        pt.put("netPurchase", amount.subtract(retAmount));
+        return pt;
+    }
+
+    /**
+     * 进货单据明细（下钻用）：区间内的已审核采购单 + 采购退货单，按日期倒序。
+     * 归期与聚合口径一致（采购单按审核日、采购退货按建单日）；金额一律取正数，由前端按类型展示与冲减。
+     */
+    private List<Map<String, Object>> purchaseDetails(LocalDate s, LocalDate e) {
+        String from = s.toString(), to = e.toString();
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Map<String, Object> r : analysisMapper.purchaseOrderRecords()) {
+            String d = txt(r.get("d"));
+            if (d.isEmpty() || d.compareTo(from) < 0 || d.compareTo(to) > 0) continue;
+            list.add(purchaseDetailRow("PURCHASE", r, d));
+        }
+        for (Map<String, Object> r : analysisMapper.purchaseReturnRecords()) {
+            String d = txt(r.get("d"));
+            if (d.isEmpty() || d.compareTo(from) < 0 || d.compareTo(to) > 0) continue;
+            list.add(purchaseDetailRow("PURCHASE_RETURN", r, d));
+        }
+        list.sort(Comparator.comparing((Map<String, Object> m) -> String.valueOf(m.get("date"))).reversed()
+                .thenComparing(m -> String.valueOf(m.get("code"))));
+        return list;
+    }
+
+    /** 组装一行进货明细 */
+    private Map<String, Object> purchaseDetailRow(String billType, Map<String, Object> r, String date) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("billType", billType);
+        m.put("billId", r.get("id"));
+        m.put("code", txt(r.get("code")));
+        m.put("date", date);
+        m.put("supplier", txt(r.get("partner")));
+        m.put("amount", toBd(r.get("total_amount")));
+        m.put("remark", txt(r.get("remark")));
+        return m;
+    }
+
+    /** 空安全的 toString（金额/文本字段取值） */
+    private String txt(Object v) { return v == null ? "" : v.toString(); }
 
     @Override
     public Map<String, Object> profit(int months, LocalDate start, LocalDate end) {

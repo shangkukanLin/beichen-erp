@@ -19,7 +19,7 @@ public class Bom {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long projectId;
-    private Long bomTypeId;
+    private Long materialTypeId;
     /** 关联外协物料ID（outsource_material.id） */
     private Long outsourceMaterialId;
     private Long supplierId;

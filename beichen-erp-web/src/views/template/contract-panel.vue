@@ -1,12 +1,15 @@
 <script setup lang="ts">
-defineOptions({ name: 'ContractTemplate' })
-
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getTemplateList, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate, type ContractTemplate } from '@/api/contract-template'
 import { QuillEditor } from '@vueup/vue-quill'
 import '@vueup/vue-quill/dist/vue-quill.snow.css'
 
+/**
+ * 加工合同模板面板（2026-09-15）：原「加工合同模板」页面（/outsource/contract-template）的主体，
+ * 现作为「基础数据 → 模版管理」页面中「加工合同模板」页签的内嵌内容（见 ../index.vue）。
+ * 页内仍按「加工合同 / 采购合同」两类切换；接口与业务行为不变（导出合同 PDF 仍由后端模板渲染）。
+ */
 const list = ref<any[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
@@ -86,38 +89,40 @@ onMounted(() => loadData())
 </script>
 
 <template>
-  <div class="template-page">
-    <el-tabs v-model="activeType" @tab-change="onTypeChange">
+  <div class="panel-body">
+    <el-tabs v-model="activeType" @tab-change="onTypeChange" class="type-tabs">
       <el-tab-pane v-for="(lb, code) in CONTRACT_TYPE_LABELS" :key="code" :label="lb" :name="code" />
     </el-tabs>
 
-    <el-card shadow="never">
-      <div style="margin-bottom:12px"><el-button type="primary" :icon="'Plus'" @click="openAdd">新增模板</el-button></div>
-      <el-table :data="list" border stripe v-loading="loading">
-        <el-table-column prop="id" label="ID" width="60" />
-        <el-table-column prop="templateName" label="模板名称" min-width="200" />
-        <el-table-column label="当前生效" width="90" align="center">
-          <template #default="{row}">
-            <el-tag v-if="row.isDefault===1" type="success">使用中</el-tag>
-            <span v-else style="color:var(--app-text-placeholder)">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="80">
-          <template #default="{row}"><el-tag :type="row.status===1?'success':'danger'">{{ row.status===1?'启用':'停用' }}</el-tag></template>
-        </el-table-column>
-        <el-table-column label="操作" width="200" align="center">
-          <template #default="{row}">
-            <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
-            <el-button v-if="row.isDefault!==1" type="success" link @click="handleSetDefault(row)">设为默认</el-button>
-            <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+    <div class="panel-toolbar">
+      <span class="panel-tip">导出合同时，标题、甲乙双方信息、明细表格、签名区由系统自动生成，这里只需维护以下「条款」内容；每种类型可设一份「使用中」模板。</span>
+      <el-button type="primary" :icon="'Plus'" @click="openAdd">新增模板</el-button>
+    </div>
+
+    <el-table :data="list" border stripe v-loading="loading">
+      <el-table-column prop="id" label="ID" width="60" />
+      <el-table-column prop="templateName" label="模板名称" min-width="200" />
+      <el-table-column label="当前生效" width="90" align="center">
+        <template #default="{row}">
+          <el-tag v-if="row.isDefault===1" type="success">使用中</el-tag>
+          <span v-else style="color:var(--app-text-placeholder)">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="状态" width="80">
+        <template #default="{row}"><el-tag :type="row.status===1?'success':'danger'">{{ row.status===1?'启用':'停用' }}</el-tag></template>
+      </el-table-column>
+      <el-table-column label="操作" width="200" align="center">
+        <template #default="{row}">
+          <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
+          <el-button v-if="row.isDefault!==1" type="success" link @click="handleSetDefault(row)">设为默认</el-button>
+          <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
 
     <el-dialog v-model="dialogVisible" :title="isEdit?'编辑模板':'新增模板'" width="960px" top="2vh" :close-on-click-modal="false">
       <el-form :model="form" label-width="80px">
-        <el-form-item label="模板名称"><el-input v-model="form.templateName" placeholder="请输入模板名称" /></el-form-item>
+        <el-form-item required label="模板名称"><el-input v-model="form.templateName" placeholder="请输入模板名称" /></el-form-item>
         <el-form-item label="状态">
           <el-switch v-model="form.status" :active-value="1" :inactive-value="0" />
         </el-form-item>
@@ -152,7 +157,11 @@ onMounted(() => loadData())
 </template>
 
 <style scoped>
-.template-page { padding: 16px; }
+.panel-body { display: flex; flex-direction: column; gap: 12px; }
+/* 页内二级切换（加工合同 / 采购合同）：不需要在外层 TAB 下再做粘顶表头 */
+.type-tabs :deep(.el-tabs__header) { position: static; box-shadow: none; }
+.panel-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.panel-tip { font-size: var(--app-font-xs); color: var(--el-text-color-secondary); }
 
 .quill-wrapper { margin-top:4px; }
 </style>

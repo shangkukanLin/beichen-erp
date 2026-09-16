@@ -61,6 +61,23 @@ public class FinanceAnalysisController {
     }
 
     /**
+     * 进货分析（2026-09-15 新增，供「经营分析 → 进货分析」）：
+     * 所选区间的采购 KPI（采购金额/采购退货/净采购额/采购单数）+ 趋势序列 + 单据明细（可下钻）。
+     */
+    @GetMapping("/purchase-analysis")
+    public R<Map<String, Object>> purchaseAnalysis(@RequestParam(defaultValue = "month") String preset,
+            @RequestParam(required = false) String start,
+            @RequestParam(required = false) String end) {
+        try {
+            if (start != null && !start.isBlank()) LocalDate.parse(start);
+            if (end != null && !end.isBlank()) LocalDate.parse(end);
+        } catch (Exception ex) {
+            return R.fail("日期格式无效，应为 yyyy-MM-dd");
+        }
+        return R.ok(service.purchaseAnalysis(preset, start, end));
+    }
+
+    /**
      * 资金趋势与账户余额分布（2026-09-15 起支持「统计区间」）：
      * preset 快捷预设（today/yesterday/week/month/quarter/year）或 start/end 自定义（优先）；都没有时按 months 取近 N 月。
      */

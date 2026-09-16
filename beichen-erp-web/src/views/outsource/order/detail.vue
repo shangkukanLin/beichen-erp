@@ -50,7 +50,7 @@ function goPurchase(row: any) {
   const ids = (s.supplierIds || '') as string; const firstId = ids.split(',')[0]?.trim()
   const p = new URLSearchParams(); if (firstId) p.set('supplierId', firstId)
   if (s.materialId) p.set('materialId', String(s.materialId))
-  p.set('materialName', matName(row.materialId)); p.set('bomTypeId', String(row.bomTypeId ?? ''))
+  p.set('materialName', matName(row.materialId)); p.set('materialTypeId', String(row.materialTypeId ?? ''))
   p.set('unit', row.unit || ''); p.set('quantity', String(s.shortage || 0))
   router.push('/outsource/material-order/add?' + p.toString())
 }
@@ -60,7 +60,7 @@ function goOutsource(row: any) {
   const p = new URLSearchParams(); p.set('orderType', OrderType.OUTSOURCE)
   if (firstId) p.set('supplierId', firstId)
   if (s.materialId) p.set('materialId', String(s.materialId))
-  p.set('materialName', matName(row.materialId)); p.set('bomTypeId', String(row.bomTypeId ?? ''))
+  p.set('materialName', matName(row.materialId)); p.set('materialTypeId', String(row.materialTypeId ?? ''))
   p.set('unit', row.unit || ''); p.set('quantity', String(s.shortage || 0))
   router.push('/outsource/material-order/add?' + p.toString())
 }
@@ -78,15 +78,15 @@ const form = reactive({
 // 供料模式：OURS来料加工 / FACTORY包工包料
 const SUPPLY_MODE_OPTIONS = [{ label: '来料加工', value: 'OURS' }, { label: '包工包料', value: 'FACTORY' }]
 const SUPPLY_TYPE_OPTIONS = [{ label: '我方供', value: 'OURS' }, { label: '工厂包', value: 'FACTORY' }]
-// 包工包料默认规则：仅玻璃（按BOM类型ID对比）我方供，其余物料默认工厂包
-const glassTypeId = computed(() => bomTypes.value.find((t: any) => t.typeName === '玻璃')?.id)
-function defaultSupplyType(bomTypeId: any) {
-  return glassTypeId.value != null && bomTypeId === glassTypeId.value ? 'OURS' : 'FACTORY'
+// 包工包料默认规则：仅玻璃（按物料类型ID对比）我方供，其余物料默认工厂包
+const glassTypeId = computed(() => materialTypes.value.find((t: any) => t.typeName === '玻璃')?.id)
+function defaultSupplyType(materialTypeId: any) {
+  return glassTypeId.value != null && materialTypeId === glassTypeId.value ? 'OURS' : 'FACTORY'
 }
 function onSupplyModeChange() {
   // 来料加工：全部我方供；包工包料：玻璃我方供、其余默认工厂包
   products.value.forEach((p: any) => (p.materials || []).forEach((m: any) => {
-    m.supplyType = form.supplyMode === 'OURS' ? 'OURS' : defaultSupplyType(m.bomTypeId)
+    m.supplyType = form.supplyMode === 'OURS' ? 'OURS' : defaultSupplyType(m.materialTypeId)
   }))
 }
 
@@ -94,17 +94,17 @@ const products = ref<any[]>([])
 const factoryOptions = ref<any[]>([])
 const projectOptions = ref<any[]>([])
 const materialOptions = ref<any[]>([])
-const bomTypes = ref<any[]>([])
+const materialTypes = ref<any[]>([])
 const fetchFactories = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw, supplierType: 'factory' } })
 const fetchProjects = (kw: string) => request.get('/dev/project/page', { params: { pageSize: 500, name: kw } })
 const fetchMaterials = (kw: string) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw } })
-const fetchBomTypes = (kw: string) => request.get('/dev/bom-type/enabled', { params: { pageSize: 500, name: kw } })
+const fetchMaterialTypes = (kw: string) => request.get('/dev/material-type/enabled', { params: { pageSize: 500, name: kw } })
 // 收货/退不良仓库限定为我方（自有）成品仓
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: 'FINISHED' } })
 
-// bomTypeId -> 类型名 映射（兜底展示用）
+// materialTypeId -> 类型名 映射（兜底展示用）
 function typeName(id: number | undefined, fallback?: string) {
-  if (id != null) { const t = bomTypes.value.find((v: any) => v.id === id); if (t) return t.typeName }
+  if (id != null) { const t = materialTypes.value.find((v: any) => v.id === id); if (t) return t.typeName }
   return fallback || '-'
 }
 // 数字格式化（保留2位小数，null/undefined 显示 0）
@@ -113,11 +113,11 @@ function fmt(v: any) { return v !== undefined && v !== null ? Number(v).toFixed(
 const deliveries = ref<any[]>([])
 
 async function loadOptions() {
-  const [f, p, m, b]: any[] = await Promise.all([fetchFactories(''), fetchProjects(''), fetchMaterials(''), fetchBomTypes('')])
+  const [f, p, m, b]: any[] = await Promise.all([fetchFactories(''), fetchProjects(''), fetchMaterials(''), fetchMaterialTypes('')])
   factoryOptions.value = f?.records || []
   projectOptions.value = p?.records || []
   materialOptions.value = m?.records || []
-  bomTypes.value = Array.isArray(b) ? b : (b?.records || [])
+  materialTypes.value = Array.isArray(b) ? b : (b?.records || [])
 }
 
 async function loadData() {
@@ -149,7 +149,7 @@ async function loadData() {
   } finally { loading.value = false }
 }
 
-function addProduct() { products.value.push({ _key: Date.now(), projectId: undefined, productName: '', productSpec: '', quantity: 1, unitPrice: 0, amount: 0, remark: '', materials: [] }) }
+function addProduct() { products.value.push({ _key: Date.now(), projectId: undefined, productName: '', quantity: 1, unitPrice: 0, amount: 0, remark: '', materials: [] }) }
 function removeProduct(idx: number) { products.value.splice(idx, 1) }
 function onProjectSelect(idx: number, pid: number) {
   const proj = projectOptions.value.find((v:any) => v.id === pid)
@@ -157,7 +157,6 @@ function onProjectSelect(idx: number, pid: number) {
     products.value[idx].projectId = pid
     // 产品名称取项目总成名称(assemblyName)，与产品主数据一致；无总成名称时回退项目名
     products.value[idx].productName = proj.assemblyName || proj.name || ''
-    products.value[idx].productSpec = proj.productSpec || ''
     loadBomMaterials(idx, pid)
   }
 }
@@ -168,14 +167,14 @@ async function loadBomMaterials(idx: number, pid: number) {
       const qty = Number(products.value[idx].quantity) || 1
       products.value[idx].materials = mats.map((m:any) => {
         const opt = materialOptions.value.find((o:any) => o.id === m.outsourceMaterialId)
-        return { materialId: m.outsourceMaterialId || null, materialName: opt?.materialName || '', price: opt?.price ?? null, bomTypeId: m.bomTypeId || null,  unit: m.unit || '', demandQuantity: +(qty * Number(m.quantity || 0)).toFixed(4), lossRate: m.lossRate || 0, supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(m.bomTypeId) : 'OURS', remark: '' }
+        return { materialId: m.outsourceMaterialId || null, materialName: opt?.materialName || '', price: opt?.price ?? null, materialTypeId: m.materialTypeId || null,  unit: m.unit || '', demandQuantity: +(qty * Number(m.quantity || 0)).toFixed(4), lossRate: m.lossRate || 0, supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(m.materialTypeId) : 'OURS', remark: '' }
       })
     }
   } catch { products.value[idx].materials = [] }
 }
 function calcAmount(idx: number) { const p = products.value[idx]; p.amount = (Number(p.quantity) || 0) * (Number(p.unitPrice) || 0) }
-function onMatSelect(idx: number, mi: number, mat: any) { const m = materialOptions.value.find((v:any) => v.id === mi); if (m) { mat.materialName = m.materialName; mat.bomTypeId = m.bomTypeId; mat.unit = m.unit } }
-function addMaterial(idx: number) { products.value[idx].materials.push({ materialId: undefined, materialName: '', bomTypeId: undefined, unit: '', demandQuantity: 1, lossRate: 0, supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(undefined) : 'OURS', remark: '' }) }
+function onMatSelect(idx: number, mi: number, mat: any) { const m = materialOptions.value.find((v:any) => v.id === mi); if (m) { mat.materialName = m.materialName; mat.materialTypeId = m.materialTypeId; mat.unit = m.unit } }
+function addMaterial(idx: number) { products.value[idx].materials.push({ materialId: undefined, materialName: '', materialTypeId: undefined, unit: '', demandQuantity: 1, lossRate: 0, supplyType: form.supplyMode === 'FACTORY' ? defaultSupplyType(undefined) : 'OURS', remark: '' }) }
 function removeMaterial(pi: number, mi: number) { products.value[pi].materials.splice(mi, 1) }
 
 function openAttach(url:string) { window.open(url + '?inline=true') }
@@ -476,7 +475,7 @@ onActivated(async () => { await loadOptions(); await loadData() })
         <div style="margin-top:8px">
           <div style="margin-bottom:6px"><span style="font-weight:500;font-size:var(--app-font-sm)">BOM物料清单</span></div>
           <el-table v-if="p.materials && p.materials.length" :data="p.materials" border size="small" class="bom-table">
-            <el-table-column label="类型" width="70"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
+            <el-table-column label="类型" width="70"><template #default="{row}">{{ typeName(row.materialTypeId) }}</template></el-table-column>
             <el-table-column label="物料名称" min-width="120"><template #default="{row}">{{ matName(row.materialId) }}</template></el-table-column>
             <el-table-column prop="unit" label="单位" width="55" />
             <el-table-column label="单价" width="90" align="right">
@@ -609,7 +608,7 @@ onActivated(async () => { await loadOptions(); await loadData() })
       <el-card shadow="never" v-loading="closeLoading">
         <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">结单详情</span><el-button size="small" @click="router.push(`/outsource/order/close/${form.id}`)">查看完整结单报表</el-button></div></template>
         <el-table :data="closeItems" border size="small" stripe v-if="closeItems.length">
-          <el-table-column label="类目" width="70"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
+          <el-table-column label="类目" width="70"><template #default="{row}">{{ typeName(row.materialTypeId) }}</template></el-table-column>
           <el-table-column prop="materialName" label="物料名称" min-width="120" />
           <el-table-column label="用料总数" width="90" align="right"><template #default="{row}">{{ fmt(row.usedTotalQuantity) }}</template></el-table-column>
           <el-table-column label="退料总计" width="90" align="right"><template #default="{row}">{{ fmt((+row.goodReturnQty||0) + (+row.defectReturnQty||0)) }}</template></el-table-column>

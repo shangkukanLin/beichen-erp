@@ -119,7 +119,7 @@ async function handleEdit(row: PurchaseOrder) {
 }
 
 function addItem() {
-  items.value.push({ productId: undefined, qualityType: 'A', materialName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' })
+  items.value.push({ productId: undefined, qualityType: 'A', materialName: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' })
 }
 function removeItem(index: number) {
   items.value.splice(index, 1)
@@ -129,7 +129,6 @@ function onMaterialChange(val: number, row: PurchaseOrderItem) {
   if (m) {
     row.productId = m.id as number
     row.materialName = m.materialName
-    row.spec = m.spec
     row.unit = m.unit
   }
 }
@@ -350,7 +349,6 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
               </RemoteSelect>
             </template>
           </el-table-column>
-          <el-table-column prop="spec" label="规格" width="100" />
           <el-table-column prop="unit" label="单位" width="70" />
           <el-table-column label="品质" width="90">
             <template #default="{ row }">

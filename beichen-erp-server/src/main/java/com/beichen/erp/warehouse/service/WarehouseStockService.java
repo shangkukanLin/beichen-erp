@@ -42,7 +42,7 @@ public class WarehouseStockService {
                 null, (RelatedBillType) null, null, null, ProductQualityType.A.getCode());
     }
 
-    /** 旧签名兼容 */
+    /** 旧签名兼容；⚠️ `spec` 为历史遗留参数（方法体内从未使用），产品规格已于 2026-09-15 全站下线，调用方传 `""` */
     @Transactional
     public void changeStock(Long warehouseId, String productName, BigDecimal quantity,
                             StockChangeType type, String relatedBillNo, RelatedBillType relatedBillType,
@@ -52,6 +52,8 @@ public class WarehouseStockService {
 
     /**
      * 通用库存变更：按 (warehouseId, productId, qualityType) 定位唯一库存行。
+     * <p>⚠️ `spec`（产品规格）为**历史遗留参数，方法体内从未使用**；产品规格字段已于 2026-09-15 全站下线
+     * （DB 列与实体字段均已删除），调用方一律传 `""`。保留形参仅为避免大范围改动调用点。</p>
      */
     @Transactional
     public void changeStock(Long warehouseId, Long productId, BigDecimal quantity,

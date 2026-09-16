@@ -27,15 +27,6 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
     /** 按加工单查询交货记录（按ID倒序） */
     List<OutsourceOrderDelivery> listByOrder(Long orderId);
 
-    /**
-     * 跨加工单分页查询成品交货/退不良记录（纯查询，不触碰库存与应付）
-     *
-     * @param deliveryType 交货类型：空=全部；DELIVERY=普通交货；DEFECT_RETURN=退不良
-     */
-    Page<Map<String, Object>> pageDeliveries(int pageNum, int pageSize, String orderCode,
-                                             String productName, String deliveryType, String status,
-                                             String startDate, String endDate);
-
     /** 交货汇总：总数量/已交数量/剩余数量/明细统计 */
     Map<String, Object> summary(Long orderId);
 

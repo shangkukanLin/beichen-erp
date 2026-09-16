@@ -59,7 +59,7 @@ const rules: FormRules = {
 const submitLoading = ref(false)
 
 // 库存检查相关
-const stockCheckResult = ref<{ productName: string; spec: string; unit: string; required: number; available: number; shortage: number; sufficient: boolean }[]>([])
+const stockCheckResult = ref<{ productName: string; unit: string; required: number; available: number; shortage: number; sufficient: boolean }[]>([])
 const stockCheckVisible = ref(false)
 const pendingSubmit = ref(false)
 /** 审核前的库存不足阻断弹窗（库存不足不允许审核，只能关闭） */
@@ -67,11 +67,11 @@ const auditBlockVisible = ref(false)
 
 function onProductChange(val: number, row: SaleOrderItem) {
   const p = products.value.find(x => x.id === val)
-  if (p) { row.productId = p.id as number; row.productName = p.name; row.sku = p.sku || ''; row.spec = p.spec; row.unit = p.unit }
+  if (p) { row.productId = p.id as number; row.productName = p.name; row.sku = p.sku || ''; row.unit = p.unit }
   // 切换产品后自动刷新该行库存
   refreshRowStock(row)
 }
-function addItem() { items.value.push({ productId: undefined, qualityType: 'A', productName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' }) }
+function addItem() { items.value.push({ productId: undefined, qualityType: 'A', productName: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' }) }
 function removeItem(index: number) { items.value.splice(index, 1) }
 function itemAmount(row: SaleOrderItem) { const q = Number(row.quantity) || 0; const p = Number(row.unitPrice) || 0; return (q * p).toFixed(2) }
 
@@ -198,7 +198,6 @@ async function loadData() {
       return {
         ...it,
         productName: it.productName || (p ? p.name : ''),
-        spec: it.spec || (p ? p.spec : ''),
         unit: it.unit || (p ? p.unit : '')
       }
     })
@@ -376,7 +375,6 @@ onActivated(() => { loadData() })
                 </RemoteSelect>
               </template>
             </el-table-column>
-            <el-table-column prop="spec" label="规格" width="100" />
             <el-table-column prop="unit" label="单位" width="70" />
             <el-table-column label="品质" width="90">
               <template #default="{ row }">
@@ -458,7 +456,6 @@ onActivated(() => { loadData() })
           </template>
         </el-table-column>
           <el-table-column prop="productName" label="产品" min-width="140" />
-          <el-table-column prop="spec" label="规格" width="100" />
           <el-table-column prop="unit" label="单位" width="70" />
           <el-table-column prop="quantity" label="数量" width="90" align="right" />
           <el-table-column prop="unitPrice" label="单价" width="90" align="right" />
@@ -535,7 +532,6 @@ onActivated(() => { loadData() })
       </el-alert>
       <el-table :data="stockCheckResult.filter(r => !r.sufficient)" border>
         <el-table-column prop="productName" label="产品名称" min-width="140" />
-        <el-table-column prop="spec" label="规格" width="100" />
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column label="订购数量" width="100" align="right">
           <template #default="{ row }">{{ row.required }}</template>
@@ -560,7 +556,6 @@ onActivated(() => { loadData() })
       </el-alert>
       <el-table :data="stockCheckResult.filter(r => !r.sufficient)" border>
         <el-table-column prop="productName" label="产品名称" min-width="140" />
-        <el-table-column prop="spec" label="规格" width="100" />
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column label="订购数量" width="100" align="right">
           <template #default="{ row }">{{ row.required }}</template>

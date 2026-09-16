@@ -18,8 +18,8 @@ public interface CustomerAnalysisMapper {
     @Select("SELECT id, code, name, credit_period, credit_period_months, credit_limit, status FROM customer")
     List<Map<String, Object>> customerAll();
 
-    /** 销售单按天 × 客户（金额与订单数；按审核时间归日，NULL 时 create_time 兜底） */
-    @Select("SELECT DATE_FORMAT(COALESCE(audit_time, create_time), '%Y-%m-%d') AS d, customer_id, IFNULL(SUM(total_amount), 0) AS amt, COUNT(*) AS cnt, MAX(DATE(COALESCE(audit_time, create_time))) AS last_date " +
+    /** 销售单按天 × 客户（金额与订单数；**按建单时间归日**，2026-09-15 全站统一口径） */
+    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, customer_id, IFNULL(SUM(total_amount), 0) AS amt, COUNT(*) AS cnt, MAX(DATE(create_time)) AS last_date " +
             "FROM sale_order WHERE status = 'AUDITED' AND customer_id IS NOT NULL GROUP BY d, customer_id")
     List<Map<String, Object>> saleByDayCustomer();
 
@@ -31,12 +31,12 @@ public interface CustomerAnalysisMapper {
     @Select("SELECT customer_id, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_receivable WHERE status IN ('UNSETTLED', 'PARTIAL') AND customer_id IS NOT NULL GROUP BY customer_id")
     List<Map<String, Object>> receivableByCustomer();
 
-    /** 客户首单日期（新增客户判定） */
-    @Select("SELECT customer_id, MIN(DATE(COALESCE(audit_time, create_time))) AS first_date FROM sale_order WHERE status = 'AUDITED' AND customer_id IS NOT NULL GROUP BY customer_id")
+    /** 客户首单日期（新增客户判定；按**建单日**） */
+    @Select("SELECT customer_id, MIN(DATE(create_time)) AS first_date FROM sale_order WHERE status = 'AUDITED' AND customer_id IS NOT NULL GROUP BY customer_id")
     List<Map<String, Object>> customerFirstOrder();
 
-    /** 产品档案（名称/SKU/品牌/规格/型号/单位/移动加权成本价） */
-    @Select("SELECT id, name, sku, brand_id, spec, general_model, unit, cost_price FROM product")
+    /** 产品档案（名称/SKU/品牌/型号/单位/移动加权成本价）；2026-09-15 规格字段已下线 */
+    @Select("SELECT id, name, sku, brand_id, general_model, unit, cost_price FROM product")
     List<Map<String, Object>> productAll();
 
     /** 品牌档案（用于按品牌汇总销售额分布） */
@@ -60,8 +60,8 @@ public interface CustomerAnalysisMapper {
             "FROM sale_return_item i JOIN sale_return r ON r.id = i.return_id WHERE r.status = 'AUDITED'")
     List<Map<String, Object>> saleReturnItemDetail();
 
-    /** 已审核销售单明细（钻取用，含 id 供跳销售单详情） */
-    @Select("SELECT o.id, o.code, DATE_FORMAT(COALESCE(o.audit_time, o.create_time), '%Y-%m-%d') AS d, o.customer_id, c.name AS customer_name, w.warehouse_name, o.total_amount, o.remark " +
+    /** 已审核销售单明细（钻取用，含 id 供跳销售单详情；归期 = **建单日**） */
+    @Select("SELECT o.id, o.code, DATE_FORMAT(o.create_time, '%Y-%m-%d') AS d, o.customer_id, c.name AS customer_name, w.warehouse_name, o.total_amount, o.remark " +
             "FROM sale_order o LEFT JOIN customer c ON c.id = o.customer_id LEFT JOIN warehouse w ON w.id = o.warehouse_id WHERE o.status = 'AUDITED' AND o.customer_id IS NOT NULL")
     List<Map<String, Object>> saleOrderRecords();
 }

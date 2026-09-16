@@ -32,19 +32,19 @@ const defForm = (): ProjectDTO => ({
   brandId: undefined
 })
 
-// BOM 类型（驱动IC/触摸IC/码片IC）id，用于改配物料下拉按类型过滤
-const bomTypeIdMap = reactive<{ drive?: number; touch?: number; code?: number }>({})
-async function loadBomTypeIds() {
+// 物料类型（驱动IC/触摸IC/码片IC）id，用于改配物料下拉按类型过滤
+const materialTypeIdMap = reactive<{ drive?: number; touch?: number; code?: number }>({})
+async function loadMaterialTypeIds() {
   try {
-    const bt: any = await request.get('/dev/bom-type/enabled')
+    const bt: any = await request.get('/dev/material-type/enabled')
     const list = bt || []
-    bomTypeIdMap.drive = list.find((t: any) => t.typeName === '驱动IC')?.id
-    bomTypeIdMap.touch = list.find((t: any) => t.typeName === '触摸IC')?.id
-    bomTypeIdMap.code = list.find((t: any) => t.typeName === '码片IC')?.id
+    materialTypeIdMap.drive = list.find((t: any) => t.typeName === '驱动IC')?.id
+    materialTypeIdMap.touch = list.find((t: any) => t.typeName === '触摸IC')?.id
+    materialTypeIdMap.code = list.find((t: any) => t.typeName === '码片IC')?.id
   } catch { /* 忽略 */ }
 }
-function fetchMaterialsByType(kw: string, bomTypeId?: number) {
-  return request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw, bomTypeId: bomTypeId || undefined } })
+function fetchMaterialsByType(kw: string, materialTypeId?: number) {
+  return request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw, materialTypeId: materialTypeId || undefined } })
 }
 const form = reactive<ProjectDTO>(defForm())
 
@@ -66,6 +66,21 @@ async function loadData() {
 async function handleSubmit() {
   if (!form.name) { ElMessage.warning('请输入项目名称'); return }
   if (!form.assemblyName || !form.assemblyName.trim()) { ElMessage.warning('请输入总成名称'); return }
+  // 2026-09-16 用户要求：原机配置（4）+ 改配信息（5）全部必填 —— 与页面上的红色 * 一一对应
+  const requiredFields: [any, string][] = [
+    [form.originalSize, '请填写原机配置-原机尺寸'],
+    [form.originalResolution, '请填写原机配置-原分辨率'],
+    [form.originalDriveIc, '请填写原机配置-驱动IC'],
+    [form.originalTouchIc, '请填写原机配置-触摸IC'],
+    [form.glassSize, '请填写改配信息-玻璃尺寸'],
+    [form.glassResolution, '请填写改配信息-玻璃分辨率'],
+    [form.configDriveIcId, '请选择改配信息-驱动IC'],
+    [form.configTouchIcId, '请选择改配信息-触摸IC'],
+    [form.configCodeIcId, '请选择改配信息-码片IC'],
+  ]
+  for (const [val, msg] of requiredFields) {
+    if (val === undefined || val === null || String(val).trim() === '') { ElMessage.warning(msg); return }
+  }
   const assembly = form.assemblyName.trim()
 
   // 查重：若总成名称与已有产品重名，询问用户关联或修改名称
@@ -111,11 +126,11 @@ function onNameBlur() {
   }
 }
 
-// 顶栏"刷新数据"：重新加载方案供应商与BOM类型
-async function handleRefreshData() { await Promise.all([loadData(), loadBomTypeIds()]) }
+// 顶栏"刷新数据"：重新加载方案供应商与物料类型
+async function handleRefreshData() { await Promise.all([loadData(), loadMaterialTypeIds()]) }
 onMounted(() => {
   loadData()
-  loadBomTypeIds()
+  loadMaterialTypeIds()
   window.addEventListener('refresh:dropdown-data', handleRefreshData)
 })
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
@@ -128,7 +143,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <template #header><span style="font-weight:600">基础信息</span></template>
       <el-form :model="form" label-width="100px">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="项目名称"><el-input v-model="form.name" placeholder="请输入项目名称" @blur="onNameBlur" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="项目名称"><el-input v-model="form.name" placeholder="请输入项目名称" @blur="onNameBlur" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="总成名称" prop="assemblyName" :rules="[{ required: true, message: '请输入总成名称', trigger: 'blur' }]"><el-input v-model="form.assemblyName" placeholder="请输入总成名称" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="适配机型"><el-input v-model="form.adaptModel" placeholder="如 iPhone 15" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="显示方案">
@@ -149,25 +164,27 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
         <!-- 原机配置 -->
         <el-divider content-position="left">原机配置</el-divider>
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="原机尺寸"><el-input v-model="form.originalSize" placeholder="如 6.1寸" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="原分辨率"><el-input v-model="form.originalResolution" placeholder="如 1080×2400" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="驱动IC"><el-input v-model="form.originalDriveIc" placeholder="原机驱动IC型号" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="触摸IC"><el-input v-model="form.originalTouchIc" placeholder="原机触摸IC型号" /></el-form-item></el-col>
+          <!-- 2026-09-16 用户要求：原机配置 4 项全部必填 -->
+          <el-col :span="8"><el-form-item required label="原机尺寸"><el-input v-model="form.originalSize" placeholder="如 6.1寸" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="原分辨率"><el-input v-model="form.originalResolution" placeholder="如 1080×2400" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="驱动IC"><el-input v-model="form.originalDriveIc" placeholder="原机驱动IC型号" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="触摸IC"><el-input v-model="form.originalTouchIc" placeholder="原机触摸IC型号" /></el-form-item></el-col>
         </el-row>
 
         <!-- 改配信息 -->
         <el-divider content-position="left">改配信息</el-divider>
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="玻璃尺寸"><el-input v-model="form.glassSize" placeholder="如 6.1寸" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="玻璃分辨率"><el-input v-model="form.glassResolution" placeholder="如 1080×2400" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="驱动IC">
-            <RemoteSelect v-model="form.configDriveIcId" :fetch="(kw: string) => fetchMaterialsByType(kw, bomTypeIdMap.drive)" label-key="materialName" clearable filterable :disabled="!bomTypeIdMap.drive" style="width:100%" placeholder="选择驱动IC物料" />
+          <!-- 2026-09-16 用户要求：改配信息 5 项全部必填 -->
+          <el-col :span="8"><el-form-item required label="玻璃尺寸"><el-input v-model="form.glassSize" placeholder="如 6.1寸" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="玻璃分辨率"><el-input v-model="form.glassResolution" placeholder="如 1080×2400" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="驱动IC">
+            <RemoteSelect v-model="form.configDriveIcId" :fetch="(kw: string) => fetchMaterialsByType(kw, materialTypeIdMap.drive)" label-key="materialName" clearable filterable :disabled="!materialTypeIdMap.drive" style="width:100%" placeholder="选择驱动IC物料" />
           </el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="触摸IC">
-            <RemoteSelect v-model="form.configTouchIcId" :fetch="(kw: string) => fetchMaterialsByType(kw, bomTypeIdMap.touch)" label-key="materialName" clearable filterable :disabled="!bomTypeIdMap.touch" style="width:100%" placeholder="选择触摸IC物料" />
+          <el-col :span="8"><el-form-item required label="触摸IC">
+            <RemoteSelect v-model="form.configTouchIcId" :fetch="(kw: string) => fetchMaterialsByType(kw, materialTypeIdMap.touch)" label-key="materialName" clearable filterable :disabled="!materialTypeIdMap.touch" style="width:100%" placeholder="选择触摸IC物料" />
           </el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="码片IC">
-            <RemoteSelect v-model="form.configCodeIcId" :fetch="(kw: string) => fetchMaterialsByType(kw, bomTypeIdMap.code)" label-key="materialName" clearable filterable :disabled="!bomTypeIdMap.code" style="width:100%" placeholder="选择码片IC物料" />
+          <el-col :span="8"><el-form-item required label="码片IC">
+            <RemoteSelect v-model="form.configCodeIcId" :fetch="(kw: string) => fetchMaterialsByType(kw, materialTypeIdMap.code)" label-key="materialName" clearable filterable :disabled="!materialTypeIdMap.code" style="width:100%" placeholder="选择码片IC物料" />
           </el-form-item></el-col>
         </el-row>
       </el-form>

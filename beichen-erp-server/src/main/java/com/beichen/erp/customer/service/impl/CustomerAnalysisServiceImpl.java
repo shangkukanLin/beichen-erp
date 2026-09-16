@@ -12,7 +12,7 @@ import java.util.*;
 
 /**
  * 客户分析 Service 实现：纯查询聚合。
- * 口径：销售额=已审核销售单（审核日归期）；退货额=已审核销售退单（建单日归期）；净额=销售额-退货额；
+ * 口径（2026-09-15 全站统一**建单日** create_time）：销售额=已审核销售单；退货额=已审核销售退单；净额=销售额-退货额；
  * 应收余额取 finance_receivable 未结清部分（与应收台账一致）。
  */
 @Service
@@ -184,14 +184,13 @@ public class CustomerAnalysisServiceImpl implements CustomerAnalysisService {
         summary.put("avgAmount", activeCount > 0
                 ? totalAmount.divide(new BigDecimal(activeCount), 2, RoundingMode.HALF_UP) : ZERO);
 
-        // 排行 TOP10（销售额）
-        List<Map<String, Object>> top = new ArrayList<>(rows.size() > 10 ? rows.subList(0, 10) : rows);
+        // 2026-09-15 用户要求：删除「客户销售额 TOP10」卡片 → 后端**不再产出 `top` 字段**
+        // （前端 `views/analysis/customer.vue` 的条形图与 echarts 依赖已同步清理）
 
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("start", s.toString());
         res.put("end", e.toString());
         res.put("summary", summary);
-        res.put("top", top);
         res.put("rows", rows);
         return res;
     }
@@ -347,7 +346,6 @@ public class CustomerAnalysisServiceImpl implements CustomerAnalysisService {
             m.put("sku", p == null ? "" : str(p.get("sku")));
             m.put("productName", p == null ? "" : str(p.get("name")));
             m.put("brandName", brandNameMap.getOrDefault(bid, ""));
-            m.put("spec", p == null ? "" : str(p.get("spec")));
             m.put("model", p == null ? "" : str(p.get("general_model")));
             m.put("unit", p == null ? "" : str(p.get("unit")));
             m.put("quantity", sold);

@@ -29,10 +29,6 @@ public class SaleOrderItem {
     @TableField(exist = false)
     private String productName;
 
-    /** 规格（实时查 product，不落库） */
-    @TableField(exist = false)
-    private String spec;
-
     /** 单位（实时查 product，不落库） */
     @TableField(exist = false)
     private String unit;

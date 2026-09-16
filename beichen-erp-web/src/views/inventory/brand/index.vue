@@ -63,7 +63,7 @@ onMounted(() => loadData())
 
   <el-dialog v-model="dialogVisible" :title="isEdit?'编辑品牌':'新增品牌'" width="400px">
     <el-form :model="form" label-width="80px">
-      <el-form-item label="品牌名称"><el-input v-model="form.brandName" placeholder="请输入品牌名称" /></el-form-item>
+      <el-form-item required label="品牌名称"><el-input v-model="form.brandName" placeholder="请输入品牌名称" /></el-form-item>
       <el-form-item label="状态"><el-select v-model="form.status" style="width:100%"><el-option label="启用" :value="1"/><el-option label="禁用" :value="0"/></el-select></el-form-item>
     </el-form>
     <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" @click="handleSubmit">确定</el-button></template>

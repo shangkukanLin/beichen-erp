@@ -3,8 +3,8 @@ package com.beichen.erp.system.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
-import com.beichen.erp.dev.entity.BomType;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.dev.entity.MaterialType;
+import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.system.entity.Company;
 import com.beichen.erp.system.entity.Role;
@@ -29,7 +29,7 @@ public class CompanyServiceImpl implements CompanyService {
     private final CompanyMapper companyMapper;
     private final UserMapper userMapper;
     private final RoleMapper roleMapper;
-    private final BomTypeMapper bomTypeMapper;
+    private final MaterialTypeMapper materialTypeMapper;
     private final JdbcTemplate jdbcTemplate;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -82,16 +82,16 @@ public class CompanyServiceImpl implements CompanyService {
                     + "（生产请注入 INIT_ADMIN_PASSWORD）", company.getCompanyName(), user.getUsername(), DEFAULT_PASSWORD);
         }
 
-        // 初始化默认BOM类型
-        String[] defaultTypes = com.beichen.erp.common.DefaultBomTypes.TYPES;
+        // 初始化默认物料类型
+        String[] defaultTypes = com.beichen.erp.common.DefaultMaterialTypes.TYPES;
         for (int i = 0; i < defaultTypes.length; i++) {
-            BomType bt = new BomType();
+            MaterialType bt = new MaterialType();
             bt.setTypeName(defaultTypes[i]);
             bt.setSortOrder(i + 1);
             bt.setStatus(1);
             bt.setIsDefault(1);
             bt.setCompanyId(company.getId());
-            bomTypeMapper.insert(bt);
+            materialTypeMapper.insert(bt);
         }
     }
 

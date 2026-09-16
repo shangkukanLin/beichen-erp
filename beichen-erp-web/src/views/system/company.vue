@@ -114,7 +114,7 @@ onMounted(() => loadData())
 
     <el-dialog v-model="dialogVisible" :title="isEdit?'编辑公司':'新增公司'" width="420px" :close-on-click-modal="false">
       <el-form :model="form" label-width="80px">
-        <el-form-item label="公司名称"><el-input v-model="form.companyName" placeholder="请输入公司名称" /></el-form-item>
+        <el-form-item required label="公司名称"><el-input v-model="form.companyName" placeholder="请输入公司名称" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>

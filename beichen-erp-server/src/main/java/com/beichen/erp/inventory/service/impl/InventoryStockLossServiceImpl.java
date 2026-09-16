@@ -253,7 +253,7 @@ public class InventoryStockLossServiceImpl implements InventoryStockLossService 
                     ? it.getQualityType() : ProductQualityType.A.getCode();
             stockService.changeStock(loss.getWarehouseId(), it.getProductId(), q.negate(),
                     StockChangeType.LOSS_OUT, loss.getCode(), RelatedBillType.INVENTORY_STOCK_LOSS,
-                    it.getSpec(), loss.getId(), qt);
+                    "", loss.getId(), qt);
         }
     }
 
@@ -266,7 +266,7 @@ public class InventoryStockLossServiceImpl implements InventoryStockLossService 
                     ? it.getQualityType() : ProductQualityType.A.getCode();
             stockService.changeStock(loss.getWarehouseId(), it.getProductId(), q,
                     StockChangeType.CANCEL_LOSS_OUT, loss.getCode(), RelatedBillType.INVENTORY_STOCK_LOSS,
-                    it.getSpec(), loss.getId(), qt);
+                    "", loss.getId(), qt);
         }
     }
 
@@ -291,7 +291,6 @@ public class InventoryStockLossServiceImpl implements InventoryStockLossService 
             if (p != null) {
                 it.setProductName(p.getName());
                 it.setSku(p.getSku());
-                it.setSpec(p.getSpec());
                 it.setUnit(p.getUnit());
                 // 单价未填时用产品成本价，成本价为空再退到最近进价
                 if (it.getUnitPrice() == null) {

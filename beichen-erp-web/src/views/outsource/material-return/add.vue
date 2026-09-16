@@ -40,7 +40,7 @@ async function handleSubmit() {
   const items = stockList.value
     .filter((m: any) => Number(m.returnQuantity) > 0)
     .map((m: any) => ({
-      materialId: m.materialId, bomTypeId: m.bomTypeId, unit: m.unit,
+      materialId: m.materialId, materialTypeId: m.materialTypeId, unit: m.unit,
       quantity: Number(m.returnQuantity), unitPrice: m.unitPrice || '', remark: ''
     }))
   if (items.length === 0) { ElMessage.warning('请输入退货数量'); return }
@@ -72,8 +72,8 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <template #header><span style="font-weight:600">退货信息</span></template>
       <el-form :model="form" label-width="100px" size="small">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="退回对象"><RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="选择物料商" style="width:100%" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="出库源仓"><el-select v-model="form.fromWarehouseId" filterable clearable style="width:100%" placeholder="选择物料所在仓库" @change="onWarehouseChange"><el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="退回对象"><RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="选择物料商" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="出库源仓"><el-select v-model="form.fromWarehouseId" filterable clearable style="width:100%" placeholder="选择物料所在仓库" @change="onWarehouseChange"><el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="退货日期"><el-input v-model="form.returnDate" type="date" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
         </el-row>
@@ -84,7 +84,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <template #header><span style="font-weight:600">可退物料（源仓良品库存）</span></template>
       <el-table :data="stockList" border size="small">
         <el-table-column prop="materialName" label="物料名称" min-width="140" />
-        <el-table-column prop="bomTypeName" label="BOM类型" width="100" />
+        <el-table-column prop="materialTypeName" label="物料类型" width="100" />
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column label="可退数量" width="100" align="right">
           <template #default="{row}">{{ Number(row.quantity || 0) }}</template>

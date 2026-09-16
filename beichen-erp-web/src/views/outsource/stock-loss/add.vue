@@ -44,8 +44,8 @@
               @select="(r:any)=>onMaterialPick(r, row)" />
           </template>
         </el-table-column>
-        <el-table-column label="BOM类型" width="120">
-          <template #default="{ row }">{{ row.bomTypeName || '—' }}</template>
+        <el-table-column label="物料类型" width="120">
+          <template #default="{ row }">{{ row.materialTypeName || '—' }}</template>
         </el-table-column>
         <el-table-column label="规格" width="130">
           <template #default="{ row }">{{ row.spec || '—' }}</template>
@@ -124,7 +124,7 @@ const fetchMaterials = (kw: string) =>
   request.get('/outsource/material/page', { params: { pageSize: 100, materialName: kw } })
 
 const lossReasons = ref<any[]>([])
-const bomTypes = ref<any[]>([])
+const materialTypes = ref<any[]>([])
 const saving = ref(false)
 
 const form = reactive({
@@ -141,7 +141,7 @@ const totalAmount = computed(() => items.value.reduce((s, r) => s + (Number(r.am
 
 function newItem() {
   return {
-    materialId: undefined, materialName: '', bomTypeId: undefined, bomTypeName: '',
+    materialId: undefined, materialName: '', materialTypeId: undefined, materialTypeName: '',
     spec: '', unit: '', quantity: undefined, unitPrice: undefined,
     amount: 0, remark: '', stockQty: undefined as number | undefined
   }
@@ -156,8 +156,8 @@ async function onMaterialPick(m: any, row: any) {
   row.materialName = m.materialName || ''
   row.spec = m.spec || ''
   row.unit = m.unit || ''
-  row.bomTypeId = m.bomTypeId
-  row.bomTypeName = bomTypes.value.find((b: any) => b.id === m.bomTypeId)?.typeName || ''
+  row.materialTypeId = m.materialTypeId
+  row.materialTypeName = materialTypes.value.find((b: any) => b.id === m.materialTypeId)?.typeName || ''
   if (row.unitPrice == null) row.unitPrice = Number(m.lastInPrice) || Number(m.price) || 0
   calcAmount(row)
   loadStock(row)
@@ -197,7 +197,7 @@ async function loadDetail() {
     const its = await request.get<any, any>(`/outsource/stock-loss/${editId.value}/items`)
     items.value = (its || []).map((i: any) => ({
       materialId: i.materialId, materialName: i.materialName || '',
-      bomTypeId: i.bomTypeId, bomTypeName: i.bomTypeName || '',
+      materialTypeId: i.materialTypeId, materialTypeName: i.materialTypeName || '',
       spec: i.spec || '', unit: i.unit || '', quantity: i.quantity,
       unitPrice: i.unitPrice, amount: i.amount, remark: i.remark || '', stockQty: undefined
     }))
@@ -223,7 +223,7 @@ async function handleSubmit() {
       },
       items: valid.map((i: any) => ({
         materialId: i.materialId,
-        bomTypeId: i.bomTypeId,
+        materialTypeId: i.materialTypeId,
         quantity: i.quantity,
         unitPrice: i.unitPrice,
         remark: i.remark
@@ -242,7 +242,7 @@ function goBack() { router.push('/outsource/stock-loss') }
 
 onMounted(async () => {
   lossReasons.value = codeLabelOptions(LossReasonLabel) // 2026-09-14：前端枚举映射（后端接口已只回 code）
-  try { bomTypes.value = await request.get<any, any>('/dev/bom-type/page', { params: { pageSize: 200 } }).then((r: any) => r?.records || []) } catch { bomTypes.value = [] }
+  try { materialTypes.value = await request.get<any, any>('/dev/material-type/page', { params: { pageSize: 200 } }).then((r: any) => r?.records || []) } catch { materialTypes.value = [] }
   if (isEdit.value) loadDetail()
   else items.value = [newItem()]
 })

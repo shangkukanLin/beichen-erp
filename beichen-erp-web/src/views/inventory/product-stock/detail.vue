@@ -11,7 +11,6 @@
       <el-descriptions v-loading="loading" :column="4" border class="info">
         <el-descriptions-item label="SKU">{{ summary?.sku || '—' }}</el-descriptions-item>
         <el-descriptions-item label="产品名称">{{ summary?.productName || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="规格">{{ summary?.spec || '—' }}</el-descriptions-item>
         <el-descriptions-item label="单位">{{ summary?.unit || '—' }}</el-descriptions-item>
         <el-descriptions-item label="品牌">{{ summary?.brandName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="分布仓库">{{ rows.length }} 个</el-descriptions-item>
@@ -191,7 +190,7 @@ function exportDetail() {
   const cols = ['仓库', 'A规', 'B规', 'C规', '不良', '待分类', '小计', '占比(%)']
   const aoa: (string | number)[][] = [
     [`产品库存分布 - ${s.sku || ''} ${s.productName || ''}（导出时间：${new Date().toLocaleString('zh-CN')}，共 ${data.length} 个仓库）`],
-    [`品牌：${s.brandName || '—'}　规格：${s.spec || '—'}　单位：${s.unit || '—'}　总库存：${totalOf(s)}　安全库存：${s.safetyStock ? s.safetyStock : '未设置'}`],
+    [`品牌：${s.brandName || '—'}　单位：${s.unit || '—'}　总库存：${totalOf(s)}　安全库存：${s.safetyStock ? s.safetyStock : '未设置'}`],
     [],
     cols,
   ]

@@ -32,15 +32,14 @@ const fetchWarehouses = (kw: string) =>
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 50, keyword: kw } })
 
 function addEditItem() {
-  editItems.value.push({ productId: undefined, productName: '', sku: '', spec: '', unit: '', fromQuality: 'A', toQuality: 'B', quantity: undefined, stockQty: undefined })
+  editItems.value.push({ productId: undefined, productName: '', sku: '', unit: '', fromQuality: 'A', toQuality: 'B', quantity: undefined, stockQty: undefined })
 }
 function removeEditItem(i: number) { editItems.value.splice(i, 1) }
 function onProductPick(p: any, row: any) {
-  if (!p) { row.productId = undefined; row.productName = ''; row.sku = ''; row.spec = ''; row.unit = ''; return }
+  if (!p) { row.productId = undefined; row.productName = ''; row.sku = ''; row.unit = ''; return }
   row.productId = p.id
   row.productName = p.name || p.productName || ''
   row.sku = p.sku || ''
-  row.spec = p.spec || ''
   row.unit = p.unit || ''
   loadStock(row)
 }
@@ -71,7 +70,6 @@ function fillEditForm() {
     productId: i.productId,
     productName: i.productName || getProdName(i.productId),
     sku: i.sku || '',
-    spec: i.spec || getProdSpec(i.productId),
     unit: i.unit || getProdUnit(i.productId),
     fromQuality: i.fromQuality || 'A',
     toQuality: i.toQuality || 'B',
@@ -88,10 +86,6 @@ function getWhName(wid?: number) {
 function getProdName(pid?: number) {
   if (pid == null) return '-'
   return products.value.find((p: any) => p.id === pid)?.name || '-'
-}
-function getProdSpec(pid?: number) {
-  if (pid == null) return '-'
-  return products.value.find((p: any) => p.id === pid)?.spec || '-'
 }
 function getProdUnit(pid?: number) {
   if (pid == null) return '-'
@@ -252,9 +246,6 @@ onActivated(() => { loadDetail() })
             <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="搜索产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" />
           </template>
         </el-table-column>
-        <el-table-column label="规格" width="110" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.spec || '-' }}</template>
-        </el-table-column>
         <el-table-column label="原品质" width="110">
           <template #default="{ row }">
             <el-select v-model="row.fromQuality" size="small" style="width:100%" @change="loadStock(row)">
@@ -293,9 +284,6 @@ onActivated(() => { loadDetail() })
         </el-table-column>
         <el-table-column label="产品" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">{{ row.productName || getProdName(row.productId) }}</template>
-        </el-table-column>
-        <el-table-column label="规格" width="110" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.spec || getProdSpec(row.productId) }}</template>
         </el-table-column>
         <el-table-column label="原品质" width="100" align="center">
           <template #default="{ row }">{{ qualityLabel(row.fromQuality) }}</template>

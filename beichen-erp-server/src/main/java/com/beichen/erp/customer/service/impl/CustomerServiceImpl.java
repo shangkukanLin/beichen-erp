@@ -8,7 +8,6 @@ import com.beichen.erp.customer.entity.Customer;
 import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.customer.service.CustomerService;
 import com.beichen.erp.exception.BusinessException;
-import com.beichen.erp.finance.common.SettlementStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +16,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -39,28 +37,7 @@ public class CustomerServiceImpl implements CustomerService {
             }
             w.eq(Customer::getStatus, Integer.valueOf(status));
         }
-        Page<Customer> page = customerMapper.selectPage(new Page<>(pageNum, pageSize), w);
-        // 应收余额实时汇总回填（废弃快照字段后，余额统一由应收台账实时 SUM 计算）
-        fillReceivableBalance(page.getRecords());
-        return page;
-    }
-
-    /** 批量回填应收余额（实时汇总，避免逐客户 N+1） */
-    private void fillReceivableBalance(List<Customer> customers) {
-        if (customers == null || customers.isEmpty()) return;
-        List<Long> ids = customers.stream().map(Customer::getId).filter(java.util.Objects::nonNull).toList();
-        if (ids.isEmpty()) return;
-        // 只算未结清台账：排除 已结清(SETTLED) 与 已冲回(CANCELLED)，与 FinanceReceivableController.unpaid 口径一致
-        List<String> excludeStatuses = List.of(SettlementStatus.SETTLED.getCode(), SettlementStatus.CANCELLED.getCode());
-        Map<Long, Map<String, Object>> balanceMap = customerMapper.sumReceivableBalance(ids, excludeStatuses);
-        for (Customer c : customers) {
-            Map<String, Object> row = balanceMap.get(c.getId());
-            if (row != null && row.get("balance") != null) {
-                c.setReceivableBalance(new BigDecimal(row.get("balance").toString()));
-            } else {
-                c.setReceivableBalance(BigDecimal.ZERO);
-            }
-        }
+        return customerMapper.selectPage(new Page<>(pageNum, pageSize), w);
     }
 
     @Override

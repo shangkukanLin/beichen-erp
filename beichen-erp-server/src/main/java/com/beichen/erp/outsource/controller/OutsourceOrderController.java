@@ -54,7 +54,7 @@ public class OutsourceOrderController {
     private final WarehouseMapper warehouseMapper;
     private final WarehouseStockMapper warehouseStockMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
-    private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
+    private final com.beichen.erp.dev.mapper.MaterialTypeMapper materialTypeMapper;
     private final OutsourceDeliveryMapper deliveryMapper;
     private final OutsourceDeliveryItemMapper deliveryItemMapper;
     private final OutsourceOrderDeliveryMapper orderDeliveryMapper;
@@ -103,7 +103,7 @@ public class OutsourceOrderController {
             pm.put("id", p.getId()); pm.put("orderId", p.getOrderId()); pm.put("projectId", p.getProjectId());
             // 产品主数据ID(product.id)，退不良库存匹配使用
             pm.put("productId", p.getProductId());
-            pm.put("productName", p.getProductName()); pm.put("productSpec", p.getProductSpec());
+            pm.put("productName", p.getProductName());
             pm.put("quantity", p.getQuantity()); pm.put("unitPrice", p.getUnitPrice());
             pm.put("amount", p.getAmount()); pm.put("remark", p.getRemark());
             // 项目名
@@ -144,7 +144,7 @@ public class OutsourceOrderController {
                 } else {
                     Map<String, Object> m = new java.util.LinkedHashMap<>();
                     m.put("materialName", mat.getMaterialId() != null ? getMaterialNameById(mat.getMaterialId()) : "");
-                    m.put("bomTypeName", getBomTypeNameById(mat.getBomTypeId()));
+                    m.put("materialTypeName", getMaterialTypeNameById(mat.getMaterialTypeId()));
                     m.put("unit", mat.getUnit());
                     m.put("materialId", mat.getMaterialId());
                     m.put("demandQuantity", mat.getDemandQuantity() != null ? mat.getDemandQuantity() : BigDecimal.ZERO);
@@ -384,7 +384,6 @@ public class OutsourceOrderController {
                     if (map.get("productId") != null && !map.get("productId").toString().isBlank())
                         p.setProductId(Long.valueOf(map.get("productId").toString()));
                     p.setProductName((String) map.get("productName"));
-                    p.setProductSpec((String) map.get("productSpec"));
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank())
                         p.setQuantity(new BigDecimal(map.get("quantity").toString()));
                     if (map.get("unitPrice") != null && !map.get("unitPrice").toString().isBlank())
@@ -399,7 +398,7 @@ public class OutsourceOrderController {
                                 Map<String, Object> mm = (Map<String, Object>) matMap;
                                 OutsourceOrderMaterial mat = new OutsourceOrderMaterial();
                                 if (mm.get("materialId") != null) mat.setMaterialId(Long.valueOf(mm.get("materialId").toString()));
-                                if (mm.get("bomTypeId") != null) mat.setBomTypeId(Long.valueOf(mm.get("bomTypeId").toString()));
+                                if (mm.get("materialTypeId") != null) mat.setMaterialTypeId(Long.valueOf(mm.get("materialTypeId").toString()));
                                 mat.setUnit((String) mm.get("unit"));
                                 if (mm.get("demandQuantity") != null && !mm.get("demandQuantity").toString().isBlank())
                                     mat.setDemandQuantity(new BigDecimal(mm.get("demandQuantity").toString()));
@@ -427,10 +426,10 @@ public class OutsourceOrderController {
         return m != null ? m.getMaterialName() : "";
     }
 
-    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
-    private String getBomTypeNameById(Long bomTypeId) {
-        if (bomTypeId == null) return "-";
-        com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
+    /** 根据 物料类型ID 查询类型名称，空安全返回 "-" */
+    private String getMaterialTypeNameById(Long materialTypeId) {
+        if (materialTypeId == null) return "-";
+        com.beichen.erp.dev.entity.MaterialType bt = materialTypeMapper.selectById(materialTypeId);
         return bt != null ? bt.getTypeName() : "-";
     }
 }

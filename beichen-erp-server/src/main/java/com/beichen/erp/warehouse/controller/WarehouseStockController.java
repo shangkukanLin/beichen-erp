@@ -7,8 +7,8 @@ import com.beichen.erp.brand.mapper.BrandMapper;
 import com.beichen.erp.common.R;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.dev.entity.BomType;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.dev.entity.MaterialType;
+import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
@@ -44,7 +44,7 @@ public class WarehouseStockController {
     private final ProductMapper productMapper;
     private final WarehouseMapper warehouseMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
-    private final BomTypeMapper bomTypeMapper;
+    private final MaterialTypeMapper materialTypeMapper;
     private final BrandMapper brandMapper;
     private final SaleOutboundMapper saleOutboundMapper;
 
@@ -291,7 +291,6 @@ public class WarehouseStockController {
 
             row.put("sku", p != null && p.getSku() != null ? p.getSku() : "");
             row.put("productName", p != null && p.getName() != null ? p.getName() : "");
-            row.put("spec", p != null && p.getSpec() != null ? p.getSpec() : "");
             row.put("unit", p != null && p.getUnit() != null ? p.getUnit() : "");
             row.put("safetyStock", safetyStock);
             row.put("brandId", p != null ? p.getBrandId() : null);
@@ -452,30 +451,30 @@ public class WarehouseStockController {
         List<WarehouseStock> stocks = stockMapper.selectList(
             new LambdaQueryWrapper<WarehouseStock>().eq(WarehouseStock::getWarehouseId, warehouseId));
 
-        // 批量查询物料名称和BOM类型名称
+        // 批量查询物料名称和物料类型名称
         Set<Long> materialIds = new HashSet<>();
         for (WarehouseStock s : stocks) {
             if (s.getMaterialId() != null) materialIds.add(s.getMaterialId());
         }
         Map<Long, String> materialNameMap = new HashMap<>();
-        Map<Long, String> bomTypeNameMap = new HashMap<>();
+        Map<Long, String> materialTypeNameMap = new HashMap<>();
         if (!materialIds.isEmpty()) {
             List<OutsourceMaterial> materials = outsourceMaterialMapper.selectBatchIds(materialIds);
-            Map<Long, Long> matBomTypeMap = new HashMap<>();
+            Map<Long, Long> matMaterialTypeMap = new HashMap<>();
             for (OutsourceMaterial m : materials) {
                 materialNameMap.put(m.getId(), m.getMaterialName());
-                if (m.getBomTypeId() != null) matBomTypeMap.put(m.getId(), m.getBomTypeId());
+                if (m.getMaterialTypeId() != null) matMaterialTypeMap.put(m.getId(), m.getMaterialTypeId());
             }
-            // 批量查BOM类型名称
+            // 批量查物料类型名称
             Map<Long, String> btNameMap = new HashMap<>();
-            if (!matBomTypeMap.isEmpty()) {
-                Set<Long> bomTypeIds = new HashSet<>(matBomTypeMap.values());
-                bomTypeMapper.selectBatchIds(bomTypeIds).forEach(b -> btNameMap.put(b.getId(), b.getTypeName()));
+            if (!matMaterialTypeMap.isEmpty()) {
+                Set<Long> materialTypeIds = new HashSet<>(matMaterialTypeMap.values());
+                materialTypeMapper.selectBatchIds(materialTypeIds).forEach(b -> btNameMap.put(b.getId(), b.getTypeName()));
             }
-            // 物料ID → bomTypeName
-            matBomTypeMap.forEach((matId, btId) -> {
+            // 物料ID → materialTypeName
+            matMaterialTypeMap.forEach((matId, btId) -> {
                 String name = btNameMap.get(btId);
-                if (name != null) bomTypeNameMap.put(matId, name);
+                if (name != null) materialTypeNameMap.put(matId, name);
             });
         }
 
@@ -510,7 +509,7 @@ public class WarehouseStockController {
             }
             if (s.getMaterialId() != null) {
                 m.put("materialName", materialNameMap.getOrDefault(s.getMaterialId(), ""));
-                m.put("bomTypeName", bomTypeNameMap.getOrDefault(s.getMaterialId(), ""));
+                m.put("materialTypeName", materialTypeNameMap.getOrDefault(s.getMaterialId(), ""));
             }
             list.add(m);
         }

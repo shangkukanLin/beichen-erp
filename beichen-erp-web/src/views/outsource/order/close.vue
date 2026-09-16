@@ -18,19 +18,19 @@ const report = reactive({
 })
 const items = ref<any[]>([])
 const remark = ref('')
-const bomTypes = ref<any[]>([])
+const materialTypes = ref<any[]>([])
 const returnWarehouseId = ref<number | null>(null)
 // 退回仓库选择：纯 Odoo 方案，RemoteSelect 实时查库
 const fetchWarehouses = (kw: string) =>
   request.get('/warehouse/page', { params: { warehouseName: kw, pageSize: 500 } })
 
-// bomTypeId -> 类型名 映射（兜底展示用）
+// materialTypeId -> 类型名 映射（兜底展示用）
 function typeName(id: number | undefined, fallback?: string) {
-  if (id != null) { const t = bomTypes.value.find((v: any) => v.id === id); if (t) return t.typeName }
+  if (id != null) { const t = materialTypes.value.find((v: any) => v.id === id); if (t) return t.typeName }
   return fallback || '-'
 }
-async function loadBomTypes() {
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
+async function loadMaterialTypes() {
+  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch {}
 }
 
 /** 自动计算 */
@@ -130,7 +130,7 @@ async function handleReopen() {
 
 function fmt(v: any) { return v !== undefined && v !== null ? Number(v).toFixed(2) : '0.00' }
 
-onMounted(() => { loadBomTypes(); loadReport() })
+onMounted(() => { loadMaterialTypes(); loadReport() })
 </script>
 
 <template>
@@ -168,7 +168,7 @@ onMounted(() => { loadBomTypes(); loadReport() })
         </div>
       </template>
       <el-table :data="items" border size="small" stripe show-summary :summary-method="() => []">
-        <el-table-column label="类目" width="70"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
+        <el-table-column label="类目" width="70"><template #default="{row}">{{ typeName(row.materialTypeId) }}</template></el-table-column>
         <el-table-column prop="materialName" label="物料名称" min-width="120" />
 
 

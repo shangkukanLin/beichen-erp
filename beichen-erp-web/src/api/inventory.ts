@@ -93,7 +93,6 @@ export interface ReclassifyItem {
   id?: number
   productId?: number
   productName?: string
-  spec?: string
   unit?: string
   fromQuality: string
   toQuality: string
@@ -135,7 +134,6 @@ export interface ReturnSortItem {
   productName?: string
   /** SKU（展示用；待整理清单按 productId 回填） */
   sku?: string
-  spec?: string
   unit?: string
   totalQuantity?: number
   qtyA?: number
@@ -196,12 +194,12 @@ export function deleteReturnSort(id: number) {
 
 // ==================== 库存盘点（每月每仓一次） ====================
 export interface StockTake { id?: number; takeNo?: string; warehouseId?: number; warehouseName?: string; period?: string; takeDate?: string; status?: string; remark?: string; itemCount?: number; diffCount?: number; diffSum?: number }
-export interface StockTakeItem { id?: number; takeId?: number; productId?: number; productName?: string; sku?: string; materialId?: number; materialName?: string; qualityType?: string; spec?: string; unit?: string; bookQuantity?: number; actualQuantity?: number; diffQuantity?: number; remark?: string }
+export interface StockTakeItem { id?: number; takeId?: number; productId?: number; productName?: string; sku?: string; materialId?: number; materialName?: string; qualityType?: string; unit?: string; bookQuantity?: number; actualQuantity?: number; diffQuantity?: number; remark?: string }
 /** 仓库盘点看板行：当月是否已盘点 + 超期天数 + 上次盘点日期 */
 export interface StockTakeStatus { warehouseId?: number; warehouseName?: string; warehouseType?: string; warehouseCategory?: string; period?: string; taken?: boolean; lastTakeDate?: string; dueDate?: string; overdueDays?: number; remind?: boolean }
-/** 各仓库当月盘点状态与超期天数 */
-export function getStockTakeStatus() {
-  return request.get<StockTakeStatus[]>('/inventory/stock-take/status')
+/** 各仓库当月盘点状态与超期天数（传 scope=PRODUCT|MATERIAL 可只看成品/物料范围） */
+export function getStockTakeStatus(params?: any) {
+  return request.get<StockTakeStatus[]>('/inventory/stock-take/status', { params })
 }
 export function getStockTakePage(params?: any) {
   return request.get<PageResult<StockTake>>('/inventory/stock-take/page', { params })

@@ -52,11 +52,6 @@ public interface MaterialOrderService {
     /** 查询该订单的收发单列表（含明细） */
     List<Map<String, Object>> deliveries(Long id);
 
-    /** 物料交货信息列表（跨订单、明细行粒度，原生SQL分页，company_id 手动过滤） */
-    Page<Map<String, Object>> deliveryItemsPage(int pageNum, int pageSize, String deliveryCode, String orderCode,
-                                                String materialName, String deliveryType, String status,
-                                                String startDate, String endDate);
-
     /** 清空合同附件 */
     void deleteAttach(Long id);
 

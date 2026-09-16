@@ -81,7 +81,7 @@ public class BrandController {
         Map<String, Object> result = new LinkedHashMap<>();
         Map<String, Integer> associations = new LinkedHashMap<>();
         if (materialCount > 0) associations.put("物料", materialCount);
-        if (projectCount > 0) associations.put("研发项目", projectCount);
+        if (projectCount > 0) associations.put("研发立项", projectCount);
         result.put("canDelete", associations.isEmpty());
         result.put("associations", associations);
         return R.ok(result);

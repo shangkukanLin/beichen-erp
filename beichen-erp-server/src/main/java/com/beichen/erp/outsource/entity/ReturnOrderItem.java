@@ -13,9 +13,9 @@ public class ReturnOrderItem {
     /** 委外物料ID（关联 outsource_material.id），替代冗余 material_name */
     @TableField("outsource_material_id")
     private Long materialId;
-    /** BOM类型ID（关联 dev_bom_type.id） */
-    @TableField("bom_type_id")
-    private Long bomTypeId;
+    /** 物料类型ID（关联 material_type.id） */
+    @TableField("material_type_id")
+    private Long materialTypeId;
     private String unit;
     private BigDecimal quantity;
     private BigDecimal unitPrice;

@@ -17,17 +17,17 @@ const MATERIAL_TYPES = ref<any[]>([])
 // Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
 const fetchProjects = (kw: string) => request.get('/dev/project/page', { params: { pageSize: 500, name: kw } })
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
-const fetchBomTypes = (kw: string) => request.get('/dev/bom-type/enabled')
+const fetchMaterialTypes = (kw: string) => request.get('/dev/material-type/enabled')
 const selectedProjects = ref<any[]>([])
 function onPickProjects(opts: any[]) { selectedProjects.value = opts }
 
-// Tab 切换 - 物料类型（按 bomTypeId 过滤）
+// Tab 切换 - 物料类型（按 materialTypeId 过滤）
 const activeTab = ref<number | string>('全部')
 
 // 列表关联名称显示：组件本地轻量列表加载一次（Odoo 实时化）
 async function loadOptions() {
   const [bt, sup, mat] = await Promise.all([
-    fetchBomTypes(''),
+    fetchMaterialTypes(''),
     fetchSuppliers(''),
     request.get('/outsource/material/page', { params: { pageSize: 500 } }),
   ])
@@ -54,7 +54,7 @@ async function loadData() {
     const p: any = { pageNum: pagination.pageNum, pageSize: pagination.pageSize }
     if (query.materialName) p.materialName = query.materialName
     if (query.projectId) p.projectId = query.projectId
-    if (activeTab.value !== '全部') p.bomTypeId = activeTab.value
+    if (activeTab.value !== '全部') p.materialTypeId = activeTab.value
     const r = await request.get<any, any>('/outsource/material/page', { params: p })
     tableData.value = r?.records || []; pagination.total = r?.total || 0
   } finally { tableLoading.value = false }
@@ -64,7 +64,7 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.materialName = ''; query.projectId = undefined; pagination.pageNum = 1; loadData() }
 
 const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoading = ref(false)
-const defForm = () => ({ id: undefined as any, projectIds: '', projectIdArr: [] as number[], materialName: '', bomTypeId: undefined as any, supplierIdArr: [] as number[], unit: 'PCS', price: undefined as any, remark: '' })
+const defForm = () => ({ id: undefined as any, projectIds: '', projectIdArr: [] as number[], materialName: '', materialTypeId: undefined as any, supplierIdArr: [] as number[], unit: 'PCS', price: undefined as any, remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
 // 子物料组成
@@ -102,7 +102,7 @@ async function handleEdit(row: any) {
 
 async function handleSubmit() {
   if (!form.materialName) { ElMessage.warning('请输入物料名称'); return }
-  if (!form.bomTypeId) { ElMessage.warning('请选择物料类型'); return }
+  if (!form.materialTypeId) { ElMessage.warning('请选择物料类型'); return }
   const ids = form.projectIdArr.join(',')
   const names = selectedProjects.value.map((p: any) => p.name).filter(Boolean).join(', ')
   const sIds = form.supplierIdArr.join(',')
@@ -135,10 +135,10 @@ function onSupplierChange(val: any[]) {
   }
 }
 
-// 支持从外部跳转（如研发项目改配信息"+ 新增"）定位到对应 BOM 类型 TAB
+// 支持从外部跳转（如研发项目改配信息"+ 新增"）定位到对应 物料类型 TAB
 onMounted(async () => {
   await loadOptions()
-  const q = route.query.bomTypeId
+  const q = route.query.materialTypeId
   if (q != null && q !== '') {
     const id = Number(q)
     if (MATERIAL_TYPES.value.some(t => t.id === id)) activeTab.value = id
@@ -172,7 +172,7 @@ onMounted(async () => {
 
       <el-table :data="tableData" border stripe v-loading="tableLoading">
         <el-table-column prop="projectName" label="所属项目" width="150" show-overflow-tooltip />
-        <el-table-column prop="bomTypeName" label="物料类型" width="100" />
+        <el-table-column prop="materialTypeName" label="物料类型" width="100" />
         <el-table-column prop="materialName" label="物料名称" min-width="130" show-overflow-tooltip />
         <el-table-column label="供应商" width="180" show-overflow-tooltip>
           <template #default="{ row }">{{ supplierNames(row.supplierIds) }}</template>
@@ -197,7 +197,7 @@ onMounted(async () => {
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="720px" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px">
         <el-form-item label="所属项目"><RemoteSelect v-model="form.projectIdArr" multiple :fetch="fetchProjects" placeholder="可多选" style="width:100%" @pick="onPickProjects" @change="onProjectChange"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
-        <el-form-item label="物料类型"><RemoteSelect v-model="form.bomTypeId" :fetch="fetchBomTypes" :label-key="(t: any) => t.typeName" placeholder="请选择" style="width:100%" /></el-form-item>
+        <el-form-item required label="物料类型"><RemoteSelect v-model="form.materialTypeId" :fetch="fetchMaterialTypes" :label-key="(t: any) => t.typeName" placeholder="请选择" style="width:100%" /></el-form-item>
         <el-form-item label="物料名称" required><el-input v-model="form.materialName" /></el-form-item>
         <el-form-item label="供应商"><RemoteSelect v-model="form.supplierIdArr" multiple :fetch="fetchSuppliers" placeholder="可多选" style="width:100%" @change="onSupplierChange"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
         <el-form-item label="单位"><el-input v-model="form.unit" /></el-form-item>
@@ -214,7 +214,7 @@ onMounted(async () => {
         <el-table-column label="子物料" min-width="220">
           <template #default="{ row }">
             <el-select v-model="row.childMaterialId" filterable placeholder="选择已有物料" style="width:100%" size="small">
-              <el-option v-for="m in allMaterials" :key="m.id" :label="`${m.materialName} (${m.bomTypeName || ''})`" :value="m.id" :disabled="m.id === form.id" />
+              <el-option v-for="m in allMaterials" :key="m.id" :label="`${m.materialName} (${m.materialTypeName || ''})`" :value="m.id" :disabled="m.id === form.id" />
             </el-select>
           </template>
         </el-table-column>

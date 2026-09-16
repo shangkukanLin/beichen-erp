@@ -28,7 +28,6 @@ const defaultForm = (): Product => ({
   sku: '',
   brandId: undefined,
   category: '',
-  spec: '',
   generalModel: '',
   unit: 'pcs',
   safetyStock: undefined,
@@ -177,11 +176,6 @@ watch(() => route.fullPath, () => { init() })
           <el-col :span="12">
             <el-form-item label="分类">
               <el-input v-model="form.category" placeholder="如：成品/半成品/原料" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="规格">
-              <el-input v-model="form.spec" placeholder="规格型号" />
             </el-form-item>
           </el-col>
           <el-col :span="12">

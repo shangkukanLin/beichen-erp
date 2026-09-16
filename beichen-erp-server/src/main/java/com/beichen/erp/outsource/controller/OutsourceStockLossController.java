@@ -118,8 +118,8 @@ public class OutsourceStockLossController {
                     if (map.get("materialId") != null) {
                         it.setMaterialId(Long.valueOf(map.get("materialId").toString()));
                     }
-                    if (map.get("bomTypeId") != null) {
-                        it.setBomTypeId(Long.valueOf(map.get("bomTypeId").toString()));
+                    if (map.get("materialTypeId") != null) {
+                        it.setMaterialTypeId(Long.valueOf(map.get("materialTypeId").toString()));
                     }
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank()) {
                         it.setQuantity(new BigDecimal(map.get("quantity").toString()));

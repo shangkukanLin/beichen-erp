@@ -10,7 +10,7 @@ import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.config.CompanyContext;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.inventory.common.RelatedBillType;
@@ -58,7 +58,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     private final OutsourceOrderProductMapper orderProductMapper;
     private final WarehouseMapper warehouseMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
-    private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
+    private final com.beichen.erp.dev.mapper.MaterialTypeMapper materialTypeMapper;
     private final SupplierMapper supplierMapper;
     private final PayableHelper payableHelper;
     private final WarehouseStockService warehouseStockService;
@@ -210,7 +210,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
             ReturnOrderItem item = new ReturnOrderItem();
             item.setReturnOrderId(order.getId());
             item.setMaterialId(matId);
-            item.setBomTypeId(toLong(it.get("bomTypeId")));
+            item.setMaterialTypeId(toLong(it.get("materialTypeId")));
             item.setUnit((String) it.get("unit"));
             item.setQuantity(qty);
             item.setUnitPrice(price);
@@ -456,8 +456,8 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                 Map<String, Object> x = new LinkedHashMap<>();
                 x.put("outsourceMaterialId", key);
                 x.put("materialName", getMaterialNameById(key));
-                x.put("bomTypeId", mat.getBomTypeId());
-                x.put("bomTypeName", getBomTypeNameById(mat.getBomTypeId()));
+                x.put("materialTypeId", mat.getMaterialTypeId());
+                x.put("materialTypeName", getMaterialTypeNameById(mat.getMaterialTypeId()));
                 x.put("unit", mat.getUnit());
                 x.put("perSetQuantity", BigDecimal.ZERO);
                 return x;
@@ -603,10 +603,10 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         return m != null ? m.getMaterialName() : "";
     }
 
-    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
-    private String getBomTypeNameById(Long bomTypeId) {
-        if (bomTypeId == null) return "-";
-        com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
+    /** 根据 物料类型ID 查询类型名称，空安全返回 "-" */
+    private String getMaterialTypeNameById(Long materialTypeId) {
+        if (materialTypeId == null) return "-";
+        com.beichen.erp.dev.entity.MaterialType bt = materialTypeMapper.selectById(materialTypeId);
         return bt != null ? bt.getTypeName() : "-";
     }
 

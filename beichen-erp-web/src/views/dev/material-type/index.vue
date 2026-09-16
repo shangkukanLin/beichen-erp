@@ -9,7 +9,7 @@ const form = reactive({ id: undefined as number | undefined, typeName: '', sortO
 const isEdit = ref(false)
 
 async function loadData() {
-  const res = await request.get<any, any>('/dev/bom-type/page', { params: { pageSize: 100 } })
+  const res = await request.get<any, any>('/dev/material-type/page', { params: { pageSize: 100 } })
   tableData.value = res?.records || []
 }
 
@@ -18,14 +18,14 @@ function handleEdit(row: any) { Object.assign(form, row); isEdit.value = true; d
 
 async function handleSubmit() {
   if (!form.typeName) { ElMessage.warning('请输入类型名称'); return }
-  if (isEdit.value) { await request.put('/dev/bom-type', form); ElMessage.success('已更新') }
-  else { await request.post('/dev/bom-type', form); ElMessage.success('已添加') }
+  if (isEdit.value) { await request.put('/dev/material-type', form); ElMessage.success('已更新') }
+  else { await request.post('/dev/material-type', form); ElMessage.success('已添加') }
   dialogVisible.value = false; loadData()
 }
 
 async function handleDelete(row: any) {
   if (row.isDefault === 1) { ElMessage.warning('默认类型不可删除'); return }
-  try { await ElMessageBox.confirm(`确定删除「${row.typeName}」吗？`, '提示', { type: 'warning' }); await request.delete(`/dev/bom-type/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm(`确定删除「${row.typeName}」吗？`, '提示', { type: 'warning' }); await request.delete(`/dev/material-type/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
 onMounted(() => loadData())
@@ -33,7 +33,7 @@ onMounted(() => loadData())
 </script>
 
 <template>
-  <div class="bom-type-page">
+  <div class="material-type-page">
     <el-card shadow="never">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         <el-button type="primary" :icon="'Plus'" @click="handleAdd">新增类型</el-button>
@@ -55,7 +55,7 @@ onMounted(() => loadData())
 
     <el-dialog v-model="dialogVisible" :title="isEdit?'编辑类型':'新增类型'" width="400px">
       <el-form :model="form" label-width="80px">
-        <el-form-item label="类型名称"><el-input v-model="form.typeName" placeholder="如：偏光片" /></el-form-item>
+        <el-form-item required label="类型名称"><el-input v-model="form.typeName" placeholder="如：偏光片" /></el-form-item>
         <el-form-item label="排序"><el-input-number v-model="form.sortOrder" :min="0" /></el-form-item>
         <el-form-item label="状态"><el-select v-model="form.status" style="width:100%"><el-option label="启用" :value="1"/><el-option label="禁用" :value="0"/></el-select></el-form-item>
       </el-form>

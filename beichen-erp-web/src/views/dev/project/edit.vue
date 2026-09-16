@@ -217,39 +217,39 @@ function phaseRowClass({ row }: { row: PhaseItem }) {
 
 // BOM 平铺列表（父+子混排，子行只读缩进）
 const bomList = ref<any[]>([])
-const bomTypes = ref<any[]>([])
+const materialTypes = ref<any[]>([])
 const allMaterials = ref<any[]>([])
-const fetchBomTypes = (kw: string) => request.get('/dev/bom-type/enabled', { params: { kw } })
+const fetchMaterialTypes = (kw: string) => request.get('/dev/material-type/enabled', { params: { kw } })
 const fetchMaterials = (kw: string) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw } })
-// 按 BOM 类型过滤物料（实时查库，供 BOM 物料名称下拉使用）
+// 按 物料类型过滤物料（实时查库，供 BOM 物料名称下拉使用）
 function fetchMaterialsByType(kw: string, row: any) {
-  return request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw, bomTypeId: row.bomTypeId || undefined } })
+  return request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw, materialTypeId: row.materialTypeId || undefined } })
 }
-async function loadBomTypes() {
-  const bt: any = await fetchBomTypes(''); bomTypes.value = bt || []
+async function loadMaterialTypes() {
+  const bt: any = await fetchMaterialTypes(''); materialTypes.value = bt || []
   const m: any = await fetchMaterials(''); allMaterials.value = (m?.records || []) as any[]
 }
-// BOM类型名 -> id 映射，用于改配信息物料下拉按类型过滤
-const bomTypeIdMap = computed<Record<string, number>>(() => {
+// 物料类型名 -> id 映射，用于改配信息物料下拉按类型过滤
+const materialTypeIdMap = computed<Record<string, number>>(() => {
   const m: Record<string, number> = {}
-  for (const t of bomTypes.value) m[t.typeName] = t.id
+  for (const t of materialTypes.value) m[t.typeName] = t.id
   return m
 })
 function fetchConfigMaterials(kw: string, typeName: string) {
-  const typeId = bomTypeIdMap.value[typeName]
-  return request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw, bomTypeId: typeId || undefined } })
+  const typeId = materialTypeIdMap.value[typeName]
+  return request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw, materialTypeId: typeId || undefined } })
 }
-// 跳转到物料信息管理并定位到对应 BOM 类型 TAB
+// 跳转到物料信息管理并定位到对应 物料类型 TAB
 function goMaterialInfo(typeName: string) {
-  router.push({ path: '/outsource/material-info', query: { bomTypeId: bomTypeIdMap.value[typeName] } })
+  router.push({ path: '/outsource/material-info', query: { materialTypeId: materialTypeIdMap.value[typeName] } })
 }
-// BOM类型 id -> 类型名 映射，用于回显
-const bomTypeNameMap = computed<Record<number, string>>(() => {
+// 物料类型 id -> 类型名 映射，用于回显
+const materialTypeNameMap = computed<Record<number, string>>(() => {
   const m: Record<number, string> = {}
-  for (const t of bomTypes.value) m[t.id] = t.typeName
+  for (const t of materialTypes.value) m[t.id] = t.typeName
   return m
 })
-function getMaterialsByType(type: any) { return allMaterials.value.filter((m:any) => m.bomTypeId != null && m.bomTypeId === type) }
+function getMaterialsByType(type: any) { return allMaterials.value.filter((m:any) => m.materialTypeId != null && m.materialTypeId === type) }
 
 /** 加载BOM + 子物料平铺 */
 async function loadBom() {
@@ -269,16 +269,16 @@ async function loadBom() {
   for (const b of items) {
     const matId = b.outsourceMaterialId
     const matName = matId ? (materialNameMap[matId] || '') : ''
-    result.push({ _isChild: false, materialName: matName, outsourceMaterialId: matId, supplierId: b.supplierId, spec: b.specification, unit: b.unit, quantityPerSet: b.quantity, lossRate: b.lossRate, bomTypeId: b.bomTypeId, bomTypeName: bomTypeNameMap.value[b.bomTypeId ?? 0] || '', remark: '', id: b.id })
+    result.push({ _isChild: false, materialName: matName, outsourceMaterialId: matId, supplierId: b.supplierId, spec: b.specification, unit: b.unit, quantityPerSet: b.quantity, lossRate: b.lossRate, materialTypeId: b.materialTypeId, materialTypeName: materialTypeNameMap.value[b.materialTypeId ?? 0] || '', remark: '', id: b.id })
     const subs = childrenMap[String(matId)] || []
     for (const s of subs) {
-      result.push({ _isChild: true, materialName: s.childName || s.materialName, bomTypeName: s.childType || '', quantityPerSet: s.quantity, lossRate: s.lossRate, remark: s.remark })
+      result.push({ _isChild: true, materialName: s.childName || s.materialName, materialTypeName: s.childType || '', quantityPerSet: s.quantity, lossRate: s.lossRate, remark: s.remark })
     }
   }
   bomList.value = result
 }
 
-function addBomRow() { bomList.value.push({ _isChild: false, materialName: '', outsourceMaterialId: undefined, spec: '', unit: '', quantityPerSet: 1, lossRate: 2, bomTypeId: '', remark: '', supplierId: undefined }) }
+function addBomRow() { bomList.value.push({ _isChild: false, materialName: '', outsourceMaterialId: undefined, spec: '', unit: '', quantityPerSet: 1, lossRate: 2, materialTypeId: '', remark: '', supplierId: undefined }) }
 async function onBomMaterialChange(materialId: number, row: any) {
   if (!materialId) return
   const matched = allMaterials.value.find((m: any) => m.id === materialId)
@@ -295,8 +295,8 @@ async function onBomMaterialChange(materialId: number, row: any) {
 function removeBomRow(i: number) { bomList.value.splice(i, 1) }
 async function saveBom() {
   const parents = bomList.value.filter((b: any) => !b._isChild)
-  const emptyType = parents.find((b: any) => !b.bomTypeId)
-  if (emptyType) { ElMessage.warning('BOM类型不能为空'); return }
+  const emptyType = parents.find((b: any) => !b.materialTypeId)
+  if (emptyType) { ElMessage.warning('物料类型不能为空'); return }
   const emptyMatId = parents.find((b: any) => !b.outsourceMaterialId)
   if (emptyMatId) { ElMessage.warning('物料名称不能为空'); return }
   const zeroQty = parents.find((b: any) => !b.quantityPerSet || Number(b.quantityPerSet) <= 0)
@@ -305,7 +305,7 @@ async function saveBom() {
   const bomData = parents.map((b: any) => ({
     id: b.id,
     projectId,
-    bomTypeId: b.bomTypeId,
+    materialTypeId: b.materialTypeId,
     outsourceMaterialId: b.outsourceMaterialId,
     supplierId: b.supplierId,
     quantity: b.quantityPerSet,
@@ -443,7 +443,7 @@ watch(activeTab, async (tab) => { if (tab === 'bom') await loadBom() })
 
 // 顶栏"刷新数据"：重新加载方案供应商下拉
 async function handleRefreshData() { await loadSolutionSuppliers() }
-onMounted(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBrandOptions(); loadBomTypes(); loadPhase(); loadBom(); loadBugs(); loadDrawings(); loadDevMaterials(); window.addEventListener('refresh:dropdown-data', handleRefreshData) })
+onMounted(() => { loadProject(); loadSolutionSuppliers(); loadAllSuppliers(); loadFactories(); loadBrandOptions(); loadMaterialTypes(); loadPhase(); loadBom(); loadBugs(); loadDrawings(); loadDevMaterials(); window.addEventListener('refresh:dropdown-data', handleRefreshData) })
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 
 
@@ -467,7 +467,7 @@ function onNameBlur() {
           <el-form :model="form" label-width="100px" size="default">
             <el-row :gutter="16">
               <el-col :span="8"><el-form-item label="项目编码"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
-              <el-col :span="8"><el-form-item label="项目名称"><el-input v-model="form.name" @blur="onNameBlur" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item required label="项目名称"><el-input v-model="form.name" @blur="onNameBlur" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="总成名称" prop="assemblyName" :rules="[{ required: true, message: '请输入总成名称', trigger: 'blur' }]"><el-input v-model="form.assemblyName" /></el-form-item></el-col>
 
               <el-col :span="8"><el-form-item label="立项日期"><el-input v-model="form.startDate" type="date" /></el-form-item></el-col>
@@ -648,8 +648,8 @@ function onNameBlur() {
           <el-table :data="bomList" border size="small">
             <el-table-column label="类型" width="100">
               <template #default="{row}">
-                <span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ row.bomTypeName }}</span>
-                <RemoteSelect v-else v-model="row.bomTypeId" :fetch="fetchBomTypes" label-key="typeName" size="small" clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.bomTypeId = ''; router.push('/dev/bom-type'); return } row.outsourceMaterialId = undefined; row.materialName = '' }">
+                <span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ row.materialTypeName }}</span>
+                <RemoteSelect v-else v-model="row.materialTypeId" :fetch="fetchMaterialTypes" label-key="typeName" size="small" clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.materialTypeId = ''; router.push('/dev/material-type'); return } row.outsourceMaterialId = undefined; row.materialName = '' }">
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </template>

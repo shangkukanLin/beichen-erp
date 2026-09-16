@@ -140,20 +140,22 @@ onMounted(() => { loadData(); loadBrandOptions() })
       </el-tabs>
 
       <!-- 全部 -->
-      <el-table v-if="activeTab==='all'" :data="allProjects" border stripe v-loading="tableLoading" style="width:100%" size="default" @row-click="handleEdit">
-        <el-table-column prop="code" label="编号" width="140" show-overflow-tooltip />
-        <el-table-column prop="name" label="项目名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="assemblyName" label="总成名称" width="110" show-overflow-tooltip />
-        <el-table-column prop="brandName" label="品牌" width="100" show-overflow-tooltip />
-        <el-table-column prop="displaySupplierName" label="显示方案" min-width="90" show-overflow-tooltip />
-        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
-        <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
-        <el-table-column label="项目阶段" min-width="100" align="center">
+      <!-- 2026-09-16 用户要求「一行显示完、不要左右滑动」：列宽整体收紧（原合计 ≈1270px → ≈1015px） -->
+      <el-table v-if="activeTab==='all'" :data="allProjects" border stripe v-loading="tableLoading" style="width:100%" size="small" @row-click="handleEdit">
+        <el-table-column prop="code" label="编号" width="118" show-overflow-tooltip />
+        <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
+        <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
+        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="75" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机尺寸" width="70" show-overflow-tooltip />
+        <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
+        <el-table-column prop="glassSize" label="改配尺寸" width="70" show-overflow-tooltip />
+        <el-table-column label="项目阶段" min-width="80" align="center">
           <template #default="{ row }">
             <el-tag type="warning" size="small">{{ getCurrentPhase(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="截止时间" width="120" align="center">
+        <el-table-column label="截止时间" width="90" align="center">
           <template #default="{ row }">
             <span v-if="getPlannedEnd(row)" :style="{ color: isOverdue(row) ? 'var(--app-color-danger)' : 'var(--app-text-regular)', fontWeight: isOverdue(row) ? 'bold' : 'normal' }">
               {{ getPlannedEnd(row) }}
@@ -161,7 +163,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
             <span v-else style="color:var(--app-text-placeholder)">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" align="center" fixed="right">
+        <el-table-column label="操作" width="100" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="success" link size="small" @click.stop="handleEdit(row)">详细</el-button>
             <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click.stop="handleCancel(row)">取消</el-button>
@@ -170,20 +172,21 @@ onMounted(() => { loadData(); loadBrandOptions() })
       </el-table>
 
       <!-- 进行中 -->
-      <el-table v-if="activeTab==='active'" :data="activeProjects" border stripe v-loading="tableLoading" style="width:100%" size="default" :height="undefined" @row-click="handleEdit">
-        <el-table-column prop="code" label="编号" width="140" show-overflow-tooltip />
-        <el-table-column prop="name" label="项目名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="assemblyName" label="总成名称" width="110" show-overflow-tooltip />
-        <el-table-column prop="brandName" label="品牌" width="100" show-overflow-tooltip />
-        <el-table-column prop="displaySupplierName" label="显示方案" min-width="90" show-overflow-tooltip />
-        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
-        <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
-        <el-table-column label="项目阶段" min-width="100" align="center">
+      <el-table v-if="activeTab==='active'" :data="activeProjects" border stripe v-loading="tableLoading" style="width:100%" size="small" :height="undefined" @row-click="handleEdit">
+        <el-table-column prop="code" label="编号" width="118" show-overflow-tooltip />
+        <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
+        <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
+        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="75" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机尺寸" width="70" show-overflow-tooltip />
+        <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
+        <el-table-column prop="glassSize" label="改配尺寸" width="70" show-overflow-tooltip />
+        <el-table-column label="项目阶段" min-width="80" align="center">
           <template #default="{ row }">
             <el-tag type="warning" size="small">{{ getCurrentPhase(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="截止时间" width="120" align="center">
+        <el-table-column label="截止时间" width="90" align="center">
           <template #default="{ row }">
             <span v-if="getPlannedEnd(row)" :style="{ color: isOverdue(row) ? 'var(--app-color-danger)' : 'var(--app-text-regular)', fontWeight: isOverdue(row) ? 'bold' : 'normal' }">
               {{ getPlannedEnd(row) }}
@@ -191,7 +194,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
             <span v-else style="color:var(--app-text-placeholder)">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" align="center" fixed="right">
+        <el-table-column label="操作" width="100" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="success" link size="small" @click.stop="handleEdit(row)">详细</el-button>
             <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click.stop="handleCancel(row)">取消</el-button>
@@ -200,15 +203,17 @@ onMounted(() => { loadData(); loadBrandOptions() })
       </el-table>
 
       <!-- 已结项 -->
-      <el-table v-if="activeTab==='finished'" :data="finishedProjects" border stripe v-loading="tableLoading" style="width:100%" size="default" @row-click="handleEdit">
-        <el-table-column prop="code" label="编号" width="140" show-overflow-tooltip />
-        <el-table-column prop="name" label="项目名称" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="brandName" label="品牌" width="100" show-overflow-tooltip />
-        <el-table-column prop="displaySupplierName" label="显示方案" min-width="90" show-overflow-tooltip />
-        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
-        <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
-        <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'success'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="100" align="center" fixed="right">
+      <el-table v-if="activeTab==='finished'" :data="finishedProjects" border stripe v-loading="tableLoading" style="width:100%" size="small" @row-click="handleEdit">
+        <el-table-column prop="code" label="编号" width="118" show-overflow-tooltip />
+        <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
+        <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
+        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="75" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机尺寸" width="70" show-overflow-tooltip />
+        <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
+        <el-table-column prop="glassSize" label="改配尺寸" width="70" show-overflow-tooltip />
+        <el-table-column label="状态" width="75" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'success'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="85" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="success" link size="small" @click.stop="handleEdit(row as ProjectVO)">详细</el-button>
           </template>
@@ -216,15 +221,17 @@ onMounted(() => { loadData(); loadBrandOptions() })
       </el-table>
 
       <!-- 已取消 -->
-      <el-table v-if="activeTab==='cancelled'" :data="cancelledProjects" border stripe v-loading="tableLoading" style="width:100%" size="default" @row-click="handleEdit">
-        <el-table-column prop="code" label="编号" width="140" show-overflow-tooltip />
-        <el-table-column prop="name" label="项目名称" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="brandName" label="品牌" width="100" show-overflow-tooltip />
-        <el-table-column prop="displaySupplierName" label="显示方案" min-width="90" show-overflow-tooltip />
-        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="90" show-overflow-tooltip />
-        <el-table-column prop="originalSize" label="原机尺寸" width="90" show-overflow-tooltip />
-        <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'danger'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="160" align="center" fixed="right">
+      <el-table v-if="activeTab==='cancelled'" :data="cancelledProjects" border stripe v-loading="tableLoading" style="width:100%" size="small" @row-click="handleEdit">
+        <el-table-column prop="code" label="编号" width="118" show-overflow-tooltip />
+        <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
+        <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
+        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="75" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机尺寸" width="70" show-overflow-tooltip />
+        <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
+        <el-table-column prop="glassSize" label="改配尺寸" width="70" show-overflow-tooltip />
+        <el-table-column label="状态" width="75" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'danger'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="115" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="success" link size="small" @click.stop="handleEdit(row as ProjectVO)">详细</el-button>
             <el-button type="warning" link size="small" @click.stop="handleReactivate(row as ProjectVO)">重新激活</el-button>

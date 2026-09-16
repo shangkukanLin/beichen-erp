@@ -22,9 +22,9 @@ public class OutsourceMaterialReturnItem {
     @TableField("outsource_material_id")
     private Long materialId;
 
-    /** BOM类型ID（关联 dev_bom_type.id） */
-    @TableField("bom_type_id")
-    private Long bomTypeId;
+    /** 物料类型ID（关联 material_type.id） */
+    @TableField("material_type_id")
+    private Long materialTypeId;
 
     /** 单位 */
     private String unit;

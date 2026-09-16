@@ -47,9 +47,9 @@ import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.outsource.service.CloseReportService;
 import com.beichen.erp.dev.entity.Bom;
-import com.beichen.erp.dev.entity.BomType;
+import com.beichen.erp.dev.entity.MaterialType;
 import com.beichen.erp.dev.mapper.BomMapper;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import com.beichen.erp.finance.service.PayableHelper;
@@ -86,7 +86,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     private final OutsourceOtherIoItemMapper otherIoItemMapper;
     private final JdbcTemplate jdbcTemplate;
     private final BomMapper bomMapper;
-    private final BomTypeMapper bomTypeMapper;
+    private final MaterialTypeMapper materialTypeMapper;
     private final SupplierMapper supplierMapper;
     private final MaterialOrderMapper materialOrderMapper;
     private final MaterialOrderItemMapper materialOrderItemMapper;
@@ -199,8 +199,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         Map<String, Object> item = new LinkedHashMap<>();
         item.put("materialName", getMaterialNameById(mat.getMaterialId()));
         item.put("materialId", mat.getMaterialId());
-        item.put("bomTypeId", mat.getBomTypeId());
-        item.put("bomTypeName", getBomTypeNameById(mat.getBomTypeId()));
+        item.put("materialTypeId", mat.getMaterialTypeId());
+        item.put("materialTypeName", getMaterialTypeNameById(mat.getMaterialTypeId()));
         item.put("unit", mat.getUnit());
         BigDecimal perSet = mat.getDemandQuantity(); // 该物料在此产品中的总需求
         // 找到所属产品，计算单套用量 = 总需求 / 产品数量
@@ -540,7 +540,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
 
             OutsourceOtherIoItem oi = new OutsourceOtherIoItem();
             oi.setMaterialId(item.getMaterialId());
-            oi.setBomTypeId(item.getBomTypeId());
+            oi.setMaterialTypeId(item.getMaterialTypeId());
             oi.setUnit(item.getUnit());
             oi.setQuantity(missing);
             oi.setRemark("加工厂遗失-" + order.getCode());
@@ -682,7 +682,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     private OutsourceDeliveryItem buildReturnItem(CloseReportItem item, BigDecimal qty, String qualityType) {
         OutsourceDeliveryItem di = new OutsourceDeliveryItem();
         di.setMaterialId(item.getMaterialId());
-        di.setBomTypeId(item.getBomTypeId());
+        di.setMaterialTypeId(item.getMaterialTypeId());
         di.setUnit(item.getUnit());
         di.setQuantity(qty);
         di.setQualityType(qualityType);
@@ -754,10 +754,10 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         return m != null ? m.getMaterialName() : "";
     }
 
-    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
-    private String getBomTypeNameById(Long bomTypeId) {
-        if (bomTypeId == null) return "-";
-        BomType bt = bomTypeMapper.selectById(bomTypeId);
+    /** 根据 物料类型ID 查询类型名称，空安全返回 "-" */
+    private String getMaterialTypeNameById(Long materialTypeId) {
+        if (materialTypeId == null) return "-";
+        MaterialType bt = materialTypeMapper.selectById(materialTypeId);
         return bt != null ? bt.getTypeName() : "-";
     }
 }

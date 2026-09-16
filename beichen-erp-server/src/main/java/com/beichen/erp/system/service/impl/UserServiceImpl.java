@@ -326,6 +326,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (routeNames.contains("OutsourceOrder") || routeNames.contains("OutsourceMaterialOrder")) tabs.add("outsource");
         if (routeNames.contains("InventoryPurchase") || routeNames.contains("SupplierManage") || routeNames.contains("OutsourceSupplierManage")) tabs.add("purchase");
         if (routeNames.contains("InventorySale") || routeNames.contains("InventoryCustomer")) tabs.add("sale");
+        // 物料仓库（2026-09-16 新增 TAB）：含任一物料收发/其他出入库/报损/自有物料仓 菜单即视为该模块可见
+        // 注：委外仓库与成品仓库管理共用 route_name「Warehouse」，故这里不按它判断，避免串号
+        if (routeNames.contains("OutsourceDelivery") || routeNames.contains("OutsourceOtherIo")
+                || routeNames.contains("OutsourceStockLoss") || routeNames.contains("OutsourceMaterialWarehouse")) {
+            tabs.add("materialWarehouse");
+        }
         if (routeNames.contains("InventoryStock") || routeNames.contains("Warehouse") || routeNames.contains("ProductManage")) tabs.add("stock");
         if (routeNames.contains("FinanceReceivable") || routeNames.contains("FinancePayable")) tabs.add("finance");
         return tabs;

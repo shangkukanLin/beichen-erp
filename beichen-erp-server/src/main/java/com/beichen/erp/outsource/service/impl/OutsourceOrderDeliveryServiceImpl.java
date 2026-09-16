@@ -1,7 +1,6 @@
 package com.beichen.erp.outsource.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.common.DocStatusGuard;
@@ -48,8 +47,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * 加工单交货记录服务实现
@@ -84,158 +81,6 @@ public class OutsourceOrderDeliveryServiceImpl
         return baseMapper.selectList(new LambdaQueryWrapper<OutsourceOrderDelivery>()
                 .eq(OutsourceOrderDelivery::getOrderId, orderId)
                 .orderByDesc(OutsourceOrderDelivery::getId));
-    }
-
-    /**
-     * 跨加工单分页查询成品交货/退不良记录（纯查询，不触碰库存与应付）
-     * <p>company_id 由多租户插件自动注入，此处无需手写。</p>
-     */
-    @Override
-    public Page<Map<String, Object>> pageDeliveries(int pageNum, int pageSize, String orderCode,
-                                                    String productName, String deliveryType, String status,
-                                                    String startDate, String endDate) {
-        // 1) 加工单号 → 加工单ID集合
-        List<Long> orderIds = null;
-        if (orderCode != null && !orderCode.isBlank()) {
-            List<OutsourceOrder> orders = orderMapper.selectList(new LambdaQueryWrapper<OutsourceOrder>()
-                    .like(OutsourceOrder::getCode, orderCode.trim()));
-            orderIds = orders.stream().map(OutsourceOrder::getId).collect(Collectors.toList());
-            if (orderIds.isEmpty()) return emptyPage(pageNum, pageSize);
-        }
-        // 2) 产品名称 → 加工单产品行ID + 产品主数据ID集合
-        //    交货记录可能挂行ID（历史数据）或主数据ID（现行口径），两者都要匹配上
-        List<Long> productRowIds = null;
-        List<Long> productMasterIds = null;
-        if (productName != null && !productName.isBlank()) {
-            List<OutsourceOrderProduct> prods = orderProductMapper.selectList(
-                    new LambdaQueryWrapper<OutsourceOrderProduct>()
-                            .like(OutsourceOrderProduct::getProductName, productName.trim()));
-            productRowIds = prods.stream().map(OutsourceOrderProduct::getId)
-                    .filter(java.util.Objects::nonNull).distinct().collect(Collectors.toList());
-            productMasterIds = prods.stream().map(OutsourceOrderProduct::getProductId)
-                    .filter(java.util.Objects::nonNull).distinct().collect(Collectors.toList());
-            if (productRowIds.isEmpty() && productMasterIds.isEmpty()) return emptyPage(pageNum, pageSize);
-        }
-        // 3) 主表分页查询
-        LambdaQueryWrapper<OutsourceOrderDelivery> w = new LambdaQueryWrapper<>();
-        if (orderIds != null) w.in(OutsourceOrderDelivery::getOrderId, orderIds);
-        if (productRowIds != null) {
-            final List<Long> rows = productRowIds.isEmpty() ? List.of(-1L) : productRowIds;
-            final List<Long> masters = productMasterIds == null || productMasterIds.isEmpty()
-                    ? List.of(-1L) : productMasterIds;
-            w.and(x -> x.in(OutsourceOrderDelivery::getProductId, rows)
-                    .or().in(OutsourceOrderDelivery::getProductMasterId, masters));
-        }
-        if (deliveryType != null && !deliveryType.isBlank()) {
-            if (DeliveryType.DEFECT_RETURN.getCode().equals(deliveryType)) {
-                // 退不良：isReverse=true 或 delivery_type=DEFECT_RETURN
-                w.and(x -> x.eq(OutsourceOrderDelivery::getIsReverse, true)
-                        .or().eq(OutsourceOrderDelivery::getDeliveryType, DeliveryType.DEFECT_RETURN.getCode()));
-            } else {
-                // 普通交货：非退不良（isReverse 为空或 false，且类型不是退不良）
-                w.and(x -> x.isNull(OutsourceOrderDelivery::getIsReverse)
-                        .or().eq(OutsourceOrderDelivery::getIsReverse, false));
-                w.ne(OutsourceOrderDelivery::getDeliveryType, DeliveryType.DEFECT_RETURN.getCode());
-            }
-        }
-        if (status != null && !status.isBlank()) w.eq(OutsourceOrderDelivery::getStatus, status);
-        if (startDate != null && !startDate.isBlank()) {
-            w.ge(OutsourceOrderDelivery::getDeliveryDate, LocalDate.parse(startDate));
-        }
-        if (endDate != null && !endDate.isBlank()) {
-            w.le(OutsourceOrderDelivery::getDeliveryDate, LocalDate.parse(endDate));
-        }
-        w.orderByDesc(OutsourceOrderDelivery::getDeliveryDate).orderByDesc(OutsourceOrderDelivery::getId);
-
-        Page<OutsourceOrderDelivery> p = new Page<>(pageNum, pageSize);
-        baseMapper.selectPage(p, w);
-
-        // 4) 批量回填名称（加工单号/产品名/仓库名），避免逐行查库
-        Set<Long> oidSet = p.getRecords().stream().map(OutsourceOrderDelivery::getOrderId)
-                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
-        Set<Long> pidSet = p.getRecords().stream().map(OutsourceOrderDelivery::getProductId)
-                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
-        Set<Long> pmidSet = p.getRecords().stream().map(OutsourceOrderDelivery::getProductMasterId)
-                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
-        Set<Long> widSet = p.getRecords().stream().map(OutsourceOrderDelivery::getWarehouseId)
-                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
-
-        Map<Long, String> codeMap = new HashMap<>();
-        if (!oidSet.isEmpty()) {
-            for (OutsourceOrder o : orderMapper.selectBatchIds(oidSet)) codeMap.put(o.getId(), o.getCode());
-        }
-        // 产品行：同时按「产品行ID」与「产品主数据ID」建索引——
-        // 现行交货记录挂主数据ID（不受加工单编辑重建产品行影响），历史数据挂行ID
-        Map<Long, OutsourceOrderProduct> prodMap = new HashMap<>();
-        Map<Long, OutsourceOrderProduct> prodByMasterMap = new HashMap<>();
-        Set<Long> allProductKeys = new java.util.HashSet<>(pidSet);
-        allProductKeys.addAll(pmidSet);
-        if (!allProductKeys.isEmpty()) {
-            List<OutsourceOrderProduct> prods = new ArrayList<>(orderProductMapper.selectBatchIds(allProductKeys));
-            // 回填 SKU（非表字段），前端可直接展示
-            productService.fillSku(prods, OutsourceOrderProduct::getProductId, OutsourceOrderProduct::setSku);
-            for (OutsourceOrderProduct pr : prods) {
-                prodMap.put(pr.getId(), pr);
-                if (pr.getProductId() != null) prodByMasterMap.put(pr.getProductId(), pr);
-            }
-        }
-        // 仓库：需同时取名称与工厂ID（工厂ID用于前端区分委外仓/自有成品仓详情路由）
-        Map<Long, Warehouse> whMap = new HashMap<>();
-        if (!widSet.isEmpty()) {
-            for (Warehouse wh : warehouseMapper.selectBatchIds(widSet)) whMap.put(wh.getId(), wh);
-        }
-
-        // 5) 组装返回行
-        List<Map<String, Object>> records = new ArrayList<>();
-        for (OutsourceOrderDelivery d : p.getRecords()) {
-            boolean reverse = Boolean.TRUE.equals(d.getIsReverse())
-                    || DeliveryType.DEFECT_RETURN.getCode().equals(d.getDeliveryType());
-            // 产品行：主数据ID优先（稳定），行ID兜底（历史数据）
-            OutsourceOrderProduct pr = d.getProductMasterId() != null
-                    ? prodByMasterMap.get(d.getProductMasterId()) : null;
-            if (pr == null && d.getProductId() != null) pr = prodMap.get(d.getProductId());
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", d.getId());
-            m.put("deliveryDate", d.getDeliveryDate());
-            m.put("deliveryType", reverse ? DeliveryType.DEFECT_RETURN.getCode() : "DELIVERY");
-            m.put("deliveryTypeLabel", reverse ? "退不良" : "交货");
-            m.put("isReverse", reverse);
-            m.put("orderId", d.getOrderId());
-            m.put("orderCode", d.getOrderId() != null ? codeMap.get(d.getOrderId()) : null);
-            m.put("productId", d.getProductId());
-            // 产品主数据ID(product.id)，前端跳转产品详情用；为空时兜底取加工单产品的 productId
-            m.put("productMasterId", d.getProductMasterId() != null
-                    ? d.getProductMasterId() : (pr != null ? pr.getProductId() : null));
-            m.put("productName", pr != null ? pr.getProductName() : null);
-            m.put("productSpec", pr != null ? pr.getProductSpec() : null);
-            m.put("sku", pr != null ? pr.getSku() : null);
-            m.put("quantity", d.getQuantity());
-            m.put("aQty", d.getAQty());
-            m.put("bQty", d.getBQty());
-            m.put("cQty", d.getCQty());
-            m.put("defectQty", d.getDefectQty());
-            m.put("qualityType", d.getQualityType());
-            Warehouse wh = d.getWarehouseId() != null ? whMap.get(d.getWarehouseId()) : null;
-            m.put("warehouseId", d.getWarehouseId());
-            m.put("warehouseName", wh != null ? wh.getWarehouseName() : null);
-            // 工厂仓(委外仓)与自有成品仓详情路由不同，前端据此分流
-            m.put("warehouseFactoryId", wh != null ? wh.getFactoryId() : null);
-            m.put("trackingNo", d.getTrackingNo());
-            m.put("status", d.getStatus());
-            m.put("remark", d.getRemark());
-            m.put("attachUrl", d.getAttachUrl());
-            records.add(m);
-        }
-        Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, p.getTotal());
-        result.setRecords(records);
-        return result;
-    }
-
-    /** 空分页结果：前置条件已过滤完所有数据时直接返回 */
-    private Page<Map<String, Object>> emptyPage(int pageNum, int pageSize) {
-        Page<Map<String, Object>> p = new Page<>(pageNum, pageSize, 0);
-        p.setRecords(new ArrayList<>());
-        return p;
     }
 
     /** 获取交货汇总 */

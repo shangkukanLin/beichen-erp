@@ -64,7 +64,7 @@ onActivated(loadData)
       <template #header><span style="font-weight:600">退货物料明细</span></template>
       <el-table :data="detail.items || []" border size="small">
         <el-table-column prop="materialName" label="物料名称" min-width="160" />
-        <el-table-column prop="bomTypeName" label="BOM类型" width="100" />
+        <el-table-column prop="materialTypeName" label="物料类型" width="100" />
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column prop="quantity" label="数量" width="100" align="right" />
         <el-table-column prop="unitPrice" label="单价" width="100" align="right" />

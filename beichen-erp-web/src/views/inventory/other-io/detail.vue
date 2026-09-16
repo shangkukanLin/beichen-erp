@@ -32,7 +32,7 @@ const fetchProducts = (kw: string) => request.get('/product/page', { params: { p
 const isOut = computed(() => editForm.ioType === IoType.OUT)
 
 function addEditItem() {
-  editItems.value.push({ productId: undefined, productName: '', spec: '', unit: '', qualityType: 'A', quantity: undefined, remark: '', stockQty: undefined })
+  editItems.value.push({ productId: undefined, productName: '', unit: '', qualityType: 'A', quantity: undefined, remark: '', stockQty: undefined })
 }
 function removeEditItem(i: number) { editItems.value.splice(i, 1) }
 
@@ -59,17 +59,16 @@ function onIoTypeChange() { editItems.value.forEach(loadStock) }
 function overStock(row: any) {
   return isOut.value && row.stockQty != null && Number(row.quantity) > 0 && Number(row.quantity) > row.stockQty
 }
-/** 选中成品后带出规格/单位 */
+/** 选中成品后带出单位 */
 function onProductPick(row: any, idx: number) {
   const it = editItems.value[idx]
-  if (!row) { it.productId = undefined; it.productName = ''; it.spec = ''; it.unit = ''; return }
+  if (!row) { it.productId = undefined; it.productName = ''; it.unit = ''; return }
   it.productId = row.id
   it.productName = row.name || row.productName || ''
-  it.spec = row.spec || ''
   it.unit = row.unit || ''
   loadStock(it)
 }
-/** 用单据数据回填编辑表单（明细带出规格/单位靠本地产品缓存） */
+/** 用单据数据回填编辑表单（明细带出单位靠本地产品缓存） */
 function fillEditForm() {
   editForm.warehouseId = detail.value.warehouseId
   editForm.ioType = detail.value.ioType || IoType.IN
@@ -78,7 +77,6 @@ function fillEditForm() {
   editItems.value = items.value.map((i: any) => ({
     productId: i.productId,
     productName: i.productId != null ? getProdName(i.productId) : '',
-    spec: getProdSpec(i.productId),
     unit: getProdUnit(i.productId),
     qualityType: i.qualityType || 'A',
     quantity: i.quantity,
@@ -95,10 +93,6 @@ function getWhName(wid: number) {
 function getProdName(pid: number | undefined) {
   if (pid == null) return '-'
   return products.value.find((p: any) => p.id === pid)?.name || '-'
-}
-function getProdSpec(pid: number | undefined) {
-  if (pid == null) return '-'
-  return products.value.find((p: any) => p.id === pid)?.spec || '-'
 }
 function getProdUnit(pid: number | undefined) {
   if (pid == null) return '-'
@@ -137,7 +131,7 @@ async function loadDetail() {
     detail.value = io || {}
     const its = await request.get<any, any>(`/inventory/other/${id}/items`)
     items.value = Array.isArray(its) ? its : []
-    // 明细要带出规格/单位，依赖产品缓存，先确保已加载
+    // 明细要带出单位，依赖产品缓存，先确保已加载
     if (products.value.length === 0) await loadProducts()
     if (isDraft.value) fillEditForm()
   } finally { loading.value = false }
@@ -257,9 +251,6 @@ onActivated(() => { loadDetail() })
             <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="可输SKU搜索" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],$index)" />
           </template>
         </el-table-column>
-        <el-table-column label="规格" width="120" show-overflow-tooltip>
-          <template #default="{row}">{{ row.spec || '-' }}</template>
-        </el-table-column>
         <el-table-column label="单位" width="80">
           <template #default="{row}">{{ row.unit || '-' }}</template>
         </el-table-column>
@@ -294,9 +285,6 @@ onActivated(() => { loadDetail() })
       <el-table v-else :data="items" border size="small">
         <el-table-column label="成品名称" min-width="160" show-overflow-tooltip>
           <template #default="{row}">{{ getProdName(row.productId) }}</template>
-        </el-table-column>
-        <el-table-column label="规格" width="120" show-overflow-tooltip>
-          <template #default="{row}">{{ getProdSpec(row.productId) }}</template>
         </el-table-column>
         <el-table-column label="单位" width="80">
           <template #default="{row}">{{ getProdUnit(row.productId) }}</template>

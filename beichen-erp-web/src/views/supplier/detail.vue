@@ -301,7 +301,7 @@ onActivated(loadData)
           <template #header><span style="font-weight:600">基础信息</span></template>
           <el-form :model="form" label-width="80px" size="small">
             <el-row :gutter="12">
-              <el-col :span="8"><el-form-item label="名称"><el-input v-model="form.name" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item required label="名称"><el-input v-model="form.name" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="编码"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="状态">
                 <el-select v-model="form.status" style="width:100%">
@@ -387,7 +387,7 @@ onActivated(loadData)
               </template>
             </el-table-column>
             <el-table-column label="规格" width="120"><template #default="{row}">{{ row.spec || '-' }}</template></el-table-column>
-            <el-table-column label="BOM类型" width="120"><template #default="{row}">{{ row.bomTypeName || '-' }}</template></el-table-column>
+            <el-table-column label="物料类型" width="120"><template #default="{row}">{{ row.materialTypeName || '-' }}</template></el-table-column>
             <el-table-column label="单价" width="100"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" /></template></el-table-column>
             <el-table-column label="备注" width="120"><template #default="{row}"><el-input v-model="row.remark" size="small" /></template></el-table-column>
             <el-table-column label="操作" width="150" align="center">
@@ -476,7 +476,7 @@ onActivated(loadData)
         <el-card shadow="never" v-loading="materialLoading">
           <el-table :data="materialSummary" border stripe size="small">
             <el-table-column prop="materialName" label="物料名称" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="bomTypeName" label="类型" width="80" />
+            <el-table-column prop="materialTypeName" label="类型" width="80" />
             <el-table-column prop="totalDemand" label="总需求" width="90" align="right" />
             <el-table-column label="已送料" width="90" align="right">
               <template #default="{ row }">{{ row.totalDelivered || 0 }}</template>

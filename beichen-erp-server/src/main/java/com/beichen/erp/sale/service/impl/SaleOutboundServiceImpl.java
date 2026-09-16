@@ -195,7 +195,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
                     product != null ? product.getName() : "",
                     it.getQuantity().negate(), StockChangeType.SALE_OUT, outbound.getCode(), RelatedBillType.SALE_OUTBOUND,
                     it.getProductId(),
-                    product != null ? product.getSpec() : "", outbound.getId(), it.getQualityType());
+                    "", outbound.getId(), it.getQualityType());
         }
         // 2) 更新出库单状态（销售出库单仅负责真实出库：扣库存；应收由销售订单统一生成，此处不改动订单状态，避免跨单状态污染）
         SaleOutbound u = new SaleOutbound();
@@ -223,7 +223,7 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
                     product != null ? product.getName() : "",
                     it.getQuantity(), StockChangeType.SALE_OUT_UN_AUDIT, outbound.getCode(), RelatedBillType.SALE_OUTBOUND,
                     it.getProductId(),
-                    product != null ? product.getSpec() : "", outbound.getId(), it.getQualityType());
+                    "", outbound.getId(), it.getQualityType());
         }
         // 2) 出库单状态回退为草稿（实体无审核人字段，仅回退状态）
         SaleOutbound u = new SaleOutbound();

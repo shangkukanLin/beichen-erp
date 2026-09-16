@@ -61,7 +61,6 @@
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column prop="spec" label="规格" width="90" />
           <el-table-column prop="unit" label="单位" width="60" />
           <el-table-column label="品质数量/单价" min-width="360">
             <template #default="{ row }">
@@ -141,7 +140,6 @@ interface ItemRow {
   productId: any
   sku?: string
   materialName: string
-  spec: string
   unit: string
   aQty: string;   aPrice: string
   bQty: string;   bPrice: string
@@ -173,7 +171,7 @@ const rules: FormRules = {
 
 /** 空明细行 */
 function emptyRow(): ItemRow {
-  return { productId: undefined, materialName: '', spec: '', unit: '', aQty: '', aPrice: '', bQty: '', bPrice: '', cQty: '', cPrice: '', defectQty: '', defectPrice: '', remark: '' }
+  return { productId: undefined, materialName: '', unit: '', aQty: '', aPrice: '', bQty: '', bPrice: '', cQty: '', cPrice: '', defectQty: '', defectPrice: '', remark: '' }
 }
 
 function addItem() {
@@ -222,7 +220,6 @@ function onMaterialChange(val: any, row: ItemRow) {
     row.productId = m.id
     row.materialName = m.name
     row.sku = m.sku || ''
-    row.spec = m.spec
     row.unit = m.unit
   }
 }
@@ -252,7 +249,6 @@ function expandItems(row: ItemRow) {
     result.push({
       productId: row.productId,
       materialName: row.materialName,
-      spec: row.spec,
       unit: row.unit,
       qualityType: g.qualityType,
       quantity: n,
@@ -315,7 +311,6 @@ async function initFromQuery() {
         const it = items.value[0] || (items.value.push(emptyRow()), items.value[0])
         it.productId = Number(q.productId)
         it.materialName = p.name
-        it.spec = p.spec
         it.unit = p.unit
       }
     } catch { /* 忽略 */ }
@@ -326,7 +321,7 @@ async function initFromQuery() {
       if (it.materialName) {
         const res = await request.get('/outsource/material/page', { params: { materialName: it.materialName, pageSize: 1 } })
         const rec = res?.records?.[0]
-        if (rec) { it.spec = rec.spec || it.spec; it.unit = rec.unit || it.unit }
+        if (rec) { it.unit = rec.unit || it.unit }
       }
     } catch { /* 忽略 */ }
   }

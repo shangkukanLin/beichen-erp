@@ -235,7 +235,7 @@ onMounted(loadData)
 
     <el-dialog v-model="dialogVisible" :title="isEdit?'编辑交货记录':'新增交货记录'" width="520px" :close-on-click-modal="false">
       <el-form :model="form" label-width="85px" size="small">
-        <el-form-item label="产品名称">
+        <el-form-item required label="产品名称">
           <el-select v-model="form.productId" filterable style="width:100%" placeholder="选择订单产品">
             <el-option v-for="p in products" :key="p.id" :label="p.productName" :value="p.id" />
           </el-select>

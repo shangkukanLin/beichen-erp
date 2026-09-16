@@ -8,7 +8,7 @@ import java.util.List;
 
 public interface SupplierMaterialService extends IService<SupplierMaterial> {
 
-    /** 按供应商ID查询其供应的物料列表（联查物料名称/规格/BOM类型名） */
+    /** 按供应商ID查询其供应的物料列表（联查物料名称/规格/物料类型名） */
     List<SupplierMaterial> listBySupplierId(Long supplierId);
 
     /** 按物料ID从 supplier_material 居间表查询供应商ID逗号串（供列表/详情展示） */

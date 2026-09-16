@@ -33,3 +33,9 @@ beichen-erp-web/build_*.txt
 beichen-erp-web/build_final.txt
 beichen-erp-web/build_out.txt
 
+# 文档备份（.bak 副本不入库）
+*.bak.docx
+
+# 一次性调研/调试脚本（浏览器探针、数据抓取等，不入库）
+beichen-erp-server/scripts/
+

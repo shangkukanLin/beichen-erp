@@ -36,6 +36,17 @@ public interface FinanceAnalysisService {
     Map<String, Object> overviewKpi(String preset, String start, String end);
 
     /**
+     * 进货分析（2026-09-15 新增，供「经营分析 → 进货分析」）：
+     * 所选区间的采购 KPI（采购金额 / 采购退货 / 净采购额 / 采购单数）+ 按天或按月的趋势序列 + 单据明细（下钻）。
+     * 口径：采购金额 = 已审核采购单金额（按审核日归期）；采购退货 = 已审核采购退货金额（按建单日归期）；
+     * 采购入库属资产、不计入损益，故本页只做采购视角统计，不参与利润/成本。
+     * @param preset 快捷区间（today/yesterday/week/month/quarter/year），start/end 非空时优先生效
+     * @param start  自定义区间开始日期（含）
+     * @param end    自定义区间结束日期（含）
+     */
+    Map<String, Object> purchaseAnalysis(String preset, String start, String end);
+
+    /**
      * 主体往来统计：供应商应付（按主体类型）、供应商应收未收（应付转应收）、报损损失。
      * 数据源：应付/应收台账 + 两张报损单（只读聚合，不改业务数据）。
      */

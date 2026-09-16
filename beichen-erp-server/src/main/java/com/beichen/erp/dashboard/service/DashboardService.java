@@ -53,20 +53,23 @@ public class DashboardService {
         res.put("counts", counts);
 
         // 2) 盘点：本月待盘点/超期仓库数
+        // 2026-09-16：按盘点范围分开 —— stockTake = 成品类仓库（成品/不良/售后仓）；materialTake = 物料类（委外仓 + 自有物料仓）
         Map<String, Object> take = new LinkedHashMap<>();
         try {
-            List<Map<String, Object>> status = stockTakeService.takeStatus();
-            long pendingWh = status.stream().filter(s -> !Boolean.TRUE.equals(s.get("taken"))).count();
-            long overdueWh = status.stream().filter(s -> !Boolean.TRUE.equals(s.get("taken"))
-                    && s.get("overdueDays") != null && ((Number) s.get("overdueDays")).intValue() > 0).count();
-            take.put("pending", pendingWh);
-            take.put("overdue", overdueWh);
-            take.put("period", status.isEmpty() ? null : status.get(0).get("period"));
+            take = takeStat("PRODUCT");
         } catch (Exception e) {
             log.warn("首页盘点看板统计失败: {}", e.getMessage());
             take.put("pending", 0); take.put("overdue", 0); take.put("period", null);
         }
         res.put("stockTake", take);
+        Map<String, Object> materialTake = new LinkedHashMap<>();
+        try {
+            materialTake = takeStat("MATERIAL");
+        } catch (Exception e) {
+            log.warn("首页物料盘点看板统计失败: {}", e.getMessage());
+            materialTake.put("pending", 0); materialTake.put("overdue", 0); materialTake.put("period", null);
+        }
+        res.put("materialTake", materialTake);
 
         // 3) 售后仓超期待整理：按该产品在售后仓最早的 PENDING 入库流水日期判定
         Map<String, Object> sort = new LinkedHashMap<>();
@@ -81,9 +84,27 @@ public class DashboardService {
     // ==================== 销售工作台（首页「销售业务」TAB，2026-09-15 新增） ====================
 
     /**
+     * 盘点看板统计（按范围口径）：本月待盘点仓库数 / 其中超期数 / 当前盘点月份。
+     *
+     * @param scope PRODUCT=成品类仓库（成品/不良/售后仓）；MATERIAL=物料类（委外仓 + 自有物料仓）
+     */
+    private Map<String, Object> takeStat(String scope) {
+        List<Map<String, Object>> status = stockTakeService.takeStatus(scope);
+        long pendingWh = status.stream().filter(s -> !Boolean.TRUE.equals(s.get("taken"))).count();
+        long overdueWh = status.stream().filter(s -> !Boolean.TRUE.equals(s.get("taken"))
+                && s.get("overdueDays") != null && ((Number) s.get("overdueDays")).intValue() > 0).count();
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("pending", pendingWh);
+        m.put("overdue", overdueWh);
+        m.put("period", status.isEmpty() ? null : status.get(0).get("period"));
+        return m;
+    }
+
+    /**
      * 销售工作台（2026-09-15 用户口径）：**当日单据量** 4 项。纯只读聚合。
-     * 「当日」= 各单据的**业务日期列**等于今天（sale_order.order_date / sale_return.return_date /
-     * sale_exchange.exchange_date / return_sort.sort_date），**排除已作废**；草稿与已审核都计（当天开了单）。
+     * 「当日」= 各单据的**建单日 `create_time`** 等于今天（2026-09-15 全站统一归期口径：
+     * 由原「业务日期列 order_date/return_date/exchange_date/sort_date」改为**建单日**），
+     * **排除已作废**；草稿与已审核都计（当天建单）。
      * 按用户要求：不做业绩数字、不做沉默客户卡、不做超期应收/售后仓超期卡、**不做出库情况提示**。
      */
     public Map<String, Object> saleWorkbench() {
@@ -91,10 +112,10 @@ public class DashboardService {
         Map<String, Object> res = new LinkedHashMap<>();
 
         Map<String, Object> todos = new LinkedHashMap<>();
-        todos.put("saleOrderToday", countToday("sale_order", "order_date", cid));
-        todos.put("saleReturnToday", countToday("sale_return", "return_date", cid));
-        todos.put("saleExchangeToday", countToday("sale_exchange", "exchange_date", cid));
-        todos.put("returnSortToday", countToday("return_sort", "sort_date", cid));
+        todos.put("saleOrderToday", countToday("sale_order", "create_time", cid));
+        todos.put("saleReturnToday", countToday("sale_return", "create_time", cid));
+        todos.put("saleExchangeToday", countToday("sale_exchange", "create_time", cid));
+        todos.put("returnSortToday", countToday("return_sort", "create_time", cid));
         res.put("todos", todos);
         return res;
     }

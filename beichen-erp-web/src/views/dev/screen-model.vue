@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx'
 import request from '@/utils/request'
 
 /**
- * 屏幕资料知识库（研发管理）：行业机型屏幕参数，支持增删改查、关键词搜索、Excel 导入导出。
+ * 屏幕资料（研发管理，2026-09-16 由「屏幕资料知识库」改名）：行业机型屏幕参数，支持增删改查、关键词搜索、Excel 导入导出。
  * 数据由后端启动时从 db/screen_model_data.sql 初始化；清空数据不会清理本知识库。
  */
 const loading = ref(false)
@@ -105,7 +105,7 @@ async function exportExcel() {
   ]))
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), '屏幕资料')
-  XLSX.writeFile(wb, `屏幕资料知识库_${localDate()}.xlsx`)
+  XLSX.writeFile(wb, `屏幕资料_${localDate()}.xlsx`)
   ElMessage.success(`已导出 ${list.length} 条`)
 }
 
@@ -242,8 +242,8 @@ onActivated(() => { loadData() })
               <el-option label="折叠屏" value="FOLD" /><el-option label="直板AMOLED" value="AMOLED" />
             </el-select>
           </el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="品牌"><el-input v-model="form.brand" /></el-form-item></el-col>
-          <el-col :span="8"><el-form-item label="型号"><el-input v-model="form.model" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="品牌"><el-input v-model="form.brand" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="型号"><el-input v-model="form.model" /></el-form-item></el-col>
         </el-row>
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item label="主屏尺寸">

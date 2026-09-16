@@ -28,11 +28,11 @@ const warehouseOptions = ref<any[]>([])
 const productList = ref<any[]>([]) // 该工厂所有产品汇总
 const rows = ref<any[]>([createEmptyRow()])
 const mergedItems = ref<any[]>([])
-const bomTypes = ref<any[]>([])
+const materialTypes = ref<any[]>([])
 const loading = ref(false)
 
-// bomTypeId -> 类型名 映射供展示
-function typeName(id: number | undefined) { if (id == null) return '-'; const t = bomTypes.value.find((v: any) => v.id === id); return t ? t.typeName : (id as any) }
+// materialTypeId -> 类型名 映射供展示
+function typeName(id: number | undefined) { if (id == null) return '-'; const t = materialTypes.value.find((v: any) => v.id === id); return t ? t.typeName : (id as any) }
 
 function createEmptyRow() {
   // qualityType：退回成品规格（审核按该规格从成品仓扣减，避免不同等级间账实错位）
@@ -153,7 +153,7 @@ function refreshMerged() {
       const key = m.outsourceMaterialId || m.materialName || ''
       if (!key) continue
       if (!map[key]) {
-        map[key] = { materialId: m.outsourceMaterialId, bomTypeId: m.bomTypeId, materialName: m.materialName, unit: m.unit, quantity: 0, perSetQuantity: m.perSetQuantity }
+        map[key] = { materialId: m.outsourceMaterialId, materialTypeId: m.materialTypeId, materialName: m.materialName, unit: m.unit, quantity: 0, perSetQuantity: m.perSetQuantity }
       }
       map[key].quantity += qty * (Number(m.perSetQuantity) || 0)
     }
@@ -181,7 +181,7 @@ async function handleSubmit() {
     }
   }
   const items = mergedItems.value.map(m => ({
-    materialId: m.materialId, bomTypeId: m.bomTypeId, unit: m.unit,
+    materialId: m.materialId, materialTypeId: m.materialTypeId, unit: m.unit,
     quantity: m.quantity, unitPrice: '', remark: ''
   }))
   if (items.length === 0) { ElMessage.warning('请选择产品并填写退回数量'); return }
@@ -249,9 +249,9 @@ async function loadForEdit(id: number) {
   } catch (e: any) { ElMessage.error(e?.message || '加载退货单失败') } finally { loading.value = false }
 }
 
-onMounted(async () => { await loadFactories(); loadBomTypes(); if (editId) await loadForEdit(editId) })
-async function loadBomTypes() {
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch { bomTypes.value = [] }
+onMounted(async () => { await loadFactories(); loadMaterialTypes(); if (editId) await loadForEdit(editId) })
+async function loadMaterialTypes() {
+  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch { materialTypes.value = [] }
 }
 
 </script>
@@ -262,7 +262,7 @@ async function loadBomTypes() {
       <template #header><span style="font-weight:600">退货信息</span></template>
       <el-form :model="form" label-width="90px" size="small">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" placeholder="请选择加工厂" @update:modelValue="onFactoryChange" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" placeholder="请选择加工厂" @update:modelValue="onFactoryChange" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="成品出库仓" required><RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择出库仓（我方成品仓）" @update:modelValue="onWarehouseChange" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="退货日期"><el-input v-model="form.returnDate" type="date" /></el-form-item></el-col>
           <el-col :span="6">
@@ -352,7 +352,7 @@ async function loadBomTypes() {
     <el-card shadow="never" v-if="mergedItems.length > 0">
       <template #header><span style="font-weight:600">拆解后的退货物料（合并去重）</span></template>
       <el-table :data="mergedItems" border size="small">
-        <el-table-column label="类型" width="80"><template #default="{row}">{{ typeName(row.bomTypeId) }}</template></el-table-column>
+        <el-table-column label="类型" width="80"><template #default="{row}">{{ typeName(row.materialTypeId) }}</template></el-table-column>
         <el-table-column prop="materialName" label="物料名称" min-width="130" />
         <el-table-column prop="unit" label="单位" width="60" />
         <el-table-column prop="quantity" label="退回数量" width="100" align="right" />

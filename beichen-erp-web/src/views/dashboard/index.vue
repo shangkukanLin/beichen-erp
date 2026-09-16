@@ -79,10 +79,6 @@
             <div class="stat-value" style="color:var(--app-color-warning)">{{ devInProgress }}</div>
             <div class="stat-label">进行中</div>
           </div>
-          <div class="stat-card clickable" @click="$router.push('/dev/bom')">
-            <div class="stat-value" style="color:var(--app-color-primary)">{{ devBomCount }}</div>
-            <div class="stat-label">BOM总数</div>
-          </div>
           <div class="stat-card clickable" @click="$router.push('/dev/project?tab=finished')">
             <div class="stat-value" style="color:var(--app-color-success)">{{ devFinished }}</div>
             <div class="stat-label">已结项</div>
@@ -110,13 +106,12 @@
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
           <!-- 顺序 = 使用频率（2026-09-14 按最新菜单重排：研发项目/BOM/物料/图纸/知识库 高频，模板类低频收尾） -->
-          <el-button v-if="hasMenu['DevProject']" type="primary" size="small" text @click="$router.push('/dev/project')">研发项目</el-button>
-          <el-button v-if="hasMenu['DevBom']" type="primary" size="small" text @click="$router.push('/dev/bom')">BOM管理</el-button>
-          <el-button v-if="hasMenu['DevMaterial']" type="primary" size="small" text @click="$router.push('/dev/material')">研发物料管理</el-button>
-          <el-button v-if="hasMenu['DevDrawing']" type="primary" size="small" text @click="$router.push('/dev/drawing')">图纸文档</el-button>
-          <el-button v-if="hasMenu['DevScreenModel']" type="primary" size="small" text @click="$router.push('/dev/screen-model')">屏幕资料知识库</el-button>
-          <el-button v-if="hasMenu['DevPhaseTemplate']" type="primary" size="small" text @click="$router.push('/dev/phase-template')">阶段模板</el-button>
-          <el-button v-if="hasMenu['DevBomType']" type="primary" size="small" text @click="$router.push('/dev/bom-type')">BOM表类型</el-button>
+          <el-button v-if="hasMenu['DevProject']" type="primary" size="small" text @click="$router.push('/dev/project')">研发立项</el-button>
+          <el-button v-if="hasMenu['DevMaterial']" type="primary" size="small" text @click="$router.push('/dev/material')">研发物料</el-button>
+          <el-button v-if="hasMenu['DevScreenModel']" type="primary" size="small" text @click="$router.push('/dev/screen-model')">屏幕资料</el-button>
+          <!-- 阶段模板已并入「基础数据 → 模版管理」（2026-09-15）：按钮保留、深链到该页的「阶段模板管理」页签 -->
+          <el-button v-if="hasMenu['TemplateManage']" type="primary" size="small" text @click="$router.push('/template?tab=phase')">阶段模板</el-button>
+          <el-button v-if="hasMenu['MaterialType']" type="primary" size="small" text @click="$router.push('/dev/material-type')">物料类型</el-button>
         </div>
       </el-tab-pane>
 
@@ -204,21 +199,32 @@
 
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序 = 使用频率（2026-09-14）：加工/交货/物料订单（跟单）→ 收发/仓库/出入库/报损（仓管）→ 物料信息 → 退货（售后）→ 供货商/合同模板（配置） -->
+          <!-- 顺序 = 使用频率（2026-09-14）：加工/交货/物料订单（跟单）→ 物料信息 → 退货（售后）→ 供货商/合同模板（配置）
+               注：2026-09-16 「物料收发单 / 物料其他出入库 / 物料报损 / 委外仓库 / 自有物料仓」5 项
+               已随新一级菜单「物料仓库」迁到独立的「物料仓库」TAB -->
           <el-button v-if="hasMenu['OutsourceOrder']" type="primary" size="small" text @click="$router.push('/outsource/order')">加工订单</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialOrder']" type="primary" size="small" text @click="$router.push('/outsource/material-order')">物料订单</el-button>
-          <el-button v-if="hasMenu['OutsourceDeliveryInfo']" type="primary" size="small" text @click="$router.push('/outsource/delivery-info')">交货信息</el-button>
-          <el-button v-if="hasMenu['OutsourceDelivery']" type="primary" size="small" text @click="$router.push('/outsource/delivery')">物料收发单</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialInfo']" type="primary" size="small" text @click="$router.push('/outsource/material-info')">物料信息管理</el-button>
-          <el-button v-if="hasMenu['OutsourceOtherIo']" type="primary" size="small" text @click="$router.push('/outsource/other-io')">物料其他出入库</el-button>
           <el-button v-if="hasMenu['OutsourceReturnOrder']" type="primary" size="small" text @click="$router.push('/outsource/return-order')">加工退货</el-button>
-          <!-- 委外仓库：改用**路由路径**判权限（与「成品仓库管理」共用 route_name "Warehouse" 会串号） -->
-          <el-button v-if="hasPath['/outsource/warehouse']" type="primary" size="small" text @click="$router.push('/outsource/warehouse')">委外仓库</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialReturn']" type="primary" size="small" text @click="$router.push('/outsource/material-return')">物料退货</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialWarehouse']" type="primary" size="small" text @click="$router.push('/outsource/material-warehouse')">自有物料仓</el-button>
-          <el-button v-if="hasMenu['OutsourceStockLoss']" type="primary" size="small" text @click="$router.push('/outsource/stock-loss')">物料报损</el-button>
           <el-button v-if="hasMenu['OutsourceSupplierManage']" type="primary" size="small" text @click="$router.push('/outsource/supplier/manage')">供货商管理</el-button>
-          <el-button v-if="hasMenu['OutsourceContractTemplate']" type="primary" size="small" text @click="$router.push('/outsource/contract-template')">加工合同模板</el-button>
+          <!-- 加工合同模板已并入「基础数据 → 模版管理」（2026-09-15）：按钮保留、深链到该页的「加工合同模板」页签 -->
+          <el-button v-if="hasMenu['TemplateManage']" type="primary" size="small" text @click="$router.push('/template?tab=contract')">加工合同模板</el-button>
+        </div>
+      </el-tab-pane>
+
+      <!-- 物料仓库（2026-09-16 新增 TAB，对应新的一级菜单「物料仓库」）：快捷入口自「委外加工」TAB 迁入，
+           顺序与左侧栏菜单一致；本模块暂无汇总统计卡片（如需物料仓库存量/待处理收发单等统计，另行补充） -->
+      <el-tab-pane v-if="hasModule['materialWarehouse']" label="物料仓库" name="materialWarehouse">
+        <div class="quick-links">
+          <span class="links-label">快捷入口：</span>
+          <el-button v-if="hasMenu['OutsourceDelivery']" type="primary" size="small" text @click="$router.push('/outsource/delivery')">物料收发单</el-button>
+          <el-button v-if="hasMenu['OutsourceOtherIo']" type="primary" size="small" text @click="$router.push('/outsource/other-io')">物料其他出入库</el-button>
+          <el-button v-if="hasMenu['OutsourceStockLoss']" type="primary" size="small" text @click="$router.push('/outsource/stock-loss')">物料报损</el-button>
+          <!-- 委外仓库：按**路由路径**判权限（与「成品仓库管理」共用 route_name "Warehouse" 会串号） -->
+          <el-button v-if="hasPath['/outsource/warehouse']" type="primary" size="small" text @click="$router.push('/outsource/warehouse')">委外仓库</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialWarehouse']" type="primary" size="small" text @click="$router.push('/outsource/material-warehouse')">自有物料仓</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialStockTake']" type="primary" size="small" text @click="$router.push('/outsource/material-stock-take')">物料库存盘点</el-button>
         </div>
       </el-tab-pane>
 
@@ -599,10 +605,18 @@ const todoItems = computed(() => {
   if (c.purchaseReturn) items.push({ label: '采购退货单待审核', count: c.purchaseReturn, path: '/inventory/purchase-return', tone: 'var(--app-color-primary)', sub: '草稿待审核' })
   if (c.expense) items.push({ label: '费用单待审核', count: c.expense, path: '/finance/expense', tone: 'var(--app-color-primary)', sub: '草稿待审核' })
   // 预警类
+  // 成品仓待盘点（口径已按范围收敛为"成品类仓库"：成品/不良/售后仓）
   if (take.pending) items.push({
     label: `${take.period || '本月'}待盘点仓库`, count: take.pending, path: '/inventory/stock-take',
     tone: take.overdue ? 'var(--app-color-danger)' : 'var(--app-color-warning)',
     sub: take.overdue ? `其中超期 ${take.overdue} 个` : `应盘日 ${take.period || ''}`,
+  })
+  // 物料仓待盘点（2026-09-16 新增，独立口径；无该菜单权限则不展示）
+  const mt = pending.value.materialTake || {}
+  if (mt.pending && hasMenu.value['OutsourceMaterialStockTake']) items.push({
+    label: `${mt.period || '本月'}待盘点物料仓`, count: mt.pending, path: '/outsource/material-stock-take',
+    tone: mt.overdue ? 'var(--app-color-danger)' : 'var(--app-color-warning)',
+    sub: mt.overdue ? `其中超期 ${mt.overdue} 个` : `应盘日 ${mt.period || ''}`,
   })
   if (overdueSort) items.push({ label: '售后仓超期待整理', count: overdueSort, path: '/inventory/return-sort', tone: 'var(--app-color-danger)', sub: '停留超过 3 天' })
   if (overdueRec > 0) items.push({ label: '超期应收', count: fmtN(overdueRec), path: '/finance/receivable', tone: 'var(--app-color-danger)', sub: '已过到期日未收' })
@@ -684,7 +698,8 @@ function onTabChange() {
 }
 
 // 2026-09-15 用户要求：删除「当日销售构成」四图（原 pieData / drawChart / renderSaleCharts 及 4 个图表实例），
-// 该区块口径（单据日期）与页面其它卡片（审核日）不同源，易误读；销售 TAB 改为"待办 + 业绩 + 停滞"结构。
+// 该区块口径（单据日期）与页面其它卡片（当时为审核日）不同源，易误读；销售 TAB 改为"待办 + 业绩 + 停滞"结构。
+// 注：2026-09-15 稍后全站归期已统一为**建单日**，故此处的"不同源"问题已不存在（但四图仍按用户要求保持删除）。
 
 // 根据用户菜单权限判断可见模块
 const hasMenu = ref<Record<string, boolean>>({})
@@ -694,12 +709,12 @@ const hasMenu = ref<Record<string, boolean>>({})
  * （用户有其中任一权限，两处快捷入口都会显示）。故这两处入口改用**路径**判断。
  */
 const hasPath = ref<Record<string, boolean>>({})
-const hasModule = reactive({ dev: false, outsource: false, purchase: false, sale: false, stock: false, finance: false })
+const hasModule = reactive({ dev: false, outsource: false, purchase: false, sale: false, stock: false, finance: false, materialWarehouse: false })
 
 // 统计卡片数据
 const devTotal = ref(0)
 const devInProgress = ref(0)
-const devBomCount = ref(0)
+// devBomCount 已移除（2026-09-16：BOM管理菜单/总览页下线，仪表盘不再展示 BOM 总数）
 const devFinished = ref(0)
 // 当日（本地时区 yyyy-MM-dd）：**不能用 toISOString()** —— 那是 UTC，东八区 08:00 之前会算成前一天。
 // 两处使用：①研发"计划完成"逾期标红（模板）②"当日销售单"按 orderDate 过滤（2026-09-14 新增）
@@ -811,27 +826,33 @@ function checkUserMenus() {
   }
   collect(menus)
 
-  // 可见模块判断（菜单推导）∩ 用户勾选（dashboardTabs；null=未配置=全部可见）
-  const tabs = userStore.dashboardTabs
-  const tabAllowed = (key: string) => !tabs || tabs.includes(key)
-  hasModule.dev = (names.has('DevProject') || names.has('DevBom')) && tabAllowed('dev')
-  hasModule.outsource = (names.has('OutsourceOrder') || names.has('OutsourceMaterialOrder')) && tabAllowed('outsource')
-  hasModule.purchase = (names.has('InventoryPurchase') || names.has('SupplierManage') || names.has('OutsourceSupplierManage')) && tabAllowed('purchase')
-  hasModule.sale = (names.has('InventorySale') || names.has('InventoryCustomer')) && tabAllowed('sale')
-  hasModule.stock = (names.has('InventoryStock') || names.has('Warehouse') || names.has('ProductManage')) && tabAllowed('stock')
-  hasModule.finance = (names.has('FinanceReceivable') || names.has('FinancePayable')) && tabAllowed('finance')
-
-  // 快捷入口可见性（route_name 与 sys_menu 一致）
-  // 2026-09-14 按最新 sys_menu 重设：补齐缺失的 route_name（DevScreenModel / OutsourceDeliveryInfo / OutsourceStockLoss /
-  // InventoryProductStock / InventoryStockLoss / FinancePayableTransfer / AnalysisOverview），并移除**已不存在**的 FinanceAnalysis
-  const menuNames = ['Dashboard','DevProject','DevBom','DevDrawing','DevMaterial','DevScreenModel','DevBomType','DevPhaseTemplate','ProductManage','InventoryBrand','InventoryCustomer','SupplierManage','OutsourceSupplierManage','OutsourceOrder','OutsourceMaterialOrder','OutsourceDeliveryInfo','OutsourceMaterialInfo','OutsourceDelivery','OutsourceOtherIo','OutsourceReturnOrder','OutsourceMaterialReturn','OutsourceStockLoss','Warehouse','OutsourceMaterialWarehouse','OutsourceContractTemplate','InventoryPurchase','InventoryPurchaseReturn','InventorySale','SaleReturn','SaleExchange','InventoryProductStock','InventoryStock','WarehouseStockLog','InventoryOtherIo','InventoryReclassify','InventoryWarehouseMove','InventoryStockTake','InventoryReturnSort','InventoryStockLoss','FinanceReceivable','FinancePayable','FinanceBill','FinanceCashflow','FinanceAccount','FinanceReceipt','FinancePayment','FinanceExpense','FinanceInvoice','FinancePayableTransfer','AnalysisOverview','SystemSmart','SystemUser','SystemSettings','SystemDataManage','SystemRole','SystemMenu','SystemClearData']
-  menuNames.forEach(n => { hasMenu.value[n] = names.has(n) })
   // 共用 route_name「Warehouse」的两处仓库入口：改按**路径**判权限，避免串号（见 hasPath 注释）
+  // 注：必须在 hasModule 之前赋值 —— 「物料仓库」TAB 的可见性要用到 hasPath['/outsource/warehouse']
   hasPath.value = {
     '/outsource/warehouse': paths.has('/outsource/warehouse'),
     '/inventory/warehouse': paths.has('/inventory/warehouse')
   }
 
+  // 可见模块判断（菜单推导）∩ 用户勾选（dashboardTabs；null=未配置=全部可见）
+  const tabs = userStore.dashboardTabs
+  const tabAllowed = (key: string) => !tabs || tabs.includes(key)
+  // 2026-09-16：BOM管理/图纸文档 菜单下线后，研发模块可见性只看「研发立项」
+  hasModule.dev = names.has('DevProject') && tabAllowed('dev')
+  hasModule.outsource = (names.has('OutsourceOrder') || names.has('OutsourceMaterialOrder')) && tabAllowed('outsource')
+  hasModule.purchase = (names.has('InventoryPurchase') || names.has('SupplierManage') || names.has('OutsourceSupplierManage')) && tabAllowed('purchase')
+  hasModule.sale = (names.has('InventorySale') || names.has('InventoryCustomer')) && tabAllowed('sale')
+  hasModule.stock = (names.has('InventoryStock') || names.has('Warehouse') || names.has('ProductManage')) && tabAllowed('stock')
+  hasModule.finance = (names.has('FinanceReceivable') || names.has('FinancePayable')) && tabAllowed('finance')
+  // 物料仓库（2026-09-16 新增 TAB，对应新的一级菜单「物料仓库」）：菜单含任一物料收发/仓储/报损页面即视为可见
+  hasModule.materialWarehouse = (names.has('OutsourceDelivery') || names.has('OutsourceOtherIo')
+    || names.has('OutsourceStockLoss') || names.has('OutsourceMaterialWarehouse')
+    || hasPath.value['/outsource/warehouse']) && tabAllowed('materialWarehouse')
+
+  // 快捷入口可见性（route_name 与 sys_menu 一致）
+  // 2026-09-14 按最新 sys_menu 重设：补齐缺失的 route_name（DevScreenModel / OutsourceStockLoss /
+  // InventoryProductStock / InventoryStockLoss / FinancePayableTransfer / AnalysisOverview），并移除**已不存在**的 FinanceAnalysis
+  const menuNames = ['Dashboard','DevProject','DevMaterial','DevScreenModel','MaterialType','TemplateManage','ProductManage','InventoryBrand','InventoryCustomer','SupplierManage','OutsourceSupplierManage','OutsourceOrder','OutsourceMaterialOrder','OutsourceMaterialInfo','OutsourceDelivery','OutsourceOtherIo','OutsourceReturnOrder','OutsourceMaterialReturn','OutsourceStockLoss','Warehouse','OutsourceMaterialWarehouse','OutsourceMaterialStockTake','InventoryPurchase','InventoryPurchaseReturn','InventorySale','SaleReturn','SaleExchange','InventoryProductStock','InventoryStock','WarehouseStockLog','InventoryOtherIo','InventoryReclassify','InventoryWarehouseMove','InventoryStockTake','InventoryReturnSort','InventoryStockLoss','FinanceReceivable','FinancePayable','FinanceBill','FinanceCashflow','FinanceAccount','FinanceReceipt','FinancePayment','FinanceExpense','FinanceInvoice','FinancePayableTransfer','AnalysisOverview','SystemSmart','SystemUser','SystemSettings','SystemDataManage','SystemRole','SystemMenu','SystemClearData']
+  menuNames.forEach(n => { hasMenu.value[n] = names.has(n) })
   // 默认激活「备忘录」（2026-09-15 用户要求，原为「经营总览」；财务区块仍按 AnalysisOverview 权限显隐）
   activeTab.value = 'memo'
 }
@@ -840,14 +861,11 @@ async function loadStats() {
   try {
     // 项目研发
     if (hasModule.dev) {
-      const [projRes, bomRes, allProjRes] = await Promise.all([
+      const [projRes, allProjRes] = await Promise.all([
         request.get<any, any>('/dev/project/page', { params: { pageSize: 1 } }).catch(() => ({})),
-        // BOM 总数只需 total，无需拉全量明细
-        request.get<any, any>('/dev/bom/page', { params: { pageSize: 1 } }).catch(() => ({})),
         request.get<any, any>('/dev/project/page', { params: { pageSize: 200 } }).catch(() => ({})),
       ])
       const projTotal = projRes?.total || 0
-      const bomProjectCount = bomRes?.total || 0
       const allRecords = allProjRes?.records || []
       let inProgress = 0, finished = 0
       const activeProjects: any[] = []
@@ -858,7 +876,6 @@ async function loadStats() {
       inProgressProjects.value = activeProjects.slice(0, 5)
       devTotal.value = projTotal
       devInProgress.value = inProgress
-      devBomCount.value = bomProjectCount
       devFinished.value = finished
       // 加载进行中项目的项目阶段
       if (activeProjects.length > 0) {

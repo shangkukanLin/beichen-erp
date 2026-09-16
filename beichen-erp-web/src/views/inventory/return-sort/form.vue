@@ -87,7 +87,7 @@ async function loadDefectStock() {
           pendingId: r.pendingId,
           sourceType: r.sourceType, sourceCode: r.sourceCode, sourceDate: r.sourceDate,
           sku: r.sku || '',
-          productId: r.productId, productName: r.productName, spec: r.spec, unit: r.unit,
+          productId: r.productId, productName: r.productName, unit: r.unit,
           totalQuantity: qty, available: qty,
           batchQuantity: Number(r.totalQuantity) || 0, sortedQuantity: Number(r.sortedQuantity) || 0,
           stayDays: Number(r.stayDays) || 0,
@@ -131,7 +131,7 @@ async function init() {
     items.value = (its || []).map((it: any) => ({
       pendingId: it.pendingId,
       sourceType: it.sourceType, sourceCode: it.sourceCode, sourceDate: it.sourceDate,
-      productId: it.productId, productName: it.productName, spec: it.spec, unit: it.unit,
+      productId: it.productId, productName: it.productName, unit: it.unit,
       sku: it.sku || '',
       totalQuantity: Number(it.totalQuantity), qtyA: Number(it.qtyA), qtyB: Number(it.qtyB),
       qtyC: Number(it.qtyC), qtyDefect: Number(it.qtyDefect)
@@ -261,7 +261,6 @@ watch(() => route.fullPath, () => { init() })
         </el-table-column>
         <el-table-column prop="sku" label="SKU" width="130" />
         <el-table-column prop="productName" label="产品" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="spec" label="规格" width="110" show-overflow-tooltip />
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column prop="totalQuantity" label="待整理数量" width="110" align="center">
           <template #default="{ row }"><b>{{ row.totalQuantity }}</b></template>

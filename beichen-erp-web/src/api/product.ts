@@ -40,7 +40,6 @@ export interface Product {
   sku?: string
   brandId?: number
   category?: string
-  spec?: string
   /** 通用型号（适用多款机型） */
   generalModel?: string
   unit?: string

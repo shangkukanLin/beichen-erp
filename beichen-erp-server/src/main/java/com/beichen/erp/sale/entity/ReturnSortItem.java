@@ -55,8 +55,6 @@ public class ReturnSortItem {
 
     private String productName;
 
-    private String spec;
-
     private String unit;
 
     /** 待整理数量(源仓DEFECT库存，只读带出) */

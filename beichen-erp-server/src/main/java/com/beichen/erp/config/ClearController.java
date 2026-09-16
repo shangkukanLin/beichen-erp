@@ -4,7 +4,7 @@ import cn.dev33.satoken.annotation.SaCheckRole;
 import cn.dev33.satoken.annotation.SaMode;
 import cn.dev33.satoken.stp.StpUtil;
 import com.beichen.erp.common.R;
-import com.beichen.erp.common.DefaultBomTypes;
+import com.beichen.erp.common.DefaultMaterialTypes;
 import com.beichen.erp.common.DefaultContractTemplate;
 import com.beichen.erp.system.common.SystemConstants;
 import lombok.extern.slf4j.Slf4j;
@@ -135,7 +135,7 @@ public class ClearController {
                 "DELETE FROM dev_drawing WHERE company_id = " + companyId,
                 "DELETE FROM dev_bug WHERE company_id = " + companyId,
                 "DELETE FROM dev_bom WHERE company_id = " + companyId,
-                "DELETE FROM dev_bom_type WHERE company_id = " + companyId,
+                "DELETE FROM material_type WHERE company_id = " + companyId,
                 "DELETE FROM dev_purchase_item WHERE company_id = " + companyId,
                 "DELETE FROM dev_material_flow WHERE company_id = " + companyId,
                 "DELETE FROM dev_phase_template WHERE company_id = " + companyId,
@@ -156,10 +156,10 @@ public class ClearController {
                 // 清空公司业务数据时保留，避免辛苦录入的机型屏幕参数被误删。
             };
             for (String s : sqls) { stmt.execute(s); }
-                // 重新初始化BOM类型默认数据（统一用 DefaultBomTypes，避免与 DataInitializer 不一致）
-            String[] defaultTypes = DefaultBomTypes.TYPES;
+                // 重新初始化物料类型默认数据（统一用 DefaultMaterialTypes，避免与 DataInitializer 不一致）
+            String[] defaultTypes = DefaultMaterialTypes.TYPES;
             for (int i = 0; i < defaultTypes.length; i++) {
-                stmt.execute("INSERT INTO dev_bom_type (type_name, sort_order, status, is_default, company_id) VALUES ('" + defaultTypes[i] + "', " + (i + 1) + ", 1, 1, " + companyId + ")");
+                stmt.execute("INSERT INTO material_type (type_name, sort_order, status, is_default, company_id) VALUES ('" + defaultTypes[i] + "', " + (i + 1) + ", 1, 1, " + companyId + ")");
             }
             // 重新初始化阶段模板默认数据
             String[][] phaseDefaults = {
@@ -183,7 +183,7 @@ public class ClearController {
                     + p[0].replace("'", "''") + "', " + p[1] + ", " + p[2] + ", '"
                     + p[3].replace("'", "''") + "', " + companyId + ")");
             }
-            // 重新初始化默认合同模板（加工合同、采购合同），与 BOM 类型/阶段模板一致
+            // 重新初始化默认合同模板（加工合同、采购合同），与 物料类型/阶段模板一致
             insertContractTemplate(stmt, companyId, DefaultContractTemplate.TYPE_PROCESSING,
                     DefaultContractTemplate.NAME_PROCESSING, DefaultContractTemplate.PROCESSING_CONTRACT_HTML);
             insertContractTemplate(stmt, companyId, DefaultContractTemplate.TYPE_PURCHASE,
@@ -191,7 +191,7 @@ public class ClearController {
             stmt.execute("SET FOREIGN_KEY_CHECKS = 1");
             conn.commit();
             stmt.close();
-            return R.ok("当前公司所有业务数据已清空，BOM类型和阶段模板已重置为默认");
+            return R.ok("当前公司所有业务数据已清空，物料类型和阶段模板已重置为默认");
         } catch (Exception e) {
             return R.fail(e.getMessage());
         }

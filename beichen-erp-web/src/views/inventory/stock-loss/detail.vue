@@ -38,7 +38,6 @@
       <el-table v-loading="tableLoading" :data="items" border stripe show-summary :summary-method="summaries">
         <el-table-column prop="productName" label="产品名称" min-width="160" />
         <el-table-column prop="sku" label="SKU" width="130" />
-        <el-table-column prop="spec" label="规格" width="120" />
         <el-table-column label="单位" width="70" align="center">
           <template #default="{ row }">{{ row.unit || '—' }}</template>
         </el-table-column>
@@ -88,7 +87,7 @@ const items = ref<any[]>([])
 function fmtQty(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
 function money(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 
-/** 合计行：数量/金额求和（列序固定：0产品 1SKU 2规格 3单位 4品质 5数量 6单价 7金额 8备注） */
+/** 合计行：数量/金额求和（列序固定：0产品 1SKU 2单位 3品质 4数量 5单价 6金额 7备注） */
 function summaries({ columns }: any) {
   const sumQty = items.value.reduce((s, r) => s + (Number(r.quantity) || 0), 0)
   const sumAmt = items.value.reduce((s, r) => s + (Number(r.amount) || 0), 0)

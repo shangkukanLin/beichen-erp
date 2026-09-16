@@ -18,7 +18,7 @@ public interface OutsourceStockLossService {
     /** 明细列表（已回填品质中文名） */
     List<OutsourceStockLossItem> getItems(Long lossId);
 
-    /** 新增（草稿）：明细按物料档案冗余快照名称/规格/单位/BOM类型，单价为空时带出最近进价 */
+    /** 新增（草稿）：明细按物料档案冗余快照名称/规格/单位/物料类型，单价为空时带出最近进价 */
     void create(OutsourceStockLoss loss, List<OutsourceStockLossItem> items);
 
     /** 编辑（仅草稿） */

@@ -47,9 +47,6 @@
         <el-table-column label="SKU" width="130">
           <template #default="{ row }">{{ row.sku || '—' }}</template>
         </el-table-column>
-        <el-table-column label="规格" width="120">
-          <template #default="{ row }">{{ row.spec || '—' }}</template>
-        </el-table-column>
         <el-table-column label="单位" width="70" align="center">
           <template #default="{ row }">{{ row.unit || '—' }}</template>
         </el-table-column>
@@ -147,7 +144,7 @@ const totalAmount = computed(() =>
 
 function newItem() {
   return {
-    productId: undefined, sku: '', productName: '', spec: '', unit: '',
+    productId: undefined, sku: '', productName: '', unit: '',
     qualityType: ProductQualityType.A as string, quantity: undefined, unitPrice: undefined,
     amount: 0, remark: '', stockQty: undefined as number | undefined
   }
@@ -161,7 +158,6 @@ async function onProductPick(p: any, row: any) {
   row.productId = p.id
   row.sku = p.sku || ''
   row.productName = p.name || ''
-  row.spec = p.spec || ''
   row.unit = p.unit || ''
   // 单价优先取产品成本价，没有再取最近进价（后端保存时同样逻辑，这里只是提前展示）
   if (row.unitPrice == null) row.unitPrice = Number(p.costPrice) || Number(p.lastInPrice) || 0
@@ -206,7 +202,7 @@ async function loadDetail() {
     const its = await request.get<any, any>(`/inventory/stock-loss/${editId.value}/items`)
     items.value = (its || []).map((i: any) => ({
       productId: i.productId, sku: i.sku || '', productName: i.productName || '',
-      spec: i.spec || '', unit: i.unit || '', qualityType: i.qualityType || ProductQualityType.A,
+      unit: i.unit || '', qualityType: i.qualityType || ProductQualityType.A,
       quantity: i.quantity, unitPrice: i.unitPrice, amount: i.amount,
       remark: i.remark || '', stockQty: undefined
     }))

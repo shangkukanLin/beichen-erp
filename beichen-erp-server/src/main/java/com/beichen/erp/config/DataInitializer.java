@@ -1,13 +1,13 @@
 package com.beichen.erp.config;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.beichen.erp.common.DefaultBomTypes;
+import com.beichen.erp.common.DefaultMaterialTypes;
 import com.beichen.erp.common.DefaultContractTemplate;
 import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
-import com.beichen.erp.dev.entity.BomType;
+import com.beichen.erp.dev.entity.MaterialType;
 import com.beichen.erp.dev.entity.PhaseTemplate;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.dev.mapper.PhaseTemplateMapper;
 import com.beichen.erp.outsource.entity.ContractTemplate;
 import com.beichen.erp.outsource.mapper.ContractTemplateMapper;
@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 数据初始化器：启动时自动初始化系统基础数据（角色、菜单、用户、BOM类型、阶段模板、合同模板）。
+ * 数据初始化器：启动时自动初始化系统基础数据（角色、菜单、用户、物料类型、阶段模板、合同模板）。
  * <p>表结构统一由 schema.sql 维护，本类不执行任何建表/加列/数据迁移，仅写入业务初始化数据。</p>
  */
 @Slf4j
@@ -45,7 +45,7 @@ public class DataInitializer implements ApplicationRunner {
     private final UserRoleMapper userRoleMapper;
     private final MenuMapper menuMapper;
     private final RoleService roleService;
-    private final BomTypeMapper bomTypeMapper;
+    private final MaterialTypeMapper materialTypeMapper;
     private final PhaseTemplateMapper phaseTemplateMapper;
     private final ContractTemplateMapper contractTemplateMapper;
     private final JdbcTemplate jdbcTemplate;
@@ -64,8 +64,9 @@ public class DataInitializer implements ApplicationRunner {
         initRoles();
         syncMenus();
         initRoleMenus();
+        migrateDashboardTabs();
         initSuperAdmin();
-        initBomTypes();
+        initMaterialTypes();
         initPhaseTemplates();
         initContractTemplates();
         initScreenModels();
@@ -229,36 +230,60 @@ public class DataInitializer implements ApplicationRunner {
             {4L, 0L, "委外加工", "catalog", "", "", "Setting", 5},
             {5L, 0L, "进货业务", "catalog", "", "", "ShoppingCart", 6},
             {6L, 0L, "销售业务", "catalog", "", "", "Sell", 7},
-            {7L, 0L, "成品库存", "catalog", "", "", "Odometer", 8},
-            {8L, 0L, "财务管理", "catalog", "", "", "Money", 9},
-            {9L, 0L, "设置", "catalog", "", "", "Tools", 10},
+            // 物料仓库（2026-09-16 用户要求新增）：自「委外加工」迁入 5 个物料收发/仓储/报损子菜单。
+            // 排在「成品库存」之前，使两个仓库模块相邻（成品库存 8→9、财务管理 9→10、设置 10→11）
+            {11L, 0L, "物料仓库", "catalog", "", "", "Box", 8},
+            {7L, 0L, "成品库存", "catalog", "", "", "Odometer", 9},
+            {8L, 0L, "财务管理", "catalog", "", "", "Money", 10},
+            {9L, 0L, "设置", "catalog", "", "", "Tools", 11},
+            // 基础数据子菜单顺序（2026-09-15 用户定稿，2026-09-16 追加「物料信息管理」）：sort_order 即左侧栏显示顺序：
+            // 客户管理 → 产品管理 → 品牌管理 → 供货商管理 → 供应商管理 → 物料类型管理 → 物料信息管理 → 模版管理
             {105L, 2L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "UserFilled", 1},
-            {106L, 2L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "OfficeBuilding", 2},
-            {107L, 2L, "供货商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "Van", 3},
-            {103L, 2L, "BOM表类型管理", "menu", "/dev/bom-type", "DevBomType", "Tickets", 4},
-            {101L, 2L, "产品管理", "menu", "/product", "ProductManage", "TakeawayBox", 5},
-            {102L, 2L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 6},
-            {104L, 2L, "阶段模板管理", "menu", "/dev/phase-template", "DevPhaseTemplate", "Timer", 7},
-            {301L, 3L, "研发项目", "menu", "/dev/project", "DevProject", "Notebook", 1},
-            {302L, 3L, "BOM管理", "menu", "/dev/bom", "DevBom", "Tickets", 2},
-            {303L, 3L, "图纸文档", "menu", "/dev/drawing", "DevDrawing", "Files", 3},
-            {304L, 3L, "研发物料管理", "menu", "/dev/material", "DevMaterial", "Box", 4},
-            // 屏幕资料知识库：行业机型屏幕参数（折叠屏/直板 AMOLED），可增删改查；清空数据时不清理
-            {305L, 3L, "屏幕资料知识库", "menu", "/dev/screen-model", "DevScreenModel", "Iphone", 5},
+            {101L, 2L, "产品管理", "menu", "/product", "ProductManage", "TakeawayBox", 2},
+            {102L, 2L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 3},
+            {107L, 2L, "供货商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "Van", 4},
+            {106L, 2L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "OfficeBuilding", 5},
+            {103L, 2L, "物料类型管理", "menu", "/dev/material-type", "MaterialType", "Tickets", 6},
+            // 物料信息管理（403）：2026-09-16 用户要求自「委外加工」迁入「基础数据」，紧跟「物料类型管理」；
+            // 同日按用户要求菜单名由「物料信息」改为「物料信息管理」（与页面标题一致）
+            // （物料主数据属基础数据；路由路径 /outsource/material-info 保持不变，故不涉及菜单白名单/重定向）
+            {403L, 2L, "物料信息管理", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 7},
+            // 模版管理：把原「阶段模板管理」（104，基础数据下）与「加工合同模板」（405，委外加工下）
+            // 合并为一个页面，页内用 TAB 区分（2026-09-15 用户要求）。旧地址保留为重定向。
+            {108L, 2L, "模版管理", "menu", "/template", "TemplateManage", "Timer", 8},
+            // 301 菜单名（2026-09-16 用户要求）：「研发项目」→「研发立项」（仅显示文案，id/route_path/route_name/授权均不变）
+            {301L, 3L, "研发立项", "menu", "/dev/project", "DevProject", "Notebook", 1},
+            // 302「BOM管理」/ 303「图纸文档」已于 2026-09-16 按用户要求下线（不再 upsert，下方统一置 visible=0）。
+            // 注意：BOM / 图纸 的**数据模型与页面能力保留** —— 它们在「研发立项」编辑页的 BOM / 图纸 页签内，
+            // 且 dev_bom 被改配信息联动、委外带料/退不良回料依赖（BomMapper）。本次只删"独立总览页 + 菜单"。
+            // 304/305 菜单名（2026-09-16 用户要求）：「研发物料管理」→「研发物料」、「屏幕资料知识库」→「屏幕资料」
+            // （仅显示文案，id / route_path / route_name / 授权均不变）
+            {304L, 3L, "研发物料", "menu", "/dev/material", "DevMaterial", "Box", 4},
+            // 屏幕资料：行业机型屏幕参数（折叠屏/直板 AMOLED），可增删改查；清空数据时不清理
+            {305L, 3L, "屏幕资料", "menu", "/dev/screen-model", "DevScreenModel", "Iphone", 5},
             {401L, 4L, "加工订单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1},
             {402L, 4L, "物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2},
-            {412L, 4L, "交货信息", "menu", "/outsource/delivery-info", "OutsourceDeliveryInfo", "Van", 3},
-            {403L, 4L, "物料信息", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 4},
-            {406L, 4L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 5},
-            {407L, 4L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 6},
-            {408L, 4L, "加工退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 7},
-            {411L, 4L, "物料退货", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Refrigerator", 8},
-            {404L, 4L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 9},
+            // 412「交货信息」已于 2026-09-16 按用户要求下线（不再 upsert，下方统一置 visible=0）。
+            // 注意：**交货业务本身保留** —— 交货记录在「加工订单详情 → 交货管理」与「物料订单详情 → 交货管理」页签内
+            // （OrderDeliveryController / OutsourceOrderDeliveryService 及库存、应付、BOM还料逻辑均未动）。
+            // 403「物料信息」已于 2026-09-16 迁入「基础数据」（紧跟物料类型管理）→ 此处不再 upsert。
+            // 406/407/404/410/413「物料收发单 / 物料其他出入库 / 委外仓库 / 自有物料仓 / 物料报损」
+            // 已于 2026-09-16 按用户要求迁入新目录「物料仓库」(11)——**路由路径全部不变**，故不涉白名单/重定向
+            {408L, 4L, "加工退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 3},
+            {411L, 4L, "物料退货", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Refrigerator", 4},
+            {409L, 4L, "供应商管理", "menu", "/supplier/manage", "OutsourceSupplierManage", "UserFilled", 5},
+            // 405「加工合同模板」已并入 108「模版管理」（基础数据，2026-09-15），不再在此 upsert
+            // 物料仓库（11，2026-09-16 新增）：单据类（收发/其他出入库/报损）在前、仓库类（委外仓/自有物料仓）在后
+            {406L, 11L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 1},
+            {407L, 11L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 2},
             // 物料报损：与成品报损独立成表（主体为 outsource_material，物料库存不区分品质，固定按良品扣减）
-            {413L, 4L, "物料报损", "menu", "/outsource/stock-loss", "OutsourceStockLoss", "DeleteFilled", 10},
-            {410L, 4L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 10},
-            {409L, 4L, "供应商管理", "menu", "/supplier/manage", "OutsourceSupplierManage", "UserFilled", 11},
-            {405L, 4L, "加工合同模板", "menu", "/outsource/contract-template", "OutsourceContractTemplate", "Document", 12},
+            {413L, 11L, "物料报损", "menu", "/outsource/stock-loss", "OutsourceStockLoss", "DeleteFilled", 3},
+            {404L, 11L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 4},
+            {410L, 11L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 5},
+            // 物料库存盘点（2026-09-16 用户要求）：与成品「库存盘点」按仓库类别彻底分开 ——
+            // 本页只盘物料仓（委外仓 + 自有物料仓），成品页只盘成品类仓库；
+            // 且本页**接口级限「跟单专员」**（见 StockTakeServiceImpl.assertRoleForScope，管理员兜底）
+            {414L, 11L, "物料库存盘点", "menu", "/outsource/material-stock-take", "OutsourceMaterialStockTake", "DocumentChecked", 6},
             {501L, 5L, "成品采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1},
             {502L, 5L, "采购退货单", "menu", "/inventory/purchase-return", "InventoryPurchaseReturn", "Refrigerator", 2},
             // 进货业务→供货商管理：指向 /outsource/supplier/manage（供货商=成品商，双模式页面）
@@ -305,15 +330,18 @@ public class DataInitializer implements ApplicationRunner {
             {907L, 9L, "菜单管理", "menu", "/system/menu", "SystemMenu", "Menu", 7},
             {908L, 9L, "清空数据", "menu", "/system/clear-data", "SystemClearData", "Delete", 8},
             // ==================== 经营分析（目录 10）：原「财务分析」5 个 Tab 拆分 + 新增销售/客户分析 ====================
+            // 顺序（2026-09-15 用户定稿「方案X」）：经营概览 → 销售分析 → 客户分析 → [进货分析(1007 待建)] → 税务分析 → 资金往来
             {1001L, 10L, "经营概览", "menu", "/analysis/overview", "AnalysisOverview", "DataLine", 1},
             // 2026-09-15：原 1002「利润表」(/analysis/profit) 已按用户要求整体下线（页面/路由/接口/菜单均已删除）
-            // 资金与往来：资金趋势 + 应收应付账龄 + 主体往来统计（原两个 Tab 合并）
-            {1003L, 10L, "资金与往来", "menu", "/analysis/cash", "AnalysisCash", "Wallet", 3},
-            {1004L, 10L, "税务分析", "menu", "/analysis/tax", "AnalysisTax", "Stamp", 4},
             // 销售分析：销售额趋势 + 产品/仓库排行，行可下钻到销售单明细
-            {1005L, 10L, "销售分析", "menu", "/analysis/sale", "AnalysisSale", "Sell", 5},
+            {1005L, 10L, "销售分析", "menu", "/analysis/sale", "AnalysisSale", "Sell", 2},
             // 客户分析：客户销售额排行 + 欠款/账期，行可下钻到该客户的销售单
-            {1006L, 10L, "客户分析", "menu", "/analysis/customer", "AnalysisCustomer", "UserFilled", 6},
+            {1006L, 10L, "客户分析", "menu", "/analysis/customer", "AnalysisCustomer", "UserFilled", 3},
+            // 进货分析（2026-09-15 新增）：区间采购 KPI（采购金额/采购退货/净采购额/采购单数）+ 趋势 + 单据明细下钻
+            {1007L, 10L, "进货分析", "menu", "/analysis/purchase", "AnalysisPurchase", "ShoppingCart", 4},
+            {1004L, 10L, "税务分析", "menu", "/analysis/tax", "AnalysisTax", "Stamp", 5},
+            // 资金往来（2026-09-15 由「资金与往来」改名）：资金趋势 + 应收应付账龄 + 主体往来统计
+            {1003L, 10L, "资金往来", "menu", "/analysis/cash", "AnalysisCash", "Wallet", 6},
         };
         // ON DUPLICATE KEY UPDATE 实现 upsert
         int processed = 0;
@@ -343,6 +371,17 @@ public class DataInitializer implements ApplicationRunner {
             } catch (Exception ignored) {}
         }
         log.info("已为管理员角色授权标准菜单");
+
+        // 下线历史菜单：104「阶段模板管理」（基础数据）/ 405「加工合同模板」（委外加工）
+        // —— 两者功能已合并进 108「模版管理」（页内 TAB 区分）。这里置 visible=0 而**不删行**：便于回滚，
+        // 且 getMenuTreeByRoleIds 只回 status=1 AND visible=1 → 侧栏消失、前端菜单白名单也不再含旧路径
+        // （旧路径在前端已改为重定向到 /template 对应页签，直接输 URL 不会吃 403）。
+        try {
+            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 412) AND visible = 1");
+            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 412 交货信息）", hidden);
+        } catch (Exception e) {
+            log.warn("下线老菜单异常: {}", e.getMessage());
+        }
     }
 
     /**
@@ -354,37 +393,96 @@ public class DataInitializer implements ApplicationRunner {
         jdbcTemplate.update(
                 "DELETE rm FROM sys_role_menu rm LEFT JOIN sys_menu m ON m.id = rm.menu_id WHERE m.id IS NULL");
 
-        // 管理员：全部权限
+        // 管理员：全部权限（104 阶段模板管理 / 405 加工合同模板 已并入 108 模版管理）
         assignRoleMenus("admin", Arrays.asList(
-                1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L,
-                101L, 102L, 103L, 104L, 105L, 106L, 107L,
-                301L, 302L, 303L, 304L, 305L,
-                401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L, 410L, 411L, 412L, 413L,
+                1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L,
+                101L, 102L, 103L, 105L, 106L, 107L, 108L,
+                301L, 304L, 305L,
+                401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 411L, 413L, 414L,
                 501L, 502L, 503L,
                 601L, 602L, 603L, 605L,
                 701L, 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L,
                 801L, 802L, 803L, 804L, 805L, 806L, 807L, 809L, 810L, 811L,
-                1001L, 1003L, 1004L, 1005L, 1006L,
+                1001L, 1003L, 1004L, 1005L, 1006L, 1007L,
                 901L, 902L, 903L, 904L, 905L, 906L, 907L, 908L));
-        // 研发工程师：项目研发 + BOM + 基础产品（2 基础数据 = 101 产品管理的父目录）
+        // 研发工程师：项目研发 + BOM + 基础产品（2 基础数据 = 101 产品管理 / 108 模版管理 的父目录）
+        // 108 模版管理（内含阶段模板）：阶段模板本是研发在用，2026-09-15 随两页合并一并补授
         assignRoleMenus("dev_engineer", Arrays.asList(
-                1L, 2L, 3L, 301L, 302L, 303L, 304L, 305L, 101L));
-        // 销售专员：销售业务 + 客户 + 产品 + 经营分析（605 换货单；2 基础数据）
+                1L, 2L, 3L, 301L, 304L, 305L, 101L, 108L));
+        // 销售专员：销售业务 + 客户 + 产品（605 换货单；2 基础数据）
+        // 注：经营分析（目录 10 及其子页）自 2026-09-15 起**仅管理者可见**，故不再授予 sales
         assignRoleMenus("sales", Arrays.asList(
-                1L, 2L, 6L, 601L, 602L, 603L, 605L, 101L,
-                10L, 1001L, 1003L, 1004L, 1005L, 1006L));
-        // 仓管员：进货 + 库存 + 仓库（2 基础数据 / 6 销售业务 为其子菜单的父目录）
+                1L, 2L, 6L, 601L, 602L, 603L, 605L, 101L));
+        // 仓管员：进货 + 库存 + 仓库 + **物料仓库整组**（2026-09-16 用户要求：
+        // 11 目录 + 404 委外仓库 / 406 物料收发单 / 407 物料其他出入库 / 410 自有物料仓 / 413 物料报损）
+        // （2 基础数据 / 6 销售业务 / 11 物料仓库 为其子菜单的父目录）
         assignRoleMenus("warehouse", Arrays.asList(
-                1L, 2L, 5L, 6L, 7L, 501L, 502L, 603L, 701L, 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L, 101L));
-        // 跟单专员：委外加工全部 + 相关基础数据/进货/销售/成品库存页面
+                1L, 2L, 5L, 6L, 7L, 11L, 501L, 502L, 603L, 701L, 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L,
+                404L, 406L, 407L, 410L, 413L, 101L));
+        // 跟单专员：委外加工全部 + 相关基础数据/进货/销售/成品库存页面 + 物料仓库整组（含 414 物料库存盘点）
+        // （原 405 加工合同模板 → 108 模版管理，权限等价迁移）
         assignRoleMenus("merchandiser", Arrays.asList(
-                1L, 2L, 4L, 5L, 6L, 7L,
-                401L, 402L, 403L, 404L, 405L, 406L, 407L, 408L, 409L, 410L, 412L, 413L,
-                101L, 502L, 602L, 702L, 705L));
-        // 财务：财务管理 + 经营分析（2 基础数据 = 101 产品管理的父目录）
+                1L, 2L, 4L, 5L, 6L, 7L, 11L,
+                401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 413L, 414L,
+                101L, 108L, 502L, 602L, 702L, 705L));
+        // 财务：财务管理（2 基础数据 = 101 产品管理的父目录）
+        // 注：经营分析自 2026-09-15 起**仅管理者可见**，故不再授予 finance
         assignRoleMenus("finance", Arrays.asList(
-                1L, 2L, 8L, 801L, 802L, 803L, 804L, 805L, 806L, 807L, 809L, 810L, 811L, 101L,
-                10L, 1001L, 1003L, 1004L, 1005L, 1006L));
+                1L, 2L, 8L, 801L, 802L, 803L, 804L, 805L, 806L, 807L, 809L, 810L, 811L, 101L));
+
+        // 存量库幂等补授：上面的 assignRoleMenus **只在角色「尚无任何菜单」时才写入**，
+        // 因此新增菜单不会自动补进已有角色 → 这里单独把 108「模版管理」补授给
+        // admin / 跟单专员 / 研发工程师（uk_role_menu 唯一键 + INSERT IGNORE，重复启动无副作用）
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, 108 FROM sys_role r WHERE r.role_code IN ('admin','merchandiser','dev_engineer')");
+            if (granted > 0) log.info("已补授 108「模版管理」菜单给 {} 个角色", granted);
+        } catch (Exception e) {
+            log.warn("补授模版管理菜单异常: {}", e.getMessage());
+        }
+
+        // 存量库幂等补授：新目录 11「物料仓库」**必须**授给 admin / 跟单专员 ——
+        // 菜单树 buildTree 以「已授权菜单」为输入，父目录未授权会把其 5 个子菜单整组丢弃
+        // （同 108 的做法：uk_role_menu 唯一键 + INSERT IGNORE，重复启动无副作用）
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, m.id FROM sys_role r JOIN sys_menu m ON m.id IN (11, 414) " +
+                    "WHERE r.role_code IN ('admin','merchandiser')");
+            if (granted > 0) log.info("已补授 11「物料仓库」目录 / 414「物料库存盘点」给 {} 个角色", granted);
+        } catch (Exception e) {
+            log.warn("补授物料仓库目录异常: {}", e.getMessage());
+        }
+
+        // 存量库幂等补授：把「物料仓库」整组（11 目录 + 5 个子菜单）补授给**仓管员**
+        // （2026-09-16 用户要求；uk_role_menu 唯一键 + INSERT IGNORE → 幂等）
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, m.id FROM sys_role r JOIN sys_menu m ON m.id IN (11, 404, 406, 407, 410, 413) " +
+                    "WHERE r.role_code = 'warehouse'");
+            if (granted > 0) log.info("已补授「物料仓库」整组给仓管员，共 {} 条", granted);
+        } catch (Exception e) {
+            log.warn("补授仓管员物料仓库权限异常: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 存量用户首页 TAB 补齐（2026-09-16）：新增「物料仓库」TAB 后，**已显式配置过首页 TAB 的用户**
+     * （sys_user_dashboard_tab 有记录；无记录=全部可见，不受影响）默认看不到它 ——
+     * 这 5 个页面原本挂在「委外加工」TAB 下，故给配了 outsource 的用户补上 materialWarehouse。
+     * uk_user_tab(user_id, tab_key) 唯一键 + INSERT IGNORE → 幂等，重复启动无副作用。
+     */
+    private void migrateDashboardTabs() {
+        try {
+            int n = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_user_dashboard_tab (user_id, tab_key, company_id) " +
+                    "SELECT user_id, 'materialWarehouse', company_id FROM sys_user_dashboard_tab WHERE tab_key = 'outsource'");
+            if (n > 0) log.info("已为 {} 位已配置首页 TAB 的用户补上「物料仓库」TAB", n);
+        } catch (Exception e) {
+            log.warn("补齐首页 TAB 异常: {}", e.getMessage());
+        }
     }
 
     /** 为指定角色授权菜单（仅当角色尚无菜单权限时执行） */
@@ -399,32 +497,32 @@ public class DataInitializer implements ApplicationRunner {
         }
     }
 
-    /** 初始化默认BOM类型（玻璃/驱动IC/触摸IC/码片IC/排线/盖板/背贴/钢板/COP） */
-    private void initBomTypes() {
-        // 补齐默认BOM类型：表空时全量初始化；已有部分时仅补缺失的默认类型（幂等）
-        List<BomType> existing = bomTypeMapper.selectList(
-                new LambdaQueryWrapper<BomType>().eq(BomType::getCompanyId, 1L));
+    /** 初始化默认物料类型（玻璃/驱动IC/触摸IC/码片IC/排线/盖板/背贴/钢板/COP） */
+    private void initMaterialTypes() {
+        // 补齐默认物料类型：表空时全量初始化；已有部分时仅补缺失的默认类型（幂等）
+        List<MaterialType> existing = materialTypeMapper.selectList(
+                new LambdaQueryWrapper<MaterialType>().eq(MaterialType::getCompanyId, 1L));
         java.util.Set<String> existingNames = new java.util.HashSet<>();
         int maxSort = 0;
-        for (BomType b : existing) {
+        for (MaterialType b : existing) {
             if (b.getTypeName() != null) existingNames.add(b.getTypeName());
             if (b.getSortOrder() != null && b.getSortOrder() > maxSort) maxSort = b.getSortOrder();
         }
-        String[] defaultTypes = DefaultBomTypes.TYPES;
+        String[] defaultTypes = DefaultMaterialTypes.TYPES;
         int nextSort = maxSort;
         int added = 0;
         for (String name : defaultTypes) {
             if (existingNames.contains(name)) continue;
-            BomType bt = new BomType();
+            MaterialType bt = new MaterialType();
             bt.setTypeName(name);
             bt.setSortOrder(++nextSort);
             bt.setStatus(1);
             bt.setIsDefault(1);
             bt.setCompanyId(1L);
-            bomTypeMapper.insert(bt);
+            materialTypeMapper.insert(bt);
             added++;
         }
-        if (added > 0) log.info("补齐默认BOM类型 {} 条", added);
+        if (added > 0) log.info("补齐默认物料类型 {} 条", added);
     }
 
     /** 初始化14个研发阶段模板 */

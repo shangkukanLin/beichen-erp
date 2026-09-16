@@ -31,6 +31,6 @@ public class UserDTO {
 
     private List<Long> roleIds;
 
-    /** 首页业务 TAB 可见性（dev/outsource/purchase/sale/stock/finance），null/空=全部可见 */
+    /** 首页业务 TAB 可见性（dev/outsource/purchase/sale/materialWarehouse/stock/finance），null/空=全部可见 */
     private List<String> dashboardTabs;
 }

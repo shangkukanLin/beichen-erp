@@ -15,7 +15,7 @@ const detail = ref<any>({})
 const items = ref<any[]>([])
 const warehouses = ref<any[]>([])
 const materialOptions = ref<any[]>([])
-const bomTypes = ref<any[]>([])
+const materialTypes = ref<any[]>([])
 
 async function loadWarehouses() {
   try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } }); warehouses.value = (r?.records || []).map((w: any) => ({ ...w, _type: w.warehouseCategory === WarehouseCategory.INVENTORY ? '我方仓' : '委外仓' })) } catch { warehouses.value = [] }
@@ -23,8 +23,8 @@ async function loadWarehouses() {
 async function loadMaterials() {
   try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); materialOptions.value = r?.records || [] } catch { materialOptions.value = [] }
 }
-async function loadBomTypes() {
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch { bomTypes.value = [] }
+async function loadMaterialTypes() {
+  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch { materialTypes.value = [] }
 }
 
 // 编辑态表单（主单字段）
@@ -39,7 +39,7 @@ function getMatName(mid: number | undefined) {
 }
 function getTypeName(id: number | undefined) {
   if (id == null) return '-'
-  const t = bomTypes.value.find((v: any) => v.id === id)
+  const t = materialTypes.value.find((v: any) => v.id === id)
   return t ? t.typeName : '-'
 }
 function statusLabel(s: string) {
@@ -50,8 +50,8 @@ function statusTag(s: string): any {
 }
 
 // 编辑态物料类型/物料联动（复用 add.vue 交互）
-const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any) => m.bomTypeId).filter(Boolean))] as number[])
-function materialsByType(type: number) { return materialOptions.value.filter((m: any) => m.bomTypeId === type) }
+const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any) => m.materialTypeId).filter(Boolean))] as number[])
+function materialsByType(type: number) { return materialOptions.value.filter((m: any) => m.materialTypeId === type) }
 function typeName(id: number | undefined) { return getTypeName(id) }
 function onTypeChange(idx: number) {
   items.value[idx].materialId = undefined
@@ -60,7 +60,7 @@ function onTypeChange(idx: number) {
 }
 function onMatSelect(idx: number, matId: number) {
   const m = materialOptions.value.find((v: any) => v.id === matId)
-  if (m) { items.value[idx].bomTypeId = m.bomTypeId; items.value[idx].unit = m.unit }
+  if (m) { items.value[idx].materialTypeId = m.materialTypeId; items.value[idx].unit = m.unit }
   // 委外仓选物料自动查加权单价
   if (m && form.value.warehouseId) {
     const wh = warehouses.value.find((w: any) => w.id === form.value.warehouseId)
@@ -72,7 +72,7 @@ function onMatSelect(idx: number, matId: number) {
   }
 }
 function addItem() {
-  items.value.push({ materialId: undefined, bomTypeId: undefined, unit: '', unit_price: '', quantity: undefined, remark: '' })
+  items.value.push({ materialId: undefined, materialTypeId: undefined, unit: '', unit_price: '', quantity: undefined, remark: '' })
 }
 function removeItem(i: number) { items.value.splice(i, 1) }
 
@@ -84,7 +84,7 @@ async function loadDetail() {
     form.value = { warehouseId: io.warehouseId, ioType: io.ioType, ioDate: io.ioDate || '', remark: io.remark || '' }
     const its = await request.get<any, any>(`/outsource/other-io/${id}/items`)
     items.value = Array.isArray(its)
-      ? its.map((i: any) => ({ materialId: i.materialId, bomTypeId: i.bomTypeId, unit: i.unit, unit_price: i.unitPrice ?? '', quantity: i.quantity, remark: i.remark || '' }))
+      ? its.map((i: any) => ({ materialId: i.materialId, materialTypeId: i.materialTypeId, unit: i.unit, unit_price: i.unitPrice ?? '', quantity: i.quantity, remark: i.remark || '' }))
       : []
   } finally { loading.value = false }
 }
@@ -110,7 +110,7 @@ async function handleSave() {
 }
 
 // 字典类只需加载一次
-onMounted(() => { loadWarehouses(); loadMaterials(); loadBomTypes() })
+onMounted(() => { loadWarehouses(); loadMaterials(); loadMaterialTypes() })
 // 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
 onActivated(() => { loadDetail() })
 </script>
@@ -137,7 +137,7 @@ onActivated(() => { loadDetail() })
         <el-form-item label="单号"><span>{{ detail.code || '-' }}</span></el-form-item>
         <el-row :gutter="12">
           <el-col :span="8">
-            <el-form-item label="仓库">
+            <el-form-item required label="仓库">
               <el-select v-model="form.warehouseId" filterable style="width:100%">
                 <el-option v-for="w in warehouses" :key="w.id + '@' + w._type" :label="`${w.warehouseName}（${w._type}）`" :value="w.id"/>
               </el-select>
@@ -171,7 +171,7 @@ onActivated(() => { loadDetail() })
       <!-- 只读明细 -->
       <el-table v-if="!editing" :data="items" border size="small">
         <el-table-column label="物料类型" width="120">
-          <template #default="{row}">{{ getTypeName(row.bomTypeId) }}</template>
+          <template #default="{row}">{{ getTypeName(row.materialTypeId) }}</template>
         </el-table-column>
         <el-table-column label="物料名称" min-width="160" show-overflow-tooltip>
           <template #default="{row}">{{ getMatName(row.materialId) }}</template>
@@ -193,15 +193,15 @@ onActivated(() => { loadDetail() })
       <el-table v-else :data="items" border size="small">
         <el-table-column label="物料类型" width="150">
           <template #default="{row,$index}">
-            <el-select v-model="row.bomTypeId" filterable style="width:100%" clearable @change="onTypeChange($index)">
+            <el-select v-model="row.materialTypeId" filterable style="width:100%" clearable @change="onTypeChange($index)">
               <el-option v-for="t in uniqueTypes" :key="t" :label="typeName(t)" :value="t"/>
             </el-select>
           </template>
         </el-table-column>
         <el-table-column label="物料名称" min-width="180">
           <template #default="{row,$index}">
-            <el-select v-model="row.materialId" filterable style="width:100%" :disabled="!row.bomTypeId" @change="(v:any)=>onMatSelect($index,v)">
-              <el-option v-for="m in materialsByType(row.bomTypeId)" :key="m.id" :label="m.materialName" :value="m.id"/>
+            <el-select v-model="row.materialId" filterable style="width:100%" :disabled="!row.materialTypeId" @change="(v:any)=>onMatSelect($index,v)">
+              <el-option v-for="m in materialsByType(row.materialTypeId)" :key="m.id" :label="m.materialName" :value="m.id"/>
             </el-select>
           </template>
         </el-table-column>

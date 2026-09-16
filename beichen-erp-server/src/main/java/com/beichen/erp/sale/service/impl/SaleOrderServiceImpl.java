@@ -114,7 +114,6 @@ public class SaleOrderServiceImpl implements SaleOrderService {
             Product p = it.getProductId() != null ? productMap.get(it.getProductId()) : null;
             it.setProductName(p != null && p.getName() != null ? p.getName() : "");
             it.setSku(p != null && p.getSku() != null ? p.getSku() : "");
-            it.setSpec(p != null && p.getSpec() != null ? p.getSpec() : "");
             it.setUnit(p != null && p.getUnit() != null ? p.getUnit() : "");
         }
     }
@@ -307,7 +306,6 @@ public class SaleOrderServiceImpl implements SaleOrderService {
             Map<String, Object> m = new HashMap<>();
             m.put("productId", it.getProductId());
             m.put("productName", product.getName());
-            m.put("spec", product.getSpec() != null ? product.getSpec() : "");
             m.put("unit", product.getUnit() != null ? product.getUnit() : "");
             m.put("required", required);
             m.put("available", available);

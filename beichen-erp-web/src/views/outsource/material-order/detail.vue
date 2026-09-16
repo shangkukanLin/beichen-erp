@@ -15,17 +15,17 @@ const order = reactive({ id: 0, code: '', status: '', orderType: OrderType.PURCH
 const items = ref<any[]>([])
 const activeTab = ref('detail')
 const saving = ref(false)
-const bomTypes = ref<any[]>([])
+const materialTypes = ref<any[]>([])
 
 // Odoo 风格：下拉框实时查库
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
-const fetchBomTypes = (kw: string) => request.get('/dev/bom-type/enabled', { params: { kw } })
-const fetchMaterialsByType = (kw: string, row: any) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw, bomTypeId: row.bomTypeId || undefined } })
+const fetchMaterialTypes = (kw: string) => request.get('/dev/material-type/enabled', { params: { kw } })
+const fetchMaterialsByType = (kw: string, row: any) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw, materialTypeId: row.materialTypeId || undefined } })
 
 // 待审核状态行内编辑物料明细
 const allMaterials = ref<any[]>([])
-function addItem() { items.value.push({ bomTypeId: undefined, materialId: undefined, materialName: '', unit: '', orderQuantity: 1, unitPrice: undefined, remark: '' }) }
+function addItem() { items.value.push({ materialTypeId: undefined, materialId: undefined, materialName: '', unit: '', orderQuantity: 1, unitPrice: undefined, remark: '' }) }
 function removeItem(i: number) { items.value.splice(i, 1) }
 function onMatChange(v: any, row: any) {
   if (!v) { row.materialName = ''; row.unit = ''; return }
@@ -33,17 +33,17 @@ function onMatChange(v: any, row: any) {
   if (m) { row.materialName = m.materialName; row.unit = m.unit }
 }
 
-// bomTypeId -> 类型名 映射（兜底展示用）
+// materialTypeId -> 类型名 映射（兜底展示用）
 function typeName(bid: number | undefined, fallback?: string) {
-  if (bid != null) { const t = bomTypes.value.find((v: any) => v.id === bid); if (t) return t.typeName }
+  if (bid != null) { const t = materialTypes.value.find((v: any) => v.id === bid); if (t) return t.typeName }
   return fallback || '-'
 }
-async function loadBomTypes() {
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch {}
+async function loadMaterialTypes() {
+  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch {}
 }
 
 async function loadOptions() {
-  loadBomTypes()
+  loadMaterialTypes()
   try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); allMaterials.value = r?.records || [] } catch { allMaterials.value = [] }
 }
 
@@ -214,7 +214,7 @@ function goPurchaseComponent(comp: any, parentItem: any) {
   const ids = (comp.supplierIds || '') as string; const firstId = ids.split(',')[0]?.trim()
   const p = new URLSearchParams(); if (firstId) p.set('supplierId', firstId)
   if (comp.childMaterialId) p.set('materialId', String(comp.childMaterialId))
-  p.set('materialName', comp.childMaterialName || ''); p.set('bomTypeId', String(comp.childBomTypeId ?? ''))
+  p.set('materialName', comp.childMaterialName || ''); p.set('materialTypeId', String(comp.childMaterialTypeId ?? ''))
   p.set('unit', comp.childUnit || ''); p.set('quantity', String(comp.shortage || 0))
   router.push('/outsource/material-order/add?' + p.toString())
 }
@@ -290,8 +290,8 @@ function exportPdf() {
   }).catch(() => { ElMessage.error('导出失败') })
 }
 
-// BOM 类型字典只需加载一次
-onMounted(() => { loadBomTypes() })
+// 物料类型字典只需加载一次
+onMounted(() => { loadMaterialTypes() })
 /**
  * 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发，
  * 只靠 onMounted 会停留在上次缓存的状态（如在列表改单后再进详情看到的还是旧数据）。
@@ -356,8 +356,8 @@ onActivated(() => { loadAll() })
             </template>
           </el-table-column>
           <el-table-column label="类型" width="130"><template #default="{row}">
-            <RemoteSelect v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.bomTypeId" :fetch="fetchBomTypes" label-key="typeName" size="small" clearable style="width:100%" @change="() => { row.materialId = undefined; row.materialName = ''; row.unit = '' }" />
-            <span v-else>{{ typeName(row.bomTypeId) }}</span>
+            <RemoteSelect v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.materialTypeId" :fetch="fetchMaterialTypes" label-key="typeName" size="small" clearable style="width:100%" @change="() => { row.materialId = undefined; row.materialName = ''; row.unit = '' }" />
+            <span v-else>{{ typeName(row.materialTypeId) }}</span>
           </template></el-table-column>
           <el-table-column label="物料名称" min-width="150"><template #default="{row}">
             <RemoteSelect v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.materialId" :fetch="(kw:string)=>fetchMaterialsByType(kw,row)" label-key="materialName" size="small" filterable clearable disable-cache style="width:100%" :preset="row.materialId?{id:row.materialId,materialName:row.materialName}:null" @change="(v:any)=>onMatChange(v,row)" />

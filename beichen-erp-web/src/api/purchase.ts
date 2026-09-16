@@ -96,8 +96,8 @@ export interface OutsourceMaterialOption {
   materialName?: string
   spec?: string
   unit?: string
-  bomTypeId?: number
-  bomTypeName?: string
+  materialTypeId?: number
+  materialTypeName?: string
 }
 
 /** 查询委外物料列表（用于采购单物料下拉） */

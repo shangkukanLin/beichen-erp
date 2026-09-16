@@ -29,7 +29,7 @@ function groupMaterialStocks(rows: any[]) {
   for (const r of rows || []) {
     if (r.materialId == null) continue // 仅统计物料库存
     if (!map.has(r.materialId)) {
-      map.set(r.materialId, { materialId: r.materialId, materialName: r.materialName || '', bomTypeName: r.bomTypeName || '', quantity: 0 })
+      map.set(r.materialId, { materialId: r.materialId, materialName: r.materialName || '', materialTypeName: r.materialTypeName || '', quantity: 0 })
     }
     const row = map.get(r.materialId)
     row.quantity += Number(r.quantity) || 0
@@ -81,7 +81,7 @@ function totalQty(row: any) {
 
 /**
  * 导出"当前页签"为 Excel：列与页面表格一致，数量按数值写入（整数不带小数）。
- * - 物料信息 → 物料清单（物料名称/BOM类型/数量）
+ * - 物料信息 → 物料清单（物料名称/物料类型/数量）
  * - 产品信息 → 成品清单（SKU/产品名称/A规…待分类/总库存）
  * - 仓库信息 → 仓库档案（项目/内容），避免"点了导出没反应"
  */
@@ -94,8 +94,8 @@ function exportExcel() {
 
   if (activeTab.value === 'material') {
     sheetName = '物料库存'
-    cols = ['物料名称', 'BOM类型', '数量']
-    body = (materials.value || []).map((r: any) => [r.materialName || '', r.bomTypeName || '-', Number(r.quantity ?? 0)])
+    cols = ['物料名称', '物料类型', '数量']
+    body = (materials.value || []).map((r: any) => [r.materialName || '', r.materialTypeName || '-', Number(r.quantity ?? 0)])
   } else if (activeTab.value === 'product') {
     sheetName = '成品库存'
     cols = ['SKU', '产品名称', 'A规', 'B规', 'C规', '不良', '待分类', '总库存']
@@ -159,8 +159,8 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
         <el-tab-pane label="物料信息" name="material">
           <el-table :data="materials" border stripe v-loading="matLoading" size="small">
             <el-table-column prop="materialName" label="物料名称" min-width="160" show-overflow-tooltip />
-            <el-table-column prop="bomTypeName" label="BOM类型" width="130" align="center">
-              <template #default="{row}"><span v-if="row.bomTypeName">{{ row.bomTypeName }}</span><span v-else style="color:#999">-</span></template>
+            <el-table-column prop="materialTypeName" label="物料类型" width="130" align="center">
+              <template #default="{row}"><span v-if="row.materialTypeName">{{ row.materialTypeName }}</span><span v-else style="color:#999">-</span></template>
             </el-table-column>
             <el-table-column label="数量" width="120" align="right">
               <template #default="{row}"><span style="font-weight:600">{{ fmt(row.quantity) }}</span></template>

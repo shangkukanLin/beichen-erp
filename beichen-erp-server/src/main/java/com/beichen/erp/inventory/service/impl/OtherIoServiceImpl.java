@@ -216,7 +216,7 @@ public class OtherIoServiceImpl implements OtherIoService {
             Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
                     delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),
-                    prod != null ? prod.getSpec() : "", io.getId(), it.getQualityType());
+                    "", io.getId(), it.getQualityType());
             // 其他入库单无单价：成本为空时用最近进价兜底，避免"有库存无成本"
             if (isIn) costService.fillProductCostIfEmpty(it.getProductId());
         }
@@ -232,7 +232,7 @@ public class OtherIoServiceImpl implements OtherIoService {
             Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
                     delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),
-                    prod != null ? prod.getSpec() : "", io.getId(), it.getQualityType());
+                    "", io.getId(), it.getQualityType());
         }
     }
 

@@ -24,7 +24,7 @@ public class SupplierMaterial {
     private String spec;
 
     @TableField(exist = false)
-    private String bomTypeName;
+    private String materialTypeName;
 
     private BigDecimal unitPrice;
 

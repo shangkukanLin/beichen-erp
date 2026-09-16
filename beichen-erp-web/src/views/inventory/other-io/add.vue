@@ -26,7 +26,7 @@ const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN as stri
 // 此前误用委外物料下拉导致 productId 存不进去，这里与详情页保持一致
 // 出库单才需要看库存：入库不消耗库存，不展示也不校验
 const isOut = computed(() => form.ioType === IoType.OUT)
-const items = ref<any[]>([{ productId: undefined, productName: '', spec: '', unit: '', qualityType: 'A', quantity: undefined, remark: '', stockQty: undefined }])
+const items = ref<any[]>([{ productId: undefined, productName: '', unit: '', qualityType: 'A', quantity: undefined, remark: '', stockQty: undefined }])
 
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 100, keyword: kw } })
@@ -34,14 +34,13 @@ const fetchProducts = (kw: string) => request.get('/product/page', { params: { p
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 function onProductPick(row: any, idx: number) {
   const it = items.value[idx]
-  if (!row) { it.productId = undefined; it.productName = ''; it.spec = ''; it.unit = ''; return }
+  if (!row) { it.productId = undefined; it.productName = ''; it.unit = ''; return }
   it.productId = row.id
   it.productName = row.name || row.productName || ''
-  it.spec = row.spec || ''
   it.unit = row.unit || ''
   loadStock(it)
 }
-function addItem() { items.value.push({ productId: undefined, productName: '', spec: '', unit: '', qualityType: 'A', quantity: undefined, remark: '', stockQty: undefined }) }
+function addItem() { items.value.push({ productId: undefined, productName: '', unit: '', qualityType: 'A', quantity: undefined, remark: '', stockQty: undefined }) }
 
 /**
  * 查询该成品在所选仓库、所选品质下的可用库存（仅出库单需要）。
@@ -76,7 +75,7 @@ async function loadDetail() {
     form.ioDate = io.ioDate; form.remark = io.remark||''
     const its = await request.get<any,any>(`/inventory/other/${editId.value}/items`)
     if (Array.isArray(its)) {
-      items.value = its.map((i:any)=>({ productId: i.productId, productName: i.productName||'', spec: i.spec||'', unit: i.unit||'', qualityType: i.qualityType||'A', quantity: i.quantity, remark: i.remark||'', stockQty: undefined }))
+      items.value = its.map((i:any)=>({ productId: i.productId, productName: i.productName||'', unit: i.unit||'', qualityType: i.qualityType||'A', quantity: i.quantity, remark: i.remark||'', stockQty: undefined }))
       if (isOut.value) items.value.forEach(loadStock)
     }
   } catch (e: any) { ElMessage.error(e?.message||'加载失败') }
@@ -119,7 +118,7 @@ function initPage() {
     ioDate: localDate(),
     remark: ''
   })
-  items.value = [{ productId: undefined, productName: '', spec: '', unit: '', qualityType: 'A', quantity: undefined, remark: '', stockQty: undefined }]
+  items.value = [{ productId: undefined, productName: '', unit: '', qualityType: 'A', quantity: undefined, remark: '', stockQty: undefined }]
   if (editId.value) loadDetail()
 }
 
@@ -136,7 +135,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
     <el-card shadow="never">
       <el-form :model="form" label-width="80px">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item label="仓库"><RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" @update:modelValue="onWarehouseChange" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="仓库"><RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" @update:modelValue="onWarehouseChange" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="类型"><el-select v-model="form.ioType" style="width:100%" @change="onIoTypeChange"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="form.ioDate" type="date"/></el-form-item></el-col>
         </el-row>
@@ -148,7 +147,6 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <el-button type="primary" size="small" @click="addItem" style="margin-bottom:8px">+ 添加成品</el-button>
       <el-table :data="items" border size="small">
         <el-table-column label="成品名称" min-width="180"><template #default="{row,$index}"><RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="可输SKU搜索" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],$index)" /></template></el-table-column>
-        <el-table-column label="规格" width="120" show-overflow-tooltip><template #default="{row}">{{ row.spec || '-' }}</template></el-table-column>
         <el-table-column label="单位" width="80"><template #default="{row}">{{ row.unit || '-' }}</template></el-table-column>
         <el-table-column label="品质" width="90"><template #default="{row}"><el-select v-model="row.qualityType" size="small" style="width:100%" @change="loadStock(row)"><el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value"/></el-select></template></el-table-column>
         <el-table-column v-if="isOut" label="可用库存" width="100" align="right">

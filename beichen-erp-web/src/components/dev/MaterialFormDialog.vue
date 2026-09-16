@@ -96,14 +96,14 @@ onMounted(() => { if (props.visible) open() })
   <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑项目物料' : '新增项目物料'" width="520px" @close="handleClose">
     <el-form :model="form" label-width="80px">
       <el-row :gutter="12">
-        <el-col :span="14"><el-form-item label="名称"><el-input v-model="form.name" /></el-form-item></el-col>
+        <el-col :span="14"><el-form-item required label="名称"><el-input v-model="form.name" /></el-form-item></el-col>
         <el-col :span="10"><el-form-item label="类型">
           <el-select v-model="form.type" style="width:100%" placeholder="请选择类型">
             <el-option v-for="t in materialTypeOptions" :key="t.code" :label="t.label" :value="t.code" />
           </el-select>
         </el-form-item></el-col>
         <el-col :span="24"><el-form-item label="关联项目">
-          <el-select v-model="form.projectId" style="width:100%" :disabled="lockedProject" clearable placeholder="不关联研发项目">
+          <el-select v-model="form.projectId" style="width:100%" :disabled="lockedProject" clearable placeholder="不关联研发立项">
             <el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-form-item></el-col>

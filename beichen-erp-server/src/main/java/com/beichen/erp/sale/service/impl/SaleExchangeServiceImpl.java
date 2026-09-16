@@ -193,7 +193,6 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             m.put("saleOrderItemId", oi.getId());
             m.put("productId", oi.getProductId());
             m.put("productName", p != null ? p.getName() : "");
-            m.put("spec", p != null ? p.getSpec() : "");
             m.put("unit", p != null ? p.getUnit() : "");
             m.put("qualityType", oi.getQualityType());
             m.put("quantity", sold);
@@ -355,7 +354,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             // ① 退回：入售后仓，品质待分类（后续走退货整理）
             stockService.changeStock(e.getWarehouseInId(), it.getProductId(), it.getQuantity(),
                     StockChangeType.EXCHANGE_IN, e.getCode(), RelatedBillType.SALE_EXCHANGE,
-                    specOf(pMap.get(it.getProductId())), e.getId(), ProductQualityType.PENDING.getCode());
+                    "", e.getId(), ProductQualityType.PENDING.getCode());
             // ② 换出：从成品仓按「退回产品/换出数量/换出品质」扣减（同品换货，产品与退回一致）
             BigDecimal outQty = outQtyOf(it);
             if (outQty.compareTo(BigDecimal.ZERO) <= 0) continue;
@@ -363,7 +362,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             String qt = outQualityTypeOf(it);
             stockService.changeStock(e.getWarehouseOutId(), outPid, outQty.negate(),
                     StockChangeType.EXCHANGE_OUT, e.getCode(), RelatedBillType.SALE_EXCHANGE,
-                    specOf(pMap.get(outPid)), e.getId(), qt);
+                    "", e.getId(), qt);
         }
         // 追溯联动：退回的待分类品登记到统一待整理池，供退货整理单消费（与销售退单同一入口）
         createPendingBatches(e, items, pMap);
@@ -394,14 +393,14 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             // 回滚：售后仓扣回退回的待分类品
             stockService.changeStock(e.getWarehouseInId(), it.getProductId(), it.getQuantity().negate(),
                     StockChangeType.EXCHANGE_UN_AUDIT, e.getCode(), RelatedBillType.SALE_EXCHANGE,
-                    specOf(pMap.get(it.getProductId())), e.getId(), ProductQualityType.PENDING.getCode());
+                    "", e.getId(), ProductQualityType.PENDING.getCode());
             // 回滚：成品仓加回换出库存（按退回产品/换出数量/品质对称回补，同品换货产品一致）
             BigDecimal outQty = outQtyOf(it);
             if (outQty.compareTo(BigDecimal.ZERO) <= 0) continue;
             Long outPid = it.getProductId();
             stockService.changeStock(e.getWarehouseOutId(), outPid, outQty,
                     StockChangeType.EXCHANGE_UN_AUDIT, e.getCode(), RelatedBillType.SALE_EXCHANGE,
-                    specOf(pMap.get(outPid)), e.getId(), outQualityTypeOf(it));
+                    "", e.getId(), outQualityTypeOf(it));
         }
         // 追溯联动：撤销本单登记的待整理批次（护栏已确保未被整理，可安全删除）
         deletePendingBatches(AfterSaleSourceType.SALE_EXCHANGE, id);
@@ -552,8 +551,6 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         return map;
     }
 
-    private String specOf(Product p) { return p != null && p.getSpec() != null ? p.getSpec() : ""; }
-
     /** 换出数量：未指定时回退为退回数量（默认 1:1，可手工改成退 2 换 1） */
     private BigDecimal outQtyOf(SaleExchangeItem it) {
         return it.getOutQuantity() != null ? it.getOutQuantity() : nz(it.getQuantity());
@@ -593,7 +590,6 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             pending.setProductId(it.getProductId());
             pending.setProductName(it.getProductName() != null && !it.getProductName().isBlank()
                     ? it.getProductName() : (p != null ? p.getName() : ""));
-            pending.setSpec(p != null ? p.getSpec() : "");
             pending.setUnit(p != null ? p.getUnit() : "");
             pending.setQuantity(it.getQuantity());
             pending.setSortedQuantity(BigDecimal.ZERO);

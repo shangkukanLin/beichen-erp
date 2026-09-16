@@ -37,7 +37,7 @@ public class DeliveryController {
     private final OutsourceDeliveryItemMapper itemMapper;
     private final SupplierMapper supplierMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
-    private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
+    private final com.beichen.erp.dev.mapper.MaterialTypeMapper materialTypeMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -229,9 +229,9 @@ public class DeliveryController {
                     // 兼容 materialId 和 material_id
                     Object mid = map.get("materialId") != null ? map.get("materialId") : map.get("material_id");
                     if (mid != null) item.setMaterialId(Long.valueOf(mid.toString()));
-                    // 兼容 bomTypeId 和 bom_type_id
-                    Object btid = map.get("bomTypeId") != null ? map.get("bomTypeId") : map.get("bom_type_id");
-                    if (btid != null) item.setBomTypeId(Long.valueOf(btid.toString()));
+                    // 兼容 materialTypeId 和 material_type_id
+                    Object btid = map.get("materialTypeId") != null ? map.get("materialTypeId") : map.get("material_type_id");
+                    if (btid != null) item.setMaterialTypeId(Long.valueOf(btid.toString()));
                     item.setUnit((String) map.get("unit"));
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank()) {
                         item.setQuantity(new BigDecimal(map.get("quantity").toString()));
@@ -256,10 +256,10 @@ public class DeliveryController {
         return m != null ? m.getMaterialName() : "";
     }
 
-    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
-    private String getBomTypeNameById(Long bomTypeId) {
-        if (bomTypeId == null) return "-";
-        com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
+    /** 根据 物料类型ID 查询类型名称，空安全返回 "-" */
+    private String getMaterialTypeNameById(Long materialTypeId) {
+        if (materialTypeId == null) return "-";
+        com.beichen.erp.dev.entity.MaterialType bt = materialTypeMapper.selectById(materialTypeId);
         return bt != null ? bt.getTypeName() : "-";
     }
 }

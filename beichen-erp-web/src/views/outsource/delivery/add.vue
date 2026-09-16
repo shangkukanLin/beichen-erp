@@ -26,17 +26,17 @@ const allWarehouses = ref<any[]>([])   // 全部仓库（组件本地，Odoo 风
 const allOutsourceWarehouses = computed(() => allWarehouses.value.filter((w: any) => w.warehouseCategory === WarehouseCategory.OUTSOURCE))
 const combinedFromWhs = computed(() => [...inventoryWarehouses.value, ...allOutsourceWarehouses.value])
 const materialOptions = ref<any[]>([])
-const bomTypes = ref<any[]>([])
+const materialTypes = ref<any[]>([])
 const items = ref<any[]>([])
 const uploadFile = ref<File | null>(null)
 
 // Odoo 风格：工厂实时查库
 const fetchFactories = (kw: string) => request.get('/supplier/page', { params: { supplierType: 'factory', pageSize: 500, name: kw } })
 
-// 类型选择器按 bomTypeId 过滤；bomTypeId -> 类型名 映射供展示
-const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any) => m.bomTypeId).filter(Boolean))] as number[])
-function materialsByType(type: number) { return materialOptions.value.filter((m: any) => m.bomTypeId === type) }
-function typeName(id: number | undefined) { if (id == null) return '-'; const t = bomTypes.value.find((v: any) => v.id === id); return t ? t.typeName : (id as any) }
+// 类型选择器按 materialTypeId 过滤；materialTypeId -> 类型名 映射供展示
+const uniqueTypes = computed(() => [...new Set(materialOptions.value.map((m: any) => m.materialTypeId).filter(Boolean))] as number[])
+function materialsByType(type: number) { return materialOptions.value.filter((m: any) => m.materialTypeId === type) }
+function typeName(id: number | undefined) { if (id == null) return '-'; const t = materialTypes.value.find((v: any) => v.id === id); return t ? t.typeName : (id as any) }
 
 async function loadWarehouses(factoryId: number) {
   try { const r = await request.get<any, any>('/warehouse/by-factory/' + factoryId); outsourceWarehouses.value = r || [] } catch { outsourceWarehouses.value = [] }
@@ -53,8 +53,8 @@ async function loadAllWarehouses() {
 async function loadMaterials() {
   try { const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); materialOptions.value = r?.records || [] } catch { materialOptions.value = [] }
 }
-async function loadBomTypes() {
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch { bomTypes.value = [] }
+async function loadMaterialTypes() {
+  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch { materialTypes.value = [] }
 }
 function onTypeChange() { form.factoryId = undefined; form.supplierId = undefined; form.fromWarehouseId = undefined; form.toWarehouseId = undefined; outsourceWarehouses.value = []; targetOutsourceWarehouses.value = [] }
 async function onFactoryChange(id: number) {
@@ -69,12 +69,12 @@ async function onTargetFactoryChange(id: number) {
   if (id) { await loadTargetWarehouses(id); if (targetOutsourceWarehouses.value.length > 0) form.toWarehouseId = targetOutsourceWarehouses.value[0].id }
 }
 
-function addItem() { items.value.push({ material_id: undefined, material_name: '', bomTypeId: undefined, unit: '', unit_price: '', quantity: undefined, qualityType: QualityType.GOOD, stock: '' }) }
+function addItem() { items.value.push({ material_id: undefined, material_name: '', materialTypeId: undefined, unit: '', unit_price: '', quantity: undefined, qualityType: QualityType.GOOD, stock: '' }) }
 function removeItem(i: number) { items.value.splice(i, 1) }
 function onTypeChangeMtl(idx: number) { items.value[idx].material_id = undefined; items.value[idx].material_name = ''; items.value[idx].unit = '' }
 function onMaterialSelect(idx: number, mid: number) {
   const m = materialOptions.value.find((v: any) => v.id === mid)
-  if (m) { items.value[idx].material_name = m.materialName; items.value[idx].bomTypeId = m.bomTypeId; items.value[idx].unit = m.unit; items.value[idx].material_id = m.id }
+  if (m) { items.value[idx].material_name = m.materialName; items.value[idx].materialTypeId = m.materialTypeId; items.value[idx].unit = m.unit; items.value[idx].material_id = m.id }
   // 自动查询加权平均单价
   if (form.factoryId && m) {
     request.get<any,any>('/outsource/delivery/material-weighted-price', { params: { factoryId: form.factoryId, materialId: m.id } }).then((r: any) => {
@@ -125,10 +125,10 @@ async function handleSubmit() {
 
 // 点击顶栏"刷新数据"：重新加载仓库/物料/类型下拉（不丢失已填表单）
 async function handleRefreshData() {
-  await Promise.all([loadInventoryWarehouses(), loadAllWarehouses(), loadMaterials(), loadBomTypes()])
+  await Promise.all([loadInventoryWarehouses(), loadAllWarehouses(), loadMaterials(), loadMaterialTypes()])
 }
 onMounted(() => {
-  loadInventoryWarehouses(); loadAllWarehouses(); loadMaterials(); loadBomTypes()
+  loadInventoryWarehouses(); loadAllWarehouses(); loadMaterials(); loadMaterialTypes()
   window.addEventListener('refresh:dropdown-data', handleRefreshData)
 })
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
@@ -141,21 +141,21 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <el-form :model="form" label-width="100px">
         <el-row :gutter="16">
           <el-col :span="6"><el-form-item label="类型"><el-select v-model="form.deliveryType" style="width:100%" @change="onTypeChange"><el-option :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :value="DeliveryType.DELIVERY"/><el-option :label="DeliveryTypeLabel[DeliveryType.RETURN]" :value="DeliveryType.RETURN"/><el-option :label="DeliveryTypeLabel[DeliveryType.TRANSFER]" :value="DeliveryType.TRANSFER"/></el-select></el-form-item></el-col>
-          <el-col :span="6"><el-form-item :label="form.deliveryType===DeliveryType.TRANSFER?'来源工厂':'收货工厂'">
+          <el-col :span="6"><el-form-item required :label="form.deliveryType===DeliveryType.TRANSFER?'来源工厂':'收货工厂'">
             <RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" style="width:100%" placeholder="选择工厂" @pick="()=>onFactoryChange(form.factoryId)">
               <el-option label="+ 新增" :value="ADD_MARKER" @click="router.push('/supplier/manage')" />
             </RemoteSelect>
           </el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item label="目标工厂">
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item required label="目标工厂">
             <RemoteSelect v-model="form.supplierId" :fetch="fetchFactories" style="width:100%" placeholder="选择目标工厂" @pick="()=>onTargetFactoryChange(form.supplierId)" />
           </el-form-item></el-col>
           <el-col :span="6"><el-form-item label="日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item label="发出仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id"/></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item label="目标委外仓库"><el-select v-model="form.toWarehouseId" style="width:100%" disabled><el-option v-for="w in outsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.RETURN"><el-form-item label="来源仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id ?? ''"/></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.RETURN"><el-form-item label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id ?? ''"/></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item label="来源仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id ?? ''"/></el-select></el-form-item></el-col>
-          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id ?? ''"/></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item required label="发出仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id"/></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item required label="目标委外仓库"><el-select v-model="form.toWarehouseId" style="width:100%" disabled><el-option v-for="w in outsourceWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.RETURN"><el-form-item required label="来源仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id ?? ''"/></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.RETURN"><el-form-item required label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id ?? ''"/></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item required label="来源仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id ?? ''"/></el-select></el-form-item></el-col>
+          <el-col :span="6" v-if="form.deliveryType===DeliveryType.TRANSFER"><el-form-item required label="目标仓库"><el-select v-model="form.toWarehouseId" filterable style="width:100%"><el-option v-for="w in combinedFromWhs" :key="w.id+'_'+w.warehouseName" :label="`${w.warehouseName}（${w.factoryId?'委外仓':'我方仓'}）`" :value="w.id ?? ''"/></el-select></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item></el-col>
         </el-row>
@@ -166,8 +166,8 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <template #header><span style="font-weight:600">物料明细</span></template>
       <el-button type="primary" size="small" @click="addItem" style="margin-bottom:8px">+ 添加物料</el-button>
       <el-table :data="items" border size="small">
-        <el-table-column label="物料类型" width="110"><template #default="{row,$index}"><el-select v-model="row.bomTypeId" filterable style="width:100%" clearable @change="onTypeChangeMtl($index)"><el-option v-for="t in uniqueTypes" :key="t" :label="typeName(t)" :value="t" /></el-select></template></el-table-column>
-        <el-table-column label="物料名称" min-width="140"><template #default="{row,$index}"><el-select v-model="row.material_id" filterable style="width:100%" :disabled="!row.bomTypeId" @change="(v: any) => { if (v === ADD_MARKER) { row.material_id = undefined; router.push('/product/add'); return } onMaterialSelect($index, v) }"><el-option v-for="m in materialsByType(row.bomTypeId)" :key="m.id" :label="m.materialName" :value="m.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></template></el-table-column>
+        <el-table-column label="物料类型" width="110"><template #default="{row,$index}"><el-select v-model="row.materialTypeId" filterable style="width:100%" clearable @change="onTypeChangeMtl($index)"><el-option v-for="t in uniqueTypes" :key="t" :label="typeName(t)" :value="t" /></el-select></template></el-table-column>
+        <el-table-column label="物料名称" min-width="140"><template #default="{row,$index}"><el-select v-model="row.material_id" filterable style="width:100%" :disabled="!row.materialTypeId" @change="(v: any) => { if (v === ADD_MARKER) { row.material_id = undefined; router.push('/product/add'); return } onMaterialSelect($index, v) }"><el-option v-for="m in materialsByType(row.materialTypeId)" :key="m.id" :label="m.materialName" :value="m.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></template></el-table-column>
         <el-table-column label="单位" width="70"><template #default="{row}">{{row.unit}}</template></el-table-column>
         <el-table-column label="发出仓库库存" width="110" align="right"><template #default="{row}"><span :style="{ color: row.stock !== '' && Number(row.quantity) > Number(row.stock) ? 'var(--app-color-danger)' : undefined }">{{ row.stock === '' ? '-' : row.stock }}</span></template></el-table-column>
         <el-table-column label="单价" width="100"><template #default="{row}"><el-input v-model="row.unit_price" size="small" placeholder="单价" /></template></el-table-column>

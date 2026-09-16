@@ -21,7 +21,6 @@ public class OutsourceOrderProduct {
     private String sku;
 
     private String productName;
-    private String productSpec;
     private BigDecimal quantity;
     private BigDecimal unitPrice;
     private BigDecimal amount;

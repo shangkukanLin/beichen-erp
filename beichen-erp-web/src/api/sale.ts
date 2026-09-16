@@ -7,7 +7,6 @@ export interface SaleOrderItem {
   productName?: string
   /** SKU（展示用；后端按 productId 回填，新增行未选产品时为空） */
   sku?: string
-  spec?: string
   unit?: string
   qualityType?: string
   quantity?: number
@@ -98,7 +97,7 @@ export function unAuditSaleOrder(id: number) {
 
 /** 库存检查：传入 warehouseId + items，返回各产品库存对比 */
 export function checkSaleOrderStock(data: { warehouseId?: number; items: SaleOrderItem[] }) {
-  return request.post<{ productName: string; spec: string; unit: string; required: number; available: number; shortage: number; sufficient: boolean }[]>(
+  return request.post<{ productName: string; unit: string; required: number; available: number; shortage: number; sufficient: boolean }[]>(
     '/inventory/sale/check-stock', data
   )
 }

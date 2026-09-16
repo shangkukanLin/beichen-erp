@@ -43,7 +43,7 @@ public class CloseReportController {
         List<CloseReportItem> items = itemsRaw != null ? itemsRaw.stream().map(m -> {
             CloseReportItem i = new CloseReportItem();
             if (m.get("materialId") != null) i.setMaterialId(Long.valueOf(m.get("materialId").toString()));
-            if (m.get("bomTypeId") != null) i.setBomTypeId(Long.valueOf(m.get("bomTypeId").toString()));
+            if (m.get("materialTypeId") != null) i.setMaterialTypeId(Long.valueOf(m.get("materialTypeId").toString()));
             i.setUnit((String) m.get("unit"));
             if (m.get("returnedQuantity") != null) i.setReturnedQuantity(new BigDecimal(m.get("returnedQuantity").toString()));
             if (m.get("goodReturnQty") != null) i.setGoodReturnQty(new BigDecimal(m.get("goodReturnQty").toString()));
@@ -150,7 +150,7 @@ public class CloseReportController {
             Row dRow = sheet.createRow(rowIdx++);
             int curRow = dRow.getRowNum() + 1;
 
-            textCell(dRow, 0, (String) it.get("bomTypeName"), textStyle);
+            textCell(dRow, 0, (String) it.get("materialTypeName"), textStyle);
             textCell(dRow, 1, (String) it.get("materialName"), textStyle);
             // 用料总数 = 出货消耗 + 良品退料 + 不良退料 + 留存工厂 + 缺失
             formulaCell(dRow, 2, "E" + curRow + "+F" + curRow + "+G" + curRow + "+H" + curRow + "+I" + curRow, numStyle);
@@ -270,7 +270,7 @@ public class CloseReportController {
         if (obj instanceof java.util.Map) { @SuppressWarnings("unchecked") java.util.Map<String, Object> m = (java.util.Map<String, Object>) obj; return m; }
         var pr = (com.beichen.erp.outsource.entity.OutsourceOrderProduct) obj;
         java.util.Map<String, Object> p = new java.util.LinkedHashMap<>();
-        p.put("productName", pr.getProductName()); p.put("productSpec", pr.getProductSpec()); p.put("quantity", pr.getQuantity());
+        p.put("productName", pr.getProductName()); p.put("quantity", pr.getQuantity());
         return p;
     }
     private void numCell(Row row, int col, Map<String, Object> it, String key, CellStyle style) { numCellRaw(row, col, it.get(key), style); }

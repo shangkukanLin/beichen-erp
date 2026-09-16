@@ -104,7 +104,6 @@ CREATE TABLE IF NOT EXISTS material (
     name VARCHAR(100) NOT NULL COMMENT '物料名称',
     brand_id BIGINT DEFAULT NULL COMMENT '品牌ID',
     category VARCHAR(30) COMMENT '分类(原料/辅料/半成品/成品)',
-    spec VARCHAR(100) COMMENT '规格型号',
     unit VARCHAR(20) COMMENT '单位',
     safety_stock DECIMAL(18,4) DEFAULT 0 COMMENT '安全库存',
     current_stock DECIMAL(18,4) DEFAULT 0 COMMENT '当前库存',
@@ -195,7 +194,6 @@ CREATE TABLE IF NOT EXISTS outsource_order_product (
     order_id BIGINT NOT NULL COMMENT '订单ID',
     project_id BIGINT COMMENT '项目ID',
     product_name VARCHAR(100) NOT NULL COMMENT '产品名称',
-    product_spec VARCHAR(100) COMMENT '产品规格',
     quantity DECIMAL(18,4) DEFAULT 0 COMMENT '数量',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
     amount DECIMAL(18,4) DEFAULT 0 COMMENT '金额',
@@ -448,7 +446,7 @@ CREATE TABLE IF NOT EXISTS dev_bom (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='BOM表';
 
-CREATE TABLE IF NOT EXISTS dev_bom_type (
+CREATE TABLE IF NOT EXISTS material_type (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     type_name VARCHAR(50) NOT NULL COMMENT '类型名称',
     sort_order INT DEFAULT 0 COMMENT '排序',
@@ -456,7 +454,7 @@ CREATE TABLE IF NOT EXISTS dev_bom_type (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='BOM类型表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='物料类型表';
 
 CREATE TABLE IF NOT EXISTS dev_bug (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'Bug ID',

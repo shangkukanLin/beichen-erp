@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
-import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.common.DefectHandleType;
 import com.beichen.erp.outsource.common.DeliveryType;
@@ -49,7 +48,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     private final MaterialOrderItemMapper itemMapper;
     private final SupplierMapper supplierMapper;
     private final OutsourceMaterialMapper materialMapper;
-    private final com.beichen.erp.dev.mapper.BomTypeMapper bomTypeMapper;
+    private final com.beichen.erp.dev.mapper.MaterialTypeMapper materialTypeMapper;
     private final WarehouseMapper warehouseMapper;
     private final WarehouseStockMapper warehouseStockMapper;
     private final OutsourceDeliveryMapper deliveryMapper;
@@ -266,7 +265,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             di.setDeliveryId(delivery.getId());
             di.setItemId(itemId);
             di.setMaterialId(orderItem.getMaterialId());
-            di.setBomTypeId(orderItem.getBomTypeId());
+            di.setMaterialTypeId(orderItem.getMaterialTypeId());
             di.setUnit(orderItem.getUnit());
             di.setQuantity(qty);
             di.setAmount(qty.multiply(orderItem.getUnitPrice() != null ? orderItem.getUnitPrice() : BigDecimal.ZERO));
@@ -362,7 +361,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             di.setDeliveryId(delivery.getId());
             di.setItemId(itemId);
             di.setMaterialId(orderItem.getMaterialId());
-            di.setBomTypeId(orderItem.getBomTypeId());
+            di.setMaterialTypeId(orderItem.getMaterialTypeId());
             di.setUnit(orderItem.getUnit());
             di.setQuantity(qty);
             di.setAmount(qty.multiply(orderItem.getUnitPrice() != null ? orderItem.getUnitPrice() : BigDecimal.ZERO));
@@ -456,7 +455,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
                 im.put("id", it.getId()); im.put("deliveryId", it.getDeliveryId());
                 im.put("materialId", it.getMaterialId());
                 im.put("materialName", getMaterialNameById(it.getMaterialId()));
-                im.put("bomTypeId", it.getBomTypeId());
+                im.put("materialTypeId", it.getMaterialTypeId());
                 im.put("itemId", it.getItemId());
                 im.put("unit", it.getUnit());
                 im.put("quantity", it.getQuantity());
@@ -470,55 +469,6 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             m.put("items", itemMaps);
             result.add(m);
         }
-        return result;
-    }
-
-    @Override
-    public Page<Map<String, Object>> deliveryItemsPage(int pageNum, int pageSize, String deliveryCode, String orderCode,
-                                                       String materialName, String deliveryType, String status,
-                                                       String startDate, String endDate) {
-        List<Object> params = new ArrayList<>();
-        StringBuilder where = new StringBuilder(
-            "WHERE od.delivery_type IN ('RECEIVE', 'DEFECT_RETURN') AND od.source_order_id IS NOT NULL ");
-        Long companyId = CompanyContext.get();
-        if (companyId != null) { where.append("AND od.company_id = ? "); params.add(companyId); }
-        if (deliveryCode != null && !deliveryCode.isBlank()) { where.append("AND od.code LIKE ? "); params.add("%" + deliveryCode.trim() + "%"); }
-        if (orderCode != null && !orderCode.isBlank()) { where.append("AND omo.code LIKE ? "); params.add("%" + orderCode.trim() + "%"); }
-        if (materialName != null && !materialName.isBlank()) { where.append("AND om.material_name LIKE ? "); params.add("%" + materialName.trim() + "%"); }
-        if (deliveryType != null && !deliveryType.isBlank()) { where.append("AND od.delivery_type = ? "); params.add(deliveryType); }
-        if (status != null && !status.isBlank()) { where.append("AND od.status = ? "); params.add(status); }
-        if (startDate != null && !startDate.isBlank()) { where.append("AND od.delivery_date >= ? "); params.add(startDate); }
-        if (endDate != null && !endDate.isBlank()) { where.append("AND od.delivery_date <= ? "); params.add(endDate); }
-
-        String baseSql =
-            "FROM outsource_delivery_item odi " +
-            "INNER JOIN outsource_delivery od ON odi.delivery_id = od.id " +
-            "LEFT JOIN outsource_material_order omo ON od.source_order_id = omo.id " +
-            "LEFT JOIN outsource_material om ON odi.outsource_material_id = om.id " +
-            "LEFT JOIN dev_bom_type bt ON odi.bom_type_id = bt.id " +
-            "LEFT JOIN outsource_material_order_item omi ON odi.item_id = omi.id " +
-            "LEFT JOIN supplier sf ON od.factory_id = sf.id " +
-            "LEFT JOIN supplier sp ON od.supplier_id = sp.id " +
-            "LEFT JOIN warehouse w ON od.to_warehouse_id = w.id " +
-            where;
-
-        Long total = jdbcTemplate.queryForObject("SELECT COUNT(*) " + baseSql, Long.class, params.toArray());
-        StringBuilder sql = new StringBuilder(
-            "SELECT odi.id, od.id AS delivery_id, od.code AS delivery_code, od.delivery_type, od.delivery_date, od.status AS delivery_status, " +
-            "od.source_order_id AS order_id, omo.code AS order_code, omo.order_type, " +
-            "sf.name AS factory_name, od.factory_id AS factory_id, sp.name AS supplier_name, od.supplier_id AS supplier_id, " +
-            "om.material_name, om.spec, bt.type_name AS bom_type_name, odi.unit, odi.quantity, " +
-            "CASE WHEN IFNULL(odi.unit_price, 0) = 0 THEN IFNULL(omi.unit_price, 0) ELSE odi.unit_price END AS unit_price, " +
-            "odi.amount, odi.quality_type, odi.handle_type, od.to_warehouse_id AS warehouse_id, w.warehouse_name, w.factory_id AS warehouse_factory_id, od.remark, odi.create_time " +
-            baseSql +
-            "ORDER BY od.delivery_date DESC, od.id DESC, odi.id ASC LIMIT ? OFFSET ?");
-        List<Object> pageParams = new ArrayList<>(params);
-        pageParams.add(pageSize);
-        pageParams.add((long) (pageNum - 1) * pageSize);
-
-        List<Map<String, Object>> records = jdbcTemplate.queryForList(sql.toString(), pageParams.toArray());
-        Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, total != null ? total : 0);
-        result.setRecords(records);
         return result;
     }
 
@@ -607,8 +557,8 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             map.put("orderId", it.getOrderId());
             map.put("materialId", it.getMaterialId());
             map.put("materialName", getMaterialNameById(it.getMaterialId()));
-            map.put("bomTypeId", it.getBomTypeId());
-            map.put("bomTypeName", getBomTypeNameById(it.getBomTypeId()));
+            map.put("materialTypeId", it.getMaterialTypeId());
+            map.put("materialTypeName", getMaterialTypeNameById(it.getMaterialTypeId()));
             map.put("unit", it.getUnit());
             map.put("orderQuantity", it.getOrderQuantity());
             map.put("receivedQuantity", it.getReceivedQuantity());
@@ -644,8 +594,8 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
                             if (childMat != null) {
                                 cm.put("childMaterialName", childMat.getMaterialName());
                                 cm.put("childUnit", childMat.getUnit());
-                                cm.put("childBomTypeId", childMat.getBomTypeId());
-                                cm.put("childBomTypeName", getBomTypeNameById(childMat.getBomTypeId()));
+                                cm.put("childMaterialTypeId", childMat.getMaterialTypeId());
+                                cm.put("childMaterialTypeName", getMaterialTypeNameById(childMat.getMaterialTypeId()));
                                 // 供应商从 supplier_material 居间表联查（outsource_material.supplier_ids 冗余字段已废弃）
                                 cm.put("supplierIds", supplierMaterialService.listSupplierIdsByMaterial(childMat.getId()));
                             }
@@ -684,7 +634,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     private MaterialOrderItem parseItem(Map<String, Object> it) {
         MaterialOrderItem item = new MaterialOrderItem();
         if (it.get("materialId") != null) item.setMaterialId(Long.valueOf(it.get("materialId").toString()));
-        if (it.get("bomTypeId") != null) item.setBomTypeId(Long.valueOf(it.get("bomTypeId").toString()));
+        if (it.get("materialTypeId") != null) item.setMaterialTypeId(Long.valueOf(it.get("materialTypeId").toString()));
         item.setUnit((String) it.get("unit"));
         if (it.get("orderQuantity") != null) item.setOrderQuantity(new BigDecimal(it.get("orderQuantity").toString()));
         if (it.get("unitPrice") != null) item.setUnitPrice(new BigDecimal(it.get("unitPrice").toString()));
@@ -722,10 +672,10 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         return m != null ? m.getMaterialName() : "";
     }
 
-    /** 根据 BOM 类型ID 查询类型名称，空安全返回 "-" */
-    private String getBomTypeNameById(Long bomTypeId) {
-        if (bomTypeId == null) return "-";
-        com.beichen.erp.dev.entity.BomType bt = bomTypeMapper.selectById(bomTypeId);
+    /** 根据 物料类型ID 查询类型名称，空安全返回 "-" */
+    private String getMaterialTypeNameById(Long materialTypeId) {
+        if (materialTypeId == null) return "-";
+        com.beichen.erp.dev.entity.MaterialType bt = materialTypeMapper.selectById(materialTypeId);
         return bt != null ? bt.getTypeName() : "-";
     }
 

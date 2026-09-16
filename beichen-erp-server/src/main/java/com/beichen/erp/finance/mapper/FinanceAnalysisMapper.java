@@ -13,12 +13,12 @@ import java.util.Map;
 @Mapper
 public interface FinanceAnalysisMapper {
 
-    /** 销售收入（按审核时间归月；audit_time 为 NULL 时按 create_time 兜底） */
-    @Select("SELECT DATE_FORMAT(COALESCE(audit_time, create_time), '%Y-%m') AS ym, IFNULL(SUM(total_amount), 0) AS amt FROM sale_order WHERE status = 'AUDITED' GROUP BY ym")
+    /** 销售收入（按**建单时间**归月；2026-09-15 用户要求全站统一为建单日口径） */
+    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, IFNULL(SUM(total_amount), 0) AS amt FROM sale_order WHERE status = 'AUDITED' GROUP BY ym")
     List<Map<String, Object>> saleByMonth();
 
-    /** 采购成本（按审核时间归月） */
-    @Select("SELECT DATE_FORMAT(audit_time, '%Y-%m') AS ym, IFNULL(SUM(total_amount), 0) AS amt FROM purchase_order WHERE status = 'AUDITED' AND audit_time IS NOT NULL GROUP BY ym")
+    /** 采购成本（按**建单时间**归月；已去掉原 `audit_time IS NOT NULL` 过滤，避免漏统计） */
+    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, IFNULL(SUM(total_amount), 0) AS amt FROM purchase_order WHERE status = 'AUDITED' GROUP BY ym")
     List<Map<String, Object>> purchaseByMonth();
 
     /** 销售退货（冲减收入，按建单时间归月） */
@@ -33,19 +33,19 @@ public interface FinanceAnalysisMapper {
     @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, IFNULL(SUM(total_amount), 0) AS amt FROM purchase_return WHERE status = 'AUDITED' GROUP BY ym")
     List<Map<String, Object>> purchaseReturnByMonth();
 
-    /** 费用（按费用日期归月） */
-    @Select("SELECT DATE_FORMAT(expense_date, '%Y-%m') AS ym, IFNULL(SUM(amount), 0) AS amt FROM finance_expense WHERE status = 'AUDITED' GROUP BY ym")
+    /** 费用（按**建单时间**归月；2026-09-15 由 expense_date 改为 create_time 以统一口径） */
+    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, IFNULL(SUM(amount), 0) AS amt FROM finance_expense WHERE status = 'AUDITED' GROUP BY ym")
     List<Map<String, Object>> expenseByMonth();
 
     // ==================== 利润表明细（按天，口径与按月版完全一致） ====================
     // 全量按天聚合、Java 侧按区间取值：不把日期参数放进 SQL（此前 BETWEEN 参数绑定实测取不到数据）
 
-    /** 销售收入（按审核时间归日；audit_time 为 NULL 时按 create_time 兜底） */
-    @Select("SELECT DATE_FORMAT(COALESCE(audit_time, create_time), '%Y-%m-%d') AS d, IFNULL(SUM(total_amount), 0) AS amt FROM sale_order WHERE status = 'AUDITED' GROUP BY d")
+    /** 销售收入（按**建单时间**归日） */
+    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, IFNULL(SUM(total_amount), 0) AS amt FROM sale_order WHERE status = 'AUDITED' GROUP BY d")
     List<Map<String, Object>> saleByDay();
 
-    /** 采购成本（按审核时间归日） */
-    @Select("SELECT DATE_FORMAT(audit_time, '%Y-%m-%d') AS d, IFNULL(SUM(total_amount), 0) AS amt FROM purchase_order WHERE status = 'AUDITED' AND audit_time IS NOT NULL GROUP BY d")
+    /** 采购成本（按**建单时间**归日） */
+    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, IFNULL(SUM(total_amount), 0) AS amt FROM purchase_order WHERE status = 'AUDITED' GROUP BY d")
     List<Map<String, Object>> purchaseByDay();
 
     /** 销售退货（冲减收入，按建单时间归日） */
@@ -65,8 +65,8 @@ public interface FinanceAnalysisMapper {
     // 与客户分析/销售分析同源（同一 cost_price），保证跨页面"毛利"可对账；
     // 采购入库属资产，不再计入利润表成本（采购金额仍可在资金/采购模块查看）。
 
-    /** 销售出库成本按天：销售明细行数量 × 产品当前移动加权成本价（按销售单审核日归日，NULL 兜底 create_time） */
-    @Select("SELECT DATE_FORMAT(COALESCE(o.audit_time, o.create_time), '%Y-%m-%d') AS d, IFNULL(SUM(i.quantity * IFNULL(p.cost_price, 0)), 0) AS amt " +
+    /** 销售出库成本按天：销售明细行数量 × 产品当前移动加权成本价（按销售单**建单日**归日） */
+    @Select("SELECT DATE_FORMAT(o.create_time, '%Y-%m-%d') AS d, IFNULL(SUM(i.quantity * IFNULL(p.cost_price, 0)), 0) AS amt " +
             "FROM sale_order_item i JOIN sale_order o ON o.id = i.order_id LEFT JOIN product p ON p.id = i.product_id " +
             "WHERE o.status = 'AUDITED' GROUP BY d")
     List<Map<String, Object>> saleCostByDay();
@@ -77,21 +77,78 @@ public interface FinanceAnalysisMapper {
             "WHERE r.status = 'AUDITED' GROUP BY d")
     List<Map<String, Object>> saleReturnCostByDay();
 
-    /** 费用（按费用日期归日） */
-    @Select("SELECT DATE_FORMAT(expense_date, '%Y-%m-%d') AS d, IFNULL(SUM(amount), 0) AS amt FROM finance_expense WHERE status = 'AUDITED' GROUP BY d")
+    /** 费用（按**建单时间**归日） */
+    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, IFNULL(SUM(amount), 0) AS amt FROM finance_expense WHERE status = 'AUDITED' GROUP BY d")
     List<Map<String, Object>> expenseByDay();
+
+    // ==================== 进货分析（2026-09-15 新增，供「经营分析 → 进货分析」） ====================
+    // 归期口径（2026-09-15 全站统一）：采购单、采购退货**均按建单日** create_time
+
+    /** 采购单数（按**建单日**归日） */
+    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS amt FROM purchase_order WHERE status = 'AUDITED' GROUP BY d")
+    List<Map<String, Object>> purchaseCountByDay();
+
+    /** 采购单明细（下钻用：d=**建单日**、partner=供应商名称） */
+    @Select("SELECT o.id, o.code, DATE_FORMAT(o.create_time, '%Y-%m-%d') AS d, s.name AS partner, o.total_amount, o.remark FROM purchase_order o LEFT JOIN supplier s ON s.id = o.supplier_id WHERE o.status = 'AUDITED'")
+    List<Map<String, Object>> purchaseOrderRecords();
+
+    /** 采购退货单明细（下钻用：d=建单日、partner=供应商名称） */
+    @Select("SELECT o.id, o.code, DATE_FORMAT(o.create_time, '%Y-%m-%d') AS d, s.name AS partner, o.total_amount, o.remark FROM purchase_return o LEFT JOIN supplier s ON s.id = o.supplier_id WHERE o.status = 'AUDITED'")
+    List<Map<String, Object>> purchaseReturnRecords();
+
+    // ==================== 进货分析的 2 个饼图（2026-09-15 新增） ====================
+    // 均为「按产品」分片；金额与件数一次查回（前端每卡一个「金额/件数」switch）
+
+    /**
+     * **直接采购成品**明细按「产品 × **建单日**」（饼图用）：已审核采购单。
+     * 区间过滤在 Java 侧（与全站做法一致）；`d` = 建单日。
+     */
+    @Select("SELECT i.product_id, p.name AS product_name, DATE_FORMAT(o.create_time, '%Y-%m-%d') AS d, " +
+            "IFNULL(SUM(i.amount), 0) AS amt, IFNULL(SUM(i.quantity), 0) AS qty " +
+            "FROM purchase_order o JOIN purchase_order_item i ON i.order_id = o.id " +
+            "LEFT JOIN product p ON p.id = i.product_id " +
+            "WHERE o.status = 'AUDITED' " +
+            "GROUP BY i.product_id, p.name, d")
+    List<Map<String, Object>> purchaseItemByProduct();
+
+    /**
+     * **采购退货**明细按「产品 × 建单日」（饼图用，作为净额的**冲减项**）：归期 = 建单日，
+     * 与 `purchaseReturnByDay()` 口径一致。仅金额/件数取正数，冲减由 Service 侧取负。
+     */
+    @Select("SELECT i.product_id, p.name AS product_name, DATE_FORMAT(r.create_time, '%Y-%m-%d') AS d, " +
+            "IFNULL(SUM(i.amount), 0) AS amt, IFNULL(SUM(i.quantity), 0) AS qty " +
+            "FROM purchase_return r JOIN purchase_return_item i ON i.return_id = r.id " +
+            "LEFT JOIN product p ON p.id = i.product_id " +
+            "WHERE r.status = 'AUDITED' " +
+            "GROUP BY i.product_id, p.name, d")
+    List<Map<String, Object>> purchaseReturnItemByProduct();
+
+    /**
+     * **委外加工成品入库**按「成品产品 × 交货日期」（饼图用）：已审核交货记录（审核后成品入库 + 生成应付）。
+     * <p>该表**无金额字段**：金额按 `Σ(交货数量 × 加工单价)` 计算（`outsource_order_product.unit_price`），
+     * 与审核时生成的应付金额口径一致（见 OutsourceOrderDeliveryServiceImpl#createDeliveryPayable）。</p>
+     * <p>归期 = **建单日**（2026-09-15 全站统一，原为交货日期）；退不良记录数量为负 → 自动冲减；成品取 `product_master_id`。</p>
+     */
+    @Select("SELECT od.product_master_id, p.name AS product_name, DATE_FORMAT(od.create_time, '%Y-%m-%d') AS d, " +
+            "IFNULL(SUM(od.quantity * IFNULL(op.unit_price, 0)), 0) AS amt, IFNULL(SUM(od.quantity), 0) AS qty " +
+            "FROM outsource_order_delivery od " +
+            "LEFT JOIN outsource_order_product op ON op.id = od.product_id " +
+            "LEFT JOIN product p ON p.id = od.product_master_id " +
+            "WHERE od.status = 'AUDITED' " +
+            "GROUP BY od.product_master_id, p.name, d")
+    List<Map<String, Object>> outsourceInByProduct();
 
     // ==================== 税务分析（已税/未税） ====================
 
     /**
      * 销售额按月 × 税状态聚合（已税=tax_included=1，从中拆出税额；未税=tax_included=0）。
-     * 已审核单据，按审核时间归月（audit_time 为 NULL 时 create_time 兜底）。
+     * 已审核单据，按**建单时间**归月（2026-09-15 全站统一）。
      */
-    @Select("SELECT DATE_FORMAT(COALESCE(audit_time, create_time), '%Y-%m') AS ym, tax_included, IFNULL(SUM(total_amount), 0) AS amt, IFNULL(SUM(tax_amount), 0) AS tax FROM sale_order WHERE status = 'AUDITED' GROUP BY ym, tax_included")
+    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, tax_included, IFNULL(SUM(total_amount), 0) AS amt, IFNULL(SUM(tax_amount), 0) AS tax FROM sale_order WHERE status = 'AUDITED' GROUP BY ym, tax_included")
     List<Map<String, Object>> saleTaxByMonth();
 
-    /** 采购额按月 × 税状态聚合（进项视角） */
-    @Select("SELECT DATE_FORMAT(audit_time, '%Y-%m') AS ym, tax_included, IFNULL(SUM(total_amount), 0) AS amt, IFNULL(SUM(tax_amount), 0) AS tax FROM purchase_order WHERE status = 'AUDITED' AND audit_time IS NOT NULL GROUP BY ym, tax_included")
+    /** 采购额按月 × 税状态聚合（进项视角；归期 = **建单时间**） */
+    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, tax_included, IFNULL(SUM(total_amount), 0) AS amt, IFNULL(SUM(tax_amount), 0) AS tax FROM purchase_order WHERE status = 'AUDITED' GROUP BY ym, tax_included")
     List<Map<String, Object>> purchaseTaxByMonth();
 
     /**

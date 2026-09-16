@@ -10,8 +10,8 @@ import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.config.CompanyContext;
-import com.beichen.erp.dev.entity.BomType;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.dev.entity.MaterialType;
+import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.LossReason;
 import com.beichen.erp.inventory.common.RelatedBillType;
@@ -52,7 +52,7 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
     private final OutsourceStockLossItemMapper itemMapper;
     private final WarehouseStockService stockService;
     private final OutsourceMaterialMapper materialMapper;
-    private final BomTypeMapper bomTypeMapper;
+    private final MaterialTypeMapper materialTypeMapper;
     private final WarehouseMapper warehouseMapper;
     private final UserMapper userMapper;
 
@@ -273,7 +273,7 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
         return valid;
     }
 
-    /** 保存明细：回填物料档案快照、BOM类型名与单价，计算金额 */
+    /** 保存明细：回填物料档案快照、物料类型名与单价，计算金额 */
     private void saveItems(Long lossId, List<OutsourceStockLossItem> items, Long cid) {
         for (OutsourceStockLossItem it : items) {
             it.setId(null);
@@ -283,15 +283,15 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
                 it.setMaterialName(m.getMaterialName());
                 it.setSpec(m.getSpec());
                 it.setUnit(m.getUnit());
-                if (it.getBomTypeId() == null) it.setBomTypeId(m.getBomTypeId());
+                if (it.getMaterialTypeId() == null) it.setMaterialTypeId(m.getMaterialTypeId());
                 // 单价未填时优先最近进价，其次物料单价
                 if (it.getUnitPrice() == null) {
                     it.setUnitPrice(firstNonZero(m.getLastInPrice(), m.getPrice(), m.getCostPrice()));
                 }
             }
-            if (it.getBomTypeId() != null) {
-                BomType bt = bomTypeMapper.selectById(it.getBomTypeId());
-                if (bt != null) it.setBomTypeName(bt.getTypeName());
+            if (it.getMaterialTypeId() != null) {
+                MaterialType bt = materialTypeMapper.selectById(it.getMaterialTypeId());
+                if (bt != null) it.setMaterialTypeName(bt.getTypeName());
             }
             // 物料库存不区分品质，统一按 GOOD 记账（字段仅作冗余展示）
             if (it.getQualityType() == null || it.getQualityType().isBlank()) {

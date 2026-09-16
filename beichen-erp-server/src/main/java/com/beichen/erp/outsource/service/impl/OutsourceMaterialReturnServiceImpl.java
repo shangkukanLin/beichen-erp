@@ -10,8 +10,8 @@ import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.config.CompanyContext;
-import com.beichen.erp.dev.entity.BomType;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.dev.entity.MaterialType;
+import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.service.PayableHelper;
@@ -55,7 +55,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     private final SupplierMapper supplierMapper;
     private final WarehouseMapper warehouseMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
-    private final BomTypeMapper bomTypeMapper;
+    private final MaterialTypeMapper materialTypeMapper;
     private final WarehouseStockMapper warehouseStockMapper;
     /** 物料库存统一写入口（架构债 A1：原先本类私有实现直写 mapper + jdbcTemplate 写流水） */
     private final WarehouseStockService warehouseStockService;
@@ -140,8 +140,8 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
             im.put("id", it.getId());
             im.put("materialId", it.getMaterialId());
             im.put("materialName", getMaterialName(it.getMaterialId()));
-            im.put("bomTypeId", it.getBomTypeId());
-            im.put("bomTypeName", getBomTypeName(it.getBomTypeId()));
+            im.put("materialTypeId", it.getMaterialTypeId());
+            im.put("materialTypeName", getMaterialTypeName(it.getMaterialTypeId()));
             im.put("unit", it.getUnit());
             im.put("quantity", it.getQuantity());
             im.put("unitPrice", it.getUnitPrice());
@@ -330,8 +330,8 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("materialId", m.getId());
             row.put("materialName", m.getMaterialName());
-            row.put("bomTypeId", m.getBomTypeId());
-            row.put("bomTypeName", getBomTypeName(m.getBomTypeId()));
+            row.put("materialTypeId", m.getMaterialTypeId());
+            row.put("materialTypeName", getMaterialTypeName(m.getMaterialTypeId()));
             row.put("unit", m.getUnit());
             row.put("quantity", e.getValue());
             result.add(row);
@@ -360,7 +360,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
             OutsourceMaterialReturnItem item = new OutsourceMaterialReturnItem();
             item.setReturnOrderId(returnOrderId);
             item.setMaterialId(materialId);
-            item.setBomTypeId(toLong(it.get("bomTypeId")));
+            item.setMaterialTypeId(toLong(it.get("materialTypeId")));
             item.setUnit((String) it.get("unit"));
             item.setQuantity(qty);
             item.setUnitPrice(price);
@@ -421,9 +421,9 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         return m != null ? m.getMaterialName() : "";
     }
 
-    private String getBomTypeName(Long bomTypeId) {
-        if (bomTypeId == null) return "-";
-        BomType bt = bomTypeMapper.selectById(bomTypeId);
+    private String getMaterialTypeName(Long materialTypeId) {
+        if (materialTypeId == null) return "-";
+        MaterialType bt = materialTypeMapper.selectById(materialTypeId);
         return bt != null ? bt.getTypeName() : "-";
     }
 

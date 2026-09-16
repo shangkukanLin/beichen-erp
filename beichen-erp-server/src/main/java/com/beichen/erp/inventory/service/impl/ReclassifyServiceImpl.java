@@ -171,12 +171,12 @@ public class ReclassifyServiceImpl implements ReclassifyService {
             stockService.changeStock(rc.getWarehouseId(), prod != null ? prod.getName() : "",
                     it.getQuantity().negate(), StockChangeType.RECLASSIFY_OUT, rc.getCode(),
                     RelatedBillType.PRODUCT_RECLASSIFY, it.getProductId(),
-                    prod != null ? prod.getSpec() : "", rc.getId(), it.getFromQuality());
+                    "", rc.getId(), it.getFromQuality());
             // 增加目标品质
             stockService.changeStock(rc.getWarehouseId(), prod != null ? prod.getName() : "",
                     it.getQuantity(), StockChangeType.RECLASSIFY_IN, rc.getCode(),
                     RelatedBillType.PRODUCT_RECLASSIFY, it.getProductId(),
-                    prod != null ? prod.getSpec() : "", rc.getId(), it.getToQuality());
+                    "", rc.getId(), it.getToQuality());
         }
         InventoryProductReclassify u = new InventoryProductReclassify(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
         rcMapper.updateById(u);
@@ -255,12 +255,12 @@ public class ReclassifyServiceImpl implements ReclassifyService {
             stockService.changeStock(rc.getWarehouseId(), prod != null ? prod.getName() : "",
                     it.getQuantity(), StockChangeType.CANCEL_RECLASSIFY_OUT, rc.getCode(),
                     RelatedBillType.PRODUCT_RECLASSIFY, it.getProductId(),
-                    prod != null ? prod.getSpec() : "", rc.getId(), it.getFromQuality());
+                    "", rc.getId(), it.getFromQuality());
             // 冲回目标品质
             stockService.changeStock(rc.getWarehouseId(), prod != null ? prod.getName() : "",
                     it.getQuantity().negate(), StockChangeType.CANCEL_RECLASSIFY_IN, rc.getCode(),
                     RelatedBillType.PRODUCT_RECLASSIFY, it.getProductId(),
-                    prod != null ? prod.getSpec() : "", rc.getId(), it.getToQuality());
+                    "", rc.getId(), it.getToQuality());
         }
         InventoryProductReclassify u = new InventoryProductReclassify(); u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode());
         rcMapper.updateById(u);

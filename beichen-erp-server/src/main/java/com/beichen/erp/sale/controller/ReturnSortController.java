@@ -118,7 +118,6 @@ public class ReturnSortController {
                         it.setPendingId(Long.valueOf(map.get("pendingId").toString()));
                     if (map.get("saleReturnItemId") != null) it.setSaleReturnItemId(Long.valueOf(map.get("saleReturnItemId").toString()));
                     it.setProductName((String) map.get("productName"));
-                    it.setSpec((String) map.get("spec"));
                     it.setUnit((String) map.get("unit"));
                     if (map.get("totalQuantity") != null && !map.get("totalQuantity").toString().isBlank())
                         it.setTotalQuantity(new BigDecimal(map.get("totalQuantity").toString()));

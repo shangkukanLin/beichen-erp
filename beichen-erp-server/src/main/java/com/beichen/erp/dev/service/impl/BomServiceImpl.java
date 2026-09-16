@@ -85,7 +85,7 @@ public class BomServiceImpl extends ServiceImpl<BomMapper, Bom> implements BomSe
         for (Bom bom : currentBoms) {
             Bom newBom = new Bom();
             newBom.setProjectId(bom.getProjectId());
-            newBom.setBomTypeId(bom.getBomTypeId());
+            newBom.setMaterialTypeId(bom.getMaterialTypeId());
             newBom.setOutsourceMaterialId(bom.getOutsourceMaterialId());
             newBom.setSupplierId(bom.getSupplierId());
             newBom.setQuantity(bom.getQuantity());

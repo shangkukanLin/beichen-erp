@@ -262,7 +262,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     product != null ? product.getId() : it.getProductId(),
                     it.getQuantity(),
                     StockChangeType.PURCHASE_IN, order.getCode(), RelatedBillType.PURCHASE_ORDER,
-                    product != null ? product.getSpec() : "",
+                    "",
                     order.getId(), it.getQualityType());
             // 3) 移动加权成本：按明细单价入库加权
             costService.applyProduct(it.getProductId(), it.getQuantity(), it.getUnitPrice(),
@@ -320,7 +320,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                     it.getQuantity().negate(), // 负数冲回
                     // 反审核流水用专用 code（清单 C1）：原先复用 PURCHASE_IN，只能靠符号判断正反
                     StockChangeType.PURCHASE_UN_AUDIT, order.getCode(), RelatedBillType.PURCHASE_ORDER,
-                    product != null ? product.getSpec() : "",
+                    "",
                     order.getId(), it.getQualityType());
         }
 

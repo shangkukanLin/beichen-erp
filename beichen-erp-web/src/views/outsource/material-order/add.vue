@@ -18,7 +18,7 @@ const form = reactive({ orderType: OrderType.PURCHASE as string, supplierId: und
 const items = ref<any[]>([])
 const supplierOptions = ref<any[]>([])
 const materialOptions = ref<any[]>([])
-const bomTypes = ref<any[]>([])
+const materialTypes = ref<any[]>([])
 const itemTypes = ref<Record<number, string>>({})
 
 // Odoo 风格：下拉框实时查库
@@ -32,25 +32,25 @@ async function loadSuppliers() {
 async function loadOptions() {
   await loadSuppliers()
   const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); materialOptions.value = r?.records || []
-  try { const r = await request.get<any, any>('/dev/bom-type/enabled'); bomTypes.value = r || [] } catch { }
+  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch { }
 }
 
 function onOrderTypeChange() {
   form.supplierId = undefined
 }
 
-// 根据选择的类型(bomTypeId)筛选物料
+// 根据选择的类型(materialTypeId)筛选物料
 function filteredMaterials(type: number) {
   if (!type) return materialOptions.value
-  return materialOptions.value.filter((m: any) => m.bomTypeId === type)
+  return materialOptions.value.filter((m: any) => m.materialTypeId === type)
 }
 function typeName(id: number | undefined) {
   if (id == null) return '-'
-  const t = bomTypes.value.find((v: any) => v.id === id)
+  const t = materialTypes.value.find((v: any) => v.id === id)
   return t ? t.typeName : (id as any)
 }
 
-function addItem() { items.value.push({ bomTypeId: undefined, materialId: undefined, materialName: '', unit: '', orderQuantity: 1, unitPrice: 0, remark: '' }) }
+function addItem() { items.value.push({ materialTypeId: undefined, materialId: undefined, materialName: '', unit: '', orderQuantity: 1, unitPrice: 0, remark: '' }) }
 function removeItem(i: number) { items.value.splice(i, 1) }
 function onTypeChange(idx: number) {
   items.value[idx].materialId = undefined
@@ -59,7 +59,7 @@ function onTypeChange(idx: number) {
 }
 function onMatChange(idx: number, mid: number) {
   const m = materialOptions.value.find((v: any) => v.id === mid)
-  if (m) { items.value[idx].materialName = m.materialName; items.value[idx].bomTypeId = m.bomTypeId; items.value[idx].unit = m.unit }
+  if (m) { items.value[idx].materialName = m.materialName; items.value[idx].materialTypeId = m.materialTypeId; items.value[idx].unit = m.unit }
 }
 
 function handleCancel() {
@@ -106,20 +106,20 @@ async function initFromQuery() {
     }
   }
   if (q.materialName) {
-    let matTypeId = q.bomTypeId ? Number(q.bomTypeId) : undefined
+    let matTypeId = q.materialTypeId ? Number(q.materialTypeId) : undefined
     let matId = q.materialId ? Number(q.materialId) : undefined
     // 如果 materialId 存在，用物料实际类型（确保 filteredMaterials 能匹配到）
     if (matId) {
       const exists = materialOptions.value.find((m: any) => m.id === matId)
-      if (exists) matTypeId = exists.bomTypeId ?? matTypeId
+      if (exists) matTypeId = exists.materialTypeId ?? matTypeId
     } else {
       // materialId 未传时，按名称从已加载物料中查找
       const found = materialOptions.value.find((m: any) => m.materialName === q.materialName)
-      if (found) { matId = found.id; matTypeId = found.bomTypeId ?? matTypeId }
+      if (found) { matId = found.id; matTypeId = found.materialTypeId ?? matTypeId }
     }
     console.log('[initFromQuery] material item:', { matTypeId, matId, materialName: q.materialName })
     items.value = [{
-      bomTypeId: matTypeId,
+      materialTypeId: matTypeId,
       materialId: matId,
       materialName: q.materialName as string,
       unit: (q.unit as string) || '',
@@ -148,7 +148,7 @@ onMounted(async () => {
       if (r) {
         Object.assign(form, { orderType: r.orderType || OrderType.PURCHASE, supplierId: r.supplierId, targetWarehouseId: r.targetWarehouseId, deliveryDate: r.deliveryDate, remark: r.remark })
         await loadSuppliers()
-        items.value = (r.items || []).map((it: any) => ({ bomTypeId: it.bomTypeId, materialId: it.materialId, materialName: it.materialName, unit: it.unit, orderQuantity: it.orderQuantity, unitPrice: it.unitPrice, remark: it.remark }))
+        items.value = (r.items || []).map((it: any) => ({ materialTypeId: it.materialTypeId, materialId: it.materialId, materialName: it.materialName, unit: it.unit, orderQuantity: it.orderQuantity, unitPrice: it.unitPrice, remark: it.remark }))
       }
     } catch { ElMessage.error('加载订单失败') }
   } else {
@@ -172,7 +172,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
               <el-radio :value="OrderType.OUTSOURCE">委外</el-radio>
             </el-radio-group>
           </el-form-item></el-col>
-          <el-col :span="8"><el-form-item :label="form.orderType===OrderType.OUTSOURCE?'加工厂':'供应商'">
+          <el-col :span="8"><el-form-item required :label="form.orderType===OrderType.OUTSOURCE?'加工厂':'供应商'">
             <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" clearable style="width:100%" placeholder="选择供应商">
               <el-option label="+ 新增" :value="ADD_MARKER" @click="router.push('/supplier/manage')" />
             </RemoteSelect>
@@ -189,16 +189,16 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <el-table :data="items" border size="small">
         <el-table-column label="类型" width="90">
           <template #default="{row,$index}">
-            <el-select v-model="row.bomTypeId" size="small" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.bomTypeId = undefined; router.push('/dev/bom-type'); return } onTypeChange($index) }">
-              <el-option v-for="t in bomTypes" :key="t.id" :label="t.typeName" :value="t.id" />
+            <el-select v-model="row.materialTypeId" size="small" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.materialTypeId = undefined; router.push('/dev/material-type'); return } onTypeChange($index) }">
+              <el-option v-for="t in materialTypes" :key="t.id" :label="t.typeName" :value="t.id" />
               <el-option label="+ 新增" :value="ADD_MARKER" />
             </el-select>
           </template>
         </el-table-column>
         <el-table-column label="物料名称" min-width="180">
           <template #default="{row,$index}">
-            <el-select v-model="row.materialId" filterable size="small" style="width:100%" :disabled="!row.bomTypeId" @change="(v: any) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/product/add'); return } onMatChange($index, v) }">
-              <el-option v-for="m in filteredMaterials(row.bomTypeId)" :key="m.id" :label="m.materialName" :value="m.id" />
+            <el-select v-model="row.materialId" filterable size="small" style="width:100%" :disabled="!row.materialTypeId" @change="(v: any) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/product/add'); return } onMatChange($index, v) }">
+              <el-option v-for="m in filteredMaterials(row.materialTypeId)" :key="m.id" :label="m.materialName" :value="m.id" />
               <el-option label="+ 新增" :value="ADD_MARKER" />
             </el-select>
           </template>

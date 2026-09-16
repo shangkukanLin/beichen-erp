@@ -3,8 +3,8 @@ package com.beichen.erp.supplier.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.R;
-import com.beichen.erp.dev.entity.BomType;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.dev.entity.MaterialType;
+import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.common.SettlementStatus;
@@ -72,7 +72,7 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
     @Resource
     private WarehouseStockService warehouseStockService;
     @Resource
-    private BomTypeMapper bomTypeMapper;
+    private MaterialTypeMapper materialTypeMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -114,7 +114,7 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
                 .orderByDesc(MaterialOrder::getId));
         result.put("activeMaterialOrders", materialOrders);
 
-        // 3. 委外仓库存（批量预取物料与BOM类型，避免 N+1）
+        // 3. 委外仓库存（批量预取物料与物料类型，避免 N+1）
         List<Warehouse> warehouses = warehouseMapper.selectList(
                 new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, supplierId));
         Set<Long> matIds = new HashSet<>();
@@ -132,11 +132,11 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
         Map<Long, OutsourceMaterial> matMap = matIds.isEmpty() ? Collections.emptyMap()
                 : materialMapper.selectBatchIds(new ArrayList<>(matIds)).stream()
                 .collect(Collectors.toMap(OutsourceMaterial::getId, m -> m, (a, b) -> a));
-        Set<Long> bomIds = matMap.values().stream().map(OutsourceMaterial::getBomTypeId)
+        Set<Long> bomIds = matMap.values().stream().map(OutsourceMaterial::getMaterialTypeId)
                 .filter(Objects::nonNull).collect(Collectors.toSet());
         Map<Long, String> bomNameMap = bomIds.isEmpty() ? Collections.emptyMap()
-                : bomTypeMapper.selectBatchIds(new ArrayList<>(bomIds)).stream()
-                .collect(Collectors.toMap(BomType::getId, BomType::getTypeName, (a, b) -> a));
+                : materialTypeMapper.selectBatchIds(new ArrayList<>(bomIds)).stream()
+                .collect(Collectors.toMap(MaterialType::getId, MaterialType::getTypeName, (a, b) -> a));
 
         List<Map<String, Object>> stocks = new ArrayList<>();
         for (Warehouse wh : warehouses) {
@@ -148,8 +148,8 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
                 m.put("materialId", st.getMaterialId());
                 OutsourceMaterial mat = st.getMaterialId() != null ? matMap.get(st.getMaterialId()) : null;
                 m.put("materialName", mat != null ? mat.getMaterialName() : "未知物料");
-                m.put("bomTypeName", mat != null && mat.getBomTypeId() != null
-                        ? bomNameMap.getOrDefault(mat.getBomTypeId(), "-") : "-");
+                m.put("materialTypeName", mat != null && mat.getMaterialTypeId() != null
+                        ? bomNameMap.getOrDefault(mat.getMaterialTypeId(), "-") : "-");
                 m.put("unit", mat != null ? mat.getUnit() : "");
                 m.put("qualityType", st.getQualityType());
                 m.put("quantity", st.getQuantity());
@@ -217,7 +217,7 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
                 OutsourceDeliveryItem di = new OutsourceDeliveryItem();
                 di.setDeliveryId(delivery.getId());
                 di.setMaterialId(st.getMaterialId());
-                di.setBomTypeId(mat != null ? mat.getBomTypeId() : null);
+                di.setMaterialTypeId(mat != null ? mat.getMaterialTypeId() : null);
                 di.setUnit(mat != null ? mat.getUnit() : null);
                 di.setQuantity(qty);
                 di.setQualityType(st.getQualityType());

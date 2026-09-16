@@ -42,9 +42,6 @@
                 @pick="(rows:any[]) => onProductPick(rows[0], row)" />
             </template>
           </el-table-column>
-          <el-table-column label="规格" width="100">
-            <template #default="{ row }">{{ row._spec || '' }}</template>
-          </el-table-column>
           <el-table-column label="单位" width="70">
             <template #default="{ row }">{{ row._unit || '' }}</template>
           </el-table-column>
@@ -92,7 +89,6 @@ interface MoveItem {
   productId?: number
   sku?: string
   qualityType?: string
-  _spec?: string
   _unit?: string
   _stock?: number
   quantity?: number
@@ -142,7 +138,6 @@ function onProductPick(p: any, row: MoveItem) {
   if (!p) return
   row.productId = p.id
   row.sku = p.sku || ''
-  row._spec = p.spec
   row._unit = p.unit
   // 查询该产品在移出仓库的现有库存
   if (p.id && form.fromWarehouseId) {
@@ -187,7 +182,6 @@ async function loadMoveData() {
     items.value = (its || []).map((it: any) => ({
       productId: it.productId,
       qualityType: it.qualityType,
-      _spec: it.spec,
       _unit: it.unit,
       quantity: it.quantity,
       remark: it.remark,

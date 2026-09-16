@@ -1,5 +1,6 @@
 package com.beichen.erp.inventory.service.impl;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -10,6 +11,7 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
+import com.beichen.erp.inventory.common.StockTakeScope;
 import com.beichen.erp.inventory.entity.InventoryStockTake;
 import com.beichen.erp.inventory.entity.InventoryStockTakeItem;
 import com.beichen.erp.inventory.mapper.InventoryStockTakeItemMapper;
@@ -19,6 +21,7 @@ import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
+import com.beichen.erp.system.common.SystemConstants;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
@@ -66,9 +69,17 @@ public class StockTakeServiceImpl implements StockTakeService {
     private final CostService costService;
 
     @Override
-    public Page<Map<String, Object>> page(Long warehouseId, String period, String status, int pageNum, int pageSize) {
+    public Page<Map<String, Object>> page(Long warehouseId, String period, String status, String scope, int pageNum, int pageSize) {
+        // 2026-09-16：按盘点范围过滤 —— 成品盘点页只看成品类仓库的单据，物料盘点页只看物料类
+        StockTakeScope sc = StockTakeScope.of(scope);
+        assertRoleForScope(sc); // 物料盘点查询同样限跟单专员（防止绕过页面直连接口看物料盘点数据）
+        List<Long> scopeIds = sc == null ? null : scopeWarehouseIds(sc);
+        if (scopeIds != null && scopeIds.isEmpty()) {
+            return new Page<>(pageNum, pageSize, 0); // 该范围内无启用仓库 → 直接空结果（避免 IN () 语法错误）
+        }
         LambdaQueryWrapper<InventoryStockTake> w = new LambdaQueryWrapper<InventoryStockTake>()
                 .eq(warehouseId != null, InventoryStockTake::getWarehouseId, warehouseId)
+                .in(scopeIds != null, InventoryStockTake::getWarehouseId, scopeIds != null ? scopeIds : List.of(-1L))
                 .eq(period != null && !period.isBlank(), InventoryStockTake::getPeriod, period)
                 .eq(status != null && !status.isBlank(), InventoryStockTake::getStatus, status)
                 .orderByDesc(InventoryStockTake::getId);
@@ -108,21 +119,33 @@ public class StockTakeServiceImpl implements StockTakeService {
 
     @Override
     public InventoryStockTake getById(Long id) {
-        return takeMapper.selectById(id);
+        InventoryStockTake t = takeMapper.selectById(id);
+        assertRoleForTake(t);
+        return t;
     }
 
     @Override
     public List<InventoryStockTakeItem> getItems(Long takeId) {
+        assertRoleForTake(takeMapper.selectById(takeId));
         return itemMapper.selectList(
                 new LambdaQueryWrapper<InventoryStockTakeItem>().eq(InventoryStockTakeItem::getTakeId, takeId));
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public InventoryStockTake create(Long warehouseId, String period, LocalDate takeDate, String remark) {
+    public InventoryStockTake create(Long warehouseId, String period, LocalDate takeDate, String remark, String scope) {
         if (warehouseId == null) throw new BusinessException("请选择盘点仓库");
         Warehouse wh = warehouseMapper.selectById(warehouseId);
         if (wh == null) throw new BusinessException("仓库不存在");
+        // 服务端范围校验：前端传了 scope 就必须匹配（防止绕过前端把成品仓建成"物料盘点"或反之）
+        StockTakeScope want = StockTakeScope.of(scope);
+        if (want != null && !want.test(wh)) {
+            throw new BusinessException(want == StockTakeScope.MATERIAL
+                    ? "该仓库不属于物料盘点范围（仅委外仓 / 自有物料仓）"
+                    : "该仓库不属于成品盘点范围（成品仓 / 不良仓 / 售后仓）");
+        }
+        // 物料仓的盘点单：接口级限跟单专员（按仓库实际归属判定，不依赖前端是否传 scope）
+        assertRoleForScope(scopeOf(wh));
         String ym = (period == null || period.isBlank()) ? LocalDate.now().format(YM) : period;
         // 同一仓库同一月份只保留一条有效单据（草稿/已审核）
         Long exist = takeMapper.selectCount(new LambdaQueryWrapper<InventoryStockTake>()
@@ -160,14 +183,12 @@ public class StockTakeServiceImpl implements StockTakeService {
                 if (p != null) {
                     it.setProductName(p.getName());
                     it.setSku(p.getSku());
-                    it.setSpec(p.getSpec());
                     it.setUnit(p.getUnit());
                 }
             } else if (s.getMaterialId() != null) {
                 OutsourceMaterial m = materialMapper.selectById(s.getMaterialId());
                 if (m != null) {
                     it.setMaterialName(m.getMaterialName());
-                    it.setSpec(m.getSpec());
                     it.setUnit(m.getUnit());
                 }
             }
@@ -183,6 +204,7 @@ public class StockTakeServiceImpl implements StockTakeService {
     public void saveItems(Long takeId, List<InventoryStockTakeItem> items) {
         InventoryStockTake t = takeMapper.selectById(takeId);
         if (t == null) throw new BusinessException("盘点单不存在");
+        assertRoleForTake(t);
         if (!DocStatus.DRAFT.getCode().equals(t.getStatus())) throw new BusinessException("只有草稿状态可保存实盘数量");
         if (items == null) return;
         for (InventoryStockTakeItem in : items) {
@@ -202,6 +224,7 @@ public class StockTakeServiceImpl implements StockTakeService {
     public void audit(Long id) {
         InventoryStockTake t = takeMapper.selectById(id);
         if (t == null) throw new BusinessException("盘点单不存在");
+        assertRoleForTake(t);
         // P2-29：原子抢占 DRAFT→AUDITED，避免并发/双击重复按差异调整库存
         if (!DocStatusGuard.claim(takeMapper, InventoryStockTake::getId, id,
                 InventoryStockTake::getStatus, DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode())) {
@@ -220,6 +243,7 @@ public class StockTakeServiceImpl implements StockTakeService {
     public void unAudit(Long id) {
         InventoryStockTake t = takeMapper.selectById(id);
         if (t == null) throw new BusinessException("盘点单不存在");
+        assertRoleForTake(t);
         // P2-29：原子抢占 AUDITED→DRAFT，避免并发反审核重复冲回盘点差异
         if (!DocStatusGuard.claim(takeMapper, InventoryStockTake::getId, id,
                 InventoryStockTake::getStatus, DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode())) {
@@ -241,6 +265,7 @@ public class StockTakeServiceImpl implements StockTakeService {
     public void cancel(Long id) {
         InventoryStockTake t = takeMapper.selectById(id);
         if (t == null) throw new BusinessException("盘点单不存在");
+        assertRoleForTake(t);
         if (!DocStatus.DRAFT.getCode().equals(t.getStatus())) throw new BusinessException("只有草稿状态可作废");
         InventoryStockTake u = new InventoryStockTake();
         u.setId(id);
@@ -249,15 +274,18 @@ public class StockTakeServiceImpl implements StockTakeService {
     }
 
     @Override
-    public List<Map<String, Object>> takeStatus() {
+    public List<Map<String, Object>> takeStatus(String scope) {
         LocalDate today = LocalDate.now();
         String curYm = today.format(YM);
         LocalDate due = today.withDayOfMonth(today.lengthOfMonth()); // 应盘日 = 当月最后一天
         boolean remind = today.getDayOfMonth() >= REMIND_DAY;
 
+        StockTakeScope sc = StockTakeScope.of(scope);
+        assertRoleForScope(sc); // 物料盘点看板同样限跟单专员
         List<Warehouse> whs = warehouseMapper.selectList(new LambdaQueryWrapper<Warehouse>()
                 .eq(Warehouse::getStatus, 1)
                 .orderByAsc(Warehouse::getId));
+        if (sc != null) whs = whs.stream().filter(sc::test).toList(); // 2026-09-16：成品/物料盘点看板分开
         // 本月已审核的盘点单（仓库 -> 审核日期）
         Map<Long, InventoryStockTake> done = new LinkedHashMap<>();
         for (InventoryStockTake t : takeMapper.selectList(new LambdaQueryWrapper<InventoryStockTake>()
@@ -293,6 +321,50 @@ public class StockTakeServiceImpl implements StockTakeService {
             rows.add(m);
         }
         return rows;
+    }
+
+    // ==================== 盘点范围（2026-09-16：成品 / 物料 分开） ====================
+
+    /** 物料盘点接口级角色：跟单专员 */
+    private static final String MATERIAL_TAKE_ROLE = "merchandiser";
+
+    /** 取该范围内的启用仓库 id（用于盘点列表/看板过滤） */
+    private List<Long> scopeWarehouseIds(StockTakeScope scope) {
+        return warehouseMapper.selectList(new LambdaQueryWrapper<Warehouse>()
+                        .eq(Warehouse::getStatus, 1))
+                .stream().filter(scope::test).map(Warehouse::getId).toList();
+    }
+
+    /** 由仓库实际归属判定盘点范围（category 为空的异常数据返回 null，不参与任何范围） */
+    private StockTakeScope scopeOf(Warehouse w) {
+        if (w == null) return null;
+        if (StockTakeScope.PRODUCT.test(w)) return StockTakeScope.PRODUCT;
+        if (StockTakeScope.MATERIAL.test(w)) return StockTakeScope.MATERIAL;
+        return null;
+    }
+
+    /** 按盘点单所属仓库校验接口级权限 */
+    private void assertRoleForTake(InventoryStockTake t) {
+        if (t == null) return;
+        assertRoleForScope(scopeOf(warehouseMapper.selectById(t.getWarehouseId())));
+    }
+
+    /**
+     * 物料盘点接口级权限（2026-09-16 用户要求）：**仅跟单专员**可操作物料仓的盘点单
+     * （建单/录实盘/审核/反审核/作废/看明细）。
+     * <p>管理员（admin / super_admin）按项目惯例保留兜底 —— 避免管理员界面可见但接口 403。</p>
+     */
+    private void assertRoleForScope(StockTakeScope scope) {
+        if (scope != StockTakeScope.MATERIAL) return;
+        boolean allowed;
+        try {
+            allowed = StpUtil.hasRole(MATERIAL_TAKE_ROLE)
+                    || StpUtil.hasRole(SystemConstants.ADMIN_ROLE_CODE)
+                    || StpUtil.hasRole(SystemConstants.SUPER_ADMIN_ROLE_CODE);
+        } catch (Exception e) {
+            allowed = false; // 无登录上下文（定时任务/内部调用）→ 从严拒绝
+        }
+        if (!allowed) throw new BusinessException(403, "物料库存盘点仅限跟单专员操作");
     }
 
     // ==================== 内部实现 ====================

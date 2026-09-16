@@ -20,7 +20,7 @@ public class CustomerAnalysisController {
 
     private final CustomerAnalysisService service;
 
-    /** 客户分析总览：KPI + TOP10 + 客户明细表 */
+    /** 客户分析总览：KPI + 客户明细表（2026-09-15 起**不再返回 TOP10 字段**） */
     @GetMapping
     public R<Map<String, Object>> customer(@RequestParam(defaultValue = "month") String preset,
                                            @RequestParam(required = false) String start,

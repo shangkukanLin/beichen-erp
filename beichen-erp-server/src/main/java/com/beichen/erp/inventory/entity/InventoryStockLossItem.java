@@ -27,8 +27,6 @@ public class InventoryStockLossItem {
     /** 品质等级（ProductQualityType：A/B/C/DEFECT/PENDING） */
     private String qualityType;
 
-    private String spec;
-
     private String unit;
 
     private BigDecimal quantity;

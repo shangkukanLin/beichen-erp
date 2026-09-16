@@ -7,8 +7,8 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.outsource.common.DeliveryType;
 import com.beichen.erp.outsource.common.MaterialOrderStatus;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
-import com.beichen.erp.dev.entity.BomType;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.dev.entity.MaterialType;
+import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.supplier.service.SupplierMaterialSummaryService;
@@ -40,7 +40,7 @@ public class SupplierMaterialSummaryServiceImpl implements SupplierMaterialSumma
     private OutsourceMaterialMapper outsourceMaterialMapper;
 
     @Resource
-    private BomTypeMapper bomTypeMapper;
+    private MaterialTypeMapper materialTypeMapper;
 
     @Override
     public Map<String, Object> materialSummary(Long factoryId) {
@@ -128,7 +128,7 @@ public class SupplierMaterialSummaryServiceImpl implements SupplierMaterialSumma
             orderMap.computeIfAbsent(mid, k -> new ArrayList<>()).add(row);
         }
 
-        // 4. 批量预取物料名称与 BOM 类型名称（避免 N+1）
+        // 4. 批量预取物料名称与 物料类型名称（避免 N+1）
         Set<Long> allIds = new java.util.HashSet<>();
         allIds.addAll(demandMap.keySet());
         allIds.addAll(deliveredMap.keySet());
@@ -144,15 +144,15 @@ public class SupplierMaterialSummaryServiceImpl implements SupplierMaterialSumma
             for (Long id : ids) {
                 OutsourceMaterial m = matEntities.get(id);
                 materialNameMap.put(id, m != null ? m.getMaterialName() : "未知物料");
-                materialBomMap.put(id, m != null ? m.getBomTypeId() : null);
+                materialBomMap.put(id, m != null ? m.getMaterialTypeId() : null);
             }
         }
-        // BOM 类型名批量查
+        // 物料类型名批量查
         Set<Long> bomIds = materialBomMap.values().stream().filter(java.util.Objects::nonNull).collect(Collectors.toSet());
         Map<Long, String> bomNameMap = new LinkedHashMap<>();
         if (!bomIds.isEmpty()) {
-            List<BomType> boms = bomTypeMapper.selectBatchIds(new ArrayList<>(bomIds));
-            for (BomType b : boms) {
+            List<MaterialType> boms = materialTypeMapper.selectBatchIds(new ArrayList<>(bomIds));
+            for (MaterialType b : boms) {
                 bomNameMap.put(b.getId(), b.getTypeName());
             }
         }
@@ -176,9 +176,9 @@ public class SupplierMaterialSummaryServiceImpl implements SupplierMaterialSumma
             Map<String, Object> mat = new LinkedHashMap<>();
             mat.put("materialId", mid);
             mat.put("materialName", materialNameMap.getOrDefault(mid, "未知物料"));
-            Long bomTypeId = materialBomMap.get(mid);
-            mat.put("bomTypeId", bomTypeId);
-            mat.put("bomTypeName", bomTypeId != null ? bomNameMap.getOrDefault(bomTypeId, "-") : "-");
+            Long materialTypeId = materialBomMap.get(mid);
+            mat.put("materialTypeId", materialTypeId);
+            mat.put("materialTypeName", materialTypeId != null ? bomNameMap.getOrDefault(materialTypeId, "-") : "-");
             mat.put("totalDemand", totalDemand);
             mat.put("totalDelivered", totalDelivered);
             mat.put("warehouseStock", stock);

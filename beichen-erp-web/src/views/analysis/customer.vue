@@ -1,20 +1,19 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onActivated, nextTick } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
-import * as echarts from 'echarts'
 import request from '@/utils/request'
 import StatRange from '@/components/StatRange.vue'
 
 /**
- * 客户分析（经营分析）：客户销售额排行 + 客户明细（含退货、应收余额、账期）。
+ * 客户分析（经营分析）：KPI + 客户明细（含退货、应收余额、账期）。
  * 行点「明细」下钻到该客户在区间的销售单（/analysis/customer/detail）。
+ * 2026-09-15 用户要求：删除「客户销售额 TOP10」条形图卡片（前端图表 + 后端 `top` 字段一并清理）。
  */
 const router = useRouter()
 const preset = ref('month')
 const range = ref<[string, string] | null>(null)
 const loading = ref(false)
-const data = ref<any>({ start: '', end: '', summary: {}, top: [], rows: [] })
-let rankChart: echarts.ECharts | null = null
+const data = ref<any>({ start: '', end: '', summary: {}, rows: [] })
 
 function fmt(v?: any) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function fmtN(v?: any) {
@@ -36,31 +35,10 @@ async function loadData() {
     if (preset.value === 'custom' && range.value?.length === 2) {
       params.start = range.value[0]; params.end = range.value[1]
     }
-    data.value = await request.get<any, any>('/customer/analysis', { params }) || { start: '', end: '', summary: {}, top: [], rows: [] }
-  } catch { data.value = { start: '', end: '', summary: {}, top: [], rows: [] } } finally { loading.value = false }
-  await nextTick()
-  renderChart()
+    data.value = await request.get<any, any>('/customer/analysis', { params }) || { start: '', end: '', summary: {}, rows: [] }
+  } catch { data.value = { start: '', end: '', summary: {}, rows: [] } } finally { loading.value = false }
 }
 // 预设切换/日期变更的"清空 + 触发"逻辑已收口到 StatRange 组件，页面只需 loadData
-
-function renderChart() {
-  const el = document.getElementById('customerRankChart')
-  if (!el) return
-  rankChart = rankChart || echarts.init(el)
-  const top = (data.value.top || []).slice().reverse()   // 横向条形图：数值大的放上方
-  rankChart.setOption({
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: 120, right: 60, top: 16, bottom: 30 },
-    xAxis: { type: 'value', max: top.length ? undefined : 100 },
-    yAxis: { type: 'category', data: top.map((r: any) => r.customerName) },
-    series: [{
-      name: '销售额', type: 'bar', barMaxWidth: 18, itemStyle: { color: '#5470c6' },
-      label: { show: true, position: 'right', fontSize: 11, formatter: (p: any) => fmtN(p.value) },
-      data: top.map((r: any) => Number(r.amount)),
-    }],
-  })
-  rankChart.resize()
-}
 
 function drill(row: any) {
   const query: any = { preset: preset.value, customerId: row.customerId, customerName: row.customerName }
@@ -105,12 +83,8 @@ onActivated(() => { loadData() })
       </div>
     </div>
     <div class="dim-tip">利润口径：净销售额 − 销售成本（成本按产品移动加权平均成本价 × 数量估算，退货退回的成本已冲回）。采购成本无法按客户归集、运营费用无法按客户分摊，故此处为毛利口径。</div>
+    <!-- 客户明细（2026-09-15：原「客户销售额 TOP10」条形图卡片已按用户要求删除） -->
     <el-card shadow="never">
-      <template #header>客户销售额 TOP10</template>
-      <div id="customerRankChart" class="chart"/>
-    </el-card>
-    <!-- 客户明细 -->
-    <el-card shadow="never" style="margin-top:12px">
       <template #header>客户明细（点「明细」看该客户的销售单）</template>
       <!--
         全部列用 min-width（不用固定 width）：Element Plus 按 min-width 比例分摊剩余空间，
@@ -161,5 +135,4 @@ onActivated(() => { loadData() })
 .stat-card{background:var(--el-fill-color-light);border-radius:8px;padding:16px}
 .stat-label{font-size:12px;color:var(--el-text-color-secondary);margin-top:4px}
 .stat-value.sm{font-size:16px;font-weight:600}
-.chart{width:100%;height:320px}
 </style>

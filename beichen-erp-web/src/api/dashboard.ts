@@ -8,6 +8,8 @@ export interface DashboardPending {
     expense?: number; stockTake?: number
   }
   stockTake?: { pending?: number; overdue?: number; period?: string }
+  /** 物料仓盘点待办（2026-09-16 新增，与 stockTake 分开口径）：委外仓 + 自有物料仓 */
+  materialTake?: { pending?: number; overdue?: number; period?: string }
   returnSort?: { overdue?: number }
   overdueReceivable?: number
 }

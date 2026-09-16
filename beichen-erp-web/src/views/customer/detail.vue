@@ -32,8 +32,6 @@ const defaultForm = (): Customer => ({
 })
 
 const form = reactive<Customer>(defaultForm())
-/** 应收余额为系统维护字段，仅展示不可编辑 */
-const receivableBalance = ref<number | undefined>(undefined)
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入客户名称', trigger: 'blur' }],
@@ -69,7 +67,6 @@ async function init() {
   loadedKey.value = key
 
   Object.assign(form, defaultForm())
-  receivableBalance.value = undefined
   orders.value = []
   pagination.total = 0
   pagination.pageNum = 1
@@ -80,7 +77,6 @@ async function init() {
   try {
     const c = await getCustomer(id.value)
     Object.assign(form, defaultForm(), c || {})
-    receivableBalance.value = c?.receivableBalance
     await loadOrders()
   } finally { loading.value = false }
 }
@@ -185,11 +181,9 @@ watch(() => route.fullPath, () => { init() })
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col v-if="!isNew" :span="12">
-            <el-form-item label="应收余额">
-              <span style="color:var(--app-color-danger)">{{ fmt(receivableBalance) }}</span>
-            </el-form-item>
-          </el-col>
+          <!-- 2026-09-15 用户要求：删除「应收余额」（列表列与详情项一并下线）——
+               该值原先只由列表接口 page() 回填、详情接口 getById 并不回填，故详情页恒显示 0.00 -->
+
           <el-col :span="24">
             <el-form-item label="地址">
               <el-input v-model="form.address" placeholder="地址" />

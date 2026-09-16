@@ -25,16 +25,15 @@ const fetchWarehouses = (kw: string) =>
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 50, keyword: kw } })
 
 function addItem() {
-  items.value.push({ productId: undefined, productName: '', sku: '', spec: '', unit: '', fromQuality: 'A', toQuality: 'B', quantity: undefined, stockQty: undefined })
+  items.value.push({ productId: undefined, productName: '', sku: '', unit: '', fromQuality: 'A', toQuality: 'B', quantity: undefined, stockQty: undefined })
 }
 function removeItem(i: number) { items.value.splice(i, 1) }
 
 function onProductPick(p: any, row: any) {
-  if (!p) { row.productId = undefined; row.productName = ''; row.sku = ''; row.spec = ''; row.unit = ''; return }
+  if (!p) { row.productId = undefined; row.productName = ''; row.sku = ''; row.unit = ''; return }
   row.productId = p.id
   row.productName = p.name || p.productName || ''
   row.sku = p.sku || ''
-  row.spec = p.spec || ''
   row.unit = p.unit || ''
   loadStock(row)
 }
@@ -151,9 +150,6 @@ onActivated(() => { resetPage() })
           <template #default="{ row }">
             <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="搜索产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" />
           </template>
-        </el-table-column>
-        <el-table-column prop="spec" label="规格" width="110" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.spec || '-' }}</template>
         </el-table-column>
         <el-table-column label="原品质" width="110">
           <template #default="{ row }">

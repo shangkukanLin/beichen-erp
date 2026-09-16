@@ -117,25 +117,6 @@ public class MaterialOrderController {
         return R.ok(materialOrderService.deliveries(id));
     }
 
-    /**
-     * 物料交货信息列表（跨订单、交货明细行粒度，分页）
-     * 数据源：物料订单产生的收发单（delivery_type IN (收料, 退不良) 且 source_order_id 非空）的明细行。
-     */
-    @GetMapping("/delivery-items/page")
-    public R<Page<Map<String, Object>>> deliveryItemsPage(
-            @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "10") int pageSize,
-            @RequestParam(required = false) String deliveryCode,
-            @RequestParam(required = false) String orderCode,
-            @RequestParam(required = false) String materialName,
-            @RequestParam(required = false) String deliveryType,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String startDate,
-            @RequestParam(required = false) String endDate) {
-        return R.ok(materialOrderService.deliveryItemsPage(pageNum, pageSize, deliveryCode, orderCode,
-                materialName, deliveryType, status, startDate, endDate));
-    }
-
     @DeleteMapping("/{id}/attach")
     public R<Void> deleteAttach(@PathVariable Long id) {
         materialOrderService.deleteAttach(id);

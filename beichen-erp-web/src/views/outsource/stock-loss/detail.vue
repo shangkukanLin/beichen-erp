@@ -37,8 +37,8 @@
       </template>
       <el-table v-loading="tableLoading" :data="items" border stripe show-summary :summary-method="summaries">
         <el-table-column prop="materialName" label="物料名称" min-width="160" />
-        <el-table-column prop="bomTypeName" label="BOM类型" width="120">
-          <template #default="{ row }">{{ row.bomTypeName || '—' }}</template>
+        <el-table-column prop="materialTypeName" label="物料类型" width="120">
+          <template #default="{ row }">{{ row.materialTypeName || '—' }}</template>
         </el-table-column>
         <el-table-column prop="spec" label="规格" width="130" />
         <el-table-column label="单位" width="70" align="center">
@@ -87,7 +87,7 @@ const items = ref<any[]>([])
 function fmtQty(v?: number) { return v == null ? '0' : parseFloat(Number(v).toFixed(4)).toString() }
 function money(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 
-/** 合计行（列序固定：0物料 1BOM类型 2规格 3单位 4数量 5单价 6金额 7备注） */
+/** 合计行（列序固定：0物料 1物料类型 2规格 3单位 4数量 5单价 6金额 7备注） */
 function summaries({ columns }: any) {
   const sumQty = items.value.reduce((s, r) => s + (Number(r.quantity) || 0), 0)
   const sumAmt = items.value.reduce((s, r) => s + (Number(r.amount) || 0), 0)

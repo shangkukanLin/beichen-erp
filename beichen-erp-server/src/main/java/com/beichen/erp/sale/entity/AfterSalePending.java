@@ -58,9 +58,6 @@ public class AfterSalePending {
     /** 产品名称（冗余） */
     private String productName;
 
-    /** 规格（冗余） */
-    private String spec;
-
     /** 单位（冗余） */
     private String unit;
 

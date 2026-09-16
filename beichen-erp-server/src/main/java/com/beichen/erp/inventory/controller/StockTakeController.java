@@ -28,15 +28,16 @@ public class StockTakeController {
     public R<Page<Map<String, Object>>> page(@RequestParam(required = false) Long warehouseId,
                                              @RequestParam(required = false) String period,
                                              @RequestParam(required = false) String status,
+                                             @RequestParam(required = false) String scope,
                                              @RequestParam(defaultValue = "1") int pageNum,
                                              @RequestParam(defaultValue = "10") int pageSize) {
-        return R.ok(service.page(warehouseId, period, status, pageNum, pageSize));
+        return R.ok(service.page(warehouseId, period, status, scope, pageNum, pageSize));
     }
 
-    /** 盘点看板：各仓库当月盘点状态与超期天数 */
+    /** 盘点看板：各仓库当月盘点状态与超期天数（scope 过滤成品/物料范围） */
     @GetMapping("/status")
-    public R<List<Map<String, Object>>> status() {
-        return R.ok(service.takeStatus());
+    public R<List<Map<String, Object>>> status(@RequestParam(required = false) String scope) {
+        return R.ok(service.takeStatus(scope));
     }
 
     @GetMapping("/{id}")
@@ -49,7 +50,7 @@ public class StockTakeController {
         return R.ok(service.getItems(id));
     }
 
-    /** 新建盘点单（按仓库+月份自动带出账面库存明细） */
+    /** 新建盘点单（按仓库+月份自动带出账面库存明细；scope=MATERIAL 时仅跟单专员可建） */
     @PostMapping
     public R<InventoryStockTake> create(@RequestBody Map<String, Object> body) {
         Long warehouseId = body.get("warehouseId") == null ? null : Long.valueOf(body.get("warehouseId").toString());
@@ -57,7 +58,8 @@ public class StockTakeController {
         LocalDate takeDate = null;
         if (body.get("takeDate") != null) takeDate = LocalDate.parse(body.get("takeDate").toString());
         String remark = body.get("remark") == null ? null : String.valueOf(body.get("remark"));
-        return R.ok(service.create(warehouseId, period, takeDate, remark));
+        String scope = body.get("scope") == null ? null : String.valueOf(body.get("scope"));
+        return R.ok(service.create(warehouseId, period, takeDate, remark, scope));
     }
 
     /** 保存实盘数量（仅草稿） */

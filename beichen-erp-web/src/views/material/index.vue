@@ -194,18 +194,9 @@ onMounted(() => {
         <el-table-column label="品牌" min-width="120">
           <template #default="{ row }">{{ getBrandName(row.brandId) }}</template>
         </el-table-column>
-        <el-table-column prop="spec" label="规格" width="120" />
         <el-table-column prop="generalModel" label="通用型号" width="120" />
         <el-table-column prop="safetyStock" label="安全库存" width="100" align="right" />
-        <el-table-column label="成本价" width="110" align="right">
-          <template #default="{ row }">
-            <span>{{ row.costPrice != null ? Number(row.costPrice).toFixed(2) : '—' }}</span>
-            <el-tag v-if="row.costManual === 1" size="small" type="info" style="margin-left:4px">手工</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="最近进价" width="110" align="right">
-          <template #default="{ row }">{{ row.lastInPrice != null ? Number(row.lastInPrice).toFixed(2) : '—' }}</template>
-        </el-table-column>
+        <!-- 2026-09-15 用户要求：删除「成本价」列（含「手工」标记）与「最近进价」列 —— 成本属内部信息，不在产品列表展示 -->
         <el-table-column label="当前库存" width="130" align="right">
           <template #default="{ row }">
             <span :style="{ color: isLowStock(row) ? 'var(--app-color-danger)' : '', fontWeight: isLowStock(row) ? 'bold' : '' }">

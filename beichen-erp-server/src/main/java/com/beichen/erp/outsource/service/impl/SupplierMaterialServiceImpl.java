@@ -3,8 +3,8 @@ package com.beichen.erp.outsource.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.config.CompanyContext;
-import com.beichen.erp.dev.entity.BomType;
-import com.beichen.erp.dev.mapper.BomTypeMapper;
+import com.beichen.erp.dev.entity.MaterialType;
+import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.SupplierMaterial;
 import com.beichen.erp.outsource.entity.dto.SupplierMaterialDTO;
@@ -28,7 +28,7 @@ public class SupplierMaterialServiceImpl extends ServiceImpl<SupplierMaterialMap
 
     private final SupplierMaterialMapper supplierMaterialMapper;
     private final OutsourceMaterialMapper materialMapper;
-    private final BomTypeMapper bomTypeMapper;
+    private final MaterialTypeMapper materialTypeMapper;
 
     @Override
     public List<SupplierMaterial> listBySupplierId(Long supplierId) {
@@ -36,7 +36,7 @@ public class SupplierMaterialServiceImpl extends ServiceImpl<SupplierMaterialMap
                 .eq(SupplierMaterial::getSupplierId, supplierId)
                 .orderByAsc(SupplierMaterial::getId);
         List<SupplierMaterial> list = supplierMaterialMapper.selectList(wrapper);
-        // 联查 outsource_material 填充物料名称/规格/BOM类型名
+        // 联查 outsource_material 填充物料名称/规格/物料类型名
         fillMaterialInfo(list);
         return list;
     }
@@ -137,7 +137,7 @@ public class SupplierMaterialServiceImpl extends ServiceImpl<SupplierMaterialMap
                 .distinct().collect(Collectors.joining(","));
     }
 
-    /** 通过 materialId 批量填充物料名称/规格/BOM类型名 */
+    /** 通过 materialId 批量填充物料名称/规格/物料类型名 */
     private void fillMaterialInfo(List<SupplierMaterial> list) {
         List<Long> materialIds = list.stream().map(SupplierMaterial::getMaterialId)
                 .filter(id -> id != null).distinct().collect(Collectors.toList());
@@ -151,11 +151,11 @@ public class SupplierMaterialServiceImpl extends ServiceImpl<SupplierMaterialMap
                 if (m != null) {
                     sm.setMaterialName(m.getMaterialName());
                     sm.setSpec(m.getSpec());
-                    if (m.getBomTypeId() != null) {
-                        BomType bt = bomTypeMapper.selectById(m.getBomTypeId());
-                        sm.setBomTypeName(bt != null ? bt.getTypeName() : "-");
+                    if (m.getMaterialTypeId() != null) {
+                        MaterialType bt = materialTypeMapper.selectById(m.getMaterialTypeId());
+                        sm.setMaterialTypeName(bt != null ? bt.getTypeName() : "-");
                     } else {
-                        sm.setBomTypeName("-");
+                        sm.setMaterialTypeName("-");
                     }
                 }
             }

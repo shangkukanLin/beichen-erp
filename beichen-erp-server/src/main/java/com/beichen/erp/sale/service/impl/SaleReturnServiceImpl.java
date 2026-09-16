@@ -272,7 +272,6 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             pending.setProductId(it.getProductId());
             pending.setProductName(it.getProductName() != null && !it.getProductName().isBlank()
                     ? it.getProductName() : (p != null ? p.getName() : ""));
-            pending.setSpec(p != null ? p.getSpec() : "");
             pending.setUnit(p != null ? p.getUnit() : "");
             pending.setQuantity(it.getQuantity());
             pending.setSortedQuantity(BigDecimal.ZERO);
@@ -412,7 +411,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
                             : (product != null ? product.getName() : ""),
                     it.getQuantity(),
                     StockChangeType.SALE_RETURN_IN, order.getCode(), RelatedBillType.SALE_RETURN, it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId(), it.getQualityType() != null ? it.getQualityType() : ProductQualityType.PENDING.getCode());
+                    "", order.getId(), it.getQualityType() != null ? it.getQualityType() : ProductQualityType.PENDING.getCode());
         }
         // 追溯联动：登记售后待整理批次，供退货整理单消费（退单与换货单统一入口）
         createPendingBatches(order, items, pMap);
@@ -474,7 +473,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
                             : (product != null ? product.getName() : ""),
                     it.getQuantity().negate(),
                     StockChangeType.SALE_RETURN_UN_AUDIT, order.getCode(), RelatedBillType.SALE_RETURN, it.getProductId(),
-                    product != null ? product.getSpec() : "", order.getId(), it.getQualityType() != null ? it.getQualityType() : ProductQualityType.PENDING.getCode());
+                    "", order.getId(), it.getQualityType() != null ? it.getQualityType() : ProductQualityType.PENDING.getCode());
         }
         // 追溯联动：撤销本单登记的待整理批次（护栏已确保未被整理，可安全删除）
         deletePendingBatches(AfterSaleSourceType.SALE_RETURN, id);
@@ -552,7 +551,6 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             m.put("saleOrderItemId", oi.getId());
             m.put("productId", oi.getProductId());
             m.put("productName", p != null ? p.getName() : "");
-            m.put("spec", p != null ? p.getSpec() : "");
             m.put("unit", p != null ? p.getUnit() : "");
             m.put("qualityType", oi.getQualityType());
             m.put("quantity", oi.getQuantity());

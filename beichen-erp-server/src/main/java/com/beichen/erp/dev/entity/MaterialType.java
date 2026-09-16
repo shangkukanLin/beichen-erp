@@ -5,8 +5,8 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("dev_bom_type")
-public class BomType {
+@TableName("material_type")
+public class MaterialType {
     @TableId(type = IdType.AUTO)
     private Long id;
     private String typeName;

@@ -28,9 +28,6 @@ public class SupplierProduct {
     private String productName;
 
     @TableField(exist = false)
-    private String spec;
-
-    @TableField(exist = false)
     private String unit;
 
     private BigDecimal unitPrice;
