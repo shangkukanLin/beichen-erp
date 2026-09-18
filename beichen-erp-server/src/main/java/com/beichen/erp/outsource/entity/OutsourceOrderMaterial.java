@@ -22,6 +22,8 @@ public class OutsourceOrderMaterial {
     @TableField("material_type_id")
     private Long materialTypeId;
     private String unit;
+    /** 单套用量（bom_snapshot_item.quantity_per_set）：读取时由视图带出；下单时前端按 bomQuantityPerSet 传入 */
+    private BigDecimal quantityPerSet;
     private BigDecimal demandQuantity;
     private BigDecimal lossRate;
     /** 供料方：OURS我方供 FACTORY工厂包 */

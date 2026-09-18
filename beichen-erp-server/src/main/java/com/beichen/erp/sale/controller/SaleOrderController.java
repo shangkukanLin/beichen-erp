@@ -84,6 +84,10 @@ public class SaleOrderController {
         if (d.get("taxIncluded") != null) o.setTaxIncluded(Integer.valueOf(d.get("taxIncluded").toString()));
         if (d.get("taxRate") != null && !d.get("taxRate").toString().isBlank())
             o.setTaxRate(new BigDecimal(d.get("taxRate").toString()));
+        // 结算方式（2026-09-18 按单记）：settleType 空/非法由 Service 归一为 CREDIT（账期）
+        if (d.get("settleType") != null) o.setSettleType(d.get("settleType").toString());
+        if (d.get("settleAccountId") != null && !d.get("settleAccountId").toString().isBlank())
+            o.setSettleAccountId(Long.valueOf(d.get("settleAccountId").toString()));
         o.setRemark((String) d.get("remark"));
         return o;
     }

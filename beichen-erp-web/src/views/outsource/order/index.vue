@@ -85,17 +85,18 @@ onMounted(() => {
       </el-tabs>
 
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%" @row-click="(row: any) => router.push(`/outsource/order/detail/${row.id}`)">
-        <el-table-column prop="code" label="单号" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="code" label="单号" min-width="140" show-overflow-tooltip />
         <el-table-column label="模式" width="90" align="center">
           <template #default="{row}"><el-tag :type="row.supplyMode==='FACTORY' ? 'warning' : 'info'" size="small">{{ row.supplyMode==='FACTORY' ? '包工包料' : '来料加工' }}</el-tag></template>
         </el-table-column>
         <el-table-column label="加工厂" min-width="160" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
         </el-table-column>
+        <!-- 产品与 SKU 合并为**一行**（2026-09-16 用户要求：列表内容不要换行；多产品时悬浮看全文） -->
         <el-table-column label="产品" min-width="200" show-overflow-tooltip>
           <template #default="{row}">
-            <div>{{ row.productNames || (row.productCount || 0) + '项' }}</div>
-            <div v-if="row.productSkus" style="font-size:12px;color:var(--app-text-secondary)">{{ row.productSkus }}</div>
+            <span>{{ row.productNames || (row.productCount || 0) + '项' }}</span>
+            <span v-if="row.productSkus" style="color:var(--app-text-secondary)"> · {{ row.productSkus }}</span>
           </template>
         </el-table-column>
         <el-table-column label="计划完成" width="120">
@@ -105,6 +106,14 @@ onMounted(() => {
         </el-table-column>
         <el-table-column label="最近交货" width="120">
           <template #default="{row}">{{ row.latestDeliveryDate || '-' }}</template>
+        </el-table-column>
+        <!-- 是否缺料（2026-09-17）：口径 = 剩余待交量对应的物料需求 > 该加工厂委外仓库存（与交货时的缺料拦截一致）；
+             仅进行中（待审核/生产中）计算，已结单/已作废显示 — -->
+        <el-table-column label="是否缺料" width="90" align="center">
+          <template #default="{row}">
+            <span v-if="row.materialShortage === null || row.materialShortage === undefined">—</span>
+            <el-tag v-else :type="row.materialShortage ? 'danger' : 'success'" size="small">{{ row.materialShortage ? '是' : '否' }}</el-tag>
+          </template>
         </el-table-column>
         <el-table-column prop="status" label="状态" width="100" align="center">
           <template #default="{row}">

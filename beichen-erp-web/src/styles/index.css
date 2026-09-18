@@ -46,6 +46,59 @@ ol {
   list-style: none;
 }
 
+/* ==========================================================================
+   字号统一（2026-09-16 定稿）—— 全站阶梯：12 辅助 / 14 正文 / 15 卡片标题 / 18 页面标题 / 16·22 统计数字
+   组件基准（--el-font-size-*）在 styles/tokens.css 里收口；此处补齐"选择器级"的 EP 组件规则。
+   新增页面请直接继承，不要再写 font-size 硬编码（web-check.ps1 有守卫）。
+   ========================================================================== */
+/* 表格：表头与正文统一 14px（表头字重 500，柔和） */
+.el-table th.el-table__cell > .cell {
+  font-size: var(--app-font-base);
+  font-weight: 500;
+}
+.el-table td.el-table__cell > .cell {
+  font-size: var(--app-font-base);
+}
+/* 卡片 / 弹窗 / 确认框标题：15px 加粗 */
+.el-card__header {
+  font-size: var(--app-font-md);
+  font-weight: 600;
+}
+.el-dialog__title,
+.el-message-box__title {
+  font-size: var(--app-font-md);
+  font-weight: 600;
+}
+/* 表单 label 与正文同号 */
+.el-form-item__label {
+  font-size: var(--app-font-base);
+}
+/* 状态标签保持 12px：不跟随 --el-font-size-extra-small 升档，避免标签显臃肿 */
+.el-tag {
+  font-size: var(--app-font-xs);
+}
+/* 表格单元格一律「单行显示」（2026-09-16 用户要求：列表内容不要换行）：
+   字号升到 14px 后，日期/数量这类定宽列会被折成两行、把行高撑成两倍。
+   这里统一 nowrap + 省略号；需要看全文的列请在 el-table-column 上加 show-overflow-tooltip（悬浮显示）。
+   注意：单元格里**刻意分成上下两行**的写法（如「产品名 + SKU」「订单号 + 类型」）不受影响，
+   它们是两个块级元素而非文本换行。 */
+.el-table .cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.el-table .cell > div {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 表格内的「链接按钮」（单号链接、操作列）去掉左右内边距：
+   el-button 默认 15px 左右内边距会让单元格内容凭空多占 30px，单行显示后被截断 */
+.el-table .cell .el-button.is-link {
+  padding-left: 0;
+  padding-right: 0;
+}
+
 /* ===================== 移动端适配 ===================== */
 /* 断点：宽度 <= 768px 视为手机/小平板 */
 @media (max-width: 768px) {
@@ -85,7 +138,7 @@ ol {
     padding: 0 10px !important;
   }
   .header-title {
-    font-size: 15px !important;
+    font-size: var(--app-font-md) !important;
   }
 
   /* 描述列表、步骤条等组件在窄屏更易读 */
@@ -101,7 +154,7 @@ ol {
 /* 超小屏（<= 480px）：进一步压紧 */
 @media (max-width: 480px) {
   .header-title {
-    font-size: 14px !important;
+    font-size: var(--app-font-base) !important;
   }
   .layout-main {
     padding: 6px !important;
@@ -150,7 +203,7 @@ ol {
    放在全局样式里，避免"只在某个页面 chunk 加载后才生效"导致另一页 tooltip 无样式。 */
 .kpi-help {
   margin-left: 4px;
-  font-size: 13px;
+  font-size: var(--app-font-base);
   color: var(--app-text-secondary);
   vertical-align: -2px;
   cursor: help;

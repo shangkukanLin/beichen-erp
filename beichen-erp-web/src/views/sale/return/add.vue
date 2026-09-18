@@ -15,7 +15,7 @@
           <el-col :span="8">
             <el-form-item label="退货仓库" prop="warehouseId">
               <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择仓库" style="width: 100%" />
-              <div style="font-size: 12px; color: #909399; margin-top: 4px; line-height: 1.4;">提示：销售退货只能退到售后仓</div>
+              <div style="font-size: var(--app-font-xs); color: #909399; margin-top: 4px; line-height: 1.4;">提示：销售退货只能退到自有成品仓（退回品按「待分类」品质入库，后续用退货整理单分流）</div>
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -115,7 +115,7 @@
           <el-button type="primary" plain :icon="Plus" @click="addItem">添加明细</el-button>
           <el-button type="success" plain :icon="Download" :disabled="!form.saleOrderId" @click="loadFromSaleOrder">从销售单带入明细</el-button>
           <span style="margin-left: 16px">合计金额：<b>{{ totalAmount }}</b></span>
-          <span style="margin-left: 16px; color: #909399; font-size: 12px">
+          <span style="margin-left: 16px; color: #909399; font-size: var(--app-font-xs)">
             折损收款请在「退货整理单」上填写（整理后才知道 B/C/不良 各多少）
           </span>
         </div>
@@ -157,7 +157,8 @@ const isEdit = ref(false)
 
 // Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: WarehouseType.AFTER_SALE } })
+// 退货入库仓：自有**成品仓**（2026-09-16 方案 A：原"售后仓"取消，退回品直接入成品仓、品质 PENDING 待分类）
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: WarehouseType.FINISHED } })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 500, keyword: kw } })
 const fetchSaleOrders = (kw: string) => request.get('/sale/return/sale-orders', { params: { pageSize: 200, customerId: form.customerId } })
 
@@ -261,7 +262,7 @@ async function initFromSaleOrder(saleOrderId: number) {
     form.saleOrderId = so.id
     form.saleOrderCode = so.code || ''
     form.customerId = so.customerId
-    // 退货必须入售后仓，与销售单的出库仓不同，故仓库不预填，由用户选择
+    // 退货入自有成品仓（与销售单出库仓可能相同），但不预填，由用户选择
     await loadFromSaleOrder()
   } catch (e: any) {
     ElMessage.error(e?.msg || e?.message || '加载来源销售单失败')

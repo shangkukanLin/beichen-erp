@@ -282,12 +282,12 @@ onActivated(() => { loadData() })
 .p{display:flex;flex-direction:column}
 .toolbar{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .spacer{flex:1}
-.title{font-weight:600;font-size:15px}
-.dim{font-size:12px;color:var(--el-text-color-secondary)}
+.title{font-weight:600;font-size:var(--app-font-md)}
+.dim{font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
 .desc{margin-bottom:12px}
 .stat-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:12px}
 .stat-card{background:var(--el-fill-color-light);border-radius:8px;padding:14px}
-.stat-label{font-size:12px;color:var(--el-text-color-secondary);margin-top:4px}
-.stat-value.sm{font-size:16px;font-weight:600}
+.stat-label{font-size:var(--app-font-xs);color:var(--el-text-color-secondary);margin-top:4px}
+.stat-value.sm{font-size:var(--app-font-num-sm);font-weight:600}
 .chart{width:100%;height:280px}
 </style>

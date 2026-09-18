@@ -208,9 +208,9 @@ onMounted(async () => {
       <el-divider content-position="left"><span style="font-weight:600;font-size:var(--app-font-base)">子物料组成</span></el-divider>
       <div style="margin-bottom:8px">
         <el-button type="primary" size="small" @click="addBomRow">+ 添加子物料</el-button>
-        <span style="color:var(--app-text-secondary);font-size:var(--app-font-sm);margin-left:8px">共 {{ bomRows.length }} 项</span>
+        <span style="color:var(--app-text-secondary);font-size:var(--app-font-base);margin-left:8px">共 {{ bomRows.length }} 项</span>
       </div>
-      <el-table :data="bomRows" border stripe empty-text="暂无子物料" max-height="280" size="small">
+      <el-table :data="bomRows" border stripe empty-text="暂无子物料" max-height="280">
         <el-table-column label="子物料" min-width="220">
           <template #default="{ row }">
             <el-select v-model="row.childMaterialId" filterable placeholder="选择已有物料" style="width:100%" size="small">

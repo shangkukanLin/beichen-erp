@@ -226,10 +226,10 @@ onMounted(() => { loadSummary(); loadRows() })
 .card-header { display: flex; align-items: center; justify-content: space-between; }
 .right { display: flex; align-items: center; gap: 12px; }
 .title { font-weight: 600; }
-.hint { font-size: 12px; color: #909399; }
-.low-tip { font-size: 12px; }
+.hint { font-size: var(--app-font-xs); color: #909399; }
+.low-tip { font-size: var(--app-font-xs); }
 /* 占比列：进度条后面的百分比文字（插槽自定义，避开组件按 stroke-width 算出的 16px 内联字号） */
-.pct-text { font-size: 12px; margin-left: 8px; color: #606266; }
+.pct-text { font-size: var(--app-font-xs); margin-left: 8px; color: #606266; }
 :deep(.el-progress__text) { min-width: 44px; }
 .info { margin-bottom: 4px; }
 :deep(.el-card__body) { padding: 16px; }

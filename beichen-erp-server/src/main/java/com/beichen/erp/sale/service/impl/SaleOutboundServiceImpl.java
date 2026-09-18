@@ -172,6 +172,10 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
+        // ⚠️ 2026-09-17 口径变更（D2）：**销售单审核已统一扣减库存**（SaleOrderServiceImpl.audit →
+        // StockChangeType.SALE_OUT / RelatedBillType.SALE_ORDER）。本方法同样会扣库存（下方第 1 步），
+        // 两者若同时启用会**双重扣减**。当前该页面**未注册路由、无菜单**（点不到），故暂保留代码；
+        // 若将来要挂导航启用出库单，必须**先移除本方法的 changeStock/回补逻辑**（改为纯出库凭证：仅登记物流/批次）。
         SaleOutbound outbound = outboundMapper.selectById(id);
         if (outbound == null) throw new BusinessException("销售出库单不存在");
         // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免库存重复扣减

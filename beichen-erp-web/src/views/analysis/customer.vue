@@ -90,7 +90,7 @@ onActivated(() => { loadData() })
         全部列用 min-width（不用固定 width）：Element Plus 按 min-width 比例分摊剩余空间，
         窄屏刚好放下、宽屏自动铺满，不会出现横向滚动。序号与账期列已按需求移除。
       -->
-      <el-table :data="data.rows" border stripe size="small" max-height="420">
+      <el-table :data="data.rows" border stripe max-height="420">
         <el-table-column prop="customerCode" label="客户编码" min-width="78" show-overflow-tooltip/>
         <el-table-column prop="customerName" label="客户" min-width="90" show-overflow-tooltip>
           <template #default="{ row }">
@@ -131,8 +131,8 @@ onActivated(() => { loadData() })
 .p{display:flex;flex-direction:column}
 .toolbar{display:flex;align-items:center;margin-bottom:12px}
 .stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:12px}
-.dim-tip{font-size:12px;color:var(--el-text-color-secondary);margin-bottom:12px}
+.dim-tip{font-size:var(--app-font-xs);color:var(--el-text-color-secondary);margin-bottom:12px}
 .stat-card{background:var(--el-fill-color-light);border-radius:8px;padding:16px}
-.stat-label{font-size:12px;color:var(--el-text-color-secondary);margin-top:4px}
-.stat-value.sm{font-size:16px;font-weight:600}
+.stat-label{font-size:var(--app-font-xs);color:var(--el-text-color-secondary);margin-top:4px}
+.stat-value.sm{font-size:var(--app-font-num-sm);font-weight:600}
 </style>

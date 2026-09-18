@@ -177,7 +177,7 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
         <el-descriptions-item label="结单日期">{{ report.closeDate || '-' }}</el-descriptions-item>
       </el-descriptions>
       <div style="margin-top:8px">
-        <span style="font-weight:500;font-size:var(--app-font-sm)">备注：</span>
+        <span style="font-weight:500;font-size:var(--app-font-base)">备注：</span>
         <el-input v-model="remark" placeholder="结单备注" size="small" style="width:400px;margin-left:4px" />
       </div>
     </el-card>
@@ -188,7 +188,7 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
         <div style="display:flex;align-items:center;justify-content:space-between">
           <span style="font-weight:600">物料明细</span>
           <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:var(--app-font-sm);color:var(--app-text-regular)">退回仓库：</span>
+            <span style="font-size:var(--app-font-base);color:var(--app-text-regular)">退回仓库：</span>
             <RemoteSelect v-model="returnWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择退回仓库" size="small" style="width:200px" :disabled="report.reportStatus===CloseReportStatus.FINISHED" />
           </div>
         </div>
@@ -253,7 +253,7 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
     <!-- 交货记录 -->
     <el-card shadow="never" style="margin-bottom:12px">
       <template #header><span style="font-weight:600">交货记录</span></template>
-      <div style="display:flex;gap:20px;margin-bottom:12px;font-size:var(--app-font-sm);color:var(--app-text-regular)">
+      <div style="display:flex;gap:20px;margin-bottom:12px;font-size:var(--app-font-base);color:var(--app-text-regular)">
         <span>正常交货：<b style="color:var(--app-color-success)">{{ (report.deliveries || []).filter((d:any)=>d.deliveryType!==DeliveryType.DEFECT_RETURN).reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
         <span>退不良：<b style="color:var(--app-color-warning)">{{ Math.abs((report.deliveries || []).filter((d:any)=>d.deliveryType===DeliveryType.DEFECT_RETURN).reduce((s:number,d:any)=>s+(d.quantity||0),0)) }}</b></span>
         <span>实际已交：<b style="color:var(--app-color-primary)">{{ (report.deliveries || []).reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>

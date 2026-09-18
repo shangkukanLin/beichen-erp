@@ -122,7 +122,7 @@ export const ExpenseTypeLabel: Record<string, string> = {
   TRANSPORT: '运输费', TRAVEL: '差旅费', ENTERTAIN: '业务招待', OTHER: '其他'
 }
 
-/** 资金账户类型：DB 存 code（finance_account.account_type），显示映射（资金账户页 / 首页财务 TAB / 经营分析-资金与往来 共用） */
+/** 账户类型：DB 存 code（finance_account.account_type），显示映射（账户管理页 / 首页财务 TAB / 经营分析-资金与往来 共用） */
 export const AccountType = {
   CASH: 'cash',
   BANK: 'bank',
@@ -146,6 +146,27 @@ export const AccountTypeLabel: Record<string, string> = {
 export function accountTypeLabel(v?: string | null): string {
   if (v === null || v === undefined || v === '') return '-'
   return AccountTypeLabel[String(v).toLowerCase()] || String(v)
+}
+
+/**
+ * 销售单结算方式（2026-09-18，**按单记**：同一客户有时现金、有时账期）。
+ * 对应后端 `sale/common/SettleType`，DB 存 code。
+ * CASH = 审核销售单后自动生成一张**草稿**收款单（挂所选收款账户），人工审核该收款单即完成收款。
+ */
+export const SettleType = {
+  CREDIT: 'CREDIT',
+  CASH: 'CASH'
+} as const
+
+export const SettleTypeLabel: Record<string, string> = {
+  [SettleType.CREDIT]: '账期',
+  [SettleType.CASH]: '现金'
+}
+
+/** el-tag 的 type 需窄化联合类型（直接给 string 会触发 TS2322） */
+export const SettleTypeTag: Record<string, 'primary' | 'success' | 'warning' | 'info' | 'danger'> = {
+  [SettleType.CREDIT]: 'info',
+  [SettleType.CASH]: 'success'
 }
 
 /** 项目项目阶段状态（对应 PhaseStatus 枚举） */
@@ -335,6 +356,8 @@ export const SourceBillTypeLabel: Record<string, string> = {
   PURCHASE_RETURN: '采购退货单', SALE_RETURN: '销售退货',
   OUTSOURCE_DELIVERY: '委外加工交货', OUTSOURCE_MATERIAL_DELIVERY: '委外物料收发',
   OUTSOURCE_RETURN: '委外退料', OUTSOURCE_MATERIAL_RETURN: '委外物料退货',
+  OUTSOURCE_RETURN_CHARGE: '委外加工退货收费',
+  OUTSOURCE_REPAIR_CHARGE: '委外维修收费',
   OUTSOURCE_EXCESS_LOSS: '委外超损'
 }
 export function sourceBillTypeLabel(code?: string) { return code ? (SourceBillTypeLabel[code] || code) : '' }
@@ -365,11 +388,15 @@ export const PAYABLE_TRANSFER_DIRTY_KEY = 'payableTransferDirty'
 export const SourceBillDetailRoute: Record<string, string> = {
   PURCHASE_ORDER: '/inventory/purchase/detail',
   PURCHASE_RETURN: '/inventory/purchase-return/detail',
+  PURCHASE_EXCHANGE_RETURN: '/inventory/purchase-exchange/detail',
+  PURCHASE_EXCHANGE_IN: '/inventory/purchase-exchange/detail',
   OUTSOURCE_DELIVERY: '/outsource/order/detail',
   OUTSOURCE_EXCESS_LOSS: '/outsource/order/detail',
   OUTSOURCE_MATERIAL_DELIVERY: '/outsource/delivery/detail',
   OUTSOURCE_MATERIAL_RETURN: '/outsource/material-return/detail',
   OUTSOURCE_RETURN: '/outsource/return-order/detail',
+  OUTSOURCE_RETURN_CHARGE: '/outsource/return-order/detail',
+  OUTSOURCE_REPAIR_CHARGE: '/outsource/return-order/detail',
   SALE_ORDER: '/sale/order',
   SALE_OUTBOUND: '/sale/outbound',
   SALE_RETURN: '/sale/return/detail'
@@ -403,19 +430,23 @@ export const MaterialPlaceTypeLabel: Record<string, string> = {
   [MaterialPlaceType.TEXT]: '自定义'
 }
 
-/** 仓库类型（对应 Warehouse.warehouse_type 字段，DB 存 code） */
+/**
+ * 仓库类型（对应 Warehouse.warehouse_type 字段，DB 存 code）
+ * 2026-09-16 方案 A：仓型由 4 种收敛为 **2 种**（辅料仓 / 成品仓）。
+ * 原「不良仓(DEFECT)」「售后仓(AFTER_SALE)」已取消：退回品/不良品统一入成品仓，改用**品质**区分
+ * （A/B/C 良品、DEFECT 不良、PENDING 待分类）；委外仓（OUTSOURCE）不再写仓型。
+ */
 export const WarehouseType = {
-  AUXILIARY: 'AUXILIARY',  // 辅料仓
-  FINISHED: 'FINISHED',    // 成品仓
-  DEFECT: 'DEFECT',        // 不良仓
-  AFTER_SALE: 'AFTER_SALE' // 售后仓
+  AUXILIARY: 'AUXILIARY',  // 辅料仓（自有物料仓）
+  FINISHED: 'FINISHED'     // 成品仓
 } as const
 
+// 历史值 DEFECT/AFTER_SALE 仅作展示兜底（存量数据/旧单据可能仍带），新代码不要再引用
 export const WarehouseTypeLabel: Record<string, string> = {
   [WarehouseType.AUXILIARY]: '辅料仓',
   [WarehouseType.FINISHED]: '成品仓',
-  [WarehouseType.DEFECT]: '不良仓',
-  [WarehouseType.AFTER_SALE]: '售后仓'
+  DEFECT: '不良仓（已取消）',
+  AFTER_SALE: '售后仓（已取消）'
 }
 
 /** 产品品质等级（对应 ProductQualityType 枚举，存储值为 A/B/C/DEFECT/PENDING） */
@@ -476,6 +507,26 @@ export const OutsourceChargeTypeLabel: Record<string, string> = {
   [OutsourceChargeType.INSPECTION]: '检测费',
   [OutsourceChargeType.EXCESS_LOSS]: '超损赔偿',
   [OutsourceChargeType.OTHER]: '其他'
+}
+
+/**
+ * 委外加工退货类型（对应后端 OutsourceReturnType 枚举，2026-09-17）
+ * <p>DEFECT 不良退货：工厂交货后发现不良退回工厂 —— 可关联加工单（也可不关联）、**禁止向工厂收费**；
+ * REPAIR 维修退货：客户使用后退回我方的售后品推给工厂维修 —— **不关联加工单**、**必须由工厂收费**、修好走「维修返回」。</p>
+ */
+export const OutsourceReturnType = {
+  DEFECT: 'DEFECT',   // 不良退货
+  REPAIR: 'REPAIR'    // 维修退货
+} as const
+
+export const OutsourceReturnTypeLabel: Record<string, string> = {
+  [OutsourceReturnType.DEFECT]: '不良退货',
+  [OutsourceReturnType.REPAIR]: '维修退货'
+}
+
+export const OutsourceReturnTypeTag: Record<string, 'warning' | 'primary'> = {
+  [OutsourceReturnType.DEFECT]: 'warning',
+  [OutsourceReturnType.REPAIR]: 'primary'
 }
 
 /** 售后待整理批次来源单据类型（对应 AfterSaleSourceType 枚举） */
@@ -541,15 +592,27 @@ export const DocStatusTag: Record<string, 'success' | 'warning' | 'info' | 'dang
   [DocStatus.CANCELLED]: 'danger'
 }
 
-/** 委外物料退货类型（对应 MaterialReturnType 枚举） */
+/**
+ * 委外物料退货类型（对应后端 MaterialReturnType 枚举，2026-09-17 定稿两类型，对齐加工退货）
+ * - REFUND 退货退款：物料退给供应商，供应商把货款退给我们 → 审核扣源仓 + 负向应付
+ * - REPAIR 维修返还：退给供应商维修，修好后把物料还给我们 → 审核扣源仓（不冲应付）+ 登记维修返回入库
+ * ⚠️ 历史值 MATERIAL 由后端归一成 REFUND，前端只需兜底显示
+ */
 export const MaterialReturnType = {
-  MATERIAL: 'MATERIAL',
-  PRODUCT: 'PRODUCT'
+  REFUND: 'REFUND',
+  REPAIR: 'REPAIR'
 } as const
 
 export const MaterialReturnTypeLabel: Record<string, string> = {
-  [MaterialReturnType.MATERIAL]: '物料商退货',
-  [MaterialReturnType.PRODUCT]: '成品商退货'
+  [MaterialReturnType.REFUND]: '退货退款',
+  [MaterialReturnType.REPAIR]: '维修返还',
+  // 历史值兜底（旧枚举"物料商退货"= 退货退款）
+  MATERIAL: '退货退款'
+}
+
+export const MaterialReturnTypeTag: Record<string, 'warning' | 'primary'> = {
+  [MaterialReturnType.REFUND]: 'warning',
+  [MaterialReturnType.REPAIR]: 'primary'
 }
 
 /** 委外物料订单列表脏标志：详情/新增页数据变动后置位，列表页 onActivated 据此按需刷新 */
@@ -572,6 +635,9 @@ export const StockChangeType = {
   // 采购
   PURCHASE_IN: 'PURCHASE_IN', PURCHASE_UN_AUDIT: 'PURCHASE_UN_AUDIT',
   RETURN_OUT: 'RETURN_OUT', RETURN_UN_AUDIT: 'RETURN_UN_AUDIT',
+  // 采购换货（2026-09-18 新增）：退回出库 / 换入入库 / 反审核
+  PURCHASE_EXCHANGE_OUT: 'PURCHASE_EXCHANGE_OUT', PURCHASE_EXCHANGE_IN: 'PURCHASE_EXCHANGE_IN',
+  PURCHASE_EXCHANGE_UN_AUDIT: 'PURCHASE_EXCHANGE_UN_AUDIT',
   // 销售
   SALE_OUT: 'SALE_OUT', SALE_OUT_UN_AUDIT: 'SALE_OUT_UN_AUDIT',
   SALE_RETURN_IN: 'SALE_RETURN_IN', SALE_RETURN_UN_AUDIT: 'SALE_RETURN_UN_AUDIT',
@@ -586,6 +652,9 @@ export const StockChangeType = {
   OUTSOURCE_DEFECT_RETURN: 'OUTSOURCE_DEFECT_RETURN', OUTSOURCE_ROLLBACK: 'OUTSOURCE_ROLLBACK',
   OUTSOURCE_CONSUME: 'OUTSOURCE_CONSUME', CANCEL_OUTSOURCE_CONSUME: 'CANCEL_OUTSOURCE_CONSUME',
   OUTSOURCE_DEFECT_RETURN_UN_AUDIT: 'OUTSOURCE_DEFECT_RETURN_UN_AUDIT',
+  // 委外维修退货（2026-09-17）：送修出库 / 反审核回补 / 维修返回入库 / 撤销返回
+  OUTSOURCE_REPAIR_OUT: 'OUTSOURCE_REPAIR_OUT', OUTSOURCE_REPAIR_OUT_UN_AUDIT: 'OUTSOURCE_REPAIR_OUT_UN_AUDIT',
+  OUTSOURCE_REPAIR_IN: 'OUTSOURCE_REPAIR_IN', CANCEL_OUTSOURCE_REPAIR_IN: 'CANCEL_OUTSOURCE_REPAIR_IN',
   OUTSOURCE_CANCEL_DELIVERY: 'OUTSOURCE_CANCEL_DELIVERY', OUTSOURCE_EDIT_ROLLBACK: 'OUTSOURCE_EDIT_ROLLBACK',
   DELIVERY_OUT: 'DELIVERY_OUT', DELIVERY_IN: 'DELIVERY_IN',
   TRANSFER_OUT: 'TRANSFER_OUT', TRANSFER_IN: 'TRANSFER_IN',
@@ -598,6 +667,9 @@ export const StockChangeType = {
   OUTSOURCE_COMPONENT_CONSUME: 'OUTSOURCE_COMPONENT_CONSUME',
   CANCEL_OUTSOURCE_COMPONENT_CONSUME: 'CANCEL_OUTSOURCE_COMPONENT_CONSUME',
   MATERIAL_RETURN_OUT: 'MATERIAL_RETURN_OUT', CANCEL_MATERIAL_RETURN_OUT: 'CANCEL_MATERIAL_RETURN_OUT',
+  // 委外物料维修（2026-09-17）：送修出库 / 反审核回补 / 维修返回入库 / 撤销返回
+  MATERIAL_REPAIR_OUT: 'MATERIAL_REPAIR_OUT', MATERIAL_REPAIR_OUT_UN_AUDIT: 'MATERIAL_REPAIR_OUT_UN_AUDIT',
+  MATERIAL_REPAIR_IN: 'MATERIAL_REPAIR_IN', CANCEL_MATERIAL_REPAIR_IN: 'CANCEL_MATERIAL_REPAIR_IN',
   // 供应商清算
   SETTLEMENT_RETURN_IN: 'SETTLEMENT_RETURN_IN', SETTLEMENT_RETURN_OUT: 'SETTLEMENT_RETURN_OUT',
   // 初始化
@@ -619,6 +691,9 @@ export const StockChangeTypeLabel: Record<string, string> = {
   [StockChangeType.PURCHASE_UN_AUDIT]: '采购反审核',
   [StockChangeType.RETURN_OUT]: '退货出库',
   [StockChangeType.RETURN_UN_AUDIT]: '退货反审核',
+  [StockChangeType.PURCHASE_EXCHANGE_OUT]: '采购换货退回出库',
+  [StockChangeType.PURCHASE_EXCHANGE_IN]: '采购换货入库',
+  [StockChangeType.PURCHASE_EXCHANGE_UN_AUDIT]: '采购换货反审核',
   [StockChangeType.SALE_OUT]: '销售出库',
   [StockChangeType.SALE_OUT_UN_AUDIT]: '销售反审核',
   [StockChangeType.SALE_RETURN_IN]: '销售退货入库',
@@ -641,6 +716,10 @@ export const StockChangeTypeLabel: Record<string, string> = {
   [StockChangeType.OUTSOURCE_CONSUME]: '交货扣料',
   [StockChangeType.CANCEL_OUTSOURCE_CONSUME]: '取消交货扣料',
   [StockChangeType.OUTSOURCE_DEFECT_RETURN_UN_AUDIT]: '委外退不良反审核',
+  [StockChangeType.OUTSOURCE_REPAIR_OUT]: '委外维修出库',
+  [StockChangeType.OUTSOURCE_REPAIR_OUT_UN_AUDIT]: '委外维修出库反审核',
+  [StockChangeType.OUTSOURCE_REPAIR_IN]: '委外维修入库',
+  [StockChangeType.CANCEL_OUTSOURCE_REPAIR_IN]: '取消委外维修入库',
   [StockChangeType.OUTSOURCE_CANCEL_DELIVERY]: '取消发料',
   [StockChangeType.OUTSOURCE_EDIT_ROLLBACK]: '编辑回滚-发料',
   [StockChangeType.DELIVERY_OUT]: '发料出',
@@ -660,6 +739,10 @@ export const StockChangeTypeLabel: Record<string, string> = {
   [StockChangeType.CANCEL_OUTSOURCE_COMPONENT_CONSUME]: '退审恢复子物料',
   [StockChangeType.MATERIAL_RETURN_OUT]: '委外物料退货出',
   [StockChangeType.CANCEL_MATERIAL_RETURN_OUT]: '取消委外物料退货出',
+  [StockChangeType.MATERIAL_REPAIR_OUT]: '委外物料维修出',
+  [StockChangeType.MATERIAL_REPAIR_OUT_UN_AUDIT]: '委外物料维修出反审核',
+  [StockChangeType.MATERIAL_REPAIR_IN]: '委外物料维修入',
+  [StockChangeType.CANCEL_MATERIAL_REPAIR_IN]: '取消委外物料维修入',
   [StockChangeType.SETTLEMENT_RETURN_IN]: '清算退料入',
   [StockChangeType.SETTLEMENT_RETURN_OUT]: '清算退料出',
   [StockChangeType.INIT]: '期初导入',
@@ -699,11 +782,14 @@ export function stockChangeTypeTag(code?: string): 'success' | 'danger' | 'info'
 /** 库存流水关联单据类型（对应后端 RelatedBillType 枚举，DB 存 code；原由后端回 relatedBillTypeLabel） */
 export const RelatedBillType = {
   PURCHASE_ORDER: 'PURCHASE_ORDER', PURCHASE_INBOUND: 'PURCHASE_INBOUND', PURCHASE_RETURN: 'PURCHASE_RETURN',
+  PURCHASE_EXCHANGE: 'PURCHASE_EXCHANGE',
   SALE_ORDER: 'SALE_ORDER', SALE_OUTBOUND: 'SALE_OUTBOUND', SALE_RETURN: 'SALE_RETURN', SALE_EXCHANGE: 'SALE_EXCHANGE',
   WAREHOUSE_MOVE: 'WAREHOUSE_MOVE', WAREHOUSE_MOVE_UN_AUDIT: 'WAREHOUSE_MOVE_UN_AUDIT',
   OTHER_IO: 'OTHER_IO',
   OUTSOURCE_DELIVERY: 'OUTSOURCE_DELIVERY', OUTSOURCE_RETURN: 'OUTSOURCE_RETURN', OUTSOURCE_ORDER: 'OUTSOURCE_ORDER',
   OUTSOURCE_DEFECT: 'OUTSOURCE_DEFECT', OUTSOURCE_MATERIAL_RETURN: 'OUTSOURCE_MATERIAL_RETURN',
+  OUTSOURCE_REPAIR: 'OUTSOURCE_REPAIR',
+  OUTSOURCE_MATERIAL_REPAIR: 'OUTSOURCE_MATERIAL_REPAIR',
   MATERIAL_IO: 'MATERIAL_IO', SUPPLIER_SETTLEMENT: 'SUPPLIER_SETTLEMENT',
   PRODUCT_RECLASSIFY: 'PRODUCT_RECLASSIFY', RETURN_SORT: 'RETURN_SORT', STOCK_TAKE: 'STOCK_TAKE',
   INVENTORY_STOCK_LOSS: 'INVENTORY_STOCK_LOSS', OUTSOURCE_STOCK_LOSS: 'OUTSOURCE_STOCK_LOSS'
@@ -713,6 +799,7 @@ export const RelatedBillTypeLabel: Record<string, string> = {
   [RelatedBillType.PURCHASE_ORDER]: '采购单',
   [RelatedBillType.PURCHASE_INBOUND]: '采购入库',
   [RelatedBillType.PURCHASE_RETURN]: '采购退货单',
+  [RelatedBillType.PURCHASE_EXCHANGE]: '采购换货单',
   [RelatedBillType.SALE_ORDER]: '销售单',
   [RelatedBillType.SALE_OUTBOUND]: '销售出库',
   [RelatedBillType.SALE_RETURN]: '销售退货单',
@@ -725,6 +812,8 @@ export const RelatedBillTypeLabel: Record<string, string> = {
   [RelatedBillType.OUTSOURCE_ORDER]: '委外加工',
   [RelatedBillType.OUTSOURCE_DEFECT]: '退不良',
   [RelatedBillType.OUTSOURCE_MATERIAL_RETURN]: '委外物料退货',
+  [RelatedBillType.OUTSOURCE_REPAIR]: '委外维修退货',
+  [RelatedBillType.OUTSOURCE_MATERIAL_REPAIR]: '委外物料维修',
   [RelatedBillType.MATERIAL_IO]: '物料收发',
   [RelatedBillType.SUPPLIER_SETTLEMENT]: '供应商清算',
   [RelatedBillType.PRODUCT_RECLASSIFY]: '品质重分类',
@@ -756,6 +845,7 @@ export const DEV_PROJECT_DIRTY_KEY = 'devProjectListDirty'
 export const DEV_MATERIAL_DIRTY_KEY = 'devMaterialListDirty'
 export const SUPPLIER_DIRTY_KEY = 'supplierListDirty'
 export const SALE_EXCHANGE_DIRTY_KEY = 'saleExchangeListDirty'
+export const PURCHASE_EXCHANGE_DIRTY_KEY = 'purchaseExchangeListDirty'
 
 
 

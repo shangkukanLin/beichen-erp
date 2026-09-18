@@ -2,10 +2,15 @@ package com.beichen.erp.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.beichen.erp.auth.entity.User;
+import com.beichen.erp.auth.mapper.UserMapper;
+import com.beichen.erp.system.common.SystemConstants;
 import com.beichen.erp.system.entity.Menu;
 import com.beichen.erp.system.entity.RoleMenu;
+import com.beichen.erp.system.entity.UserMenu;
 import com.beichen.erp.system.mapper.MenuMapper;
 import com.beichen.erp.system.mapper.RoleMenuMapper;
+import com.beichen.erp.system.mapper.UserMenuMapper;
 import com.beichen.erp.system.service.MenuService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -13,6 +18,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -23,6 +29,8 @@ import java.util.stream.Collectors;
 public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements MenuService {
 
     private final RoleMenuMapper roleMenuMapper;
+    private final UserMenuMapper userMenuMapper;
+    private final UserMapper userMapper;
 
     @Override
     public List<Menu> getMenuTree() {
@@ -32,16 +40,22 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements Me
     }
 
     @Override
-    public List<Menu> getMenuTreeByRoleIds(List<Long> roleIds) {
-        if (roleIds == null || roleIds.isEmpty()) {
-            return Collections.emptyList();
+    public List<Menu> getMenuTreeByRoleIds(List<Long> roleIds, Long userId) {
+        String menuMode = menuModeOf(userId);
+        Set<Long> menuIds = new LinkedHashSet<>();
+        // CUSTOM：菜单完全以用户级为准（不叠加角色，才能"收权"）；ROLE：角色授权 ∪ 用户级（正常用户级为空，并集兜底）
+        if (!SystemConstants.MENU_MODE_CUSTOM.equals(menuMode)) {
+            if (roleIds != null && !roleIds.isEmpty()) {
+                List<RoleMenu> roleMenus = roleMenuMapper.selectList(new LambdaQueryWrapper<RoleMenu>()
+                        .in(RoleMenu::getRoleId, roleIds));
+                roleMenus.forEach(rm -> menuIds.add(rm.getMenuId()));
+            }
         }
-        List<RoleMenu> roleMenus = roleMenuMapper.selectList(new LambdaQueryWrapper<RoleMenu>()
-                .in(RoleMenu::getRoleId, roleIds));
-        List<Long> menuIds = roleMenus.stream()
-                .map(RoleMenu::getMenuId)
-                .distinct()
-                .collect(Collectors.toList());
+        if (userId != null) {
+            List<UserMenu> userMenus = userMenuMapper.selectList(new LambdaQueryWrapper<UserMenu>()
+                    .eq(UserMenu::getUserId, userId));
+            userMenus.forEach(um -> menuIds.add(um.getMenuId()));
+        }
         if (menuIds.isEmpty()) {
             return Collections.emptyList();
         }
@@ -51,6 +65,18 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements Me
                 .eq(Menu::getVisible, 1)
                 .orderByAsc(Menu::getSortOrder));
         return buildTree(withAncestors(menus));
+    }
+
+    /** 读取用户页面权限模式：仅 CUSTOM 生效自定义，其余（含空值/用户不存在）一律 ROLE=跟随角色 */
+    private String menuModeOf(Long userId) {
+        if (userId == null) {
+            return SystemConstants.MENU_MODE_ROLE;
+        }
+        User user = userMapper.selectById(userId);
+        String mode = user == null ? null : user.getMenuMode();
+        return (mode != null && SystemConstants.MENU_MODE_CUSTOM.equalsIgnoreCase(mode.trim()))
+                ? SystemConstants.MENU_MODE_CUSTOM
+                : SystemConstants.MENU_MODE_ROLE;
     }
 
     /**

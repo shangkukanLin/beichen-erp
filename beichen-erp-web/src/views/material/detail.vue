@@ -205,7 +205,7 @@ watch(() => route.fullPath, () => { init() })
               <!-- 成本价默认由入库自动加权；手填后标记为手工锁定，自动加权将跳过 -->
               <el-input-number v-model="form.costPrice" :min="0" :precision="2" controls-position="right" style="width:100%"
                 placeholder="入库后自动计算" @change="(v: any) => { if (v != null && form.id) form.costManual = 1 }" />
-              <div v-if="form.lastInPrice != null" style="font-size:12px;color:var(--el-text-color-secondary)">
+              <div v-if="form.lastInPrice != null" style="font-size:var(--app-font-xs);color:var(--el-text-color-secondary)">
                 最近进价 {{ Number(form.lastInPrice).toFixed(2) }}
               </div>
             </el-form-item>
@@ -250,7 +250,7 @@ watch(() => route.fullPath, () => { init() })
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="!stockRows.length" style="padding:12px;color:var(--app-text-secondary);font-size:12px">暂无库存记录</div>
+      <div v-if="!stockRows.length" style="padding:12px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">暂无库存记录</div>
     </el-card>
 
     <div style="text-align:center;margin-top:20px">

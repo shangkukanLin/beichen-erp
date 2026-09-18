@@ -28,8 +28,10 @@ public class ReturnOrderController {
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) String code,
-            @RequestParam(required = false) Long factoryId) {
-        return R.ok(returnOrderService.page(pageNum, pageSize, code, factoryId));
+            @RequestParam(required = false) Long factoryId,
+            @RequestParam(required = false) String returnType,
+            @RequestParam(required = false) String progress) {
+        return R.ok(returnOrderService.page(pageNum, pageSize, code, factoryId, returnType, progress));
     }
 
     @GetMapping("/{id}")
@@ -78,26 +80,73 @@ public class ReturnOrderController {
         return R.ok(returnOrderService.fifoPrice(materialId, qty));
     }
 
-    /** 获取某工厂的产品列表（含每个产品的BOM版本来源），用于退货选择 */
+    /**
+     * 该工厂加工过的产品 + 每个产品可用的 **BOM 快照**（2026-09-17 起选项单位由"加工单"改为"BOM 快照"，
+     * 同一份快照被多张单共享时只出现一次，并附带用过它的加工单）。
+     */
     @GetMapping("/order-products")
     public R<List<Map<String, Object>>> orderProducts(@RequestParam Long factoryId) {
         return R.ok(returnOrderService.orderProducts(factoryId));
     }
 
-    /** 获取某产品在某加工单中的BOM快照物料 */
+    /** BOM 快照的物料明细（单套用量口径） */
     @GetMapping("/bom-snapshot")
-    public R<List<Map<String, Object>>> bomSnapshot(@RequestParam Long orderId, @RequestParam Long productId) {
-        return R.ok(returnOrderService.bomSnapshot(orderId, productId));
+    public R<List<Map<String, Object>>> bomSnapshot(@RequestParam Long snapshotId) {
+        return R.ok(returnOrderService.bomSnapshot(snapshotId));
+    }
+
+    /** 从「成品收货」发起退货的预填数据（交货记录ID 或 加工单ID 二选一） */
+    @GetMapping("/return-prefill")
+    public R<Map<String, Object>> returnPrefill(@RequestParam(required = false) Long deliveryId,
+                                                @RequestParam(required = false) Long orderId) {
+        return R.ok(returnOrderService.returnPrefill(deliveryId, orderId));
+    }
+
+    /** 登记维修返回（维修退货单已审核后，工厂修好送回入库；登记即生效，不产生应付） */
+    @PostMapping("/{id}/repair-return")
+    public R<Void> repairReturn(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        returnOrderService.repairReturn(id, body);
+        return R.ok();
+    }
+
+    /** 撤销维修返回（库存回滚 + 删除该条返回记录） */
+    @DeleteMapping("/repair-return/{recordId}")
+    public R<Void> cancelRepairReturn(@PathVariable Long recordId) {
+        returnOrderService.cancelRepairReturn(recordId);
+        return R.ok();
+    }
+
+    /**
+     * 结案（仅维修退货，2026-09-17）：工厂送修的全部成品都送回（未返回=0）后确认收尾。
+     * <p>结案后禁止登记/撤销维修返回、禁止反审核（需先「撤销结案」）。</p>
+     */
+    @PutMapping("/{id}/close")
+    public R<Void> close(@PathVariable Long id) {
+        returnOrderService.close(id);
+        return R.ok();
+    }
+
+    /** 撤销结案：回到「送修中」跟踪状态，可继续登记维修返回 */
+    @PutMapping("/{id}/re-open")
+    public R<Void> reOpen(@PathVariable Long id) {
+        returnOrderService.reOpen(id);
+        return R.ok();
     }
 
     // ===== 请求解析 =====
 
     private ReturnOrder parseOrder(Map<String, Object> body) {
         ReturnOrder o = new ReturnOrder();
+        // 退货类型（2026-09-17）：DEFECT 不良退货 / REPAIR 维修退货；不传则保持原值/默认不良退货
+        Object rt = body.get("returnType");
+        if (rt != null && !rt.toString().isBlank()) o.setReturnType(rt.toString());
         Object fid = body.get("factoryId");
         if (fid != null && !fid.toString().isBlank()) o.setFactoryId(Long.valueOf(fid.toString()));
         Object oid = body.get("orderId");
         if (oid != null && !oid.toString().isBlank()) o.setOrderId(Long.valueOf(oid.toString()));
+        // 来源交货记录（成品收货页发起退货时带出，用于按记录算「可退数量」）
+        Object sdid = body.get("sourceDeliveryId");
+        if (sdid != null && !sdid.toString().isBlank()) o.setSourceDeliveryId(Long.valueOf(sdid.toString()));
         Object dd = body.get("returnDate");
         if (dd != null && !dd.toString().isBlank()) o.setReturnDate(LocalDate.parse(dd.toString()));
         if (body.get("remark") != null) o.setRemark(body.get("remark").toString());

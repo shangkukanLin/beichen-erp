@@ -151,7 +151,7 @@ onActivated(() => { loadData() })
       <el-button type="primary" plain size="small" @click="exportTax">导出 Excel</el-button>
     </div>
     <div id="taxChart" class="chart"/>
-    <el-table :data="tax.rows" border stripe size="small" style="margin-top:12px">
+    <el-table :data="tax.rows" border stripe style="margin-top:12px">
       <el-table-column prop="month" label="月份" width="95" align="center" fixed="left"/>
       <el-table-column label="销售（销项）" align="center">
         <el-table-column label="已税" width="105" align="right"><template #default="{row}">{{ fmt(row.saleTaxed) }}</template></el-table-column>
@@ -178,11 +178,11 @@ onActivated(() => { loadData() })
 .p{display:flex;flex-direction:column}
 .stat-grid{display:grid;gap:12px}
 .stat-card{background:var(--el-fill-color-light);border-radius:8px;padding:16px}
-.stat-label{font-size:12px;color:var(--el-text-color-secondary);margin-top:4px}
-.stat-value.sm{font-size:16px;font-weight:600}
-.stat-sub{margin-top:6px;font-size:12px;display:flex;gap:8px;align-items:center}
+.stat-label{font-size:var(--app-font-xs);color:var(--el-text-color-secondary);margin-top:4px}
+.stat-value.sm{font-size:var(--app-font-num-sm);font-weight:600}
+.stat-sub{margin-top:6px;font-size:var(--app-font-xs);display:flex;gap:8px;align-items:center}
 .stat-sub .dim{color:var(--el-text-color-secondary)}
 .toolbar{margin:8px 0;display:flex;align-items:center;justify-content:space-between}
-.tip{font-size:12px;color:var(--el-text-color-secondary)}
+.tip{font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
 .chart{width:100%;height:320px}
 </style>

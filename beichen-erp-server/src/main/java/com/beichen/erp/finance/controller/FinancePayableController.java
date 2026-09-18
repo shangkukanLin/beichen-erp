@@ -63,7 +63,7 @@ public class FinancePayableController {
         return R.ok(payableMapper.selectById(id));
     }
 
-    /** 付款时可选的未结清应付：排除已转应收的记录，避免同一笔既抵扣又向对方收款 */
+    /** 付款时可选的未结清应付：排除已转应收（避免同一笔既抵扣又向对方收款）与**负数应付**（I11 修复 2026-09-18） */
     @GetMapping("/unpaid")
     public R<?> unpaid(@RequestParam Long supplierId) {
         return R.ok(payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
@@ -72,6 +72,10 @@ public class FinancePayableController {
                 // 已作废(反审核冲销留痕)的台账不可再被选中抵扣；口径与应付汇总/账龄一致（应收侧同样已排除 CANCELLED）
                 .ne(FinancePayable::getStatus, SettlementStatus.CANCELLED.getCode())
                 .ne(FinancePayable::getTransferredToReceivable, 1)
+                // I11 修复（2026-09-18，用户确认口径）：核销下拉**只列正数未付**。负数应付是「退货/超损冲减」项，
+                // 正常应在付款时**净额抵扣**；若被单独选中核销，会生成 ADVANCE（预付）台账、把负数越滚越大
+                // （实测付 500 后产生 -566 预付）。需要向对方收款时走「应付转应收」，不是把它当付款核销目标。
+                .gt(FinancePayable::getAmount, BigDecimal.ZERO)
                 .orderByDesc(FinancePayable::getId)));
     }
 

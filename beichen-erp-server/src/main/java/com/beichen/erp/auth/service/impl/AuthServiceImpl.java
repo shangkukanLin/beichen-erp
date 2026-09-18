@@ -61,9 +61,9 @@ public class AuthServiceImpl implements AuthService {
         List<String> roleCodes = roleService.getRoleCodesByUserId(user.getId());
         StpUtil.getSession().set("roles", roleCodes);
 
-        // 查询用户有权限的菜单树
+        // 查询用户有权限的菜单树（角色授权 / 用户级自定义权限，见 MenuService）
         List<Long> roleIds = roleService.getRoleIdsByUserId(user.getId());
-        List<Menu> menus = menuService.getMenuTreeByRoleIds(roleIds);
+        List<Menu> menus = menuService.getMenuTreeByRoleIds(roleIds, user.getId());
 
         Map<String, Object> userInfo = new HashMap<>();
         userInfo.put("id", user.getId());

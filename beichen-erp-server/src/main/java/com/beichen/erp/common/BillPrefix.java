@@ -14,6 +14,8 @@ public final class BillPrefix {
     public static final String PURCHASE = "CG-";
     /** 采购退货 */
     public static final String PURCHASE_RETURN = "TH-";
+    /** 采购换货单（进货业务：把采购成品退回供货商换新，2026-09-18 新增；CH- 已核实未被占用） */
+    public static final String PURCHASE_EXCHANGE = "CH-";
     /** 销售订单 */
     public static final String SALE = "XS-";
     /** 销售订单（历史前缀，CommonController 解析兜底） */

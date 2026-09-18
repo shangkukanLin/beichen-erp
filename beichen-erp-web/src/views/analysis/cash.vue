@@ -74,7 +74,7 @@ onActivated(() => { loadData() })
       <StatRange v-model:preset="preset" v-model:range="range" @change="loadData"/>
     </div>
     <div id="cashChart" class="chart"/>
-    <el-table :data="cash.accounts" border stripe size="small" style="margin-top:12px">
+    <el-table :data="cash.accounts" border stripe style="margin-top:12px">
       <el-table-column prop="name" label="账户名称" min-width="140"/>
       <el-table-column prop="type" label="类型" width="100" align="center"><template #default="{row}"><el-tag size="small">{{ accountTypeLabel(row.type) }}</el-tag></template></el-table-column>
       <el-table-column prop="balance" label="余额" width="150" align="right"><template #default="{row}">{{ fmt(row.balance) }}</template></el-table-column>
@@ -93,7 +93,7 @@ onActivated(() => { loadData() })
         </el-card>
         <el-card shadow="never">
           <template #header>客户欠款 TOP5</template>
-          <el-table :data="aging.topCustomers" size="small" border>
+          <el-table :data="aging.topCustomers" border>
             <el-table-column prop="name" label="客户" min-width="120"/>
             <el-table-column prop="unpaid" label="未收款" width="120" align="right"><template #default="{row}">{{ fmt(row.unpaid) }}</template></el-table-column>
           </el-table>
@@ -111,7 +111,7 @@ onActivated(() => { loadData() })
         </el-card>
         <el-card shadow="never">
           <template #header>供应商应付 TOP5</template>
-          <el-table :data="aging.topSuppliers" size="small" border>
+          <el-table :data="aging.topSuppliers" border>
             <el-table-column prop="name" label="供应商" min-width="120"/>
             <el-table-column prop="unpaid" label="未付款" width="120" align="right"><template #default="{row}">{{ fmt(row.unpaid) }}</template></el-table-column>
           </el-table>
@@ -149,9 +149,9 @@ onActivated(() => { loadData() })
 .chart{width:100%;height:320px}
 .stat-grid{display:grid;gap:12px}
 .stat-card{background:var(--el-fill-color-light);border-radius:8px;padding:16px}
-.stat-value{font-size:20px;font-weight:600}
-.stat-label{font-size:12px;color:var(--el-text-color-secondary);margin-top:4px}
-.stat-value.sm{font-size:16px;font-weight:600}
-.stat-sub{margin-top:6px;font-size:12px;display:flex;gap:8px;align-items:center}
+.stat-value{font-size:var(--app-font-num);font-weight:600}
+.stat-label{font-size:var(--app-font-xs);color:var(--el-text-color-secondary);margin-top:4px}
+.stat-value.sm{font-size:var(--app-font-num-sm);font-weight:600}
+.stat-sub{margin-top:6px;font-size:var(--app-font-xs);display:flex;gap:8px;align-items:center}
 .stat-sub .dim{color:var(--el-text-color-secondary)}
 </style>

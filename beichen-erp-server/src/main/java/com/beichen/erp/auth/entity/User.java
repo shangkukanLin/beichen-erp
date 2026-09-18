@@ -31,6 +31,12 @@ public class User {
     @TableLogic
     private Integer deleted;
 
+    /**
+     * 页面权限模式：ROLE=跟随角色（默认，菜单取自角色授权）/ CUSTOM=自定义（完全以 sys_user_menu 为准）。
+     * 见 {@code UserServiceImpl.saveUserMenuPerm} 与 {@code MenuServiceImpl.getMenuTreeByRoleIds}。
+     */
+    private String menuMode;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 

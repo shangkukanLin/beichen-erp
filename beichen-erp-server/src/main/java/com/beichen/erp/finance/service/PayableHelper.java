@@ -102,8 +102,10 @@ public class PayableHelper {
         SourceBillType t = SourceBillType.fromCode(sourceBillType);
         if (t != null) {
             switch (t) {
-                case PURCHASE_ORDER, PURCHASE_INBOUND, PURCHASE_RETURN -> { return "product"; }
-                case OUTSOURCE_DELIVERY, OUTSOURCE_EXCESS_LOSS, OUTSOURCE_RETURN, OUTSOURCE_RETURN_CHARGE -> { return "factory"; }
+                case PURCHASE_ORDER, PURCHASE_INBOUND, PURCHASE_RETURN,
+                     PURCHASE_EXCHANGE_RETURN, PURCHASE_EXCHANGE_IN -> { return "product"; }
+                case OUTSOURCE_DELIVERY, OUTSOURCE_EXCESS_LOSS, OUTSOURCE_RETURN, OUTSOURCE_RETURN_CHARGE,
+                     OUTSOURCE_REPAIR_CHARGE -> { return "factory"; }
                 case OUTSOURCE_MATERIAL_DELIVERY, OUTSOURCE_MATERIAL_RETURN -> { return "material"; }
                 default -> { /* 其他场景走下面的兜底 */ }
             }
@@ -143,10 +145,30 @@ public class PayableHelper {
             // 已转应收的冲减项挂着对应的应收台账，作废会造成应收悬空（对方债务凭空消失），必须先反审核转应收单
             if (Integer.valueOf(1).equals(fp.getTransferredToReceivable()))
                 throw new BusinessException("应付单「" + fp.getBillNo() + "」已转应收，请先反审核对应的转应收单");
-            fp.setStatus(SettlementStatus.CANCELLED.getCode());
-            fp.setUnpaidAmount(BigDecimal.ZERO);
-            payableMapper.updateById(fp);
+            cancelLedger(fp);
         }
+    }
+
+    /**
+     * 作废台账（I29 口径，2026-09-18）：**已作废的应付不计金额**。
+     * <p>把状态置 CANCELLED 的同时把 {@code amount} **一并清零**，使「amount = paid + unpaid」在**所有行**上恒成立
+     * （作废行 paid/unpaid 均为 0）。旧实现只清零 {@code unpaid_amount}，作废行仍保留原金额（如 -24），
+     * 导致以行为单位的对账/稽核把「作废留痕行」误判为异常（I29）。</p>
+     * <p>原金额写入 {@code remark} 留痕（`[已作废] 原金额=-24`），避免"金额凭空消失"无法追溯；
+     * 各统计/汇总口径均按状态排除 CANCELLED，故清零不影响账务结果。</p>
+     */
+    public void cancelLedger(FinancePayable fp) {
+        if (fp == null) return;
+        BigDecimal old = fp.getAmount();
+        fp.setStatus(SettlementStatus.CANCELLED.getCode());
+        fp.setUnpaidAmount(BigDecimal.ZERO);
+        if (old != null && old.compareTo(BigDecimal.ZERO) != 0) {
+            String mark = "[已作废] 原金额=" + old.stripTrailingZeros().toPlainString();
+            String r = fp.getRemark();
+            fp.setRemark(r == null || r.isBlank() ? mark : r + " " + mark);
+        }
+        fp.setAmount(BigDecimal.ZERO);
+        payableMapper.updateById(fp);
     }
 
     /** 按来源记录删除应付（已付款核销的阻止）；类型维度同 {@link #reversePayable(Long, String...)} */

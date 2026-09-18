@@ -391,7 +391,7 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
 .query-card :deep(.el-card__body), .table-card :deep(.el-card__body) { padding: 16px; }
 .query-form { align-items: center; }
 .pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
-.sum-bar { margin-top: 12px; display: flex; justify-content: flex-end; gap: 24px; font-size: 14px; color: var(--app-text-secondary); }
-.sum-bar b { color: var(--app-text-primary); font-size: 16px; }
+.sum-bar { margin-top: 12px; display: flex; justify-content: flex-end; gap: 24px; font-size: var(--app-font-base); color: var(--app-text-secondary); }
+.sum-bar b { color: var(--app-text-primary); font-size: var(--app-font-num-sm); }
 .tax-num { color: var(--app-color-danger); }
 </style>

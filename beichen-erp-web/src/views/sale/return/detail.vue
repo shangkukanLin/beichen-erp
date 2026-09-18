@@ -169,7 +169,7 @@ function goSaleOrder(id?: number) { if (id) router.push(`/inventory/sale/detail/
 function goProduct(id?: number) { if (id) router.push(`/product/detail/${id}`) }
 
 async function doAudit() {
-  await ElMessageBox.confirm('确认审核？审核后客户退回的待分类品将入库售后仓增加库存。', '提示', { type: 'warning' })
+  await ElMessageBox.confirm('确认审核？审核后客户退回的待分类品将入库成品仓增加库存。', '提示', { type: 'warning' })
   acting.value = true
   try {
     await auditSaleReturn(Number(route.params.id))

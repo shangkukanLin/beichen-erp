@@ -222,13 +222,13 @@ onActivated(() => { loadData() })
 /* 2026-09-15：KPI 由 4 卡变 5 卡（新增净利率）→ 桌面 5 列 */
 .stat-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
 .stat-card{background:var(--el-fill-color-light);border-radius:8px;padding:16px}
-.stat-value{font-size:22px;font-weight:600}
-.stat-label{font-size:12px;color:var(--el-text-color-secondary);margin-top:4px}
+.stat-value{font-size:var(--app-font-num);font-weight:600}
+.stat-label{font-size:var(--app-font-xs);color:var(--el-text-color-secondary);margin-top:4px}
 .chart-sm{width:100%;height:180px;margin-top:12px}
 .sec{margin-top:12px}
 .stat-card.kpi{border-top:3px solid var(--el-color-primary-light-5)}
-.stat-value.sm{font-size:16px;font-weight:600}
-.stat-sub{margin-top:6px;font-size:12px;display:flex;gap:8px;align-items:center}
+.stat-value.sm{font-size:var(--app-font-num-sm);font-weight:600}
+.stat-sub{margin-top:6px;font-size:var(--app-font-xs);display:flex;gap:8px;align-items:center}
 .stat-sub .dim{color:var(--el-text-color-secondary)}
 .chg.good{color:var(--app-color-success);font-weight:600}
 .chg.bad{color:var(--app-color-danger);font-weight:600}

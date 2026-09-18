@@ -12,6 +12,8 @@ public enum RelatedBillType {
     PURCHASE_INBOUND("采购入库"),
     /** 采购退货单：退货单审核/反审核触发 */
     PURCHASE_RETURN("采购退货单"),
+    /** 采购换货单：换货单审核/反审核触发（退回出库 + 换入入库，2026-09-18） */
+    PURCHASE_EXCHANGE("采购换货单"),
 
     /** 销售单：销售订单审核触发 */
     SALE_ORDER("销售单"),
@@ -40,6 +42,10 @@ public enum RelatedBillType {
     OUTSOURCE_DEFECT("退不良"),
     /** 委外物料退货：委外物料退货单触发 */
     OUTSOURCE_MATERIAL_RETURN("委外物料退货"),
+    /** 委外维修退货：维修退货单送修出库 / 维修返回入库触发（2026-09-17） */
+    OUTSOURCE_REPAIR("委外维修退货"),
+    /** 委外物料维修：物料退货（维修返还）送修出库 / 维修返回入库触发（2026-09-17） */
+    OUTSOURCE_MATERIAL_REPAIR("委外物料维修"),
 
     /** 物料收发：委外发料 adjustSourceStock 触发 */
     MATERIAL_IO("物料收发"),

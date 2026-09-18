@@ -30,7 +30,7 @@ async function handleClear() {
     <p style="color:var(--app-text-secondary);margin-bottom:16px">
       清空当前公司下所有业务数据，包括：客户、品牌、供应商、采购单、销售单、库存、财务数据等。
     </p>
-    <p style="color:var(--app-color-warning);margin-bottom:16px;font-size:var(--app-font-sm)">
+    <p style="color:var(--app-color-warning);margin-bottom:16px;font-size:var(--app-font-base)">
       系统数据（公司、用户、角色、菜单）不受影响。操作后不可恢复，请谨慎执行。
     </p>
     <el-button type="danger" :loading="loading" @click="handleClear">清空当前公司数据</el-button>

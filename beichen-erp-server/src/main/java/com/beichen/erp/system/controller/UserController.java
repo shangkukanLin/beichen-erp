@@ -8,6 +8,7 @@ import com.beichen.erp.system.common.SystemConstants;
 import com.beichen.erp.system.entity.dto.ResetPasswordDTO;
 import com.beichen.erp.system.entity.dto.UserDTO;
 import com.beichen.erp.system.entity.dto.UserQueryDTO;
+import com.beichen.erp.system.entity.vo.UserMenuPermVO;
 import com.beichen.erp.system.entity.vo.UserVO;
 import com.beichen.erp.system.service.UserService;
 import jakarta.validation.Valid;
@@ -76,5 +77,18 @@ public class UserController {
     @GetMapping("/default-dashboard-tabs")
     public R<List<String>> defaultDashboardTabs(@RequestParam("roleIds") List<Long> roleIds) {
         return R.ok(userService.deriveDefaultDashboardTabs(roleIds));
+    }
+
+    /** 查询某用户的页面权限（menuMode + 自定义菜单 + 角色菜单并集），「页面权限」弹窗用（与角色权限接口对称） */
+    @GetMapping("/{id}/menus")
+    public R<UserMenuPermVO> getUserMenus(@PathVariable Long id) {
+        return R.ok(userService.getUserMenuPerm(id));
+    }
+
+    /** 保存某用户的页面权限：ROLE=跟随角色（清空自定义）/ CUSTOM=以用户级勾选为准 */
+    @PutMapping("/{id}/menus")
+    public R<Void> saveUserMenus(@PathVariable Long id, @RequestBody UserMenuPermVO body) {
+        userService.saveUserMenuPerm(id, body.getMenuMode(), body.getMenuIds());
+        return R.ok();
     }
 }

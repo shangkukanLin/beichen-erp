@@ -206,17 +206,17 @@ onActivated(() => { loadData() })
         <el-tab-pane label="折叠屏" name="FOLD" />
         <el-tab-pane label="直板AMOLED" name="AMOLED" />
       </el-tabs>
-      <el-table v-loading="loading" :data="rows" border stripe size="small" max-height="620">
+      <el-table v-loading="loading" :data="rows" border stripe max-height="620">
         <el-table-column prop="brand" label="品牌" min-width="90" show-overflow-tooltip />
         <el-table-column prop="model" label="型号" min-width="140" show-overflow-tooltip />
         <el-table-column prop="screenSize" label="主屏尺寸" width="90" align="center" />
-        <el-table-column prop="resolution" label="分辨率" min-width="110" show-overflow-tooltip />
-        <el-table-column prop="screenType" label="屏幕类型" min-width="110" show-overflow-tooltip />
+        <el-table-column prop="resolution" label="分辨率" min-width="142" show-overflow-tooltip />
+        <el-table-column prop="screenType" label="屏幕类型" min-width="142" show-overflow-tooltip />
         <el-table-column prop="refreshRate" label="刷新率" width="80" align="center" />
         <el-table-column prop="subSize" label="副屏尺寸" width="90" align="center">
           <template #default="{ row }">{{ row.subSize || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="fingerprint" label="指纹" width="70" align="center" />
+        <el-table-column prop="fingerprint" label="指纹" width="120" align="center" show-overflow-tooltip />
         <el-table-column prop="panelSupplier" label="屏幕供应商" min-width="130" show-overflow-tooltip />
         <el-table-column prop="releaseDate" label="发布时间" width="90" align="center" />
         <el-table-column label="操作" width="120" align="center" fixed="right">
@@ -309,7 +309,7 @@ onActivated(() => { loadData() })
 
 /* 操作区：左提示 + 右侧按钮组，窄屏自动折行 */
 .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.toolbar-count{color:var(--el-text-color-secondary);font-size:13px}
-.toolbar-count b{color:var(--el-color-primary);font-size:15px;margin:0 2px}
+.toolbar-count{color:var(--el-text-color-secondary);font-size:var(--app-font-base)}
+.toolbar-count b{color:var(--el-color-primary);font-size:var(--app-font-md);margin:0 2px}
 .toolbar-actions{display:flex;gap:8px;flex-wrap:wrap}
 </style>

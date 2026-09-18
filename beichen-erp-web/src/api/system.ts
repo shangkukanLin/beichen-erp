@@ -21,6 +21,8 @@ export interface UserVO {
   roles?: Role[]
   roleIds?: number[] | string[]
   dashboardTabs?: string[]
+  /** 页面权限模式：ROLE=跟随角色（默认）/ CUSTOM=自定义 */
+  menuMode?: string
   [key: string]: unknown
 }
 
@@ -148,6 +150,25 @@ export function resetPassword(data: ResetPasswordParams) {
 
 export function toggleUserStatus(id: number | string, status: number) {
   return request.put<void>(`/system/user/${id}/status`, { status })
+}
+
+/* ============================ 用户页面权限（用户管理「页面权限」弹窗） ============================ */
+
+export interface UserMenuPerm {
+  /** ROLE=跟随角色（默认，清空自定义）/ CUSTOM=以用户级勾选为准（可加可减，不叠加角色） */
+  menuMode: string
+  /** CUSTOM 时的菜单 id 集合（保存时会自动补齐目录并保留「首页」） */
+  menuIds?: (number | string)[]
+  /** 只读返回：该用户当前角色菜单并集（前端切「自定义」时的初始勾选） */
+  roleMenuIds?: (number | string)[]
+}
+
+export function getUserMenus(id: number | string) {
+  return request.get<UserMenuPerm>(`/system/user/${id}/menus`)
+}
+
+export function saveUserMenus(id: number | string, data: UserMenuPerm) {
+  return request.put<void>(`/system/user/${id}/menus`, data)
 }
 
 /* ============================ 角色管理 API ============================ */
@@ -370,6 +391,8 @@ export function updateProjectStatus(id: number | string, status: string) { retur
 
 export function getProjectBom(projectId: number | string) { return request.get<BomVO[]>(`/dev/project/${projectId}/bom`) }
 export function saveProjectBom(projectId: number | string, items: BomDTO[]) { return request.post<void>(`/dev/project/${projectId}/bom/batch`, items) }
+/** BOM 历史快照（2026-09-17）：下加工单时按「研发BOM版本 + 明细内容」生成/共享，仅在"有变化"时新增 */
+export function getProjectBomSnapshots(projectId: number | string) { return request.get<any[]>(`/dev/project/${projectId}/bom-snapshots`) }
 
 export function getProjectDrawings(projectId: number | string) { return request.get<DrawingVO[]>(`/dev/project/${projectId}/drawing`) }
 export function addProjectDrawing(projectId: number | string, data: DrawingVO) { return request.post<void>(`/dev/project/${projectId}/drawing`, data) }

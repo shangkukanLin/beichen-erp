@@ -40,6 +40,19 @@ public class SaleOrder {
 
     private BigDecimal totalAmount;
 
+    /**
+     * 结算方式（2026-09-18，**按单记**）：CREDIT 账期（只挂应收）/ CASH 现金（审核后自动生成草稿收款单）。
+     * 见 {@link com.beichen.erp.sale.common.SettleType}。
+     */
+    private String settleType;
+
+    /** 结算账户ID（finance_account.id）：settleType=CASH 时必填，默认取现金账户 */
+    private Long settleAccountId;
+
+    /** 结算账户名（实时查名，不落库） */
+    @TableField(exist = false)
+    private String settleAccountName;
+
     private String remark;
 
     @TableField(fill = FieldFill.INSERT)

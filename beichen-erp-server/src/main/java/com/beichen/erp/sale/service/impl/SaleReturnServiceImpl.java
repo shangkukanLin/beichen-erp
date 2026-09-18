@@ -394,11 +394,15 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
                 throw new BusinessException("退货数量必须大于 0（明细行ID=" + it.getId() + "）");
         }
-        // 售后仓校验：销售退回的待分类品只能入售后仓（前端下拉已过滤，此处防止接口绕过）
+        // 落仓校验（2026-09-16 方案 A：仓型收敛为「成品仓/辅料仓」，原"售后仓"已取消）——
+        // 退回的待分类品入**自有成品仓**（品质仍为 PENDING），后续由退货整理单按品质分流；
+        // 前端下拉已过滤，此处防接口绕过。
         Warehouse wh = warehouseMapper.selectById(order.getWarehouseId());
         if (wh == null) throw new BusinessException("退货仓库不存在");
-        if (!WarehouseType.AFTER_SALE.getCode().equals(wh.getWarehouseType()))
-            throw new BusinessException("销售退货只能退到售后仓，当前仓库类型为：" + wh.getWarehouseType());
+        if (!com.beichen.erp.warehouse.common.WarehouseCategory.INVENTORY.getCode().equals(wh.getWarehouseCategory())
+                || !WarehouseType.FINISHED.getCode().equals(wh.getWarehouseType()))
+            throw new BusinessException("销售退货只能选自有成品仓，当前仓库类别=" + wh.getWarehouseCategory()
+                    + "，仓型=" + wh.getWarehouseType());
         // 库存联动：客户退回待分类品（品质默认待分类），入库增加库存
         // 批量取产品，避免循环内逐条查库（N+1）
         Map<Long, Product> pMap = productMap(items);

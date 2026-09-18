@@ -81,7 +81,9 @@ public class ClearController {
                 "DELETE FROM outsource_material_component WHERE company_id = " + companyId,
                 "DELETE FROM outsource_material_order_item WHERE company_id = " + companyId,
                 "DELETE FROM outsource_material_return_item WHERE company_id = " + companyId,
-                "DELETE FROM outsource_order_material WHERE company_id = " + companyId,
+                // BOM 快照（2026-09-17 重构：原 outsource_order_material 表已成只读视图，明细落在 bom_snapshot_item）
+                "DELETE FROM bom_snapshot_item WHERE company_id = " + companyId,
+                "DELETE FROM bom_snapshot WHERE company_id = " + companyId,
                 "DELETE FROM outsource_order_product WHERE company_id = " + companyId,
                 "DELETE FROM outsource_order_delivery WHERE company_id = " + companyId,
                 "DELETE FROM outsource_other_io_item WHERE company_id = " + companyId,

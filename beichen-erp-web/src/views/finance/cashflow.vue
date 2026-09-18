@@ -2,7 +2,7 @@
 import { reactive, ref, onMounted } from 'vue'
 import { getCashflowPage, getAccountPage, type FinanceCashflow, type FinanceAccount } from '@/api/finance'
 
-// 资金流水（资金账户已拆分为独立子菜单 /finance/account，账户下拉仅用于筛选）
+// 资金流水（账户管理已拆分为独立子菜单 /finance/account，账户下拉仅用于筛选）
 const fquery = reactive({ accountId: undefined as number|undefined, flowType: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)

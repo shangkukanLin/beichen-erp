@@ -342,8 +342,9 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             throw new BusinessException("只有草稿状态可审核");
         List<SaleExchangeItem> items = getItems(id);
         if (items.isEmpty()) throw new BusinessException("换货单明细不能为空");
-        // 换入仓必须为售后仓，换出仓必须为成品仓
-        assertWarehouseType(e.getWarehouseInId(), WarehouseType.AFTER_SALE, "换入仓");
+        // 换入/换出仓（2026-09-16 方案 A）：仓型收敛后**两者都必须是自有成品仓**；
+        // 换入=退回品（品质 PENDING 待分类）、换出=良品（A 等），同一仓内按品质分行 → **允许同仓**（用户确认）
+        assertWarehouseType(e.getWarehouseInId(), WarehouseType.FINISHED, "换入仓");
         assertWarehouseType(e.getWarehouseOutId(), WarehouseType.FINISHED, "换出仓");
         validateQuantity(e, items);
         // 批量取产品（退回侧与换出侧同品），避免循环内逐条查库（N+1）
@@ -439,11 +440,10 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
     /** 主表校验：必关联销售单、仓库必填且类型正确、明细非空 */
     private void validate(SaleExchange e, List<Map<String, Object>> itemMaps) {
         if (e.getSaleOrderId() == null) throw new BusinessException("换货单必须选择来源销售单");
-        if (e.getWarehouseInId() == null) throw new BusinessException("换入仓(售后仓)不能为空");
+        if (e.getWarehouseInId() == null) throw new BusinessException("换入仓(成品仓)不能为空");
         if (e.getWarehouseOutId() == null) throw new BusinessException("换出仓(成品仓)不能为空");
-        if (e.getWarehouseInId().equals(e.getWarehouseOutId()))
-            throw new BusinessException("换入仓与换出仓不能相同");
-        assertWarehouseType(e.getWarehouseInId(), WarehouseType.AFTER_SALE, "换入仓");
+        // 2026-09-16 方案 A：换入/换出都只能是自有成品仓 → **不再限制"两者不能相同"**（同仓内按品质分行）
+        assertWarehouseType(e.getWarehouseInId(), WarehouseType.FINISHED, "换入仓");
         assertWarehouseType(e.getWarehouseOutId(), WarehouseType.FINISHED, "换出仓");
         if (itemMaps == null || itemMaps.isEmpty()) throw new BusinessException("换货明细不能为空");
 

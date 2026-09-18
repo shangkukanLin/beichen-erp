@@ -302,7 +302,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
 
       <!-- BOM物料表（只读，需求数量自动计算） -->
       <div style="margin-top:8px" v-if="p.materials.length > 0">
-        <div style="margin-bottom:6px"><span style="font-weight:500;font-size:var(--app-font-sm)">BOM物料清单</span></div>
+        <div style="margin-bottom:6px"><span style="font-weight:500;font-size:var(--app-font-base)">BOM物料清单</span></div>
         <el-table :data="p.materials" border size="small">
           <el-table-column label="类型" width="80"><template #default="{row}">{{ typeName(row.materialTypeId) }}</template></el-table-column>
           <el-table-column prop="materialName" label="物料名称" min-width="150" />
@@ -325,7 +325,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
           </el-table-column>
         </el-table>
       </div>
-      <div v-else style="margin-top:8px;color:var(--app-text-secondary);font-size:var(--app-font-sm)">选择关联项目后自动加载 BOM 物料清单</div>
+      <div v-else style="margin-top:8px;color:var(--app-text-secondary);font-size:var(--app-font-base)">选择关联项目后自动加载 BOM 物料清单</div>
     </el-card>
 
     <div style="margin-top:12px"><el-button type="primary" @click="addProduct">+ 添加产品</el-button></div>

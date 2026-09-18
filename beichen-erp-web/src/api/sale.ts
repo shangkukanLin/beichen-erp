@@ -24,6 +24,12 @@ export interface SaleOrder {
   orderDate?: string
   status?: string
   taxIncluded?: number
+  /** 结算方式（2026-09-18 按单记）：CREDIT 账期（只挂应收）/ CASH 现金（**立即到账**：审核销售单时系统自动生成**已审核**收款单并完成核销） */
+  settleType?: string
+  /** 结算账户ID（现金结算时必填） */
+  settleAccountId?: number
+  /** 结算账户名（后端实时回显，不落库） */
+  settleAccountName?: string
   taxRate?: number
   taxAmount?: number
   totalAmount?: number

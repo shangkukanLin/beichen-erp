@@ -263,7 +263,7 @@ onActivated(() => { loadData() })
           </span>
         </div>
       </template>
-      <el-table :data="pagedDetails" border stripe size="small" empty-text="该区间无采购单据">
+      <el-table :data="pagedDetails" border stripe empty-text="该区间无采购单据">
         <el-table-column label="类型" width="110" align="center">
           <template #default="{ row }">
             <el-tag :type="row.billType === 'PURCHASE_RETURN' ? 'danger' : 'warning'" size="small">
@@ -295,13 +295,13 @@ onActivated(() => { loadData() })
 <style scoped>
 .p{display:flex;flex-direction:column}
 .toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-.range-text{font-size:12px;color:var(--el-text-color-secondary)}
+.range-text{font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
 .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .stat-card{background:var(--el-fill-color-light);border-radius:8px;padding:16px}
-.stat-value{font-size:22px;font-weight:600}
-.stat-label{font-size:12px;color:var(--el-text-color-secondary);margin-top:4px}
+.stat-value{font-size:var(--app-font-num);font-weight:600}
+.stat-label{font-size:var(--app-font-xs);color:var(--el-text-color-secondary);margin-top:4px}
 .stat-card.kpi{border-top:3px solid var(--el-color-primary-light-5)}
-.unit{font-size:12px;margin-left:2px;font-weight:400;color:var(--el-text-color-secondary)}
+.unit{font-size:var(--app-font-xs);margin-left:2px;font-weight:400;color:var(--el-text-color-secondary)}
 .chart{width:100%;height:200px;margin:8px 0 12px}
 /* 两个饼图（2026-09-15）：与销售分析同款「卡片等高 + 空态叠加」实现
    —— 空态与有数据态都是定高 200px 的 .pie-body，卡片高度不会变 */
@@ -310,14 +310,14 @@ onActivated(() => { loadData() })
 .pie-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;min-height:26px}
 .pie-head-right{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
 .pie-title{font-size:var(--app-font-base);font-weight:600}
-.pie-total{font-size:13px;color:var(--el-text-color-secondary)}
+.pie-total{font-size:var(--app-font-base);color:var(--el-text-color-secondary)}
 .pie-body{position:relative;height:200px;margin-top:4px}
 .pie-chart{width:100%;height:100%}
-.pie-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--el-text-color-secondary)}
+.pie-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
 .section-card{margin-top:4px}
 .card-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
 .card-title{font-weight:600}
-.dim{font-size:12px;color:var(--el-text-color-secondary)}
+.dim{font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
 .pager{display:flex;justify-content:flex-end;margin-top:10px}
 /* 窄屏：4 卡降为 2 列 */
 @media (max-width: 1000px){ .stat-grid{grid-template-columns:repeat(2,1fr)} }

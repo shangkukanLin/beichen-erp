@@ -30,7 +30,7 @@
           <el-col :span="8">
             <el-form-item label="换入仓" required>
               <RemoteSelect v-model="form.warehouseInId" :fetch="fetchAfterSaleWarehouses"
-                label-key="warehouseName" placeholder="售后仓" style="width:100%" />
+                label-key="warehouseName" placeholder="成品仓" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -79,7 +79,7 @@
       </el-divider>
       <el-table :data="items" border size="small" max-height="380">
         <!-- ===== 退回侧：客户退回，入售后仓待整理 ===== -->
-        <el-table-column label="退回（客户退回，入售后仓）" align="center">
+        <el-table-column label="退回（客户退回，入成品仓待分类）" align="center">
           <el-table-column label="SKU" width="130">
             <template #default="{ row }">
               <span v-if="row.sku">{{ row.sku }}</span>
@@ -198,8 +198,9 @@ const fetchSaleOrders = async (kw: string) => {
   const list = (rows || []).filter((r: any) => !kw || (r.code || '').includes(kw))
   return { data: { records: list } }
 }
+// 2026-09-16 方案 A：换入仓(退回品) 与 换出仓(良品) **都只能是自有成品仓**，同仓内按品质分行 → 允许两者相同
 const fetchAfterSaleWarehouses = (kw: string) => request.get('/warehouse/page',
-  { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.AFTER_SALE } })
+  { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.FINISHED } })
 const fetchFinishedWarehouses = (kw: string) => request.get('/warehouse/page',
   { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.FINISHED } })
 
@@ -246,7 +247,7 @@ async function initFromSaleOrder(saleOrderId: number) {
     form.saleOrderId = so.id
     form.saleOrderCode = so.code || ''
     if (so.warehouseId) form.warehouseOutId = so.warehouseId
-    // 换入仓(售后仓)与换出仓不同，需用户自行选择
+    // 换入仓与换出仓现在都是成品仓（允许相同，同仓按品质分行），仍由用户选择
     await onSaleOrderChange(so.id, so)
   } catch (e: any) {
     ElMessage.error(e?.msg || e?.message || '加载来源销售单失败')
@@ -283,7 +284,7 @@ function removeItem(i: number) { items.value.splice(i, 1) }
 
 async function submit() {
   if (!form.saleOrderId) { ElMessage.warning('请选择来源销售单'); return }
-  if (!form.warehouseInId) { ElMessage.warning('请选择换入仓(售后仓)'); return }
+  if (!form.warehouseInId) { ElMessage.warning('请选择换入仓(成品仓)'); return }
   if (!form.warehouseOutId) { ElMessage.warning('请选择换出仓(成品仓)'); return }
   const its = items.value.filter((i) => Number(i.quantity) > 0)
   if (its.length === 0) { ElMessage.warning('请至少录入一条换货明细'); return }

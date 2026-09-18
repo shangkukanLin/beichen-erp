@@ -167,7 +167,7 @@ onMounted(() => { loadData() })
           <el-input-number v-model="form.amount" :min="0.01" :precision="2" controls-position="right" style="width:100%"/>
         </el-form-item>
         <el-form-item label="联动预览">
-          <span style="font-size:13px">不含税 <b>{{ fmt(preview.amount) }}</b> ＋ 税额 <b style="color:var(--app-color-primary)">{{ fmt(preview.tax) }}</b> ＝ 价税合计 <b>{{ fmt(preview.total) }}</b></span>
+          <span style="font-size:var(--app-font-base)">不含税 <b>{{ fmt(preview.amount) }}</b> ＋ 税额 <b style="color:var(--app-color-primary)">{{ fmt(preview.tax) }}</b> ＝ 价税合计 <b>{{ fmt(preview.total) }}</b></span>
         </el-form-item>
         <el-form-item label="关联单号"><el-input v-model="form.sourceBillCode" placeholder="可选：关联销售单/采购单号"/></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea"/></el-form-item>

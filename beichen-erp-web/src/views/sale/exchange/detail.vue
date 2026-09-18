@@ -41,7 +41,7 @@
       <el-divider content-position="left">换货明细（同品换货）</el-divider>
       <el-table :data="items" border>
         <!-- ===== 退回侧：客户退回，入售后仓待整理 ===== -->
-        <el-table-column label="退回（客户退回，入售后仓）" align="center">
+        <el-table-column label="退回（客户退回，入成品仓待分类）" align="center">
           <el-table-column label="SKU" width="130">
             <template #default="{ row }">
               <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ row.sku || '—' }}</el-button>
@@ -199,7 +199,7 @@ async function doAudit() {
   const chargeTip = charged
     ? `\n并生成一条向客户收取的费用应收 ${formatMoney(head.chargeAmount)} 元（台账单号 ${head.code}-FEE）。`
     : ''
-  await ElMessageBox.confirm(`确认审核「${head.code}」？审核后退回货品入售后仓(待分类)，换出货品从成品仓扣减。${chargeTip}`, '审核确认', { type: 'warning' })
+  await ElMessageBox.confirm(`确认审核「${head.code}」？审核后退回货品入成品仓(待分类)，换出货品从成品仓扣减。${chargeTip}`, '审核确认', { type: 'warning' })
   acting.value = true
   try {
     await auditSaleExchange(Number(route.params.id))

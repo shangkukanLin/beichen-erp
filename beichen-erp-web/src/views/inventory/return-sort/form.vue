@@ -40,11 +40,9 @@ const items = ref<any[]>([])
 /** 待整理库存超期预警阈值（天）：停留超过该天数则标红提示 */
 const STAY_ALERT_DAYS = 3
 
-// 源仓库：只允许选售后仓
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.AFTER_SALE } })
-// 目标仓库：自有仓（成品仓/不良仓等）
-const fetchTargetWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY' } })
-// A规/B规/C规 目标仓：必须为成品仓（与后端校验一致）
+// 源仓库：自有**成品仓**（2026-09-16 方案 A：原"售后仓"取消，退回品直接压在成品仓、品质 PENDING 待分类）
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.FINISHED } })
+// 目标入库仓（A/B/C/不良）：一律自有**成品仓** —— 不良品改用**品质 DEFECT** 区分，不再需要独立"不良仓"
 const fetchFinishedWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.FINISHED } })
 
 const warehouseOptions = ref<any[]>([])
@@ -60,19 +58,18 @@ function resetForm() {
   items.value = []
 }
 
-// 默认目标仓库：A/B/C 取第一个成品仓，不良取第一个不良仓
+// 默认目标仓库：A/B/C/不良 都取第一个成品仓（2026-09-16 方案 A：不良品靠品质 DEFECT 区分，无独立不良仓）
 function applyTargetDefaults() {
   const fin = warehouseOptions.value.find((w: any) => w.warehouseType === WarehouseType.FINISHED)
-  const def = warehouseOptions.value.find((w: any) => w.warehouseType === WarehouseType.DEFECT)
   form.targetWarehouseA = fin?.id
   form.targetWarehouseB = fin?.id
   form.targetWarehouseC = fin?.id
-  form.targetWarehouseDefect = def?.id
+  form.targetWarehouseDefect = fin?.id
 }
 
-// 加载售后仓待整理库存（待分类品）
+// 加载成品仓待整理库存（待分类品）
 async function loadDefectStock() {
-  if (!form.warehouseId) { ElMessage.warning('请先选择源仓库(售后仓)'); return }
+  if (!form.warehouseId) { ElMessage.warning('请先选择源仓库(成品仓)'); return }
   try {
     const rows: any[] = await getReturnSortDefectStock(form.warehouseId)
     for (const r of rows) {
@@ -95,7 +92,7 @@ async function loadDefectStock() {
         })
       }
     }
-    if (rows.length === 0) ElMessage.info('该售后仓暂无待整理库存（待分类品）')
+    if (rows.length === 0) ElMessage.info('该成品仓暂无待整理库存（待分类品）')
   } catch { ElMessage.error('加载待整理库存失败') }
 }
 
@@ -144,16 +141,16 @@ async function loadWarehouses() {
 }
 
 async function handleSave() {
-  if (!form.warehouseId) { ElMessage.warning('请选择源仓库(售后仓)'); return }
+  if (!form.warehouseId) { ElMessage.warning('请选择源仓库(成品仓)'); return }
   if (!form.targetWarehouseA || !form.targetWarehouseB || !form.targetWarehouseC || !form.targetWarehouseDefect) {
     ElMessage.warning('请选择 A规/B规/C规/不良 的目标入库仓库'); return
   }
-  if (items.value.length === 0) { ElMessage.warning('请先加载售后仓待整理库存并录入分选数量'); return }
+  if (items.value.length === 0) { ElMessage.warning('请先加载成品仓待整理库存并录入分选数量'); return }
   if (Number(form.lossAmount) < 0) { ElMessage.warning('折损收款金额不能为负数'); return }
   for (const it of items.value) {
     if (!it.totalQuantity || it.totalQuantity <= 0) { ElMessage.warning(`产品「${it.productName || it.productId}」待整理数量必须大于0`); return }
     if (it.available != null && it.totalQuantity > it.available) {
-      ElMessage.warning(`产品「${it.productName || it.productId}」待整理数量(${it.totalQuantity})超过售后仓可用待分类库存(${it.available})`)
+      ElMessage.warning(`产品「${it.productName || it.productId}」待整理数量(${it.totalQuantity})超过成品仓可用待分类库存(${it.available})`)
       return
     }
     if (itemSum(it) !== Number(it.totalQuantity)) {
@@ -195,7 +192,7 @@ watch(() => route.fullPath, () => { init() })
         <el-row :gutter="12">
           <el-col :span="8">
             <el-form-item label="源仓库" required>
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择售后仓" style="width:100%" />
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择成品仓" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -223,7 +220,7 @@ watch(() => route.fullPath, () => { init() })
           </el-col>
           <el-col :span="6">
             <el-form-item label="不良入库仓" required>
-              <RemoteSelect v-model="form.targetWarehouseDefect" :fetch="fetchTargetWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择仓库" style="width:100%" />
+              <RemoteSelect v-model="form.targetWarehouseDefect" :fetch="fetchFinishedWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择成品仓" style="width:100%" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -245,7 +242,7 @@ watch(() => route.fullPath, () => { init() })
 
       <el-divider content-position="left">整理明细（待整理数量 = A + B + C + 不良）</el-divider>
       <div style="margin-bottom:8px">
-        <el-button type="primary" :icon="'Download'" :disabled="!form.warehouseId" @click="loadDefectStock">加载售后仓待整理库存</el-button>
+        <el-button type="primary" :icon="'Download'" :disabled="!form.warehouseId" @click="loadDefectStock">加载成品仓待整理库存</el-button>
       </div>
       <el-table :data="items" border>
         <el-table-column label="来源单据" width="190" show-overflow-tooltip>

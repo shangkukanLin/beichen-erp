@@ -261,7 +261,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         List<ReturnSortItem> items = getItems(id);
         if (items.isEmpty()) throw new BusinessException("退货整理明细不能为空");
         // 源仓库必须为售后仓：防止创建后仓库被改成非售后仓再审核
-        assertAfterSaleWarehouse(s.getWarehouseId());
+        assertSourceWarehouse(s.getWarehouseId());
         assertTargetWarehouses(s);
 
         for (ReturnSortItem it : items) {
@@ -369,38 +369,27 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         itemMapper.delete(new LambdaQueryWrapper<ReturnSortItem>().eq(ReturnSortItem::getSortId, id));
     }
 
-    /** 源仓库必须为售后仓（前端下拉已过滤，此处防止接口绕过） */
-    private void assertAfterSaleWarehouse(Long warehouseId) {
+    /** 源仓库必须为自有成品仓（2026-09-16 方案 A：原"售后仓"取消，退回品直接压在成品仓内按品质 PENDING 待分类）；前端下拉已过滤，此处防接口绕过 */
+    private void assertSourceWarehouse(Long warehouseId) {
         Warehouse wh = warehouseMapper.selectById(warehouseId);
         if (wh == null) throw new BusinessException("源仓库不存在");
-        if (!WarehouseType.AFTER_SALE.getCode().equals(wh.getWarehouseType()))
-            throw new BusinessException("退货整理的源仓库必须是售后仓，当前仓库类型为：" + wh.getWarehouseType());
+        if (!com.beichen.erp.warehouse.common.WarehouseCategory.INVENTORY.getCode().equals(wh.getWarehouseCategory())
+                || !WarehouseType.FINISHED.getCode().equals(wh.getWarehouseType()))
+            throw new BusinessException("退货整理的源仓库必须是自有成品仓，当前仓库类别=" + wh.getWarehouseCategory()
+                    + "，仓型=" + wh.getWarehouseType());
     }
 
     /**
-     * 目标入库仓库校验：4 个目标仓均不能与源仓(售后仓)相同；A/B/C 必须为成品仓。
-     * 不良仓为柔性校验——仅当系统已配置"不良仓"类型的仓库时才强制，避免未建不良仓时无法提交整理单。
+     * 目标入库仓库校验（2026-09-16 方案 A）：A/B/C/不良 4 个目标仓都必须是**自有成品仓**
+     * （仓型已无"不良仓/售后仓"，不良品改由**品质 DEFECT** 区分）。
+     * <p>⚠️ 不再校验"目标仓 ≠ 源仓"：退货整理本质是**同一仓内的品质分流**
+     * （PENDING → A/B/C/DEFECT），源仓与目标仓同为成品仓是正常且最常见的用法。</p>
      */
     private void assertTargetWarehouses(ReturnSort s) {
-        Long src = s.getWarehouseId();
-        assertTargetNotSource(s.getTargetWarehouseA(), src, "A规");
-        assertTargetNotSource(s.getTargetWarehouseB(), src, "B规");
-        assertTargetNotSource(s.getTargetWarehouseC(), src, "C规");
-        assertTargetNotSource(s.getTargetWarehouseDefect(), src, "不良品");
-
         assertWarehouseType(s.getTargetWarehouseA(), WarehouseType.FINISHED, "A规");
         assertWarehouseType(s.getTargetWarehouseB(), WarehouseType.FINISHED, "B规");
         assertWarehouseType(s.getTargetWarehouseC(), WarehouseType.FINISHED, "C规");
-
-        Long defectCount = warehouseMapper.selectCount(new LambdaQueryWrapper<Warehouse>()
-                .eq(Warehouse::getWarehouseType, WarehouseType.DEFECT.getCode()));
-        if (defectCount != null && defectCount > 0)
-            assertWarehouseType(s.getTargetWarehouseDefect(), WarehouseType.DEFECT, "不良品");
-    }
-
-    private void assertTargetNotSource(Long targetId, Long srcId, String label) {
-        if (targetId != null && targetId.equals(srcId))
-            throw new BusinessException(label + "的目标入库仓库不能与源仓库(售后仓)相同");
+        assertWarehouseType(s.getTargetWarehouseDefect(), WarehouseType.FINISHED, "不良品");
     }
 
     private void assertWarehouseType(Long warehouseId, WarehouseType expect, String label) {
@@ -454,7 +443,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
 
     private void validate(ReturnSort s, List<ReturnSortItem> items) {
         if (s.getWarehouseId() == null) throw new BusinessException("源仓库(售后仓)不能为空");
-        assertAfterSaleWarehouse(s.getWarehouseId());
+        assertSourceWarehouse(s.getWarehouseId());
         if (s.getTargetWarehouseA() == null || s.getTargetWarehouseB() == null
                 || s.getTargetWarehouseC() == null || s.getTargetWarehouseDefect() == null)
             throw new BusinessException("请选择 A/B/C/不良 的目标入库仓库");

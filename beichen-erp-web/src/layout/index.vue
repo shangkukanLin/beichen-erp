@@ -290,7 +290,7 @@ watch(() => userStore.userInfo?.companyName, (name) => {
 .logo-text-mini { font-size: var(--app-font-lg); font-weight: 600; }
 .layout-header { display: flex; align-items: center; justify-content: space-between; background-color: var(--app-bg-container); border-bottom: 1px solid var(--app-border-light); padding: 0 var(--app-space-base); height: 48px; }
 .header-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.collapse-btn { font-size: 20px; cursor: pointer; color: var(--app-text-regular); }
+.collapse-btn { font-size: var(--app-font-num); cursor: pointer; color: var(--app-text-regular); }
 .header-breadcrumb { font-size: var(--app-font-base); }
 .header-breadcrumb :deep(.el-breadcrumb__inner) { color: var(--app-text-regular); }
 .header-breadcrumb :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) { color: var(--app-text-primary); font-weight: 600; }
@@ -305,7 +305,7 @@ watch(() => userStore.userInfo?.companyName, (name) => {
 .tab-bar { display: flex; align-items: center; background: #fff; border-bottom: 1px solid #e5e6eb; padding: 4px 8px 0 4px; height: 46px; }
 .tabs-wrapper { display: flex; align-items: center; flex: 1; overflow-x: auto; overflow-y: hidden; min-width: 0; scrollbar-width: none; -ms-overflow-style: none; }
 .tabs-wrapper::-webkit-scrollbar { display: none; }
-.tab-arrow { flex-shrink: 0; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 1; color: var(--app-text-regular); cursor: pointer; border-radius: 3px; user-select: none; }
+.tab-arrow { flex-shrink: 0; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: var(--app-font-md); line-height: 1; color: var(--app-text-regular); cursor: pointer; border-radius: 3px; user-select: none; }
 .tab-arrow:hover { background: #f2f3f5; color: var(--app-color-primary); }
 .tab-item { display: flex; align-items: center; gap: 2px; padding: 6px 10px 6px 12px; margin: 0 3px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: var(--app-font-base); color: #555; background: #fff; white-space: nowrap; max-width: 180px; flex-shrink: 0; }
 .tab-item:hover { background: #f2f3f5; color: var(--app-color-primary); }

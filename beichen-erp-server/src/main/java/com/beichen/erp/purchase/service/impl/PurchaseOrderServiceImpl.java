@@ -326,10 +326,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
         // 4) 冲销应付台账：置「已作废」并保留审计，不再物理删除（与委外交货反审核一致），
         //    避免账务无留痕、以及反审核后再审核时 bill_no 重复生成
+        //    I29 口径（2026-09-18）：作废行**金额一并清零**（原金额记入备注留痕），
+        //    使「amount = paid + unpaid」在所有行上恒成立，行级对账不再误报作废行
         for (FinancePayable fp : payables) {
-            fp.setStatus(SettlementStatus.CANCELLED.getCode());
-            fp.setUnpaidAmount(BigDecimal.ZERO);
-            payableMapper.updateById(fp);
+            payableHelper.cancelLedger(fp);
         }
 
         // 5) 成本冲销：删除本单入库批次并反加权

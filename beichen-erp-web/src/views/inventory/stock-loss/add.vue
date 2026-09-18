@@ -260,9 +260,9 @@ onMounted(async () => {
 .title { font-weight: 600; }
 .head-form { display: flex; flex-wrap: wrap; }
 .head-form :deep(.el-form-item) { margin-bottom: 8px; }
-.warn { color: #f56c6c; font-size: 12px; line-height: 16px; }
+.warn { color: #f56c6c; font-size: var(--app-font-xs); line-height: 16px; }
 .footer { margin-top: 16px; display: flex; align-items: center; justify-content: space-between; }
-.total { font-size: 14px; }
-.total strong { color: #f56c6c; font-size: 16px; }
+.total { font-size: var(--app-font-base); }
+.total strong { color: #f56c6c; font-size: var(--app-font-num-sm); }
 :deep(.el-card__body) { padding: 16px; }
 </style>

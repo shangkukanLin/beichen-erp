@@ -1,5 +1,6 @@
 package com.beichen.erp.system.service.impl;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -11,14 +12,17 @@ import com.beichen.erp.system.common.SystemConstants;
 import com.beichen.erp.system.entity.Menu;
 import com.beichen.erp.system.entity.Role;
 import com.beichen.erp.system.entity.UserDashboardTab;
+import com.beichen.erp.system.entity.UserMenu;
 import com.beichen.erp.system.entity.UserRole;
 import com.beichen.erp.system.entity.dto.ResetPasswordDTO;
 import com.beichen.erp.system.entity.dto.UserDTO;
 import com.beichen.erp.system.entity.dto.UserQueryDTO;
+import com.beichen.erp.system.entity.vo.UserMenuPermVO;
 import com.beichen.erp.system.entity.vo.UserVO;
 import com.beichen.erp.system.mapper.MenuMapper;
 import com.beichen.erp.system.mapper.RoleMapper;
 import com.beichen.erp.system.mapper.UserDashboardTabMapper;
+import com.beichen.erp.system.mapper.UserMenuMapper;
 import com.beichen.erp.system.mapper.UserRoleMapper;
 import com.beichen.erp.system.service.RoleService;
 import com.beichen.erp.system.service.UserService;
@@ -31,8 +35,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -41,6 +48,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     private final UserRoleMapper userRoleMapper;
     private final UserDashboardTabMapper dashboardTabMapper;
+    private final UserMenuMapper userMenuMapper;
     private final RoleMapper roleMapper;
     private final MenuMapper menuMapper;
     private final RoleService roleService;
@@ -144,6 +152,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             // 角色与看板页签一律重建（deleteUser 已清空，这里再兜一层，避免异常路径残留）
             userRoleMapper.delete(new LambdaQueryWrapper<UserRole>().eq(UserRole::getUserId, removed.getId()));
             dashboardTabMapper.delete(new LambdaQueryWrapper<UserDashboardTab>().eq(UserDashboardTab::getUserId, removed.getId()));
+            // 复活 = 全新用户：清空用户级自定义页面权限并回落「跟随角色」模式
+            userMenuMapper.delete(new LambdaQueryWrapper<UserMenu>().eq(UserMenu::getUserId, removed.getId()));
+            User resetMode = new User();
+            resetMode.setId(removed.getId());
+            resetMode.setMenuMode(SystemConstants.MENU_MODE_ROLE);
+            baseMapper.updateById(resetMode);
             saveUserRoles(removed.getId(), dto.getRoleIds());
             saveDashboardTabs(removed.getId(), dto.getDashboardTabs());
             log.info("已复活同名删除用户 {}（id={}）", dto.getUsername(), removed.getId());
@@ -219,6 +233,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 .eq(UserRole::getUserId, id));
         dashboardTabMapper.delete(new LambdaQueryWrapper<UserDashboardTab>()
                 .eq(UserDashboardTab::getUserId, id));
+        userMenuMapper.delete(new LambdaQueryWrapper<UserMenu>()
+                .eq(UserMenu::getUserId, id));
     }
 
     @Override
@@ -302,6 +318,119 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return dashboardTabMapper.selectList(new LambdaQueryWrapper<UserDashboardTab>()
                 .eq(UserDashboardTab::getUserId, userId))
                 .stream().map(UserDashboardTab::getTabKey).distinct().toList();
+    }
+
+    // ==================== 用户级页面权限（2026-09-18，消费方 MenuServiceImpl.getMenuTreeByRoleIds） ====================
+
+    @Override
+    public UserMenuPermVO getUserMenuPerm(Long userId) {
+        User user = baseMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        if (tenantCompany() != null && !tenantCompany().equals(user.getCompanyId())) {
+            throw new BusinessException(403, "无权限操作该用户");
+        }
+        UserMenuPermVO vo = new UserMenuPermVO();
+        String mode = user.getMenuMode();
+        boolean custom = mode != null && SystemConstants.MENU_MODE_CUSTOM.equalsIgnoreCase(mode.trim());
+        vo.setMenuMode(custom ? SystemConstants.MENU_MODE_CUSTOM : SystemConstants.MENU_MODE_ROLE);
+        vo.setMenuIds(userMenuMapper.selectList(new LambdaQueryWrapper<UserMenu>()
+                        .eq(UserMenu::getUserId, userId))
+                .stream().map(UserMenu::getMenuId).distinct().collect(Collectors.toList()));
+        // 角色菜单并集：前端把开关切到「自定义」时作为初始勾选（在角色既有权限上微调，而不是从零勾）
+        Set<Long> roleMenuIds = new LinkedHashSet<>();
+        for (Long roleId : roleService.getRoleIdsByUserId(userId)) {
+            roleMenuIds.addAll(roleService.getMenuIdsByRoleId(roleId));
+        }
+        vo.setRoleMenuIds(new ArrayList<>(roleMenuIds));
+        return vo;
+    }
+
+    /**
+     * 保存用户页面权限。
+     * <p>语义：ROLE=跟随角色（清空用户级记录）/ CUSTOM=完全以用户级记录为准（可加可减，不叠加角色）。</p>
+     * <p>只影响**菜单可见性 + 前端路由白名单**；后端接口鉴权仍是角色级（无按钮级权限），故被收权者不该手工调接口。</p>
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveUserMenuPerm(Long userId, String menuMode, List<Long> menuIds) {
+        User user = baseMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException("用户不存在");
+        }
+        if (tenantCompany() != null && !tenantCompany().equals(user.getCompanyId())) {
+            throw new BusinessException(403, "无权限操作该用户");
+        }
+        // 护栏①：不允许改自己的页面权限 —— 若把自己「用户管理」勾掉，就再也进不来调整（防自锁）
+        long currentUserId = StpUtil.getLoginIdAsLong();
+        if (userId != null && userId.longValue() == currentUserId) {
+            throw new BusinessException("不能修改自己的页面权限，请由其他管理员操作");
+        }
+        String mode = (menuMode == null || menuMode.isBlank())
+                ? SystemConstants.MENU_MODE_ROLE
+                : menuMode.trim().toUpperCase();
+        boolean custom = SystemConstants.MENU_MODE_CUSTOM.equals(mode);
+        if (!custom && !SystemConstants.MENU_MODE_ROLE.equals(mode)) {
+            throw new BusinessException("页面权限模式不合法");
+        }
+        // 护栏②：super_admin 用户恒为「跟随角色」（全量菜单），不允许被收权
+        if (custom && roleService.getRoleCodesByUserId(userId).contains(SystemConstants.SUPER_ADMIN_ROLE_CODE)) {
+            throw new BusinessException("超级管理员用户的页面权限不可自定义，只能跟随角色");
+        }
+        Set<Long> resolved = custom ? resolveCustomMenuIds(menuIds) : Collections.emptySet();
+        if (custom && resolved.isEmpty()) {
+            throw new BusinessException("自定义页面权限至少要勾选一个页面");
+        }
+        User upd = new User();
+        upd.setId(userId);
+        upd.setMenuMode(mode);
+        baseMapper.updateById(upd);
+
+        userMenuMapper.delete(new LambdaQueryWrapper<UserMenu>().eq(UserMenu::getUserId, userId));
+        if (!custom) {
+            log.info("用户 {} 页面权限已改回跟随角色（已清空用户级菜单）", userId);
+            return;
+        }
+        for (Long menuId : resolved) {
+            UserMenu um = new UserMenu();
+            um.setUserId(userId);
+            um.setMenuId(menuId);
+            userMenuMapper.insert(um);
+        }
+        log.info("用户 {} 页面权限已设为自定义，共 {} 条菜单", userId, resolved.size());
+    }
+
+    /**
+     * 规整自定义菜单集合：只接受"存在且启用"的菜单，**自动补齐祖先目录**，并**强制保留「首页」**。
+     * <p>①补祖先：菜单树 buildTree 只返回 parentId=0 的子树，缺父目录会让子菜单整组消失；
+     * ②保留首页：登录后默认落到 /dashboard，若被勾掉会一进系统就吃 403。</p>
+     */
+    private Set<Long> resolveCustomMenuIds(List<Long> menuIds) {
+        Set<Long> result = new LinkedHashSet<>();
+        if (menuIds == null || menuIds.isEmpty()) {
+            return result;
+        }
+        Map<Long, Menu> all = menuMapper.selectList(null).stream()
+                .collect(Collectors.toMap(Menu::getId, m -> m, (a, b) -> a));
+        for (Long id : menuIds) {
+            if (id == null) continue;
+            Menu m = all.get(id);
+            if (m == null || m.getStatus() == null || m.getStatus() != 1) continue;
+            result.add(id);
+            Long pid = m.getParentId();
+            int guard = 0;
+            while (pid != null && pid > 0 && guard++ < 10) {
+                Menu parent = all.get(pid);
+                if (parent == null) break;
+                result.add(pid);
+                pid = parent.getParentId();
+            }
+        }
+        all.values().stream()
+                .filter(m -> "/dashboard".equals(m.getRoutePath()) && m.getStatus() != null && m.getStatus() == 1)
+                .findFirst().ifPresent(m -> result.add(m.getId()));
+        return result;
     }
 
     /**

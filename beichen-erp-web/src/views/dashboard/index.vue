@@ -55,7 +55,7 @@
         <el-card shadow="never" class="section-card">
           <template #header>
             <span class="section-title">待办与预警</span>
-            <span style="float:right;font-size:12px;color:var(--app-text-secondary)">
+            <span style="float:right;font-size:var(--app-font-xs);color:var(--app-text-secondary)">
               {{ pendingCount ? `共 ${pendingCount} 项待处理` : '暂无待处理事项' }}
             </span>
           </template>
@@ -148,7 +148,7 @@
             <el-table-column label="产品" min-width="160" show-overflow-tooltip>
               <template #default="{row}">
                 <div>{{ row.productNames || ((row.productCount || 0) + '项') }}</div>
-                <div v-if="row.productSkus" style="font-size:12px;color:var(--app-text-secondary)">{{ row.productSkus }}</div>
+                <div v-if="row.productSkus" style="font-size:var(--app-font-xs);color:var(--app-text-secondary)">{{ row.productSkus }}</div>
               </template>
             </el-table-column>
             <el-table-column label="金额" width="110" align="right">
@@ -203,7 +203,10 @@
                注：2026-09-16 「物料收发单 / 物料其他出入库 / 物料报损 / 委外仓库 / 自有物料仓」5 项
                已随新一级菜单「物料仓库」迁到独立的「物料仓库」TAB -->
           <el-button v-if="hasMenu['OutsourceOrder']" type="primary" size="small" text @click="$router.push('/outsource/order')">加工订单</el-button>
+          <!-- 成品收货 / 物料收货：2026-09-16 由订单详情页签移出成独立菜单页（顺序与左侧栏一致） -->
+          <el-button v-if="hasMenu['OutsourceOrderDelivery']" type="primary" size="small" text @click="$router.push('/outsource/order/delivery')">成品收货</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialOrder']" type="primary" size="small" text @click="$router.push('/outsource/material-order')">物料订单</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialOrderDelivery']" type="primary" size="small" text @click="$router.push('/outsource/material-order/delivery')">物料收货</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialInfo']" type="primary" size="small" text @click="$router.push('/outsource/material-info')">物料信息管理</el-button>
           <el-button v-if="hasMenu['OutsourceReturnOrder']" type="primary" size="small" text @click="$router.push('/outsource/return-order')">加工退货</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialReturn']" type="primary" size="small" text @click="$router.push('/outsource/material-return')">物料退货</el-button>
@@ -311,7 +314,7 @@
             <el-table-column label="占比" min-width="140">
               <template #default="{row}">
                 <el-progress :percentage="row.pct" :stroke-width="10" :show-text="false" />
-                <span style="font-size:12px;color:var(--app-text-secondary)">{{ row.pct }}%</span>
+                <span style="font-size:var(--app-font-xs);color:var(--app-text-secondary)">{{ row.pct }}%</span>
               </template>
             </el-table-column>
           </el-table>
@@ -329,11 +332,11 @@
 
       <el-tab-pane v-if="hasModule['stock']" label="成品库存" name="stock">
         <div class="stat-grid">
-          <div class="stat-card clickable" @click="$router.push('/inventory/stock')">
+          <div class="stat-card clickable" @click="$router.push('/inventory/product-stock')">
             <div class="stat-value" style="color:var(--app-color-primary)">{{ fmtN(stockTotalQty) }}</div>
             <div class="stat-label">库存总件数</div>
           </div>
-          <div class="stat-card clickable" @click="$router.push('/inventory/stock')">
+          <div class="stat-card clickable" @click="$router.push('/inventory/product-stock')">
             <div class="stat-value" style="color:var(--app-color-success)">{{ fmtN(stockTotalValue) }}</div>
             <div class="stat-label">库存总金额</div>
           </div>
@@ -341,7 +344,7 @@
             <div class="stat-value" style="color:var(--app-color-warning)">{{ fmtN(stockPendingQty) }}</div>
             <div class="stat-label">待整理件数</div>
           </div>
-          <div class="stat-card clickable" @click="$router.push('/inventory/stock')">
+          <div class="stat-card clickable" @click="$router.push('/inventory/product-stock')">
             <div class="stat-value" style="color:var(--app-color-danger)">{{ fmtN(stockDefectQty) }}</div>
             <div class="stat-label">不良品件数</div>
           </div>
@@ -360,7 +363,7 @@
         <el-card shadow="never" class="section-card" v-if="lowStockItems.length">
           <template #header>
             <span class="section-title" style="color:var(--app-color-danger)">低库存预警（可用量 ≤ 安全库存）</span>
-            <el-button size="small" text style="float:right" @click="$router.push('/inventory/stock')">查看库存 →</el-button>
+            <el-button size="small" text style="float:right" @click="$router.push('/inventory/product-stock')">查看库存 →</el-button>
           </template>
           <el-table :data="lowStockItems" size="small" stripe>
             <el-table-column prop="productName" label="产品" min-width="140" show-overflow-tooltip>
@@ -380,10 +383,10 @@
         </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序 = 使用频率（2026-09-14）：库存情况/库存/仓库（日常查询）→ 流水/出入库/移仓/盘点/报损（作业）→ 重分类/产品（低频）；
-               注：退货整理已移到「销售业务」TAB（其菜单 707 本属销售业务） -->
+          <!-- 顺序 = 使用频率：库存情况/仓库（日常查询）→ 流水/出入库/移仓/盘点/报损（作业）→ 重分类/产品（低频）；
+               注：①「成品库存」查询页 2026-09-18 按用户要求下线（并入「成品库存情况」），快捷按钮一并移除
+                   ②退货整理自 2026-09-18 起归「成品库存」菜单（其 707 原属销售业务） -->
           <el-button v-if="hasMenu['InventoryProductStock']" type="primary" size="small" text @click="$router.push('/inventory/product-stock')">成品库存情况</el-button>
-          <el-button v-if="hasMenu['InventoryStock']" type="primary" size="small" text @click="$router.push('/inventory/stock')">成品库存</el-button>
           <!-- 成品仓库管理：改用**路由路径**判权限（与「委外仓库」共用 route_name "Warehouse" 会串号） -->
           <el-button v-if="hasPath['/inventory/warehouse']" type="primary" size="small" text @click="$router.push('/inventory/warehouse')">成品仓库管理</el-button>
           <el-button v-if="hasMenu['WarehouseStockLog']" type="primary" size="small" text @click="$router.push('/inventory/stock-log')">库存流水</el-button>
@@ -444,7 +447,7 @@
           <el-button v-if="hasMenu['FinanceCashflow']" type="primary" size="small" text @click="$router.push('/finance/cashflow')">资金流水</el-button>
           <el-button v-if="hasMenu['FinanceExpense']" type="primary" size="small" text @click="$router.push('/finance/expense')">费用管理</el-button>
           <el-button v-if="hasMenu['FinanceInvoice']" type="primary" size="small" text @click="$router.push('/finance/invoice')">发票管理</el-button>
-          <el-button v-if="hasMenu['FinanceAccount']" type="primary" size="small" text @click="$router.push('/finance/account')">资金账户</el-button>
+          <el-button v-if="hasMenu['FinanceAccount']" type="primary" size="small" text @click="$router.push('/finance/account')">账户管理</el-button>
           <el-button v-if="hasMenu['FinancePayableTransfer']" type="primary" size="small" text @click="$router.push('/finance/payable-transfer')">应付转应收</el-button>
         </div>
       </el-tab-pane>
@@ -841,7 +844,7 @@ function checkUserMenus() {
   hasModule.outsource = (names.has('OutsourceOrder') || names.has('OutsourceMaterialOrder')) && tabAllowed('outsource')
   hasModule.purchase = (names.has('InventoryPurchase') || names.has('SupplierManage') || names.has('OutsourceSupplierManage')) && tabAllowed('purchase')
   hasModule.sale = (names.has('InventorySale') || names.has('InventoryCustomer')) && tabAllowed('sale')
-  hasModule.stock = (names.has('InventoryStock') || names.has('Warehouse') || names.has('ProductManage')) && tabAllowed('stock')
+  hasModule.stock = (names.has('InventoryProductStock') || names.has('Warehouse') || names.has('ProductManage')) && tabAllowed('stock')
   hasModule.finance = (names.has('FinanceReceivable') || names.has('FinancePayable')) && tabAllowed('finance')
   // 物料仓库（2026-09-16 新增 TAB，对应新的一级菜单「物料仓库」）：菜单含任一物料收发/仓储/报损页面即视为可见
   hasModule.materialWarehouse = (names.has('OutsourceDelivery') || names.has('OutsourceOtherIo')
@@ -851,7 +854,7 @@ function checkUserMenus() {
   // 快捷入口可见性（route_name 与 sys_menu 一致）
   // 2026-09-14 按最新 sys_menu 重设：补齐缺失的 route_name（DevScreenModel / OutsourceStockLoss /
   // InventoryProductStock / InventoryStockLoss / FinancePayableTransfer / AnalysisOverview），并移除**已不存在**的 FinanceAnalysis
-  const menuNames = ['Dashboard','DevProject','DevMaterial','DevScreenModel','MaterialType','TemplateManage','ProductManage','InventoryBrand','InventoryCustomer','SupplierManage','OutsourceSupplierManage','OutsourceOrder','OutsourceMaterialOrder','OutsourceMaterialInfo','OutsourceDelivery','OutsourceOtherIo','OutsourceReturnOrder','OutsourceMaterialReturn','OutsourceStockLoss','Warehouse','OutsourceMaterialWarehouse','OutsourceMaterialStockTake','InventoryPurchase','InventoryPurchaseReturn','InventorySale','SaleReturn','SaleExchange','InventoryProductStock','InventoryStock','WarehouseStockLog','InventoryOtherIo','InventoryReclassify','InventoryWarehouseMove','InventoryStockTake','InventoryReturnSort','InventoryStockLoss','FinanceReceivable','FinancePayable','FinanceBill','FinanceCashflow','FinanceAccount','FinanceReceipt','FinancePayment','FinanceExpense','FinanceInvoice','FinancePayableTransfer','AnalysisOverview','SystemSmart','SystemUser','SystemSettings','SystemDataManage','SystemRole','SystemMenu','SystemClearData']
+  const menuNames = ['Dashboard','DevProject','DevMaterial','DevScreenModel','MaterialType','TemplateManage','ProductManage','InventoryBrand','InventoryCustomer','SupplierManage','OutsourceSupplierManage','OutsourceOrder','OutsourceOrderDelivery','OutsourceMaterialOrder','OutsourceMaterialOrderDelivery','OutsourceMaterialInfo','OutsourceDelivery','OutsourceOtherIo','OutsourceReturnOrder','OutsourceMaterialReturn','OutsourceStockLoss','Warehouse','OutsourceMaterialWarehouse','OutsourceMaterialStockTake','InventoryPurchase','InventoryPurchaseReturn','InventorySale','SaleReturn','SaleExchange','InventoryProductStock','WarehouseStockLog','InventoryOtherIo','InventoryReclassify','InventoryWarehouseMove','InventoryStockTake','InventoryReturnSort','InventoryStockLoss','FinanceReceivable','FinancePayable','FinanceBill','FinanceCashflow','FinanceAccount','FinanceReceipt','FinancePayment','FinanceExpense','FinanceInvoice','FinancePayableTransfer','AnalysisOverview','SystemSmart','SystemUser','SystemSettings','SystemDataManage','SystemRole','SystemMenu','SystemClearData']
   menuNames.forEach(n => { hasMenu.value[n] = names.has(n) })
   // 默认激活「备忘录」（2026-09-15 用户要求，原为「经营总览」；财务区块仍按 AnalysisOverview 权限显隐）
   activeTab.value = 'memo'
@@ -1039,7 +1042,7 @@ onMounted(async () => {
 .stat-card.clickable { cursor: pointer; transition: box-shadow 0.2s; }
 .stat-card.clickable:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
 .stat-value { font-size: var(--app-font-num); font-weight: 700; }
-.stat-label { font-size: var(--app-font-sm); color: var(--app-text-secondary); margin-top: 4px; }
+.stat-label { font-size: var(--app-font-base); color: var(--app-text-secondary); margin-top: 4px; }
 
 /* 快捷入口固定在视口底部（方案 A · 2026-09-14）
    原理：真正的滚动容器是 Element Plus 的 .el-main(overflow:auto)，但 .el-tabs__content 自带 overflow:hidden，
@@ -1059,7 +1062,7 @@ onMounted(async () => {
   background: var(--app-bg-container);          /* 白底：避免正文从按钮后面穿过 */
   border-top: 1px solid var(--app-border-light);
 }
-.links-label { color: var(--app-text-secondary); font-size: var(--app-font-sm); }
+.links-label { color: var(--app-text-secondary); font-size: var(--app-font-base); }
 
 .section-card { margin-bottom: 16px; }
 .section-title { font-weight: 600; font-size: var(--app-font-base); }
@@ -1067,19 +1070,19 @@ onMounted(async () => {
 /* 经营总览 */
 /* KPI 区间选择器（2026-09-15；选择器本体已收口到公共组件 StatRange） */
 .kpi-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
-.kpi-range { font-size: var(--app-font-sm); color: var(--app-text-secondary); }
+.kpi-range { font-size: var(--app-font-base); color: var(--app-text-secondary); }
 /* 悬停问号 .kpi-help 与 tooltip 内容 .kpi-formula 已提到全局样式 src/styles/index.css（2026-09-15）
    —— 原因：经营分析「经营概览」页也要用，写在某个页面的 style 里会出现"页面各自加载才生效"的样式缺失。 */
 .stat-card.mini { padding: 12px 16px; }
-.stat-value.sm { font-size: 16px; font-weight: 700; }
+.stat-value.sm { font-size: var(--app-font-num-sm); font-weight: 700; }
 .chart { width: 100%; height: 220px; margin-bottom: 16px; }
 /* 曲线图容器：说明文字 + 无数据占位（2026-09-15） */
 .chart-wrap { position: relative; }
-.chart-caption { font-size: var(--app-font-sm); color: var(--app-text-secondary); margin-bottom: 6px; }
+.chart-caption { font-size: var(--app-font-base); color: var(--app-text-secondary); margin-bottom: 6px; }
 .chart-empty {
   position: absolute; left: 0; right: 0; top: 30px; bottom: 24px;
   display: flex; align-items: center; justify-content: center;
-  color: var(--app-text-secondary); font-size: var(--app-font-sm); pointer-events: none;
+  color: var(--app-text-secondary); font-size: var(--app-font-base); pointer-events: none;
 }
 .todo-grid { display: flex; gap: 12px; flex-wrap: wrap; }
 .todo-card {
@@ -1088,15 +1091,15 @@ onMounted(async () => {
 }
 .todo-card.clickable { cursor: pointer; transition: box-shadow 0.2s; }
 .todo-card.clickable:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-.todo-value { font-size: 20px; font-weight: 700; }
-.todo-label { font-size: var(--app-font-sm); color: var(--app-text-secondary); margin-top: 4px; }
-.todo-sub { font-size: 12px; color: var(--app-text-secondary); margin-top: 2px; }
+.todo-value { font-size: var(--app-font-num); font-weight: 700; }
+.todo-label { font-size: var(--app-font-base); color: var(--app-text-secondary); margin-top: 4px; }
+.todo-sub { font-size: var(--app-font-xs); color: var(--app-text-secondary); margin-top: 2px; }
 
 /* 销售工作台（2026-09-15 改版）：当日单据量 4 卡 */
 
 /* 2026-09-15：原「出库情况提示行」已按用户要求删除，相关 .warn-line 样式一并清理 */
 
-/* 窄屏（≤768px）：快捷入口按钮会折成 2–3 行（委外加工 tab 有 11 个），固定底栏会长期占掉大片屏幕，
+/* 窄屏（≤768px）：快捷入口按钮会折成 2–3 行（委外加工 tab 有 9 个），固定底栏会长期占掉大片屏幕，
    故回退为"随内容滚动"（与改动前一致）。若要窄屏也固定，删掉这一条即可。 */
 @media (max-width: 768px) {
   .quick-links { position: static; }

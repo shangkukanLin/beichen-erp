@@ -318,10 +318,10 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                     "", order.getId(), it.getQualityType());
         }
         // 3) 冲销应付台账：置「已作废」并保留审计，不再物理删除（与委外交货反审核一致）
+        //    I29 口径（2026-09-18）：作废行**金额一并清零**（原金额记入备注留痕），
+        //    使「amount = paid + unpaid」在所有行上恒成立，行级对账不再误报作废行
         for (FinancePayable fp : payables) {
-            fp.setStatus(SettlementStatus.CANCELLED.getCode());
-            fp.setUnpaidAmount(BigDecimal.ZERO);
-            payableMapper.updateById(fp);
+            payableHelper.cancelLedger(fp);
         }
         // 4) 回退到草稿
         // 审核信息必须用 UpdateWrapper 显式置 null：updateById 忽略 null 字段，反审核后仍显示审核人/时间

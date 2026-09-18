@@ -95,13 +95,13 @@ public class WarehouseController {
         if (w.getWarehouseCategory() == null || w.getWarehouseCategory().isBlank()) {
             w.setWarehouseCategory(WarehouseCategory.INVENTORY.getCode());
         }
-        // 仓型必填：仓型为空会导致按仓型过滤的下拉（销售出库/退货/委外等）都选不到该仓
-        if (w.getWarehouseType() == null || w.getWarehouseType().isBlank()) {
-            if (WarehouseCategory.OUTSOURCE.getCode().equals(w.getWarehouseCategory())) {
-                w.setWarehouseType(WarehouseType.AUXILIARY.getCode());
-            } else {
-                throw new BusinessException("仓型不能为空");
-            }
+        // 仓型（2026-09-16 方案 A）：仅**自有仓必填**（下拉按仓型过滤）；委外仓一律不写仓型；
+        // 且仓型必须在枚举内 —— 防止接口绕过写入已取消的 DEFECT/AFTER_SALE
+        if (WarehouseCategory.OUTSOURCE.getCode().equals(w.getWarehouseCategory())) {
+            w.setWarehouseType(null);
+        } else {
+            if (w.getWarehouseType() == null || w.getWarehouseType().isBlank()) throw new BusinessException("仓型不能为空");
+            assertValidType(w.getWarehouseType());
         }
         if (w.getStatus() == null) w.setStatus(1);
         warehouseMapper.insert(w);
@@ -126,11 +126,21 @@ public class WarehouseController {
     @PutMapping
     public R<Void> update(@RequestBody Warehouse w) {
         // 显式传空串=要把仓型清空，需拦截；未传(null)视为不修改，由 MP 忽略
-        if (w.getWarehouseType() != null && w.getWarehouseType().isBlank()) {
-            throw new BusinessException("仓型不能为空");
+        if (w.getWarehouseType() != null) {
+            if (w.getWarehouseType().isBlank()) throw new BusinessException("仓型不能为空");
+            assertValidType(w.getWarehouseType());
         }
         warehouseMapper.updateById(w);
         return R.ok();
+    }
+
+    /** 仓型必须在枚举内（2026-09-16 方案 A：仓型收敛为 成品仓/辅料仓，防止接口绕过写入已取消的 DEFECT/AFTER_SALE） */
+    private void assertValidType(String type) {
+        try {
+            WarehouseType.valueOf(type);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException("仓型非法：" + type);
+        }
     }
 
     /** 删除仓库（检查关联数据） */

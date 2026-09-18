@@ -71,6 +71,6 @@ onActivated(() => { loadData() })
 <style scoped>
 .p{display:flex;flex-direction:column}
 .toolbar{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-.title{font-weight:600;font-size:15px}
-.dim{font-size:12px;color:var(--el-text-color-secondary)}
+.title{font-weight:600;font-size:var(--app-font-md)}
+.dim{font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
 </style>

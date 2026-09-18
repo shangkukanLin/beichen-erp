@@ -73,7 +73,7 @@ public class CompanyController {
         List<String> roleCodes = roleService.getRoleCodesByUserId(userId);
         StpUtil.getSession().set("roles", roleCodes);
         List<Long> roleIds = roleService.getRoleIdsByUserId(userId);
-        List<Menu> menus = menuService.getMenuTreeByRoleIds(roleIds);
+        List<Menu> menus = menuService.getMenuTreeByRoleIds(roleIds, userId);
 
         Map<String, Object> result = new HashMap<>();
         result.put("companyId", companyId);

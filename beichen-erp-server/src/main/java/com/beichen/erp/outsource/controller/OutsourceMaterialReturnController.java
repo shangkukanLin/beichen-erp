@@ -30,8 +30,10 @@ public class OutsourceMaterialReturnController {
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) String code,
             @RequestParam(required = false) Long supplierId,
-            @RequestParam(required = false) String status) {
-        return R.ok(returnService.page(pageNum, pageSize, code, supplierId, status));
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String returnType,
+            @RequestParam(required = false) String progress) {
+        return R.ok(returnService.page(pageNum, pageSize, code, supplierId, status, returnType, progress));
     }
 
     /** 详情 */
@@ -84,6 +86,37 @@ public class OutsourceMaterialReturnController {
         return R.ok();
     }
 
+    /** 登记维修返回（维修返还单已审核后，供应商修好把物料送回来 → 入库；不产生应付，2026-09-17） */
+    @PostMapping("/{id}/repair-return")
+    public R<Void> repairReturn(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        returnService.repairReturn(id, body);
+        return R.ok();
+    }
+
+    /** 撤销维修返回（按记录ID：扣回已入库物料并删除该记录） */
+    @DeleteMapping("/repair-return/{repairRecordId}")
+    public R<Void> cancelRepairReturn(@PathVariable Long repairRecordId) {
+        returnService.cancelRepairReturn(repairRecordId);
+        return R.ok();
+    }
+
+    /**
+     * 结案（仅维修返还，2026-09-17）：全部送修数量都已返回（未返回=0）后确认收尾 —— 场景②/③的跟踪终点。
+     * <p>结案后禁止登记/撤销维修返回、禁止反审核（需先「撤销结案」）。</p>
+     */
+    @PutMapping("/{id}/close")
+    public R<Void> close(@PathVariable Long id) {
+        returnService.close(id);
+        return R.ok();
+    }
+
+    /** 撤销结案：回到"送修中"跟踪状态，可继续登记维修返回 */
+    @PutMapping("/{id}/re-open")
+    public R<Void> reOpen(@PathVariable Long id) {
+        returnService.reOpen(id);
+        return R.ok();
+    }
+
     /** 可选源仓列表（启用仓库） */
     @GetMapping("/warehouse-options")
     public R<List<Map<String, Object>>> warehouseOptions() {
@@ -102,6 +135,12 @@ public class OutsourceMaterialReturnController {
         return R.ok(returnService.fifoPrice(materialId, qty));
     }
 
+    /** 从「物料收货」发起退货的预填数据（按收料单带出供应商/源仓/物料与可退数量） */
+    @GetMapping("/return-prefill")
+    public R<Map<String, Object>> returnPrefill(@RequestParam Long deliveryId) {
+        return R.ok(returnService.returnPrefill(deliveryId));
+    }
+
     // ===== 请求解析 =====
 
     private OutsourceMaterialReturn parseOrder(Map<String, Object> body) {
@@ -110,6 +149,12 @@ public class OutsourceMaterialReturnController {
         if (sid != null && !sid.toString().isBlank()) o.setSupplierId(Long.valueOf(sid.toString()));
         Object wid = body.get("fromWarehouseId");
         if (wid != null && !wid.toString().isBlank()) o.setFromWarehouseId(Long.valueOf(wid.toString()));
+        // 来源收料单（物料收货页发起退货时带出，用于按记录算「可退数量」）
+        Object sdid = body.get("sourceDeliveryId");
+        if (sdid != null && !sdid.toString().isBlank()) o.setSourceDeliveryId(Long.valueOf(sdid.toString()));
+        // 关联物料订单（维修返还闭环，2026-09-17）：未传/清空=不关联（返回情况靠本单「送修/已返回」跟踪）
+        Object moid = body.get("materialOrderId");
+        if (moid != null && !moid.toString().isBlank()) o.setMaterialOrderId(Long.valueOf(moid.toString()));
         Object rt = body.get("returnType");
         if (rt != null && !rt.toString().isBlank()) o.setReturnType(rt.toString());
         Object dd = body.get("returnDate");

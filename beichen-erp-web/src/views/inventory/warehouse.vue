@@ -22,7 +22,9 @@ const allData = ref<any[]>([])
 const activeTab = ref('active')
 const tableLoading = ref(false)
 // 仓型下拉（value=code，与后端 WarehouseType 枚举一致）
-const WARHOUSE_TYPES: Record<string, string> = { FINISHED: '成品仓', DEFECT: '不良仓', AFTER_SALE: '售后仓' }
+// 2026-09-16 方案 A：仓型收敛为「成品仓 / 辅料仓」两种；本页只管自有**成品仓**（辅料仓在「物料仓库 → 自有物料仓」），
+// 原「不良仓 / 售后仓」已取消（退回品与不良品统一入成品仓、按品质区分）
+const WARHOUSE_TYPES: Record<string, string> = { FINISHED: '成品仓' }
 const activeData = computed(() => allData.value.filter(v => v.status === 1))
 const stoppedData = computed(() => allData.value.filter(v => v.status === 0))
 
@@ -41,7 +43,8 @@ function handleQuery() { loadData() }
 function handleReset() { query.warehouseName = ''; query.warehouseType = ''; loadData() }
 
 const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoading = ref(false)
-const defForm = () => ({ id: undefined as any, code: '', warehouseName: '', warehouseType: '', address: '', manager: '', phone: '', status: 1, remark: '' })
+// 仓型默认「成品仓」：本页只建自有成品仓（2026-09-16 方案 A 后仓型仅 成品仓/辅料仓 两种）
+const defForm = () => ({ id: undefined as any, code: '', warehouseName: '', warehouseType: WarehouseType.FINISHED, address: '', manager: '', phone: '', status: 1, remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
 function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dialogTitle.value = '新增仓库'; dialogVisible.value = true }
@@ -125,7 +128,11 @@ onMounted(() => { loadData(); loadTakeStatus() })
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
       <el-form :model="form" label-width="80px">
         <el-form-item label="名称" required><el-input v-model="form.warehouseName" /></el-form-item>
-        <el-form-item label="仓型" required><el-select v-model="form.warehouseType" style="width:100%"><el-option v-for="(lb, code) in WARHOUSE_TYPES" :key="code" :label="lb" :value="code" /></el-select></el-form-item>
+        <el-form-item label="仓型" required>
+          <el-select v-model="form.warehouseType" placeholder="请选择仓型" style="width:100%"><el-option v-for="(lb, code) in WARHOUSE_TYPES" :key="code" :label="lb" :value="code" /></el-select>
+          <!-- I5 提示文案（2026-09-18）：本页只管成品仓，辅料仓在另一处菜单，避免按字面误建 -->
+          <div style="color:var(--app-text-secondary);font-size:var(--app-font-xs);line-height:1.5">本页只管理<b>成品仓</b>；辅料仓（自有物料仓）请在「物料仓库 → 自有物料仓」创建与管理</div>
+        </el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
         <el-form-item label="负责人"><el-input v-model="form.manager" /></el-form-item>
         <el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item>

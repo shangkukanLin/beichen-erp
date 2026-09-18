@@ -54,7 +54,7 @@
             采购/销售/换货/退货整理/售后、采购单、销售单、库存与盘点、成品报损、物料报损、成本批次、
             财务（费用、发票、收付款、应收应付、应付转应收、账单、现金流）、备忘等。
           </p>
-          <p style="color:var(--app-color-warning);margin-bottom:16px;font-size:var(--app-font-sm)">
+          <p style="color:var(--app-color-warning);margin-bottom:16px;font-size:var(--app-font-base)">
             系统数据（公司、用户、角色、菜单）不受影响。操作后不可恢复，请谨慎执行。
           </p>
           <el-button type="danger" :loading="clearLoading" @click="handleClear">清空当前公司数据</el-button>

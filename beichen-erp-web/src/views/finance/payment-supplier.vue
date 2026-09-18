@@ -124,7 +124,7 @@ onMounted(() => loadAll())
 
     <el-card shadow="never">
       <template #header><span style="font-weight:600">应付明细</span></template>
-      <el-table :data="payables" border stripe size="small">
+      <el-table :data="payables" border stripe>
         <el-table-column prop="billNo" label="单据号" width="150" />
         <el-table-column label="来源" width="130"><template #default="{row}">{{ sourceBillTypeLabel(row.sourceBillType) }}</template></el-table-column>
         <el-table-column label="来源单号" width="160" show-overflow-tooltip><template #default="{row}"><a v-if="row.sourceId != null" class="bill-link" @click="goSourceDetail(row)">{{ row.sourceBillNo }}</a><span v-else>{{ row.sourceBillNo }}</span></template></el-table-column>
@@ -139,7 +139,7 @@ onMounted(() => loadAll())
 
     <el-card shadow="never">
       <template #header><span style="font-weight:600">付款记录</span></template>
-      <el-table :data="payments" border stripe size="small">
+      <el-table :data="payments" border stripe>
         <el-table-column prop="code" label="单号" width="150" />
         <el-table-column prop="accountName" label="账户" width="120" />
         <el-table-column prop="paymentDate" label="日期" width="100" align="center" />
@@ -169,7 +169,7 @@ onMounted(() => loadAll())
         </el-row>
         <el-divider>核销明细（未结清应付）</el-divider>
         <div style="margin-bottom:8px"><el-button type="primary" size="small" @click="addItem">添加核销项</el-button></div>
-        <el-table :data="dItems" border size="small">
+        <el-table :data="dItems" border>
           <el-table-column label="应付单据" min-width="240"><template #default="{row}"><el-select v-model="row.payableId" filterable style="width:100%" @change="(v:number)=>onPayableChange(v,row)"><el-option v-for="u in unpaid" :key="u.id" :label="`${u.billNo} (未付:${u.unpaidAmount}, 到期:${$fmtDate(u.dueDate)})`" :value="u.id"/></el-select></template></el-table-column>
           <el-table-column label="核销金额" width="140"><template #default="{row}"><el-input-number v-model="row.thisAmount" :min="0" :precision="2" controls-position="right" style="width:100%"/></template></el-table-column>
           <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>
@@ -186,6 +186,6 @@ onMounted(() => loadAll())
 .page-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:4px}
 
 .stat-row{display:flex;gap:48px;padding:4px 8px}
-.stat-label{font-size:var(--app-font-sm);color:var(--app-text-secondary);margin-bottom:4px}
-.stat-value{font-size:22px;font-weight:600}
+.stat-label{font-size:var(--app-font-base);color:var(--app-text-secondary);margin-bottom:4px}
+.stat-value{font-size:var(--app-font-num);font-weight:600}
 </style>

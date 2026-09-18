@@ -65,6 +65,7 @@ public class DataInitializer implements ApplicationRunner {
         syncMenus();
         initRoleMenus();
         migrateDashboardTabs();
+        migrateUserMenuMode();
         initSuperAdmin();
         initMaterialTypes();
         initPhaseTemplates();
@@ -261,67 +262,101 @@ public class DataInitializer implements ApplicationRunner {
             {304L, 3L, "研发物料", "menu", "/dev/material", "DevMaterial", "Box", 4},
             // 屏幕资料：行业机型屏幕参数（折叠屏/直板 AMOLED），可增删改查；清空数据时不清理
             {305L, 3L, "屏幕资料", "menu", "/dev/screen-model", "DevScreenModel", "Iphone", 5},
+            // 委外加工子菜单顺序（2026-09-17 用户定稿）：加工订单 → 成品收货 → 加工退货 → 物料订单 → 物料收货 → 物料退货。
+            // sort_order 即左侧栏显示顺序（MenuMapper.selectAllEnabled 按 sort_order 排序）；下方书写顺序与实际显示顺序一致，便于维护。
             {401L, 4L, "加工订单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1},
-            {402L, 4L, "物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 2},
-            // 412「交货信息」已于 2026-09-16 按用户要求下线（不再 upsert，下方统一置 visible=0）。
-            // 注意：**交货业务本身保留** —— 交货记录在「加工订单详情 → 交货管理」与「物料订单详情 → 交货管理」页签内
-            // （OrderDeliveryController / OutsourceOrderDeliveryService 及库存、应付、BOM还料逻辑均未动）。
+            // 成品收货（2026-09-16 用户要求）：原「加工订单详情 → 交货管理」页签**移出**独立成菜单页 ——
+            // 页面只列正在加工（PRODUCING）的加工单，点「交货」进详细页并自动弹出新增交货弹窗。
+            // id 412 复用 2026-09-16 下线的「交货信息」总览页旧行（**必须同时从下方 visible=0 名单移除**）
+            {412L, 4L, "成品收货", "menu", "/outsource/order/delivery", "OutsourceOrderDelivery", "Van", 2},
+            // 加工退货（2026-09-17 起排在物料类之前：不良退货 / 维修退货）
+            {408L, 4L, "加工退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 3},
+            {402L, 4L, "物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 4},
+            // 物料收货（2026-09-16 用户要求）：原「物料订单详情 → 交货管理」页签**移出**独立成菜单页 ——
+            // 页面只列收货中（RECEIVING）的物料订单，点「收料」进详细页并自动弹出收货弹窗。
+            // 注意：**交货业务本身未改**（OrderDeliveryController / OutsourceOrderDeliveryService /
+            // MaterialOrderController 的收料、退不良、库存、应付、BOM还料逻辑均未动）
+            {415L, 4L, "物料收货", "menu", "/outsource/material-order/delivery", "OutsourceMaterialOrderDelivery", "Van", 5},
+            {411L, 4L, "物料退货", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Refrigerator", 6},
+            // 409「供应商管理」已于 2026-09-17 按用户要求下线：它是委外加工侧的**重复入口**（与基础数据 106
+            // 「供应商管理」同指 /supplier/manage，页面完全相同），基础数据里 106/107 两份都保留。
+            // 与 104/405/302/303 同范式：下方统一置 visible=0（保留行与角色授权，便于回滚）。
             // 403「物料信息」已于 2026-09-16 迁入「基础数据」（紧跟物料类型管理）→ 此处不再 upsert。
             // 406/407/404/410/413「物料收发单 / 物料其他出入库 / 委外仓库 / 自有物料仓 / 物料报损」
             // 已于 2026-09-16 按用户要求迁入新目录「物料仓库」(11)——**路由路径全部不变**，故不涉白名单/重定向
-            {408L, 4L, "加工退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 3},
-            {411L, 4L, "物料退货", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Refrigerator", 4},
-            {409L, 4L, "供应商管理", "menu", "/supplier/manage", "OutsourceSupplierManage", "UserFilled", 5},
             // 405「加工合同模板」已并入 108「模版管理」（基础数据，2026-09-15），不再在此 upsert
-            // 物料仓库（11，2026-09-16 新增）：单据类（收发/其他出入库/报损）在前、仓库类（委外仓/自有物料仓）在后
-            {406L, 11L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 1},
-            {407L, 11L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 2},
-            // 物料报损：与成品报损独立成表（主体为 outsource_material，物料库存不区分品质，固定按良品扣减）
-            {413L, 11L, "物料报损", "menu", "/outsource/stock-loss", "OutsourceStockLoss", "DeleteFilled", 3},
-            {404L, 11L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 4},
-            {410L, 11L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 5},
+            // 物料仓库（11，2026-09-16 新增；同日按用户要求重排为「仓库 → 盘点 → 单据」）：
+            {404L, 11L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 1},
+            {410L, 11L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 2},
             // 物料库存盘点（2026-09-16 用户要求）：与成品「库存盘点」按仓库类别彻底分开 ——
             // 本页只盘物料仓（委外仓 + 自有物料仓），成品页只盘成品类仓库；
             // 且本页**接口级限「跟单专员」**（见 StockTakeServiceImpl.assertRoleForScope，管理员兜底）
-            {414L, 11L, "物料库存盘点", "menu", "/outsource/material-stock-take", "OutsourceMaterialStockTake", "DocumentChecked", 6},
+            {414L, 11L, "物料库存盘点", "menu", "/outsource/material-stock-take", "OutsourceMaterialStockTake", "DocumentChecked", 3},
+            // 物料报损：与成品报损独立成表（主体为 outsource_material，物料库存不区分品质，固定按良品扣减）
+            {413L, 11L, "物料报损", "menu", "/outsource/stock-loss", "OutsourceStockLoss", "DeleteFilled", 4},
+            {407L, 11L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 5},
+            {406L, 11L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6},
             {501L, 5L, "成品采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1},
             {502L, 5L, "采购退货单", "menu", "/inventory/purchase-return", "InventoryPurchaseReturn", "Refrigerator", 2},
-            // 进货业务→供货商管理：指向 /outsource/supplier/manage（供货商=成品商，双模式页面）
-            {503L, 5L, "供货商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "UserFilled", 3},
+            // 采购换货单（2026-09-18 用户要求）：向供货商采购的成品也可换货 —— 把不良品退回供货商 + 换回良品，
+            // 一张单管住"出一进"（退回出库扣减 + 换入入库增加），并生成两条应付台账（退回负 / 换入正），净额即差价
+            {504L, 5L, "采购换货单", "menu", "/inventory/purchase-exchange", "InventoryPurchaseExchange", "Refresh", 3},
+            // 503「供货商管理」已于 2026-09-18 按用户要求下线：它是进货业务侧的**重复入口**
+            // （与基础数据 107「供货商管理」同指 /outsource/supplier/manage、同 route_name，页面完全相同）
+            // ——基础数据里已有，故与 602/409/104 同范式：不再 upsert，下方统一置 visible=0。
+            // 注意：merchandiser 原先**只有 409**（2026-09-17 已被隐藏的委外侧重复入口）、没有 107，
+            // 若只隐藏 503/409 会让跟单专员看不到「供货商管理」⇒ 必须补授 107（见 initRoleMenus 存量补授块）。
             {601L, 6L, "销售单", "menu", "/inventory/sale", "InventorySale", "Sell", 1},
-            {602L, 6L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "User", 5},
-            // 售后：销售退单 → 退货整理 → 销售换货单（换货可选择性收费）
+            // 602「客户管理」已于 2026-09-18 按用户要求下线：它是销售业务侧的**重复入口**
+            // （与基础数据 105「客户管理」同指 /inventory/customer，页面完全相同）——基础数据里已有，
+            // 故与 409/104/405/302/303 同范式：不再 upsert，下方统一置 visible=0（保留行与角色授权，便于回滚）。
+            // 注意：sales / merchandiser 原先只授了 602，下线后必须补授 105（见 initRoleMenus 的存量补授块），
+            // 否则这两个角色会失去「客户管理」入口与其前端菜单白名单。
+            // 售后：销售退单 → 销售换货单（换货可选择性收费）；「退货整理」已于 2026-09-18 移到「成品库存」
             {603L, 6L, "销售退单", "menu", "/sale/return", "SaleReturn", "Refund", 2},
             {605L, 6L, "销售换货单", "menu", "/sale/exchange", "SaleExchange", "Refresh", 3},
-            // 成品库存情况：按产品维度看跨仓库库存汇总，列表置顶；点行进详情看该产品在各仓库的分布
-            {712L, 7L, "成品库存情况", "menu", "/inventory/product-stock", "InventoryProductStock", "Box", 1},
-            {701L, 7L, "成品库存", "menu", "/inventory/stock", "InventoryStock", "Odometer", 2},
-            {702L, 7L, "成品仓库管理", "menu", "/inventory/warehouse", "Warehouse", "Odometer", 3},
+            // 成品库存子菜单顺序（2026-09-18 用户定稿重排）：
+            // 成品移仓单 → 退货整理 → 成品库存情况 → 成品库存流水 → 库存盘点 → 成品报损 → 成品其他出入库 → 成品品质重分类 → 成品仓库管理
+            // sort_order 即左侧栏显示顺序（MenuMapper.selectAllEnabled 按 sort_order 排序）；下方书写顺序与实际显示顺序一致，便于维护。
+            {706L, 7L, "成品移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 1},
+            // 退货整理（2026-09-18 用户要求：从「销售业务」移到「成品库存」—— 它本质是退回品的成品分选入库）
+            // ID 仍保留 707（存量角色授权按 ID 关联，换 ID 会导致历史授权失效），仅迁移 parent_id 6 → 7；
+            // 同日用户重排本组顺序，退货整理由第 10 位改排**第 2 位**（紧跟成品移仓单）。
+            // ⚠️ 父目录 7 必须同时授权，否则菜单树 buildTree 会把 707 整组丢弃
+            // （下方幂等补授块给其它持有 707 的角色兜底）。
+            {707L, 7L, "退货整理", "menu", "/inventory/return-sort", "InventoryReturnSort", "RefreshRight", 2},
+            // 成品库存情况：按产品维度看跨仓库库存汇总；点行进详情看该产品在各仓库的分布
+            {712L, 7L, "成品库存情况", "menu", "/inventory/product-stock", "InventoryProductStock", "Box", 3},
             {703L, 7L, "成品库存流水", "menu", "/inventory/stock-log", "WarehouseStockLog", "TrendCharts", 4},
-            {704L, 7L, "成品其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 5},
-            {705L, 7L, "成品品质重分类", "menu", "/inventory/reclassify", "InventoryReclassify", "Refresh", 6},
-            {706L, 7L, "成品移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 7},
             // 库存盘点：每月每仓一次，仓库列表与盘点页显示待盘点/超期提醒
-            {711L, 7L, "库存盘点", "menu", "/inventory/stock-take", "InventoryStockTake", "Files", 8},
+            {711L, 7L, "库存盘点", "menu", "/inventory/stock-take", "InventoryStockTake", "Files", 5},
             // 成品报损：草稿→审核扣减成品库存（LOSS_OUT 流水），可反审核回滚
-            {713L, 7L, "成品报损", "menu", "/inventory/stock-loss", "InventoryStockLoss", "DeleteFilled", 9},
-            // 退货整理归属「销售」模块（售后链路的一环：退单/换货退回 → 整理分选 → 入成品仓/不良仓）
-            // ID 仍保留 707（存量角色授权按 ID 关联，换 ID 会导致历史授权失效），仅迁移 parent_id
-            {707L, 6L, "退货整理", "menu", "/inventory/return-sort", "InventoryReturnSort", "RefreshRight", 4},
-            {801L, 8L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 1},
-            {802L, 8L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 2},
-            {803L, 8L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 3},
-            {804L, 8L, "资金流水", "menu", "/finance/cashflow", "FinanceCashflow", "TrendCharts", 4},
-            // 资金账户自「资金流水」页拆分为独立子菜单（807）
-            {807L, 8L, "资金账户", "menu", "/finance/account", "FinanceAccount", "Coin", 5},
-            {805L, 8L, "收款管理", "menu", "/finance/receipt", "FinanceReceipt", "Money", 6},
-            {806L, 8L, "付款管理", "menu", "/finance/payment", "FinancePayment", "Sell", 7},
-            // 费用登记：审核扣减资金账户并生成「费用支出」流水，供财务分析利润表取数
-            {809L, 8L, "费用管理", "menu", "/finance/expense", "FinanceExpense", "Tickets", 8},
+            {713L, 7L, "成品报损", "menu", "/inventory/stock-loss", "InventoryStockLoss", "DeleteFilled", 6},
+            {704L, 7L, "成品其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 7},
+            {705L, 7L, "成品品质重分类", "menu", "/inventory/reclassify", "InventoryReclassify", "Refresh", 8},
+            {702L, 7L, "成品仓库管理", "menu", "/inventory/warehouse", "Warehouse", "Odometer", 9},
+            // 701「成品库存」（/inventory/stock）已于 2026-09-18 按用户要求下线（页面代码已删，功能由
+            // 「712 成品库存情况」按产品维度覆盖）⇒ 与 409/602/503 同范式：不再 upsert，
+            // 下方统一置 visible=0（保留行与角色授权，便于回滚）；其历史 sort_order 已在下方挪到 99，
+            // 不再占用 1~9，避免与 707 并列（将来若回滚启用也不会产生顺序歧义）。
+            // 财务管理子菜单顺序（2026-09-18 用户定稿重排）：
+            // 账单生成 → 收款管理 → 付款管理 → 费用管理 → 应收管理 → 应付管理 → 资金流水 → 账户管理 → 发票管理 → 应付转应收
+            // sort_order 即左侧栏显示顺序（MenuMapper.selectAllEnabled 按 sort_order 排序）；下方书写顺序与实际显示顺序一致，便于维护。
+            {803L, 8L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 1},
+            {805L, 8L, "收款管理", "menu", "/finance/receipt", "FinanceReceipt", "Money", 2},
+            {806L, 8L, "付款管理", "menu", "/finance/payment", "FinancePayment", "Sell", 3},
+            // 费用登记：审核扣减账户并生成「费用支出」流水，供财务分析利润表取数
+            {809L, 8L, "费用管理", "menu", "/finance/expense", "FinanceExpense", "Tickets", 4},
+            {801L, 8L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 5},
+            {802L, 8L, "应付管理", "menu", "/finance/payable", "FinancePayable", "CreditCard", 6},
+            {804L, 8L, "资金流水", "menu", "/finance/cashflow", "FinanceCashflow", "TrendCharts", 7},
+            // 807 自「资金流水」页拆分为独立子菜单；2026-09-18 按用户要求菜单名由「资金账户」改为「账户管理」
+            // （纯文案：id / parent_id / route_path / route_name / 授权均不变，故不涉及白名单与跳转；同日并入本组重排 → 第 8 位）
+            {807L, 8L, "账户管理", "menu", "/finance/account", "FinanceAccount", "Coin", 8},
             // 发票登记：销项/进项发票（税务口径），供税务分析发票汇总取数
-            {810L, 8L, "发票管理", "menu", "/finance/invoice", "FinanceInvoice", "Stamp", 10},
+            {810L, 8L, "发票管理", "menu", "/finance/invoice", "FinanceInvoice", "Stamp", 9},
             // 应付转应收：退货/超损扣款（负向应付）在无货款可抵时，转为向供应商收款
-            {811L, 8L, "应付转应收", "menu", "/finance/payable-transfer", "FinancePayableTransfer", "Refresh", 11},
+            {811L, 8L, "应付转应收", "menu", "/finance/payable-transfer", "FinancePayableTransfer", "Refresh", 10},
             {901L, 9L, "智能管理", "menu", "/system/smart", "SystemSmart", "Cpu", 1},
             {902L, 9L, "用户管理", "menu", "/system/user", "SystemUser", "UserFilled", 2},
             {904L, 9L, "系统信息", "menu", "/system/settings", "SystemSettings", "Setting", 4},
@@ -376,11 +411,22 @@ public class DataInitializer implements ApplicationRunner {
         // —— 两者功能已合并进 108「模版管理」（页内 TAB 区分）。这里置 visible=0 而**不删行**：便于回滚，
         // 且 getMenuTreeByRoleIds 只回 status=1 AND visible=1 → 侧栏消失、前端菜单白名单也不再含旧路径
         // （旧路径在前端已改为重定向到 /template 对应页签，直接输 URL 不会吃 403）。
+        // 409「供应商管理」2026-09-17 按用户要求一并下线（委外加工侧重复入口，基础数据 106 已有同页面菜单）。
         try {
-            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 412) AND visible = 1");
-            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 412 交货信息）", hidden);
+            // 注意：412 不在此列表 —— 2026-09-16 该 id 已被复用为「成品收货」菜单，
+            // 若仍置 visible=0，会在上面的 upsert 之后把新菜单立刻隐藏（upsert 在前、置 0 在后）
+            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701) AND visible = 1");
+            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 409 委外加工-供应商管理 / 602 销售业务-客户管理 / 503 进货业务-供货商管理 / 701 成品库存查询）", hidden);
         } catch (Exception e) {
             log.warn("下线老菜单异常: {}", e.getMessage());
+        }
+
+        // 701 已下线：把它的历史 sort_order（2）挪到 99 —— 2026-09-18 成品库存组重排后 1~9 已被
+        // 9 个在用菜单占满，不腾位就会与 707（新 sort_order=2）并列（幂等：仅在不等时更新）。
+        try {
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 99 WHERE id = 701 AND sort_order <> 99");
+        } catch (Exception e) {
+            log.warn("调整 701 排序位异常: {}", e.getMessage());
         }
     }
 
@@ -398,10 +444,10 @@ public class DataInitializer implements ApplicationRunner {
                 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L,
                 101L, 102L, 103L, 105L, 106L, 107L, 108L,
                 301L, 304L, 305L,
-                401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 411L, 413L, 414L,
-                501L, 502L, 503L,
+                401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 411L, 412L, 413L, 414L, 415L,
+                501L, 502L, 503L, 504L,
                 601L, 602L, 603L, 605L,
-                701L, 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L,
+                702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L,
                 801L, 802L, 803L, 804L, 805L, 806L, 807L, 809L, 810L, 811L,
                 1001L, 1003L, 1004L, 1005L, 1006L, 1007L,
                 901L, 902L, 903L, 904L, 905L, 906L, 907L, 908L));
@@ -411,20 +457,27 @@ public class DataInitializer implements ApplicationRunner {
                 1L, 2L, 3L, 301L, 304L, 305L, 101L, 108L));
         // 销售专员：销售业务 + 客户 + 产品（605 换货单；2 基础数据）
         // 注：经营分析（目录 10 及其子页）自 2026-09-15 起**仅管理者可见**，故不再授予 sales
+        // 105「客户管理」（基础数据）：2026-09-18 起客户管理只保留基础数据这一处入口，故销售专员必须授 105
+        // （602 保留授权仅为回滚便利，已 visible=0 不再出菜单）
         assignRoleMenus("sales", Arrays.asList(
-                1L, 2L, 6L, 601L, 602L, 603L, 605L, 101L));
+                1L, 2L, 6L, 601L, 602L, 603L, 605L, 101L, 105L));
         // 仓管员：进货 + 库存 + 仓库 + **物料仓库整组**（2026-09-16 用户要求：
         // 11 目录 + 404 委外仓库 / 406 物料收发单 / 407 物料其他出入库 / 410 自有物料仓 / 413 物料报损）
         // （2 基础数据 / 6 销售业务 / 11 物料仓库 为其子菜单的父目录）
+        // 707「退货整理」（成品库存）：2026-09-18 用户要求补授 —— 它是**成品分选入库的操作页**，仓管员日常在用
         assignRoleMenus("warehouse", Arrays.asList(
-                1L, 2L, 5L, 6L, 7L, 11L, 501L, 502L, 603L, 701L, 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L,
+                1L, 2L, 5L, 6L, 7L, 11L, 501L, 502L, 504L, 603L, 702L, 703L, 704L, 705L, 706L, 707L, 711L, 712L, 713L,
                 404L, 406L, 407L, 410L, 413L, 101L));
         // 跟单专员：委外加工全部 + 相关基础数据/进货/销售/成品库存页面 + 物料仓库整组（含 414 物料库存盘点）
         // （原 405 加工合同模板 → 108 模版管理，权限等价迁移）
+        // 412 成品收货 / 415 物料收货（2026-09-16）：原详情页签移出成菜单，权限沿用委外加工原范围
+        // 107「供货商管理」（基础数据）：2026-09-18 起供货商管理只保留基础数据这一处入口；
+        // 跟单专员原先只有 409（9-17 已隐藏的委外侧重复入口）⇒ 必须授 107 才看得到供货商主数据
+        // 707「退货整理」（成品库存）：2026-09-18 用户要求补授 —— 售后分选入库链路跟单专员也参与
         assignRoleMenus("merchandiser", Arrays.asList(
                 1L, 2L, 4L, 5L, 6L, 7L, 11L,
-                401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 413L, 414L,
-                101L, 108L, 502L, 602L, 702L, 705L));
+                401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 412L, 413L, 414L, 415L,
+                101L, 105L, 107L, 108L, 502L, 504L, 602L, 702L, 705L, 707L));
         // 财务：财务管理（2 基础数据 = 101 产品管理的父目录）
         // 注：经营分析自 2026-09-15 起**仅管理者可见**，故不再授予 finance
         assignRoleMenus("finance", Arrays.asList(
@@ -466,6 +519,78 @@ public class DataInitializer implements ApplicationRunner {
         } catch (Exception e) {
             log.warn("补授仓管员物料仓库权限异常: {}", e.getMessage());
         }
+
+        // 存量库幂等补授：412「成品收货」/ 415「物料收货」是 2026-09-16 由详情页签移出成菜单的新行，
+        // assignRoleMenus 只在角色「尚无任何菜单」时才写入 → 存量库必须单独补授（admin / 跟单专员）
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, m.id FROM sys_role r JOIN sys_menu m ON m.id IN (412, 415) " +
+                    "WHERE r.role_code IN ('admin','merchandiser')");
+            if (granted > 0) log.info("已补授 412「成品收货」/ 415「物料收货」给 {} 个角色", granted);
+        } catch (Exception e) {
+            log.warn("补授收货菜单异常: {}", e.getMessage());
+        }
+
+        // 存量库幂等补授（2026-09-18）：销售业务侧的 602「客户管理」重复入口已下线（与基础数据 105 同页面），
+        // 而 sales / merchandiser 原先**只授了 602**；不补授 105 会让这两个角色彻底失去客户管理
+        // （菜单不出现 + 前端白名单无 /inventory/customer → 直输 URL 吃 403）。
+        // 同 108/11 做法：INSERT IGNORE + uk_role_menu 唯一键，重复启动无副作用。
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, 105 FROM sys_role r WHERE r.role_code IN ('admin','sales','merchandiser')");
+            if (granted > 0) log.info("已补授 105「客户管理」（基础数据）给 {} 个角色", granted);
+        } catch (Exception e) {
+            log.warn("补授客户管理菜单异常: {}", e.getMessage());
+        }
+
+        // 存量库幂等补授（2026-09-18）：进货业务侧的 503「供货商管理」重复入口已下线（与基础数据 107 同页面）；
+        // merchandiser 历史上只有 409（9-17 已隐藏的委外侧重复入口）而没有 107 ⇒ 不补授 107 会让跟单专员
+        // 看不到供货商主数据（菜单不出现 + 白名单无 /outsource/supplier/manage → 直输 URL 吃 403）。
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, 107 FROM sys_role r WHERE r.role_code IN ('admin','merchandiser')");
+            if (granted > 0) log.info("已补授 107「供货商管理」（基础数据）给 {} 个角色", granted);
+        } catch (Exception e) {
+            log.warn("补授供货商管理菜单异常: {}", e.getMessage());
+        }
+
+        // 存量库幂等补授（2026-09-18）：进货业务新增「504 采购换货单」（父目录 5 进货业务 + 菜单本体），
+        // assignRoleMenus 只在角色"尚无任何菜单"时写入 ⇒ 存量库必须单独补授，否则老库看不到新菜单。
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, 504 FROM sys_role r WHERE r.role_code IN ('admin','warehouse','merchandiser')");
+            if (granted > 0) log.info("已补授 504「采购换货单」给 {} 个角色", granted);
+        } catch (Exception e) {
+            log.warn("补授采购换货单菜单异常: {}", e.getMessage());
+        }
+
+        // 存量库幂等补授（2026-09-18）：707「退货整理」由销售业务（parent 6）迁到成品库存（parent 7）。
+        // 菜单树以「已授权菜单」为输入，**父目录未授权会把其子菜单整组丢弃** ⇒ 给持有 707 的角色补授目录 7
+        // （admin 本就有 7，INSERT IGNORE 幂等；其它角色若有 707 也能自愈）。
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT DISTINCT rm.role_id, 7 FROM sys_role_menu rm WHERE rm.menu_id = 707");
+            if (granted > 0) log.info("已为持有 707「退货整理」的角色补授父目录 7「成品库存」，共 {} 条", granted);
+        } catch (Exception e) {
+            log.warn("补授成品库存目录异常: {}", e.getMessage());
+        }
+
+        // 存量库幂等补授（2026-09-18 用户要求）：707「退货整理」（成品库存）此前**只有 admin 持有**，
+        // 补授给**仓管员 / 跟单专员** —— 它是成品分选入库的操作页，这两个角色日常在用。
+        // （父目录 7 两者本就有，无需重复补授；INSERT IGNORE + uk_role_menu 保证重复启动无副作用）
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, 707 FROM sys_role r WHERE r.role_code IN ('warehouse','merchandiser')");
+            if (granted > 0) log.info("已补授 707「退货整理」给 {} 个角色（仓管员/跟单专员）", granted);
+        } catch (Exception e) {
+            log.warn("补授退货整理菜单异常: {}", e.getMessage());
+        }
     }
 
     /**
@@ -482,6 +607,21 @@ public class DataInitializer implements ApplicationRunner {
             if (n > 0) log.info("已为 {} 位已配置首页 TAB 的用户补上「物料仓库」TAB", n);
         } catch (Exception e) {
             log.warn("补齐首页 TAB 异常: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 存量库幂等迁移（2026-09-18）：sys_user 增加 menu_mode 列（页面权限模式 ROLE/CUSTOM）。
+     * <p>新库由 schema.sql 直接建列；老库必须 ALTER —— MySQL 不支持 ADD COLUMN IF NOT EXISTS，
+     * 故用 try/catch 忽略「列已存在」错误，保证重复启动无副作用。</p>
+     */
+    private void migrateUserMenuMode() {
+        try {
+            jdbcTemplate.execute("ALTER TABLE sys_user ADD COLUMN menu_mode VARCHAR(10) DEFAULT 'ROLE' "
+                    + "COMMENT '页面权限模式: ROLE=跟随角色(默认) CUSTOM=以用户级菜单为准'");
+            log.info("已为 sys_user 增加 menu_mode 列（用户级页面权限模式）");
+        } catch (Exception e) {
+            log.debug("menu_mode 列已存在，跳过：{}", e.getMessage());
         }
     }
 

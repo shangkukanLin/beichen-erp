@@ -109,7 +109,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
           </span>
         </div>
       </template>
-      <el-table :data="data.payables || []" border stripe size="small" max-height="260" @row-click="goSourceDetail">
+      <el-table :data="data.payables || []" border stripe max-height="260" @row-click="goSourceDetail">
         <el-table-column prop="billNo" label="应付单号" width="150" />
         <el-table-column label="来源" width="110"><template #default="{row}">{{ sourceBillTypeLabel(row.sourceBillType) }}</template></el-table-column>
         <el-table-column label="来源单号" width="160" show-overflow-tooltip><template #default="{row}"><a v-if="row.sourceId != null" class="bill-link" @click.stop="goSourceDetail(row)">{{ row.sourceBillNo }}</a><span v-else>{{ row.sourceBillNo }}</span></template></el-table-column>
@@ -126,7 +126,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
       <template #header><span style="font-weight:600">② 未完成订单（需完成或取消）</span></template>
       <template v-if="(data.activeOrders||[]).length > 0">
         <div class="section-title">委外加工单</div>
-        <el-table :data="data.activeOrders" border stripe size="small" @row-click="(row: any) => router.push(`/outsource/order/detail/${row.id}`)">
+        <el-table :data="data.activeOrders" border stripe @row-click="(row: any) => router.push(`/outsource/order/detail/${row.id}`)">
           <el-table-column prop="code" label="单号" width="170" />
           <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="OutsourceOrderStatusTag[row.status] || 'info'" size="small">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
           <el-table-column label="计划完成" width="110" align="center"><template #default="{row}">{{ $fmtDate(row.planEndDate) }}</template></el-table-column>
@@ -136,7 +136,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
       </template>
       <template v-if="(data.activeMaterialOrders||[]).length > 0">
         <div class="section-title" style="margin-top:12px">物料订单</div>
-        <el-table :data="data.activeMaterialOrders" border stripe size="small" @row-click="(row: any) => router.push(`/outsource/material-order/detail/${row.id}`)">
+        <el-table :data="data.activeMaterialOrders" border stripe @row-click="(row: any) => router.push(`/outsource/material-order/detail/${row.id}`)">
           <el-table-column prop="code" label="单号" width="170" />
           <el-table-column label="类型" width="80" align="center"><template #default="{row}">{{ OrderTypeLabel[row.orderType] || '物料单' }}</template></el-table-column>
           <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
@@ -155,7 +155,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
           <el-button v-if="(data.stocks||[]).length>0" type="warning" size="small" @click="openReturn">一键退料</el-button>
         </div>
       </template>
-      <el-table :data="data.stocks || []" border stripe size="small" max-height="260">
+      <el-table :data="data.stocks || []" border stripe max-height="260">
         <el-table-column prop="warehouseName" label="委外仓" width="150" />
         <el-table-column prop="materialTypeName" label="类型" width="90" />
         <el-table-column prop="materialName" label="物料" min-width="140" />
@@ -200,7 +200,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
 .page-header{display:flex;align-items:center;gap:12px;padding-bottom:4px}
 
 .card-header{display:flex;align-items:center;justify-content:space-between}
-.section-title{font-weight:600;font-size:var(--app-font-sm);color:var(--app-text-regular);margin-bottom:6px}
+.section-title{font-weight:600;font-size:var(--app-font-base);color:var(--app-text-regular);margin-bottom:6px}
 .check-list{display:flex;flex-direction:column;gap:10px;padding:4px 8px}
 .check-item{display:flex;align-items:center;gap:8px;font-size:var(--app-font-base)}
 </style>

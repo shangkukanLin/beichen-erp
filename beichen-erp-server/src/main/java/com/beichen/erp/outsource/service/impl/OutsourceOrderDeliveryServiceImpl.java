@@ -38,6 +38,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -47,6 +48,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 加工单交货记录服务实现
@@ -124,6 +126,93 @@ public class OutsourceOrderDeliveryServiceImpl
             productStats.add(ps);
         }
         result.put("productStats", productStats);
+        return result;
+    }
+
+    /**
+     * 待交货订单列表（「成品收货」菜单页）：正在加工（PRODUCING）的加工单 + 交货进度聚合。
+     * <p>口径与 {@link #summary(Long)} 一致：已交数量只统计已审核（AUDITED）的交货记录（退不良为负数会自动扣减）；
+     * 最近交货日期看全部交货记录（含草稿），与加工订单列表 latestDeliveryDate 口径保持一致。</p>
+     */
+    @Override
+    public Map<String, Object> pageProducingOrders(Integer pageNo, Integer size, String code) {
+        Page<OutsourceOrder> pageParam = new Page<>(pageNo == null || pageNo < 1 ? 1 : pageNo,
+                size == null || size < 1 ? 10 : size);
+        Page<OutsourceOrder> pageResult = orderMapper.selectPage(pageParam,
+                new LambdaQueryWrapper<OutsourceOrder>()
+                        .eq(OutsourceOrder::getStatus, OutsourceOrderStatus.PRODUCING.getCode())
+                        .like(code != null && !code.isBlank(), OutsourceOrder::getCode, code)
+                        .orderByDesc(OutsourceOrder::getId));
+
+        List<Long> orderIds = pageResult.getRecords().stream()
+                .map(OutsourceOrder::getId).collect(Collectors.toList());
+        Map<Long, BigDecimal> totalMap = new HashMap<>();
+        Map<Long, BigDecimal> deliveredMap = new HashMap<>();
+        Map<Long, LocalDate> latestMap = new HashMap<>();
+        Map<Long, String> nameMap = new HashMap<>();
+        Map<Long, String> skuMap = new HashMap<>();
+
+        if (!orderIds.isEmpty()) {
+            // 订单量 + 产品名称/SKU 拼串（一次查全部，避免逐单查询）
+            List<OutsourceOrderProduct> products = orderProductMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceOrderProduct>().in(OutsourceOrderProduct::getOrderId, orderIds));
+            productService.fillSku(products, OutsourceOrderProduct::getProductId, OutsourceOrderProduct::setSku);
+            for (OutsourceOrderProduct p : products) {
+                totalMap.merge(p.getOrderId(), p.getQuantity() != null ? p.getQuantity() : BigDecimal.ZERO, BigDecimal::add);
+                if (p.getProductName() != null && !p.getProductName().isEmpty())
+                    nameMap.merge(p.getOrderId(), p.getProductName(), (a, b) -> a + " / " + b);
+                if (p.getSku() != null && !p.getSku().isEmpty())
+                    skuMap.merge(p.getOrderId(), p.getSku(), (a, b) -> a + " / " + b);
+            }
+            // 已交数量（仅已审核）+ 最近交货日期（全部记录）
+            for (OutsourceOrderDelivery d : baseMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceOrderDelivery>().in(OutsourceOrderDelivery::getOrderId, orderIds))) {
+                if (DocStatus.AUDITED.getCode().equals(d.getStatus())) {
+                    deliveredMap.merge(d.getOrderId(),
+                            d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO, BigDecimal::add);
+                }
+                LocalDate date = d.getDeliveryDate();
+                if (date != null) {
+                    LocalDate cur = latestMap.get(d.getOrderId());
+                    if (cur == null || date.isAfter(cur)) latestMap.put(d.getOrderId(), date);
+                }
+            }
+        }
+
+        // 加工厂名称（批量查，避免 N+1）
+        Map<Long, String> factoryNameMap = new HashMap<>();
+        List<Long> factoryIds = pageResult.getRecords().stream()
+                .map(OutsourceOrder::getFactoryId).filter(fid -> fid != null).distinct().collect(Collectors.toList());
+        if (!factoryIds.isEmpty()) {
+            for (Supplier s : supplierMapper.selectBatchIds(factoryIds)) factoryNameMap.put(s.getId(), s.getName());
+        }
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (OutsourceOrder o : pageResult.getRecords()) {
+            BigDecimal total = totalMap.getOrDefault(o.getId(), BigDecimal.ZERO);
+            BigDecimal delivered = deliveredMap.getOrDefault(o.getId(), BigDecimal.ZERO);
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", o.getId());
+            m.put("code", o.getCode());
+            m.put("status", o.getStatus());
+            m.put("factoryId", o.getFactoryId());
+            m.put("factoryName", factoryNameMap.getOrDefault(o.getFactoryId(), ""));
+            m.put("productNames", nameMap.getOrDefault(o.getId(), ""));
+            m.put("productSkus", skuMap.getOrDefault(o.getId(), ""));
+            m.put("planEndDate", o.getPlanEndDate());
+            m.put("totalAmount", o.getTotalAmount());
+            m.put("totalQuantity", total);
+            m.put("deliveredQuantity", delivered);
+            m.put("remainingQuantity", total.subtract(delivered));
+            m.put("latestDeliveryDate", latestMap.get(o.getId()));
+            rows.add(m);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("records", rows);
+        result.put("total", pageResult.getTotal());
+        result.put("current", pageResult.getCurrent());
+        result.put("size", pageResult.getSize());
         return result;
     }
 
@@ -221,7 +310,7 @@ public class OutsourceOrderDeliveryServiceImpl
             OutsourceOrderProduct matchedProduct =
                     findOrderProduct(orderService.getProducts(delivery.getOrderId()), delivery);
             if (matchedProduct == null) throw new BusinessException("加工单中未找到该产品");
-            BigDecimal materialCost = applyMaterialDeduction(order, matchedProduct, delivery.getQuantity(), matchedProduct.getProductName());
+            BigDecimal materialCost = applyMaterialDeduction(order, matchedProduct, delivery.getQuantity(), matchedProduct.getProductName(), delivery.getId());
             if (delivery.getWarehouseId() != null) {
                 addInventoryStock(delivery, order.getCode());
             }
@@ -451,7 +540,7 @@ public class OutsourceOrderDeliveryServiceImpl
             // 物料写入统一到 WarehouseStockService（架构债 A2）
             stockService.changeMaterialStockAllowNegative(whId, mat.materialId(), restoreQty,
                     StockChangeType.OUTSOURCE_DEFECT_RETURN.getCode(), order.getCode(), RelatedBillType.OUTSOURCE_DEFECT,
-                    delivery.getId(), order.getId(), null);
+                    delivery.getId(), order.getId(), delivery.getId());
             log.info("退不良还料: {} +{} (仓库ID={})", mat.materialName(), restoreQty, whId);
         }
     }
@@ -484,7 +573,7 @@ public class OutsourceOrderDeliveryServiceImpl
             if (rollback.compareTo(BigDecimal.ZERO) > 0) {
                 stockService.changeMaterialStockAllowNegative(whId, mat.materialId(), rollback.negate(),
                         StockChangeType.OUTSOURCE_DEFECT_RETURN_UN_AUDIT.getCode(), order.getCode(),
-                        RelatedBillType.OUTSOURCE_DEFECT, delivery.getId(), order.getId(), null);
+                        RelatedBillType.OUTSOURCE_DEFECT, delivery.getId(), order.getId(), delivery.getId());
             }
         }
     }
@@ -699,9 +788,12 @@ public class OutsourceOrderDeliveryServiceImpl
         return sb.toString();
     }
 
-    /** 执行物料扣减（允许负数）；返回本批耗用材料总成本（按物料加权成本计价，供产品成本归集） */
+    /**
+     * 执行物料扣减（允许负数）；返回本批耗用材料总成本（按物料加权成本计价，供产品成本归集）。
+     * @param deliveryId 交货记录ID —— F1（2026-09-17）：写入流水 related_delivery_id / related_bill_id，保证可回溯
+     */
     private BigDecimal applyMaterialDeduction(OutsourceOrder order, OutsourceOrderProduct product,
-                                        BigDecimal deliveryQty, String productName) {
+                                        BigDecimal deliveryQty, String productName, Long deliveryId) {
         List<MaterialReq> materials = loadMaterialRequirements(product);
         if (materials.isEmpty()) {
             log.warn("产品「{}」无物料需求，跳过物料扣除", productName);
@@ -730,7 +822,7 @@ public class OutsourceOrderDeliveryServiceImpl
             //（forceDelivery 可忽略缺料继续出库），故用 changeMaterialStockAllowNegative，不做充足校验
             stockService.changeMaterialStockAllowNegative(whId, mat.materialId(), needed.negate(),
                     StockChangeType.OUTSOURCE_CONSUME.getCode(), order.getCode(), RelatedBillType.OUTSOURCE_ORDER,
-                    null, order.getId(), null);
+                    deliveryId, order.getId(), deliveryId);
             log.info("扣减物料: {} x{} (仓库ID={})", mat.materialName(), needed.setScale(2, RoundingMode.HALF_UP), whId);
         }
         return totalMaterialCost;
@@ -762,7 +854,7 @@ public class OutsourceOrderDeliveryServiceImpl
             // 物料写入统一到 WarehouseStockService（架构债 A2）：回补为正数，仍走"允许负数"口径以保持与领料侧对称
             stockService.changeMaterialStockAllowNegative(whId, mat.materialId(), toRestore,
                     StockChangeType.CANCEL_OUTSOURCE_CONSUME.getCode(), order.getCode(), RelatedBillType.OUTSOURCE_ORDER,
-                    delivery.getId(), order.getId(), null);
+                    delivery.getId(), order.getId(), delivery.getId());
             log.info("回滚物料: {} +{}", mat.materialName(), toRestore.setScale(2, RoundingMode.HALF_UP));
         }
     }

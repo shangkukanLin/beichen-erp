@@ -197,8 +197,8 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         int seq = nextWarehouseSeq(date);
         w.setCode(BillPrefix.WAREHOUSE + date + String.format("%03d", seq));
         w.setWarehouseCategory(WarehouseCategory.OUTSOURCE.getCode());
-        // 仓型必填：委外仓固定为辅料仓（原缺失会让按仓型过滤的下拉选不到该仓）
-        w.setWarehouseType(WarehouseType.AUXILIARY.getCode());
+        // 委外仓不写仓型（2026-09-16 方案 A：仓型只对自有仓有意义；原写 AUXILIARY 会让委外仓看起来像辅料仓）
+        w.setWarehouseType(null);
         w.setFactoryId(supplierId);
         w.setWarehouseName(supplierName != null ? supplierName + "委外仓库" : "委外仓库");
         w.setStatus(1);

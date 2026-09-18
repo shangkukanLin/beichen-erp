@@ -236,7 +236,7 @@ function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMa
             <div class="flow-item-title">
               <el-tag size="small">{{ placeTypeLabelMap[f.placeType] || f.placeType }}</el-tag>
               <span style="font-weight:600;margin-left:8px">{{ f.placeName || f.placeDetail || '-' }}</span>
-              <span v-if="f.handler" style="color:var(--app-text-secondary);margin-left:8px;font-size:12px">经办人：{{ f.handler }}</span>
+              <span v-if="f.handler" style="color:var(--app-text-secondary);margin-left:8px;font-size:var(--app-font-xs)">经办人：{{ f.handler }}</span>
             </div>
             <div v-if="f.remark" class="flow-item-remark">{{ f.remark }}</div>
             <div v-if="f.images" class="flow-item-images">
@@ -317,7 +317,7 @@ function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMa
 .material-detail-page { display:flex; flex-direction:column; gap:12px; }
 .flow-item { padding:4px 0; }
 .flow-item-title { display:flex; align-items:center; }
-.flow-item-remark { margin-top:6px; color:var(--app-text-secondary); font-size:13px; }
+.flow-item-remark { margin-top:6px; color:var(--app-text-secondary); font-size:var(--app-font-base); }
 .flow-item-images { margin-top:8px; display:flex; flex-wrap:wrap; }
 .flow-item-actions { margin-top:8px; }
 </style>

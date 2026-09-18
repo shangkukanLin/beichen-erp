@@ -247,7 +247,7 @@ onActivated(() => { loadData() })
           </template>
         </el-table-column>
       </el-table>
-      <div v-if="isDraft()" style="margin-top:12px;color:var(--app-text-secondary);font-size:12px">
+      <div v-if="isDraft()" style="margin-top:12px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
         提示：保存后总金额按「数量 × 单价」自动重算；审核时将校验本次退货数量不超过可退数量。
       </div>
     </el-card>

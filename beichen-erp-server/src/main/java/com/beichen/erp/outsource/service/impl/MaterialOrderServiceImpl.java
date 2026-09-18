@@ -563,6 +563,8 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             map.put("orderQuantity", it.getOrderQuantity());
             map.put("receivedQuantity", it.getReceivedQuantity());
             map.put("defectReturnedQty", it.getDefectReturnedQty());
+            // 送修中（2026-09-17）：维修返还已送修未返回的数量（已从 receivedQuantity 中扣出）
+            map.put("repairReturnedQty", it.getRepairReturnedQty());
             map.put("unitPrice", it.getUnitPrice());
             map.put("amount", it.getAmount());
             map.put("remark", it.getRemark());

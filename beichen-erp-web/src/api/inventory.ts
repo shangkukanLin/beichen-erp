@@ -158,9 +158,9 @@ export interface ReturnSortItem {
   batchQuantity?: number
   /** 本地字段：已整理数量（展示用，不提交） */
   sortedQuantity?: number
-  /** 本地字段：售后仓待分类可用库存，仅用于前端可用量校验，不提交后端 */
+  /** 本地字段：成品仓（待分类品质）可用库存，仅用于前端可用量校验，不提交后端 */
   available?: number
-  /** 本地字段：实物在售后仓的停留天数（按最早待分类入库日期计算），用于超期预警 */
+  /** 本地字段：实物在成品仓的停留天数（按最早待分类入库日期计算），用于超期预警 */
   stayDays?: number
 }
 export function getReturnSortPage(params: any) {

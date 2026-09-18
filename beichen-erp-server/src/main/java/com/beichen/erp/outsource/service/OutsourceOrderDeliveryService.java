@@ -31,6 +31,17 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
     Map<String, Object> summary(Long orderId);
 
     /**
+     * 待交货订单列表：正在加工（PRODUCING）的加工单 + 交货进度聚合。
+     * <p>供「成品收货」独立菜单页使用，口径与 {@link #summary(Long)} 一致（只统计已审核交货），
+     * 一次分页查询即可，避免前端逐单调用 summary 造成 N+1 请求。</p>
+     *
+     * @param pageNo 页码（从 1 开始）
+     * @param size   每页条数
+     * @param code   单号模糊筛选（可空）
+     */
+    Map<String, Object> pageProducingOrders(Integer pageNo, Integer size, String code);
+
+    /**
      * 新增交货记录（草稿态存盘，不落账）
      *
      * @param forceDelivery 缺料时是否强制继续（false 则返回缺料清单不落库）

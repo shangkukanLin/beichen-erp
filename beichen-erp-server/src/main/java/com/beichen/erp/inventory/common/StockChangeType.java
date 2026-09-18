@@ -15,6 +15,12 @@ public enum StockChangeType {
     RETURN_OUT("退货出库"),
     /** 退货反审核：采购退货单反审核后，恢复已扣减的库存 */
     RETURN_UN_AUDIT("退货反审核"),
+    /** 采购换货退回出库：采购换货单审核后，退回货品从我方仓按品质扣减（退给供货商，2026-09-18） */
+    PURCHASE_EXCHANGE_OUT("采购换货退回出库"),
+    /** 采购换货入库：采购换货单审核后，供货商换回的良品入我方仓 */
+    PURCHASE_EXCHANGE_IN("采购换货入库"),
+    /** 采购换货反审核：采购换货单反审核后，恢复退回库存并扣回换入库存 */
+    PURCHASE_EXCHANGE_UN_AUDIT("采购换货反审核"),
 
     // ===== 销售相关 =====
     /** 销售出库：销售单/销售出库单审核后，成品出库扣减库存 */
@@ -67,6 +73,14 @@ public enum StockChangeType {
     CANCEL_OUTSOURCE_CONSUME("取消交货扣料"),
     /** 委外退不良反审核：退不良反审核时扣回已还的物料 */
     OUTSOURCE_DEFECT_RETURN_UN_AUDIT("委外退不良反审核"),
+    /** 委外维修出库：维修退货单送修审核，从我方成品仓扣除待修品（2026-09-17） */
+    OUTSOURCE_REPAIR_OUT("委外维修出库"),
+    /** 委外维修出库反审核：维修退货单反审核，把送修品加回我方成品仓 */
+    OUTSOURCE_REPAIR_OUT_UN_AUDIT("委外维修出库反审核"),
+    /** 委外维修入库：维修返回登记，工厂修好的成品入我方仓库 */
+    OUTSOURCE_REPAIR_IN("委外维修入库"),
+    /** 取消委外维修入库：撤销维修返回登记，把已入库成品扣回 */
+    CANCEL_OUTSOURCE_REPAIR_IN("取消委外维修入库"),
     /** 取消发料：收发单取消，恢复已发物料库存 */
     OUTSOURCE_CANCEL_DELIVERY("取消发料"),
     /** 编辑回滚-发料：编辑收发单后回滚已发物料 */
@@ -112,6 +126,14 @@ public enum StockChangeType {
     MATERIAL_RETURN_OUT("委外物料退货出"),
     /** 取消委外物料退货出：委外物料退货取消审核，物料恢复源仓 */
     CANCEL_MATERIAL_RETURN_OUT("取消委外物料退货出"),
+    /** 委外物料维修出：物料退货（维修返还）审核，把待修物料送出源仓，交供应商维修（2026-09-17） */
+    MATERIAL_REPAIR_OUT("委外物料维修出"),
+    /** 委外物料维修出反审核：维修返还单反审核，把送修物料恢复源仓 */
+    MATERIAL_REPAIR_OUT_UN_AUDIT("委外物料维修出反审核"),
+    /** 委外物料维修入：登记维修返回，供应商修好的物料入我方仓库 */
+    MATERIAL_REPAIR_IN("委外物料维修入"),
+    /** 取消委外物料维修入：撤销维修返回登记，把已入库物料扣回 */
+    CANCEL_MATERIAL_REPAIR_IN("取消委外物料维修入"),
 
     // ===== 供应商清算 =====
     /** 清算退料入：供应商清算后退料入库 */

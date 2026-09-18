@@ -141,8 +141,8 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 全部 -->
       <!-- 2026-09-16 用户要求「一行显示完、不要左右滑动」：列宽整体收紧（原合计 ≈1270px → ≈1015px） -->
-      <el-table v-if="activeTab==='all'" :data="allProjects" border stripe v-loading="tableLoading" style="width:100%" size="small" @row-click="handleEdit">
-        <el-table-column prop="code" label="编号" width="118" show-overflow-tooltip />
+      <el-table v-if="activeTab==='all'" :data="allProjects" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleEdit">
+        <el-table-column prop="code" label="编号" width="132" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
@@ -155,7 +155,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
             <el-tag type="warning" size="small">{{ getCurrentPhase(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="截止时间" width="90" align="center">
+        <el-table-column label="截止时间" width="100" align="center">
           <template #default="{ row }">
             <span v-if="getPlannedEnd(row)" :style="{ color: isOverdue(row) ? 'var(--app-color-danger)' : 'var(--app-text-regular)', fontWeight: isOverdue(row) ? 'bold' : 'normal' }">
               {{ getPlannedEnd(row) }}
@@ -172,8 +172,8 @@ onMounted(() => { loadData(); loadBrandOptions() })
       </el-table>
 
       <!-- 进行中 -->
-      <el-table v-if="activeTab==='active'" :data="activeProjects" border stripe v-loading="tableLoading" style="width:100%" size="small" :height="undefined" @row-click="handleEdit">
-        <el-table-column prop="code" label="编号" width="118" show-overflow-tooltip />
+      <el-table v-if="activeTab==='active'" :data="activeProjects" border stripe v-loading="tableLoading" style="width:100%" :height="undefined" @row-click="handleEdit">
+        <el-table-column prop="code" label="编号" width="132" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
@@ -186,7 +186,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
             <el-tag type="warning" size="small">{{ getCurrentPhase(row) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="截止时间" width="90" align="center">
+        <el-table-column label="截止时间" width="100" align="center">
           <template #default="{ row }">
             <span v-if="getPlannedEnd(row)" :style="{ color: isOverdue(row) ? 'var(--app-color-danger)' : 'var(--app-text-regular)', fontWeight: isOverdue(row) ? 'bold' : 'normal' }">
               {{ getPlannedEnd(row) }}
@@ -203,8 +203,8 @@ onMounted(() => { loadData(); loadBrandOptions() })
       </el-table>
 
       <!-- 已结项 -->
-      <el-table v-if="activeTab==='finished'" :data="finishedProjects" border stripe v-loading="tableLoading" style="width:100%" size="small" @row-click="handleEdit">
-        <el-table-column prop="code" label="编号" width="118" show-overflow-tooltip />
+      <el-table v-if="activeTab==='finished'" :data="finishedProjects" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleEdit">
+        <el-table-column prop="code" label="编号" width="132" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
@@ -221,8 +221,8 @@ onMounted(() => { loadData(); loadBrandOptions() })
       </el-table>
 
       <!-- 已取消 -->
-      <el-table v-if="activeTab==='cancelled'" :data="cancelledProjects" border stripe v-loading="tableLoading" style="width:100%" size="small" @row-click="handleEdit">
-        <el-table-column prop="code" label="编号" width="118" show-overflow-tooltip />
+      <el-table v-if="activeTab==='cancelled'" :data="cancelledProjects" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleEdit">
+        <el-table-column prop="code" label="编号" width="132" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />

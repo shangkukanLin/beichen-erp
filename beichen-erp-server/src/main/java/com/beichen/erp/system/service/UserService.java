@@ -54,4 +54,16 @@ public interface UserService extends IService<User> {
      * 按角色集合推导首页业务 TAB 默认勾选（与首页可见性同一套映射规则，多角色取并集）
      */
     java.util.List<String> deriveDefaultDashboardTabs(java.util.List<Long> roleIds);
+
+    /**
+     * 查询用户的页面权限配置（用户管理「页面权限」弹窗用）：
+     * {@code menuMode}（ROLE/CUSTOM）+ 自定义菜单集合 + 当前角色菜单并集（前端切「自定义」时的初始勾选）。
+     */
+    com.beichen.erp.system.entity.vo.UserMenuPermVO getUserMenuPerm(Long userId);
+
+    /**
+     * 保存用户页面权限（只改该用户的菜单可见性，不动角色/接口鉴权）。
+     * <p>护栏：①不能改自己（防自锁）②super_admin 用户只能跟随角色 ③CUSTOM 时自动补齐祖先目录并保留「首页」。</p>
+     */
+    void saveUserMenuPerm(Long userId, String menuMode, java.util.List<Long> menuIds);
 }

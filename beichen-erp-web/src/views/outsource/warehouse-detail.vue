@@ -30,6 +30,12 @@ async function loadProjects() {
 
 const PRIORITY_TYPES = ['玻璃', '驱动IC']
 
+/**
+ * 负库存项（2026-09-17 F3）：委外仓允许"缺料强制出库"（交货领料走 force 口径）会形成负库存，
+ * 但必须**显式可见**并说明成因，否则容易被误认为账错。
+ */
+const negativeItems = computed(() => materials.value.filter((m: any) => Number(m.quantity) < 0))
+
 // 排序：玻璃/驱动IC > 无归属项目 > 有归属项目
 const sortedMaterials = computed(() => {
   return [...materials.value].sort((a, b) => {
@@ -121,12 +127,29 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
         <span style="font-weight:600">库存物料</span>
         <el-button type="primary" size="small" style="margin-left:12px" @click="exportExcel">导出</el-button>
       </template>
+      <!-- 负库存提示（2026-09-17 F3）：委外仓可因"缺料强制出库"出现负数，需显式说明成因 -->
+      <el-alert v-if="negativeItems.length" type="warning" :closable="false" show-icon style="margin-bottom:8px">
+        <template #title>
+          <span style="font-size:var(--app-font-xs)">
+            本仓有 {{ negativeItems.length }} 项物料为负库存（{{ negativeItems.map((m: any) => m.materialName).slice(0, 5).join('、') }}{{ negativeItems.length > 5 ? ' 等' : '' }}）——
+            由交货领料时确认「继续出库（物料将变为负数）」形成，属缺料未补、非账错，请尽快补料。
+          </span>
+        </template>
+      </el-alert>
       <el-table :data="sortedMaterials" border stripe v-loading="matLoading" size="small">
         <el-table-column prop="materialTypeName" label="物料类型" width="100" />
         <el-table-column prop="materialName" label="物料名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="unit" label="单位" width="70" align="center" />
         <el-table-column label="质量类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.qualityType===QualityType.DEFECT?'danger':'success'" size="small">{{ QualityTypeLabel[row.qualityType] || '良品' }}</el-tag></template></el-table-column>
-        <el-table-column label="库存数量" width="110" align="right"><template #default="{row}"><span :style="{color: Number(row.quantity)<0?'var(--app-color-danger)':'',fontWeight:Number(row.quantity)<0?600:400}">{{ row.quantity }}</span></template></el-table-column>
+        <el-table-column label="库存数量" width="130" align="right">
+          <template #default="{row}">
+            <span :style="{color: Number(row.quantity)<0?'var(--app-color-danger)':'',fontWeight:Number(row.quantity)<0?600:400}">{{ row.quantity }}</span>
+            <!-- 负库存显式标注（2026-09-17 F3）：本仓允许"缺料强制出库"，负数是缺料未补，不是账错 -->
+            <el-tooltip v-if="Number(row.quantity)<0" content="负库存＝交货领料时确认「继续出库（物料将变为负数）」形成，待补料后转正；建议尽快补料" placement="top">
+              <el-tag type="danger" size="small" style="margin-left:4px">缺料</el-tag>
+            </el-tooltip>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="80" align="center">
           <template #default="{row}"><el-button type="primary" link size="small" @click="router.push(`/outsource/material-history/${warehouseId}/${row.materialId}`)">详细</el-button></template>
         </el-table-column>

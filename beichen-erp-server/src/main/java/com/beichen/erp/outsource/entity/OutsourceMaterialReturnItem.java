@@ -26,6 +26,13 @@ public class OutsourceMaterialReturnItem {
     @TableField("material_type_id")
     private Long materialTypeId;
 
+    /**
+     * 本行送修落在哪一行物料订单明细（outsource_material_order_item.id），2026-09-17。
+     * <p>审核时按「关联物料订单」解析并冻结：送修扣减该行收料数、登记返回/反审核按此回补或回滚；
+     * 未关联订单（或订单已完成不动账）时为 null。</p>
+     */
+    private Long materialOrderItemId;
+
     /** 单位 */
     private String unit;
 

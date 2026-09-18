@@ -32,6 +32,17 @@ public class OrderDeliveryController {
         return R.ok(deliveryService.summary(orderId));
     }
 
+    /**
+     * 待交货订单列表（「成品收货」菜单页）：只返回正在加工（PRODUCING）的加工单，
+     * 每行带订单量/已交量/剩余量/最近交货日期，前端直接渲染列表即可。
+     */
+    @GetMapping("/order-page")
+    public R<Map<String, Object>> producingOrders(@RequestParam(defaultValue = "1") Integer page,
+                                                  @RequestParam(defaultValue = "10") Integer size,
+                                                  @RequestParam(required = false) String code) {
+        return R.ok(deliveryService.pageProducingOrders(page, size, code));
+    }
+
     /** 新增交货记录 */
     @PostMapping
     public R<Map<String, Object>> create(@RequestBody OutsourceOrderDelivery delivery,

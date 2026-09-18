@@ -2,6 +2,7 @@ package com.beichen.erp.dashboard.service;
 
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.inventory.service.StockTakeService;
+import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.common.WarehouseType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -165,8 +166,9 @@ public class DashboardService {
                     "      AND l.quality_type = ws.quality_type AND l.change_quantity > 0 " +
                     "  ) AS first_in " +
                     "  FROM warehouse_stock ws JOIN warehouse w ON w.id = ws.warehouse_id " +
-                    // 2026-09-14 修复：原为中文 '售后仓'，但该列存 code（AFTER_SALE），条件恒不成立 → 指标恒为 0
-                    "  WHERE w.warehouse_type = '" + WarehouseType.AFTER_SALE.getCode() + "' AND ws.quality_type = 'PENDING' " +
+                    // 2026-09-16 方案 A：仓型收敛为「成品仓/辅料仓」，不再有"售后仓" →
+                    // 待整理=压在**自有仓**里的待分类品质库存（PENDING 只会出现在成品行，故天然排除辅料仓）
+                    "  WHERE w.warehouse_category = '" + WarehouseCategory.INVENTORY.getCode() + "' AND ws.quality_type = 'PENDING' " +
                     "    AND ws.quantity > 0 AND ws.product_id IS NOT NULL");
             List<Object> args = new ArrayList<>();
             if (cid != null && cid > 0) {

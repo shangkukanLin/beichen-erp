@@ -5,6 +5,8 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import request from '@/utils/request'
 
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
+import { getAccountPage } from '@/api/finance'
+import { AccountType, AccountTypeLabel, SettleType, SettleTypeLabel, SettleTypeTag } from '@/api/enums'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
@@ -51,7 +53,7 @@ function ensureProducts(): Promise<void> {
 
 // ===== 草稿编辑表单 =====
 const formRef = ref<FormInstance>()
-const form = reactive<SaleOrder>({ customerId: undefined, warehouseId: undefined, orderDate: '', taxIncluded: 0, taxRate: 0, remark: '' })
+const form = reactive<SaleOrder>({ customerId: undefined, warehouseId: undefined, orderDate: '', taxIncluded: 0, taxRate: 0, remark: '', settleType: SettleType.CREDIT, settleAccountId: undefined })
 const rules: FormRules = {
   customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
   warehouseId: [{ required: true, message: '请选择出库仓库', trigger: 'change' }]
@@ -82,6 +84,37 @@ const taxAmount = computed(() => form.taxIncluded === 1 && Number(form.taxRate) 
   : 0)
 const noTaxAmount = computed(() => Math.round((goodsTotal.value - taxAmount.value) * 100) / 100)
 function onTaxSwitch(v: any) { form.taxIncluded = v ? 1 : 0; form.taxRate = v ? (form.taxRate || 13) : 0 }
+
+// ==================== 结算方式 + 关联收款单（2026-09-18 按单记） ====================
+/** 现金结算：审核销售单时系统自动生成并**审核**收款单（立刻到账、挂所选收款账户） */
+const isCashForm = computed(() => form.settleType === SettleType.CASH)
+const isCashHead = computed(() => head.value.settleType === SettleType.CASH)
+const accounts = ref<any[]>([])
+const accountOptions = computed(() => accounts.value.filter((a: any) => a.status === undefined || a.status === 1))
+async function loadAccounts() {
+  try { const res: any = await getAccountPage({ pageSize: 200 }); accounts.value = res?.records || [] } catch { accounts.value = [] }
+  // 账户列表是异步拉取的：若已切到「现金」而还没带出账户，回调里补一次
+  if (isCashForm.value && !form.settleAccountId) onSettleTypeChange()
+}
+/** 切到「现金」时若未选账户，默认带出现金账户（account_type=cash） */
+function onSettleTypeChange() {
+  if (!isCashForm.value) { form.settleAccountId = undefined; return }
+  if (form.settleAccountId) return
+  if (accountOptions.value.length === 0) return
+  const cash = accountOptions.value.find((a: any) => String(a.accountType || '').toLowerCase() === AccountType.CASH)
+  if (cash) form.settleAccountId = cash.id
+}
+/** 本单自动生成的收款单（按来源查，含已作废） */
+const linkedReceipts = ref<any[]>([])
+async function loadLinkedReceipts() {
+  if (!head.value.id) { linkedReceipts.value = []; return }
+  try {
+    linkedReceipts.value = await request.get<any, any>('/finance/receipt/by-source', {
+      params: { sourceBillType: 'SALE_ORDER', sourceId: head.value.id }
+    }) || []
+  } catch { linkedReceipts.value = [] }
+}
+function goReceipt() { router.push('/finance/receipt') }
 
 // ==================== 售后记录（该销售单发起的退货单 / 换货单） ====================
 const afterSaleTab = ref('return')
@@ -204,12 +237,16 @@ async function loadData() {
     // 草稿态：将订单头同步到编辑表单
     Object.assign(form, {
       id: head.value.id, customerId: head.value.customerId, warehouseId: head.value.warehouseId,
-      orderDate: head.value.orderDate, taxIncluded: head.value.taxIncluded, taxRate: head.value.taxRate, remark: head.value.remark
+      orderDate: head.value.orderDate, taxIncluded: head.value.taxIncluded, taxRate: head.value.taxRate, remark: head.value.remark,
+      // 结算方式（2026-09-18）：草稿编辑需带上，否则提交会把现金单静默改回账期
+      settleType: head.value.settleType || SettleType.CREDIT, settleAccountId: head.value.settleAccountId ?? undefined
     })
     // 逐行精确校准库存：单据可能开单已久，全量快照之外再回源查一次
     if (isDraft.value) items.value.forEach(refreshRowStock)
     // 售后记录：该销售单发起的退货单与换货单
     await loadAfterSales()
+    // 现金结算：本单自动生成的收款单（2026-09-18）
+    loadLinkedReceipts()
   } catch { } finally { loading.value = false }
 }
 
@@ -282,7 +319,7 @@ function goBack() { router.back() }
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
 // 字典类（客户/仓库/产品/品质）只需加载一次
-onMounted(() => { loadCustomers(); loadWarehouses(); ensureProducts(); loadQualityTypes() })
+onMounted(() => { loadCustomers(); loadWarehouses(); ensureProducts(); loadQualityTypes(); loadAccounts() })
 
 /**
  * 每次进入详情页都重新拉取单据数据。
@@ -335,6 +372,22 @@ onActivated(() => { loadData() })
                 <el-date-picker v-model="form.orderDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width:100%" />
               </el-form-item>
             </el-col>
+            <el-col :span="12">
+              <el-form-item label="结算方式">
+                <el-select v-model="form.settleType" style="width:100%" @change="onSettleTypeChange">
+                  <el-option :label="SettleTypeLabel[SettleType.CREDIT]" :value="SettleType.CREDIT" />
+                  <el-option :label="SettleTypeLabel[SettleType.CASH]" :value="SettleType.CASH" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12" v-if="isCashForm">
+              <el-form-item required label="收款账户">
+                <el-select v-model="form.settleAccountId" filterable clearable placeholder="选择现金账户" style="width:100%">
+                  <el-option v-for="a in accountOptions" :key="a.id" :value="a.id"
+                    :label="a.accountName + '（' + (AccountTypeLabel[String(a.accountType || '').toLowerCase()] || a.accountType || '') + '）'" />
+                </el-select>
+              </el-form-item>
+            </el-col>
             <el-col :span="6">
               <el-form-item label="含税">
                 <el-switch :model-value="form.taxIncluded === 1" @change="onTaxSwitch" />
@@ -357,7 +410,7 @@ onActivated(() => { loadData() })
             <el-button type="primary" :icon="'Plus'" @click="addItem">添加产品</el-button>
             <!-- 注意：必须写 loadWarehouseStock()，不带括号会把 MouseEvent 当作 silent 参数传入导致静默 -->
             <el-button :icon="'Refresh'" :loading="stockLoading" :disabled="!stockWarehouseId" @click="loadWarehouseStock()">刷新库存</el-button>
-            <span v-if="!stockWarehouseId" style="color:#909399; font-size:12px">请先选择出库仓库，再刷新库存</span>
+            <span v-if="!stockWarehouseId" style="color:#909399; font-size:var(--app-font-xs)">请先选择出库仓库，再刷新库存</span>
           </div>
           <el-table :data="items" border>
             <el-table-column label="SKU" width="130">
@@ -445,6 +498,19 @@ onActivated(() => { loadData() })
           <el-descriptions-item label="含税">{{ head.taxIncluded === 1 ? '是（' + head.taxRate + '%）' : '否' }}</el-descriptions-item>
           <el-descriptions-item label="总金额（含税）">{{ fmt(head.totalAmount) }}</el-descriptions-item>
           <el-descriptions-item label="税额">{{ fmt(head.taxAmount) }}</el-descriptions-item>
+          <!-- 结算方式（2026-09-18 按单记）：现金单审核时系统自动收款（立刻到账、已审核） -->
+          <el-descriptions-item label="结算方式">
+            <el-tag :type="SettleTypeTag[String(head.settleType || 'CREDIT')] || 'info'" size="small">{{ SettleTypeLabel[String(head.settleType || 'CREDIT')] || '账期' }}</el-tag>
+            <span v-if="isCashHead" style="margin-left:6px; color:var(--app-text-secondary)">{{ head.settleAccountName || '（未选收款账户）' }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="isCashHead" label="关联收款单">
+            <template v-if="linkedReceipts.length">
+              <el-button v-for="r in linkedReceipts" :key="r.id" type="primary" link @click="goReceipt()">
+                {{ r.code }}（{{ DocStatusLabel[String(r.status)] || r.status }}）
+              </el-button>
+            </template>
+            <span v-else>—</span>
+          </el-descriptions-item>
           <el-descriptions-item label="备注" :span="2">{{ head.remark }}</el-descriptions-item>
         </el-descriptions>
         <el-divider content-position="left">产品明细</el-divider>
@@ -578,7 +644,7 @@ onActivated(() => { loadData() })
 .page { padding: 0; }
 .head-bar { display: flex; align-items: center; justify-content: space-between; }
 .title { display: flex; align-items: center; gap: 8px; }
-.title-text { font-size: 16px; font-weight: 600; }
+.title-text { font-size: var(--app-font-md); font-weight: 600; }
 .footer { margin-top: 16px; display: flex; justify-content: flex-end; gap: 12px; }
 /* 金额汇总：标签在上、数值在下，块间竖线分隔，避免多项挤在一行 */
 .sum-bar {
@@ -601,14 +667,14 @@ onActivated(() => { loadData() })
 .sum-item + .sum-item { border-left: 1px solid var(--el-border-color-lighter); }
 .sum-item:first-child { padding-left: 0; }
 .sum-item:last-child { padding-right: 0; }
-.sum-label { font-size: 12px; color: var(--app-text-secondary); white-space: nowrap; }
+.sum-label { font-size: var(--app-font-xs); color: var(--app-text-secondary); white-space: nowrap; }
 .sum-value {
-  font-size: 18px;
+  font-size: var(--app-font-lg);
   font-weight: 600;
   line-height: 1.2;
   color: var(--app-text-primary);
   font-variant-numeric: tabular-nums;
 }
-.sum-main .sum-value { font-size: 24px; color: var(--app-color-primary); }
+.sum-main .sum-value { font-size: var(--app-font-num); color: var(--app-color-primary); }
 .tax-num { color: var(--app-color-danger); }
 </style>

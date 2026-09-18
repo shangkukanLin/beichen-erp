@@ -53,7 +53,7 @@ async function handleAudit(row: any) {
   const chargeTip = charged
     ? `\n并生成一条向客户收取的费用应收 ${Number(row.chargeAmount).toFixed(2)} 元（台账单号 ${row.code}-FEE）。`
     : ''
-  await ElMessageBox.confirm(`确认审核「${row.code}」？审核后退回货品入售后仓(待分类)，换出货品从成品仓扣减。${chargeTip}`, '审核确认', { type: 'warning' })
+  await ElMessageBox.confirm(`确认审核「${row.code}」？审核后退回货品入成品仓(待分类)，换出货品从成品仓扣减。${chargeTip}`, '审核确认', { type: 'warning' })
   await auditSaleExchange(row.id)
   ElMessage.success('已审核'); sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1'); loadData()
 }
@@ -90,7 +90,7 @@ async function handleCancel(row: any) {
         </el-form-item>
       </el-form>
 
-      <el-table v-loading="loading" :data="list" border stripe size="small" @row-click="goDetail">
+      <el-table v-loading="loading" :data="list" border stripe @row-click="goDetail">
         <el-table-column prop="exchangeDate" label="换货日期" width="110" />
         <el-table-column prop="code" label="换货单号" width="160" />
         <!-- 换货概况：退回侧 → 换出侧（来源销售单在详情中可见） -->

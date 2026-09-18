@@ -10,6 +10,7 @@ import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
 import com.beichen.erp.outsource.common.MaterialOrderStatus;
 import com.beichen.erp.outsource.common.QualityType;
+import com.beichen.erp.outsource.service.BomSnapshotService;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.outsource.service.SupplierMaterialService;
 import com.beichen.erp.outsource.mapper.OutsourceOrderMapper;
@@ -62,6 +63,7 @@ public class OutsourceOrderController {
     private final MaterialOrderMapper materialOrderMapper;
     private final MaterialOrderItemMapper materialOrderItemMapper;
     private final SupplierMaterialService supplierMaterialService;
+    private final BomSnapshotService bomSnapshotService;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -114,6 +116,14 @@ public class OutsourceOrderController {
             // 物料
             List<OutsourceOrderMaterial> materials = orderService.getMaterials(p.getId());
             pm.put("materials", materials);
+            // 所用 BOM 快照（2026-09-17 重构）：同 BOM 版本同内容的多张加工单共享一份快照，前端显示「BOM 版本 vN」
+            pm.put("bomSnapshotId", p.getBomSnapshotId());
+            com.beichen.erp.outsource.entity.BomSnapshot snap = bomSnapshotService.snapshotOfOrderProduct(p.getId());
+            if (snap != null) {
+                pm.put("bomVersion", snap.getBomVersion());
+                pm.put("bomSnapshotKind", snap.getKind());
+                pm.put("bomSnapshotTime", snap.getCreateTime());
+            }
             list.add(pm);
         }
         return R.ok(list);
@@ -401,6 +411,9 @@ public class OutsourceOrderController {
                                 if (mm.get("materialId") != null) mat.setMaterialId(Long.valueOf(mm.get("materialId").toString()));
                                 if (mm.get("materialTypeId") != null) mat.setMaterialTypeId(Long.valueOf(mm.get("materialTypeId").toString()));
                                 mat.setUnit((String) mm.get("unit"));
+                                // 单套用量（前端 bomQuantityPerSet）：写入 BOM 快照时用，缺失则按 需求数量 ÷ 产品数量 折算
+                                if (mm.get("bomQuantityPerSet") != null && !mm.get("bomQuantityPerSet").toString().isBlank())
+                                    mat.setQuantityPerSet(new BigDecimal(mm.get("bomQuantityPerSet").toString()));
                                 if (mm.get("demandQuantity") != null && !mm.get("demandQuantity").toString().isBlank())
                                     mat.setDemandQuantity(new BigDecimal(mm.get("demandQuantity").toString()));
                                 if (mm.get("lossRate") != null && !mm.get("lossRate").toString().isBlank())

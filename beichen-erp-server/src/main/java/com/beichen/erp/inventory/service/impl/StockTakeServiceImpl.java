@@ -209,11 +209,21 @@ public class StockTakeServiceImpl implements StockTakeService {
         if (items == null) return;
         for (InventoryStockTakeItem in : items) {
             if (in.getId() == null) continue;
+            // F6（2026-09-18 修）：只认本单自己的明细行（原先直接 updateById 提交的 id，跨单 id 会改到别的盘点单）
+            InventoryStockTakeItem db = itemMapper.selectById(in.getId());
+            if (db == null || !takeId.equals(db.getTakeId())) continue;
+            BigDecimal actual = in.getActualQuantity() != null ? in.getActualQuantity() : BigDecimal.ZERO;
+            // F6：账面一律取**当前库存**（不信前端提交的账面快照）—— 创建后若库存被其他单据变动过，
+            // 旧快照会让差异算错，审核后库存 ≠ 实盘。
+            BigDecimal liveBook = currentBook(t.getWarehouseId(), db);
+            // 是否"用户确实盘过这一行"：页面默认 实盘=账面，用户只改有差异的行 → 仍等于原账面快照即视为未盘
+            boolean counted = db.getBookQuantity() == null || actual.compareTo(db.getBookQuantity()) != 0;
+            if (!counted) actual = liveBook; // 未盘行以当前账面为准（差异 0），避免把库存拉回历史快照
             InventoryStockTakeItem u = new InventoryStockTakeItem();
-            u.setId(in.getId());
-            u.setActualQuantity(in.getActualQuantity() != null ? in.getActualQuantity() : BigDecimal.ZERO);
-            BigDecimal book = in.getBookQuantity() != null ? in.getBookQuantity() : BigDecimal.ZERO;
-            u.setDiffQuantity(u.getActualQuantity().subtract(book));
+            u.setId(db.getId());
+            u.setActualQuantity(actual);
+            u.setBookQuantity(liveBook);
+            u.setDiffQuantity(counted ? actual.subtract(liveBook) : BigDecimal.ZERO);
             u.setRemark(in.getRemark());
             itemMapper.updateById(u);
         }
@@ -230,6 +240,9 @@ public class StockTakeServiceImpl implements StockTakeService {
                 InventoryStockTake::getStatus, DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode())) {
             throw new BusinessException("只有草稿状态可审核");
         }
+        // F6（2026-09-18 修）：落账前按**当前账面**兜底重算差异 —— 保证盘点不变式「审核后库存 == 实盘」：
+        // 保存实盘之后、审核之前若库存又被其他单据变动过，仍按此刻账面结算（不是保存时的旧账面）。
+        refreshBookAtAudit(t);
         applyDiff(t, false);
         InventoryStockTake u = new InventoryStockTake();
         u.setId(id);
@@ -378,6 +391,54 @@ public class StockTakeServiceImpl implements StockTakeService {
      * {@code related_bill_id}（盘点单）+ 盘点单自身的差异正负还原。不新增 {@code STOCK_TAKE_UN_AUDIT_*}：
      * 历史流水无法回填新 code，报表反而要同时认两套。</p>
      */
+    /**
+     * F6（2026-09-18）：明细行的「当前账面」——产品按 (仓库,产品,品质)、物料按 (仓库,物料) 实时取。
+     * <p>盘点单创建时写入的 {@code book_quantity} 只是**快照**，不能拿它当结算口径（见 §12.107.3-F6）。</p>
+     */
+    private BigDecimal currentBook(Long warehouseId, InventoryStockTakeItem it) {
+        if (it.getProductId() != null) {
+            return nz(stockService.getQuantity(warehouseId, it.getProductId(), it.getQualityType()));
+        }
+        if (it.getMaterialId() != null) {
+            return nz(stockService.getMaterialQuantity(warehouseId, it.getMaterialId()));
+        }
+        return BigDecimal.ZERO;
+    }
+
+    /**
+     * 审核前按当前账面兜底重算（F6）：
+     * <ul>
+     *   <li>已有差异的行（用户盘出差异）→ 差异按<b>当前账面</b>重算 ⇒ 审核后库存必然等于实盘；</li>
+     *   <li>无差异的行 → 只把账面刷新为当前值、差异保持 0（不把库存拉回历史快照）。</li>
+     * </ul>
+     * 重算结果持久化，使单据显示、反审核冲回（按存储差异取反）三者口径一致。
+     */
+    private void refreshBookAtAudit(InventoryStockTake t) {
+        for (InventoryStockTakeItem it : getItems(t.getId())) {
+            if (it.getActualQuantity() == null) continue;
+            BigDecimal liveBook = currentBook(t.getWarehouseId(), it);
+            boolean hasDiff = nz(it.getDiffQuantity()).compareTo(BigDecimal.ZERO) != 0;
+            BigDecimal newDiff = hasDiff ? it.getActualQuantity().subtract(liveBook) : BigDecimal.ZERO;
+            BigDecimal newActual = hasDiff ? it.getActualQuantity() : liveBook;
+            if (nz(it.getBookQuantity()).compareTo(liveBook) == 0
+                    && nz(it.getDiffQuantity()).compareTo(newDiff) == 0
+                    && nz(it.getActualQuantity()).compareTo(newActual) == 0) {
+                continue;
+            }
+            InventoryStockTakeItem u = new InventoryStockTakeItem();
+            u.setId(it.getId());
+            u.setBookQuantity(liveBook);
+            u.setActualQuantity(newActual);
+            u.setDiffQuantity(newDiff);
+            itemMapper.updateById(u);
+        }
+    }
+
+    /** null 视为 0 */
+    private BigDecimal nz(BigDecimal v) {
+        return v != null ? v : BigDecimal.ZERO;
+    }
+
     private void applyDiff(InventoryStockTake t, boolean reverse) {
         List<InventoryStockTakeItem> items = getItems(t.getId());
         for (InventoryStockTakeItem it : items) {
@@ -393,7 +454,7 @@ public class StockTakeServiceImpl implements StockTakeService {
             } else if (it.getMaterialId() != null) {
                 stockService.changeMaterialStock(t.getWarehouseId(), it.getMaterialId(), delta,
                         delta.compareTo(BigDecimal.ZERO) > 0 ? StockChangeType.STOCK_TAKE_IN.getCode() : StockChangeType.STOCK_TAKE_OUT.getCode(),
-                        t.getTakeNo(), RelatedBillType.STOCK_TAKE, null, t.getId());
+                        t.getTakeNo(), RelatedBillType.STOCK_TAKE, null, t.getId(), t.getId());
                 if (delta.compareTo(BigDecimal.ZERO) > 0) costService.fillMaterialCostIfEmpty(it.getMaterialId());
             }
         }

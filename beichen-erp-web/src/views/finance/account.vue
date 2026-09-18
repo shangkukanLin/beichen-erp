@@ -4,7 +4,7 @@ import { ElMessage, type FormInstance } from 'element-plus'
 import { getAccountPage, createAccount, updateAccount, type FinanceAccount } from '@/api/finance'
 import { AccountTypeLabel, accountTypeLabel } from '@/api/enums'
 
-// 资金账户管理（自「资金流水」页拆分为独立子菜单）
+// 账户管理（自「资金流水」页拆分为独立子菜单；菜单名 2026-09-18 由「资金账户」改为「账户管理」）
 const accounts = ref<FinanceAccount[]>([])
 const loading = ref(false)
 const aDialog = ref(false)
@@ -39,7 +39,7 @@ onMounted(() => { loadAccounts() })
       </el-table>
     </el-card>
 
-    <el-dialog v-model="aDialog" title="资金账户" width="500px">
+    <el-dialog v-model="aDialog" title="账户管理" width="500px">
       <el-form ref="aRef" :model="aForm" label-width="80px">
         <el-form-item label="名称"><el-input v-model="aForm.accountName"/></el-form-item>
         <el-form-item label="类型"><el-select v-model="aForm.accountType" style="width:100%"><el-option v-for="(lb, code) in AccountTypeLabel" :key="code" :label="lb" :value="code"/></el-select></el-form-item>

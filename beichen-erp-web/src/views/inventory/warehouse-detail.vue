@@ -148,7 +148,7 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
           <el-descriptions v-if="warehouse" :column="2" border size="small">
             <el-descriptions-item label="仓库名称" :span="2">{{ warehouse.warehouseName }}</el-descriptions-item>
             <el-descriptions-item label="编码">{{ warehouse.code }}</el-descriptions-item>
-            <el-descriptions-item label="类型"><el-tag :type="warehouse.warehouseType==='FINISHED'?'success':warehouse.warehouseType==='DEFECT'?'danger':'info'" size="small">{{ WarehouseTypeLabel[warehouse.warehouseType] || warehouse.warehouseType }}</el-tag></el-descriptions-item>
+            <el-descriptions-item label="类型"><el-tag :type="warehouse.warehouseType==='FINISHED'?'success':'info'" size="small">{{ WarehouseTypeLabel[warehouse.warehouseType] || warehouse.warehouseType }}</el-tag></el-descriptions-item>
             <el-descriptions-item label="地址" :span="2">{{ warehouse.address || '-' }}</el-descriptions-item>
             <el-descriptions-item label="联系人">{{ warehouse.contact || '-' }}</el-descriptions-item>
             <el-descriptions-item label="电话">{{ warehouse.phone || '-' }}</el-descriptions-item>

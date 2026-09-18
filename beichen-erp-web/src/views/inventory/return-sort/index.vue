@@ -19,8 +19,8 @@ const tableLoading = ref(false)
 const tableData = ref<any[]>([])
 const warehouseOptions = ref<any[]>([])
 
-// 源仓库：只允许选售后仓
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.AFTER_SALE } })
+// 源仓库：自有成品仓（2026-09-16 方案 A：原"售后仓"取消，退回品直接压在成品仓、品质 PENDING）
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.FINISHED } })
 
 // 列表
 async function loadData() {
@@ -54,7 +54,7 @@ async function handleAudit(row: any) {
   const loss = Number(row.lossAmount) || 0
   const lossTip = loss > 0 ? `\n并将生成一条向客户收取的折损应收 ${loss.toFixed(2)} 元（台账单号 ${row.code}-LOSS）。` : ''
   try {
-    await ElMessageBox.confirm(`确认审核单号「${row.code}」？审核后将从售后仓扣减待分类品并分品质入库（A/B/C 入成品仓）。${lossTip}`, '审核确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确认审核单号「${row.code}」？审核后将从成品仓扣减待分类品并分品质入库（A/B/C/不良 均入成品仓，按品质区分）。${lossTip}`, '审核确认', { type: 'warning' })
     await auditReturnSort(row.id)
     ElMessage.success('审核成功')
     loadData()

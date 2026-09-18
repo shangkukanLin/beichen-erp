@@ -32,14 +32,16 @@
   --app-bg-container: #ffffff;
   --app-bg-hover: #f5f7fa;
 
-  /* ---------- 字号阶梯（正文 14 / 表格 13 / 辅助 12） ---------- */
-  --app-font-xs: 12px;      /* 辅助说明、占位、次级提示 */
-  --app-font-sm: 13px;      /* 表格单元格、列表正文 */
-  --app-font-base: 14px;    /* 正文、表单 label、按钮 */
-  --app-font-md: 15px;      /* 小标题、页签标题 */
-  --app-font-lg: 16px;      /* 主标题、logo 折叠态 */
-  --app-font-xl: 18px;      /* 大标题、logo 展开态 */
-  --app-font-num: 28px;     /* 统计数字 */
+  /* ---------- 字号阶梯（2026-09-16 统一：12 辅助 / 14 正文 / 15 卡片标题 / 18 页标题 / 16·22 统计） ----------
+     全站只有 4 个原文档位 + 2 个数字档位；13px 档已废弃（原 --app-font-sm 已删除）。 */
+  --app-font-xs: 12px;      /* 辅助说明、占位、次级提示、状态标签 */
+  --app-font-base: 14px;    /* 正文：表格、表单 label、输入、按钮、菜单、页签、分页 */
+  --app-font-md: 15px;      /* 卡片 / 区块 / 弹窗标题 */
+  --app-font-lg: 18px;      /* 页面主标题 */
+  --app-font-xl: 18px;      /* logo 展开态（与页面主标题同档） */
+  --app-font-num-sm: 16px;  /* 统计卡次数字 */
+  --app-font-num: 22px;     /* 统计卡主数字 */
+  --app-font-display: 34px; /* 品牌展示字（仅登录页大标题） */
 
   /* ---------- 圆角阶梯 ---------- */
   --app-radius-sm: 2px;     /* 标签、小徽标 */
@@ -66,10 +68,12 @@
   --el-color-primary-light-9: #ecf5ff;
   --el-color-primary-dark-2: #337ecc;
 
-  /* 字号：统一组件文字基准 */
-  --el-font-size-base: var(--app-font-base);          /* 默认 14px */
-  --el-font-size-small: var(--app-font-sm);           /* small 尺寸 13px */
-  --el-font-size-extra-small: var(--app-font-xs);     /* 12px */
+  /* 字号：统一组件文字基准 —— small / extra-small **均指向正文 14px**：
+     页面上的 size="small" 从此只压缩高度与内边距，不再把字号降到 12/13px
+     （这就是"全站字号统一"的关键一处，无需逐个清理 50+ 页面的 size="small"） */
+  --el-font-size-base: var(--app-font-base);          /* 14px */
+  --el-font-size-small: var(--app-font-base);         /* 原 13px → 14 */
+  --el-font-size-extra-small: var(--app-font-base);   /* 原 12px → 14 */
 
   /* 圆角：统一组件圆角为 4px（覆盖 EP 默认 4px，保持一致） */
   --el-border-radius-base: var(--app-radius-base);
@@ -104,15 +108,27 @@
   color: var(--app-text-placeholder);
 }
 
-/* 表格正文（13px） */
+/* 表格正文（14px，与正文同号） */
 .text-table {
-  font-size: var(--app-font-sm);
+  font-size: var(--app-font-base);
 }
 
 /* 小标题（15px 中等强调） */
 .text-subtitle {
   font-size: var(--app-font-md);
   font-weight: 500;
+}
+
+/* 统计卡主数字（22px） */
+.text-num {
+  font-size: var(--app-font-num);
+  font-weight: 600;
+}
+
+/* 统计卡次数字（16px） */
+.text-num-sm {
+  font-size: var(--app-font-num-sm);
+  font-weight: 600;
 }
 
 /* 主色文字 */

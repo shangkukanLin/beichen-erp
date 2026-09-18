@@ -147,6 +147,11 @@ public class WarehouseStockService {
      * 写到不存在的维度上（"幽灵库存行"）。收敛在库存写入层做一次校验，可覆盖所有模块（含未来新增路径）。</p>
      */
     private void assertRefsExist(Long warehouseId, Long productId, Long materialId) {
+        // T7（2026-09-18 修复）：库存行必须能归属到「产品」或「物料」，**两者都空**会写出无法归属的
+        // "幽灵库存行"（实测：其他出入库明细未选产品也能保存并审核，写出 product_id=material_id=NULL、
+        // 数量 5 的库存行，产品库存统计出现脏数据）。此处是**库存写入层兜底**，覆盖所有模块与未来新增路径。
+        if (productId == null && materialId == null)
+            throw new BusinessException("库存变更必须指定产品ID或物料ID（不能都为空，否则会产生无法归属的库存行）");
         if (warehouseId == null || warehouseMapper.selectById(warehouseId) == null)
             throw new BusinessException("仓库不存在：ID=" + warehouseId);
         if (productId != null && productMapper.selectById(productId) == null)
@@ -222,8 +227,13 @@ public class WarehouseStockService {
         logEntry.setAfterQuantity(after);
         logEntry.setRelatedOrderCode(relatedCode);
         logEntry.setRelatedBillType(relatedBillType != null ? relatedBillType.getCode() : null);
+        // F1（2026-09-17 修复）：物料流水原先**只写 related_order_code、从不写 related_bill_no**，
+        // 导致物料侧流水 100% 无法回溯单据（实测 264/440 行为空，退货/收料/领料/维修返回整类为空）。
+        // 各调用点传入的 relatedCode 就是单据号（报损 WBS- / 物料退货 MR- / 加工单 WO- / 盘点 PD- 等），
+        // 与成品侧 changeStock 的口径保持一致地写入 related_bill_no。
+        if (relatedCode != null && !relatedCode.isBlank()) logEntry.setRelatedBillNo(relatedCode);
         logEntry.setRelatedDeliveryId(relatedDeliveryId);
-        // relatedBillId：物料报损等独立单据用它跳回详情页；其余物料变动为 null
+        // relatedBillId：物料报损/退货/维修返回等独立单据用它跳回详情页
         if (relatedBillId != null) logEntry.setRelatedBillId(relatedBillId);
         if (companyId != null) logEntry.setCompanyId(companyId);
         warehouseStockLogMapper.insert(logEntry);

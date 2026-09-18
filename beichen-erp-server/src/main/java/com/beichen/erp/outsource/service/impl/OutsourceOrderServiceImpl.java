@@ -24,6 +24,7 @@ import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.common.QualityType;
+import com.beichen.erp.outsource.service.BomSnapshotService;
 import com.beichen.erp.outsource.service.OutsourceOrderDeliveryService;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.supplier.common.SupplierTypeEnum;
@@ -59,6 +60,8 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     private final ProductService productService;
     private final ProjectMapper projectMapper;
     private final JdbcTemplate jdbcTemplate;
+    /** BOM 快照服务（2026-09-17）：下单时按「产品 + 研发BOM版本 + 明细内容」复用/新建快照 */
+    private final BomSnapshotService bomSnapshotService;
     /** 交货记录服务与本服务互相依赖，使用 @Lazy 字段注入打破循环依赖 */
     @org.springframework.beans.factory.annotation.Autowired
     @org.springframework.context.annotation.Lazy
@@ -131,6 +134,107 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
             }
         }
 
+        // ===== 是否缺料（2026-09-17 新增列表列）=====
+        // 口径与交货时的缺料拦截完全一致（OutsourceOrderDeliveryServiceImpl#checkMaterialShortages:742）：
+        //   逐物料需求 = Σ(单套用量 × 该产品剩余待交量)，单套用量 = outsource_order_material.demand_quantity ÷ 产品行计划数量；
+        //   比对 = 该加工厂委外仓(warehouse.factory_id = 加工单.factory_id)的良品库存；任一物料「需求 > 库存」= 缺料。
+        //   供料方为「工厂包」(supply_type=FACTORY) 的物料不参与（与交货口径一致）。
+        //   剩余待交 = 计划数量 − Σ已审核交货量（退不良 quantity 为负，累加即冲减）。
+        // 仅 PENDING/PRODUCING 计算；FINISHED/CANCELLED 置 null（前端显示「—」）。
+        if (!orderIds.isEmpty()) {
+            String ph = orderIds.stream().map(id -> "?").collect(Collectors.joining(","));
+            Object[] orderParams = orderIds.toArray();
+            // 1) 产品行（计划数量 + 所属订单/工厂/状态）
+            List<Map<String, Object>> prodRows = jdbcTemplate.queryForList(
+                    "SELECT p.id AS pid, p.order_id AS oid, p.quantity AS plan_qty, o.factory_id AS fid, o.status AS st "
+                            + "FROM outsource_order_product p JOIN outsource_order o ON o.id = p.order_id "
+                            + "WHERE p.order_id IN (" + ph + ")", orderParams);
+            // 2) 已审核交货量（按产品行聚合）
+            Map<Long, BigDecimal> deliveredByProduct = new HashMap<>();
+            for (Map<String, Object> r : jdbcTemplate.queryForList(
+                    "SELECT product_id, SUM(quantity) AS delivered FROM outsource_order_delivery "
+                            + "WHERE order_id IN (" + ph + ") AND status = '" + DocStatus.AUDITED.getCode() + "' "
+                            + "GROUP BY product_id", orderParams)) {
+                if (r.get("product_id") == null) continue;
+                deliveredByProduct.put(((Number) r.get("product_id")).longValue(),
+                        r.get("delivered") != null ? new BigDecimal(r.get("delivered").toString()) : BigDecimal.ZERO);
+            }
+            // 3) 物料清单（按产品行）：[materialId, demandQuantity]
+            Map<Long, List<Object[]>> matsByProduct = new HashMap<>();
+            List<Long> prodIds = prodRows.stream().filter(r -> r.get("pid") != null)
+                    .map(r -> ((Number) r.get("pid")).longValue()).distinct().collect(Collectors.toList());
+            if (!prodIds.isEmpty()) {
+                String pph = prodIds.stream().map(id -> "?").collect(Collectors.joining(","));
+                for (Map<String, Object> r : jdbcTemplate.queryForList(
+                        "SELECT product_id, outsource_material_id, demand_quantity, supply_type "
+                                + "FROM outsource_order_material WHERE product_id IN (" + pph + ")", prodIds.toArray())) {
+                    if (r.get("product_id") == null || r.get("outsource_material_id") == null) continue;
+                    if ("FACTORY".equals(r.get("supply_type"))) continue;
+                    BigDecimal dem = r.get("demand_quantity") != null
+                            ? new BigDecimal(r.get("demand_quantity").toString()) : BigDecimal.ZERO;
+                    matsByProduct.computeIfAbsent(((Number) r.get("product_id")).longValue(), k -> new ArrayList<>())
+                            .add(new Object[]{((Number) r.get("outsource_material_id")).longValue(), dem});
+                }
+            }
+            // 4) 各工厂委外仓良品库存：factoryId -> materialId -> 库存
+            Map<Long, Map<Long, BigDecimal>> stockByFactory = new HashMap<>();
+            List<Long> factoryIds = prodRows.stream().filter(r -> r.get("fid") != null)
+                    .map(r -> ((Number) r.get("fid")).longValue()).distinct().collect(Collectors.toList());
+            if (!factoryIds.isEmpty()) {
+                String fph = factoryIds.stream().map(id -> "?").collect(Collectors.joining(","));
+                for (Map<String, Object> r : jdbcTemplate.queryForList(
+                        "SELECT w.factory_id AS fid, s.material_id AS mid, SUM(s.quantity) AS qty "
+                                + "FROM warehouse_stock s JOIN warehouse w ON w.id = s.warehouse_id "
+                                + "WHERE w.factory_id IN (" + fph + ") AND s.material_id IS NOT NULL "
+                                + "AND s.quality_type = '" + QualityType.GOOD.getCode()
+                                + "' GROUP BY w.factory_id, s.material_id", factoryIds.toArray())) {
+                    if (r.get("fid") == null || r.get("mid") == null) continue;
+                    stockByFactory.computeIfAbsent(((Number) r.get("fid")).longValue(), k -> new HashMap<>())
+                            .merge(((Number) r.get("mid")).longValue(),
+                                    r.get("qty") != null ? new BigDecimal(r.get("qty").toString()) : BigDecimal.ZERO,
+                                    BigDecimal::add);
+                }
+            }
+            // 5) 逐单判定：需求先按物料合并再比库存（避免"每产品单看够、合起来不够"漏判）
+            Map<Long, String> orderStatus = new HashMap<>();
+            Map<Long, Long> orderFactory = new HashMap<>();
+            Map<Long, Map<Long, BigDecimal>> needByOrder = new HashMap<>();
+            for (Map<String, Object> r : prodRows) {
+                Long oid = r.get("oid") != null ? ((Number) r.get("oid")).longValue() : null;
+                Long pid = r.get("pid") != null ? ((Number) r.get("pid")).longValue() : null;
+                if (oid == null || pid == null) continue;
+                orderStatus.put(oid, r.get("st") != null ? r.get("st").toString() : null);
+                orderFactory.put(oid, r.get("fid") != null ? ((Number) r.get("fid")).longValue() : null);
+                BigDecimal planQty = r.get("plan_qty") != null
+                        ? new BigDecimal(r.get("plan_qty").toString()) : BigDecimal.ZERO;
+                BigDecimal remaining = planQty.subtract(deliveredByProduct.getOrDefault(pid, BigDecimal.ZERO));
+                if (remaining.compareTo(BigDecimal.ZERO) <= 0) continue;
+                BigDecimal denom = planQty.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ONE : planQty;
+                for (Object[] mat : matsByProduct.getOrDefault(pid, List.of())) {
+                    BigDecimal perUnit = ((BigDecimal) mat[1]).divide(denom, 6, RoundingMode.HALF_UP);
+                    BigDecimal need = perUnit.multiply(remaining).setScale(0, RoundingMode.HALF_UP);
+                    if (need.compareTo(BigDecimal.ZERO) <= 0) continue;
+                    needByOrder.computeIfAbsent(oid, k -> new HashMap<>())
+                            .merge((Long) mat[0], need, BigDecimal::add);
+                }
+            }
+            for (Map<String, Object> rec : result.getRecords()) {
+                Long oid = (Long) rec.get("id");
+                String st = orderStatus.get(oid);
+                boolean applicable = OutsourceOrderStatus.PENDING.getCode().equals(st)
+                        || OutsourceOrderStatus.PRODUCING.getCode().equals(st);
+                if (!applicable) { rec.put("materialShortage", null); continue; }
+                Map<Long, BigDecimal> needMap = needByOrder.getOrDefault(oid, Map.of());
+                Map<Long, BigDecimal> stockMap = stockByFactory.getOrDefault(orderFactory.get(oid), Map.of());
+                boolean shortage = false;
+                for (Map.Entry<Long, BigDecimal> en : needMap.entrySet()) {
+                    BigDecimal stock = stockMap.getOrDefault(en.getKey(), BigDecimal.ZERO);
+                    if (stock.compareTo(en.getValue()) < 0) { shortage = true; break; }
+                }
+                rec.put("materialShortage", shortage);
+            }
+        }
+
         return result;
     }
 
@@ -180,16 +284,11 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
             // 回填关联产品主数据ID(product.id)，交货/库存落账使用
             p.setProductId(resolveProductMasterId(p));
             if (cid != null && cid > 0) p.setCompanyId(cid);
+            // BOM 快照（2026-09-17 重构）：按「产品 + 研发BOM版本 + 明细内容」复用/新建，
+            // 研发BOM未变化时多张加工单共享同一份快照，不再每次下单都生成一份明细
+            p.setBomSnapshotId(bomSnapshotService.resolveSnapshot(
+                    p.getProductId(), p.getProductName(), p.getProjectId(), p.getQuantity(), p.getMaterials(), cid));
             productMapper.insert(p);
-            // 保存物料
-            if (p.getMaterials() != null) {
-                for (OutsourceOrderMaterial mat : p.getMaterials()) {
-                    mat.setId(null);
-                    mat.setProductId(p.getId());
-                    if (cid != null && cid > 0) mat.setCompanyId(cid);
-                    materialMapper.insert(mat);
-                }
-            }
         }
         // 更新总金额与税额
         OutsourceOrder update = new OutsourceOrder();
@@ -221,13 +320,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
         assertFactory(factoryId);
         if (newProducts == null || newProducts.isEmpty()) throw new BusinessException("至少需要一个加工产品");
 
-        // 删除旧产品（级联删除物料）
-        List<OutsourceOrderProduct> oldProducts = productMapper.selectList(
-                new LambdaQueryWrapper<OutsourceOrderProduct>().eq(OutsourceOrderProduct::getOrderId, order.getId()));
-        for (OutsourceOrderProduct op : oldProducts) {
-            materialMapper.delete(new LambdaQueryWrapper<OutsourceOrderMaterial>()
-                    .eq(OutsourceOrderMaterial::getProductId, op.getId()));
-        }
+        // 删除旧产品行（2026-09-17 重构：物料明细已改为共享 BOM 快照，不能再随单删除——否则会波及别的加工单）
         productMapper.delete(new LambdaQueryWrapper<OutsourceOrderProduct>()
                 .eq(OutsourceOrderProduct::getOrderId, order.getId()));
 
@@ -248,15 +341,10 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
             p.setOrderId(order.getId());
             // 回填关联产品主数据ID(product.id)，交货/库存落账使用
             p.setProductId(resolveProductMasterId(p));
+            // BOM 快照：编辑加工单同样走"复用/新建"判定，未变化则沿用既有快照
+            p.setBomSnapshotId(bomSnapshotService.resolveSnapshot(
+                    p.getProductId(), p.getProductName(), p.getProjectId(), p.getQuantity(), p.getMaterials(), old.getCompanyId()));
             productMapper.insert(p);
-            // 插入物料
-            if (p.getMaterials() != null) {
-                for (OutsourceOrderMaterial mat : p.getMaterials()) {
-                    mat.setId(null);
-                    mat.setProductId(p.getId());
-                    materialMapper.insert(mat);
-                }
-            }
         }
         // 更新总金额与税额
         OutsourceOrder amountUpdate = new OutsourceOrder();

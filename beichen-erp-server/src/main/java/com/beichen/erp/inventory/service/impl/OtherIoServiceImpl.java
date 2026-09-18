@@ -94,6 +94,8 @@ public class OtherIoServiceImpl implements OtherIoService {
     public void create(InventoryOtherIo otherIo, List<InventoryOtherIoItem> items) {
         if (otherIo.getWarehouseId() == null) throw new BusinessException("仓库不能为空");
         if (otherIo.getIoType() == null || otherIo.getIoType().isBlank()) throw new BusinessException("出入库类型不能为空");
+        items = validItems(items);
+        if (items.isEmpty()) throw new BusinessException("请添加明细（每行需选择产品且数量大于 0）");
         otherIo.setCode(gen(BillPrefix.INVENTORY_OTHER_IO));
         // 统一流程：创建为草稿，审核时才应用库存
         otherIo.setStatus(DocStatus.DRAFT.getCode());
@@ -115,7 +117,8 @@ public class OtherIoServiceImpl implements OtherIoService {
         if (old == null) throw new BusinessException("其他出入库单不存在");
         // 统一流程：仅草稿可编辑（草稿未应用库存，直接更新主表与明细）
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("仅草稿状态可编辑");
-
+        items = validItems(items);
+        if (items.isEmpty()) throw new BusinessException("请添加明细（每行需选择产品且数量大于 0）");
         otherIo.setCode(old.getCode()); otherIo.setStatus(DocStatus.DRAFT.getCode());
         ioMapper.updateById(otherIo);
 
@@ -153,6 +156,8 @@ public class OtherIoServiceImpl implements OtherIoService {
         // 审核时应用库存
         List<InventoryOtherIoItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
+        // T7（2026-09-18）：审核前兜底校验明细可归属（兼容修复前保存的旧草稿单）
+        assertItemsAttributable(items);
         // 出库前校验库存：一次列清所有不足项，避免落到 changeStock 只报「产品ID=xx」
         checkStockBeforeOut(io, items);
         applyStock(io, items);
@@ -174,6 +179,34 @@ public class OtherIoServiceImpl implements OtherIoService {
             new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
         revertStock(io, items);
         // 状态已由 DocStatusGuard 在该方法开头原子置为 DRAFT
+    }
+
+    /**
+     * T7（2026-09-18 修复）：明细行合法性 —— 只保留「已选择产品且数量 > 0」的行。
+     * <p>修复前允许保存"未选产品"的空行，审核时因数量为 0 跳过库存校验，却仍把
+     * {@code product_id=NULL} 的幽灵库存行写进 `warehouse_stock`（详见 §12.109.6-T7）。</p>
+     */
+    private List<InventoryOtherIoItem> validItems(List<InventoryOtherIoItem> items) {
+        List<InventoryOtherIoItem> valid = new ArrayList<>();
+        if (items == null) return valid;
+        for (InventoryOtherIoItem it : items) {
+            if (it.getProductId() == null) continue;
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
+            valid.add(it);
+        }
+        return valid;
+    }
+
+    /**
+     * T7（2026-09-18 修复）：审核前兜底校验 —— 每行必须选择产品。
+     * <p>覆盖修复前已保存的旧草稿单（那些单里可能残留"未选产品"的行）。</p>
+     */
+    private void assertItemsAttributable(List<InventoryOtherIoItem> items) {
+        if (items == null || items.isEmpty()) throw new BusinessException("明细不能为空，无法审核");
+        for (InventoryOtherIoItem it : items) {
+            if (it.getProductId() == null)
+                throw new BusinessException("明细行未选择产品，无法审核（请补全产品后再审核）");
+        }
     }
 
     /**

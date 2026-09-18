@@ -3,7 +3,7 @@
  * 库存盘点面板（2026-09-16 由 views/inventory/stock-take/index.vue 抽出）
  *
  * 通过 scope 区分两种盘点，**仓库范围与服务端口径完全一致**：
- *  - PRODUCT  成品盘点：自有仓中除辅料仓以外的仓库（成品仓 / 不良仓 / 售后仓）
+ *  - PRODUCT  成品盘点：自有仓中除辅料仓以外的仓库（现只有成品仓）
  *  - MATERIAL 物料盘点：委外仓（OUTSOURCE）+ 自有物料仓（INVENTORY + AUXILIARY）
  *
  * 后端在 create/save/audit 等入口也会按「盘点单所属仓库」再校验一次，前端过滤只是体验层面；
@@ -25,7 +25,7 @@ const props = defineProps<{ scope: 'PRODUCT' | 'MATERIAL' }>()
 const isMaterial = computed(() => props.scope === 'MATERIAL')
 /** 页面标题：用于表头提示当前盘的是哪一类仓库 */
 const pageTitle = computed(() => (isMaterial.value ? '物料库存盘点' : '库存盘点'))
-const scopeHint = computed(() => (isMaterial.value ? '（委外仓 / 自有物料仓）' : '（成品仓 / 不良仓 / 售后仓）'))
+const scopeHint = computed(() => (isMaterial.value ? '（委外仓 / 自有物料仓）' : '（成品仓）'))
 
 // 库存盘点：每月每仓一次
 const query = reactive({ warehouseId: undefined as number | undefined, period: '', status: '' })
@@ -210,7 +210,7 @@ onMounted(() => { loadData(); loadWarehouses() })
 
     <!-- 明细：录入实盘数量 -->
     <el-dialog v-model="itemDialog" :title="`盘点明细 - ${curTake.warehouseName}（${curTake.takeNo}）`" width="900px" :close-on-click-modal="false">
-      <div style="margin-bottom:8px;font-size:13px">
+      <div style="margin-bottom:8px;font-size:var(--app-font-base)">
         账面数量来自建单时快照；修改实盘数量后自动算差异。当前差异行：<b :style="{color: diffRows.length ? 'var(--app-color-danger)' : ''}">{{ diffRows.length }}</b>
       </div>
       <el-table v-loading="itemLoading" :data="items" border stripe size="small" max-height="420">

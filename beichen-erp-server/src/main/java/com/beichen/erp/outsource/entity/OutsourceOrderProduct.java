@@ -16,6 +16,9 @@ public class OutsourceOrderProduct {
     /** 关联产品主数据ID(product.id)，交货/库存落账用主表ID */
     private Long productId;
 
+    /** 所用BOM快照ID(bom_snapshot.id)：同一BOM版本同内容的多张加工单共享一份快照（2026-09-17） */
+    private Long bomSnapshotId;
+
     /** SKU（展示用，非表字段；明细接口按 productId 批量回填） */
     @TableField(exist = false)
     private String sku;

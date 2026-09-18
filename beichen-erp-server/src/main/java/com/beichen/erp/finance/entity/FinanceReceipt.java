@@ -26,6 +26,13 @@ public class FinanceReceipt {
     private LocalDate receiptDate;
     private BigDecimal amount;
     private String status;
+    /**
+     * 来源单据（2026-09-18）：销售单现金结算时由「审核销售单」自动生成草稿收款单，
+     * 销售单反审核需按此精确定位并联动（草稿→自动作废；已审核→拦住提示先撤收款）。
+     */
+    private String sourceBillType;
+    private String sourceBillNo;
+    private Long sourceId;
     private String remark;
     @TableField(fill = FieldFill.INSERT) private Long companyId;
     private LocalDateTime createTime;

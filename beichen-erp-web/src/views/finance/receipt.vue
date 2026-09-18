@@ -144,6 +144,13 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
     <el-card shadow="never">
       <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
         <el-table-column prop="code" label="单号" min-width="150"/>
+        <!-- 来源单据（2026-09-18）：现金销售单由系统自动收款（立刻到账、已审核）时显示销售单号 -->
+        <el-table-column label="来源" width="140">
+          <template #default="{row}">
+            <span v-if="row.sourceBillNo">{{ row.sourceBillNo }}</span>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="主体类型" width="100" align="center">
           <template #default="{row}">
             <el-tag :type="row.subjectType === SubjectType.SUPPLIER ? 'warning' : 'primary'" size="small">{{ SubjectTypeLabel[row.subjectType] || '客户' }}</el-tag>

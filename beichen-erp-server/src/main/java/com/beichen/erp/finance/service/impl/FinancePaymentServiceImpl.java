@@ -127,6 +127,10 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             if (it.getPayableId() == null) continue;
             FinancePayable p = payableMapper.selectById(it.getPayableId());
             if (p == null) continue;
+            // I27（2026-09-18 修复，与应收侧对称）：预付台账（ADVANCE，负数应付）不可作为付款核销目标，
+            // 否则会生成"预付的预付"（语义错误 + 单号被层层追加后缀）
+            if (SettlementStatus.ADVANCE.getCode().equals(p.getStatus()))
+                throw new BusinessException("应付单「" + p.getBillNo() + "」是预付台账（多付款待抵扣），不能作为付款核销的目标；如需冲回预付款请走退款或冲销流程");
             BigDecimal amt = it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO;
             BigDecimal unpaid = p.getUnpaidAmount() != null ? p.getUnpaidAmount() : BigDecimal.ZERO;
             BigDecimal newUnpaid = unpaid.subtract(amt);
@@ -329,10 +333,9 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
                         .eq(FinancePayable::getSourceBillType, SettlementStatus.ADVANCE.getCode())
                         .eq(FinancePayable::getSourceId, id));
         for (FinancePayable adv : advances) {
-            FinancePayable upAdv = new FinancePayable();
-            upAdv.setId(adv.getId());
-            upAdv.setStatus(SettlementStatus.CANCELLED.getCode());
-            payableMapper.updateById(upAdv);
+            // I29 口径（2026-09-18）：作废预付台账时**金额一并清零**（原金额记入备注留痕），
+            // 与应付反审核冲销保持同一口径（旧实现只置状态，作废行仍带金额）
+            payableHelper.cancelLedger(adv);
         }
         // 4) 写冲正资金流水（保留审计轨迹，不删除原流水；账户余额由流水实时累计）
         FinanceCashflow cf = new FinanceCashflow();

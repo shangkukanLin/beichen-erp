@@ -167,3 +167,35 @@ export function getPurchaseReturnByOrder(purchaseOrderId: number) {
 export function getPurchaseReturnPurchaseOrderItems(purchaseOrderId: number) {
   return request.get<any[]>(`/inventory/purchase-return/purchase-order-items`, { params: { purchaseOrderId } })
 }
+
+// ---- 采购换货单 API（进货业务：把采购成品退回供货商换新；同品换货、强关联采购单；2026-09-18 新增） ----
+
+export function getPurchaseExchangePage(params: any) {
+  return request.get<PageResult<any>>('/inventory/purchase-exchange/page', { params })
+}
+export function getPurchaseExchange(id: number) {
+  return request.get<any>(`/inventory/purchase-exchange/${id}`)
+}
+export function createPurchaseExchange(data: any) {
+  return request.post<any>('/inventory/purchase-exchange', data)
+}
+export function updatePurchaseExchange(id: number, data: any) {
+  return request.put<any>('/inventory/purchase-exchange', { ...data, id })
+}
+export function auditPurchaseExchange(id: number) {
+  return request.put<void>(`/inventory/purchase-exchange/${id}/audit`)
+}
+export function unAuditPurchaseExchange(id: number) {
+  return request.put<void>(`/inventory/purchase-exchange/${id}/un-audit`)
+}
+export function cancelPurchaseExchange(id: number) {
+  return request.put<void>(`/inventory/purchase-exchange/${id}/cancel`)
+}
+/** 查询采购单明细（含已购/已退/已换/可换数量，供换货带入；可换量 = 已购 − 已退 − 已换） */
+export function getPurchaseExchangePurchaseOrderItems(purchaseOrderId: number) {
+  return request.get<any[]>(`/inventory/purchase-exchange/purchase-order-items`, { params: { purchaseOrderId } })
+}
+/** 查询已审核采购单（供换货选择来源采购单） */
+export function getPurchaseExchangePurchaseOrders(supplierId?: number, kw?: string) {
+  return request.get<any[]>(`/inventory/purchase-exchange/purchase-orders`, { params: { supplierId, kw } })
+}

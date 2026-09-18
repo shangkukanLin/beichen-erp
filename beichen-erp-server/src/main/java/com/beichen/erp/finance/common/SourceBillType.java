@@ -19,6 +19,10 @@ public enum SourceBillType {
     PURCHASE_INBOUND("采购入库"),
     /** 采购退货单 */
     PURCHASE_RETURN("采购退货单"),
+    /** 采购换货-退回侧：换货单退回供货商生成**负向**应付（冲减），台账号后缀 -RET（2026-09-18） */
+    PURCHASE_EXCHANGE_RETURN("采购换货退回"),
+    /** 采购换货-换入侧：供货商换回的良品生成**正向**应付，台账号后缀 -IN ⇒ 与退回侧两行净额即差价 */
+    PURCHASE_EXCHANGE_IN("采购换货入库"),
     /** 销售退货 */
     SALE_RETURN("销售退货"),
     /** 委外加工单交货（成品报工入库产生应付） */
@@ -27,8 +31,10 @@ public enum SourceBillType {
     OUTSOURCE_MATERIAL_DELIVERY("委外物料收发"),
     /** 委外退料（负向应付冲减） */
     OUTSOURCE_RETURN("委外退料"),
-    /** 委外加工退货收费：我方支付给加工厂的费用（与退料负向冲减分开记账，同为 sourceId=退货单ID） */
+    /** 委外加工退货收费：**加工厂向我方收取**（我方付加工厂）的费用，与退料负向冲减分开记账，同为 sourceId=退货单ID */
     OUTSOURCE_RETURN_CHARGE("委外加工退货收费"),
+    /** 委外维修收费（2026-09-17）：维修退货单送修时**加工厂向我方收取**的维修费，正向应付，单独分账便于对账 */
+    OUTSOURCE_REPAIR_CHARGE("委外维修收费"),
     /** 委外物料退货（退回物料商，负向应付冲减） */
     OUTSOURCE_MATERIAL_RETURN("委外物料退货"),
     /** 委外超损赔偿（结单超损总价生成负应付） */

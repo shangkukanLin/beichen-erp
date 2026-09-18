@@ -87,7 +87,7 @@ onMounted(() => { loadWarehouseOptions(); loadData() })
         <el-tab-pane label="全部" name="" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :name="DeliveryType.DELIVERY" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.TRANSFER]" :name="DeliveryType.TRANSFER" /><el-tab-pane :label="`${DeliveryTypeLabel[DeliveryType.RECEIVE]}（自动）`" :name="DeliveryType.RECEIVE" /><el-tab-pane :label="`${DeliveryTypeLabel[DeliveryType.DEFECT_RETURN]}（自动）`" :name="DeliveryType.DEFECT_RETURN" /><el-tab-pane :label="`${DeliveryTypeLabel[DeliveryType.RETURN]}（已下线）`" :name="DeliveryType.RETURN" />
       </el-tabs>
 
-      <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%" size="small" @row-click="(row: any) => router.push(`/outsource/delivery/detail/${row.id}`)">
+      <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%" @row-click="(row: any) => router.push(`/outsource/delivery/detail/${row.id}`)">
         <el-table-column label="日期" width="100"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column prop="code" label="单号" width="170" />
         <el-table-column label="发出仓库/供应商" width="170" show-overflow-tooltip>

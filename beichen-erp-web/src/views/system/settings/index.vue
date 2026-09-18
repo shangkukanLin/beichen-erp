@@ -83,7 +83,7 @@ onMounted(() => { loadCompany(); loadParams() })
           <el-form-item label="日期"><el-input v-model="logQuery.startDate" type="date" /> ~ <el-input v-model="logQuery.endDate" type="date" /></el-form-item>
           <el-form-item><el-button type="primary" :icon="'Search'" @click="logPage.pageNum=1;loadLogs()">查询</el-button></el-form-item>
         </el-form>
-        <el-table :data="logData" border stripe v-loading="logLoading" size="small">
+        <el-table :data="logData" border stripe v-loading="logLoading">
           <el-table-column prop="id" label="ID" width="60" />
           <el-table-column prop="username" label="用户" width="80" />
           <el-table-column prop="module" label="模块" width="80" />

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, watch } from 'vue'
+import { reactive, ref, computed, onMounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getUserPage,
@@ -11,13 +11,20 @@ import {
   resetPassword,
   toggleUserStatus,
   getEnabledRoles,
+  getMenuTree,
+  getUserMenus,
+  saveUserMenus,
   DASHBOARD_TABS,
   type UserVO,
   type UserDTO,
   type UserQueryParams,
+  type MenuVO,
   type Role
 } from '@/api/system'
 import { SUPER_ADMIN_ROLE_CODE } from '@/constants/system'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
 
 // 查询参数
 const query = reactive<UserQueryParams>({
@@ -288,6 +295,99 @@ async function handleResetPassword() {
   })
 }
 
+/* ============== 页面权限弹窗（2026-09-18：在用户管理里直接编辑该用户的页面可见性） ============== */
+const permDialogVisible = ref(false)
+const permSaving = ref(false)
+const permUserId = ref<number | string>('')
+const permUsername = ref('')
+const permMode = ref('ROLE')
+const permRoleKeys = ref<(number | string)[]>([])
+const permCheckedKeys = ref<(number | string)[]>([])
+const permMenuTree = ref<MenuVO[]>([])
+const permTreeRef = ref()
+
+function isCustomPerm(row: UserVO) {
+  return (row.menuMode || 'ROLE') === 'CUSTOM'
+}
+function isSuperAdminRow(row: UserVO) {
+  return (row.roles || []).some((r) => r.roleCode === SUPER_ADMIN_ROLE_CODE)
+}
+function isSelfRow(row: UserVO) {
+  return String(row.id ?? '') === String(userStore.userInfo?.id ?? '')
+}
+/** 不能改自己（防自锁：把自己「用户管理」去掉就再也进不来）也不能改超管（恒为跟随角色） */
+function canEditPerm(row: UserVO) {
+  return !isSelfRow(row) && !isSuperAdminRow(row) && row.username !== 'lin'
+}
+function permDisabledReason(row: UserVO) {
+  if (isSelfRow(row)) return '不能修改自己的页面权限（防止把自己锁在门外），请由其他管理员操作'
+  if (isSuperAdminRow(row) || row.username === 'lin') return '超级管理员用户恒为「跟随角色」，不可自定义'
+  return ''
+}
+
+async function handleOpenPerm(row: UserVO) {
+  permUserId.value = row.id as number | string
+  permUsername.value = row.username
+  permMode.value = 'ROLE'
+  permRoleKeys.value = []
+  permCheckedKeys.value = []
+  permDialogVisible.value = true
+  // 菜单树：与角色「分配权限」同一接口（管理端全量树）
+  try {
+    permMenuTree.value = (await getMenuTree()) || []
+  } catch {
+    permMenuTree.value = []
+  }
+  try {
+    const perm = await getUserMenus(permUserId.value)
+    permRoleKeys.value = perm.roleMenuIds || []
+    if ((perm.menuMode || 'ROLE') === 'CUSTOM') {
+      permMode.value = 'CUSTOM'
+      permCheckedKeys.value = perm.menuIds && perm.menuIds.length > 0 ? perm.menuIds : permRoleKeys.value
+      await nextTick()
+      permTreeRef.value?.setCheckedKeys(permCheckedKeys.value)
+    }
+  } catch {
+    permMode.value = 'ROLE'
+  }
+}
+
+/* 切到「自定义」时：若尚无勾选，用「角色现有权限」预填（在其基础上微调，而不是从零勾） */
+watch(permMode, async (val) => {
+  if (val !== 'CUSTOM') return
+  const keys = permCheckedKeys.value.length > 0 ? permCheckedKeys.value : permRoleKeys.value
+  permCheckedKeys.value = keys
+  await nextTick()
+  permTreeRef.value?.setCheckedKeys(keys)
+})
+
+async function handleSavePerm() {
+  permSaving.value = true
+  try {
+    if (permMode.value === 'ROLE') {
+      await saveUserMenus(permUserId.value, { menuMode: 'ROLE' })
+      ElMessage.success('已设为「跟随角色」')
+    } else {
+      // 与角色「分配权限」一致：提交"全选 + 半选"
+      const checkedKeys = permTreeRef.value?.getCheckedKeys() || []
+      const halfCheckedKeys = permTreeRef.value?.getHalfCheckedKeys() || []
+      const allKeys = [...checkedKeys, ...halfCheckedKeys]
+      if (allKeys.length === 0) {
+        ElMessage.warning('自定义页面权限至少要勾选一个页面')
+        return
+      }
+      await saveUserMenus(permUserId.value, { menuMode: 'CUSTOM', menuIds: allKeys })
+      ElMessage.success('自定义页面权限已保存')
+    }
+    permDialogVisible.value = false
+    loadData()
+  } catch {
+    // 错误已在拦截器中提示
+  } finally {
+    permSaving.value = false
+  }
+}
+
 function handleSizeChange(val: number) {
   pagination.pageSize = val
   pagination.pageNum = 1
@@ -380,8 +480,30 @@ onMounted(() => {
             <el-tag :type="statusType((row as UserVO).status)">{{ statusText((row as UserVO).status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="240" align="center" fixed="right">
+        <el-table-column label="页面权限" width="110" align="center">
           <template #default="{ row }">
+            <el-tag v-if="isCustomPerm(row as UserVO)" type="warning" size="small">自定义</el-tag>
+            <el-tag v-else type="info" size="small">跟随角色</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="290" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-tooltip
+              :content="permDisabledReason(row as UserVO)"
+              :disabled="canEditPerm(row as UserVO)"
+              placement="top"
+            >
+              <span>
+                <el-button
+                  type="primary"
+                  link
+                  :disabled="!canEditPerm(row as UserVO)"
+                  @click="handleOpenPerm(row as UserVO)"
+                >
+                  权限
+                </el-button>
+              </span>
+            </el-tooltip>
             <el-button type="primary" link @click="handleEdit(row as UserVO)">编辑</el-button>
             <el-button type="warning" link @click="handleOpenReset(row as UserVO)">重置密码</el-button>
             <el-button
@@ -470,6 +592,53 @@ onMounted(() => {
       </template>
     </el-dialog>
 
+    <!-- 页面权限弹窗（2026-09-18：直接编辑该用户可见的页面） -->
+    <el-dialog
+      v-model="permDialogVisible"
+      :title="`页面权限 - ${permUsername}`"
+      width="560px"
+      :close-on-click-modal="false"
+    >
+      <el-form label-width="90px">
+        <el-form-item label="权限模式">
+          <el-radio-group v-model="permMode">
+            <el-radio value="ROLE">跟随角色（默认）</el-radio>
+            <el-radio value="CUSTOM">自定义</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="permMode === 'ROLE'" label="可见页面">
+          <span class="perm-hint">
+            该用户可见页面 = 所属角色的权限（当前共 {{ permRoleKeys.length }} 项）；角色权限变化时自动跟随。
+          </span>
+        </el-form-item>
+        <template v-else>
+          <el-form-item label="可见页面">
+            <div class="perm-tree">
+              <el-tree
+                ref="permTreeRef"
+                :data="permMenuTree"
+                node-key="id"
+                show-checkbox
+                :default-checked-keys="permCheckedKeys"
+                :props="{ label: 'menuName', children: 'children' }"
+                default-expand-all
+              />
+            </div>
+          </el-form-item>
+          <el-form-item label=" ">
+            <span class="perm-hint">
+              自定义后，角色权限变化<strong>不会</strong>自动同步给该用户；保存时会自动保留「首页」并补齐上级目录。
+              仅控制页面可见性（后端接口鉴权仍按角色）。
+            </span>
+          </el-form-item>
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="permDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="permSaving" @click="handleSavePerm">保存</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 重置密码弹窗 -->
     <el-dialog v-model="resetDialogVisible" title="重置密码" width="440px" :close-on-click-modal="false">
       <el-form ref="resetFormRef" :model="resetForm" :rules="resetRules" label-width="90px">
@@ -515,5 +684,20 @@ onMounted(() => {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+
+/* 页面权限弹窗 */
+.perm-tree {
+  width: 100%;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.perm-hint {
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
 }
 </style>

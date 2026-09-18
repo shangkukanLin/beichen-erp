@@ -6,6 +6,8 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
+import { getAccountPage } from '@/api/finance'
+import { AccountType, AccountTypeLabel, SettleType, SettleTypeLabel } from '@/api/enums'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import {
@@ -30,7 +32,9 @@ const formRef = ref<FormInstance>()
 const form = reactive<SaleOrder>({
   id: undefined, customerId: undefined, warehouseId: undefined,
   orderDate: localDate(),
-  taxIncluded: 0, taxRate: 0, remark: ''
+  taxIncluded: 0, taxRate: 0, remark: '',
+  // 结算方式（2026-09-18 按单记）：默认账期；选现金时必须指定收款账户
+  settleType: SettleType.CREDIT, settleAccountId: undefined
 })
 const items = ref<SaleOrderItem[]>([])
 
@@ -55,9 +59,35 @@ async function loadProducts() { try { const res: any = await fetchProducts(''); 
 function resetForm() {
   Object.assign(form, {
     id: undefined, customerId: undefined, warehouseId: undefined,
-    orderDate: localDate(), taxIncluded: 0, taxRate: 0, remark: ''
+    orderDate: localDate(), taxIncluded: 0, taxRate: 0, remark: '',
+    settleType: SettleType.CREDIT, settleAccountId: undefined
   })
   items.value = []
+}
+
+// ==================== 结算方式（2026-09-18 按单记：同一客户有时现金、有时账期） ====================
+/** 现金结算：审核销售单后系统会自动生成一张**草稿**收款单（本页只负责选定收款账户） */
+const isCash = computed(() => form.settleType === SettleType.CASH)
+const accounts = ref<any[]>([])
+/** 可选账户：只列启用的 */
+const accountOptions = computed(() => accounts.value.filter((a: any) => a.status === undefined || a.status === 1))
+async function loadAccounts() {
+  try { const res: any = await getAccountPage({ pageSize: 200 }); accounts.value = res?.records || [] } catch { accounts.value = [] }
+  // 账户列表是异步拉取的：若用户先切到「现金」、后列表才回来，这里补一次默认带出
+  if (isCash.value && !form.settleAccountId) onSettleTypeChange()
+}
+/** 切到「现金」时若未选账户，默认带出现金账户（account_type=cash） */
+function onSettleTypeChange() {
+  if (!isCash.value) { form.settleAccountId = undefined; return }
+  if (form.settleAccountId) return
+  if (accountOptions.value.length === 0) return // 账户还没加载完，loadAccounts 回调里会再试
+  const cash = accountOptions.value.find((a: any) => String(a.accountType || '').toLowerCase() === AccountType.CASH)
+  if (cash) form.settleAccountId = cash.id
+}
+/** 结算方式开关（2026-09-18 用户要求：新增页用开关表示，开=现金，关=账期） */
+function onSettleSwitch(v: any) {
+  form.settleType = v ? SettleType.CASH : SettleType.CREDIT
+  onSettleTypeChange()
 }
 function addItem() { items.value.push({ productId: undefined, qualityType: 'A', productName: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' }) }
 function removeItem(index: number) { items.value.splice(index, 1) }
@@ -153,7 +183,9 @@ async function loadEdit(id: number) {
       orderDate: h?.orderDate ? String(h.orderDate).slice(0, 10) : '',
       taxIncluded: h?.taxIncluded ?? 0,
       taxRate: h?.taxRate ?? 0,
-      remark: h?.remark ?? ''
+      remark: h?.remark ?? '',
+      settleType: h?.settleType || SettleType.CREDIT,
+      settleAccountId: h?.settleAccountId ?? undefined
     })
     items.value = (its || []).map((it: any) => ({ ...it }))
     // 逐行精确校准库存：单据可能开单已久，全量快照之外再回源查一次
@@ -192,6 +224,8 @@ async function handleSubmit() {
 }
 
 async function doSubmit() {
+  // 现金结算必须给出收款账户（后端 normalizeSettle 同样校验，这里先给友好提示）
+  if (isCash.value && !form.settleAccountId) { ElMessage.warning('结算方式为「现金」时请选择收款账户'); return }
   submitLoading.value = true
   try {
     const payload = { order: { ...form }, items: items.value }
@@ -211,6 +245,7 @@ async function loadQualityTypes() { try { qualityOptions.value = await getQualit
 onMounted(async () => {
   loadProducts()
   loadQualityTypes()
+  loadAccounts()
   if (editId.value !== null) await loadEdit(editId.value)
   else addItem()
 })
@@ -249,6 +284,23 @@ onMounted(async () => {
               <el-date-picker v-model="form.orderDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width:100%" />
             </el-form-item>
           </el-col>
+          <!-- 结算方式（2026-09-18 按单记，同日改开关；口径：现金 = **立刻到账即结算** / 账期 = 只挂应收） -->
+          <el-col :span="8">
+            <el-form-item label="结算方式">
+              <el-switch :model-value="isCash" inline-prompt
+                :active-text="SettleTypeLabel[SettleType.CASH]" :inactive-text="SettleTypeLabel[SettleType.CREDIT]"
+                @change="onSettleSwitch" />
+              <span style="margin-left:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ isCash ? '立即到账' : '挂应收' }}</span>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8" v-if="isCash">
+            <el-form-item required label="收款账户">
+              <el-select v-model="form.settleAccountId" filterable clearable placeholder="选择现金账户" style="width:100%">
+                <el-option v-for="a in accountOptions" :key="a.id" :value="a.id"
+                  :label="a.accountName + '（' + (AccountTypeLabel[String(a.accountType || '').toLowerCase()] || a.accountType || '') + '）'" />
+              </el-select>
+            </el-form-item>
+          </el-col>
           <el-col :span="4">
             <el-form-item label="含税">
               <el-switch :model-value="form.taxIncluded === 1" @change="onTaxSwitch" />
@@ -273,7 +325,7 @@ onMounted(async () => {
           <el-button :icon="'Refresh'" :loading="stockLoading" :disabled="!form.warehouseId" @click="loadWarehouseStock()">
             刷新库存
           </el-button>
-          <span v-if="!form.warehouseId" style="color:#909399; font-size:12px">请先选择出库仓库，再刷新库存</span>
+          <span v-if="!form.warehouseId" style="color:#909399; font-size:var(--app-font-xs)">请先选择出库仓库，再刷新库存</span>
         </div>
         <el-table :data="items" border>
           <el-table-column label="SKU" width="130">
@@ -324,6 +376,10 @@ onMounted(async () => {
         </el-table>
         <div class="sum-bar">
           <div class="sum-item sum-main">
+            <span class="sum-label">结算方式</span>
+            <span class="sum-value">{{ SettleTypeLabel[form.settleType || 'CREDIT'] || '账期' }}{{ isCash ? '（审核后自动生成收款单）' : '' }}</span>
+          </div>
+          <div class="sum-item">
             <span class="sum-label">应收总额（含税）</span>
             <span class="sum-value">{{ goodsTotal.toFixed(2) }}</span>
           </div>
@@ -396,14 +452,14 @@ onMounted(async () => {
 .sum-item + .sum-item { border-left: 1px solid var(--el-border-color-lighter); }
 .sum-item:first-child { padding-left: 0; }
 .sum-item:last-child { padding-right: 0; }
-.sum-label { font-size: 12px; color: var(--app-text-secondary); white-space: nowrap; }
+.sum-label { font-size: var(--app-font-xs); color: var(--app-text-secondary); white-space: nowrap; }
 .sum-value {
-  font-size: 18px;
+  font-size: var(--app-font-lg);
   font-weight: 600;
   line-height: 1.2;
   color: var(--app-text-primary);
   font-variant-numeric: tabular-nums;
 }
-.sum-main .sum-value { font-size: 24px; color: var(--app-color-primary); }
+.sum-main .sum-value { font-size: var(--app-font-num); color: var(--app-color-primary); }
 .tax-num { color: var(--app-color-danger); }
 </style>

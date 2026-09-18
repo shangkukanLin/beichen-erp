@@ -96,13 +96,13 @@ onActivated(() => {
     </el-tabs>
 
     <el-card shadow="never" class="table-card">
-      <el-table :data="tableData" border stripe v-loading="loading" row-key="id" size="small" @row-click="(row: any) => router.push(`/outsource/material-order/detail/${row.id}`)">
-        <el-table-column prop="code" label="订单号" width="170" />
-        <el-table-column label="供应商" width="170" show-overflow-tooltip>
+      <el-table :data="tableData" border stripe v-loading="loading" row-key="id" @row-click="(row: any) => router.push(`/outsource/material-order/detail/${row.id}`)">
+        <el-table-column prop="code" label="订单号" width="150" />
+        <el-table-column label="供应商" width="150" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName }}</el-button></template>
         </el-table-column>
-        <el-table-column label="下单日期" width="90" align="center"><template #default="{row}">{{ $fmtDate(row.createTime) || '-' }}</template></el-table-column>
-        <el-table-column label="物料名称" min-width="50" show-overflow-tooltip>
+        <el-table-column label="下单日期" width="100" align="center"><template #default="{row}">{{ $fmtDate(row.createTime) || '-' }}</template></el-table-column>
+        <el-table-column label="物料名称" min-width="100" show-overflow-tooltip>
           <template #default="{row}">
             <el-tooltip placement="top" :show-after="300" raw-content>
               <template #content>
@@ -118,10 +118,10 @@ onActivated(() => {
         <el-table-column label="已收" width="72" align="center">
           <template #default="{row}"><span :style="{color: (row.items || []).reduce((s: number, it: any) => s + (it.receivedQuantity || 0), 0)>0?'var(--app-color-success)':''}">{{ (row.items || []).reduce((s: number, it: any) => s + (it.receivedQuantity || 0), 0) }}</span></template>
         </el-table-column>
-        <el-table-column label="最近交货" width="85" align="center"><template #default="{row}">{{ $fmtDate(row.lastDeliveryTime) || '-' }}</template></el-table-column>
-        <el-table-column label="交期" width="90" align="center"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column label="状态" width="70" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status]||'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="255" align="center" fixed="right">
+        <el-table-column label="最近交货" width="100" align="center"><template #default="{row}">{{ $fmtDate(row.lastDeliveryTime) || '-' }}</template></el-table-column>
+        <el-table-column label="交期" width="100" align="center"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
+        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status]||'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="235" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click.stop="router.push(`/outsource/material-order/detail/${row.id}`)" style="padding:0 4px">详情</el-button>
             <el-button type="success" link size="small" @click.stop="handleDownloadContract(row)" style="padding:0 4px">下载合同</el-button>

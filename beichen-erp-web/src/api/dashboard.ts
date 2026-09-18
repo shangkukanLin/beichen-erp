@@ -1,6 +1,6 @@
 import request from '@/utils/request'
 
-/** 首页待办与预警：各模块待审核数 + 盘点待办/超期 + 售后仓超期待整理 + 超期应收 */
+/** 首页待办与预警：各模块待审核数 + 盘点待办/超期 + 待分类品（成品仓 PENDING）超期待整理 + 超期应收 */
 export interface DashboardPending {
   counts?: {
     saleOrder?: number; saleReturn?: number; purchaseOrder?: number; purchaseReturn?: number

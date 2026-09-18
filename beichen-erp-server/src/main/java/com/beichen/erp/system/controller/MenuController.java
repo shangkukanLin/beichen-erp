@@ -41,7 +41,7 @@ public class MenuController {
     public R<List<Menu>> userTree() {
         Long userId = StpUtil.getLoginIdAsLong();
         List<Long> roleIds = roleService.getRoleIdsByUserId(userId);
-        return R.ok(menuService.getMenuTreeByRoleIds(roleIds));
+        return R.ok(menuService.getMenuTreeByRoleIds(roleIds, userId));
     }
 
     @SaCheckRole(value = {SystemConstants.SUPER_ADMIN_ROLE_CODE, SystemConstants.ADMIN_ROLE_CODE}, mode = SaMode.OR)

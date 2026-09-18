@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import { SettleTypeLabel, SettleTypeTag } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import {
   getSaleOrderPage, auditSaleOrder, cancelSaleOrder, unAuditSaleOrder, SALE_ORDER_DIRTY_KEY,
@@ -140,6 +141,14 @@ onActivated(() => {
         </el-table-column>
         <el-table-column prop="totalAmount" label="总金额" width="120" align="right">
           <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
+        </el-table-column>
+        <!-- 结算方式（2026-09-18 按单记）：现金 = **立刻到账**（审核销售单时系统自动收款/核销） -->
+        <el-table-column label="结算方式" width="96" align="center">
+          <template #default="{ row }">
+            <el-tag :type="SettleTypeTag[String(row.settleType || 'CREDIT')] || 'info'" size="small">
+              {{ SettleTypeLabel[String(row.settleType || 'CREDIT')] || '账期' }}
+            </el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[String(row.status)] || row.status }}</el-tag></template>

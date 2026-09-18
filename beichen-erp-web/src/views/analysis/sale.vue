@@ -252,7 +252,7 @@ watch([retMetric, exchMetric], async () => {
       <el-col :span="14">
         <el-card shadow="never">
           <template #header>产品销售额排行（点「明细」看该产品的销售单）</template>
-          <el-table :data="data.byProduct" border stripe size="small" max-height="360" show-summary :summary-method="productSummary">
+          <el-table :data="data.byProduct" border stripe max-height="360" show-summary :summary-method="productSummary">
             <el-table-column prop="sku" label="SKU" width="120" show-overflow-tooltip/>
             <el-table-column prop="productName" label="产品" min-width="120" show-overflow-tooltip/>
             <el-table-column label="数量" width="90" align="right"><template #default="{row}">{{ fmt(row.quantity) }}</template></el-table-column>
@@ -270,7 +270,7 @@ watch([retMetric, exchMetric], async () => {
       <el-col :span="10">
         <el-card shadow="never">
           <template #header>仓库销售分布（点「明细」看该仓库的销售单）</template>
-          <el-table :data="data.byWarehouse" border stripe size="small" max-height="360">
+          <el-table :data="data.byWarehouse" border stripe max-height="360">
             <el-table-column prop="warehouseName" label="仓库" min-width="120" show-overflow-tooltip/>
             <el-table-column label="订单数" width="80" align="center"><template #default="{row}">{{ row.orderCount }}</template></el-table-column>
             <el-table-column label="金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
@@ -290,20 +290,20 @@ watch([retMetric, exchMetric], async () => {
 .toolbar{display:flex;align-items:center;margin-bottom:12px}
 .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}
 .stat-card{background:var(--el-fill-color-light);border-radius:8px;padding:16px}
-.stat-label{font-size:12px;color:var(--el-text-color-secondary);margin-top:4px}
-.stat-value.sm{font-size:16px;font-weight:600}
+.stat-label{font-size:var(--app-font-xs);color:var(--el-text-color-secondary);margin-top:4px}
+.stat-value.sm{font-size:var(--app-font-num-sm);font-weight:600}
 /* 6 个饼图：2 列 × 3 行（2026-09-15 替换原柱状图/数字卡） */
 .pie-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:12px}
 .pie-card{padding:12px 16px}
 /* min-height 固定表头高度：后两张卡多了「金额/件数」switch，不固定会比前 4 张高几像素（2026-09-15 卡片等高要求） */
 .pie-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;min-height:26px}
 .pie-title{font-size:var(--app-font-base);font-weight:600}
-.pie-total{font-size:13px;color:var(--el-text-color-secondary)}
+.pie-total{font-size:var(--app-font-base);color:var(--el-text-color-secondary)}
 .pie-head-right{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
 /* 2026-09-15 统一卡片高度：无论有无数据都是定高 200px 的 .pie-body
    —— 原先空态是「.pie-empty(200px) + 空 .pie-chart(200px)」两块并存，卡片比有数据时高约一倍 */
 .pie-body{position:relative;height:200px;margin-top:4px}
 .pie-chart{width:100%;height:100%}
-.pie-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--el-text-color-secondary)}
+.pie-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
 @media (max-width: 900px){ .pie-grid{grid-template-columns:1fr} }
 </style>

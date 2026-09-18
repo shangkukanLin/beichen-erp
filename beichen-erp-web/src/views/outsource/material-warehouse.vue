@@ -100,7 +100,8 @@ onMounted(() => loadData())
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
       <el-form :model="form" label-width="80px">
         <el-form-item label="名称" required><el-input v-model="form.warehouseName" /></el-form-item>
-        <el-form-item label="仓型"><el-select v-model="form.warehouseType" style="width:100%"><el-option :label="WAREHOUSE_TYPE" :value="WAREHOUSE_TYPE" /></el-select></el-form-item>
+        <!-- 仓型：本页只管理自有物料仓（辅料仓），值=code、显示=中文 label（原写法把 code 当 label，界面显示 "AUXILIARY"） -->
+        <el-form-item label="仓型"><el-select v-model="form.warehouseType" style="width:100%"><el-option :label="WarehouseTypeLabel[WAREHOUSE_TYPE]" :value="WAREHOUSE_TYPE" /></el-select></el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
         <el-form-item label="负责人"><el-input v-model="form.manager" /></el-form-item>
         <el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item>

@@ -22,6 +22,7 @@ import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinanceReceiptService;
+import com.beichen.erp.finance.service.ReceivableHelper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +46,7 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
     private final FinanceBillItemMapper billItemMapper;
     private final FinanceBillMapper billMapper;
     private final SupplierMapper supplierMapper;
+    private final ReceivableHelper receivableHelper;
 
     @Override
     public Page<Map<String, Object>> page(Long customerId, Long supplierId, String subjectType, String status, int pageNum, int pageSize) {
@@ -65,6 +67,9 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
             m.put("accountId", r.getAccountId()); m.put("accountName", r.getAccountName());
             m.put("receiptDate", r.getReceiptDate()); m.put("amount", r.getAmount());
             m.put("status", r.getStatus()); m.put("remark", r.getRemark());
+            // 来源单据（2026-09-18）：销售单现金结算自动生成的收款单，列表可显示来源单号
+            m.put("sourceBillType", r.getSourceBillType()); m.put("sourceBillNo", r.getSourceBillNo());
+            m.put("sourceId", r.getSourceId());
             m.put("createTime", r.getCreateTime());
             return m;
         }).toList());
@@ -74,6 +79,16 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
     @Override public FinanceReceipt getById(Long id) { return receiptMapper.selectById(id); }
     @Override public List<FinanceReceiptItem> getItems(Long receiptId) {
         return itemMapper.selectList(new LambdaQueryWrapper<FinanceReceiptItem>().eq(FinanceReceiptItem::getReceiptId, receiptId));
+    }
+
+    /** 按来源单据查收款单（含已作废，调用方自行判状态）：2026-09-18 销售单现金结算联动用 */
+    @Override
+    public List<FinanceReceipt> findBySource(String sourceBillType, Long sourceId) {
+        if (sourceBillType == null || sourceBillType.isBlank() || sourceId == null) return List.of();
+        return receiptMapper.selectList(new LambdaQueryWrapper<FinanceReceipt>()
+                .eq(FinanceReceipt::getSourceBillType, sourceBillType)
+                .eq(FinanceReceipt::getSourceId, sourceId)
+                .orderByAsc(FinanceReceipt::getId));
     }
 
     @Override @Transactional(rollbackFor = Exception.class)
@@ -145,6 +160,12 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
             if (!recSubject.equals(receipt.getSubjectType()))
                 throw new BusinessException("收款主体与被核销应收不一致（收款：" + SubjectType.fromCode(receipt.getSubjectType()).getLabel()
                         + "，应收：" + SubjectType.fromCode(recSubject).getLabel() + "），请分开制单");
+            // I27（2026-09-18 修复）：预收台账（ADVANCE，负数应收＝多收款、我方欠客户）是"待退/待抵扣"挂账，
+            // **不能作为收款核销目标** —— 旧实现允许核销它会走进"超额"分支再次生成预收，
+            // 单号被层层追加 `-ADVANCE`（`X-ADVANCE-ADVANCE-…`）直到撑破列宽、单据无法审核。
+            // 语义上"用收款去核销预收"等于退款，应走退款/冲销，而不是收款。
+            if (SettlementStatus.ADVANCE.getCode().equals(rec.getStatus()))
+                throw new BusinessException("应收单「" + rec.getBillNo() + "」是预收台账（多收款待退/待抵扣），不能作为收款核销的目标；如需退预收款请走退款或冲销流程");
             BigDecimal amt = it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO;
             BigDecimal unpaid = rec.getUnpaidAmount() != null ? rec.getUnpaidAmount() : BigDecimal.ZERO;
             BigDecimal newUnpaid = unpaid.subtract(amt);
@@ -162,7 +183,8 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
                 if (rows == 0) throw new BusinessException("应收台账已被其他单据核销，请刷新后重试");
                 // 生成负数应收（预收单），sourceBillType=ADVANCE + sourceId=原收款单id 用于反审核精确删除
                 FinanceReceivable advance = new FinanceReceivable();
-                advance.setBillNo(rec.getBillNo() + "-" + SettlementStatus.ADVANCE.getCode());
+                // I27 修复：单号走归一化（去掉已有 -ADVANCE 后再追加一次 + 超长护栏），不再层层叠加
+                advance.setBillNo(ReceivableHelper.advanceBillNo(rec.getBillNo()));
                 advance.setCustomerId(rec.getCustomerId());
                 advance.setCustomerName(rec.getCustomerName());
                 // 预收继承主体类型与供应商信息（供应商收款多收时同样生成负数应收预收）
@@ -347,10 +369,9 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
                         .eq(FinanceReceivable::getSourceBillType, SettlementStatus.ADVANCE.getCode())
                         .eq(FinanceReceivable::getSourceId, id));
         for (FinanceReceivable adv : advances) {
-            FinanceReceivable upAdv = new FinanceReceivable();
-            upAdv.setId(adv.getId());
-            upAdv.setStatus(SettlementStatus.CANCELLED.getCode());
-            receivableMapper.updateById(upAdv);
+            // I29 口径（2026-09-18）：作废预收台账时**金额一并清零**（原金额记入备注留痕），
+            // 与应收反审核冲销保持同一口径（旧实现只置状态，作废行仍带金额）
+            receivableHelper.cancelLedger(adv);
         }
         // 4) 写冲正资金流水（保留审计轨迹，不删除原流水；账户余额由流水实时累计）
         FinanceCashflow cf = new FinanceCashflow();

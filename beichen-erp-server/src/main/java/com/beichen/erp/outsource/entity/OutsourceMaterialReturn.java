@@ -30,6 +30,31 @@ public class OutsourceMaterialReturn {
     /** 物料出库源仓（用户自选，委外仓/自有物料仓均可） */
     private Long fromWarehouseId;
 
+    /** 来源收料单ID（outsource_delivery.id）：物料收货页按记录发起退货时落库 */
+    private Long sourceDeliveryId;
+
+    /**
+     * 关联物料订单ID(outsource_material_order.id)，2026-09-17 维修返还闭环：
+     * <ul>
+     *   <li>订单<b>未完成</b>(RECEIVING)：审核时扣减该订单明细的收料数（净收料 = 收料总数 − 送修数），
+     *       修好「登记维修返回」时回补 → 订单台账自动闭环，无需另行跟踪；</li>
+     *   <li>订单<b>已完成</b>(FINISHED) 或为空：不动订单，返回情况靠本单「送修/已返回」+ 结案跟踪。</li>
+     * </ul>
+     */
+    private Long materialOrderId;
+
+    /** 是否已在关联物料订单上扣减收料数：0否 1是（审核瞬间按订单状态冻结，反审核按此精确回滚） */
+    private Integer deductedFlag;
+
+    /** 结案：0未结案 1已结案（未返回=0 才能结案；结案后禁再登记返回、禁反审核） */
+    private Integer closedFlag;
+
+    /** 结案时间 */
+    private LocalDateTime closedTime;
+
+    /** 结案人 */
+    private String closedBy;
+
     /** 退货日期 */
     private LocalDate returnDate;
 

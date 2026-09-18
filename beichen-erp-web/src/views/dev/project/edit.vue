@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { PhaseStatus, PhaseStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DevMaterialTypeLabel, DevMaterialStatusLabel, DevDrawingDocType, DevDrawingDocTypeLabel, DEV_PROJECT_DIRTY_KEY } from '@/api/enums'
 import {
   getProject, updateProject,
-  getProjectBom, saveProjectBom,
+  getProjectBom, saveProjectBom, getProjectBomSnapshots,
   getProjectBugs, addProjectBug, updateProjectBug, deleteProjectBug,
   getProjectDrawings, addProjectDrawing, deleteProjectDrawing,
   type ProjectVO, type ProjectDTO, type BomDTO, type BugDTO, type DrawingVO
@@ -322,6 +322,24 @@ async function saveBom() {
   form.configTouchIcId = p.configTouchIcId
   form.configCodeIcId = p.configCodeIcId
   await loadConfigNames()
+}
+
+// ===================== BOM 历史快照（2026-09-17） =====================
+// 下加工单时按「产品 + 研发BOM版本 + 明细内容」生成：研发BOM没变就沿用上一份快照（多张加工单共享），
+// 只有"有变化"（研发BOM升版本 或 下单时改了损耗率/供料方）时才新增一份。这里回看历史与流向。
+const snapDialog = ref(false)
+const snapLoading = ref(false)
+const snapList = ref<any[]>([])
+async function openSnapshots() {
+  snapDialog.value = true
+  snapLoading.value = true
+  try { snapList.value = (await getProjectBomSnapshots(projectId)) || [] } catch { snapList.value = [] } finally { snapLoading.value = false }
+}
+function snapKindText(kind: string) {
+  if (kind === 'BOM') return '与研发BOM一致'
+  if (kind === 'ORDER') return '下单时明细有调整'
+  if (kind === 'MIGRATED') return '历史订单迁移'
+  return kind || '-'
 }
 
 // ===================== BUG =====================
@@ -644,6 +662,10 @@ function onNameBlur() {
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
             <el-button type="primary" size="small" @click="addBomRow">+ 添加物料</el-button>
             <el-button type="success" size="small" @click="saveBom">保存</el-button>
+            <!-- 历史快照：下加工单时按「研发BOM版本 + 明细内容」生成/共享（2026-09-17） -->
+            <el-button size="small" @click="openSnapshots">历史快照</el-button>
+            <!-- I4 口径明确了（2026-09-18）：研发侧「用量 / 损耗率%」只读，数值在「加工单下单」时按需调整 -->
+            <span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">用量 / 损耗率% 在研发侧为只读，可在「加工单下单」时调整</span>
           </div>
           <el-table :data="bomList" border size="small">
             <el-table-column label="类型" width="100">
@@ -672,8 +694,8 @@ function onNameBlur() {
             </el-table-column>
             <el-table-column label="规格" width="90"><template #default="{row}"><span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">-</span><el-input v-else v-model="row.spec" size="small" /></template></el-table-column>
             <el-table-column label="单位" width="65"><template #default="{row}"><span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">-</span><el-input v-else v-model="row.unit" size="small" /></template></el-table-column>
-            <el-table-column label="用量" width="75"><template #default="{row}"><span :style="{fontSize:'12px'}">{{ row.quantityPerSet }}</span></template></el-table-column>
-            <el-table-column label="损耗率%" width="80"><template #default="{row}"><span :style="{fontSize:'12px'}">{{ row.lossRate }}</span></template></el-table-column>
+            <el-table-column label="用量" width="75"><template #header><span title="只读展示：用量在「加工单下单」时可调">用量</span></template><template #default="{row}"><span :style="{fontSize:'12px'}">{{ row.quantityPerSet }}</span></template></el-table-column>
+            <el-table-column label="损耗率%" width="80"><template #header><span title="只读展示：损耗率在「加工单下单」时可调">损耗率%</span></template><template #default="{row}"><span :style="{fontSize:'12px'}">{{ row.lossRate }}</span></template></el-table-column>
             <el-table-column label="操作" width="60" align="center">
               <template #default="{$index}">
                 <el-button type="danger" link @click="removeBomRow($index)">{{ bomList[$index]._isChild ? '' : '删除' }}</el-button>
@@ -744,6 +766,39 @@ function onNameBlur() {
       </el-tab-pane>
 
     </el-tabs>
+
+    <!-- BOM 历史快照（2026-09-17）：下加工单时生成，研发BOM未变化则复用同一份 -->
+    <el-dialog v-model="snapDialog" title="BOM 历史快照" width="900px">
+      <div style="margin-bottom:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
+        下加工单时按「产品 + 研发BOM版本 + 明细内容」生成：研发BOM没变就沿用上一份快照（多张加工单共享），有变化才新增。
+      </div>
+      <el-table v-loading="snapLoading" :data="snapList" border size="small" empty-text="暂无快照（下过加工单后才会生成）">
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div style="padding:6px 16px">
+              <el-table :data="row.items || []" border size="small">
+                <el-table-column label="物料类型" width="110"><template #default="{ row: it }">{{ it.materialTypeName || '-' }}</template></el-table-column>
+                <el-table-column label="物料名称" min-width="160"><template #default="{ row: it }">{{ it.materialName || ('#' + it.materialId) }}</template></el-table-column>
+                <el-table-column label="单位" width="70"><template #default="{ row: it }">{{ it.unit || '-' }}</template></el-table-column>
+                <el-table-column label="单套用量" width="90" align="right"><template #default="{ row: it }">{{ it.quantityPerSet }}</template></el-table-column>
+                <el-table-column label="损耗率%" width="90" align="right"><template #default="{ row: it }">{{ it.lossRate }}</template></el-table-column>
+                <el-table-column label="供料方" width="90" align="center"><template #default="{ row: it }">{{ it.supplyType === 'FACTORY' ? '工厂包' : '我方供' }}</template></el-table-column>
+              </el-table>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="BOM版本" width="90" align="center"><template #default="{ row }">{{ row.bomVersion != null ? ('v' + row.bomVersion) : '-' }}</template></el-table-column>
+        <el-table-column label="来源" width="140"><template #default="{ row }"><el-tag size="small" :type="row.kind === 'BOM' ? 'success' : (row.kind === 'MIGRATED' ? 'info' : 'warning')">{{ snapKindText(row.kind) }}</el-tag></template></el-table-column>
+        <el-table-column label="生成时间" width="160"><template #default="{ row }">{{ $fmtDate(row.createTime) }}</template></el-table-column>
+        <el-table-column label="明细" width="70" align="center"><template #default="{ row }">{{ row.itemCount }}</template></el-table-column>
+        <el-table-column label="关联加工单" min-width="200">
+          <template #default="{ row }">
+            <span v-if="!row.orders || !row.orders.length" style="color:var(--app-text-placeholder)">-</span>
+            <span v-else>{{ row.orders.map((o: any) => o.code).join('、') }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
 
     <!-- BUG 弹窗 -->
     <el-dialog v-model="bugDialogVisible" :title="isBugEdit?'编辑BUG':'新增BUG'" width="500px">

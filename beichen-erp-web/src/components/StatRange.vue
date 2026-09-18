@@ -83,6 +83,6 @@ function onRangeChange(v: any) {
 <style scoped>
 /* 间距与利润表原实现一致：文案右间距 8px、日期选择器左间距 12px */
 .stat-range { display: inline-flex; align-items: center; }
-.stat-range-label { margin-right: 8px; font-size: var(--app-font-sm); color: var(--app-text-secondary); }
+.stat-range-label { margin-right: 8px; font-size: var(--app-font-base); color: var(--app-text-secondary); }
 .stat-range-date { width: 260px; margin-left: 12px; }
 </style>

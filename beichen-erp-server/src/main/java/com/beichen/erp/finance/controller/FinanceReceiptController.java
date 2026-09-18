@@ -32,6 +32,15 @@ public class FinanceReceiptController {
         return R.ok(service.page(customerId, supplierId, subjectType, status, pageNum, pageSize));
     }
 
+    /**
+     * 按来源单据查收款单（2026-09-18）：销售单**现金结算**审核时自动生成的草稿收款单，
+     * 销售单详情页据此显示「收款单 SK-…（草稿/已审核）」并可点击跳转。
+     */
+    @GetMapping("/by-source")
+    public R<List<FinanceReceipt>> bySource(@RequestParam String sourceBillType, @RequestParam Long sourceId) {
+        return R.ok(service.findBySource(sourceBillType, sourceId));
+    }
+
     @GetMapping("/{id}")
     public R<FinanceReceipt> getById(@PathVariable Long id) { return R.ok(service.getById(id)); }
 

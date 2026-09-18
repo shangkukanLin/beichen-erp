@@ -29,6 +29,12 @@ public class OutsourceReturnOrderProduct {
     /** 产品名称快照 */
     private String productName;
 
+    /**
+     * 所用 BOM 快照ID（bom_snapshot.id，2026-09-17）。
+     * <p>用于追溯"这单按哪一份 BOM 用量退的料"（编辑草稿/详情展示）；关联加工单时由订单产品行决定，不允许手改。</p>
+     */
+    private Long bomSnapshotId;
+
     /** 退货数量 */
     private BigDecimal quantity;
 
