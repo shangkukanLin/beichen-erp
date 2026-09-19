@@ -57,6 +57,9 @@ public class FinanceBillController {
      * 原先直接调 {@code autoTask.run(...)} 会**遍历所有公司**（跨租户批量写），而权限只要求
      * {@code finance:bill} 页面码。跨租户全量现收口给平台超管，且必须显式传 {@code all=true}；
      * 定时任务（{@code runScheduled}）不受影响，仍按实例锁全公司跑。</p>
+     *
+     * <p><b>F7-39#8（2026-09-19）</b>：手动入口也走**同一把跨实例锁**（{@code runAllLocked} /
+     * {@code runForCompanyLocked}）—— 原先手动触发完全绕过 {@code GET_LOCK}，多实例并发点击可重复出账。</p>
      */
     @PostMapping("/auto-generate")
     public R<String> autoGenerate(@RequestParam(defaultValue = "false") boolean all) {
@@ -68,9 +71,9 @@ public class FinanceBillController {
                 superAdmin = false; // 无登录上下文 → 从严拒绝
             }
             if (!superAdmin) throw new BusinessException(403, "仅超级管理员可触发全公司账单生成");
-            return R.ok(autoTask.run(LocalDate.now()));
+            return R.ok(autoTask.runAllLocked(LocalDate.now()));
         }
-        return R.ok(autoTask.runForCompany(CompanyContext.get(), LocalDate.now()));
+        return R.ok(autoTask.runForCompanyLocked(CompanyContext.get(), LocalDate.now()));
     }
 
     // E1 口径（2026-09-12）：审核族统一 PUT（旧 POST 保留为别名）；反审核统一 /un-audit（旧 /unAudit 保留为别名）

@@ -76,8 +76,22 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         return m;
     }
 
-    /** 近 months 个月（含本月，升序） */
+    /**
+     * 区间防滥用上限（天）。F7-43#3（2026-09-19）**统一阈值** —— 原先 {@code overviewKpi}/{@code purchaseAnalysis}
+     * 截到 400 天、{@code cashTrend} 截到 200 天，且都**静默**（用户看不到被截断）。现在统一走本常量，
+     * 并在返回结构里回带 {@code truncated} / {@code maxDays} 提示。
+     */
+    private static final long MAX_RANGE_DAYS = 400;
+    /** 月份序列上限（月）：与 {@code monthRange} 既有的 60 护栏一致（F7-43#2） */
+    private static final int MAX_RANGE_MONTHS = 60;
+    /** F7-43#4：饼图「其它（未指定产品）」分片的伪 key（{@code product_id} 为空的行归此片，不再静默丢弃） */
+    private static final Long OTHER_PID = -1L;
+    private static final String OTHER_NAME = "其它（未指定产品）";
+
+    /** 近 months 个月（含本月，升序）；F7-43#2（2026-09-19）：加 60 个月上限（原 months 由请求直传、无上限） */
     private List<String> monthList(int months) {
+        if (months < 1) months = 1;
+        if (months > MAX_RANGE_MONTHS) months = MAX_RANGE_MONTHS;
         List<String> list = new ArrayList<>();
         LocalDate cur = LocalDate.now().withDayOfMonth(1);
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM");
@@ -141,8 +155,9 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
             LocalDate[] r = resolvePresetRange(preset);
             s = r[0]; e = r[1];
         }
-        // 防滥用：按天展开，最长 400 天（与 profitDetail 一致）
-        if (s.plusDays(400).isBefore(e)) s = e.minusDays(399);
+        // 防滥用：按天展开，最长 MAX_RANGE_DAYS 天（F7-43#3：统一阈值 + 回带 truncated 提示，不再静默截断）
+        boolean truncated = s.plusDays(MAX_RANGE_DAYS).isBefore(e);
+        if (truncated) s = e.minusDays(MAX_RANGE_DAYS - 1);
 
         Map<String, Map<String, BigDecimal>> dayMaps = kpiDayMaps();
         LocalDate today = LocalDate.now();
@@ -151,6 +166,8 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         range.put("start", s.toString());
         range.put("end", e.toString());
         range.put("preset", custom ? "custom" : (preset == null ? "today" : preset));
+        range.put("truncated", truncated);          // F7-43#3：区间被截断时前端需提示用户
+        range.put("maxDays", MAX_RANGE_DAYS);
 
         // 趋势图区间（2026-09-15 用户确认）：默认与所选区间一致；**不足 7 天**（今日/昨日/短自定义）
         // 时以结束日为终点向前补足 7 天，避免曲线只有 1 个点。注意卡片数值仍严格按所选区间（range）。
@@ -279,8 +296,9 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
 
     /**
      * 进货分析：所选区间的采购 KPI + 趋势序列 + 单据明细（下钻）。
-     * 口径（与 overview-kpi 的采购项完全一致）：采购金额 = 已审核采购单（按审核日）；
-     * 采购退货 = 已审核采购退货（按建单日）；净采购额 = 采购金额 − 采购退货；采购单数 = 已审核采购单笔数。
+     * 口径（与 overview-kpi 的采购项完全一致；**F7-42 · 2026-09-19 纠偏**）：采购金额 = 已审核采购单、
+     * 采购退货 = 已审核采购退货，**归期一律按建单日（{@code create_time}）**（原写"按审核日"与实现不符）；
+     * 净采购额 = 采购金额 − 采购退货；采购单数 = 已审核采购单笔数。
      * 注：采购入库属资产、不计入损益，本页只做采购视角统计。
      */
     @Override
@@ -294,8 +312,9 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
             LocalDate[] r = resolvePresetRange(preset);
             s = r[0]; e = r[1];
         }
-        // 防滥用：按天展开，最长 400 天（与其余区间接口同规则）
-        if (s.plusDays(400).isBefore(e)) s = e.minusDays(399);
+        // 防滥用：按天展开，最长 MAX_RANGE_DAYS 天（F7-43#3：统一阈值 + 回带 truncated 提示）
+        boolean truncated = s.plusDays(MAX_RANGE_DAYS).isBefore(e);
+        if (truncated) s = e.minusDays(MAX_RANGE_DAYS - 1);
 
         Map<String, Map<String, BigDecimal>> dm = new LinkedHashMap<>();
         dm.put("pur", toDayMap(analysisMapper.purchaseByDay()));
@@ -314,6 +333,8 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         range.put("start", s.toString());
         range.put("end", e.toString());
         range.put("preset", custom ? "custom" : (preset == null ? "month" : preset));
+        range.put("truncated", truncated);          // F7-43#3：区间被截断时前端需提示用户
+        range.put("maxDays", MAX_RANGE_DAYS);
 
         Map<String, Object> kpi = new LinkedHashMap<>();
         kpi.put("purchaseAmount", amount);
@@ -335,7 +356,7 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
      * 进货分析的两个饼图（用户口径：**两张分开做**，各按**产品**分片，每卡一个「金额 / 件数」switch）：
      * <ul>
      *   <li>① **直接采购成品**（**净额**口径）= Σ采购单明细 − Σ采购退货明细，按产品；
-     *       归期与采购聚合一致（采购单按**审核日**、采购退货按**建单日**）。</li>
+     *       归期与采购聚合一致（**统一按建单日** {@code create_time}；F7-42 纠偏）。</li>
      *   <li>② **委外加工成品入库** = Σ(交货数量 × 加工单价)，按**成品产品**分片；归期 = **建单日**
      *       （2026-09-15 全站统一，原为交货日期）；退不良数量为负 → 自动冲减（与生成的应付同口径）。</li>
      * </ul>
@@ -350,29 +371,35 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         Map<Long, BigDecimal> purAmt = new HashMap<>(), purQty = new HashMap<>();
         Map<Long, String> purName = new HashMap<>();
         for (Map<String, Object> r : analysisMapper.purchaseItemByProduct()) {
-            if (!inRange(txt(r.get("d")), from, to) || r.get("product_id") == null) continue;
-            Long pid = toBd(r.get("product_id")).longValue();
+            if (!inRange(txt(r.get("d")), from, to)) continue;
+            // F7-43#4（2026-09-19）：product_id 为空的行**归入「其它」分片**，不再静默丢弃 ——
+            // 原实现直接 continue，这些行既不出分片也不进合计（合计与分片同源 ⇒ 与业务量合计不等）。
+            Long pid = r.get("product_id") == null ? OTHER_PID : toBd(r.get("product_id")).longValue();
+            if (OTHER_PID.equals(pid)) purName.putIfAbsent(pid, OTHER_NAME);
+            else purName.put(pid, txt(r.get("product_name")));
             purAmt.merge(pid, toBd(r.get("amt")), BigDecimal::add);
             purQty.merge(pid, toBd(r.get("qty")), BigDecimal::add);
-            purName.put(pid, txt(r.get("product_name")));
         }
         for (Map<String, Object> r : analysisMapper.purchaseReturnItemByProduct()) {
-            if (!inRange(txt(r.get("d")), from, to) || r.get("product_id") == null) continue;
-            Long pid = toBd(r.get("product_id")).longValue();
+            if (!inRange(txt(r.get("d")), from, to)) continue;
+            Long pid = r.get("product_id") == null ? OTHER_PID : toBd(r.get("product_id")).longValue();
+            if (OTHER_PID.equals(pid)) purName.putIfAbsent(pid, OTHER_NAME);
+            else purName.putIfAbsent(pid, txt(r.get("product_name")));
             purAmt.merge(pid, toBd(r.get("amt")).negate(), BigDecimal::add);
             purQty.merge(pid, toBd(r.get("qty")).negate(), BigDecimal::add);
-            purName.putIfAbsent(pid, txt(r.get("product_name")));
         }
 
         // ② 委外加工成品入库（Σ 数量 × 加工单价；退不良数量为负 → 自动冲减）
         Map<Long, BigDecimal> outAmt = new HashMap<>(), outQty = new HashMap<>();
         Map<Long, String> outName = new HashMap<>();
         for (Map<String, Object> r : analysisMapper.outsourceInByProduct()) {
-            if (!inRange(txt(r.get("d")), from, to) || r.get("product_master_id") == null) continue;
-            Long pid = toBd(r.get("product_master_id")).longValue();
+            if (!inRange(txt(r.get("d")), from, to)) continue;
+            // F7-43#4：product_master_id 为空同样归入「其它」分片（理由同直接采购侧）
+            Long pid = r.get("product_master_id") == null ? OTHER_PID : toBd(r.get("product_master_id")).longValue();
+            if (OTHER_PID.equals(pid)) outName.putIfAbsent(pid, OTHER_NAME);
+            else outName.put(pid, txt(r.get("product_name")));
             outAmt.merge(pid, toBd(r.get("amt")), BigDecimal::add);
             outQty.merge(pid, toBd(r.get("qty")), BigDecimal::add);
-            outName.put(pid, txt(r.get("product_name")));
         }
 
         res.put("directPurchaseByProduct", toProductPie(purAmt, purName));        // 直接采购成品 饼图（金额口径）
@@ -463,7 +490,7 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
 
     /**
      * 进货单据明细（下钻用）：区间内的已审核采购单 + 采购退货单，按日期倒序。
-     * 归期与聚合口径一致（采购单按审核日、采购退货按建单日）；金额一律取正数，由前端按类型展示与冲减。
+     * 归期与聚合口径一致（**统一按建单日** {@code create_time}；F7-42 纠偏）；金额一律取正数，由前端按类型展示与冲减。
      */
     private List<Map<String, Object>> purchaseDetails(LocalDate s, LocalDate e) {
         String from = s.toString(), to = e.toString();
@@ -502,14 +529,36 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
     @Override
     public Map<String, Object> profit(int months, LocalDate start, LocalDate end) {
         List<String> ms = (start != null && end != null) ? monthRange(start, end) : monthList(months);
-        Map<String, BigDecimal> sale = toAmtMap(analysisMapper.saleByMonth());
-        Map<String, BigDecimal> saleRet = toAmtMap(analysisMapper.saleReturnByMonth());
-        Map<String, BigDecimal> exp = toAmtMap(analysisMapper.expenseByMonth());
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("months", ms);
+        res.put("rows", profitRows(ms, loadProfitMaps()));
+        return res;
+    }
+
+    /**
+     * F7-43#1（2026-09-19）：利润表 6 张聚合的**一次性取数**。
+     *
+     * <p>抽出的原因：{@code summary()} 原先对**完全相同**的数据跑 3 遍全表聚合
+     * （{@code profit(2)} + 显式 6 条 + {@code profit(6)}）—— 因为所有 {@code xxxByMonth/ByDay}
+     * 都是全表 GROUP BY、不带日期参数（见 {@code FinanceAnalysisMapper} 注释），三遍结果逐字相同。</p>
+     */
+    private Map<String, Map<String, BigDecimal>> loadProfitMaps() {
+        Map<String, Map<String, BigDecimal>> dm = new LinkedHashMap<>();
+        dm.put("sale", toAmtMap(analysisMapper.saleByMonth()));
+        dm.put("saleRet", toAmtMap(analysisMapper.saleReturnByMonth()));
+        dm.put("exp", toAmtMap(analysisMapper.expenseByMonth()));
         // 折损收款：退货环节向客户收取的补偿，并入营业收入
-        Map<String, BigDecimal> loss = toAmtMap(analysisMapper.saleReturnLossByMonth());
+        dm.put("loss", toAmtMap(analysisMapper.saleReturnLossByMonth()));
         // 成本（口径 B）：按天聚合结果汇总到月，保证按月与按天两条链路完全一致
-        Map<String, BigDecimal> saleCost = dayToMonthMap(analysisMapper.saleCostByDay());
-        Map<String, BigDecimal> retCost = dayToMonthMap(analysisMapper.saleReturnCostByDay());
+        dm.put("saleCost", dayToMonthMap(analysisMapper.saleCostByDay()));
+        dm.put("retCost", dayToMonthMap(analysisMapper.saleReturnCostByDay()));
+        return dm;
+    }
+
+    /** 由已取好的 6 张聚合生成利润表行（逐月公式与重构前的 {@code profit()} **逐字一致**，纯提取） */
+    private List<Map<String, Object>> profitRows(List<String> ms, Map<String, Map<String, BigDecimal>> dm) {
+        Map<String, BigDecimal> sale = dm.get("sale"), saleRet = dm.get("saleRet"), exp = dm.get("exp"),
+                loss = dm.get("loss"), saleCost = dm.get("saleCost"), retCost = dm.get("retCost");
         List<Map<String, Object>> rows = new ArrayList<>();
         for (String ym : ms) {
             BigDecimal lossAmt = loss.getOrDefault(ym, ZERO);
@@ -528,16 +577,16 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
             row.put("netProfit", gross.subtract(expense));
             rows.add(row);
         }
-        Map<String, Object> res = new LinkedHashMap<>();
-        res.put("months", ms);
-        res.put("rows", rows);
-        return res;
+        return rows;
     }
 
     @Override
     public Map<String, Object> summary() {
-        Map<String, Object> p = profit(2, null, null);
-        List<Map<String, Object>> rows = (List<Map<String, Object>>) (List<?>) p.get("rows");
+        // F7-43#1（2026-09-19）：6 张全表聚合**只取一次**，供 cur/prev、YTD、近 6 月趋势共用 ——
+        // 原实现跑 3 遍完全相同的数据（profit(2) + 下面显式 6 条 + profit(6)），单次请求多打 12 条聚合 SQL。
+        Map<String, Map<String, BigDecimal>> dm = loadProfitMaps();
+        List<String> ms = monthList(2);
+        List<Map<String, Object>> rows = profitRows(ms, dm);
         Map<String, Object> cur = !rows.isEmpty() ? rows.get(rows.size() - 1) : new HashMap<>();
         Map<String, Object> prev = rows.size() > 1 ? rows.get(0) : new HashMap<>();
         Map<String, BigDecimal> cashNet = new HashMap<>();
@@ -545,18 +594,17 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
             Object ym = r.get("ym");
             if (ym != null) cashNet.put(ym.toString(), toBd(r.get("income")).subtract(toBd(r.get("expense"))));
         }
-        List<String> ms = monthList(2);
 
         // 本年累计（YTD）：按月聚合结果中累加本年（yyyy-*）月份
         String yearPrefix = LocalDate.now().getYear() + "-";
         BigDecimal ytdRevenue = ZERO, ytdCost = ZERO, ytdExpense = ZERO;
-        Map<String, BigDecimal> sale = toAmtMap(analysisMapper.saleByMonth());
-        Map<String, BigDecimal> saleRet = toAmtMap(analysisMapper.saleReturnByMonth());
-        Map<String, BigDecimal> exp = toAmtMap(analysisMapper.expenseByMonth());
-        Map<String, BigDecimal> loss = toAmtMap(analysisMapper.saleReturnLossByMonth());
+        Map<String, BigDecimal> sale = dm.get("sale");
+        Map<String, BigDecimal> saleRet = dm.get("saleRet");
+        Map<String, BigDecimal> exp = dm.get("exp");
+        Map<String, BigDecimal> loss = dm.get("loss");
         // 成本（口径 B，与利润表同源）
-        Map<String, BigDecimal> saleCost = dayToMonthMap(analysisMapper.saleCostByDay());
-        Map<String, BigDecimal> retCost = dayToMonthMap(analysisMapper.saleReturnCostByDay());
+        Map<String, BigDecimal> saleCost = dm.get("saleCost");
+        Map<String, BigDecimal> retCost = dm.get("retCost");
         Set<String> allYm = new HashSet<>();
         allYm.addAll(sale.keySet()); allYm.addAll(saleCost.keySet()); allYm.addAll(exp.keySet()); allYm.addAll(loss.keySet());
         for (String ym : allYm) {
@@ -589,10 +637,9 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         health.put("receivableOverdue", recOverdue);
         health.put("payableUnpaid", toBd(paySum.get("unpaid")));
 
-        // 近 6 月经营趋势（销售额 / 净利润 / 净现金流）
-        Map<String, Object> p6 = profit(6, null, null);
+        // 近 6 月经营趋势（销售额 / 净利润 / 净现金流）—— F7-43#1：复用同一批 dm，不再重跑 6 条聚合
         List<Map<String, Object>> trend = new ArrayList<>();
-        for (Map<String, Object> row : (List<Map<String, Object>>) (List<?>) p6.get("rows")) {
+        for (Map<String, Object> row : profitRows(monthList(6), dm)) {
             String ym = String.valueOf(row.get("month"));
             Map<String, Object> t = new LinkedHashMap<>();
             t.put("month", ym);
@@ -647,6 +694,7 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         List<String> labels = new ArrayList<>();
         List<BigDecimal> in = new ArrayList<>(), out = new ArrayList<>(), net = new ArrayList<>();
         String granularity;
+        boolean truncated = false;      // F7-43#3：区间被截断时回带提示
         if (r == null) {
             granularity = "month";
             Map<String, BigDecimal> income = new HashMap<>(), expense = new HashMap<>();
@@ -661,8 +709,10 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
             }
         } else {
             LocalDate s = r[0], e = r[1];
-            // 防滥用：按天展开，最长 200 天
-            if (s.plusDays(200).isBefore(e)) s = e.minusDays(199);
+            // 防滥用：按天展开，最长 MAX_RANGE_DAYS 天
+            // F7-43#3（2026-09-19）：原为 200 天（与其它接口的 400 天不一致）且**静默**截断 ⇒ 统一阈值 + 回带提示
+            truncated = s.plusDays(MAX_RANGE_DAYS).isBefore(e);
+            if (truncated) s = e.minusDays(MAX_RANGE_DAYS - 1);
             Map<String, BigDecimal> income = new HashMap<>(), expense = new HashMap<>();
             for (Map<String, Object> x : analysisMapper.cashflowByDay()) {
                 Object d = x.get("d");
@@ -697,6 +747,8 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         res.put("income", in);
         res.put("expense", out);
         res.put("net", net);
+        res.put("truncated", truncated);            // F7-43#3：区间被截断时前端需提示用户
+        res.put("maxDays", MAX_RANGE_DAYS);
         res.put("accounts", analysisMapper.accountDistribution());
         return res;
     }

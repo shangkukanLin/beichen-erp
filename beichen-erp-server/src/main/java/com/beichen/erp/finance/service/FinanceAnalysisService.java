@@ -38,7 +38,10 @@ public interface FinanceAnalysisService {
     /**
      * 进货分析（2026-09-15 新增，供「经营分析 → 进货分析」）：
      * 所选区间的采购 KPI（采购金额 / 采购退货 / 净采购额 / 采购单数）+ 按天或按月的趋势序列 + 单据明细（下钻）。
-     * 口径：采购金额 = 已审核采购单金额（按审核日归期）；采购退货 = 已审核采购退货金额（按建单日归期）；
+     * 口径（**F7-42 · 2026-09-19 纠偏**）：采购金额 = 已审核采购单金额、采购退货 = 已审核采购退货金额，
+     * **归期一律按建单日（`create_time`）** —— 原注释写"采购按审核日、退货按建单日"与实现不符
+     * （`FinanceAnalysisMapper` 的所有 `xxxByMonth/ByDay` 都是 `DATE_FORMAT(create_time, ...)`）；
+     * 且**审核日口径不可复现**（反审核→重审会写入新的 `audit_time`，历史月度数字会随之后的操作持续漂移）。
      * 采购入库属资产、不计入损益，故本页只做采购视角统计，不参与利润/成本。
      * @param preset 快捷区间（today/yesterday/week/month/quarter/year），start/end 非空时优先生效
      * @param start  自定义区间开始日期（含）

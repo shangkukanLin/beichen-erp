@@ -443,7 +443,13 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         if (last != null && last.getCode() != null) {
             try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
         }
-        return BillPrefix.RECEIPT + d + String.format("%03d", seq);
+        // F7-39#3（2026-09-19）：冲突检测 + 递增重试（原为解析失败静默兜底 seq=1 ⇒ 可能重号）
+        for (int i = 0; i < 999; i++) {
+            String code = BillPrefix.RECEIPT + d + String.format("%03d", seq);
+            if (receiptMapper.selectCount(new LambdaQueryWrapper<FinanceReceipt>().eq(FinanceReceipt::getCode, code)) == 0) return code;
+            seq++;
+        }
+        throw new BusinessException("当日收款单编号已用尽（前缀 " + pat + "），请联系管理员");
     }
 
     private String genFlowNo() {
@@ -455,6 +461,13 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         if (last != null && last.getFlowNo() != null) {
             try { seq = Integer.parseInt(last.getFlowNo().substring(last.getFlowNo().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
         }
-        return BillPrefix.CASHFLOW + d + String.format("%03d", seq);
+        // F7-39#3（2026-09-19）：冲突检测 + 递增重试 —— finance_cashflow.flow_no **无索引**，
+        // 原兜底 seq=1 会静默重号（本批同时补唯一索引，双重兜底）。
+        for (int i = 0; i < 999; i++) {
+            String code = BillPrefix.CASHFLOW + d + String.format("%03d", seq);
+            if (cashflowMapper.selectCount(new LambdaQueryWrapper<FinanceCashflow>().eq(FinanceCashflow::getFlowNo, code)) == 0) return code;
+            seq++;
+        }
+        throw new BusinessException("当日资金流水号已用尽（前缀 " + pat + "），请联系管理员");
     }
 }

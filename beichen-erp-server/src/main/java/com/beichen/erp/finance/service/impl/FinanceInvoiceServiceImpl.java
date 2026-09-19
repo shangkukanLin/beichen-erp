@@ -111,13 +111,20 @@ public class FinanceInvoiceServiceImpl implements FinanceInvoiceService {
         BigDecimal rate = invoice.getTaxRate() != null ? invoice.getTaxRate() : BigDecimal.ZERO;
         BigDecimal hundred = new BigDecimal("100");
         if (invoice.getTotalAmount() != null && invoice.getTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal tax = invoice.getTotalAmount().multiply(rate).divide(hundred.add(rate), 2, RoundingMode.HALF_UP);
-            invoice.setTaxAmount(tax);
-            invoice.setAmount(invoice.getTotalAmount().subtract(tax).setScale(2, RoundingMode.HALF_UP));
-        } else if (invoice.getAmount() != null) {
-            BigDecimal total = invoice.getAmount().multiply(hundred.add(rate)).divide(hundred, 2, RoundingMode.HALF_UP);
+            // F7-39#5（2026-09-19）：先把价税合计**归一到 2 位小数**再拆税 —— 原实现 totalAmount 原样保留、
+            // amount/tax 各自 setScale(2)，当 total 带 3 位以上小数时 amount + tax 与 total 差 0.01
+            // （发票三值自相矛盾）。归一后"2 位 − 2 位 = 2 位" ⇒ amount + tax == total 恒成立。
+            BigDecimal total = invoice.getTotalAmount().setScale(2, RoundingMode.HALF_UP);
+            BigDecimal tax = total.multiply(rate).divide(hundred.add(rate), 2, RoundingMode.HALF_UP);
             invoice.setTotalAmount(total);
-            invoice.setTaxAmount(total.subtract(invoice.getAmount()).setScale(2, RoundingMode.HALF_UP));
+            invoice.setTaxAmount(tax);
+            invoice.setAmount(total.subtract(tax));
+        } else if (invoice.getAmount() != null) {
+            BigDecimal amt = invoice.getAmount().setScale(2, RoundingMode.HALF_UP);
+            BigDecimal total = amt.multiply(hundred.add(rate)).divide(hundred, 2, RoundingMode.HALF_UP);
+            invoice.setAmount(amt);
+            invoice.setTotalAmount(total);
+            invoice.setTaxAmount(total.subtract(amt));
         } else {
             invoice.setAmount(BigDecimal.ZERO);
             invoice.setTotalAmount(BigDecimal.ZERO);

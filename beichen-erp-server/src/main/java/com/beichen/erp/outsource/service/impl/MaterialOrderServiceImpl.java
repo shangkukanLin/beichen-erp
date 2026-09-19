@@ -239,6 +239,26 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             }
         }
 
+        // F7-46（2026-09-19）：**秒级重复提交兜底**（前端暂无幂等键 —— 已核实 `requestId/uuid/nonce` 0 命中，
+        // 故服务端兜底挡住"双击/网络重试"这一主场景）。`receive` 会 insert 一张收货草稿单，双击即两张相同草稿，
+        // 各自审核 ⇒ **双倍入库 / 双倍应付 / 订单已收数量翻倍**。
+        //
+        // 规则：同「来源订单 + 收货仓库 + 收货类型」在 **5 秒**内已存在 **DRAFT** 收货单 ⇒ 视为同一次提交，
+        // 直接返回该单 id（与新建路径**同一返回类型** Long），不再新建。
+        // 为何是 5 秒：双击/超时重试必在秒级；而"同订单分批两次真实收货"间隔通常更久，不会被误判。
+        OutsourceDelivery dup = deliveryMapper.selectOne(new LambdaQueryWrapper<OutsourceDelivery>()
+                .eq(OutsourceDelivery::getSourceOrderId, id)
+                .eq(OutsourceDelivery::getDeliveryType, DeliveryType.RECEIVE.getCode())
+                .eq(OutsourceDelivery::getToWarehouseId, whId)
+                .eq(OutsourceDelivery::getStatus, DocStatus.DRAFT.getCode())
+                .gt(OutsourceDelivery::getCreateTime, java.time.LocalDateTime.now().minusSeconds(5))
+                .orderByDesc(OutsourceDelivery::getId)
+                .last("LIMIT 1"));
+        if (dup != null) {
+            log.warn("收货重复提交拦截：orderId={} 复用 5 秒内的草稿收货单 {}", id, dup.getCode());
+            return dup.getId();
+        }
+
         // 2. 创建收货草稿单（库存/应付/订单明细的更新推迟到审核时统一处理，支持反审核）
         OutsourceDelivery delivery = new OutsourceDelivery();
         delivery.setDeliveryType(DeliveryType.RECEIVE.getCode());

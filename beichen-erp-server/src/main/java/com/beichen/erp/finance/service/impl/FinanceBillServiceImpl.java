@@ -82,13 +82,20 @@ public class FinanceBillServiceImpl implements FinanceBillService {
      */
     @Override
     public FinanceBill generate(String billType, Long partnerId, String partnerName, LocalDate periodStart, LocalDate periodEnd) {
+        // F7-39#1（2026-09-19）：三参数改**必填** —— 原实现仅在 billType/partnerId/periodEnd **三者全非空**时才查重，
+        // 任一为 null 就整段跳过 ⇒ 无账期/无往来单位即可重复出账（账单是快照、不动钱，但会造成同账期重复单据）。
+        if (billType == null || billType.isBlank()) throw new BusinessException("账单类型不能为空");
+        if (partnerId == null) throw new BusinessException("往来单位不能为空");
+        if (periodEnd == null) throw new BusinessException("账期截止日不能为空");
+        // F7-39#2（2026-09-19）：校验账单类型 —— 原实现"不是 RECEIVABLE 一律走应付分支"，
+        // 传 PAYABLE/任意字符串都会按应付出账（静默兜底错分支）。
+        if (!BillType.RECEIVABLE.getCode().equals(billType) && !BillType.PAYABLE.getCode().equals(billType))
+            throw new BusinessException("不支持的账单类型：" + billType + "（仅支持 RECEIVABLE / PAYABLE）");
         synchronized (generateLock) {
-            if (billType != null && partnerId != null && periodEnd != null) {
-                FinanceBill exist = findActiveBill(billType, partnerId, periodEnd);
-                if (exist != null) {
-                    throw new BusinessException("该往来单位在本账期已存在账单 " + exist.getBillNo()
-                            + "，请勿重复生成；如需重做请先作废原账单");
-                }
+            FinanceBill exist = findActiveBill(billType, partnerId, periodEnd);
+            if (exist != null) {
+                throw new BusinessException("该往来单位在本账期已存在账单 " + exist.getBillNo()
+                        + "，请勿重复生成；如需重做请先作废原账单");
             }
             TransactionTemplate tt = new TransactionTemplate(txManager);
             return tt.execute(status -> doGenerate(billType, partnerId, partnerName, periodStart, periodEnd));
@@ -235,7 +242,15 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         if (last != null && last.getBillNo() != null) {
             try { seq = Integer.parseInt(last.getBillNo().substring(last.getBillNo().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
         }
-        return BillPrefix.BILL + d + String.format("%03d", seq);
+        // F7-39#3（2026-09-19）：改为「冲突检测 + 递增重试」—— 原实现解析失败时**静默兜底 seq=1**，
+        // 对无唯一索引的单号列（finance_cashflow.flow_no / finance_expense.expense_no / finance_invoice.invoice_no）
+        // 会直接生成重复编号且无 DB 兜底。现在生成后校验是否已占用，冲突则递增，用尽则报错（不再静默重号）。
+        for (int i = 0; i < 999; i++) {
+            String code = BillPrefix.BILL + d + String.format("%03d", seq);
+            if (billMapper.selectCount(new LambdaQueryWrapper<FinanceBill>().eq(FinanceBill::getBillNo, code)) == 0) return code;
+            seq++;
+        }
+        throw new BusinessException("当日账单编号已用尽（前缀 " + pat + "），请联系管理员");
     }
 
     // ==================== 自动账单（方案A：到期即出账） ====================

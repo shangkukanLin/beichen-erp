@@ -48,7 +48,12 @@ public class ReceivableQuery {
                     .gt(FinanceReceivable::getAmount, BigDecimal.ZERO)
                     .orderByDesc(FinanceReceivable::getId));
         }
+        // F7-39#9（2026-09-19）：客户分支补 subjectType 限定 + customerId 非空护栏。
+        // 原实现只 eq(customerId)：① 语义不完整（与 SUPPLIER 分支不对称）；② customerId 为 null 时
+        // MyBatis-Plus 生成 customer_id = NULL（恒假）⇒ 静默返回空列表而非报错，调用方难定位。
+        if (customerId == null) return List.of();
         return receivableMapper.selectList(new LambdaQueryWrapper<FinanceReceivable>()
+                .eq(FinanceReceivable::getSubjectType, SubjectType.CUSTOMER.getCode())
                 .eq(FinanceReceivable::getCustomerId, customerId)
                 .ne(FinanceReceivable::getStatus, SettlementStatus.SETTLED.getCode())
                 .ne(FinanceReceivable::getStatus, SettlementStatus.CANCELLED.getCode())

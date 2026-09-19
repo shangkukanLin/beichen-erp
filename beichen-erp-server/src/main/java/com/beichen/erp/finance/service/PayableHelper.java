@@ -222,6 +222,12 @@ public class PayableHelper {
         if (last != null && last.getBillNo() != null) {
             try { seq = Integer.parseInt(last.getBillNo().substring(last.getBillNo().length() - 3)) + 1; } catch (Exception ignored) {}
         }
-        return BillPrefix.PAYABLE + ds + String.format("%03d", seq);
+        // F7-39#3（2026-09-19）：冲突检测 + 递增重试（原 catch 为空 ⇒ 解析失败静默从 001 重来，可能重号）
+        for (int i = 0; i < 999; i++) {
+            String no = BillPrefix.PAYABLE + ds + String.format("%03d", seq);
+            if (payableMapper.selectCount(new LambdaQueryWrapper<FinancePayable>().eq(FinancePayable::getBillNo, no)) == 0) return no;
+            seq++;
+        }
+        throw new BusinessException("当日应付单编号已用尽（前缀 " + BillPrefix.PAYABLE + ds + "），请联系管理员");
     }
 }

@@ -283,7 +283,13 @@ public class PayableTransferServiceImpl implements PayableTransferService {
         if (last != null && last.getCode() != null) {
             try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception ignored) { seq = 1; }
         }
-        return pat + String.format("%03d", seq);
+        // F7-39#3（2026-09-19）：冲突检测 + 递增重试（原解析失败静默兜底 seq=1 ⇒ 可能重号）
+        for (int i = 0; i < 999; i++) {
+            String code = pat + String.format("%03d", seq);
+            if (transferMapper.selectCount(new LambdaQueryWrapper<PayableTransfer>().eq(PayableTransfer::getCode, code)) == 0) return code;
+            seq++;
+        }
+        throw new BusinessException("当日转应收单编号已用尽（前缀 " + pat + "），请联系管理员");
     }
 
     private Long getCurrentUserId() {

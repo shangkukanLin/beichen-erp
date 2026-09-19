@@ -13,13 +13,12 @@ import java.util.Map;
 @Mapper
 public interface FinanceAnalysisMapper {
 
+    /** TOP 榜条数。F7-43#5（2026-09-19）：原为两处硬编码 {@code LIMIT 5}，抽常量（注解内可拼编译期常量） */
+    int TOP_N = 5;
+
     /** 销售收入（按**建单时间**归月；2026-09-15 用户要求全站统一为建单日口径） */
     @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, IFNULL(SUM(total_amount), 0) AS amt FROM sale_order WHERE status = 'AUDITED' GROUP BY ym")
     List<Map<String, Object>> saleByMonth();
-
-    /** 采购成本（按**建单时间**归月；已去掉原 `audit_time IS NOT NULL` 过滤，避免漏统计） */
-    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, IFNULL(SUM(total_amount), 0) AS amt FROM purchase_order WHERE status = 'AUDITED' GROUP BY ym")
-    List<Map<String, Object>> purchaseByMonth();
 
     /** 销售退货（冲减收入，按建单时间归月） */
     @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, IFNULL(SUM(total_amount), 0) AS amt FROM sale_return WHERE status = 'AUDITED' GROUP BY ym")
@@ -28,10 +27,6 @@ public interface FinanceAnalysisMapper {
     /** 退货折损收款（已审核销售退货单的 loss_amount，向客户收取的补偿，收入性质；与退货同按建单时间归月） */
     @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, IFNULL(SUM(loss_amount), 0) AS amt FROM sale_return WHERE status = 'AUDITED' AND loss_amount > 0 GROUP BY ym")
     List<Map<String, Object>> saleReturnLossByMonth();
-
-    /** 采购退货（冲减成本） */
-    @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, IFNULL(SUM(total_amount), 0) AS amt FROM purchase_return WHERE status = 'AUDITED' GROUP BY ym")
-    List<Map<String, Object>> purchaseReturnByMonth();
 
     /** 费用（按**建单时间**归月；2026-09-15 由 expense_date 改为 create_time 以统一口径） */
     @Select("SELECT DATE_FORMAT(create_time, '%Y-%m') AS ym, IFNULL(SUM(amount), 0) AS amt FROM finance_expense WHERE status = 'AUDITED' GROUP BY ym")
@@ -218,11 +213,11 @@ public interface FinanceAnalysisMapper {
     Map<String, Object> payableSummary();
 
     /** TOP 客户欠款 */
-    @Select("SELECT customer_name AS name, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_receivable WHERE status IN ('UNSETTLED', 'PARTIAL') GROUP BY customer_name ORDER BY unpaid DESC LIMIT 5")
+    @Select("SELECT customer_name AS name, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_receivable WHERE status IN ('UNSETTLED', 'PARTIAL') GROUP BY customer_name ORDER BY unpaid DESC LIMIT " + TOP_N)
     List<Map<String, Object>> topCustomers();
 
     /** TOP 供应商应付（2026-09-19 F7-34：剔除已转应收的冲减项，避免负值行挤占 TOP 榜并虚增总额） */
-    @Select("SELECT supplier_name AS name, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_payable WHERE status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(transferred_to_receivable, 0) <> 1 GROUP BY supplier_name ORDER BY unpaid DESC LIMIT 5")
+    @Select("SELECT supplier_name AS name, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_payable WHERE status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(transferred_to_receivable, 0) <> 1 GROUP BY supplier_name ORDER BY unpaid DESC LIMIT " + TOP_N)
     List<Map<String, Object>> topSuppliers();
 
     /** 资金账户余额分布（余额=期初+收支流水累计） */

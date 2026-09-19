@@ -1736,6 +1736,9 @@ CREATE TABLE IF NOT EXISTS finance_cashflow (
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    -- F7-39（2026-09-19）：流水号补唯一约束 —— 原先 flow_no **无任何索引**，
+    -- 单号生成的 catch 兜底（seq=1）会静默重号，且无 DB 兜底。
+    UNIQUE KEY uk_flow_no (flow_no),
     INDEX idx_account_id (account_id),
     INDEX idx_flow_type (flow_type),
     INDEX idx_company_id (company_id)
@@ -1754,6 +1757,8 @@ CREATE TABLE IF NOT EXISTS finance_expense (
     company_id BIGINT COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    -- F7-39（2026-09-19）：费用单号补唯一约束（原先 expense_no 无任何索引，catch 兜底 seq=1 可静默重号）
+    UNIQUE KEY uk_expense_no (expense_no),
     INDEX idx_expense_type (expense_type),
     INDEX idx_expense_date (expense_date),
     INDEX idx_status (status),

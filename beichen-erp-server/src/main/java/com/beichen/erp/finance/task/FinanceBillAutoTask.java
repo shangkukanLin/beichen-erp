@@ -115,6 +115,42 @@ public class FinanceBillAutoTask {
         return result;
     }
 
+    /**
+     * F7-39#8（2026-09-19）：**手动入口也抢同一把跨实例锁** —— 原先只有定时入口 {@link #runScheduled} 加锁，
+     * 手动 {@code /auto-generate} 完全绕过 {@code GET_LOCK}（只靠 JVM 内 {@code synchronized} + 账期查重兜底）
+     * ⇒ 多实例部署时两个实例同时点"立即执行"仍可重复出账。
+     *
+     * <p>与定时入口的差别：抢不到锁**不静默跳过**，而是明确报错（手动操作需要即时反馈）。等待 5 秒
+     * （定时入口用 0 秒不等待，抢不到就下一轮）。</p>
+     */
+    public String runAllLocked(LocalDate today) {
+        return withLock(() -> run(today));
+    }
+
+    /** F7-39#8：手动"只跑当前公司"入口的加锁版本（见 {@link #runAllLocked}） */
+    public String runForCompanyLocked(Long companyId, LocalDate today) {
+        return withLock(() -> runForCompany(companyId, today));
+    }
+
+    /** 在跨实例命名锁内执行一轮（锁绑在本次连接上，方法返回即释放；进程异常退出由 MySQL 自动释放） */
+    private String withLock(java.util.function.Supplier<String> body) {
+        try (Connection conn = dataSource.getConnection()) {
+            Integer acquired = queryInt(conn, "SELECT GET_LOCK('" + LOCK_NAME + "', 5)");
+            if (acquired == null || acquired != 1)
+                throw new BusinessException("账单生成正在执行中（其他实例或请求持有锁），请稍后重试");
+            try {
+                return body.get();
+            } finally {
+                queryInt(conn, "SELECT RELEASE_LOCK('" + LOCK_NAME + "')");
+            }
+        } catch (BusinessException be) {
+            throw be;
+        } catch (Exception e) {
+            log.error("账单生成获取实例锁失败", e);
+            throw new BusinessException("账单生成锁获取失败：" + e.getMessage());
+        }
+    }
+
     /** 逐公司生成一轮（定时任务传全部启用公司；手动入口只传当前公司），返回成功张数 */
     private int runFor(List<Company> companies, LocalDate today, StringBuilder summary) {
         int total = 0;
