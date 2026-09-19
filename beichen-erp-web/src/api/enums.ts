@@ -358,7 +358,15 @@ export const SourceBillTypeLabel: Record<string, string> = {
   OUTSOURCE_RETURN: '委外退料', OUTSOURCE_MATERIAL_RETURN: '委外物料退货',
   OUTSOURCE_RETURN_CHARGE: '委外加工退货收费',
   OUTSOURCE_REPAIR_CHARGE: '委外维修收费',
-  OUTSOURCE_EXCESS_LOSS: '委外超损'
+  OUTSOURCE_EXCESS_LOSS: '委外超损',
+  // F7-54（2026-09-19）：补齐 6 个后端已定义但前端漏映射的值 ——
+  // 缺映射时 sourceBillTypeLabel() 会走 `|| code` 兜底，列表"来源"列直接显示英文 code。
+  // 其中 PURCHASE_EXCHANGE_IN / PURCHASE_EXCHANGE_RETURN 在库中各 60 行（采购换货是主力业务）。
+  PURCHASE_EXCHANGE_RETURN: '采购换货退回', PURCHASE_EXCHANGE_IN: '采购换货入库',
+  SALE_EXCHANGE_CHARGE: '销售换货收费', SALE_RETURN_CHARGE: '销售退货收费',
+  RETURN_SORT_LOSS: '退货整理折损', PAYABLE_TRANSFER: '应付转应收',
+  // F7-53（2026-09-19）：预收/预付台账的来源标记（后端由 SettlementStatus.ADVANCE 归位而来）
+  ADVANCE_LEDGER: '预收/预付台账'
 }
 export function sourceBillTypeLabel(code?: string) { return code ? (SourceBillTypeLabel[code] || code) : '' }
 
@@ -399,7 +407,13 @@ export const SourceBillDetailRoute: Record<string, string> = {
   OUTSOURCE_REPAIR_CHARGE: '/outsource/return-order/detail',
   SALE_ORDER: '/sale/order',
   SALE_OUTBOUND: '/sale/outbound',
-  SALE_RETURN: '/sale/return/detail'
+  SALE_RETURN: '/sale/return/detail',
+  // F7-54（2026-09-19）：补 4 个跳转前缀 —— 缺键时 goSourceDetail 遇 !base 直接 return，
+  // 表现为"来源单号"点不动（不是 404）。4 个路由均已在 router/index.ts 核实存在。
+  SALE_RETURN_CHARGE: '/sale/return/detail',
+  SALE_EXCHANGE_CHARGE: '/sale/exchange/detail',
+  RETURN_SORT_LOSS: '/inventory/return-sort/detail',
+  PAYABLE_TRANSFER: '/finance/payable-transfer/detail'
 }
 
 /** 菜单类型（对应 sys_menu 的 menu_type 字段） */
@@ -556,21 +570,24 @@ export const SettlementStatus = {
   UNSETTLED: 'UNSETTLED', // 未结算
   PARTIAL: 'PARTIAL',     // 部分结算
   SETTLED: 'SETTLED',     // 已结算
-  CANCELLED: 'CANCELLED'  // 已作废
+  CANCELLED: 'CANCELLED', // 已冲回
+  ADVANCE: 'ADVANCE'      // F7-54（2026-09-19）：预收/预付台账（多收/多付形成的负数台账）
 } as const
 
 export const SettlementStatusLabel: Record<string, string> = {
   [SettlementStatus.UNSETTLED]: '未结算',
   [SettlementStatus.PARTIAL]: '部分结算',
   [SettlementStatus.SETTLED]: '已结算',
-  [SettlementStatus.CANCELLED]: '已作废'
+  [SettlementStatus.CANCELLED]: '已冲回',
+  [SettlementStatus.ADVANCE]: '预收/预付'
 }
 
 export const SettlementStatusTag: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
   [SettlementStatus.UNSETTLED]: 'danger',
   [SettlementStatus.PARTIAL]: 'warning',
   [SettlementStatus.SETTLED]: 'success',
-  [SettlementStatus.CANCELLED]: 'info'
+  [SettlementStatus.CANCELLED]: 'info',
+  [SettlementStatus.ADVANCE]: 'warning'
 }
 
 /** 通用单据状态（对应 DocStatus 枚举：草稿/已审核/已作废） */

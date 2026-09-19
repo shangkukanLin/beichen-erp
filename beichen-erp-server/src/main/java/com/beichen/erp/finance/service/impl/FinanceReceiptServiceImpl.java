@@ -16,6 +16,7 @@ import com.beichen.erp.finance.common.CashflowType;
 import com.beichen.erp.finance.common.SettlementDirection;
 import com.beichen.erp.finance.common.SettlementSourceType;
 import com.beichen.erp.finance.common.SettlementStatus;
+import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.common.SettlementRecordStatus;
 import com.beichen.erp.finance.common.SubjectType;
 import com.beichen.erp.supplier.entity.Supplier;
@@ -232,7 +233,9 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
                 advance.setSubjectType(rec.getSubjectType());
                 advance.setSupplierId(rec.getSupplierId());
                 advance.setSupplierName(rec.getSupplierName());
-                advance.setSourceBillType(SettlementStatus.ADVANCE.getCode());
+                // F7-53（2026-09-19）：来源类型必须取 SourceBillType 的合法值 —— 原写 SettlementStatus.ADVANCE
+                // （用错枚举填错字段）⇒ 前端映射查不到该值、列表"来源"列显示英文 "ADVANCE"。
+                advance.setSourceBillType(SourceBillType.ADVANCE_LEDGER.getCode());
                 advance.setSourceBillNo(rec.getSourceBillNo());
                 advance.setSourceId(id);
                 advance.setAmount(over.negate());

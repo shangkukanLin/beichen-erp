@@ -14,6 +14,7 @@ import com.beichen.erp.finance.common.CashflowType;
 import com.beichen.erp.finance.common.SettlementDirection;
 import com.beichen.erp.finance.common.SettlementSourceType;
 import com.beichen.erp.finance.common.SettlementStatus;
+import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.common.SettlementRecordStatus;
 import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinancePaymentService;
@@ -193,7 +194,8 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
                 advance.setBillNo(payableHelper.newBillNo());
                 advance.setSupplierId(p.getSupplierId());
                 advance.setSupplierName(p.getSupplierName());
-                advance.setSourceBillType(SettlementStatus.ADVANCE.getCode());
+                // F7-53（2026-09-19）：来源类型必须取 SourceBillType 的合法值（原写 SettlementStatus.ADVANCE）
+                advance.setSourceBillType(SourceBillType.ADVANCE_LEDGER.getCode());
                 advance.setSourceBillNo(p.getSourceBillNo());
                 advance.setSourceId(id);
                 advance.setAmount(over.negate());

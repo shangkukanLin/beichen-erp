@@ -50,7 +50,17 @@ public enum SourceBillType {
     RETURN_SORT_LOSS("退货整理折损"),
 
     /** 应付转应收：退货/超损扣款在无货款可抵扣时，转为向供应商收款（应收挂供应商） */
-    PAYABLE_TRANSFER("应付转应收");
+    PAYABLE_TRANSFER("应付转应收"),
+
+    /**
+     * F7-53（2026-09-19）：**预收/预付台账**的来源标记 —— 多收/多付产生的台账，其来源就是收款单/付款单。
+     *
+     * <p>修复前这两处写入的是 {@code SettlementStatus.ADVANCE.getCode()}（字面量 "ADVANCE"）—— **用错枚举填错字段**：
+     * ① 该值不在本枚举白名单内 ⇒ 前端 `SourceBillTypeLabel` 查不到 ⇒ 应收/应付列表的"来源"列**直接显示英文 "ADVANCE"**；
+     * ② 该值不在来源类型下拉里 ⇒ 按来源筛选时**筛不到**这批行。
+     * 本批把写入改为本值，并订正了库中 9 行历史数据（应收 5 + 应付 4）。</p>
+     */
+    ADVANCE_LEDGER("预收/预付台账");
 
     private final String label;
 

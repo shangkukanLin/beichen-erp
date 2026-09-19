@@ -58,6 +58,38 @@ if ($bomBad.Count -gt 0) {
   Write-Output ("[BOM守卫] PASS ui-e2e-*.ps1 编码规范（含非 ASCII 的均已带 UTF-8 BOM；共 " + $e2eScripts.Count + " 个）")
 }
 
+# ===== 源头守卫（2026-09-19 · F7-54）：后端枚举常量必须出现在前端 Label 映射里 =====
+# 原因（F7-54 实锤）：前端映射表**手工维护**，后端新增枚举值（如 2026-09-18 的 PURCHASE_EXCHANGE_*、
+# PAYABLE_TRANSFER）不会自动进前端 ⇒ sourceBillTypeLabel() 走 `|| code` 兜底 ⇒ 清单页"来源"列
+# **直接显示英文 code**（DB 里 PURCHASE_EXCHANGE_IN/RETURN 各 60 行）。
+# 做法：解析后端枚举的常量名集合，断言每个常量都出现在前端对应 Label 映射块内；缺失即 FAIL 列出。
+$srvRoot = 'c:\Users\75629\CodeBuddy\20260710123705\beichen-erp\beichen-erp-server\src\main\java\com\beichen\erp'
+$enumPairs = @(
+  @{ Name = 'SourceBillType';   Java = "$srvRoot\finance\common\SourceBillType.java";   TsMap = 'SourceBillTypeLabel' },
+  @{ Name = 'SettlementStatus'; Java = "$srvRoot\finance\common\SettlementStatus.java"; TsMap = 'SettlementStatusLabel' }
+)
+$enumMissing = @()
+$tsSrc = Get-Content (Join-Path $root 'src\api\enums.ts') -Raw -Encoding UTF8
+foreach ($p in $enumPairs) {
+  if (-not (Test-Path $p.Java)) { $enumMissing += ($p.Name + ' (java 枚举文件不存在)'); continue }
+  $javaSrc = Get-Content $p.Java -Raw -Encoding UTF8
+  # 枚举常量形如：   NAME("标签"),   末项 NAME("标签");   （缩进 4 空格；javadoc/字段/方法均为小写开头故不误匹配）
+  $codes = @([regex]::Matches($javaSrc, '(?m)^\s{4}([A-Z][A-Z0-9_]*)\s*[(",;]') |
+    ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -ne $p.Name } | Select-Object -Unique)
+  $block = [regex]::Match($tsSrc, ($p.TsMap + '[^=]*=\s*\{([^}]*)\}'))
+  if (-not $block.Success) { $enumMissing += ($p.Name + ' (前端映射块 ' + $p.TsMap + ' 未找到)'); continue }
+  $keys = @([regex]::Matches($block.Groups[1].Value, '[A-Z][A-Z0-9_]{2,}') |
+    ForEach-Object { $_.Value } | Select-Object -Unique)
+  foreach ($c in $codes) { if ($keys -notcontains $c) { $enumMissing += ($p.Name + '.' + $c) } }
+}
+if ($enumMissing.Count -gt 0) {
+  Write-Output ("[枚举守卫] FAIL 后端枚举常量在前端 Label 映射里缺失 " + $enumMissing.Count + " 个（页面会显示英文 code）：")
+  $enumMissing | ForEach-Object { Write-Output ("  " + $_) }
+  $hygiene = 1
+} else {
+  Write-Output '[枚举守卫] PASS 后端枚举常量与前端 Label 映射一致（SourceBillType / SettlementStatus）'
+}
+
 Push-Location $root
 if ($Script -eq 'build') {
   & cmd /c "npm run build > `"$log`" 2>&1"
