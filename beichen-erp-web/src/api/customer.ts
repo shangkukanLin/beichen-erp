@@ -33,6 +33,15 @@ export function getCustomer(id: number) {
   return request.get<Customer>(`/inventory/customer/${id}`)
 }
 
+/**
+ * 期 2（2026-09-19 读隔离）：客户详情页「销售单」页签改走**本页前缀**
+ * （原直读 `/inventory/sale/page`，需 sale:order ⇒ 只有客户档案权限的用户会 403）。
+ * 服务端分页语义不变：翻页 / 改每页条数仍重新查询。
+ */
+export function getCustomerSaleOrders(id: number, params: any) {
+  return request.get<PageResult<any>>(`/inventory/customer/${id}/sale-orders`, { params })
+}
+
 export function createCustomer(data: Customer) {
   return request.post<void>('/inventory/customer', data)
 }

@@ -3,16 +3,23 @@ import { defineStore } from 'pinia'
 interface Tab {
   path: string
   title: string
+  /** 该页签最近一次访问的完整地址（含 query），切回页签时用它恢复页内状态（如 ?tab=bills、?id=） */
+  fullPath?: string
 }
 
 const STORAGE_KEY = 'beichen_tabs'
 
-function loadTabs(): { tabs: Tab[]; activePath: string } {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return { tabs: [], activePath: '' }
+/**
+ * 页签身份 = **去掉 query/hash 的 path**。
+ *
+ * ⚠️ 2026-09-19 修（用户报「点整理单后顶部导航只剩首页」）：历史实现把 `route.fullPath`（含 query）当页签身份，
+ * 带来两个连锁问题：
+ *   1) 同一页因 query 不同（`/inventory/return-sort?tab=bills`）会再新增一个**重复页签**；
+ *   2) 布局面包屑拿 `activePath` 去匹配菜单 `routePath`（纯路径）⇒ 匹配失败 ⇒ 面包屑塌陷成只剩「首页」。
+ * 现在：身份用 `path`（query-free），**完整地址记在 `fullPath`** 里用于切回页签时恢复页内状态。
+ */
+export function normalizeTabPath(p: unknown): string {
+  return String(p ?? '').split('?')[0].split('#')[0]
 }
 
 function saveTabs(state: { tabs: Tab[]; activePath: string; lastActivePath: string }) {
@@ -21,38 +28,80 @@ function saveTabs(state: { tabs: Tab[]; activePath: string; lastActivePath: stri
   } catch {}
 }
 
+function loadTabs(): { tabs: Tab[]; activePath: string; lastActivePath: string } {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) || {}
+      // 自愈旧数据：按 query-free path 归并重复页签（老版本留下的 `?tab=...` 页签会被合并回原页签）
+      const tabs: Tab[] = []
+      const seen = new Set<string>()
+      for (const t of Array.isArray(parsed.tabs) ? parsed.tabs : []) {
+        const p = normalizeTabPath(t?.path)
+        if (!p || seen.has(p)) continue
+        seen.add(p)
+        // ⚠️ 必须优先取 t.fullPath（含 query 的"最近访问地址"）；早期写成 t.path 会把记忆擦成纯路径，
+        //    表现为"刷新后点页签回不到 ?tab=bills"（由 ui-e2e-1-nav.ps1 的 tab-memory 断言抓到）
+        tabs.push({ path: p, title: t?.title || p, fullPath: String(t?.fullPath || t?.path || p) })
+      }
+      const active = normalizeTabPath(parsed.activePath)
+      const last = normalizeTabPath(parsed.lastActivePath)
+      return {
+        tabs,
+        activePath: tabs.some(t => t.path === active) ? active : (tabs.length > 0 ? tabs[tabs.length - 1].path : ''),
+        lastActivePath: last,
+      }
+    }
+  } catch {}
+  return { tabs: [], activePath: '', lastActivePath: '' }
+}
+
 export const useTabStore = defineStore('tabs', {
   state: () => {
     const saved = loadTabs()
     return {
-      tabs: saved.tabs || [] as Tab[],
-      activePath: saved.activePath || '' as string,
+      tabs: saved.tabs as Tab[],
+      activePath: saved.activePath as string,
       /** 上一个活跃的 tab 路径，用于关闭当前 tab 时回退 */
-      lastActivePath: (saved as any).lastActivePath || '' as string,
+      lastActivePath: saved.lastActivePath as string,
       /** 每个路由 path 的打开序号（仅内存态，不持久化）：
        *  用于 keep-alive 的组件 key —— 关闭 Tab 后重新打开时序号 +1，key 变化使组件重新挂载，不残留上次状态 */
       tabSeq: {} as Record<string, number>
     }
   },
   actions: {
-    openTab(path: string, title: string) {
-      const exists = this.tabs.find(t => t.path === path)
+    /**
+     * 打开/激活页签。
+     * @param path 路由 path（可传 fullPath，内部会归一化；**页签身份是 query-free path**）
+     * @param title 页签标题（一般取 route.meta.title）
+     * @param fullPath 当前完整地址（含 query），用于切回页签时恢复页内状态
+     */
+    openTab(path: string, title: string, fullPath?: string) {
+      const key = normalizeTabPath(path)
+      if (!key) return
+      const full = fullPath || (path.includes('?') ? path : key)
+      const exists = this.tabs.find(t => t.path === key)
       if (!exists) {
-        this.tabs.push({ path, title })
-        this.tabSeq[path] = (this.tabSeq[path] || 0) + 1
+        this.tabs.push({ path: key, title, fullPath: full })
+        this.tabSeq[key] = (this.tabSeq[key] || 0) + 1
+      } else {
+        // 同一页签：仅更新"最近访问地址"与标题（不再产生第 2 个页签）
+        exists.fullPath = full
+        if (title) exists.title = title
       }
       // 记录上一个活跃 tab
-      if (this.activePath && this.activePath !== path) {
+      if (this.activePath && this.activePath !== key) {
         this.lastActivePath = this.activePath
       }
-      this.activePath = path
+      this.activePath = key
       saveTabs(this.$state)
     },
     removeTab(path: string) {
-      const idx = this.tabs.findIndex(t => t.path === path)
+      const key = normalizeTabPath(path)
+      const idx = this.tabs.findIndex(t => t.path === key)
       if (idx === -1) return
       this.tabs.splice(idx, 1)
-      if (this.activePath === path) {
+      if (this.activePath === key) {
         // 优先回到上一个活跃 tab（如果它还存在于列表中）
         if (this.lastActivePath && this.tabs.some(t => t.path === this.lastActivePath)) {
           this.activePath = this.lastActivePath
@@ -67,14 +116,15 @@ export const useTabStore = defineStore('tabs', {
       saveTabs(this.$state)
     },
     setActive(path: string) {
-      if (this.activePath && this.activePath !== path) {
+      const key = normalizeTabPath(path)
+      if (this.activePath && this.activePath !== key) {
         this.lastActivePath = this.activePath
       }
-      this.activePath = path
+      this.activePath = key
       saveTabs(this.$state)
     },
     updateTabTitle(path: string, title: string) {
-      const tab = this.tabs.find(t => t.path === path)
+      const tab = this.tabs.find(t => t.path === normalizeTabPath(path))
       if (tab) {
         tab.title = title
         saveTabs(this.$state)

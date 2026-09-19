@@ -124,9 +124,10 @@ async function handleCancel(row: any) {
           <template #default="{ row }">
             <el-button type="primary" link @click="goDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click="goEdit(row)">编辑</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
+            <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发，无码则后端也会 403 -->
+            <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'purchase:exchange:audit'" type="success" link @click="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === DocStatus.AUDITED" v-perm="'purchase:exchange:unaudit'" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'purchase:exchange:cancel'" type="danger" link @click="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

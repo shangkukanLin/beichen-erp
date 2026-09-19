@@ -28,20 +28,43 @@
               <el-button type="primary" :disabled="!importFile" :loading="importLoading" @click="handleImportPreview">下一步</el-button>
             </div>
           </div>
-          <!-- 第二步：预览并确认 -->
-          <div v-else-if="importStep === 'preview' && importPreview" style="text-align:center">
+          <!-- 第二步：预览并确认（表数口径 + 失败/清空风险 + 二次确认） -->
+          <div v-else-if="importStep === 'preview' && importPreview" style="text-align:left">
             <el-descriptions :column="2" border size="small">
-              <el-descriptions-item label="备份时间">{{ importPreview.time }}</el-descriptions-item>
-              <el-descriptions-item label="数据表">{{ importPreview.tableCount }} 张</el-descriptions-item>
-              <el-descriptions-item label="总记录数" :span="2">{{ importPreview.recordCount }} 条</el-descriptions-item>
+              <el-descriptions-item label="备份时间">{{ importPreview.exportTime }}</el-descriptions-item>
+              <el-descriptions-item label="备份表数">
+                {{ importPreview.backupTables }} 张
+                <span style="color:var(--app-text-secondary)">
+                  （{{ importPreview.tablesWithData }} 张有数据 / {{ (importPreview.emptyTables || []).length }} 张空表）
+                </span>
+              </el-descriptions-item>
+              <el-descriptions-item label="备份记录数" :span="2">{{ importPreview.backupRecords }} 条</el-descriptions-item>
             </el-descriptions>
+            <el-alert
+              v-if="importRiskTables.length"
+              type="warning"
+              :closable="false"
+              show-icon
+              style="margin-top:12px;text-align:left"
+            >
+              <template #title>备份缺少当前库的 {{ importRiskTables.length }} 张表，导入后这些表会被清空</template>
+              <div style="margin-top:4px">{{ importRiskPreview }}</div>
+              <el-checkbox v-model="importAck" style="margin-top:8px">我已知悉，确认清空上述表</el-checkbox>
+            </el-alert>
             <div style="margin-top:12px;text-align:left">
               <span style="color:#f56c6c">请输入“确认导入”以继续：</span>
               <el-input v-model="confirmText" placeholder="确认导入" size="small" style="margin-top:4px" />
             </div>
-            <div style="margin-top:16px">
+            <div style="margin-top:16px;text-align:center">
               <el-button @click="resetImport">重新选择</el-button>
-              <el-button type="danger" :disabled="confirmText !== '确认导入'" :loading="importLoading" @click="handleImportConfirm">确认导入</el-button>
+              <el-button
+                type="danger"
+                :disabled="confirmText !== '确认导入' || (importRiskTables.length > 0 && !importAck)"
+                :loading="importLoading"
+                @click="handleImportConfirm"
+              >
+                确认导入
+              </el-button>
             </div>
           </div>
         </el-card>
@@ -86,45 +109,67 @@ const importLoading = ref(false)
 const importPreview = ref<any>(null)
 const importStep = ref<'upload' | 'preview'>('upload')
 const confirmText = ref('')
+const importAck = ref(false)
+
+/** 备份里没有、导入后会被清空的当前表（服务端预检给出） */
+const importRiskTables = computed<string[]>(() => (importPreview.value?.tablesNotInBackup || []) as string[])
+const importRiskPreview = computed(() => {
+  const t = importRiskTables.value
+  if (!t.length) return ''
+  return t.slice(0, 10).join('、') + (t.length > 10 ? ` 等 ${t.length} 张` : '')
+})
 
 function handleFileChange(file: any) { importFile.value = file.raw || file }
 
-function handleImportPreview() {
+async function handleImportPreview() {
   if (!importFile.value) return
   importLoading.value = true
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    try {
-      const data = JSON.parse(e.target?.result as string)
-      const info = data.exportInfo || {}
-      const tables = data.tables || {}
-      let totalRecords = 0
-      Object.values(tables).forEach((rows: any) => {
-        if (Array.isArray(rows)) totalRecords += rows.length
-      })
-      importPreview.value = {
-        time: info.exportTime || info.time || '未知',
-        tableCount: Object.keys(tables).length,
-        recordCount: totalRecords
-      }
-      importStep.value = 'preview'
-    } catch (ex: any) {
-      ElMessage.error('文件解析失败: ' + (ex?.message || '格式错误'))
-      importPreview.value = null
-      importFile.value = null
-    } finally { importLoading.value = false }
-  }
-  reader.readAsText(importFile.value)
+  try {
+    // 1) 本地快速校验：能解析、且含 tables（兼容两种形态：UI 下载的内层对象 / 接口原始响应带 R 包装）
+    const text = await importFile.value.text()
+    const parsed = JSON.parse(text)
+    const payload = parsed?.tables ? parsed : (parsed?.data || {})
+    if (!payload?.tables) throw new Error('缺少 tables 字段')
+    // 2) 服务端预检（只读）：表数口径、空表清单、将被清空的表清单 —— 作为"二次确认"的依据
+    const fd = new FormData(); fd.append('file', importFile.value)
+    const pre = await request.post<any, any>('/system/import-data/precheck', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    importPreview.value = pre
+    importAck.value = false
+    importStep.value = 'preview'
+  } catch (ex: any) {
+    ElMessage.error('文件解析失败: ' + (ex?.message || '格式错误'))
+    importPreview.value = null
+    importFile.value = null
+  } finally { importLoading.value = false }
 }
 
 async function handleImportConfirm() {
   if (confirmText.value !== '确认导入' || !importFile.value) return
+  if (importRiskTables.value.length > 0 && !importAck.value) {
+    ElMessage.warning('请先勾选「我已知悉，确认清空上述表」')
+    return
+  }
   importLoading.value = true
   try {
     const fd = new FormData(); fd.append('file', importFile.value)
+    // 服务端要求：存在"备份缺失的当前表"时必须显式确认，否则拒绝（不删任何数据）
+    if (importRiskTables.value.length > 0) fd.append('confirmMissingTables', 'true')
     const res = await request.post<any, any>('/system/import-data', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
     const data = res?.data || res
-    ElMessage.success(`导入成功：${data?.totalRecords || 0} 条记录，${data?.totalTables || 0} 张表`)
+    const emptyCnt = (data?.emptyTables || []).length
+    ElMessage.success(
+      `导入成功：${data?.totalRecords || 0} 条记录，${data?.dataTables || 0} 张表有数据` +
+      (emptyCnt ? `（另有 ${emptyCnt} 张空表）` : '')
+    )
+    // F5-1（2026-09-18）：导入不可逆，服务端已在落库前自动备份"导入前的库" —— 告知回滚点位置
+    if (data?.preImportBackupPath) {
+      ElMessageBox.alert(
+        `导入前的数据已自动备份到服务器：${data.preImportBackupPath}。` +
+        `若结果不符预期，可在本页选择该文件重新导入，即可回退到导入前的状态。`,
+        '导入完成（已生成回滚点）',
+        { type: 'success', confirmButtonText: '知道了' }
+      ).catch(() => {})
+    }
     resetImport()
   } catch (e: any) { ElMessage.error('导入失败: ' + (e?.message || '未知错误')) } finally { importLoading.value = false }
 }
@@ -132,6 +177,7 @@ async function handleImportConfirm() {
 function resetImport() {
   importPreview.value = null
   confirmText.value = ''
+  importAck.value = false
   importFile.value = null
   importStep.value = 'upload'
 }
@@ -145,7 +191,13 @@ async function handleExport() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a'); a.href = url; a.download = `backup_${localDate()}.json`
       a.click(); URL.revokeObjectURL(url)
-      ElMessage.success('导出成功')
+      // 失败表清单（服务端不再静默跳过）：有则在成功提示之外额外告警，避免"备份少表"无人察觉
+      const failed = res.exportInfo?.failedTables || []
+      if (Array.isArray(failed) && failed.length > 0) {
+        ElMessage.warning(`导出完成，但有 ${failed.length} 张表读取失败：${failed.slice(0, 5).join('、')}${failed.length > 5 ? ' 等' : ''}`)
+      } else {
+        ElMessage.success('导出成功')
+      }
     } else {
       ElMessage.error('导出失败')
     }

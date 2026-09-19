@@ -301,6 +301,11 @@ public class OutsourceOrderDeliveryServiceImpl
         OutsourceOrder order = orderService.getById(delivery.getOrderId());
         if (order == null) throw new BusinessException("加工单不存在");
 
+        // F2-2（2026-09-18 审核修复）：普通交货复核「累计交货 ≤ 计划数量」（退不良为负数，天然不会超，不拦）
+        if (!Boolean.TRUE.equals(delivery.getIsReverse())) {
+            assertNotOverPlanned(order, delivery);
+        }
+
         if (Boolean.TRUE.equals(delivery.getIsReverse())) {
             // 退不良审核：扣成品库存 + BOM还料 + 冲减应付
             applyDefectStock(order, delivery);
@@ -621,9 +626,13 @@ public class OutsourceOrderDeliveryServiceImpl
                 Long materialId = mat.getMaterialId();
                 if (materialId == null) continue; // 无物料ID则跳过（BOM快照已删名称字段，无法按名兜底）
                 if ("FACTORY".equals(mat.getSupplyType())) continue; // 工厂包料（包工包料）不扣我方仓
-                BigDecimal perUnit = mat.getDemandQuantity() != null
-                        ? mat.getDemandQuantity().divide(productQty, 6, RoundingMode.HALF_UP)
-                        : BigDecimal.ZERO;
+                // F2-3（2026-09-18 审核修复）：优先**直取**视图的 quantity_per_set（精确值），
+                // 不再用「整单需求 ÷ 产品数量」反算 —— 后者在单套用量为小数时会被视图的 ROUND 放大/漂移。
+                BigDecimal perUnit = mat.getQuantityPerSet() != null
+                        ? mat.getQuantityPerSet()
+                        : (mat.getDemandQuantity() != null
+                                ? mat.getDemandQuantity().divide(productQty, 6, RoundingMode.HALF_UP)
+                                : BigDecimal.ZERO);
                 result.add(new MaterialReq(materialId, getMaterialNameById(materialId), perUnit));
             }
             log.info("从订单物料加载 {} 项 (productId={})", result.size(), product.getId());
@@ -717,6 +726,36 @@ public class OutsourceOrderDeliveryServiceImpl
         if (d.getProductMasterId() != null && p.getProductId() != null)
             return d.getProductMasterId().equals(p.getProductId());
         return p.getId() != null && p.getId().equals(d.getProductId());
+    }
+
+    /**
+     * F2-2（2026-09-18 审核修复）：交货审核前复核「累计交货（含本次）≤ 该产品计划数量」。
+     * <p>原先只有前端展示 `remainingQuantity`（{@link #summary(Long)}），接口层可超计划量交货。</p>
+     * <p>⚠️ 统计"已交"时**必须排除本单** —— claim 已把本单置为 AUDITED，不排除就会把自己算进去
+     * （批 1 F1-1 的同类坑：按全额交货会被误判为超交）。</p>
+     */
+    private void assertNotOverPlanned(OutsourceOrder order, OutsourceOrderDelivery delivery) {
+        BigDecimal thisQty = delivery.getQuantity() != null ? delivery.getQuantity() : BigDecimal.ZERO;
+        if (thisQty.compareTo(BigDecimal.ZERO) <= 0) return;
+        OutsourceOrderProduct matched = findOrderProduct(orderService.getProducts(order.getId()), delivery);
+        if (matched == null) return; // 由审核主体另行报"加工单中未找到该产品"
+        BigDecimal planned = matched.getQuantity() != null ? matched.getQuantity() : BigDecimal.ZERO;
+        if (planned.compareTo(BigDecimal.ZERO) <= 0) return;
+        BigDecimal delivered = BigDecimal.ZERO;
+        for (OutsourceOrderDelivery d : baseMapper.selectList(new LambdaQueryWrapper<OutsourceOrderDelivery>()
+                .eq(OutsourceOrderDelivery::getOrderId, order.getId())
+                .eq(OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.getCode())
+                .ne(OutsourceOrderDelivery::getId, delivery.getId()))) {
+            if (!belongsToProduct(d, matched)) continue;
+            delivered = delivered.add(d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO);
+        }
+        if (delivered.add(thisQty).compareTo(planned) > 0) {
+            String pn = matched.getProductName() != null ? matched.getProductName() : ("#" + matched.getId());
+            throw new BusinessException("交货数量超过该产品剩余待交量（产品[" + pn + "]计划 "
+                    + planned.stripTrailingZeros().toPlainString()
+                    + "、已交 " + delivered.stripTrailingZeros().toPlainString()
+                    + "、本次 " + thisQty.stripTrailingZeros().toPlainString() + "）");
+        }
     }
 
     /** 交货记录的产品名（按记录自身归属解析，兼容产品行重建） */

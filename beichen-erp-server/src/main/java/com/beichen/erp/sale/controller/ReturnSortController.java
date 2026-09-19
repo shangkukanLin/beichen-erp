@@ -50,6 +50,36 @@ public class ReturnSortController {
         return R.ok(service.defectStock(warehouseId));
     }
 
+    /**
+     * 待整理总览（2026-09-19 退货整理页优化）：跨**自有成品仓**列出待整理批次与账实差额。
+     * <p>三态：SORTABLE 可整理 · SHORTAGE 实物不足（账实不符，需盘库）· CLEARED 已整理完
+     * （默认不返回，includeCleared=true 时返回）。</p>
+     */
+    @GetMapping("/pending-overview")
+    public R<Map<String, Object>> pendingOverview(@RequestParam(defaultValue = "false") boolean includeCleared) {
+        return R.ok(service.pendingOverview(includeCleared));
+    }
+
+    /**
+     * 批量生成整理草稿：勾选多个来源批次，按 (仓库, 客户) 分组各生成一张草稿
+     * （一张整理单只能对应一个客户，折损收款才有唯一对象）。
+     *
+     * <p>body: {@code { pendingIds:[...], sortDate, defaultQuality:'A', targetWarehouseA/B/C/Defect,
+     * lossAmount, lossRemark, remark }}；**不接受 warehouseId**（源仓库由勾选的批次决定）。</p>
+     */
+    @PostMapping("/batch-draft")
+    public R<Map<String, Object>> batchDraft(@RequestBody Map<String, Object> body) {
+        List<Long> pendingIds = new ArrayList<>();
+        Object obj = body.get("pendingIds");
+        if (obj instanceof List<?> raw) {
+            for (Object o : raw) {
+                if (o != null && !o.toString().isBlank()) pendingIds.add(Long.valueOf(o.toString()));
+            }
+        }
+        String quality = body.get("defaultQuality") != null ? body.get("defaultQuality").toString() : null;
+        return R.ok(service.batchCreateDrafts(pendingIds, parseSort(body), quality));
+    }
+
     @PostMapping
     public R<Void> create(@RequestBody Map<String, Object> body) {
         service.create(parseSort(body), parseItems(body));

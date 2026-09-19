@@ -12,7 +12,7 @@ import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import {
   getSaleOrder, getSaleOrderItems, updateSaleOrder, auditSaleOrder, cancelSaleOrder, unAuditSaleOrder, checkSaleOrderStock, SALE_ORDER_DIRTY_KEY,
-  getSaleReturnPage, getSaleExchangePage, SaleReturnStatus, SaleReturnStatusLabel,
+  SaleReturnStatus, SaleReturnStatusLabel,
   type SaleOrder, type SaleOrderItem
 } from '@/api/sale'
 const route = useRoute()
@@ -104,34 +104,20 @@ function onSettleTypeChange() {
   const cash = accountOptions.value.find((a: any) => String(a.accountType || '').toLowerCase() === AccountType.CASH)
   if (cash) form.settleAccountId = cash.id
 }
-/** 本单自动生成的收款单（按来源查，含已作废） */
+/**
+ * 本单自动生成的收款单（含已作废）。
+ * 期 2（2026-09-19 读隔离）：由本单详情接口一并返回（原先跨页读 `/finance/receipt/by-source`，
+ * 只被授予 sale:order 的用户会 403）。
+ */
 const linkedReceipts = ref<any[]>([])
-async function loadLinkedReceipts() {
-  if (!head.value.id) { linkedReceipts.value = []; return }
-  try {
-    linkedReceipts.value = await request.get<any, any>('/finance/receipt/by-source', {
-      params: { sourceBillType: 'SALE_ORDER', sourceId: head.value.id }
-    }) || []
-  } catch { linkedReceipts.value = [] }
-}
 function goReceipt() { router.push('/finance/receipt') }
 
 // ==================== 售后记录（该销售单发起的退货单 / 换货单） ====================
 const afterSaleTab = ref('return')
 const returns = ref<any[]>([])
 const exchanges = ref<any[]>([])
-
-/** 拉取关联本销售单的退货单与换货单（草稿单不会有售后记录，仍统一查询以便展示空态） */
-async function loadAfterSales() {
-  try {
-    const [r, e]: any = await Promise.all([
-      getSaleReturnPage({ saleOrderId: orderId, pageNum: 1, pageSize: 100 }),
-      getSaleExchangePage({ saleOrderId: orderId, pageNum: 1, pageSize: 100 })
-    ])
-    returns.value = r?.records || []
-    exchanges.value = e?.records || []
-  } catch { returns.value = []; exchanges.value = [] }
-}
+// 期 2（2026-09-19 读隔离）：退货单 / 换货单同样随本单详情返回
+// （原先跨页读 /sale/return/page 与 /sale/exchange/page）
 
 /** 发起退货 / 换货：带 saleOrderId 跳转，目标页会自动预填来源销售单与明细 */
 function goReturn() { router.push(`/sale/return/add?saleOrderId=${orderId}`) }
@@ -243,10 +229,11 @@ async function loadData() {
     })
     // 逐行精确校准库存：单据可能开单已久，全量快照之外再回源查一次
     if (isDraft.value) items.value.forEach(refreshRowStock)
-    // 售后记录：该销售单发起的退货单与换货单
-    await loadAfterSales()
-    // 现金结算：本单自动生成的收款单（2026-09-18）
-    loadLinkedReceipts()
+    // 售后记录（退货单/换货单）与现金结算收款单：期 2（读隔离）随本详情接口一并返回，
+    // 不再跨页去读 /sale/return、/sale/exchange、/finance/receipt 三个别的页面接口
+    returns.value = h?.returns || []
+    exchanges.value = h?.exchanges || []
+    linkedReceipts.value = h?.receipts || []
   } catch { } finally { loading.value = false }
 }
 
@@ -343,9 +330,9 @@ onActivated(() => { loadData() })
           <!-- 售后：仅已审核销售单可发起（后端 saleOrders 只返回已审核单据，售后锚定销售明细） -->
           <el-button v-if="head.status === DocStatus.AUDITED" type="warning" @click="goReturn">退货</el-button>
           <el-button v-if="head.status === DocStatus.AUDITED" type="warning" plain @click="goExchange">换货</el-button>
-          <el-button v-if="head.status === DocStatus.DRAFT" type="success" @click="handleAudit">审核</el-button>
-          <el-button v-if="head.status === DocStatus.AUDITED" type="warning" @click="handleUnAudit">反审核</el-button>
-          <el-button v-if="head.status === DocStatus.DRAFT" type="danger" @click="handleCancel">作废</el-button>
+          <el-button v-if="head.status === DocStatus.DRAFT" v-perm="'sale:order:audit'" type="success" @click="handleAudit">审核</el-button>
+          <el-button v-if="head.status === DocStatus.AUDITED" v-perm="'sale:order:unaudit'" type="warning" @click="handleUnAudit">反审核</el-button>
+          <el-button v-if="head.status === DocStatus.DRAFT" v-perm="'sale:order:cancel'" type="danger" @click="handleCancel">作废</el-button>
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.R;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.inventory.service.StockTakeService;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import com.beichen.erp.warehouse.common.WarehouseCategory;
@@ -32,6 +33,19 @@ public class WarehouseController {
     private final WarehouseMapper warehouseMapper;
     private final JdbcTemplate jdbcTemplate;
     private final SupplierMapper supplierMapper;
+    // 期 2（2026-09-19 读隔离）：仓库管理页的「本月盘点 / 上次盘点」列改由本页接口提供
+    private final StockTakeService stockTakeService;
+
+    /**
+     * 各仓库当月盘点状态与超期天数（仓库管理页表格用；scope 可过滤成品/物料范围）。
+     * <p>原先该页直读 {@code /api/inventory/stock-take/status}（需 {@code stock:stock-take}）
+     * ⇒ 只被授予 {@code stock:warehouse} 的用户会 403。现走本页前缀，并复用盘点模块的**同一查询**
+     * （{@link StockTakeService#takeStatus}），口径与「仓库盘点」页完全一致。</p>
+     */
+    @GetMapping("/stock-take-status")
+    public R<List<Map<String, Object>>> stockTakeStatus(@RequestParam(required = false) String scope) {
+        return R.ok(stockTakeService.takeStatus(scope));
+    }
 
     /** 仓库分页查询，支持按名称、类别、类型过滤 */
     @GetMapping("/page")

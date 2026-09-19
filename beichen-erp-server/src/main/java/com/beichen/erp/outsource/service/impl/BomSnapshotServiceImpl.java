@@ -2,6 +2,7 @@ package com.beichen.erp.outsource.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.outsource.entity.BomSnapshot;
+import org.springframework.dao.DuplicateKeyException;
 import com.beichen.erp.outsource.entity.BomSnapshotItem;
 import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
@@ -95,7 +96,23 @@ public class BomSnapshotServiceImpl implements BomSnapshotService {
         }
         snapshot.setRemark("下单生成｜BOM版本 " + (version == null ? "无" : "v" + version) + prevDesc);
         snapshot.setCompanyId(companyId);
-        snapshotMapper.insert(snapshot);
+        try {
+            snapshotMapper.insert(snapshot);
+        } catch (DuplicateKeyException dup) {
+            // F2-4（2026-09-18 审核修复）：并发下单时两张单可能同时判定"需要新建"，
+            // 由唯一键 uk_snapshot(product_key, bom_version, fingerprint) 兜住；
+            // 抢输的一方改为复用赢家已建好的快照，避免"整单报错"或"生成两份内容相同的快照"。
+            BomSnapshot winner = snapshotMapper.selectOne(new LambdaQueryWrapper<BomSnapshot>()
+                    .eq(BomSnapshot::getProductKey, key)
+                    .eq(BomSnapshot::getFingerprint, fingerprint)
+                    .orderByDesc(BomSnapshot::getId)
+                    .last("LIMIT 1"));
+            if (winner != null) {
+                log.info("BOM 快照并发复用：productKey={} bomVersion={} snapshotId={}", key, version, winner.getId());
+                return winner.getId();
+            }
+            throw dup;
+        }
 
         for (BomSnapshotItem item : items) {
             item.setId(null);

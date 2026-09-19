@@ -198,6 +198,13 @@ export function deleteSaleReturn(id: number) {
 export function getSaleReturnSaleOrders(customerId: number) {
   return request.get<any[]>('/sale/return/sale-orders', { params: { customerId } })
 }
+/**
+ * 来源销售单头（退货页带 ?saleOrderId= 跳转时反查客户/单号）。
+ * 期 3（2026-09-19 读隔离）：走退货页自身前缀（原直读 `/inventory/sale/{id}` 需 sale:order）。
+ */
+export function getSaleReturnSourceOrder(saleOrderId: number) {
+  return request.get<any>(`/sale/return/source-order`, { params: { saleOrderId } })
+}
 /** 查询销售单明细（含可退数量，供退货带入） */
 export function getSaleReturnSaleOrderItems(saleOrderId: number) {
   return request.get<any[]>(`/sale/return/sale-order-items`, { params: { saleOrderId } })
@@ -228,6 +235,20 @@ export function cancelSaleExchange(id: number) {
 /** 查询销售单明细（含已售/已退/已换/可换数量，供换货带入；可换量 = 已售 − 已退 − 已换） */
 export function getSaleExchangeSaleOrderItems(saleOrderId: number) {
   return request.get<any[]>(`/sale/exchange/sale-order-items`, { params: { saleOrderId } })
+}
+/**
+ * 查询某客户已审核的销售单（换货页「来源销售单」下拉）。
+ * 期 3（2026-09-19 读隔离）：走换货页自身前缀（原直读退货页 `/sale/return/sale-orders` 需 sale:return）。
+ */
+export function getSaleExchangeSaleOrders(customerId: number) {
+  return request.get<any[]>('/sale/exchange/sale-orders', { params: { customerId } })
+}
+/**
+ * 来源销售单头（换货页带 ?saleOrderId= 跳转时反查客户/单号/出库仓）。
+ * 期 3（2026-09-19 读隔离）：走换货页自身前缀（原直读 `/inventory/sale/{id}` 需 sale:order）。
+ */
+export function getSaleExchangeSourceOrder(saleOrderId: number) {
+  return request.get<any>(`/sale/exchange/source-order`, { params: { saleOrderId } })
 }
 export function getSaleOutboundItems(id: number) {
   return request.get<SaleOutboundItem[]>(`/inventory/outbound/${id}/items`)

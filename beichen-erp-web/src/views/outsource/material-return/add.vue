@@ -42,7 +42,8 @@ const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: {
 /** 选中的物料订单行（含状态，用于提示"扣减订单收料 / 靠本单跟踪"两种收尾方式） */
 const pickedOrder = ref<any>(null)
 /** 该物料商的物料订单（收货中/已完成）：收货中的单审核会扣减收料数，已完成的靠本单跟踪 */
-const fetchMaterialOrders = (kw: string) => request.get('/outsource/material-order/page', {
+// 期 3（2026-09-19 读隔离）：改走本页前缀（原读 /outsource/material-order/page 需 outsource:material-order）
+const fetchMaterialOrders = (kw: string) => request.get('/outsource/material-return/material-orders', {
   params: {
     pageSize: 500, code: kw || undefined,
     supplierId: form.supplierId || undefined,

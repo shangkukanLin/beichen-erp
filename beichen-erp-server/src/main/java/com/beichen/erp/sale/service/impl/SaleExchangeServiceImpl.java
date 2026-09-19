@@ -467,7 +467,8 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             Product p = productMapper.selectById(pid);
             if (p != null) nameMap.put(soiId, p.getName());
         }
-        checkCanExchange(qtyMap, nameMap);
+        // 编辑草稿时排除自身（草稿不计入"已换"，此处仅为口径统一，F1-1）
+        checkCanExchange(qtyMap, nameMap, e.getId());
     }
 
     /** 审核时复核可换量（用已落库的明细） */
@@ -482,17 +483,25 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
                 if (p != null) nameMap.put(it.getSaleOrderItemId(), p.getName());
             }
         }
-        checkCanExchange(qtyMap, nameMap);
+        // ⚠️ F1-1（2026-09-18 审核修复）：审核时本单已被 claim 置为 AUDITED，必须排除自身，
+        // 否则"已换量"会包含本单退回量（实测：已售5/已退0，退回 3 时误报"已换 3、可换 2"）
+        checkCanExchange(qtyMap, nameMap, e.getId());
     }
 
-    /** 可换量 = 已售 − 已退 − 已换 */
-    private void checkCanExchange(Map<Long, BigDecimal> qtyMap, Map<Long, String> nameMap) {
+    /**
+     * 可换量 = 已售 − 已退 − 已换。
+     *
+     * @param excludeExchangeId 需排除的单据 id（**审核中的本单**，见 F1-1：claim 已把本单置为 AUDITED，
+     *                          不排除就会把本单退回量算进"已换"，导致"退回量 > 余量一半"被误拒）；
+     *                          创建/编辑草稿传当前 id（无则 null）
+     */
+    private void checkCanExchange(Map<Long, BigDecimal> qtyMap, Map<Long, String> nameMap, Long excludeExchangeId) {
         if (qtyMap.isEmpty()) return;
         List<SaleOrderItem> oiList = saleOrderItemMapper.selectBatchIds(qtyMap.keySet());
         for (SaleOrderItem oi : oiList) {
             BigDecimal sold = nz(oi.getQuantity());
             BigDecimal returned = alreadyReturned(oi.getId());
-            BigDecimal exchanged = alreadyExchanged(oi.getId());
+            BigDecimal exchanged = alreadyExchanged(oi.getId(), excludeExchangeId);
             BigDecimal canEx = sold.subtract(returned).subtract(exchanged);
             BigDecimal thisQty = qtyMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
             if (thisQty.compareTo(canEx) > 0) {
@@ -517,10 +526,12 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         return sum;
     }
 
-    /** 已换量：已审核换货单中该销售明细的累计数量（本单若已审核也会被计入，故编辑/新建时不会重复占用） */
-    private BigDecimal alreadyExchanged(Long saleOrderItemId) {
-        List<SaleExchange> audited = exchangeMapper.selectList(new LambdaQueryWrapper<SaleExchange>()
-                .eq(SaleExchange::getStatus, DocStatus.AUDITED.getCode()));
+    /** 已换量：已审核换货单中该销售明细的累计数量（**排除 excludeExchangeId 指定的本单**，见 F1-1） */
+    private BigDecimal alreadyExchanged(Long saleOrderItemId, Long excludeExchangeId) {
+        LambdaQueryWrapper<SaleExchange> w = new LambdaQueryWrapper<SaleExchange>()
+                .eq(SaleExchange::getStatus, DocStatus.AUDITED.getCode());
+        if (excludeExchangeId != null) w.ne(SaleExchange::getId, excludeExchangeId);
+        List<SaleExchange> audited = exchangeMapper.selectList(w);
         if (audited.isEmpty()) return BigDecimal.ZERO;
         List<Long> ids = audited.stream().map(SaleExchange::getId).collect(Collectors.toList());
         List<SaleExchangeItem> items = exchangeItemMapper.selectList(new LambdaQueryWrapper<SaleExchangeItem>()

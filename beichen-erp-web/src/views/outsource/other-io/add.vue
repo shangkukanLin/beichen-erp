@@ -38,7 +38,8 @@ function onMatSelect(idx: number, matId: number) {
     const wh = warehouses.value.find((w:any)=>w.id===form.warehouseId)
     // 委外仓用加工厂ID查加权单价，我方仓不自动查
     if (wh?._type === '委外仓' && wh?.factoryId) {
-      request.get<any,any>('/outsource/delivery/material-weighted-price', { params: { factoryId: wh.factoryId, materialId: m.id } }).then((r: any) => {
+      // 期 3（2026-09-19 读隔离）：加权单价改走本页前缀（原读 /outsource/delivery/material-weighted-price 需 outsource:delivery）
+      request.get<any,any>('/outsource/other-io/material-weighted-price', { params: { factoryId: wh.factoryId, materialId: m.id } }).then((r: any) => {
         if (r) items.value[idx].unit_price = r
       }).catch(() => {})
     }

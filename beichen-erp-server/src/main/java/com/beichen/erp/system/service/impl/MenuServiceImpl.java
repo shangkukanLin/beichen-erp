@@ -13,6 +13,7 @@ import com.beichen.erp.system.mapper.RoleMenuMapper;
 import com.beichen.erp.system.mapper.UserMenuMapper;
 import com.beichen.erp.system.service.MenuService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements MenuService {
 
@@ -57,7 +59,16 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements Me
             userMenus.forEach(um -> menuIds.add(um.getMenuId()));
         }
         if (menuIds.isEmpty()) {
-            return Collections.emptyList();
+            // F3-2（2026-09-18 审核修复）：CUSTOM 但用户级记录为空（仅直改库/清库等异常可达）⇒ 回退角色菜单，
+            // 否则该用户登录后"一个菜单都没有"（连首页都点不到）。正常保存路径已保证「至少一项 + 强制保留首页」。
+            if (SystemConstants.MENU_MODE_CUSTOM.equals(menuMode) && roleIds != null && !roleIds.isEmpty()) {
+                log.warn("用户 {} 为自定义页面权限但无用户级菜单记录，本次回退为角色菜单（请检查数据）", userId);
+                roleMenuMapper.selectList(new LambdaQueryWrapper<RoleMenu>()
+                        .in(RoleMenu::getRoleId, roleIds)).forEach(rm -> menuIds.add(rm.getMenuId()));
+            }
+            if (menuIds.isEmpty()) {
+                return Collections.emptyList();
+            }
         }
         List<Menu> menus = this.list(new LambdaQueryWrapper<Menu>()
                 .in(Menu::getId, menuIds)
@@ -117,6 +128,72 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements Me
     @Override
     public List<Menu> getAllEnabledMenus() {
         return this.baseMapper.selectAllEnabled();
+    }
+
+    @Override
+    public List<String> collectPerms(List<Menu> menus) {
+        // F3-3（2026-09-18 接口级权限专项）：菜单树 → 权限码集合（去重；递归含子菜单）
+        java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>();
+        collectPermsInto(menus, set);
+        return new ArrayList<>(set);
+    }
+
+    private void collectPermsInto(List<Menu> menus, java.util.Set<String> out) {
+        if (menus == null) return;
+        for (Menu m : menus) {
+            if (m == null) continue;
+            String p = m.getPerms();
+            if (p != null && !p.isBlank()) out.add(p.trim());
+            collectPermsInto(m.getChildren(), out);
+        }
+    }
+
+    @Override
+    public List<String> collectPermsWithButtons(List<Menu> menus) {
+        // F3-3 按钮级权限（方案 A）：页面码 ∪ 已授权页面下的按钮码（自动跟随，无需补授数据）
+        java.util.LinkedHashSet<String> set = new java.util.LinkedHashSet<>(collectPerms(menus));
+        Set<Long> ids = new HashSet<>();
+        collectIds(menus, ids);
+        if (!ids.isEmpty()) {
+            set.addAll(listButtonPermsByParentIds(ids));
+        }
+        return new ArrayList<>(set);
+    }
+
+    private void collectIds(List<Menu> menus, Set<Long> out) {
+        if (menus == null) return;
+        for (Menu m : menus) {
+            if (m == null) continue;
+            if (m.getId() != null) out.add(m.getId());
+            collectIds(m.getChildren(), out);
+        }
+    }
+
+    @Override
+    public List<String> listButtonPermsByParentIds(java.util.Collection<Long> pageIds) {
+        if (pageIds == null || pageIds.isEmpty()) return new ArrayList<>();
+        return this.list(new LambdaQueryWrapper<Menu>()
+                        .select(Menu::getPerms)
+                        .eq(Menu::getMenuType, "button")
+                        .in(Menu::getParentId, pageIds)
+                        .isNotNull(Menu::getPerms))
+                .stream()
+                .map(Menu::getPerms)
+                .filter(p -> p != null && !p.isBlank())
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<String> listAllPerms() {
+        return this.list(new LambdaQueryWrapper<Menu>()
+                        .select(Menu::getPerms)
+                        .isNotNull(Menu::getPerms))
+                .stream()
+                .map(Menu::getPerms)
+                .filter(p -> p != null && !p.isBlank())
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     /**

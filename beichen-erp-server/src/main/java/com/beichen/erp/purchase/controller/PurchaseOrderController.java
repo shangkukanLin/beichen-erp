@@ -5,6 +5,9 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
 import com.beichen.erp.purchase.entity.PurchaseOrderItem;
 import com.beichen.erp.purchase.service.PurchaseOrderService;
+import com.beichen.erp.purchase.service.PurchaseReturnService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +23,10 @@ import java.util.Map;
 public class PurchaseOrderController {
 
     private final PurchaseOrderService service;
+    // 期 2（2026-09-19 读隔离）：详情页的「本单退货情况」下沉到本页接口
+    private final PurchaseReturnService purchaseReturnService;
+    /** Spring 容器里的 ObjectMapper（含 JavaTimeModule，见 SystemController 的说明） */
+    private final ObjectMapper objectMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -31,9 +38,20 @@ public class PurchaseOrderController {
         return R.ok(service.page(status, supplierId, code, pageNum, pageSize));
     }
 
+    /**
+     * 详情（期 2·2026-09-19 读隔离）：追加 {@code returns} —— 本单的退货情况。
+     *
+     * <p>原先采购单详情页要去读 {@code /api/inventory/purchase-return/by-order}（需 {@code purchase:return}），
+     * 只被授予 {@code purchase:order} 的用户会 403。现由本页接口一并返回：
+     * 响应体 = 实体原字段（JSON 路径不变）+ 追加字段。</p>
+     */
     @GetMapping("/{id}")
-    public R<PurchaseOrder> getById(@PathVariable Long id) {
-        return R.ok(service.getById(id));
+    public R<Map<String, Object>> getById(@PathVariable Long id) {
+        PurchaseOrder o = service.getById(id);
+        if (o == null) return R.ok(Map.of());
+        Map<String, Object> m = objectMapper.convertValue(o, new TypeReference<Map<String, Object>>() {});
+        m.put("returns", purchaseReturnService.byOrder(id));
+        return R.ok(m);
     }
 
     @GetMapping("/{id}/items")

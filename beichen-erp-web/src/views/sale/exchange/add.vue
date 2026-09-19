@@ -153,8 +153,8 @@ import {
   SALE_EXCHANGE_DIRTY_KEY,
 } from '@/api/enums'
 import {
-  getSaleExchange, createSaleExchange, updateSaleExchange, getSaleOrder,
-  getSaleReturnSaleOrders, getSaleExchangeSaleOrderItems,
+  getSaleExchange, createSaleExchange, updateSaleExchange,
+  getSaleExchangeSaleOrders, getSaleExchangeSaleOrderItems, getSaleExchangeSourceOrder,
 } from '@/api/sale'
 
 const route = useRoute()
@@ -194,7 +194,8 @@ const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', {
 const fetchSaleOrders = async (kw: string) => {
   // 换货必须关联销售单：按客户过滤，未选客户时返回空，避免跨客户挂单
   if (!form.customerId) return { data: { records: [] } }
-  const rows: any[] = await getSaleReturnSaleOrders(form.customerId)
+  // 期 3（2026-09-19 读隔离）：来源销售单下拉改走换货页自身前缀（原读退货页的 /sale/return/sale-orders 需 sale:return）
+  const rows: any[] = await getSaleExchangeSaleOrders(form.customerId)
   const list = (rows || []).filter((r: any) => !kw || (r.code || '').includes(kw))
   return { data: { records: list } }
 }
@@ -241,7 +242,8 @@ async function onSaleOrderChange(saleOrderId: number | null, opt: any) {
  */
 async function initFromSaleOrder(saleOrderId: number) {
   try {
-    const so: any = await getSaleOrder(saleOrderId)
+    // 期 3（2026-09-19 读隔离）：来源销售单头改走换货页自身前缀（原读 /inventory/sale/{id} 需 sale:order）
+    const so: any = await getSaleExchangeSourceOrder(saleOrderId)
     if (!so) { ElMessage.warning('来源销售单不存在'); return }
     form.customerId = so.customerId
     form.saleOrderId = so.id

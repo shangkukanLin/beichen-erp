@@ -4,7 +4,7 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { getPaymentPage, createPayment, getUnpaidPayables, type FinancePaymentItem } from '@/api/finance'
+import { getPaymentPage, createPayment, getPaymentUnpaidPayables, getPaymentPayableSummary, getPaymentPayables, type FinancePaymentItem } from '@/api/finance'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { SettlementStatus, SettlementStatusLabel, sourceBillTypeLabel, SourceBillDetailRoute } from '@/api/enums'
 
@@ -28,10 +28,12 @@ async function goSourceDetail(row: any) {
   const base = SourceBillDetailRoute[row.sourceBillType]
   if (!base || row.sourceBillNo == null) return
   let targetId = row.sourceId
-  // 委外加工交货/超损的 sourceId 是交货记录/结单报表ID，需按单号反查加工单ID
+  // 委外加工交货/超损的 sourceId 是交货记录/结单报表ID，需按单号反查加工单ID。
+  // 期 2（2026-09-19 读隔离）：改用通用单号解析器 /common/resolve-code（跨模块单号跳转的标准做法，
+  // 属豁免前缀），不再直读加工单页的 /outsource/order/page（需 outsource:order ⇒ 只有 finance:payment 的用户会 403）。
   if (row.sourceBillType === 'OUTSOURCE_DELIVERY' || row.sourceBillType === 'OUTSOURCE_EXCESS_LOSS') {
-    const res: any = await request.get('/outsource/order/page', { params: { code: row.sourceBillNo, pageSize: 1 } })
-    targetId = res?.records?.[0]?.id
+    const r: any = await request.get('/common/resolve-code', { params: { code: row.sourceBillNo } })
+    targetId = r?.type === 'order' ? r.id : undefined
   }
   if (targetId == null) return
   router.push(`${base}/${targetId}`)
@@ -40,10 +42,11 @@ async function goSourceDetail(row: any) {
 async function loadAll() {
   loading.value = true
   try {
+    // 期 2（2026-09-19 读隔离）：应付汇总/明细改走付款页自身前缀（原读 /finance/payable/* 需 finance:payable）
     const [sup, sumList, pList, payList, accList] = await Promise.all([
       request.get<any, any>(`/supplier/${supplierId}`),
-      request.get<any, any>('/finance/payable/supplier-summary'),
-      request.get<any, any>('/finance/payable/page', { params: { supplierId, pageSize: 200 } }),
+      getPaymentPayableSummary(),
+      getPaymentPayables({ supplierId, pageSize: 200 }),
       getPaymentPage({ supplierId, pageSize: 100 }),
       request.get<any, any>('/finance/account/list')
     ])
@@ -66,7 +69,7 @@ const uploadFile = ref<File | null>(null)
 async function openAddPayment() {
   Object.assign(dForm, { accountId: undefined, paymentDate: localDate(), remark: '', attachUrl: '' })
   dItems.value = []; uploadFile.value = null
-  try { unpaid.value = await getUnpaidPayables(supplierId) || [] } catch { unpaid.value = [] }
+  try { unpaid.value = await getPaymentUnpaidPayables(supplierId) || [] } catch { unpaid.value = [] }
   if (unpaid.value.length === 0) { ElMessage.info('该供应商没有未结清应付'); return }
   dVisible.value = true
 }

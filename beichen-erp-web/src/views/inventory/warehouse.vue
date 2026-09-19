@@ -4,7 +4,7 @@ import { reactive, ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { getStockTakeStatus, type StockTakeStatus } from '@/api/inventory'
+import { getWarehouseTakeStatus, type StockTakeStatus } from '@/api/inventory'
 
 const router = useRouter()
 
@@ -15,7 +15,7 @@ const takeMap = computed(() => {
   takeStatus.value.forEach(s => { if (s.warehouseId) m[s.warehouseId] = s })
   return m
 })
-async function loadTakeStatus() { try { takeStatus.value = await getStockTakeStatus() } catch { takeStatus.value = [] } }
+async function loadTakeStatus() { try { takeStatus.value = await getWarehouseTakeStatus() } catch { takeStatus.value = [] } }
 
 const query = reactive({ warehouseName: '', warehouseType: '' })
 const allData = ref<any[]>([])

@@ -5,6 +5,7 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import 'element-plus/dist/index.css'
 import App from './App.vue'
 import router from './router'
+import { setupPermDirective } from './directives/perm'
 import './styles/tokens.css'
 import './styles/index.css'
 
@@ -24,5 +25,8 @@ app.config.globalProperties.$fmtDate = (val: any) => {
 app.use(createPinia())
 app.use(router)
 app.use(ElementPlus)
+
+// F3-3 按钮级权限（方案 A）：v-perm="'purchase:exchange:audit'"
+setupPermDirective(app)
 
 app.mount('#app')

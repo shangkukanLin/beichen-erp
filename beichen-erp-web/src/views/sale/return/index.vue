@@ -55,10 +55,11 @@
         <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="goDetail(row)">详情</el-button>
-            <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="success" @click.stop="doAudit(row)">审核</el-button>
-            <el-button v-if="row.status === SaleReturnStatus.AUDITED" link type="warning" @click.stop="doUnAudit(row)">反审核</el-button>
+            <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发 -->
+            <el-button v-if="row.status === SaleReturnStatus.DRAFT" v-perm="'sale:return:audit'" link type="success" @click.stop="doAudit(row)">审核</el-button>
+            <el-button v-if="row.status === SaleReturnStatus.AUDITED" v-perm="'sale:return:unaudit'" link type="warning" @click.stop="doUnAudit(row)">反审核</el-button>
             <!-- 销售退单不提供删除：单据需留痕，只能作废（后端 delete 语义也等同作废） -->
-            <el-button v-if="row.status === SaleReturnStatus.DRAFT" link type="danger" @click.stop="doCancel(row)">作废</el-button>
+            <el-button v-if="row.status === SaleReturnStatus.DRAFT" v-perm="'sale:return:cancel'" link type="danger" @click.stop="doCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

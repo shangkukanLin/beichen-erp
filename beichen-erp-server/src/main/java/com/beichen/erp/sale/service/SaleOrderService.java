@@ -21,6 +21,13 @@ public interface SaleOrderService {
 
     List<SaleOrderItem> getItems(Long orderId);
 
+    /**
+     * 某客户**已审核**的销售单列表（供售后退货 / 换货关联选择）。
+     * <p>2026-09-19 期 3「读隔离」：该方法从 {@code SaleReturnService} 上移到销售单模块（数据属主）——
+     * 退货页与换货页各自用**自己前缀**的接口取这份列表，不再互相跨模块读（也避免两处口径漂移）。</p>
+     */
+    List<Map<String, Object>> auditedOrdersOfCustomer(Long customerId);
+
     void create(SaleOrder order, List<SaleOrderItem> items);
 
     void update(SaleOrder order, List<SaleOrderItem> items);

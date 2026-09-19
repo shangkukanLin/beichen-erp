@@ -221,7 +221,10 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             .filter(p -> p.getId().equals(mat.getProductId())).findFirst().orElse(null);
         BigDecimal productQty = ownerProduct != null && ownerProduct.getQuantity() != null
             ? ownerProduct.getQuantity() : BigDecimal.ONE;
-        BigDecimal qps = perSet != null ? perSet.divide(productQty, 10, java.math.RoundingMode.HALF_UP) : BigDecimal.ZERO;
+        // F2-3（2026-09-18 审核修复）：优先直取视图 quantity_per_set（精确），反算仅作兜底
+        BigDecimal qps = mat.getQuantityPerSet() != null
+                ? mat.getQuantityPerSet()
+                : (perSet != null ? perSet.divide(productQty, 10, java.math.RoundingMode.HALF_UP) : BigDecimal.ZERO);
         item.put("quantityPerSet", qps);
         // 加工良率 = 100% - 损耗率（取快照中的 lossRate）
         BigDecimal lossRate = mat.getLossRate() != null ? mat.getLossRate() : BigDecimal.ZERO;

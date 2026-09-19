@@ -21,6 +21,26 @@ public interface ReturnSortService {
     /** 售后仓不良品库存清单（新增时带出，按产品聚合） */
     List<Map<String, Object>> defectStock(Long warehouseId);
 
+    /**
+     * 待整理总览（2026-09-19 退货整理页优化）：跨**自有成品仓**列出待整理批次与其账实差额。
+     *
+     * <p>每行 {@code status} 三态：{@code SORTABLE} 可整理 · {@code SHORTAGE} 实物不足（账实不符，需盘库）·
+     * {@code CLEARED} 已整理完（仅 {@code includeCleared=true} 时返回）。</p>
+     *
+     * <p>返回 {@code { asOf, stayAlertDays, warehouses:[{warehouseId, warehouseName, rows, ...汇总}], summary }}。</p>
+     */
+    Map<String, Object> pendingOverview(boolean includeCleared);
+
+    /**
+     * 批量生成整理草稿：勾选多个来源批次，按 (仓库, 客户) 分组各生成一张草稿。
+     *
+     * <p>分选数量按 {@code defaultQuality} 整批预置（默认 A 规），用户可再进编辑页微调。
+     * 可整理量走与总览**同一套 FIFO 分配**，保证"总览显示多少、批量就生成多少"。</p>
+     *
+     * <p>{@code template} 只取 sortDate / 4 个目标仓 / 折损 / 备注；{@code warehouseId} 必须为空（由批次决定）。</p>
+     */
+    Map<String, Object> batchCreateDrafts(List<Long> pendingIds, ReturnSort template, String defaultQuality);
+
     void create(ReturnSort s, List<ReturnSortItem> items);
 
     void update(ReturnSort s, List<ReturnSortItem> items);

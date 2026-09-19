@@ -23,7 +23,10 @@ const displayCompanyName = ref('')
 
 // 面包屑：根据当前激活 tab 的菜单父链生成（首页 / 一级菜单 / 二级菜单 / 操作名 ...）
 const breadcrumbItems = computed(() => {
-  const path = tabStore.activePath || route.path
+  // ⚠️ 2026-09-19 修（用户报「点整理单后顶部导航只剩首页」）：菜单 routePath 是**纯路径**，
+  // 若拿含 query 的地址（`/inventory/return-sort?tab=bills`）去精确/前缀匹配就会失配 ⇒ 只剩「首页」。
+  // 这里统一归一化掉 query/hash（页签身份本身也已改为 query-free path，见 stores/tabs.ts）。
+  const path = String(tabStore.activePath || route.path).split('?')[0].split('#')[0]
   const menus = userStore.menus || []
   const crumbs: { name: string; path?: string }[] = [{ name: '首页', path: '/dashboard' }]
   if (!Array.isArray(menus) || menus.length === 0) return crumbs
@@ -76,11 +79,15 @@ async function fetchCompanyName() {
   } catch { /* ignore */ }
 }
 
+/** 页签的完整地址（含 query），切回该页签时用它恢复页内状态（如 ?tab=bills / ?id=）；页签身份本身是 query-free path */
+function tabTarget(path: string) { return tabStore.tabs.find(t => t.path === path)?.fullPath || path }
+
 // 路由变化时自动打开页签
-watch(() => route.fullPath, (path) => {
-  if (path !== '/login' && path !== '/company-manage') {
-    const title = (route.meta.title as string) || path
-    tabStore.openTab(path, title)
+watch(() => route.fullPath, (fullPath) => {
+  if (fullPath !== '/login' && fullPath !== '/company-manage') {
+    const title = (route.meta.title as string) || route.path
+    // 页签身份 = query-free path：同一页的 `?tab=...` 不再新增重复页签；完整地址存进页签用于恢复页内状态
+    tabStore.openTab(route.path, title, fullPath)
   }
 }, { immediate: true })
 
@@ -96,23 +103,24 @@ watch(() => route.path, () => {
 
 function switchTab(path: string) {
   tabStore.setActive(path)
-  router.push(path)
+  router.push(tabTarget(path))
 }
 
 function closeTab(path: string, e: MouseEvent) {
   e.preventDefault()
   e.stopPropagation()
+  const isCurrent = route.path === path
   tabStore.removeTab(path)
-  const next = tabStore.tabs.length > 0 ? tabStore.activePath || '/dashboard' : '/dashboard'
-  if (route.fullPath === path) {
-    router.push(next)
+  if (isCurrent) {
+    const next = tabStore.tabs.length > 0 ? tabStore.activePath || '/dashboard' : '/dashboard'
+    router.push(tabTarget(next))
   }
 }
 
 function handleClosePage() {
-  tabStore.removeTab(route.fullPath)
+  tabStore.removeTab(route.path)
   const next = tabStore.tabs.length > 0 ? tabStore.activePath || '/dashboard' : '/dashboard'
-  router.push(next)
+  router.push(tabTarget(next))
 }
 
 function handleTabMouseDown(path: string, e: MouseEvent) {

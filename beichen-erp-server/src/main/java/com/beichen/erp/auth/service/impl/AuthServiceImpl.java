@@ -8,6 +8,7 @@ import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.auth.service.AuthService;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.system.common.SystemConstants;
 import com.beichen.erp.system.entity.Company;
 import com.beichen.erp.system.entity.Menu;
 import com.beichen.erp.system.mapper.CompanyMapper;
@@ -65,6 +66,15 @@ public class AuthServiceImpl implements AuthService {
         List<Long> roleIds = roleService.getRoleIdsByUserId(user.getId());
         List<Menu> menus = menuService.getMenuTreeByRoleIds(roleIds, user.getId());
 
+        // F3-3（2026-09-18 接口级权限专项）：把"页面级接口权限码"存入 session，供 @SaCheckPermission 使用。
+        // 权限口径与菜单同源（看得见的页面 = 调得通的接口）；super_admin 自身不挂菜单 ⇒ 兜底给全量码。
+        // 与 roles 一样在登录时快照：改了授权需重新登录才生效（与既有 @SaCheckRole 行为一致）。
+        // 方案 A：动作码（:audit/:unaudit/:cancel/:delete）跟随页面自动带出 ⇒ 前端可用它控制按钮显示
+        List<String> perms = roleCodes.contains(SystemConstants.SUPER_ADMIN_ROLE_CODE)
+                ? menuService.listAllPerms()
+                : menuService.collectPermsWithButtons(menus);
+        StpUtil.getSession().set("perms", perms);
+
         Map<String, Object> userInfo = new HashMap<>();
         userInfo.put("id", user.getId());
         userInfo.put("username", user.getUsername());
@@ -74,6 +84,7 @@ public class AuthServiceImpl implements AuthService {
         userInfo.put("roles", roleCodes);
         userInfo.put("companyId", companyId);
         userInfo.put("companyName", companyName);
+        userInfo.put("perms", perms);
 
         Map<String, Object> result = new HashMap<>();
         result.put("token", tokenInfo.tokenValue);

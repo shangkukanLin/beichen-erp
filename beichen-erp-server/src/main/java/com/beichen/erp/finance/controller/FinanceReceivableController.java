@@ -3,21 +3,28 @@ package com.beichen.erp.finance.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
-import com.beichen.erp.finance.common.SettlementStatus;
-import com.beichen.erp.finance.common.SubjectType;
 import com.beichen.erp.finance.entity.FinanceReceivable;
 import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
+import com.beichen.erp.finance.service.ReceivableQuery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+/**
+ * 应收台账接口（应收管理页）。
+ *
+ * <p>期 2（2026-09-19 读隔离）：{@code /unpaid} 的口径已抽到 {@link ReceivableQuery}，
+ * 本控制器与 {@code FinanceReceiptController}（收款页核销下拉）共用同一实现。</p>
+ */
 @RestController
 @RequestMapping("/api/finance/receivable")
 @RequiredArgsConstructor
 public class FinanceReceivableController {
 
+    private final ReceivableQuery query;
     private final FinanceReceivableMapper receivableMapper;
 
     @GetMapping("/page")
@@ -60,23 +67,11 @@ public class FinanceReceivableController {
         return R.ok(receivableMapper.selectById(id));
     }
 
-    /** 未结清应收（供收款单下拉）：客户应收按 customerId 查，供应商应收按 supplierId 查 */
+    /** 未结清应收（收款页核销下拉共用；口径见 {@link ReceivableQuery#unpaid}） */
     @GetMapping("/unpaid")
-    public R<?> unpaid(@RequestParam(required = false) Long customerId,
-                       @RequestParam(required = false) Long supplierId,
-                       @RequestParam(required = false) String subjectType) {
-        if (supplierId != null || (subjectType != null && "SUPPLIER".equalsIgnoreCase(subjectType))) {
-            return R.ok(receivableMapper.selectList(new LambdaQueryWrapper<FinanceReceivable>()
-                    .eq(FinanceReceivable::getSubjectType, SubjectType.SUPPLIER.getCode())
-                    .eq(supplierId != null, FinanceReceivable::getSupplierId, supplierId)
-                    .ne(FinanceReceivable::getStatus, SettlementStatus.SETTLED.getCode())
-                    .ne(FinanceReceivable::getStatus, SettlementStatus.CANCELLED.getCode())
-                    .orderByDesc(FinanceReceivable::getId)));
-        }
-        return R.ok(receivableMapper.selectList(new LambdaQueryWrapper<FinanceReceivable>()
-                .eq(FinanceReceivable::getCustomerId, customerId)
-                .ne(FinanceReceivable::getStatus, SettlementStatus.SETTLED.getCode())
-                .ne(FinanceReceivable::getStatus, SettlementStatus.CANCELLED.getCode())
-                .orderByDesc(FinanceReceivable::getId)));
+    public R<List<FinanceReceivable>> unpaid(@RequestParam(required = false) Long customerId,
+                                             @RequestParam(required = false) Long supplierId,
+                                             @RequestParam(required = false) String subjectType) {
+        return R.ok(query.unpaid(customerId, supplierId, subjectType));
     }
 }

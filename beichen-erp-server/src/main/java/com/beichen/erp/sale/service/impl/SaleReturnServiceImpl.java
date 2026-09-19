@@ -517,25 +517,6 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     }
 
     @Override
-    public List<Map<String, Object>> saleOrders(Long customerId) {
-        if (customerId == null) return List.of();
-        List<SaleOrder> list = saleOrderMapper.selectList(new LambdaQueryWrapper<SaleOrder>()
-                .eq(SaleOrder::getCustomerId, customerId)
-                .eq(SaleOrder::getStatus, DocStatus.AUDITED.getCode())
-                .orderByDesc(SaleOrder::getId));
-        List<Map<String, Object>> res = new ArrayList<>();
-        for (SaleOrder o : list) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", o.getId());
-            m.put("code", o.getCode());
-            m.put("orderDate", o.getOrderDate());
-            m.put("totalAmount", o.getTotalAmount());
-            res.add(m);
-        }
-        return res;
-    }
-
-    @Override
     public List<Map<String, Object>> saleOrderItems(Long saleOrderId) {
         if (saleOrderId == null) return List.of();
         List<SaleOrderItem> oiList = saleOrderItemMapper.selectList(new LambdaQueryWrapper<SaleOrderItem>()

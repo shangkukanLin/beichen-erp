@@ -4,8 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { DocStatusLabel, DocStatusTag } from '@/api/common'
-import { getSaleOrderPage, type SaleOrder } from '@/api/sale'
-import { getCustomer, createCustomer, updateCustomer, type Customer } from '@/api/customer'
+import { type SaleOrder } from '@/api/sale'
+import { getCustomer, createCustomer, updateCustomer, getCustomerSaleOrders, type Customer } from '@/api/customer'
 
 const route = useRoute(); const router = useRouter()
 
@@ -82,10 +82,11 @@ async function init() {
 }
 
 async function loadOrders() {
-  const res = await getSaleOrderPage({
+  // 期 2（2026-09-19 读隔离）：改走客户页自身前缀 /inventory/customer/{id}/sale-orders
+  // （原先读 /inventory/sale/page 需 sale:order ⇒ 只有客户档案权限的用户会 403）
+  const res = await getCustomerSaleOrders(id.value as number, {
     pageNum: pagination.pageNum,
-    pageSize: pagination.pageSize,
-    customerId: id.value
+    pageSize: pagination.pageSize
   })
   orders.value = res?.records || []
   pagination.total = res?.total || 0

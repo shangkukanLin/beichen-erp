@@ -175,6 +175,54 @@ export function getReturnSortItems(id: number) {
 export function getReturnSortDefectStock(warehouseId: number) {
   return request.get<any[]>(`/inventory/return-sort/defect-stock`, { params: { warehouseId } })
 }
+
+/**
+ * 待整理总览（2026-09-19 退货整理页优化）：跨**自有成品仓**列出待整理批次与其账实差额。
+ * <p>行 status 三态：SORTABLE 可整理 · SHORTAGE 实物不足（账实不符，需盘库）·
+ * CLEARED 已整理完（默认不返回，includeCleared=true 时返回）。</p>
+ */
+export interface ReturnSortPendingRow {
+  pendingId?: number
+  warehouseId?: number
+  status?: 'SORTABLE' | 'SHORTAGE' | 'CLEARED' | string
+  /** 部分可整理：实物少于批次剩余量 */
+  partial?: boolean
+  sourceType?: string
+  sourceTypeLabel?: string
+  sourceCode?: string
+  sourceDate?: string
+  customerId?: number
+  customerName?: string
+  productId?: number
+  sku?: string
+  productName?: string
+  unit?: string
+  /** 本次可整理数量（FIFO 分配到的实物量） */
+  quantity?: number
+  totalQuantity?: number
+  sortedQuantity?: number
+  remainQuantity?: number
+  stayDays?: number
+  overdue?: boolean
+}
+export interface ReturnSortPendingOverview {
+  asOf?: string
+  stayAlertDays?: number
+  warehouses?: { warehouseId?: number; warehouseName?: string; rows?: ReturnSortPendingRow[]; batchCount?: number; sortableCount?: number; shortageCount?: number; clearedCount?: number; sortableQuantity?: number; remainQuantity?: number; oldestStayDays?: number; overdueCount?: number }[]
+  summary?: { warehouseCount?: number; batchCount?: number; sortableCount?: number; shortageCount?: number; clearedCount?: number; sortableQuantity?: number; remainQuantity?: number; overdueCount?: number }
+}
+export function getReturnSortPendingOverview(params?: { includeCleared?: boolean }) {
+  return request.get<ReturnSortPendingOverview>('/inventory/return-sort/pending-overview', { params })
+}
+
+/**
+ * 批量生成整理草稿：勾选多个来源批次，服务端按 (仓库, 客户) 各生成一张草稿，
+ * 分选数量按 defaultQuality 整批预置（默认 A，可进编辑页再调整）。
+ * **不要传 warehouseId** —— 源仓库由勾选的批次决定。
+ */
+export function batchCreateReturnSortDrafts(data: any) {
+  return request.post<any>('/inventory/return-sort/batch-draft', data)
+}
 export function createReturnSort(data: any) {
   return request.post<void>('/inventory/return-sort', data)
 }
@@ -197,9 +245,13 @@ export interface StockTake { id?: number; takeNo?: string; warehouseId?: number;
 export interface StockTakeItem { id?: number; takeId?: number; productId?: number; productName?: string; sku?: string; materialId?: number; materialName?: string; qualityType?: string; unit?: string; bookQuantity?: number; actualQuantity?: number; diffQuantity?: number; remark?: string }
 /** 仓库盘点看板行：当月是否已盘点 + 超期天数 + 上次盘点日期 */
 export interface StockTakeStatus { warehouseId?: number; warehouseName?: string; warehouseType?: string; warehouseCategory?: string; period?: string; taken?: boolean; lastTakeDate?: string; dueDate?: string; overdueDays?: number; remind?: boolean }
-/** 各仓库当月盘点状态与超期天数（传 scope=PRODUCT|MATERIAL 可只看成品/物料范围） */
-export function getStockTakeStatus(params?: any) {
-  return request.get<StockTakeStatus[]>('/inventory/stock-take/status', { params })
+/**
+ * 各仓库当月盘点状态与超期天数（**仓库管理页**「本月盘点 / 上次盘点」两列；传 scope=PRODUCT|MATERIAL 过滤范围）。
+ * 期 2（2026-09-19 读隔离）：改走 `/warehouse` 前缀（原直读 `/inventory/stock-take/status`，需 stock:stock-take
+ * ⇒ 只被授予 stock:warehouse 的用户会 403）。后端复用盘点模块的同一查询，口径不变。
+ */
+export function getWarehouseTakeStatus(params?: any) {
+  return request.get<StockTakeStatus[]>('/warehouse/stock-take-status', { params })
 }
 export function getStockTakePage(params?: any) {
   return request.get<PageResult<StockTake>>('/inventory/stock-take/page', { params })

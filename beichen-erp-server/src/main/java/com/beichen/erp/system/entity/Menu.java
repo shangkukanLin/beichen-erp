@@ -29,6 +29,9 @@ public class Menu {
 
     private String icon;
 
+    /** F3-3（2026-09-18）：页面级接口权限码（catalog 为 null），见 schema.sql / DataInitializer.initMenuPerms */
+    private String perms;
+
     private Integer sortOrder;
 
     private Integer visible;

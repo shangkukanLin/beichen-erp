@@ -31,9 +31,6 @@ public interface SaleReturnService {
 
     void delete(Long id);
 
-    /** 查询某客户已审核的销售单（供退货关联选择） */
-    List<Map<String, Object>> saleOrders(Long customerId);
-
     /** 查询销售单明细（含已退/可退数量，供退货带入） */
     List<Map<String, Object>> saleOrderItems(Long saleOrderId);
 }

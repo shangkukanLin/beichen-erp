@@ -18,7 +18,8 @@ const summaryData = ref<any[]>([])
 async function loadSummary() {
   summaryLoading.value = true
   try {
-    const r = await request.get<any, any>('/finance/payable/supplier-summary')
+    // 期 2（2026-09-19 读隔离）：应付汇总改走付款页自身前缀（原读 /finance/payable/supplier-summary 需 finance:payable）
+    const r = await request.get<any, any>('/finance/payment/payable-summary')
     summaryData.value = r || []
   } catch { summaryData.value = [] } finally { summaryLoading.value = false }
 }

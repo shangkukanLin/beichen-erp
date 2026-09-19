@@ -8,7 +8,7 @@ import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
-import { getReceiptPage, getReceiptItems, createReceipt, auditReceipt, cancelReceipt, unAuditReceipt, getUnpaidReceivables, type FinanceReceipt, type FinanceReceiptItem, type FinanceReceivable } from '@/api/finance'
+import { getReceiptPage, getReceiptItems, createReceipt, auditReceipt, cancelReceipt, unAuditReceipt, getReceiptUnpaidReceivables, type FinanceReceipt, type FinanceReceiptItem, type FinanceReceivable } from '@/api/finance'
 import { SubjectType, SubjectTypeLabel } from '@/api/enums'
 
 const query = reactive({ customerId: '' as string|number, subjectType: '', status: '' })
@@ -76,12 +76,16 @@ function onSubjectTypeChange() {
   dItems.value = []
   unpaid.value = []
 }
-/** 按主体类型拉取可核销的未结清应收 */
+/**
+ * 按主体类型拉取可核销的未结清应收。
+ * 期 2（2026-09-19 读隔离）：改走收款页自身前缀（原读 /finance/receivable/unpaid 需 finance:receivable，
+ * 只有 finance:receipt 的用户会 403 —— 接口级权限校准后新查出的真实缺口）。
+ */
 async function loadUnpaid() {
   try {
     unpaid.value = dForm.subjectType === SubjectType.SUPPLIER
-      ? (await getUnpaidReceivables(undefined, dForm.supplierId as number)) || []
-      : (await getUnpaidReceivables(dForm.customerId as number)) || []
+      ? (await getReceiptUnpaidReceivables(undefined, dForm.supplierId as number)) || []
+      : (await getReceiptUnpaidReceivables(dForm.customerId as number)) || []
   } catch { unpaid.value = [] }
 }
 function addItem() { dItems.value.push({ receivableId: undefined, receivableBillNo: '', thisAmount: 0, remark: '' }) }

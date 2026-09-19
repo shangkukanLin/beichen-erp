@@ -54,6 +54,12 @@ CREATE TABLE IF NOT EXISTS sys_menu (
     route_path VARCHAR(100) DEFAULT '' COMMENT '路由路径',
     route_name VARCHAR(100) DEFAULT '' COMMENT '路由名称',
     icon VARCHAR(50) DEFAULT '' COMMENT '图标',
+    -- F3-3（2026-09-18 接口级权限专项）：页面级接口权限码（如 purchase:exchange），
+    -- 仅 menu_type='menu' 的页面菜单有值；用户的有效权限 = 其可见菜单的 perms 集合，
+    -- 由 StpInterfaceImpl.getPermissionList 提供给 @SaCheckPermission。目录(catalog)恒为 NULL。
+    -- 存量库（表已存在，CREATE TABLE IF NOT EXISTS 不会改）请手工执行：
+    --   ALTER TABLE sys_menu ADD COLUMN perms VARCHAR(100) DEFAULT NULL COMMENT '接口权限码';
+    perms VARCHAR(100) DEFAULT NULL COMMENT '接口权限码',
     sort_order INT DEFAULT 0 COMMENT '排序',
     visible TINYINT DEFAULT 1 COMMENT '0隐藏 1显示',
     status TINYINT DEFAULT 1 COMMENT '0禁用 1启用',
@@ -239,6 +245,11 @@ CREATE TABLE IF NOT EXISTS bom_snapshot (
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    -- F2-4（2026-09-18 审核修复）：并发下单时同一 (product_key, bom_version, fingerprint) 只允许一份，
+    -- 抢输的一方由 BomSnapshotServiceImpl 捕获 DuplicateKeyException 后复用赢家快照（不再产生重复快照）。
+    -- 存量库（本表已存在，CREATE TABLE IF NOT EXISTS 不会改）请手工执行，SQL 见《代码审核报告_20260918》§9.6：
+    --   ALTER TABLE bom_snapshot ADD UNIQUE KEY uk_snapshot (product_key, bom_version, fingerprint);
+    UNIQUE KEY uk_snapshot (product_key, bom_version, fingerprint),
     INDEX idx_product_key (product_key),
     INDEX idx_product_master_id (product_master_id),
     INDEX idx_project_id (project_id),

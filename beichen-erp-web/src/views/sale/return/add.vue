@@ -140,13 +140,13 @@ import { ProductQualityTypeLabel, ProductQualityTypeTag, WarehouseType, SALE_RET
   ExchangeChargeType, ExchangeChargeTypeLabel } from '@/api/enums'
 import { productLabel } from '@/api/product'
 import {
-  getSaleOrder,
   getSaleReturn,
   getSaleReturnItems,
   createSaleReturn,
   updateSaleReturn,
   getSaleReturnSaleOrders,
   getSaleReturnSaleOrderItems,
+  getSaleReturnSourceOrder,
 } from '@/api/sale'
 
 const route = useRoute()
@@ -257,7 +257,8 @@ function onProductChange(row: any, id: number) {
  */
 async function initFromSaleOrder(saleOrderId: number) {
   try {
-    const so: any = await getSaleOrder(saleOrderId)
+    // 期 3（2026-09-19 读隔离）：来源销售单头改走退货页自身前缀（原读 /inventory/sale/{id} 需 sale:order）
+    const so: any = await getSaleReturnSourceOrder(saleOrderId)
     if (!so) { ElMessage.warning('来源销售单不存在'); return }
     form.saleOrderId = so.id
     form.saleOrderCode = so.code || ''

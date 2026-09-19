@@ -110,6 +110,30 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         return res;
     }
 
+    /**
+     * 某客户**已审核**的销售单（供售后退货 / 换货关联选择）。
+     * <p>口径与原 {@code SaleReturnServiceImpl.saleOrders} 完全一致（只回 id/code/orderDate/totalAmount），
+     * 2026-09-19 期 3 上移到销售单模块后由退货页、换货页共用。</p>
+     */
+    @Override
+    public List<Map<String, Object>> auditedOrdersOfCustomer(Long customerId) {
+        if (customerId == null) return List.of();
+        List<SaleOrder> list = orderMapper.selectList(new LambdaQueryWrapper<SaleOrder>()
+                .eq(SaleOrder::getCustomerId, customerId)
+                .eq(SaleOrder::getStatus, DocStatus.AUDITED.getCode())
+                .orderByDesc(SaleOrder::getId));
+        List<Map<String, Object>> res = new ArrayList<>();
+        for (SaleOrder o : list) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", o.getId());
+            m.put("code", o.getCode());
+            m.put("orderDate", o.getOrderDate());
+            m.put("totalAmount", o.getTotalAmount());
+            res.add(m);
+        }
+        return res;
+    }
+
     @Override
     public SaleOrder getById(Long id) {
         SaleOrder o = orderMapper.selectById(id);

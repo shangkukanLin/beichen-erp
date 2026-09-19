@@ -52,11 +52,9 @@ async function loadData() {
       const w = list.find((x: any) => x.id === order.value.warehouseId)
       warehouseName.value = w?.warehouseName || ''
     }
-    // 该采购单的退货情况
-    try {
-      const rr: any = await request.get('/inventory/purchase-return/by-order', { params: { purchaseOrderId: orderId } })
-      returns.value = (rr as any[]) || []
-    } catch { returns.value = [] }
+    // 该采购单的退货情况（期 2·2026-09-19 读隔离：随详情接口一并返回，
+    // 原先跨页读 /inventory/purchase-return/by-order，需 purchase:return ⇒ 只有采购单权限的用户会 403）
+    returns.value = (res as any)?.returns || []
   } finally { loading.value = false }
 }
 

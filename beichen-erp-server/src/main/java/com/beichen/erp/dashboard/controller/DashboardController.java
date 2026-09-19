@@ -26,6 +26,15 @@ public class DashboardController {
         return R.ok(service.pending());
     }
 
+    /**
+     * 首页卡片聚合（期 1 读隔离，2026-09-19）：把原先由前端直连的**跨模块只读**（采购单/采购退货/
+     * 加工单/物料订单分页）改为后端一次聚合，并**按调用者 perms 过滤**（无权限的块不返回）。
+     */
+    @GetMapping("/module-pages")
+    public R<Map<String, Object>> modulePages() {
+        return R.ok(service.modulePages());
+    }
+
     /** 销售工作台（首页「销售业务」TAB，2026-09-15 新增）：待办数 + 沉默客户 + 业绩（今日/昨日/本月/上月） */
     @GetMapping("/sale-workbench")
     public R<Map<String, Object>> saleWorkbench() {

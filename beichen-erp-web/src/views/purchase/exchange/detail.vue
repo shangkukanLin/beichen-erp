@@ -86,10 +86,10 @@
         <el-button @click="goBack">返回</el-button>
         <template v-if="head.status === DocStatus.DRAFT">
           <el-button type="primary" @click="goEdit">编辑</el-button>
-          <el-button type="success" :loading="acting" @click="doAudit">审核</el-button>
-          <el-button type="danger" :loading="acting" @click="doCancel">作废</el-button>
+          <el-button v-perm="'purchase:exchange:audit'" type="success" :loading="acting" @click="doAudit">审核</el-button>
+          <el-button v-perm="'purchase:exchange:cancel'" type="danger" :loading="acting" @click="doCancel">作废</el-button>
         </template>
-        <el-button v-if="head.status === DocStatus.AUDITED" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
+        <el-button v-if="head.status === DocStatus.AUDITED" v-perm="'purchase:exchange:unaudit'" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
       </div>
     </el-card>
   </div>

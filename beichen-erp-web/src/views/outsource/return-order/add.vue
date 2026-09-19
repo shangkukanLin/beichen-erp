@@ -70,7 +70,8 @@ async function loadOrderOptions(factoryId: any) {
   orderOptions.value = []
   if (!factoryId) return
   try {
-    const r: any = await request.get('/outsource/order/page', { params: { factoryId, pageNum: 1, pageSize: 500 } })
+    // 期 3（2026-09-19 读隔离）：关联加工单改走本页前缀（原读 /outsource/order/page 需 outsource:order）
+    const r: any = await request.get('/outsource/return-order/orders', { params: { factoryId, pageNum: 1, pageSize: 500 } })
     orderOptions.value = r?.records || []
   } catch { orderOptions.value = [] }
 }

@@ -423,6 +423,9 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                 || order.getChargeAmount() == null || order.getChargeAmount().compareTo(BigDecimal.ZERO) <= 0))
             throw new BusinessException("维修退货必须填写加工厂向我方收取的维修费（收费类型 + 金额大于 0）");
 
+        // F2-2（2026-09-18 审核修复）：复核「累计退货量 ≤ 已交货量」，防直调接口超退（详见审核报告 F2-2）
+        assertReturnNotOverDelivered(order);
+
         // 工厂委外仓（物料退回目标仓）
         Long factoryWhId = null;
         if (order.getFactoryId() != null) {
@@ -457,9 +460,13 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                         outType, order.getCode(), outBill,
                         null, order.getId(), normalizeQualityType(p.getQualityType()));
             }
-        } else if (repair) {
-            // 维修退货必须扣库存（否则"送修"没账，货凭空消失）
-            throw new BusinessException("请选择送修出库仓（我方成品仓）");
+        } else {
+            // F2-1（2026-09-18 审核修复）：两类退货都**必须**先选仓才能审核 ——
+            // 不良退货原先在未选仓时"静默跳过成品扣减"，却照旧执行「退货物料入工厂委外仓 + 负向应付」
+            // ⇒ 料账/应付动了、成品库存没动，账实不符（前端已必填，此处是接口层兜底）。
+            throw new BusinessException(repair
+                    ? "请选择送修出库仓（我方成品仓）"
+                    : "请选择成品出库仓（我方成品仓）");
         }
 
         // 3. 应付冲减（负向应付）：仅不良退货；维修退货不冲减（维修不是退货，加工费照付）
@@ -932,6 +939,98 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     }
 
     private BigDecimal nz(BigDecimal v) { return v == null ? BigDecimal.ZERO : v; }
+
+    /** 去掉无意义的末尾 0，便于提示语展示 */
+    private String fmt(BigDecimal v) { return v == null ? "0" : v.stripTrailingZeros().toPlainString(); }
+
+    /** 交货记录的总数量：等级列之和，历史/手工数据等级全空时按总数量兜底（与审核落账口径一致） */
+    private BigDecimal deliveryTotalQty(OutsourceOrderDelivery d) {
+        BigDecimal sum = nz(d.getAQty()).add(nz(d.getBQty())).add(nz(d.getCQty())).add(nz(d.getDefectQty()));
+        if (sum.compareTo(BigDecimal.ZERO) == 0 && nz(d.getQuantity()).compareTo(BigDecimal.ZERO) > 0)
+            return nz(d.getQuantity());
+        return sum;
+    }
+
+    /**
+     * F2-2（2026-09-18 审核修复）：审核时复核「累计退货量 ≤ 已交货量」，与前端「可退量」同源但按**产品合计**。
+     *
+     * <p>三个关键口径：</p>
+     * <ol>
+     *   <li><b>按产品主数据ID合计，不按规格</b>：不良退货常把 A 规交来的货以 DEFECT 规格退回，
+     *       若按「产品+规格」比对，DEFECT 已交量为 0 会把正常业务全部拦死；</li>
+     *   <li><b>"已退"只统计已审核的其它退货单</b>（草稿未生效不该占用额度），且**必须排除本单** ——
+     *       claim 已把本单置为 AUDITED，不排除就会把自己算进去（批 1 F1-1 的同类坑）；</li>
+     *   <li><b>基准</b>：有来源交货记录 → 取该条交货量；只关联加工单 → 取该单已审交货量合计；
+     *       两者都没有 → 无基准可依，跳过（仍由"库存不得为负"兜底）。</li>
+     * </ol>
+     */
+    private void assertReturnNotOverDelivered(ReturnOrder order) {
+        Long deliveryId = order.getSourceDeliveryId();
+        Long orderId = order.getOrderId();
+        if (deliveryId == null && orderId == null) return;
+        List<OutsourceReturnOrderProduct> products = returnProductMapper.selectList(
+                new LambdaQueryWrapper<OutsourceReturnOrderProduct>()
+                        .eq(OutsourceReturnOrderProduct::getReturnOrderId, order.getId()));
+        if (products.isEmpty()) return;
+        Map<Long, BigDecimal> thisQty = new LinkedHashMap<>();
+        Map<Long, String> nameMap = new HashMap<>();
+        for (OutsourceReturnOrderProduct p : products) {
+            Long pid = resolveStockProductId(null, p.getProductId(), null);
+            if (pid == null) continue;
+            thisQty.merge(pid, nz(p.getQuantity()), BigDecimal::add);
+            if (p.getProductName() != null && !p.getProductName().isBlank()) nameMap.put(pid, p.getProductName());
+        }
+        if (thisQty.isEmpty()) return;
+
+        // 已交货量（按产品合计）
+        Map<Long, BigDecimal> delivered = new LinkedHashMap<>();
+        if (deliveryId != null) {
+            OutsourceOrderDelivery d = orderDeliveryMapper.selectById(deliveryId);
+            if (d != null) {
+                Long pid = resolveStockProductId(null, d.getProductId(), d.getProductMasterId());
+                BigDecimal q = deliveryTotalQty(d);
+                if (pid != null && q.compareTo(BigDecimal.ZERO) > 0) delivered.merge(pid, q, BigDecimal::add);
+            }
+        } else {
+            for (OutsourceOrderDelivery d : orderDeliveryMapper.selectList(new LambdaQueryWrapper<OutsourceOrderDelivery>()
+                    .eq(OutsourceOrderDelivery::getOrderId, orderId)
+                    .eq(OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.getCode()))) {
+                Long pid = resolveStockProductId(null, d.getProductId(), d.getProductMasterId());
+                if (pid == null) continue;
+                delivered.merge(pid, nz(d.getQuantity()), BigDecimal::add);
+            }
+        }
+
+        // 已退量（其它已审核退货单，排除本单）
+        LambdaQueryWrapper<ReturnOrder> w = new LambdaQueryWrapper<ReturnOrder>()
+                .eq(ReturnOrder::getStatus, DocStatus.AUDITED.getCode())
+                .ne(ReturnOrder::getId, order.getId());
+        if (deliveryId != null) w.eq(ReturnOrder::getSourceDeliveryId, deliveryId);
+        else w.eq(ReturnOrder::getOrderId, orderId);
+        List<ReturnOrder> others = returnOrderMapper.selectList(w);
+        Map<Long, BigDecimal> returned = new LinkedHashMap<>();
+        if (!others.isEmpty()) {
+            List<Long> ids = others.stream().map(ReturnOrder::getId).toList();
+            for (OutsourceReturnOrderProduct p : returnProductMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceReturnOrderProduct>()
+                            .in(OutsourceReturnOrderProduct::getReturnOrderId, ids))) {
+                Long pid = resolveStockProductId(null, p.getProductId(), null);
+                if (pid == null) continue;
+                returned.merge(pid, nz(p.getQuantity()), BigDecimal::add);
+            }
+        }
+
+        for (Map.Entry<Long, BigDecimal> e : thisQty.entrySet()) {
+            Long pid = e.getKey();
+            BigDecimal base = delivered.getOrDefault(pid, BigDecimal.ZERO);
+            BigDecimal done = returned.getOrDefault(pid, BigDecimal.ZERO);
+            if (done.add(e.getValue()).compareTo(base) > 0) {
+                throw new BusinessException("退货数量超过该产品已交货量（产品["
+                        + nameMap.getOrDefault(pid, "#" + pid) + "]已交 " + fmt(base)
+                        + "、已退 " + fmt(done) + "、本次 " + fmt(e.getValue()) + "）");
+            }
+        }
+    }
 
     /** null 视为 0 */
     private int nzInt(Integer v) { return v != null ? v : 0; }

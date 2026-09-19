@@ -197,7 +197,10 @@ public class OutsourceOrderController {
                 if (key == null) continue;
                 java.math.BigDecimal matDemand = mat.getDemandQuantity() != null ? mat.getDemandQuantity() : java.math.BigDecimal.ZERO;
                 if (matDemand.compareTo(java.math.BigDecimal.ZERO) == 0) continue;
-                java.math.BigDecimal perUnit = matDemand.divide(pTotal, 10, java.math.RoundingMode.HALF_UP);
+                // F2-3（2026-09-18 审核修复）：优先直取视图 quantity_per_set（精确），反算仅作兜底
+                java.math.BigDecimal perUnit = mat.getQuantityPerSet() != null
+                        ? mat.getQuantityPerSet()
+                        : matDemand.divide(pTotal, 10, java.math.RoundingMode.HALF_UP);
                 // 数量一律为整数（2026-09-16）：单套用量(比率) × 已交货数量 → 取整
                 java.math.BigDecimal consumed = perUnit.multiply(pDelivered).setScale(0, java.math.RoundingMode.HALF_UP);
                 shippedConsumedMap.merge(key, consumed, java.math.BigDecimal::add);

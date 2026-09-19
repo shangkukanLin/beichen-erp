@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -36,6 +37,20 @@ public class AuthController {
     @GetMapping("/info")
     public R<User> info() {
         return R.ok(authService.getCurrentUser());
+    }
+
+    /**
+     * F3-3（2026-09-18）：当前登录用户的**接口权限码**（页面码 + 按钮动作码）。
+     * <p>登录响应里已带 {@code userInfo.perms}；此端点供前端刷新页面时重新取一次（前端按钮 gating 用）。</p>
+     */
+    @GetMapping("/perms")
+    @SuppressWarnings("unchecked")
+    public R<List<String>> perms() {
+        Object perms = StpUtil.getSession().get("perms");
+        if (perms instanceof List) {
+            return R.ok((List<String>) perms);
+        }
+        return R.ok(List.of());
     }
 
     /** 获取登录公司名称（从 session 读取，刷新页面后仍可用） */

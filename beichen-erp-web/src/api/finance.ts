@@ -27,6 +27,30 @@ export function getUnpaidReceivables(customerId?: number, supplierId?: number) {
 export function getPayablePage(params: any) { return request.get<PageResult<FinancePayable>>('/finance/payable/page', { params }) }
 export function getUnpaidPayables(supplierId: number) { return request.get<FinancePayable[]>('/finance/payable/unpaid', { params: { supplierId } }) }
 
+// ==================== 期 2（2026-09-19 读隔离）：付款 / 收款页改读「自身前缀」 ====================
+/**
+ * 应付汇总（付款页 Tab1「供应商汇总」）。原直读 `/finance/payable/supplier-summary`
+ * （需 finance:payable）⇒ 只被授予 finance:payment 的用户会 403，现走付款页前缀（后端同一查询实现）。
+ */
+export function getPaymentPayableSummary() {
+  return request.get<any[]>('/finance/payment/payable-summary')
+}
+/** 应付明细（供应商付款页）。原直读 `/finance/payable/page` */
+export function getPaymentPayables(params: any) {
+  return request.get<PageResult<FinancePayable>>('/finance/payment/payables', { params })
+}
+/** 未结清应付（新增付款弹窗的核销下拉）。原直读 `/finance/payable/unpaid` */
+export function getPaymentUnpaidPayables(supplierId: number) {
+  return request.get<FinancePayable[]>('/finance/payment/unpaid-payables', { params: { supplierId } })
+}
+/**
+ * 未结清应收（收款单「核销明细」下拉）。原直读 `/finance/receivable/unpaid`（需 finance:receivable）
+ * ⇒ 只被授予 finance:receipt 的用户会 403，现走收款页前缀（后端同一查询实现）。
+ */
+export function getReceiptUnpaidReceivables(customerId?: number, supplierId?: number) {
+  return request.get<FinanceReceivable[]>('/finance/receipt/unpaid-receivables', { params: { customerId, supplierId } })
+}
+
 export function getCashflowPage(params: any) { return request.get<PageResult<FinanceCashflow>>('/finance/cashflow/page', { params }) }
 
 export interface FinanceExpense { id?: number; expenseNo?: string; expenseType?: string; amount?: number; expenseDate?: string; accountId?: number; accountName?: string; status?: string; remark?: string; createTime?: string }

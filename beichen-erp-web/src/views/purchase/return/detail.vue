@@ -178,10 +178,10 @@ onActivated(() => { loadData() })
             <template v-if="isDraft()">
               <el-button type="primary" size="small" :loading="saving" @click="handleSave">保存</el-button>
               <el-button size="small" @click="loadData">取消</el-button>
-              <el-button type="success" size="small" @click="handleAudit">审核</el-button>
-              <el-button type="danger" size="small" @click="handleCancel">作废</el-button>
+              <el-button v-perm="'purchase:return:audit'" type="success" size="small" @click="handleAudit">审核</el-button>
+              <el-button v-perm="'purchase:return:cancel'" type="danger" size="small" @click="handleCancel">作废</el-button>
             </template>
-            <el-button v-if="isAudited()" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
+            <el-button v-if="isAudited()" v-perm="'purchase:return:unaudit'" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
           </div>
         </div>
       </template>

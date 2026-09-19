@@ -2,8 +2,10 @@ package com.beichen.erp.purchase.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.purchase.entity.PurchaseOrder;
 import com.beichen.erp.purchase.entity.PurchaseReturn;
 import com.beichen.erp.purchase.entity.PurchaseReturnItem;
+import com.beichen.erp.purchase.service.PurchaseOrderService;
 import com.beichen.erp.purchase.service.PurchaseReturnService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +19,8 @@ import java.util.Map;
 public class PurchaseReturnController {
 
     private final PurchaseReturnService service;
+    // 期 3（2026-09-19 读隔离）：退货页要读「来源采购单」，改由本页接口提供
+    private final PurchaseOrderService purchaseOrderService;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -52,6 +56,17 @@ public class PurchaseReturnController {
     @GetMapping("/{id}/items")
     public R<List<PurchaseReturnItem>> items(@PathVariable Long id) {
         return R.ok(service.getItems(id));
+    }
+
+    /**
+     * 来源采购单（退货页「从采购单带入明细」时反查供货商 / 退货仓库 / 单号）。
+     * <p>期 3（2026-09-19 读隔离）：原先退货页直读 {@code /api/inventory/purchase/{id}}
+     * （需 {@code purchase:order}）⇒ 只被授予 {@code purchase:return} 的用户会 403。现走本页前缀，
+     * 返回体与原采购单详情**逐字段一致**（同一实体，前端取值零改动）。</p>
+     */
+    @GetMapping("/source-order")
+    public R<PurchaseOrder> sourceOrder(@RequestParam Long purchaseOrderId) {
+        return R.ok(purchaseOrderService.getById(purchaseOrderId));
     }
 
     /** 按采购单查询关联的退货单列表 */

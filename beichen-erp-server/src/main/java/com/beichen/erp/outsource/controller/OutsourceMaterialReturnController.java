@@ -22,6 +22,24 @@ import java.util.Map;
 public class OutsourceMaterialReturnController {
 
     private final OutsourceMaterialReturnService returnService;
+    // 期 3（2026-09-19 读隔离）：退货页的「关联物料订单」下拉改由本页接口提供
+    private final com.beichen.erp.outsource.service.MaterialOrderService materialOrderService;
+
+    /**
+     * 该物料商的物料订单（物料退货页「关联物料订单」下拉；维修返还闭环：收货中/已完成）。
+     * <p>期 3（2026-09-19 读隔离）：原先物料退货页直读 {@code /api/outsource/material-order/page}
+     * （需 {@code outsource:material-order}）⇒ 只被授予 {@code outsource:material-return} 的用户会 403。
+     * 现走本页前缀，复用物料订单模块的**同一分页查询**。</p>
+     */
+    @GetMapping("/material-orders")
+    public R<Page<Map<String, Object>>> materialOrders(
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) String code,
+            @RequestParam(required = false) Long supplierId,
+            @RequestParam(required = false) String statuses) {
+        return R.ok(materialOrderService.page(pageNum, pageSize, code, null, statuses, supplierId));
+    }
 
     /** 分页查询 */
     @GetMapping("/page")

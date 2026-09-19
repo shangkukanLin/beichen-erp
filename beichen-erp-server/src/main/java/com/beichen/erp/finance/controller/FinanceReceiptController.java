@@ -2,9 +2,11 @@ package com.beichen.erp.finance.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.finance.entity.FinanceReceivable;
 import com.beichen.erp.finance.entity.FinanceReceipt;
 import com.beichen.erp.finance.entity.FinanceReceiptItem;
 import com.beichen.erp.finance.service.FinanceReceiptService;
+import com.beichen.erp.finance.service.ReceivableQuery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +22,8 @@ import java.util.Map;
 public class FinanceReceiptController {
 
     private final FinanceReceiptService service;
+    // 期 2（2026-09-19 读隔离）：收款页核销下拉要用的未结清应收由本页接口提供（与应收页共用 ReceivableQuery）
+    private final ReceivableQuery receivableQuery;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -39,6 +43,19 @@ public class FinanceReceiptController {
     @GetMapping("/by-source")
     public R<List<FinanceReceipt>> bySource(@RequestParam String sourceBillType, @RequestParam Long sourceId) {
         return R.ok(service.findBySource(sourceBillType, sourceId));
+    }
+
+    /**
+     * 未结清应收（收款单「核销明细」下拉：客户收款按 customerId，供应商收款按 supplierId）。
+     * <p>期 2（2026-09-19 读隔离）：原先前端直读 {@code /api/finance/receivable/unpaid}
+     * （需 {@code finance:receivable}）⇒ 只被授予 {@code finance:receipt} 的用户会 403
+     * —— 这是接口级权限校准工具修好后新查出的真实缺口。现由本页接口提供，口径复用应收页同一查询。</p>
+     */
+    @GetMapping("/unpaid-receivables")
+    public R<List<FinanceReceivable>> unpaidReceivables(@RequestParam(required = false) Long customerId,
+                                                        @RequestParam(required = false) Long supplierId,
+                                                        @RequestParam(required = false) String subjectType) {
+        return R.ok(receivableQuery.unpaid(customerId, supplierId, subjectType));
     }
 
     @GetMapping("/{id}")

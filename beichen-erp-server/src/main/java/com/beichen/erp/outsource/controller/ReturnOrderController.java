@@ -3,6 +3,7 @@ package com.beichen.erp.outsource.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.outsource.entity.ReturnOrder;
+import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.outsource.service.OutsourceReturnOrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -22,6 +23,21 @@ import java.util.Map;
 public class ReturnOrderController {
 
     private final OutsourceReturnOrderService returnOrderService;
+    // 期 3（2026-09-19 读隔离）：退货页的「关联加工单」下拉改由本页接口提供
+    private final OutsourceOrderService outsourceOrderService;
+
+    /**
+     * 该加工厂可关联的加工单（退货页「关联加工单」下拉；2026-09-17 口径：可选可清空，清空=不关联）。
+     * <p>期 3（2026-09-19 读隔离）：原先退货页直读 {@code /api/outsource/order/page}
+     * （需 {@code outsource:order}）⇒ 只被授予 {@code outsource:return-order} 的用户会 403。
+     * 现走本页前缀，复用加工单模块的**同一分页查询**（形状与 {@code /outsource/order/page} 一致）。</p>
+     */
+    @GetMapping("/orders")
+    public R<Page<Map<String, Object>>> orders(@RequestParam(required = false) Long factoryId,
+                                               @RequestParam(defaultValue = "1") int pageNum,
+                                               @RequestParam(defaultValue = "10") int pageSize) {
+        return R.ok(outsourceOrderService.page(null, factoryId, null, pageNum, pageSize));
+    }
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(

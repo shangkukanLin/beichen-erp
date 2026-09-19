@@ -157,9 +157,10 @@ onActivated(() => {
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click.stop="goEdit(row)">编辑</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
+            <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发 -->
+            <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'sale:order:audit'" type="success" link @click.stop="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === DocStatus.AUDITED" v-perm="'sale:order:unaudit'" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'sale:order:cancel'" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

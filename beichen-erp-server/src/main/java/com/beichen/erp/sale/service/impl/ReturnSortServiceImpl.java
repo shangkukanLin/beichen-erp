@@ -28,6 +28,7 @@ import com.beichen.erp.sale.mapper.AfterSalePendingMapper;
 import com.beichen.erp.sale.mapper.ReturnSortItemMapper;
 import com.beichen.erp.sale.mapper.ReturnSortMapper;
 import com.beichen.erp.sale.service.ReturnSortService;
+import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.common.WarehouseType;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
@@ -65,6 +66,17 @@ public class ReturnSortServiceImpl implements ReturnSortService {
     private final FinanceReceivableMapper financeReceivableMapper;
     private final ReceivableHelper receivableHelper;
     private final WarehouseStockLogMapper stockLogMapper;
+
+    /** 待整理实物停留预警阈值（天）：与前端 form.vue 的 STAY_ALERT_DAYS 同值，随总览一起下发 */
+    private static final int STAY_ALERT_DAYS = 3;
+    /** 待整理行的三种状态（见 pendingRows） */
+    private static final String STATUS_SORTABLE = "SORTABLE";
+    private static final String STATUS_SHORTAGE = "SHORTAGE";
+    private static final String STATUS_CLEARED = "CLEARED";
+    /** 允许的默认分选品质（批量建草稿时整批预置） */
+    private static final Set<String> SORT_QUALITIES = new LinkedHashSet<>(Arrays.asList(
+            ProductQualityType.A.getCode(), ProductQualityType.B.getCode(),
+            ProductQualityType.C.getCode(), ProductQualityType.DEFECT.getCode()));
 
     @Override
     public Page<Map<String, Object>> page(String status, Long warehouseId, int pageNum, int pageSize) {
@@ -150,48 +162,280 @@ public class ReturnSortServiceImpl implements ReturnSortService {
      * <p>库存按 (仓库,产品,品质) 聚合、不记录来源，无法直接追溯。此处按批次ID 升序(FIFO)
      * 将售后仓待分类库存分配回各「售后待整理批次」（after_sale_pending，销售退单与销售换货单共用入口），
      * 使每行都能追溯到具体来源单据，并给出「原数量 / 已整理数量 / 本次可整理数量」。</p>
+     *
+     * <p>口径与 {@link #pendingOverview(boolean)} 完全一致（同一 {@link #pendingRows}），此处只保留
+     * 「本次可整理数量 &gt; 0」的行 —— 表单带入不可整理的行（已整理完 / 实物不足）没有意义。</p>
      */
     public List<Map<String, Object>> defectStock(Long warehouseId) {
         if (warehouseId == null) throw new BusinessException("仓库不能为空");
-        // 1) 售后仓待分类库存（按产品聚合）：决定实物有多少可整理
-        List<WarehouseStock> stocks = stockMapper.selectList(new LambdaQueryWrapper<WarehouseStock>()
-                .eq(WarehouseStock::getWarehouseId, warehouseId)
+        return pendingRows(List.of(warehouseId), false).stream()
+                .filter(r -> nz((BigDecimal) r.get("quantity")).compareTo(BigDecimal.ZERO) > 0)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public Map<String, Object> pendingOverview(boolean includeCleared) {
+        // 只覆盖**自有成品仓**（与新增页源仓库下拉同口径：INVENTORY + FINISHED）
+        List<Warehouse> whs = warehouseMapper.selectList(new LambdaQueryWrapper<Warehouse>()
+                .eq(Warehouse::getWarehouseCategory, WarehouseCategory.INVENTORY.getCode())
+                .eq(Warehouse::getWarehouseType, WarehouseType.FINISHED.getCode())
+                .orderByAsc(Warehouse::getId));
+        Map<Long, String> whNames = new LinkedHashMap<>();
+        for (Warehouse w : whs) whNames.put(w.getId(), w.getWarehouseName());
+
+        List<Map<String, Object>> rows = whNames.isEmpty() ? Collections.emptyList()
+                : pendingRows(whNames.keySet(), includeCleared);
+
+        // 按仓分组（仓库ID升序，与仓档列表一致；没有批次的仓不出现，避免总览被空仓淹没）
+        Map<Long, List<Map<String, Object>>> byWh = new LinkedHashMap<>();
+        for (Map<String, Object> r : rows) {
+            byWh.computeIfAbsent((Long) r.get("warehouseId"), k -> new ArrayList<>()).add(r);
+        }
+
+        List<Map<String, Object>> groups = new ArrayList<>();
+        int sCnt = 0, shCnt = 0, cCnt = 0, odCnt = 0;
+        BigDecimal sortableQty = BigDecimal.ZERO, remainQty = BigDecimal.ZERO;
+        for (Map.Entry<Long, List<Map<String, Object>>> e : byWh.entrySet()) {
+            List<Map<String, Object>> rs = e.getValue();
+            int sc = 0, shc = 0, cc = 0, od = 0, oldest = 0;
+            BigDecimal sq = BigDecimal.ZERO, rq = BigDecimal.ZERO;
+            for (Map<String, Object> r : rs) {
+                String st = String.valueOf(r.get("status"));
+                int days = ((Number) r.get("stayDays")).intValue();
+                if (days > oldest) oldest = days;
+                if (Boolean.TRUE.equals(r.get("overdue"))) od++;
+                if (STATUS_SORTABLE.equals(st)) {
+                    sc++;
+                    sq = sq.add(nz((BigDecimal) r.get("quantity")));
+                } else if (STATUS_SHORTAGE.equals(st)) {
+                    shc++;
+                } else {
+                    cc++;
+                }
+                rq = rq.add(nz((BigDecimal) r.get("remainQuantity")));
+            }
+            Map<String, Object> g = new LinkedHashMap<>();
+            g.put("warehouseId", e.getKey());
+            g.put("warehouseName", whNames.getOrDefault(e.getKey(), ""));
+            g.put("rows", rs);
+            g.put("batchCount", rs.size());
+            g.put("sortableCount", sc);
+            g.put("shortageCount", shc);
+            g.put("clearedCount", cc);
+            g.put("sortableQuantity", sq);
+            g.put("remainQuantity", rq);
+            g.put("oldestStayDays", oldest);
+            g.put("overdueCount", od);
+            groups.add(g);
+            sCnt += sc; shCnt += shc; cCnt += cc; odCnt += od;
+            sortableQty = sortableQty.add(sq);
+            remainQty = remainQty.add(rq);
+        }
+
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("warehouseCount", groups.size());
+        summary.put("batchCount", rows.size());
+        summary.put("sortableCount", sCnt);
+        summary.put("shortageCount", shCnt);
+        summary.put("clearedCount", cCnt);
+        summary.put("sortableQuantity", sortableQty);
+        summary.put("remainQuantity", remainQty);
+        summary.put("overdueCount", odCnt);
+
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("asOf", LocalDate.now().toString());
+        res.put("stayAlertDays", STAY_ALERT_DAYS);
+        res.put("warehouses", groups);
+        res.put("summary", summary);
+        return res;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> batchCreateDrafts(List<Long> pendingIds, ReturnSort template, String defaultQuality) {
+        if (pendingIds == null || pendingIds.isEmpty()) throw new BusinessException("请先勾选需要整理的来源批次");
+        if (template.getWarehouseId() != null)
+            throw new BusinessException("批量生成不支持指定源仓库：源仓库由勾选的批次决定");
+        String quality = defaultQuality == null || defaultQuality.isBlank()
+                ? ProductQualityType.A.getCode() : defaultQuality;
+        if (!SORT_QUALITIES.contains(quality)) throw new BusinessException("默认分选品质不合法：" + quality);
+
+        List<Long> ids = pendingIds.stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        if (ids.isEmpty()) throw new BusinessException("请先勾选需要整理的来源批次");
+        Map<Long, AfterSalePending> pm = afterSalePendingMapper.selectBatchIds(ids).stream()
+                .collect(Collectors.toMap(AfterSalePending::getId, p -> p, (a, b) -> a));
+
+        // 可整理量必须与总览**同一算法**（pendingRows 内含 FIFO 分配）：总览显示多少，批量就生成多少
+        Set<Long> whIds = ids.stream().map(pm::get).filter(Objects::nonNull)
+                .map(AfterSalePending::getWarehouseId).filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<Long, Map<String, Object>> rowByPending = new LinkedHashMap<>();
+        for (Map<String, Object> r : pendingRows(whIds, true)) rowByPending.put((Long) r.get("pendingId"), r);
+
+        // 按 (仓库, 客户) 分组：一张整理单只能对应一个客户（折损收款才有唯一对象），也便于按仓分单作业
+        Map<String, List<Map<String, Object>>> groups = new LinkedHashMap<>();
+        List<Map<String, Object>> skipped = new ArrayList<>();
+        for (Long pid : ids) {
+            AfterSalePending p = pm.get(pid);
+            if (p == null) { skipped.add(skipRow(pid, null, "来源批次不存在")); continue; }
+            Map<String, Object> r = rowByPending.get(pid);
+            BigDecimal alloc = r == null ? BigDecimal.ZERO : nz((BigDecimal) r.get("quantity"));
+            if (alloc.compareTo(BigDecimal.ZERO) <= 0) {
+                BigDecimal remain = nz(p.getQuantity()).subtract(nz(p.getSortedQuantity()));
+                skipped.add(skipRow(pid, p.getSourceCode(), remain.compareTo(BigDecimal.ZERO) <= 0
+                        ? "该批次已整理完"
+                        : "成品仓待分类实物不足（FIFO 已分配给更早批次）"));
+                continue;
+            }
+            groups.computeIfAbsent(p.getWarehouseId() + "#" + (p.getCustomerId() == null ? "-" : p.getCustomerId()),
+                    k -> new ArrayList<>()).add(r);
+        }
+        if (groups.isEmpty())
+            throw new BusinessException("勾选的批次当前都没有可整理数量（可能已整理完或实物不足），请刷新「待整理」列表后重试");
+
+        // 先整批构造 + 校验，再落库：避免中途失败留下半套草稿
+        List<ReturnSort> drafts = new ArrayList<>();
+        List<List<ReturnSortItem>> draftItems = new ArrayList<>();
+        ProductQualityType qt = ProductQualityType.of(quality);
+        for (Map.Entry<String, List<Map<String, Object>>> e : groups.entrySet()) {
+            List<Map<String, Object>> rs = e.getValue();
+            ReturnSort s = new ReturnSort();
+            s.setWarehouseId(((Number) rs.get(0).get("warehouseId")).longValue());
+            s.setSortDate(template.getSortDate() != null ? template.getSortDate() : LocalDate.now());
+            s.setTargetWarehouseA(template.getTargetWarehouseA());
+            s.setTargetWarehouseB(template.getTargetWarehouseB());
+            s.setTargetWarehouseC(template.getTargetWarehouseC());
+            s.setTargetWarehouseDefect(template.getTargetWarehouseDefect());
+            s.setLossAmount(template.getLossAmount() != null ? template.getLossAmount() : BigDecimal.ZERO);
+            s.setLossRemark(template.getLossRemark());
+            String auto = "批量生成：" + rs.size() + " 个来源批次，默认按"
+                    + (qt != null ? qt.getLabel() : quality) + "入库";
+            s.setRemark(template.getRemark() != null && !template.getRemark().isBlank()
+                    ? template.getRemark() : auto);
+
+            List<ReturnSortItem> items = new ArrayList<>();
+            for (Map<String, Object> r : rs) {
+                BigDecimal q = nz((BigDecimal) r.get("quantity"));
+                ReturnSortItem it = new ReturnSortItem();
+                it.setPendingId((Long) r.get("pendingId"));
+                it.setProductId((Long) r.get("productId"));
+                it.setProductName((String) r.get("productName"));
+                it.setUnit((String) r.get("unit"));
+                it.setTotalQuantity(q);
+                it.setQtyA(ProductQualityType.A.getCode().equals(quality) ? q : BigDecimal.ZERO);
+                it.setQtyB(ProductQualityType.B.getCode().equals(quality) ? q : BigDecimal.ZERO);
+                it.setQtyC(ProductQualityType.C.getCode().equals(quality) ? q : BigDecimal.ZERO);
+                it.setQtyDefect(ProductQualityType.DEFECT.getCode().equals(quality) ? q : BigDecimal.ZERO);
+                items.add(it);
+            }
+            validate(s, items);
+            drafts.add(s);
+            draftItems.add(items);
+        }
+
+        Map<Long, String> whNames = warehouseNames(drafts.stream().map(ReturnSort::getWarehouseId)
+                .collect(Collectors.toList()));
+        Map<Long, String> cusNames = customerNames(new ArrayList<>(pm.values()));
+        List<Map<String, Object>> created = new ArrayList<>();
+        for (int i = 0; i < drafts.size(); i++) {
+            ReturnSort s = drafts.get(i);
+            List<ReturnSortItem> items = draftItems.get(i);
+            create(s, items); // 生成单号 + 置草稿态 + 落库（同事务）
+            Map<String, Object> c = new LinkedHashMap<>();
+            c.put("id", s.getId());
+            c.put("code", s.getCode());
+            c.put("warehouseId", s.getWarehouseId());
+            c.put("warehouseName", whNames.getOrDefault(s.getWarehouseId(), ""));
+            // 分组键是 (仓库, 客户)，组内客户必然相同：取第一行批次上的客户即可代表本单
+            AfterSalePending first = items.get(0).getPendingId() == null ? null : pm.get(items.get(0).getPendingId());
+            Long cid = first == null ? null : first.getCustomerId();
+            c.put("customerId", cid);
+            c.put("customerName", cid == null ? "" : cusNames.getOrDefault(cid, ""));
+            c.put("itemCount", items.size());
+            c.put("quantity", items.stream().map(it -> nz(it.getTotalQuantity()))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
+            created.add(c);
+        }
+
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("created", created);
+        res.put("skipped", skipped);
+        res.put("draftCount", created.size());
+        return res;
+    }
+
+    /**
+     * 待整理批次 × 待分类(PENDING)实物的 **FIFO 分配**（跨仓批量版）。
+     *
+     * <p>这是「待整理」的唯一口径来源：{@link #defectStock(Long)}（表单带出）、
+     * {@link #pendingOverview(boolean)}（跨仓总览）、{@link #batchCreateDrafts}（批量建单）
+     * 全部走这里，避免出现"总览显示 80 件、表单只能整理 50 件"的口径漂移。</p>
+     *
+     * <p>库存按 (仓库,产品,品质) 聚合、不记录来源，故按批次ID 升序把实物分配回各批次：每行给出
+     * 原数量 / 已整理数量 / 剩余数量 / 本次可整理数量({@code quantity}) 与停留天数。状态三态：
+     * {@code SORTABLE} 可整理 · {@code SHORTAGE} 实物不足（账实不符）· {@code CLEARED} 已整理完。</p>
+     *
+     * @param includeCleared 是否包含「已整理完」（剩余 ≤ 0）的批次
+     */
+    private List<Map<String, Object>> pendingRows(Collection<Long> warehouseIds, boolean includeCleared) {
+        List<Map<String, Object>> res = new ArrayList<>();
+        if (warehouseIds == null) return res;
+        List<Long> ids = warehouseIds.stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        if (ids.isEmpty()) return res;
+
+        // 1) 各仓待分类(PENDING)实物，按 仓库+产品 聚合：决定每个仓每个产品实有多少可整理
+        Map<String, BigDecimal> avail = new LinkedHashMap<>();
+        for (WarehouseStock s : stockMapper.selectList(new LambdaQueryWrapper<WarehouseStock>()
+                .in(WarehouseStock::getWarehouseId, ids)
                 .eq(WarehouseStock::getQualityType, ProductQualityType.PENDING.getCode())
                 .gt(WarehouseStock::getQuantity, BigDecimal.ZERO)
-                .isNotNull(WarehouseStock::getProductId));
-        Map<Long, BigDecimal> avail = new LinkedHashMap<>();
-        for (WarehouseStock s : stocks) {
+                .isNotNull(WarehouseStock::getProductId))) {
             if (s.getProductId() == null) continue;
-            avail.merge(s.getProductId(), nz(s.getQuantity()), BigDecimal::add);
+            avail.merge(whProductKey(s.getWarehouseId(), s.getProductId()), nz(s.getQuantity()), BigDecimal::add);
         }
-        List<Map<String, Object>> res = new ArrayList<>();
-        if (avail.isEmpty()) return res;
 
-        // 2) 该售后仓的待整理批次（FIFO：批次ID 升序）
+        // 2) 各仓待整理批次（FIFO：批次ID 升序）
         List<AfterSalePending> pendings = afterSalePendingMapper.selectList(
                 new LambdaQueryWrapper<AfterSalePending>()
-                        .eq(AfterSalePending::getWarehouseId, warehouseId)
+                        .in(AfterSalePending::getWarehouseId, ids)
                         .orderByAsc(AfterSalePending::getId));
         if (pendings.isEmpty()) return res;
 
-        // 回填 SKU（非表字段），清单直接带出便于识别型号
+        // 回填 SKU 与客户名（均批量，避免逐行查库）、各「仓库+产品」最早待分类入库日期
         productService.fillSku(pendings, AfterSalePending::getProductId, AfterSalePending::setSku);
+        Map<Long, String> customerNames = customerNames(pendings);
+        Map<String, LocalDate> firstIns = firstPendingInDates(ids);
 
-        // 3) 批次按 FIFO 分配可用库存，逐行展开（同一产品可来自多张单据，各自独立成行以便追溯）
+        // 3) 逐批次 FIFO 分配（同一产品可来自多张单据，各自独立成行以便追溯）
         for (AfterSalePending pending : pendings) {
-            BigDecimal left = avail.get(pending.getProductId());
-            if (left == null || left.compareTo(BigDecimal.ZERO) <= 0) continue;
             BigDecimal remain = nz(pending.getQuantity()).subtract(nz(pending.getSortedQuantity()));
-            if (remain.compareTo(BigDecimal.ZERO) <= 0) continue; // 该批次已整理完
-            BigDecimal alloc = remain.min(left);
+            boolean cleared = remain.compareTo(BigDecimal.ZERO) <= 0;
+            if (cleared && !includeCleared) continue; // 已整理完：默认不返回（否则历史批次会淹没列表）
+            String k = whProductKey(pending.getWarehouseId(), pending.getProductId());
+            BigDecimal left = avail.getOrDefault(k, BigDecimal.ZERO);
+            BigDecimal alloc = cleared ? BigDecimal.ZERO : remain.min(left);
+            if (alloc.compareTo(BigDecimal.ZERO) > 0) avail.put(k, left.subtract(alloc));
+
+            LocalDate firstIn = firstIns.get(k);
+            int stayDays = firstIn == null ? 0
+                    : (int) Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(firstIn, LocalDate.now()));
             AfterSaleSourceType st = AfterSaleSourceType.fromCode(pending.getSourceType());
+
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("pendingId", pending.getId());
+            m.put("warehouseId", pending.getWarehouseId());
+            m.put("status", cleared ? STATUS_CLEARED
+                    : (alloc.compareTo(BigDecimal.ZERO) > 0 ? STATUS_SORTABLE : STATUS_SHORTAGE));
+            // 部分可整理：实物少于批次剩余量（其余部分实物不足，账实不符的轻量提示）
+            m.put("partial", !cleared && alloc.compareTo(BigDecimal.ZERO) > 0 && alloc.compareTo(remain) < 0);
             m.put("sourceType", pending.getSourceType());
             m.put("sourceTypeLabel", st != null ? st.getLabel() : pending.getSourceType());
             m.put("sourceId", pending.getSourceId());
             m.put("sourceCode", pending.getSourceCode() != null ? pending.getSourceCode() : "");
             m.put("sourceDate", pending.getSourceDate() != null ? pending.getSourceDate().toString() : "");
+            m.put("customerId", pending.getCustomerId());
+            m.put("customerName", pending.getCustomerId() == null ? ""
+                    : customerNames.getOrDefault(pending.getCustomerId(), ""));
             m.put("productId", pending.getProductId());
             m.put("sku", pending.getSku() != null ? pending.getSku() : "");
             m.put("productName", pending.getProductName() != null ? pending.getProductName() : "");
@@ -199,16 +443,62 @@ public class ReturnSortServiceImpl implements ReturnSortService {
             m.put("quantity", alloc);
             m.put("totalQuantity", nz(pending.getQuantity()));
             m.put("sortedQuantity", nz(pending.getSortedQuantity()));
+            m.put("remainQuantity", remain.max(BigDecimal.ZERO));
             m.put("unitPrice", nz(pending.getUnitPrice()));
-            // 停留天数：按该产品在售后仓最早的待分类入库日期计算（预警用，无流水则为 0）
-            LocalDate firstIn = firstPendingInDate(warehouseId, pending.getProductId());
-            m.put("stayDays", firstIn == null ? 0
-                    : Math.max(0, java.time.temporal.ChronoUnit.DAYS.between(firstIn, LocalDate.now())));
+            // 停留天数：按该产品在该仓最早的待分类入库日期计算（预警用，无流水则为 0）
+            m.put("stayDays", stayDays);
+            m.put("overdue", stayDays > STAY_ALERT_DAYS);
             res.add(m);
-            avail.put(pending.getProductId(), left.subtract(alloc));
         }
         return res;
     }
+
+    /** 批量建草稿的跳过项（勾选的批次已整理完 / 实物不足 / 不存在） */
+    private Map<String, Object> skipRow(Long pendingId, String sourceCode, String reason) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("pendingId", pendingId);
+        m.put("sourceCode", sourceCode != null ? sourceCode : "");
+        m.put("reason", reason);
+        return m;
+    }
+
+    private Map<Long, String> customerNames(List<AfterSalePending> pendings) {
+        List<Long> ids = pendings.stream().map(AfterSalePending::getCustomerId)
+                .filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        Map<Long, String> res = new LinkedHashMap<>();
+        if (ids.isEmpty()) return res;
+        for (Customer c : customerMapper.selectBatchIds(ids)) {
+            res.put(c.getId(), c.getName() != null ? c.getName() : "");
+        }
+        return res;
+    }
+
+    private Map<Long, String> warehouseNames(List<Long> warehouseIds) {
+        List<Long> ids = warehouseIds.stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        Map<Long, String> res = new LinkedHashMap<>();
+        if (ids.isEmpty()) return res;
+        for (Warehouse w : warehouseMapper.selectBatchIds(ids)) res.put(w.getId(), w.getWarehouseName());
+        return res;
+    }
+
+    /** 各「仓库+产品」最早的待分类(PENDING)入库日期（批量，替代逐行查询；停留天数预警用） */
+    private Map<String, LocalDate> firstPendingInDates(Collection<Long> warehouseIds) {
+        Map<String, LocalDate> res = new LinkedHashMap<>();
+        if (warehouseIds == null || warehouseIds.isEmpty()) return res;
+        List<WarehouseStockLog> logs = stockLogMapper.selectList(new LambdaQueryWrapper<WarehouseStockLog>()
+                .in(WarehouseStockLog::getWarehouseId, warehouseIds)
+                .eq(WarehouseStockLog::getQualityType, ProductQualityType.PENDING.getCode())
+                .gt(WarehouseStockLog::getChangeQuantity, BigDecimal.ZERO)
+                .orderByAsc(WarehouseStockLog::getCreateTime));
+        for (WarehouseStockLog log : logs) {
+            if (log.getProductId() == null || log.getCreateTime() == null) continue;
+            res.putIfAbsent(whProductKey(log.getWarehouseId(), log.getProductId()),
+                    log.getCreateTime().toLocalDate());
+        }
+        return res;
+    }
+
+    private String whProductKey(Long warehouseId, Long productId) { return warehouseId + "#" + productId; }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -465,18 +755,6 @@ public class ReturnSortServiceImpl implements ReturnSortService {
                         + " 超过售后仓可用待分类库存 " + avail + "，请刷新待整理库存后重试");
             assertSourceAvailable(it);
         }
-    }
-
-    /** 该产品在指定售后仓最早的待分类(PENDING)入库日期：用于计算实物停留天数（预警用） */
-    private LocalDate firstPendingInDate(Long warehouseId, Long productId) {
-        WarehouseStockLog log = stockLogMapper.selectOne(new LambdaQueryWrapper<WarehouseStockLog>()
-                .eq(WarehouseStockLog::getWarehouseId, warehouseId)
-                .eq(WarehouseStockLog::getProductId, productId)
-                .eq(WarehouseStockLog::getQualityType, ProductQualityType.PENDING.getCode())
-                .gt(WarehouseStockLog::getChangeQuantity, BigDecimal.ZERO)
-                .orderByAsc(WarehouseStockLog::getCreateTime)
-                .last("LIMIT 1"));
-        return log == null || log.getCreateTime() == null ? null : log.getCreateTime().toLocalDate();
     }
 
     private String nameOf(ReturnSortItem it) {

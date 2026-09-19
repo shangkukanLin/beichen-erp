@@ -428,6 +428,168 @@ public class DataInitializer implements ApplicationRunner {
         } catch (Exception e) {
             log.warn("调整 701 排序位异常: {}", e.getMessage());
         }
+
+        // F3-3（2026-09-18 接口级权限专项）：写页面级接口权限码（幂等）
+        initMenuPerms();
+    }
+
+    /**
+     * F3-3（2026-09-18 接口级权限专项）：给**页面菜单**写接口权限码 {@code sys_menu.perms}（幂等）。
+     *
+     * <p>口径：权限码 = {@code 模块:资源}，与页面菜单一一对应（仅 {@code menu_type='menu'} 的行有值，
+     * 目录(catalog) 恒为 NULL）。用户的有效权限 = 其**可见菜单**的权限码集合，由
+     * {@code StpInterfaceImpl.getPermissionList} 提供给 {@code @SaCheckPermission} ⇒
+     * 与侧栏同源，保证"看得见的页面，接口一定调得通"。</p>
+     *
+     * <p>注意：**已下线菜单**（104/302/303/405/409/503/602/701，visible=0）不在此表 —— 权限码只授给
+     * 在用页面；其页面若仍被复用（如 301 研发立项复用 BomController），注解取**复用页**的码。</p>
+     */
+    private void initMenuPerms() {
+        Object[][] perms = {
+                // ===== 首页 =====
+                {1L, "dashboard"},
+                // ===== 基础数据（目录 2）=====
+                {101L, "base:product"},
+                {102L, "base:brand"},
+                {103L, "base:material-type"},
+                {105L, "base:customer"},
+                {106L, "base:supplier"},
+                {107L, "outsource:supplier"},
+                {108L, "base:template"},
+                {403L, "outsource:material-info"},
+                // ===== 研发管理（目录 3）=====
+                {301L, "dev:project"},
+                {304L, "dev:material"},
+                {305L, "dev:screen-model"},
+                // ===== 委外加工（目录 4）=====
+                {401L, "outsource:order"},
+                {402L, "outsource:material-order"},
+                {408L, "outsource:return-order"},
+                {411L, "outsource:material-return"},
+                {412L, "outsource:order-delivery"},
+                {415L, "outsource:material-delivery"},
+                // ===== 进货业务（目录 5）=====
+                {501L, "purchase:order"},
+                {502L, "purchase:return"},
+                {504L, "purchase:exchange"},
+                // ===== 销售业务（目录 6）=====
+                {601L, "sale:order"},
+                {603L, "sale:return"},
+                {605L, "sale:exchange"},
+                // ===== 成品库存（目录 7）=====
+                {702L, "stock:warehouse"},
+                {703L, "stock:log"},
+                {704L, "stock:other-io"},
+                {705L, "stock:reclassify"},
+                {706L, "stock:warehouse-move"},
+                {707L, "stock:return-sort"},
+                {711L, "stock:stock-take"},
+                {712L, "stock:product-stock"},
+                {713L, "stock:stock-loss"},
+                // ===== 财务管理（目录 8）=====
+                {801L, "finance:receivable"},
+                {802L, "finance:payable"},
+                {803L, "finance:bill"},
+                {804L, "finance:cashflow"},
+                {805L, "finance:receipt"},
+                {806L, "finance:payment"},
+                {807L, "finance:account"},
+                {809L, "finance:expense"},
+                {810L, "finance:invoice"},
+                {811L, "finance:payable-transfer"},
+                // ===== 设置（目录 9）=====
+                {901L, "system:smart"},
+                {902L, "system:user"},
+                {904L, "system:settings"},
+                {905L, "system:data-manage"},
+                {906L, "system:role"},
+                {907L, "system:menu"},
+                {908L, "system:clear-data"},
+                // ===== 经营分析（目录 10）=====
+                {1001L, "analysis:overview"},
+                {1003L, "analysis:cash"},
+                {1004L, "analysis:tax"},
+                {1005L, "analysis:sale"},
+                {1006L, "analysis:customer"},
+                {1007L, "analysis:purchase"},
+                // ===== 物料仓库（目录 11）=====
+                {404L, "outsource:warehouse"},
+                {406L, "outsource:delivery"},
+                {407L, "outsource:other-io"},
+                {410L, "outsource:material-warehouse"},
+                {413L, "outsource:stock-loss"},
+                {414L, "outsource:material-stock-take"},
+        };
+        int updated = 0;
+        for (Object[] p : perms) {
+            try {
+                // 仅在"与目标值不同"时更新 —— 每次启动零写入（幂等）
+                updated += jdbcTemplate.update(
+                        "UPDATE sys_menu SET perms = ? WHERE id = ? AND (perms IS NULL OR perms <> ?)",
+                        p[1], p[0], p[1]);
+            } catch (Exception e) {
+                log.warn("写菜单权限码失败: id={}, err={}", p[0], e.getMessage());
+            }
+        }
+        // 目录/非页面菜单一律不携带权限码（防止历史脏值让"看不见的目录"被授出接口权限）
+        try {
+            // 只清目录，**保留 button 行**的权限码（按钮级权限就靠它承载）
+            int cleaned = jdbcTemplate.update("UPDATE sys_menu SET perms = NULL "
+                    + "WHERE (menu_type IS NULL OR menu_type NOT IN ('menu', 'button')) AND perms IS NOT NULL");
+            if (cleaned > 0) log.info("已清理非页面菜单的权限码 {} 条", cleaned);
+        } catch (Exception e) {
+            log.warn("清理目录权限码异常: {}", e.getMessage());
+        }
+        if (updated > 0) log.info("已同步菜单权限码 {} 条（F3-3 接口级权限）", updated);
+
+        // F3-3 按钮级权限（方案 A）：动作码登记为 sys_menu 的 button 行（挂在所属页面下）
+        initButtonPerms();
+    }
+
+    /**
+     * F3-3 按钮级权限（**方案 A：动作码默认跟随页面**）—— 把"审核/反审核/作废/删除"这类动作
+     * 登记为 {@code menu_type='button'} 的菜单行（挂在所属页面行下），权限码形如
+     * {@code purchase:exchange:audit}。
+     *
+     * <p>为什么用 sys_menu 行而不是硬编码常量：①动作清单可查、可在菜单管理页看到；②后端服务
+     * {@code MenuService.collectPermsWithButtons} 按 {@code parent_id ∈ 已授权页面} 自动带出动作码
+     * ⇒ **完全不改变现有授权数据**（无需给 6 个角色补授，升级零风险）；③将来若要切到"动作码独立授权"，
+     * 只需改那一处扩展逻辑（不再自动带出）+ 补授，本表即为授权 UI 的数据基础。</p>
+     */
+    private void initButtonPerms() {
+        // {id, parentPageId, 动作名, 动作码}
+        Object[][] buttons = {
+                {9101L, 504L, "审核", "purchase:exchange:audit"},
+                {9102L, 504L, "反审核", "purchase:exchange:unaudit"},
+                {9103L, 504L, "作废", "purchase:exchange:cancel"},
+                {9111L, 502L, "审核", "purchase:return:audit"},
+                {9112L, 502L, "反审核", "purchase:return:unaudit"},
+                {9113L, 502L, "作废", "purchase:return:cancel"},
+                {9114L, 502L, "删除", "purchase:return:delete"},
+                {9121L, 601L, "审核", "sale:order:audit"},
+                {9122L, 601L, "反审核", "sale:order:unaudit"},
+                {9123L, 601L, "作废", "sale:order:cancel"},
+                {9131L, 603L, "审核", "sale:return:audit"},
+                {9132L, 603L, "反审核", "sale:return:unaudit"},
+                {9133L, 603L, "作废", "sale:return:cancel"},
+                {9134L, 603L, "删除", "sale:return:delete"},
+        };
+        int processed = 0;
+        for (Object[] b : buttons) {
+            try {
+                jdbcTemplate.update(
+                        "INSERT INTO sys_menu (id, parent_id, menu_name, menu_type, route_path, route_name, "
+                                + "icon, sort_order, visible, status, perms) "
+                                + "VALUES (?, ?, ?, 'button', '', '', '', 0, 1, 1, ?) "
+                                + "ON DUPLICATE KEY UPDATE parent_id=VALUES(parent_id), menu_name=VALUES(menu_name), "
+                                + "menu_type='button', perms=VALUES(perms), visible=1, status=1",
+                        b[0], b[1], b[2], b[3]);
+                processed++;
+            } catch (Exception e) {
+                log.warn("同步按钮权限失败: id={}, err={}", b[0], e.getMessage());
+            }
+        }
+        log.info("已同步按钮级权限码 {} 条（方案 A：跟随页面自动授予）", processed);
     }
 
     /**

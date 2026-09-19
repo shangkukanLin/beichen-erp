@@ -34,6 +34,86 @@ public class DashboardService {
     private final JdbcTemplate jdbcTemplate;
     private final StockTakeService stockTakeService;
 
+    // 期 1（读隔离，2026-09-19）：首页原先前端直连各模块分页接口，属"跨页读"；改由本服务聚合
+    private final com.beichen.erp.purchase.service.PurchaseOrderService purchaseOrderService;
+    private final com.beichen.erp.purchase.service.PurchaseReturnService purchaseReturnService;
+    private final com.beichen.erp.outsource.service.OutsourceOrderService outsourceOrderService;
+    private final com.beichen.erp.outsource.service.MaterialOrderService materialOrderService;
+    // 期 1b（2026-09-19）：研发项目/阶段、销售单总数、客户分析也一并下沉
+    private final com.beichen.erp.dev.service.ProjectService projectService;
+    private final com.beichen.erp.sale.service.SaleOrderService saleOrderService;
+    private final com.beichen.erp.customer.service.CustomerAnalysisService customerAnalysisService;
+
+    /**
+     * 期 1（读隔离）：首页卡片所需的**跨模块只读**聚合，**按调用者 perms 过滤**。
+     *
+     * <p>背景：首页原先直接调 `/api/inventory/purchase/page`、`/api/outsource/order/page` 等模块接口
+     * （前端用 `if (hasModule.x)` 已经按菜单门控，但静态上仍是"跨页读"，会阻碍这些前缀的读隔离）。
+     * 现在由后端一次聚合；**缺对应页面码时该块不返回** ⇒ 前端自然不渲染，且权限判定在后端兜底
+     * （前端即使被绕过也拿不到无权数据）。</p>
+     *
+     * <p>形状与各模块 `/page` 接口**完全一致**（`Page<Map<String,Object>>`），前端下游逻辑无需改动。</p>
+     */
+    public Map<String, Object> modulePages() {
+        List<String> perms;
+        try {
+            perms = cn.dev33.satoken.stp.StpUtil.getPermissionList();
+        } catch (Exception e) {
+            perms = List.of();
+        }
+        Map<String, Object> res = new LinkedHashMap<>();
+        try {
+            if (perms.contains("purchase:order")) {
+                res.put("purchaseOrder", purchaseOrderService.page(null, null, null, 1, 200));
+            }
+            if (perms.contains("purchase:return")) {
+                res.put("purchaseReturn", purchaseReturnService.page(null, null, null, 1, 200));
+            }
+            if (perms.contains("outsource:order")) {
+                res.put("outsourceOrder", outsourceOrderService.page(null, null, null, 1, 200));
+            }
+            if (perms.contains("outsource:material-order")) {
+                res.put("materialOrder", materialOrderService.page(1, 200, null, null, null, null));
+            }
+            // 研发（期 1b）：项目分页 + 进行中项目（前 5）的阶段 —— 原前端要发 3 次请求
+            // （pageSize=1 取 total、pageSize=200 取记录、batch-phases POST 取阶段）
+            if (perms.contains("dev:project") || perms.contains("dev:material") || perms.contains("dev:screen-model")) {
+                com.beichen.erp.common.PageParam pp = new com.beichen.erp.common.PageParam();
+                pp.setPageNum(1);
+                pp.setPageSize(200);
+                var projPage = projectService.page(pp, null, null, null);
+                Map<String, Object> dev = new LinkedHashMap<>();
+                dev.put("projectPage", projPage);
+                List<Long> activeIds = new ArrayList<>();
+                if (projPage != null && projPage.getRecords() != null) {
+                    // records 是 Project 实体（该接口直接序列化实体，前端读 p.id/p.status）
+                    for (com.beichen.erp.dev.entity.Project r : projPage.getRecords()) {
+                        // 与前端同口径：ProjectStatus.IN_PROGRESS 的**前 5 个**（列表顺序一致）
+                        if ("IN_PROGRESS".equals(String.valueOf(r.getStatus())) && r.getId() != null) {
+                            activeIds.add(r.getId());
+                            if (activeIds.size() >= 5) break;
+                        }
+                    }
+                }
+                dev.put("phases", activeIds.isEmpty() ? Map.of() : projectService.batchPhases(activeIds));
+                res.put("dev", dev);
+            }
+            // 销售（期 1b）：仅总单数（原前端拉 /inventory/sale/page?pageSize=1 只为取 total）
+            if (perms.contains("sale:order")) {
+                Map<String, Object> sale = new LinkedHashMap<>();
+                sale.put("total", saleOrderService.page(null, null, null, null, null, 1, 1).getTotal());
+                res.put("sale", sale);
+            }
+            // 客户分析（期 1b）：本月客户 TOP5 + 合计（原前端 /customer/analysis?preset=month）
+            if (perms.contains("analysis:customer")) {
+                res.put("customerAnalysis", customerAnalysisService.customer("month", null, null));
+            }
+        } catch (Exception e) {
+            log.warn("首页模块聚合失败: {}", e.getMessage());
+        }
+        return res;
+    }
+
     /** 待办与预警汇总 */
     public Map<String, Object> pending() {
         Long cid = CompanyContext.get();

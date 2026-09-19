@@ -98,7 +98,7 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
 import request from '@/utils/request'
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
-import { getPurchaseReturnPurchaseOrderItems } from '@/api/purchase'
+import { getPurchaseReturnPurchaseOrderItems, getPurchaseReturnSourceOrder } from '@/api/purchase'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 interface ReturnItem {
@@ -140,7 +140,8 @@ async function loadFromPurchaseOrder(orderId?: number) {
   const oid = orderId || form.purchaseOrderId
   if (!oid) { ElMessage.warning('未关联采购单'); return }
   try {
-    const order: any = await request.get(`/inventory/purchase/${oid}`)
+    // 期 3（2026-09-19 读隔离）：来源采购单改走退货页自身前缀（原读 /inventory/purchase/{id} 需 purchase:order）
+    const order: any = await getPurchaseReturnSourceOrder(oid)
     if (order) {
       form.supplierId = order.supplierId
       form.warehouseId = order.warehouseId

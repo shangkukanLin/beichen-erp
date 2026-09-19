@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.beichen.erp.common.R;
 import com.beichen.erp.sale.entity.SaleReturn;
 import com.beichen.erp.sale.entity.SaleReturnItem;
+import com.beichen.erp.sale.entity.SaleOrder;
+import com.beichen.erp.sale.service.SaleOrderService;
 import com.beichen.erp.sale.service.SaleReturnService;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,9 +20,12 @@ import java.util.Map;
 public class SaleReturnController {
 
     private final SaleReturnService service;
+    // 期 3（2026-09-19 读隔离）：退货页的「来源销售单」读取改由本页接口提供
+    private final SaleOrderService saleOrderService;
 
-    public SaleReturnController(SaleReturnService service) {
+    public SaleReturnController(SaleReturnService service, SaleOrderService saleOrderService) {
         this.service = service;
+        this.saleOrderService = saleOrderService;
     }
 
     @GetMapping("/page")
@@ -59,7 +64,18 @@ public class SaleReturnController {
 
     @GetMapping("/sale-orders")
     public R<List<Map<String, Object>>> saleOrders(@RequestParam(required = false) Long customerId) {
-        return R.ok(service.saleOrders(customerId));
+        return R.ok(saleOrderService.auditedOrdersOfCustomer(customerId));
+    }
+
+    /**
+     * 来源销售单（退货页带 {@code ?saleOrderId=} 跳转时反查客户 / 单号）。
+     * <p>期 3（2026-09-19 读隔离）：原先退货页直读 {@code /api/inventory/sale/{id}}
+     * （需 {@code sale:order}）⇒ 只被授予 {@code sale:return} 的用户会 403。现走本页前缀，
+     * 返回体与原销售单详情**逐字段一致**（同一实体，前端取值零改动）。</p>
+     */
+    @GetMapping("/source-order")
+    public R<SaleOrder> sourceOrder(@RequestParam Long saleOrderId) {
+        return R.ok(saleOrderService.getById(saleOrderId));
     }
 
     @GetMapping("/sale-order-items")

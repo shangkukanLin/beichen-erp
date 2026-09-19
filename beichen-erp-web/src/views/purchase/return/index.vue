@@ -42,10 +42,11 @@
         <el-table-column label="操作" width="200" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
-            <el-button v-if="row.status === ReturnStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === ReturnStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
+            <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发 -->
+            <el-button v-if="row.status === ReturnStatus.DRAFT" v-perm="'purchase:return:audit'" type="success" link @click.stop="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === ReturnStatus.AUDITED" v-perm="'purchase:return:unaudit'" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
             <el-button v-if="row.status === ReturnStatus.DRAFT" type="warning" link @click.stop="handleEdit(row)">编辑</el-button>
-            <el-button v-if="row.status === ReturnStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
+            <el-button v-if="row.status === ReturnStatus.DRAFT" v-perm="'purchase:return:cancel'" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

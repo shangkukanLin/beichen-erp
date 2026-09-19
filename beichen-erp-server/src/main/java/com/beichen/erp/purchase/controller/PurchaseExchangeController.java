@@ -3,7 +3,9 @@ package com.beichen.erp.purchase.controller;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.beichen.erp.common.R;
 import com.beichen.erp.purchase.entity.PurchaseExchange;
+import com.beichen.erp.purchase.entity.PurchaseOrder;
 import com.beichen.erp.purchase.service.PurchaseExchangeService;
+import com.beichen.erp.purchase.service.PurchaseOrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,6 +19,11 @@ import java.util.Map;
 
 /**
  * 采购换货单接口（进货业务，同品换货，强关联采购单；2026-09-18 新增）
+ *
+ * <p>F3-3（2026-09-18 接口级权限专项）：本模块接口受页面级权限保护 ——
+ * {@code ApiPermGuard} 中 {@code /api/inventory/purchase-exchange → purchase:exchange}
+ * （权限码来自菜单 504「采购换货单」）。用户被收掉该页面后**直调接口即 403**
+ * （原先：只有前端不显示菜单，接口仍可调）。</p>
  */
 @RestController
 @RequestMapping("/api/inventory/purchase-exchange")
@@ -24,6 +31,8 @@ import java.util.Map;
 public class PurchaseExchangeController {
 
     private final PurchaseExchangeService exchangeService;
+    // 期 3（2026-09-19 读隔离）：换货页要读「来源采购单」，改由本页接口提供
+    private final PurchaseOrderService purchaseOrderService;
 
     /** 分页列表 */
     @GetMapping("/page")
@@ -31,6 +40,17 @@ public class PurchaseExchangeController {
                                               @RequestParam(defaultValue = "10") long pageSize,
                                               @RequestParam Map<String, Object> q) {
         return R.ok(exchangeService.page(pageNum, pageSize, q));
+    }
+
+    /**
+     * 来源采购单（采购单详情「换货」跳转时反查供货商 / 换货仓 / 单号）。
+     * <p>期 3（2026-09-19 读隔离）：原先换货页直读 {@code /api/inventory/purchase/{id}}
+     * （需 {@code purchase:order}）⇒ 只被授予 {@code purchase:exchange} 的用户会 403。现走本页前缀，
+     * 返回体与原采购单详情**逐字段一致**（同一实体，前端取值零改动）。</p>
+     */
+    @GetMapping("/source-order")
+    public R<PurchaseOrder> sourceOrder(@RequestParam Long purchaseOrderId) {
+        return R.ok(purchaseOrderService.getById(purchaseOrderId));
     }
 
     /** 详情（含明细） */

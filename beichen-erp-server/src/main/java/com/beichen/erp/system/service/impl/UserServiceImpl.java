@@ -417,6 +417,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             if (id == null) continue;
             Menu m = all.get(id);
             if (m == null || m.getStatus() == null || m.getStatus() != 1) continue;
+            // F3-1（2026-09-18 审核修复）：只接受「启用且可见」的菜单 —— 已下线的历史菜单不应再进用户级授权记录
+            if (m.getVisible() != null && m.getVisible() != 1) continue;
             result.add(id);
             Long pid = m.getParentId();
             int guard = 0;

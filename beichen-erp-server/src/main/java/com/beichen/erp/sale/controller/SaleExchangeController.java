@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.beichen.erp.common.R;
 import com.beichen.erp.sale.entity.SaleExchange;
 import com.beichen.erp.sale.entity.SaleExchangeItem;
+import com.beichen.erp.sale.entity.SaleOrder;
 import com.beichen.erp.sale.service.SaleExchangeService;
+import com.beichen.erp.sale.service.SaleOrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,6 +27,30 @@ import java.util.Map;
 public class SaleExchangeController {
 
     private final SaleExchangeService exchangeService;
+    // 期 3（2026-09-19 读隔离）：换货页的「来源销售单」读取改由本页接口提供
+    private final SaleOrderService saleOrderService;
+
+    /**
+     * 某客户**已审核**的销售单（换货页「来源销售单」下拉）。
+     * <p>期 3（2026-09-19 读隔离）：原先换货页直读**退货页**的 {@code /api/sale/return/sale-orders}
+     * （需 {@code sale:return}）⇒ 只被授予 {@code sale:exchange} 的用户会 403。
+     * 现由本页前缀提供，与退货页共用销售单模块的**同一查询**（{@link SaleOrderService#auditedOrdersOfCustomer}）。</p>
+     */
+    @GetMapping("/sale-orders")
+    public R<List<Map<String, Object>>> saleOrders(@RequestParam(required = false) Long customerId) {
+        return R.ok(saleOrderService.auditedOrdersOfCustomer(customerId));
+    }
+
+    /**
+     * 来源销售单（换货页带 {@code ?saleOrderId=} 跳转时反查客户 / 单号 / 出库仓）。
+     * <p>期 3（2026-09-19 读隔离）：原先换货页直读 {@code /api/inventory/sale/{id}}
+     * （需 {@code sale:order}）⇒ 只被授予 {@code sale:exchange} 的用户会 403。现走本页前缀，
+     * 返回体与原销售单详情**逐字段一致**（同一实体，前端取值零改动）。</p>
+     */
+    @GetMapping("/source-order")
+    public R<SaleOrder> sourceOrder(@RequestParam Long saleOrderId) {
+        return R.ok(saleOrderService.getById(saleOrderId));
+    }
 
     /** 分页列表 */
     @GetMapping("/page")

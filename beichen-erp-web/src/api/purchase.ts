@@ -167,6 +167,13 @@ export function getPurchaseReturnByOrder(purchaseOrderId: number) {
 export function getPurchaseReturnPurchaseOrderItems(purchaseOrderId: number) {
   return request.get<any[]>(`/inventory/purchase-return/purchase-order-items`, { params: { purchaseOrderId } })
 }
+/**
+ * 来源采购单头（退货页「从采购单带入明细」反查供货商 / 退货仓库 / 单号）。
+ * 期 3（2026-09-19 读隔离）：走退货页自身前缀（原直读 `/inventory/purchase/{id}` 需 purchase:order）。
+ */
+export function getPurchaseReturnSourceOrder(purchaseOrderId: number) {
+  return request.get<PurchaseOrder>(`/inventory/purchase-return/source-order`, { params: { purchaseOrderId } })
+}
 
 // ---- 采购换货单 API（进货业务：把采购成品退回供货商换新；同品换货、强关联采购单；2026-09-18 新增） ----
 
@@ -175,6 +182,13 @@ export function getPurchaseExchangePage(params: any) {
 }
 export function getPurchaseExchange(id: number) {
   return request.get<any>(`/inventory/purchase-exchange/${id}`)
+}
+/**
+ * 来源采购单头（采购单详情「换货」跳转时反查供货商 / 换货仓 / 单号）。
+ * 期 3（2026-09-19 读隔离）：走换货页自身前缀（原直读 `/inventory/purchase/{id}` 需 purchase:order）。
+ */
+export function getPurchaseExchangeSourceOrder(purchaseOrderId: number) {
+  return request.get<any>(`/inventory/purchase-exchange/source-order`, { params: { purchaseOrderId } })
 }
 export function createPurchaseExchange(data: any) {
   return request.post<any>('/inventory/purchase-exchange', data)

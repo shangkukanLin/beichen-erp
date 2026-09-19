@@ -144,6 +144,7 @@ import {
 import {
   getPurchaseExchange, createPurchaseExchange, updatePurchaseExchange,
   getPurchaseExchangePurchaseOrders, getPurchaseExchangePurchaseOrderItems,
+  getPurchaseExchangeSourceOrder,
 } from '@/api/purchase'
 
 const route = useRoute()
@@ -223,7 +224,8 @@ async function onPurchaseOrderChange(purchaseOrderId: number | null, opt: any) {
  */
 async function initFromPurchaseOrder(orderId: number) {
   try {
-    const po: any = await request.get(`/inventory/purchase/${orderId}`)
+    // 期 3（2026-09-19 读隔离）：来源采购单改走换货页自身前缀（原读 /inventory/purchase/{id} 需 purchase:order）
+    const po: any = await getPurchaseExchangeSourceOrder(orderId)
     if (!po) { ElMessage.warning('来源采购单不存在'); return }
     form.supplierId = po.supplierId
     form.purchaseOrderId = po.id

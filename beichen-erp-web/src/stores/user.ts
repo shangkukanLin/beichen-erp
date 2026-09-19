@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import router from '@/router'
 import { getUserMenuTree, getMyDashboardTabs, type MenuVO } from '@/api/system'
+import { getMyPerms } from '@/api/auth'
 import { SUPER_ADMIN_ROLE_CODE, ADMIN_ROLE_CODE } from '@/constants/system'
 
 interface UserInfo {
@@ -9,6 +10,8 @@ interface UserInfo {
   phone?: string
   dept?: string | null
   status?: number
+  /** F3-3：接口权限码（页面码 + 按钮动作码），登录时由后端下发 */
+  perms?: string[]
   avatar?: string
   roles?: string[]
   companyId?: number
@@ -30,6 +33,13 @@ export const useUserStore = defineStore('user', {
   }),
   getters: {
     isLogin: (state) => !!state.token,
+    /**
+     * F3-3（2026-09-18）按钮级权限：接口权限码（页面码 + 按钮动作码）。
+     * 来源＝登录响应 userInfo.perms（方案 A：动作码跟随页面自动带出）。
+     */
+    perms: (state) => (state.userInfo?.perms || []) as string[],
+    /** 是否持有某权限码（`v-perm` 指令与页面内判定共用同一口径） */
+    hasPerm: (state) => (code: string) => (state.userInfo?.perms || []).includes(code),
     isAdmin: (state) => {
       const roles = state.userInfo?.roles || []
       return roles.includes(SUPER_ADMIN_ROLE_CODE) || roles.includes(ADMIN_ROLE_CODE)
@@ -81,6 +91,9 @@ export const useUserStore = defineStore('user', {
         // 顺带刷新首页 TAB 勾选（管理员可能改过）
         const tabs = await getMyDashboardTabs()
         this.setDashboardTabs(tabs)
+        // 顺带刷新权限码（页面码 + 按钮动作码）：管理员改过授权后，按钮显隐随之更新
+        const perms = await getMyPerms()
+        if (perms && this.userInfo) this.setUserInfo({ ...this.userInfo, perms })
       } catch { /* 网络异常时保留当前菜单 */ }
     },
     logout() {

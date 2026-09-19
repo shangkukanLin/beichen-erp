@@ -2,9 +2,11 @@ package com.beichen.erp.finance.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.entity.FinancePayment;
 import com.beichen.erp.finance.entity.FinancePaymentItem;
 import com.beichen.erp.finance.service.FinancePaymentService;
+import com.beichen.erp.finance.service.PayableQuery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +22,8 @@ import java.util.Map;
 public class FinancePaymentController {
 
     private final FinancePaymentService service;
+    // 期 2（2026-09-19 读隔离）：付款页要用的应付数据由本页接口提供（与应付页共用 PayableQuery）
+    private final PayableQuery payableQuery;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -29,6 +33,35 @@ public class FinancePaymentController {
             @RequestParam(defaultValue = "1") int pageNum,
             @RequestParam(defaultValue = "10") int pageSize) {
         return R.ok(service.page(supplierId, supplierType, status, pageNum, pageSize));
+    }
+
+    /**
+     * 应付汇总（付款页 Tab1「供应商汇总」）。
+     * <p>期 2（2026-09-19 读隔离）：原先付款页直读 {@code /api/finance/payable/supplier-summary}
+     * （需 {@code finance:payable}）⇒ 只被授予 {@code finance:payment} 的用户会 403。现由本页接口提供。</p>
+     */
+    @GetMapping("/payable-summary")
+    public R<List<Map<String, Object>>> payableSummary() {
+        return R.ok(payableQuery.supplierSummary());
+    }
+
+    /** 应付明细（供应商付款页）：原读 {@code /api/finance/payable/page} */
+    @GetMapping("/payables")
+    public R<Page<Map<String, Object>>> payables(
+            @RequestParam(required = false) Long supplierId,
+            @RequestParam(required = false) String supplierType,
+            @RequestParam(required = false) String sourceBillType,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String billNo,
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize) {
+        return R.ok(payableQuery.page(supplierId, supplierType, sourceBillType, status, billNo, pageNum, pageSize));
+    }
+
+    /** 未结清应付（新增付款弹窗的核销下拉）：原读 {@code /api/finance/payable/unpaid} */
+    @GetMapping("/unpaid-payables")
+    public R<List<FinancePayable>> unpaidPayables(@RequestParam Long supplierId) {
+        return R.ok(payableQuery.unpaid(supplierId));
     }
 
     @GetMapping("/{id}")

@@ -32,3 +32,8 @@ export function getUserInfo() {
   return request.get<UserInfo>('/auth/info')
 }
 
+/** F3-3：当前用户的接口权限码（页面码 + 按钮动作码），供 v-perm 按钮 gating 使用 */
+export function getMyPerms() {
+  return request.get<string[]>('/auth/perms')
+}
+

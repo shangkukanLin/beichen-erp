@@ -2,9 +2,14 @@ package com.beichen.erp.sale.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
+import com.beichen.erp.finance.service.FinanceReceiptService;
 import com.beichen.erp.sale.entity.SaleOrder;
 import com.beichen.erp.sale.entity.SaleOrderItem;
+import com.beichen.erp.sale.service.SaleExchangeService;
 import com.beichen.erp.sale.service.SaleOrderService;
+import com.beichen.erp.sale.service.SaleReturnService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -20,6 +25,12 @@ import java.util.Map;
 public class SaleOrderController {
 
     private final SaleOrderService service;
+    // 期 2（2026-09-19 读隔离）：详情页的关联摘要下沉到本页接口，不再去读别人的接口
+    private final SaleReturnService saleReturnService;
+    private final SaleExchangeService saleExchangeService;
+    private final FinanceReceiptService financeReceiptService;
+    /** 必须用 Spring 容器里的 ObjectMapper（含 JavaTimeModule，见 SystemController 的说明），不要手拼 Map */
+    private final ObjectMapper objectMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -34,8 +45,27 @@ public class SaleOrderController {
         return R.ok(service.page(status, customerId, code, startDate, endDate, pageNum, pageSize));
     }
 
+    /**
+     * 详情（期 2·2026-09-19 读隔离：**关联摘要随详情一并返回**）。
+     *
+     * <p>原先销售单详情页要分别读三个**别的页面**的接口：收款单 {@code /api/finance/receipt/by-source}、
+     * 退货单 {@code /api/sale/return/page}、换货单 {@code /api/sale/exchange/page} —— 只被授予
+     * {@code sale:order} 的用户直调它们会 403（页面看得见、数据读不出）。现全部改由本页接口返回：
+     * 响应体 = 实体原字段（JSON 路径不变，前端 {@code head.xxx} 零改动）+ 追加
+     * {@code receipts / returns / exchanges}。</p>
+     */
     @GetMapping("/{id}")
-    public R<SaleOrder> getById(@PathVariable Long id) { return R.ok(service.getById(id)); }
+    public R<Map<String, Object>> getById(@PathVariable Long id) {
+        SaleOrder o = service.getById(id);
+        if (o == null) return R.ok(Map.of());
+        Map<String, Object> m = objectMapper.convertValue(o, new TypeReference<Map<String, Object>>() {});
+        // 本单自动生成的收款单（销售单现金结算联动；含已作废，与 /finance/receipt/by-source 同口径）
+        m.put("receipts", financeReceiptService.findBySource("SALE_ORDER", id));
+        // 本单发起的退货单 / 换货单（原前端取 pageSize=100，此处同口径）
+        m.put("returns", saleReturnService.page(null, null, null, id, 1, 100).getRecords());
+        m.put("exchanges", saleExchangeService.page(1, 100, Map.of("saleOrderId", id)).getRecords());
+        return R.ok(m);
+    }
 
     @GetMapping("/{id}/items")
     public R<List<SaleOrderItem>> getItems(@PathVariable Long id) { return R.ok(service.getItems(id)); }

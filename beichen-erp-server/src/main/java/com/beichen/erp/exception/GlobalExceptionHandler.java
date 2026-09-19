@@ -1,6 +1,7 @@
 package com.beichen.erp.exception;
 
 import cn.dev33.satoken.exception.NotLoginException;
+import cn.dev33.satoken.exception.NotPermissionException;
 import cn.dev33.satoken.exception.NotRoleException;
 import com.beichen.erp.common.R;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +40,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NotRoleException.class)
     public R<Void> handleNotRoleException(NotRoleException e) {
         log.warn("无权限访问: {}", e.getMessage());
+        return R.fail(403, "无权限访问");
+    }
+
+    /**
+     * F3-3（2026-09-18 接口级权限专项）：{@code @SaCheckPermission} 校验失败（缺页面级接口权限码）。
+     * <p>此前该类异常未被覆盖 ⇒ 会掉进兜底变成 500「系统异常」，前端无法区分"没权限"与"服务出错"
+     * （越权探测也拿不到清晰的拒绝信号）；现与 {@link NotRoleException} 口径一致返回 403。</p>
+     */
+    @ExceptionHandler(NotPermissionException.class)
+    public R<Void> handleNotPermissionException(NotPermissionException e) {
+        log.warn("无接口权限: {}", e.getMessage());
         return R.fail(403, "无权限访问");
     }
 

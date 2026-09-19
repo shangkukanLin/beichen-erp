@@ -50,6 +50,19 @@ public class OutsourceOtherIoController {
     private final WarehouseMapper warehouseMapper;
     private final com.beichen.erp.warehouse.service.CostService costService;
     private final WarehouseStockService warehouseStockService;
+    // 期 3（2026-09-19 读隔离）：物料加权通常需读「物料收发单」模块的同一查询
+    private final com.beichen.erp.outsource.service.DeliveryService deliveryService;
+
+    /**
+     * 某个工厂某个物料的**加权平均单价**（委外仓选物料时自动带出单价）。
+     * <p>期 3（2026-09-19 读隔离）：原先本模块三个页面（新增/编辑/详情）直读物料收发单模块的
+     * {@code /api/outsource/delivery/material-weighted-price}（需 {@code outsource:delivery}）
+     * ⇒ 只被授予 {@code outsource:other-io} 的用户会 403。现走本页前缀，复用同一计算方法，单价口径不变。</p>
+     */
+    @GetMapping("/material-weighted-price")
+    public R<BigDecimal> materialWeightedPrice(@RequestParam Long factoryId, @RequestParam Long materialId) {
+        return R.ok(deliveryService.calcWeightedPrice(factoryId, materialId));
+    }
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(

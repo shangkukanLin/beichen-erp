@@ -861,15 +861,16 @@ function checkUserMenus() {
 }
 
 async function loadStats() {
+  // 期 1（读隔离，2026-09-19）：跨模块只读改为后端聚合 /dashboard/module-pages（后端按 perms 过滤），
+  // 不再由前端直连 /inventory/purchase、/inventory/purchase-return、/outsource/order、/outsource/material-order。
+  const aggRes: any = await request.get<any, any>('/dashboard/module-pages').catch(() => ({}))
   try {
     // 项目研发
     if (hasModule.dev) {
-      const [projRes, allProjRes] = await Promise.all([
-        request.get<any, any>('/dev/project/page', { params: { pageSize: 1 } }).catch(() => ({})),
-        request.get<any, any>('/dev/project/page', { params: { pageSize: 200 } }).catch(() => ({})),
-      ])
-      const projTotal = projRes?.total || 0
-      const allRecords = allProjRes?.records || []
+      // 期 1b（读隔离）：项目分页 + 阶段改由 /dashboard/module-pages 一次返回（原为 3 次跨页请求）
+      const projPage: any = aggRes?.dev?.projectPage || {}
+      const projTotal = projPage?.total || 0
+      const allRecords = projPage?.records || []
       let inProgress = 0, finished = 0
       const activeProjects: any[] = []
       allRecords.forEach((p: any) => {
@@ -880,21 +881,14 @@ async function loadStats() {
       devTotal.value = projTotal
       devInProgress.value = inProgress
       devFinished.value = finished
-      // 加载进行中项目的项目阶段
-      if (activeProjects.length > 0) {
-        try {
-          const tlRes = await request.post('/dev/project/batch-phases', activeProjects.map((p: any) => p.id))
-          dashboardPhaseMap.value = tlRes || {}
-        } catch { /* ignore */}
-      }
+      // 加载进行中项目的项目阶段（期 1b：由聚合接口一并返回，口径 = IN_PROGRESS 前 5 个）
+      dashboardPhaseMap.value = aggRes?.dev?.phases || {}
     }
   } catch { /* ignore */}
   try {
     if (hasModule.outsource) {
-      const [allOrderRes, allMatRes] = await Promise.all([
-        request.get<any, any>('/outsource/order/page', { params: { pageSize: 200 } }).catch(() => ({})),
-        request.get<any, any>('/outsource/material-order/page', { params: { pageSize: 200 } }).catch(() => ({})),
-      ])
+      const allOrderRes = aggRes?.outsourceOrder || {}
+      const allMatRes = aggRes?.materialOrder || {}
       const allOrders = allOrderRes?.records || []
       let pending = 0, inProd = 0
       const activeList: any[] = []
@@ -919,11 +913,11 @@ async function loadStats() {
   } catch { /* ignore */}
   try {
     if (hasModule.purchase) {
-      const [purRes, retRes, supRes] = await Promise.all([
-        request.get<any, any>('/inventory/purchase/page', { params: { pageSize: 200 } }).catch(() => ({})),
-        request.get<any, any>('/inventory/purchase-return/page', { params: { pageSize: 200 } }).catch(() => ({})),
+      const [supRes] = await Promise.all([
         request.get<any, any>('/supplier/page', { params: { pageSize: 1 } }).catch(() => ({})),
       ])
+      const purRes = aggRes?.purchaseOrder || {}
+      const retRes = aggRes?.purchaseReturn || {}
       const purchases = purRes?.records || []
       purchaseMonthAmount.value = purchases
         .filter((p: any) => p.status === 'AUDITED' && (p.orderDate || '').startsWith(curMonth))
@@ -941,16 +935,14 @@ async function loadStats() {
   } catch { /* ignore */}
   try {
     if (hasModule.sale) {
-      const [saleRes, cusRes, custAnRes, workRes] = await Promise.all([
-        // 销售单总数：只取 total（pageSize=1，不再拉 200 条明细）
-        request.get<any, any>('/inventory/sale/page', { params: { pageSize: 1 } }).catch(() => ({})),
+      // 期 1b（读隔离）：销售单总数与「本月客户 TOP5」改由 /dashboard/module-pages 返回；
+      // 客户档案（共享基础数据）与销售工作台（本模块接口）仍直连。
+      const [cusRes, workRes] = await Promise.all([
         request.get<any, any>('/inventory/customer/page', { params: { pageSize: 200 } }).catch(() => ({})),
-        // 本月客户 TOP5：服务端整月聚合（preset=month = 本月 1 日~今天），不再从"最近 200 张销售单"里筛
-        request.get<any, any>('/customer/analysis', { params: { preset: 'month' } }).catch(() => ({})),
         // 销售工作台（2026-09-15）：**当日单据量** 4 项（销售单/退单/换货单/退货整理单）
-        // ——原先"待审核销售单"要单独发一次分页请求，现由该接口一并返回
         request.get<any, any>('/dashboard/sale-workbench').catch(() => ({})),
       ])
+      const custAnRes: any = aggRes?.customerAnalysis || {}
       const mSum: any = custAnRes?.summary || {}
       // 销售工作台数据（服务端一次聚合；口径见 DashboardService.saleWorkbench 注释）
       saleWork.value = workRes && workRes.todos ? workRes : { todos: {} }
@@ -968,7 +960,7 @@ async function loadStats() {
         }
       })
       customerTotal.value = cusRes?.total || 0
-      saleTotal.value = saleRes?.total || 0
+      saleTotal.value = Number(aggRes?.sale?.total || 0)
     }
   } catch { /* ignore */}
   try {

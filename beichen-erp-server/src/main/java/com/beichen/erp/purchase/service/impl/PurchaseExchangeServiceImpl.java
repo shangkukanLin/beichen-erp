@@ -119,19 +119,35 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
                     .stream().collect(Collectors.groupingBy(PurchaseExchangeItem::getExchangeId));
         }
         Map<Long, List<PurchaseExchangeItem>> finalItemsMap = itemsMap;
+        // F1-5（2026-09-18 审核修复）：供货商/仓库名一次性批量取（原来每行 3 次 selectById → N+1）
+        Set<Long> supIds = p.getRecords().stream().map(PurchaseExchange::getSupplierId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, String> supNameMap = new HashMap<>();
+        if (!supIds.isEmpty())
+            supplierMapper.selectBatchIds(supIds).forEach(s ->
+                    supNameMap.put(s.getId(), s.getName() == null ? "" : s.getName()));
+        Set<Long> whIds = new java.util.HashSet<>();
+        for (PurchaseExchange e : p.getRecords()) {
+            if (e.getWarehouseOutId() != null) whIds.add(e.getWarehouseOutId());
+            if (e.getWarehouseInId() != null) whIds.add(e.getWarehouseInId());
+        }
+        Map<Long, String> whNameMap = new HashMap<>();
+        if (!whIds.isEmpty())
+            warehouseMapper.selectBatchIds(whIds).forEach(wh ->
+                    whNameMap.put(wh.getId(), wh.getWarehouseName() == null ? "" : wh.getWarehouseName()));
         List<Map<String, Object>> rows = new ArrayList<>();
         for (PurchaseExchange e : p.getRecords()) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", e.getId());
             m.put("code", e.getCode());
             m.put("supplierId", e.getSupplierId());
-            m.put("supplierName", supplierName(e.getSupplierId()));
+            m.put("supplierName", supNameMap.getOrDefault(e.getSupplierId(), ""));
             m.put("purchaseOrderId", e.getPurchaseOrderId());
             m.put("purchaseOrderCode", e.getPurchaseOrderCode());
             m.put("warehouseOutId", e.getWarehouseOutId());
-            m.put("warehouseOutName", warehouseName(e.getWarehouseOutId()));
+            m.put("warehouseOutName", whNameMap.getOrDefault(e.getWarehouseOutId(), ""));
             m.put("warehouseInId", e.getWarehouseInId());
-            m.put("warehouseInName", warehouseName(e.getWarehouseInId()));
+            m.put("warehouseInName", whNameMap.getOrDefault(e.getWarehouseInId(), ""));
             m.put("exchangeDate", e.getExchangeDate() != null ? e.getExchangeDate().toString() : "");
             m.put("status", e.getStatus());
             m.put("totalReturnAmount", e.getTotalReturnAmount());
@@ -166,7 +182,10 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
     @Override
     public List<PurchaseExchangeItem> getItems(Long id) {
         List<PurchaseExchangeItem> items = itemMapper.selectList(
-                new LambdaQueryWrapper<PurchaseExchangeItem>().eq(PurchaseExchangeItem::getExchangeId, id));
+                // F1-5（2026-09-18 审核修复）：明细按主键排序，保证"退化/换入"行的展示顺序稳定
+                new LambdaQueryWrapper<PurchaseExchangeItem>()
+                        .eq(PurchaseExchangeItem::getExchangeId, id)
+                        .orderByAsc(PurchaseExchangeItem::getId));
         productService.fillSku(items, PurchaseExchangeItem::getProductId, PurchaseExchangeItem::setSku);
         return items;
     }
@@ -183,9 +202,9 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
         if (!pids.isEmpty()) productMapper.selectBatchIds(pids).forEach(p -> pMap.put(p.getId(), p));
         Set<Long> oiIds = oiList.stream().map(PurchaseOrderItem::getId)
                 .filter(Objects::nonNull).collect(Collectors.toSet());
-        // 批量取已退/已换累计，避免逐条查库（N+1）
+        // 批量取已退/已换累计，避免逐条查库（N+1）；选单场景无"本单"，不排除任何单据
         Map<Long, BigDecimal> returnedMap = alreadyReturnedBatch(oiIds);
-        Map<Long, BigDecimal> exchangedMap = alreadyExchangedBatch(oiIds);
+        Map<Long, BigDecimal> exchangedMap = alreadyExchangedBatch(oiIds, null);
         List<Map<String, Object>> res = new ArrayList<>();
         for (PurchaseOrderItem oi : oiList) {
             Product p = pMap.get(oi.getProductId());
@@ -218,15 +237,28 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
                 .like(kw != null && !kw.isBlank(), PurchaseOrder::getCode, kw)
                 .orderByDesc(PurchaseOrder::getId)
                 .last("LIMIT 200"));
+        // F1-5（2026-09-18 审核修复）：本接口最多回 200 行，供货商/仓库名一次性批量取（原每行 2 次 selectById）
+        Set<Long> supIds = list.stream().map(PurchaseOrder::getSupplierId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, String> supNameMap = new HashMap<>();
+        if (!supIds.isEmpty())
+            supplierMapper.selectBatchIds(supIds).forEach(s ->
+                    supNameMap.put(s.getId(), s.getName() == null ? "" : s.getName()));
+        Set<Long> whIds = list.stream().map(PurchaseOrder::getWarehouseId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, String> whNameMap = new HashMap<>();
+        if (!whIds.isEmpty())
+            warehouseMapper.selectBatchIds(whIds).forEach(w ->
+                    whNameMap.put(w.getId(), w.getWarehouseName() == null ? "" : w.getWarehouseName()));
         List<Map<String, Object>> res = new ArrayList<>();
         for (PurchaseOrder po : list) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", po.getId());
             m.put("code", po.getCode());
             m.put("supplierId", po.getSupplierId());
-            m.put("supplierName", supplierName(po.getSupplierId()));
+            m.put("supplierName", supNameMap.getOrDefault(po.getSupplierId(), ""));
             m.put("warehouseId", po.getWarehouseId());
-            m.put("warehouseName", warehouseName(po.getWarehouseId()));
+            m.put("warehouseName", whNameMap.getOrDefault(po.getWarehouseId(), ""));
             m.put("orderDate", po.getOrderDate() != null ? po.getOrderDate().toString() : "");
             res.add(m);
         }
@@ -324,11 +356,17 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
         }
     }
 
-    /** 回填来源采购单信息（单号、供货商、默认仓） */
+    /**
+     * 回填来源采购单信息（单号、供货商、默认仓）。
+     *
+     * <p>F1-3（2026-09-18 审核修复）：**供货商一律以来源采购单为准** —— 直调接口可传一个与采购单无关的
+     * 供应商 id，会把两条应付台账挂到错误主体上；此处校验一致后强制写回采购单的供应商。</p>
+     */
     private void fillPurchaseOrderInfo(PurchaseExchange e) {
         if (e.getPurchaseOrderId() == null) throw new BusinessException("换货单必须选择来源采购单");
         PurchaseOrder po = purchaseOrderMapper.selectById(e.getPurchaseOrderId());
         if (po == null) throw new BusinessException("来源采购单不存在");
+        assertSupplierConsistent(e, po);
         e.setPurchaseOrderCode(po.getCode());
         if (e.getSupplierId() == null) e.setSupplierId(po.getSupplierId());
         // 默认仓取采购单的入库仓（我方成品仓）；退回出库与换入入库都允许用户另选
@@ -392,8 +430,13 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
             if (inQtyOf(it).compareTo(BigDecimal.ZERO) <= 0)
                 throw new BusinessException("换入数量必须大于 0（明细行ID=" + it.getId() + "）");
         }
-        // 可换量复核（口径 = 已购 − 已退 − 已换）
-        checkCanExchange(items);
+        // 可换量复核（口径 = 已购 − 已退 − 已换）。
+        // ⚠️ F1-1（2026-09-18 审核修复）：必须**排除本单自身** —— claim 已把本单状态置为 AUDITED，
+        // 若不排除，`alreadyExchangedBatch` 会把本单的退回量算进"已换"，等价于"退回量 > 余量一半即被拒"
+        // （实测：已购100/已退10/既有已换14，退回 50 时误报"已换 64、可换 26"）。
+        // F1-3（2026-09-18 审核修复）：审核前再兜一层"供货商与来源采购单一致"（防历史/直改库数据把应付挂错主体）
+        assertSupplierConsistent(e, purchaseOrderMapper.selectById(e.getPurchaseOrderId()));
+        checkCanExchange(e, items);
         // 退回出库前**一次性列清**库存缺口（changeStock 只会报"产品ID=xx"，用户看不出差多少）
         assertReturnStockEnough(e, items);
         // 1) 库存联动：退回出库扣减 + 换入入库增加
@@ -411,10 +454,12 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
         BigDecimal totalReturn = nz(cur.getTotalReturnAmount());
         BigDecimal totalIn = nz(cur.getTotalInAmount());
         // 3) 财务联动：两条对称台账 —— 退回侧负向（冲减应付）、换入侧正向（新增应付）⇒ 净额即差价
-        //    台账号固定为「单据号 + 后缀」，按 billNo 复用（反审核后重审不撞 finance_payable.uk_bill_no）
-        savePayable(e, SourceBillType.PURCHASE_EXCHANGE_RETURN, e.getCode() + "-RET",
+        //    F1-4（2026-09-18 审核修复）：台账号改用 **D1 口径** 的 YF- 流水号（每次审核都是新号），
+        //    与采购单 / 采购退货完全一致 —— 反审核把旧行置 CANCELLED 留痕、重审**新建一行**，
+        //    不再「单据号-RET/-IN」复用重置同一行（那样会覆盖掉上一次的作废留痕）。
+        savePayable(e, SourceBillType.PURCHASE_EXCHANGE_RETURN,
                 totalReturn.negate(), "采购换货退回（冲减应付）：" + e.getCode());
-        savePayable(e, SourceBillType.PURCHASE_EXCHANGE_IN, e.getCode() + "-IN",
+        savePayable(e, SourceBillType.PURCHASE_EXCHANGE_IN,
                 totalIn, "采购换货入库（新增应付）：" + e.getCode());
         // 4) 更新状态与审核人（状态已由 DocStatusGuard 抢占置为 AUDITED）
         PurchaseExchange u = new PurchaseExchange();
@@ -517,11 +562,13 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
             qtyMap.merge(poiId, qty, BigDecimal::add);
             if (m.get("productName") != null) nameMap.put(poiId, m.get("productName").toString());
         }
-        checkCanExchangeMap(qtyMap, nameMap);
+        // 编辑草稿时以自身 id 作排除项（草稿不计入"已换"，此处仅为口径统一）；
+        // 锚点归属按本单来源采购单校验（F1-2）
+        checkCanExchangeMap(qtyMap, nameMap, e.getId(), e.getPurchaseOrderId());
     }
 
-    /** 审核时复核可换量（用已落库的明细） */
-    private void checkCanExchange(List<PurchaseExchangeItem> items) {
+    /** 审核时复核可换量（用已落库的明细；**排除自身**，见 audit 的 F1-1 说明） */
+    private void checkCanExchange(PurchaseExchange e, List<PurchaseExchangeItem> items) {
         Map<Long, BigDecimal> qtyMap = new LinkedHashMap<>();
         Map<Long, String> nameMap = new HashMap<>();
         for (PurchaseExchangeItem it : items) {
@@ -530,15 +577,36 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
             if (it.getProductName() != null && !it.getProductName().isBlank())
                 nameMap.put(it.getPurchaseOrderItemId(), it.getProductName());
         }
-        checkCanExchangeMap(qtyMap, nameMap);
+        checkCanExchangeMap(qtyMap, nameMap, e.getId(), e.getPurchaseOrderId());
     }
 
-    /** 可换量 = 已购 − 已退(TH-) − 已换(CH-)（只约束退回数量，换入属正常入库不受限） */
-    private void checkCanExchangeMap(Map<Long, BigDecimal> qtyMap, Map<Long, String> nameMap) {
+    /**
+     * 可换量 = 已购 − 已退(TH-) − 已换(CH-)（只约束退回数量，换入属正常入库不受限）。
+     *
+     * <p>F1-2（2026-09-18 审核修复）：锚点 `purchaseOrderItemId` 必须**真实存在且属于本单的来源采购单**。
+     * 原实现用 `selectBatchIds` 取锚点后直接遍历结果，取不到的锚点被静默跳过 ⇒ 传伪造/他单据 id 即可
+     * 绕过数量校验（实测：锚点 999999 + 退回 100 能创建成功，审核只停在库存检查）。</p>
+     *
+     * <p>F1-1：`excludeExchangeId` 为审核中的本单 id（创建/编辑时为当前草稿 id，无则 null），
+     * 统计"已换量"时必须排除，否则审核时会把本单算进"已换"。</p>
+     */
+    private void checkCanExchangeMap(Map<Long, BigDecimal> qtyMap, Map<Long, String> nameMap,
+                                     Long excludeExchangeId, Long expectPurchaseOrderId) {
         if (qtyMap.isEmpty()) return;
         List<PurchaseOrderItem> oiList = purchaseOrderItemMapper.selectBatchIds(qtyMap.keySet());
+        Map<Long, PurchaseOrderItem> oiMap = new HashMap<>();
+        for (PurchaseOrderItem oi : oiList) oiMap.put(oi.getId(), oi);
+        for (Long poiId : qtyMap.keySet()) {
+            PurchaseOrderItem oi = oiMap.get(poiId);
+            if (oi == null)
+                throw new BusinessException("明细关联的采购单明细不存在（ID=" + poiId + "），无法校验可换数量");
+            if (expectPurchaseOrderId != null && oi.getOrderId() != null
+                    && !expectPurchaseOrderId.equals(oi.getOrderId()))
+                throw new BusinessException("明细关联的采购单明细不属于本单来源采购单（明细ID=" + poiId
+                        + " 属于采购单ID=" + oi.getOrderId() + "，本单来源采购单ID=" + expectPurchaseOrderId + "）");
+        }
         Map<Long, BigDecimal> returnedMap = alreadyReturnedBatch(qtyMap.keySet());
-        Map<Long, BigDecimal> exchangedMap = alreadyExchangedBatch(qtyMap.keySet());
+        Map<Long, BigDecimal> exchangedMap = alreadyExchangedBatch(qtyMap.keySet(), excludeExchangeId);
         for (PurchaseOrderItem oi : oiList) {
             // 提示语要能定位到具体产品：调用方可能没传 productName，这里按产品ID兜底查名
             if (!nameMap.containsKey(oi.getId()) && oi.getProductId() != null) {
@@ -558,37 +626,56 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
         }
     }
 
-    /** 批量取已退量（按采购单明细ID聚合）：已审核采购退货单中该采购明细的累计数量 */
+    /**
+     * 批量取已退量（按采购单明细ID聚合）：已审核采购退货单中该采购明细的累计数量。
+     * <p>F1-5（2026-09-18 审核修复）：先用**锚点集合**把明细收窄，再只查这些明细所属单据的状态 ——
+     * 原实现先"全表捞所有已审核退货单"再捞其全部明细，退货单累积后会做大量无谓扫描。</p>
+     */
     private Map<Long, BigDecimal> alreadyReturnedBatch(Collection<Long> purchaseOrderItemIds) {
         Map<Long, BigDecimal> res = new HashMap<>();
         if (purchaseOrderItemIds == null || purchaseOrderItemIds.isEmpty()) return res;
-        List<PurchaseReturn> audited = purchaseReturnMapper.selectList(new LambdaQueryWrapper<PurchaseReturn>()
-                .eq(PurchaseReturn::getStatus, DocStatus.AUDITED.getCode()));
-        if (audited.isEmpty()) return res;
-        List<Long> returnIds = audited.stream().map(PurchaseReturn::getId).collect(Collectors.toList());
         List<PurchaseReturnItem> items = purchaseReturnItemMapper.selectList(new LambdaQueryWrapper<PurchaseReturnItem>()
-                .in(PurchaseReturnItem::getReturnId, returnIds)
                 .in(PurchaseReturnItem::getPurchaseOrderItemId, purchaseOrderItemIds));
+        if (items.isEmpty()) return res;
+        Set<Long> returnIds = items.stream().map(PurchaseReturnItem::getReturnId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        if (returnIds.isEmpty()) return res;
+        Set<Long> auditedIds = purchaseReturnMapper.selectList(new LambdaQueryWrapper<PurchaseReturn>()
+                        .in(PurchaseReturn::getId, returnIds)
+                        .eq(PurchaseReturn::getStatus, DocStatus.AUDITED.getCode()))
+                .stream().map(PurchaseReturn::getId).collect(Collectors.toSet());
+        if (auditedIds.isEmpty()) return res;
         for (PurchaseReturnItem it : items) {
-            if (it.getPurchaseOrderItemId() == null) continue;
+            if (it.getPurchaseOrderItemId() == null || !auditedIds.contains(it.getReturnId())) continue;
             res.merge(it.getPurchaseOrderItemId(), nz(it.getQuantity()), BigDecimal::add);
         }
         return res;
     }
 
-    /** 批量取已换退回量（按采购单明细ID聚合）：已审核采购换货单中该采购明细的累计退回数量 */
-    private Map<Long, BigDecimal> alreadyExchangedBatch(Collection<Long> purchaseOrderItemIds) {
+    /**
+     * 批量取已换退回量（按采购单明细ID聚合）：已审核采购换货单中该采购明细的累计退回数量。
+     *
+     * @param excludeExchangeId 需排除的单据 id（审核中的本单，见 F1-1）；列表/选单场景传 null
+     */
+    private Map<Long, BigDecimal> alreadyExchangedBatch(Collection<Long> purchaseOrderItemIds, Long excludeExchangeId) {
         Map<Long, BigDecimal> res = new HashMap<>();
         if (purchaseOrderItemIds == null || purchaseOrderItemIds.isEmpty()) return res;
-        List<PurchaseExchange> audited = exchangeMapper.selectList(new LambdaQueryWrapper<PurchaseExchange>()
-                .eq(PurchaseExchange::getStatus, DocStatus.AUDITED.getCode()));
-        if (audited.isEmpty()) return res;
-        List<Long> exIds = audited.stream().map(PurchaseExchange::getId).collect(Collectors.toList());
+        // F1-5：同 alreadyReturnedBatch —— 先按锚点收窄明细，再核单据状态（见上）
         List<PurchaseExchangeItem> items = itemMapper.selectList(new LambdaQueryWrapper<PurchaseExchangeItem>()
-                .in(PurchaseExchangeItem::getExchangeId, exIds)
                 .in(PurchaseExchangeItem::getPurchaseOrderItemId, purchaseOrderItemIds));
+        if (items.isEmpty()) return res;
+        Set<Long> exIds = items.stream().map(PurchaseExchangeItem::getExchangeId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        if (exIds.isEmpty()) return res;
+        LambdaQueryWrapper<PurchaseExchange> w = new LambdaQueryWrapper<PurchaseExchange>()
+                .in(PurchaseExchange::getId, exIds)
+                .eq(PurchaseExchange::getStatus, DocStatus.AUDITED.getCode());
+        if (excludeExchangeId != null) w.ne(PurchaseExchange::getId, excludeExchangeId);
+        Set<Long> auditedIds = exchangeMapper.selectList(w).stream()
+                .map(PurchaseExchange::getId).collect(Collectors.toSet());
+        if (auditedIds.isEmpty()) return res;
         for (PurchaseExchangeItem it : items) {
-            if (it.getPurchaseOrderItemId() == null) continue;
+            if (it.getPurchaseOrderItemId() == null || !auditedIds.contains(it.getExchangeId())) continue;
             res.merge(it.getPurchaseOrderItemId(), outQtyOf(it), BigDecimal::add);
         }
         return res;
@@ -630,12 +717,12 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
                     + "。请先反审核占用该库存的单据（如销售单/委外单）");
     }
 
-    /** 应付台账入库（按 billNo 复用：反审核后重审不撞 uk_bill_no） */
-    private void savePayable(PurchaseExchange e, SourceBillType type, String billNo,
+    /** 应付台账入库（D1 口径：台账号一律 YF- 流水号；来源单号写 source_bill_no 便于按来源检索） */
+    private void savePayable(PurchaseExchange e, SourceBillType type,
                              BigDecimal amount, String remark) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) == 0) return; // 0 元不建台账，避免空行
         FinancePayable fp = new FinancePayable();
-        fp.setBillNo(billNo);
+        fp.setBillNo(payableHelper.newBillNo());
         fp.setSupplierId(e.getSupplierId());
         fp.setSupplierName(supplierName(e.getSupplierId()));
         fp.setSourceBillType(type.getCode());
@@ -691,6 +778,19 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
     }
 
     // ==================== 工具 ====================
+
+    /**
+     * 校验"供货商与来源采购单一致"（F1-3，2026-09-18 审核修复），并把供货商强制写回采购单的供应商。
+     * <p>换货单的应付台账按 `supplierId` 生成，若允许前端/接口传一个与采购单无关的供应商，
+     * 就会把两条台账挂到错误主体（对账时才发现）。create / update / audit 三处都调用。</p>
+     */
+    private void assertSupplierConsistent(PurchaseExchange e, PurchaseOrder po) {
+        if (po == null) throw new BusinessException("来源采购单不存在");
+        if (e.getSupplierId() != null && po.getSupplierId() != null && !e.getSupplierId().equals(po.getSupplierId()))
+            throw new BusinessException("供货商与来源采购单不一致（本单供货商ID=" + e.getSupplierId()
+                    + "，采购单 " + po.getCode() + " 的供货商ID=" + po.getSupplierId() + "），请重新选择来源采购单");
+        e.setSupplierId(po.getSupplierId());
+    }
 
     private void assertWarehouseType(Long warehouseId, String label) {
         Warehouse wh = warehouseId == null ? null : warehouseMapper.selectById(warehouseId);
