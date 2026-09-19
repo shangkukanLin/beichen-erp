@@ -93,7 +93,7 @@ public class OtherIoServiceImpl implements OtherIoService {
     @Transactional(rollbackFor = Exception.class)
     public void create(InventoryOtherIo otherIo, List<InventoryOtherIoItem> items) {
         if (otherIo.getWarehouseId() == null) throw new BusinessException("仓库不能为空");
-        if (otherIo.getIoType() == null || otherIo.getIoType().isBlank()) throw new BusinessException("出入库类型不能为空");
+        otherIo.setIoType(normalizeIoType(otherIo.getIoType()));
         items = validItems(items);
         if (items.isEmpty()) throw new BusinessException("请添加明细（每行需选择产品且数量大于 0）");
         otherIo.setCode(gen(BillPrefix.INVENTORY_OTHER_IO));
@@ -119,6 +119,9 @@ public class OtherIoServiceImpl implements OtherIoService {
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("仅草稿状态可编辑");
         items = validItems(items);
         if (items.isEmpty()) throw new BusinessException("请添加明细（每行需选择产品且数量大于 0）");
+        // F7-17：归一化出入库类型（编辑未传时沿用原值，避免被误判为非法）
+        otherIo.setIoType(normalizeIoType(
+                otherIo.getIoType() == null || otherIo.getIoType().isBlank() ? old.getIoType() : otherIo.getIoType()));
         otherIo.setCode(old.getCode()); otherIo.setStatus(DocStatus.DRAFT.getCode());
         ioMapper.updateById(otherIo);
 
@@ -158,6 +161,8 @@ public class OtherIoServiceImpl implements OtherIoService {
             new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
         // T7（2026-09-18）：审核前兜底校验明细可归属（兼容修复前保存的旧草稿单）
         assertItemsAttributable(items);
+        // F7-17 兜底：归一化出入库类型（覆盖历史脏数据），使下方"是否出库"的判定口径一致
+        io.setIoType(normalizeIoType(io.getIoType()));
         // 出库前校验库存：一次列清所有不足项，避免落到 changeStock 只报「产品ID=xx」
         checkStockBeforeOut(io, items);
         applyStock(io, items);
@@ -179,6 +184,29 @@ public class OtherIoServiceImpl implements OtherIoService {
             new LambdaQueryWrapper<InventoryOtherIoItem>().eq(InventoryOtherIoItem::getOtherIoId, id));
         revertStock(io, items);
         // 状态已由 DocStatusGuard 在该方法开头原子置为 DRAFT
+    }
+
+    /**
+     * F7-17（2026-09-19）：出入库类型必须是合法枚举，并**归一化**为枚举常量名后再落库。
+     *
+     * <p><b>修复的缺陷</b>：修复前 create / update 只校验"非空"，而下游三处判定用的是大小写敏感的
+     * {@code equals}：{@link #checkStockBeforeOut} 对非 {@code OUT} 的值**直接跳过库存校验**，
+     * {@link #applyStock} 却把非 {@code IN} 的值一律按"出库扣减"处理 ⇒ 传 {@code "XYZ"}（或小写
+     * {@code in}）会"跳过校验但仍然扣减"，报错也只剩库存写入层的兜底文案。</p>
+     *
+     * <p>{@link IoType#fromCode(String)} 忽略大小写，故此处**回写规范 code**，使下游三处判定口径一致
+     * （否则会出现"校验通过、却按出库扣"的残留不一致）。</p>
+     */
+    private String normalizeIoType(String ioType) {
+        if (ioType == null || ioType.isBlank()) throw new BusinessException("出入库类型不能为空");
+        IoType t = IoType.fromCode(ioType);
+        if (t == null) throw new BusinessException("出入库类型不合法：" + ioType);
+        return t.getCode();
+    }
+
+    /** F7-17：出入库方向的**唯一**判定（checkStockBeforeOut / applyStock / revertStock 三处共用） */
+    private boolean isIn(InventoryOtherIo io) {
+        return IoType.IN.getCode().equals(io.getIoType());
     }
 
     /**
@@ -215,7 +243,7 @@ public class OtherIoServiceImpl implements OtherIoService {
      * 用户看不出是哪个产品、差多少。这里前置一次性检查全部明细，给出产品名/品质/需量/库存/缺口。
      */
     private void checkStockBeforeOut(InventoryOtherIo io, List<InventoryOtherIoItem> items) {
-        if (!IoType.OUT.getCode().equals(io.getIoType())) return;
+        if (isIn(io)) return; // F7-17：仅出库单需要校验库存（入库只会增加库存）
         List<String> shortage = new ArrayList<>();
         for (InventoryOtherIoItem it : items) {
             BigDecimal need = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
@@ -241,27 +269,29 @@ public class OtherIoServiceImpl implements OtherIoService {
 
     /** 应用库存变更 */
     private void applyStock(InventoryOtherIo io, List<InventoryOtherIoItem> items) {
-            StockChangeType type = IoType.IN.getCode().equals(io.getIoType()) ? StockChangeType.OTHER_IN : StockChangeType.OTHER_OUT;
-        boolean isIn = IoType.IN.getCode().equals(io.getIoType());
+        // F7-17：方向判定统一走 isIn()，避免三处各自 equals 造成"校验跳过却仍按出库扣减"的口径漂移
+        boolean in = isIn(io);
+        StockChangeType type = in ? StockChangeType.OTHER_IN : StockChangeType.OTHER_OUT;
         for (InventoryOtherIoItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
-            BigDecimal delta = isIn ? q : q.negate();
+            BigDecimal delta = in ? q : q.negate();
             Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
                     delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),
                     "", io.getId(), it.getQualityType());
             // 其他入库单无单价：成本为空时用最近进价兜底，避免"有库存无成本"
-            if (isIn) costService.fillProductCostIfEmpty(it.getProductId());
+            if (in) costService.fillProductCostIfEmpty(it.getProductId());
         }
     }
 
     /** 逆向库存（编辑回滚 / 取消） */
     private void revertStock(InventoryOtherIo io, List<InventoryOtherIoItem> items) {
-        StockChangeType type = IoType.IN.getCode().equals(io.getIoType()) ? StockChangeType.CANCEL_IN : StockChangeType.CANCEL_OUT;
+        boolean in = isIn(io);
+        StockChangeType type = in ? StockChangeType.CANCEL_IN : StockChangeType.CANCEL_OUT;
         for (InventoryOtherIoItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             // 逆向：入库变成扣回，出库变成加回
-            BigDecimal delta = IoType.IN.getCode().equals(io.getIoType()) ? q.negate() : q;
+            BigDecimal delta = in ? q.negate() : q;
             Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
             stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
                     delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),

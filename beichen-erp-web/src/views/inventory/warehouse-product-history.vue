@@ -30,14 +30,17 @@ async function handleCodeClick(code: string) {
   try {
     const r = await request.get<any, any>('/common/resolve-code', { params: { code } })
     if (!r?.type) { ElMessage.info('未找到关联单据'); return }
+    // F7-28（2026-09-19）：一律指向**详情页**前缀，与 warehouse-material-history.vue / stock-log.vue 口径一致。
+    // 原先 other_io 指 `/inventory/other-io/add?id=`、sale 指 `/inventory/sale/edit?id=` —— 后者路由**不存在**
+    //（router 只有 inventory/sale/detail/:id）⇒ 点销售单号会跳到空白/404。
     const map: Record<string, string> = {
       order: '/outsource/order/detail/',
       material_order: '/outsource/material-order/detail/',
       delivery: '/outsource/delivery/detail/',
-      other_io: '/inventory/other-io/add?id=',
-      outsource_other_io: '/outsource/other-io/add?id=',
+      other_io: '/inventory/other-io/detail/',
+      outsource_other_io: '/outsource/other-io/detail/',
       purchase: '/inventory/purchase/detail/',
-      sale: '/inventory/sale/edit?id='
+      sale: '/inventory/sale/detail/'
     }
     const path = map[r.type]
     if (path) router.push(path + r.id)

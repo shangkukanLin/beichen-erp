@@ -314,12 +314,26 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             it.setOutAmount(outQty.multiply(it.getOutUnitPrice()));
             String qt = m.get("outQualityType") != null && !m.get("outQualityType").toString().isBlank()
                     ? m.get("outQualityType").toString() : ProductQualityType.A.getCode();
-            if (!ProductQualityType.isValid(qt)) throw new BusinessException("非法的换出品质等级：" + qt);
+            assertOutQuality(qt);   // F7-27：换出品质仅允许 A/B/C
             it.setOutQualityType(qt);
 
             if (m.get("remark") != null) it.setRemark(m.get("remark").toString());
             it.setCompanyId(cid);
             exchangeItemMapper.insert(it);
+        }
+    }
+
+    /**
+     * F7-27（2026-09-19）：换出品质只允许 A / B / C。
+     *
+     * <p>"换给客户的新品"不应是不良品或待分类；原先用 {@link ProductQualityType#isValid} 收全集
+     * （A/B/C/DEFECT/PENDING），与前端品质下拉（仅 A/B/C）出现"前端不可选、后端可收"的宽窄不一致。</p>
+     */
+    private void assertOutQuality(String qt) {
+        if (!ProductQualityType.A.getCode().equals(qt)
+                && !ProductQualityType.B.getCode().equals(qt)
+                && !ProductQualityType.C.getCode().equals(qt)) {
+            throw new BusinessException("非法的换出品质等级：" + qt);
         }
     }
 
@@ -458,7 +472,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             // 换出品质：未指定默认 A 规，指定则必须合法
             String qt = m.get("outQualityType") != null && !m.get("outQualityType").toString().isBlank()
                     ? m.get("outQualityType").toString() : ProductQualityType.A.getCode();
-            if (!ProductQualityType.isValid(qt)) throw new BusinessException("非法的换出品质等级：" + qt);
+            assertOutQuality(qt);   // F7-27：换出品质仅允许 A/B/C
 
             Object soiObj = m.get("saleOrderItemId");
             if (soiObj == null || soiObj.toString().isBlank()) continue;

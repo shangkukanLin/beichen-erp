@@ -121,7 +121,17 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         BigDecimal total = BigDecimal.ZERO;
         if (cid != null && cid > 0) receipt.setCompanyId(cid);
         receiptMapper.insert(receipt);
+        int rowNo = 0;
         for (FinanceReceiptItem it : items) {
+            rowNo++;
+            // F7-33（2026-09-19）：建单即拦负数金额（审核侧另有兜底，覆盖历史草稿）
+            if (it.getThisAmount() != null && it.getThisAmount().compareTo(BigDecimal.ZERO) < 0)
+                throw new BusinessException("收款明细金额不能为负数");
+            // F7-37（2026-09-19）：明细必须关联应收台账 —— 缺台账的明细在审核时会被**静默跳过**，
+            // 而资金流水仍按全额入账（钱进账、应收没减）。若要收"没有对应应收"的钱，请改为对该应收**超额收款**
+            // （超额分支会自动生成预收 ADVANCE 台账，口径见 ReceivableHelper.advanceBillNo）。
+            if (it.getReceivableId() == null)
+                throw new BusinessException("收款明细第 " + rowNo + " 行未关联应收台账（不能只填金额，请从「未收款」里选择应收单）");
             it.setId(null); it.setReceiptId(receipt.getId());
             total = total.add(it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO);
             if (cid != null && cid > 0) it.setCompanyId(cid);
@@ -141,6 +151,25 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode()); receiptMapper.updateById(u);
     }
 
+    /**
+     * F7-31（2026-09-19）：核销对象必须与收款单属于**同一往来单位**。
+     *
+     * <p>客户收款只核销同一客户的应收；供应商收款（如应付转应收生成的台账）只核销同一供应商的应收。
+     * 修复前仅比对 {@code subjectType}，同为 {@code CUSTOMER} 时 A 客户的收款单可核销 B 客户的应收
+     * （实测复现：客户 24 的收款单把客户 16 的应收核销掉），造成双向错账且不可逆。</p>
+     */
+    private void assertSamePartner(FinanceReceipt receipt, FinanceReceivable rec) {
+        if (SubjectType.SUPPLIER.getCode().equals(rec.getSubjectType())) {
+            if (receipt.getSupplierId() == null || !receipt.getSupplierId().equals(rec.getSupplierId()))
+                throw new BusinessException("收款供应商与被核销应收的供应商不一致（收款供应商ID=" + receipt.getSupplierId()
+                        + "，应收供应商ID=" + rec.getSupplierId() + "），请分开制单");
+        } else {
+            if (receipt.getCustomerId() == null || !receipt.getCustomerId().equals(rec.getCustomerId()))
+                throw new BusinessException("收款客户与被核销应收的客户不一致（收款客户ID=" + receipt.getCustomerId()
+                        + "，应收客户ID=" + rec.getCustomerId() + "），请分开制单");
+        }
+    }
+
     @Override @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
         FinanceReceipt receipt = receiptMapper.selectById(id);
@@ -151,10 +180,16 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
             throw new BusinessException("只有草稿状态可审核");
         List<FinanceReceiptItem> items = itemMapper.selectList(new LambdaQueryWrapper<FinanceReceiptItem>().eq(FinanceReceiptItem::getReceiptId, id));
         // 核销应收：更新台账 + 写入核销流水（双向可追溯），超额部分生成负数应收（预收）
+        int rowNo = 0;
         for (FinanceReceiptItem it : items) {
-            if (it.getReceivableId() == null) continue;
+            rowNo++;
+            // F7-37（2026-09-19）：不再静默跳过（跳过 ⇒ 资金流水全额入账而应收未核销）。
+            // create 已拦新数据，此处兜底**历史草稿**：明细缺台账 / 台账不存在一律拒绝审核。
+            if (it.getReceivableId() == null)
+                throw new BusinessException("收款明细第 " + rowNo + " 行未关联应收台账，无法审核（请补全或作废重开）");
             FinanceReceivable rec = receivableMapper.selectById(it.getReceivableId());
-            if (rec == null) continue;
+            if (rec == null)
+                throw new BusinessException("收款明细指向的应收台账不存在（第 " + rowNo + " 行，台账ID=" + it.getReceivableId() + "），请刷新后重试");
             // 主体一致性：客户收款只能核销客户应收，供应商收款只能核销供应商应收（防串账）
             String recSubject = rec.getSubjectType() != null ? rec.getSubjectType() : SubjectType.CUSTOMER.getCode();
             if (!recSubject.equals(receipt.getSubjectType()))
@@ -166,6 +201,12 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
             // 语义上"用收款去核销预收"等于退款，应走退款/冲销，而不是收款。
             if (SettlementStatus.ADVANCE.getCode().equals(rec.getStatus()))
                 throw new BusinessException("应收单「" + rec.getBillNo() + "」是预收台账（多收款待退/待抵扣），不能作为收款核销的目标；如需退预收款请走退款或冲销流程");
+            // F7-31（2026-09-19）：对象归属一致性 —— 同为主体类型还不够，必须核销**同一往来单位**的应收。
+            // 修复前只比对 subjectType，A 客户的收款单可核销 B 客户的应收（已实测复现；库中历史已存在 6 条）。
+            assertSamePartner(receipt, rec);
+            // F7-33（2026-09-19）：金额不得为负 —— 修复前负数会反向调整台账（实测 paid 变负、unpaid 虚增）
+            if (it.getThisAmount() != null && it.getThisAmount().compareTo(BigDecimal.ZERO) < 0)
+                throw new BusinessException("收款明细金额不能为负数");
             BigDecimal amt = it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO;
             BigDecimal unpaid = rec.getUnpaidAmount() != null ? rec.getUnpaidAmount() : BigDecimal.ZERO;
             BigDecimal newUnpaid = unpaid.subtract(amt);
@@ -350,10 +391,15 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
             BigDecimal amt = st.getAmount() != null ? st.getAmount() : BigDecimal.ZERO;
             // 冲销台账：原子增减 + SQL 内推导状态（P2-29），与其它并发核销/冲销互不覆盖
             String amtSql = amt.toPlainString();
+            // F7-35（2026-09-19）：反核销后补 PARTIAL —— 该台账若还有**其它**收款的核销，
+            // 冲销后未收额介于 (0, amount) 之间，状态应回到 PARTIAL；原实现只有 SETTLED/UNSETTLED 两态，
+            // 会把"部分结清"写成"未结清"（实测：台账 282 反审核后 PARTIAL→UNSETTLED，从部分结清列表里消失）。
             int rows = receivableMapper.update(null, new LambdaUpdateWrapper<FinanceReceivable>()
                     .eq(FinanceReceivable::getId, rec.getId())
                     .setSql("status = CASE WHEN IFNULL(unpaid_amount, 0) + (" + amtSql + ") <= 0 THEN '"
-                            + SettlementStatus.SETTLED.getCode() + "' ELSE '" + SettlementStatus.UNSETTLED.getCode() + "' END")
+                            + SettlementStatus.SETTLED.getCode() + "' WHEN IFNULL(unpaid_amount, 0) + (" + amtSql
+                            + ") >= IFNULL(amount, 0) THEN '" + SettlementStatus.UNSETTLED.getCode()
+                            + "' ELSE '" + SettlementStatus.PARTIAL.getCode() + "' END")
                     .setSql("paid_amount = GREATEST(IFNULL(paid_amount, 0) - (" + amtSql + "), 0)")
                     .setSql("unpaid_amount = IFNULL(unpaid_amount, 0) + (" + amtSql + ")"));
             if (rows == 0) throw new BusinessException("应收台账不存在，反核销失败");

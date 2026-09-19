@@ -27,7 +27,11 @@ function ApiRaw($method, $path, [string]$json) {
   } catch { return $_.ErrorDetails.Message }
 }
 function LastReceiptId { return [int](SqlOne 'SELECT COALESCE(MAX(id),0) FROM finance_receipt') }
-function PostReceipt([int]$recvId, [string]$recvBill, [int]$amt, [int]$custId, [int]$acctId, [string]$tag) {
+# F7-31 (2026-09-19): the receipt customer MUST be the receivable's OWN customer -- the service now
+# rejects settling another partner's receivable (it used to only compare subjectType). Derive it here
+# instead of passing a fixed pick, otherwise the numbering/open tests below can no longer audit.
+function PostReceipt([int]$recvId, [string]$recvBill, [int]$amt, [int]$acctId, [string]$tag) {
+  $custId = [int](SqlOne ("SELECT COALESCE(customer_id,0) FROM finance_receivable WHERE id=" + $recvId))
   $body = '{"subjectType":"CUSTOMER","customerId":' + $custId + ',"accountId":' + $acctId + ',"receiptDate":"2026-09-18","remark":"I27-VERIFY-' + $tag + '","items":[{"receivableId":' + $recvId + ',"receivableBillNo":"' + $recvBill + '","thisAmount":' + $amt + '}]}'
   return (ApiRaw 'Post' '/finance/receipt' $body)
 }
@@ -37,9 +41,11 @@ $custId = [int](SqlOne "SELECT id FROM customer ORDER BY id LIMIT 1")
 $acctId = [int](SqlOne "SELECT id FROM finance_account WHERE account_name='CASH-01' LIMIT 1")
 $advId = [int](SqlOne "SELECT id FROM finance_receivable WHERE status='ADVANCE' ORDER BY id LIMIT 1")
 $advBill = SqlOne ("SELECT bill_no FROM finance_receivable WHERE id=" + $advId)
-$settledId = [int](SqlOne "SELECT id FROM finance_receivable WHERE status='SETTLED' ORDER BY id DESC LIMIT 1")
+# F7-31 (2026-09-19): pick CUSTOMER receivables only -- a SUPPLIER receivable (e.g. from
+# payable-transfer) cannot be settled by a customer receipt any more (partner must match).
+$settledId = [int](SqlOne "SELECT id FROM finance_receivable WHERE subject_type='CUSTOMER' AND status='SETTLED' ORDER BY id DESC LIMIT 1")
 $settledBill = SqlOne ("SELECT bill_no FROM finance_receivable WHERE id=" + $settledId)
-$openId = [int](SqlOne "SELECT id FROM finance_receivable WHERE status IN ('UNSETTLED','PARTIAL') AND unpaid_amount>=100 ORDER BY id LIMIT 1")
+$openId = [int](SqlOne "SELECT id FROM finance_receivable WHERE subject_type='CUSTOMER' AND status IN ('UNSETTLED','PARTIAL') AND unpaid_amount>=100 ORDER BY id LIMIT 1")
 $openBill = SqlOne ("SELECT bill_no FROM finance_receivable WHERE id=" + $openId)
 Write-Host ('[SEED] customer=' + $custId + ' account=' + $acctId + ' advance=' + $advId + '(' + $advBill + ') settled=' + $settledId + '(' + $settledBill + ') open=' + $openId + '(' + $openBill + ')')
 $suffixRows0 = D (SqlOne "SELECT COUNT(*) FROM finance_receivable WHERE bill_no LIKE '%-ADVANCE-ADVANCE%'")
@@ -49,7 +55,7 @@ Write-Host ('[BASE] doubleSuffixRows=' + $suffixRows0 + ' advanceRows=' + $advRo
 Ok (($advId -gt 0) -and ($settledId -gt 0) -and ($openId -gt 0)) 'picked an advance row, a settled row and an open row'
 
 Step '1) guard: writing a receipt off an ADVANCE row must be rejected with a clear message'
-$r = PostReceipt $advId $advBill 100 $custId $acctId 'GUARD'
+$r = PostReceipt $advId $advBill 100 $acctId 'GUARD'
 $rid = LastReceiptId
 $idBefore = SqlOne 'SELECT COALESCE(MAX(id),0) FROM finance_receivable'
 Ok (($rid -gt 0)) ('receipt draft created for the guard test (id=' + $rid + ')')
@@ -66,7 +72,7 @@ Ok (($idBefore -eq $idAfter)) 'no new receivable row was created by the rejected
 Write-Host ('  (cleanup) guard-test draft cancelled, no data removed')
 
 Step '2) numbering stays idempotent when an over-collection creates an advance'
-$r2 = PostReceipt $settledId $settledBill 100 $custId $acctId 'NUMBER'
+$r2 = PostReceipt $settledId $settledBill 100 $acctId 'NUMBER'
 $rid2 = LastReceiptId
 Ok (($rid2 -gt $rid)) ('receipt created for the numbering test (id=' + $rid2 + ')')
 $null = ApiRaw 'Put' ('/finance/receipt/' + $rid2 + '/audit') $null
@@ -89,7 +95,7 @@ Ok (($suffixRows1 -eq $suffixRows0)) ('no NEW stacked-suffix row appeared (' + $
 
 Step '3) normal write-off against an OPEN receivable still works'
 $paid0 = D (SqlOne ("SELECT COALESCE(paid_amount,0) FROM finance_receivable WHERE id=" + $openId))
-$r3 = PostReceipt $openId $openBill 100 $custId $acctId 'OPEN'
+$r3 = PostReceipt $openId $openBill 100 $acctId 'OPEN'
 $rid3 = LastReceiptId
 $null = ApiRaw 'Put' ('/finance/receipt/' + $rid3 + '/audit') $null
 $paid1 = D (SqlOne ("SELECT COALESCE(paid_amount,0) FROM finance_receivable WHERE id=" + $openId))

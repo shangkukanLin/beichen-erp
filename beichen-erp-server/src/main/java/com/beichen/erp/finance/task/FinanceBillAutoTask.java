@@ -2,6 +2,7 @@ package com.beichen.erp.finance.task;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.service.FinanceBillService;
 import com.beichen.erp.system.entity.Company;
 import com.beichen.erp.system.mapper.CompanyMapper;
@@ -79,17 +80,44 @@ public class FinanceBillAutoTask {
     }
 
     /**
-     * 执行一轮自动账单生成（定时任务与手动触发接口共用）。
+     * 执行一轮自动账单生成（**定时任务专用**：遍历全部启用公司）。
      * <p>定时线程无登录态：{@code CompanyContext} 为空时租户插件放行全表、companyId 字段填充为空，
      * 因此必须<b>逐公司</b>设置上下文，保证应收/应付查询按公司隔离、finance_bill.company_id 正确落库。</p>
      *
-     * @return 执行结果摘要（供手动触发接口返回）
+     * @return 执行结果摘要
      */
     public String run(LocalDate today) {
         // sys_company 不参与租户隔离，可跨公司查询；status=1 为启用
         List<Company> companies = companyMapper.selectList(new LambdaQueryWrapper<Company>().eq(Company::getStatus, 1));
-        int total = 0;
         StringBuilder summary = new StringBuilder();
+        int total = runFor(companies, today, summary);
+        String result = "自动账单完成：共生成 " + total + " 张。" + summary;
+        log.info(result);
+        return result;
+    }
+
+    /**
+     * F7-38（2026-09-19）：只跑**指定公司**（手动触发接口用）。
+     *
+     * <p>手动入口原先直接调用 {@link #run(LocalDate)} ⇒ 任何持有 {@code finance:bill} 页面码的用户
+     * 都能触发**跨公司**批量出账。现收口为"手动只跑当前公司"，跨租户全量只留给平台超管显式触发
+     * （见 {@code FinanceBillController#autoGenerate}）。</p>
+     */
+    public String runForCompany(Long companyId, LocalDate today) {
+        if (companyId == null) throw new BusinessException("当前公司上下文缺失，无法生成账单");
+        Company c = companyMapper.selectById(companyId);
+        if (c == null) throw new BusinessException("公司不存在：" + companyId);
+        if (!Integer.valueOf(1).equals(c.getStatus())) throw new BusinessException("公司已停用，无法生成账单");
+        StringBuilder summary = new StringBuilder();
+        int total = runFor(List.of(c), today, summary);
+        String result = "自动账单完成：共生成 " + total + " 张。" + summary;
+        log.info(result);
+        return result;
+    }
+
+    /** 逐公司生成一轮（定时任务传全部启用公司；手动入口只传当前公司），返回成功张数 */
+    private int runFor(List<Company> companies, LocalDate today, StringBuilder summary) {
+        int total = 0;
         for (Company c : companies) {
             try {
                 CompanyContext.set(c.getId());
@@ -114,8 +142,6 @@ public class FinanceBillAutoTask {
                 CompanyContext.clear();
             }
         }
-        String result = "自动账单完成：共生成 " + total + " 张。" + summary;
-        log.info(result);
-        return result;
+        return total;
     }
 }

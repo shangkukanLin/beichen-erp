@@ -147,6 +147,11 @@ public class StockTakeServiceImpl implements StockTakeService {
         // 物料仓的盘点单：接口级限跟单专员（按仓库实际归属判定，不依赖前端是否传 scope）
         assertRoleForScope(scopeOf(wh));
         String ym = (period == null || period.isBlank()) ? LocalDate.now().format(YM) : period;
+        // F7-24（2026-09-19）：对仓库行加行锁，使"同仓同月查重 → 插入"串行化。
+        // 原先查重（selectCount）与插入之间无锁，且表上没有 (warehouse_id, period) 唯一索引
+        // ⇒ 并发提交（两人同时建同仓同月盘点单）会建出两张。锁在 warehouse 行上（该行必然存在）。
+        warehouseMapper.selectOne(new LambdaQueryWrapper<Warehouse>()
+                .select(Warehouse::getId).eq(Warehouse::getId, warehouseId).last("FOR UPDATE"));
         // 同一仓库同一月份只保留一条有效单据（草稿/已审核）
         Long exist = takeMapper.selectCount(new LambdaQueryWrapper<InventoryStockTake>()
                 .eq(InventoryStockTake::getWarehouseId, warehouseId)

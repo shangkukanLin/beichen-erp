@@ -47,7 +47,7 @@
           </el-table-column>
           <el-table-column label="品质" width="90">
             <template #default="{ row }">
-              <el-select v-model="row.qualityType" size="small" style="width:100%">
+              <el-select v-model="row.qualityType" size="small" style="width:100%" @change="() => loadStock(row)">
                 <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
               </el-select>
             </template>
@@ -139,26 +139,35 @@ function onProductPick(p: any, row: MoveItem) {
   row.productId = p.id
   row.sku = p.sku || ''
   row._unit = p.unit
-  // 查询该产品在移出仓库的现有库存
-  if (p.id && form.fromWarehouseId) {
-    request.get<any, any>('/warehouse/stock/page', { params: { productId: p.id, warehouseId: form.fromWarehouseId, pageSize: 1 } })
-      .then(r => { row._stock = (r?.records || [])[0]?.quantity || 0 })
-      .catch(() => { row._stock = undefined })
-  }
+  void loadStock(row)
 }
 
-// 刷新所有明细行的库存
+/**
+ * F7-21：移仓从「移出仓」扣减，库存展示与校验都针对移出仓 + **该行品质**。
+ * 原先取数用 pageSize:1 且不按品质过滤 ⇒ _stock 实为"(仓,产品)任意首个品质行"的数量，
+ * 与详情页（detail.vue）口径不一致。此处与详情页实现完全对齐。
+ */
+async function loadStock(row: MoveItem) {
+  row._stock = undefined
+  if (!form.fromWarehouseId || !row.productId) return
+  try {
+    const r = await request.get<any, any>('/warehouse/stock/page', {
+      params: { warehouseId: form.fromWarehouseId, productId: row.productId, stockType: 'PRODUCT', pageSize: 100 }
+    })
+    const recs: any[] = r?.records || []
+    const hit = recs.find((x: any) => String(x.qualityType) === String(row.qualityType || 'A'))
+    row._stock = hit ? Number(hit.quantity) : 0
+  } catch { row._stock = undefined }
+}
+
+/** F7-21：该行数量是否超过移出仓该品质的可用库存（与 detail.vue 同判定） */
+function overStock(row: MoveItem) {
+  return row._stock != null && Number(row.quantity) > 0 && Number(row.quantity) > row._stock
+}
+
+// 刷新所有明细行的库存（移出仓变化时；行品质变化时也走 loadStock 单行重算）
 async function refreshStock() {
-  for (const item of items.value) {
-    if (item.productId && form.fromWarehouseId) {
-      try {
-        const r = await request.get<any, any>('/warehouse/stock/page', { params: { productId: item.productId, warehouseId: form.fromWarehouseId, pageSize: 1 } })
-        item._stock = (r?.records || [])[0]?.quantity || 0
-      } catch { item._stock = undefined }
-    } else {
-      item._stock = undefined
-    }
-  }
+  for (const item of items.value) await loadStock(item)
 }
 
 function addItem() { items.value.push({ productId: undefined, qualityType: 'A', quantity: 1 }) }
@@ -213,6 +222,12 @@ async function handleSubmit() {
     if (form.fromWarehouseId === form.toWarehouseId) { ElMessage.warning('移出与移入仓库不能相同'); return }
     if (items.value.length === 0) { ElMessage.warning('请至少添加一条明细'); return }
     if (items.value.some(it => !it.productId)) { ElMessage.warning('请选择产品'); return }
+    // F7-21：超量提交拦截（与详情页一致；后端审核时另有库存层兜底）
+    const bad = items.value.find(it => overStock(it))
+    if (bad) {
+      ElMessage.warning(`第 ${items.value.indexOf(bad) + 1} 行数量超过移出仓该品质可用库存（${bad._stock}）`)
+      return
+    }
     submitLoading.value = true
     try {
       const payload = { move: { ...form }, items: items.value }

@@ -52,7 +52,7 @@
         </el-table-column>
         <el-table-column label="待分类" min-width="74" align="right">
           <template #default="{ row }">
-            <span :class="qtyClass(row.qtyPending, 'pending')" title="压在售后仓、等待退货整理的库存">{{ fmt(row.qtyPending) }}</span>
+            <span :class="qtyClass(row.qtyPending, 'pending')" title="压在成品仓、等待退货整理的库存（品质待分类 PENDING）">{{ fmt(row.qtyPending) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="总库存" min-width="74" align="right">

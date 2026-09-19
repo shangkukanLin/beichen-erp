@@ -194,24 +194,24 @@ public interface FinanceAnalysisMapper {
     @Select("SELECT CASE WHEN due_date IS NULL THEN 'none' WHEN due_date >= CURDATE() THEN 'not_due' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 'd30' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) THEN 'd60' ELSE 'd60p' END AS bucket, IFNULL(SUM(unpaid_amount), 0) AS amt, COUNT(*) AS cnt FROM finance_receivable WHERE status IN ('UNSETTLED', 'PARTIAL') GROUP BY bucket")
     List<Map<String, Object>> receivableAging();
 
-    /** 应付账龄分桶（对称） */
-    @Select("SELECT CASE WHEN due_date IS NULL THEN 'none' WHEN due_date >= CURDATE() THEN 'not_due' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 'd30' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) THEN 'd60' ELSE 'd60p' END AS bucket, IFNULL(SUM(unpaid_amount), 0) AS amt, COUNT(*) AS cnt FROM finance_payable WHERE status IN ('UNSETTLED', 'PARTIAL') GROUP BY bucket")
+    /** 应付账龄分桶（对称；2026-09-19 F7-34：剔除已转应收的冲减项，避免与应收双算） */
+    @Select("SELECT CASE WHEN due_date IS NULL THEN 'none' WHEN due_date >= CURDATE() THEN 'not_due' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 'd30' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) THEN 'd60' ELSE 'd60p' END AS bucket, IFNULL(SUM(unpaid_amount), 0) AS amt, COUNT(*) AS cnt FROM finance_payable WHERE status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(transferred_to_receivable, 0) <> 1 GROUP BY bucket")
     List<Map<String, Object>> payableAging();
 
     /** 应收汇总（回款率） */
     @Select("SELECT IFNULL(SUM(amount), 0) AS total, IFNULL(SUM(paid_amount), 0) AS paid, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_receivable WHERE status != 'CANCELLED'")
     Map<String, Object> receivableSummary();
 
-    /** 应付汇总（付款率） */
-    @Select("SELECT IFNULL(SUM(amount), 0) AS total, IFNULL(SUM(paid_amount), 0) AS paid, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_payable WHERE status != 'CANCELLED'")
+    /** 应付汇总（付款率；2026-09-19 F7-34：剔除已转应收的冲减项，口径与 PayableQuery.supplierSummary 一致） */
+    @Select("SELECT IFNULL(SUM(amount), 0) AS total, IFNULL(SUM(paid_amount), 0) AS paid, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_payable WHERE status != 'CANCELLED' AND IFNULL(transferred_to_receivable, 0) <> 1")
     Map<String, Object> payableSummary();
 
     /** TOP 客户欠款 */
     @Select("SELECT customer_name AS name, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_receivable WHERE status IN ('UNSETTLED', 'PARTIAL') GROUP BY customer_name ORDER BY unpaid DESC LIMIT 5")
     List<Map<String, Object>> topCustomers();
 
-    /** TOP 供应商应付 */
-    @Select("SELECT supplier_name AS name, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_payable WHERE status IN ('UNSETTLED', 'PARTIAL') GROUP BY supplier_name ORDER BY unpaid DESC LIMIT 5")
+    /** TOP 供应商应付（2026-09-19 F7-34：剔除已转应收的冲减项，避免负值行挤占 TOP 榜并虚增总额） */
+    @Select("SELECT supplier_name AS name, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_payable WHERE status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(transferred_to_receivable, 0) <> 1 GROUP BY supplier_name ORDER BY unpaid DESC LIMIT 5")
     List<Map<String, Object>> topSuppliers();
 
     /** 资金账户余额分布（余额=期初+收支流水累计） */

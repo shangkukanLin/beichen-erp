@@ -621,7 +621,7 @@ const todoItems = computed(() => {
     tone: mt.overdue ? 'var(--app-color-danger)' : 'var(--app-color-warning)',
     sub: mt.overdue ? `其中超期 ${mt.overdue} 个` : `应盘日 ${mt.period || ''}`,
   })
-  if (overdueSort) items.push({ label: '售后仓超期待整理', count: overdueSort, path: '/inventory/return-sort', tone: 'var(--app-color-danger)', sub: '停留超过 3 天' })
+  if (overdueSort) items.push({ label: '成品仓超期待整理', count: overdueSort, path: '/inventory/return-sort', tone: 'var(--app-color-danger)', sub: '停留超过 3 天' })
   if (overdueRec > 0) items.push({ label: '超期应收', count: fmtN(overdueRec), path: '/finance/receivable', tone: 'var(--app-color-danger)', sub: '已过到期日未收' })
   return items
 })

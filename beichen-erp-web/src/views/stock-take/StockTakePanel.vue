@@ -79,7 +79,7 @@ async function submitCreate() {
     ElMessage.success('盘点单已创建，请录入实盘数量')
     await loadData()
     if (t?.id) openItems(t)
-  } catch {}
+  } catch { /* F7-29：失败提示由 request 拦截器统一给出；此处不给成功提示，故不会被误判为成功 */ }
 }
 
 // 明细（录入实盘数量）
@@ -108,7 +108,7 @@ async function saveItems() {
     ElMessage.success('实盘数量已保存')
     await loadData()
     await loadItems(curTake.value.id!)
-  } catch {}
+  } catch { /* F7-29：同上，失败提示由拦截器给出 */ }
 }
 async function audit(row: StockTake) {
   const tips = (row.diffCount || 0) > 0

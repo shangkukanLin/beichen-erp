@@ -56,10 +56,15 @@ async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('�
 
 function handleDetail(row: any) { router.push(`/inventory/warehouse/detail/${row.id}`) }
 
+// F7-29（2026-09-19）：改为"请求成功后再改本地状态"。
+// 原先先翻转 row.status 再 PUT，且无 catch ⇒ 请求失败时列表本地状态已翻转、与后端不一致（直到下次刷新）。
 async function handleToggleStatus(row: any) {
-  row.status = row.status === 1 ? 0 : 1
-  await request.put('/warehouse', row)
-  ElMessage.success(row.status === 1 ? '已启用' : '已停用'); loadData()
+  const next = row.status === 1 ? 0 : 1
+  try {
+    await request.put('/warehouse', { ...row, status: next })
+    ElMessage.success(next === 1 ? '已启用' : '已停用')
+    loadData()
+  } catch { ElMessage.error('状态切换失败，请重试') }
 }
 
 onMounted(() => { loadData(); loadTakeStatus() })

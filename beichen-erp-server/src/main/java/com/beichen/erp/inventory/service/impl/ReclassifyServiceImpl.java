@@ -107,8 +107,8 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         if (cid != null && cid > 0) rc.setCompanyId(cid);
         rcMapper.insert(rc);
         for (InventoryProductReclassifyItem it : items) {
-            if (it.getFromQuality() == null || it.getToQuality() == null)
-                throw new BusinessException("原品质和目标品质不能为空");
+            assertQuality(it.getFromQuality(), "原品质");
+            assertQuality(it.getToQuality(), "目标品质");
             if (it.getFromQuality().equals(it.getToQuality()))
                 throw new BusinessException("原品质和目标品质不能相同");
             it.setId(null);
@@ -137,6 +137,9 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         for (InventoryProductReclassifyItem it : items) {
             it.setId(null); it.setReclassifyId(rc.getId());
             if (cid != null && cid > 0) it.setCompanyId(cid);
+            // F7-16/F7-23：白名单校验（同时消除原先 fromQuality 为 null 时 it.getFromQuality().equals(...) 的 NPE）
+            assertQuality(it.getFromQuality(), "原品质");
+            assertQuality(it.getToQuality(), "目标品质");
             if (it.getFromQuality().equals(it.getToQuality()))
                 throw new BusinessException("原品质和目标品质不能相同");
             itemMapper.insert(it);
@@ -159,6 +162,13 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         for (InventoryProductReclassifyItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
                 throw new BusinessException("重分类数量必须大于 0（明细行ID=" + it.getId() + "）");
+        }
+        // F7-16（2026-09-19）：品质白名单兜底 —— 覆盖历史草稿与直连库的脏数据。
+        // 修复前 toQuality 会被 changeStock 当作库存行维度直接 INSERT（传 'ZZ' 即产出不计入任何品质
+        // 口径的"幽灵库存行"，已实测复现）；fromQuality 则出现"校验按 A、扣减按空串"的口径失真。
+        for (InventoryProductReclassifyItem it : items) {
+            assertQuality(it.getFromQuality(), "原品质");
+            assertQuality(it.getToQuality(), "目标品质");
         }
         // 审核前校验原品质库存：一次列清所有不足项，避免落到 changeStock 只报「产品ID=xx」
         checkStockBeforeAudit(rc, items);
@@ -183,6 +193,22 @@ public class ReclassifyServiceImpl implements ReclassifyService {
     }
 
     /**
+     * 品质白名单校验（F7-16 · 2026-09-19）：品质必须是 {@link ProductQualityType} 的合法枚举值。
+     *
+     * <p><b>修复的缺陷</b>：修复前 create / update 只做"非空 + 不相同"，audit 完全不校验，
+     * 于是 {@code toQuality='ZZ'} 这类非法值会被 {@code changeStock} 当作库存行维度**直接 INSERT**，
+     * 产出不计入任何品质口径的"幽灵库存行"（实测：`warehouse_stock(wh, product, quality_type='ZZ')`），
+     * 使库存总量与各品质之和不再相等，且不可逆。</p>
+     *
+     * <p>{@link ProductQualityType#isValid(String)} 已把 {@code null}/空白视为非法，故本方法同时
+     * 消除了原先 {@code fromQuality} 为 null 时的 NPE（F7-23）。白名单取全集
+     * （A/B/C/DEFECT/PENDING），保持最小行为变化。</p>
+     */
+    private void assertQuality(String quality, String label) {
+        if (!ProductQualityType.isValid(quality)) throw new BusinessException(label + "不合法：" + quality);
+    }
+
+    /**
      * 审核前校验「原品质」的可用库存（目标品质是增加库存，无需校验）。
      * changeStock 本身也会拦（SQL 带 quantity + delta >= 0），但报错只有「产品ID=xx」，
      * 用户看不出是哪个产品、差多少。这里前置一次性检查全部明细，给出产品名/品质/需量/库存/缺口。
@@ -192,6 +218,8 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         for (InventoryProductReclassifyItem it : items) {
             BigDecimal need = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             if (need.compareTo(BigDecimal.ZERO) <= 0) continue;
+            // F7-16 之后此处已收不到空串（create/update/audit 均先过 assertQuality 白名单），
+            // 该兼容分支保留以防历史数据，请勿删除。
             String fq = it.getFromQuality() != null && !it.getFromQuality().isBlank()
                     ? it.getFromQuality() : ProductQualityType.A.getCode();
             BigDecimal avail = stockService.getQuantity(rc.getWarehouseId(), it.getProductId(), fq);

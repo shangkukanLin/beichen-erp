@@ -126,31 +126,40 @@ function handleAdd() { router.push('/inventory/warehouse-move/add') }
 // 详情已独立成页：草稿态在详情页内直接编辑，列表不再提供「编辑」入口
 function handleDetail(row: any) { router.push(`/inventory/warehouse-move/detail/${row.id}`) }
 
+// F7-29（2026-09-19）：把「用户取消」与「请求失败」分开 —— 原先 confirm 与请求同在一个 try，
+// 取消与失败都落进 `catch { }`，无法区分；现与 stock-take/StockTakePanel.vue 的既有写法统一：
+// confirm 取消即 return，请求失败由 request 拦截器统一提示（成功提示只在请求成功后才给）。
 async function handleAudit(row: any) {
   try {
     await ElMessageBox.confirm(`确认审核移仓单「${row.code}」？将从移出仓扣减库存并增加到移入仓。`, '提示', { type: 'warning' })
+  } catch { return }
+  try {
     await request.put(`/inventory/warehouse-move/${row.id}/audit`)
     ElMessage.success('审核成功')
     loadData()
-  } catch { }
+  } catch { /* 已由 request 拦截器提示 */ }
 }
 
 async function handleUnAudit(row: any) {
   try {
     await ElMessageBox.confirm(`确认反审核移仓单「${row.code}」？将退回移出仓库存并从移入仓扣回。`, '提示', { type: 'warning' })
+  } catch { return }
+  try {
     await request.put(`/inventory/warehouse-move/${row.id}/un-audit`)
     ElMessage.success('反审核成功')
     loadData()
-  } catch { }
+  } catch { /* 已由 request 拦截器提示 */ }
 }
 
 async function handleCancel(row: any) {
   try {
     await ElMessageBox.confirm(`确认作废移仓单「${row.code}」？`, '提示', { type: 'warning' })
+  } catch { return }
+  try {
     await request.put(`/inventory/warehouse-move/${row.id}/cancel`)
     ElMessage.success('已作废')
     loadData()
-  } catch { }
+  } catch { /* 已由 request 拦截器提示 */ }
 }
 
 onActivated(() => {

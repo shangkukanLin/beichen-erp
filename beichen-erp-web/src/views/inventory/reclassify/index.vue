@@ -41,31 +41,40 @@ function handleReset() { query.code = ''; query.status = ''; query.warehouseId =
 function handleAdd() { router.push('/inventory/reclassify/add') }
 function handleDetail(row: any) { router.push(`/inventory/reclassify/detail/${row.id}`) }
 
+// F7-29（2026-09-19）：原先 confirm 与请求同在一个 try 且 `catch { /* 取消 */ }` —— 注释说"取消"，
+// 实际把请求失败也吞了（语义误导、无法区分）。现与 StockTakePanel.vue 口径统一：取消即 return，
+// 请求失败由 request 拦截器提示；成功提示只在请求成功后给出。
 async function handleAudit(row: any) {
   try {
     await ElMessageBox.confirm(`确认审核单号「${row.code}」？审核后库存将立即变更。`, '审核确认', { type: 'warning' })
+  } catch { return }
+  try {
     await auditReclassify(row.id)
     ElMessage.success('审核成功')
     loadData()
-  } catch { /* 取消 */ }
+  } catch { /* 已由 request 拦截器提示 */ }
 }
 /** 反审核（E2：走 /un-audit，逆向恢复库存并置 CANCELLED） */
 async function handleUnAudit(row: any) {
   try {
     await ElMessageBox.confirm(`确认反审核单号「${row.code}」？反审核后将逆向恢复库存。`, '反审核确认', { type: 'warning' })
+  } catch { return }
+  try {
     await unAuditReclassify(row.id)
     ElMessage.success('已反审核')
     loadData()
-  } catch { /* 取消 */ }
+  } catch { /* 已由 request 拦截器提示 */ }
 }
 /** 作废（E2：仅草稿走 /cancel，不再承担反审核语义） */
 async function handleCancel(row: any) {
   try {
     await ElMessageBox.confirm(`确认作废草稿单「${row.code}」？`, '作废确认', { type: 'warning' })
+  } catch { return }
+  try {
     await cancelReclassify(row.id)
     ElMessage.success('已作废')
     loadData()
-  } catch { /* 取消 */ }
+  } catch { /* 已由 request 拦截器提示 */ }
 }
 
 async function loadWarehouses() {

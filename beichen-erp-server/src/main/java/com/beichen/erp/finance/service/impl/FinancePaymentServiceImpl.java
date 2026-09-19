@@ -90,7 +90,16 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         BigDecimal total = BigDecimal.ZERO;
         if (cid != null && cid > 0) payment.setCompanyId(cid);
         paymentMapper.insert(payment);
+        int rowNo = 0;
         for (FinancePaymentItem it : items) {
+            rowNo++;
+            // F7-33（2026-09-19）：建单即拦负数金额（审核侧另有兜底，覆盖历史草稿）
+            if (it.getThisAmount() != null && it.getThisAmount().compareTo(BigDecimal.ZERO) < 0)
+                throw new BusinessException("付款明细金额不能为负数");
+            // F7-37（2026-09-19）：明细必须关联应付台账 —— 缺台账的明细在审核时会被**静默跳过**，
+            // 而资金流水仍按全额入账（钱付出、应付没减）。多付的部分走"对该应付**超额付款**"（自动生成预付台账）。
+            if (it.getPayableId() == null)
+                throw new BusinessException("付款明细第 " + rowNo + " 行未关联应付台账（不能只填金额，请从「未付款」里选择应付单）");
             it.setId(null); it.setPaymentId(payment.getId());
             total = total.add(it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO);
             if (cid != null && cid > 0) it.setCompanyId(cid);
@@ -122,15 +131,37 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
                 DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
             throw new BusinessException("只有草稿状态可审核");
         List<FinancePaymentItem> items = itemMapper.selectList(new LambdaQueryWrapper<FinancePaymentItem>().eq(FinancePaymentItem::getPaymentId, id));
+        // F7-36（2026-09-19）：账户余额校验 —— 与费用单对齐（FinanceExpenseServiceImpl.audit:96-101）。
+        // 修复前付款审核不校验余额、直接写支出流水（账户余额由流水实时累计）⇒ 账户可被透支（实测余额 200 付 500 成功）。
+        // 用 payment.amount（而非明细之和）是因为下方资金流水就按它入账，两者必须同源。
+        if (payment.getAccountId() == null) throw new BusinessException("付款账户不能为空");
+        BigDecimal payAmount = payment.getAmount() != null ? payment.getAmount() : BigDecimal.ZERO;
+        BigDecimal accountBal = accountBalance(payment.getAccountId());
+        if (accountBal.subtract(payAmount).compareTo(BigDecimal.ZERO) < 0)
+            throw new BusinessException("账户余额不足：当前余额 " + accountBal + "，付款 " + payAmount);
         // 核销应付：更新台账 + 写入核销流水（双向可追溯），超额部分生成负数应付（预付）
+        int rowNo = 0;
         for (FinancePaymentItem it : items) {
-            if (it.getPayableId() == null) continue;
+            rowNo++;
+            // F7-37（2026-09-19）：不再静默跳过（跳过 ⇒ 资金流水全额入账而应付未核销）。
+            // create 已拦新数据，此处兜底**历史草稿**：明细缺台账 / 台账不存在一律拒绝审核。
+            if (it.getPayableId() == null)
+                throw new BusinessException("付款明细第 " + rowNo + " 行未关联应付台账，无法审核（请补全或作废重开）");
             FinancePayable p = payableMapper.selectById(it.getPayableId());
-            if (p == null) continue;
+            if (p == null)
+                throw new BusinessException("付款明细指向的应付台账不存在（第 " + rowNo + " 行，台账ID=" + it.getPayableId() + "），请刷新后重试");
             // I27（2026-09-18 修复，与应收侧对称）：预付台账（ADVANCE，负数应付）不可作为付款核销目标，
             // 否则会生成"预付的预付"（语义错误 + 单号被层层追加后缀）
             if (SettlementStatus.ADVANCE.getCode().equals(p.getStatus()))
                 throw new BusinessException("应付单「" + p.getBillNo() + "」是预付台账（多付款待抵扣），不能作为付款核销的目标；如需冲回预付款请走退款或冲销流程");
+            // F7-32（2026-09-19）：对象归属一致性 —— 必须核销**同一供应商**的应付。
+            // 修复前只按 payableId 取台账、不校验归属（实测：供应商 34 的付款单把供应商 26 的应付核销掉）。
+            if (payment.getSupplierId() == null || !payment.getSupplierId().equals(p.getSupplierId()))
+                throw new BusinessException("付款供应商与被核销应付的供应商不一致（付款供应商ID=" + payment.getSupplierId()
+                        + "，应付供应商ID=" + p.getSupplierId() + "），请分开制单");
+            // F7-33（2026-09-19）：金额不得为负 —— 修复前负数会反向调整台账（实测 paid 变负、unpaid 虚增）
+            if (it.getThisAmount() != null && it.getThisAmount().compareTo(BigDecimal.ZERO) < 0)
+                throw new BusinessException("付款明细金额不能为负数");
             BigDecimal amt = it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO;
             BigDecimal unpaid = p.getUnpaidAmount() != null ? p.getUnpaidAmount() : BigDecimal.ZERO;
             BigDecimal newUnpaid = unpaid.subtract(amt);
@@ -221,6 +252,14 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         cashflowMapper.insert(cf);
         // 更新付款单状态
         FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode()); paymentMapper.updateById(u);
+    }
+
+    /** F7-36（2026-09-19）：账户实时余额 = Σ(流水 income - expense)（口径与 FinanceExpenseServiceImpl.accountBalance 一致） */
+    private BigDecimal accountBalance(Long accountId) {
+        Map<Long, Map<String, Object>> map = accountMapper.sumBalance(List.of(accountId));
+        Map<String, Object> row = map.get(accountId);
+        if (row == null || row.get("balance") == null) return BigDecimal.ZERO;
+        return new BigDecimal(row.get("balance").toString());
     }
 
     /** 账单进度联动：按核销流水反查账单明细，同步已付金额并重算账单主表（只算有效核销） */
@@ -314,10 +353,15 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             BigDecimal amt = st.getAmount() != null ? st.getAmount() : BigDecimal.ZERO;
             // 冲销台账：原子增减 + SQL 内推导状态（P2-29），与其它并发核销/冲销互不覆盖
             String amtSql = amt.toPlainString();
+            // F7-35（2026-09-19）：反核销后补 PARTIAL —— 该台账若还有**其它**付款的核销，
+            // 冲销后未付额介于 (0, amount) 之间，状态应回到 PARTIAL；原实现只有 SETTLED/UNSETTLED 两态，
+            // 会把"部分结清"写成"未结清"（与应收侧对称修复）。
             int rows = payableMapper.update(null, new LambdaUpdateWrapper<FinancePayable>()
                     .eq(FinancePayable::getId, p.getId())
                     .setSql("status = CASE WHEN IFNULL(unpaid_amount, 0) + (" + amtSql + ") <= 0 THEN '"
-                            + SettlementStatus.SETTLED.getCode() + "' ELSE '" + SettlementStatus.UNSETTLED.getCode() + "' END")
+                            + SettlementStatus.SETTLED.getCode() + "' WHEN IFNULL(unpaid_amount, 0) + (" + amtSql
+                            + ") >= IFNULL(amount, 0) THEN '" + SettlementStatus.UNSETTLED.getCode()
+                            + "' ELSE '" + SettlementStatus.PARTIAL.getCode() + "' END")
                     .setSql("paid_amount = GREATEST(IFNULL(paid_amount, 0) - (" + amtSql + "), 0)")
                     .setSql("unpaid_amount = IFNULL(unpaid_amount, 0) + (" + amtSql + ")"));
             if (rows == 0) throw new BusinessException("应付台账不存在，反核销失败");

@@ -78,7 +78,7 @@
         </span>
       </el-divider>
       <el-table :data="items" border size="small" max-height="380">
-        <!-- ===== 退回侧：客户退回，入售后仓待整理 ===== -->
+        <!-- ===== 退回侧：客户退回，入成品仓（品质待分类 PENDING）待整理 ===== -->
         <el-table-column label="退回（客户退回，入成品仓待分类）" align="center">
           <el-table-column label="SKU" width="130">
             <template #default="{ row }">

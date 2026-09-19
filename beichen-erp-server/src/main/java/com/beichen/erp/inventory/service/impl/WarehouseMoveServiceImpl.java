@@ -113,6 +113,7 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
             throw new BusinessException("移出/移入仓库不能为空");
         if (move.getFromWarehouseId().equals(move.getToWarehouseId()))
             throw new BusinessException("移出与移入仓库不能相同");
+        assertItems(items);
         move.setCode(gen(BillPrefix.WAREHOUSE_MOVE));
         move.setStatus(DocStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
@@ -132,6 +133,8 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
         InventoryWarehouseMove old = moveMapper.selectById(move.getId());
         if (old == null) throw new BusinessException("移仓单不存在");
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        // F7-15：必须在删旧明细之前校验，否则校验失败时草稿明细已被清空
+        assertItems(items);
         move.setCode(old.getCode());
         moveMapper.updateById(move);
         itemMapper.delete(new LambdaQueryWrapper<InventoryWarehouseMoveItem>().eq(InventoryWarehouseMoveItem::getMoveId, move.getId()));
@@ -166,6 +169,8 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
         }
         List<InventoryWarehouseMoveItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<InventoryWarehouseMoveItem>().eq(InventoryWarehouseMoveItem::getMoveId, id));
+        // F7-15 兜底（覆盖历史草稿与直连库的脏数据）：放在 claim 之后，抛错会连同 claim 一起回滚
+        assertItems(items);
         for (InventoryWarehouseMoveItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             // 查询产品名称用于库存流水
@@ -213,6 +218,28 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
                     StockChangeType.MOVE_OUT, move.getCode(), RelatedBillType.WAREHOUSE_MOVE_UN_AUDIT, it.getProductId(), "", move.getId(), it.getQualityType());
         }
         // 状态已由 DocStatusGuard 在该方法开头原子置为 DRAFT
+    }
+
+    /**
+     * 明细行校验（F7-15 · 2026-09-19）：明细不能为空，且每行必须选择产品、数量必须大于 0。
+     *
+     * <p><b>修复的缺陷</b>：修复前 create / update / audit 三处都不校验明细数量，数量为负数时
+     * {@link #audit(Long)} 会给移出仓 {@code q.negate()}（变正）、给移入仓 {@code q}（变负），
+     * 等价于"按单据的反方向搬运"（实测：单据说 A→B 移 2 件，账上 B 仓 −2、A 仓 +2），
+     * 静默错账、反审核也不会自愈。</p>
+     *
+     * <p><b>为什么直接抛错而不是静默过滤</b>：过滤会悄悄改变单据含义（用户填 −2 意图搬 2 件，
+     * 丢行后单据内容就与提交内容不一致）；抛错能立刻定位到具体行。</p>
+     */
+    private void assertItems(List<InventoryWarehouseMoveItem> items) {
+        if (items == null || items.isEmpty()) throw new BusinessException("请添加移仓明细");
+        for (int i = 0; i < items.size(); i++) {
+            InventoryWarehouseMoveItem it = items.get(i);
+            if (it == null || it.getProductId() == null)
+                throw new BusinessException("第 " + (i + 1) + " 行未选择产品");
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("第 " + (i + 1) + " 行数量必须大于 0");
+        }
     }
 
     private String gen(String prefix) {

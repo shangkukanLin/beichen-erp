@@ -37,6 +37,10 @@ $prodId = [int](SqlOne "SELECT COALESCE(MAX(id),0) FROM product")
 # Chinese terms built from code points so this file stays ASCII-only (PS 5.1 + no BOM = ANSI)
 $CN_PROD = [string][char]0x4EA7 + [string][char]0x54C1   # product
 $CN_MAT  = [string][char]0x7269 + [string][char]0x6599   # material
+# F7-15 (2026-09-19): warehouse-move now rejects a NULL-product line in its OWN item guard
+# ("row N has not selected a product") BEFORE reaching the stock-write layer, so T7-5 must accept
+# either message. Safety outcome is unchanged (rejected + stays DRAFT + no ghost row, see T7-6).
+$CN_ROW_NOPROD = [string][char]0x672A + [string][char]0x9009 + [string][char]0x62E9 + [string][char]0x4EA7 + [string][char]0x54C1   # row-has-no-product
 $whId   = [int](SqlOne "SELECT COALESCE(MIN(warehouse_id),0) FROM warehouse_stock WHERE product_id=$prodId AND quantity > 0")
 $wh2    = [int](SqlOne "SELECT COALESCE(MIN(id),0) FROM warehouse WHERE warehouse_category='INVENTORY'")
 $today  = (Get-Date -Format 'yyyy-MM-dd')
@@ -99,8 +103,11 @@ $mvId = [int](SqlOne ("SELECT id FROM inventory_warehouse_move WHERE code='" + $
 SqlExec ("INSERT INTO inventory_warehouse_move_item (move_id,product_id,quality_type,quantity,company_id) VALUES (" + $mvId + ",NULL,'A',1,1)")
 $r5 = ApiRaw 'PUT' "/inventory/warehouse-move/$mvId/audit" ''
 Write-Host ('audit move -> ' + (Msg $r5))
-Ok ((Msg $r5) -match 'code=500') 'T7-5 move audit rejected by the stock layer'
-Ok (((Msg $r5) -match [regex]::Escape($CN_PROD)) -and ((Msg $r5) -match [regex]::Escape($CN_MAT))) 'T7-5 message is the stock-layer guard (product/material must be specified)'
+Ok ((Msg $r5) -match 'code=500') 'T7-5 move audit rejected (guarded)'
+$msg5 = Msg $r5
+$rowGuard5   = $msg5 -match [regex]::Escape($CN_ROW_NOPROD)
+$stockGuard5 = ($msg5 -match [regex]::Escape($CN_PROD)) -and ($msg5 -match [regex]::Escape($CN_MAT))
+Ok ($rowGuard5 -or $stockGuard5) 'T7-5 reject message is a guard (move item line OR product+material)'
 SqlExec ("DELETE FROM inventory_warehouse_move_item WHERE move_id=$mvId")
 SqlExec ("DELETE FROM inventory_warehouse_move WHERE id=$mvId")
 # clean any leftovers from earlier runs (unique-prefix rows only)

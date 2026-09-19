@@ -2,7 +2,6 @@ package com.beichen.erp.warehouse.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
-import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
@@ -45,17 +44,4 @@ public interface WarehouseStockMapper extends BaseMapper<WarehouseStock> {
                                 @Param("companyId") Long companyId,
                                 @Param("delta") BigDecimal delta);
 
-    /** 插入成品库存首条记录 */
-    @Insert("""
-            INSERT INTO warehouse_stock
-                (warehouse_id, product_id, quality_type, quantity, available_quantity, company_id, create_time, update_time)
-            VALUES
-                (#{warehouseId}, #{productId}, #{qualityType}, #{delta}, #{delta},
-                 #{companyId}, NOW(), NOW())
-            """)
-    int insertStock(@Param("warehouseId") Long warehouseId,
-                    @Param("productId") Long productId,
-                    @Param("qualityType") String qualityType,
-                    @Param("companyId") Long companyId,
-                    @Param("delta") BigDecimal delta);
 }

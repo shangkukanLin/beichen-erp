@@ -73,7 +73,7 @@
         </el-table-column>
         <el-table-column label="待分类" width="100" align="right">
           <template #default="{ row }">
-            <el-tag v-if="row.qtyPending > 0" type="info" size="small" title="压在售后仓、等待退货整理的库存">{{ fmt(row.qtyPending) }}</el-tag>
+            <el-tag v-if="row.qtyPending > 0" type="info" size="small" title="压在成品仓、等待退货整理的库存（品质待分类 PENDING）">{{ fmt(row.qtyPending) }}</el-tag>
             <span v-else style="color:#999">0</span>
           </template>
         </el-table-column>
