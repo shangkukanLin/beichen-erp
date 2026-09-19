@@ -246,7 +246,28 @@ public class DeliveryServiceImpl implements DeliveryService {
         for (OutsourceDeliveryItem item : items) {
             if (item.getItemId() == null || item.getQuantity() == null) continue;
             MaterialOrderItem oi = materialOrderItemMapper.selectById(item.getItemId());
-            if (oi == null) continue;
+            // F7-67（2026-09-19）：订单编辑会"删明细再重建"，已存在的收货草稿其 item_id 随之悬空。
+            // 原实现静默 continue ⇒ 库存已入、应付已生成、状态已置 AUDITED，唯独订单已收数量不回写
+            // ⇒ 订单永远显示"未收"，可无限再收。改为抛错，让整个事务回滚（不落半套账）。
+            if (oi == null) {
+                throw new BusinessException("收货明细关联的物料订单明细行不存在（行ID=" + item.getItemId()
+                        + "），该订单可能已被编辑；请删除本单后重新收货");
+            }
+            // F7-66（2026-09-19）：落账前**第二道防线** —— 复核「已收 + 本次 ≤ 下单数」。
+            // 第一道在 MaterialOrderServiceImpl.receive（建草稿时，含"在途草稿"额度占用）；
+            // 本道兜住"历史草稿 / 直改库 / 并发叠加"等绕过第一道的情形。
+            if (isReceive) {
+                BigDecimal orderedQty = oi.getOrderQuantity() != null ? oi.getOrderQuantity() : BigDecimal.ZERO;
+                BigDecimal receivedQty = oi.getReceivedQuantity() != null ? oi.getReceivedQuantity() : BigDecimal.ZERO;
+                if (orderedQty.compareTo(BigDecimal.ZERO) > 0
+                        && receivedQty.add(item.getQuantity()).compareTo(orderedQty) > 0) {
+                    throw new BusinessException("收货数量超过该物料下单数量：物料「" + getMaterialNameById(oi.getMaterialId())
+                            + "」下单 " + orderedQty.stripTrailingZeros().toPlainString()
+                            + "、已收 " + receivedQty.stripTrailingZeros().toPlainString()
+                            + "、本次 " + item.getQuantity().stripTrailingZeros().toPlainString()
+                            + "；请调整收货数量或修改订单数量");
+                }
+            }
             // F7-49（2026-09-19）：改为 **SQL 原子累加**（原为 Java 侧"读-改-写"：同一物料订单明细行被两张
             // 收料单并发审核时互相覆盖，数量少记一次且不报错）。数字取自 BigDecimal.toPlainString()。
             String qtySql = item.getQuantity().toPlainString();

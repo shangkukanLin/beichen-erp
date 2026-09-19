@@ -255,8 +255,12 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
                 .orderByDesc(OutsourceDelivery::getId)
                 .last("LIMIT 1"));
         if (dup != null) {
-            log.warn("收货重复提交拦截：orderId={} 复用 5 秒内的草稿收货单 {}", id, dup.getCode());
-            return dup.getId();
+            // F7-66 / §24.8（2026-09-19）：原实现是"静默复用"该草稿并返回其 id —— 第二次请求携带的
+            // 数量/明细被丢弃，而调用方拿到 200 + 一个单号，会误以为"本次收货成功"。
+            // 改为明确报错并给出既有草稿单号，由用户确认是审核它还是稍后重试。
+            log.warn("收货重复提交拦截：orderId={} 已存在 5 秒内的草稿收货单 {}", id, dup.getCode());
+            throw new BusinessException("该订单刚刚已生成收货草稿单 " + dup.getCode()
+                    + "（疑似重复提交）。请到「物料收货」页确认并审核该草稿单，确认不是重复后再重新收货。");
         }
 
         // 2. 创建收货草稿单（库存/应付/订单明细的更新推迟到审核时统一处理，支持反审核）
@@ -287,6 +291,23 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             MaterialOrderItem orderItem = itemMapper.selectById(itemId);
             if (orderItem == null) continue;
 
+            // F7-66（2026-09-19）：收货数量不得超过「下单数 − 已收数 − 在途草稿数」。
+            // 原实现只判断 qty > 0 ⇒ 直调接口或前端手填即可超收（实测现网已产生 8 行超收：1900 件、
+            // 按单价折算 18800 元应付虚增）。此处是**第一道防线**（建草稿即拦）；
+            // 第二道在 DeliveryServiceImpl.auditMaterialDelivery（落账前复核）。
+            BigDecimal orderedQty = orderItem.getOrderQuantity() != null ? orderItem.getOrderQuantity() : BigDecimal.ZERO;
+            BigDecimal receivedQty = orderItem.getReceivedQuantity() != null ? orderItem.getReceivedQuantity() : BigDecimal.ZERO;
+            BigDecimal onWayQty = pendingReceiveDraftQty(itemId);
+            BigDecimal remainQty = orderedQty.subtract(receivedQty).subtract(onWayQty);
+            if (qty.compareTo(remainQty) > 0) {
+                throw new BusinessException("收货数量超过该物料剩余可收量：物料「" + getMaterialNameById(orderItem.getMaterialId())
+                        + "」下单 " + orderedQty.stripTrailingZeros().toPlainString()
+                        + "、已收 " + receivedQty.stripTrailingZeros().toPlainString()
+                        + "、在途草稿 " + onWayQty.stripTrailingZeros().toPlainString()
+                        + "、本次 " + qty.stripTrailingZeros().toPlainString()
+                        + "；剩余可收 " + remainQty.max(BigDecimal.ZERO).stripTrailingZeros().toPlainString());
+            }
+
             OutsourceDeliveryItem di = new OutsourceDeliveryItem();
             di.setDeliveryId(delivery.getId());
             di.setItemId(itemId);
@@ -308,6 +329,33 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             orderMapper.updateById(upd);
         }
         return delivery.getId();
+    }
+
+    /**
+     * 该订单明细行上「在途」的收货草稿数量 = 同一 item_id 且单据为 DRAFT 的 **RECEIVE** 明细合计。
+     * <p>F7-66（2026-09-19）：剩余可收量必须扣掉尚未审核的草稿，否则"连续建两张超量草稿"即可绕过上限
+     * （第一张草稿审核前 received_quantity 尚未变化）。</p>
+     */
+    private BigDecimal pendingReceiveDraftQty(Long orderItemId) {
+        if (orderItemId == null) return BigDecimal.ZERO;
+        List<OutsourceDeliveryItem> rows = deliveryItemMapper.selectList(
+                new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getItemId, orderItemId));
+        if (rows.isEmpty()) return BigDecimal.ZERO;
+        List<Long> deliveryIds = rows.stream().map(OutsourceDeliveryItem::getDeliveryId)
+                .filter(java.util.Objects::nonNull).distinct().collect(Collectors.toList());
+        if (deliveryIds.isEmpty()) return BigDecimal.ZERO;
+        Set<Long> draftIds = deliveryMapper.selectList(new LambdaQueryWrapper<OutsourceDelivery>()
+                        .in(OutsourceDelivery::getId, deliveryIds)
+                        .eq(OutsourceDelivery::getDeliveryType, DeliveryType.RECEIVE.getCode())
+                        .eq(OutsourceDelivery::getStatus, DocStatus.DRAFT.getCode()))
+                .stream().map(OutsourceDelivery::getId).collect(Collectors.toSet());
+        BigDecimal sum = BigDecimal.ZERO;
+        for (OutsourceDeliveryItem r : rows) {
+            if (r.getDeliveryId() != null && draftIds.contains(r.getDeliveryId()) && r.getQuantity() != null) {
+                sum = sum.add(r.getQuantity());
+            }
+        }
+        return sum;
     }
 
     /** 获取某个仓库某个物料的良品库存 */

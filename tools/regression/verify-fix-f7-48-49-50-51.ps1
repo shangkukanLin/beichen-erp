@@ -79,27 +79,35 @@ foreach ($t in $auditTables) {
 if ($dirty -eq 0) { Ok ("invariant holds: 0 DRAFT doc carries audit_time across " + $auditTables.Count + " tables") }
 else { Bad ("$dirty DRAFT doc(s) still carry audit_time") }
 
-# A2: round trip on a real AUDITED sale order (un-audit -> audit_time must be NULL, audit -> restored)
-$soRow = SqlOne "SELECT CONCAT(id,'|',code,'|',IFNULL(settle_type,'')) FROM sale_order WHERE status='AUDITED' AND IFNULL(settle_type,'')<>'CASH' ORDER BY id DESC LIMIT 1"
-$sp = $soRow -split '\|'
-$soId = [int]$sp[0]
-$soCode = $sp[1]
-$soBaseAudit = SqlOne "SELECT IFNULL(audit_time,'NULL') FROM sale_order WHERE id=$soId"
-Info ("fixture sale_order $soCode (id=$soId, audit_time=$soBaseAudit)")
-$r = Api 'Put' "$BASE/inventory/sale/$soId/un-audit" $null
-$afterUn = SqlOne "SELECT CONCAT(status,'|',IFNULL(audit_time,'NULL')) FROM sale_order WHERE id=$soId"
-if ((CodeOf $r) -eq '200' -and $afterUn -eq 'DRAFT|NULL') {
-  Ok ("un-audit cleared audit_time: status|audit_time = $afterUn (was $soBaseAudit)")
-} else {
-  Bad ("un-audit did not clear audit fields: code=" + (CodeOf $r) + " msg=" + (MsgOf $r) + " row=$afterUn")
+# A2: round trip on a real AUDITED sale order (un-audit -> audit_time must be NULL, audit -> restored).
+# NOTE: AUDITED orders get locked by business rules once they carry receipts (observed:
+# "应收单「XS-...」已有收款记录，不可反审核"), so walk the candidates and use the first one the
+# service actually accepts -- same approach as the sale_exchange branch below.
+$soIds = @()
+$soRaw = Sql "SELECT id FROM sale_order WHERE status='AUDITED' AND IFNULL(settle_type,'')<>'CASH' ORDER BY id DESC"
+foreach ($line in ($soRaw -split "`n")) {
+  $t = "$line".Trim()
+  if ($t -match '^\d+$') { $soIds += [int]$t }
 }
-$r2 = Api 'Put' "$BASE/inventory/sale/$soId/audit" $null
-$afterRe = SqlOne "SELECT CONCAT(status,'|',IFNULL(audit_time,'NULL')) FROM sale_order WHERE id=$soId"
-if ((CodeOf $r2) -eq '200' -and $afterRe -ne 'DRAFT|NULL' -and $afterRe -ne 'AUDITED|NULL') {
-  Ok ("re-audit restored the doc: $afterRe")
-} else {
-  Bad ("re-audit problem: code=" + (CodeOf $r2) + " msg=" + (MsgOf $r2) + " row=$afterRe")
+$soTested = $false
+foreach ($sid in $soIds) {
+  $soBaseAudit = SqlOne "SELECT IFNULL(audit_time,'NULL') FROM sale_order WHERE id=$sid"
+  $r = Api 'Put' "$BASE/inventory/sale/$sid/un-audit" $null
+  if ((CodeOf $r) -ne '200') { Info ("sale_order $sid un-audit refused: " + (MsgOf $r)); continue }
+  $afterUn = SqlOne "SELECT CONCAT(status,'|',IFNULL(audit_time,'NULL')) FROM sale_order WHERE id=$sid"
+  if ($afterUn -eq 'DRAFT|NULL') { Ok ("sale_order $sid un-audit cleared audit_time: $afterUn (was $soBaseAudit)") }
+  else { Bad ("sale_order $sid un-audit left audit fields: $afterUn") }
+  $r2 = Api 'Put' "$BASE/inventory/sale/$sid/audit" $null
+  $afterRe = SqlOne "SELECT CONCAT(status,'|',IFNULL(audit_time,'NULL')) FROM sale_order WHERE id=$sid"
+  if ((CodeOf $r2) -eq '200' -and $afterRe -ne 'DRAFT|NULL' -and $afterRe -ne 'AUDITED|NULL') {
+    Ok ("sale_order $sid re-audit restored the doc: $afterRe")
+  } else {
+    Bad ("sale_order $sid re-audit problem: code=" + (CodeOf $r2) + " msg=" + (MsgOf $r2) + " row=$afterRe")
+  }
+  $soTested = $true
+  break
 }
+if (-not $soTested) { Info 'no AUDITED sale_order could be un-audited (all locked by business rules) -- SO branch verified by code review only' }
 
 # A3: same for sale_exchange when an un-auditable fixture exists (auditor_id/name are cleared there too).
 # Several AUDITED exchanges are locked by business rules (goods already sorted, etc.), so walk the

@@ -64,6 +64,9 @@ function openReceive() {
   recItems.value = items.value.map((it: any) => ({
     itemId: it.id, materialName: it.materialName, orderQuantity: it.orderQuantity,
     receivedQuantity: it.receivedQuantity, defectReturnedQty: it.defectReturnedQty, quantity: undefined as any,
+    // F7-66（2026-09-19）：收货数量上限 = 下单数 − 已收数（服务端还会再扣掉"在途草稿"，此处仅作 UI 提示；
+    // 精确拦截以服务端为准）。原先输入框无上限 ⇒ 正常操作即可超收。
+    maxReceive: Math.max(0, Number(it.orderQuantity || 0) - Number(it.receivedQuantity || 0)),
     components: (it.components || []).map((c: any) => ({ childMaterialName: c.childMaterialName, childUnit: c.childUnit, stockQuantity: c.stockQuantity || 0, quantity: c.quantity || 1 }))
   }))
   recVisible.value = true
@@ -304,8 +307,9 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         </el-table-column>
         <el-table-column prop="materialName" label="物料" min-width="140" />
         <el-table-column label="已收" width="70" align="right"><template #default="{ row }">{{ (row.receivedQuantity || 0) - (row.defectReturnedQty || 0) }}</template></el-table-column>
-        <el-table-column label="本次交货" width="140"><template #default="{ row }"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" style="width:100%" placeholder="数量" /></template></el-table-column>
+        <el-table-column label="本次交货" width="140"><template #default="{ row }"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" :max="row.maxReceive" style="width:100%" placeholder="数量" /></template></el-table-column>
         <el-table-column prop="orderQuantity" label="下单数" width="80" />
+        <el-table-column label="剩余可收" width="80" align="right"><template #default="{ row }">{{ row.maxReceive }}</template></el-table-column>
       </el-table>
       <template #footer><el-button @click="recVisible = false">取消</el-button><el-button type="primary" :loading="recSaving" @click="handleReceive()">确认交货</el-button></template>
     </el-dialog>
@@ -323,7 +327,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         <el-table-column prop="materialName" label="物料" min-width="140" />
         <el-table-column prop="available" label="可退" width="70" />
         <el-table-column label="仓库库存" width="90" align="right"><template #default="{ row }"><span v-if="row.stockLoading">加载中...</span><span v-else-if="row.warehouseStock === undefined" style="color:var(--app-text-placeholder)">—</span><span v-else :style="{ color: row.warehouseStock < row.quantity ? 'var(--app-color-danger)' : 'var(--app-color-success)' }">{{ row.warehouseStock }}</span></template></el-table-column>
-        <el-table-column label="退料数量" width="140"><template #default="{ row }"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" style="width:100%" placeholder="数量" /></template></el-table-column>
+        <el-table-column label="退料数量" width="140"><template #default="{ row }"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" :max="row.available" style="width:100%" placeholder="数量" /></template></el-table-column>
       </el-table>
       <template #footer><el-button @click="defectVisible = false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认退料</el-button></template>
     </el-dialog>

@@ -197,31 +197,45 @@ if ((CodeOf $pa) -eq '200') {
 
 # ================= F7-46 =================
 Write-Output '=== F7-46: receive dedup window ==='
-$moId = [int](SqlOne "SELECT IFNULL(MAX(id),0) FROM outsource_material_order WHERE status='RECEIVING'")
-$moItem = [int](SqlOne ("SELECT IFNULL(MIN(id),0) FROM outsource_material_order_item WHERE order_id=" + $moId))
-$moSup = SqlOne ("SELECT supplier_id FROM outsource_material_order WHERE id=" + $moId)
+# NOTE (2026-09-19, F7-66): receive() now enforces "received + this <= ordered", so the fixture must
+# be an item row that still HAS remaining quota. Picking MAX(id) used to land on a fully received row
+# and the first call is now correctly rejected before the dedup window is even reached.
+# The assertion also changed shape: the second call is now REFUSED with an explicit error instead of
+# silently returning the same draft id -- both prove "no second draft is created".
+$moRow = SqlOne ("SELECT CONCAT(i.order_id,'|',i.id,'|',IFNULL(o.supplier_id,0)) FROM outsource_material_order_item i " +
+                 "JOIN outsource_material_order o ON o.id=i.order_id " +
+                 "WHERE o.status='RECEIVING' AND IFNULL(i.order_quantity,0)-IFNULL(i.received_quantity,0) >= 10 " +
+                 "ORDER BY i.id LIMIT 1")
+$fp = $moRow -split '\|'
+$moId = 0; $moItem = 0; $moSup = '0'
+if ($fp.Count -ge 3) { $moId = [int]$fp[0]; $moItem = [int]$fp[1]; $moSup = $fp[2] }
 $wh = [int](SqlOne ("SELECT IFNULL(MAX(id),0) FROM warehouse WHERE factory_id=" + $moSup))
 if ($wh -le 0) { $wh = [int](SqlOne "SELECT IFNULL(MAX(id),0) FROM warehouse") }
 $dlv0 = [int](SqlOne "SELECT COUNT(*) FROM outsource_delivery")
 if ($moId -gt 0 -and $moItem -gt 0 -and $wh -gt 0) {
-  Info ("fixture material_order=$moId item=$moItem warehouse=$wh")
+  Info ("fixture material_order=$moId item=$moItem warehouse=$wh (row still has remaining quota)")
   $rcvBody = @{ warehouseId = $wh; items = @(@{ itemId = $moItem; quantity = 10 }) }
   $r1 = Api 'Post' "$BASE/outsource/material-order/$moId/receive" $rcvBody
   $r2 = Api 'Post' "$BASE/outsource/material-order/$moId/receive" $rcvBody
   $dlv1 = [int](SqlOne "SELECT COUNT(*) FROM outsource_delivery")
   $created = $dlv1 - $dlv0
-  if ((CodeOf $r1) -eq '200' -and (CodeOf $r2) -eq '200') {
-    if ([string]$r1.data -eq [string]$r2.data) { Ok ("second receive within 5s reused the same draft delivery (id=" + $r1.data + ")") }
-    else { Bad ("two receive calls returned different deliveries: " + $r1.data + " / " + $r2.data) }
-  } else { Bad ("receive calls failed: " + (CodeOf $r1) + " " + (MsgOf $r1)) }
+  if ((CodeOf $r1) -eq '200' -and (CodeOf $r2) -ne '200') {
+    Ok ("second receive blocked by the dedup guard (first id=" + $r1.data + "; second: " + (MsgOf $r2) + ")")
+  } elseif ((CodeOf $r1) -eq '200' -and (CodeOf $r2) -eq '200' -and [string]$r1.data -eq [string]$r2.data) {
+    Ok ("second receive within 5s reused the same draft delivery (id=" + $r1.data + ")")
+  } else {
+    Bad ("receive calls failed: r1=" + (CodeOf $r1) + " " + (MsgOf $r1) + " | r2=" + (CodeOf $r2) + " " + (MsgOf $r2))
+  }
   if ($created -eq 1) { Ok "exactly 1 delivery draft was created by the double submit (before the fix: 2)" }
   else { Bad ("$created delivery drafts created by a double submit (expect 1)") }
-  # cleanup the probe delivery
-  $dlvId = [int]$r1.data
-  Sql "DELETE FROM outsource_delivery_item WHERE delivery_id=$dlvId" | Out-Null
-  Sql "DELETE FROM outsource_delivery WHERE id=$dlvId" | Out-Null
-  $left = [int](SqlOne "SELECT COUNT(*) FROM outsource_delivery WHERE id=$dlvId")
-  if ($left -eq 0) { Ok "probe delivery removed" } else { Bad "probe delivery left behind" }
+  # cleanup the probe delivery (only when the first call actually created one)
+  if ((CodeOf $r1) -eq '200') {
+    $dlvId = [int]$r1.data
+    Sql "DELETE FROM outsource_delivery_item WHERE delivery_id=$dlvId" | Out-Null
+    Sql "DELETE FROM outsource_delivery WHERE id=$dlvId" | Out-Null
+    $left = [int](SqlOne "SELECT COUNT(*) FROM outsource_delivery WHERE id=$dlvId")
+    if ($left -eq 0) { Ok "probe delivery removed" } else { Bad "probe delivery left behind" }
+  }
 } else { Info "receive fixture incomplete (order=$moId item=$moItem wh=$wh); skipped" }
 
 # ================= cleanup + self-check =================
