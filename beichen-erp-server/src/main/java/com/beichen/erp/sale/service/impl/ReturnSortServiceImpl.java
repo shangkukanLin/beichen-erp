@@ -1,6 +1,7 @@
 package com.beichen.erp.sale.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
@@ -598,9 +599,18 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         rsMapper.updateById(u);
     }
 
+    /** @deprecated 反审核语义，请改用 {@link #unAudit(Long)}（F7-51：原名与其余模块的"作废"语义相反；
+     *  保留为兼容别名，Controller 的 /cancel 与 /un-audit 都指向同一实现） */
+    @Override
+    @Deprecated
+    public void cancel(Long id) {
+        unAudit(id);
+    }
+
+    /** 反审核：逆向回滚（canonical 命名 · F7-51） */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void cancel(Long id) {
+    public void unAudit(Long id) {
         ReturnSort s = rsMapper.selectById(id);
         if (s == null) throw new BusinessException("退货整理单不存在");
         // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免分选库存重复冲回
@@ -722,13 +732,15 @@ public class ReturnSortServiceImpl implements ReturnSortService {
     private void applySortedQuantity(Long pendingId, BigDecimal qty, boolean add) {
         if (pendingId == null || qty == null) return;
         AfterSalePending p = afterSalePendingMapper.selectById(pendingId);
-        if (p == null) return;
-        BigDecimal next = add ? nz(p.getSortedQuantity()).add(qty) : nz(p.getSortedQuantity()).subtract(qty);
-        if (next.compareTo(BigDecimal.ZERO) < 0) next = BigDecimal.ZERO;
-        AfterSalePending u = new AfterSalePending();
-        u.setId(p.getId());
-        u.setSortedQuantity(next);
-        afterSalePendingMapper.updateById(u);
+        if (p == null) return; // 无锚点（历史数据）不校验、不回写（保持原语义）
+        // F7-49（2026-09-19）：改为 **SQL 原子累加**（原 Java 侧"读-改-写"，两张整理单并发审核同一来源批次
+        // 会互相覆盖、已整理量少记一次）；扣回侧用 GREATEST(...,0) 保留原来的"不为负"语义。
+        String qtySql = qty.toPlainString();
+        afterSalePendingMapper.update(null, new LambdaUpdateWrapper<AfterSalePending>()
+                .eq(AfterSalePending::getId, p.getId())
+                .setSql(add
+                        ? "sorted_quantity = IFNULL(sorted_quantity, 0) + (" + qtySql + ")"
+                        : "sorted_quantity = GREATEST(IFNULL(sorted_quantity, 0) - (" + qtySql + "), 0)"));
     }
 
     private void validate(ReturnSort s, List<ReturnSortItem> items) {

@@ -284,11 +284,10 @@ public class StockTakeServiceImpl implements StockTakeService {
         InventoryStockTake t = takeMapper.selectById(id);
         if (t == null) throw new BusinessException("盘点单不存在");
         assertRoleForTake(t);
-        if (!DocStatus.DRAFT.getCode().equals(t.getStatus())) throw new BusinessException("只有草稿状态可作废");
-        InventoryStockTake u = new InventoryStockTake();
-        u.setId(id);
-        u.setStatus(DocStatus.CANCELLED.getCode());
-        takeMapper.updateById(u);
+        // F7-50（2026-09-19）：原子抢占 DRAFT→CANCELLED（原"先查后改"可与 audit 并发互覆，见移仓单同款注释）
+        if (!DocStatusGuard.claim(takeMapper, InventoryStockTake::getId, id,
+                InventoryStockTake::getStatus, DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("只有草稿状态可作废");
     }
 
     @Override

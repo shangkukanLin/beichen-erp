@@ -165,10 +165,10 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
     public void cancel(Long id) {
         OutsourceStockLoss old = lossMapper.selectById(id);
         if (old == null) throw new BusinessException("报损单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("仅草稿状态可作废，已审核单据请先反审核");
-        OutsourceStockLoss u = new OutsourceStockLoss();
-        u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode());
-        lossMapper.updateById(u);
+        // F7-50（2026-09-19）：原子抢占 DRAFT→CANCELLED（原"先查后改"可与 audit 并发互覆）
+        if (!DocStatusGuard.claim(lossMapper, OutsourceStockLoss::getId, id,
+                OutsourceStockLoss::getStatus, DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("仅草稿状态可作废，已审核单据请先反审核");
     }
 
     @Override

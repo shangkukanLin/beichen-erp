@@ -152,9 +152,11 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
     public void cancel(Long id) {
         InventoryWarehouseMove old = moveMapper.selectById(id);
         if (old == null) throw new BusinessException("移仓单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
-        InventoryWarehouseMove u = new InventoryWarehouseMove(); u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode());
-        moveMapper.updateById(u);
+        // F7-50（2026-09-19）：原子抢占 DRAFT→CANCELLED —— 原"先查后改"在 cancel 与 audit 并发时，
+        // audit 抢占成功并落了库存、cancel 仍把单据覆写成 CANCELLED ⇒ 库存已生效却显示已作废且无逆向动作
+        if (!DocStatusGuard.claim(moveMapper, InventoryWarehouseMove::getId, id,
+                InventoryWarehouseMove::getStatus, DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("只有草稿状态可作废");
     }
 
     @Override

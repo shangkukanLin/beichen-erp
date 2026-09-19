@@ -387,10 +387,12 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         if (row.getMaterialOrderItemId() != null && row.getQuantity() != null) {
             MaterialOrderItem oi = materialOrderItemMapper.selectById(row.getMaterialOrderItemId());
             if (oi != null) {
-                BigDecimal received = nz(oi.getReceivedQuantity()).subtract(row.getQuantity());
-                oi.setReceivedQuantity(received.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : received);
-                oi.setRepairReturnedQty(nz(oi.getRepairReturnedQty()).add(row.getQuantity()));
-                materialOrderItemMapper.updateById(oi);
+                // F7-49（2026-09-19）：SQL 原子加减；received 侧保留原来的"不为负"夹零语义
+                String qtySql = row.getQuantity().toPlainString();
+                materialOrderItemMapper.update(null, new LambdaUpdateWrapper<MaterialOrderItem>()
+                        .eq(MaterialOrderItem::getId, oi.getId())
+                        .setSql("received_quantity = GREATEST(IFNULL(received_quantity, 0) - (" + qtySql + "), 0)")
+                        .setSql("repair_returned_qty = IFNULL(repair_returned_qty, 0) + (" + qtySql + ")"));
             }
         }
         repairMapper.deleteById(repairRecordId);
@@ -617,9 +619,13 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
             it.setMaterialOrderItemId(oi.getId());
             itemMapper.updateById(it);
             // 扣减收料数 + 记送修中（净收料 = 收料总数 − 送修数）
-            oi.setReceivedQuantity(received.subtract(it.getQuantity()));
-            oi.setRepairReturnedQty(repairing.add(it.getQuantity()));
-            materialOrderItemMapper.updateById(oi);
+            // F7-49（2026-09-19）：SQL 原子加减（原 Java 侧"读-改-写"并发会互相覆盖）。
+            // 此处 received 侧**保持不夹零**（原实现也不夹零：上方 returnable 校验已保证不会减成负数）。
+            String qtySql = it.getQuantity().toPlainString();
+            materialOrderItemMapper.update(null, new LambdaUpdateWrapper<MaterialOrderItem>()
+                    .eq(MaterialOrderItem::getId, oi.getId())
+                    .setSql("received_quantity = IFNULL(received_quantity, 0) - (" + qtySql + ")")
+                    .setSql("repair_returned_qty = IFNULL(repair_returned_qty, 0) + (" + qtySql + ")"));
         }
     }
 
@@ -654,10 +660,12 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                     || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
             MaterialOrderItem oi = materialOrderItemMapper.selectById(it.getMaterialOrderItemId());
             if (oi == null) continue;
-            oi.setReceivedQuantity(nz(oi.getReceivedQuantity()).add(it.getQuantity()));
-            BigDecimal repairing = nz(oi.getRepairReturnedQty()).subtract(it.getQuantity());
-            oi.setRepairReturnedQty(repairing.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : repairing);
-            materialOrderItemMapper.updateById(oi);
+            // F7-49（2026-09-19）：SQL 原子加减；repair_returned_qty 保留原来的"不为负"夹零语义
+            String qtySql = it.getQuantity().toPlainString();
+            materialOrderItemMapper.update(null, new LambdaUpdateWrapper<MaterialOrderItem>()
+                    .eq(MaterialOrderItem::getId, oi.getId())
+                    .setSql("received_quantity = IFNULL(received_quantity, 0) + (" + qtySql + ")")
+                    .setSql("repair_returned_qty = GREATEST(IFNULL(repair_returned_qty, 0) - (" + qtySql + "), 0)"));
         }
         // 落点解冻（下次审核重新解析）
         itemMapper.update(null, new LambdaUpdateWrapper<OutsourceMaterialReturnItem>()
@@ -718,11 +726,10 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     public void cancel(Long id) {
         OutsourceMaterialReturn old = returnMapper.selectById(id);
         if (old == null) throw new BusinessException("退货单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可作废");
-        OutsourceMaterialReturn u = new OutsourceMaterialReturn();
-        u.setId(id);
-        u.setStatus(DocStatus.CANCELLED.getCode());
-        returnMapper.updateById(u);
+        // F7-50（2026-09-19）：原子抢占 DRAFT→CANCELLED（原"先查后改"可与 audit 并发互覆）
+        if (!DocStatusGuard.claim(returnMapper, OutsourceMaterialReturn::getId, id,
+                OutsourceMaterialReturn::getStatus, DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("只有草稿状态可作废");
     }
 
     @Override

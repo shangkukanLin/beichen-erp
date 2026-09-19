@@ -67,7 +67,7 @@ function PyBody([int]$sup, [int]$acc, [int]$payableId, $amt) {
 Write-Output '=== 0) baseline ==='
 $supDbIncl = D (SqlOne "SELECT IFNULL(SUM(unpaid_amount),0) FROM finance_payable WHERE supplier_id=$SUP AND status NOT IN ('SETTLED','CANCELLED')")
 $supDbExcl = D (SqlOne "SELECT IFNULL(SUM(unpaid_amount),0) FROM finance_payable WHERE supplier_id=$SUP AND status NOT IN ('SETTLED','CANCELLED') AND IFNULL(transferred_to_receivable,0)<>1")
-$allExcl   = D (SqlOne "SELECT IFNULL(SUM(unpaid_amount),0) FROM finance_payable WHERE status<>'CANCELLED' AND IFNULL(transferred_to_receivable,0)<>1")
+$allExcl   = D (SqlOne "SELECT IFNULL(SUM(unpaid_amount),0) FROM finance_payable WHERE status IN ('UNSETTLED','PARTIAL') AND IFNULL(transferred_to_receivable,0)<>1")
 $agingDb   = D (SqlOne "SELECT IFNULL(SUM(unpaid_amount),0) FROM finance_payable WHERE status IN ('UNSETTLED','PARTIAL') AND IFNULL(transferred_to_receivable,0)<>1")
 $top5Db    = D (SqlOne "SELECT IFNULL(SUM(u),0) FROM (SELECT IFNULL(SUM(unpaid_amount),0) u FROM finance_payable WHERE status IN ('UNSETTLED','PARTIAL') AND IFNULL(transferred_to_receivable,0)<>1 GROUP BY supplier_name ORDER BY u DESC LIMIT 5) t")
 $pyA   = SqlOne "SELECT CONCAT(paid_amount,'|',unpaid_amount,'|',status) FROM finance_payable WHERE id=$PAYABLE"

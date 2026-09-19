@@ -575,11 +575,10 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     public void cancel(Long id) {
         ReturnOrder order = returnOrderMapper.selectById(id);
         if (order == null) throw new BusinessException("退货单不存在");
-        if (!DocStatus.DRAFT.getCode().equals(order.getStatus())) throw new BusinessException("只有草稿状态可作废");
-        ReturnOrder u = new ReturnOrder();
-        u.setId(id);
-        u.setStatus(DocStatus.CANCELLED.getCode());
-        returnOrderMapper.updateById(u);
+        // F7-50（2026-09-19）：原子抢占 DRAFT→CANCELLED（原"先查后改"可与 audit 并发互覆）
+        if (!DocStatusGuard.claim(returnOrderMapper, ReturnOrder::getId, id,
+                ReturnOrder::getStatus, DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("只有草稿状态可作废");
     }
 
     // ===== 维修返回（维修退货单的"回来"腿，2026-09-17） =====

@@ -1,6 +1,7 @@
 package com.beichen.erp.outsource.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.entity.OutsourceDelivery;
@@ -146,7 +147,18 @@ public class DeliveryServiceImpl implements DeliveryService {
     public void unaudit(Long id) {
         OutsourceDelivery delivery = deliveryMapper.selectById(id);
         if (delivery == null) throw new BusinessException("单据不存在");
-        if (!DocStatus.AUDITED.getCode().equals(delivery.getStatus())) {
+        // F7-44（2026-09-19）：与 audit 对称分流 —— 「收料/退不良」单必须走物料订单专用反审核
+        // （逆向库存 + 冲回应付 + **回滚订单已收/退不良数量** + BOM 子料回补 + 成本冲销 全套）。
+        // 原先通用反审核**不分流** ⇒ 只做「库存逆向 + 应付冲销」，其余三项不回滚 ⇒ 账实不符
+        //（即 D1「审核侧已分流、反审核侧漏改」的另一半）。
+        String unAuditType = delivery.getDeliveryType();
+        if (DeliveryType.RECEIVE.getCode().equals(unAuditType) || DeliveryType.DEFECT_RETURN.getCode().equals(unAuditType)) {
+            unauditMaterialDelivery(id);
+            return;
+        }
+        // F7-45（2026-09-19）：原子抢占 AUDITED→DRAFT（原"先查后改"非原子，并发/双击会重复逆向库存与应付）
+        if (!DocStatusGuard.claim(deliveryMapper, OutsourceDelivery::getId, id,
+                OutsourceDelivery::getStatus, DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode())) {
             throw new BusinessException("仅已审核状态可以反审核");
         }
         // 反审核：逆向库存 + 回滚已发数量，回到草稿
@@ -235,12 +247,14 @@ public class DeliveryServiceImpl implements DeliveryService {
             if (item.getItemId() == null || item.getQuantity() == null) continue;
             MaterialOrderItem oi = materialOrderItemMapper.selectById(item.getItemId());
             if (oi == null) continue;
-            if (isReceive) {
-                oi.setReceivedQuantity(safeAdd(oi.getReceivedQuantity(), item.getQuantity()));
-            } else {
-                oi.setDefectReturnedQty(safeAdd(oi.getDefectReturnedQty(), item.getQuantity()));
-            }
-            materialOrderItemMapper.updateById(oi);
+            // F7-49（2026-09-19）：改为 **SQL 原子累加**（原为 Java 侧"读-改-写"：同一物料订单明细行被两张
+            // 收料单并发审核时互相覆盖，数量少记一次且不报错）。数字取自 BigDecimal.toPlainString()。
+            String qtySql = item.getQuantity().toPlainString();
+            materialOrderItemMapper.update(null, new LambdaUpdateWrapper<MaterialOrderItem>()
+                    .eq(MaterialOrderItem::getId, oi.getId())
+                    .setSql(isReceive
+                            ? "received_quantity = IFNULL(received_quantity, 0) + (" + qtySql + ")"
+                            : "defect_returned_qty = IFNULL(defect_returned_qty, 0) + (" + qtySql + ")"));
         }
         // 4.1 移动加权成本：收货入库按明细单价加权（退不良出库不影响成本）
         if (isReceive) {
@@ -261,12 +275,16 @@ public class DeliveryServiceImpl implements DeliveryService {
     public void unauditMaterialDelivery(Long id) {
         OutsourceDelivery delivery = deliveryMapper.selectById(id);
         if (delivery == null) throw new BusinessException("单据不存在");
-        if (!DocStatus.AUDITED.getCode().equals(delivery.getStatus())) {
-            throw new BusinessException("仅已审核状态可以反审核");
-        }
         if (!DeliveryType.RECEIVE.getCode().equals(delivery.getDeliveryType())
                 && !DeliveryType.DEFECT_RETURN.getCode().equals(delivery.getDeliveryType())) {
             throw new BusinessException("该单据非物料订单收货/退不良单，不可反审核");
+        }
+        // F7-45（2026-09-19）：原子抢占 AUDITED→DRAFT（原"先查后改"非原子）。
+        // 本方法会逆向库存 + 冲回应付 + 回滚订单已收/退不良数量 + 回补 BOM 子料 + 冲销成本，
+        // 并发/双击重复执行会重复冲销 ⇒ 与正向 auditMaterialDelivery 的 CAS 对齐。
+        if (!DocStatusGuard.claim(deliveryMapper, OutsourceDelivery::getId, id,
+                OutsourceDelivery::getStatus, DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode())) {
+            throw new BusinessException("仅已审核状态可以反审核");
         }
         Long orderId = delivery.getSourceOrderId();
         if (orderId == null) throw new BusinessException("收货单缺少关联物料订单");
@@ -319,29 +337,19 @@ public class DeliveryServiceImpl implements DeliveryService {
             if (item.getItemId() == null || item.getQuantity() == null) continue;
             MaterialOrderItem oi = materialOrderItemMapper.selectById(item.getItemId());
             if (oi == null) continue;
-            if (isReceive) {
-                oi.setReceivedQuantity(safeSubtract(oi.getReceivedQuantity(), item.getQuantity()));
-            } else {
-                oi.setDefectReturnedQty(safeSubtract(oi.getDefectReturnedQty(), item.getQuantity()));
-            }
-            materialOrderItemMapper.updateById(oi);
+            // F7-49（2026-09-19）：SQL 原子扣减；GREATEST(...,0) 保留原 safeSubtract 的"结果不为负"语义
+            String qtySql = item.getQuantity().toPlainString();
+            materialOrderItemMapper.update(null, new LambdaUpdateWrapper<MaterialOrderItem>()
+                    .eq(MaterialOrderItem::getId, oi.getId())
+                    .setSql(isReceive
+                            ? "received_quantity = GREATEST(IFNULL(received_quantity, 0) - (" + qtySql + "), 0)"
+                            : "defect_returned_qty = GREATEST(IFNULL(defect_returned_qty, 0) - (" + qtySql + "), 0)"));
         }
         // 4. 单据回到草稿
         OutsourceDelivery up = new OutsourceDelivery();
         up.setId(id);
         up.setStatus(DocStatus.DRAFT.getCode());
         deliveryMapper.updateById(up);
-    }
-
-    /** 安全累加，null 视为 0 */
-    private BigDecimal safeAdd(BigDecimal a, BigDecimal b) {
-        return (a == null ? BigDecimal.ZERO : a).add(b == null ? BigDecimal.ZERO : b);
-    }
-
-    /** 安全相减，结果不为负 */
-    private BigDecimal safeSubtract(BigDecimal a, BigDecimal b) {
-        BigDecimal r = (a == null ? BigDecimal.ZERO : a).subtract(b == null ? BigDecimal.ZERO : b);
-        return r.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : r;
     }
 
     /**
@@ -368,14 +376,10 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (DocStatus.CANCELLED.getCode().equals(delivery.getStatus())) {
             throw new BusinessException("单据已取消，不可重复取消");
         }
-        if (!DocStatus.DRAFT.getCode().equals(delivery.getStatus())) {
+        // F7-50（2026-09-19）：原子抢占 DRAFT→CANCELLED（原"先查后改"可与 audit 并发互覆，见移仓单同款注释）
+        if (!DocStatusGuard.claim(deliveryMapper, OutsourceDelivery::getId, id,
+                OutsourceDelivery::getStatus, DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
             throw new BusinessException("只有草稿状态可作废，已审核单据请先反审核");
-        }
-        // 更新状态
-        OutsourceDelivery update = new OutsourceDelivery();
-        update.setId(id);
-        update.setStatus(DocStatus.CANCELLED.getCode());
-        deliveryMapper.updateById(update);
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.beichen.erp.sale.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
@@ -421,10 +422,14 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         deletePendingBatches(AfterSaleSourceType.SALE_EXCHANGE, id);
         // 财务联动：冲销换货收费台账（未收费时台账不存在，跳过）
         reverseReceivableIfExists(e.getCode() + "-FEE");
-        SaleExchange u = new SaleExchange();
-        u.setId(id);
-        u.setStatus(DocStatus.DRAFT.getCode());
-        exchangeMapper.updateById(u);
+        // F7-48（2026-09-19）：审核信息必须用 UpdateWrapper **显式置 null** —— updateById 忽略 null 字段，
+        // 反审核后 audit_time/审核人仍残留，单据看着"像已审核"（审计信息失真）。
+        exchangeMapper.update(null, new LambdaUpdateWrapper<SaleExchange>()
+                .eq(SaleExchange::getId, id)
+                .set(SaleExchange::getStatus, DocStatus.DRAFT.getCode())
+                .set(SaleExchange::getAuditorId, null)
+                .set(SaleExchange::getAuditorName, null)
+                .set(SaleExchange::getAuditTime, null));
     }
 
     @Override

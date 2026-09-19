@@ -141,9 +141,10 @@ public class OtherIoServiceImpl implements OtherIoService {
         InventoryOtherIo old = ioMapper.selectById(id);
         if (old == null) throw new BusinessException("其他出入库单不存在");
         // 统一流程：仅草稿可作废（草稿未应用库存，无需逆向）；已审核单据请先反审核
-        if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("仅草稿状态可作废，已审核单据请先反审核");
-        InventoryOtherIo u = new InventoryOtherIo(); u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode());
-        ioMapper.updateById(u);
+        // F7-50（2026-09-19）：原子抢占 DRAFT→CANCELLED（原"先查后改"可与 audit 并发互覆）
+        if (!DocStatusGuard.claim(ioMapper, InventoryOtherIo::getId, id,
+                InventoryOtherIo::getStatus, DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("仅草稿状态可作废，已审核单据请先反审核");
     }
 
     @Override

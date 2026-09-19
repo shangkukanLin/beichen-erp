@@ -201,9 +201,11 @@ try {
   if ((CodeOf $invR) -eq '200' -and (CodeOf $invP) -eq '200' -and $invRid -gt 0 -and $invPid -gt 0) {
     $null = Api 'PUT' "$BASE/finance/receipt/$invRid/audit" $null
     $null = Api 'PUT' "$BASE/finance/payment/$invPid/audit" $null
-    $inv1 = SqlOne "SELECT CONCAT(IFNULL(cf.income,0),'=',IFNULL((SELECT SUM(s.amount) FROM finance_settlement s WHERE s.receipt_payment_id=$invRid AND s.status='NORMAL'),0)) FROM finance_cashflow cf WHERE cf.related_bill_no=(SELECT code FROM finance_receipt WHERE id=$invRid)"
+    # NOTE: receipt_payment_id is SHARED by receipts and payments -- the direction filter is mandatory,
+    # otherwise a RECEIPT whose id happens to equal this PAYMENT id gets summed in (observed 10=110).
+    $inv1 = SqlOne "SELECT CONCAT(IFNULL(cf.income,0),'=',IFNULL((SELECT SUM(s.amount) FROM finance_settlement s WHERE s.receipt_payment_id=$invRid AND s.direction='RECEIVE' AND s.status='NORMAL'),0)) FROM finance_cashflow cf WHERE cf.related_bill_no=(SELECT code FROM finance_receipt WHERE id=$invRid)"
     if ($inv1 -match '^([0-9.]+)=\1$') { Ok "receipt cashflow income == settlements sum ($inv1)" } else { Bad "receipt invariant broken: $inv1 (a skipped item would show income>sum)" }
-    $inv2 = SqlOne "SELECT CONCAT(IFNULL(cf.expense,0),'=',IFNULL((SELECT SUM(s.amount) FROM finance_settlement s WHERE s.receipt_payment_id=$invPid AND s.status='NORMAL'),0)) FROM finance_cashflow cf WHERE cf.related_bill_no=(SELECT code FROM finance_payment WHERE id=$invPid)"
+    $inv2 = SqlOne "SELECT CONCAT(IFNULL(cf.expense,0),'=',IFNULL((SELECT SUM(s.amount) FROM finance_settlement s WHERE s.receipt_payment_id=$invPid AND s.direction='PAY' AND s.status='NORMAL'),0)) FROM finance_cashflow cf WHERE cf.related_bill_no=(SELECT code FROM finance_payment WHERE id=$invPid)"
     if ($inv2 -match '^([0-9.]+)=\1$') { Ok "payment cashflow expense == settlements sum ($inv2)" } else { Bad "payment invariant broken: $inv2" }
   } else { Bad "invariant fixtures failed (receipt=$(CodeOf $invR) payment=$(CodeOf $invP))" }
 

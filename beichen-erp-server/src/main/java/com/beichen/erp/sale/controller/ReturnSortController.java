@@ -101,13 +101,14 @@ public class ReturnSortController {
     }
 
     /**
-     * 反审核（E2 口径 · 2026-09-12）：退货整理的 cancel **本就是"反审核"语义**（AUDITED → DRAFT），
+     * 反审核（E2 口径 · 2026-09-12；F7-51 · 2026-09-19 服务层已改名 canonical {@code unAudit}）：
+     * 退货整理的 cancel **本就是"反审核"语义**（AUDITED → DRAFT），
      * 这里补上 canonical 路径 /un-audit；/cancel 保留为兼容别名。
      * 注意：草稿的"删除"是独立的 DELETE /{id}，故本端点不存在语义重载。
      */
     @PutMapping({"/{id}/un-audit", "/{id}/cancel"})
-    public R<Void> cancel(@PathVariable Long id) {
-        service.cancel(id);
+    public R<Void> unAudit(@PathVariable Long id) {
+        service.unAudit(id);
         return R.ok();
     }
 

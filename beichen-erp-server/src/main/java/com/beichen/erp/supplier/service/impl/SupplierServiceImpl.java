@@ -111,8 +111,11 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         if (suppliers == null || suppliers.isEmpty()) return;
         List<Long> ids = suppliers.stream().map(Supplier::getId).filter(java.util.Objects::nonNull).toList();
         if (ids.isEmpty()) return;
-        // 只算未结清台账：排除 已结清(SETTLED) 与 已冲回(CANCELLED)，与 FinancePayableController.unpaid 口径一致
-        List<String> excludeStatuses = List.of(SettlementStatus.SETTLED.getCode(), SettlementStatus.CANCELLED.getCode());
+        // 只算未结清台账：排除 已结清(SETTLED)、已冲回(CANCELLED) 与 预付台账(ADVANCE，多付形成的负数应付)。
+        // F7-40（2026-09-19）：三者之外正好是 UNSETTLED/PARTIAL，与应付汇总/账龄/付款下拉口径统一；
+        // 原先含 ADVANCE 会让该供应商的"应付余额"被负台账冲减（实测供应商 26：3,498，应为 4,564；27：1,232，应为 2,256）。
+        List<String> excludeStatuses = List.of(SettlementStatus.SETTLED.getCode(),
+                SettlementStatus.CANCELLED.getCode(), SettlementStatus.ADVANCE.getCode());
         Map<Long, Map<String, Object>> balanceMap = baseMapper.sumPayableBalance(ids, excludeStatuses);
         for (Supplier s : suppliers) {
             Map<String, Object> row = balanceMap.get(s.getId());

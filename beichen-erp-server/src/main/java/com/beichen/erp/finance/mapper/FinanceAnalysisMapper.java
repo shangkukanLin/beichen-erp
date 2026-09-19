@@ -198,12 +198,23 @@ public interface FinanceAnalysisMapper {
     @Select("SELECT CASE WHEN due_date IS NULL THEN 'none' WHEN due_date >= CURDATE() THEN 'not_due' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 'd30' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) THEN 'd60' ELSE 'd60p' END AS bucket, IFNULL(SUM(unpaid_amount), 0) AS amt, COUNT(*) AS cnt FROM finance_payable WHERE status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(transferred_to_receivable, 0) <> 1 GROUP BY bucket")
     List<Map<String, Object>> payableAging();
 
-    /** 应收汇总（回款率） */
-    @Select("SELECT IFNULL(SUM(amount), 0) AS total, IFNULL(SUM(paid_amount), 0) AS paid, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_receivable WHERE status != 'CANCELLED'")
+    /**
+     * 应收汇总（回款率）。
+     * <p><b>2026-09-19 修复（F7-40）</b>：`unpaid` 只计<b>未结清</b>（UNSETTLED/PARTIAL）—— 预收台账（ADVANCE，
+     * 多收款形成的负数应收）必须剔除，否则「应收未收」会被负台账冲减（实测 -4,260，业务上不可解释），
+     * 且与本页账龄分桶（只取 UNSETTLED/PARTIAL）不一致。
+     * `total`/`paid` <b>保持全量</b>（含已结清）—— 它们是回款率的分母/分子，收紧会把已结清历史排除、把回款率算坏。</p>
+     */
+    @Select("SELECT IFNULL(SUM(amount), 0) AS total, IFNULL(SUM(paid_amount), 0) AS paid, IFNULL(SUM(CASE WHEN status IN ('UNSETTLED', 'PARTIAL') THEN unpaid_amount ELSE 0 END), 0) AS unpaid FROM finance_receivable WHERE status != 'CANCELLED'")
     Map<String, Object> receivableSummary();
 
-    /** 应付汇总（付款率；2026-09-19 F7-34：剔除已转应收的冲减项，口径与 PayableQuery.supplierSummary 一致） */
-    @Select("SELECT IFNULL(SUM(amount), 0) AS total, IFNULL(SUM(paid_amount), 0) AS paid, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_payable WHERE status != 'CANCELLED' AND IFNULL(transferred_to_receivable, 0) <> 1")
+    /**
+     * 应付汇总（付款率；2026-09-19 F7-34：剔除已转应收的冲减项）。
+     * <p><b>2026-09-19 修复（F7-40）</b>：`unpaid` 只计<b>未结清</b>（UNSETTLED/PARTIAL）—— 预付台账（ADVANCE，
+     * 多付款形成的负数应付）剔除，与同页账龄分桶口径一致（实测修前 63,000 vs 分桶 65,090，差 2,090 即该台账）。
+     * `total`/`paid` 保持全量（付款率的分母/分子）。</p>
+     */
+    @Select("SELECT IFNULL(SUM(amount), 0) AS total, IFNULL(SUM(paid_amount), 0) AS paid, IFNULL(SUM(CASE WHEN status IN ('UNSETTLED', 'PARTIAL') THEN unpaid_amount ELSE 0 END), 0) AS unpaid FROM finance_payable WHERE status != 'CANCELLED' AND IFNULL(transferred_to_receivable, 0) <> 1")
     Map<String, Object> payableSummary();
 
     /** TOP 客户欠款 */

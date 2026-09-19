@@ -48,7 +48,17 @@ public interface ReturnSortService {
     /** 审核：售后仓扣 DEFECT，A/B/C/不良 分别入目标仓库 */
     void audit(Long id);
 
-    /** 反审核：逆向回滚 */
+    /**
+     * 反审核：逆向回滚（canonical 命名 · 2026-09-19 F7-51）。
+     *
+     * <p>本方法原名 {@code cancel}，与其余模块的"作废（DRAFT→CANCELLED）"语义**相反**（这里是 AUDITED→DRAFT），
+     * 同名不同义易误用；现按统一口径改名为 {@code unAudit}，原方法保留为 {@code @Deprecated} 兼容别名
+     * （行为不变，Controller 的 {@code /un-audit} 与 {@code /cancel} 两个 URL 都仍可用）。</p>
+     */
+    void unAudit(Long id);
+
+    /** @deprecated 反审核语义，请改用 {@link #unAudit(Long)}（F7-51） */
+    @Deprecated
     void cancel(Long id);
 
     void delete(Long id);

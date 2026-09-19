@@ -441,10 +441,13 @@ public class SaleOrderServiceImpl implements SaleOrderService {
                 .eq(FinanceReceivable::getBillNo, order.getCode()));
         if (exist != null) receivableHelper.reverseReceivable(order.getCode());
         // 3) 订单状态回退为草稿
-        SaleOrder u = new SaleOrder();
-        u.setId(id);
-        u.setStatus(DocStatus.DRAFT.getCode());
-        orderMapper.updateById(u);
+        // F7-48（2026-09-19）：审核信息必须用 UpdateWrapper **显式置 null** —— updateById 会忽略 null 字段，
+        // 反审核后 audit_time 仍残留（实测库中有 2 条草稿带审核时间），而该列注释为"供财务分析按月归集"，
+        // 会让"草稿"被当成已审核单据计入归集。与其余 10 处反审核（盘点/报损/采购/销售退单等）口径一致。
+        orderMapper.update(null, new LambdaUpdateWrapper<SaleOrder>()
+                .eq(SaleOrder::getId, id)
+                .set(SaleOrder::getStatus, DocStatus.DRAFT.getCode())
+                .set(SaleOrder::getAuditTime, null));
     }
 
     @Override

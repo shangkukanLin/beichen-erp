@@ -250,13 +250,13 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         InventoryProductReclassify rc = rcMapper.selectById(id);
         if (rc == null) throw new BusinessException("品质重分类单不存在");
         if (DocStatus.CANCELLED.getCode().equals(rc.getStatus())) throw new BusinessException("单据已作废");
-        if (!DocStatus.DRAFT.getCode().equals(rc.getStatus()))
+        // F7-50（2026-09-19）：原子抢占 DRAFT→CANCELLED —— 原实现先查后改，且那条条件 UPDATE 的 **WHERE 里没有 status**，
+        // 并发下会把已被 audit 抢成 AUDITED 的单据覆写回 CANCELLED（库存已应用却无逆向）。
+        // 草稿未应用库存，直接作废即可（与其他四类库存单据的 cancel 语义对齐，
+        // 否则空明细/超量等无效草稿没有任何出路，会永久滞留在列表中）。
+        if (!DocStatusGuard.claim(rcMapper, InventoryProductReclassify::getId, id,
+                InventoryProductReclassify::getStatus, DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
             throw new BusinessException("已审核单据不可直接作废，请先反审核");
-        // 草稿：未应用库存，直接作废即可（与其他四类库存单据的 cancel 语义对齐，
-        // 否则空明细/超量等无效草稿没有任何出路，会永久滞留在列表中）
-        rcMapper.update(null, new LambdaUpdateWrapper<InventoryProductReclassify>()
-                .eq(InventoryProductReclassify::getId, id)
-                .set(InventoryProductReclassify::getStatus, DocStatus.CANCELLED.getCode()));
     }
 
     /**

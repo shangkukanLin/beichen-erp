@@ -31,7 +31,8 @@ public interface SupplierMapper extends BaseMapper<Supplier> {
      * {@code SupplierSettlementServiceImpl} / 应付汇总·账龄 保持一致）。
      * 条件写在 LEFT JOIN 的 ON 里，保证「无未结应付的供应商」仍返回 balance=0 行。</p>
      * @param supplierIds 供应商ID集合（非空）
-     * @param excludeStatuses 不计入余额的台账状态 code（应传 SETTLED / CANCELLED）
+     * @param excludeStatuses 不计入余额的台账状态 code（应传 SETTLED / CANCELLED / **ADVANCE**；
+     *                        三者之外正好是 UNSETTLED + PARTIAL，见 {@code SupplierServiceImpl.fillPayableBalance}）
      * @return supplierId -> 应付余额
      */
     @Select("<script>" +

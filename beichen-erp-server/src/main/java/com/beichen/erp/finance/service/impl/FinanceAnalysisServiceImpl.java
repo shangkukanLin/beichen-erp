@@ -856,8 +856,11 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         Map<String, Object> res = new LinkedHashMap<>();
 
         // 1) 供应商应付（未付）按主体类型分组；已转应收的负数冲减项剔除，避免与应收重复统计
+        // F7-40（2026-09-19）：口径与账龄/应付汇总统一 —— 只计未结清（UNSETTLED/PARTIAL），
+        // 预付台账（ADVANCE，负数应付）不计入"未付"（原实现含它，实测 other 类型出现 -2,090）。
         List<FinancePayable> payables = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
-                .ne(FinancePayable::getStatus, SettlementStatus.CANCELLED.getCode())
+                .in(FinancePayable::getStatus, SettlementStatus.UNSETTLED.getCode(),
+                        SettlementStatus.PARTIAL.getCode())
                 .ne(FinancePayable::getTransferredToReceivable, 1));
         Map<String, BigDecimal> payableByType = new LinkedHashMap<>();
         for (String t : new String[]{"product", "factory", "material", "solution", "other"}) payableByType.put(t, ZERO);
@@ -869,9 +872,11 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         res.put("payableByType", payableByType);
 
         // 2) 供应商应收未收（应付转应收单生成，尚未被收款核销的金额）
+        // F7-40（同上）：只计未结清（UNSETTLED/PARTIAL），预收台账（ADVANCE，负数应收）不计入"未收"
         List<FinanceReceivable> recv = receivableMapper.selectList(new LambdaQueryWrapper<FinanceReceivable>()
                 .eq(FinanceReceivable::getSubjectType, "SUPPLIER")
-                .ne(FinanceReceivable::getStatus, SettlementStatus.CANCELLED.getCode()));
+                .in(FinanceReceivable::getStatus, SettlementStatus.UNSETTLED.getCode(),
+                        SettlementStatus.PARTIAL.getCode()));
         BigDecimal supplierRecvUnpaid = recv.stream()
                 .map(r -> r.getUnpaidAmount() != null ? r.getUnpaidAmount() : ZERO)
                 .reduce(ZERO, BigDecimal::add);

@@ -216,10 +216,11 @@ public class OutsourceOtherIoController {
         OutsourceOtherIo old = ioMapper.selectById(id);
         if (old == null) throw new BusinessException("其他出入库单不存在");
         if (DocStatus.CANCELLED.getCode().equals(old.getStatus())) throw new BusinessException("单据已取消");
-        if (DocStatus.AUDITED.getCode().equals(old.getStatus())) throw new BusinessException("已审核的单据需先反审核再取消");
-        // 草稿状态直接取消，无需回滚库存
-        OutsourceOtherIo u = new OutsourceOtherIo(); u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode());
-        ioMapper.updateById(u);
+        // 草稿状态直接取消，无需回滚库存。
+        // F7-50（2026-09-19）：原子抢占 DRAFT→CANCELLED（原"先查后改"可与 audit 并发互覆）
+        if (!DocStatusGuard.claim(ioMapper, OutsourceOtherIo::getId, id,
+                OutsourceOtherIo::getStatus, DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))
+            throw new BusinessException("已审核的单据需先反审核再取消");
         return R.ok();
     }
 

@@ -2,7 +2,6 @@ package com.beichen.erp.finance.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
@@ -79,10 +78,17 @@ public class PayableQuery {
                 .orderByDesc(FinancePayable::getId));
     }
 
-    /** 按供应商汇总应付：总额/已付/未付/逾期（原 {@code GET /api/finance/payable/supplier-summary}） */
+    /**
+     * 按供应商汇总应付：总额/已付/未付/逾期（原 {@code GET /api/finance/payable/supplier-summary}）。
+     *
+     * <p><b>F7-40（2026-09-19）</b>：只取<b>未结清</b>（UNSETTLED/PARTIAL）—— 预付台账（ADVANCE，负数应付）
+     * 不计入"未付"，与应付汇总/账龄/付款下拉口径统一（原先用 {@code != CANCELLED}，负台账会把该供应商的
+     * 应付冲减：实测供应商 26 为 3,498 而非 4,564、供应商 27 为 1,232 而非 2,256）。</p>
+     */
     public List<Map<String, Object>> supplierSummary() {
         List<FinancePayable> all = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
-                .ne(FinancePayable::getStatus, DocStatus.CANCELLED.getCode())
+                .in(FinancePayable::getStatus, SettlementStatus.UNSETTLED.getCode(),
+                        SettlementStatus.PARTIAL.getCode())
                 // 已转应收的冲减项不再参与付款抵扣，应付汇总口径必须同步排除，否则与应收双算
                 .ne(FinancePayable::getTransferredToReceivable, 1));
         Map<Long, Map<String, Object>> map = new LinkedHashMap<>();

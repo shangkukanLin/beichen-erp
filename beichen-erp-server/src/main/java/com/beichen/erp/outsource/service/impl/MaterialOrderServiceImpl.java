@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
+import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.outsource.common.DefectHandleType;
 import com.beichen.erp.outsource.common.DeliveryType;
@@ -138,7 +139,10 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     public void audit(Long id) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        if (!MaterialOrderStatus.PENDING.getCode().equals(o.getStatus())) throw new BusinessException("只有待审核状态可审核");
+        // F7-46（2026-09-19）：原子抢占 PENDING→RECEIVING（原"先查后改"非原子，双击/并发都能通过校验）
+        if (!DocStatusGuard.claim(orderMapper, MaterialOrder::getId, id,
+                MaterialOrder::getStatus, MaterialOrderStatus.PENDING.getCode(), MaterialOrderStatus.RECEIVING.getCode()))
+            throw new BusinessException("只有待审核状态可审核");
         MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.RECEIVING.getCode());
         orderMapper.updateById(upd);
     }
@@ -148,7 +152,9 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     public void unAudit(Long id) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        if (!MaterialOrderStatus.RECEIVING.getCode().equals(o.getStatus()))
+        // F7-46（2026-09-19）：原子抢占 RECEIVING→PENDING（原"先查后改"非原子）
+        if (!DocStatusGuard.claim(orderMapper, MaterialOrder::getId, id,
+                MaterialOrder::getStatus, MaterialOrderStatus.RECEIVING.getCode(), MaterialOrderStatus.PENDING.getCode()))
             throw new BusinessException("仅收货中状态可反审核");
         List<MaterialOrderItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
@@ -379,6 +385,10 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         if (o == null) throw new BusinessException("订单不存在");
         if (MaterialOrderStatus.CANCELLED.getCode().equals(o.getStatus())) throw new BusinessException("已作废的订单不可结单");
         if (MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus())) throw new BusinessException("订单已完成");
+        // F7-46（2026-09-19）：按当前状态原子抢占 → FINISHED（动态 from：PENDING/RECEIVING 均可结单）
+        if (!DocStatusGuard.claim(orderMapper, MaterialOrder::getId, id,
+                MaterialOrder::getStatus, o.getStatus(), MaterialOrderStatus.FINISHED.getCode()))
+            throw new BusinessException("订单状态已变化，请刷新后重试");
         MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.FINISHED.getCode()); upd.setFinishTime(LocalDateTime.now());
         orderMapper.updateById(upd);
     }
@@ -390,6 +400,10 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         if (o == null) throw new BusinessException("订单不存在");
         if (MaterialOrderStatus.CANCELLED.getCode().equals(o.getStatus()) || MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus()))
             throw new BusinessException("当前状态不可作废");
+        // F7-46（2026-09-19）：按当前状态原子抢占 → CANCELLED（动态 from：PENDING/RECEIVING 均可作废）
+        if (!DocStatusGuard.claim(orderMapper, MaterialOrder::getId, id,
+                MaterialOrder::getStatus, o.getStatus(), MaterialOrderStatus.CANCELLED.getCode()))
+            throw new BusinessException("订单状态已变化，请刷新后重试");
         List<MaterialOrderItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
         boolean hasDelivery = items.stream().anyMatch(it -> it.getReceivedQuantity() != null && it.getReceivedQuantity().compareTo(BigDecimal.ZERO) > 0);

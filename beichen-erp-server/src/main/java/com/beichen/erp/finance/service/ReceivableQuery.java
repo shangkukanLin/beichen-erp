@@ -8,6 +8,7 @@ import com.beichen.erp.finance.mapper.FinanceReceivableMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -29,6 +30,12 @@ public class ReceivableQuery {
     /**
      * 未结清应收（供收款单下拉）：客户应收按 {@code customerId} 查，供应商应收（应付转应收）按 {@code supplierId} 查。
      * <p>口径：排除已结清（SETTLED）与已作废（CANCELLED）。</p>
+     *
+     * <p><b>2026-09-19 修复（F7-41）</b>：再排除 <b>ADVANCE（预收台账）</b> 与 <b>非正数应收</b> —— 与付款侧
+     * {@code PayableQuery.unpaid} 的 {@code amount > 0} 完全对称。修复前负数/预收台账会出现在核销下拉里：
+     * ① ADVANCE 选中后审核必被 I27 守卫拒绝（"可选但必然失败"）；② 负数应收（UNSETTLED，实测 -5）
+     * 连 I27 都不覆盖，选中核销会走"超额"分支<b>再生成一条预收 ADVANCE</b>
+     * —— 正是 I11（2026-09-18）在应付侧修掉的同型路径。</p>
      */
     public List<FinanceReceivable> unpaid(Long customerId, Long supplierId, String subjectType) {
         if (supplierId != null || (subjectType != null && "SUPPLIER".equalsIgnoreCase(subjectType))) {
@@ -37,12 +44,16 @@ public class ReceivableQuery {
                     .eq(supplierId != null, FinanceReceivable::getSupplierId, supplierId)
                     .ne(FinanceReceivable::getStatus, SettlementStatus.SETTLED.getCode())
                     .ne(FinanceReceivable::getStatus, SettlementStatus.CANCELLED.getCode())
+                    .ne(FinanceReceivable::getStatus, SettlementStatus.ADVANCE.getCode())
+                    .gt(FinanceReceivable::getAmount, BigDecimal.ZERO)
                     .orderByDesc(FinanceReceivable::getId));
         }
         return receivableMapper.selectList(new LambdaQueryWrapper<FinanceReceivable>()
                 .eq(FinanceReceivable::getCustomerId, customerId)
                 .ne(FinanceReceivable::getStatus, SettlementStatus.SETTLED.getCode())
                 .ne(FinanceReceivable::getStatus, SettlementStatus.CANCELLED.getCode())
+                .ne(FinanceReceivable::getStatus, SettlementStatus.ADVANCE.getCode())
+                .gt(FinanceReceivable::getAmount, BigDecimal.ZERO)
                 .orderByDesc(FinanceReceivable::getId));
     }
 }
