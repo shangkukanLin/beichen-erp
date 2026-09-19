@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted, onUnmounted } from 'vue'
-import { ProjectStatus, DEV_PROJECT_DIRTY_KEY } from '@/api/enums'
+import { DEV_PROJECT_DIRTY_KEY } from '@/api/enums'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { addProject, checkProjectAssembly, type ProjectDTO } from '@/api/system'
@@ -21,7 +21,7 @@ const fetchSolutionSuppliers = (kw: string) => request.get('/supplier/page', { p
 const fetchFactorySuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, supplierType: 'factory', name: kw } })
 
 const defForm = (): ProjectDTO => ({
-  name: '', status: ProjectStatus.IN_PROGRESS, displaySupplierName: '', touchSupplierName: '',
+  name: '', displaySupplierName: '', touchSupplierName: '',
   assemblyName: '',
   adaptModel: '', originalSize: '', originalResolution: '',
   originalDriveIc: '', originalTouchIc: '',

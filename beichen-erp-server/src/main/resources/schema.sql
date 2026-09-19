@@ -722,7 +722,7 @@ CREATE TABLE IF NOT EXISTS dev_project (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    INDEX idx_code (code),
+    UNIQUE KEY uk_code (code),
     INDEX idx_status (status),
     INDEX idx_project_leader_id (project_leader_id),
     INDEX idx_company_id (company_id)
@@ -754,7 +754,7 @@ CREATE TABLE IF NOT EXISTS dev_phase_template (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_name_company (name, company_id),
+    UNIQUE KEY uk_company_name (company_id, name),
     INDEX idx_sort (sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目阶段模板表';
 
@@ -855,7 +855,8 @@ CREATE TABLE IF NOT EXISTS material_type (
     is_default TINYINT DEFAULT 0 COMMENT '1默认类型(不可删除) 0自定义',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+    UNIQUE KEY uk_company_name (company_id, type_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='物料类型表';
 
 CREATE TABLE IF NOT EXISTS dev_bug (
@@ -874,7 +875,8 @@ CREATE TABLE IF NOT EXISTS dev_bug (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_project_id (project_id),
-    INDEX idx_status (status)
+    INDEX idx_status (status),
+    UNIQUE KEY uk_code (code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Bug表';
 
 CREATE TABLE IF NOT EXISTS dev_drawing (
@@ -888,7 +890,8 @@ CREATE TABLE IF NOT EXISTS dev_drawing (
     remark VARCHAR(255) COMMENT '备注',
     upload_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
-    INDEX idx_project_id (project_id)
+    INDEX idx_project_id (project_id),
+    UNIQUE KEY uk_proj_doc_ver (project_id, doc_name, doc_type, version_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='图纸/文档表';
 
 -- ==================== 客户模块（进销存） ====================

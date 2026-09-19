@@ -351,7 +351,9 @@ export interface ProjectDTO {
   sampleFactoryId?: number; outsourceFactoryId?: number
   sampleFactoryName?: string; outsourceFactoryName?: string
   startDate?: string; expectedEndDate?: string; actualEndDate?: string
-  status?: string; remark?: string
+  // F7-89（2026-09-19）：DTO 不再携带 status —— 项目状态由阶段推导、不允许由编辑页写回；
+  // 后端 updateProject 也改为白名单字段更新。列表/详情展示继续用 ProjectVO.status。
+  remark?: string
 }
 
 export interface ProjectQueryParams {

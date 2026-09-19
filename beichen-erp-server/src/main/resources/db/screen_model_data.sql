@@ -1,6 +1,10 @@
 -- 屏幕资料知识库种子数据（共 1268 条：折叠屏 94 + AMOLED 1174）
 -- 由 Excel「北辰型号统计」自动生成，请勿手工编辑。
--- 每条用 INSERT ... SELECT ... FROM sys_company 实现「每个公司各一份」；DataInitializer 在表为空时才执行本文件。
+-- ⚠️ F7-99（2026-09-19）：screen_model 已改为**行业共享的单一知识库**（不参与租户隔离，company_id 恒为 NULL）。
+--    下列 `INSERT ... SELECT ... FROM sys_company` 是「每个公司各一份」时代的写法，保留仅为兼容；
+--    DataInitializer.initScreenModels() 在导入后会统一执行 `UPDATE screen_model SET company_id = NULL`，
+--    因此最终落在「共享一份」的语义上。下次重新生成种子文件时，建议直接改为插入 company_id = NULL 的单份数据。
+-- DataInitializer 仅在表为空时才执行本文件。
 -- 重要：一条 INSERT 占多行、以分号结尾，请按「语句」整体执行，切勿逐行执行（逐行会语法错误）。
 INSERT INTO screen_model (category, brand, model, screen_size, resolution, screen_type, refresh_rate,
         sub_size, sub_resolution, sub_screen_type, sub_refresh_rate,

@@ -26,4 +26,18 @@ public enum PhaseStatus {
     public String getLabel() { return label; }
     /** 存入数据库的枚举常量名 */
     public String getCode() { return name(); }
+
+    /**
+     * F7-96（2026-09-19）：按 code 解析（大小写不敏感、空值安全）。
+     * <p>原先 {@code savePhaseRow} 直接采用请求体里的 {@code status}（无白名单），
+     * 写入非法值后 {@code syncProjectStatus} 的 allMatch 会把它当作"未完成"，
+     * 项目将永远无法结项。</p>
+     */
+    public static PhaseStatus fromCode(String code) {
+        if (code == null || code.isBlank()) return null;
+        for (PhaseStatus t : values()) {
+            if (t.name().equalsIgnoreCase(code)) return t;
+        }
+        return null;
+    }
 }

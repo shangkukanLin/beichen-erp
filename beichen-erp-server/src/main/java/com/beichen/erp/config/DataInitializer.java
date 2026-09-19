@@ -75,8 +75,13 @@ public class DataInitializer implements ApplicationRunner {
 
     /**
      * 屏幕资料知识库初始化：仅在表为空时导入一次种子数据（db/screen_model_data.sql），
-     * 避免覆盖用户后续编辑/新增的内容。种子 SQL 用 INSERT...SELECT...FROM company，
-     * 因此每个公司各导入一份，切换公司也能看到完整知识库。
+     * 避免覆盖用户后续编辑/新增的内容。
+     * <p>F7-99（2026-09-19）：本表已改为**行业共享的单一知识库**（不参与租户隔离，见
+     * {@link CompanyTenantHandler} 的 IGNORE_TABLES）。种子文件里的
+     * {@code INSERT ... SELECT ... FROM sys_company} 是"每个公司各一份"时代的写法 ——
+     * 导入后这里统一把 company_id 归拢为 NULL，与"共享一份"的语义对齐。</p>
+     * <p>注意：这里的 {@code COUNT(*)} 由 jdbcTemplate 原生 SQL 执行（不走租户插件），
+     * 统计的是全表；表非空即认为已导入过，直接返回。</p>
      */
     private void initScreenModels() {
         try {
@@ -109,7 +114,10 @@ public class DataInitializer implements ApplicationRunner {
                     n++;
                 }
             }
-            log.info("屏幕资料知识库初始化完成，导入 {} 条", n);
+            // 共享语义：种子文件按"每公司一份"插入时，这里统一归拢为一份（company_id = NULL）
+            int normalized = jdbcTemplate.update(
+                    "UPDATE screen_model SET company_id = NULL WHERE company_id IS NOT NULL");
+            log.info("屏幕资料知识库初始化完成，导入 {} 条（company_id 归拢 {} 行）", n, normalized);
         } catch (Exception e) {
             // 打印完整堆栈：bad SQL grammar 的具体 MySQL 原因在 cause 链里
             log.warn("初始化屏幕资料知识库异常", e);

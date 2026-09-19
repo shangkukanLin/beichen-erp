@@ -115,6 +115,12 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     public void revertPhase(Long projectId, Long phaseId) {
         ProjectPhase current = projectPhaseMapper.selectById(phaseId);
         if (current == null) return;
+        // F7-96（2026-09-19）：补上"已取消项目"护栏 —— complete/skip/savePhaseRow 三处都有，
+        // 这里原先漏了，导致已取消项目仍可撤销阶段（还会把 CLOSED 改回 IN_PROGRESS）
+        if (isProjectCancelled(projectId)) {
+            log.warn("项目已取消，禁止撤销阶段: projectId={}, phaseId={}", projectId, phaseId);
+            throw new BusinessException("项目已取消，无法撤销阶段；请先重新激活项目");
+        }
 
         String oldStatus = current.getStatus();
         // 只有已完成或已跳过的阶段才能撤销
@@ -211,7 +217,13 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
 
         String oldStatus = existing.getStatus();
         String newStatus = row.getStatus();
-        boolean statusChanged = !oldStatus.equals(newStatus);
+        // F7-96（2026-09-19）：① status 白名单（原先可直接写任意字符串，之后 syncProjectStatus 的
+        // allMatch 会把该阶段视为"未完成" ⇒ 项目永远无法结项）；② 用 Objects.equals 避免
+        // oldStatus 为 null（历史脏数据）时 NPE
+        if (newStatus != null && PhaseStatus.fromCode(newStatus) == null) {
+            throw new BusinessException("阶段状态非法：" + newStatus);
+        }
+        boolean statusChanged = !java.util.Objects.equals(oldStatus, newStatus);
 
         existing.setStatus(newStatus);
         existing.setPlannedEnd(row.getPlannedEnd());
@@ -237,6 +249,10 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     @Override
     @Transactional
     public void updatePlanned(Long projectId, String phaseName, LocalDate plannedEnd) {
+        // F7-96（2026-09-19）：补上"已取消项目"护栏（原先只在 complete/skip/savePhaseRow 三处做了）
+        if (isProjectCancelled(projectId)) {
+            throw new BusinessException("项目已取消，无法修改阶段计划日期；请先重新激活项目");
+        }
         ProjectPhase tl = findByPhaseName(projectId, phaseName);
         if (tl != null) {
             tl.setPlannedEnd(plannedEnd);
@@ -247,6 +263,11 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     @Override
     @Transactional
     public void updatePlannedAndShift(Long projectId, String phaseName, LocalDate plannedEnd) {
+        // F7-96（2026-09-19）：补上"已取消项目"护栏（该方法还会**级联后推后续所有阶段**，
+        // 对已取消项目执行相当于篡改历史计划）
+        if (isProjectCancelled(projectId)) {
+            throw new BusinessException("项目已取消，无法推移阶段计划日期；请先重新激活项目");
+        }
         ProjectPhase tl = findByPhaseName(projectId, phaseName);
         if (tl == null) return;
 
@@ -267,15 +288,9 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
         }
     }
 
-    @Override
-    @Transactional
-    public void updateStatus(Long projectId, String phaseName, String status) {
-        ProjectPhase tl = findByPhaseName(projectId, phaseName);
-        if (tl != null) {
-            tl.setStatus(status);
-            projectPhaseMapper.updateById(tl);
-        }
-    }
+    // F7-93（2026-09-19）：原 updateStatus(projectId, phaseName, status) 已删除 ——
+    // ProjectPhaseController 从未暴露该端点、全库也没有调用方（死代码），且它直接 setStatus
+    // 且无枚举白名单，留着容易被误用。阶段状态变更请走 completePhase / skipPhase / savePhaseRow。
 
     // ===== 内部方法 =====
 
@@ -314,7 +329,12 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     /** 从项目阶段推导项目状态 */
     private void syncProjectStatus(Long projectId) {
         Project project = projectMapper.selectById(projectId);
-        if (project == null || project.getCancelledAt() != null) return;
+        if (project == null) return;
+        // F7-89（2026-09-19）：判据由 cancelledAt 改为 status，与阶段护栏 isProjectCancelled
+        // 保持一致。原先按 cancelledAt 判断时，一旦出现"status=IN_PROGRESS 但 cancelled_at 有
+        // 残留"的数据（旧版 updateProject 整实体写回即可造成），这里会永久 return ⇒
+        // 阶段全部完成后项目永不结项（静默死锁）。
+        if (ProjectStatus.CANCELLED.getCode().equals(project.getStatus())) return;
 
         List<ProjectPhase> all = listByProject(projectId);
         boolean allDone = all.stream().allMatch(t ->
@@ -332,10 +352,22 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     }
 
     private void checkProductStatusSync(String phaseName, Long projectId) {
+        // F7-93（2026-09-19）：原用 selectOne(eq(name)) —— 一旦同名模板存在两条（历史脏数据，或
+        // 未加唯一索引前建出来），MyBatis-Plus 会抛 TooManyResultsException ⇒ 完成/跳过/保存
+        // 阶段全部 500（研发主线被脏数据打断）。改为按 id 升序取第一条兜底，入口侧另加了重名校验。
         PhaseTemplate tpl = phaseTemplateMapper.selectOne(
                 new LambdaQueryWrapper<PhaseTemplate>()
-                        .eq(PhaseTemplate::getName, phaseName));
-        if (tpl != null && PhaseTemplate.SYNC_PRODUCT_STATUS == valueOf(tpl.getProductStatusSync())) {
+                        .eq(PhaseTemplate::getName, phaseName)
+                        .orderByAsc(PhaseTemplate::getId)
+                        .last("LIMIT 1"));
+        if (tpl == null) {
+            // F7-94（2026-09-19）：原为静默跳过 —— 阶段模板被改名或删除后，本阶段不再触发产品状态
+            // 同步（阶段名是建项目时复制进 dev_project_phase 的快照，模板改名不会回溯），
+            // 且没有任何提示，只能靠"产品状态一直停在研发中"来间接发现
+            log.warn("未找到阶段模板[{}]，跳过产品状态同步: projectId={}", phaseName, projectId);
+            return;
+        }
+        if (PhaseTemplate.SYNC_PRODUCT_STATUS == valueOf(tpl.getProductStatusSync())) {
             projectProductSyncService.syncProductStatus(projectId);
         }
     }

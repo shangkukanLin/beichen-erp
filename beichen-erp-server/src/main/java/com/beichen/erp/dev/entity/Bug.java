@@ -17,7 +17,7 @@ public class Bug {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long projectId;
-    /** Bug编号，如 DEV_BUG-20260815-001 */
+    /** Bug编号，格式 {@code DEV_BUG-yyyyMMdd-三位序号}，如 DEV_BUG-20260919-001 */
     private String code;
     private String title;
     private String bugType;

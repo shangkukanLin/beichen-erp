@@ -1,6 +1,7 @@
 package com.beichen.erp.dev.controller;
 
 import com.beichen.erp.common.R;
+import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.dev.entity.Bom;
 import com.beichen.erp.dev.service.BomService;
 import com.beichen.erp.outsource.service.BomSnapshotService;
@@ -42,13 +43,29 @@ public class BomController {
         return R.ok();
     }
 
-    /** 保存BOM项 */
+    /**
+     * 保存BOM项（仅允许新增 / 修改**最新版本**的行，且带 id 时该行必须属于本项目）。
+     * <p>F7-97（2026-09-19）三处加固：① 忽略前端传的 {@code version}，一律写当前最新版本
+     * （原先可显式指定 ⇒ 直接改写历史版本，与 {@code BomServiceImpl.deleteItem} 注释守护的
+     * "版本历史不可改写"自相矛盾）；② 带 {@code id} 时校验该行属于本项目（原先
+     * {@code setProjectId(projectId)} 会把别项目的 BOM 行"搬"到当前项目）；③ 带 {@code id}
+     * 且该行属于历史版本时拒绝，提示先新建版本。</p>
+     */
     @PostMapping("/{projectId}/bom")
     public R<Void> saveItem(@PathVariable Long projectId, @RequestBody Bom bom) {
-        bom.setProjectId(projectId);
-        if (bom.getVersion() == null) {
-            bom.setVersion(bomService.getMaxVersion(projectId));
+        int maxVersion = bomService.getMaxVersion(projectId);
+        if (bom.getId() != null) {
+            Bom exist = bomService.getById(bom.getId());
+            if (exist == null) throw new BusinessException("BOM 行不存在");
+            if (!projectId.equals(exist.getProjectId())) {
+                throw new BusinessException("该 BOM 行不属于当前项目");
+            }
+            if (exist.getVersion() != null && exist.getVersion() != maxVersion) {
+                throw new BusinessException("历史版本（V" + exist.getVersion() + "）的 BOM 行不可修改，请先新建版本");
+            }
         }
+        bom.setProjectId(projectId);
+        bom.setVersion(maxVersion);
         bomService.saveOrUpdate(bom);
         return R.ok();
     }

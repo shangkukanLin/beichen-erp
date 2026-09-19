@@ -34,4 +34,17 @@ public enum DevMaterialPlaceTypeEnum {
         }
         return code;
     }
+
+    /**
+     * F7-103（2026-09-19）：按 code 解析（大小写不敏感、空值安全），供接口层做白名单校验。
+     * <p>原先 {@code resolvePlaceName} 对未知 placeType 是"静默接受"（落空位置名、不报错不记日志），
+     * 历史数据里可能出现前端无法识别的类型。</p>
+     */
+    public static DevMaterialPlaceTypeEnum fromCode(String code) {
+        if (code == null || code.isBlank()) return null;
+        for (DevMaterialPlaceTypeEnum t : values()) {
+            if (t.name().equalsIgnoreCase(code)) return t;
+        }
+        return null;
+    }
 }

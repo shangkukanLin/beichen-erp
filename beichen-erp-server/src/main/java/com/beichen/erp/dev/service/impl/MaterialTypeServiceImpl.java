@@ -57,13 +57,26 @@ public class MaterialTypeServiceImpl implements MaterialTypeService {
         }
         if (type.getStatus() == null) type.setStatus(1);
         if (type.getSortOrder() == null) type.setSortOrder(0);
-        type.setCompanyId(CompanyContext.get());
+        // F7-90（2026-09-19）：仅在"有租户上下文"时写公司（超管模式下 strictInsertFill 不兜底，
+        // 显式写 null/0 会让该行对所有公司都不可见）
+        Long cid = CompanyContext.get();
+        if (cid != null && cid > 0) type.setCompanyId(cid);
         materialTypeMapper.insert(type);
     }
 
     @Override
     @Transactional
     public void update(MaterialType type) {
+        if (type.getId() == null) throw new BusinessException("类型ID不能为空");
+        // F7-91（2026-09-19）：改名同样校验同公司重名 —— 原先 update 完全无校验，可以把 A 类型
+        // 改成与 B 同名，之后 ProjectServiceImpl.materialTypeIdMap 的同名映射会在两条之间漂移
+        // （改配联动可能挂到"另一个"类型上）
+        if (type.getTypeName() != null && !type.getTypeName().isBlank()
+                && materialTypeMapper.selectCount(buildWrapper()
+                        .eq(MaterialType::getTypeName, type.getTypeName())
+                        .ne(MaterialType::getId, type.getId())) > 0) {
+            throw new BusinessException("类型名称已存在");
+        }
         // 物料仅存 material_type_id 指向类型，类型改名不影响 ID，无需同步物料
         materialTypeMapper.updateById(type);
     }

@@ -16,7 +16,11 @@ public class CompanyTenantHandler implements TenantLineHandler {
      */
     private static final java.util.Set<String> IGNORE_TABLES = java.util.Set.of(
         "sys_company", "sys_user", "sys_role", "sys_menu", "sys_role_menu", "sys_user_role",
-        "sys_user_menu"
+        "sys_user_menu",
+        // F7-99（2026-09-19）：屏幕资料知识库 = 行业基础资料（1268 条机型种子数据），
+        // 不是业务数据（清空数据时一律保留）⇒ **各公司共享同一份**，不参与租户隔离；
+        // 该表 company_id 已统一置 NULL（DataInitializer 导入时也会归拢）。
+        "screen_model"
     );
 
     @Override

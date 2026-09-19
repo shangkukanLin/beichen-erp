@@ -2,7 +2,7 @@
 import { reactive, ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { PhaseStatus, PhaseStatusLabel, ProjectStatus, ProjectStatusLabel, ProjectStatusTag, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DevMaterialTypeLabel, DevMaterialStatusLabel, DevDrawingDocType, DevDrawingDocTypeLabel, DEV_PROJECT_DIRTY_KEY } from '@/api/enums'
+import { PhaseStatus, PhaseStatusLabel, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DevMaterialTypeLabel, DevMaterialStatusLabel, DevDrawingDocType, DevDrawingDocTypeLabel, DEV_PROJECT_DIRTY_KEY } from '@/api/enums'
 import {
   getProject, updateProject,
   getProjectBom, saveProjectBom, getProjectBomSnapshots,
@@ -29,7 +29,7 @@ const form = reactive<ProjectDTO>({
   originalDriveIc: '', originalTouchIc: '',
   glassSize: '', glassResolution: '',
   configDriveIcId: undefined, configTouchIcId: undefined, configCodeIcId: undefined,
-  startDate: '', expectedEndDate: '', status: ProjectStatus.IN_PROGRESS, remark: '',
+  startDate: '', expectedEndDate: '', remark: '',
   sampleFactoryId: undefined, outsourceFactoryId: undefined,
   brandId: undefined
 })
@@ -70,7 +70,8 @@ async function loadProject() {
     sampleFactoryId: p.sampleFactoryId, outsourceFactoryId: p.outsourceFactoryId,
     sampleFactoryName: p.sampleFactoryName, outsourceFactoryName: p.outsourceFactoryName,
     startDate: p.startDate, expectedEndDate: p.expectedEndDate,
-    status: p.status, remark: p.remark
+    // F7-89：不回填 status —— 它是阶段推导的派生字段，本页不提交（后端已改为白名单字段更新）
+    remark: p.remark
   })
   await loadConfigNames()
 }

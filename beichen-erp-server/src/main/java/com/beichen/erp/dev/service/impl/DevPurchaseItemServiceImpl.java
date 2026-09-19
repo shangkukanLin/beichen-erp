@@ -14,11 +14,14 @@ import com.beichen.erp.dev.mapper.DevMaterialFlowMapper;
 import com.beichen.erp.dev.mapper.DevPurchaseItemMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.dev.service.DevPurchaseItemService;
+import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -29,6 +32,7 @@ import java.util.stream.Collectors;
 /**
  * 研发物料管理业务实现
  */
+@Slf4j
 @Service
 public class DevPurchaseItemServiceImpl extends ServiceImpl<DevPurchaseItemMapper, DevPurchaseItem> implements DevPurchaseItemService {
 
@@ -95,6 +99,64 @@ public class DevPurchaseItemServiceImpl extends ServiceImpl<DevPurchaseItemMappe
         if (item == null) return null;
         fillLatestFlow(List.of(item));
         return item;
+    }
+
+    @Override
+    @Transactional
+    public DevPurchaseItem addItem(DevPurchaseItem item) {
+        validateItem(item);
+        Long cid = CompanyContext.get();
+        if (cid != null && cid > 0) item.setCompanyId(cid);
+        this.save(item);
+        return item;
+    }
+
+    @Override
+    @Transactional
+    public void updateItem(DevPurchaseItem item) {
+        if (item.getId() == null) throw new BusinessException("物料ID不能为空");
+        if (this.getById(item.getId()) == null) throw new BusinessException("研发物料不存在");
+        validateItem(item);
+        // F7-101：白名单字段更新 —— 只写"允许编辑"的字段（companyId 一律不落库；借 MyBatis-Plus
+        // 默认的 NOT_NULL 策略，"前端未提交" == "保持原值"）
+        DevPurchaseItem patch = new DevPurchaseItem();
+        patch.setId(item.getId());
+        patch.setProjectId(item.getProjectId());
+        patch.setName(item.getName());
+        patch.setType(item.getType());
+        patch.setQuantity(item.getQuantity());
+        patch.setLocationDetail(item.getLocationDetail());
+        patch.setPurchaseDate(item.getPurchaseDate());
+        patch.setAmount(item.getAmount());
+        patch.setStatus(item.getStatus());
+        patch.setRemark(item.getRemark());
+        this.updateById(patch);
+    }
+
+    @Override
+    @Transactional
+    public void deleteItem(Long id) {
+        if (this.getById(id) == null) throw new BusinessException("研发物料不存在");
+        // F7-101：级联清理位置流转记录 —— 原先只删物料，dev_material_flow 的行会成为孤儿，
+        // 而 fillLatestFlow / DevMaterialFlowServiceImpl.listByMaterial 仍会按 material_id 查到它们
+        // （表现为"幽灵当前位置"）
+        int flows = materialFlowMapper.delete(new LambdaQueryWrapper<DevMaterialFlow>()
+                .eq(DevMaterialFlow::getMaterialId, id));
+        this.removeById(id);
+        if (flows > 0) log.info("删除研发物料时级联清理流转记录 {} 条: materialId={}", flows, id);
+    }
+
+    /** 必填与取值范围校验（F7-101）：名称必填，数量/金额不允许负数 */
+    private void validateItem(DevPurchaseItem item) {
+        if (item.getName() == null || item.getName().isBlank()) {
+            throw new BusinessException("物料名称不能为空");
+        }
+        if (item.getQuantity() != null && item.getQuantity() < 0) {
+            throw new BusinessException("数量不能为负数");
+        }
+        if (item.getAmount() != null && item.getAmount().compareTo(java.math.BigDecimal.ZERO) < 0) {
+            throw new BusinessException("金额不能为负数");
+        }
     }
 
     /** 工具方法：返回非空列表，避免判空 */

@@ -33,4 +33,19 @@ public interface DevPurchaseItemService extends IService<DevPurchaseItem> {
      * 查询单条研发物料详情（当前位置已实时回填）
      */
     DevPurchaseItem getDetail(Long id);
+
+    /**
+     * 新增研发物料（F7-101：名称必填、数量/金额非负；companyId 仅在有效租户上下文时写入）
+     */
+    DevPurchaseItem addItem(DevPurchaseItem item);
+
+    /**
+     * 修改研发物料（F7-101：白名单字段更新，companyId 不落库）
+     */
+    void updateItem(DevPurchaseItem item);
+
+    /**
+     * 删除研发物料（F7-101：级联清理其位置流转记录，避免 dev_material_flow 出现孤儿行）
+     */
+    void deleteItem(Long id);
 }

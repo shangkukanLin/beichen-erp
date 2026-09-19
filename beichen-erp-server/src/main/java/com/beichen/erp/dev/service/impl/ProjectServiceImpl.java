@@ -9,6 +9,7 @@ import com.beichen.erp.brand.mapper.BrandMapper;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.PageParam;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.dev.common.ProjectStatus;
 import com.beichen.erp.dev.entity.Bom;
 import com.beichen.erp.dev.entity.MaterialType;
@@ -24,6 +25,7 @@ import com.beichen.erp.dev.service.ProjectService;
 import com.beichen.erp.dev.service.ProjectPhaseService;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
+import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
@@ -192,11 +194,21 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
      * 保留排线上原有的其他子物料，仅更新触摸IC/码片IC。
      */
     private void syncPaixianComponents(Project project, int version) {
+        // F7-90（2026-09-19）：下面三处自动创建的物料 / 子物料组成只在"有租户上下文"时显式写公司。
+        // 超管模式（companyId = 0/null）下 MetaObjectHandler 的 strictInsertFill 也不会兜底，
+        // 若显式 setCompanyId(CompanyContext.get()) 会把 company_id 落成 NULL ⇒ 该行对所有公司都查不到。
+        final Long cid = CompanyContext.get();
+        final boolean hasCid = cid != null && cid > 0;
         Map<String, Long> typeMap = materialTypeIdMap();
         Long paixianTypeId = typeMap.get("排线");
         Long touchTypeId = typeMap.get("触摸IC");
         Long codeTypeId = typeMap.get("码片IC");
-        if (paixianTypeId == null) return;
+        if (paixianTypeId == null) {
+            // F7-94（2026-09-19）：原为静默 return —— 物料类型改名为别的叫法后，
+            // 触摸IC/码片IC 的改配联动会整体失效却毫无提示（关联键是中文类型名）
+            log.warn("未找到物料类型[排线]，触摸IC/码片IC 改配联动跳过: projectId={}", project.getId());
+            return;
+        }
         Long projectId = project.getId();
 
         // 1. 确保排线物料存在（BOM 排线行 + outsource_material 记录）
@@ -232,7 +244,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
                 mat.setMaterialTypeId(paixianTypeId);
                 mat.setStatus(1);
                 mat.setUnit("PCS");
-                mat.setCompanyId(CompanyContext.get());
+                if (hasCid) mat.setCompanyId(cid);
                 outsourceMaterialMapper.insert(mat);
                 paixianMatId = mat.getId();
             }
@@ -293,7 +305,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
             n.setQuantity(k.getQuantity());
             n.setLossRate(k.getLossRate());
             n.setRemark(k.getRemark());
-            n.setCompanyId(CompanyContext.get());
+            if (hasCid) n.setCompanyId(cid);
             outsourceMaterialComponentMapper.insert(n);
         }
         Long[] touchCode = {project.getConfigTouchIcId(), project.getConfigCodeIcId()};
@@ -306,7 +318,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
             n.setChildMaterialId(mid);
             n.setQuantity(java.math.BigDecimal.ONE);
             n.setLossRate(java.math.BigDecimal.ZERO);
-            n.setCompanyId(CompanyContext.get());
+            if (hasCid) n.setCompanyId(cid);
             outsourceMaterialComponentMapper.insert(n);
         }
     }
@@ -359,11 +371,22 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         }
     }
 
-    /** 物料类型名 -> id 映射 */
+    /**
+     * 物料类型名 -> id 映射（改配联动用：驱动IC / 排线 / 触摸IC / 码片IC）。
+     * <p>F7-91（2026-09-19）：① 改为按 id 升序扫描 + {@code putIfAbsent} —— 原 {@code put} 在出现同名
+     * 类型时"最后一个胜出"，取值随插入顺序漂移（超管模式下租户插件不过滤时尤为明显）；
+     * ② 命中同名类型记 {@code log.warn}，把"静默取错"变成"有迹可查"。</p>
+     * <p>备注：本方法仍以**中文类型名**作关联键（沿用既有设计），彻底解决需要给类型加稳定编码列，
+     * 见报告 §32-F7-91 的结构性建议。</p>
+     */
     private Map<String, Long> materialTypeIdMap() {
         Map<String, Long> m = new HashMap<>();
-        for (MaterialType t : materialTypeMapper.selectList(null)) {
-            m.put(t.getTypeName(), t.getId());
+        for (MaterialType t : materialTypeMapper.selectList(
+                new LambdaQueryWrapper<MaterialType>().orderByAsc(MaterialType::getId))) {
+            if (m.putIfAbsent(t.getTypeName(), t.getId()) != null) {
+                log.warn("存在同名物料类型，改配联动固定取 id 较小的一条: typeName={}, ignoredId={}",
+                        t.getTypeName(), t.getId());
+            }
         }
         return m;
     }
@@ -381,11 +404,45 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     @Transactional
     public void cancel(Long projectId) {
         Project project = projectMapper.selectById(projectId);
-        if (project == null) return;
-        project.setStatus(ProjectStatus.CANCELLED.getCode());
-        project.setCancelledAt(LocalDateTime.now());
-        projectMapper.updateById(project);
+        if (project == null) throw new BusinessException("项目不存在");
+        // F7-92（2026-09-19）：三处加固 ——
+        // ① 先校验当前状态（原先对"已取消"的项目再取消会刷新 cancelled_at，掩盖真实取消时间）；
+        // ② 校验下游单据：存在未完成的委外加工单时不允许取消（否则加工单会挂在一个已取消的项目上）；
+        // ③ 用 CAS 更新替代"先查后改"，避免与 reactivate 并发时互相覆盖（后写者胜）。
+        if (ProjectStatus.CANCELLED.getCode().equals(project.getStatus())) {
+            throw new BusinessException("项目已取消");
+        }
+        Long running = countRunningOutsourceOrders(projectId);
+        if (running != null && running > 0) {
+            throw new BusinessException("该项目下还有 " + running + " 张未完成的委外加工单，请先结单或取消后再取消项目");
+        }
+        int updated = projectMapper.update(null, new LambdaUpdateWrapper<Project>()
+                .eq(Project::getId, projectId)
+                .eq(Project::getStatus, project.getStatus())
+                .set(Project::getStatus, ProjectStatus.CANCELLED.getCode())
+                .set(Project::getCancelledAt, LocalDateTime.now()));
+        if (updated == 0) throw new BusinessException("项目状态已被其他操作变更，请刷新后重试");
         log.info("项目已取消: projectId={}", projectId);
+    }
+
+    /**
+     * 项目下"未完成"的委外加工单数量（F7-92）。
+     * <p>关联方式与 {@link #getRelatedOrders} 一致：走 {@code outsource_order_product.project_id}
+     * （而不是用 {@code remark LIKE} 那种展示字段串单）。</p>
+     */
+    private Long countRunningOutsourceOrders(Long projectId) {
+        List<OutsourceOrderProduct> products = outsourceOrderProductMapper.selectList(
+                new LambdaQueryWrapper<OutsourceOrderProduct>()
+                        .eq(OutsourceOrderProduct::getProjectId, projectId));
+        if (products.isEmpty()) return 0L;
+        Set<Long> orderIds = products.stream().map(OutsourceOrderProduct::getOrderId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        if (orderIds.isEmpty()) return 0L;
+        return outsourceOrderMapper.selectCount(new LambdaQueryWrapper<OutsourceOrder>()
+                .in(OutsourceOrder::getId, orderIds)
+                .notIn(OutsourceOrder::getStatus,
+                        OutsourceOrderStatus.FINISHED.getCode(),
+                        OutsourceOrderStatus.CANCELLED.getCode()));
     }
 
     @Override
@@ -411,24 +468,83 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
 
     // ===== 内部方法 =====
 
+    /**
+     * 生成项目编号：{@code DEV-yyMMdd-三位序号}。
+     * <p>F7-87（2026-09-19）：原实现用 {@code selectCount(当日前缀) + 1} 取号 —— 删除任意一条后
+     * 下一个编号必然落在**已占用区间**（count 小于当日最大序号），并发/双击提交也会取到同一个
+     * count；而 {@code dev_project.code} 过去没有唯一索引，重号可以直接落库。现改为「取当日
+     * **最大**编号 + 1」（与同模块 {@code BugController.generateBugCode} 的正确写法一致），
+     * 并配合 {@code uk_code} 唯一索引兜底（并发撞号时由数据库拦下，而不是写脏数据）。</p>
+     */
     private String generateProjectCode() {
         String date = LocalDate.now().toString().replace("-", "").substring(2);
-        LambdaQueryWrapper<Project> w = new LambdaQueryWrapper<>();
-        w.likeRight(Project::getCode, BillPrefix.DEV_PROJECT + date);
-        long count = projectMapper.selectCount(w);
-        return BillPrefix.DEV_PROJECT + date + "-" + String.format("%03d", count + 1);
+        String prefix = BillPrefix.DEV_PROJECT + date;
+        Project last = projectMapper.selectOne(new LambdaQueryWrapper<Project>()
+                .likeRight(Project::getCode, prefix)
+                .orderByDesc(Project::getCode)
+                .last("LIMIT 1"));
+        int seq = 1;
+        if (last != null && last.getCode() != null) {
+            // 取最后一个 '-' 之后的部分（比 substring(len-3) 更稳：序号超过 999 时不会截错）
+            String numPart = last.getCode().substring(last.getCode().lastIndexOf('-') + 1);
+            try {
+                seq = Integer.parseInt(numPart) + 1;
+            } catch (Exception e) {
+                log.warn("项目编号序号解析失败，本次回退为 1: lastCode={}", last.getCode());
+                seq = 1;
+            }
+        }
+        return prefix + "-" + String.format("%03d", seq);
     }
 
+    /**
+     * 更新项目基础信息（**白名单字段更新**）。
+     * <p>F7-89（2026-09-19）：原实现是 {@code updateById(project)}（整实体）—— {@code project}
+     * 直接来自 {@code @RequestBody}，前端编辑页会把表单里的 {@code status} 一并回填并提交，
+     * 于是**陈旧的 status 会覆盖状态机推导出来的值**；一旦出现"status 被改回 IN_PROGRESS、
+     * cancelled_at 仍有残留"的组合，{@code syncProjectStatus} 会永久 return，而阶段护栏按
+     * status 判定 ⇒ 阶段全部完成后项目**永不结项**（静默死锁）。</p>
+     * <p>现改为只写入"允许编辑"的字段：{@code status}/{@code cancelledAt}/{@code code}/
+     * {@code productId}/{@code companyId}/{@code actualEndDate}/{@code createTime} 等派生或系统
+     * 字段一律不落库。这里借用 MyBatis-Plus 默认的 {@code NOT_NULL} 更新策略：未赋值的字段不会
+     * 出现在 UPDATE 语句里，因此"前端未提交该字段" == "保持原值"。</p>
+     */
     @Override
     @Transactional
     public void updateProject(Project project) {
-        // 总成名称变更时，同步改名关联产品，确保两处名称一致
         Project old = projectMapper.selectById(project.getId());
-        projectMapper.updateById(project);
+        if (old == null) throw new BusinessException("项目不存在");
+
+        Project patch = new Project();
+        patch.setId(project.getId());
+        // ↓ 只允许这些字段被编辑（需与前端 edit.vue 的表单字段保持一致）
+        patch.setName(project.getName());
+        patch.setAssemblyName(project.getAssemblyName());
+        patch.setBrandId(project.getBrandId());
+        patch.setDisplaySupplierName(project.getDisplaySupplierName());
+        patch.setTouchSupplierName(project.getTouchSupplierName());
+        patch.setAdaptModel(project.getAdaptModel());
+        patch.setOriginalSize(project.getOriginalSize());
+        patch.setOriginalResolution(project.getOriginalResolution());
+        patch.setOriginalDriveIc(project.getOriginalDriveIc());
+        patch.setOriginalTouchIc(project.getOriginalTouchIc());
+        patch.setGlassSize(project.getGlassSize());
+        patch.setGlassResolution(project.getGlassResolution());
+        patch.setConfigDriveIcId(project.getConfigDriveIcId());
+        patch.setConfigTouchIcId(project.getConfigTouchIcId());
+        patch.setConfigCodeIcId(project.getConfigCodeIcId());
+        patch.setSampleFactoryId(project.getSampleFactoryId());
+        patch.setOutsourceFactoryId(project.getOutsourceFactoryId());
+        patch.setProjectLeaderId(project.getProjectLeaderId());
+        patch.setStartDate(project.getStartDate());
+        patch.setExpectedEndDate(project.getExpectedEndDate());
+        patch.setRemark(project.getRemark());
+        projectMapper.updateById(patch);
+
         // 改配信息（驱动IC/触摸IC/码片IC）同步写回项目 BOM 对应独立行
         syncConfigToBom(project);
-        if (old != null
-                && old.getAssemblyName() != null
+        // 总成名称变更时，同步改名关联产品，确保两处名称一致
+        if (old.getAssemblyName() != null
                 && !old.getAssemblyName().equals(project.getAssemblyName())) {
             projectProductSyncService.syncProductNameFromProject(
                     project.getId(), project.getAssemblyName());

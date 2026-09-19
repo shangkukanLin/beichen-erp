@@ -55,26 +55,24 @@ public class DevPurchaseItemController {
         return R.ok(devPurchaseItemService.warehouseOptions());
     }
 
-    /** 新增项目物料（projectId可空，表示不关联研发项目） */
+    /** 新增项目物料（projectId 可空，表示不关联研发项目；F7-101：必填/非负校验 + companyId 判空） */
     @PostMapping
     public R<DevPurchaseItem> add(@RequestBody DevPurchaseItem item) {
-        item.setCompanyId(CompanyContext.get());
-        devPurchaseItemService.save(item);
-        return R.ok(item);
+        return R.ok(devPurchaseItemService.addItem(item));
     }
 
-    /** 修改项目物料 */
+    /** 修改项目物料（F7-101：白名单字段更新） */
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable Long id, @RequestBody DevPurchaseItem item) {
         item.setId(id);
-        devPurchaseItemService.updateById(item);
+        devPurchaseItemService.updateItem(item);
         return R.ok();
     }
 
-    /** 删除项目物料 */
+    /** 删除项目物料（F7-101：级联清理位置流转记录） */
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
-        devPurchaseItemService.removeById(id);
+        devPurchaseItemService.deleteItem(id);
         return R.ok();
     }
 }

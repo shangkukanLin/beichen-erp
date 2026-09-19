@@ -35,6 +35,5 @@ public interface ProjectPhaseService extends IService<ProjectPhase> {
     /** 级联重算所有未开始阶段的计划日期（从第一个进行中阶段开始推算） */
     void recalcAllPlannedEnds(Long projectId);
 
-    /** 更新单个阶段状态 */
-    void updateStatus(Long projectId, String phaseName, String status);
+    // F7-93（2026-09-19）：updateStatus 已删除（无控制器映射、无调用方的死代码）
 }
