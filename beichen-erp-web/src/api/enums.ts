@@ -392,6 +392,34 @@ export const SubjectTypeTag: Record<string, 'success' | 'warning' | 'info' | 'da
 /** 应付转应收：新增/编辑/详情/审核后回列表时的脏标志（列表页 onActivated 按需刷新） */
 export const PAYABLE_TRANSFER_DIRTY_KEY = 'payableTransferDirty'
 
+/**
+ * 2026-09-20（F7-165）：以下映射原先**分散硬编码**在各页面（同一份 label 抄两遍、或散落 4 处），
+ * 新增类型/流水种类时容易漏改（改一处、忘一处 ⇒ 静默显示英文 code）。统一集中到此处。
+ * 全库口径：**存库用 code（英文），展示用 label（中文）**。
+ */
+
+/** 资金流水类型（`finance/cashflow.vue` 的筛选下拉与列表展示共用同一份） */
+export const CashFlowTypeLabel: Record<string, string> = {
+  RECEIPT: '收款', PAYMENT: '付款', OPENING: '期初',
+  RECEIPT_REVERSE: '收款冲正', PAYMENT_REVERSE: '付款冲正',
+  EXPENSE: '费用支出', EXPENSE_REVERSE: '费用冲正',
+}
+
+/** 发票类型（登记发票：专票/普票/电子专票/电子普票） */
+export const InvoiceKindLabel: Record<string, string> = {
+  special: '增值税专用发票', normal: '增值税普通发票',
+  e_special: '电子专票', e_normal: '电子普票',
+}
+
+/** 发票进销方向：销项=我方开出，进项=我方收到 */
+export const InvoiceDirectionLabel: Record<string, string> = { SALE: '销项', PURCHASE: '进项' }
+
+/** 发票登记状态 */
+export const InvoiceStatusLabel: Record<string, string> = { REGISTERED: '已登记', CANCELLED: '已作废' }
+
+/** 发票状态 → el-tag 的 type */
+export const InvoiceStatusTag: Record<string, string> = { REGISTERED: 'success', CANCELLED: 'info' }
+
 /** 应付/应收来源单据类型 → 详情页路由前缀（用于来源单号点击跳转） */
 export const SourceBillDetailRoute: Record<string, string> = {
   PURCHASE_ORDER: '/inventory/purchase/detail',

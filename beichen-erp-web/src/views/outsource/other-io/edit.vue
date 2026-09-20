@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026-09-20（F7-159）：显式声明组件名（便于 DevTools 辨认与将来按名 exclude）
+defineOptions({ name: 'OutsourceOtherIoEdit' })
 import { localDate } from '@/utils/date'
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { getPaymentPage, getPaymentItems, auditPayment, cancelPayment, unAuditPayment, type FinancePayment, type FinancePaymentItem } from '@/api/finance'
-import { TYPE_MAP, TYPE_TAG } from '@/constants/supplier'
+import { TYPE_MAP, TYPE_TAG, TYPE_OPTIONS } from '@/constants/supplier'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
@@ -139,11 +139,10 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
         <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="供应商"><RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" /></el-form-item>
         <el-form-item label="主体类型">
+          <!-- 2026-09-20（F7-165）：改用 @/constants/supplier 的 TYPE_OPTIONS（4 个主体类型集中维护，
+               含 方案商/加工厂/供货商/辅料商），不再在本页硬编码 label + code -->
           <el-select v-model="query.supplierType" placeholder="全部" clearable style="width:120px">
-            <el-option label="方案商" value="solution" />
-            <el-option label="加工厂" value="factory" />
-            <el-option label="供货商" value="product" />
-            <el-option label="辅料商" value="material" />
+            <el-option v-for="o in TYPE_OPTIONS" :key="o.name" :label="o.label" :value="o.name" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="o in statusOpts" :key="o.v" :label="o.l" :value="o.v"/></el-select></el-form-item>

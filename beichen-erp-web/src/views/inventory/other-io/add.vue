@@ -1,4 +1,7 @@
 <script setup lang="ts">
+// 2026-09-20（F7-159）：显式声明组件名 —— 该页监听顶栏 refresh:dropdown-data，
+// 将来若需按名字加入 keep-alive 的 :exclude（如 layout 已排除的 PurchaseAdd 等）才有名可用。
+defineOptions({ name: 'InventoryOtherIoAdd' })
 import { localDate } from '@/utils/date'
 import { ref, computed, onMounted, onActivated, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'

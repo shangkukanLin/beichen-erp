@@ -235,15 +235,17 @@
         <div class="stat-grid">
           <div class="stat-card clickable" @click="$router.push('/inventory/purchase')">
             <div class="stat-value" style="color:var(--app-color-primary)">{{ fmtN(purchaseMonthAmount) }}</div>
-            <div class="stat-label">本月采购金额</div>
+            <!-- 2026-09-20（F7-195）：后端 module-pages 固定分页 200 条，此处是"近 200 条"的合计而非全量；
+                 原先文案未说明 ⇒ 超过 200 条时会静默偏小。改为自解释文案（长久方案应由后端给真聚合）。 -->
+            <div class="stat-label">本月采购金额（近 200 条）</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/inventory/purchase-return')">
             <div class="stat-value" style="color:var(--app-color-warning)">{{ fmtN(purchaseReturnMonthAmount) }}</div>
-            <div class="stat-label">本月采购退货</div>
+            <div class="stat-label">本月采购退货（近 200 条）</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/inventory/purchase')">
             <div class="stat-value" style="color:var(--app-color-danger)">{{ purchasePending }}</div>
-            <div class="stat-label">待审核采购单</div>
+            <div class="stat-label">待审核采购单（近 200 条）</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/supplier/manage')">
             <div class="stat-value" style="color:var(--app-color-success)">{{ supplierTotal }}</div>
@@ -334,11 +336,11 @@
         <div class="stat-grid">
           <div class="stat-card clickable" @click="$router.push('/inventory/product-stock')">
             <div class="stat-value" style="color:var(--app-color-primary)">{{ fmtN(stockTotalQty) }}</div>
-            <div class="stat-label">库存总件数</div>
+            <div class="stat-label">库存总件数（近 200 条）</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/inventory/product-stock')">
             <div class="stat-value" style="color:var(--app-color-success)">{{ fmtN(stockTotalValue) }}</div>
-            <div class="stat-label">库存总金额</div>
+            <div class="stat-label">库存总金额（近 200 条）</div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/inventory/return-sort')">
             <div class="stat-value" style="color:var(--app-color-warning)">{{ fmtN(stockPendingQty) }}</div>

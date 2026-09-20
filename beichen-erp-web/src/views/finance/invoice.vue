@@ -3,14 +3,18 @@ import { localDate } from '@/utils/date'
 import { reactive, ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getInvoicePage, createInvoice, updateInvoice, cancelInvoice, type FinanceInvoice } from '@/api/finance'
+// 2026-09-20（F7-165）：4 组映射原先硬编码在本页，现集中到 @/api/enums（新增票种/状态只改一处）；
+// 用**别名导入**以保持下方所有用法不变（最小改动）。
+import {
+  InvoiceKindLabel as INVOICE_KIND_LABELS,
+  InvoiceDirectionLabel as DIRECTION_LABEL,
+  InvoiceStatusLabel as STATUS_LABEL,
+  InvoiceStatusTag as STATUS_TAG,
+} from '@/api/enums'
 
 // 发票管理（税务口径）：销项=我方开出的发票，进项=我方收到的发票。登记即生效，作废仅标记可重新登记同号。
 // 发票类型存枚举 code，显示用 label 映射
-const INVOICE_KIND_LABELS: Record<string, string> = { special: '增值税专用发票', normal: '增值税普通发票', e_special: '电子专票', e_normal: '电子普票' }
 const INVOICE_KINDS = Object.keys(INVOICE_KIND_LABELS)
-const DIRECTION_LABEL: Record<string, string> = { SALE: '销项', PURCHASE: '进项' }
-const STATUS_LABEL: Record<string, string> = { REGISTERED: '已登记', CANCELLED: '已作废' }
-const STATUS_TAG: Record<string, string> = { REGISTERED: 'success', CANCELLED: 'info' }
 
 const query = reactive({ direction: '', status: '', keyword: '', dateRange: null as [string, string] | null })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })

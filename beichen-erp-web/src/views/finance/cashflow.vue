@@ -1,28 +1,18 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { getCashflowPage, getAccountPage, type FinanceCashflow, type FinanceAccount } from '@/api/finance'
+import { CashFlowTypeLabel, codeLabelOptions } from '@/api/enums'
 
 // 资金流水（账户管理已拆分为独立子菜单 /finance/account，账户下拉仅用于筛选）
 const fquery = reactive({ accountId: undefined as number|undefined, flowType: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinanceCashflow[]>([])
-// 流水类型：后端存 code（英文），前端展示 label（中文）
-const flowTypes = [
-  { label: '收款', value: 'RECEIPT' },
-  { label: '付款', value: 'PAYMENT' },
-  { label: '费用支出', value: 'EXPENSE' },
-  { label: '期初', value: 'OPENING' },
-  { label: '收款冲正', value: 'RECEIPT_REVERSE' },
-  { label: '付款冲正', value: 'PAYMENT_REVERSE' },
-  { label: '费用冲正', value: 'EXPENSE_REVERSE' },
-]
-const flowTypeLabelMap: Record<string, string> = {
-  RECEIPT: '收款', PAYMENT: '付款', OPENING: '期初',
-  RECEIPT_REVERSE: '收款冲正', PAYMENT_REVERSE: '付款冲正',
-  EXPENSE: '费用支出', EXPENSE_REVERSE: '费用冲正',
-}
-function flowTypeLabel(code?: string) { return code ? (flowTypeLabelMap[code] ?? code) : '' }
+// 流水类型：后端存 code（英文），前端展示 label（中文）。
+// 2026-09-20（F7-165）：原先同一份 label 在本文件**抄了两遍**（下拉数组 + 映射对象）⇒
+// 现共用 @/api/enums 的 CashFlowTypeLabel（新增流水种类只改一处），下拉由 codeLabelOptions 统一生成。
+const flowTypes = codeLabelOptions(CashFlowTypeLabel)
+function flowTypeLabel(code?: string) { return code ? (CashFlowTypeLabel[code] ?? code) : '' }
 
 async function loadFlow() {
   loading.value = true
@@ -51,7 +41,7 @@ onMounted(() => { loadFlow(); loadAccounts() })
       <div class="query-bar">
       <el-form :inline="true" :model="fquery" class="qf">
         <el-form-item label="账户"><el-select v-model="fquery.accountId" placeholder="全部" clearable style="width:150px"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id ?? ''"/></el-select></el-form-item>
-        <el-form-item label="类型"><el-select v-model="fquery.flowType" placeholder="全部" clearable style="width:130px"><el-option v-for="t in flowTypes" :key="t.value" :label="t.label" :value="t.value"/></el-select></el-form-item>
+        <el-form-item label="类型"><el-select v-model="fquery.flowType" placeholder="全部" clearable style="width:130px"><el-option v-for="t in flowTypes" :key="t.code" :label="t.label" :value="t.code"/></el-select></el-form-item>
       </el-form>
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="fq_">查询</el-button>
