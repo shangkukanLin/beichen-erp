@@ -75,6 +75,10 @@ $maxDv  = [int](SqlOne 'SELECT IFNULL(MAX(id),0) FROM outsource_order_delivery')
 # NOTE: payable rows are cleaned by "id > the id captured here" -- finance_payable uses bill_no for the
 # SYSTEM bill number and source_bill_no for the source document, so matching by code would be wrong.
 $maxPayId = [int](SqlOne 'SELECT IFNULL(MAX(id),0) FROM finance_payable')
+# F7-141（2026-09-20，测试卫生 B2）：warehouse_stock_log 是 append-only 台账 —— 审核/反审核都新增行，
+# 本脚本只还原业务表与库存值 ⇒ 反复运行会把测试噪声累积进审计表（实测本脚本当日留下 84 行）。
+# 记录主键上界，收尾只删**本次运行新增的**（历史审计行不动）。
+$slMax0 = [int](SqlOne 'SELECT IFNULL(MAX(id),0) FROM warehouse_stock_log')
 Info "baseline: supplier=$cntSup warehouse=$cntWh order=$cntOrd orderProduct=$cntOp delivery=$cntDv stock=$cntStk payable=$cntPay maxDeliveryId=$maxDv maxPayableId=$maxPayId"
 
 # ---------- F7-74 : a factory whose only warehouse is NOT an outsource warehouse ----------
@@ -159,6 +163,8 @@ if ($fixtureOp -gt 0)    { SqlExec ("DELETE FROM outsource_order_product WHERE i
 if ($fixtureOrd -gt 0)   { SqlExec ("DELETE FROM outsource_order WHERE id=$fixtureOrd") }
 if ($fixtureWh -gt 0)    { SqlExec ("DELETE FROM warehouse WHERE id=$fixtureWh") }
 if ($fixtureSup -gt 0)   { SqlExec ("DELETE FROM supplier WHERE id=$fixtureSup") }
+# F7-141：只删本次运行新增的流水（历史审计行不动）
+SqlExec ("DELETE FROM warehouse_stock_log WHERE id > $slMax0")
 
 $c1 = [int](SqlOne 'SELECT COUNT(*) FROM supplier')
 $c2 = [int](SqlOne 'SELECT COUNT(*) FROM warehouse')
@@ -167,9 +173,10 @@ $c4 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_order_product')
 $c5 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_order_delivery')
 $c6 = [int](SqlOne 'SELECT COUNT(*) FROM warehouse_stock')
 $c7 = [int](SqlOne 'SELECT COUNT(*) FROM finance_payable')
-Info ("after cleanup: supplier=$c1(was $cntSup) warehouse=$c2(was $cntWh) order=$c3(was $cntOrd) orderProduct=$c4(was $cntOp) delivery=$c5(was $cntDv) stock=$c6(was $cntStk) payable=$c7(was $cntPay)")
-if ($c1 -eq $cntSup -and $c2 -eq $cntWh -and $c3 -eq $cntOrd -and $c4 -eq $cntOp -and $c5 -eq $cntDv -and $c6 -eq $cntStk -and $c7 -eq $cntPay) {
-  Ok 'all 7 tables back to their pre-run baseline'
+$slNow = [int](SqlOne 'SELECT IFNULL(MAX(id),0) FROM warehouse_stock_log')
+Info ("after cleanup: supplier=$c1(was $cntSup) warehouse=$c2(was $cntWh) order=$c3(was $cntOrd) orderProduct=$c4(was $cntOp) delivery=$c5(was $cntDv) stock=$c6(was $cntStk) payable=$c7(was $cntPay) stockLogMax=$slNow(was $slMax0)")
+if ($c1 -eq $cntSup -and $c2 -eq $cntWh -and $c3 -eq $cntOrd -and $c4 -eq $cntOp -and $c5 -eq $cntDv -and $c6 -eq $cntStk -and $c7 -eq $cntPay -and $slNow -le $slMax0) {
+  Ok 'all 7 tables + this run''s stock-log rows back to their pre-run baseline'
 } else { Bad 'cleanup incomplete (see counts above)' }
 if ($whOut -gt 0 -and $matId -gt 0) {
   $finalQty = [double](SqlFirstNum "SELECT quantity FROM warehouse_stock WHERE warehouse_id=$whOut AND material_id=$matId AND quality_type='GOOD'")

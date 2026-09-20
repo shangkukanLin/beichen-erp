@@ -73,6 +73,9 @@ $cntRetI  = [int](SqlOne 'SELECT COUNT(*) FROM outsource_material_return_item')
 $cntRep   = [int](SqlOne 'SELECT COUNT(*) FROM outsource_material_return_repair')
 $cntRO    = [int](SqlOne 'SELECT COUNT(*) FROM outsource_return_order')
 $cntROR   = [int](SqlOne 'SELECT COUNT(*) FROM outsource_return_order_repair')
+# F7-141（2026-09-20，测试卫生 B2）：warehouse_stock_log 是 append-only 台账，审核/反审核都会新增行；
+# 本脚本只还原业务表 ⇒ 反复运行会把测试噪声累积进审计表。记录主键上界，收尾只删**本次运行新增的**。
+$slMax0 = [int](SqlOne 'SELECT IFNULL(MAX(id),0) FROM warehouse_stock_log')
 Info "baseline: order=$cntOrder mo=$cntMo moi=$cntMoi ret=$cntRet retItem=$cntRetI repairRec=$cntRep retOrder=$cntRO roRepair=$cntROR"
 
 # ---------- F7-61 ----------
@@ -208,6 +211,8 @@ if ($planOrderId -gt 0) { SqlExec ("DELETE FROM outsource_order WHERE id=$planOr
 if ($rtId -gt 0)        { SqlExec ("DELETE FROM outsource_return_order_repair WHERE return_order_id=$rtId") }
 if ($rtId -gt 0)        { SqlExec ("DELETE FROM outsource_return_order_product WHERE return_order_id=$rtId") }
 if ($rtId -gt 0)        { SqlExec ("DELETE FROM outsource_return_order WHERE id=$rtId") }
+# F7-141：只删本次运行新增的流水（历史审计行不动）
+SqlExec ("DELETE FROM warehouse_stock_log WHERE id > $slMax0")
 
 $c1 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_order')
 $c2 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_material_order')
@@ -217,10 +222,11 @@ $c5 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_material_return_item')
 $c6 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_material_return_repair')
 $c7 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_return_order')
 $c8 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_return_order_repair')
-Info ("after cleanup: order=$c1(was $cntOrder) mo=$c2(was $cntMo) moi=$c3(was $cntMoi) ret=$c4(was $cntRet) retItem=$c5(was $cntRetI) repairRec=$c6(was $cntRep) retOrder=$c7(was $cntRO) roRepair=$c8(was $cntROR)")
+$slNow = [int](SqlOne 'SELECT IFNULL(MAX(id),0) FROM warehouse_stock_log')
+Info ("after cleanup: order=$c1(was $cntOrder) mo=$c2(was $cntMo) moi=$c3(was $cntMoi) ret=$c4(was $cntRet) retItem=$c5(was $cntRetI) repairRec=$c6(was $cntRep) retOrder=$c7(was $cntRO) roRepair=$c8(was $cntROR) stockLogMax=$slNow(was $slMax0)")
 if ($c1 -eq $cntOrder -and $c2 -eq $cntMo -and $c3 -eq $cntMoi -and $c4 -eq $cntRet -and $c5 -eq $cntRetI -and $c6 -eq $cntRep `
-    -and $c7 -eq $cntRO -and $c8 -eq $cntROR) {
-  Ok 'all 8 tables back to their pre-run baseline'
+    -and $c7 -eq $cntRO -and $c8 -eq $cntROR -and $slNow -le $slMax0) {
+  Ok 'all 8 tables + this run''s stock-log rows back to their pre-run baseline'
 } else { Bad 'cleanup incomplete (see counts above)' }
 
 Write-Output ''

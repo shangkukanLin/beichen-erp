@@ -83,6 +83,11 @@ $ioCount0 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_other_io')
 $ordCount0 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_order')
 $repCount0 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_order_close_report')
 $repItemCount0 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_order_close_report_item')
+# F7-141（2026-09-20，测试卫生 B2）：warehouse_stock_log 是 append-only 台账 —— 每次运行都会**新增**流水行
+# （审核写正向、反审核写冲销），本脚本此前只还原业务表 ⇒ 反复运行会把测试噪声**无限累积**在审计表里
+# （实测当日累计 210 行）。现记录**主键上界**，收尾时只删"**本次运行新增的**"（id > 基线）——
+# **历史真实流水与审计链不受影响**。
+$slMax0 = [int](SqlOne 'SELECT IFNULL(MAX(id),0) FROM warehouse_stock_log')
 
 # self-built PRODUCING order + DRAFT close report with ONE missing line (missing=1 -> generates the out-IO)
 SqlExec ("INSERT INTO outsource_order (code, factory_id, status, company_id) VALUES ('$ORDER_CODE', $FACTORY, 'PRODUCING', $CID)")
@@ -192,6 +197,8 @@ SqlExec ("DELETE FROM outsource_order WHERE id=$orderId")
 if ($stockRows0 -eq 0) {
   SqlExec ("DELETE FROM warehouse_stock WHERE warehouse_id=$FACT_WH AND material_id=$MAT AND IFNULL(quantity,0)=0")
 }
+# F7-141：只删本次运行新增的流水（见快照处说明；历史审计行不动）
+SqlExec ("DELETE FROM warehouse_stock_log WHERE id > $slMax0")
 
 $c1 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_other_io')
 $c2 = [int](SqlOne 'SELECT COUNT(*) FROM outsource_order')
@@ -201,10 +208,12 @@ $stockRows1 = [int](SqlOne "SELECT COUNT(*) FROM warehouse_stock WHERE warehouse
 $stockQty1  = SqlOne "SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$FACT_WH AND material_id=$MAT LIMIT 1"
 if ($null -eq $stockQty1) { $stockQty1 = '0' }
 Info ("after cleanup: other_io=$c1(was $ioCount0) order=$c2(was $ordCount0) report=$c3(was $repCount0) report_item=$c4(was $repItemCount0); stock rows=$stockRows1(was $stockRows0) qty=$stockQty1(was $stockQty0)")
-# NOTE: warehouse_stock_log keeps its rows on purpose (audit trail); only business tables are restored.
+# NOTE (F7-141): warehouse_stock_log is restored too -- but ONLY the rows this run added (id > $slMax0),
+# so the pre-existing audit trail is untouched.
+$slNow = [int](SqlOne 'SELECT IFNULL(MAX(id),0) FROM warehouse_stock_log')
 if ($c1 -eq $ioCount0 -and $c2 -eq $ordCount0 -and $c3 -eq $repCount0 -and $c4 -eq $repItemCount0 `
-    -and $stockRows1 -eq $stockRows0 -and "$stockQty1" -eq "$stockQty0") {
-  Ok 'business tables and the touched stock row are back to their pre-run baseline'
+    -and $stockRows1 -eq $stockRows0 -and "$stockQty1" -eq "$stockQty0" -and $slNow -le $slMax0) {
+  Ok 'business tables, the touched stock row and this run''s stock-log rows are back to baseline'
 } else { Bad 'cleanup incomplete (see counts above)' }
 
 Write-Output ''

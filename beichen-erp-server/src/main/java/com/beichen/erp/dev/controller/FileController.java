@@ -1,10 +1,11 @@
 package com.beichen.erp.dev.controller;
 
 import com.beichen.erp.common.R;
+import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.dev.service.FileStorage;
 import com.beichen.erp.exception.BusinessException;
-import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -18,7 +19,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
@@ -26,28 +26,11 @@ import java.util.UUID;
 @Slf4j
 @RestController
 @RequestMapping("/api/dev/file")
+@RequiredArgsConstructor
 public class FileController {
 
-    @Value("${file.upload.path:./uploads}")
-    private String uploadPath;
-
-    private Path uploadDir;
-
-    @PostConstruct
-    public void init() {
-        // 解析路径：如果是相对路径，则相对于当前工作目录
-        Path p = Paths.get(uploadPath);
-        if (!p.isAbsolute()) {
-            p = Paths.get(System.getProperty("user.dir")).resolve(uploadPath);
-        }
-        this.uploadDir = p.toAbsolutePath().normalize();
-        try {
-            Files.createDirectories(this.uploadDir);
-            log.info("文件上传目录: {}", this.uploadDir);
-        } catch (IOException e) {
-            log.error("无法创建上传目录: {}", e.getMessage());
-        }
-    }
+    /** F7-95 遗留①收尾：目录解析与"按 URL 删文件"统一由 FileStorage 提供（DrawingController 也用） */
+    private final FileStorage fileStorage;
 
     /** 附件单文件上限（F7-95）：与"全量导入 JSON"共用的全局 200MB 上限分开，避免任意登录用户反复上传大文件耗尽磁盘 */
     private static final long MAX_ATTACHMENT_BYTES = 20L * 1024 * 1024;
@@ -59,7 +42,6 @@ public class FileController {
 
     @PostMapping("/upload")
     public R<String> upload(@RequestParam("file") MultipartFile file) throws IOException {
-        Files.createDirectories(uploadDir);
         // F7-95（2026-09-19）三项加固：
         // ① 独立大小上限（原依赖全局 multipart 的 200MB）；
         // ② 危险后缀拒绝；
@@ -79,13 +61,16 @@ public class FileController {
             throw new BusinessException("不允许上传该类型文件：" + ext);
         }
         String dateDir = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        Path dir = uploadDir.resolve(dateDir);
-        Files.createDirectories(dir);
         String name = UUID.randomUUID().toString().substring(0, 8) + "_" + safeName;
-        Path target = dir.resolve(name).normalize();
-        if (!target.startsWith(uploadDir)) throw new BusinessException("非法文件路径");
+        // F7-95 遗留①（2026-09-20）：**上传路径加公司维度** —— 原为 {dateDir}/{name}，文件名只有随机前缀、
+        // 不含租户信息 ⇒ 任一登录用户凭 URL 即可下载别家附件。现为 company/{companyId}/{dateDir}/{name}，
+        // 下载侧再校验"路径公司 == 当前上下文公司"。路径越界校验在 resolveInCompany 内（normalize + startsWith）。
+        Long cid = fileStorage.currentCompanyKey();
+        Path target = fileStorage.resolveInCompany(cid, dateDir, name);
+        Files.createDirectories(target.getParent());
         file.transferTo(target.toFile());
-        return R.ok("/api/dev/file/download/" + dateDir + "/" + name);
+        // 返回值即前端保存的附件 URL（含 company 段）；历史文件仍走旧路由，见下方兼容注释
+        return R.ok("/api/dev/file/download/" + cid + "/" + dateDir + "/" + name);
     }
 
     /** 清洗原始文件名：只保留最后一段，去掉路径分隔符与控制字符（前端提交不可信） */
@@ -99,19 +84,42 @@ public class FileController {
         return n;
     }
 
+    /**
+     * 下载（**新格式，含公司段**）。F7-95 遗留①：路径里的公司必须与当前上下文一致 ——
+     * 否则任何租户只要猜到/拿到别家的 URL 就能下载（越权读）。超管（无租户上下文）不受限。
+     */
+    @GetMapping("/download/{companyId}/{dateDir}/{fileName}")
+    public ResponseEntity<Resource> downloadScoped(@PathVariable Long companyId, @PathVariable String dateDir,
+            @PathVariable String fileName, @RequestParam(defaultValue = "false") boolean inline) throws IOException {
+        Long cid = CompanyContext.get();
+        boolean superAdmin = (cid == null || cid <= 0);
+        if (!superAdmin && !cid.equals(companyId)) {
+            log.warn("拒绝跨租户下载：当前公司={} 路径公司={} 文件={}", cid, companyId, fileName);
+            return ResponseEntity.status(403).build();
+        }
+        return serve(fileStorage.resolveInCompany(companyId, dateDir, fileName), fileName, inline);
+    }
+
+    /**
+     * 下载（**历史格式，无公司段**）。
+     *
+     * <p>保留用于**兼容旧数据**：2026-09-20 之前上传的文件 URL 形如
+     * {@code /api/dev/file/download/{dateDir}/{name}}，改路径规则会使这些 URL 全部 404
+     * （附件散落在各业务单据的 attachUrl/fileUrl 字段里，无法一次性迁移）。
+     * **新上传一律走带公司段的路由**，本路由只服务历史文件。</p>
+     */
     @GetMapping("/download/{dateDir}/{fileName}")
     public ResponseEntity<Resource> download(@PathVariable String dateDir, @PathVariable String fileName,
             @RequestParam(defaultValue = "false") boolean inline) throws IOException {
-        Path filePath = uploadDir.resolve(dateDir).resolve(fileName).normalize();
-        // 安全检查：防止路径穿越攻击
-        if (!filePath.startsWith(uploadDir)) {
-            return ResponseEntity.badRequest().build();
-        }
+        return serve(fileStorage.resolveLegacy(dateDir, fileName), fileName, inline);
+    }
+
+    /** 共同的响应组装：存在性 + 后缀→MIME 映射 + 下载文件名编码 */
+    private ResponseEntity<Resource> serve(Path filePath, String fileName, boolean inline) {
         if (!Files.exists(filePath)) return ResponseEntity.notFound().build();
         Resource resource = new FileSystemResource(filePath);
         String encodedName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
         String disposition = inline ? "inline" : "attachment";
-        // 根据后缀设置正确的MIME类型
         MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
         String lower = fileName.toLowerCase();
         if (lower.endsWith(".pdf")) mediaType = MediaType.APPLICATION_PDF;
