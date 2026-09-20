@@ -19,7 +19,7 @@ const router = useRouter()
 const preset = ref('month')
 const range = ref<[string, string] | null>(null)
 const loading = ref(false)
-const data = ref<any>({ start: '', end: '', summary: {}, metrics: {}, byProduct: [], byWarehouse: [] })
+const data = ref<any>({ start: '', end: '', summary: {}, metrics: {}, byProduct: [] })
 
 function fmt(v?: any) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function fmtN(v?: any) {
@@ -49,9 +49,9 @@ async function loadData() {
       params.start = range.value[0]; params.end = range.value[1]
     }
     data.value = await request.get<any, any>('/sale/analysis', { params })
-      || { start: '', end: '', summary: {}, dates: [], amounts: [], returns: [], byProduct: [], byWarehouse: [] }
+      || { start: '', end: '', summary: {}, dates: [], amounts: [], returns: [], byProduct: [] }
   } catch {
-    data.value = { start: '', end: '', summary: {}, dates: [], amounts: [], returns: [], byProduct: [], byWarehouse: [] }
+    data.value = { start: '', end: '', summary: {}, dates: [], amounts: [], returns: [], byProduct: [] }
   } finally { loading.value = false }
   // 饼图需等容器渲染完再初始化，否则会按 0 宽高绘制
   await nextTick()
@@ -185,6 +185,31 @@ function productSummary({ columns }: any) {
   })
 }
 
+/**
+ * 产品销售利润排行（2026-09-21 用户要求：替换原「仓库销售分布」卡片）。
+ * 数据源 = 后端 `byProduct[].profit`（成本口径 B：明细金额 − 明细数量 × 产品移动加权成本价），
+ * **不在前端重算** ⇒ 合计与「产品利润」饼图、`metrics.productProfit` 必然自洽。
+ * 排序用**副本**（profit 降序），不影响左侧「产品销售额排行」原有的 amount 降序。
+ */
+const profitRank = computed(() =>
+  [...(data.value.byProduct || [])].sort((a: any, b: any) => Number(b.profit || 0) - Number(a.profit || 0))
+)
+/** 利润率 = 利润 ÷ 销售额 × 100%，保留 1 位小数；销售额为 0 时无意义 ⇒ 显示 — */
+function profitRate(row: any) {
+  const amt = Number(row.amount || 0)
+  if (!amt) return '—'
+  return ((Number(row.profit || 0) / amt) * 100).toFixed(1) + '%'
+}
+/** 利润排行合计行：只合计「利润」列（利润率求和无语义，返回空） */
+function profitSummary({ columns }: any) {
+  const rows = profitRank.value
+  return columns.map((_c: any, i: number) => {
+    if (i === 0) return '合计'
+    if (i === 1) return fmt(rows.reduce((s: number, r: any) => s + Number(r.profit || 0), 0))
+    return ''
+  })
+}
+
 onMounted(() => { loadData() })
 onActivated(() => { loadData() })
 /** 口径开关切换 → 只重绘对应饼图（数据已在本地，不重新请求接口） */
@@ -272,17 +297,28 @@ onUnmounted(() => {
           </el-table>
         </el-card>
       </el-col>
-      <!-- 仓库分布 -->
+      <!-- 产品销售利润排行（2026-09-21 用户要求：替换原「仓库销售分布」卡片）
+           按利润降序；亏损产品排在最后并标红；列宽合计 341 ≤ 右卡可用宽（约 360px）⇒ 不出现横向滚动条 -->
       <el-col :span="10">
         <el-card shadow="never">
-          <template #header>仓库销售分布（点「明细」看该仓库的销售单）</template>
-          <el-table :data="data.byWarehouse" border stripe max-height="360">
-            <el-table-column prop="warehouseName" label="仓库" min-width="120" show-overflow-tooltip/>
-            <el-table-column label="订单数" width="80" align="center"><template #default="{row}">{{ row.orderCount }}</template></el-table-column>
-            <el-table-column label="金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
-            <el-table-column label="操作" width="80" align="center">
+          <template #header>
+            产品销售利润排行（点「明细」看该产品的销售单）
+            <el-tooltip placement="top" effect="dark" :show-after="100">
+              <template #content><div class="kpi-formula">{{ SALE_ANALYSIS_FORMULA.productProfit }}</div></template>
+              <el-icon class="kpi-help"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </template>
+          <el-table :data="profitRank" border stripe max-height="360" show-summary :summary-method="profitSummary">
+            <el-table-column prop="productName" label="产品" min-width="110" show-overflow-tooltip/>
+            <el-table-column label="利润" width="105" align="right">
               <template #default="{row}">
-                <el-button link type="primary" @click="drill({ warehouseId: row.warehouseId, warehouseName: row.warehouseName })">明细</el-button>
+                <span :style="{ color: Number(row.profit) < 0 ? 'var(--app-color-danger)' : '' }">{{ fmt(row.profit) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="利润率" width="70" align="right"><template #default="{row}">{{ profitRate(row) }}</template></el-table-column>
+            <el-table-column label="操作" width="56" align="center">
+              <template #default="{row}">
+                <el-button link type="primary" @click="drill({ productId: row.productId, productName: row.productName })">明细</el-button>
               </template>
             </el-table-column>
           </el-table>

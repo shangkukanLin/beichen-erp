@@ -227,7 +227,7 @@ public class SaleAnalysisServiceImpl implements SaleAnalysisService {
         // 客单价：净销售额 / 订单数
         summary.put("avgOrder", sumOrders > 0 ? net.divide(new BigDecimal(sumOrders), 2, RoundingMode.HALF_UP) : ZERO);
 
-        // ② 区间内订单（后续产品/仓库聚合与钻取共用）
+        // ② 区间内订单（后续产品聚合与钻取共用）
         List<Map<String, Object>> orders = ordersInRange(s, e);
         Set<Long> orderIds = new HashSet<>();
         for (Map<String, Object> o : orders) orderIds.add(toBd(o.get("id")).longValue());
@@ -293,28 +293,12 @@ public class SaleAnalysisServiceImpl implements SaleAnalysisService {
         }
         byProduct.sort((a, b) -> ((BigDecimal) b.get("amount")).compareTo((BigDecimal) a.get("amount")));
 
-        // ④ 仓库分布
-        Map<Long, BigDecimal> amtByWh = new LinkedHashMap<>();
-        Map<Long, Integer> cntByWh = new HashMap<>();
-        Map<Long, String> whNameMap = new HashMap<>();
-        for (Map<String, Object> o : orders) {
-            Long wid = o.get("warehouse_id") == null ? 0L : toBd(o.get("warehouse_id")).longValue();
-            amtByWh.merge(wid, toBd(o.get("total_amount")), BigDecimal::add);
-            cntByWh.merge(wid, 1, Integer::sum);
-            whNameMap.putIfAbsent(wid, str(o.get("warehouse_name")));
-        }
-        List<Map<String, Object>> byWarehouse = new ArrayList<>();
-        for (Long wid : amtByWh.keySet()) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("warehouseId", wid);
-            m.put("warehouseName", whNameMap.getOrDefault(wid, ""));
-            m.put("orderCount", cntByWh.getOrDefault(wid, 0));
-            m.put("amount", amtByWh.get(wid));
-            byWarehouse.add(m);
-        }
-        byWarehouse.sort((a, b) -> ((BigDecimal) b.get("amount")).compareTo((BigDecimal) a.get("amount")));
+        // （原「④ 仓库分布」已于 2026-09-21 删除：销售分析页的「仓库销售分布」卡片按用户要求改为
+        //   「产品销售利润排行」，byWarehouse 遂无任何消费者 —— 全仓仅本页引用、无验证脚本引用。
+        //   ⚠️ `records()` 的 warehouseId 过滤能力与其所需的 warehouse_id/warehouse_name 仍保留，
+        //   故 SaleAnalysisMapper.saleOrderRecords() 的 SELECT 字段不变。）
 
-        // ⑤ 6 项指标 + 饼图数据（2026-09-15 用户要求：原柱状图 → 6 个饼图；前 8 名 + 「其它」由前端合并）
+        // ④ 6 项指标 + 饼图数据（2026-09-15 用户要求：原柱状图 → 6 个饼图；前 8 名 + 「其它」由前端合并）
         //    客户退货率/换货率饼图 = 各客户「退货额/换货额 ÷ 总退货额/总换货额」的占比（标题显示总比率）
         //    ⚠️ 换货金额口径 = **明细「换出金额」Σ out_amount**（换货单主表 total_amount 后端从不回写、恒为 0，
         //       原取该列会导致换货率永远 0、饼图空图；2026-09-15 修正，退货仍取 sale_return.total_amount）
@@ -420,7 +404,6 @@ public class SaleAnalysisServiceImpl implements SaleAnalysisService {
         res.put("dates", dates);
         res.put("amounts", amounts);
         res.put("returns", returns);
-        res.put("byWarehouse", byWarehouse);
         return res;
     }
 

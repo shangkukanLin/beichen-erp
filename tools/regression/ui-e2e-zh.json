@@ -1,4 +1,8 @@
 {
+  "card_sale_profit_rank": "产品销售利润排行",
+  "card_sale_wh_dist": "仓库销售分布",
+  "pie_product_profit": "产品利润",
+  "btn_detail_line_row": "明细",
   "btn_new": "新增",
   "btn_save": "保存",
   "btn_stock_force": "仍然保存订单",
