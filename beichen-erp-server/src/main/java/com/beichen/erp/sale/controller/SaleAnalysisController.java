@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.Map;
 
 /** 销售分析 Controller（经营分析 → 销售分析）：销售额趋势 / 产品排行 / 仓库分布 / 钻取明细 */
@@ -19,15 +20,21 @@ public class SaleAnalysisController {
 
     private final SaleAnalysisService service;
 
-    /** 销售分析总览：快捷区间（month 默认）或自定义 start/end */
+    /**
+     * 销售分析总览：快捷区间（month 默认）或自定义 start/end。
+     *
+     * <p>F7-120（2026-09-20）：原先这里与另两个端点都是 {@code catch (Exception)}，把
+     * <b>任何</b>异常（NPE / SQL 错误 / 服务层 bug）都伪装成"日期格式无效" ⇒ 掩盖真实故障、排障困难。
+     * 现只捕获**日期解析异常**；其余异常交给 {@code GlobalExceptionHandler} 兜底（会 log.error 带堆栈）。</p>
+     */
     @GetMapping
     public R<Map<String, Object>> sale(@RequestParam(defaultValue = "month") String preset,
                                        @RequestParam(required = false) String start,
                                        @RequestParam(required = false) String end) {
         try {
             return R.ok(service.sale(preset, parse(start), parse(end)));
-        } catch (Exception ex) {
-            return R.fail("日期格式无效，应为 yyyy-MM-dd");
+        } catch (DateTimeParseException ex) {
+            return R.fail(400, "日期格式无效，应为 yyyy-MM-dd");
         }
     }
 
@@ -41,8 +48,8 @@ public class SaleAnalysisController {
                                           @RequestParam(required = false) Long customerId) {
         try {
             return R.ok(service.records(preset, parse(start), parse(end), productId, warehouseId, customerId));
-        } catch (Exception ex) {
-            return R.fail("日期格式无效，应为 yyyy-MM-dd");
+        } catch (DateTimeParseException ex) {
+            return R.fail(400, "日期格式无效，应为 yyyy-MM-dd");
         }
     }
 
@@ -54,8 +61,8 @@ public class SaleAnalysisController {
     public R<Map<String, Object>> byDocDate(@RequestParam(required = false) String date) {
         try {
             return R.ok(service.byDocDate(date));
-        } catch (Exception ex) {
-            return R.fail("日期格式无效，应为 yyyy-MM-dd");
+        } catch (DateTimeParseException ex) {
+            return R.fail(400, "日期格式无效，应为 yyyy-MM-dd");
         }
     }
 

@@ -1,16 +1,24 @@
 package com.beichen.erp.config;
 
+import cn.dev33.satoken.exception.NotPermissionException;
 import cn.dev33.satoken.stp.StpUtil;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * F3-3（2026-09-18 接口级权限专项）：**接口级权限的唯一事实来源**。
  *
  * <p><b>四张表</b>（判定顺序：EXEMPT → 共享只读 → RULES → WRITE_RULES）：</p>
+ * <p><b>⚠️ 2026-09-20（F7-106 第二步）起：四者都未命中 ⇒ <u>默认拒绝</u></b>
+ * （{@code app.perm.default-deny}，默认 {@code true}）。此前是"未命中即放行"的白名单式收口 ——
+ * 新增控制器若忘记登记就等于"任何登录用户可读可写"（F7-105 的 {@code /api/inventory/outbound} 即如此）。
+ * 启动期另由 {@link ApiPermGuardSelfCheck} 枚举全部 {@code /api} 端点核对是否已登记（未登记打 ERROR）。</p>
  * <ol>
  *   <li>{@link #EXEMPT}：完全豁免（登录即可），跨模块共用的基础数据读、字典、附件、门户、已由角色保护的 system 域。</li>
  *   <li>{@link #READ_SHARED}：**共享只读** —— 该前缀被**多个页面**读取（详见每条注释里的调用方清单，
@@ -47,6 +55,10 @@ public class ApiPermGuard {
             "/api/finance/analysis",     // 财务分析聚合（门户 + 多个分析页共用）
             "/api/supplier-settlement",  // 供应商结算（跨模块只读）
             "/api/dev/file",             // 附件上传/下载（各页皆可上传）
+            // F7-106（2026-09-20）：销售分析（只读聚合，与 /api/analysis、/api/finance/analysis 同类）。
+            // 原先未登记 —— 因本类是"白名单式收口 + 无默认拒绝"，未登记前缀等于"登录即可"；
+            // 它只有 GET 聚合查询，故按只读聚合登记在 EXEMPT（比塞进 RULES 更贴合语义，避免误收口）。
+            "/api/sale/analysis",        // 销售分析（只读聚合）
             "/api/system"                // 已由 @SaCheckRole(admin/super_admin) 保护，不重复收口
     );
 
@@ -104,6 +116,21 @@ public class ApiPermGuard {
             "/cancel", "cancel"
     );
 
+    /**
+     * F7-106 第二步（2026-09-20）：**未命中任何规则时的默认策略**（{@code app.perm.default-deny}）。
+     *
+     * <ul>
+     *   <li>{@code true}（默认）：**拒绝** —— 白名单式收口的安全兜底，防"新增控制器忘登记即裸奔"
+     *       （F7-105 的 {@code /api/inventory/outbound} 就是未登记 ⇒ 任何登录用户可写）；</li>
+     *   <li>{@code false}：**放行** —— 应急回滚开关，等价于 2026-09-20 之前的旧行为。</li>
+     * </ul>
+     *
+     * <p>配套保障：{@link ApiPermGuardSelfCheck} 在启动时枚举全部 {@code /api} 端点核对是否已登记，
+     * 未登记会打 ERROR 日志 ⇒ 先看日志归零、再依赖默认拒绝。</p>
+     */
+    @Value("${app.perm.default-deny:true}")
+    private boolean defaultDeny;
+
     private static void actionRule(String prefix, String... actions) {
         ACTION_RULES.put(prefix, List.of(actions));
     }
@@ -122,6 +149,9 @@ public class ApiPermGuard {
         rule("/api/inventory/purchase-return", "purchase:return");
         rule("/api/inventory/purchase", "purchase:order");
         // ===== 销售业务 =====
+        // F7-105（2026-09-20）：销售出库单原先**未登记**（⇒ 登录即可调用，见报告 §37）。它语义上是
+        // 销售单的出库凭证，故复用销售单页面码 sale:order（系统内无 sale:outbound 码）。
+        rule("/api/inventory/outbound", "sale:order");
         rule("/api/sale/exchange", "sale:exchange");
         rule("/api/sale/return", "sale:return");
         rule("/api/inventory/sale", "sale:order");
@@ -294,6 +324,59 @@ public class ApiPermGuard {
         String wp = longest(WRITE_RULES, uri);
         if (wp != null && !read) {
             StpUtil.checkPermissionOr(WRITE_RULES.get(wp));
+            return;
         }
+        // F7-106 第二步（2026-09-20）：**四张表都没命中** ⇒ 按默认策略处理。
+        // 本类原先是纯"白名单式收口"：未命中即**放行**（没有默认拒绝分支）⇒ 新增控制器忘登记
+        // 就等于"任何登录用户可读、可写"（F7-105 的 /api/inventory/outbound 正是如此，
+        // 且它叠加了"出库单重复扣库存"⇒ 曾可用一条 curl 造出库存差异）。
+        // 现改为**默认拒绝**；应急可用 app.perm.default-deny=false 回滚为旧行为。
+        // 注意：命中 WRITE_RULES 的**读**请求已在上面 `if (read)` 分支 return，走到这里的
+        // `wp != null` 只可能是"写"（已被收口）；因此只需在 `wp == null` 时兜底。
+        if (defaultDeny) {
+            throw new NotPermissionException(
+                    "接口未登记收口前缀，已按默认策略拒绝（app.perm.default-deny=true）：" + uri);
+        }
+    }
+
+    // ==================== F7-106（2026-09-20）：收口自检支持 ====================
+
+    /**
+     * 已登记的收口前缀全量（{@link #EXEMPT} + {@link #RULES} + {@link #WRITE_RULES} 的 key）。
+     *
+     * <p>本类是**白名单式收口**：上面四张表都没命中时原本 {@link #check} 直接返回 = <b>放行</b>
+     * （没有默认拒绝分支）⇒ 新增控制器若忘登记就"登录即可读写"；**2026-09-20（F7-106 第二步）起
+     * 已改为默认拒绝**。该访问器供 {@code ApiPermGuardSelfCheck} 在启动时与**实际注册的端点**比对，
+     * 把"忘登记"从静默盲区变成**启动即报**。</p>
+     */
+    public static Set<String> registeredPrefixes() {
+        Set<String> all = new LinkedHashSet<>(EXEMPT);
+        all.addAll(RULES.keySet());
+        all.addAll(WRITE_RULES.keySet());
+        return all;
+    }
+
+    /**
+     * 某个 URI 是否落在已登记的收口前缀内（**按路径段最长匹配**，语义与 {@link #check} 保持一致）。
+     *
+     * <p>注意 {@link #READ_POST_PATHS} 是"精确路径"而非前缀，故单独判断。
+     * 换句话说：本方法返回 {@code false} 的 URI，**2026-09-20 之前任何人都能访问**（仅需登录），
+     * 现在则由默认拒绝（{@link #defaultDeny}）兜底成 403。</p>
+     */
+    public static boolean isRegistered(String uri) {
+        if (uri == null || uri.isEmpty()) {
+            return true;
+        }
+        for (String ex : EXEMPT) {
+            if (under(uri, ex)) {
+                return true;
+            }
+        }
+        for (String p : READ_POST_PATHS) {
+            if (uri.equals(p)) {
+                return true;
+            }
+        }
+        return longest(RULES, uri) != null || longest(WRITE_RULES, uri) != null;
     }
 }

@@ -3,16 +3,15 @@ package com.beichen.erp.outsource.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
-import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.MaterialType;
 import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
-import com.beichen.erp.outsource.entity.dto.SupplierMaterialDTO;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
+import com.beichen.erp.outsource.service.OutsourceMaterialService;
 import com.beichen.erp.outsource.service.SupplierMaterialService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -31,6 +30,7 @@ public class OutsourceMaterialController {
     private final ProjectMapper projectMapper;
     private final MaterialTypeMapper materialTypeMapper;
     private final SupplierMaterialService supplierMaterialService;
+    private final OutsourceMaterialService materialService;
     private final JdbcTemplate jdbcTemplate;
 
     @GetMapping("/page")
@@ -124,74 +124,22 @@ public class OutsourceMaterialController {
 
     @PostMapping
     public R<Long> add(@RequestBody Map<String, Object> body) {
-        OutsourceMaterial m = new OutsourceMaterial();
-        fill(m, body);
-        m.setUnit(body.get("unit") != null ? body.get("unit").toString() : "PCS");
-        m.setStatus(1);
-        mapper.insert(m);
-        // 供应商关联统一写入 supplier_material 居间表（弃用 outsource_material.supplier_ids 字段）
-        syncSupplierMaterials(m.getId(), body);
-        return R.ok(m.getId());
+        // F7-70（2026-09-20）：写路径下沉到 OutsourceMaterialService（主表 + 供应商居间表进同一事务）
+        return R.ok(materialService.create(body));
     }
 
     @PutMapping
     public R<Void> update(@RequestBody Map<String, Object> body) {
-        OutsourceMaterial m = new OutsourceMaterial();
-        m.setId(Long.valueOf(body.get("id").toString()));
-        fill(m, body);
-        mapper.updateById(m);
-        // 供应商关联统一写入 supplier_material 居间表（差量更新）
-        syncSupplierMaterials(m.getId(), body);
+        materialService.update(body);
         return R.ok();
-    }
-
-    /** 将前端传入的 supplierIds 逗号串同步到 supplier_material 居间表 */
-    private void syncSupplierMaterials(Long materialId, Map<String, Object> body) {
-        List<SupplierMaterialDTO> dtos = new ArrayList<>();
-        Object idsObj = body.get("supplierIds");
-        if (idsObj != null) {
-            String ids = String.valueOf(idsObj);
-            for (String sid : ids.split(",")) {
-                sid = sid.trim();
-                if (sid.isEmpty()) continue;
-                try {
-                    SupplierMaterialDTO dto = new SupplierMaterialDTO();
-                    dto.setMaterialId(materialId);
-                    dto.setSupplierId(Long.valueOf(sid));
-                    dtos.add(dto);
-                } catch (NumberFormatException ignore) {
-                    // 跳过非数字项
-                }
-            }
-        }
-        supplierMaterialService.saveMaterialsByMaterial(materialId, dtos);
-    }
-
-    private void fill(OutsourceMaterial m, Map<String, Object> body) {
-        m.setProjectIds(body.get("projectIds") != null ? body.get("projectIds").toString() : null);
-        m.setMaterialName((String) body.get("materialName"));
-        // 仅存储 物料类型ID，类型名称在展示时关联 material_type 查名
-        if (body.get("materialTypeId") != null) {
-            m.setMaterialTypeId(Long.valueOf(body.get("materialTypeId").toString()));
-        }
-        m.setSpec((String) body.get("spec"));
-        // 注意：supplierIds 不再写入 outsource_material 实体，改由 supplier_material 居间表维护
-        m.setUnit(body.get("unit") != null ? body.get("unit").toString() : "PCS");
-        m.setStatus(body.get("status") != null ? Integer.valueOf(body.get("status").toString()) : 1);
-        m.setRemark((String) body.get("remark"));
-        m.setPrice(body.get("price") != null ? new BigDecimal(body.get("price").toString()) : null);
-        Long cid = CompanyContext.get();
-        if (cid != null && cid > 0) m.setCompanyId(cid);
     }
 
     private final OutsourceMaterialComponentMapper compMapper;
 
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Long id) {
-        // 级联删除子物料组成
-        compMapper.delete(new LambdaQueryWrapper<OutsourceMaterialComponent>()
-            .eq(OutsourceMaterialComponent::getParentMaterialId, id));
-        mapper.deleteById(id);
+        // F7-70（2026-09-20）：下沉到 Service —— 事务内"引用校验 + 级联删子物料组成 + 删物料"
+        materialService.delete(id);
         return R.ok();
     }
 
@@ -218,19 +166,8 @@ public class OutsourceMaterialController {
     /** 保存物料的子物料组成（全量替换） */
     @PutMapping("/{materialId}/components")
     public R<Void> saveComponents(@PathVariable Long materialId, @RequestBody List<Map<String, Object>> items) {
-        compMapper.delete(new LambdaQueryWrapper<OutsourceMaterialComponent>()
-            .eq(OutsourceMaterialComponent::getParentMaterialId, materialId));
-        if (items != null) {
-            for (Map<String, Object> it : items) {
-                OutsourceMaterialComponent c = new OutsourceMaterialComponent();
-                c.setParentMaterialId(materialId);
-                c.setChildMaterialId(Long.valueOf(it.get("childMaterialId").toString()));
-                if (it.get("quantity") != null) c.setQuantity(new BigDecimal(it.get("quantity").toString()));
-                if (it.get("lossRate") != null) c.setLossRate(new BigDecimal(it.get("lossRate").toString()));
-                c.setRemark((String) it.get("remark"));
-                compMapper.insert(c);
-            }
-        }
+        // F7-70（2026-09-20）：下沉到 Service —— 事务内"全量替换"（原先删+插分两步且无事务）
+        materialService.saveComponents(materialId, items);
         return R.ok();
     }
 

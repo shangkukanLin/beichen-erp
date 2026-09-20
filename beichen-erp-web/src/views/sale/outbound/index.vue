@@ -102,8 +102,8 @@ async function handleSubmit() {
 }
 async function handleAudit(row: SaleOutbound) {
   try {
-    await ElMessageBox.confirm(`确认审核销售出库「${row.code}」？审核后将扣减库存并生成应收。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
-    await auditSaleOutbound(row.id as number); ElMessage.success('审核成功，已扣减库存并生成应收'); loadData()
+    await ElMessageBox.confirm(`确认审核销售出库「${row.code}」？本单仅为出库凭证：不扣减库存（库存已在销售单审核时扣减）、不生成应收。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    await auditSaleOutbound(row.id as number); ElMessage.success('审核成功（出库凭证，不涉及库存）'); loadData()
   } catch { }
 }
 async function handleCancel(row: SaleOutbound) {
@@ -114,7 +114,7 @@ async function handleCancel(row: SaleOutbound) {
 }
 async function handleUnAudit(row: SaleOutbound) {
   try {
-    await ElMessageBox.confirm(`确认反审核销售出库「${row.code}」？将回补库存并冲回应收。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    await ElMessageBox.confirm(`确认反审核销售出库「${row.code}」？仅回退状态，不涉及库存。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
     await unAuditSaleOutbound(row.id as number); ElMessage.success('已反审核'); loadData()
   } catch { }
 }

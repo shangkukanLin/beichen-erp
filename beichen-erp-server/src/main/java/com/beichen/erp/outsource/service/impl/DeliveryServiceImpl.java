@@ -64,6 +64,8 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final PayableHelper payableHelper;
     private final SupplierMapper supplierMapper;
     private final com.beichen.erp.warehouse.service.CostService costService;
+    /** F7-77（2026-09-20）：物料单价统一实现（加权 / FIFO 同一份取数与状态过滤口径） */
+    private final com.beichen.erp.outsource.service.OutsourceMaterialPricingService pricingService;
 
     @Override
     public Page<OutsourceDelivery> page(String deliveryType, Long factoryId, String code, int pageNum, int pageSize) {
@@ -411,6 +413,24 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) {
             throw new BusinessException("仅草稿状态可编辑，已审核单据请先反审核");
         }
+        // F7-68（2026-09-20）：**与 create 同一套口径** —— 原 update 完全不校验类型与仓库：
+        //   ① 可把草稿改成"已下线的手工类型"（RETURN / RECEIVE / DEFECT_RETURN）；
+        //   ② 可把仓库换成**任意仓（含成品仓）** ⇒ 审核后在非物料仓写物料库存；
+        //   ③ 收货单/退不良单是「物料订单流程」自动生成的，本不该被手工编辑 —— 一旦编辑，
+        //      明细是"全删重插"，若解析漏字段就会把明细 ↔ 订单行（item_id）的关联清空（见 F7-76）。
+        if (!MANUAL_TYPES.contains(old.getDeliveryType())) {
+            throw new BusinessException("该收发类型不支持手工编辑（" + old.getDeliveryType()
+                    + "），仅「发料 / 调拨」可编辑");
+        }
+        if (delivery.getDeliveryType() == null || delivery.getDeliveryType().isBlank()) {
+            delivery.setDeliveryType(old.getDeliveryType());
+        } else if (!delivery.getDeliveryType().equals(old.getDeliveryType())) {
+            throw new BusinessException("收发类型不可修改（原 " + old.getDeliveryType() + "）");
+        }
+        // 供应商直发已下线（与 create 一致）：发料一律从我方物料仓发出
+        delivery.setSupplierDirect(0);
+        // 仓库规则校验（与 create 共用同一份：发出/目标仓类型、工厂归属、调拨不可同仓…）
+        validateWarehouses(delivery);
 
         // 草稿态编辑不触碰库存，仅删旧明细、更新主表、插新明细
         // 1. 删旧明细
@@ -744,39 +764,8 @@ public class DeliveryServiceImpl implements DeliveryService {
     @Override
     public java.math.BigDecimal calcWeightedPrice(Long factoryId, Long materialId) {
         if (factoryId == null || materialId == null) return java.math.BigDecimal.ZERO;
-        // 优先按工厂（供应商）维度取价
-        java.math.BigDecimal price = calcWeightedPriceInternal(
-            new LambdaQueryWrapper<MaterialOrder>().eq(MaterialOrder::getSupplierId, factoryId), materialId);
-        // 工厂维度查不到时回退：该物料全部物料订单的加权均价（保证新增单据有默认单价）
-        if (price == null || price.compareTo(java.math.BigDecimal.ZERO) <= 0) {
-            price = calcWeightedPriceInternal(null, materialId);
-        }
-        return price != null ? price : java.math.BigDecimal.ZERO;
-    }
-
-    /** 按指定订单范围计算某物料的加权均价；无有效数量/无订单返回 null */
-    private java.math.BigDecimal calcWeightedPriceInternal(LambdaQueryWrapper<MaterialOrder> orderWrapper, Long materialId) {
-        if (materialId == null) return null;
-        try {
-            List<MaterialOrder> orders = orderWrapper != null
-                ? materialOrderMapper.selectList(orderWrapper)
-                : materialOrderMapper.selectList(new LambdaQueryWrapper<>());
-            java.math.BigDecimal totalAmount = java.math.BigDecimal.ZERO, totalQty = java.math.BigDecimal.ZERO;
-            for (MaterialOrder o : orders) {
-                LambdaQueryWrapper<MaterialOrderItem> itemW = new LambdaQueryWrapper<MaterialOrderItem>()
-                    .eq(MaterialOrderItem::getOrderId, o.getId())
-                    .eq(MaterialOrderItem::getMaterialId, materialId);
-                List<MaterialOrderItem> mItems = materialOrderItemMapper.selectList(itemW);
-                for (MaterialOrderItem it : mItems) {
-                    java.math.BigDecimal qty = it.getOrderQuantity() != null ? it.getOrderQuantity() : java.math.BigDecimal.ZERO;
-                    java.math.BigDecimal price = it.getUnitPrice() != null ? it.getUnitPrice() : java.math.BigDecimal.ZERO;
-                    totalAmount = totalAmount.add(qty.multiply(price));
-                    totalQty = totalQty.add(qty);
-                }
-            }
-            if (totalQty.compareTo(java.math.BigDecimal.ZERO) > 0)
-                return totalAmount.divide(totalQty, 4, java.math.RoundingMode.HALF_UP);
-        } catch (Exception e) { log.warn("计算加权均价失败: {}", e.getMessage()); }
-        return null;
+        // F7-77（2026-09-20）：收敛到 OutsourceMaterialPricingService.weightedPrice
+        // （内含"先按工厂、查不到回退全量"与原实现一致；并统一排除 CANCELLED、批量取明细去 N+1）
+        return pricingService.weightedPrice(factoryId, materialId);
     }
 }

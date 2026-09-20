@@ -78,6 +78,8 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     private final MaterialOrderItemMapper materialOrderItemMapper;
     private final UserMapper userMapper;
     private final JdbcTemplate jdbcTemplate;
+    /** F7-77（2026-09-20）：物料单价统一实现（成本价 → FIFO → 参考价的三级链保持不变） */
+    private final com.beichen.erp.outsource.service.OutsourceMaterialPricingService pricingService;
 
     @Override
     public Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long factoryId, String returnType, String progress) {
@@ -427,19 +429,24 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         assertReturnNotOverDelivered(order);
 
         // 工厂委外仓（物料退回目标仓）
-        Long factoryWhId = null;
-        if (order.getFactoryId() != null) {
-            List<Warehouse> whs = warehouseMapper.selectList(
-                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
-            factoryWhId = whs.isEmpty() ? null : whs.get(0).getId();
-        }
+        // F7-78（2026-09-20）：工厂存在但**无委外仓**时必须**显式报错**。原实现是 `factoryWhId != null`
+        // 才入库、否则**静默跳过** ⇒ 成品出库与应付照旧生成、退货物料却不入库 ⇒ 料账不符。
+        // 口径对齐同模块的 CloseReportServiceImpl.confirmClose（"该加工厂未配置委外仓库"）。
+        if (order.getFactoryId() == null)
+            throw new BusinessException("退货单缺少加工厂，无法审核");
+        List<Warehouse> factoryWhList = warehouseMapper.selectList(
+            new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
+        if (factoryWhList.isEmpty())
+            throw new BusinessException("该加工厂未配置委外仓库，无法审核退货单（请先在【委外仓库】页面为该工厂创建委外仓库）");
+        Long factoryWhId = factoryWhList.get(0).getId();
         Long invWhId = order.getWarehouseId();
 
         // 1. 退货物料入工厂委外仓 + 流水
         BigDecimal totalReturnAmount = BigDecimal.ZERO;
         for (ReturnOrderItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            if (factoryWhId != null && it.getMaterialId() != null) {
+            // factoryWhId 已由上方保证非空（F7-78）
+            if (it.getMaterialId() != null) {
                 updateOutsourceStock(factoryWhId, it.getMaterialId(), it.getQuantity(), QualityType.GOOD.getCode(), StockChangeType.RETURN_IN.getCode(), order.getCode(), order.getId());
             }
             if (it.getAmount() != null) totalReturnAmount = totalReturnAmount.add(it.getAmount());
@@ -622,7 +629,10 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         int saved = 0;
         for (Map<String, Object> line : lines) {
             BigDecimal qty = toBigDecimal(line.get("quantity"));
-            Long productId = toLong(line.get("productId"));
+            // F7-79（2026-09-20）：产品ID**必须归一**（与 sentQtyByProduct 同口径）。
+            // 原实现直接用入参 productId ⇒ 若前端传的是「订单产品行ID」而核销键是「产品主数据ID」，
+            // 既会把库存记到错的产品上，又让 returnedQtyByProduct 的键与 sent 的键不是同一套 ⇒ 核销失效。
+            Long productId = resolveStockProductId(order, toLong(line.get("productId")), toLong(line.get("productMasterId")));
             if (productId == null || qty.compareTo(BigDecimal.ZERO) <= 0) continue;
             String quality = normalizeQualityType(line.get("qualityType"));
             BigDecimal sentQty = sent.getOrDefault(productId, BigDecimal.ZERO);
@@ -739,7 +749,13 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         for (OutsourceReturnOrderRepair r : repairMapper.selectList(
                 new LambdaQueryWrapper<OutsourceReturnOrderRepair>().eq(OutsourceReturnOrderRepair::getReturnOrderId, returnOrderId))) {
             if (r.getProductId() == null) continue;
-            map.merge(r.getProductId(), nz(r.getQuantity()), BigDecimal::add);
+            // F7-79（2026-09-20）：**读取侧同样归一** —— 历史行里可能存的是"订单产品行ID"，
+            // 而归一后的键是"产品主数据ID"。若不归一，sent(主数据ID) 与 returned(行ID) 不是同一套键
+            // ⇒ "已返回量"恒为 0 ⇒ 送修量校验失效 ⇒ 可超量登记维修返回（返回是入库 +
+            // 且无 changeStock 的 >=0 护栏兜底）。
+            Long pid = resolveStockProductId(null, r.getProductId(), null);
+            if (pid == null) continue;
+            map.merge(pid, nz(r.getQuantity()), BigDecimal::add);
         }
         return map;
     }
@@ -1104,43 +1120,10 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     }
 
     private BigDecimal calcFifoPrice(Long materialId, BigDecimal requiredQty) {
-        if (materialId == null || requiredQty == null || requiredQty.compareTo(BigDecimal.ZERO) <= 0)
-            return BigDecimal.ZERO;
-        // 1) 优先取系统统一成本（物料移动加权成本，由成本服务维护）：
-        //    覆盖「委外其他出入库」「结算退料」等一切入库来源；原实现只扫物料订单，
-        //    非物料订单来源的物料会算出 0 价 → 退货金额 0 → 负向应付不生成（应付漏冲减）。
-        OutsourceMaterial mat = outsourceMaterialMapper.selectById(materialId);
-        if (mat != null && mat.getCostPrice() != null && mat.getCostPrice().compareTo(BigDecimal.ZERO) > 0)
-            return mat.getCostPrice();
-        // 2) 兜底：物料订单 FIFO（历史口径，保留以兼容未建立移动加权成本的物料）
-        try {
-            List<MaterialOrder> orders = materialOrderMapper.selectList(
-                new LambdaQueryWrapper<MaterialOrder>().orderByAsc(MaterialOrder::getDeliveryDate));
-            BigDecimal accumulatedAmount = BigDecimal.ZERO, accumulatedQty = BigDecimal.ZERO;
-            for (MaterialOrder o : orders) {
-                LambdaQueryWrapper<MaterialOrderItem> itemW = new LambdaQueryWrapper<MaterialOrderItem>()
-                    .eq(MaterialOrderItem::getOrderId, o.getId())
-                    .eq(MaterialOrderItem::getMaterialId, materialId);
-                List<MaterialOrderItem> items = materialOrderItemMapper.selectList(itemW);
-                for (MaterialOrderItem itt : items) {
-                    BigDecimal q = itt.getOrderQuantity() != null ? itt.getOrderQuantity() : BigDecimal.ZERO;
-                    BigDecimal p = itt.getUnitPrice() != null ? itt.getUnitPrice() : BigDecimal.ZERO;
-                    if (q.compareTo(BigDecimal.ZERO) <= 0 || p.compareTo(BigDecimal.ZERO) <= 0) continue;
-                    BigDecimal need = requiredQty.subtract(accumulatedQty);
-                    if (need.compareTo(BigDecimal.ZERO) <= 0) break;
-                    BigDecimal use = q.min(need);
-                    accumulatedAmount = accumulatedAmount.add(use.multiply(p));
-                    accumulatedQty = accumulatedQty.add(use);
-                }
-                if (accumulatedQty.compareTo(requiredQty) >= 0) break;
-            }
-            if (accumulatedQty.compareTo(BigDecimal.ZERO) > 0)
-                return accumulatedAmount.divide(accumulatedQty, 4, RoundingMode.HALF_UP);
-        } catch (Exception e) { log.warn("FIFO单价计算失败: {}", e.getMessage()); }
-        // 3) 再兜底：物料主数据参考单价
-        if (mat != null && mat.getPrice() != null && mat.getPrice().compareTo(BigDecimal.ZERO) > 0)
-            return mat.getPrice();
-        return BigDecimal.ZERO;
+        // F7-77（2026-09-20）：收敛到 OutsourceMaterialPricingService.fifoPriceWithFallback
+        // （三级链保持不变：① 物料移动加权成本 → ② 交期 FIFO → ③ 物料主数据参考价；
+        //   统一排除 CANCELLED + 批量取明细去 N+1）
+        return pricingService.fifoPriceWithFallback(materialId, requiredQty);
     }
 
     /**

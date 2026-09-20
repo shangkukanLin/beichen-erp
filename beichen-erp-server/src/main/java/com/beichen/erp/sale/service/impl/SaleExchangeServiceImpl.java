@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
+import com.beichen.erp.common.BillNoSeq;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.customer.entity.Customer;
@@ -42,6 +43,7 @@ import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -88,6 +90,11 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
     private final CustomerMapper customerMapper;
     private final FinanceReceivableMapper financeReceivableMapper;
     private final ReceivableHelper receivableHelper;
+    /**
+     * F7-113（2026-09-20）：已退/已换量改用**一条 JOIN 聚合**（原实现先"查出全部已审核单据"
+     * 再 {@code in(ids)} 查明细，且在校验循环里按明细逐条调用 ⇒ 全表扫描 + N+1）。
+     */
+    private final JdbcTemplate jdbcTemplate;
 
     // ==================== 查询 ====================
 
@@ -115,6 +122,17 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
                     .stream().collect(Collectors.groupingBy(SaleExchangeItem::getExchangeId));
         }
         Map<Long, List<SaleExchangeItem>> finalItemsMap = itemsMap;
+        // F7-116（2026-09-20）：仓库名一次批量查 —— 原先在下面的循环里逐条 `selectById`（N+1），
+        // 而同方法上方刚注释"避免逐条查库"，属自相矛盾。
+        Set<Long> whIds = new HashSet<>();
+        for (SaleExchange e : p.getRecords()) {
+            if (e.getWarehouseInId() != null) whIds.add(e.getWarehouseInId());
+            if (e.getWarehouseOutId() != null) whIds.add(e.getWarehouseOutId());
+        }
+        Map<Long, String> whNameMap = whIds.isEmpty() ? new HashMap<>()
+                : warehouseMapper.selectBatchIds(whIds).stream()
+                        .collect(Collectors.toMap(Warehouse::getId,
+                                wh -> wh.getWarehouseName() != null ? wh.getWarehouseName() : "", (a, b) -> a));
         List<Map<String, Object>> rows = new ArrayList<>();
         for (SaleExchange e : p.getRecords()) {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -124,9 +142,9 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             m.put("saleOrderCode", e.getSaleOrderCode());
             m.put("customerId", e.getCustomerId());
             m.put("warehouseInId", e.getWarehouseInId());
-            m.put("warehouseInName", warehouseName(e.getWarehouseInId()));
+            m.put("warehouseInName", whNameMap.getOrDefault(e.getWarehouseInId(), ""));
             m.put("warehouseOutId", e.getWarehouseOutId());
-            m.put("warehouseOutName", warehouseName(e.getWarehouseOutId()));
+            m.put("warehouseOutName", whNameMap.getOrDefault(e.getWarehouseOutId(), ""));
             m.put("exchangeDate", e.getExchangeDate() != null ? e.getExchangeDate().toString() : "");
             m.put("status", e.getStatus());
             // 换货概况：产品名 退N → 换M(品质)，多条明细用「；」连接
@@ -181,7 +199,8 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
                 .filter(Objects::nonNull).collect(Collectors.toSet());
         // 批量取已退/已换累计，避免逐条查库（N+1）
         Map<Long, BigDecimal> returnedMap = alreadyReturnedBatch(oiIds);
-        Map<Long, BigDecimal> exchangedMap = alreadyExchangedBatch(oiIds);
+        // F7-113（2026-09-20）：此处是"查可换量"页签，不排除任何本单 ⇒ excludeExchangeId = null
+        Map<Long, BigDecimal> exchangedMap = alreadyExchangedBatch(oiIds, null);
         List<Map<String, Object>> res = new ArrayList<>();
         for (SaleOrderItem oi : oiList) {
             Product p = pMap.get(oi.getProductId());
@@ -206,39 +225,54 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         return res;
     }
 
-    /** 批量取已退量（按销售单明细ID聚合）：已审核销售退单中该销售明细的累计数量 */
+    /**
+     * 批量取已退量（按销售单明细ID聚合）：已审核销售退单中该销售明细的累计数量。
+     * <p><b>F7-113（2026-09-20）</b>：改为一条 JOIN 聚合 SQL（原实现"查全部已审核退单 → in(ids) 查明细"，
+     * 随单据增长是平方级 + 受 {@code max_allowed_packet} 限制；与 {@code SaleReturnServiceImpl} 的写法统一）。</p>
+     */
     private Map<Long, BigDecimal> alreadyReturnedBatch(Set<Long> saleOrderItemIds) {
-        Map<Long, BigDecimal> res = new HashMap<>();
-        if (saleOrderItemIds == null || saleOrderItemIds.isEmpty()) return res;
-        List<SaleReturn> audited = saleReturnMapper.selectList(new LambdaQueryWrapper<SaleReturn>()
-                .eq(SaleReturn::getStatus, DocStatus.AUDITED.getCode()));
-        if (audited.isEmpty()) return res;
-        List<Long> returnIds = audited.stream().map(SaleReturn::getId).collect(Collectors.toList());
-        List<SaleReturnItem> items = saleReturnItemMapper.selectList(new LambdaQueryWrapper<SaleReturnItem>()
-                .in(SaleReturnItem::getReturnId, returnIds)
-                .in(SaleReturnItem::getSaleOrderItemId, saleOrderItemIds));
-        for (SaleReturnItem it : items) {
-            if (it.getSaleOrderItemId() == null) continue;
-            res.merge(it.getSaleOrderItemId(), nz(it.getQuantity()), BigDecimal::add);
-        }
-        return res;
+        return sumsBySaleOrderItemIds(
+                "SELECT ri.sale_order_item_id AS k, COALESCE(SUM(ri.quantity), 0) AS v "
+                        + "FROM sale_return_item ri JOIN sale_return sr ON sr.id = ri.return_id "
+                        + "WHERE sr.status = 'AUDITED' AND ri.sale_order_item_id IN (%s) "
+                        + "GROUP BY ri.sale_order_item_id",
+                saleOrderItemIds);
     }
 
-    /** 批量取已换量（按销售单明细ID聚合）：已审核换货单中该销售明细的累计数量 */
-    private Map<Long, BigDecimal> alreadyExchangedBatch(Set<Long> saleOrderItemIds) {
+    /**
+     * 批量取已换量（按销售单明细ID聚合）：已审核换货单中该销售明细的累计数量。
+     *
+     * @param excludeExchangeId 需要排除的单据 id（**审核中的本单**，F1-1：claim 已把本单置 AUDITED，
+     *                          不排除就会把本单退回量算进"已换"）—— 仅 {@link #checkCanExchange} 会传。
+     */
+    private Map<Long, BigDecimal> alreadyExchangedBatch(Set<Long> saleOrderItemIds, Long excludeExchangeId) {
+        return sumsBySaleOrderItemIds(
+                "SELECT i.sale_order_item_id AS k, COALESCE(SUM(i.quantity), 0) AS v "
+                        + "FROM sale_exchange_item i JOIN sale_exchange e ON e.id = i.exchange_id "
+                        + "WHERE e.status = 'AUDITED' AND i.sale_order_item_id IN (%s)"
+                        + (excludeExchangeId == null ? "" : " AND e.id <> " + excludeExchangeId)
+                        + " GROUP BY i.sale_order_item_id",
+                saleOrderItemIds);
+    }
+
+    /**
+     * 执行"按销售单明细ID求和"的聚合 SQL（{@code %s} 处填入 IN 列表）。
+     *
+     * <p>⚠️ 拼入 IN 列表的 id 均来自**数据库主键**（{@code SaleOrderItem.id}）或已由
+     * {@code Long} 承载的入参 ⇒ 只可能是数字 ⇒ 无注入面。若将来改为传字符串形参，必须改成参数化绑定。</p>
+     */
+    private Map<Long, BigDecimal> sumsBySaleOrderItemIds(String sqlTemplate, Set<Long> saleOrderItemIds) {
         Map<Long, BigDecimal> res = new HashMap<>();
         if (saleOrderItemIds == null || saleOrderItemIds.isEmpty()) return res;
-        List<SaleExchange> audited = exchangeMapper.selectList(new LambdaQueryWrapper<SaleExchange>()
-                .eq(SaleExchange::getStatus, DocStatus.AUDITED.getCode()));
-        if (audited.isEmpty()) return res;
-        List<Long> exIds = audited.stream().map(SaleExchange::getId).collect(Collectors.toList());
-        List<SaleExchangeItem> items = exchangeItemMapper.selectList(new LambdaQueryWrapper<SaleExchangeItem>()
-                .in(SaleExchangeItem::getExchangeId, exIds)
-                .in(SaleExchangeItem::getSaleOrderItemId, saleOrderItemIds));
-        for (SaleExchangeItem it : items) {
-            if (it.getSaleOrderItemId() == null) continue;
-            res.merge(it.getSaleOrderItemId(), nz(it.getQuantity()), BigDecimal::add);
-        }
+        List<Long> clean = saleOrderItemIds.stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        if (clean.isEmpty()) return res;
+        String in = clean.stream().map(String::valueOf).collect(Collectors.joining(","));
+        jdbcTemplate.query(String.format(sqlTemplate, in), rs -> {
+            while (rs.next()) {
+                res.put(rs.getLong(1), rs.getBigDecimal(2));
+            }
+            return null;
+        });
         return res;
     }
 
@@ -251,7 +285,10 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         exchange.setCode(gen());
         if (exchange.getStatus() == null) exchange.setStatus(DocStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
-        if (cid != null) exchange.setCompanyId(cid);
+        // F7-114（2026-09-20）：必须同时判 `> 0` —— 超管模式下 CompanyContext 为 0，
+        // 显式 set(0) 会落 company_id = 0 ⇒ 租户条件 `company_id = N` 永不命中 ⇒ 该行对所有公司不可见（孤儿单）。
+        // 自动填充器（strictInsertFill）本身也只在 cid > 0 时才兜底，故这里不能只判 null。
+        if (cid != null && cid > 0) exchange.setCompanyId(cid);
         validate(exchange, itemMaps);
         normalizeCharge(exchange);
         exchangeMapper.insert(exchange);
@@ -319,7 +356,8 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             it.setOutQualityType(qt);
 
             if (m.get("remark") != null) it.setRemark(m.get("remark").toString());
-            it.setCompanyId(cid);
+            // F7-114（2026-09-20）：同 create —— 只在 cid > 0 时赋值（超管模式不落 company_id = 0）
+            if (cid != null && cid > 0) it.setCompanyId(cid);
             exchangeItemMapper.insert(it);
         }
     }
@@ -517,10 +555,16 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
     private void checkCanExchange(Map<Long, BigDecimal> qtyMap, Map<Long, String> nameMap, Long excludeExchangeId) {
         if (qtyMap.isEmpty()) return;
         List<SaleOrderItem> oiList = saleOrderItemMapper.selectBatchIds(qtyMap.keySet());
+        // F7-113（2026-09-20）：已退/已换量**一次批量聚合**（原先在下面的循环里按明细逐条查
+        // ⇒ 每条明细 2 次"全表已审核单 + in"扫描）。
+        Set<Long> oiIds = oiList.stream().map(SaleOrderItem::getId).filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, BigDecimal> returnedMap = alreadyReturnedBatch(oiIds);
+        Map<Long, BigDecimal> exchangedMap = alreadyExchangedBatch(oiIds, excludeExchangeId);
         for (SaleOrderItem oi : oiList) {
             BigDecimal sold = nz(oi.getQuantity());
-            BigDecimal returned = alreadyReturned(oi.getId());
-            BigDecimal exchanged = alreadyExchanged(oi.getId(), excludeExchangeId);
+            BigDecimal returned = returnedMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
+            BigDecimal exchanged = exchangedMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
             BigDecimal canEx = sold.subtract(returned).subtract(exchanged);
             BigDecimal thisQty = qtyMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
             if (thisQty.compareTo(canEx) > 0) {
@@ -529,36 +573,6 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
                         + "，已退" + fmt(returned) + "，已换" + fmt(exchanged) + "，可换" + fmt(canEx) + "）");
             }
         }
-    }
-
-    /** 已退量：已审核销售退货单中该销售明细的累计数量 */
-    private BigDecimal alreadyReturned(Long saleOrderItemId) {
-        List<SaleReturn> audited = saleReturnMapper.selectList(new LambdaQueryWrapper<SaleReturn>()
-                .eq(SaleReturn::getStatus, DocStatus.AUDITED.getCode()));
-        if (audited.isEmpty()) return BigDecimal.ZERO;
-        List<Long> ids = audited.stream().map(SaleReturn::getId).collect(Collectors.toList());
-        List<SaleReturnItem> items = saleReturnItemMapper.selectList(new LambdaQueryWrapper<SaleReturnItem>()
-                .in(SaleReturnItem::getReturnId, ids)
-                .eq(SaleReturnItem::getSaleOrderItemId, saleOrderItemId));
-        BigDecimal sum = BigDecimal.ZERO;
-        for (SaleReturnItem it : items) sum = sum.add(nz(it.getQuantity()));
-        return sum;
-    }
-
-    /** 已换量：已审核换货单中该销售明细的累计数量（**排除 excludeExchangeId 指定的本单**，见 F1-1） */
-    private BigDecimal alreadyExchanged(Long saleOrderItemId, Long excludeExchangeId) {
-        LambdaQueryWrapper<SaleExchange> w = new LambdaQueryWrapper<SaleExchange>()
-                .eq(SaleExchange::getStatus, DocStatus.AUDITED.getCode());
-        if (excludeExchangeId != null) w.ne(SaleExchange::getId, excludeExchangeId);
-        List<SaleExchange> audited = exchangeMapper.selectList(w);
-        if (audited.isEmpty()) return BigDecimal.ZERO;
-        List<Long> ids = audited.stream().map(SaleExchange::getId).collect(Collectors.toList());
-        List<SaleExchangeItem> items = exchangeItemMapper.selectList(new LambdaQueryWrapper<SaleExchangeItem>()
-                .in(SaleExchangeItem::getExchangeId, ids)
-                .eq(SaleExchangeItem::getSaleOrderItemId, saleOrderItemId));
-        BigDecimal sum = BigDecimal.ZERO;
-        for (SaleExchangeItem it : items) sum = sum.add(nz(it.getQuantity()));
-        return sum;
     }
 
     private void assertWarehouseType(Long warehouseId, WarehouseType expect, String label) {
@@ -745,12 +759,9 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         LambdaQueryWrapper<SaleExchange> w = new LambdaQueryWrapper<SaleExchange>()
                 .likeRight(SaleExchange::getCode, pat).orderByDesc(SaleExchange::getCode).last("LIMIT 1");
         SaleExchange last = exchangeMapper.selectOne(w);
-        int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; }
-            catch (Exception ex) { seq = 1; }
-        }
-        return pat + String.format("%03d", seq);
+        // F7-109（2026-09-20）：统一走 BillNoSeq（详见该类 javadoc）。
+        int seq = BillNoSeq.lastSeq(last == null ? null : last.getCode(), pat) + 1;
+        return BillNoSeq.format(pat, seq);
     }
 
     private String warehouseName(Long id) {

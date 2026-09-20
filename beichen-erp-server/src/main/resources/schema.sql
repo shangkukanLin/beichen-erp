@@ -1496,7 +1496,9 @@ CREATE TABLE IF NOT EXISTS sale_exchange (
     warehouse_out_id      BIGINT DEFAULT NULL                COMMENT '换出仓：发出新货从此仓扣减(须为成品仓)',
     exchange_date         DATE                               COMMENT '换货日期',
     status                VARCHAR(20) DEFAULT 'DRAFT'        COMMENT '状态: DRAFT/AUDITED/CANCELLED',
-    total_amount          DECIMAL(18,2) DEFAULT 0            COMMENT '换出货值合计(Σ换出数量×换出单价，仅展示，不参与结算)',
+    -- total_amount（换出货值合计）：F7-118（2026-09-20）已 **DROP COLUMN** —— 该列后端从不回写
+    -- （实体 SaleExchange 里根本没有该字段，保存/审核都不计算）⇒ 恒为 0；分析页曾误用它算换货率，
+    -- 导致"换货率永远 0、饼图为空"。换货金额口径统一取**明细** sale_exchange_item.out_amount。
     charge_flag           TINYINT DEFAULT 0                  COMMENT '是否收费: 0否 1是',
     charge_type           VARCHAR(20) DEFAULT NULL           COMMENT '收费类型: SERVICE服务费/DIFF品质差价/FULL全额货值/OTHER其他',
     charge_amount         DECIMAL(18,2) DEFAULT 0            COMMENT '收费金额(手工填写，审核后生成正向应收，单号后缀 -FEE)',

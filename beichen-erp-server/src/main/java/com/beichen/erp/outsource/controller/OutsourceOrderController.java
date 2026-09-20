@@ -9,6 +9,7 @@ import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
 import com.beichen.erp.outsource.common.MaterialOrderStatus;
+import com.beichen.erp.outsource.common.MaterialRequirementCalc;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.service.BomSnapshotService;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
@@ -198,11 +199,11 @@ public class OutsourceOrderController {
                 java.math.BigDecimal matDemand = mat.getDemandQuantity() != null ? mat.getDemandQuantity() : java.math.BigDecimal.ZERO;
                 if (matDemand.compareTo(java.math.BigDecimal.ZERO) == 0) continue;
                 // F2-3（2026-09-18 审核修复）：优先直取视图 quantity_per_set（精确），反算仅作兜底
-                java.math.BigDecimal perUnit = mat.getQuantityPerSet() != null
-                        ? mat.getQuantityPerSet()
-                        : matDemand.divide(pTotal, 10, java.math.RoundingMode.HALF_UP);
+                // F7-60（2026-09-20）：收敛到 MaterialRequirementCalc —— 反算精度由 10 位统一为 6 位，
+                // 与交货侧/列表页一致（仅在 quantity_per_set 缺失时才走反算，故实际影响极小）。
+                java.math.BigDecimal perUnit = MaterialRequirementCalc.perUnit(mat.getQuantityPerSet(), matDemand, pTotal);
                 // 数量一律为整数（2026-09-16）：单套用量(比率) × 已交货数量 → 取整
-                java.math.BigDecimal consumed = perUnit.multiply(pDelivered).setScale(0, java.math.RoundingMode.HALF_UP);
+                java.math.BigDecimal consumed = MaterialRequirementCalc.need(perUnit, pDelivered);
                 shippedConsumedMap.merge(key, consumed, java.math.BigDecimal::add);
             }
         }

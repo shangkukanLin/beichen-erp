@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
+import com.beichen.erp.common.BillNoSeq;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.customer.entity.Customer;
@@ -861,10 +862,8 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         LambdaQueryWrapper<ReturnSort> w = new LambdaQueryWrapper<ReturnSort>()
                 .likeRight(ReturnSort::getCode, pat).orderByDesc(ReturnSort::getCode).last("LIMIT 1");
         ReturnSort last = rsMapper.selectOne(w);
-        int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
-        }
-        return prefix + d + String.format("%03d", seq);
+        // F7-116（2026-09-20）：统一走 BillNoSeq（详见该类 javadoc）。
+        int seq = BillNoSeq.lastSeq(last == null ? null : last.getCode(), pat) + 1;
+        return BillNoSeq.format(pat, seq);
     }
 }

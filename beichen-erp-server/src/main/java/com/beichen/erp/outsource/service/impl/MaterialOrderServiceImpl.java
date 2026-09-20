@@ -124,13 +124,44 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         o.setId(id);
         orderMapper.updateById(o);
 
-        itemMapper.delete(new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
+        // F7-67（2026-09-20）：明细改为**差量更新，保住行 id**。
+        // 原实现是"全删重插" ⇒ item 行 id 全部变化 ⇒ 已存在的收货草稿（outsource_delivery_item.item_id）
+        // 随之悬空 ⇒ 审核时无法回写订单"已收数量"（DeliveryServiceImpl.auditMaterialDelivery 已把该处
+        // 由静默 continue 改为抛错兜住"静默落账"，但那只把问题变成"编辑过的收货单无法审核"）。
+        // 根治 = 编辑时保住行 id：按 business key（materialId）原地更新。
+        // 业务键安全性：实查现网 (order_id, material_id) 无重复组合。
+        List<MaterialOrderItem> oldItems = itemMapper.selectList(
+                new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
+        Map<Long, MaterialOrderItem> byMaterial = new LinkedHashMap<>();
+        for (MaterialOrderItem oi : oldItems) {
+            if (oi.getMaterialId() != null) byMaterial.put(oi.getMaterialId(), oi);
+        }
+        java.util.Set<Long> keptIds = new java.util.HashSet<>();
         if (itemsRaw != null) {
             for (Map<String, Object> it : itemsRaw) {
                 MaterialOrderItem item = parseItem(it);
                 item.setOrderId(id);
-                itemMapper.insert(item);
+                MaterialOrderItem exist = item.getMaterialId() == null ? null : byMaterial.get(item.getMaterialId());
+                if (exist != null) {
+                    item.setId(exist.getId());   // 原地更新：保住行 id 与其下所有引用
+                    keptIds.add(exist.getId());
+                    itemMapper.updateById(item);
+                } else {
+                    itemMapper.insert(item);
+                    keptIds.add(item.getId());
+                }
             }
+        }
+        // 被移除的行：**若已被收货单引用则拒绝删除**（否则又会造出悬空的 item_id）
+        for (MaterialOrderItem oi : oldItems) {
+            if (keptIds.contains(oi.getId())) continue;
+            Long refs = deliveryItemMapper.selectCount(new LambdaQueryWrapper<OutsourceDeliveryItem>()
+                    .eq(OutsourceDeliveryItem::getItemId, oi.getId()));
+            if (refs != null && refs > 0) {
+                throw new BusinessException("物料「" + getMaterialNameById(oi.getMaterialId())
+                        + "」已有 " + refs + " 条收货明细引用，不能从订单中移除；请先作废相关收货单");
+            }
+            itemMapper.deleteById(oi.getId());
         }
     }
 
@@ -263,6 +294,25 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
                     + "（疑似重复提交）。请到「物料收货」页确认并审核该草稿单，确认不是重复后再重新收货。");
         }
 
+        // F7-72（2026-09-20）：**去重必须覆盖"第一张已被审核"的情形**。上面的兜底只查 DRAFT ⇒
+        // "双击 → 第一张被审核 → 第二次请求"会再建一张同内容的草稿 ⇒ 审核即双倍入库 / 双倍应付
+        // （现网 8 行超收中 received 恰为 order 的 2 倍，符合该模式）。
+        // 判定口径：仅当**同订单 + 同收货仓 + 同类型 + 明细（物料与数量）完全一致**才视为重复提交
+        // —— 只要有一项不同就放行，以免误拦"同日分两批收不同数量"这一正常业务。
+        OutsourceDelivery recentAudited = deliveryMapper.selectOne(new LambdaQueryWrapper<OutsourceDelivery>()
+                .eq(OutsourceDelivery::getSourceOrderId, id)
+                .eq(OutsourceDelivery::getDeliveryType, DeliveryType.RECEIVE.getCode())
+                .eq(OutsourceDelivery::getToWarehouseId, whId)
+                .eq(OutsourceDelivery::getStatus, DocStatus.AUDITED.getCode())
+                .gt(OutsourceDelivery::getUpdateTime, java.time.LocalDateTime.now().minusSeconds(5))
+                .orderByDesc(OutsourceDelivery::getId)
+                .last("LIMIT 1"));
+        if (recentAudited != null && sameReceiveLines(recentAudited.getId(), items)) {
+            log.warn("收货重复提交拦截（已审核）：orderId={} 已存在 5 秒内的同明细收货单 {}", id, recentAudited.getCode());
+            throw new BusinessException("该订单刚刚已收货并审核（单号 " + recentAudited.getCode()
+                    + "，明细与本单完全一致，疑似重复提交）。若确实要分两批收同样数量，请稍后重试。");
+        }
+
         // 2. 创建收货草稿单（库存/应付/订单明细的更新推迟到审核时统一处理，支持反审核）
         OutsourceDelivery delivery = new OutsourceDelivery();
         delivery.setDeliveryType(DeliveryType.RECEIVE.getCode());
@@ -329,6 +379,36 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             orderMapper.updateById(upd);
         }
         return delivery.getId();
+    }
+
+    /**
+     * F7-72（2026-09-20）：判断已存在收货单的明细与本次请求是否**完全一致**（按订单明细行ID聚合数量，
+     * 逐项相同）。只有"完全一致"才认定重复提交；任何一项不同即放行，以保护正常的分批收货。
+     * <p>畸形入参（缺 itemId / 非数字）在这里一律忽略 —— 它们会由主流程的校验负责报错。</p>
+     */
+    private boolean sameReceiveLines(Long deliveryId, List<Map<String, Object>> items) {
+        Map<Long, BigDecimal> want = new LinkedHashMap<>();
+        for (Map<String, Object> it : items) {
+            if (it.get("itemId") == null || it.get("quantity") == null) continue;
+            try {
+                BigDecimal q = new BigDecimal(it.get("quantity").toString());
+                if (q.compareTo(BigDecimal.ZERO) <= 0) continue;
+                want.merge(Long.valueOf(it.get("itemId").toString()), q, BigDecimal::add);
+            } catch (Exception ignore) { /* 交给主流程校验 */ }
+        }
+        if (want.isEmpty()) return false;
+        Map<Long, BigDecimal> have = new LinkedHashMap<>();
+        for (OutsourceDeliveryItem di : deliveryItemMapper.selectList(
+                new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getDeliveryId, deliveryId))) {
+            if (di.getItemId() == null || di.getQuantity() == null) continue;
+            have.merge(di.getItemId(), di.getQuantity(), BigDecimal::add);
+        }
+        if (have.size() != want.size()) return false;
+        for (Map.Entry<Long, BigDecimal> e : want.entrySet()) {
+            BigDecimal h = have.get(e.getKey());
+            if (h == null || h.compareTo(e.getValue()) != 0) return false;
+        }
+        return true;
     }
 
     /**

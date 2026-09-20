@@ -10,6 +10,19 @@ import java.util.Map;
  * 销售分析聚合 Mapper：销售额趋势 / 产品排行 / 仓库分布 / 钻取明细。
  * 登录态下多租户插件自动注入 company_id 过滤；全部为只读聚合查询。
  * 与财务分析保持一致的做法：SQL 只做全量分组，区间过滤放 Java 侧（日期参数绑定进 SQL 实测取不到数据）。
+ *
+ * <p><b>⚠️ F7-121（2026-09-20）两条必须知道的前提：</b></p>
+ * <ol>
+ *   <li><b>多表 JOIN 依赖租户插件对「每张表」注入 company_id</b> —— 本文件的 JOIN
+ *       （{@code sale_order o LEFT JOIN customer c LEFT JOIN warehouse w}、
+ *       {@code sale_exchange e JOIN sale_exchange_item i LEFT JOIN customer c} 等）之所以安全，
+ *       是因为 customer / warehouse / product 这些表**都带 company_id 列**。
+ *       将来若要 JOIN 一张**没有该列**的表，租户插件会注入出 {@code Unknown column 'company_id'}
+ *       ⇒ 查询直接报错（或被迫把该表加进 IGNORE_TABLES）；**改动前请先 `SHOW COLUMNS` 确认目标表有该列**。</li>
+ *   <li><b>区间过滤在 Java 侧（见上）</b> ⇒ 每次请求都会把这些查询**全表**拉回内存
+ *       （{@link #saleOrderItemAll()} 更是无条件全表）。当前数据量下正常，但属**已知技术债（F7-117）**：
+ *       若 {@code sale_order_item} 增长到十万级、或首页出现超时，应把区间与状态条件下推到 SQL。</li>
+ * </ol>
  */
 @Mapper
 public interface SaleAnalysisMapper {

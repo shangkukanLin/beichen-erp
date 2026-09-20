@@ -13,6 +13,7 @@ import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.service.ProductService;
 import com.beichen.erp.outsource.common.DeliveryType;
+import com.beichen.erp.outsource.common.MaterialRequirementCalc;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.outsource.common.QualityType;
@@ -231,18 +232,11 @@ public class OutsourceOrderDeliveryServiceImpl
         // 工厂必须有委外仓库，否则交货时无法正确扣减我方物料
         if (resolveOutsourceWarehouseId(order) == null)
             throw new BusinessException("工厂无委外仓库，请先在【委外仓库】页面为该工厂创建委外仓库");
-        if (delivery.getQuantity() == null || delivery.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
-            throw new BusinessException("交货数量必须大于0");
-        // 强制四等级校验
-        BigDecimal a = delivery.getAQty() == null ? BigDecimal.ZERO : delivery.getAQty();
-        BigDecimal b = delivery.getBQty() == null ? BigDecimal.ZERO : delivery.getBQty();
-        BigDecimal c = delivery.getCQty() == null ? BigDecimal.ZERO : delivery.getCQty();
-        BigDecimal d = delivery.getDefectQty() == null ? BigDecimal.ZERO : delivery.getDefectQty();
-        BigDecimal gradeSum = a.add(b).add(c).add(d);
-        if (gradeSum.compareTo(BigDecimal.ZERO) <= 0)
-            throw new BusinessException("请至少填写一个等级的数量（A规/B规/C规/不良）");
-        if (gradeSum.compareTo(delivery.getQuantity()) != 0)
-            throw new BusinessException("各等级数量之和(" + gradeSum + ")必须等于交货总数量(" + delivery.getQuantity() + ")");
+        // F7-58（2026-09-20）：入参校验抽成 validateDraftPayload，供 create / update **两条写入口共用**。
+        // 原实现 create 校验齐全、update 只查"状态 + 数量上限" ⇒ 直调接口可把草稿改成 quantity=-5、
+        // 「等级和 ≠ 总量」或把仓库清空 ⇒ 审核时三条落账路径各取不同字段（入库按等级、应付与扣料按 quantity）
+        // ⇒ 库存与应付解耦、可造负应付与反向扣料。
+        validateDraftPayload(delivery);
 
         List<OutsourceOrderProduct> products = orderService.getProducts(delivery.getOrderId());
         OutsourceOrderProduct matchedProduct = matchProduct(products, delivery.getProductId(), delivery.getProductMasterId());
@@ -316,9 +310,12 @@ public class OutsourceOrderDeliveryServiceImpl
                     findOrderProduct(orderService.getProducts(delivery.getOrderId()), delivery);
             if (matchedProduct == null) throw new BusinessException("加工单中未找到该产品");
             BigDecimal materialCost = applyMaterialDeduction(order, matchedProduct, delivery.getQuantity(), matchedProduct.getProductName(), delivery.getId());
-            if (delivery.getWarehouseId() != null) {
-                addInventoryStock(delivery, order.getCode());
-            }
+            // F7-58（2026-09-20）：仓库缺失 ⇒ **显式拒绝**（原为 `if (warehouseId != null)` 静默跳过入库
+            // ⇒ "审核通过但成品不入库，而扣料与应付照落" = 账实不符）。草稿侧已由 validateDraftPayload 保证，
+            // 此处兜住"历史草稿 / 直改库"等绕过路径。
+            if (delivery.getWarehouseId() == null)
+                throw new BusinessException("交货记录缺少入库仓库，无法审核（请先反审核、补全收货仓库后再审核）");
+            addInventoryStock(delivery, order.getCode());
             createDeliveryPayable(order, matchedProduct, delivery);
             // 移动加权成本：本批单位成本 = (加工费 + 耗用材料成本) ÷ 交货数量（包工包料时材料成本为 0）
             BigDecimal totalQty = delivery.getQuantity() != null ? delivery.getQuantity() : BigDecimal.ZERO;
@@ -388,12 +385,18 @@ public class OutsourceOrderDeliveryServiceImpl
         // 草稿态编辑同步刷新产品行ID与产品主数据ID（行ID可能因加工单编辑而重建）
         delivery.setProductId(matchedProduct.getId());
         delivery.setProductMasterId(orderService.resolveProductMasterId(matchedProduct));
+        // F7-58（2026-09-20）：与新增**同一套**入参校验（数量 > 0 · 等级和 == 总量 · 仓库必填）
+        validateDraftPayload(delivery);
         // 数量上限校验（排除自身），口径同新增
         assertDeliveryWithinOrderQty(old.getOrderId(), matchedProduct, delivery.getQuantity(), id);
 
         // 草稿态编辑不触碰库存，仅更新记录本身与审核状态（保持草稿）
         delivery.setId(id);
         delivery.setIsReverse(old.getIsReverse());
+        // F7-58：**类型不可改** —— 原实现直接采用请求体的 deliveryType ⇒ 可把普通交货草稿改成
+        // DEFECT_RETURN（单据自我描述与审核分支错位；returnDefect 的"累计退不良"按 deliveryType
+        // 统计也会被污染）。类型在创建时已定型（create 强制 DELIVERY）。
+        delivery.setDeliveryType(old.getDeliveryType());
         delivery.setStatus(DocStatus.DRAFT.getCode());
         baseMapper.updateById(delivery);
 
@@ -628,11 +631,9 @@ public class OutsourceOrderDeliveryServiceImpl
                 if ("FACTORY".equals(mat.getSupplyType())) continue; // 工厂包料（包工包料）不扣我方仓
                 // F2-3（2026-09-18 审核修复）：优先**直取**视图的 quantity_per_set（精确值），
                 // 不再用「整单需求 ÷ 产品数量」反算 —— 后者在单套用量为小数时会被视图的 ROUND 放大/漂移。
-                BigDecimal perUnit = mat.getQuantityPerSet() != null
-                        ? mat.getQuantityPerSet()
-                        : (mat.getDemandQuantity() != null
-                                ? mat.getDemandQuantity().divide(productQty, 6, RoundingMode.HALF_UP)
-                                : BigDecimal.ZERO);
+                // F7-60（2026-09-20）：收敛到 MaterialRequirementCalc.perUnit，与列表页/详情页/结单同一口径。
+                BigDecimal perUnit = MaterialRequirementCalc.perUnit(
+                        mat.getQuantityPerSet(), mat.getDemandQuantity(), productQty);
                 result.add(new MaterialReq(materialId, getMaterialNameById(materialId), perUnit));
             }
             log.info("从订单物料加载 {} 项 (productId={})", result.size(), product.getId());
@@ -793,7 +794,8 @@ public class OutsourceOrderDeliveryServiceImpl
                 continue;
             }
             // 2026-09-16 数量一律为整数：单套用量(比率) × 交货数量 → 取整（缺料判断与提示都用整数）
-            BigDecimal needed = mat.perUnit().multiply(deliveryQty).setScale(0, RoundingMode.HALF_UP);
+            // F7-60（2026-09-20）：收敛到 MaterialRequirementCalc.need（全模块同一取整口径）
+            BigDecimal needed = MaterialRequirementCalc.need(mat.perUnit(), deliveryQty);
 
             WarehouseStock stock = stockMapper.selectOne(
                     new LambdaQueryWrapper<WarehouseStock>()
@@ -944,6 +946,33 @@ public class OutsourceOrderDeliveryServiceImpl
      * <p>统计口径与 {@link #summary(Long)} 一致：同订单+同产品、交货类型为普通交货、
      * 未作废（含草稿，避免多张草稿叠加超量）；excludeId 供编辑场景排除自身。</p>
      */
+    /**
+     * F7-58（2026-09-20）：**草稿写入口的共用入参校验** —— {@code createDelivery} 与 {@code updateDelivery}
+     * 必须**同判**（原实现 create 全套校验、update 只查状态与数量上限，直调接口即可绕过）。
+     *
+     * <p>校验项：① 交货数量 &gt; 0；② 至少一个等级 &gt; 0；③ 各等级之和 == 交货总量；
+     * ④ **入库仓库必填**（原 update 完全不查，而 audit 侧是 {@code if (warehouseId != null)} 才入库
+     * ⇒ 可"审核通过但成品不入库，而扣料与应付照落"）。</p>
+     *
+     * <p>与前端一致：{@code order/delivery.vue} 提交时恒 {@code quantity = 各等级之和}、且已强制选择收货仓库
+     * ⇒ 这些校验对正常 UI 无感，只拦直调接口的畸形载荷。</p>
+     */
+    private void validateDraftPayload(OutsourceOrderDelivery delivery) {
+        if (delivery.getQuantity() == null || delivery.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
+            throw new BusinessException("交货数量必须大于0");
+        BigDecimal a = delivery.getAQty() == null ? BigDecimal.ZERO : delivery.getAQty();
+        BigDecimal b = delivery.getBQty() == null ? BigDecimal.ZERO : delivery.getBQty();
+        BigDecimal c = delivery.getCQty() == null ? BigDecimal.ZERO : delivery.getCQty();
+        BigDecimal d = delivery.getDefectQty() == null ? BigDecimal.ZERO : delivery.getDefectQty();
+        BigDecimal gradeSum = a.add(b).add(c).add(d);
+        if (gradeSum.compareTo(BigDecimal.ZERO) <= 0)
+            throw new BusinessException("请至少填写一个等级的数量（A规/B规/C规/不良）");
+        if (gradeSum.compareTo(delivery.getQuantity()) != 0)
+            throw new BusinessException("各等级数量之和(" + gradeSum + ")必须等于交货总数量(" + delivery.getQuantity() + ")");
+        if (delivery.getWarehouseId() == null)
+            throw new BusinessException("入库仓库不能为空");
+    }
+
     private void assertDeliveryWithinOrderQty(Long orderId, OutsourceOrderProduct product,
                                               BigDecimal qty, Long excludeId) {
         BigDecimal orderQty = product.getQuantity() != null ? product.getQuantity() : BigDecimal.ZERO;
@@ -951,12 +980,16 @@ public class OutsourceOrderDeliveryServiceImpl
         List<OutsourceOrderDelivery> list = baseMapper.selectList(
                 new LambdaQueryWrapper<OutsourceOrderDelivery>()
                         .eq(OutsourceOrderDelivery::getOrderId, orderId)
-                        .eq(OutsourceOrderDelivery::getProductId, product.getId())
                         .eq(OutsourceOrderDelivery::getDeliveryType, DeliveryType.DELIVERY.getCode())
                         .ne(OutsourceOrderDelivery::getStatus, DocStatus.CANCELLED.getCode()));
         BigDecimal delivered = BigDecimal.ZERO;
         for (OutsourceOrderDelivery d : list) {
             if (excludeId != null && excludeId.equals(d.getId())) continue;
+            // F7-59（2026-09-20）：关联判定统一为 belongsToProduct（**产品主数据ID 优先、产品行ID 兜底**），
+            // 与 summary / assertNotOverPlanned 同一份逻辑。
+            // 原实现用 `.eq(productId, product.getId())`（**只按产品行ID**）⇒ 加工单编辑会重建产品行 ⇒
+            // 历史交货记录的 product_id 是旧行ID ⇒ 累计已交量算不到 ⇒ **可重复交满/超交**。
+            if (!belongsToProduct(d, product)) continue;
             if (d.getQuantity() != null && d.getQuantity().signum() > 0) delivered = delivered.add(d.getQuantity());
         }
         BigDecimal thisQty = qty != null ? qty : BigDecimal.ZERO;

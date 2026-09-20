@@ -8,10 +8,8 @@ import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.common.BillPrefix;
+import com.beichen.erp.common.BillNoSeq;
 import com.beichen.erp.common.DocStatus;
-import com.beichen.erp.inventory.common.RelatedBillType;
-import com.beichen.erp.inventory.common.StockChangeType;
-import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.material.service.ProductService;
@@ -40,9 +38,9 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     private final SaleOutboundItemMapper itemMapper;
     private final SaleOrderMapper saleOrderMapper;
     private final CustomerMapper customerMapper;
-    private final WarehouseStockService stockService;
     private final ProductMapper productMapper;
     private final ProductService productService;
+    // 2026-09-20（F7-105）：原注入的 WarehouseStockService 已移除 —— 本单不再变动库存（见 audit 的说明）。
 
     @Override
     public Page<Map<String, Object>> page(String status, Long customerId, String code, int pageNum, int pageSize) {
@@ -169,13 +167,22 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         outboundMapper.updateById(u);
     }
 
+    /**
+     * 审核：**纯出库凭证，不参与库存变动**（F7-105 · 2026-09-20 移除重复扣减）。
+     *
+     * <p>历史：2026-09-17（D2）起「销售单审核」已统一扣减库存（{@code SaleOrderServiceImpl.audit} →
+     * {@code StockChangeType.SALE_OUT / RelatedBillType.SALE_ORDER}），而本方法**也**扣一次，
+     * 两者同时启用即**双重扣减**。原实现以"该页面未注册路由、无菜单（点不到）"为由保留代码、仅在注释里警示；
+     * 但 {@code /api/inventory/outbound} 当时**未在 ApiPermGuard 登记** ⇒ 接口层本就可达
+     * （任意登录用户一条 curl 即可触发，实测见报告 §37）⇒ "点不到"的假设不成立。</p>
+     *
+     * <p>现口径：**库存的唯一入口是销售单审核**。出库单只保留
+     * ① CAS 状态机；② "必须挂一张已审核销售单"的校验；③ 出库凭证字段（仓库/日期/明细/备注）。
+     * 将来给它挂路由（作为物流/批次凭证）时，**无需再动库存逻辑**。</p>
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
-        // ⚠️ 2026-09-17 口径变更（D2）：**销售单审核已统一扣减库存**（SaleOrderServiceImpl.audit →
-        // StockChangeType.SALE_OUT / RelatedBillType.SALE_ORDER）。本方法同样会扣库存（下方第 1 步），
-        // 两者若同时启用会**双重扣减**。当前该页面**未注册路由、无菜单**（点不到），故暂保留代码；
-        // 若将来要挂导航启用出库单，必须**先移除本方法的 changeStock/回补逻辑**（改为纯出库凭证：仅登记物流/批次）。
         SaleOutbound outbound = outboundMapper.selectById(id);
         if (outbound == null) throw new BusinessException("销售出库单不存在");
         // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免库存重复扣减
@@ -192,16 +199,10 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
                     + saleOrder.getStatus() + "），请先审核销售单再出库");
         List<SaleOutboundItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, id));
-        // 1) 库存联动：出库减库存（changeStock 负数，不足自动抛异常）
-        for (SaleOutboundItem it : items) {
-            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
-            stockService.changeStock(outbound.getWarehouseId(),
-                    product != null ? product.getName() : "",
-                    it.getQuantity().negate(), StockChangeType.SALE_OUT, outbound.getCode(), RelatedBillType.SALE_OUTBOUND,
-                    it.getProductId(),
-                    "", outbound.getId(), it.getQualityType());
-        }
-        // 2) 更新出库单状态（销售出库单仅负责真实出库：扣库存；应收由销售订单统一生成，此处不改动订单状态，避免跨单状态污染）
+        if (items.isEmpty()) throw new BusinessException("出库单明细不能为空");
+        // 2026-09-20（F7-105）：**此处原先会扣减库存**（SALE_OUT / SALE_OUTBOUND），与销售单审核重复。
+        // 已移除 —— 库存只由 SaleOrderServiceImpl.audit 变动（单入口）。
+        // 更新出库单状态（本单是出库凭证：不动库存、不生成应收、不改订单状态，避免跨单污染）
         SaleOutbound u = new SaleOutbound();
         u.setId(id);
         u.setStatus(DocStatus.AUDITED.getCode());
@@ -217,19 +218,9 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         if (!DocStatusGuard.claim(outboundMapper, SaleOutbound::getId, id, SaleOutbound::getStatus,
                 DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
             throw new BusinessException("只有已审核的出库单可反审核");
-        List<SaleOutboundItem> items = itemMapper.selectList(
-                new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, id));
-        // 1) 库存回补：出库时按负数扣库存，反审核原路加回（与 audit 的扣减对称）
-        for (SaleOutboundItem it : items) {
-            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
-            stockService.changeStock(outbound.getWarehouseId(),
-                    product != null ? product.getName() : "",
-                    it.getQuantity(), StockChangeType.SALE_OUT_UN_AUDIT, outbound.getCode(), RelatedBillType.SALE_OUTBOUND,
-                    it.getProductId(),
-                    "", outbound.getId(), it.getQualityType());
-        }
-        // 2) 出库单状态回退为草稿（实体无审核人字段，仅回退状态）
+        // 2026-09-20（F7-105）：**此处原先会回补库存**（SALE_OUT_UN_AUDIT，与 audit 的扣减对称）。
+        // 已随扣减一并移除 —— 本单不再参与库存变动，反审核只回退状态。
+        // 出库单状态回退为草稿（实体无审核人字段，仅回退状态）
         SaleOutbound u = new SaleOutbound();
         u.setId(id);
         u.setStatus(DocStatus.DRAFT.getCode());
@@ -242,10 +233,8 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         LambdaQueryWrapper<SaleOutbound> w = new LambdaQueryWrapper<SaleOutbound>()
                 .likeRight(SaleOutbound::getCode, pat).orderByDesc(SaleOutbound::getCode).last("LIMIT 1");
         SaleOutbound last = outboundMapper.selectOne(w);
-        int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
-        }
-        return BillPrefix.SALE_OUTBOUND + d + String.format("%03d", seq);
+        // F7-116（2026-09-20）：统一走 BillNoSeq（详见该类 javadoc）。
+        int seq = BillNoSeq.lastSeq(last == null ? null : last.getCode(), pat) + 1;
+        return BillNoSeq.format(pat, seq);
     }
 }

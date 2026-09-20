@@ -1,4 +1,11 @@
 ﻿# Seed 3b-fix: sale outbound via /api/inventory/outbound (ASCII only)
+#
+# !!! DO NOT RUN AGAINST A REAL DATABASE !!!
+#   This script REALLY creates draft outbound bills and AUDITS them (Post + Put .../audit).
+#   Before 2026-09-20 that double-deducted stock (see report F7-105). Since F7-105 was fixed,
+#   audit() no longer touches stock at all, so running it now only leaves fake outbound rows
+#   (sale_outbound / sale_outbound_item) that you would have to clean up by hand.
+#   Kept for history only. Use verify-fix-f7-105-106-111.ps1 for the current regression instead.
 $ErrorActionPreference = 'Continue'
 $B = 'http://localhost:8080/api'
 $loginBody = @{ username = 'lin'; password = '123'; companyId = 1 } | ConvertTo-Json

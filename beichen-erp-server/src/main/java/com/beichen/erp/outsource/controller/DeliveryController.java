@@ -229,6 +229,11 @@ public class DeliveryController {
                 if (obj instanceof Map<?, ?> itemMap) {
                     Map<String, Object> map = (Map<String, Object>) itemMap;
                     OutsourceDeliveryItem item = new OutsourceDeliveryItem();
+                    // F7-76（2026-09-20）：补解析 itemId（= 物料订单明细行ID）。原实现漏了它，而 update 是
+                    // "删旧明细 + 插新明细" ⇒ 任何 PUT 都会把明细的 item_id 清成 null ⇒ 审核时无法回写订单
+                    // 的"已收数量"（F7-67 已把该处由静默 continue 改为抛错 ⇒ 症状变成"编辑过的收货单无法审核"）。
+                    Object iid = map.get("itemId") != null ? map.get("itemId") : map.get("item_id");
+                    if (iid != null && !iid.toString().isBlank()) item.setItemId(Long.valueOf(iid.toString()));
                     // 兼容 materialId 和 material_id
                     Object mid = map.get("materialId") != null ? map.get("materialId") : map.get("material_id");
                     if (mid != null) item.setMaterialId(Long.valueOf(mid.toString()));

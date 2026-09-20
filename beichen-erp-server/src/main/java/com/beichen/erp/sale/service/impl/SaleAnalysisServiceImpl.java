@@ -259,6 +259,9 @@ public class SaleAnalysisServiceImpl implements SaleAnalysisService {
         for (Map<String, Object> it : analysisMapper.saleOrderItemAll()) {
             Long oid = toBd(it.get("order_id")).longValue();
             if (!orderIds.contains(oid)) continue;
+            // F7-120（2026-09-20）：与 byDocDate 一致地判空 —— product_id 为 NULL 时若直接
+            // toBd(...).longValue() 会被归入 pid = 0，凭空多出一行"产品 0"（现网 0 条，属防御性修复）。
+            if (it.get("product_id") == null) continue;
             Long pid = toBd(it.get("product_id")).longValue();
             BigDecimal q = toBd(it.get("qty")), a = toBd(it.get("amt"));
             qtyByProduct.merge(pid, q, BigDecimal::add);

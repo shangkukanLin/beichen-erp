@@ -9,6 +9,7 @@ import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.common.BillPrefix;
+import com.beichen.erp.common.BillNoSeq;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SourceBillType;
@@ -40,6 +41,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -233,18 +235,36 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         receiptService.audit(rid);
     }
 
+    /**
+     * F7-108（2026-09-20）：草稿保存时的明细护栏 —— **与 {@link #audit} 同一口径**。
+     *
+     * <p>原先只在 audit 校验（明细非空 + 数量 &gt; 0）⇒ 保存阶段可落"空明细 / 负数量"草稿：
+     * 前端显示为"正常的草稿"，用户以为已录入，直到审核才被拦（错误暴露得太晚，
+     * 且空明细草稿若被清理脚本/报表统计会带来噪音）。此处把校验提前到保存那一步。</p>
+     */
+    private void assertItemsForDraft(List<SaleOrderItem> items) {
+        if (items == null || items.isEmpty()) throw new BusinessException("销售单明细不能为空");
+        for (SaleOrderItem it : items) {
+            if (it.getProductId() == null) throw new BusinessException("销售明细必须选择产品");
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("销售数量必须大于 0（产品ID=" + it.getProductId() + "）");
+        }
+    }
+
     private BigDecimal calcTaxAmount(BigDecimal total, Integer taxIncluded, BigDecimal taxRate) {
         if (!Integer.valueOf(1).equals(taxIncluded) || taxRate == null || taxRate.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO;
         }
-        BigDecimal rate = taxRate.divide(new BigDecimal("100"), 6, BigDecimal.ROUND_HALF_UP);
-        return total.multiply(rate).divide(BigDecimal.ONE.add(rate), 2, BigDecimal.ROUND_HALF_UP);
+        // F7-110（2026-09-20）：改用 RoundingMode（BigDecimal.ROUND_HALF_UP 自 Java 9 起已被废弃）
+        BigDecimal rate = taxRate.divide(new BigDecimal("100"), 6, RoundingMode.HALF_UP);
+        return total.multiply(rate).divide(BigDecimal.ONE.add(rate), 2, RoundingMode.HALF_UP);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void create(SaleOrder order, List<SaleOrderItem> items) {
         if (order.getCustomerId() == null) throw new BusinessException("客户不能为空");
+        assertItemsForDraft(items);
         normalizeSettle(order);
         order.setCode(generateCode());
         order.setStatus(DocStatus.DRAFT.getCode());
@@ -275,6 +295,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         SaleOrder old = orderMapper.selectById(order.getId());
         if (old == null) throw new BusinessException("销售单不存在");
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        assertItemsForDraft(items);
         normalizeSettle(order);
         order.setCode(old.getCode());
         orderMapper.updateById(order);
@@ -284,6 +305,11 @@ public class SaleOrderServiceImpl implements SaleOrderService {
                     .eq(SaleOrder::getId, order.getId())
                     .set(SaleOrder::getSettleAccountId, null));
         }
+        // ⚠️ F7-108（2026-09-20）：这里是"全删重插"⇒ **明细 id 会全部变化**。
+        // 当前安全：只有**草稿**可编辑，而引用 sale_order_item.id 的只有 sale_outbound_item.orderItemId，
+        // 出库单又要求挂**已审核**销售单 ⇒ 草稿阶段不可能存在引用。
+        // **若将来允许编辑已审核单，或新增任何"按 item.id 引用销售明细"的功能（如批次/序列号追溯），
+        // 必须改为按 id 差量更新**，否则那些引用会静默悬空。
         itemMapper.delete(new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, order.getId()));
         BigDecimal total = BigDecimal.ZERO;
         Long cid = CompanyContext.get();
@@ -517,10 +543,9 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         LambdaQueryWrapper<SaleOrder> w = new LambdaQueryWrapper<SaleOrder>()
                 .likeRight(SaleOrder::getCode, pat).orderByDesc(SaleOrder::getCode).last("LIMIT 1");
         SaleOrder last = orderMapper.selectOne(w);
-        int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
-        }
-        return BillPrefix.SALE + d + String.format("%03d", seq);
+        // F7-109（2026-09-20）：统一走 BillNoSeq —— 不再 substring(len-3)（序号 ≥1000 会截错），
+        // 也不再 `catch → seq = 1` 静默回退（真撞车交给 uk_code 抛可见错误）。
+        int seq = BillNoSeq.lastSeq(last == null ? null : last.getCode(), pat) + 1;
+        return BillNoSeq.format(pat, seq);
     }
 }

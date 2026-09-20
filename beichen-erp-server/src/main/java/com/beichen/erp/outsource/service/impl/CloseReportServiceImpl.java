@@ -11,6 +11,7 @@ import com.beichen.erp.inventory.common.IoType;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.outsource.common.DeliveryType;
+import com.beichen.erp.outsource.common.MaterialRequirementCalc;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.common.CloseReportStatus;
 import com.beichen.erp.finance.common.SourceBillType;
@@ -92,6 +93,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     private final MaterialOrderItemMapper materialOrderItemMapper;
     private final PayableHelper payableHelper;
     private final com.beichen.erp.material.service.ProductService productService;
+    /** F7-77（2026-09-20）：物料单价统一实现（FIFO 口径与此前一致，但统一排除 CANCELLED + 去 N+1） */
+    private final com.beichen.erp.outsource.service.OutsourceMaterialPricingService pricingService;
 
     @Override
     public Map<String, Object> getOrCreateReport(Long orderId) {
@@ -222,9 +225,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         BigDecimal productQty = ownerProduct != null && ownerProduct.getQuantity() != null
             ? ownerProduct.getQuantity() : BigDecimal.ONE;
         // F2-3（2026-09-18 审核修复）：优先直取视图 quantity_per_set（精确），反算仅作兜底
-        BigDecimal qps = mat.getQuantityPerSet() != null
-                ? mat.getQuantityPerSet()
-                : (perSet != null ? perSet.divide(productQty, 10, java.math.RoundingMode.HALF_UP) : BigDecimal.ZERO);
+        // F7-60（2026-09-20）：收敛到 MaterialRequirementCalc（反算精度统一为 6 位）
+        BigDecimal qps = MaterialRequirementCalc.perUnit(mat.getQuantityPerSet(), perSet, productQty);
         item.put("quantityPerSet", qps);
         // 加工良率 = 100% - 损耗率（取快照中的 lossRate）
         BigDecimal lossRate = mat.getLossRate() != null ? mat.getLossRate() : BigDecimal.ZERO;
@@ -250,7 +252,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             if (pDelivered == null) pDelivered = deliveredByProduct.getOrDefault(ownerProduct.getId(), BigDecimal.ZERO);
             if (pDelivered.compareTo(BigDecimal.ZERO) > 0) {
                 // 2026-09-16：数量一律为整数 —— 单套用量 qps 是比率，乘出来的数量需取整（四舍五入）
-                shippedTotal = pDelivered.multiply(qps).setScale(0, RoundingMode.HALF_UP);
+                // F7-60（2026-09-20）：收敛到 MaterialRequirementCalc.need
+                shippedTotal = MaterialRequirementCalc.need(qps, pDelivered);
             }
         }
         item.put("shippedQuantity", shippedTotal);
@@ -777,37 +780,11 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         return BillPrefix.OUTSOURCE_DELIVERY + dateStr + String.format("%03d", seq);
     }
 
-    /** 加权平均单价：该工厂所有物料订单中该物料的 总金额/总数量 */
     /** 先进先出计算单价：按交期升序累计订单，直到满足需求量，计算加权均价 */
     private BigDecimal calcFifoPrice(Long materialId, String materialName, BigDecimal requiredQty) {
-        if (materialId == null || requiredQty == null || requiredQty.compareTo(BigDecimal.ZERO) <= 0)
-            return BigDecimal.ZERO;
-        try {
-            List<MaterialOrder> orders = materialOrderMapper.selectList(
-                new LambdaQueryWrapper<MaterialOrder>().orderByAsc(MaterialOrder::getDeliveryDate));
-            BigDecimal accumulatedAmount = BigDecimal.ZERO;
-            BigDecimal accumulatedQty = BigDecimal.ZERO;
-            for (MaterialOrder o : orders) {
-                LambdaQueryWrapper<MaterialOrderItem> itemW = new LambdaQueryWrapper<MaterialOrderItem>()
-                    .eq(MaterialOrderItem::getOrderId, o.getId())
-                    .eq(MaterialOrderItem::getMaterialId, materialId);
-                List<MaterialOrderItem> items = materialOrderItemMapper.selectList(itemW);
-                for (MaterialOrderItem it : items) {
-                    BigDecimal qty = it.getOrderQuantity() != null ? it.getOrderQuantity() : BigDecimal.ZERO;
-                    BigDecimal price = it.getUnitPrice() != null ? it.getUnitPrice() : BigDecimal.ZERO;
-                    if (qty.compareTo(BigDecimal.ZERO) <= 0 || price.compareTo(BigDecimal.ZERO) <= 0) continue;
-                    BigDecimal need = requiredQty.subtract(accumulatedQty);
-                    if (need.compareTo(BigDecimal.ZERO) <= 0) break;
-                    BigDecimal useQty = qty.min(need);
-                    accumulatedAmount = accumulatedAmount.add(useQty.multiply(price));
-                    accumulatedQty = accumulatedQty.add(useQty);
-                }
-                if (accumulatedQty.compareTo(requiredQty) >= 0) break;
-            }
-            if (accumulatedQty.compareTo(BigDecimal.ZERO) > 0)
-                return accumulatedAmount.divide(accumulatedQty, 4, RoundingMode.HALF_UP);
-        } catch (Exception e) { log.warn("FIFO单价计算失败: {}", e.getMessage()); }
-        return BigDecimal.ZERO;
+        // F7-77（2026-09-20）：收敛到 OutsourceMaterialPricingService.fifoPrice
+        // （算法与返回值口径不变：无有效数量返回 0；统一排除 CANCELLED + 批量取明细去 N+1）
+        return pricingService.fifoPrice(materialId, requiredQty);
     }
 
     /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */

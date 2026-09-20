@@ -69,6 +69,12 @@ app:
   # 定时任务总开关；多实例部署时建议只在一个实例打开（任务内部另有 MySQL 命名锁兜底）
   scheduling:
     enabled: ${SCHEDULING_ENABLED:true}
+  # 接口级权限（F3-3 / F7-106 第二步）：**未登记收口前缀**时的默认策略。
+  #   true （默认，推荐）：拒绝 —— 白名单式收口的安全兜底，防"新增控制器忘登记即裸奔"（见 F7-105）；
+  #   false：放行 —— 应急回滚开关（等价于 2026-09-20 之前的旧行为）。
+  # 启动期 ApiPermGuardSelfCheck 会枚举全部 /api 端点核对是否已登记（未登记打 ERROR 日志）。
+  perm:
+    default-deny: ${PERM_DEFAULT_DENY:true}
 
 logging:
   level:

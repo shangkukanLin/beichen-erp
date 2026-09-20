@@ -43,7 +43,20 @@ public class SaleReturnItem {
     /** 退货数量 */
     private BigDecimal quantity;
 
-    /** 已整理数量（退货整理单审核时累加、反审核时扣回；用于追溯该明细是否已整理完） */
+    /**
+     * 已整理数量。
+     *
+     * <p><b>⚠️ 已废弃（F7-112 · 2026-09-20 实测）：本字段无人写入，恒为 0。</b>
+     * 退货整理单审核/反审核时累加/扣回的是 {@code after_sale_pending.sorted_quantity}
+     * （见 {@code ReturnSortServiceImpl.applySortedQuantity()}）。现网实查：
+     * {@code SELECT SUM(sorted_quantity) FROM sale_return_item} = <b>0.00</b>（11 行全 0），
+     * 而 {@code after_sale_pending} 侧 = <b>27.00</b>。</p>
+     *
+     * <p>⇒ 判断"某条退货明细是否已整理完"请改用 {@code after_sale_pending}
+     * （按 {@code source_type='SALE_RETURN'} + {@code source_item_id = 本明细id} 定位）；
+     * <b>读本字段只会得到 0，切勿用于判断或展示</b>（护栏 {@code assertNotSorted} 用的是前者，故功能正确）。</p>
+     */
+    @Deprecated
     private BigDecimal sortedQuantity;
 
     /** 单价 */

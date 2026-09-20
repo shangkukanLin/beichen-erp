@@ -74,6 +74,8 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     private final OutsourceDeliveryItemMapper outsourceDeliveryItemMapper;
     private final PayableHelper payableHelper;
     private final UserMapper userMapper;
+    /** F7-77（2026-09-20）：物料单价统一实现（FIFO 口径与此前一致，但统一排除 CANCELLED + 去 N+1） */
+    private final com.beichen.erp.outsource.service.OutsourceMaterialPricingService pricingService;
 
     @Override
     public Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long supplierId, String status, String returnType, String progress) {
@@ -328,6 +330,66 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     }
 
     /**
+     * F7-71（2026-09-20）：**退货退款（REFUND）的「不超可退」校验**（与 {@link #deductOrderReceived} 的送修口径对称）。
+     *
+     * <p>可退 = 该物料在本订单上「已收 − 已退不良 − 送修中 − 本单之外已审核的退货退款合计」。
+     * 缺这道防线时，只要源仓有货即可反复退同一批收料 ⇒ 负应付超冲（把供应商往来冲成负数）。</p>
+     *
+     * <p>仅在退货单关联了物料订单时调用；同一订单同一物料可能有多行明细，故按物料**聚合**后比较。</p>
+     */
+    private void assertRefundNotOverReceived(OutsourceMaterialReturn order, List<OutsourceMaterialReturnItem> items) {
+        Long moId = order.getMaterialOrderId();
+        MaterialOrder mo = materialOrderMapper.selectById(moId);
+        if (mo == null) throw new BusinessException("关联的物料订单不存在");
+
+        // 该订单下每个物料的 [已收, 已退不良, 送修中]
+        Map<Long, BigDecimal[]> agg = new LinkedHashMap<>();
+        for (MaterialOrderItem oi : materialOrderItemMapper.selectList(
+                new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, moId))) {
+            if (oi.getMaterialId() == null) continue;
+            BigDecimal[] a = agg.computeIfAbsent(oi.getMaterialId(),
+                    k -> new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO});
+            a[0] = a[0].add(nz(oi.getReceivedQuantity()));
+            a[1] = a[1].add(nz(oi.getDefectReturnedQty()));
+            a[2] = a[2].add(nz(oi.getRepairReturnedQty()));
+        }
+
+        // 本单之外、同订单、已审核的「退货退款」已退合计（按物料）
+        Map<Long, BigDecimal> refunded = new LinkedHashMap<>();
+        List<OutsourceMaterialReturn> others = returnMapper.selectList(new LambdaQueryWrapper<OutsourceMaterialReturn>()
+                .eq(OutsourceMaterialReturn::getMaterialOrderId, moId)
+                .eq(OutsourceMaterialReturn::getStatus, DocStatus.AUDITED.getCode())
+                .ne(OutsourceMaterialReturn::getId, order.getId()));
+        for (OutsourceMaterialReturn r : others) {
+            if (MaterialReturnType.isRepair(r.getReturnType())) continue;
+            for (OutsourceMaterialReturnItem it : itemMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceMaterialReturnItem>()
+                            .eq(OutsourceMaterialReturnItem::getReturnOrderId, r.getId()))) {
+                if (it.getMaterialId() == null) continue;
+                refunded.merge(it.getMaterialId(), nz(it.getQuantity()), BigDecimal::add);
+            }
+        }
+
+        for (OutsourceMaterialReturnItem it : items) {
+            if (it.getMaterialId() == null || it.getQuantity() == null
+                    || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
+            BigDecimal[] a = agg.getOrDefault(it.getMaterialId(),
+                    new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO});
+            BigDecimal already = refunded.getOrDefault(it.getMaterialId(), BigDecimal.ZERO);
+            BigDecimal returnable = a[0].subtract(a[1]).subtract(a[2]).subtract(already);
+            if (returnable.compareTo(BigDecimal.ZERO) < 0) returnable = BigDecimal.ZERO;
+            if (it.getQuantity().compareTo(returnable) > 0)
+                throw new BusinessException("退货数量超过该物料订单的可退数量：物料「" + getMaterialName(it.getMaterialId())
+                        + "」在订单 " + mo.getCode() + " 上已收 " + a[0].stripTrailingZeros().toPlainString()
+                        + "、已退不良 " + a[1].stripTrailingZeros().toPlainString()
+                        + "、送修中 " + a[2].stripTrailingZeros().toPlainString()
+                        + "、已退货退款 " + already.stripTrailingZeros().toPlainString()
+                        + "，可退 " + returnable.stripTrailingZeros().toPlainString()
+                        + "，本次 " + it.getQuantity().stripTrailingZeros().toPlainString());
+        }
+    }
+
+    /**
      * 回补关联物料订单：按本单该物料「已冻结的订单明细行」分摊本次返回数量，
      * 每行回补 收料数 += take、送修中 -= take。返回分摊明细 [orderItemId, take]。
      */
@@ -347,10 +409,14 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
             MaterialOrderItem oi = materialOrderItemMapper.selectById(r.getMaterialOrderItemId());
             if (oi == null) continue;
             BigDecimal take = avail.min(remain);
-            oi.setReceivedQuantity(nz(oi.getReceivedQuantity()).add(take));
-            BigDecimal rest = nz(oi.getRepairReturnedQty()).subtract(take);
-            oi.setRepairReturnedQty(rest.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : rest);
-            materialOrderItemMapper.updateById(oi);
+            // F7-69（2026-09-20）：改 **SQL 原子加减**（原为 Java 侧"读-改-写"后 `updateById(oi)` 全字段回写
+            // ⇒ 同一订单明细行被两张维修返回单并发登记时互相覆盖、数量少记且不报错）。这是 F7-49 的
+            // **第 4 处漏改**（其余 3 处已改）。语义与原实现完全等价：收料数累加、送修中递减且**不夹零**。
+            String takeSql = take.toPlainString();
+            materialOrderItemMapper.update(null, new LambdaUpdateWrapper<MaterialOrderItem>()
+                    .eq(MaterialOrderItem::getId, oi.getId())
+                    .setSql("received_quantity = IFNULL(received_quantity, 0) + (" + takeSql + ")")
+                    .setSql("repair_returned_qty = GREATEST(IFNULL(repair_returned_qty, 0) - (" + takeSql + "), 0)"));
             out.add(new Object[]{r.getMaterialOrderItemId(), take});
             remain = remain.subtract(take);
         }
@@ -548,6 +614,14 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                 : StockChangeType.MATERIAL_RETURN_OUT.getCode();
         RelatedBillType outBill = repair ? RelatedBillType.OUTSOURCE_MATERIAL_REPAIR
                 : RelatedBillType.OUTSOURCE_MATERIAL_RETURN;
+        // F7-71（2026-09-20）：**退货退款补「不超可退」护栏**（F2-2 已在成品退货侧补 assertReturnNotOverDelivered，
+        // 物料侧漏改）。原实现只校验"数量>0 + 源仓库存充足" ⇒ 只要源仓有货就能退，可对同一批收料反复退
+        // ⇒ 负应付超冲。口径与 deductOrderReceived（送修）对称：
+        //   可退 = 该物料在本订单上「已收 − 已退不良 − 送修中 − 本单之外已审核的退货退款」。
+        // 仅当本单**关联了物料订单**时校验（未关联则无订单口径可比 —— 现网 6 张退货单均未关联 ⇒ 零影响）。
+        if (!repair && order.getMaterialOrderId() != null) {
+            assertRefundNotOverReceived(order, items);
+        }
         for (OutsourceMaterialReturnItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
             warehouseStockService.changeMaterialStock(order.getFromWarehouseId(), it.getMaterialId(),
@@ -911,33 +985,9 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     }
 
     private BigDecimal calcFifoPrice(Long materialId, BigDecimal requiredQty) {
-        if (materialId == null || requiredQty == null || requiredQty.compareTo(BigDecimal.ZERO) <= 0)
-            return BigDecimal.ZERO;
-        try {
-            List<MaterialOrder> orders = materialOrderMapper.selectList(
-                    new LambdaQueryWrapper<MaterialOrder>().orderByAsc(MaterialOrder::getDeliveryDate));
-            BigDecimal accumulatedAmount = BigDecimal.ZERO, accumulatedQty = BigDecimal.ZERO;
-            for (MaterialOrder o : orders) {
-                List<MaterialOrderItem> items = materialOrderItemMapper.selectList(
-                        new LambdaQueryWrapper<MaterialOrderItem>()
-                                .eq(MaterialOrderItem::getOrderId, o.getId())
-                                .eq(MaterialOrderItem::getMaterialId, materialId));
-                for (MaterialOrderItem itt : items) {
-                    BigDecimal q = itt.getOrderQuantity() != null ? itt.getOrderQuantity() : BigDecimal.ZERO;
-                    BigDecimal p = itt.getUnitPrice() != null ? itt.getUnitPrice() : BigDecimal.ZERO;
-                    if (q.compareTo(BigDecimal.ZERO) <= 0 || p.compareTo(BigDecimal.ZERO) <= 0) continue;
-                    BigDecimal need = requiredQty.subtract(accumulatedQty);
-                    if (need.compareTo(BigDecimal.ZERO) <= 0) break;
-                    BigDecimal use = q.min(need);
-                    accumulatedAmount = accumulatedAmount.add(use.multiply(p));
-                    accumulatedQty = accumulatedQty.add(use);
-                }
-                if (accumulatedQty.compareTo(requiredQty) >= 0) break;
-            }
-            if (accumulatedQty.compareTo(BigDecimal.ZERO) > 0)
-                return accumulatedAmount.divide(accumulatedQty, 4, RoundingMode.HALF_UP);
-        } catch (Exception e) { log.warn("FIFO单价计算失败: {}", e.getMessage()); }
-        return BigDecimal.ZERO;
+        // F7-77（2026-09-20）：收敛到 OutsourceMaterialPricingService.fifoPrice
+        // （算法与返回值口径不变：无有效数量返回 0；统一排除 CANCELLED + 批量取明细去 N+1）
+        return pricingService.fifoPrice(materialId, requiredQty);
     }
 
     /** 已返回量：按退货单批量汇总（列表用，避免逐单查） */

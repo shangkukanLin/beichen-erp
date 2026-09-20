@@ -9,6 +9,7 @@ import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.common.BillPrefix;
+import com.beichen.erp.common.BillNoSeq;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.finance.common.SettlementStatus;
@@ -406,9 +407,24 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         // 库存联动：客户退回待分类品（品质默认待分类），入库增加库存
         // 批量取产品，避免循环内逐条查库（N+1）
         Map<Long, Product> pMap = productMap(items);
+        // F7-111（2026-09-20，宽松版）：产品必须"**曾售出**" —— 本公司范围内该产品有销售/换货出库流水即可。
+        // 原因：退货的"不超已售"校验只在**关联销售单**时生效（validateReturnQuantity 首行即 return），
+        // 而现网 11 条退货单**全部未关联销售单** ⇒ 该护栏实际从不生效 ⇒ 需补一道与"是否关联"无关的底线。
+        // 本校验挡掉"从未卖过的产品凭空入库"，**不校验剩余可退量**（允许多次/跨月部分退货，与现状兼容）。
+        // 先做一遍"产品存在"预检（复用已批量查出的 pMap）：否则**不存在**的产品会被下面的
+        // "未销售过"校验先拦下（两者都成立时提示语会误导 —— 实测 productId=999999 报的是"未销售过"）。
+        for (SaleReturnItem it : items) {
+            if (it.getProductId() == null || pMap.get(it.getProductId()) == null)
+                throw new BusinessException("产品不存在：ID=" + it.getProductId() + "（明细行ID=" + it.getId() + "）");
+        }
+        assertProductsSoldOnce(items.stream().map(SaleReturnItem::getProductId).toList());
         for (SaleReturnItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
             Product product = pMap.get(it.getProductId());
+            // F7-111（2026-09-20）：产品必须存在。原实现 pMap.get() 为 null 时**也照常入库**（流水备注退化为空串），
+            // 与上面的"曾售出"合起来即为「产品已建档 + 卖过」双底线；与 SaleOrderServiceImpl.audit 口径对齐。
+            if (it.getProductId() == null || product == null)
+                throw new BusinessException("产品不存在：ID=" + it.getProductId() + "（明细行ID=" + it.getId() + "）");
             stockService.changeStock(order.getWarehouseId(),
                     // 流水留痕：与反审核保持一致，优先用明细冗余的产品名
                     it.getProductName() != null && !it.getProductName().isBlank() ? it.getProductName()
@@ -629,10 +645,19 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             it.setReturnId(returnId);
             if (map.get("saleOrderItemId") != null && !map.get("saleOrderItemId").toString().isBlank())
                 it.setSaleOrderItemId(Long.valueOf(map.get("saleOrderItemId").toString()));
-            if (map.get("productId") != null) it.setProductId(Long.valueOf(map.get("productId").toString()));
+            // F7-111（2026-09-20）：产品必填 —— 原为 `if (map.get("productId") != null)` 才 set，
+            // 允许落 product_id = NULL 的明细（现网 0 条，无历史包袱）。
+            if (map.get("productId") == null || map.get("productId").toString().isBlank())
+                throw new BusinessException("退货明细必须选择产品");
+            it.setProductId(Long.valueOf(map.get("productId").toString()));
             if (map.get("quantity") != null) it.setQuantity(new BigDecimal(map.get("quantity").toString()));
             if (map.get("unitPrice") != null) it.setUnitPrice(new BigDecimal(map.get("unitPrice").toString()));
-            if (map.get("amount") != null) it.setAmount(new BigDecimal(map.get("amount").toString()));
+            // F7-115（2026-09-20）：明细金额**由服务端重算**，不再原样采用前端传值 ——
+            // 原实现下"明细 amount（前端传什么存什么）"与"单头 totalAmount（服务端 Σ数量×单价）"
+            // 可以不一致，对账时两边对不上；现与 SaleOrderServiceImpl.create 口径统一。
+            BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
+            BigDecimal price = it.getUnitPrice() != null ? it.getUnitPrice() : BigDecimal.ZERO;
+            it.setAmount(qty.multiply(price));
             if (map.get("remark") != null) it.setRemark(map.get("remark").toString());
             // 销售退货品质默认"待分类"，若前端传入则优先使用（售后待重新分类）
             String qt = map.get("qualityType") != null && !map.get("qualityType").toString().isBlank()
@@ -646,19 +671,46 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         }
     }
 
+    /**
+     * F7-111（2026-09-20）：产品必须"**曾售出**"（宽松版）。
+     *
+     * <p>判定 = 本公司范围内该产品存在**销售出库或换货出库**流水（{@code warehouse_stock_log.change_type}
+     * ∈ {SALE_OUT, EXCHANGE_OUT}）。**不校验剩余可退量** —— 那是"关联销售单"时的口径（见
+     * {@link #validateReturnQuantity}），本校验只兜住"从未卖过的产品凭空入库"。</p>
+     *
+     * <p>批量一次 {@code IN} 查询（避免逐行 N+1）。⚠️ id 列表由 {@code Long} 拼入 SQL：
+     * 它们来自数据库主键 / 已由 {@code Long.valueOf} 解析的入参 ⇒ 只可能是数字 ⇒ 无注入面；
+     * 若将来允许传字符串形参，必须改为参数化绑定。</p>
+     */
+    private void assertProductsSoldOnce(Collection<Long> productIds) {
+        if (productIds == null || productIds.isEmpty()) return;
+        List<Long> ids = productIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) return;
+        String in = ids.stream().map(String::valueOf).collect(Collectors.joining(","));
+        Set<Long> sold = new HashSet<>();
+        jdbcTemplate.query(
+                "SELECT DISTINCT product_id FROM warehouse_stock_log "
+                        + "WHERE change_type IN ('SALE_OUT','EXCHANGE_OUT') AND product_id IN (" + in + ")",
+                rs -> {
+                    while (rs.next()) sold.add(rs.getLong(1));
+                    return null;
+                });
+        for (Long pid : ids) {
+            if (!sold.contains(pid))
+                throw new BusinessException("产品未销售过，无法退货入库（产品ID=" + pid
+                        + "）。若确属特殊业务（客户未售先退），请先补开销售单，或改走其他出入库单。");
+        }
+    }
+
     private String generateCode() {
         String d = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String pat = BillPrefix.SALE_RETURN + d;
         LambdaQueryWrapper<SaleReturn> w = new LambdaQueryWrapper<SaleReturn>()
                 .likeRight(SaleReturn::getCode, pat).orderByDesc(SaleReturn::getCode).last("LIMIT 1");
         SaleReturn last = returnMapper.selectOne(w);
-        int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try {
-                seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1;
-            } catch (Exception e) { seq = 1; }
-        }
-        return BillPrefix.SALE_RETURN + d + String.format("%03d", seq);
+        // F7-109（2026-09-20）：统一走 BillNoSeq（详见该类 javadoc）。
+        int seq = BillNoSeq.lastSeq(last == null ? null : last.getCode(), pat) + 1;
+        return BillNoSeq.format(pat, seq);
     }
 
     private Long getCurrentUserId() {
