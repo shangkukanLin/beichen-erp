@@ -94,8 +94,15 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
                 DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
             throw new BusinessException("只有草稿状态可审核");
         if (expense.getAccountId() == null) throw new BusinessException("支出账户不能为空");
+        // F7-140（2026-09-20）：**账户行锁** —— 与付款侧同款问题：余额是 Σ 流水的派生值，
+        // "读余额校验 → 写支出流水"两步不原子 ⇒ 并发两笔费用可双双通过校验、账户被透支（报告的 P3 残留）。
+        Long lockCid = CompanyContext.get();
+        if (lockCid != null && lockCid <= 0) lockCid = null;
+        if (accountMapper.selectForUpdate(expense.getAccountId(), lockCid) == null)
+            throw new BusinessException("支出账户不存在");
         // 余额校验：账户实时余额（期初+收入-支出）须足够支付本笔费用
-        BigDecimal balance = accountBalance(expense.getAccountId());
+        // F7-140：用**当前读**取余额（见 accountBalanceForUpdate 的说明：一致性读会读到旧快照 ⇒ 并发可透支）
+        BigDecimal balance = accountBalanceForUpdate(expense.getAccountId());
         BigDecimal amount = expense.getAmount() != null ? expense.getAmount() : BigDecimal.ZERO;
         if (balance.subtract(amount).compareTo(BigDecimal.ZERO) < 0)
             throw new BusinessException("账户余额不足：当前余额 " + balance + "，费用 " + amount);
@@ -178,6 +185,18 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
     private BigDecimal accountBalance(Long accountId) {
         Map<Long, Map<String, Object>> map = accountMapper.sumBalance(List.of(accountId));
         Map<String, Object> row = map.get(accountId);
+        if (row == null || row.get("balance") == null) return BigDecimal.ZERO;
+        return new BigDecimal(row.get("balance").toString());
+    }
+
+    /**
+     * F7-140（2026-09-20）：**当前读**版本的余额（`FOR UPDATE`），供审核路径使用。
+     *
+     * <p>普通 {@link #accountBalance} 走一致性读：审核事务在**取单据时**就已建立快照 ⇒ 之后即使拿到了账户行锁，
+     * 读到的仍是**旧余额** ⇒ 并发第二笔照样通过校验。必须用当前读才能读到"前一笔已提交的流水"。</p>
+     */
+    private BigDecimal accountBalanceForUpdate(Long accountId) {
+        Map<String, Object> row = accountMapper.sumBalanceForUpdate(accountId);
         if (row == null || row.get("balance") == null) return BigDecimal.ZERO;
         return new BigDecimal(row.get("balance").toString());
     }

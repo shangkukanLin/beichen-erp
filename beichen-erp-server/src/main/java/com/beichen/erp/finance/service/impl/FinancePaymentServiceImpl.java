@@ -145,8 +145,15 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         // 修复前付款审核不校验余额、直接写支出流水（账户余额由流水实时累计）⇒ 账户可被透支（实测余额 200 付 500 成功）。
         // 用 payment.amount（而非明细之和）是因为下方资金流水就按它入账，两者必须同源。
         if (payment.getAccountId() == null) throw new BusinessException("付款账户不能为空");
+        // F7-140（2026-09-20）：**账户行锁**。下面"读余额校验 → 写支出流水"是两步（余额是 Σ 流水的派生值），
+        // 并发两笔付款会各自读到相同的旧余额、双双通过校验 ⇒ **账户被透支**（报告 §7 已把这处非原子性记为 P3 残留）。
+        // 同一账户的审核串行化即可闭合；费用单（FinanceExpenseServiceImpl.audit）为同款写法，已一并加锁。
+        lockAccount(payment.getAccountId());
         BigDecimal payAmount = payment.getAmount() != null ? payment.getAmount() : BigDecimal.ZERO;
-        BigDecimal accountBal = accountBalance(payment.getAccountId());
+        // F7-140：用**当前读**取余额 —— 一致性读会读到事务开始时的旧快照，导致并发第二笔仍通过校验
+        Map<String, Object> balRow = accountMapper.sumBalanceForUpdate(payment.getAccountId());
+        BigDecimal accountBal = (balRow == null || balRow.get("balance") == null)
+                ? BigDecimal.ZERO : new BigDecimal(balRow.get("balance").toString());
         if (accountBal.subtract(payAmount).compareTo(BigDecimal.ZERO) < 0)
             throw new BusinessException("账户余额不足：当前余额 " + accountBal + "，付款 " + payAmount);
         // 核销应付：更新台账 + 写入核销流水（双向可追溯），超额部分生成负数应付（预付）
@@ -263,6 +270,13 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         cashflowMapper.insert(cf);
         // 更新付款单状态
         FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode()); paymentMapper.updateById(u);
+    }
+
+    /** F7-140（2026-09-20）：账户行锁（带租户条件）—— 让"余额校验 + 写流水"在同一账户上串行，防并发透支 */
+    private void lockAccount(Long accountId) {
+        Long cid = CompanyContext.get();
+        if (cid != null && cid <= 0) cid = null;
+        if (accountMapper.selectForUpdate(accountId, cid) == null) throw new BusinessException("付款账户不存在");
     }
 
     /** F7-36（2026-09-19）：账户实时余额 = Σ(流水 income - expense)（口径与 FinanceExpenseServiceImpl.accountBalance 一致） */
