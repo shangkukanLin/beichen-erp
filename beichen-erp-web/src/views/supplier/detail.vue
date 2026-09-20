@@ -35,7 +35,7 @@ function applyVendorTitle() {
 
 const form = reactive({
   id: undefined as any,
-  code: '', name: '', supplierType: '', status: 1,
+  code: '', name: '', supplierType: '', supplySku: '', status: 1,
   contact: '', phone: '', address: '', remark: '',
   checkedTypes: [] as string[],
   creditPeriodMonths: undefined as any, creditPeriod: undefined as any,
@@ -305,6 +305,15 @@ onActivated(loadData)
             <el-row :gutter="12">
               <el-col :span="8"><el-form-item required label="名称"><el-input v-model="form.name" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="编码"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
+              <!-- 2026-09-21：供货SKU —— 该供货商所供产品 SKU 的前缀（新增产品选中本供货商时生效） -->
+              <el-col :span="8">
+                <el-form-item label="供货SKU">
+                  <el-input v-model="form.supplySku" maxlength="24" clearable placeholder="如 ABC（留空则产品走默认 SKU-）" />
+                  <div style="font-size:var(--app-font-xs);color:var(--app-text-secondary);line-height:1.4">
+                    该供货商的产品 SKU 以此打头（ABC → ABC-000001）；改动只影响后续新增的产品
+                  </div>
+                </el-form-item>
+              </el-col>
               <el-col :span="8"><el-form-item label="状态">
                 <el-select v-model="form.status" style="width:100%">
                   <el-option label="启用" :value="1" />

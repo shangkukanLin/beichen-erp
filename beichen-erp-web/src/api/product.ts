@@ -40,6 +40,8 @@ export interface Product {
   /** SKU 编码（产品级唯一；新增留空由后端自动生成 SKU-000001） */
   sku?: string
   brandId?: number
+  /** 供货商ID（类型=product 的供货商）；新增时决定 SKU 前缀（取该供货商的 supplySku），编辑时改动不回改已有 SKU */
+  supplierId?: number
   /** 规格（ORIGINAL原装 / MATCHED原配 / MODIFIED改配）；产品管理新增/编辑必填 */
   specType?: string
   /** 通用型号（适用多款机型） */

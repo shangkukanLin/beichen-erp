@@ -135,6 +135,7 @@ CREATE TABLE IF NOT EXISTS supplier (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '供应商ID',
     code VARCHAR(50) NOT NULL COMMENT '供应商编码',
     name VARCHAR(100) NOT NULL COMMENT '供应商名称',
+    supply_sku VARCHAR(32) DEFAULT NULL COMMENT '供货SKU(该供货商所供产品 SKU 的前缀，如 ABC ⇒ 产品 SKU 形如 ABC-000001；可空，空则产品走默认前缀 SKU-)',
     -- supplier_type 已拆分为 supplier_type_ref 中间表
     contact VARCHAR(50) COMMENT '联系人',
     phone VARCHAR(20) COMMENT '手机号',
@@ -150,6 +151,7 @@ CREATE TABLE IF NOT EXISTS supplier (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_code (code),
+    UNIQUE KEY uk_company_supply_sku (company_id, supply_sku),
     INDEX idx_company_id (company_id),
     INDEX idx_related_supplier_id (related_supplier_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='供应商表';
@@ -2008,6 +2010,7 @@ CREATE TABLE IF NOT EXISTS product (
     name            VARCHAR(100) NOT NULL              COMMENT '产品名称',
     sku             VARCHAR(64) DEFAULT NULL           COMMENT 'SKU编码(产品级唯一；新增留空由后端自动生成 SKU-000001)',
     brand_id        BIGINT DEFAULT NULL               COMMENT '品牌ID',
+    supplier_id     BIGINT DEFAULT NULL               COMMENT '供货商ID(关联 supplier.id，类型=product 的供货商；新增该产品时 SKU 前缀取该供货商的 supply_sku)',
     spec_type       VARCHAR(20)                       COMMENT '规格: ORIGINAL原装/MATCHED原配/MODIFIED改配（产品管理必填；研发立项自动建产品可为空，之后补填）',
     general_model   VARCHAR(100) DEFAULT NULL          COMMENT '通用型号(适用多款机型)',
     unit            VARCHAR(20) DEFAULT 'pcs'          COMMENT '单位',
@@ -2022,6 +2025,7 @@ CREATE TABLE IF NOT EXISTS product (
     create_time     DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_company_id (company_id),
+    INDEX idx_supplier_id (supplier_id),
     UNIQUE KEY uk_company_sku (company_id, sku)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品主数据表';
 

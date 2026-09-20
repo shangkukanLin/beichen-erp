@@ -42,10 +42,13 @@ public class ProductController {
     /**
      * 预览下一个可用 SKU（只读），供「新增产品」预填；允许用户修改后再提交。
      * <p>2026-09-21 用户要求：SKU 先默认生成、可以修改。</p>
+     * <p>2026-09-21（供货SKU）：带 {@code supplierId} 时按该供货商的「供货SKU」作前缀取号
+     * （{@code ABC ⇒ ABC-000001}）；不带/该供货商未配 ⇒ 默认 {@code SKU-000001}。
+     * 前端在产品页切换「供货商」时会重新调用本接口刷新预填值。</p>
      */
     @GetMapping("/next-sku")
-    public R<String> nextSku() {
-        return R.ok(service.peekNextSku());
+    public R<String> nextSku(@RequestParam(required = false) Long supplierId) {
+        return R.ok(service.peekNextSku(supplierId));
     }
 
     /** 单条查询 */
@@ -79,6 +82,12 @@ public class ProductController {
             }
         }
         service.updateById(product);
+        // 2026-09-21（供货商字段）：MyBatis-Plus 的 updateById 会跳过 null 字段 ⇒ 把供货商改回「未选」时
+        // 落不了库，这里显式补一次置空。⚠️ 只影响 supplier_id 一列；本接口的前端调用方只有产品管理页
+        // （material/detail.vue），其提交体恒带 supplierId 键，故 null 即"用户清空"的语义。
+        if (product.getSupplierId() == null) {
+            service.clearSupplier(id);
+        }
         return R.ok();
     }
 

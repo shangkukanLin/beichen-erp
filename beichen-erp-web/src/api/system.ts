@@ -232,6 +232,8 @@ export interface SupplierVO {
   code: string
   name: string
   supplierType: string
+  /** 供货SKU：该供货商所供产品 SKU 的前缀（如 ABC ⇒ 产品 SKU 形如 ABC-000001）；空则产品走默认前缀 SKU- */
+  supplySku?: string
   contact?: string
   phone?: string
   address?: string
@@ -251,6 +253,8 @@ export interface SupplierDTO {
   name: string
   supplierType: string
   typeCodes?: string[]
+  /** 供货SKU（可空，1-24 位字母/数字/短横线；保存时后端统一转大写并校验公司内唯一） */
+  supplySku?: string
   contact?: string
   phone?: string
   address?: string

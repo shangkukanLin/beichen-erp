@@ -10,6 +10,9 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.material.common.ProductStatus;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
+import com.beichen.erp.supplier.entity.Supplier;
+import com.beichen.erp.supplier.mapper.SupplierMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -22,7 +25,11 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class ProductService extends ServiceImpl<ProductMapper, Product> {
+
+    /** 解析供货商「供货SKU」作为 SKU 前缀用；mapper 无依赖，不构成模块循环 */
+    private final SupplierMapper supplierMapper;
 
     /** SKU 流水号位数：SKU- 前缀后补 6 位，如 SKU-000001 */
     private static final String SKU_NUM_FORMAT = "%06d";
@@ -92,13 +99,15 @@ public class ProductService extends ServiceImpl<ProductMapper, Product> {
 
     /**
      * 新增产品：**传入 SKU 则采用**（2026-09-21 用户要求：前端预填自动生成的编码、允许用户改），
-     * 传空则按公司内最大流水自动生成（SKU-000001）。
+     * 传空则按公司内最大流水自动生成。
+     * <p>2026-09-21（供货SKU）：自动生成时前缀取该产品所选**供货商**的「供货SKU」，
+     * 未选/未配 ⇒ 默认 {@code SKU-000001}（与既有行为完全一致）。</p>
      */
     @Override
     public boolean save(Product entity) {
         String incoming = entity.getSku() == null ? "" : entity.getSku().trim();
         if (!StringUtils.hasText(incoming)) {
-            entity.setSku(nextSku());
+            entity.setSku(nextSku(skuPrefixOf(entity.getSupplierId())));
         } else {
             assertSkuAvailable(incoming, null);
             entity.setSku(incoming);
@@ -118,7 +127,10 @@ public class ProductService extends ServiceImpl<ProductMapper, Product> {
         Product old = entity.getId() != null ? this.getById(entity.getId()) : null;
         String incoming = entity.getSku() == null ? "" : entity.getSku().trim();
         if (!StringUtils.hasText(incoming)) {
-            entity.setSku(old != null && StringUtils.hasText(old.getSku()) ? old.getSku() : nextSku());
+            // 编辑时不会因改供货商而重算 SKU（用户已确认口径）；只有历史缺 SKU 的行才会走到生成分支
+            entity.setSku(old != null && StringUtils.hasText(old.getSku())
+                    ? old.getSku()
+                    : nextSku(skuPrefixOf(entity.getSupplierId())));
         } else if (old != null && incoming.equals(old.getSku())) {
             // 未变化：直接放行，跳过唯一校验
             entity.setSku(incoming);
@@ -134,8 +146,28 @@ public class ProductService extends ServiceImpl<ProductMapper, Product> {
      * <p>仅作建议值：并发下两个请求可能拿到同一个，最终由唯一键
      * {@code uk_company_sku(company_id, sku)} 拦截并由 {@link #assertSkuAvailable} 明确报错。</p>
      */
-    public String peekNextSku() {
-        return nextSku();
+    public String peekNextSku(Long supplierId) {
+        return nextSku(skuPrefixOf(supplierId));
+    }
+
+    /**
+     * 解析 SKU 前缀（2026-09-21 供货SKU）：供货商配了「供货SKU」⇒ {@code 供货SKU + "-"}；
+     * 未选供货商、供货商不存在、或未配「供货SKU」⇒ 默认前缀 {@code SKU-}。
+     */
+    public String skuPrefixOf(Long supplierId) {
+        if (supplierId == null) return BillPrefix.PRODUCT_SKU;
+        Supplier s = supplierMapper.selectById(supplierId);
+        if (s == null || !StringUtils.hasText(s.getSupplySku())) return BillPrefix.PRODUCT_SKU;
+        return s.getSupplySku().trim() + "-";
+    }
+
+    /**
+     * 显式清空产品的供货商。
+     * <p>MyBatis-Plus 的 {@code updateById} 会跳过 null 字段（{@code FieldStrategy.NOT_NULL}），
+     * 因此「把供货商改回未选」无法通过 updateById 落库，只能由这里显式 {@code set null}。</p>
+     */
+    public void clearSupplier(Long id) {
+        this.update(new LambdaUpdateWrapper<Product>().eq(Product::getId, id).set(Product::getSupplierId, null));
     }
 
     /** 校验 SKU 可用：非空、长度合法、公司内唯一（{@code excludeId} 用于编辑时排除自身） */
@@ -150,11 +182,15 @@ public class ProductService extends ServiceImpl<ProductMapper, Product> {
         }
     }
 
-    /** 取下一个可用 SKU：按公司内已有最大流水 +1，若被占用则顺延（并发下由唯一索引兜底） */
-    private String nextSku() {
-        int seq = nextSeq();
+    /**
+     * 取下一个可用 SKU：前缀 + 该前缀内已有最大流水 +1，若被占用则顺延（并发下由唯一索引兜底）。
+     * <p>前缀由 {@link #skuPrefixOf(Long)} 给出：{@code SKU-}（默认）或某供货商的「供货SKU + '-'」。
+     * **各前缀的流水号互相独立**（{@code ABC-000001} 与 {@code SKU-000001} 可并存）。</p>
+     */
+    private String nextSku(String prefix) {
+        int seq = nextSeq(prefix);
         for (int i = 0; i < SKU_MAX_RETRY; i++) {
-            String candidate = BillPrefix.PRODUCT_SKU + String.format(SKU_NUM_FORMAT, seq + i);
+            String candidate = prefix + String.format(SKU_NUM_FORMAT, seq + i);
             if (count(new LambdaQueryWrapper<Product>().eq(Product::getSku, candidate)) == 0) {
                 return candidate;
             }
@@ -162,16 +198,20 @@ public class ProductService extends ServiceImpl<ProductMapper, Product> {
         throw new BusinessException("SKU 生成失败，请联系管理员");
     }
 
-    /** 公司内已使用的最大 SKU 流水号 +1（无记录则返回 1） */
-    private int nextSeq() {
+    /**
+     * 该前缀下公司内已使用的最大 SKU 流水号 +1（无记录则返回 1）。
+     * <p>注意用 {@code likeRight(prefix)} 而不是写死 {@code SKU-}：{@code prefix} 末尾恒为 '-'，
+     * 因此 {@code ABC-} 不会误匹配 {@code ABCD-…}。</p>
+     */
+    private int nextSeq(String prefix) {
         Long cid = CompanyContext.get();
         List<Product> max = list(new LambdaQueryWrapper<Product>()
                 .eq(cid != null, Product::getCompanyId, cid)
-                .likeRight(Product::getSku, BillPrefix.PRODUCT_SKU)
+                .likeRight(Product::getSku, prefix)
                 .orderByDesc(Product::getSku)
                 .last("LIMIT 1"));
         if (max.isEmpty() || !StringUtils.hasText(max.get(0).getSku())) return 1;
-        String num = max.get(0).getSku().substring(BillPrefix.PRODUCT_SKU.length());
+        String num = max.get(0).getSku().substring(prefix.length());
         try {
             return Integer.parseInt(num) + 1;
         } catch (NumberFormatException e) {

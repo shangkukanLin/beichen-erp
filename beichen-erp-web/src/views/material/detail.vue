@@ -32,6 +32,7 @@ const defaultForm = (): Product => ({
   name: '',
   sku: '',
   brandId: undefined,
+  supplierId: undefined,
   specType: '',
   generalModel: '',
   unit: 'pcs',
@@ -93,9 +94,10 @@ async function init() {
   stocks.value = []
   originalSku.value = ''
   if (id.value == null) {
-    // 2026-09-21：新增时预填一个自动生成的 SKU（用户可修改）；
-    // 拉取失败不阻塞，留空则由后端自动生成
-    try { form.sku = String((await request.get<any, any>('/product/next-sku')) || '') } catch { form.sku = '' }
+    // 2026-09-21：新增时预填一个自动生成的 SKU（用户可修改）；拉取失败不阻塞，留空则由后端自动生成
+    // 2026-09-21（供货SKU）：进入新增时尚未选供货商 ⇒ 前缀为默认 SKU-；选中供货商后由 onSupplierChange 重取
+    form.supplierId = undefined
+    await prefillSku()
     return
   }
 
@@ -122,6 +124,44 @@ async function loadBrands() {
     const res = await request.get<any, any>('/brand/enabled')
     brandOptions.value = Array.isArray(res) ? res : (res?.records || [])
   } catch { brandOptions.value = [] }
+}
+
+/**
+ * 供货商下拉（2026-09-21 新增字段）：口径与采购单/采购退货一致 —— 只列类型为 product 的「供货商」。
+ * 刻意**不按状态过滤**：编辑老产品时若该供货商已停用，过滤后下拉里找不到对应项会退化成显示原始数字 id。
+ */
+const supplierOptions = ref<{ id: number; name: string; supplySku?: string }[]>([])
+async function loadSuppliers() {
+  try {
+    const res = await request.get<any, any>('/supplier/page', { params: { pageSize: 500, supplierType: 'product' } })
+    supplierOptions.value = res?.records || []
+  } catch { supplierOptions.value = [] }
+}
+
+/**
+ * 上一次自动预填的 SKU 值：用来判断「用户是否手工改过 SKU」——
+ * 只有没改过（或为空）时才允许切换供货商覆盖，避免把用户已输入的自定义编码静默冲掉。
+ */
+const autoSku = ref('')
+
+/** 预填下一个可用 SKU：带供货商 ⇒ 后端按该供货商的「供货SKU」作前缀取号；失败不阻塞（留空由后端生成） */
+async function prefillSku(supplierId?: number) {
+  try {
+    const v = String((await request.get<any, any>('/product/next-sku', { params: { supplierId } })) || '')
+    autoSku.value = v
+    form.sku = v
+  } catch { autoSku.value = '' }
+}
+
+/**
+ * 切换供货商（2026-09-21 供货SKU）：**仅新增态**重新预填 SKU —— 前缀变成该供货商的「供货SKU」。
+ * 编辑态刻意不动 SKU：SKU 是既有编码，且历史单据里存的是快照，改它会对不上账。
+ */
+async function onSupplierChange(v: any) {
+  if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/outsource/supplier/manage'); return }
+  if (!isNew.value) return
+  if (form.sku && form.sku !== autoSku.value) return
+  await prefillSku(v != null && v !== '' ? Number(v) : undefined)
 }
 
 async function handleSave() {
@@ -160,7 +200,7 @@ function handleCancel() { router.push('/product') }
 function goProject(pid?: number) { if (pid) router.push(`/dev/project/edit/${pid}`) }
 function goStockLog(row: any) { router.push(`/inventory/warehouse/product-history/${row.warehouseId}/${id.value}`) }
 
-onMounted(() => { loadBrands(); init() })
+onMounted(() => { loadBrands(); loadSuppliers(); init() })
 // keep-alive 缓存下再次进入会复用组件，onMounted 不再触发；路由参数变化（切换产品/新增）也需重新加载
 onActivated(() => { init() })
 watch(() => route.fullPath, () => { init() })
@@ -198,6 +238,18 @@ watch(() => route.fullPath, () => { init() })
               <el-select v-model="form.brandId" placeholder="请选择品牌" clearable style="width:100%"
                 @change="(v: any) => { if (v === ADD_MARKER) { form.brandId = undefined; router.push('/inventory/brand'); return } }">
                 <el-option v-for="b in brandOptions" :key="b.id" :label="b.brandName" :value="b.id" />
+                <el-option label="+ 新增" :value="ADD_MARKER" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <!-- 2026-09-21（供货SKU）：新增时选中供货商 ⇒ SKU 前缀取该供货商的「供货SKU」
+                 （如 ABC ⇒ ABC-000001）；编辑态改供货商**不会**重算已有 SKU -->
+            <el-form-item label="供货商">
+              <el-select v-model="form.supplierId" placeholder="请选择供货商" clearable filterable style="width:100%"
+                @change="onSupplierChange">
+                <el-option v-for="s in supplierOptions" :key="s.id"
+                  :label="s.supplySku ? `${s.name}（${s.supplySku}）` : s.name" :value="s.id" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </el-form-item>

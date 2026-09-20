@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.common.BillPrefix;
+import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.common.WarehouseType;
@@ -34,6 +35,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -162,6 +164,10 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         String primaryType = dto.getTypeCodes().get(0);
         Supplier supplier = new Supplier();
         BeanUtils.copyProperties(dto, supplier, "typeCodes", "code");
+        // 2026-09-21（供货SKU）：统一 trim+大写并校验格式/公司内唯一后，覆盖 BeanUtils 带过来的原值
+        String supplySku = normalizeSupplySku(dto.getSupplySku());
+        assertSupplySkuAvailable(supplySku, null);
+        supplier.setSupplySku(supplySku);
         if (StringUtils.hasText(dto.getCode())) {
             supplier.setCode(dto.getCode());
         } else {
@@ -267,10 +273,60 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         exist.setCreditPeriodMonths(dto.getCreditPeriodMonths());
         exist.setCreditPeriod(dto.getCreditPeriod());
         exist.setRemark(dto.getRemark());
+        // 2026-09-21（供货SKU）：⚠️ 本方法是**逐字段赋值**（不像 create 走 BeanUtils）⇒ 新增字段必须显式带上，
+        // 否则编辑保存时前端传的值会被静默丢弃。传空 ⇒ null = 取消前缀（此后新产品走默认 SKU-，已生成的 SKU 不变）。
+        String supplySku = normalizeSupplySku(dto.getSupplySku());
+        assertSupplySkuAvailable(supplySku, exist.getId());
+        exist.setSupplySku(supplySku);
         updateById(exist);
+        // ⚠️ 同一坑的第二处：updateById 跳过 null 字段 ⇒ 上面那句 setSupplySku(null) 落不了库。
+        // 「清空供货SKU」（改为不启用前缀）必须再显式写一次 null，否则旧前缀会一直留着。
+        if (supplySku == null) {
+            update(Wrappers.<Supplier>lambdaUpdate()
+                    .eq(Supplier::getId, exist.getId())
+                    .set(Supplier::getSupplySku, null));
+        }
 
         // 类型编码：全量同步（删除旧的重新插入，保证取消勾选生效）
         saveTypeRefsFull(exist.getId(), dto.getTypeCodes());
+    }
+
+    // ==================== 供货SKU（2026-09-21 新增字段） ====================
+
+    /** 供货SKU 允许的字符与长度：1-24 位字母/数字/短横线（还要拼上 '-' + 6 位流水进 product.sku VARCHAR(64)，留足余量） */
+    private static final Pattern SUPPLY_SKU_PATTERN = Pattern.compile("^[A-Z0-9-]{1,24}$");
+
+    /**
+     * 规范化「供货SKU」：空白 ⇒ {@code null}（不启用前缀，该供货商的产品仍走默认 {@code SKU-}）；
+     * 否则 trim + 转大写后校验格式，不合法直接拒绝（避免空格/中文等混进 SKU）。
+     * <p>⚠️ 统一转大写是**刻意的**：MySQL 唯一索引在 utf8mb4 默认排序规则下**大小写不敏感**，
+     * 若原样保存，应用层"精确比对"会放过 {@code abc} 与 {@code ABC}，随后由 DB 抛唯一键冲突
+     * ⇒ 用户看到「系统异常」而非可读提示。归一为大写后应用层与 DB 口径一致，
+     * 也与既有编码风格（{@code SKU-} / {@code CG-}）统一。</p>
+     */
+    private String normalizeSupplySku(String raw) {
+        if (!StringUtils.hasText(raw)) return null;
+        String v = raw.trim().toUpperCase();
+        if (!SUPPLY_SKU_PATTERN.matcher(v).matches()) {
+            throw new BusinessException("供货SKU 只能由 1-24 位字母、数字或短横线组成（如 ABC、GYS-1）：" + raw.trim());
+        }
+        return v;
+    }
+
+    /**
+     * 校验「供货SKU」公司内唯一（{@code excludeId} 用于编辑时排除自身）。
+     * <p>两个供货商共用同一前缀会让各自产品的 SKU 流水号**交叉占用**（唯一键只能挡住完全相同的 SKU，
+     * 挡不住编号交错），故在入口直接拒绝。DB 侧 {@code uk_company_supply_sku} 兜底。</p>
+     */
+    private void assertSupplySkuAvailable(String supplySku, Long excludeId) {
+        if (supplySku == null) return;
+        LambdaQueryWrapper<Supplier> w = Wrappers.<Supplier>lambdaQuery().eq(Supplier::getSupplySku, supplySku);
+        Long cid = CompanyContext.get();
+        if (cid != null && cid > 0) w.eq(Supplier::getCompanyId, cid);
+        if (excludeId != null) w.ne(Supplier::getId, excludeId);
+        if (count(w) > 0) {
+            throw new BusinessException("供货SKU 已被其他供货商占用：" + supplySku + "，请更换（共用同一前缀会导致产品 SKU 编号交叉）");
+        }
     }
 
     /** 全量同步类型引用（先删后插，编辑保存时取消勾选即生效） */

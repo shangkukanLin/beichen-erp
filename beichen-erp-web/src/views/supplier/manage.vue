@@ -44,7 +44,7 @@ watch(activeType, () => { pagination.pageNum = 1; loadData() })
 
 const dialogVisible = ref(false); const dialogTitle = ref(''); const saving = ref(false)
 const form = reactive({
-  id: undefined as any, code: '', name: '', contact: '', phone: '', address: '', remark: '',
+  id: undefined as any, code: '', name: '', supplySku: '', contact: '', phone: '', address: '', remark: '',
   checkedTypes: [] as string[], status: 1,
   creditPeriodMonths: undefined as any, creditPeriod: undefined as any
 })
@@ -54,7 +54,7 @@ const isEdit = ref(false)
 const isType = computed(() => (type: string) => form.checkedTypes.includes(type))
 
 function resetForm() {
-  Object.assign(form, { id: undefined, code: '', name: '', contact: '', phone: '', address: '', remark: '',
+  Object.assign(form, { id: undefined, code: '', name: '', supplySku: '', contact: '', phone: '', address: '', remark: '',
     checkedTypes: [] as string[], status: 1,
     creditPeriodMonths: undefined, creditPeriod: undefined })
 }
@@ -72,7 +72,7 @@ function handleAdd() {
 function handleEdit(row: any) {
   resetForm()
   Object.assign(form, {
-    id: row.id, code: row.code || '', name: row.name || '', contact: row.contact || '', phone: row.phone || '',
+    id: row.id, code: row.code || '', name: row.name || '', supplySku: row.supplySku || '', contact: row.contact || '', phone: row.phone || '',
     address: row.address || '', remark: row.remark || '',
     checkedTypes: row.typeCodes || [],
     status: row.status ?? 1,
@@ -192,6 +192,13 @@ onMounted(loadData)
           <el-input v-model="form.code" disabled :placeholder="isEdit ? '' : '保存后自动生成'" />
         </el-form-item>
         <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
+        <!-- 2026-09-21：供货SKU —— 该供货商所供产品的 SKU 前缀（新增产品时选中本供货商即生效） -->
+        <el-form-item label="供货SKU">
+          <el-input v-model="form.supplySku" maxlength="24" clearable placeholder="如 ABC（留空则产品走默认 SKU-）" />
+          <div style="font-size:var(--app-font-xs);color:var(--app-text-secondary);line-height:1.4">
+            该供货商的产品 SKU 以此打头（ABC → ABC-000001）；1-24 位字母/数字/短横线，保存时自动转大写
+          </div>
+        </el-form-item>
         <el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item>
         <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" type="textarea" :rows="2" /></el-form-item>
