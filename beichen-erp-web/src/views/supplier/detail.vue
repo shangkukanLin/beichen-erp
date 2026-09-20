@@ -191,6 +191,9 @@ async function handleSave() {
   saving.value = true
   try {
     const body: any = { ...form, typeCodes: form.checkedTypes }
+    // 2026-09-21：「供货SKU」只属于供货商（类型=成品商）⇒ 非供货商保存时显式置空，
+    // 避免「供货商改成供应商」后前缀仍残留在库里（后端同样会忽略该类型的值）
+    if (!isVendor.value) body.supplySku = ''
     await request.put('/supplier', body)
     ElMessage.success('保存成功'); sessionStorage.setItem(SUPPLIER_DIRTY_KEY, '1')
     loadData()
@@ -305,8 +308,9 @@ onActivated(loadData)
             <el-row :gutter="12">
               <el-col :span="8"><el-form-item required label="名称"><el-input v-model="form.name" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="编码"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
-              <!-- 2026-09-21：供货SKU —— 该供货商所供产品 SKU 的前缀（新增产品选中本供货商时生效） -->
-              <el-col :span="8">
+              <!-- 2026-09-21：供货SKU —— **只属于「供货商」（类型=成品商）**：该供货商的产品 SKU 用它打头。
+                   供应商不显示该字段（isVendor 在本页既按入口路径判定、也在加载后按实际类型校正） -->
+              <el-col v-if="isVendor" :span="8">
                 <el-form-item label="供货SKU">
                   <el-input v-model="form.supplySku" maxlength="24" clearable placeholder="如 ABC（留空则产品走默认 SKU-）" />
                   <div style="font-size:var(--app-font-xs);color:var(--app-text-secondary);line-height:1.4">

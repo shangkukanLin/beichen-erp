@@ -154,6 +154,30 @@ if ($Part -eq 0 -or $Part -eq 1) {
       Call 'Put' "$apiBase/product/$p3id" @{ sku = [string]$row3.sku; specType = 'ORIGINAL'; supplierId = $supId } | Out-Null
     }
 
+    # l) the field is VENDOR-ONLY (vendor = product type): a supplier must not keep it, and a type change
+    #    back to a non-vendor type must clear an existing prefix.
+    $tcName = 'PROBE-SUPPLY-TYPECHANGE'
+    $tc1 = Call 'Post' "$apiBase/supplier" @{ name = $tcName; typeCodes = @('factory'); supplySku = 'ZQTYPECHG' }
+    $tcId = $tc1.data
+    $tg1 = $null
+    if ($tcId -ne $null -and [int]$tcId -gt 0) { $tg1 = Call 'Get' "$apiBase/supplier/$tcId" $null }
+    Write-Host ('  non-vendor create -> id=' + $tcId + ' supplySku=' + $tg1.data.supplySku)
+    Ok ([int]$tc1.code -eq 200) 'a NON-vendor supplier can still be created while passing a supply SKU'
+    Ok ($null -eq $tg1.data.supplySku -or [string]$tg1.data.supplySku -eq '') 'a NON-vendor supplier does NOT keep a supply SKU (vendor-only field)'
+    if ($tcId -ne $null -and [int]$tcId -gt 0) {
+      # turning it INTO a vendor accepts the prefix
+      Call 'Put' "$apiBase/supplier" @{ id = $tcId; name = $tcName; typeCodes = @('product'); supplySku = 'ZQTYPECHG' } | Out-Null
+      $tg2 = Call 'Get' "$apiBase/supplier/$tcId" $null
+      Write-Host ('  became vendor -> supplySku=' + $tg2.data.supplySku)
+      Ok ([string]$tg2.data.supplySku -eq 'ZQTYPECHG') 'turning it INTO a vendor accepts the supply SKU'
+      # turning it BACK to a supplier clears the prefix
+      Call 'Put' "$apiBase/supplier" @{ id = $tcId; name = $tcName; typeCodes = @('factory') } | Out-Null
+      $tg3 = Call 'Get' "$apiBase/supplier/$tcId" $null
+      Write-Host ('  back to supplier -> supplySku=' + $tg3.data.supplySku)
+      Ok ($null -eq $tg3.data.supplySku -or [string]$tg3.data.supplySku -eq '') 'turning it BACK into a supplier CLEARS the prefix (vendor-only)'
+      Call 'Delete' "$apiBase/supplier/$tcId" $null | Out-Null
+    }
+
     # cleanup: disable the probe products (status lifecycle; nothing physically deleted)
     foreach ($pidX in @($p1id, $p2id, $p3id)) {
       if ($pidX -ne $null -and [int]$pidX -gt 0) { Call 'Delete' "$apiBase/product/$pidX" $null | Out-Null }
@@ -281,6 +305,24 @@ if ($Part -eq 0 -or $Part -eq 2) {
       Ok ($d.hit -eq $true) 'the new-supplier dialog contains a supply SKU field'
     }
     # close it (class selector only - no Chinese needed)
+    EvalJs "(()=>{var b=document.querySelector('.el-dialog__headerbtn');if(b){b.click();return 'ok'}return 'nobtn';})()" | Out-Null
+    Start-Sleep -Milliseconds 400
+
+    # o) the SUPPLIER entry (non-vendor) must NOT offer the supply SKU field -- it is vendor-only
+    Open '/supplier/manage' 5000
+    Start-Sleep -Milliseconds 2000
+    $nb2 = (EvalJs $jsNew).Trim()
+    Start-Sleep -Milliseconds 1200
+    $draw2 = (EvalJs $jsDlg).Trim()
+    Write-Host ('  new-SUPPLIER dialog = ' + $draw2 + '  (click=' + $nb2 + ')')
+    $d2 = $null
+    try { $d2 = $draw2 | ConvertFrom-Json } catch { }
+    if ($null -ne $d2) {
+      if ([string]$d2.hasDialog -ne 'True') { Write-Host '  SKIP /supplier/manage dialog not reachable (route guard?) - not a feature failure' }
+      else {
+        Ok ($d2.hit -eq $false) 'the SUPPLIER dialog does NOT offer the supply SKU field (vendor-only)'
+      }
+    }
     EvalJs "(()=>{var b=document.querySelector('.el-dialog__headerbtn');if(b){b.click();return 'ok'}return 'nobtn';})()" | Out-Null
     Start-Sleep -Milliseconds 400
   }

@@ -165,7 +165,8 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         Supplier supplier = new Supplier();
         BeanUtils.copyProperties(dto, supplier, "typeCodes", "code");
         // 2026-09-21（供货SKU）：统一 trim+大写并校验格式/公司内唯一后，覆盖 BeanUtils 带过来的原值
-        String supplySku = normalizeSupplySku(dto.getSupplySku());
+        // ⚠️ 口径：该字段**只属于供货商（类型 = 成品商 product）** ⇒ 其它类型一律置空（前端也不显示该输入框）
+        String supplySku = hasProductType(dto.getTypeCodes()) ? normalizeSupplySku(dto.getSupplySku()) : null;
         assertSupplySkuAvailable(supplySku, null);
         supplier.setSupplySku(supplySku);
         if (StringUtils.hasText(dto.getCode())) {
@@ -275,7 +276,8 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         exist.setRemark(dto.getRemark());
         // 2026-09-21（供货SKU）：⚠️ 本方法是**逐字段赋值**（不像 create 走 BeanUtils）⇒ 新增字段必须显式带上，
         // 否则编辑保存时前端传的值会被静默丢弃。传空 ⇒ null = 取消前缀（此后新产品走默认 SKU-，已生成的 SKU 不变）。
-        String supplySku = normalizeSupplySku(dto.getSupplySku());
+        // ⚠️ 口径：该字段**只属于供货商（类型 = 成品商 product）** ⇒ 改成其它类型时前缀一并清掉（见 hasProductType）。
+        String supplySku = hasProductType(dto.getTypeCodes()) ? normalizeSupplySku(dto.getSupplySku()) : null;
         assertSupplySkuAvailable(supplySku, exist.getId());
         exist.setSupplySku(supplySku);
         updateById(exist);
@@ -295,6 +297,15 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
 
     /** 供货SKU 允许的字符与长度：1-24 位字母/数字/短横线（还要拼上 '-' + 6 位流水进 product.sku VARCHAR(64)，留足余量） */
     private static final Pattern SUPPLY_SKU_PATTERN = Pattern.compile("^[A-Z0-9-]{1,24}$");
+
+    /**
+     * 「供货SKU」是否适用：**只对供货商（类型 = 成品商 product）有意义**。
+     * <p>供应商（方案商/加工厂/辅料商）没有这个字段 —— 前端不显示输入框，后端在这里也不落库，
+     * 双保险避免「在供应商上误配前缀、之后类型变更为供货商时突然生效」。类型是全量同步的，以本次提交为准。</p>
+     */
+    private boolean hasProductType(List<String> typeCodes) {
+        return typeCodes != null && typeCodes.contains(SupplierTypeEnum.PRODUCT.getCode());
+    }
 
     /**
      * 规范化「供货SKU」：空白 ⇒ {@code null}（不启用前缀，该供货商的产品仍走默认 {@code SKU-}）；

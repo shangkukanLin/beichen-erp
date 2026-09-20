@@ -105,6 +105,8 @@ async function handleSubmit() {
   saving.value = true
   try {
     const body: any = { ...form, typeCodes: form.checkedTypes }
+    // 2026-09-21：「供货SKU」只属于供货商（类型=成品商）⇒ 供应商提交时显式置空，避免残留旧前缀
+    if (!isVendor) body.supplySku = ''
     if (isEdit.value) { await request.put('/supplier', body); ElMessage.success('已更新') }
     else { await request.post('/supplier', body); ElMessage.success('已添加') }
     dialogVisible.value = false; loadData()
@@ -192,8 +194,9 @@ onMounted(loadData)
           <el-input v-model="form.code" disabled :placeholder="isEdit ? '' : '保存后自动生成'" />
         </el-form-item>
         <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
-        <!-- 2026-09-21：供货SKU —— 该供货商所供产品的 SKU 前缀（新增产品时选中本供货商即生效） -->
-        <el-form-item label="供货SKU">
+        <!-- 2026-09-21：供货SKU —— **只属于「供货商」（类型=成品商）**：该供货商的产品 SKU 用它打头。
+             供应商（方案商/加工厂/辅料商）不显示该字段，后端也会忽略该类型传来的值 -->
+        <el-form-item v-if="isVendor" label="供货SKU">
           <el-input v-model="form.supplySku" maxlength="24" clearable placeholder="如 ABC（留空则产品走默认 SKU-）" />
           <div style="font-size:var(--app-font-xs);color:var(--app-text-secondary);line-height:1.4">
             该供货商的产品 SKU 以此打头（ABC → ABC-000001）；1-24 位字母/数字/短横线，保存时自动转大写
