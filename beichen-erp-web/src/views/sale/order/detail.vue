@@ -319,6 +319,11 @@ onMounted(() => { loadCustomers(); ensureProducts(); loadQualityTypes(); loadAcc
  * <p>原因：layout 用 keep-alive 缓存页面组件，从列表返回或再次进入时组件被复用、
  * onMounted 不会再次触发。若单据数据只在 onMounted 加载，会停留在上次缓存的状态
  * ——例如在列表点「审核」后再进详情，仍显示缓存的草稿状态。</p>
+ * <p>⚠️ 2026-09-20（F7-148）：单据数据**只**挂在这里，等于依赖"本路由一定在 keep-alive 内"
+ * （当前成立：`layout/index.vue` 的 `:exclude` 只列了 PurchaseAdd / PurchaseReturnAdd /
+ * InventoryWarehouseMoveAdd）。若将来把本组件加进 `:exclude`、或改用非 keep-alive 布局，
+ * `onActivated` 将**不再触发** ⇒ 页面永久空白且无任何报错线索。
+ * 届时必须**同时**补一个 `onMounted(() => loadData())`。</p>
  */
 onActivated(() => { loadData() })
 </script>

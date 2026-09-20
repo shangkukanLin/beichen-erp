@@ -98,7 +98,12 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
 import request from '@/utils/request'
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
-import { getPurchaseReturnPurchaseOrderItems, getPurchaseReturnSourceOrder } from '@/api/purchase'
+// 2026-09-20（F7-157）：原页内直接拼 request.get/post/put('/inventory/purchase-return...') 绕过 API 层
+//（同模块"部分走封装、部分直连"，且同一端点在本页与详情页各写一份字面量）⇒ 统一改用 @/api/purchase
+import {
+  getPurchaseReturn, getPurchaseReturnItems, createPurchaseReturn, updatePurchaseReturn,
+  getPurchaseReturnPurchaseOrderItems, getPurchaseReturnSourceOrder,
+} from '@/api/purchase'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 interface ReturnItem {
@@ -212,7 +217,7 @@ async function loadReturnData() {
   const id = Number(route.query.id)
   if (!id) return
   try {
-    const order = await request.get(`/inventory/purchase-return/${id}`)
+    const order: any = await getPurchaseReturn(id)
     // 仅草稿可编辑：已审核/已作废的单据禁止进入编辑
     if (order && order.status !== 'DRAFT') {
       ElMessage.warning('仅草稿状态的退货单可编辑')
@@ -228,7 +233,7 @@ async function loadReturnData() {
       form.returnDate = order.returnDate
       form.remark = order.remark || ''
     }
-    const its = await request.get(`/inventory/purchase-return/${id}/items`) || []
+    const its: any = await getPurchaseReturnItems(id) || []
     items.value = (Array.isArray(its) ? its : (its?.records || [])).map((it: any) => ({
       productId: it.productId,
       qualityType: it.qualityType,
@@ -291,9 +296,9 @@ async function handleSubmit() {
         }))
       }
       if (isEdit) {
-        await request.put(`/inventory/purchase-return/${Number(route.query.id)}`, body)
+        await updatePurchaseReturn(Number(route.query.id), body)
       } else {
-        await request.post('/inventory/purchase-return', body)
+        await createPurchaseReturn(body)
       }
       ElMessage.success(isEdit ? '更新成功' : '新增成功'); sessionStorage.setItem(PURCHASE_RETURN_DIRTY_KEY, '1')
       tabStore.removeTab(route.fullPath)

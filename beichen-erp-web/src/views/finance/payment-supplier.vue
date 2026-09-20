@@ -80,6 +80,13 @@ function onPayableChange(val: number, row: FinancePaymentItem) {
   if (r) { row.payableId = r.id; row.payableBillNo = r.billNo; row.thisAmount = r.unpaidAmount }
 }
 function handleFileSelect(e: Event) { const f = (e.target as HTMLInputElement).files?.[0]; if (f) uploadFile.value = f }
+/** 2026-09-20（F7-169）：从按钮向上找最近的 form-item 容器再取隐藏的 file input，
+ *  不依赖固定的 DOM 层级（原写法写死两层 parentElement，结构一调就静默失效）。 */
+function pickUploadFile(e: Event) {
+  const btn = e.currentTarget as HTMLElement | null
+  const box = btn?.closest('.el-form-item') as HTMLElement | null
+  box?.querySelector<HTMLInputElement>('input[type="file"]')?.click()
+}
 
 async function handleSubmitPayment() {
   if (!dForm.accountId) { ElMessage.warning('请选择付款账户'); return }
@@ -163,7 +170,9 @@ onMounted(() => loadAll())
           <el-col :span="12"><el-form-item label="付款日期"><el-date-picker v-model="dForm.paymentDate" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="付款凭证">
             <div style="display:flex;align-items:center;gap:8px">
-              <el-button size="small" @click="($event.currentTarget as HTMLElement).parentElement?.parentElement?.querySelector('input')?.click()">选择图片</el-button>
+              <!-- 2026-09-20（F7-169）：原写法靠 `parentElement.parentElement`（两层）碰巧包住 input，
+                   DOM 结构一调即静默失效；改为从按钮向上 find 最近的容器再取 input。 -->
+              <el-button size="small" @click="pickUploadFile($event)">选择图片</el-button>
               <span style="font-size:var(--app-font-xs);color:var(--app-text-secondary)">{{ uploadFile?.name || '未选择' }}</span>
               <input type="file" accept="image/*" style="display:none" @change="handleFileSelect" />
             </div>

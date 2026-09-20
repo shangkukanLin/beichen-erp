@@ -9,7 +9,7 @@ import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
-/** 来源单据类型下拉（取后端枚举，避免前端硬编码中文） */
+/** 来源单据类型下拉（2026-09-20 F7-166：由前端枚举映射生成，不请求后端；后端接口只回 code） */
 const sourceBillTypeOptions = ref<{ code: string; label: string }[]>([])
 const query = reactive({ supplierId: '' as string|number, sourceBillType: '', status: '', billNo: '' })
 /** 页签：按主体类型查看应付（与供应商管理页一致），all=全部 */

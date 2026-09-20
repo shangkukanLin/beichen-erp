@@ -84,14 +84,17 @@ const defaultForm = (): MenuDTO => ({
 const form = reactive<MenuDTO>(defaultForm())
 
 // 父菜单下拉树数据（只允许选目录类型作为父节点）
-function buildTreeSelectOptions(tree: MenuVO[]): MenuVO[] {
+// 2026-09-20（F7-187）：新增 excludeId —— 编辑时必须把"正在编辑的节点自身及其整棵子树"排除，
+// 否则可把父级选成自己或自己的后代 ⇒ 形成父子环（菜单树渲染异常 / 数据自引用）。
+function buildTreeSelectOptions(tree: MenuVO[], excludeId?: number): MenuVO[] {
   const result: MenuVO[] = []
   for (const item of tree) {
+    if (excludeId != null && item.id === excludeId) continue   // 自身及子孙都不作为父级候选
     if (item.menuType === MenuType.CATALOG) {
       result.push({ ...item })
     }
     if (item.children && item.children.length > 0) {
-      result.push(...buildTreeSelectOptions(item.children))
+      result.push(...buildTreeSelectOptions(item.children, excludeId))
     }
   }
   return result
@@ -130,7 +133,8 @@ function handleEdit(row: FlatMenu) {
   })
   isEdit.value = true
   dialogTitle.value = '编辑菜单'
-  parentOptions.value = buildTreeSelectOptions(menuTree.value)
+  // F7-187：排除自身及子孙，防止把父级选成自己/后代形成环
+  parentOptions.value = buildTreeSelectOptions(menuTree.value, row.id as number)
   dialogVisible.value = true
   formRef.value?.clearValidate()
 }

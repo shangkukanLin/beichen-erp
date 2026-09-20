@@ -183,7 +183,9 @@ async function handleCancel() {
   catch (e: any) { ElMessage.error(e?.message || '作废失败') }
 }
 
-onMounted(() => { loadProducts(); loadQualityTypes() })
+// 2026-09-20（F7-179）：产品列表由 loadDetail() 内的 `if (products.length===0) loadProducts()` 按需加载，
+// 这里**不再**重复调用（原写法 onMounted 与 onActivated 都会触发 ⇒ 首屏重复请求 /product/page）。
+onMounted(() => { loadQualityTypes() })
 // keep-alive 缓存下再次进入会复用组件，onMounted 不再触发
 onActivated(() => { loadDetail() })
 </script>

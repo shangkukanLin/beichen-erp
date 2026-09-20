@@ -211,6 +211,9 @@ async function doCancel() {
 
 // 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
 // （仓库名已随 loadDetail 按 id 单取，不再需要额外的字典预载）
+// ⚠️ 2026-09-20（F7-148）：本页**只有**这个入口加载单据数据 ⇒ 依赖"本路由一定在 keep-alive 内"
+// （当前成立，见 layout/index.vue 的 :exclude 只列 3 个 Add 页）。若将来把本组件加进 :exclude
+// 或改用非 keep-alive 布局，onActivated 不再触发 ⇒ 页面永久空白且无报错线索，届时须同时补 onMounted。
 onActivated(() => { loadDetail(Number(route.params.id)) })
 </script>
 

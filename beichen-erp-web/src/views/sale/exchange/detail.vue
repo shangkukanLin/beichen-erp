@@ -237,6 +237,9 @@ async function doCancel() {
 // 字典类只需加载一次
 onMounted(() => { loadCustomers() })
 // 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
+// ⚠️ 2026-09-20（F7-148）：单据数据**只**挂 onActivated ⇒ 依赖"本路由一定在 keep-alive 内"
+// （当前成立）。若将来把本组件加进 layout 的 :exclude 或改用非 keep-alive 布局，
+// onActivated 不再触发 ⇒ 页面永久空白且无报错线索，届时须同时补 onMounted。
 onActivated(() => { loadDetail(Number(route.params.id)) })
 </script>
 

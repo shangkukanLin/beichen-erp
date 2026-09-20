@@ -61,12 +61,13 @@ async function onSubmit() {
 }
 function goBack() { router.push('/finance/payable-transfer') }
 
+// 2026-09-20（F7-168）：原写法把两件事叠在一起 —— 编辑态会调用 loadDetail() 两次（多一次请求），
+// 且 presetPayableId 与 editId 同时存在时预选值会被 loadDetail 覆盖。现按"互斥"处理：
+// 编辑态以单据数据为准（回填全部字段）；新增态才用列表带过来的 payableId 预选。
 onMounted(async () => {
   await loadCandidates()
-  // 从应付列表过来时预选该笔；编辑时由详情回填
-  if (presetPayableId.value) form.payableId = presetPayableId.value
-  else await loadDetail()
   if (editId.value) await loadDetail()
+  else if (presetPayableId.value) form.payableId = presetPayableId.value
 })
 </script>
 

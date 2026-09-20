@@ -22,13 +22,14 @@ async function loadData() {
 
 function openAdd() {
   isEdit.value = false; editId.value = undefined
-  form.value = { companyName: '' }
+  // 2026-09-20（F7-186）：列表有「状态」列却原先无法编辑（停用公司只能改库）⇒ 表单补 status
+  form.value = { companyName: '', status: 1 }
   dialogVisible.value = true
 }
 
 function openEdit(row: any) {
   isEdit.value = true; editId.value = row.id
-  form.value = { companyName: row.companyName }
+  form.value = { companyName: row.companyName, status: row.status ?? 1 }
   dialogVisible.value = true
 }
 
@@ -115,6 +116,13 @@ onMounted(() => loadData())
     <el-dialog v-model="dialogVisible" :title="isEdit?'编辑公司':'新增公司'" width="420px" :close-on-click-modal="false">
       <el-form :model="form" label-width="80px">
         <el-form-item required label="公司名称"><el-input v-model="form.companyName" placeholder="请输入公司名称" /></el-form-item>
+        <!-- 2026-09-20（F7-186）：补「状态」编辑（后端 PUT /company/{id} 走 updateById，status 可写） -->
+        <el-form-item label="状态">
+          <el-select v-model="form.status" style="width:100%">
+            <el-option :value="1" label="启用" />
+            <el-option :value="0" label="停用" />
+          </el-select>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>

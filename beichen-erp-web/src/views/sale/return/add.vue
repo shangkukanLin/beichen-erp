@@ -160,7 +160,14 @@ const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', {
 // 退货入库仓：自有**成品仓**（2026-09-16 方案 A：原"售后仓"取消，退回品直接入成品仓、品质 PENDING 待分类）
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: WarehouseType.FINISHED } })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 500, keyword: kw } })
-const fetchSaleOrders = (kw: string) => request.get('/sale/return/sale-orders', { params: { pageSize: 200, customerId: form.customerId } })
+// 2026-09-20（F7-145）：原写法声明了 kw 却完全没用 ⇒ "关联销售单"下拉**看起来可搜索、实际搜索无效**
+//（只剩客户维度过滤）。接口必须按客户查（防跨客户挂单），单号搜索在本地过滤
+//（与 sale/exchange/add.vue 的做法一致）。接口返回 R<List<Map>>，拦截器已解包为数组。
+const fetchSaleOrders = async (kw: string) => {
+  const rows: any = await request.get<any, any>('/sale/return/sale-orders', { params: { pageSize: 200, customerId: form.customerId } })
+  const list: any[] = Array.isArray(rows) ? rows : []
+  return kw ? list.filter((r: any) => (r.code || '').includes(kw)) : list
+}
 
 // 列表/拼装用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
 // 2026-09-20（F7-146②）：删除 warehouses / loadWarehouses —— 拉回后**未被使用**

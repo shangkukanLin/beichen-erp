@@ -10,9 +10,11 @@
  * 物料仓单据额外要求「跟单专员」角色（见 StockTakeServiceImpl.assertRoleForScope）。
  */
 import { localDate, localMonth } from '@/utils/date'
-import { reactive, ref, computed, onMounted } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { DocStatusLabel, DocStatusTag } from '@/api/common'
+// 2026-09-20（F7-191①）：补 DocStatus —— 本页原先状态判定硬编码 'DRAFT'/'AUDITED'，
+// 而同页的下拉与标签却用 DocStatusLabel/DocStatusTag（同页两套写法）
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { WarehouseCategory, WarehouseType } from '@/api/enums'
 import {
   getStockTakePage, getStockTakeItems, createStockTake, saveStockTakeItems,
@@ -129,7 +131,11 @@ async function cancel(row: StockTake) {
 function fmt(v?: number) { return v == null ? '0' : String(Math.round(Number(v))) }
 function fmtDate(v?: string) { return v ? String(v).slice(0, 10) : '' }
 function nameOf(it: StockTakeItem) { return it.productName || it.materialName || '' }
-onMounted(() => { loadData(); loadWarehouses() })
+// 2026-09-20（F7-191②）：仓库列表只需加载一次；单据数据改为每次进入都重拉 ——
+// 本面板被两个路由页包裹在 keep-alive 内（再次进入复用组件、onMounted 不再触发），
+// 原先只挂 onMounted ⇒ 从新增/明细返回列表时不刷新。
+onMounted(() => { loadWarehouses() })
+onActivated(() => { loadData() })
 </script>
 
 <template>
@@ -183,14 +189,15 @@ onMounted(() => { loadData(); loadWarehouses() })
         </el-table-column>
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{row}">
-            <el-button type="primary" link @click="openItems(row)">{{ row.status==='DRAFT' ? '录入实盘' : '查看明细' }}</el-button>
-            <el-button v-if="row.status==='DRAFT'" type="success" link @click="audit(row)">审核</el-button>
-            <el-button v-if="row.status==='AUDITED'" type="warning" link @click="unAudit(row)">反审核</el-button>
-            <el-button v-if="row.status==='DRAFT'" type="danger" link @click="cancel(row)">作废</el-button>
+            <el-button type="primary" link @click="openItems(row)">{{ row.status===DocStatus.DRAFT ? '录入实盘' : '查看明细' }}</el-button>
+            <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="audit(row)">审核</el-button>
+            <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click="unAudit(row)">反审核</el-button>
+            <el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click="cancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>
-      <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData" /></div>
+      <!-- 2026-09-20（F7-191③）：改每页条数必须复位到第 1 页，否则停在越界页显示空列表 -->
+      <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="page.pageNum=1;loadData()" @current-change="loadData" /></div>
     </el-card>
 
     <!-- 新建盘点单 -->

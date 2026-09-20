@@ -132,7 +132,8 @@ import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { productLabel } from '@/api/product'
-import type { PurchaseOrder } from '@/api/purchase'
+// 2026-09-20（F7-157）：新增提交原为页内直接 request.post('/inventory/purchase') ⇒ 统一走 API 封装
+import { createPurchaseOrder, type PurchaseOrder } from '@/api/purchase'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 /** 明细行数据结构（前端用，含4个品质的数量+单价） */
@@ -285,7 +286,7 @@ async function handleSubmit() {
         ...form,
         items: flatItems,
       }
-      await request.post('/inventory/purchase', body)
+      await createPurchaseOrder(body)
       ElMessage.success('新增成功'); sessionStorage.setItem(PURCHASE_ORDER_DIRTY_KEY, '1')
       router.back()
     } catch (e: any) { ElMessage.error(e?.message || '新增失败') }

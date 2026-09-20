@@ -3,7 +3,8 @@ import { ref, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { getPurchaseReturn, getPurchaseReturnItems, getPurchaseReturnPurchaseOrderItems, auditPurchaseReturn, cancelPurchaseReturn, unAuditPurchaseReturn, ReturnStatus, ReturnStatusLabel, type PurchaseReturn, type PurchaseReturnItem } from '@/api/purchase'
+// 2026-09-20（F7-157）：详情页的保存原为页内直接 request.put('/inventory/purchase-return/{id}') ⇒ 统一走 API 封装
+import { getPurchaseReturn, getPurchaseReturnItems, getPurchaseReturnPurchaseOrderItems, auditPurchaseReturn, cancelPurchaseReturn, unAuditPurchaseReturn, updatePurchaseReturn, ReturnStatus, ReturnStatusLabel, type PurchaseReturn, type PurchaseReturnItem } from '@/api/purchase'
 import { PURCHASE_RETURN_DIRTY_KEY } from '@/api/enums'
 
 const route = useRoute(); const router = useRouter()
@@ -162,7 +163,7 @@ async function handleSave() {
         remark: it.remark || '',
       })),
     }
-    await request.put(`/inventory/purchase-return/${id}`, payload)
+    await updatePurchaseReturn(Number(id), payload)
     ElMessage.success('已保存')
     sessionStorage.setItem(PURCHASE_RETURN_DIRTY_KEY, '1')
     loadData()
