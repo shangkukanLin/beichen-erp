@@ -165,7 +165,15 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void returnMaterials(Long supplierId, ReturnMaterialDTO dto) {
-        Supplier s = supplierMapper.selectById(supplierId);
+        // F7-138（2026-09-20）：**供应商级行锁**（与同类的 finish() 同一把锁口径）。
+        // 本方法会遍历该供应商**所有**委外仓的正库存行并整体搬走（委外仓腿走 changeMaterialStockAllowNegative
+        // ——**允许负数**，所以不会因"已扣过"而被拦），全程无 claim / 无幂等键，"读正库存"与"扣减"不在同一条 SQL
+        // 里 ⇒ 典型 TOCTOU。
+        // 它此前之所以没出事，是并发时 generateDeliveryCode() 在同一秒给出**相同单号**、撞上
+        // outsource_delivery.uk_code 唯一索引 ⇒ 事务回滚。**那只是"偶然正确"**：单号规则一旦带 UUID/毫秒/随机，
+        // 或该唯一索引被降级，就会**双倍搬移库存**（委外仓变负 + 我方仓双倍入账）。加锁后并发串行，
+        // 第二个请求会读到已清零的委外仓并抛"无可退物料" ⇒ 与顺序重复调用同一结果。
+        Supplier s = supplierMapper.selectForUpdate(supplierId);
         if (s == null) throw new BusinessException("供应商不存在");
         if (dto.getToWarehouseId() == null) throw new BusinessException("请选择退回目标仓（我方仓库）");
 

@@ -603,7 +603,13 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void repairReturn(Long id, Map<String, Object> body) {
-        ReturnOrder order = returnOrderMapper.selectById(id);
+        // F7-138（2026-09-20）：**行锁**（FOR UPDATE，带租户）。本方法按「送修量 − 已返回量」核销后**直接入库**
+        // （changeStock，OUTSOURCE_REPAIR_IN），是典型"先查后写"：并发双击时两个请求读到**相同的** returned
+        // ⇒ 双双通过"不超过送修量"的校验 ⇒ **重复入库、超出送修量**，且无任何唯一索引能兜住。
+        // 加锁后同单串行：第二个请求会读到已累计的 returned 而被拦。
+        Long lockCid = CompanyContext.get();
+        if (lockCid != null && lockCid <= 0) lockCid = null;
+        ReturnOrder order = returnOrderMapper.selectForUpdate(id, lockCid);
         if (order == null) throw new BusinessException("退货单不存在");
         if (!OutsourceReturnType.isRepair(order.getReturnType()))
             throw new BusinessException("只有维修退货单可以登记维修返回");
@@ -675,7 +681,11 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     public void cancelRepairReturn(Long repairRecordId) {
         OutsourceReturnOrderRepair row = repairMapper.selectById(repairRecordId);
         if (row == null) throw new BusinessException("维修返回记录不存在");
-        ReturnOrder order = returnOrderMapper.selectById(row.getReturnOrderId());
+        // F7-138（2026-09-20）：对**来源单据**加行锁（与 repairReturn 同一把锁）⇒ 同单的登记/撤销串行；
+        // 否则并发双击两次都读到该 row ⇒ 两次 changeStock(-qty) ⇒ **重复扣减库存**。
+        Long lockCid = CompanyContext.get();
+        if (lockCid != null && lockCid <= 0) lockCid = null;
+        ReturnOrder order = returnOrderMapper.selectForUpdate(row.getReturnOrderId(), lockCid);
         if (order == null) throw new BusinessException("退货单不存在");
         if (nzInt(order.getClosedFlag()) == 1)
             throw new BusinessException("该单已结案，如需撤销返回请先「撤销结案」");
@@ -685,7 +695,11 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                     StockChangeType.CANCEL_OUTSOURCE_REPAIR_IN, order.getCode(), RelatedBillType.OUTSOURCE_REPAIR,
                     "", order.getId(), normalizeQualityType(row.getQualityType()));   // F7-65①：spec 按约定传 ""（原传 null）
         }
-        repairMapper.deleteById(repairRecordId);
+        // F7-138（2026-09-20）：**条件删除 + 判影响行数**（第二道防线，与上面的行锁互为保险）——
+        // 只有真正删掉这一行的那次请求才算撤销成功；del==0 说明已被别处撤销 ⇒ 抛错 ⇒ 整个事务回滚
+        // ⇒ 上面那次 changeStock(-qty) 一并撤销（原实现 deleteById 不看行数，第二次执行会"扣了库存却没删到东西"）。
+        int del = repairMapper.deleteById(repairRecordId);
+        if (del == 0) throw new BusinessException("该维修返回记录已被撤销，请刷新后重试");
     }
 
     // ===== 结案 / 撤销结案（维修退货的收尾动作，2026-09-17） =====
@@ -698,7 +712,11 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void close(Long id) {
-        ReturnOrder order = returnOrderMapper.selectById(id);
+        // F7-138（2026-09-20）：行锁 —— 结案前要算"未返回量"，与 repairReturn 的登记属同一组"先查后写"，
+        // 统一在同一把锁下串行（避免"刚登记完就被结案"或重复结案这类竞争）。
+        Long lockCid = CompanyContext.get();
+        if (lockCid != null && lockCid <= 0) lockCid = null;
+        ReturnOrder order = returnOrderMapper.selectForUpdate(id, lockCid);
         if (order == null) throw new BusinessException("退货单不存在");
         if (!OutsourceReturnType.isRepair(order.getReturnType())) throw new BusinessException("只有维修退货单需要结案");
         if (nzInt(order.getClosedFlag()) == 1) throw new BusinessException("该单已结案");
@@ -708,25 +726,33 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         if (unreturned.compareTo(BigDecimal.ZERO) > 0)
             throw new BusinessException("还有 " + unreturned.stripTrailingZeros().toPlainString()
                     + " 件未返回，不能结案（工厂尚未修好送回）");
-        returnOrderMapper.update(null, new LambdaUpdateWrapper<ReturnOrder>()
+        // F7-138（2026-09-20）：加 `.eq(closedFlag, 0)` 条件 + 判影响行数（原为无条件更新 ⇒ 与 reOpen
+        // 并发时"后写者胜"且不留痕）。现在与 reOpen 构成**对称**的条件更新。
+        int upd = returnOrderMapper.update(null, new LambdaUpdateWrapper<ReturnOrder>()
                 .eq(ReturnOrder::getId, id)
+                .eq(ReturnOrder::getClosedFlag, 0)
                 .set(ReturnOrder::getClosedFlag, 1)
                 .set(ReturnOrder::getClosedTime, LocalDateTime.now())
                 .set(ReturnOrder::getClosedBy, getCurrentUserName()));
+        if (upd == 0) throw new BusinessException("该单状态已变化（可能已被结案），请刷新后重试");
     }
 
     /** 撤销结案：回到「送修中」跟踪状态（可继续登记维修返回） */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void reOpen(Long id) {
-        ReturnOrder order = returnOrderMapper.selectById(id);
+        Long lockCid = CompanyContext.get();
+        if (lockCid != null && lockCid <= 0) lockCid = null;
+        ReturnOrder order = returnOrderMapper.selectForUpdate(id, lockCid);
         if (order == null) throw new BusinessException("退货单不存在");
         if (nzInt(order.getClosedFlag()) != 1) throw new BusinessException("该单未结案");
-        returnOrderMapper.update(null, new LambdaUpdateWrapper<ReturnOrder>()
+        int upd = returnOrderMapper.update(null, new LambdaUpdateWrapper<ReturnOrder>()
                 .eq(ReturnOrder::getId, id)
+                .eq(ReturnOrder::getClosedFlag, 1)
                 .set(ReturnOrder::getClosedFlag, 0)
                 .set(ReturnOrder::getClosedTime, null)
                 .set(ReturnOrder::getClosedBy, null));
+        if (upd == 0) throw new BusinessException("该单状态已变化（可能已撤销结案），请刷新后重试");
     }
 
     /** 未返回量 = 送修合计（按产品） − 已返回合计 */

@@ -299,7 +299,11 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void repairReturn(Long id, Map<String, Object> body) {
-        OutsourceMaterialReturn order = returnMapper.selectById(id);
+        // F7-138（2026-09-20）：**行锁**（FOR UPDATE，带租户）。与成品侧同构：按「送修量 − 已返回量」
+        // 核销后直接入库（changeMaterialStock），并发双击会读到相同的 returned ⇒ **重复入库**。
+        Long lockCid = CompanyContext.get();
+        if (lockCid != null && lockCid <= 0) lockCid = null;
+        OutsourceMaterialReturn order = returnMapper.selectForUpdate(id, lockCid);
         if (order == null) throw new BusinessException("退货单不存在");
         if (!MaterialReturnType.isRepair(order.getReturnType()))
             throw new BusinessException("只有维修返还单可以登记维修返回");
@@ -488,7 +492,11 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     public void cancelRepairReturn(Long repairRecordId) {
         OutsourceMaterialReturnRepair row = repairMapper.selectById(repairRecordId);
         if (row == null) throw new BusinessException("维修返回记录不存在");
-        OutsourceMaterialReturn order = returnMapper.selectById(row.getReturnOrderId());
+        // F7-138（2026-09-20）：对**来源单据**加行锁（与 repairReturn 同一把锁）⇒ 同单登记/撤销串行；
+        // 否则并发双击两次都读到该 row ⇒ 两次 changeMaterialStock(-qty) ⇒ **重复扣减**。
+        Long lockCid = CompanyContext.get();
+        if (lockCid != null && lockCid <= 0) lockCid = null;
+        OutsourceMaterialReturn order = returnMapper.selectForUpdate(row.getReturnOrderId(), lockCid);
         if (order == null) throw new BusinessException("退货单不存在");
         if (nzInt(order.getClosedFlag()) == 1)
             throw new BusinessException("该单已结案，如需撤销返回请先「撤销结案」");
@@ -510,7 +518,10 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                         .setSql("repair_returned_qty = IFNULL(repair_returned_qty, 0) + (" + qtySql + ")"));
             }
         }
-        repairMapper.deleteById(repairRecordId);
+        // F7-138（2026-09-20）：**条件删除 + 判影响行数**（与行锁互为保险）—— 只有真正删到这一行的请求
+        // 才算撤销成功；del==0 ⇒ 抛错 ⇒ 事务回滚 ⇒ 上面的 changeMaterialStock(-qty) 与订单收料数回退一并撤销。
+        int del = repairMapper.deleteById(repairRecordId);
+        if (del == 0) throw new BusinessException("该维修返回记录已被撤销，请刷新后重试");
     }
 
     // ===== 结案 / 撤销结案（维修返还的收尾动作，2026-09-17） =====
@@ -522,7 +533,10 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void close(Long id) {
-        OutsourceMaterialReturn order = returnMapper.selectById(id);
+        // F7-138（2026-09-20）：行锁（与 repairReturn 同一把锁，理由同成品侧）。
+        Long lockCid = CompanyContext.get();
+        if (lockCid != null && lockCid <= 0) lockCid = null;
+        OutsourceMaterialReturn order = returnMapper.selectForUpdate(id, lockCid);
         if (order == null) throw new BusinessException("退货单不存在");
         if (!MaterialReturnType.isRepair(order.getReturnType())) throw new BusinessException("只有维修返还单需要结案");
         if (nzInt(order.getClosedFlag()) == 1) throw new BusinessException("该单已结案");
@@ -532,25 +546,32 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         if (unreturned.compareTo(BigDecimal.ZERO) > 0)
             throw new BusinessException("还有 " + unreturned.stripTrailingZeros().toPlainString()
                     + " 件未返回，不能结案（供应商尚未修好送回）");
-        returnMapper.update(null, new LambdaUpdateWrapper<OutsourceMaterialReturn>()
+        // F7-138（2026-09-20）：加 `.eq(closedFlag, 0)` 条件 + 判影响行数（与 reOpen 构成对称的条件更新）。
+        int upd = returnMapper.update(null, new LambdaUpdateWrapper<OutsourceMaterialReturn>()
                 .eq(OutsourceMaterialReturn::getId, id)
+                .eq(OutsourceMaterialReturn::getClosedFlag, 0)
                 .set(OutsourceMaterialReturn::getClosedFlag, 1)
                 .set(OutsourceMaterialReturn::getClosedTime, LocalDateTime.now())
                 .set(OutsourceMaterialReturn::getClosedBy, getCurrentUserName()));
+        if (upd == 0) throw new BusinessException("该单状态已变化（可能已被结案），请刷新后重试");
     }
 
     /** 撤销结案：回到"送修中"跟踪状态（可继续登记维修返回） */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void reOpen(Long id) {
-        OutsourceMaterialReturn order = returnMapper.selectById(id);
+        Long lockCid = CompanyContext.get();
+        if (lockCid != null && lockCid <= 0) lockCid = null;
+        OutsourceMaterialReturn order = returnMapper.selectForUpdate(id, lockCid);
         if (order == null) throw new BusinessException("退货单不存在");
         if (nzInt(order.getClosedFlag()) != 1) throw new BusinessException("该单未结案");
-        returnMapper.update(null, new LambdaUpdateWrapper<OutsourceMaterialReturn>()
+        int upd = returnMapper.update(null, new LambdaUpdateWrapper<OutsourceMaterialReturn>()
                 .eq(OutsourceMaterialReturn::getId, id)
+                .eq(OutsourceMaterialReturn::getClosedFlag, 1)
                 .set(OutsourceMaterialReturn::getClosedFlag, 0)
                 .set(OutsourceMaterialReturn::getClosedTime, null)
                 .set(OutsourceMaterialReturn::getClosedBy, null));
+        if (upd == 0) throw new BusinessException("该单状态已变化（可能已撤销结案），请刷新后重试");
     }
 
     /** 未返回量 = 送修合计 − 已返回合计 */

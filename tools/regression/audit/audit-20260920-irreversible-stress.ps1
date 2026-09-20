@@ -2,6 +2,14 @@
 #
 # 不可逆路径专项压测（2026-09-20）。靶点来自"状态流转原子性"静态交叉分析（清单 A：无原子保护者）。
 #
+# ★ 重要（F7-138 已修复后的语义）：本脚本 §1 在**修复前**能复现的是"两个并发都进入方法体"，
+#   当时之所以没双倍搬移，只是因为两个事务算出**相同单号**、被 outsource_delivery.uk_code 撞回滚
+#   （拒因 = "Duplicate entry 'DEL-...' for key 'uk_code'"）——属"偶然正确"。
+#   修复（SupplierSettlementServiceImpl.returnMaterials 加供应商行锁）之后，**拒因已变为
+#   "该供应商委外仓无可退物料"**（第二个请求等锁后读到已清零）⇒ 本脚本的断言（恰好 1 次成功、
+#   委外仓恰好清零、目标仓精确一次）**仍然全部成立**，但**拒因本身已成为"锁生效"的判据**。
+#   ⇒ 验证 F7-138 修复的专用脚本是 `verify-fix-f7-138.ps1`（它显式断言拒因不再是单号冲突）。
+#
 # 被测缺陷假设（E0 → 待实证）：
 #   ① SupplierSettlementServiceImpl.returnMaterials(:167) —— 批量退料。
 #      它遍历该供应商所有委外仓的正库存行，逐行：委外仓扣减（走 changeMaterialStockAllowNegative，
