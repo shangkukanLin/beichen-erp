@@ -6,6 +6,8 @@ import * as echarts from 'echarts'
 import request from '@/utils/request'
 import StatRange from '@/components/StatRange.vue'
 import { PURCHASE_ANALYSIS_FORMULA } from '@/utils/kpiFormula'
+// 2026-09-20：饼图外侧标签与 tooltip 共用同一数值口径（原先 label 只有「名称+占比」，数值只能悬停看）
+import { pieOutsideLabel, pieTooltip } from '@/utils/pieLabel'
 
 /**
  * 进货分析（经营分析，2026-09-15 新增）：**所选区间**的采购 KPI + 趋势图 + **两个饼图** + 单据明细（可下钻进详情）。
@@ -178,16 +180,14 @@ function renderPies() {
     const chart = pieRefs[def.id]
     if (items.length === 0) { chart.clear(); return }
     chart.setOption({
-      tooltip: {
-        trigger: 'item',
-        formatter: (p: any) => `${p.marker}${p.name}<br/>${
-          def.isQty ? fmtQty(p.value) + ' 件' : fmtN(p.value) + ' 元'}（${p.percent}%）`,
-      },
+      // 2026-09-20：tooltip 与外侧标签共用 pieTooltip/pieOutsideLabel ⇒ 悬停与直接看到的是同一个数
+      tooltip: { trigger: 'item', formatter: pieTooltip(def.isQty ? '件' : '元') },
       legend: { show: false },
       series: [{
-        type: 'pie', radius: ['42%', '68%'], center: ['50%', '52%'], avoidLabelOverlap: true,
-        label: { formatter: '{b} {d}%', fontSize: 11 },
-        labelLine: { length: 8, length2: 8 },
+        type: 'pie', radius: ['38%', '62%'], center: ['50%', '50%'], avoidLabelOverlap: true,
+        // 外侧标签（两行）：名称 / 数值 单位（占比%）—— 不再需要悬停；单位随「金额/件数」开关整体重绘而切换
+        label: { show: true, position: 'outside', formatter: pieOutsideLabel(def.isQty ? '件' : '元'), fontSize: 11, lineHeight: 14 },
+        labelLine: { show: true, length: 12, length2: 14 },
         data: items,
       }],
     }, true)
@@ -314,14 +314,17 @@ onUnmounted(() => {
 .unit{font-size:var(--app-font-xs);margin-left:2px;font-weight:400;color:var(--el-text-color-secondary)}
 .chart{width:100%;height:200px;margin:8px 0 12px}
 /* 两个饼图（2026-09-15）：与销售分析同款「卡片等高 + 空态叠加」实现
-   —— 空态与有数据态都是定高 200px 的 .pie-body，卡片高度不会变 */
-.pie-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:4px 0 12px}
+   —— 空态与有数据态都是定高 .pie-body，卡片高度不会变
+   2026-09-20：由「2 列」改「整行 1 列」—— 外侧要直接显示「数值 + 占比」，
+   半行卡片宽度（约 420px）放不下外侧标签，会被画布裁切 */
+.pie-grid{display:grid;grid-template-columns:1fr;gap:12px;margin:4px 0 12px}
 .pie-card{padding:12px 16px}
 .pie-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;min-height:26px}
 .pie-head-right{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
 .pie-title{font-size:var(--app-font-base);font-weight:600}
 .pie-total{font-size:var(--app-font-base);color:var(--el-text-color-secondary)}
-.pie-body{position:relative;height:200px;margin-top:4px}
+/* 2026-09-20：200px → 300px —— 外侧标签是两行（名称 / 数值（占比%）），200px 高放不下最多 9 个分片的标签 */
+.pie-body{position:relative;height:300px;margin-top:4px}
 .pie-chart{width:100%;height:100%}
 .pie-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
 .section-card{margin-top:4px}

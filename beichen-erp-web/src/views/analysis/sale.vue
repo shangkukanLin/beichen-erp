@@ -5,6 +5,8 @@ import * as echarts from 'echarts'
 import request from '@/utils/request'
 import StatRange from '@/components/StatRange.vue'
 import { SALE_ANALYSIS_FORMULA } from '@/utils/kpiFormula'
+// 2026-09-20：饼图外侧标签与 tooltip 共用同一数值口径（原先 label 只有「名称+占比」，数值只能悬停看）
+import { pieOutsideLabel, pieTooltip } from '@/utils/pieLabel'
 
 /**
  * 销售分析（经营分析）：6 项区间指标 + 产品排行 + 仓库分布。
@@ -103,7 +105,9 @@ const pieDefs = computed(() => {
       // 客户退货率：分片 = 各客户退货额（金额口径）/ 各客户退货件数（件数口径），标题 = 对应的总退货率
       id: 'pieReturn', label: '客户退货率',
       total: fmtPct(retMetric.value === 'qty' ? m.returnRateQty : m.returnRate),
-      unit: retMetric.value === 'qty' ? '件' : '%',
+      // 2026-09-20：金额口径的分片单位由 '%' 更正为 '元' —— 分片本身是"各客户退货额"，
+      // 原来的 '%' 只表示"该图合计是百分比"，会让外侧标签显示成无单位数字，读不出量纲
+      unit: retMetric.value === 'qty' ? '件' : '元',
       formula: retMetric.value === 'qty' ? SALE_ANALYSIS_FORMULA.returnRateQty : SALE_ANALYSIS_FORMULA.returnRate,
       items: (retMetric.value === 'qty' ? (d.returnByCustomerQty || []) : (d.returnByCustomer || []))
         .map((r: any) => ({ name: r.name || '（未知）', value: r.value }))
@@ -112,7 +116,8 @@ const pieDefs = computed(() => {
       // 客户换货率：分片 = 各客户换货额（金额口径）/ 各客户换出件数（件数口径），标题 = 对应的总换货率
       id: 'pieExchange', label: '客户换货率',
       total: fmtPct(exchMetric.value === 'qty' ? m.exchangeRateQty : m.exchangeRate),
-      unit: exchMetric.value === 'qty' ? '件' : '%',
+      // 2026-09-20：同上，金额口径分片的单位改为 '元'
+      unit: exchMetric.value === 'qty' ? '件' : '元',
       formula: exchMetric.value === 'qty' ? SALE_ANALYSIS_FORMULA.exchangeRateQty : SALE_ANALYSIS_FORMULA.exchangeRate,
       items: (exchMetric.value === 'qty' ? (d.exchangeByCustomerQty || []) : (d.exchangeByCustomer || []))
         .map((r: any) => ({ name: r.name || '（未知）', value: r.value }))
@@ -146,18 +151,14 @@ function renderPies() {
     const chart = pieRefs[def.id]
     if (items.length === 0) { chart.clear(); return }
     chart.setOption({
-      tooltip: {
-        trigger: 'item',
-        formatter: (p: any) =>
-          `${p.marker}${p.name}<br/>${Number(p.value).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}${
-            def.unit === '%' ? '' : def.unit
-          }（${p.percent}%）`,
-      },
+      // 2026-09-20：tooltip 与外侧标签共用 pieTooltip/pieOutsideLabel ⇒ 悬停与直接看到的是同一个数
+      tooltip: { trigger: 'item', formatter: pieTooltip(def.unit) },
       legend: { show: false },
       series: [{
-        type: 'pie', radius: ['42%', '68%'], center: ['50%', '52%'], avoidLabelOverlap: true,
-        label: { formatter: '{b} {d}%', fontSize: 11 },
-        labelLine: { length: 8, length2: 8 },
+        type: 'pie', radius: ['38%', '62%'], center: ['50%', '50%'], avoidLabelOverlap: true,
+        // 外侧标签（两行）：名称 / 数值 单位（占比%）—— 不再需要悬停
+        label: { show: true, position: 'outside', formatter: pieOutsideLabel(def.unit), fontSize: 11, lineHeight: 14 },
+        labelLine: { show: true, length: 12, length2: 14 },
         data: items,
       }],
     }, true)
@@ -297,18 +298,21 @@ onUnmounted(() => {
 .stat-card{background:var(--el-fill-color-light);border-radius:8px;padding:16px}
 .stat-label{font-size:var(--app-font-xs);color:var(--el-text-color-secondary);margin-top:4px}
 .stat-value.sm{font-size:var(--app-font-num-sm);font-weight:600}
-/* 6 个饼图：2 列 × 3 行（2026-09-15 替换原柱状图/数字卡） */
-.pie-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:12px}
+/* 6 个饼图：2026-09-15 由柱状图/数字卡替换而来；2026-09-20 由「2 列 × 3 行」改「整行 1 列 × 6 行」
+   —— 外侧要直接显示「数值 + 占比」，半行卡片宽度（约 420px）放不下外侧标签，会被画布裁切 */
+.pie-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:12px}
 .pie-card{padding:12px 16px}
 /* min-height 固定表头高度：后两张卡多了「金额/件数」switch，不固定会比前 4 张高几像素（2026-09-15 卡片等高要求） */
 .pie-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;min-height:26px}
 .pie-title{font-size:var(--app-font-base);font-weight:600}
 .pie-total{font-size:var(--app-font-base);color:var(--el-text-color-secondary)}
 .pie-head-right{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
-/* 2026-09-15 统一卡片高度：无论有无数据都是定高 200px 的 .pie-body
-   —— 原先空态是「.pie-empty(200px) + 空 .pie-chart(200px)」两块并存，卡片比有数据时高约一倍 */
-.pie-body{position:relative;height:200px;margin-top:4px}
+/* 2026-09-15 统一卡片高度：无论有无数据都是定高 .pie-body
+   —— 原先空态是「.pie-empty(200px) + 空 .pie-chart(200px)」两块并存，卡片比有数据时高约一倍
+   2026-09-20：200px → 300px —— 外侧标签是两行（名称 / 数值（占比%）），
+   200px 高放不下最多 9 个分片（top8 + 其它）的标签 */
+.pie-body{position:relative;height:300px;margin-top:4px}
 .pie-chart{width:100%;height:100%}
 .pie-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
-@media (max-width: 900px){ .pie-grid{grid-template-columns:1fr} }
+/* 2026-09-20：.pie-grid 已恒为整行 1 列，原先的窄屏断点（窄屏改 1 列）已冗余，随之移除 */
 </style>

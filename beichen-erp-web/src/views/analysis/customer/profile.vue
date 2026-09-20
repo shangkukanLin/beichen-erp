@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
 import StatRange from '@/components/StatRange.vue'
+// 2026-09-20：两张饼图的外侧标签与 tooltip 共用同一数值口径（原品牌分布 label 关闭、品质结构只有名称）
+import { pieOutsideLabel, pieTooltip } from '@/utils/pieLabel'
 
 /**
  * 单客户分析（经营分析 → 客户分析 → 点客户名进入）：
@@ -79,11 +81,17 @@ function renderCharts() {
     brandChart = brandChart || echarts.init(el2)
     const rows = data.value.byBrand || []
     brandChart.setOption({
-      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-      legend: { type: 'scroll', orient: 'vertical', right: 0, top: 10 },
+      // 2026-09-20：外侧标签直接显示「品牌 / 金额（占比%）」；品牌名已在标签上，
+      // 原先占位右侧的竖直滚动图例随之去掉，中心回归正中、半径收小给外侧标签让位
+      // （实测本卡画布 447×280 ⇒ 半径基准 140px，外侧标签约需 130px 横向空间，
+      //   故 outer 半径 48% ≈ 67px，加引出线后仍在画布内）
+      tooltip: { trigger: 'item', formatter: pieTooltip('元') },
+      legend: { show: false },
       series: [{
-        name: '品牌分布', type: 'pie', radius: ['35%', '62%'], center: ['38%', '52%'],
-        avoidLabelOverlap: true, label: { show: false },
+        name: '品牌分布', type: 'pie', radius: ['26%', '48%'], center: ['50%', '50%'],
+        avoidLabelOverlap: true,
+        label: { show: true, position: 'outside', formatter: pieOutsideLabel('元'), fontSize: 11, lineHeight: 14 },
+        labelLine: { show: true, length: 8, length2: 8 },
         data: rows.map((r: any) => ({ name: r.brandName || '未分类', value: Number(r.amount) })),
       }],
     })
@@ -113,10 +121,14 @@ function renderCharts() {
     qualityChart = qualityChart || echarts.init(el4)
     const rows = data.value.byQuality || []
     qualityChart.setOption({
-      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-      legend: { bottom: 0 },
+      // 2026-09-20：同品牌分布 —— 外侧标签显示「品质 / 金额（占比%）」，底部图例去掉
+      // （本卡原为 span=10（画布仅 364px）放不下外侧标签，已随栅格调整为 span=12）
+      tooltip: { trigger: 'item', formatter: pieTooltip('元') },
+      legend: { show: false },
       series: [{
-        name: '品质结构', type: 'pie', radius: '58%', center: ['50%', '46%'],
+        name: '品质结构', type: 'pie', radius: '48%', center: ['50%', '50%'], avoidLabelOverlap: true,
+        label: { show: true, position: 'outside', formatter: pieOutsideLabel('元'), fontSize: 11, lineHeight: 14 },
+        labelLine: { show: true, length: 8, length2: 8 },
         data: rows.map((r: any) => ({ name: r.qualityType || '未分类', value: Number(r.amount) })),
       }],
     })
@@ -220,10 +232,12 @@ onUnmounted(() => {
       </el-col>
     </el-row>
     <el-row :gutter="12" style="margin-top:12px">
-      <el-col :span="14">
+      <!-- 2026-09-20：原 14/10 —— 品质结构画布仅 364px，外侧标签（约需 130px）放不下、会被画布裁切，
+           故改为 12/12（两张卡等宽 447px），让两张饼图都有足够横向空间显示外侧数值 -->
+      <el-col :span="12">
         <el-card shadow="never"><template #header>产品 TOP10（销售额 / 利润）</template><div id="custProductChart" class="chart"/></el-card>
       </el-col>
-      <el-col :span="10">
+      <el-col :span="12">
         <el-card shadow="never"><template #header>品质结构（按销售额）</template><div id="custQualityChart" class="chart"/></el-card>
       </el-col>
     </el-row>
