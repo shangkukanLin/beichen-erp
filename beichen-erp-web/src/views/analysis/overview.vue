@@ -22,7 +22,7 @@ const health = ref<any>({})
 const trendEmpty = ref(false)
 let trendChart: echarts.ECharts | null = null
 
-function fmt(v?: any) { return v == null ? '0.00' : Number(v).toFixed(2) }
+// 2026-09-20（F7-190）：删除死代码 fmt() —— 定义后全书未调用（模板只用 fmtN / fmtPct / fmtInt）
 function fmtN(v?: any) {
   if (v == null) return '0.00'
   return Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })

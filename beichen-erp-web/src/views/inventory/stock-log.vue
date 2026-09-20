@@ -142,7 +142,6 @@ const tableData = ref<any[]>([])
 const warehouseOptions = ref<any[]>([])
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 100, keyword: kw } })
-const productOptions = ref<any[]>([])
 const productMap = ref<Record<number, string>>({})
 
 function fmt(v?: number) { return v == null ? '-' : Number(v).toLocaleString() }
@@ -167,14 +166,6 @@ async function loadWarehouses() {
   } catch { warehouseOptions.value = [] }
 }
 
-async function loadProducts(queryStr?: string) {
-  try {
-    const params: any = { pageSize: 100 }
-    if (queryStr) params.name = queryStr
-    const res = await fetchProducts(queryStr || '')
-    productOptions.value = res?.records || []
-  } catch { productOptions.value = [] }
-}
 
 function onProductPick(p: any) {
   if (p) productMap.value[p.id] = p.name || p.productName || ''

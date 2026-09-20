@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onActivated, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { SourceBillDetailRoute } from '@/api/enums'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
 import StatRange from '@/components/StatRange.vue'
@@ -199,8 +200,10 @@ watch([dpMetric, osMetric], async () => { await nextTick(); setTimeout(renderPie
 /** 明细行 → 对应单据详情页（采购单 / 采购退货单） */
 function goBill(row: any) {
   if (!row?.billId) return
-  const base = row.billType === 'PURCHASE_RETURN' ? '/inventory/purchase-return/detail/' : '/inventory/purchase/detail/'
-  router.push(base + row.billId)
+  // 2026-09-20（F7-189）：改用集中映射 SourceBillDetailRoute（含 PURCHASE_RETURN 键），
+  // 不再内联拼路由 —— 与 payment-supplier.vue 等处口径一致；路由一旦调整只需改 @/api/enums 一处。
+  const base = SourceBillDetailRoute[row.billType] || SourceBillDetailRoute.PURCHASE_ORDER
+  router.push(`${base}/${row.billId}`)
 }
 
 onMounted(() => { loadData() })

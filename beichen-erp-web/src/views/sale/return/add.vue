@@ -163,11 +163,12 @@ const fetchProducts = (kw: string) => request.get('/product/page', { params: { p
 const fetchSaleOrders = (kw: string) => request.get('/sale/return/sale-orders', { params: { pageSize: 200, customerId: form.customerId } })
 
 // 列表/拼装用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
+// 2026-09-20（F7-146②）：删除 warehouses / loadWarehouses —— 拉回后**未被使用**
+// （仓库下拉走 RemoteSelect 的 fetchWarehouses 实时查库）；customers / products 仍被
+// onCustomerChange / onProductChange 用于回填名称，**保留**（报告原述"C 两 ref 均未使用"与实际不符）。
 const customers = ref<{ id: number; name: string }[]>([])
-const warehouses = ref<{ id: number; warehouseName: string }[]>([])
 const products = ref<{ id: number; name: string; sku?: string }[]>([])
 async function loadCustomers() { try { const r: any = await fetchCustomers(''); customers.value = r?.records || [] } catch { customers.value = [] } }
-async function loadWarehouses() { try { const r: any = await fetchWarehouses(''); warehouses.value = r?.records || [] } catch { warehouses.value = [] } }
 async function loadProducts() { try { const r: any = await fetchProducts(''); products.value = r?.records || [] } catch { products.value = [] } }
 
 const form = reactive({
@@ -379,7 +380,6 @@ function goBack() {
 
 onMounted(async () => {
   loadCustomers()
-  loadWarehouses()
   loadProducts()
   const id = route.query.id
   if (id) {

@@ -8,7 +8,7 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 import { WarehouseType, AfterSaleSourceType, AfterSaleSourceTypeLabel, INVENTORY_RETURN_SORT_DIRTY_KEY } from '@/api/enums'
 import {
   getReturnSort, getReturnSortItems, getReturnSortDefectStock,
-  createReturnSort, updateReturnSort, type ReturnSortItem
+  createReturnSort, updateReturnSort
 } from '@/api/inventory'
 
 const route = useRoute(); const router = useRouter()

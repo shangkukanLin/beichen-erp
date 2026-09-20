@@ -5,7 +5,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import { getQualityTypes, type QualityOption } from '@/api/product'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { getReclassifyPage, auditReclassify, unAuditReclassify, cancelReclassify } from '@/api/inventory'
 
@@ -16,10 +15,7 @@ const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableLoading = ref(false)
 const tableData = ref<any[]>([])
 const warehouseOptions = ref<any[]>([])
-const qualityOptions = ref<QualityOption[]>([])
-const productOptions = ref<any[]>([])
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
-const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 50, keyword: kw } })
 
 // 列表
 async function loadData() {
@@ -80,9 +76,6 @@ async function handleCancel(row: any) {
 async function loadWarehouses() {
   try { const res = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } }); warehouseOptions.value = res?.records || [] } catch { warehouseOptions.value = [] }
 }
-async function loadQualityTypes() {
-  try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] }
-}
 
 function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Number(v).toFixed(2) }
 function warehouseName(id?: number) { const w = warehouseOptions.value.find((x: any) => x.id === id); return w ? w.warehouseName : '' }
@@ -96,7 +89,7 @@ function openFromStockLog() {
 /** 2026-09-20（F7-181）：改每页条数时回到第 1 页（与 stock-loss/index.vue:146 同口径） */
 function onSizeChange(v: number) { pagination.pageSize = v; pagination.pageNum = 1; loadData() }
 
-onMounted(async () => { await loadData(); loadWarehouses(); loadQualityTypes(); openFromStockLog() })
+onMounted(async () => { await loadData(); loadWarehouses(); openFromStockLog() })
 // 新增/详情页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
 onActivated(() => {
   if (sessionStorage.getItem(INVENTORY_RECLASSIFY_DIRTY_KEY) === '1') {

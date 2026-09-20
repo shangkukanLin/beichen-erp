@@ -99,9 +99,8 @@ const list = ref<any[]>([])
 const total = ref(0)
 // Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
-// 列表/查询显示用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
-const customers = ref<{ id: number; name: string }[]>([])
-async function loadCustomers() { try { const r: any = await fetchCustomers(''); customers.value = r?.records || [] } catch { customers.value = [] } }
+// 2026-09-20（F7-146①）：删除 customers / loadCustomers —— 拉回后**模板从未使用**
+// （列表直接用后端返回的 row.customerName；查询下拉走 RemoteSelect 的 fetchCustomers 实时查库）。
 const statusOptions = SaleReturnStatusLabel
 
 const query = reactive({
@@ -214,7 +213,6 @@ onActivated(() => {
   }
 })
 onMounted(() => {
-  loadCustomers()
   load()
 })
 

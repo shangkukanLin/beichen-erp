@@ -18,6 +18,13 @@ const keyword = ref('')
 const openMemos = computed(() => memoList.value.filter((m: any) => m.status === MemoStatus.OPEN))
 const closedMemos = computed(() => memoList.value.filter((m: any) => m.status === MemoStatus.CLOSED))
 const currentMemos = computed(() => (listTab.value === MemoStatus.OPEN ? openMemos.value : closedMemos.value))
+/**
+ * 2026-09-20（F7-158①）：当前展开的那条备忘录。
+ * 模板原先在 header 里**连续 5 次** `currentMemos.find(m => m.id === activeMemoId)`
+ * （标题 / 编辑按钮 / 按钮类型 / 按钮文案 / 状态判定）⇒ 每次渲染都要重复遍历整个列表；
+ * 提为 computed 后只算一次，且任一依赖（列表或选中 id）变化才重算。
+ */
+const activeMemo = computed(() => currentMemos.value.find((m: any) => m.id === activeMemoId.value) || null)
 
 // 新增/编辑备忘录弹窗
 const dialogVisible = ref(false)
@@ -197,12 +204,12 @@ onMounted(() => loadMemoList())
         <template #header>
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span style="font-weight:600">
-              {{ currentMemos.find((m: any) => m.id === activeMemoId)?.title || '进度记录' }}
+              {{ activeMemo?.title || '进度记录' }}
             </span>
             <span v-if="activeMemoId">
-              <el-button size="small" text type="primary" @click="openEdit(currentMemos.find((m: any) => m.id === activeMemoId))">编辑标题</el-button>
-              <el-button size="small" text :type="currentMemos.find((m: any) => m.id === activeMemoId)?.status === MemoStatus.OPEN ? 'warning' : 'success'" @click="toggleStatus(currentMemos.find((m: any) => m.id === activeMemoId))">
-                {{ currentMemos.find((m: any) => m.id === activeMemoId)?.status === MemoStatus.OPEN ? '关闭' : '重开' }}
+              <el-button size="small" text type="primary" @click="openEdit(activeMemo)">编辑标题</el-button>
+              <el-button size="small" text :type="activeMemo?.status === MemoStatus.OPEN ? 'warning' : 'success'" @click="toggleStatus(activeMemo)">
+                {{ activeMemo?.status === MemoStatus.OPEN ? '关闭' : '重开' }}
               </el-button>
             </span>
           </div>

@@ -40,19 +40,9 @@ const pagination = reactive({
 const tableLoading = ref(false)
 const tableData = ref<Product[]>([])
 
-// 分类下拉选项
-const categoryOptions = [
-  { label: '原材料', value: '原材料' },
-  { label: '半成品', value: '半成品' },
-  { label: '成品', value: '成品' },
-  { label: '辅料', value: '辅料' }
-]
-
-const statusOptions = [
-  { label: ProductStatusLabel.NORMAL, value: ProductStatus.NORMAL },
-  { label: ProductStatusLabel.DISCONTINUED, value: ProductStatus.DISCONTINUED },
-  { label: ProductStatusLabel.DEVELOPING, value: ProductStatus.DEVELOPING }
-]
+// 2026-09-20（F7-155）：删除 categoryOptions / statusOptions —— 定义后**模板从未使用**
+// （状态切换实际由 3 个 el-tab-pane 硬写）。其中 categoryOptions 是 4 个**中文分类字面量**，
+// 一旦将来被启用就是"改名静默失效"的隐患（F7-132 同族），删掉比留着更安全。
 
 async function loadData() {
   tableLoading.value = true

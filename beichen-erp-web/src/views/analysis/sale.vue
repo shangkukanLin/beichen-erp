@@ -186,7 +186,6 @@ function productSummary({ columns }: any) {
 
 onMounted(() => { loadData() })
 onActivated(() => { loadData() })
-watch([preset, range], () => {})
 /** 口径开关切换 → 只重绘对应饼图（数据已在本地，不重新请求接口） */
 watch([retMetric, exchMetric], async () => {
   await nextTick()

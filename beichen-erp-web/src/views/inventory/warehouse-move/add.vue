@@ -118,19 +118,11 @@ const rules: FormRules = {
 }
 
 const qualityOptions = ref<QualityOption[]>([])
-const productOptions = ref<any[]>([])
 
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 100, keyword: kw } })
-
-async function loadProducts(query?: string) {
-  try {
-    const params: any = { pageSize: 100 }
-    if (query) params.name = query
-    const res = await fetchProducts(query || '')
-    productOptions.value = res?.records || []
-  } catch { productOptions.value = [] }
-}
+// 2026-09-20（F7-180）：删除 loadProducts —— 它填充的 productOptions **模板从未使用**
+// （产品下拉走 RemoteSelect 实时查库 `fetchProducts`），但 onMounted 仍会调用它 ⇒ 每次进页多打一次 /product/page。
 
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
@@ -251,7 +243,6 @@ function handleCancel() {
 // 顶栏"刷新数据"：重新加载品质下拉
 async function handleRefreshData() { await loadQualityTypes() }
 onMounted(() => {
-  loadProducts()
   loadQualityTypes()
   if (isEdit.value) {
     tabStore.updateTabTitle(route.fullPath, '编辑移仓单')
