@@ -41,7 +41,7 @@
           <template #default="{ row }">
             <RemoteSelect v-model="row.productId" :fetch="fetchProducts"
               :label-key="(r:any)=>r.name || r.productName" placeholder="选择产品" style="width:100%"
-              @select="(r:any)=>onProductPick(r, row)" />
+              @pick="(rows:any[])=>onProductPick(rows[0], row)" />
           </template>
         </el-table-column>
         <el-table-column label="SKU" width="130">

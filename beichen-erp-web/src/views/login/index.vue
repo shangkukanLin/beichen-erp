@@ -65,18 +65,17 @@ onMounted(() => {
     try {
       const obj = JSON.parse(saved)
       loginForm.username = obj.username || ''
-      loginForm.password = obj.password ? decodeBase64(obj.password) : ''
       loginForm.remember = true
+      // 迁移：历史版本曾把密码 base64 存进本地存储（可逆 = 明文），此处读到即原地清除
+      if (obj.password) localStorage.setItem(REMEMBER_KEY, JSON.stringify({ username: loginForm.username }))
     } catch { localStorage.removeItem(REMEMBER_KEY) }
   }
 })
 
-function encodeBase64(str: string): string { return btoa(unescape(encodeURIComponent(str))) }
-function decodeBase64(str: string): string { return decodeURIComponent(escape(atob(str))) }
-
+/** 只记住用户名，绝不落地密码（口令只存在于内存与登录请求中） */
 function saveRemember() {
   if (loginForm.remember) {
-    localStorage.setItem(REMEMBER_KEY, JSON.stringify({ username: loginForm.username, password: encodeBase64(loginForm.password) }))
+    localStorage.setItem(REMEMBER_KEY, JSON.stringify({ username: loginForm.username }))
   } else {
     localStorage.removeItem(REMEMBER_KEY)
   }
@@ -162,7 +161,7 @@ async function handleAdminVerify() {
             <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" :prefix-icon="Lock" show-password />
           </el-form-item>
           <div class="login-options">
-            <el-checkbox v-model="loginForm.remember">记住密码</el-checkbox>
+            <el-checkbox v-model="loginForm.remember">记住用户名</el-checkbox>
           </div>
           <el-form-item>
             <el-button type="primary" size="large" class="login-btn" :loading="loading" @click="handleLogin">登 录</el-button>

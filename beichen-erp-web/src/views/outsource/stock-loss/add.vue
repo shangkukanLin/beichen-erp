@@ -41,7 +41,7 @@
           <template #default="{ row }">
             <RemoteSelect v-model="row.materialId" :fetch="fetchMaterials"
               :label-key="(r:any)=>r.materialName" placeholder="选择物料" style="width:100%"
-              @select="(r:any)=>onMaterialPick(r, row)" />
+              @pick="(rows:any[])=>onMaterialPick(rows[0], row)" />
           </template>
         </el-table-column>
         <el-table-column label="物料类型" width="120">

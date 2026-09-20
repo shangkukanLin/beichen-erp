@@ -80,7 +80,12 @@
           <p style="color:var(--app-color-warning);margin-bottom:16px;font-size:var(--app-font-base)">
             系统数据（公司、用户、角色、菜单）不受影响。操作后不可恢复，请谨慎执行。
           </p>
-          <el-button type="danger" :loading="clearLoading" @click="handleClear">清空当前公司数据</el-button>
+          <!-- 强确认：与上方「数据导入」同一口径 —— 危险动作必须手输口令，仅一个 confirm 弹窗不足以防误点 -->
+          <div style="margin-bottom:12px">
+            <span style="color:var(--app-color-danger)">请输入“{{ CLEAR_CONFIRM_WORD }}”以继续：</span>
+            <el-input v-model="clearConfirmText" :placeholder="CLEAR_CONFIRM_WORD" size="small" style="margin-top:4px" />
+          </div>
+          <el-button type="danger" :disabled="clearConfirmText !== CLEAR_CONFIRM_WORD" :loading="clearLoading" @click="handleClear">清空当前公司数据</el-button>
         </el-card>
       </el-tab-pane>
     </el-tabs>
@@ -102,6 +107,9 @@ const isSuperAdmin = computed(() => userStore.isSuperAdmin)
 const activeTab = ref(isSuperAdmin.value ? 'export' : 'clear')
 const exportLoading = ref(false)
 const clearLoading = ref(false)
+/** 清空数据的强确认口令（与「数据导入」的“确认导入”同口径） */
+const clearConfirmText = ref('')
+const CLEAR_CONFIRM_WORD = '清空数据'
 
 // 数据导入（原登录页入口迁移至此：导入需登录 + 管理员权限）
 const importFile = ref<File | null>(null)
@@ -205,6 +213,7 @@ async function handleExport() {
 }
 
 async function handleClear() {
+  if (clearConfirmText.value !== CLEAR_CONFIRM_WORD) { ElMessage.warning(`请输入“${CLEAR_CONFIRM_WORD}”以继续`); return }
   try {
     await ElMessageBox.confirm(
       '此操作将清空当前公司下的所有业务数据。此操作不可恢复！',

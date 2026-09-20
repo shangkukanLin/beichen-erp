@@ -419,5 +419,9 @@
   "btn_login": "登 录",
   "hint_wh_aux": "辅料仓（自有物料仓）请在",
   "hint_bom_qty": "在研发侧为只读",
-  "pfx_e2e": "E2E-20260918-"
+  "pfx_e2e": "E2E-20260918-",
+  "wh_fin1": "成品一号仓",
+  "val_product_a1": "测试产品A1",
+  "val_clear_word": "清空数据",
+  "col_avail_stock": "可用库存"
 }
