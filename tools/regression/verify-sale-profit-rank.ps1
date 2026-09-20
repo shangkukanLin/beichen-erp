@@ -1,4 +1,4 @@
-# Sales-analysis "product profit ranking" verification (2026-09-21). ASCII ONLY - no Chinese in this file.
+﻿# Sales-analysis "product profit ranking" verification (2026-09-21). ASCII ONLY - no Chinese in this file.
 # Chinese labels come from ui-e2e-zh.json (key -> base64 -> JS TextDecoder), per the project convention:
 # a .ps1 with raw Chinese but no BOM gets decoded as GBK by PS 5.1 and blows up the parser.
 #
@@ -6,7 +6,7 @@
 # Asserts:
 #   1) the warehouse card is GONE and the profit-ranking card EXISTS
 #   2) rows are sorted by profit DESC (strictly non-increasing)
-#   3) table 合计 profit == the product-profit pie card total
+#   3) the table's TOTAL profit == the product-profit pie card total
 #      (same response: sum(byProduct.profit) vs metrics.productProfit -> proves the front end did not
 #       recompute profit and that the two views stay reconciled)
 #   4) no horizontal scrollbar on the table (columns fit the card)

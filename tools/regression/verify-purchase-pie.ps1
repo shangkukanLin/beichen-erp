@@ -1,10 +1,21 @@
 ﻿# 进货分析「直接采购成品 / 委外加工成品入库」两个饼图 —— 接口 vs SQL 直查（2026-09-15）
 # 口径：① 直接采购成品 = Σ采购明细 − Σ采购退货明细（净额，采购按审核日、退货按建单日），按产品
 #       ② 委外加工成品入库 = Σ(交货数量 × 加工单价)，按成品产品；归期 = **建单日**（2026-09-15 全站统一）；退不良负数自动冲减
-# 区间：自定义 2026-08-01 ~ 2026-09-15（覆盖委外交货 8/28 与采购/退货 9/14）
+# 区间：**动态取"全量已审核单据"的日期跨度**（2026-09-21 修正）
+#   原为硬编码 2026-08-01 ~ 2026-09-15 ⇒ 2026-09-18 清库重建后所有单据归期整体漂移到 9/18，
+#   区间内接口与 SQL 同为 0（前 6 条互相 PASS），但末尾"与应付台账对账"那条**不带区间过滤**
+#   （取全量未作废 OUTSOURCE_DELIVERY 应付）⇒ 0 ≠ 10000，**长期假红**。
+#   ⇒ 现取 采购单/采购退货/委外交货（三者均 AUDITED）的 MIN/MAX(DATE(create_time)) 作为区间，
+#     保证"区间 = 全量数据"这一前提成立、台账对账语义正确；查不到时回退本月。
 # 用法：powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-purchase-pie.ps1
 $ErrorActionPreference = 'Continue'
-$s = '2026-08-01'; $e = '2026-09-15'
+$bnd = (& powershell -NoProfile -ExecutionPolicy Bypass -File .\q.ps1 -Sql "SELECT CAST(MIN(x.d) AS CHAR) AS mn, CAST(MAX(x.d) AS CHAR) AS mx FROM (SELECT DATE(create_time) AS d FROM purchase_order WHERE status = 'AUDITED' UNION ALL SELECT DATE(create_time) FROM purchase_return WHERE status = 'AUDITED' UNION ALL SELECT DATE(create_time) FROM outsource_order_delivery WHERE status = 'AUDITED') x;") -join "`n"
+$s = $null; $e = $null
+foreach ($ln in ($bnd -split "`r?`n")) {
+  if ($ln -match '^\s*(\d{4}-\d{2}-\d{2})\s*\t\s*(\d{4}-\d{2}-\d{2})\s*$') { $s = $Matches[1]; $e = $Matches[2] }
+}
+if (-not $s -or -not $e) { $s = (Get-Date -Format 'yyyy-MM-01'); $e = (Get-Date -Format 'yyyy-MM-dd'); Write-Output 'WARN 未取到单据日期跨度，回退本月区间' }
+Write-Output ('区间（动态）：' + $s + ' ~ ' + $e)
 $base = 'http://localhost:8080/api'
 $lg = Invoke-RestMethod -Uri "$base/auth/login" -Method Post -ContentType 'application/json' -Body '{"username":"lin","password":"123","companyId":1}'
 $h = @{ Authorization = $lg.data.token }
