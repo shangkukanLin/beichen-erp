@@ -294,11 +294,9 @@ public class OutsourceOtherIoController {
         LambdaQueryWrapper<OutsourceOtherIo> w = new LambdaQueryWrapper<OutsourceOtherIo>()
                 .likeRight(OutsourceOtherIo::getCode, pat).orderByDesc(OutsourceOtherIo::getCode).last("LIMIT 1");
         OutsourceOtherIo last = ioMapper.selectOne(w);
-        int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
-        }
-        return pat + String.format("%03d", seq);
+        // F7-81②（2026-09-20）：统一走 BillNoSeq（尾段连续数字解析 + 序号超 999 自动扩位，不再静默回退）
+        int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), pat) + 1 : 1;
+        return com.beichen.erp.common.BillNoSeq.format(pat, seq);
     }
 
     /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */

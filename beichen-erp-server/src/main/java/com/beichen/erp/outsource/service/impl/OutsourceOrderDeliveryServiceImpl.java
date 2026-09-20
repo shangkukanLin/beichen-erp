@@ -30,6 +30,7 @@ import com.beichen.erp.outsource.service.OutsourceOrderDeliveryService;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
+import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
@@ -432,7 +433,16 @@ public class OutsourceOrderDeliveryServiceImpl
 
         Long productId = body.get("productId") != null ? Long.valueOf(body.get("productId").toString()) : null;
         if (productId == null) throw new BusinessException("产品ID不能为空");
-        BigDecimal defectQty = new BigDecimal(body.get("quantity").toString());
+        // F7-65②（2026-09-20）：数量缺失/畸形时给业务提示（原先 `body.get("quantity").toString()` 直接 NPE ⇒ 500）
+        Object defectQtyObj = body.get("quantity");
+        if (defectQtyObj == null || defectQtyObj.toString().isBlank())
+            throw new BusinessException("退不良数量不能为空");
+        BigDecimal defectQty;
+        try {
+            defectQty = new BigDecimal(defectQtyObj.toString());
+        } catch (NumberFormatException e) {
+            throw new BusinessException("退不良数量格式不正确：" + defectQtyObj);
+        }
         // 退不良规格：A/B/C/DEFECT，缺省按 A 规处理（兼容旧调用）
         String qualityType = body.get("qualityType") != null && !body.get("qualityType").toString().isBlank()
                 ? body.get("qualityType").toString() : "A";
@@ -574,15 +584,14 @@ public class OutsourceOrderDeliveryServiceImpl
         for (MaterialReq mat : materials) {
             if (mat.materialId() == null) continue;
             BigDecimal restoreQty = mat.perUnit().multiply(defectQty).setScale(0, RoundingMode.HALF_UP);
-            // 反审核扣回还料：扣减量按"不超过当前库存"夹住（不产生负数、也不物理删行，清单 A2/B3），
+            // F7-64（2026-09-20）：**与审核侧 applyDefectStock 严格对称** —— 反审核按**等量**扣回，
+            // 允许扣成负数。原实现用 `min(应还, 当前库存)` 夹零 ⇒ 若还回的料已被消耗，只扣回剩余
+            // ⇒ 委外仓物料**永久多出**（多出的量恰是 `应还 − 当前`），且不报错。审核侧本就是
+            // `changeMaterialStockAllowNegative(+restoreQty)`，反审核必须能完全逆转它。
             // 库存写入统一到 WarehouseStockService（架构债 A2）
-            BigDecimal before = stockService.getMaterialQuantity(whId, mat.materialId());
-            BigDecimal rollback = restoreQty.compareTo(before) > 0 ? before : restoreQty;
-            if (rollback.compareTo(BigDecimal.ZERO) > 0) {
-                stockService.changeMaterialStockAllowNegative(whId, mat.materialId(), rollback.negate(),
-                        StockChangeType.OUTSOURCE_DEFECT_RETURN_UN_AUDIT.getCode(), order.getCode(),
-                        RelatedBillType.OUTSOURCE_DEFECT, delivery.getId(), order.getId(), delivery.getId());
-            }
+            stockService.changeMaterialStockAllowNegative(whId, mat.materialId(), restoreQty.negate(),
+                    StockChangeType.OUTSOURCE_DEFECT_RETURN_UN_AUDIT.getCode(), order.getCode(),
+                    RelatedBillType.OUTSOURCE_DEFECT, delivery.getId(), order.getId(), delivery.getId());
         }
     }
 
@@ -765,15 +774,27 @@ public class OutsourceOrderDeliveryServiceImpl
         return p != null && p.getProductName() != null ? p.getProductName() : "";
     }
 
-    /** 查找工厂的委外仓库 ID */
+    /**
+     * 查找工厂的**委外仓**ID（F7-74，2026-09-20：口径收紧为 `warehouse_category = OUTSOURCE`）。
+     *
+     * <p>原实现只按 `factory_id` 查、取第 0 个 ⇒ 若该工厂名下还有非委外仓（如成品仓），
+     * 会**取到错误的仓**（还料/扣料写进成品仓）。现网每个工厂仅有 1 个 OUTSOURCE 仓 ⇒ 行为不变，
+     * 但语义确定性由"约定"变成"显式过滤"。多个委外仓时仍取第 0 个（见报告"待业务确认项"）。</p>
+     *
+     * <p>无委外仓时**显式抛错**（原为 `log.warn + return null`，会让调用方静默跳过还料/扣料 ⇒ 料账不符，
+     * 口径对齐 F7-78）。</p>
+     */
     private Long resolveOutsourceWarehouseId(OutsourceOrder order) {
-        if (order.getFactoryId() == null) return null;
+        if (order.getFactoryId() == null)
+            throw new BusinessException("加工单缺少加工厂，无法确定委外仓库");
         List<Warehouse> warehouses = warehouseMapper.selectList(
                 new LambdaQueryWrapper<Warehouse>()
-                        .eq(Warehouse::getFactoryId, order.getFactoryId()));
+                        .eq(Warehouse::getFactoryId, order.getFactoryId())
+                        .eq(Warehouse::getWarehouseCategory, WarehouseCategory.OUTSOURCE.getCode())
+                        .orderByAsc(Warehouse::getId));
         if (warehouses.isEmpty()) {
             log.warn("工厂(ID={})无委外仓库", order.getFactoryId());
-            return null;
+            throw new BusinessException("该加工厂未配置委外仓库，请先在【委外仓库】页面为该工厂创建委外仓库");
         }
         return warehouses.get(0).getId();
     }

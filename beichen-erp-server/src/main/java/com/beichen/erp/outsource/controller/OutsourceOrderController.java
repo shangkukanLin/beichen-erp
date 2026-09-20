@@ -314,13 +314,24 @@ public class OutsourceOrderController {
         return R.ok();
     }
 
-    /** 查询该加工单的交货/退料记录 */
+    /**
+     * 查询该加工单的交货/退料记录。
+     *
+     * <p>⚠️ <b>F7-63（2026-09-20，已确认脆弱但保留）</b>：关联方式为 `remark LIKE 加工单号`
+     * —— 用**可变文本**当外键。已知后果：空备注的收发单永不出现在任何加工单下；若两个单号互为子串
+     * 会串单（现网 0 冲突）。</p>
+     * <p><b>为何不直接改</b>：收支单（`outsource_delivery`）与加工单**没有结构化外键**
+     * （`source_order_id` 语义是"物料订单ID"，不能复用），且该端点**前端已无调用方**（死接口）
+     * ⇒ 改动收益低、破坏外部调用方的风险高。**建议**：确认无外部调用后**整体删除本端点**
+     * （或为 `outsource_delivery` 增加真正的加工单外键）。</p>
+     */
     @GetMapping("/{id}/deliveries")
     public R<List<Map<String, Object>>> deliveries(@PathVariable Long id) {
         OutsourceOrder o = orderService.getById(id);
         if (o == null || o.getCode() == null) return R.ok(java.util.Collections.emptyList());
         List<OutsourceDelivery> list = deliveryMapper.selectList(
             new LambdaQueryWrapper<OutsourceDelivery>()
+                // F7-63：见方法注释 —— 历史遗留的弱关联（LIKE 可变文本），保留以兼容既有前端/外部调用
                 .like(OutsourceDelivery::getRemark, o.getCode())
                 .orderByDesc(OutsourceDelivery::getId));
         List<Map<String, Object>> result = new ArrayList<>();

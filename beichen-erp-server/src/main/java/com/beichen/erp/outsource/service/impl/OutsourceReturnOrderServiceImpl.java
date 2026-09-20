@@ -435,7 +435,12 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         if (order.getFactoryId() == null)
             throw new BusinessException("退货单缺少加工厂，无法审核");
         List<Warehouse> factoryWhList = warehouseMapper.selectList(
-            new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getFactoryId()));
+            new LambdaQueryWrapper<Warehouse>()
+                .eq(Warehouse::getFactoryId, order.getFactoryId())
+                // F7-81①（2026-09-20）：口径收紧为**委外仓**（原只按 factory_id ⇒ 该工厂若另有成品仓会取错仓；
+                // 现网每个工厂仅有 1 个 OUTSOURCE 仓 ⇒ 行为不变）
+                .eq(Warehouse::getWarehouseCategory, com.beichen.erp.warehouse.common.WarehouseCategory.OUTSOURCE.getCode())
+                .orderByAsc(Warehouse::getId));
         if (factoryWhList.isEmpty())
             throw new BusinessException("该加工厂未配置委外仓库，无法审核退货单（请先在【委外仓库】页面为该工厂创建委外仓库）");
         Long factoryWhId = factoryWhList.get(0).getId();
@@ -1199,10 +1204,13 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     }
 
     private String generateCode() {
+        // F7-75③（2026-09-20）：统一走 BillNoSeq。原实现用 `count(*) + 1` ⇒ ① 并发两请求拿到同一序号
+        // （靠 uk_code 兜底报错）② 历史单据被删/跨日残留会让序号与实际最大号错位 ⇒ 取"最大号 +1"更稳。
         String prefix = BillPrefix.OUTSOURCE_RETURN_ORDER + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        Long seq = returnOrderMapper.selectCount(
-            new LambdaQueryWrapper<ReturnOrder>().likeRight(ReturnOrder::getCode, prefix)) + 1;
-        return prefix + String.format("%03d", seq);
+        ReturnOrder last = returnOrderMapper.selectOne(new LambdaQueryWrapper<ReturnOrder>()
+                .likeRight(ReturnOrder::getCode, prefix).orderByDesc(ReturnOrder::getCode).last("LIMIT 1"));
+        int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
+        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
     }
 
     /** 当前登录用户ID */

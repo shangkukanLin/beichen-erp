@@ -72,7 +72,8 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
     public Page<Map<String, Object>> page(String status, Long factoryId, String code, int pageNum, int pageSize) {
         LambdaQueryWrapper<OutsourceOrder> w = new LambdaQueryWrapper<OutsourceOrder>()
                 .eq(factoryId != null, OutsourceOrder::getFactoryId, factoryId)
-                .eq(code != null && !code.isBlank(), OutsourceOrder::getCode, code)
+                // F7-65⑥（2026-09-20）：单号查询改为**模糊**匹配，与其它列表页一致（原为精确 eq）
+                .like(code != null && !code.isBlank(), OutsourceOrder::getCode, code)
                 .orderByDesc(OutsourceOrder::getId);
         if (status != null && !status.isBlank()) {
             if (status.contains(",")) {
@@ -316,8 +317,9 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
         if (!Integer.valueOf(1).equals(taxIncluded) || taxRate == null || taxRate.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO;
         }
-        BigDecimal rate = taxRate.divide(new BigDecimal("100"), 6, BigDecimal.ROUND_HALF_UP);
-        return total.multiply(rate).divide(BigDecimal.ONE.add(rate), 2, BigDecimal.ROUND_HALF_UP);
+        // F7-65④（2026-09-20）：改用 RoundingMode 枚举 —— `BigDecimal.ROUND_HALF_UP` 自 Java 9 起已废弃
+        BigDecimal rate = taxRate.divide(new BigDecimal("100"), 6, RoundingMode.HALF_UP);
+        return total.multiply(rate).divide(BigDecimal.ONE.add(rate), 2, RoundingMode.HALF_UP);
     }
 
     @Override
@@ -509,12 +511,9 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
                 .last("LIMIT 1");
         OutsourceOrder last = orderMapper.selectOne(w);
         int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try {
-                String numPart = last.getCode().substring(last.getCode().length() - 3);
-                seq = Integer.parseInt(numPart) + 1;
-            } catch (Exception e) { seq = 1; }
-        }
-        return BillPrefix.OUTSOURCE_ORDER + dateStr + String.format("%03d", seq);
+        // F7-65③（2026-09-20）：统一走 BillNoSeq（尾段连续数字解析 + 序号超 999 自动扩位，不再静默回退）
+        String prefix = BillPrefix.OUTSOURCE_ORDER + dateStr;
+        seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
+        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
     }
 }

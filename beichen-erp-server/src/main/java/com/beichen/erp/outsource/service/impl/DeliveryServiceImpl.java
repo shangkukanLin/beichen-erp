@@ -612,19 +612,6 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     /**
-     * 计算库存变动量：
-     * 发料 → 库存增加(+)
-     * 收料/退料 → 库存减少(-)
-     */
-    private BigDecimal getStockDelta(String deliveryType, BigDecimal quantity) {
-        if (DeliveryType.DELIVERY.getCode().equals(deliveryType)) {
-            return quantity;
-        } else {
-            return quantity.negate();
-        }
-    }
-
-    /**
      * 更新仓库库存并写入流水日志（物料侧"允许负数"口径的兼容入口）。
      * <p><b>F2（2026-09-17 修复）</b>：本方法原先自行 selectOne/insert/updateById + 手写流水，
      * 是**绕过统一库存服务的直写通道**（架构债 A3），且不写 related_bill_no/related_bill_id（流水不可回溯）。
@@ -635,6 +622,23 @@ public class DeliveryServiceImpl implements DeliveryService {
     private void updateStock(Long warehouseId, Long materialId, BigDecimal delta, String qualityType,
                              String materialName, String changeType, String deliveryCode) {
         updateStock(warehouseId, materialId, delta, qualityType, materialName, changeType, deliveryCode, null);
+    }
+
+    /**
+     * F7-74（2026-09-20）：取某工厂的**委外仓**ID。
+     * <p>① 显式限定 `warehouse_category = OUTSOURCE`（原实现只按 `factory_id` 取第 0 个 ⇒ 该工厂若另有
+     * 成品仓会取错仓；现网每个工厂仅有 1 个委外仓 ⇒ 行为不变）；② 多委外仓时取最小 id（确定性）；
+     * ③ 无委外仓时**抛错**（原为"静默 return"⇒ 子料不扣/不还却把父料入库与应付照落 ⇒ 料账不符）。</p>
+     */
+    private Long firstOutsourceWarehouseOf(Long factoryId, String label) {
+        if (factoryId == null) throw new BusinessException(label + "不能为空，无法确定委外仓库");
+        List<Warehouse> whs = warehouseMapper.selectList(new LambdaQueryWrapper<Warehouse>()
+                .eq(Warehouse::getFactoryId, factoryId)
+                .eq(Warehouse::getWarehouseCategory, WarehouseCategory.OUTSOURCE.getCode())
+                .orderByAsc(Warehouse::getId));
+        if (whs.isEmpty())
+            throw new BusinessException("该" + label + "未配置委外仓库，请先在【委外仓库】页面为其创建委外仓库");
+        return whs.get(0).getId();
     }
 
     /** 同上，多带一个关联单据ID（写入流水的 related_delivery_id/related_bill_id，便于回溯） */
@@ -659,9 +663,10 @@ public class DeliveryServiceImpl implements DeliveryService {
      */
     private void deductComponents(MaterialOrder order, List<OutsourceDeliveryItem> items, OutsourceDelivery delivery) {
         // 供应商委外仓：子物料从该仓扣减（与收货前缺料校验口径一致）
-        List<Warehouse> supWhs = warehouseMapper.selectList(
-                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getSupplierId()));
-        Long compWhId = supWhs.isEmpty() ? null : supWhs.get(0).getId();
+        // F7-74（2026-09-20）：① 显式限定 `warehouse_category = OUTSOURCE`（原只按 factory_id 取第 0 个，
+        // 工厂若另有成品仓会取错仓；现网每工厂仅 1 个委外仓 ⇒ 行为不变）；② 无仓时**抛错**而非静默 return
+        // （静默跳过会让"子料未扣减"却把父料入库/应付照落 ⇒ 料账不符）。
+        Long compWhId = firstOutsourceWarehouseOf(order.getSupplierId(), "收货工厂");
         if (compWhId == null) return;
         for (OutsourceDeliveryItem item : items) {
             if (item.getItemId() == null || item.getQuantity() == null) continue;
@@ -686,9 +691,8 @@ public class DeliveryServiceImpl implements DeliveryService {
      * 委外单收货反审核：对称恢复子物料库存（加回扣减量）。
      */
     private void restoreComponents(MaterialOrder order, List<OutsourceDeliveryItem> items, OutsourceDelivery delivery) {
-        List<Warehouse> supWhs = warehouseMapper.selectList(
-                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, order.getSupplierId()));
-        Long compWhId = supWhs.isEmpty() ? null : supWhs.get(0).getId();
+        // F7-74：与 deductComponents 同一口径（显式 OUTSOURCE 过滤 + 无仓抛错），保证正反向对称
+        Long compWhId = firstOutsourceWarehouseOf(order.getSupplierId(), "收货工厂");
         if (compWhId == null) return;
         for (OutsourceDeliveryItem item : items) {
             if (item.getItemId() == null || item.getQuantity() == null) continue;
@@ -723,14 +727,13 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         int seq = 1;
         if (last != null && last.getCode() != null) {
-            try {
-                String numPart = last.getCode().substring(last.getCode().length() - 3);
-                seq = Integer.parseInt(numPart) + 1;
-            } catch (Exception e) {
-                seq = 1;
-            }
+            // F7-75③（2026-09-20）：统一走 BillNoSeq（尾段连续数字解析 + 序号超 999 自动扩位，不再静默回退）
+            seq = 1;
         }
-        return BillPrefix.OUTSOURCE_DELIVERY + dateStr + String.format("%03d", seq);
+        String fullPrefix = BillPrefix.OUTSOURCE_DELIVERY + dateStr;
+        seq = (last != null && last.getCode() != null)
+                ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), fullPrefix) + 1 : 1;
+        return com.beichen.erp.common.BillNoSeq.format(fullPrefix, seq);
     }
 
     /**

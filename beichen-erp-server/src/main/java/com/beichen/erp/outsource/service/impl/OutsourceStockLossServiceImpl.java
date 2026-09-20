@@ -330,13 +330,13 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
                 .likeRight(OutsourceStockLoss::getCode, pat).orderByDesc(OutsourceStockLoss::getCode).last("LIMIT 1"));
         int seq = 1;
         if (last != null && last.getCode() != null) {
-            try {
-                seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1;
-            } catch (Exception e) {
-                seq = 1;
-            }
+            // F7-75③/F7-81②（2026-09-20）：统一走 BillNoSeq（尾段连续数字解析 + 序号超 999 自动扩位）
+            seq = 1;
         }
-        return prefix + d + String.format("%03d", seq);
+        String fullPrefix = prefix + d;
+        seq = (last != null && last.getCode() != null)
+                ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), fullPrefix) + 1 : 1;
+        return com.beichen.erp.common.BillNoSeq.format(fullPrefix, seq);
     }
 
     private Long getCurrentUserId() {

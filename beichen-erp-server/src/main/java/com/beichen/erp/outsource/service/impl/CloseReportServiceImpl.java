@@ -443,13 +443,10 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         OutsourceOtherIo last = otherIoMapper.selectOne(new LambdaQueryWrapper<OutsourceOtherIo>()
                 .likeRight(OutsourceOtherIo::getCode, likePattern)
                 .orderByDesc(OutsourceOtherIo::getCode).last("LIMIT 1"));
-        int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try {
-                seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1;
-            } catch (Exception e) { seq = 1; }
-        }
-        return BillPrefix.OUTSOURCE_OTHER_IO + dateStr + String.format("%03d", seq);
+        // F7-81②（2026-09-20）：统一走 BillNoSeq（尾段连续数字解析 + 序号超 999 自动扩位）
+        String prefix = BillPrefix.OUTSOURCE_OTHER_IO + dateStr;
+        int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
+        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
     }
 
     private BigDecimal toBD(Object v) {
@@ -610,7 +607,10 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             // E3 口径（2026-09-12）：outsource_other_io.status 一律用 DocStatus（与控制器/前端一致）；
             // 此前写 DeliveryStatus.CONFIRMED，前端按 DocStatus 渲染 → 状态列显示不出，且 /cancel 会误判为草稿
             io.setStatus(DocStatus.AUDITED.getCode());
-            io.setRemark("加工厂遗失 - " + order.getCode());
+            // F7-80（2026-09-20）：remark 内嵌**结构化关联键** `[#orderId=NN]`，供 reopenClose 精确回捞。
+            // 原实现只用「备注 = "加工厂遗失 - " + 单号」当外键 ⇒ 用户手建一张备注恰好相同的出库单
+            // 会在反结单时被误作废、库存被加回。
+            io.setRemark("加工厂遗失 - " + order.getCode() + " [#orderId=" + orderId + "]");
             io.setCode(generateOtherIoCode());
             otherIoMapper.insert(io);
 
@@ -703,9 +703,18 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         }
 
         // 3. 逆向缺失出库单：作废 + 工厂仓加回（结单时是减）
+        // F7-80（2026-09-20）：优先按**结单时写入的结构化关联键** `[#orderId=NN]` 精确回捞；
+        // 历史单据（无该标记）才回退到"备注 eq + 出库类型"双条件。原实现只按备注 eq 匹配 ⇒
+        // 用户手建一张备注恰好相同的出库单会被误作废并把库存加回（F7-63「可变文本当外键」家族）。
+        String structuredKey = "[#orderId=" + orderId + "]";
         List<OutsourceOtherIo> missingIos = otherIoMapper.selectList(
             new LambdaQueryWrapper<OutsourceOtherIo>()
-                .eq(OutsourceOtherIo::getRemark, "加工厂遗失 - " + order.getCode()));
+                .like(OutsourceOtherIo::getRemark, structuredKey));
+        if (missingIos.isEmpty()) {
+            missingIos = otherIoMapper.selectList(new LambdaQueryWrapper<OutsourceOtherIo>()
+                .eq(OutsourceOtherIo::getRemark, "加工厂遗失 - " + order.getCode())
+                .eq(OutsourceOtherIo::getIoType, IoType.OUT.getCode()));
+        }
         for (OutsourceOtherIo io : missingIos) {
             // E3 口径：仍用 DocStatus（与结单写入的 AUDITED 同体系）
             if (DocStatus.CANCELLED.getCode().equals(io.getStatus())) continue;
@@ -771,13 +780,10 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             .orderByDesc(OutsourceDelivery::getCode).last("LIMIT 1");
         OutsourceDelivery last = deliveryMapper.selectOne(w);
         int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try {
-                String numPart = last.getCode().substring(last.getCode().length() - 3);
-                seq = Integer.parseInt(numPart) + 1;
-            } catch (Exception e) { seq = 1; }
-        }
-        return BillPrefix.OUTSOURCE_DELIVERY + dateStr + String.format("%03d", seq);
+        // F7-81②（2026-09-20）：统一走 BillNoSeq（见上）
+        String prefix = BillPrefix.OUTSOURCE_DELIVERY + dateStr;
+        seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
+        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
     }
 
     /** 先进先出计算单价：按交期升序累计订单，直到满足需求量，计算加权均价 */

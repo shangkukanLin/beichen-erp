@@ -1046,10 +1046,12 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     }
 
     private String generateCode() {
+        // F7-75③（2026-09-20）：统一走 BillNoSeq（原 `count(*) + 1` 在并发/有删除时序号不可靠，见成品退货单同处注释）
         String prefix = BillPrefix.OUTSOURCE_MATERIAL_RETURN + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        Long seq = returnMapper.selectCount(
-                new LambdaQueryWrapper<OutsourceMaterialReturn>().likeRight(OutsourceMaterialReturn::getCode, prefix)) + 1;
-        return prefix + String.format("%03d", seq);
+        OutsourceMaterialReturn last = returnMapper.selectOne(new LambdaQueryWrapper<OutsourceMaterialReturn>()
+                .likeRight(OutsourceMaterialReturn::getCode, prefix).orderByDesc(OutsourceMaterialReturn::getCode).last("LIMIT 1"));
+        int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
+        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
     }
 
     private Long getCurrentUserId() {

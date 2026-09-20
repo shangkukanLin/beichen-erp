@@ -210,8 +210,14 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             throw new BusinessException("订单已作废，不可收货");
 
         // 供应商（加工厂）仓库：子物料从该仓扣减
+        // F7-74（2026-09-20）：口径与审核侧 DeliveryServiceImpl.deductComponents 保持一致 ——
+        // 显式限定 `warehouse_category = OUTSOURCE`、多仓取最小 id；**无委外仓时显式抛错**
+        // （原为静默 null ⇒ 收货前缺料校验被整段跳过，与审核侧行为不一致）。
         List<Warehouse> supWhs = warehouseMapper.selectList(
-            new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, o.getSupplierId()));
+            new LambdaQueryWrapper<Warehouse>()
+                .eq(Warehouse::getFactoryId, o.getSupplierId())
+                .eq(Warehouse::getWarehouseCategory, com.beichen.erp.warehouse.common.WarehouseCategory.OUTSOURCE.getCode())
+                .orderByAsc(Warehouse::getId));
         Long compWhId = supWhs.isEmpty() ? null : supWhs.get(0).getId();
 
         // 父物料收货仓：前端指定 > 订单目标仓 > 供应商仓
@@ -812,12 +818,18 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
      * 兼容旧数据：历史收发单无 sourceOrderId 时，兜底按 remark 包含订单 code 匹配
      */
     private List<OutsourceDelivery> findDeliveriesByOrder(Long orderId, String orderCode) {
+        // F7-75①（2026-09-20）：用 `and(...)` 把 OR 条件**分组**。原写法
+        // `.eq(sourceOrderId).or().like(remark)` 让 or 与外层条件平级（实测租户条件仍生效、未泄漏，
+        // 但一旦前面再加条件就会把过滤放宽 ⇒ 脆弱）。分组后语义固定为：
+        //   来源订单ID = orderId  【仅当有订单号时】OR 备注包含订单号（兼容历史弱关联数据）
         LambdaQueryWrapper<OutsourceDelivery> w = new LambdaQueryWrapper<OutsourceDelivery>()
-            .eq(OutsourceDelivery::getSourceOrderId, orderId)
+            .and(q -> {
+                q.eq(OutsourceDelivery::getSourceOrderId, orderId);
+                if (orderCode != null && !orderCode.isBlank()) {
+                    q.or().like(OutsourceDelivery::getRemark, orderCode);
+                }
+            })
             .orderByDesc(OutsourceDelivery::getId);
-        if (orderCode != null && !orderCode.isBlank()) {
-            w.or().like(OutsourceDelivery::getRemark, orderCode);
-        }
         return deliveryMapper.selectList(w);
     }
 
@@ -848,11 +860,11 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         LambdaQueryWrapper<MaterialOrder> w = new LambdaQueryWrapper<MaterialOrder>()
             .likeRight(MaterialOrder::getCode, BillPrefix.OUTSOURCE_MATERIAL_ORDER + ds).orderByDesc(MaterialOrder::getCode).last("LIMIT 1");
         MaterialOrder last = orderMapper.selectOne(w);
-        int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception ignored) {}
-        }
-        return BillPrefix.OUTSOURCE_MATERIAL_ORDER + ds + String.format("%03d", seq);
+        // F7-65③/F7-75③/F7-81②（2026-09-20）：统一走 BillNoSeq —— 按尾段连续数字解析（不再假设固定 3 位，
+        // 序号 ≥1000 时旧实现取后三位得 "000" ⇒ seq=1 ⇒ 撞号），且不再 catch → seq=1 静默回退
+        String prefix = BillPrefix.OUTSOURCE_MATERIAL_ORDER + ds;
+        int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
+        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
     }
 
     /** 处理方式 code → 中文名（用于备注展示） */
@@ -866,10 +878,9 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         LambdaQueryWrapper<OutsourceDelivery> w = new LambdaQueryWrapper<OutsourceDelivery>()
             .likeRight(OutsourceDelivery::getCode, BillPrefix.OUTSOURCE_DELIVERY + ds).orderByDesc(OutsourceDelivery::getCode).last("LIMIT 1");
         OutsourceDelivery last = deliveryMapper.selectOne(w);
-        int seq = 1;
-        if (last != null && last.getCode() != null) {
-            try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; } catch (Exception ignored) {}
-        }
-        return BillPrefix.OUTSOURCE_DELIVERY + ds + String.format("%03d", seq);
+        // F7-65③（2026-09-20）：统一走 BillNoSeq（见上）
+        String prefix = BillPrefix.OUTSOURCE_DELIVERY + ds;
+        int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
+        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
     }
 }
