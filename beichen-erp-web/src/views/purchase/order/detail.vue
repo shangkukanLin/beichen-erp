@@ -39,17 +39,14 @@ async function loadData() {
     order.value = res || {}
     items.value = itemRes || []
 
-    // 本地实时查供货商和仓库名称
+    // 2026-09-20（F7-177）：详情页只需**一个**名称 ⇒ 按 id 单取（原先是 pageSize=500 全量拉回再前端 find，
+    // 等于为了显示两个名字把整张主数据表拉一遍）。列表页做"多行名称映射"时才应全量拉（见 inventory/stock-log.vue）。
     if (order.value.supplierId) {
-      const res: any = await request.get('/supplier/page', { params: { pageSize: 500, name: '' } })
-      const list = res?.records || []
-      const s = list.find((x: any) => x.id === order.value.supplierId)
+      const s: any = await request.get(`/supplier/${order.value.supplierId}`).catch(() => null)
       supplierName.value = s?.name || ''
     }
     if (order.value.warehouseId) {
-      const res: any = await request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: '' } })
-      const list = res?.records || []
-      const w = list.find((x: any) => x.id === order.value.warehouseId)
+      const w: any = await request.get(`/warehouse/${order.value.warehouseId}`).catch(() => null)
       warehouseName.value = w?.warehouseName || ''
     }
     // 该采购单的退货情况（期 2·2026-09-19 读隔离：随详情接口一并返回，

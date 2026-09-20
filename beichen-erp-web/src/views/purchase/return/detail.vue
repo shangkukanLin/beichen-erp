@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onActivated } from 'vue'
+import { ref, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -12,10 +12,17 @@ const loading = ref(false)
 const saving = ref(false)
 const detail = ref<Partial<PurchaseReturn>>({})
 const items = ref<any[]>([])
-const warehouseOptions = ref<any[]>([])
+// 2026-09-20（F7-177）：详情只需显示**一个**仓库名 ⇒ 改为按 id 单取（原先是 pageSize=500 全量拉回再前端 find）
+const warehouseDisplayName = ref('')
 
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
-function warehouseName(wid?: number) { const w = warehouseOptions.value.find(x => x.id === wid); return w ? (w.warehouseName || w.name || '') : '' }
+/** 按 id 取仓库名（详情单条展示；列表页做多行映射时才全量拉，见 inventory/stock-log.vue） */
+async function loadWarehouseName() {
+  const wid = (detail.value as any).warehouseId
+  if (!wid) { warehouseDisplayName.value = ''; return }
+  try { const w: any = await request.get(`/warehouse/${wid}`); warehouseDisplayName.value = w?.warehouseName || w?.name || '' }
+  catch { warehouseDisplayName.value = '' }
+}
 function productName(it?: PurchaseReturnItem) { return it?.productName || (it?.productId != null ? `#${it.productId}` : '') }
 function rowAmount(row: any) {
   const q = Number(row.quantity) || 0
@@ -37,7 +44,7 @@ function goSupplier(id?: number) { if (id) router.push(`/supplier/detail/${id}`)
 function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 function goPurchaseOrder(id?: number) { if (id) router.push(`/inventory/purchase/detail/${id}`) }
 
-async function loadWarehouseOptions() { try { const r: any = await request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: '' } }); warehouseOptions.value = r?.records || [] } catch { warehouseOptions.value = [] } }
+
 
 async function loadData() {
   loading.value = true
@@ -46,6 +53,7 @@ async function loadData() {
     detail.value = d || {}
     // 后端随明细返回 productName，前端不再逐条查库
     items.value = await getPurchaseReturnItems(id) || []
+    await loadWarehouseName()
   } finally { loading.value = false }
 }
 
@@ -162,9 +170,8 @@ async function handleSave() {
   finally { saving.value = false }
 }
 
-// 字典类只需加载一次
-onMounted(() => { loadWarehouseOptions() })
 // 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
+// （仓库名已随 loadData 按 id 单取，不再需要额外的字典预载）
 onActivated(() => { loadData() })
 </script>
 
@@ -193,7 +200,7 @@ onActivated(() => { loadData() })
           <span v-else>—</span>
         </el-descriptions-item>
         <el-descriptions-item label="退货仓库">
-          <el-button v-if="detail.warehouseId" type="primary" link @click="goWarehouse(detail.warehouseId)">{{ warehouseName(detail.warehouseId) || '—' }}</el-button>
+          <el-button v-if="detail.warehouseId" type="primary" link @click="goWarehouse(detail.warehouseId)">{{ warehouseDisplayName || '—' }}</el-button>
           <span v-else>—</span>
         </el-descriptions-item>
         <el-descriptions-item label="来源采购单">
