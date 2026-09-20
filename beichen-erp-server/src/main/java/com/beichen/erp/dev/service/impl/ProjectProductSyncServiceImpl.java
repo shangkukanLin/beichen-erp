@@ -26,7 +26,12 @@ public class ProjectProductSyncServiceImpl implements ProjectProductSyncService 
     @Override
     @Transactional
     public void syncProduct(Long projectId, Long linkExistingProductId) {
-        Project project = projectMapper.selectById(projectId);
+        // F7-139（2026-09-20）：**项目行锁**。下面第 2 段的"幂等查重"是"按 projectId 查产品 → 查不到就新建"
+        // （典型先查后写）：并发（双击/重试）时两个请求都查不到 ⇒ **同一项目挂出两条产品**，
+        // 且 `project.product_id` 后写者胜。在项目行上串行即可闭合（带租户条件，不绕过租户过滤）。
+        Long lockCid = com.beichen.erp.config.CompanyContext.get();
+        if (lockCid != null && lockCid <= 0) lockCid = null;
+        Project project = projectMapper.selectForUpdate(projectId, lockCid);
         if (project == null) {
             log.info("项目不存在: projectId={}", projectId);
             return;

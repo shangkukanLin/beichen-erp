@@ -92,6 +92,12 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         if (!BillType.RECEIVABLE.getCode().equals(billType) && !BillType.PAYABLE.getCode().equals(billType))
             throw new BusinessException("不支持的账单类型：" + billType + "（仅支持 RECEIVABLE / PAYABLE）");
         synchronized (generateLock) {
+            // F7-139（2026-09-20）：**跨实例互斥**。原实现只有 JVM 内的 synchronized（其 javadoc 亦自述
+            // "多实例部署时互斥锁只在单 JVM 内有效，需再加数据库唯一约束"）。这里改为**先对往来单位行加锁**：
+            // 查重键是 (billType, partnerId, periodEnd)，把同一 partnerId 串行化即可覆盖整个键 ⇒
+            // 多实例/多线程下都不会重复出账，且**无需新增 DDL**
+            // （比加唯一索引更轻：MySQL 不支持 "WHERE status<>'CANCELLED'" 这种带条件的唯一索引）。
+            lockPartnerForGenerate(billType, partnerId);
             FinanceBill exist = findActiveBill(billType, partnerId, periodEnd);
             if (exist != null) {
                 throw new BusinessException("该往来单位在本账期已存在账单 " + exist.getBillNo()
@@ -102,8 +108,26 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         }
     }
 
-    /** 账期查重：同「账单类型 + 往来单位 + 账期截止日」的未作废账单（不存在返回 null） */
-    private FinanceBill findActiveBill(String billType, Long partnerId, LocalDate periodEnd) {
+    /**
+     * F7-139（2026-09-20）：按账单类型**锁定往来单位行**（RECEIVABLE → 客户 / PAYABLE → 供应商）。
+     *
+     * <p>作用是把"查重 + 落库"从"仅在单 JVM 内互斥"升级为**跨实例互斥**：账单查重键含 partnerId，
+     * 同一往来单位的出账被串行化即覆盖整个查重键 ⇒ 多实例部署下也不会重复出账。</p>
+     *
+     * <p>用行锁而非"唯一索引"的原因：查重口径含 `status <> 'CANCELLED'`（作废后可重新出账），
+     * 而 MySQL **不支持带条件的唯一索引** ⇒ 唯一索引会误伤"作废后重出"的合法场景。</p>
+     */
+    private void lockPartnerForGenerate(String billType, Long partnerId) {
+        Long cid = com.beichen.erp.config.CompanyContext.get();
+        if (cid != null && cid <= 0) cid = null;
+        if (BillType.RECEIVABLE.getCode().equals(billType)) {
+            if (customerMapper.selectForUpdate(partnerId, cid) == null) throw new BusinessException("客户不存在");
+        } else {
+            if (supplierMapper.selectForUpdate(partnerId, cid) == null) throw new BusinessException("供应商不存在");
+        }
+    }
+
+    /** 账期查重：同「账单类型 + 往来单位 + 账期截止日」的未作废账单（不存在返回 null） */    private FinanceBill findActiveBill(String billType, Long partnerId, LocalDate periodEnd) {
         return billMapper.selectOne(new LambdaQueryWrapper<FinanceBill>()
                 .eq(FinanceBill::getBillType, billType)
                 .eq(FinanceBill::getPartnerId, partnerId)

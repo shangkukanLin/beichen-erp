@@ -65,9 +65,28 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
         }
     }
 
+    /**
+     * F7-139（2026-09-20）：**项目级行锁** —— 把"同一项目的阶段操作"串行化。
+     *
+     * <p>本类原先**整套状态机无一处 CAS**：`completePhase` / `skipPhase` / `revertPhase` / `savePhaseRow` /
+     * `updatePlanned(AndShift)` / `recalcAllPlannedEnds` 全部用 `updateById` 直改阶段与项目状态。
+     * 单个方法重复执行多为幂等，但**并发双击**或**跨动作竞争**（如"完成当前阶段"与"撤销上一阶段"同时）
+     * 会让阶段状态与项目状态互相覆盖、且不留痕。入口加项目行锁后，同项目的阶段操作天然串行。</p>
+     *
+     * <p>同事务内 MySQL 行锁可重入，故内部方法（`activateNextPhase` / `syncProjectStatus`）无需重复加锁。
+     * 项目不存在时**不抛错**（行不存在也无从加锁），交由各方法原有的"不存在"分支处理，保持原语义。</p>
+     */
+    private void lockProject(Long projectId) {
+        if (projectId == null) return;
+        Long cid = com.beichen.erp.config.CompanyContext.get();
+        if (cid != null && cid <= 0) cid = null;
+        projectMapper.selectForUpdate(projectId, cid);
+    }
+
     @Override
     @Transactional
     public void completePhase(Long projectId, Long phaseId) {
+        lockProject(projectId);
         ProjectPhase current = projectPhaseMapper.selectById(phaseId);
         if (current == null) return;
         // 已取消项目不允许再推进阶段，避免阶段状态与项目状态脱节（必须抛错：静默 return 会让前端误报"完成成功"）
@@ -91,6 +110,7 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     @Override
     @Transactional
     public void skipPhase(Long projectId, Long phaseId) {
+        lockProject(projectId);
         ProjectPhase current = projectPhaseMapper.selectById(phaseId);
         if (current == null) return;
         // 已取消项目不允许再推进阶段（必须抛错，避免静默成功）
@@ -113,6 +133,7 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     @Override
     @Transactional
     public void revertPhase(Long projectId, Long phaseId) {
+        lockProject(projectId);
         ProjectPhase current = projectPhaseMapper.selectById(phaseId);
         if (current == null) return;
         // F7-96（2026-09-19）：补上"已取消项目"护栏 —— complete/skip/savePhaseRow 三处都有，
@@ -159,6 +180,7 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     @Override
     @Transactional
     public void recalcAllPlannedEnds(Long projectId) {
+        lockProject(projectId);
         List<ProjectPhase> all = listByProject(projectId);
         if (all.isEmpty()) return;
 
@@ -207,6 +229,7 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     @Override
     @Transactional
     public void savePhaseRow(Long projectId, ProjectPhase row) {
+        lockProject(projectId);
         ProjectPhase existing = projectPhaseMapper.selectById(row.getId());
         if (existing == null) return;
         // 已取消项目不允许通过手动编辑阶段推进状态（必须抛错，避免静默成功）
@@ -249,6 +272,7 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     @Override
     @Transactional
     public void updatePlanned(Long projectId, String phaseName, LocalDate plannedEnd) {
+        lockProject(projectId);
         // F7-96（2026-09-19）：补上"已取消项目"护栏（原先只在 complete/skip/savePhaseRow 三处做了）
         if (isProjectCancelled(projectId)) {
             throw new BusinessException("项目已取消，无法修改阶段计划日期；请先重新激活项目");
@@ -263,6 +287,7 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     @Override
     @Transactional
     public void updatePlannedAndShift(Long projectId, String phaseName, LocalDate plannedEnd) {
+        lockProject(projectId);
         // F7-96（2026-09-19）：补上"已取消项目"护栏（该方法还会**级联后推后续所有阶段**，
         // 对已取消项目执行相当于篡改历史计划）
         if (isProjectCancelled(projectId)) {

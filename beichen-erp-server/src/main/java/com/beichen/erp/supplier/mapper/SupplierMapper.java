@@ -20,6 +20,15 @@ public interface SupplierMapper extends BaseMapper<Supplier> {
     Supplier selectForUpdate(@Param("id") Long id);
 
     /**
+     * F7-139（2026-09-20）：**带租户条件**的行锁重载（原单参版本保留给清算等既有调用方，避免连带改动）。
+     * 裸 `FOR UPDATE` 不带 `company_id` 会绕过 mybatis-plus 的租户过滤，新调用方请优先用本重载
+     * （如账单生成的"往来单位串行化"）。
+     */
+    @Select("<script>SELECT * FROM supplier WHERE id = #{id}"
+            + "<if test='companyId != null'> AND company_id = #{companyId}</if> FOR UPDATE</script>")
+    Supplier selectForUpdate(@Param("id") Long id, @Param("companyId") Long companyId);
+
+    /**
      * 批量汇总供应商应付余额：按供应商ID分组，SUM 未结清应付台账的未付金额
      * 采用 LEFT JOIN + GROUP BY 一次性算完，配合 idx_supplier_id 索引，避免逐供应商 N+1 查询
      * <p><b>2026-09-14 修复</b>：原条件为 {@code p.status != '已结清'}（中文字面量），

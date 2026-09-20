@@ -452,10 +452,16 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         if (project == null) return;
         // cancelled_at 必须显式置 null：updateById 会忽略 null 字段，
         // 残留的取消标记会让阶段护栏继续把项目当"已取消"，导致阶段永远推不动（死锁）
-        projectMapper.update(null, new LambdaUpdateWrapper<Project>()
+        // F7-139（2026-09-20）：与 {@link #cancel} 构成**对称的 CAS**。原为无条件 update ⇒
+        // ① 与 cancel 并发时"后写者胜"（cancel 刚置 CANCELLED，reactivate 又改回 IN_PROGRESS，且不留痕）；
+        // ② 对**进行中/已结项**的项目也会盲目改成 IN_PROGRESS 并清掉 cancelled_at。
+        // 现限定"只有已取消的项目可激活"，并判影响行数。
+        int updated = projectMapper.update(null, new LambdaUpdateWrapper<Project>()
                 .eq(Project::getId, projectId)
+                .eq(Project::getStatus, ProjectStatus.CANCELLED.getCode())
                 .set(Project::getStatus, ProjectStatus.IN_PROGRESS.getCode())
                 .set(Project::getCancelledAt, null));
+        if (updated == 0) throw new BusinessException("只有已取消的项目可以重新激活，请刷新后重试");
         log.info("项目已重新激活: projectId={}", projectId);
     }
 
