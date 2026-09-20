@@ -205,6 +205,8 @@ if ($Part -eq 0 -or $Part -eq 2) {
   $B_SKU = B64 (ZH 'prod_lbl_sku')
   $B_SUPSKU = B64 (ZH 'sup_lbl_supply_sku')
   $B_NEW = B64 (ZH 'btn_new')
+  $B_NAME = B64 (ZH 'prod_lbl_name')
+  $B_BRAND = B64 (ZH 'prod_lbl_brand')
 
   # find the probe supplier (newest one carrying a prefix); create one when Part 2 runs standalone
   $pg = Call 'Get' "$apiBase/supplier/page?pageSize=200&supplierType=product" $null
@@ -243,6 +245,34 @@ if ($Part -eq 0 -or $Part -eq 2) {
     Ok ($j.hasSupItem -eq $true) 'add page: the supplier field exists'
     Write-Host ('  SKU before picking a supplier = ' + $j.skuVal)
     Ok ([string]$j.skuVal -match '^SKU-\d{6}$') 'add page: without a supplier the SKU keeps the legacy prefix'
+
+    # n0) FIELD ORDER (2026-09-21): the supplier field must sit directly UNDER the SKU field in the same
+    #     column -- picking a supplier rewrites the SKU above it, so the two must be vertically adjacent
+    #     for the change to be noticed. The brand field was moved to its right (they were swapped).
+    $jsOrder = "(()=>{" +
+      "const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));" +
+      "var SKU=T('$B_SKU'),SUP=T('$B_SUP'),BR=T('$B_BRAND'),NM=T('$B_NAME');" +
+      "function item(L){return [].slice.call(document.querySelectorAll('.el-form-item')).filter(function(it){var b=it.querySelector('.el-form-item__label');return b&&(b.innerText||'').trim()===L;})[0]||null;}" +
+      "var a=item(SKU),b=item(SUP),c=item(BR),d=item(NM);" +
+      "if(!a||!b||!c||!d)return JSON.stringify({ok:false,miss:[!a,!b,!c,!d]});" +
+      "var ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect(),rc=c.getBoundingClientRect(),rd=d.getBoundingClientRect();" +
+      "return JSON.stringify({ok:true,skuL:Math.round(ra.left),skuT:Math.round(ra.top)," +
+      "supL:Math.round(rb.left),supT:Math.round(rb.top),brL:Math.round(rc.left),brT:Math.round(rc.top)," +
+      "nmL:Math.round(rd.left),nmT:Math.round(rd.top)});})()"
+    $fraw = (EvalJs $jsOrder).Trim()
+    Write-Host ('  field order probe = ' + $fraw)
+    $fo = $null
+    try { $fo = $fraw | ConvertFrom-Json } catch { }
+    if ($null -ne $fo) {
+      Ok ($fo.ok -eq $true) 'add page: SKU / name / supplier / brand fields are all present'
+      if ($fo.ok -eq $true) {
+        Ok ([int]$fo.supL -eq [int]$fo.skuL) 'the SUPPLIER field is in the SAME COLUMN as SKU'
+        Ok ([int]$fo.supT -gt [int]$fo.skuT) 'the SUPPLIER field is BELOW SKU (its prefix change stays visible)'
+        Ok ([int]$fo.brT -eq [int]$fo.supT) 'the BRAND field is on the SAME ROW as the supplier field'
+        Ok ([int]$fo.brL -gt [int]$fo.supL) 'the BRAND field is to the RIGHT of the supplier field (swapped)'
+        Ok ([int]$fo.nmL -gt [int]$fo.skuL) 'the NAME field still shares row 1 with SKU (unchanged)'
+      }
+    }
 
     # m) open the supplier dropdown and list its options
     $jsOpen = "(()=>{" +

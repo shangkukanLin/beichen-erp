@@ -444,5 +444,7 @@
   "tab_supplier_recv": "供应商应收",
   "val_status_audited": "已审核",
   "prod_lbl_supplier": "供货商",
-  "sup_lbl_supply_sku": "供货SKU"
+  "sup_lbl_supply_sku": "供货SKU",
+  "prod_lbl_name": "名称",
+  "prod_lbl_brand": "品牌"
 }

@@ -234,22 +234,25 @@ watch(() => route.fullPath, () => { init() })
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="品牌">
-              <el-select v-model="form.brandId" placeholder="请选择品牌" clearable style="width:100%"
-                @change="(v: any) => { if (v === ADD_MARKER) { form.brandId = undefined; router.push('/inventory/brand'); return } }">
-                <el-option v-for="b in brandOptions" :key="b.id" :label="b.brandName" :value="b.id" />
-                <el-option label="+ 新增" :value="ADD_MARKER" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
             <!-- 2026-09-21（供货SKU）：新增时选中供货商 ⇒ SKU 前缀取该供货商的「供货SKU」
-                 （如 ABC ⇒ ABC-000001）；编辑态改供货商**不会**重算已有 SKU -->
+                 （如 ABC ⇒ ABC-000001）；编辑态改供货商**不会**重算已有 SKU。
+                 2026-09-21 排序调整：供货商**放在 SKU 正下方（第 2 行第 1 格）**——
+                 它会改动上一行的 SKU，紧贴其下才能让联动一眼可见（原先与品牌互换位置，
+                 被品牌隔在斜下方，视线要往左上回看）。品牌随之移到第 2 行第 2 格。 -->
             <el-form-item label="供货商">
               <el-select v-model="form.supplierId" placeholder="请选择供货商" clearable filterable style="width:100%"
                 @change="onSupplierChange">
                 <el-option v-for="s in supplierOptions" :key="s.id"
                   :label="s.supplySku ? `${s.name}（${s.supplySku}）` : s.name" :value="s.id" />
+                <el-option label="+ 新增" :value="ADD_MARKER" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="品牌">
+              <el-select v-model="form.brandId" placeholder="请选择品牌" clearable style="width:100%"
+                @change="(v: any) => { if (v === ADD_MARKER) { form.brandId = undefined; router.push('/inventory/brand'); return } }">
+                <el-option v-for="b in brandOptions" :key="b.id" :label="b.brandName" :value="b.id" />
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
             </el-form-item>
