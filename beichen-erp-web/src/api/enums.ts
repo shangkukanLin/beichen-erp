@@ -11,6 +11,23 @@ export const CloseReportStatusLabel: Record<string, string> = {
   [CloseReportStatus.FINISHED]: '已结单'
 }
 
+/**
+ * 产品规格（对应后端 `material/common/ProductSpec`，DB 存 code 于 `product.spec_type`）。
+ * 2026-09-21 用户要求：原「分类」（自由文本）替换为规格，固定三种取值。
+ * 产品管理的新增/编辑**必填**；研发立项自动建产品时可为空（之后在产品管理补填）。
+ */
+export const ProductSpec = {
+  ORIGINAL: 'ORIGINAL',   // 原装
+  MATCHED: 'MATCHED',     // 原配
+  MODIFIED: 'MODIFIED'    // 改配
+} as const
+
+export const ProductSpecLabel: Record<string, string> = {
+  [ProductSpec.ORIGINAL]: '原装',
+  [ProductSpec.MATCHED]: '原配',
+  [ProductSpec.MODIFIED]: '改配'
+}
+
 /** 委外加工单状态（对应 OutsourceOrderStatus 枚举） */
 export const OutsourceOrderStatus = {
   PENDING: 'PENDING',

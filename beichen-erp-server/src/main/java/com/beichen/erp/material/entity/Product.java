@@ -21,7 +21,12 @@ public class Product {
      */
     private String sku;
     private Long brandId;
-    private String category;
+    /**
+     * 规格：ORIGINAL原装 / MATCHED原配 / MODIFIED改配（枚举 {@link com.beichen.erp.material.common.ProductSpec}）。
+     * 2026-09-21：原自由文本「分类 category」替换为规格枚举。
+     * 产品管理的新增/编辑**必填**（校验在 ProductController）；研发立项自动建产品时规格尚未确定，可为空、之后补填。
+     */
+    private String specType;
     /** 通用型号（适用多款机型） */
     private String generalModel;
     private String unit;

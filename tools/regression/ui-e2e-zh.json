@@ -1,4 +1,10 @@
 {
+  "prod_lbl_spec": "规格",
+  "prod_lbl_sku": "SKU",
+  "prod_spec_original": "原装",
+  "prod_spec_matched": "原配",
+  "prod_spec_modified": "改配",
+  "prod_msg_spec_required": "请选择规格",
   "pie_title_purchase": "采购成品",
   "pie_title_outsource": "委外加工",
   "card_title_purchase_detail": "采购单据明细",

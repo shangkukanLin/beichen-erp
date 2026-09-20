@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onActivated, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { addProduct, updateProduct, ProductStatus, ProductStatusLabel, type Product } from '@/api/product'
+// 2026-09-21：规格枚举（原「分类」自由文本替换而来）
+import { ProductSpec, ProductSpecLabel } from '@/api/enums'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
 const route = useRoute(); const router = useRouter()
@@ -22,12 +24,15 @@ const statusOptions = [
   { label: ProductStatusLabel.DEVELOPING, value: ProductStatus.DEVELOPING }
 ]
 
+/** 规格下拉（2026-09-21：原「分类」自由文本改为固定三选一） */
+const specOptions = Object.values(ProductSpec).map(v => ({ value: v, label: ProductSpecLabel[v] || v }))
+
 const defaultForm = (): Product => ({
   id: undefined,
   name: '',
   sku: '',
   brandId: undefined,
-  category: '',
+  specType: '',
   generalModel: '',
   unit: 'pcs',
   safetyStock: undefined,
@@ -40,8 +45,12 @@ const defaultForm = (): Product => ({
 
 const form = reactive<Product>(defaultForm())
 
+/** 编辑态进入时的原始 SKU：改 SKU 前需二次确认（历史单据的 SKU 是快照，不会一并更新） */
+const originalSku = ref('')
+
 const rules: FormRules = {
   name: [{ required: true, message: '请输入产品名称', trigger: 'blur' }],
+  specType: [{ required: true, message: '请选择规格', trigger: 'change' }],
   status: [{ required: true, message: '请选择状态', trigger: 'change' }]
 }
 
@@ -82,7 +91,13 @@ async function init() {
 
   Object.assign(form, defaultForm())
   stocks.value = []
-  if (id.value == null) return
+  originalSku.value = ''
+  if (id.value == null) {
+    // 2026-09-21：新增时预填一个自动生成的 SKU（用户可修改）；
+    // 拉取失败不阻塞，留空则由后端自动生成
+    try { form.sku = String((await request.get<any, any>('/product/next-sku')) || '') } catch { form.sku = '' }
+    return
+  }
 
   loading.value = true
   try {
@@ -93,6 +108,7 @@ async function init() {
       request.get('/warehouse/stock/page', { params: { productId: id.value, stockType: 'PRODUCT', pageSize: 500 } }) as Promise<any>
     ])
     Object.assign(form, defaultForm(), p || {})
+    originalSku.value = form.sku || ''
     brandOptions.value = Array.isArray(b) ? b : (b?.records || [])
     warehouses.value = w?.records || []
     stocks.value = s?.records || []
@@ -112,6 +128,18 @@ async function handleSave() {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
     if (!valid) return
+    const newSku = (form.sku || '').trim()
+    form.sku = newSku
+    // 2026-09-21：编辑态修改 SKU 需二次确认 —— 历史单据里的 SKU 是当时的快照，不会被一并更新
+    if (form.id && newSku && newSku !== originalSku.value) {
+      try {
+        await ElMessageBox.confirm(
+          `SKU 将由「${originalSku.value}」改为「${newSku}」。历史单据中的 SKU 是当时的快照，不会一并更新。确认修改？`,
+          '修改 SKU 确认',
+          { type: 'warning', confirmButtonText: '确认修改', cancelButtonText: '取消' }
+        )
+      } catch { return }
+    }
     saving.value = true
     try {
       if (form.id) {
@@ -155,8 +183,9 @@ watch(() => route.fullPath, () => { init() })
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="SKU">
-              <!-- SKU 由系统自动生成且不可修改：新增时提示"保存后自动生成"，编辑时展示已生成的编码 -->
-              <el-input v-model="form.sku" :placeholder="form.id ? '' : '保存后自动生成'" disabled />
+              <!-- 2026-09-21：新增时预填自动生成的编码、允许修改；编辑时也可改（改前二次确认）。
+                   留空则由后端自动生成 —— 故此处不做必填校验 -->
+              <el-input v-model="form.sku" maxlength="64" placeholder="自动生成，可修改" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -174,8 +203,11 @@ watch(() => route.fullPath, () => { init() })
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="分类">
-              <el-input v-model="form.category" placeholder="如：成品/半成品/原料" />
+            <!-- 2026-09-21：原「分类」（自由文本）替换为「规格」（固定三选一，必填） -->
+            <el-form-item label="规格" prop="specType">
+              <el-select v-model="form.specType" placeholder="请选择规格" style="width:100%">
+                <el-option v-for="o in specOptions" :key="o.value" :label="o.label" :value="o.value" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">

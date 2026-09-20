@@ -2008,7 +2008,7 @@ CREATE TABLE IF NOT EXISTS product (
     name            VARCHAR(100) NOT NULL              COMMENT '产品名称',
     sku             VARCHAR(64) DEFAULT NULL           COMMENT 'SKU编码(产品级唯一；新增留空由后端自动生成 SKU-000001)',
     brand_id        BIGINT DEFAULT NULL               COMMENT '品牌ID',
-    category        VARCHAR(30)                       COMMENT '分类',
+    spec_type       VARCHAR(20)                       COMMENT '规格: ORIGINAL原装/MATCHED原配/MODIFIED改配（产品管理必填；研发立项自动建产品可为空，之后补填）',
     general_model   VARCHAR(100) DEFAULT NULL          COMMENT '通用型号(适用多款机型)',
     unit            VARCHAR(20) DEFAULT 'pcs'          COMMENT '单位',
     safety_stock    DECIMAL(18,0) DEFAULT 0           COMMENT '安全库存',

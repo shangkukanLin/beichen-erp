@@ -11,6 +11,8 @@ import {
   type Product,
   type ProductQueryParams
 } from '@/api/product'
+// 2026-09-21：列表新增「规格」列（原「分类」不在列表展示）
+import { ProductSpecLabel } from '@/api/enums'
 import request from '@/utils/request'
 
 const router = useRouter()
@@ -179,15 +181,20 @@ onMounted(() => {
 
       <el-table v-loading="tableLoading" :data="tableData" border stripe :row-class-name="rowClass">
         <!-- 2026-09-14 按用户要求移除「序号」列 -->
-        <el-table-column prop="sku" label="SKU" width="140" />
-        <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip />
-        <el-table-column label="品牌" min-width="120">
+        <!-- 2026-09-21：新增「规格」列，并整体压缩列宽以保持"一行显示完、不横向滚动"
+             （固定列合计 636 + min 列 250 = 886 ≤ 内容区 ~900） -->
+        <el-table-column prop="sku" label="SKU" width="120" />
+        <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
+        <el-table-column label="品牌" min-width="100">
           <template #default="{ row }">{{ getBrandName(row.brandId) }}</template>
         </el-table-column>
-        <el-table-column prop="generalModel" label="通用型号" width="120" />
-        <el-table-column prop="safetyStock" label="安全库存" width="100" align="right" />
+        <el-table-column label="规格" width="84" align="center">
+          <template #default="{ row }">{{ ProductSpecLabel[row.specType] || '—' }}</template>
+        </el-table-column>
+        <el-table-column prop="generalModel" label="通用型号" width="96" />
+        <el-table-column prop="safetyStock" label="安全库存" width="86" align="right" />
         <!-- 2026-09-15 用户要求：删除「成本价」列（含「手工」标记）与「最近进价」列 —— 成本属内部信息，不在产品列表展示 -->
-        <el-table-column label="当前库存" width="130" align="right">
+        <el-table-column label="当前库存" width="120" align="right">
           <template #default="{ row }">
             <span :style="{ color: isLowStock(row) ? 'var(--app-color-danger)' : '', fontWeight: isLowStock(row) ? 'bold' : '' }">
               {{ row.currentStock ?? 0 }}
@@ -195,7 +202,7 @@ onMounted(() => {
             <el-tag v-if="isLowStock(row)" type="danger" size="small" style="margin-left:4px">预警</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" align="center" fixed="right">
+        <el-table-column label="操作" width="130" align="center" fixed="right">
           <template #default="{ row }">
             <!-- 详情页即编辑页，列表只需一个「编辑」入口 -->
             <el-button type="primary" link @click="handleEdit(row as Product)">编辑</el-button>

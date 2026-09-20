@@ -30,7 +30,10 @@ public class ProductService extends ServiceImpl<ProductMapper, Product> {
     /** 生成 SKU 时的最大顺延次数（数据库唯一索引之外的兜底，正常不会触发） */
     private static final int SKU_MAX_RETRY = 100;
 
-    public Page<Product> page(String keyword, String category, Long brandId, ProductStatus status,
+    /** SKU 最大长度（与 product.sku VARCHAR(64) 对齐，超出直接拒绝而不是靠 DB 报错） */
+    private static final int SKU_MAX_LEN = 64;
+
+    public Page<Product> page(String keyword, String specType, Long brandId, ProductStatus status,
                               String sku, int pageNum, int pageSize) {
         LambdaQueryWrapper<Product> w = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(keyword)) {
@@ -41,8 +44,8 @@ public class ProductService extends ServiceImpl<ProductMapper, Product> {
         if (StringUtils.hasText(sku)) {
             w.eq(Product::getSku, sku.trim());
         }
-        if (StringUtils.hasText(category)) {
-            w.eq(Product::getCategory, category);
+        if (StringUtils.hasText(specType)) {
+            w.eq(Product::getSpecType, specType);
         }
         if (brandId != null) {
             w.eq(Product::getBrandId, brandId);
@@ -88,24 +91,63 @@ public class ProductService extends ServiceImpl<ProductMapper, Product> {
     // ==================== SKU（产品级唯一编码） ====================
 
     /**
-     * 新增产品：SKU 由系统按公司内最大流水统一生成（SKU-000001），
-     * **不接受调用方传入**（前端输入框已置灰，此处兜底防止接口绕过）。
+     * 新增产品：**传入 SKU 则采用**（2026-09-21 用户要求：前端预填自动生成的编码、允许用户改），
+     * 传空则按公司内最大流水自动生成（SKU-000001）。
      */
     @Override
     public boolean save(Product entity) {
-        entity.setSku(nextSku());
+        String incoming = entity.getSku() == null ? "" : entity.getSku().trim();
+        if (!StringUtils.hasText(incoming)) {
+            entity.setSku(nextSku());
+        } else {
+            assertSkuAvailable(incoming, null);
+            entity.setSku(incoming);
+        }
         return super.save(entity);
     }
 
     /**
-     * 修改产品：SKU 不可修改——一律以库中现有值为准；
-     * 原值缺失（历史脏数据）才补生成，保证 SKU 始终有值。
+     * 修改产品：**允许修改 SKU**（2026-09-21 用户要求；前端在值发生变化时会二次确认）。
+     * <p>传空 ⇒ 保持库中现值（历史脏数据才补生成），避免"编辑时把 SKU 清空"；
+     * 传了非空值 ⇒ 校验公司内唯一（排除自身）后采用。</p>
+     * <p>⚠️ 历史单据明细里的 SKU 是**冗余快照**（{@code inventory_stock_take_item.sku} /
+     * {@code inventory_stock_loss_item.sku}），本方法**不回改**这些快照。</p>
      */
     @Override
     public boolean updateById(Product entity) {
         Product old = entity.getId() != null ? this.getById(entity.getId()) : null;
-        entity.setSku(old != null && StringUtils.hasText(old.getSku()) ? old.getSku() : nextSku());
+        String incoming = entity.getSku() == null ? "" : entity.getSku().trim();
+        if (!StringUtils.hasText(incoming)) {
+            entity.setSku(old != null && StringUtils.hasText(old.getSku()) ? old.getSku() : nextSku());
+        } else if (old != null && incoming.equals(old.getSku())) {
+            // 未变化：直接放行，跳过唯一校验
+            entity.setSku(incoming);
+        } else {
+            assertSkuAvailable(incoming, entity.getId());
+            entity.setSku(incoming);
+        }
         return super.updateById(entity);
+    }
+
+    /**
+     * 预览下一个可用 SKU（**只读**，供前端「新增产品」预填；复用与自动生成完全相同的取号逻辑）。
+     * <p>仅作建议值：并发下两个请求可能拿到同一个，最终由唯一键
+     * {@code uk_company_sku(company_id, sku)} 拦截并由 {@link #assertSkuAvailable} 明确报错。</p>
+     */
+    public String peekNextSku() {
+        return nextSku();
+    }
+
+    /** 校验 SKU 可用：非空、长度合法、公司内唯一（{@code excludeId} 用于编辑时排除自身） */
+    private void assertSkuAvailable(String sku, Long excludeId) {
+        if (sku.length() > SKU_MAX_LEN) {
+            throw new BusinessException("SKU 长度不能超过 " + SKU_MAX_LEN + " 个字符");
+        }
+        LambdaQueryWrapper<Product> w = new LambdaQueryWrapper<Product>().eq(Product::getSku, sku);
+        if (excludeId != null) w.ne(Product::getId, excludeId);
+        if (count(w) > 0) {
+            throw new BusinessException("SKU 已存在：" + sku + "，请更换");
+        }
     }
 
     /** 取下一个可用 SKU：按公司内已有最大流水 +1，若被占用则顺延（并发下由唯一索引兜底） */

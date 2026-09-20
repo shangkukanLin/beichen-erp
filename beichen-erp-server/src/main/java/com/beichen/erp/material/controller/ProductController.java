@@ -3,6 +3,7 @@ package com.beichen.erp.material.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.material.common.ProductStatus;
+import com.beichen.erp.material.common.ProductSpec;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.service.ProductService;
@@ -24,7 +25,7 @@ public class ProductController {
     private final ProductService service;
     private final ProjectProductSyncService projectProductSyncService;
 
-    /** 分页查询（支持关键字(名称/SKU)/SKU精确/品牌/分类/状态筛选） */
+    /** 分页查询（支持关键字(名称/SKU)/SKU精确/品牌/规格/状态筛选） */
     @GetMapping("/page")
     public R<Page<Product>> page(
             @RequestParam(defaultValue = "1") int pageNum,
@@ -32,10 +33,19 @@ public class ProductController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String sku,
             @RequestParam(required = false) Long brandId,
-            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String specType,
             @RequestParam(required = false) String status) {
         ProductStatus ps = status != null ? ProductStatus.fromValue(status) : null;
-        return R.ok(service.page(keyword, category, brandId, ps, sku, pageNum, pageSize));
+        return R.ok(service.page(keyword, specType, brandId, ps, sku, pageNum, pageSize));
+    }
+
+    /**
+     * 预览下一个可用 SKU（只读），供「新增产品」预填；允许用户修改后再提交。
+     * <p>2026-09-21 用户要求：SKU 先默认生成、可以修改。</p>
+     */
+    @GetMapping("/next-sku")
+    public R<String> nextSku() {
+        return R.ok(service.peekNextSku());
     }
 
     /** 单条查询 */
@@ -47,6 +57,10 @@ public class ProductController {
     /** 新增 */
     @PostMapping
     public R<Void> add(@Valid @RequestBody Product product) {
+        // 规格必填（2026-09-21 用户要求）。⚠️ 放在 Controller 而非 Service：
+        // 研发立项会自动建产品（ProjectProductSyncServiceImpl 走 ProductService.save），
+        // 那是内部路径、规格尚未确定，不能因必填校验把立项流程打断。
+        product.setSpecType(ProductSpec.requireValid(product.getSpecType()));
         service.save(product);
         return R.ok();
     }
@@ -55,6 +69,8 @@ public class ProductController {
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable Long id, @RequestBody Product product) {
         product.setId(id);
+        // 规格必填（理由同上）
+        product.setSpecType(ProductSpec.requireValid(product.getSpecType()));
         // 若产品名称变更，同步更新关联项目的总成名称
         if (product.getName() != null) {
             Product old = service.getById(id);

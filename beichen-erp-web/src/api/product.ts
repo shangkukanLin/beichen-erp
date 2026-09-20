@@ -28,7 +28,8 @@ export interface ProductQueryParams {
   /** SKU 精确查询 */
   sku?: string
   brandId?: number
-  category?: string
+  /** 规格（ORIGINAL原装 / MATCHED原配 / MODIFIED改配） */
+  specType?: string
   status?: string
 }
 
@@ -39,7 +40,8 @@ export interface Product {
   /** SKU 编码（产品级唯一；新增留空由后端自动生成 SKU-000001） */
   sku?: string
   brandId?: number
-  category?: string
+  /** 规格（ORIGINAL原装 / MATCHED原配 / MODIFIED改配）；产品管理新增/编辑必填 */
+  specType?: string
   /** 通用型号（适用多款机型） */
   generalModel?: string
   unit?: string
