@@ -62,6 +62,8 @@ async function loadData() {
   } catch { tableData.value = []; pagination.total = 0 } finally { tableLoading.value = false }
 }
 function handleQuery() { pagination.pageNum = 1; loadData() }
+/** 2026-09-20（F7-181）：改每页条数时回到第 1 页（与 stock-loss/index.vue:146 同口径） */
+function onSizeChange(v: number) { pagination.pageSize = v; pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.status = ''; query.warehouseId = ''; pagination.pageNum = 1; loadData() }
 
 // 新增/编辑/详情统一走独立页面（title 各不相同）
@@ -465,8 +467,9 @@ onActivated(() => {
             </el-table-column>
           </el-table>
           <div style="margin-top:12px;display:flex;justify-content:flex-end">
+            <!-- 2026-09-20（F7-181）：改每页条数时必须回到第 1 页（原先 @change 直接 loadData） -->
             <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total"
-              :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" @change="loadData" />
+              :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" @size-change="onSizeChange" @current-change="loadData" />
           </div>
         </el-card>
       </el-tab-pane>

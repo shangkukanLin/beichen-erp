@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
 import { reactive, ref, computed, onMounted, onActivated } from 'vue'
-import { PURCHASE_ORDER_DIRTY_KEY } from '@/api/enums'
+import { PURCHASE_ORDER_DIRTY_KEY, WarehouseCategory, WarehouseType } from '@/api/enums'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
@@ -66,7 +66,10 @@ const rules: FormRules = {
 
 const fetchMaterials = (kw: string) => request.get('/product/page', { params: { pageSize: 500, keyword: kw } })
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
+// 2026-09-20（F7-149）：采购入库仓统一为**自有成品仓**（与 purchase/exchange/add.vue:185 同口径）——
+// 原先不过滤 ⇒ 可把成品采进委外仓/辅料仓（后端原先也无校验）。
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page',
+  { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY, warehouseType: WarehouseType.FINISHED } })
 const loadMaterials = async (keyword?: string) => {
   try {
     const res = await getOutsourceMaterialPage({ pageNum: 1, pageSize: 100, materialName: keyword || '' })

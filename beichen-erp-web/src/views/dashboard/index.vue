@@ -919,16 +919,18 @@ async function loadStats() {
       const purRes = aggRes?.purchaseOrder || {}
       const retRes = aggRes?.purchaseReturn || {}
       const purchases = purRes?.records || []
+      // 2026-09-20（F7-197）：同页已 import DocStatus，这里原先用 'AUDITED'/'DRAFT' 字符串字面量
+      // ⇒ 与全库"枚举值存 code、统一用常量比较"的约定不一致（改常量值时这两处会被静默漏掉）。
       purchaseMonthAmount.value = purchases
-        .filter((p: any) => p.status === 'AUDITED' && (p.orderDate || '').startsWith(curMonth))
+        .filter((p: any) => p.status === DocStatus.AUDITED && (p.orderDate || '').startsWith(curMonth))
         .reduce((s: number, p: any) => s + (Number(p.totalAmount) || 0), 0)
-      purchasePending.value = purchases.filter((p: any) => p.status === 'DRAFT').length
+      purchasePending.value = purchases.filter((p: any) => p.status === DocStatus.DRAFT).length
       recentPurchases.value = purchases.slice(0, 8)
       const rets = retRes?.records || []
       purchaseReturnMonthAmount.value = rets
-        .filter((p: any) => p.status === 'AUDITED' && (p.returnDate || '').startsWith(curMonth))
+        .filter((p: any) => p.status === DocStatus.AUDITED && (p.returnDate || '').startsWith(curMonth))
         .reduce((s: number, p: any) => s + (Number(p.totalAmount) || 0), 0)
-      pendingPurchaseReturns.value = rets.filter((p: any) => p.status === 'DRAFT').slice(0, 5)
+      pendingPurchaseReturns.value = rets.filter((p: any) => p.status === DocStatus.DRAFT).slice(0, 5)
       supplierTotal.value = supRes?.total || 0
       purchaseTotal.value = purRes?.total || 0
     }

@@ -102,7 +102,10 @@ async function handleSubmit() {
     if (!valid) return
     submitLoading.value = true
     try {
-      form.typeCodes = [currentType.value]
+      // 2026-09-20（F7-153）：编辑时**不再**用当前页签类型覆盖 typeCodes ——
+      // 原先无条件 `form.typeCodes = [currentType.value]`，会把"多类型"供应商静默改成单一类型。
+      // 新增时仍按当前页签预置（弹窗里用户还能自行调整）。
+      if (!isEdit.value) form.typeCodes = [currentType.value]
       if (isEdit.value && form.id) {
         await updateSupplier(form)
         ElMessage.success('修改成功')
@@ -117,9 +120,18 @@ async function handleSubmit() {
 }
 
 async function handleToggleStatus(row: SupplierVO) {
-  await toggleSupplierStatus(row.id!)
-  ElMessage.success(row.status === 1 ? '已停用' : '已启用')
-  loadData()
+  const next = row.status === 1 ? 0 : 1
+  const action = next === 1 ? '启用' : '停用'
+  // 2026-09-20（F7-156）：原先点一下就改状态、无任何确认 ⇒ 补 confirm（与 customer/index.vue 同口径）。
+  // 停用会影响采购/委外选单，误点代价高。
+  try {
+    await ElMessageBox.confirm(`确定要${action}「${row.name}」吗？`, '提示', { type: 'warning' })
+  } catch { return }
+  try {
+    await toggleSupplierStatus(row.id!)
+    ElMessage.success(next === 1 ? '已启用' : '已停用')
+    loadData()
+  } catch (e: any) { ElMessage.error(e?.message || `${action}失败`) }
 }
 
 // ---------- 供应产品 ----------

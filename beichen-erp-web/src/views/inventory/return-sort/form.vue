@@ -168,7 +168,31 @@ async function init() {
       totalQuantity: Number(it.totalQuantity), qtyA: Number(it.qtyA), qtyB: Number(it.qtyB),
       qtyC: Number(it.qtyC), qtyDefect: Number(it.qtyDefect)
     }))
+    // 2026-09-20（F7-175）：编辑态补齐来源批次信息。
+    // available/batchQuantity/sortedQuantity/stayDays 不在 return_sort_item 上（属来源批次 after_sale_pending），
+    // 原先编辑态全缺 ⇒ ① handleSave 的「超过可用库存」校验恒不生效（available 为 undefined）
+    // ② 模板「批次量/已整理」「停留天数」列在编辑态空白。这里用**与新增态同一个接口**（后端同一套 FIFO 分配）按 pendingId 回填。
+    await fillBatchInfo()
   } catch { ElMessage.error('获取详情失败') } finally { loading.value = false }
+}
+
+/** 编辑态回填来源批次信息（口径与 loadDefectStock 一致，只补 4 个展示/校验字段；失败不阻塞编辑） */
+async function fillBatchInfo() {
+  const whId = form.warehouseId
+  if (!whId || items.value.length === 0) return
+  try {
+    const all: any[] = await getReturnSortDefectStock(whId)
+    const byPending = new Map<number, any>()
+    for (const r of all) if (r.pendingId != null) byPending.set(Number(r.pendingId), r)
+    for (const it of items.value) {
+      const r = it.pendingId != null ? byPending.get(Number(it.pendingId)) : undefined
+      if (!r) continue
+      it.available = Number(r.quantity) || 0
+      it.batchQuantity = Number(r.totalQuantity) || 0
+      it.sortedQuantity = Number(r.sortedQuantity) || 0
+      it.stayDays = Number(r.stayDays) || 0
+    }
+  } catch { /* 回填失败不影响编辑；后端审核时仍会校验库存 */ }
 }
 
 async function loadWarehouses() {

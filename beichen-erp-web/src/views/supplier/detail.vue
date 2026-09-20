@@ -135,7 +135,9 @@ async function loadData() {
     } else {
       products.value = []
     }
-    if (isVendor) materials.value = []
+    // 2026-09-20（F7-152）：`isVendor` 是 ref，原先漏了 `.value` ⇒ 该条件恒为真 ⇒
+    // 供应商详情的「供应物料」永远被清空（else 分支的加载永不执行）。影响比原判更重：功能实际不可用。
+    if (isVendor.value) materials.value = []
     else {
       const mats = await request.get<any,any>(`/supplier/${id}/materials`)
       materials.value = mats || []

@@ -17,6 +17,10 @@ import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
+import com.beichen.erp.warehouse.entity.Warehouse;
+import com.beichen.erp.warehouse.mapper.WarehouseMapper;
+import com.beichen.erp.warehouse.common.WarehouseCategory;
+import com.beichen.erp.warehouse.common.WarehouseType;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
@@ -51,6 +55,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final com.beichen.erp.finance.service.PayableHelper payableHelper;
     private final WarehouseStockService stockService;
     private final com.beichen.erp.warehouse.service.CostService costService;
+    private final WarehouseMapper warehouseMapper;
 
     @Override
     public Page<Map<String, Object>> page(Integer status, Long supplierId, String code, int pageNum, int pageSize) {
@@ -138,6 +143,22 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         return items;
     }
 
+    /**
+     * 2026-09-20（F7-149）：采购单的入库仓必须是**自有成品仓**（INVENTORY + FINISHED）。
+     * <p>前端下拉已按此口径收窄，但接口可被直接调用 ⇒ 服务端补一次校验，
+     * 避免成品被采进**委外仓**（会污染委外物料账）或**辅料仓**（物料与成品混账）。</p>
+     */
+    private void assertFinishedWarehouse(Long warehouseId) {
+        if (warehouseId == null) throw new BusinessException("采购入库仓不能为空");
+        Warehouse w = warehouseMapper.selectById(warehouseId);
+        if (w == null) throw new BusinessException("采购入库仓不存在");
+        boolean ok = WarehouseCategory.INVENTORY.getCode().equals(w.getWarehouseCategory())
+                && WarehouseType.FINISHED.getCode().equals(w.getWarehouseType());
+        if (!ok) {
+            throw new BusinessException("采购入库仓只能是自有成品仓（当前选择：" + w.getWarehouseName() + "）");
+        }
+    }
+
     /** 税额拆分（单价含税口径）：打开含税时从含税总额中按税率拆出税额 = total × rate/(100+rate) */
     private BigDecimal calcTaxAmount(BigDecimal total, Integer taxIncluded, BigDecimal taxRate) {
         if (!Integer.valueOf(1).equals(taxIncluded) || taxRate == null || taxRate.compareTo(BigDecimal.ZERO) <= 0) {
@@ -151,6 +172,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Transactional(rollbackFor = Exception.class)
     public void create(PurchaseOrder order, List<PurchaseOrderItem> items) {
         if (order.getSupplierId() == null) throw new BusinessException("供应商不能为空");
+        assertFinishedWarehouse(order.getWarehouseId()); // F7-149：入库仓必须是自有成品仓
         order.setCode(generateCode());
         order.setStatus(DocStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
@@ -180,6 +202,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         PurchaseOrder old = orderMapper.selectById(order.getId());
         if (old == null) throw new BusinessException("采购单不存在");
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        assertFinishedWarehouse(order.getWarehouseId()); // F7-149：入库仓必须是自有成品仓
         order.setCode(old.getCode());
         orderMapper.updateById(order);
         itemMapper.delete(new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, order.getId()));

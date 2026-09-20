@@ -124,7 +124,7 @@
 
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
-import { WarehouseCategory, PURCHASE_ORDER_DIRTY_KEY } from '@/api/enums'
+import { WarehouseCategory, WarehouseType, PURCHASE_ORDER_DIRTY_KEY } from '@/api/enums'
 defineOptions({ name: 'PurchaseAdd' })
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -225,7 +225,9 @@ function onMaterialChange(val: any, row: ItemRow) {
 }
 
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw, supplierType: 'product' } })
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
+// 2026-09-20（F7-149）：只滤 category 仍会列出辅料仓 ⇒ 补 warehouseType=FINISHED（自有成品仓）
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page',
+  { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY, warehouseType: WarehouseType.FINISHED } })
 
 async function loadSuppliers() {
   try {

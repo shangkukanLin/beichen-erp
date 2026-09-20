@@ -93,6 +93,9 @@ function openFromStockLog() {
   const billId = route.query.billId
   if (billId) router.push(`/inventory/reclassify/detail/${billId}`)
 }
+/** 2026-09-20（F7-181）：改每页条数时回到第 1 页（与 stock-loss/index.vue:146 同口径） */
+function onSizeChange(v: number) { pagination.pageSize = v; pagination.pageNum = 1; loadData() }
+
 onMounted(async () => { await loadData(); loadWarehouses(); loadQualityTypes(); openFromStockLog() })
 // 新增/详情页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
 onActivated(() => {
@@ -163,8 +166,9 @@ onActivated(() => {
         </el-table-column>
       </el-table>
       <div style="margin-top:12px;display:flex;justify-content:flex-end">
+        <!-- 2026-09-20（F7-181）：改每页条数时必须回到第 1 页（原先 @change 直接 loadData ⇒ 会停在旧页码，出现空白页） -->
         <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total"
-          :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" @change="loadData" />
+          :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" @size-change="onSizeChange" @current-change="loadData" />
       </div>
     </el-card>
   </div>

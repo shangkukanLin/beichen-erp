@@ -92,7 +92,7 @@
 import { localDate } from '@/utils/date'
 defineOptions({ name: 'PurchaseReturnAdd' })
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { PURCHASE_RETURN_DIRTY_KEY, WarehouseCategory } from '@/api/enums'
+import { PURCHASE_RETURN_DIRTY_KEY, WarehouseCategory, WarehouseType } from '@/api/enums'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
@@ -124,7 +124,9 @@ const qualityOptions = ref<QualityOption[]>([])
 const productOptions = ref<any[]>([])
 const items = ref<ReturnItem[]>([])
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw, supplierType: 'product' } })
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
+// 2026-09-20（F7-149）：只滤 category 仍会列出辅料仓 ⇒ 补 warehouseType=FINISHED（自有成品仓）
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page',
+  { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY, warehouseType: WarehouseType.FINISHED } })
 
 const form = reactive({
   supplierId: undefined as number | undefined,

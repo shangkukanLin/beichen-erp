@@ -66,7 +66,7 @@
 
 <script setup lang="ts">
 import { reactive, ref, onMounted, onActivated } from 'vue'
-import { PURCHASE_RETURN_DIRTY_KEY } from '@/api/enums'
+import { PURCHASE_RETURN_DIRTY_KEY, WarehouseCategory, WarehouseType } from '@/api/enums'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -87,7 +87,9 @@ const pagination = reactive({ pageNum: 1, pageSize: 20, total: 0 })
 const supplierOptions = ref<any[]>([])
 const warehouseOptions = ref<any[]>([])
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw, supplierType: 'product' } })
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
+// 2026-09-20（F7-149）：采购退货出库仓统一为**自有成品仓**（原先不过滤 ⇒ 可选出委外仓/辅料仓）
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page',
+  { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY, warehouseType: WarehouseType.FINISHED } })
 const loadSupplierOptions = async () => { try { const r: any = await fetchSuppliers(''); supplierOptions.value = r?.records || [] } catch { supplierOptions.value = [] } }
 const loadWarehouseOptions = async () => { try { const r: any = await fetchWarehouses(''); warehouseOptions.value = r?.records || [] } catch { warehouseOptions.value = [] } }
 

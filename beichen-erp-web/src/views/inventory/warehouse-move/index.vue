@@ -55,7 +55,7 @@
       <div class="pagination">
         <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
           :page-sizes="[10, 20, 50, 100]" :total="pagination.total" layout="total, sizes, prev, pager, next, jumper"
-          background @size-change="(v:number)=>{pagination.pageSize=v;loadData()}" @current-change="loadData" />
+          background @size-change="(v:number)=>{pagination.pageSize=v;pagination.pageNum=1;loadData()}" @current-change="loadData" />
       </div>
     </el-card>
 

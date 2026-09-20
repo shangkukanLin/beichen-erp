@@ -16,9 +16,27 @@ async function loadAccounts() {
   try { const r = await getAccountPage({pageSize:200}); accounts.value = r?.records || [] } catch {} finally { loading.value = false }
 }
 function addAccount() { Object.assign(aForm, { id: undefined, accountName: '', accountType: 'bank', bankName: '', accountNo: '', openingBalance: 0, status: 1 }); aDialog.value = true }
-function editAccount(row: FinanceAccount) { Object.assign(aForm, row); aDialog.value = true }
+function editAccount(row: FinanceAccount) {
+  // 2026-09-20（F7-170）：只挑可编辑字段 —— 原先 Object.assign(aForm, row) 把整行灌进表单，
+  // 连 balance / createTime 等**只读派生字段**也一起带上并随 updateAccount 提交。字段清单与 addAccount 对齐。
+  Object.assign(aForm, {
+    id: row.id,
+    accountName: row.accountName || '',
+    accountType: row.accountType || 'bank',
+    bankName: row.bankName || '',
+    accountNo: row.accountNo || '',
+    openingBalance: row.openingBalance ?? 0,
+    status: row.status ?? 1
+  })
+  aDialog.value = true
+}
 async function saveAccount() {
-  try { if (aForm.id) { await updateAccount(aForm); ElMessage.success('修改成功') } else { await createAccount(aForm); ElMessage.success('新增成功') }; aDialog.value = false; loadAccounts() } catch {}
+  // 2026-09-20（F7-173 同族 · 顺带修复）：原先 catch {} 静默 ⇒ 保存失败无任何提示
+  try {
+    if (aForm.id) { await updateAccount(aForm); ElMessage.success('修改成功') }
+    else { await createAccount(aForm); ElMessage.success('新增成功') }
+    aDialog.value = false; loadAccounts()
+  } catch (e: any) { ElMessage.error(e?.message || '保存失败') }
 }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 
