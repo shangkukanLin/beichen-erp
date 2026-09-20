@@ -14,8 +14,10 @@ import { pieOutsideLabel, pieTooltip } from '@/utils/pieLabel'
  * 数据源 `/finance/analysis/purchase-analysis`（与首页「经营总览」/「经营概览」的采购口径同源）。
  * 口径（2026-09-15 全站统一**建单日**归期）：采购金额 = 已审核采购单（create_time）；采购退货 = 已审核采购退货（create_time）；
  *      净采购额 = 采购金额 − 采购退货；采购单数 = 已审核采购单笔数。
- * 2026-09-15（第二轮）：新增两个饼图（**直接采购成品** / **委外加工成品入库**，分开两张、各按产品分片），
- *      放在「采购单据明细（下钻）」上方；每张卡各有「金额 / 件数」switch。
+ * 2026-09-15（第二轮）：新增两个饼图（**采购成品** / **委外加工**，分开两张、各按产品分片），
+ *      放在「采购单据明细」上方；每张卡各有「金额 / 件数」switch。
+ * 2026-09-21（仅文案）：卡标题 直接采购成品→采购成品、委外加工成品入库→委外加工；
+ *      明细卡标题 采购单据明细（下钻）→采购单据明细。口径/取数/接口零改动。
  * 注：采购入库属资产、不计入损益，本页只做采购视角统计，不参与利润/成本。
  */
 const router = useRouter()
@@ -124,7 +126,7 @@ async function loadData() {
 }
 
 /**
- * 两个饼图（2026-09-15 用户要求：直接采购成品 / 委外加工成品入库**分开两张**，放在「采购单据明细」上方）。
+ * 两个饼图（2026-09-15 用户要求：采购成品 / 委外加工**分开两张**，放在「采购单据明细」上方）。
  * 两张都按**产品**分片；每张卡各有「金额 / 件数」switch —— 两套数据后端**一次返回**，切换不重发请求。
  * 口径：直接采购 = Σ采购明细 − Σ采购退货明细（净额）；委外 = Σ(交货数量 × 加工单价)，退不良负数自动冲减。
  */
@@ -154,13 +156,13 @@ const pieDefs = computed(() => {
   const osQty = osMetric.value === 'qty'
   return [
     {
-      id: 'pieDirectPurchase', label: '直接采购成品', isQty: dpQty,
+      id: 'pieDirectPurchase', label: '采购成品', isQty: dpQty,
       total: dpQty ? fmtQty(t.directPurchaseQuantity) + ' 件' : fmtN(t.directPurchaseAmount) + ' 元',
       formula: dpQty ? PURCHASE_ANALYSIS_FORMULA.directPurchaseQty : PURCHASE_ANALYSIS_FORMULA.directPurchase,
       items: dpQty ? (d.directPurchaseByProductQty || []) : (d.directPurchaseByProduct || [])
     },
     {
-      id: 'pieOutsourceIn', label: '委外加工成品入库', isQty: osQty,
+      id: 'pieOutsourceIn', label: '委外加工', isQty: osQty,
       total: osQty ? fmtQty(t.outsourceInQuantity) + ' 件' : fmtN(t.outsourceInAmount) + ' 元',
       formula: osQty ? PURCHASE_ANALYSIS_FORMULA.outsourceInQty : PURCHASE_ANALYSIS_FORMULA.outsourceIn,
       items: osQty ? (d.outsourceInByProductQty || []) : (d.outsourceInByProduct || [])
@@ -235,7 +237,7 @@ onUnmounted(() => {
     <!-- ② 趋势（随区间联动；无数据给占位） -->
     <div class="dim" v-if="chartEmpty" style="margin-bottom:6px">该区间暂无数据</div>
     <div id="purchaseChart" class="chart"/>
-    <!-- ③ 两个饼图（2026-09-15 用户要求：直接采购成品 / 委外加工成品入库 **分开两张**，放在明细卡上方）；
+    <!-- ③ 两个饼图（2026-09-15 用户要求：采购成品 / 委外加工 **分开两张**，放在明细卡上方）；
          每卡各有「金额 / 件数」switch，标题带合计值，问号悬停看公式，前 8 名 + 其它 -->
     <div class="pie-grid">
       <div class="stat-card pie-card" v-for="p in pieDefs" :key="p.id">
@@ -266,7 +268,7 @@ onUnmounted(() => {
     <el-card shadow="never" class="section-card">
       <template #header>
         <div class="card-head">
-          <span class="card-title">采购单据明细（下钻）</span>
+          <span class="card-title">采购单据明细</span>
           <span class="dim">
             合计：采购 {{ fmtN(detailSum.purchase) }} ｜ 退货 {{ fmtN(detailSum.ret) }} ｜
             净采购 <b>{{ fmtN(detailSum.net) }}</b>（应与上方「净采购额」一致）

@@ -1,4 +1,10 @@
 {
+  "pie_title_purchase": "采购成品",
+  "pie_title_outsource": "委外加工",
+  "card_title_purchase_detail": "采购单据明细",
+  "old_name_direct_purchase": "直接采购成品",
+  "old_name_outsource_in": "委外加工成品入库",
+  "old_name_detail_drill": "采购单据明细（下钻）",
   "card_sale_profit_rank": "产品销售利润排行",
   "card_sale_wh_dist": "仓库销售分布",
   "pie_product_profit": "产品利润",
