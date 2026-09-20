@@ -73,28 +73,53 @@ public class WarehouseController {
         // 转为 Map 列表，补充 supplierName
         List<Map<String, Object>> rows = new ArrayList<>();
         for (Warehouse w : mpPage.getRecords()) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", w.getId());
-            m.put("code", w.getCode());
-            m.put("warehouseName", w.getWarehouseName());
-            m.put("warehouseCategory", w.getWarehouseCategory());
-            m.put("warehouseType", w.getWarehouseType());
-            m.put("factoryId", w.getFactoryId());
-            m.put("factoryName", w.getFactoryId() != null ? supplierNameMap.getOrDefault(w.getFactoryId(), "") : "");
-            m.put("address", w.getAddress());
-            m.put("contact", w.getContact());
-            m.put("phone", w.getPhone());
-            m.put("status", w.getStatus());
-            m.put("remark", w.getRemark());
-            m.put("companyId", w.getCompanyId());
-            m.put("createTime", w.getCreateTime());
-            m.put("updateTime", w.getUpdateTime());
-            rows.add(m);
+            rows.add(toMap(w, supplierNameMap));
         }
 
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, mpPage.getTotal());
         result.setRecords(rows);
         return R.ok(result);
+    }
+
+    /**
+     * F7-131（2026-09-20）：**按 id 精确查单个仓库**（含所属加工厂名）。
+     *
+     * <p>背景：委外仓库详情页（`outsource/warehouse-detail.vue`）原实现是"先请求 {@code /by-factory/{id}}
+     * （该接口按 **factoryId** 过滤，这里传的是 warehouseId ⇒ 语义错、且返回值被直接丢弃）+ 再拉
+     * {@code /page?pageSize=100} 在前端 {@code find} 出自己" ⇒ **仓库总数超过 100 时找不到 ⇒ 页面基础信息区静默空白**。
+     * 本端点一次取单体，返回结构与 {@link #page} 的每一行**完全一致**（共用 {@link #toMap}）。</p>
+     */
+    @GetMapping("/{id}")
+    public R<Map<String, Object>> getById(@PathVariable Long id) {
+        Warehouse w = warehouseMapper.selectById(id);
+        if (w == null) throw new BusinessException("仓库不存在");
+        Map<Long, String> supplierNameMap = new HashMap<>();
+        if (w.getFactoryId() != null) {
+            var s = supplierMapper.selectById(w.getFactoryId());
+            if (s != null) supplierNameMap.put(s.getId(), s.getName());
+        }
+        return R.ok(toMap(w, supplierNameMap));
+    }
+
+    /** 仓库实体 → 列表/详情共用的 Map（唯一实现，避免两处拼装漂移） */
+    private Map<String, Object> toMap(Warehouse w, Map<Long, String> supplierNameMap) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", w.getId());
+        m.put("code", w.getCode());
+        m.put("warehouseName", w.getWarehouseName());
+        m.put("warehouseCategory", w.getWarehouseCategory());
+        m.put("warehouseType", w.getWarehouseType());
+        m.put("factoryId", w.getFactoryId());
+        m.put("factoryName", w.getFactoryId() != null ? supplierNameMap.getOrDefault(w.getFactoryId(), "") : "");
+        m.put("address", w.getAddress());
+        m.put("contact", w.getContact());
+        m.put("phone", w.getPhone());
+        m.put("status", w.getStatus());
+        m.put("remark", w.getRemark());
+        m.put("companyId", w.getCompanyId());
+        m.put("createTime", w.getCreateTime());
+        m.put("updateTime", w.getUpdateTime());
+        return m;
     }
 
     /** 新增仓库（成品仓库管理页默认自有仓库） */
@@ -209,10 +234,10 @@ public class WarehouseController {
                 "SELECT COUNT(*) FROM outsource_order_delivery WHERE warehouse_id = ?", Integer.class, id);
         if (cnt > 0) associations.merge("委外加工", cnt, Integer::sum);
 
-        cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM outsource_material WHERE warehouse_id = ?", Integer.class, id);
-        if (cnt > 0) associations.merge("委外加工", cnt, Integer::sum);
-
+        // F7-126（2026-09-20）：原此处还有一条
+        //   `SELECT COUNT(*) FROM outsource_material WHERE warehouse_id = ?`
+        // —— 但 `outsource_material.warehouse_id` 是**死列**（实体无该字段；现网 30 行全 NULL），
+        // 该检查**恒为 0、形同虚设**（会让人误以为"物料与仓库有关联"）⇒ 随 DDL 删列一并移除。
         cnt = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM outsource_delivery WHERE from_warehouse_id = ? OR to_warehouse_id = ?", Integer.class, id, id);
         if (cnt > 0) associations.merge("委外加工", cnt, Integer::sum);

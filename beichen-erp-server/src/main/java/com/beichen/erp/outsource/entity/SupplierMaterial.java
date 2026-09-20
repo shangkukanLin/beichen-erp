@@ -20,8 +20,7 @@ public class SupplierMaterial {
     @TableField(exist = false)
     private String materialName;
 
-    @TableField(exist = false)
-    private String spec;
+    // F7-125（2026-09-20）：移除展示字段 `spec`（规格已下线，其来源 `OutsourceMaterial.spec` 已删除 ⇒ 拷贝处一并移除）
 
     @TableField(exist = false)
     private String materialTypeName;

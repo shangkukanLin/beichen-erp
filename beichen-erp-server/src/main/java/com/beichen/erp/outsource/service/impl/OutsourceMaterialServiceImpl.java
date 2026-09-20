@@ -150,7 +150,7 @@ public class OutsourceMaterialServiceImpl implements OutsourceMaterialService {
         if (body.get("materialTypeId") != null) {
             m.setMaterialTypeId(Long.valueOf(body.get("materialTypeId").toString()));
         }
-        m.setSpec((String) body.get("spec"));
+        // F7-125（2026-09-20）：不再接收 `spec`（产品规格已全站下线；实体字段与 DB 列同步移除）
         // 注意：supplierIds 不再写入 outsource_material 实体，改由 supplier_material 居间表维护
         m.setUnit(body.get("unit") != null ? body.get("unit").toString() : "PCS");
         m.setStatus(body.get("status") != null ? Integer.valueOf(body.get("status").toString()) : 1);

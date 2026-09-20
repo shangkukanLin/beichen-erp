@@ -150,7 +150,8 @@ public class SupplierMaterialServiceImpl extends ServiceImpl<SupplierMaterialMap
                 OutsourceMaterial m = materialMap.get(sm.getMaterialId());
                 if (m != null) {
                     sm.setMaterialName(m.getMaterialName());
-                    sm.setSpec(m.getSpec());
+                    // F7-125（2026-09-20）：移除 `sm.setSpec(m.getSpec())` —— 规格已下线，源字段也已删除，
+                    // 原写法会把恒空值搬进展示字段（界面上永远是空）
                     if (m.getMaterialTypeId() != null) {
                         MaterialType bt = materialTypeMapper.selectById(m.getMaterialTypeId());
                         sm.setMaterialTypeName(bt != null ? bt.getTypeName() : "-");

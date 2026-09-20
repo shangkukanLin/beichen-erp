@@ -39,7 +39,8 @@ function typeName(bid: number | undefined, fallback?: string) {
   return fallback || '-'
 }
 async function loadMaterialTypes() {
-  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch {}
+  // F7-129（2026-09-20）：加载失败不再静默 —— 留痕，避免"空下拉"被误认为"没有数据"
+  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch (e: any) { console.warn('加载物料类型失败', e?.message || e) }
 }
 
 async function loadOptions() {
@@ -165,12 +166,13 @@ onActivated(() => { loadAll() })
             <el-col :span="8"><el-form-item :label="order.orderType===OrderType.OUTSOURCE?'加工厂':'供应商'">
               <RemoteSelect v-model="order.supplierId" :fetch="fetchSuppliers" style="width:100%" :disabled="order.status!==MaterialOrderStatus.PENDING" placeholder="选择供应商" />
             </el-form-item></el-col>
-            <el-col :span="8"><el-form-item label="交期"><el-input v-model="order.deliveryDate" type="date" /></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="交期"><el-input v-model="order.deliveryDate" type="date" :disabled="order.status!==MaterialOrderStatus.PENDING" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="订单完成时间"><el-input :model-value="$fmtDate(order.finishTime) || '-'" readonly class="readonly-input" /></el-form-item></el-col>
-            <el-col :span="24"><el-form-item label="备注"><el-input v-model="order.remark" type="textarea" :rows="2" /></el-form-item></el-col>
+            <el-col :span="24"><el-form-item label="备注"><el-input v-model="order.remark" type="textarea" :rows="2" :disabled="order.status!==MaterialOrderStatus.PENDING" /></el-form-item></el-col>
           </el-row>
           <div style="display:flex;gap:8px;margin-top:12px">
-            <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="order.status===MaterialOrderStatus.CANCELLED">保存</el-button>
+            <!-- F7-127（2026-09-20）：与后端白名单一致 —— 非待审核不可保存（原仅禁 CANCELLED） -->
+            <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="order.status!==MaterialOrderStatus.PENDING">保存</el-button>
             <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">审核</el-button>
             <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
             <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleFinish">结单</el-button>

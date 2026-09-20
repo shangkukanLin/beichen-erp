@@ -72,7 +72,8 @@ watch(() => form.supplierId, (nv, ov) => {
 })
 
 async function loadOptions() {
-  try { const r = await request.get<any, any>('/outsource/material-return/warehouse-options'); warehouseOptions.value = r || [] } catch {}
+  // F7-129（2026-09-20）：加载失败不再静默 —— 留痕，避免"空下拉"被误认为"没有数据"
+  try { const r = await request.get<any, any>('/outsource/material-return/warehouse-options'); warehouseOptions.value = r || [] } catch (e: any) { console.warn('加载仓库选项失败', e?.message || e) }
 }
 
 async function onWarehouseChange() {

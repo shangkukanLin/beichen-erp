@@ -367,7 +367,7 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
             OutsourceMaterial m = it.getMaterialId() != null ? materialMapper.selectById(it.getMaterialId()) : null;
             if (m != null) {
                 it.setMaterialName(m.getMaterialName());
-                it.setSpec(m.getSpec());
+                // F7-125（2026-09-20）：移除 `it.setSpec(m.getSpec())` —— 规格已下线（源字段已删）
                 it.setUnit(m.getUnit());
                 if (it.getMaterialTypeId() == null) it.setMaterialTypeId(m.getMaterialTypeId());
                 // 单价未填时优先最近进价，其次物料单价

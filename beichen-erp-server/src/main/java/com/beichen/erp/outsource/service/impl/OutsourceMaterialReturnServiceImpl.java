@@ -98,11 +98,66 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
             w.eq(OutsourceMaterialReturn::getClosedFlag, 1);
         }
         Page<OutsourceMaterialReturn> raw = returnMapper.selectPage(new Page<>(pageNum, pageSize), w);
+        List<OutsourceMaterialReturn> records = raw.getRecords();
+        List<Long> pageIds = records.stream().map(OutsourceMaterialReturn::getId).toList();
         // 已返回量：本页整批查一次（避免逐单查导致 N+1）
-        Map<Long, BigDecimal> returnedMap = returnedQtyByOrders(
-                raw.getRecords().stream().map(OutsourceMaterialReturn::getId).toList());
+        Map<Long, BigDecimal> returnedMap = returnedQtyByOrders(pageIds);
+        // F7-123（2026-09-20，同 §49 性能专项口径）：**整页批量取**来源收料单号 / 关联物料订单号 /
+        // 供应商名 / 仓库名 / 明细 / 物料名 —— 原实现每行 4 次单查 + 逐行查明细 + 逐明细查物料名
+        // ⇒ 一页 10 行 ≈ 60+ 次查询；现为固定 6 次（全部按本页收集的 id 集合一次查回）。
+        java.util.Set<Long> deliveryIds = new java.util.HashSet<>();
+        java.util.Set<Long> moIds = new java.util.HashSet<>();
+        java.util.Set<Long> supIds = new java.util.HashSet<>();
+        java.util.Set<Long> whIds = new java.util.HashSet<>();
+        for (OutsourceMaterialReturn o : records) {
+            if (o.getSourceDeliveryId() != null) deliveryIds.add(o.getSourceDeliveryId());
+            if (o.getMaterialOrderId() != null) moIds.add(o.getMaterialOrderId());
+            if (o.getSupplierId() != null) supIds.add(o.getSupplierId());
+            if (o.getFromWarehouseId() != null) whIds.add(o.getFromWarehouseId());
+        }
+        Map<Long, String> deliveryCodeMap = new LinkedHashMap<>();
+        if (!deliveryIds.isEmpty()) {
+            for (OutsourceDelivery d : outsourceDeliveryMapper.selectBatchIds(deliveryIds)) {
+                deliveryCodeMap.put(d.getId(), d.getCode());
+            }
+        }
+        Map<Long, String> moCodeMap = new LinkedHashMap<>();
+        if (!moIds.isEmpty()) {
+            for (MaterialOrder mo : materialOrderMapper.selectBatchIds(moIds)) {
+                moCodeMap.put(mo.getId(), mo.getCode());
+            }
+        }
+        Map<Long, String> supNameMap = new LinkedHashMap<>();
+        if (!supIds.isEmpty()) {
+            for (Supplier s : supplierMapper.selectBatchIds(supIds)) {
+                supNameMap.put(s.getId(), s.getName() != null ? s.getName() : "");
+            }
+        }
+        Map<Long, String> whNameMap = new LinkedHashMap<>();
+        if (!whIds.isEmpty()) {
+            for (Warehouse wh : warehouseMapper.selectBatchIds(whIds)) {
+                whNameMap.put(wh.getId(), wh.getWarehouseName() != null ? wh.getWarehouseName() : "");
+            }
+        }
+        // 明细：本页一次 in 查 + 分组；顺带收集物料 id 供一次查名
+        Map<Long, List<OutsourceMaterialReturnItem>> itemsByOrder = new LinkedHashMap<>();
+        java.util.Set<Long> matIds = new java.util.HashSet<>();
+        if (!pageIds.isEmpty()) {
+            for (OutsourceMaterialReturnItem it : itemMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceMaterialReturnItem>()
+                            .in(OutsourceMaterialReturnItem::getReturnOrderId, pageIds))) {
+                itemsByOrder.computeIfAbsent(it.getReturnOrderId(), k -> new ArrayList<>()).add(it);
+                if (it.getMaterialId() != null) matIds.add(it.getMaterialId());
+            }
+        }
+        Map<Long, String> matNameMap = new LinkedHashMap<>();
+        if (!matIds.isEmpty()) {
+            for (OutsourceMaterial m : outsourceMaterialMapper.selectBatchIds(matIds)) {
+                matNameMap.put(m.getId(), m.getMaterialName() != null ? m.getMaterialName() : "");
+            }
+        }
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, raw.getTotal());
-        result.setRecords(raw.getRecords().stream().map(o -> {
+        result.setRecords(records.stream().map(o -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", o.getId()); m.put("code", o.getCode());
             // 类型归一后返回（历史 MATERIAL → REFUND），前端页签/标签直接用
@@ -110,10 +165,10 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
             m.put("supplierId", o.getSupplierId());
             m.put("fromWarehouseId", o.getFromWarehouseId());
             m.put("sourceDeliveryId", o.getSourceDeliveryId());
-            if (o.getSourceDeliveryId() != null) m.put("sourceDeliveryCode", sourceDeliveryCode(o.getSourceDeliveryId()));
+            if (o.getSourceDeliveryId() != null) m.put("sourceDeliveryCode", deliveryCodeMap.get(o.getSourceDeliveryId()));
             // 关联物料订单（2026-09-17 维修返还闭环）：前端展示"已扣减收料 / 靠本单跟踪"
             m.put("materialOrderId", o.getMaterialOrderId());
-            m.put("materialOrderCode", materialOrderCode(o.getMaterialOrderId()));
+            m.put("materialOrderCode", o.getMaterialOrderId() != null ? moCodeMap.get(o.getMaterialOrderId()) : null);
             m.put("deductedFlag", nzInt(o.getDeductedFlag()));
             m.put("closedFlag", nzInt(o.getClosedFlag()));
             m.put("closedTime", o.getClosedTime());
@@ -121,16 +176,9 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
             m.put("status", o.getStatus());
             m.put("remark", o.getRemark());
             m.put("createTime", o.getCreateTime());
-            if (o.getSupplierId() != null) {
-                Supplier s = supplierMapper.selectById(o.getSupplierId());
-                m.put("supplierName", s != null ? s.getName() : "");
-            }
-            if (o.getFromWarehouseId() != null) {
-                Warehouse wh = warehouseMapper.selectById(o.getFromWarehouseId());
-                m.put("warehouseName", wh != null ? wh.getWarehouseName() : "");
-            }
-            List<OutsourceMaterialReturnItem> items = itemMapper.selectList(
-                    new LambdaQueryWrapper<OutsourceMaterialReturnItem>().eq(OutsourceMaterialReturnItem::getReturnOrderId, o.getId()));
+            if (o.getSupplierId() != null) m.put("supplierName", supNameMap.getOrDefault(o.getSupplierId(), ""));
+            if (o.getFromWarehouseId() != null) m.put("warehouseName", whNameMap.getOrDefault(o.getFromWarehouseId(), ""));
+            List<OutsourceMaterialReturnItem> items = itemsByOrder.getOrDefault(o.getId(), List.of());
             BigDecimal totalQty = BigDecimal.ZERO;
             BigDecimal totalAmount = BigDecimal.ZERO;
             StringBuilder sb = new StringBuilder();
@@ -139,7 +187,8 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                 totalQty = totalQty.add(qty);
                 if (it.getAmount() != null) totalAmount = totalAmount.add(it.getAmount());
                 if (sb.length() > 0) sb.append("、");
-                sb.append(getMaterialName(it.getMaterialId())).append("×").append(qty.stripTrailingZeros().toPlainString());
+                sb.append(it.getMaterialId() != null ? matNameMap.getOrDefault(it.getMaterialId(), "") : "")
+                        .append("×").append(qty.stripTrailingZeros().toPlainString());
             }
             m.put("totalQuantity", totalQty);
             m.put("totalAmount", totalAmount);

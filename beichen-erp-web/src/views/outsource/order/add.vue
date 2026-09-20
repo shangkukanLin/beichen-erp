@@ -70,8 +70,11 @@ function addProduct() {
 // 供料模式：OURS来料加工 / FACTORY包工包料
 const SUPPLY_MODE_OPTIONS = [{ label: '来料加工', value: 'OURS' }, { label: '包工包料', value: 'FACTORY' }]
 const SUPPLY_TYPE_OPTIONS = [{ label: '我方供', value: 'OURS' }, { label: '工厂包', value: 'FACTORY' }]
-// 包工包料默认规则：仅玻璃（按物料类型ID对比）我方供，其余物料默认工厂包
-const glassTypeId = computed(() => materialTypes.value.find((t: any) => t.typeName === '玻璃')?.id)
+// 包工包料默认规则：**排序第一的类型（现网 = 玻璃）**我方供，其余物料默认工厂包。
+// F7-132（2026-09-20）：原按中文类型名查找（`t.typeName === '玻璃'`）⇒ 类型改名即静默失效
+// （`glassTypeId` 变 undefined ⇒ 所有物料退化为"工厂包"）。现网 玻璃 sortOrder=1、驱动IC=2 ⇒
+// 改按 sortOrder 取第一类，行为不变且不依赖可改的展示名。
+const glassTypeId = computed(() => materialTypes.value.find((t: any) => Number(t.sortOrder) === 1)?.id)
 function defaultSupplyType(materialTypeId: any) {
   return glassTypeId.value != null && materialTypeId === glassTypeId.value ? 'OURS' : 'FACTORY'
 }
@@ -184,7 +187,8 @@ async function handleSubmit() {
 }
 
 async function loadMaterialTypes() {
-  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch {}
+  // F7-129（2026-09-20）：加载失败不再静默 —— 留痕，避免"空下拉"被误认为"没有数据"
+  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch (e: any) { console.warn('加载物料类型失败', e?.message || e) }
 }
 
 // 物料直挂模式：以某物料名作为加工产品，并将其子料作为 BOM 清单（不关联研发项目）

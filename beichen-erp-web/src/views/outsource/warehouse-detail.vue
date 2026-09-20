@@ -28,7 +28,13 @@ async function loadProjects() {
   projectMap.value = map
 }
 
-const PRIORITY_TYPES = ['玻璃', '驱动IC']
+/**
+ * F7-132（2026-09-20）：排序优先级原按**中文类型名**硬编码（`PRIORITY_TYPES = ['玻璃','驱动IC']`）
+ * ⇒ 类型一旦改名即静默失效（且同名类型在多租户下并不唯一）。现改为按物料类型的 **sortOrder** 判定
+ * （现网：玻璃=1、驱动IC=2 ⇒ 行为完全不变），该值由 `/warehouse/stock/by-warehouse/{id}` 随行返回
+ * （`materialTypeSortOrder`，本次一并补齐），前端不再依赖可改的展示名、也无需额外请求类型字典。
+ */
+const PRIORITY_SORT_ORDER_MAX = 2
 
 /**
  * 负库存项（2026-09-17 F3）：委外仓允许"缺料强制出库"（交货领料走 force 口径）会形成负库存，
@@ -36,17 +42,18 @@ const PRIORITY_TYPES = ['玻璃', '驱动IC']
  */
 const negativeItems = computed(() => materials.value.filter((m: any) => Number(m.quantity) < 0))
 
-// 排序：玻璃/驱动IC > 无归属项目 > 有归属项目
+// 排序：优先类型（sortOrder ≤ PRIORITY_SORT_ORDER_MAX）> 无归属项目 > 有归属项目；同档内按 sortOrder 稳定排
 const sortedMaterials = computed(() => {
+  const soOf = (m: any) => (m.materialTypeSortOrder != null ? Number(m.materialTypeSortOrder) : 999)
   return [...materials.value].sort((a, b) => {
-    const getOrder = (m: any) => {
-      const type = m.materialTypeName || ''
+    const orderOf = (m: any) => {
       const hasProject = !!(m.projectIds && m.projectIds.trim())
-      if (PRIORITY_TYPES.includes(type)) return 0
+      if (soOf(m) <= PRIORITY_SORT_ORDER_MAX) return 0
       if (!hasProject) return 1
       return 2
     }
-    return getOrder(a) - getOrder(b)
+    const diff = orderOf(a) - orderOf(b)
+    return diff !== 0 ? diff : soOf(a) - soOf(b)
   })
 })
 
@@ -82,13 +89,13 @@ function exportExcel() {
 async function loadWarehouse() {
   loading.value = true
   try {
-    const r = await request.get<any, any>(`/warehouse/by-factory/${warehouseId}`)
-    // by-factory 返回的是仓库列表，取第一个（通常每个工厂只有一个默认仓库）
-    // 但实际上这个接口是基于 factory_id 的，而 route 传的是 warehouse_id
-    // 需要调整——从 page 接口获取单个仓库
-    const res = await request.get<any, any>('/warehouse/page', { params: { pageSize: 100 } })
-    const list = res?.records || []
-    warehouse.value = list.find((w:any) => w.id === warehouseId) || null
+    // F7-131（2026-09-20）：原实现有三处问题 ——
+    //  ① 先请求 `/warehouse/by-factory/${warehouseId}`，但该接口按 **factoryId** 过滤（这里传的却是
+    //     warehouseId）⇒ 参数语义错，且返回值 `r` 被直接丢弃、从未使用（白白多一次查询）；
+    //  ② 改拉 `/warehouse/page?pageSize=100` 再在前端 find ⇒ **仓库总数超过 100 时找不到 ⇒ 基础信息区静默空白**；
+    //  ③ 原注释自己写着"需要调整——从 page 接口获取单个仓库"。
+    // 现改为后端新增的按 id 精确查询（返回结构与列表每一行完全一致）。
+    warehouse.value = await request.get<any, any>(`/warehouse/${warehouseId}`)
   } finally { loading.value = false }
 }
 

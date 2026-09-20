@@ -26,13 +26,17 @@ const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: {
 const fetchMaterials = (kw: string) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw } })
 
 async function loadSuppliers() {
-  const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || []
+  // F7-136（2026-09-20）：补 try/catch —— 同文件其它三个 load 都有，唯独此处没有（失败会中断 loadOptions 后续加载）。
+  try {
+    const r = await request.get<any, any>('/supplier/page', { params: { pageSize: 500 } }); supplierOptions.value = r?.records || []
+  } catch (e: any) { console.warn('加载供应商失败', e?.message || e) }
 }
 
 async function loadOptions() {
   await loadSuppliers()
   const r = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } }); materialOptions.value = r?.records || []
-  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch { }
+  // F7-129（2026-09-20）：加载失败不再静默 —— 留痕，避免"空下拉"被误认为"没有数据"
+  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch (e: any) { console.warn('加载物料类型失败', e?.message || e) }
 }
 
 function onOrderTypeChange() {
@@ -90,7 +94,6 @@ async function handleSubmit() {
 
 async function initFromQuery() {
   const q = route.query
-  console.log('[initFromQuery] query:', JSON.stringify(q))
   if (q.orderType === OrderType.OUTSOURCE) {
     form.orderType = OrderType.OUTSOURCE
     await loadSuppliers()
@@ -102,7 +105,7 @@ async function initFromQuery() {
       try {
         const sup = await request.get<any, any>(`/supplier/${form.supplierId}`)
         if (sup) supplierOptions.value.push(sup)
-      } catch { }
+      } catch (e: any) { console.warn('加载供应商失败', e?.message || e) }   // F7-129：不再静默
     }
   }
   if (q.materialName) {
@@ -117,7 +120,6 @@ async function initFromQuery() {
       const found = materialOptions.value.find((m: any) => m.materialName === q.materialName)
       if (found) { matId = found.id; matTypeId = found.materialTypeId ?? matTypeId }
     }
-    console.log('[initFromQuery] material item:', { matTypeId, matId, materialName: q.materialName })
     items.value = [{
       materialTypeId: matTypeId,
       materialId: matId,

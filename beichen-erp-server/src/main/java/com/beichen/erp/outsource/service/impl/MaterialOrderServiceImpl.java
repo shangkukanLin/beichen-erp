@@ -59,6 +59,8 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     private final WarehouseStockLogMapper stockLogMapper;
     private final SupplierMaterialService supplierMaterialService;
     private final JdbcTemplate jdbcTemplate;
+    /** F7-137（2026-09-20）：委外类物料订单的"加工厂"必须带 factory 类型标签（与 §23-F7-61 的 assertFactory 同口径） */
+    private final com.beichen.erp.supplier.mapper.SupplierTypeRefMapper supplierTypeRefMapper;
 
     @Override
     public Page<Map<String, Object>> page(int pageNum, int pageSize, String code, String status, String statuses, Long supplierId) {
@@ -101,6 +103,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long create(MaterialOrder o, List<Map<String, Object>> itemsRaw) {
+        assertFactoryForOutsource(o.getOrderType(), o.getSupplierId());
         o.setCode(generateCode());
         o.setStatus(MaterialOrderStatus.PENDING.getCode());
         orderMapper.insert(o);
@@ -120,8 +123,17 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     public void update(Long id, MaterialOrder o, List<Map<String, Object>> itemsRaw) {
         MaterialOrder old = orderMapper.selectById(id);
         if (old == null) throw new BusinessException("订单不存在");
-        if (MaterialOrderStatus.CANCELLED.getCode().equals(old.getStatus())) throw new BusinessException("已作废的订单不可编辑");
+        // F7-127（2026-09-20）：**与 §23-F7-61 对齐的状态白名单** —— 只有待审核(PENDING)可整单编辑。
+        // 原实现只拦 CANCELLED ⇒ 收货中(RECEIVING)/已完成(FINISHED) 也能编辑（前端仅把明细列按 PENDING 限死，
+        // 交期与"保存"按钮没限）⇒ 而"下单数/单价"是收货单与应付的落账依据 ⇒ 改了即单实不符。
+        if (!MaterialOrderStatus.PENDING.getCode().equals(old.getStatus()))
+            throw new BusinessException("只有待审核的订单可以编辑（当前状态：" + old.getStatus()
+                    + "）；如需修改请先反审核");
         o.setId(id);
+        // F7-137（2026-09-20）：编辑同样要校验（供应商/订单类型都可能被改；未传则沿用原值）
+        assertFactoryForOutsource(
+                o.getOrderType() != null ? o.getOrderType() : old.getOrderType(),
+                o.getSupplierId() != null ? o.getSupplierId() : old.getSupplierId());
         orderMapper.updateById(o);
 
         // F7-67（2026-09-20）：明细改为**差量更新，保住行 id**。
@@ -651,8 +663,13 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
-        // 逻辑删除：MP @TableLogic 自动将 delete 转为 UPDATE deleted=1，保留审计与关联收发流水。
-        // 原子删除（O-7）：带状态条件的逻辑删 —— 仅「待审核 / 已作废」可删。
+        // F7-122（2026-09-20）：**这里实际是【物理删除】** —— 原注释称"MP @TableLogic 自动转 UPDATE deleted=1，
+        // 保留审计与关联收发流水"，但 `@TableLogic` 当时标在 **mapper 接口的常量**上（对 MP 完全无效），
+        // 两个实体字段也**没有**该注解 ⇒ 行为与注释相反。本次只**删除无效常量并修正注释**（不改删除语义，
+        // 零行为风险）；如后续确需逻辑删除，应把 `@TableLogic` 标到实体字段并评估"明细是否级联"。
+        // 原子删除（O-7）：带状态条件的删除 —— 仅「待审核 / 已作废」可删（单条 UPDATE/DELETE，affected=0 即状态不符）。
+        // ⚠️ 已知取舍：本删除**只删主表**，其 `outsource_material_order_item` 明细会**残留**（历史实查孤儿=0，
+        // 因现网订单状态均为 RECEIVING、从未触发过该入口）。
         // 此前本入口**没有任何状态校验**（收货中/已完成的订单也能被"删除"），且"先查后删"非原子；
         // 现改为单条条件 UPDATE，affected=0 即状态不符或已被并发删除。
         int rows = orderMapper.delete(new LambdaQueryWrapper<MaterialOrder>()
@@ -666,6 +683,29 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     }
 
     // ==================== 私有 ====================
+
+    /**
+     * F7-137（2026-09-20）：**委外类物料订单的往来主体必须是加工厂**（与 §23-F7-61 加工单的
+     * {@code assertFactory} **同一口径**，此处按供应商类型标签判定）。
+     *
+     * <p>原实现只校验 `supplierId` 非空 ⇒ 可直接选辅料商/成品商建"委外物料单"，而该单在收货时会以
+     * 仓库所属工厂反写 `delivery.factoryId`、应付主体类型按单据写死为 factory ⇒ 与实际供应商类型不符
+     * （与 F7-61 的立论完全相同，只是发生在物料订单侧）。</p>
+     *
+     * <p>采购类（PURCHASE）不限制供应商类型（辅料/成品商均可）。</p>
+     */
+    private void assertFactoryForOutsource(String orderType, Long supplierId) {
+        if (!com.beichen.erp.outsource.common.OrderType.OUTSOURCE.getCode().equals(orderType)) return;
+        if (supplierId == null) return;   // 非空校验由各自的原有逻辑/前端负责，此处只补"类型"口径
+        Supplier s = supplierMapper.selectById(supplierId);
+        if (s == null) throw new BusinessException("供应商不存在");
+        Long cnt = supplierTypeRefMapper.selectCount(new LambdaQueryWrapper<com.beichen.erp.supplier.entity.SupplierTypeRef>()
+                .eq(com.beichen.erp.supplier.entity.SupplierTypeRef::getSupplierId, supplierId)
+                .eq(com.beichen.erp.supplier.entity.SupplierTypeRef::getTypeCode,
+                        com.beichen.erp.supplier.common.SupplierTypeEnum.FACTORY.getCode()));
+        if (cnt == null || cnt == 0)
+            throw new BusinessException("供应商「" + s.getName() + "」不是加工厂类型，请选择加工厂");
+    }
 
     private Map<String, Object> buildOrderMap(MaterialOrder o) {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -696,7 +736,8 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             warehouseMapper.selectList(new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, supplierId))
                 .forEach(w -> supplierWhIds.add(w.getId()));
         }
-        // 查所有活跃物料订单的在途数量（按物料ID汇总），逻辑删除订单不计入（@TableLogic 已自动过滤，此处显式声明语义）
+        // 查所有活跃物料订单的在途数量（按物料ID汇总）。F7-122（2026-09-20）：下方 `.eq(deleted, 0)` 是**唯一**
+        // 的过滤来源（原先注释所称"@TableLogic 已自动过滤"不成立 —— 逻辑删除并未启用）⇒ 保留该显式条件。
         Map<Long, BigDecimal> inTransitMap = new HashMap<>();
         List<MaterialOrder> activeOrders = orderMapper.selectList(
             new LambdaQueryWrapper<MaterialOrder>()

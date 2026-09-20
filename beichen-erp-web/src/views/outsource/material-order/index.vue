@@ -6,7 +6,9 @@ import request from '@/utils/request'
 import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
 
 const router = useRouter()
-function typeName(id: any): string { return String(id ?? '') }
+// F7-136（2026-09-20）：原函数名为 typeName 却 `String(id ?? '')` ⇒ 物料 tooltip 显示的是**类型数字 ID**。
+// 后端 `MaterialOrderServiceImpl.buildItemMaps` 已随 items 返回 `materialTypeName`（:740），此处直接取用。
+function typeName(it: any): string { return it?.materialTypeName || '-' }
 const query = reactive({ code: '' })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])
@@ -106,7 +108,7 @@ onActivated(() => {
           <template #default="{row}">
             <el-tooltip placement="top" :show-after="300" raw-content>
               <template #content>
-                <div v-for="(it,i) in (row.items||[])" :key="i" style="line-height:1.6">{{ typeName(it.materialTypeId) }} {{ it.materialName }} ×{{ it.orderQuantity }}{{it.unit}}（已收{{it.receivedQuantity||0}}）</div>
+                <div v-for="(it,i) in (row.items||[])" :key="i" style="line-height:1.6">{{ typeName(it) }} {{ it.materialName }} ×{{ it.orderQuantity }}{{it.unit}}（已收{{it.receivedQuantity||0}}）</div>
               </template>
               <span>{{ (row.items || []).map((it: any) => it.materialName).filter(Boolean).join('、') || '-' }}</span>
             </el-tooltip>

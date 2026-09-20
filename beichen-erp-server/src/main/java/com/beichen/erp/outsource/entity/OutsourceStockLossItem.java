@@ -36,7 +36,7 @@ public class OutsourceStockLossItem {
     /** 品质（QualityType：GOOD 良品 / DEFECT 不良品） */
     private String qualityType;
 
-    private String spec;
+    // F7-125（2026-09-20）：删除历史遗留 `spec`（规格已全站下线；现网该列全 NULL）⇒ 列由 DDL 同步 DROP。
 
     private String unit;
 

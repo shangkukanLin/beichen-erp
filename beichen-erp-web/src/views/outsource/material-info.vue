@@ -69,10 +69,26 @@ const form = reactive(defForm()); const isEdit = ref(false)
 
 // 子物料组成
 const bomRows = ref<any[]>([])
+/**
+ * F7-130（2026-09-20）：组件**是否成功加载**。后端 `saveComponents` 是"**全量替换**"
+ * （先删该父物料全部组件再插入，空数组与 null 都等于清空），而本页"保存主数据"时**无条件**调用它。
+ * 原实现把加载失败静默成 `bomRows = []`（与"该物料本就没有组件"无法区分）⇒ **改个物料名称就会把 BOM 删光**。
+ * 现以本哨兵标记：**只有加载成功（或新增场景）才允许提交组件**，失败则跳过并提示。
+ */
+const bomLoaded = ref(false)
 function addBomRow() { bomRows.value.push({ childMaterialId: undefined, quantity: 1, lossRate: 0, remark: '' }) }
 function removeBomRow(idx: number) { bomRows.value.splice(idx, 1) }
 async function loadComponents(materialId: number) {
-  try { const r = await request.get<any, any>(`/outsource/material/${materialId}/components`); bomRows.value = (r || []).map((c: any) => ({ childMaterialId: c.childMaterialId, quantity: c.quantity ?? 1, lossRate: c.lossRate ?? 0, remark: c.remark || '' })) } catch { bomRows.value = [] }
+  try {
+    const r = await request.get<any, any>(`/outsource/material/${materialId}/components`)
+    bomRows.value = (r || []).map((c: any) => ({ childMaterialId: c.childMaterialId, quantity: c.quantity ?? 1, lossRate: c.lossRate ?? 0, remark: c.remark || '' }))
+    bomLoaded.value = true
+  } catch (e: any) {
+    // 失败 ⇒ 不置为"空 BOM"语义，而是标记为"未加载"：本次保存**不会**提交组件
+    bomLoaded.value = false
+    bomRows.value = []
+    ElMessage.error('子物料组成加载失败，为避免误清空，本次保存不会修改子物料组成：' + (e?.message || '未知错误'))
+  }
 }
 async function saveComponents(materialId: number) {
   const valid = bomRows.value.filter(r => r.childMaterialId)
@@ -85,7 +101,7 @@ async function loadAllMaterials() {
   allMaterials.value = r?.records || r || []
 }
 
-function handleAdd() { Object.assign(form, defForm()); bomRows.value = []; isEdit.value = false; dialogTitle.value = '新增物料'; dialogVisible.value = true; loadAllMaterials() }
+function handleAdd() { Object.assign(form, defForm()); bomRows.value = []; bomLoaded.value = true; isEdit.value = false; dialogTitle.value = '新增物料'; dialogVisible.value = true; loadAllMaterials() }
 async function handleEdit(row: any) {
   Object.assign(form, defForm(), row)
   form.projectIdArr = (row.projectIds || '').split(',').filter(Boolean).map(Number)
@@ -111,7 +127,10 @@ async function handleSubmit() {
   try {
     if (isEdit.value) { await request.put('/outsource/material', body); ElMessage.success('修改成功') }
     else { const res = await request.post('/outsource/material', body) as any; form.id = res }
-    if (form.id) await saveComponents(form.id)
+    // F7-130（2026-09-20）：**仅当组件已成功加载（或新增）时才提交** —— 后端是全量替换，
+    // 若加载失败仍提交空数组会把已有 BOM 清空（原实现即此缺陷）。
+    if (form.id && bomLoaded.value) { await saveComponents(form.id) }
+    else if (form.id && !bomLoaded.value) { ElMessage.warning('子物料组成未加载成功，本次保存未修改子物料组成') }
     dialogVisible.value = false; loadData()
   } finally { submitLoading.value = false }
 }

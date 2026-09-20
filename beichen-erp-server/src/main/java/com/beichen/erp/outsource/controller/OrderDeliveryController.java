@@ -6,6 +6,8 @@ import com.beichen.erp.outsource.service.OutsourceOrderDeliveryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -45,9 +47,9 @@ public class OrderDeliveryController {
 
     /** 新增交货记录 */
     @PostMapping
-    public R<Map<String, Object>> create(@RequestBody OutsourceOrderDelivery delivery,
+    public R<Map<String, Object>> create(@RequestBody Map<String, Object> body,
                                          @RequestParam(defaultValue = "false") boolean forceDelivery) {
-        return R.ok(deliveryService.createDelivery(delivery, forceDelivery));
+        return R.ok(deliveryService.createDelivery(parseDelivery(body), forceDelivery));
     }
 
     /** 审核交货记录 */
@@ -67,9 +69,9 @@ public class OrderDeliveryController {
 
     /** 修改交货记录 */
     @PutMapping("/{id}")
-    public R<Map<String, Object>> update(@PathVariable Long id, @RequestBody OutsourceOrderDelivery delivery,
+    public R<Map<String, Object>> update(@PathVariable Long id, @RequestBody Map<String, Object> body,
                                          @RequestParam(defaultValue = "false") boolean forceDelivery) {
-        return R.ok(deliveryService.updateDelivery(id, delivery, forceDelivery));
+        return R.ok(deliveryService.updateDelivery(id, parseDelivery(body), forceDelivery));
     }
 
     /** 删除交货记录 */
@@ -84,5 +86,55 @@ public class OrderDeliveryController {
     public R<Void> returnDefect(@PathVariable Long orderId, @RequestBody Map<String, Object> body) {
         deliveryService.returnDefect(orderId, body);
         return R.ok();
+    }
+
+    /**
+     * F7-128（2026-09-20）：**白名单解析请求体**。
+     *
+     * <p>原实现用 `@RequestBody OutsourceOrderDelivery` **整实体直绑** ⇒ 前端可顺带提交
+     * `id` / `status` / `companyId` / `createTime` / `sourceType` 等**非表单字段**（mass assignment）。
+     * 现改为与同模块其它控制器（`OutsourceOrderController.parseOrder`、`DeliveryController.parseDelivery`、
+     * `MaterialOrderController.parseOrder`）**一致的白名单口径**，只接收业务字段。</p>
+     *
+     * <p>字段清单与前端 `order/delivery.vue` 的提交体一一对应（`productId` / 四等级数量 / `quantity` /
+     * `warehouseId` / `deliveryDate` / `trackingNo` / `remark` / `attachUrl` / `orderId`），
+     * 并保留 `qualityType` / `sourceType` / `contact` / `phone` / `isReverse` 供历史调用方兼容；
+     * `status`（服务端强制草稿）、`productMasterId`（服务端按产品解析）、`companyId`（租户填充）、
+     * `createTime`（DB 默认）**一律不接收**。</p>
+     */
+    private OutsourceOrderDelivery parseDelivery(Map<String, Object> body) {
+        OutsourceOrderDelivery d = new OutsourceOrderDelivery();
+        if (body == null) return d;
+        if (body.get("orderId") != null) d.setOrderId(Long.valueOf(body.get("orderId").toString()));
+        if (body.get("productId") != null) d.setProductId(Long.valueOf(body.get("productId").toString()));
+        if (body.get("warehouseId") != null && !body.get("warehouseId").toString().isBlank())
+            d.setWarehouseId(Long.valueOf(body.get("warehouseId").toString()));
+        if (body.get("deliveryDate") != null && !body.get("deliveryDate").toString().isBlank())
+            d.setDeliveryDate(LocalDate.parse(body.get("deliveryDate").toString()));
+        if (body.get("quantity") != null && !body.get("quantity").toString().isBlank())
+            d.setQuantity(new BigDecimal(body.get("quantity").toString()));
+        // 四等级数量（兼容下划线键）
+        d.setAQty(num(body, "aQty", "a_qty"));
+        d.setBQty(num(body, "bQty", "b_qty"));
+        d.setCQty(num(body, "cQty", "c_qty"));
+        d.setDefectQty(num(body, "defectQty", "defect_qty"));
+        d.setQualityType((String) body.get("qualityType"));
+        d.setSourceType((String) body.get("sourceType"));
+        d.setTrackingNo((String) body.get("trackingNo"));
+        d.setRemark((String) body.get("remark"));
+        d.setAttachUrl((String) body.get("attachUrl"));
+        // 注：`OutsourceOrderDelivery` 无 contact/phone 字段（联系方式在 `outsource_delivery` 上），故不接收
+        if (body.get("isReverse") != null && !body.get("isReverse").toString().isBlank()) {
+            String s = body.get("isReverse").toString().trim();
+            d.setIsReverse("1".equals(s) || "true".equalsIgnoreCase(s));   // 实体该字段是 Boolean
+        }
+        return d;
+    }
+
+    /** 取数值字段（驼峰优先，兼容下划线），缺省返回 null */
+    private BigDecimal num(Map<String, Object> body, String camel, String snake) {
+        Object v = body.get(camel) != null ? body.get(camel) : body.get(snake);
+        if (v == null || v.toString().isBlank()) return null;
+        return new BigDecimal(v.toString());
     }
 }

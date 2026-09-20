@@ -44,7 +44,8 @@ function typeName(id: number | undefined, fallback?: string) {
   return fallback || '-'
 }
 async function loadMaterialTypes() {
-  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch {}
+  // F7-129（2026-09-20）：加载失败不再静默 —— 留痕，避免"空下拉"被误认为"没有数据"
+  try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch (e: any) { console.warn('加载物料类型失败', e?.message || e) }
 }
 
 /** 自动计算 */

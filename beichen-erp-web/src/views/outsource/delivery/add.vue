@@ -56,7 +56,8 @@ async function loadTargetWarehouses(factoryId: number) {
   try { const r = await request.get<any, any>('/warehouse/by-factory/' + factoryId); targetOutsourceWarehouses.value = r || [] } catch { targetOutsourceWarehouses.value = [] }
 }
 async function loadInventoryWarehouses() {
-  try { const r = await request.get<any, any>('/warehouse/inventory'); inventoryWarehouses.value = r || [] } catch {}
+  // F7-129（2026-09-20）：加载失败不再静默 —— 留痕，避免"空下拉"被误认为"没有数据"
+  try { const r = await request.get<any, any>('/warehouse/inventory'); inventoryWarehouses.value = r || [] } catch (e: any) { console.warn('加载仓库失败', e?.message || e) }
 }
 async function loadAllWarehouses() {
   try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } }); allWarehouses.value = r?.records || [] } catch { allWarehouses.value = [] }

@@ -59,7 +59,7 @@ public class OutsourceMaterialController {
             map.put("materialName", m.getMaterialName());
             map.put("materialTypeId", m.getMaterialTypeId());
             map.put("materialTypeName", getMaterialTypeNameById(m.getMaterialTypeId()));
-            map.put("spec", m.getSpec());
+            // F7-125（2026-09-20）：不再返回 `spec`（规格已全站下线，实体字段与 DB 列同步移除）
             // supplierIds 统一由 supplier_material 居间表联查生成（弃用字段 outsource_material.supplier_ids）
             map.put("supplierIds", supplierMaterialService.listSupplierIdsByMaterial(m.getId()));
             map.put("unit", m.getUnit());

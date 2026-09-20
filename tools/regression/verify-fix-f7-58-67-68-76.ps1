@@ -127,7 +127,11 @@ if ($outWh) {
 # 4) material order + 1 line (+ one receiving line referencing it) for F7-67.
 #    One line is enough: the guard to test is "refuse to REMOVE a line that has receiving references",
 #    and the differential-update property is tested by editing that same line in place.
-$supplierId = SqlOne "SELECT id FROM supplier ORDER BY id LIMIT 1"
+# NOTE (2026-09-20, F7-137): the fixture must use a FACTORY-tagged supplier, because the order below is
+# created as order_type='OUTSOURCE' and the service now rejects a non-factory supplier for that type
+# (parity with §23-F7-61). The old "SELECT id FROM supplier ORDER BY id LIMIT 1" picked supplier 26
+# (type_code = 'product') and made this whole block fail for the wrong reason.
+$supplierId = SqlOne "SELECT s.id FROM supplier s JOIN supplier_type_ref r ON r.supplier_id = s.id AND r.type_code = 'factory' ORDER BY s.id LIMIT 1"
 if ($supplierId -and $materialId) {
   SqlExec ("INSERT INTO outsource_material_order (code, status, supplier_id, order_type, company_id, remark) VALUES ('VERIFY-A-MO', 'PENDING', $supplierId, 'OUTSOURCE', $CID, 'VERIFY-A-BATCH-F7-67')")
   $moId = [int](SqlOne "SELECT id FROM outsource_material_order WHERE code='VERIFY-A-MO' ORDER BY id DESC LIMIT 1")

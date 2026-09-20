@@ -39,12 +39,20 @@ async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('�
   try {     if (isEdit.value) { await request.put('/warehouse', form); ElMessage.success('已更新') } else { await request.post('/warehouse', form); ElMessage.success('已新增') }
     dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
 
-function handleDetail(row: any) { router.push(`/inventory/warehouse/detail/${row.id}`) }
+// F7-136（2026-09-20）：与同模块 `delivery/index.vue` 的 `goWhDetail` **统一为同一判定**
+// （委外仓 → /outsource/warehouse/detail，自有仓 → /inventory/warehouse/detail）。
+// 本页只管理"自有物料仓"（INVENTORY+AUXILIARY），故结果与原"一律跳 inventory"完全一致，
+// 仅消除"同一语义两套写法"（改一处忘另一处的来源）。
+function handleDetail(row: any) {
+  if (row.factoryId != null) router.push(`/outsource/warehouse/detail/${row.id}`)
+  else router.push(`/inventory/warehouse/detail/${row.id}`)
+}
 
 async function handleToggleStatus(row: any) {
-  row.status = row.status === 1 ? 0 : 1
-  await request.put('/warehouse', row)
-  ElMessage.success(row.status === 1 ? '已启用' : '已停用'); loadData()
+  // F7-133（2026-09-20）：与 warehouse.vue 同款修法 —— 去掉乐观更新，先落库成功再刷新。
+  const next = row.status === 1 ? 0 : 1
+  await request.put('/warehouse', { ...row, status: next })
+  ElMessage.success(next === 1 ? '已启用' : '已停用'); loadData()
 }
 
 onMounted(() => loadData())

@@ -49,17 +49,20 @@ async function loadOptions() {
 }
 
 async function loadData() {
+  // F7-134（2026-09-20）：原实现**无 try/finally**，`loading.value = false` 直接写在函数末尾 ⇒
+  // 任一请求抛错时 `loading` 永远为 true ⇒ **页面一直转圈**（同模块 delivery/add.vue 均用 finally）。
   loading.value = true
-  const d = await request.get<any,any>(`/outsource/delivery/${route.params.id}`)
-  items.value = (await request.get<any,any>(`/outsource/delivery/${route.params.id}/items`) || []).map((i:any)=>({...i, material_id: i.materialId, material_name: i.materialName, materialTypeId: i.materialTypeId}))
-  Object.assign(form, { id:d.id, code:d.code, deliveryType:d.deliveryType, factoryId:d.factoryId, factoryName:d.factoryName||'', supplierId:d.supplierId, supplierName:d.supplierName||'', fromWarehouseId:d.fromWarehouseId, toWarehouseId:d.toWarehouseId, fromWarehouseName:d.fromWarehouseName||'', toWarehouseName:d.toWarehouseName||'', supplierDirect:d.supplierDirect||0, allowNegative:d.allowNegative||0, logisticsCompany:d.logisticsCompany||'', logisticsNo:d.logisticsNo||'', deliveryDate:d.deliveryDate, contact:d.contact||'', phone:d.phone||'', remark:d.remark||'', attachUrl:d.attachUrl||'', status:d.status })
-  if (form.factoryId) await loadOutsourceWarehouses(form.factoryId)
-  // 补丁：确保选项列表包含当前值（本地 el-select 用；历史单据的仓库可能不在新范围内）
-  if (form.fromWarehouseId && !allWarehouses.value.some((w:any)=>w.id===form.fromWarehouseId) && d.fromWarehouseName)
-    allWarehouses.value.push({id:form.fromWarehouseId, warehouseName:d.fromWarehouseName, factoryId:d.factoryId ?? null, warehouseCategory:null, warehouseType:null})
-  if (form.toWarehouseId && !allWarehouses.value.some((w:any)=>w.id===form.toWarehouseId) && d.toWarehouseName)
-    allWarehouses.value.push({id:form.toWarehouseId, warehouseName:d.toWarehouseName, factoryId:d.factoryId ?? null, warehouseCategory:null, warehouseType:null})
-  loading.value = false
+  try {
+    const d = await request.get<any,any>(`/outsource/delivery/${route.params.id}`)
+    items.value = (await request.get<any,any>(`/outsource/delivery/${route.params.id}/items`) || []).map((i:any)=>({...i, material_id: i.materialId, material_name: i.materialName, materialTypeId: i.materialTypeId}))
+    Object.assign(form, { id:d.id, code:d.code, deliveryType:d.deliveryType, factoryId:d.factoryId, factoryName:d.factoryName||'', supplierId:d.supplierId, supplierName:d.supplierName||'', fromWarehouseId:d.fromWarehouseId, toWarehouseId:d.toWarehouseId, fromWarehouseName:d.fromWarehouseName||'', toWarehouseName:d.toWarehouseName||'', supplierDirect:d.supplierDirect||0, allowNegative:d.allowNegative||0, logisticsCompany:d.logisticsCompany||'', logisticsNo:d.logisticsNo||'', deliveryDate:d.deliveryDate, contact:d.contact||'', phone:d.phone||'', remark:d.remark||'', attachUrl:d.attachUrl||'', status:d.status })
+    if (form.factoryId) await loadOutsourceWarehouses(form.factoryId)
+    // 补丁：确保选项列表包含当前值（本地 el-select 用；历史单据的仓库可能不在新范围内）
+    if (form.fromWarehouseId && !allWarehouses.value.some((w:any)=>w.id===form.fromWarehouseId) && d.fromWarehouseName)
+      allWarehouses.value.push({id:form.fromWarehouseId, warehouseName:d.fromWarehouseName, factoryId:d.factoryId ?? null, warehouseCategory:null, warehouseType:null})
+    if (form.toWarehouseId && !allWarehouses.value.some((w:any)=>w.id===form.toWarehouseId) && d.toWarehouseName)
+      allWarehouses.value.push({id:form.toWarehouseId, warehouseName:d.toWarehouseName, factoryId:d.factoryId ?? null, warehouseCategory:null, warehouseType:null})
+  } finally { loading.value = false }
 }
 
 async function loadOutsourceWarehouses(fid:number){ try{const r=await request.get<any,any>('/warehouse/by-factory/'+fid);outsourceWarehouses.value=r||[]}catch(e: any){ console.warn('加载委外仓库失败', e?.message || e) } }
@@ -102,7 +105,11 @@ async function handleDeleteAttach() {
     await request.delete(`/outsource/delivery/${form.id}/attach`)
     ElMessage.success('附件已删除'); sessionStorage.setItem(OUTSOURCE_DELIVERY_DIRTY_KEY, '1')
     await loadData()
-  } catch (e: any) { /* 取消 */ }
+  } catch (e: any) {
+    // F7-134（2026-09-20）：原为 `/* 取消 */` 空吞 ⇒ "用户取消"与"请求失败"不分。用户取消无需提示；
+    // 请求失败由 request 拦截器统一提示，此处只做留痕（避免把失败误标成"取消"）。
+    if (e !== 'cancel' && e !== 'close') { console.error('[delivery detail] 删除附件失败', e) }
+  }
 }
 
 // 字典类只需加载一次

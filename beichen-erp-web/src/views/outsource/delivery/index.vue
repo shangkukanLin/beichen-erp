@@ -24,7 +24,9 @@ async function loadWarehouseOptions() {
 
 function goWhDetail(warehouseId: number) {
   const w = warehouseOptions.value.find((x:any)=>x.id===warehouseId)
-  if (!w) return
+  // F7-136（2026-09-20）：原为**静默 return**（仓库不在已加载列表——如 pageSize 截断——时点击毫无反应）。
+  // 改为显式提示；跳转判定保持"委外仓 → /outsource、自有仓 → /inventory"（与 material-warehouse.vue 已统一）。
+  if (!w) { ElMessage.info('未找到该仓库信息，请刷新后重试'); return }
   if (w.factoryId != null) router.push(`/outsource/warehouse/detail/${warehouseId}`)
   else router.push(`/inventory/warehouse/detail/${warehouseId}`)
 }

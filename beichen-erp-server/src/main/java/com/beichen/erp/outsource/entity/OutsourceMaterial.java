@@ -14,7 +14,8 @@ public class OutsourceMaterial {
     private String materialName;
     /** 物料类型ID（关联 material_type.id），物料按此ID归类 */
     private Long materialTypeId;
-    private String spec;
+    // F7-125（2026-09-20）：删除历史遗留 `spec`（产品规格已于 2026-09-15 全站下线；本列现网 30 行全 NULL，
+    // 写入侧 `OutsourceMaterialServiceImpl` 不再接收、读取侧两处拷贝已一并移除）⇒ 列由 DDL 同步 DROP。
     private String unit;
     private Integer status;
     private String remark;

@@ -458,18 +458,24 @@ public class WarehouseStockController {
         }
         Map<Long, String> materialNameMap = new HashMap<>();
         Map<Long, String> materialTypeNameMap = new HashMap<>();
+        // F7-132（2026-09-20）：另需「物料ID → 类型ID / 类型 sortOrder」。原文只回类型名，导致前端只能用
+        // **中文类型名**做排序优先级（`['玻璃','驱动IC']`，改名即静默失效）⇒ 这里把映射提到外层作用域，返回时一并补字段。
+        Map<Long, Long> matMaterialTypeMap = new HashMap<>();
+        Map<Long, Integer> btSortMap = new HashMap<>();
         if (!materialIds.isEmpty()) {
             List<OutsourceMaterial> materials = outsourceMaterialMapper.selectBatchIds(materialIds);
-            Map<Long, Long> matMaterialTypeMap = new HashMap<>();
             for (OutsourceMaterial m : materials) {
                 materialNameMap.put(m.getId(), m.getMaterialName());
                 if (m.getMaterialTypeId() != null) matMaterialTypeMap.put(m.getId(), m.getMaterialTypeId());
             }
-            // 批量查物料类型名称
+            // 批量查物料类型名称与排序
             Map<Long, String> btNameMap = new HashMap<>();
             if (!matMaterialTypeMap.isEmpty()) {
                 Set<Long> materialTypeIds = new HashSet<>(matMaterialTypeMap.values());
-                materialTypeMapper.selectBatchIds(materialTypeIds).forEach(b -> btNameMap.put(b.getId(), b.getTypeName()));
+                materialTypeMapper.selectBatchIds(materialTypeIds).forEach(b -> {
+                    btNameMap.put(b.getId(), b.getTypeName());
+                    btSortMap.put(b.getId(), b.getSortOrder() != null ? b.getSortOrder() : 999);
+                });
             }
             // 物料ID → materialTypeName
             matMaterialTypeMap.forEach((matId, btId) -> {
@@ -510,6 +516,11 @@ public class WarehouseStockController {
             if (s.getMaterialId() != null) {
                 m.put("materialName", materialNameMap.getOrDefault(s.getMaterialId(), ""));
                 m.put("materialTypeName", materialTypeNameMap.getOrDefault(s.getMaterialId(), ""));
+                // F7-132（2026-09-20）：补类型 id 与 sortOrder，供前端做"优先类型置顶"排序，
+                // 不再依赖可改的中文类型名（纯新增字段，向后兼容）
+                Long mtId = matMaterialTypeMap.get(s.getMaterialId());
+                m.put("materialTypeId", mtId);
+                m.put("materialTypeSortOrder", mtId != null ? btSortMap.getOrDefault(mtId, 999) : null);
             }
             list.add(m);
         }

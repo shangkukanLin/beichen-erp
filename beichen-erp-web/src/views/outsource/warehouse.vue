@@ -47,9 +47,11 @@ async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('�
     dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
 
 async function handleToggleStatus(row: any) {
-  row.status = row.status === 1 ? 0 : 1
-  await request.put('/warehouse', row)
-  ElMessage.success(row.status === 1 ? '已启用' : '已停用'); loadData()
+  // F7-133（2026-09-20）：原实现是"**先改 row.status 再 PUT**"（乐观更新）⇒ 请求失败时行内状态已翻转、
+  // 数据库未变 ⇒ 界面与数据不一致（且无回滚）。改为**先落库成功、再刷新列表**。
+  const next = row.status === 1 ? 0 : 1
+  await request.put('/warehouse', { ...row, status: next })
+  ElMessage.success(next === 1 ? '已启用' : '已停用'); loadData()
 }
 
 function handleDetail(row: any) { router.push(`/outsource/warehouse/detail/${row.id}`) }
