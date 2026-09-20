@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, watch, nextTick } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getUserPage,
@@ -22,6 +22,7 @@ import {
   type Role
 } from '@/api/system'
 import { SUPER_ADMIN_ROLE_CODE } from '@/constants/system'
+import { SYSTEM_USER_DIRTY_KEY } from '@/api/enums'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
@@ -226,6 +227,8 @@ async function handleSubmit() {
         ElMessage.success('新增成功')
       }
       dialogVisible.value = false
+      // 2026-09-20（F7-184）：置脏标志，配合列表页 onActivated 按需刷新
+      sessionStorage.setItem(SYSTEM_USER_DIRTY_KEY, '1')
       loadData()
     } catch {
       // 错误已在拦截器中提示
@@ -236,38 +239,43 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row: UserVO) {
+  // 2026-09-20（F7-173 同族 · 顺带修复）：confirm 与请求各自 try/catch ——
+  // 原先共用一个 catch ⇒ 删除失败（如用户仍被引用）会被当成"用户取消"静默吞掉。
   try {
     await ElMessageBox.confirm(`确定要删除用户「${row.username}」吗？`, '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     })
+  } catch { return }
+  try {
     await deleteUser(row.id as number | string)
     ElMessage.success('删除成功')
     if (tableData.value.length === 1 && pagination.pageNum > 1) {
       pagination.pageNum--
     }
+    sessionStorage.setItem(SYSTEM_USER_DIRTY_KEY, '1')
     loadData()
-  } catch {
-    // 用户取消或错误
-  }
+  } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 
 async function handleToggleStatus(row: UserVO) {
   const next = row.status === 1 ? 0 : 1
   const action = next === 1 ? '启用' : '禁用'
+  // 同上（顺带修复）：删除/启停都属写操作，失败必须提示，不能与"取消"共用一个 catch
   try {
     await ElMessageBox.confirm(`确定要${action}用户「${row.username}」吗？`, '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     })
+  } catch { return }
+  try {
     await toggleUserStatus(row.id as number | string, next)
     ElMessage.success(`${action}成功`)
+    sessionStorage.setItem(SYSTEM_USER_DIRTY_KEY, '1')
     loadData()
-  } catch {
-    // 用户取消或错误
-  }
+  } catch (e: any) { ElMessage.error(e?.message || `${action}失败`) }
 }
 
 function handleOpenReset(row: UserVO) {
@@ -379,6 +387,8 @@ async function handleSavePerm() {
       await saveUserMenus(permUserId.value, { menuMode: 'CUSTOM', menuIds: allKeys })
       ElMessage.success('自定义页面权限已保存')
     }
+    // 2026-09-20（F7-184）：权限变化置脏，切回本页时刷新一次
+    sessionStorage.setItem(SYSTEM_USER_DIRTY_KEY, '1')
     permDialogVisible.value = false
     loadData()
   } catch {
@@ -410,6 +420,13 @@ function statusType(status: number) {
 onMounted(() => {
   loadRoles()
   loadData()
+})
+// 2026-09-20（F7-184）：本路由在 keep-alive 内 ⇒ 切回 Tab 时 onMounted 不再触发；按需刷新（脏标志由本页写操作置位）
+onActivated(() => {
+  if (sessionStorage.getItem(SYSTEM_USER_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(SYSTEM_USER_DIRTY_KEY)
+    loadData()
+  }
 })
 
 </script>

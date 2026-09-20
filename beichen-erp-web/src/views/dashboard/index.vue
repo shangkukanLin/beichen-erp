@@ -457,7 +457,7 @@
 
 <script setup lang="ts">
 import { localDate, localMonth } from '@/utils/date'
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onActivated, nextTick } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 // KPI 公式文案公共模块（2026-09-15）：与「经营分析 → 经营概览」共用一份，口径改动只需改这一处
 import { KPI_FORMULA, YEAR_PREFIX, marginPct, fmtPct } from '@/utils/kpiFormula'
@@ -1019,6 +1019,13 @@ async function loadStats() {
 onMounted(async () => {
   checkUserMenus()
   // 总览与分模块统计并行加载，互不阻塞
+  await Promise.all([loadOverview(), loadStats()])
+})
+// 2026-09-20（F7-198）：首页在 keep-alive 内 ⇒ 从其它页返回时 onMounted 不再触发，首页会停在首次加载
+// （"待办与预警"里的待审核单数/待盘点/超期待整理最明显：用户处理完单据回首页，数字仍不变）。
+// 首页数据受**各模块操作**影响、无法靠脏标志精确置位，因此这里的口径是"每次进入都刷新"。
+onActivated(async () => {
+  checkUserMenus()
   await Promise.all([loadOverview(), loadStats()])
 })
 </script>

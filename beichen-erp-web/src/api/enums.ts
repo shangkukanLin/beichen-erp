@@ -857,6 +857,13 @@ export const LossReasonLabel: Record<string, string> = {
 
 export const INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY = 'inventoryWarehouseMoveListDirty'
 export const INVENTORY_RECLASSIFY_DIRTY_KEY = 'inventoryReclassifyListDirty'
+// 2026-09-20（F7-174/F7-184）补齐：以下列表原先只有 onMounted、不带脏标志，
+// 从新增/详情返回（keep-alive 复用组件）时不会重新拉取，列表会停留在旧数据。
+export const INVENTORY_RETURN_SORT_DIRTY_KEY = 'inventoryReturnSortListDirty'
+export const INVENTORY_STOCK_LOSS_DIRTY_KEY = 'inventoryStockLossListDirty'
+export const SYSTEM_MENU_DIRTY_KEY = 'systemMenuListDirty'
+export const SYSTEM_ROLE_DIRTY_KEY = 'systemRoleListDirty'
+export const SYSTEM_USER_DIRTY_KEY = 'systemUserListDirty'
 export const FINANCE_BILL_DIRTY_KEY = 'financeBillListDirty'
 export const DEV_PROJECT_DIRTY_KEY = 'devProjectListDirty'
 export const DEV_MATERIAL_DIRTY_KEY = 'devMaterialListDirty'

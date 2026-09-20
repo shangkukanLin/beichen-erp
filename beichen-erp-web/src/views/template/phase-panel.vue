@@ -16,7 +16,9 @@ const form = reactive({ id: undefined as any, name: '', defaultDays: 0, sortOrde
 
 async function loadData() {
   loading.value = true
+  // 2026-09-20（F7-192）：原先只有 try/finally、无 catch ⇒ 失败无提示且产生未处理 rejection
   try { const r = await request.get<any, any>('/dev/phase-template/list'); list.value = r || [] }
+  catch (e: any) { list.value = []; ElMessage.error(e?.message || '加载阶段模板失败') }
   finally { loading.value = false }
 }
 

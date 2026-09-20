@@ -331,7 +331,11 @@ function buildPayload() {
 }
 
 async function submit() {
-  await formRef.value.validate()
+  // 2026-09-20（F7-147）：Element Plus 的 validate() **不传回调时校验失败会 reject**，原先未包 try/catch
+  // ⇒ 每次"表单不完整就点保存"都会产生未处理的 Promise rejection（校验提示其实已标在表单上，这里只需静默返回）。
+  try {
+    await formRef.value.validate()
+  } catch { return }
   if (!form.items.length) {
     ElMessage.warning('请至少添加一条退货明细')
     return

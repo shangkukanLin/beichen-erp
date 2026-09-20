@@ -188,10 +188,13 @@ function goEdit() { router.push(`/inventory/purchase-exchange/add?id=${route.par
 
 async function doAudit() {
   const net = Number(head.totalInAmount || 0) - Number(head.totalReturnAmount || 0)
-  await ElMessageBox.confirm(
-    `确认审核「${head.code}」？退回货品从我方仓扣减（退给供货商）、换入良品入库；`
-    + `并生成两条应付台账：退回冲减 ${formatMoney(head.totalReturnAmount)} / 换入新增 ${formatMoney(head.totalInAmount)}，净额 ${formatMoney(net)}。`,
-    '审核确认', { type: 'warning' })
+  // 2026-09-20（F7-154）：confirm 单独 try/catch（点「取消」会 reject，原先 confirm 在 try 之外 ⇒ 未处理 rejection）
+  try {
+    await ElMessageBox.confirm(
+      `确认审核「${head.code}」？退回货品从我方仓扣减（退给供货商）、换入良品入库；`
+      + `并生成两条应付台账：退回冲减 ${formatMoney(head.totalReturnAmount)} / 换入新增 ${formatMoney(head.totalInAmount)}，净额 ${formatMoney(net)}。`,
+      '审核确认', { type: 'warning' })
+  } catch { return }
   acting.value = true
   try {
     await auditPurchaseExchange(Number(route.params.id))
@@ -201,7 +204,9 @@ async function doAudit() {
   } finally { acting.value = false }
 }
 async function doUnAudit() {
-  await ElMessageBox.confirm(`确认反审核「${head.code}」？将回滚退回与换入的库存，并作废两条应付台账。`, '提示', { type: 'warning' })
+  try {
+    await ElMessageBox.confirm(`确认反审核「${head.code}」？将回滚退回与换入的库存，并作废两条应付台账。`, '提示', { type: 'warning' })
+  } catch { return }
   acting.value = true
   try {
     await unAuditPurchaseExchange(Number(route.params.id))
@@ -211,7 +216,9 @@ async function doUnAudit() {
   } finally { acting.value = false }
 }
 async function doCancel() {
-  await ElMessageBox.confirm(`确认作废换货单「${head.code}」？作废后单据留痕，不可恢复。`, '提示', { type: 'warning' })
+  try {
+    await ElMessageBox.confirm(`确认作废换货单「${head.code}」？作废后单据留痕，不可恢复。`, '提示', { type: 'warning' })
+  } catch { return }
   acting.value = true
   try {
     await cancelPurchaseExchange(Number(route.params.id))

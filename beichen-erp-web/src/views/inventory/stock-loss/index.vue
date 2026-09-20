@@ -76,12 +76,12 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import { DocStatus, DocStatusLabel, DocStatusTag, LossReasonLabel, WarehouseCategory, WarehouseType, codeLabelOptions } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag, LossReasonLabel, WarehouseCategory, WarehouseType, codeLabelOptions, INVENTORY_STOCK_LOSS_DIRTY_KEY } from '@/api/enums'
 
 const router = useRouter()
 
@@ -183,6 +183,14 @@ async function onCancel(row: any) {
 }
 
 onMounted(() => { loadReasons(); load() })
+// 2026-09-20（F7-174）：本路由在 keep-alive 内 ⇒ 从新增/编辑页返回时 onMounted 不再触发，列表会停在旧数据。
+// 新增/编辑页保存成功后置脏标志，回到列表才拉一次（保留查询条件与分页现场）。
+onActivated(() => {
+  if (sessionStorage.getItem(INVENTORY_STOCK_LOSS_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(INVENTORY_STOCK_LOSS_DIRTY_KEY)
+    load()
+  }
+})
 </script>
 
 <style scoped>

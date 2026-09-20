@@ -4,7 +4,8 @@
       <template #header>
         <span>{{ isEdit ? '编辑销售换货单' : '新增销售换货单' }}</span>
       </template>
-      <el-form :model="form" label-width="100px" ref="formRef">
+      <!-- 2026-09-20（F7-147）：本页没有 rules，校验靠 submit 里的逐项 if ⇒ 不再挂无用的 formRef -->
+      <el-form :model="form" label-width="100px">
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="客户" required>
@@ -159,7 +160,6 @@ import {
 
 const route = useRoute()
 const router = useRouter()
-const formRef = ref()
 const saving = ref(false)
 const isEdit = ref(false)
 

@@ -26,7 +26,9 @@ const activeType = ref('PROCESSING')
 function onTypeChange() { loadData() }
 async function loadData() {
   loading.value = true
-  try { list.value = await getTemplateList(activeType.value) || [] } catch (e: any) { console.warn('加载模板列表失败', e?.message || e) }
+  // 2026-09-20（F7-192）：原先只 console.warn（用户看不到任何提示）⇒ 改为显式失败提示并清空列表
+  try { list.value = await getTemplateList(activeType.value) || [] }
+  catch (e: any) { list.value = []; ElMessage.error(e?.message || '加载模板列表失败') }
   finally { loading.value = false }
 }
 
@@ -65,12 +67,15 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row: any) {
+  // 2026-09-20（F7-173 同族 · 顺带修复）：confirm 与请求各自 try/catch ——
+  // 原先靠比较 e === 'cancel'/'close' 区分"取消"与"失败"，但接口报错也落在同一 catch 里且只 console.error，
+  // 用户看不到任何提示（删除失败却像什么都没发生）。
+  try { await ElMessageBox.confirm('确定删除该模板吗？', '删除模板', { type: 'warning' }) } catch { return }
   try {
-    await ElMessageBox.confirm('确定删除该模板吗？', '删除模板', { type: 'warning' })
     await deleteTemplate(row.id)
     ElMessage.success('已删除')
     loadData()
-  } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 
 async function handleSetDefault(row: any) {

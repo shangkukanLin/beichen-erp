@@ -20,7 +20,7 @@ async function loadData() {
     const res: any = await getPurchaseExchangePage({ ...query, pageNum: pagination.pageNum, pageSize: pagination.pageSize })
     list.value = res.records || []
     pagination.total = res.total || 0
-  } finally { loading.value = false }
+  } catch { list.value = []; pagination.total = 0 } finally { loading.value = false }
 }
 function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.kw = ''; query.status = ''; handleQuery() }
@@ -52,20 +52,28 @@ function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/de
 async function handleAudit(row: any) {
   const ret = Number(row.totalReturnAmount || 0)
   const inn = Number(row.totalInAmount || 0)
-  await ElMessageBox.confirm(
-    `确认审核「${row.code}」？审核后退回货品从我方仓扣减（退给供货商）、换入良品入库；`
-    + `并生成两条应付台账（退回冲减 ${ret.toFixed(2)} / 换入新增 ${inn.toFixed(2)}），净额 ${(inn - ret).toFixed(2)}。`,
-    '审核确认', { type: 'warning' })
+  // 2026-09-20（F7-154）：confirm 单独 try/catch —— 点「取消」时 confirm 会 reject，
+  // 原先三处都没有 catch ⇒ 每次都产生未处理 rejection（同模块 purchase/order、purchase/return 两页都已防护）。
+  try {
+    await ElMessageBox.confirm(
+      `确认审核「${row.code}」？审核后退回货品从我方仓扣减（退给供货商）、换入良品入库；`
+      + `并生成两条应付台账（退回冲减 ${ret.toFixed(2)} / 换入新增 ${inn.toFixed(2)}），净额 ${(inn - ret).toFixed(2)}。`,
+      '审核确认', { type: 'warning' })
+  } catch { return }
   await auditPurchaseExchange(row.id)
   ElMessage.success('已审核'); sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1'); loadData()
 }
 async function handleUnAudit(row: any) {
-  await ElMessageBox.confirm(`确认反审核「${row.code}」？将回滚退回与换入的库存，并作废两条应付台账。`, '提示', { type: 'warning' })
+  try {
+    await ElMessageBox.confirm(`确认反审核「${row.code}」？将回滚退回与换入的库存，并作废两条应付台账。`, '提示', { type: 'warning' })
+  } catch { return }
   await unAuditPurchaseExchange(row.id)
   ElMessage.success('已反审核'); sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1'); loadData()
 }
 async function handleCancel(row: any) {
-  await ElMessageBox.confirm(`确认作废换货单「${row.code}」？作废后单据留痕，不可恢复。`, '提示', { type: 'warning' })
+  try {
+    await ElMessageBox.confirm(`确认作废换货单「${row.code}」？作废后单据留痕，不可恢复。`, '提示', { type: 'warning' })
+  } catch { return }
   await cancelPurchaseExchange(row.id)
   ElMessage.success('已作废'); sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1'); loadData()
 }

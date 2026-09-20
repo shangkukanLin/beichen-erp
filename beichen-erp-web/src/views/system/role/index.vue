@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, nextTick, watch } from 'vue'
+import { reactive, ref, onMounted, onActivated, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { SYSTEM_ROLE_DIRTY_KEY } from '@/api/enums'
 import {
   getRolePage,
   addRole,
@@ -140,6 +141,8 @@ async function handleSubmit() {
         ElMessage.success('新增成功')
       }
       dialogVisible.value = false
+      // 2026-09-20（F7-184）：置脏标志，配合列表页 onActivated 按需刷新
+      sessionStorage.setItem(SYSTEM_ROLE_DIRTY_KEY, '1')
       loadData()
     } catch {
       // 错误已在拦截器中提示
@@ -150,21 +153,24 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row: Role) {
+  // 2026-09-20（F7-173 同族 · 顺带修复）：confirm 与请求各自 try/catch ——
+  // 原先共用一个 catch ⇒ 删除失败（如角色仍有用户）会被当成"用户取消"静默吞掉。
   try {
     await ElMessageBox.confirm(`确定要删除角色「${row.roleName}」吗？`, '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     })
+  } catch { return }
+  try {
     await deleteRole(row.id as number | string)
     ElMessage.success('删除成功')
     if (tableData.value.length === 1 && pagination.pageNum > 1) {
       pagination.pageNum--
     }
+    sessionStorage.setItem(SYSTEM_ROLE_DIRTY_KEY, '1')
     loadData()
-  } catch {
-    // 用户取消或错误
-  }
+  } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 
 function handleSizeChange(val: number) {
@@ -232,6 +238,8 @@ async function handleSavePerm() {
   try {
     await saveRoleMenus(permRoleId.value, allKeys)
     ElMessage.success('权限分配成功')
+    // 2026-09-20（F7-184）：权限变化会反映到列表（如后续展示菜单数），置脏让切回本页时刷新一次
+    sessionStorage.setItem(SYSTEM_ROLE_DIRTY_KEY, '1')
     permDialogVisible.value = false
   } catch {
     // 错误已在拦截器中提示
@@ -242,6 +250,13 @@ async function handleSavePerm() {
 
 onMounted(() => {
   loadData()
+})
+// 2026-09-20（F7-184）：本路由在 keep-alive 内 ⇒ 切回 Tab 时 onMounted 不再触发；按需刷新（脏标志由本页写操作置位）
+onActivated(() => {
+  if (sessionStorage.getItem(SYSTEM_ROLE_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(SYSTEM_ROLE_DIRTY_KEY)
+    loadData()
+  }
 })
 
 </script>

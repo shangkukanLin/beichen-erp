@@ -13,7 +13,10 @@ async function loadCompany() {
 }
 async function saveCompany() {
   companySaving.value = true
-  try { await request.put('/settings/company', companyForm); ElMessage.success('保存成功') } finally { companySaving.value = false }
+  // 2026-09-20（F7-185）：原先只有 try/finally ⇒ 保存失败既不提示又产生未处理 rejection（同文件 loadCompany 有 catch）
+  try { await request.put('/settings/company', companyForm); ElMessage.success('保存成功') }
+  catch (e: any) { ElMessage.error(e?.message || '保存失败') }
+  finally { companySaving.value = false }
 }
 
 // ==================== 系统参数 ====================
@@ -31,7 +34,10 @@ function initDefaultParams() {
 }
 async function saveParams() {
   paramsSaving.value = true
-  try { await request.put('/settings/params', params.value); ElMessage.success('保存成功') } finally { paramsSaving.value = false }
+  // 同上（F7-185）：补 catch，失败必须给用户提示
+  try { await request.put('/settings/params', params.value); ElMessage.success('保存成功') }
+  catch (e: any) { ElMessage.error(e?.message || '保存失败') }
+  finally { paramsSaving.value = false }
 }
 
 // ==================== 操作日志 ====================
@@ -44,7 +50,8 @@ async function loadLogs() {
   try {
     const res = await request.get<any, any>('/settings/logs', { params: { ...logQuery, pageNum: logPage.pageNum, pageSize: logPage.pageSize } })
     logData.value = res?.records || []; logPage.total = res?.total || 0
-  } finally { logLoading.value = false }
+  } catch { logData.value = []; logPage.total = 0 }   // 2026-09-20（F7-185）：原先只有 finally，失败后无提示且列表停在旧数据
+  finally { logLoading.value = false }
 }
 function handleLogPageChange(p: number) { logPage.pageNum = p; loadLogs() }
 

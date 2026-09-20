@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import { WarehouseType, AfterSaleSourceType, AfterSaleSourceTypeLabel } from '@/api/enums'
+import { WarehouseType, AfterSaleSourceType, AfterSaleSourceTypeLabel, INVENTORY_RETURN_SORT_DIRTY_KEY } from '@/api/enums'
 import {
   getReturnSort, getReturnSortItems, getReturnSortDefectStock,
   createReturnSort, updateReturnSort, type ReturnSortItem
@@ -200,6 +200,8 @@ async function handleSave() {
     else { await createReturnSort(data); ElMessage.success('新增成功') }
     // 嵌入模式（抽屉）：不跳路由，交由父页刷新「待整理」总览与整理单列表
     if (props.embedded) { emit('saved', form.id); return }
+    // 2026-09-20（F7-174）：独立页模式置脏标志，列表页 onActivated 时重新拉取（keep-alive 复用下 onMounted 不触发）
+    sessionStorage.setItem(INVENTORY_RETURN_SORT_DIRTY_KEY, '1')
     router.push('/inventory/return-sort')
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }

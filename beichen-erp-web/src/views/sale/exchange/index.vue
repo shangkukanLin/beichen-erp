@@ -19,7 +19,7 @@ async function loadData() {
     const res: any = await getSaleExchangePage({ ...query, pageNum: pagination.pageNum, pageSize: pagination.pageSize })
     list.value = res.records || []
     pagination.total = res.total || 0
-  } finally { loading.value = false }
+  } catch { list.value = []; pagination.total = 0 } finally { loading.value = false }
 }
 function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.kw = ''; query.status = ''; handleQuery() }
@@ -53,17 +53,25 @@ async function handleAudit(row: any) {
   const chargeTip = charged
     ? `\n并生成一条向客户收取的费用应收 ${Number(row.chargeAmount).toFixed(2)} 元（台账单号 ${row.code}-FEE）。`
     : ''
-  await ElMessageBox.confirm(`确认审核「${row.code}」？审核后退回货品入成品仓(待分类)，换出货品从成品仓扣减。${chargeTip}`, '审核确认', { type: 'warning' })
+  // 2026-09-20（F7-144）：confirm 必须单独 try/catch —— 用户点「取消」时 confirm 会 reject，
+  // 原先三个动作都没有 catch ⇒ 每次取消都产生未处理的 Promise rejection（同模块 order/return 两页都已防护）。
+  try {
+    await ElMessageBox.confirm(`确认审核「${row.code}」？审核后退回货品入成品仓(待分类)，换出货品从成品仓扣减。${chargeTip}`, '审核确认', { type: 'warning' })
+  } catch { return }
   await auditSaleExchange(row.id)
   ElMessage.success('已审核'); sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1'); loadData()
 }
 async function handleUnAudit(row: any) {
-  await ElMessageBox.confirm(`确认反审核「${row.code}」？将回滚退回与换出的库存。`, '提示', { type: 'warning' })
+  try {
+    await ElMessageBox.confirm(`确认反审核「${row.code}」？将回滚退回与换出的库存。`, '提示', { type: 'warning' })
+  } catch { return }
   await unAuditSaleExchange(row.id)
   ElMessage.success('已反审核'); sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1'); loadData()
 }
 async function handleCancel(row: any) {
-  await ElMessageBox.confirm(`确认作废换货单「${row.code}」？作废后单据留痕，不可恢复。`, '提示', { type: 'warning' })
+  try {
+    await ElMessageBox.confirm(`确认作废换货单「${row.code}」？作废后单据留痕，不可恢复。`, '提示', { type: 'warning' })
+  } catch { return }
   await cancelSaleExchange(row.id)
   ElMessage.success('已作废'); sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1'); loadData()
 }

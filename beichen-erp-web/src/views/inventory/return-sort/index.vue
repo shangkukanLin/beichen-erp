@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, watch } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -9,6 +9,7 @@ import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import {
   WarehouseType, ProductQualityType, ProductQualityTypeLabel,
   AfterSaleSourceType, AfterSaleSourceTypeLabel,
+  INVENTORY_RETURN_SORT_DIRTY_KEY,
 } from '@/api/enums'
 import {
   getReturnSortPage, auditReturnSort, cancelReturnSort, deleteReturnSort,
@@ -78,30 +79,39 @@ function openRow(row: any) {
 async function handleAudit(row: any) {
   const loss = Number(row.lossAmount) || 0
   const lossTip = loss > 0 ? `\n并将生成一条向客户收取的折损应收 ${loss.toFixed(2)} 元（台账单号 ${row.code}-LOSS）。` : ''
+  // 2026-09-20（F7-173）：confirm 与业务请求**必须各自 try/catch** —— 原先共用一个 try/catch，
+  // `catch { /* 取消 */ }` 会把**接口报错也当成"用户取消"静默吞掉**；审核/反审核/删除都是**不可逆库存动作**，
+  // 失败却无任何提示（用户以为是自己点了取消）。同单据 `detail.vue:78-98` 已是正确范式，此处对齐。
   try {
     await ElMessageBox.confirm(`确认审核单号「${row.code}」？审核后将从成品仓扣减待分类品并分品质入库（A/B/C/不良 均入成品仓，按品质区分）。${lossTip}`, '审核确认', { type: 'warning' })
+  } catch { return }
+  try {
     await auditReturnSort(row.id)
     ElMessage.success('审核成功')
     loadData()
     loadOverview()
-  } catch { /* 取消 */ }
+  } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 async function handleCancel(row: any) {
   try {
     await ElMessageBox.confirm(`确认反审核单号「${row.code}」？反审核后将逆向恢复库存。`, '反审核确认', { type: 'warning' })
+  } catch { return }
+  try {
     await cancelReturnSort(row.id)
     ElMessage.success('已反审核')
     loadData()
     loadOverview()
-  } catch { /* 取消 */ }
+  } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 async function handleDelete(row: any) {
   try {
     await ElMessageBox.confirm(`确认删除草稿单「${row.code}」？`, '删除确认', { type: 'warning' })
+  } catch { return }
+  try {
     await deleteReturnSort(row.id)
     ElMessage.success('删除成功')
     loadData()
-  } catch { /* 取消 */ }
+  } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 
 async function loadWarehouses() {
@@ -274,6 +284,15 @@ onMounted(async () => {
   loadWarehouses()
   loadOverview()
   openFromStockLog()
+})
+// 2026-09-20（F7-174）：本路由在 keep-alive 内 ⇒ 从新增/编辑页返回时组件被复用、onMounted 不再触发，
+// 列表会停留在旧数据。改为按需刷新：写操作页（form.vue 的独立模式）保存成功后置脏标志，回列表才拉一次。
+onActivated(() => {
+  if (sessionStorage.getItem(INVENTORY_RETURN_SORT_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(INVENTORY_RETURN_SORT_DIRTY_KEY)
+    loadData()
+    loadOverview()
+  }
 })
 </script>
 

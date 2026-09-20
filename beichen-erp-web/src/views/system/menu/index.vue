@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useUserStore } from '@/stores/user'
-import { MenuType, MenuTypeLabel } from '@/api/enums'
+import { MenuType, MenuTypeLabel, SYSTEM_MENU_DIRTY_KEY } from '@/api/enums'
 import {
   getMenuTree,
   addMenu,
@@ -149,6 +149,8 @@ async function handleSubmit() {
         ElMessage.success('新增成功')
       }
       dialogVisible.value = false
+      // 2026-09-20（F7-184）：置脏标志，配合列表页 onActivated 按需刷新
+      sessionStorage.setItem(SYSTEM_MENU_DIRTY_KEY, '1')
       loadData()
       userStore.fetchMenus()
     } catch {
@@ -160,19 +162,22 @@ async function handleSubmit() {
 }
 
 async function handleDelete(row: FlatMenu) {
+  // 2026-09-20（F7-173 同族 · 顺带修复）：confirm 与请求各自 try/catch ——
+  // 原先共用一个 catch ⇒ 删除接口报错也会被当成"用户取消"静默吞掉（删菜单失败却毫无提示）。
   try {
     await ElMessageBox.confirm(`确定要删除菜单「${row.menuName}」吗？`, '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     })
+  } catch { return }
+  try {
     await deleteMenu(row.id as number | string)
     ElMessage.success('删除成功')
+    sessionStorage.setItem(SYSTEM_MENU_DIRTY_KEY, '1')
     loadData()
     userStore.fetchMenus()
-  } catch {
-    // 用户取消或错误
-  }
+  } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 
 function typeText(type: string) {
@@ -189,6 +194,13 @@ function statusType(status: number) {
 
 onMounted(() => {
   loadData()
+})
+// 2026-09-20（F7-184）：本路由在 keep-alive 内 ⇒ 切回 Tab 时 onMounted 不再触发；按需刷新（脏标志由本页写操作置位）
+onActivated(() => {
+  if (sessionStorage.getItem(SYSTEM_MENU_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(SYSTEM_MENU_DIRTY_KEY)
+    loadData()
+  }
 })
 
 </script>

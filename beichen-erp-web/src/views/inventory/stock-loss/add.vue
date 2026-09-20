@@ -110,7 +110,7 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { getQualityTypes, type QualityOption } from '@/api/product'
-import { WarehouseCategory, WarehouseType, ProductQualityType, LossReasonLabel, codeLabelOptions } from '@/api/enums'
+import { WarehouseCategory, WarehouseType, ProductQualityType, LossReasonLabel, codeLabelOptions, INVENTORY_STOCK_LOSS_DIRTY_KEY } from '@/api/enums'
 
 const route = useRoute()
 const router = useRouter()
@@ -238,6 +238,8 @@ async function handleSubmit() {
     if (isEdit.value) await request.put(`/inventory/stock-loss/${editId.value}`, payload)
     else await request.post('/inventory/stock-loss', payload)
     ElMessage.success('保存成功')
+    // 2026-09-20（F7-174）：置脏标志，列表页 onActivated 时才重新拉取（否则 keep-alive 复用会让列表停在旧数据）
+    sessionStorage.setItem(INVENTORY_STOCK_LOSS_DIRTY_KEY, '1')
     router.push('/inventory/stock-loss')
   } catch (e: any) {
     ElMessage.error(e?.message || '保存失败')
