@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
-import { ref, computed, onMounted, onActivated, nextTick } from 'vue'
+import { ref, computed, onMounted, onActivated, onUnmounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import * as XLSX from 'xlsx'
 import request from '@/utils/request'
@@ -109,6 +109,8 @@ function exportTax() {
 
 onMounted(() => { loadData() })
 onActivated(() => { loadData() })
+// 2026-09-20（F7-188）：keep-alive 反复进出会累积 ECharts 实例 ⇒ 卸载时释放
+onUnmounted(() => { taxChart?.dispose(); taxChart = null })
 </script>
 <template>
   <div class="p" v-loading="loading">

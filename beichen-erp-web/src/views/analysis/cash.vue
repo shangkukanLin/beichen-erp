@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onActivated, nextTick } from 'vue'
+import { ref, onMounted, onActivated, onUnmounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
 import { accountTypeLabel } from '@/api/enums'
@@ -66,6 +66,8 @@ async function loadData() {
 
 onMounted(() => { loadData() })
 onActivated(() => { loadData() })
+// 2026-09-20（F7-188）：keep-alive 反复进出会累积 ECharts 实例 ⇒ 卸载时释放
+onUnmounted(() => { cashChart?.dispose(); cashChart = null })
 </script>
 <template>
   <div class="p" v-loading="loading">

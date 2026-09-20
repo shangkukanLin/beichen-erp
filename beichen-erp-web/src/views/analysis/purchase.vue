@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onActivated, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onActivated, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
@@ -205,6 +205,13 @@ function goBill(row: any) {
 
 onMounted(() => { loadData() })
 onActivated(() => { loadData() })
+// 2026-09-20（F7-188）：keep-alive 反复进出会累积 ECharts 实例（本页有趋势图 chart + 多张饼图 pieRefs）
+// ⇒ 卸载时统一释放并置空。
+onUnmounted(() => {
+  chart?.dispose(); chart = null
+  Object.values(pieRefs).forEach((c) => { try { c?.dispose() } catch { /* 已释放 */ } })
+  Object.keys(pieRefs).forEach((k) => { delete pieRefs[k] })
+})
 </script>
 <template>
   <div class="p" v-loading="loading">

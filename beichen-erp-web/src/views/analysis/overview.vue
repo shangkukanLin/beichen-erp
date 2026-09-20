@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onActivated, nextTick } from 'vue'
+import { ref, computed, onMounted, onActivated, onUnmounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
 import StatRange from '@/components/StatRange.vue'
@@ -168,6 +168,9 @@ async function loadData() {
 
 onMounted(() => { loadData() })
 onActivated(() => { loadData() })
+// 2026-09-20（F7-188）：本路由在 keep-alive 内，反复进出会累积 ECharts 实例（实例持 canvas 与事件）
+// ⇒ 组件真正卸载时释放并置空，下次进入会重新 init。
+onUnmounted(() => { trendChart?.dispose(); trendChart = null })
 </script>
 <template>
   <div class="p" v-loading="loading">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onActivated, nextTick } from 'vue'
+import { ref, computed, onMounted, onActivated, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
@@ -151,6 +151,13 @@ function returnSummaries({ columns }: any) {
 
 onMounted(() => { loadData() })
 onActivated(() => { loadData() })
+// 2026-09-20（F7-188）：keep-alive 反复进出会累积 ECharts 实例（本页有 4 张图）⇒ 卸载时统一释放
+onUnmounted(() => {
+  trendChart?.dispose(); trendChart = null
+  brandChart?.dispose(); brandChart = null
+  productChart?.dispose(); productChart = null
+  qualityChart?.dispose(); qualityChart = null
+})
 </script>
 <template>
   <div class="p" v-loading="loading">

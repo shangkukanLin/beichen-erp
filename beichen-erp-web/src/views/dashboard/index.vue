@@ -457,7 +457,7 @@
 
 <script setup lang="ts">
 import { localDate, localMonth } from '@/utils/date'
-import { ref, reactive, computed, onMounted, onActivated, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onActivated, onUnmounted, nextTick } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 // KPI 公式文案公共模块（2026-09-15）：与「经营分析 → 经营概览」共用一份，口径改动只需改这一处
 import { KPI_FORMULA, YEAR_PREFIX, marginPct, fmtPct } from '@/utils/kpiFormula'
@@ -1030,6 +1030,8 @@ onActivated(async () => {
   checkUserMenus()
   await Promise.all([loadOverview(), loadStats()])
 })
+// 2026-09-20（F7-196）：首页趋势图实例从不释放（keep-alive 反复进出累积）⇒ 组件真正卸载时 dispose
+onUnmounted(() => { trendChart?.dispose(); trendChart = null })
 </script>
 
 <style scoped>

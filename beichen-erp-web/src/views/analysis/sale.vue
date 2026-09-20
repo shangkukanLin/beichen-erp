@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onActivated, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onActivated, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
@@ -191,6 +191,12 @@ watch([preset, range], () => {})
 watch([retMetric, exchMetric], async () => {
   await nextTick()
   setTimeout(renderPies, 30)
+})
+// 2026-09-20（F7-188）：keep-alive 反复进出会累积 ECharts 实例（本页按科目有多张饼图，存在 pieRefs 里）
+// ⇒ 组件真正卸载时逐个释放并清空键，避免下次进入拿到已失效实例。
+onUnmounted(() => {
+  Object.values(pieRefs).forEach((c) => { try { c?.dispose() } catch { /* 已释放 */ } })
+  Object.keys(pieRefs).forEach((k) => { delete pieRefs[k] })
 })
 </script>
 <template>
