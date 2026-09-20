@@ -16,12 +16,12 @@
           <span v-else>{{ head.saleOrderCode || '—' }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="换入仓(售后)">
-          <el-button v-if="head.warehouseInId" type="primary" link @click="goWarehouse(head.warehouseInId)">{{ warehouseInName }}</el-button>
-          <span v-else>{{ warehouseInName }}</span>
+          <el-button v-if="head.warehouseInId" type="primary" link @click="goWarehouse(head.warehouseInId)">{{ warehouseInDisplayName }}</el-button>
+          <span v-else>{{ warehouseInDisplayName }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="换出仓(成品)">
-          <el-button v-if="head.warehouseOutId" type="primary" link @click="goWarehouse(head.warehouseOutId)">{{ warehouseOutName }}</el-button>
-          <span v-else>{{ warehouseOutName }}</span>
+          <el-button v-if="head.warehouseOutId" type="primary" link @click="goWarehouse(head.warehouseOutId)">{{ warehouseOutDisplayName }}</el-button>
+          <span v-else>{{ warehouseOutDisplayName }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="换货日期">{{ head.exchangeDate }}</el-descriptions-item>
         <el-descriptions-item label="收费">
@@ -133,23 +133,27 @@ const items = ref<any[]>([])
 
 // ===== 字典：客户 / 仓库（详情 head 为实体，不含冗余名称，本地翻译展示） =====
 const customers = ref<{ id: number; name?: string; customerName?: string }[]>([])
-const warehouses = ref<{ id: number; warehouseName?: string; name?: string }[]>([])
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
 async function loadCustomers() { try { const r: any = await fetchCustomers(''); customers.value = r?.records || [] } catch { customers.value = [] } }
-async function loadWarehouses() { try { const r: any = await fetchWarehouses(''); warehouses.value = r?.records || [] } catch { warehouses.value = [] } }
 const customerName = computed(() => {
   const c = customers.value.find((x) => x.id === head.customerId)
   return c ? (c.name || c.customerName) : '—'
 })
-const warehouseInName = computed(() => {
-  const w = warehouses.value.find((x) => x.id === head.warehouseInId)
-  return w ? (w.warehouseName || w.name) : '—'
-})
-const warehouseOutName = computed(() => {
-  const w = warehouses.value.find((x) => x.id === head.warehouseOutId)
-  return w ? (w.warehouseName || w.name) : '—'
-})
+// 2026-09-20（F7-177）：详情只回显换入/换出 2 个仓库名 ⇒ 按 id 单取（原为 pageSize=500 全量拉 + 前端 find）
+const warehouseInDisplayName = ref('—')
+const warehouseOutDisplayName = ref('—')
+async function loadWarehouseNames() {
+  const din = head.warehouseInId
+  const dout = head.warehouseOutId
+  if (din) {
+    try { const w: any = await request.get(`/warehouse/${din}`); warehouseInDisplayName.value = w?.warehouseName || w?.name || '—' }
+    catch { warehouseInDisplayName.value = '—' }
+  } else warehouseInDisplayName.value = '—'
+  if (dout) {
+    try { const w: any = await request.get(`/warehouse/${dout}`); warehouseOutDisplayName.value = w?.warehouseName || w?.name || '—' }
+    catch { warehouseOutDisplayName.value = '—' }
+  } else warehouseOutDisplayName.value = '—'
+}
 
 function statusLabel(s: string) { return DocStatusLabel[String(s)] ?? '未知' }
 function statusTagType(s: string) {
@@ -185,6 +189,7 @@ async function loadDetail(id: number) {
     remark: h.remark || '',
   })
   items.value = res?.items || []
+  await loadWarehouseNames()
 }
 
 function goSaleOrder(id?: number | null) { if (id) router.push(`/inventory/sale/detail/${id}`) }
@@ -230,7 +235,7 @@ async function doCancel() {
 }
 
 // 字典类只需加载一次
-onMounted(() => { loadCustomers(); loadWarehouses() })
+onMounted(() => { loadCustomers() })
 // 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
 onActivated(() => { loadDetail(Number(route.params.id)) })
 </script>

@@ -17,10 +17,12 @@ const products = ref<any[]>([])
 
 async function loadWarehouse() {
   loading.value = true
+  // 2026-09-20（F7-177）：改为按 id 精确查询（照搬 outsource/warehouse-detail.vue:98 的既有修法）。
+  // 原先拉 /warehouse/page?pageSize=200 再前端 find：「仓库总数超过 200 时找不到 ⇒ 基础信息区静默空白」，
+  // 且为显示一个仓库把整张主数据表拉回来。
   try {
-    const r = await request.get<any,any>('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } })
-    warehouse.value = (r?.records || []).find((w:any) => w.id === warehouseId) || null
-  } finally { loading.value = false }
+    warehouse.value = await request.get<any, any>(`/warehouse/${warehouseId}`)
+  } catch { warehouse.value = null } finally { loading.value = false }
 }
 
 // 按物料聚合库存：物料不区分品质，直接累加数量

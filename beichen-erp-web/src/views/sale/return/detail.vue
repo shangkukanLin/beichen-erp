@@ -14,8 +14,8 @@
           <span v-else>{{ header.customerName || '—' }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="退货仓库">
-          <el-button v-if="head.warehouseId" type="primary" link @click="goWarehouse(head.warehouseId)">{{ warehouseName }}</el-button>
-          <span v-else>{{ warehouseName }}</span>
+          <el-button v-if="head.warehouseId" type="primary" link @click="goWarehouse(head.warehouseId)">{{ warehouseDisplayName }}</el-button>
+          <span v-else>{{ warehouseDisplayName }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="关联销售单">
           <el-button v-if="head.saleOrderId" type="primary" link @click="goSaleOrder(head.saleOrderId)">{{ head.saleOrderCode || '—' }}</el-button>
@@ -95,9 +95,15 @@ const acting = ref(false)
 // 2026-09-20（F7-142）：不再按 warehouseType 过滤 —— 详情页只做「名称回显」，需能显示任意历史仓库；
 // 原写死的 'AFTER_SALE' 已随 2026-09-16「方案 A」取消（实测现网无此类型仓）⇒ 该过滤恒为空，仓库名永远显示 —。
 // 「只能退到自有成品仓」是【新增时】的可选范围规则（见 return/add.vue:161），与详情展示无关。
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
-const warehouses = ref<{ id: number; warehouseName?: string; name?: string }[]>([])
-async function loadWarehouses() { try { const r: any = await fetchWarehouses(''); warehouses.value = r?.records || [] } catch { warehouses.value = [] } }
+// 2026-09-20（F7-177）：详情只回显 1 个仓库名 ⇒ 按 id 单取（原为 pageSize=500 全量拉 + 前端 find；
+// 照搬 outsource/warehouse-detail.vue:98 的既有修法，仓库总数超过 pageSize 时全量方案会静默找不到）
+const warehouseDisplayName = ref('—')
+async function loadWarehouseName() {
+  const wid = head.warehouseId
+  if (!wid) { warehouseDisplayName.value = '—'; return }
+  try { const w: any = await request.get(`/warehouse/${wid}`); warehouseDisplayName.value = w?.warehouseName || w?.name || '—' }
+  catch { warehouseDisplayName.value = '—' }
+}
 const items = ref<any[]>([])
 
 const head = reactive({
@@ -119,10 +125,7 @@ const head = reactive({
 })
 const header = head
 
-const warehouseName = computed(() => {
-  const w = warehouses.value.find((x) => x.id === head.warehouseId)
-  return w ? (w.warehouseName || w.name) : '—'
-})
+
 
 /** 单据状态为字符串编码（DRAFT/AUDITED/CANCELLED），与后端 status 字段(varchar)一致 */
 function statusLabel(s: string) {
@@ -158,6 +161,7 @@ async function loadDetail(id: number) {
     status: h.status,
   })
   items.value = await getSaleReturnItems(id)
+  await loadWarehouseName()
 }
 
 function goBack() {
@@ -205,9 +209,8 @@ async function doCancel() {
   }
 }
 
-// 字典类只需加载一次
-onMounted(() => { loadWarehouses() })
 // 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
+// （仓库名已随 loadDetail 按 id 单取，不再需要额外的字典预载）
 onActivated(() => { loadDetail(Number(route.params.id)) })
 </script>
 

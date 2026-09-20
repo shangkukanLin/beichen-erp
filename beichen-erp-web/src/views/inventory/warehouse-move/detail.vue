@@ -15,7 +15,9 @@ const loading = ref(false)
 const saving = ref(false)
 const detail = ref<any>({})
 const items = ref<any[]>([])
-const warehouses = ref<any[]>([])
+// 2026-09-20（F7-177）：详情只回显移出/移入 2 个仓库名 ⇒ 按 id 单取（原为 pageSize=500 全量拉 + 前端 find）
+const fromWarehouseName = ref('-')
+const toWarehouseName = ref('-')
 const products = ref<any[]>([])
 const qualityOptions = ref<QualityOption[]>([])
 
@@ -84,8 +86,15 @@ function fillEditForm() {
   editItems.value.forEach(loadStock)
 }
 
-function getWhName(wid?: number) {
-  return warehouses.value.find((w: any) => w.id === wid)?.warehouseName || '-'
+/** 按 id 取仓库名（详情单条展示；列表页做多行映射时才全量拉） */
+async function loadWarehouseNames() {
+  const pick = async (wid?: number) => {
+    if (!wid) return '-'
+    try { const w: any = await request.get(`/warehouse/${wid}`); return w?.warehouseName || w?.name || '-' }
+    catch { return '-' }
+  }
+  fromWarehouseName.value = await pick(detail.value?.fromWarehouseId)
+  toWarehouseName.value = await pick(detail.value?.toWarehouseId)
 }
 function getProdName(pid?: number) {
   if (pid == null) return '-'
@@ -102,12 +111,6 @@ function qualityLabel(q?: string) {
 function statusLabel(s: string) { return DocStatusLabel[s] || s || '-' }
 function statusTag(s: string): any { return DocStatusTag[s] || 'warning' }
 
-async function loadWarehouses() {
-  try {
-    const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500, warehouseName: '' } })
-    warehouses.value = r?.records || []
-  } catch { warehouses.value = [] }
-}
 async function loadProducts() {
   try {
     const r = await request.get<any, any>('/product/page', { params: { pageSize: 500 } })
@@ -126,6 +129,7 @@ async function loadDetail() {
     items.value = Array.isArray(its) ? its : []
     if (products.value.length === 0) await loadProducts()
     if (isDraft.value) fillEditForm()
+    await loadWarehouseNames()
   } finally { loading.value = false }
 }
 
@@ -183,7 +187,7 @@ async function handleCancel() {
   catch (e: any) { ElMessage.error(e?.message || '作废失败') }
 }
 
-onMounted(() => { loadWarehouses(); loadProducts(); loadQualityTypes() })
+onMounted(() => { loadProducts(); loadQualityTypes() })
 // keep-alive 缓存下再次进入会复用组件，onMounted 不再触发
 onActivated(() => { loadDetail() })
 </script>
@@ -222,8 +226,8 @@ onActivated(() => { loadDetail() })
 
       <el-descriptions v-else :column="3" border>
         <el-descriptions-item label="单号">{{ detail.code || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="移出仓库">{{ getWhName(detail.fromWarehouseId) }}</el-descriptions-item>
-        <el-descriptions-item label="移入仓库">{{ getWhName(detail.toWarehouseId) }}</el-descriptions-item>
+        <el-descriptions-item label="移出仓库">{{ fromWarehouseName }}</el-descriptions-item>
+        <el-descriptions-item label="移入仓库">{{ toWarehouseName }}</el-descriptions-item>
         <el-descriptions-item label="移仓日期">{{ detail.moveDate ? $fmtDate(detail.moveDate) : '-' }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="statusTag(detail.status)" size="small">{{ statusLabel(detail.status) }}</el-tag>

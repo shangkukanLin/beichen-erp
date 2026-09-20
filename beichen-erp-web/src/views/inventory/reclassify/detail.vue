@@ -17,7 +17,8 @@ const loading = ref(false)
 const saving = ref(false)
 const detail = ref<any>({})
 const items = ref<any[]>([])
-const warehouses = ref<any[]>([])
+// 2026-09-20（F7-177）：详情只回显 1 个仓库名 ⇒ 按 id 单取（原为全量拉 + 前端 find）
+const warehouseDisplayName = ref('-')
 const products = ref<any[]>([])
 const qualityOptions = ref<QualityOption[]>([])
 
@@ -80,8 +81,12 @@ function fillEditForm() {
   editItems.value.forEach(loadStock)
 }
 
-function getWhName(wid?: number) {
-  return warehouses.value.find((w: any) => w.id === wid)?.warehouseName || '-'
+/** 按 id 取仓库名（详情单条展示；列表页做多行映射时才全量拉） */
+async function loadWarehouseName() {
+  const wid = detail.value?.warehouseId
+  if (!wid) { warehouseDisplayName.value = '-'; return }
+  try { const w: any = await request.get(`/warehouse/${wid}`); warehouseDisplayName.value = w?.warehouseName || w?.name || '-' }
+  catch { warehouseDisplayName.value = '-' }
 }
 function getProdName(pid?: number) {
   if (pid == null) return '-'
@@ -98,12 +103,6 @@ function qualityLabel(q?: string) {
 function statusLabel(s: string) { return DocStatusLabel[s] || s || '-' }
 function statusTag(s: string): any { return DocStatusTag[s] || 'warning' }
 
-async function loadWarehouses() {
-  try {
-    const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 200, warehouseCategory: WarehouseCategory.INVENTORY } })
-    warehouses.value = r?.records || []
-  } catch { warehouses.value = [] }
-}
 async function loadProducts() {
   try {
     const r = await request.get<any, any>('/product/page', { params: { pageSize: 500 } })
@@ -122,6 +121,7 @@ async function loadDetail() {
     items.value = Array.isArray(its) ? its : []
     if (products.value.length === 0) await loadProducts()
     if (isDraft.value) fillEditForm()
+    await loadWarehouseName()
   } finally { loading.value = false }
 }
 
@@ -183,7 +183,7 @@ async function handleCancel() {
   catch (e: any) { ElMessage.error(e?.message || '作废失败') }
 }
 
-onMounted(() => { loadWarehouses(); loadProducts(); loadQualityTypes() })
+onMounted(() => { loadProducts(); loadQualityTypes() })
 // keep-alive 缓存下再次进入会复用组件，onMounted 不再触发
 onActivated(() => { loadDetail() })
 </script>
@@ -217,7 +217,7 @@ onActivated(() => { loadDetail() })
 
       <el-descriptions v-else :column="3" border>
         <el-descriptions-item label="单号">{{ detail.code || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="仓库">{{ getWhName(detail.warehouseId) }}</el-descriptions-item>
+        <el-descriptions-item label="仓库">{{ warehouseDisplayName }}</el-descriptions-item>
         <el-descriptions-item label="日期">{{ detail.reclassifyDate ? $fmtDate(detail.reclassifyDate) : '-' }}</el-descriptions-item>
         <!-- 整理人=建单时登录的账户（历史单据无记录显示 —） -->
         <el-descriptions-item label="整理人">{{ detail.createByName || '-' }}</el-descriptions-item>

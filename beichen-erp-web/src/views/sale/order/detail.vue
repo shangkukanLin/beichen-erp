@@ -28,14 +28,20 @@ const isDraft = computed(() => head.value.status === DocStatus.DRAFT)
 
 // Odoo 风格：下拉框展开/搜索时实时查库
 const customers = ref<any[]>([])
-const warehouses = ref<any[]>([])
+// 2026-09-20（F7-177）：详情只回显 1 个出库仓库名 ⇒ 按 id 单取（原为 pageSize=500 全量拉 + 前端 find）
+const warehouseDisplayName = ref('')
 const products = ref<any[]>([])
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: 'FINISHED' } })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 500, keyword: kw } })
 
 async function loadCustomers() { try { const r: any = await fetchCustomers(''); customers.value = r?.records || [] } catch { customers.value = [] } }
-async function loadWarehouses() { try { const r: any = await fetchWarehouses(''); warehouses.value = r?.records || [] } catch { warehouses.value = [] } }
+async function loadWarehouseName() {
+  const wid = head.value?.warehouseId
+  if (!wid) { warehouseDisplayName.value = ''; return }
+  try { const w: any = await request.get(`/warehouse/${wid}`); warehouseDisplayName.value = w?.warehouseName || w?.name || '' }
+  catch { warehouseDisplayName.value = '' }
+}
 async function loadProducts(keyword?: string) { try { const res: any = await fetchProducts(keyword || ''); products.value = res?.records || [] } catch { products.value = [] } }
 
 /**
@@ -199,7 +205,6 @@ watch(stockWarehouseId, () => { if (isDraft.value) loadWarehouseStock(true) })
 
 function statusType(s?: string) { return DocStatusTag[s || ''] || '' }
 function customerName(id?: number) { const c = customers.value.find(x => x.id === id); return c ? c.name : '' }
-function warehouseName(id?: number) { const w = warehouses.value.find(x => x.id === id); return w ? w.warehouseName : '' }
 function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Number(v).toFixed(2) }
 function goCustomer(id?: number) { if (id) router.push(`/inventory/customer/detail/${id}`) }
 function goProduct(id?: number) { if (id) router.push(`/product/detail/${id}`) }
@@ -234,6 +239,7 @@ async function loadData() {
     returns.value = h?.returns || []
     exchanges.value = h?.exchanges || []
     linkedReceipts.value = h?.receipts || []
+    await loadWarehouseName()
   } catch { } finally { loading.value = false }
 }
 
@@ -306,7 +312,7 @@ function goBack() { router.back() }
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
 // 字典类（客户/仓库/产品/品质）只需加载一次
-onMounted(() => { loadCustomers(); loadWarehouses(); ensureProducts(); loadQualityTypes(); loadAccounts() })
+onMounted(() => { loadCustomers(); ensureProducts(); loadQualityTypes(); loadAccounts() })
 
 /**
  * 每次进入详情页都重新拉取单据数据。
@@ -478,7 +484,7 @@ onActivated(() => { loadData() })
             <span v-else>—</span>
           </el-descriptions-item>
           <el-descriptions-item label="出库仓库">
-            <el-button v-if="head.warehouseId" type="primary" link @click="goWarehouse(head.warehouseId)">{{ warehouseName(head.warehouseId) }}</el-button>
+            <el-button v-if="head.warehouseId" type="primary" link @click="goWarehouse(head.warehouseId)">{{ warehouseDisplayName || '—' }}</el-button>
             <span v-else>—</span>
           </el-descriptions-item>
           <el-descriptions-item label="订单日期">{{ head.orderDate }}</el-descriptions-item>
