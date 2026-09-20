@@ -38,6 +38,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 委外物料报损单：草稿 → 审核（扣物料库存）→ 反审核（加回）。
@@ -70,8 +71,73 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
                 .le(endDate != null && !endDate.isBlank(), OutsourceStockLoss::getLossDate, endDate)
                 .orderByDesc(OutsourceStockLoss::getId);
         Page<OutsourceStockLoss> p = lossMapper.selectPage(new Page<>(pageNum, pageSize), w);
-        for (OutsourceStockLoss r : p.getRecords()) fillView(r);
+        // F7-82（2026-09-20 性能专项）：列表填充改为**整页批量**（原逐行 1 仓 + 1 明细 + 每明细 1 物料
+        // ⇒ 一页 10 行 ≈ 20~30 次查询；现为固定 3 次）。单条 getById 仍走 fillView。
+        fillViewBatch(p.getRecords());
         return p;
+    }
+
+    /**
+     * F7-82（2026-09-20 性能专项）：**整页**填充列表展示字段（仓库名 + 明细概况），与逐条 {@link #fillView}
+     * 结果完全一致，只是把查询收敛为固定 3 次（仓库 / 明细 / 物料名）。
+     */
+    private void fillViewBatch(List<OutsourceStockLoss> records) {
+        if (records == null || records.isEmpty()) return;
+        // 1) 仓库名：仅对"缺名且有仓ID"的行补（与 fillView 的判定一致）
+        java.util.Set<Long> whIds = new java.util.HashSet<>();
+        for (OutsourceStockLoss r : records) {
+            if ((r.getWarehouseName() == null || r.getWarehouseName().isBlank()) && r.getWarehouseId() != null) {
+                whIds.add(r.getWarehouseId());
+            }
+        }
+        Map<Long, String> whNameMap = new java.util.HashMap<>();
+        if (!whIds.isEmpty()) {
+            for (Warehouse wh : warehouseMapper.selectBatchIds(whIds)) {
+                whNameMap.put(wh.getId(), wh.getWarehouseName());
+            }
+        }
+        // 2) 明细：一次取全页
+        java.util.Map<Long, List<OutsourceStockLossItem>> itemsByLoss = new java.util.LinkedHashMap<>();
+        java.util.Set<Long> matIds = new java.util.HashSet<>();
+        List<Long> lossIds = records.stream().map(OutsourceStockLoss::getId).collect(java.util.stream.Collectors.toList());
+        if (!lossIds.isEmpty()) {
+            for (OutsourceStockLossItem it : itemMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceStockLossItem>().in(OutsourceStockLossItem::getLossId, lossIds))) {
+                itemsByLoss.computeIfAbsent(it.getLossId(), k -> new ArrayList<>()).add(it);
+                if ((it.getMaterialName() == null || it.getMaterialName().isBlank()) && it.getMaterialId() != null) {
+                    matIds.add(it.getMaterialId());
+                }
+            }
+        }
+        // 3) 物料名：仅对明细里缺名的物料批量补
+        Map<Long, String> matNameMap = new java.util.HashMap<>();
+        if (!matIds.isEmpty()) {
+            for (OutsourceMaterial m : materialMapper.selectBatchIds(matIds)) {
+                matNameMap.put(m.getId(), m.getMaterialName());
+            }
+        }
+        for (OutsourceStockLoss r : records) {
+            if ((r.getWarehouseName() == null || r.getWarehouseName().isBlank()) && r.getWarehouseId() != null) {
+                r.setWarehouseName(whNameMap.get(r.getWarehouseId()));
+            }
+            r.setItemSummary(buildSummary(itemsByLoss.getOrDefault(r.getId(), List.of()), matNameMap));
+        }
+    }
+
+    /** 明细概况拼串（纯计算，无查询）：物料名×数量，顿号分隔；与 {@link #buildItemSummary} 同逻辑 */
+    private String buildSummary(List<OutsourceStockLossItem> items, Map<Long, String> matNameMap) {
+        StringBuilder sb = new StringBuilder();
+        for (OutsourceStockLossItem it : items) {
+            if (sb.length() > 0) sb.append("、");
+            String name = it.getMaterialName();
+            if (name == null || name.isBlank()) {
+                name = it.getMaterialId() != null ? matNameMap.get(it.getMaterialId()) : null;
+                if (name == null || name.isBlank()) name = "-";
+            }
+            BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
+            sb.append(name).append("×").append(qty.stripTrailingZeros().toPlainString());
+        }
+        return sb.toString();
     }
 
     /** 列表展示字段：补仓库名与明细概况（状态/原因的中文由前端按 code 映射，后端不再回中文） */
@@ -220,15 +286,35 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
 
     /** 报损前库存校验：物料库存不区分品质，按 仓库+物料 查可用量，一次列清所有不足项 */
     private void checkStockBeforeLoss(OutsourceStockLoss loss, List<OutsourceStockLossItem> items) {
+        // F7-82（2026-09-20 性能专项）：库存**一次批量取**（原逐明细 getMaterialQuantity），
+        // 物料名也**一次批量取**（原仅在"不足"时逐条 selectById）。判定与报错文案完全不变。
+        java.util.Set<Long> matIds = new java.util.HashSet<>();
+        for (OutsourceStockLossItem it : items) {
+            if (it.getMaterialId() != null) matIds.add(it.getMaterialId());
+        }
+        Map<Long, BigDecimal> availMap = stockService.getMaterialQuantities(loss.getWarehouseId(), matIds);
+        Map<Long, String> matNameMap = new java.util.HashMap<>();
+        List<Long> missing = new ArrayList<>();
+        for (OutsourceStockLossItem it : items) {
+            BigDecimal need = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
+            if (need.compareTo(BigDecimal.ZERO) <= 0 || it.getMaterialId() == null) continue;
+            BigDecimal avail = availMap.getOrDefault(it.getMaterialId(), BigDecimal.ZERO);
+            if (avail.compareTo(need) < 0) missing.add(it.getMaterialId());
+        }
+        if (!missing.isEmpty()) {
+            for (OutsourceMaterial m : materialMapper.selectBatchIds(missing)) {
+                matNameMap.put(m.getId(), m.getMaterialName());
+            }
+        }
         List<String> shortage = new ArrayList<>();
         for (OutsourceStockLossItem it : items) {
             BigDecimal need = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             if (need.compareTo(BigDecimal.ZERO) <= 0) continue;
-            BigDecimal avail = stockService.getMaterialQuantity(loss.getWarehouseId(), it.getMaterialId());
+            BigDecimal avail = availMap.getOrDefault(it.getMaterialId(), BigDecimal.ZERO);
             if (avail.compareTo(need) < 0) {
-                OutsourceMaterial m = it.getMaterialId() != null ? materialMapper.selectById(it.getMaterialId()) : null;
+                String name = matNameMap.get(it.getMaterialId());
                 shortage.add(String.format("%s（需 %s，库存 %s，缺 %s）",
-                        m != null ? m.getMaterialName() : "ID=" + it.getMaterialId(),
+                        name != null ? name : "ID=" + it.getMaterialId(),
                         need.stripTrailingZeros().toPlainString(),
                         avail.stripTrailingZeros().toPlainString(),
                         need.subtract(avail).stripTrailingZeros().toPlainString()));

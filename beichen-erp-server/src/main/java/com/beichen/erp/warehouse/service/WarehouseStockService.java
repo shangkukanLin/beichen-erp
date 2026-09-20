@@ -20,6 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
 import java.math.RoundingMode;
 
 /**
@@ -43,7 +45,15 @@ public class WarehouseStockService {
                 null, (RelatedBillType) null, null, null, ProductQualityType.A.getCode());
     }
 
-    /** 旧签名兼容；⚠️ `spec` 为历史遗留参数（方法体内从未使用），产品规格已于 2026-09-15 全站下线，调用方传 `""` */
+    /**
+     * 旧签名兼容重载；⚠️ `spec` 为历史遗留参数（方法体内从未使用），产品规格已于 2026-09-15 全站下线，
+     * 调用方传 `""`。
+     * <p>F7-65①（2026-09-20）：标记 {@code @Deprecated} —— 本重载把第二个形参当 {@code productName} 但内部
+     * **只透传 `spec`**（productName 完全丢弃），语义容易误用；新代码请直接用
+     * {@link #changeStock(Long, Long, BigDecimal, StockChangeType, String, RelatedBillType, String, Long, String)}
+     * 并传 {@code spec=""}。</p>
+     */
+    @Deprecated
     @Transactional
     public void changeStock(Long warehouseId, String productName, BigDecimal quantity,
                             StockChangeType type, String relatedBillNo, RelatedBillType relatedBillType,
@@ -54,7 +64,8 @@ public class WarehouseStockService {
     /**
      * 通用库存变更：按 (warehouseId, productId, qualityType) 定位唯一库存行。
      * <p>⚠️ `spec`（产品规格）为**历史遗留参数，方法体内从未使用**；产品规格字段已于 2026-09-15 全站下线
-     * （DB 列与实体字段均已删除），调用方一律传 `""`。保留形参仅为避免大范围改动调用点。</p>
+     * （DB 列与实体字段均已删除），**调用方一律传 `""`（不得传 `null`）**。保留形参仅为避免大范围改动调用点
+     * （全项目 50+ 处调用）。F7-65①（2026-09-20）：本模块（outsource）已把 4 处 `null` 改为 `""` 以符合该约定。</p>
      */
     @Transactional
     public void changeStock(Long warehouseId, Long productId, BigDecimal quantity,
@@ -257,6 +268,28 @@ public class WarehouseStockService {
         if (companyId != null && companyId <= 0) companyId = null;
         WarehouseStock exist = selectMaterialExist(warehouseId, materialId, companyId);
         return exist != null && exist.getQuantity() != null ? exist.getQuantity() : BigDecimal.ZERO;
+    }
+
+    /**
+     * F7-82（2026-09-20 性能专项）：**批量**查询同一仓库下若干物料的当前库存量（不区分品质，唯一键=仓库+物料）。
+     *
+     * <p>语义与 {@link #getMaterialQuantity(Long, Long)} **完全一致**（同样的租户条件、同样的"无记录按 0"），
+     * 只是把 N 次单查收敛为 1 次：供"逐明细校验库存"的场景（物料报损等）使用。
+     * 返回的 Map **只包含有库存记录**的物料，调用方用 {@code getOrDefault(id, ZERO)} 兜底。</p>
+     */
+    public Map<Long, BigDecimal> getMaterialQuantities(Long warehouseId, java.util.Collection<Long> materialIds) {
+        Map<Long, BigDecimal> map = new HashMap<>();
+        if (warehouseId == null || materialIds == null || materialIds.isEmpty()) return map;
+        Long companyId = CompanyContext.get();
+        if (companyId != null && companyId <= 0) companyId = null;
+        for (WarehouseStock s : warehouseStockMapper.selectList(new LambdaQueryWrapper<WarehouseStock>()
+                .eq(WarehouseStock::getWarehouseId, warehouseId)
+                .in(WarehouseStock::getMaterialId, materialIds)
+                .eq(companyId != null, WarehouseStock::getCompanyId, companyId))) {
+            if (s.getMaterialId() == null) continue;
+            map.put(s.getMaterialId(), s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO);
+        }
+        return map;
     }
 
     /** 成品出库库存不足异常（带品质、可用、需求与缺口数量，便于直接定位缺多少） */

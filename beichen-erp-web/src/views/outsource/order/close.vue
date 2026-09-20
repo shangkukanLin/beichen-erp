@@ -32,8 +32,11 @@ function rowShortage(row: any) {
 }
 const shortageRows = computed(() => (items.value || []).filter((r: any) => rowShortage(r)))
 // 退回仓库选择：纯 Odoo 方案，RemoteSelect 实时查库
+// F7-81-③（2026-09-20）：**限定为我方物料仓（INVENTORY + AUXILIARY）** —— 结单退料是一张"调拨单"
+// （工厂委外仓 → 退回仓），后端已按调拨规则校验；下拉原实现不带任何过滤，会把成品仓也列出来供选，
+// 选中即被后端拒绝（或（修复前）把物料记进成品仓）。现与后端口径对齐。
 const fetchWarehouses = (kw: string) =>
-  request.get('/warehouse/page', { params: { warehouseName: kw, pageSize: 500 } })
+  request.get('/warehouse/page', { params: { warehouseName: kw, pageSize: 500, warehouseCategory: 'INVENTORY', warehouseType: 'AUXILIARY' } })
 
 // materialTypeId -> 类型名 映射（兜底展示用）
 function typeName(id: number | undefined, fallback?: string) {

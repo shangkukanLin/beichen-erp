@@ -539,7 +539,7 @@ public class OutsourceOrderDeliveryServiceImpl
         String qualityType = delivery.getQualityType() != null ? delivery.getQualityType() : "A";
         stockService.changeStock(warehouseId, masterId, defectQty.negate(),
                 StockChangeType.OUTSOURCE_DEFECT_RETURN, order.getCode(), RelatedBillType.OUTSOURCE_DEFECT,
-                null, order.getId(), qualityType);
+                "", order.getId(), qualityType);   // F7-65①（2026-09-20）：spec 按 WarehouseStockService 约定传 ""（原传 null）
         log.info("退不良扣成品: {} {}规 (仓库={}) {} -> {}", productName, qualityType, warehouseId, stockQtyOf(masterId, warehouseId, qualityType), stockQtyOf(masterId, warehouseId, qualityType).subtract(defectQty));
 
         // 2. 冲减应付（负数交货 → 负数应付）
@@ -574,7 +574,7 @@ public class OutsourceOrderDeliveryServiceImpl
         String qualityType = delivery.getQualityType() != null ? delivery.getQualityType() : "A";
         stockService.changeStock(warehouseId, masterIdOf(delivery), defectQty,
                 StockChangeType.OUTSOURCE_DEFECT_RETURN, order.getCode(), RelatedBillType.OUTSOURCE_DEFECT,
-                null, order.getId(), qualityType);
+                "", order.getId(), qualityType);   // F7-65①（2026-09-20）：spec 按 WarehouseStockService 约定传 ""（原传 null）
         log.info("退不良反审核恢复成品: {} {}规 (仓库={}) +{}", productName, qualityType, warehouseId, defectQty);
 
         // 2. 扣回BOM还料
@@ -937,7 +937,7 @@ public class OutsourceOrderDeliveryServiceImpl
             if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) continue;
             stockService.changeStock(delivery.getWarehouseId(), masterIdOf(delivery),
                     qty, StockChangeType.OUTSOURCE_FINISH_IN, orderCode, RelatedBillType.OUTSOURCE_ORDER,
-                    null, delivery.getId(), entry.getKey());
+                    "", delivery.getId(), entry.getKey());   // F7-65①（2026-09-20）：spec 按约定传 ""（原传 null）
         }
         log.info("入库完成: warehouseId={}, productId={}, orderCode={}", delivery.getWarehouseId(), delivery.getProductId(), orderCode);
     }
@@ -955,7 +955,7 @@ public class OutsourceOrderDeliveryServiceImpl
             if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) continue;
             stockService.changeStock(delivery.getWarehouseId(), masterIdOf(delivery),
                     qty.negate(), StockChangeType.OUTSOURCE_ROLLBACK, orderCode, RelatedBillType.OUTSOURCE_ORDER,
-                    null, delivery.getId(), entry.getKey());
+                    "", delivery.getId(), entry.getKey());   // F7-65①（2026-09-20）：spec 按约定传 ""（原传 null）
             log.info("回滚成品库存[{}]: warehouseId={}, product={}, qty=-{}", entry.getKey(), delivery.getWarehouseId(), productName, qty);
         }
     }

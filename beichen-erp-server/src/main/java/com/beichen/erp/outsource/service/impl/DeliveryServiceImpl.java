@@ -485,15 +485,40 @@ public class DeliveryServiceImpl implements DeliveryService {
             if (!isOutsourceWarehouse(to)) throw new BusinessException("发料的目标仓库必须是委外仓");
             if (!delivery.getFactoryId().equals(to.getFactoryId())) throw new BusinessException("目标委外仓不属于所选工厂");
         } else {
-            if (!isMaterialWarehouse(from) || !isMaterialWarehouse(to))
-                throw new BusinessException("调拨的两端必须是物料相关仓库（我方物料仓 / 委外仓）");
-            if (from.getId().equals(to.getId())) throw new BusinessException("来源仓库与目标仓库不能相同");
-            if (isMaterialOwnWarehouse(from) && isOutsourceWarehouse(to))
-                throw new BusinessException("我方物料仓 → 委外仓 请使用「发料」单据");
+            // F7-81-③（2026-09-20）：调拨规则抽成唯一的 checkTransferRule，手工创建与"结单自动退料"共用
+            checkTransferRule(from, to);
             // 调拨不再手选工厂：按委外仓自动带出（两端皆我方仓时保持 null）
             if (isOutsourceWarehouse(from)) delivery.setFactoryId(from.getFactoryId());
             else if (isOutsourceWarehouse(to)) delivery.setFactoryId(to.getFactoryId());
         }
+    }
+
+    /**
+     * F7-81-③（2026-09-20）：**调拨仓库规则（纯判定，不查库）** —— 唯一实现，供：
+     * <ul>
+     *   <li>{@code validateWarehouses}（手工创建/编辑调拨单）；</li>
+     *   <li>{@link #assertTransferWarehouses}（结单自动退料等**非手工**生成调拨单的场景）。</li>
+     * </ul>
+     * 规则：两端都必须是物料相关仓（我方物料仓 = INVENTORY+AUXILIARY / 委外仓 = OUTSOURCE）· 不能同仓 ·
+     * "我方物料仓 → 委外仓"必须走「发料」单据。
+     */
+    private void checkTransferRule(Warehouse from, Warehouse to) {
+        if (!isMaterialWarehouse(from) || !isMaterialWarehouse(to))
+            throw new BusinessException("调拨的两端必须是物料相关仓库（我方物料仓 / 委外仓）");
+        if (from.getId().equals(to.getId())) throw new BusinessException("来源仓库与目标仓库不能相同");
+        if (isMaterialOwnWarehouse(from) && isOutsourceWarehouse(to))
+            throw new BusinessException("我方物料仓 → 委外仓 请使用「发料」单据");
+    }
+
+    @Override
+    public void assertTransferWarehouses(Long fromWarehouseId, Long toWarehouseId) {
+        if (fromWarehouseId == null) throw new BusinessException("来源仓库不能为空");
+        if (toWarehouseId == null) throw new BusinessException("目标仓库不能为空");
+        Warehouse from = warehouseMapper.selectById(fromWarehouseId);
+        Warehouse to = warehouseMapper.selectById(toWarehouseId);
+        if (from == null) throw new BusinessException("来源仓库不存在");
+        if (to == null) throw new BusinessException("目标仓库不存在");
+        checkTransferRule(from, to);
     }
 
     /** 我方物料仓 = 自有仓 + 辅料仓（物料专用仓） */

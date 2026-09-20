@@ -470,7 +470,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                 warehouseStockService.changeStock(invWhId,
                         resolveStockProductId(order, p.getProductId(), null), p.getQuantity().negate(),
                         outType, order.getCode(), outBill,
-                        null, order.getId(), normalizeQualityType(p.getQualityType()));
+                        "", order.getId(), normalizeQualityType(p.getQualityType()));   // F7-65①：spec 按约定传 ""（原传 null）
             }
         } else {
             // F2-1（2026-09-18 审核修复）：两类退货都**必须**先选仓才能审核 ——
@@ -562,7 +562,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                 warehouseStockService.changeStock(invWhId,
                         resolveStockProductId(order, p.getProductId(), null), p.getQuantity(),
                         backType, order.getCode(), backBill,
-                        null, order.getId(), normalizeQualityType(p.getQualityType()));
+                        "", order.getId(), normalizeQualityType(p.getQualityType()));   // F7-65①：spec 按约定传 ""（原传 null）
             }
         }
         // 3. 冲销应付：不良退货=退料负向 + 退货收费正向；维修退货=仅维修收费正向
@@ -650,7 +650,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
 
             warehouseStockService.changeStock(whId, productId, qty,
                     StockChangeType.OUTSOURCE_REPAIR_IN, order.getCode(), RelatedBillType.OUTSOURCE_REPAIR,
-                    null, order.getId(), quality);
+                    "", order.getId(), quality);   // F7-65①：spec 按约定传 ""（原传 null）
 
             OutsourceReturnOrderRepair row = new OutsourceReturnOrderRepair();
             row.setReturnOrderId(id);
@@ -683,7 +683,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                 && row.getQuantity() != null && row.getQuantity().compareTo(BigDecimal.ZERO) > 0) {
             warehouseStockService.changeStock(row.getWarehouseId(), row.getProductId(), row.getQuantity().negate(),
                     StockChangeType.CANCEL_OUTSOURCE_REPAIR_IN, order.getCode(), RelatedBillType.OUTSOURCE_REPAIR,
-                    null, order.getId(), normalizeQualityType(row.getQualityType()));
+                    "", order.getId(), normalizeQualityType(row.getQualityType()));   // F7-65①：spec 按约定传 ""（原传 null）
         }
         repairMapper.deleteById(repairRecordId);
     }

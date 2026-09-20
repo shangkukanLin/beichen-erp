@@ -84,7 +84,33 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
         }
         Page<OutsourceOrder> rawPage = orderMapper.selectPage(new Page<>(pageNum, pageSize), w);
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, rawPage.getTotal());
-        result.setRecords(rawPage.getRecords().stream().map(o -> {
+        List<OutsourceOrder> rawRecords = rawPage.getRecords();
+        // F7-82（2026-09-20 性能专项）：列表的**工厂名**与**产品行**改为批量取，消除逐行 N+1。
+        // 原实现每行 1 次 supplierMapper.selectById + 1 次 productMapper.selectList + 1 次
+        // productService.fillSku（每次再查一遍产品主数据）⇒ 一页 10 行 ≈ 30 次查询；现为固定 3 次。
+        Map<Long, String> factoryNameMap = new HashMap<>();
+        List<Long> pageFactoryIds = rawRecords.stream().map(OutsourceOrder::getFactoryId)
+                .filter(java.util.Objects::nonNull).distinct().collect(Collectors.toList());
+        if (!pageFactoryIds.isEmpty()) {
+            for (Supplier s : supplierMapper.selectBatchIds(pageFactoryIds)) {
+                factoryNameMap.put(s.getId(), s.getName() != null ? s.getName() : "");
+            }
+        }
+        Map<Long, List<OutsourceOrderProduct>> productsByOrder = new HashMap<>();
+        List<Long> pageOrderIds = rawRecords.stream().map(OutsourceOrder::getId).collect(Collectors.toList());
+        if (!pageOrderIds.isEmpty()) {
+            List<OutsourceOrderProduct> allProducts = productMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceOrderProduct>()
+                            .in(OutsourceOrderProduct::getOrderId, pageOrderIds)
+                            // F7-82：显式按 id 排序，保证"组内顺序"确定（与原逐单查询的默认主键序一致）
+                            .orderByAsc(OutsourceOrderProduct::getId));
+            // 列表汇总展示：回填 SKU 后与名称一起拼串，便于一眼识别具体型号（**整页一次**回填）
+            productService.fillSku(allProducts, OutsourceOrderProduct::getProductId, OutsourceOrderProduct::setSku);
+            for (OutsourceOrderProduct p : allProducts) {
+                productsByOrder.computeIfAbsent(p.getOrderId(), k -> new ArrayList<>()).add(p);
+            }
+        }
+        result.setRecords(rawRecords.stream().map(o -> {
             Map<String, Object> m = new HashMap<>();
             m.put("id", o.getId()); m.put("code", o.getCode()); m.put("status", o.getStatus());
             m.put("supplyMode", o.getSupplyMode());
@@ -97,15 +123,12 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
             // 合同文件地址（详情页「合同文件」上传），列表页「下载合同」按钮据此判断与下载
             m.put("attachUrl", o.getAttachUrl());
             if (o.getFactoryId() != null) {
-                Supplier sup = supplierMapper.selectById(o.getFactoryId());
-                m.put("factoryName", sup != null ? sup.getName() : "");
+                // F7-82：改为命中批量结果（原为逐行 selectById）
+                m.put("factoryName", factoryNameMap.getOrDefault(o.getFactoryId(), ""));
             }
-            // 产品信息
-            List<OutsourceOrderProduct> products = productMapper.selectList(
-                    new LambdaQueryWrapper<OutsourceOrderProduct>().eq(OutsourceOrderProduct::getOrderId, o.getId()));
+            // 产品信息（F7-82：批量结果 + SKU 已整页回填完毕）
+            List<OutsourceOrderProduct> products = productsByOrder.getOrDefault(o.getId(), List.of());
             m.put("productCount", (long) products.size());
-            // 列表汇总展示：回填 SKU 后与名称一起拼串，便于一眼识别具体型号
-            productService.fillSku(products, OutsourceOrderProduct::getProductId, OutsourceOrderProduct::setSku);
             m.put("productNames", products.stream()
                     .map(p -> p.getProductName() != null ? p.getProductName() : "")
                     .filter(s -> !s.isEmpty())

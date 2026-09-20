@@ -95,6 +95,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     private final com.beichen.erp.material.service.ProductService productService;
     /** F7-77（2026-09-20）：物料单价统一实现（FIFO 口径与此前一致，但统一排除 CANCELLED + 去 N+1） */
     private final com.beichen.erp.outsource.service.OutsourceMaterialPricingService pricingService;
+    /** F7-81-③（2026-09-20）：复用收发单的仓库规则 —— 结单自动退料也必须满足「调拨」的仓库约束 */
+    private final com.beichen.erp.outsource.service.DeliveryService deliveryService;
 
     @Override
     public Map<String, Object> getOrCreateReport(Long orderId) {
@@ -530,6 +532,11 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         Long factoryWhId = warehouses.get(0).getId();
         // 退回仓库不能是当前工厂委外仓本身（否则退料无意义）
         if (factoryWhId.equals(returnWarehouseId)) throw new BusinessException("退回仓库不能是该工厂委外仓库");
+        // F7-81-③（2026-09-20）：**补调拨仓库规则校验**。结单退料生成的是一张**调拨单**（委外仓 → 退回仓），
+        // 原实现直接置 AUDITED 并当场落账，**跳过了**收发单的仓库规则 ⇒ 可把"退回仓"选成成品仓等非物料仓
+        // （前端下拉也确实未过滤）。此处复用 DeliveryService 的**同一份**规则（两端须为物料相关仓 /
+        // 不可同仓 / 我方物料仓→委外仓须走「发料」）；仍是一次性落账 ⇒ **结单保持原子**（不引入 DRAFT 中间态）。
+        deliveryService.assertTransferWarehouses(factoryWhId, returnWarehouseId);
 
         // 收集需要退料的物料
         List<OutsourceDeliveryItem> returnItems = new ArrayList<>();
@@ -711,9 +718,19 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             new LambdaQueryWrapper<OutsourceOtherIo>()
                 .like(OutsourceOtherIo::getRemark, structuredKey));
         if (missingIos.isEmpty()) {
-            missingIos = otherIoMapper.selectList(new LambdaQueryWrapper<OutsourceOtherIo>()
+            // F7-80 收口（2026-09-20）：结构化键找不到时**不再按备注 eq 静默回捞**。
+            // 原回退（"备注 eq + 出库类型"）在"该订单没有带键单"时会命中**用户手建的同名单** ⇒ 误作废 + 误加库存。
+            // 现改为：只做一次**存在性探测**，若确有疑似旧版单则**显式报错让人工核对** —— 既不误伤，也不静默丢账。
+            // 依据（实查现网）：outsource_other_io 共 28 行，remark 含"加工厂遗失"的 **0 行**、含结构化键的 **0 行**
+            // ⇒ 回退分支在现网从未产生过数据，收紧无历史包袱。
+            Long legacy = otherIoMapper.selectCount(new LambdaQueryWrapper<OutsourceOtherIo>()
                 .eq(OutsourceOtherIo::getRemark, "加工厂遗失 - " + order.getCode())
                 .eq(OutsourceOtherIo::getIoType, IoType.OUT.getCode()));
+            if (legacy != null && legacy > 0) {
+                throw new BusinessException("检测到 " + legacy + " 张疑似旧版缺失出库单（备注与订单号匹配，"
+                        + "但没有结构化关联键 [#orderId]）；为避免误作废、误加库存，"
+                        + "请在「其他出入库」中人工核对后再反结单");
+            }
         }
         for (OutsourceOtherIo io : missingIos) {
             // E3 口径：仍用 DocStatus（与结单写入的 AUDITED 同体系）

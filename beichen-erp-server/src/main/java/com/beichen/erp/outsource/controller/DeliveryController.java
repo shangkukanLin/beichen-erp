@@ -24,8 +24,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/outsource/delivery")
@@ -48,33 +50,68 @@ public class DeliveryController {
             @RequestParam(defaultValue = "10") int pageSize) {
         Page<OutsourceDelivery> rawPage = deliveryService.page(deliveryType, factoryId, code, pageNum, pageSize);
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, rawPage.getTotal());
-        result.setRecords(rawPage.getRecords().stream().map(d -> {
+        List<OutsourceDelivery> records = rawPage.getRecords();
+        // F7-82（2026-09-20 性能专项）：**整页批量取**工厂名/供应商名/仓库名/明细/物料名。
+        // 原实现每行 1(工厂)+1(直发供应商)+1(来源仓)+1(目标仓)+1(明细)+每明细 1(物料名) 次查询
+        // ⇒ 一页 10 行 ≈ 50+ 次；现为固定 5 次（供应商 / 仓库 / 明细 / 物料 / 主查询）。
+        Set<Long> supIds = new HashSet<>();
+        Set<Long> whIds = new HashSet<>();
+        for (OutsourceDelivery d : records) {
+            if (d.getFactoryId() != null) supIds.add(d.getFactoryId());
+            if (d.getSupplierDirect() != null && d.getSupplierDirect() == 1 && d.getSupplierId() != null) supIds.add(d.getSupplierId());
+            if (d.getFromWarehouseId() != null) whIds.add(d.getFromWarehouseId());
+            if (d.getToWarehouseId() != null) whIds.add(d.getToWarehouseId());
+        }
+        Map<Long, String> supNameMap = new HashMap<>();
+        if (!supIds.isEmpty()) {
+            for (Supplier s : supplierMapper.selectBatchIds(supIds)) {
+                supNameMap.put(s.getId(), s.getName() != null ? s.getName() : "");
+            }
+        }
+        Map<Long, String> whNameMap = new HashMap<>();
+        if (!whIds.isEmpty()) {
+            for (Warehouse w : warehouseMapper.selectBatchIds(whIds)) {
+                whNameMap.put(w.getId(), w.getWarehouseName() != null ? w.getWarehouseName() : "");
+            }
+        }
+        Map<Long, List<OutsourceDeliveryItem>> itemsByDelivery = new HashMap<>();
+        Set<Long> matIds = new HashSet<>();
+        List<Long> deliveryIds = records.stream().map(OutsourceDelivery::getId).collect(java.util.stream.Collectors.toList());
+        if (!deliveryIds.isEmpty()) {
+            for (OutsourceDeliveryItem it : itemMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceDeliveryItem>().in(OutsourceDeliveryItem::getDeliveryId, deliveryIds))) {
+                itemsByDelivery.computeIfAbsent(it.getDeliveryId(), k -> new ArrayList<>()).add(it);
+                if (it.getMaterialId() != null) matIds.add(it.getMaterialId());
+            }
+        }
+        Map<Long, String> matNameMap = new HashMap<>();
+        if (!matIds.isEmpty()) {
+            for (OutsourceMaterial m : outsourceMaterialMapper.selectBatchIds(matIds)) {
+                matNameMap.put(m.getId(), m.getMaterialName() != null ? m.getMaterialName() : "");
+            }
+        }
+        result.setRecords(records.stream().map(d -> {
             Map<String, Object> m = new HashMap<>();
             m.put("id", d.getId()); m.put("code", d.getCode()); m.put("deliveryType", d.getDeliveryType());
             m.put("deliveryDate", d.getDeliveryDate()); m.put("status", d.getStatus());
             m.put("supplierDirect", d.getSupplierDirect()); m.put("logisticsCompany", d.getLogisticsCompany());
             m.put("logisticsNo", d.getLogisticsNo()); m.put("remark", d.getRemark());
             m.put("supplierId", d.getSupplierId());
-            // 工厂名
-            if (d.getFactoryId() != null) { Supplier sup = supplierMapper.selectById(d.getFactoryId()); m.put("factoryName", sup != null ? sup.getName() : ""); }
+            // 工厂名（F7-82：命中批量结果；键仍仅在 factoryId 非空时写入，保持原返回结构不变）
+            if (d.getFactoryId() != null) m.put("factoryName", supNameMap.getOrDefault(d.getFactoryId(), ""));
             // 直发供应商名
-            if (d.getSupplierDirect() != null && d.getSupplierDirect() == 1 && d.getSupplierId() != null) { Supplier s = supplierMapper.selectById(d.getSupplierId()); m.put("supplierName", s != null ? s.getName() : ""); }
+            if (d.getSupplierDirect() != null && d.getSupplierDirect() == 1 && d.getSupplierId() != null)
+                m.put("supplierName", supNameMap.getOrDefault(d.getSupplierId(), ""));
             // 来源仓库名
-            if (d.getFromWarehouseId() != null) {
-                Warehouse wh = warehouseMapper.selectById(d.getFromWarehouseId());
-                m.put("fromWarehouseName", wh != null ? wh.getWarehouseName() : "");
-            }
+            if (d.getFromWarehouseId() != null) m.put("fromWarehouseName", whNameMap.getOrDefault(d.getFromWarehouseId(), ""));
             // 目标仓库名
-            if (d.getToWarehouseId() != null) {
-                Warehouse wh = warehouseMapper.selectById(d.getToWarehouseId());
-                m.put("toWarehouseName", wh != null ? wh.getWarehouseName() : "");
-            }
-            // 物料统计
-            List<OutsourceDeliveryItem> items = itemMapper.selectList(new LambdaQueryWrapper<OutsourceDeliveryItem>().eq(OutsourceDeliveryItem::getDeliveryId, d.getId()));
+            if (d.getToWarehouseId() != null) m.put("toWarehouseName", whNameMap.getOrDefault(d.getToWarehouseId(), ""));
+            // 物料统计（F7-82：明细与物料名都来自批量结果）
+            List<OutsourceDeliveryItem> items = itemsByDelivery.getOrDefault(d.getId(), List.of());
             m.put("itemCount", (long) items.size());
             java.util.StringJoiner sj = new java.util.StringJoiner("、");
             for (OutsourceDeliveryItem it : items) {
-                String n = getMaterialNameById(it.getMaterialId());
+                String n = it.getMaterialId() != null ? matNameMap.getOrDefault(it.getMaterialId(), "") : "";
                 BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
                 sj.add(n + "×" + q.stripTrailingZeros().toPlainString());
             }
