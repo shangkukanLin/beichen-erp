@@ -423,5 +423,8 @@
   "wh_fin1": "成品一号仓",
   "val_product_a1": "测试产品A1",
   "val_clear_word": "清空数据",
-  "col_avail_stock": "可用库存"
+  "col_avail_stock": "可用库存",
+  "val_wh_fin4": "成品四号仓",
+  "tab_supplier_recv": "供应商应收",
+  "val_status_audited": "已审核"
 }

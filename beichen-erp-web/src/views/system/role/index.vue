@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   getRolePage,
@@ -189,6 +189,10 @@ function statusType(status: number) {
 async function handleOpenPerm(row: Role) {
   permRoleId.value = row.id as number | string
   permRoleName.value = row.roleName
+  // 2026-09-20（F7-183）：弹窗复用（el-dialog 不销毁 el-tree）⇒ 必须先清掉上一个角色的勾选，
+  // 否则本次的 default-checked-keys 不会重新生效，会看到「上一个角色的权限」。
+  permCheckedKeys.value = []
+  permTreeRef.value?.setCheckedKeys([])
   permDialogVisible.value = true
   // 加载菜单树
   try {
@@ -204,7 +208,21 @@ async function handleOpenPerm(row: Role) {
   } catch {
     permCheckedKeys.value = []
   }
+  // default-checked-keys 只在 el-tree 首次渲染时生效，而此处数据是异步返回的 ⇒ 必须显式 setCheckedKeys
+  // （与 system/user/index.vue 的「分配权限」保持同一写法）
+  await nextTick()
+  permTreeRef.value?.setCheckedKeys(permCheckedKeys.value)
 }
+
+/**
+ * 2026-09-20（F7-183 增强）：菜单树与勾选数据都是异步到齐的，而 el-tree 要先按新数据把节点建出来，
+ * setCheckedKeys 才认得这些 key。首次打开时树正好从「0 节点」变成「满节点」，仅一次 nextTick 不保证
+ * 节点已建好（实测首开勾选为 0、再次打开才正常）⇒ 用 watch 在两个数据源变化后各重设一次，确保稳定。
+ */
+watch([permMenuTree, permCheckedKeys], async () => {
+  await nextTick()
+  permTreeRef.value?.setCheckedKeys(permCheckedKeys.value)
+})
 
 async function handleSavePerm() {
   const checkedKeys = permTreeRef.value?.getCheckedKeys() || []

@@ -106,7 +106,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
       <el-descriptions :column="2" border>
         <el-descriptions-item label="单据号">{{ detail.billNo }}</el-descriptions-item>
         <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ SettlementStatusLabel[String(detail.status)] || detail.status }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="客户">{{ cName(detail.customerId) }}</el-descriptions-item>
+        <el-descriptions-item :label="detail.subjectType === SubjectType.SUPPLIER ? '供应商' : '客户'">{{ subjectName(detail) }}</el-descriptions-item>
         <el-descriptions-item label="来源类型">{{ sourceBillTypeLabel(detail.sourceBillType) }}</el-descriptions-item>
         <el-descriptions-item label="来源单号">{{ detail.sourceBillNo }}</el-descriptions-item>
         <el-descriptions-item label="到期日">{{ detail.dueDate }}</el-descriptions-item>

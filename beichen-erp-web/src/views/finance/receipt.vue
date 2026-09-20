@@ -201,7 +201,7 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
     <el-drawer v-model="detailVisible" title="收款单详情" size="50%">
       <el-descriptions :column="2" border>
         <el-descriptions-item label="单号">{{ detail.code }}</el-descriptions-item>
-        <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ detail.status }}</el-tag></el-descriptions-item>
+        <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ DocStatusLabel[String(detail.status)] || detail.status }}</el-tag></el-descriptions-item>
         <el-descriptions-item label="主体类型">{{ SubjectTypeLabel[detail.subjectType || ''] || '客户' }}</el-descriptions-item>
         <el-descriptions-item label="往来单位">{{ subjectLabel(detail) }}</el-descriptions-item>
         <el-descriptions-item label="账户">{{ aName(detail.accountId) }}</el-descriptions-item>

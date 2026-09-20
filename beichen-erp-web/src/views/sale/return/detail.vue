@@ -92,7 +92,10 @@ const route = useRoute()
 const router = useRouter()
 const acting = ref(false)
 // 仓库显示用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: 'AFTER_SALE' } })
+// 2026-09-20（F7-142）：不再按 warehouseType 过滤 —— 详情页只做「名称回显」，需能显示任意历史仓库；
+// 原写死的 'AFTER_SALE' 已随 2026-09-16「方案 A」取消（实测现网无此类型仓）⇒ 该过滤恒为空，仓库名永远显示 —。
+// 「只能退到自有成品仓」是【新增时】的可选范围规则（见 return/add.vue:161），与详情展示无关。
+const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
 const warehouses = ref<{ id: number; warehouseName?: string; name?: string }[]>([])
 async function loadWarehouses() { try { const r: any = await fetchWarehouses(''); warehouses.value = r?.records || [] } catch { warehouses.value = [] } }
 const items = ref<any[]>([])

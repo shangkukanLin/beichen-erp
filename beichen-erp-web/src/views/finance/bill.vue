@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBillPage, generateBill, auditBill, unAuditBill, cancelBill, type FinanceBill } from '@/api/finance'
 import { BillType, BillTypeLabel, sourceBillTypeLabel, FINANCE_BILL_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
@@ -93,9 +93,24 @@ async function handleGenerate() {
 
 // 详情已独立成页，列表不再用抽屉展示
 function handleDetail(row: FinanceBill) { router.push(`/finance/bill/detail/${row.id}`) }
-async function handleAudit(row: FinanceBill) { try { await auditBill(row.id as number); ElMessage.success('账单已审核'); afterChange() } catch {} }
-async function handleUnAudit(row: FinanceBill) { try { await unAuditBill(row.id as number); ElMessage.success('账单已反审核'); afterChange() } catch {} }
-async function handleCancel(row: FinanceBill) { try { await cancelBill(row.id as number); ElMessage.success('账单已作废'); afterChange() } catch {} }
+// 2026-09-20（F7-160）：审核 / 反审核 / 作废 补二次确认 —— 与同单据的 bill/detail.vue 口径一致。
+// 列表里三个危险动作原先「点一下即执行」（审核/反审核会核销、冲销台账），误点代价高；
+// 写法照搬 bill/detail.vue：confirm 与请求各自 try/catch（用户点「取消」不算失败），提示语带单号便于多行操作时辨认。
+async function handleAudit(row: FinanceBill) {
+  try { await ElMessageBox.confirm(`确认审核账单「${row.billNo}」？`, '审核确认', { type: 'warning' }) } catch { return }
+  try { await auditBill(row.id as number); ElMessage.success('账单已审核'); afterChange() }
+  catch (e: any) { ElMessage.error(e?.message || '审核失败') }
+}
+async function handleUnAudit(row: FinanceBill) {
+  try { await ElMessageBox.confirm(`确认反审核账单「${row.billNo}」？`, '反审核确认', { type: 'warning' }) } catch { return }
+  try { await unAuditBill(row.id as number); ElMessage.success('账单已反审核'); afterChange() }
+  catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
+}
+async function handleCancel(row: FinanceBill) {
+  try { await ElMessageBox.confirm(`确认作废账单「${row.billNo}」？`, '作废确认', { type: 'warning' }) } catch { return }
+  try { await cancelBill(row.id as number); ElMessage.success('账单已作废'); afterChange() }
+  catch (e: any) { ElMessage.error(e?.message || '作废失败') }
+}
 </script>
 <template>
   <div class="p">
