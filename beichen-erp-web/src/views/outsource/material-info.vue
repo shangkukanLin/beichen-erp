@@ -6,7 +6,8 @@ import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
-const query = reactive({ materialName: '', projectId: undefined as any })
+// 2026-09-21：去掉「所属项目」筛选 —— 该字段已整字段下线（用户：这个字段没什么用）
+const query = reactive({ materialName: '' })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const tableData = ref<any[]>([])
 const allMaterials = ref<any[]>([])  // 全部物料，不受TAB过滤，供子物料下拉框使用
@@ -15,11 +16,8 @@ const supplierOptions = ref<any[]>([])
 const MATERIAL_TYPES = ref<any[]>([])
 
 // Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
-const fetchProjects = (kw: string) => request.get('/dev/project/page', { params: { pageSize: 500, name: kw } })
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
 const fetchMaterialTypes = (kw: string) => request.get('/dev/material-type/enabled')
-const selectedProjects = ref<any[]>([])
-function onPickProjects(opts: any[]) { selectedProjects.value = opts }
 
 // Tab 切换 - 物料类型（按 materialTypeId 过滤）
 const activeTab = ref<number | string>('全部')
@@ -45,15 +43,13 @@ function supplierNames(ids: string | undefined) {
   }).join(', ')
 }
 
-// 数量格式化（保留2位小数，空值显示 0.00）
-function fmtQty(v: any) { return v == null ? '0.00' : Number(v).toFixed(2) }
+// 2026-09-21：原「库存总量/未交数量」格式化函数 fmtQty 随两列一并删除（已无调用方）
 
 async function loadData() {
   tableLoading.value = true
   try {
     const p: any = { pageNum: pagination.pageNum, pageSize: pagination.pageSize }
     if (query.materialName) p.materialName = query.materialName
-    if (query.projectId) p.projectId = query.projectId
     if (activeTab.value !== '全部') p.materialTypeId = activeTab.value
     const r = await request.get<any, any>('/outsource/material/page', { params: p })
     tableData.value = r?.records || []; pagination.total = r?.total || 0
@@ -61,10 +57,10 @@ async function loadData() {
 }
 function handleTabChange() { pagination.pageNum = 1; loadData() }
 function handleQuery() { pagination.pageNum = 1; loadData() }
-function handleReset() { query.materialName = ''; query.projectId = undefined; pagination.pageNum = 1; loadData() }
+function handleReset() { query.materialName = ''; pagination.pageNum = 1; loadData() }
 
 const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoading = ref(false)
-const defForm = () => ({ id: undefined as any, projectIds: '', projectIdArr: [] as number[], materialName: '', materialTypeId: undefined as any, supplierIdArr: [] as number[], unit: 'PCS', price: undefined as any, remark: '' })
+const defForm = () => ({ id: undefined as any, materialName: '', materialTypeId: undefined as any, supplierIdArr: [] as number[], unit: 'PCS', price: undefined as any, remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
 // 子物料组成
@@ -104,25 +100,19 @@ async function loadAllMaterials() {
 function handleAdd() { Object.assign(form, defForm()); bomRows.value = []; bomLoaded.value = true; isEdit.value = false; dialogTitle.value = '新增物料'; dialogVisible.value = true; loadAllMaterials() }
 async function handleEdit(row: any) {
   Object.assign(form, defForm(), row)
-  form.projectIdArr = (row.projectIds || '').split(',').filter(Boolean).map(Number)
+  // 2026-09-21：「所属项目」下线 ⇒ 不再回填 projectIdArr，也不再预取项目名（用于拼 projectName 的那段已删）
   form.supplierIdArr = (row.supplierIds || '').split(',').filter(Boolean).map(Number)
   isEdit.value = true; dialogTitle.value = '编辑物料'; dialogVisible.value = true
   loadAllMaterials()
   loadComponents(row.id)
-  // 编辑时填充已选项名称（用于提交拼装 projectName）
-  if (form.projectIdArr.length) {
-    const r = await fetchProjects('')
-    selectedProjects.value = (r?.records || []).filter((p: any) => form.projectIdArr.includes(p.id))
-  }
 }
 
 async function handleSubmit() {
   if (!form.materialName) { ElMessage.warning('请输入物料名称'); return }
   if (!form.materialTypeId) { ElMessage.warning('请选择物料类型'); return }
-  const ids = form.projectIdArr.join(',')
-  const names = selectedProjects.value.map((p: any) => p.name).filter(Boolean).join(', ')
+  // 2026-09-21：「所属项目」下线 ⇒ 提交体不再拼 projectIds / projectName
   const sIds = form.supplierIdArr.join(',')
-  const body = { ...form, projectIds: ids, projectName: names, supplierIds: sIds }
+  const body = { ...form, supplierIds: sIds }
   submitLoading.value = true
   try {
     if (isEdit.value) { await request.put('/outsource/material', body); ElMessage.success('修改成功') }
@@ -139,13 +129,8 @@ async function handleDelete(row: any) { try { await ElMessageBox.confirm('确定
 const router = useRouter()
 const route = useRoute()
 
-// 三个下拉「+ 新增」项：识别到标记后移除占位并跳转到对应列表页
-function onProjectChange(val: any[]) {
-  if (val.includes(ADD_MARKER)) {
-    form.projectIdArr = val.filter(v => v !== ADD_MARKER)
-    router.push('/dev/project')
-  }
-}
+// 下拉「+ 新增」项：识别到标记后移除占位并跳转到对应列表页
+// （原「所属项目」的 onProjectChange 已随字段下线一并删除）
 function onSupplierChange(val: any[]) {
   if (val.includes(ADD_MARKER)) {
     form.supplierIdArr = val.filter(v => v !== ADD_MARKER)
@@ -173,7 +158,6 @@ onMounted(async () => {
       <div class="query-bar">
       <el-form :inline="true" :model="query">
         <el-form-item label="物料名称"><el-input v-model="query.materialName" placeholder="物料名称" clearable @keyup.enter="handleQuery" /></el-form-item>
-        <el-form-item label="所属项目"><RemoteSelect v-model="query.projectId" :fetch="fetchProjects" placeholder="全部" style="width:180px" /></el-form-item>
       </el-form>
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
@@ -189,8 +173,8 @@ onMounted(async () => {
         <el-tab-pane v-for="t in MATERIAL_TYPES" :key="t.id" :label="t.typeName" :name="t.id" />
       </el-tabs>
 
+      <!-- 2026-09-21：列改版 —— 去掉「所属项目」「库存总量」「未交数量」三列（剩 6 列：物料类型/物料名称/供应商/单位/单价/操作） -->
       <el-table :data="tableData" border stripe v-loading="tableLoading">
-        <el-table-column prop="projectName" label="所属项目" width="150" show-overflow-tooltip />
         <el-table-column prop="materialTypeName" label="物料类型" width="100" />
         <el-table-column prop="materialName" label="物料名称" min-width="130" show-overflow-tooltip />
         <el-table-column label="供应商" width="180" show-overflow-tooltip>
@@ -198,14 +182,6 @@ onMounted(async () => {
         </el-table-column>
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column prop="price" label="单价" width="90" />
-        <el-table-column label="库存总量" width="110" align="right">
-          <template #default="{ row }">{{ fmtQty(row.stockTotal) }}</template>
-        </el-table-column>
-        <el-table-column label="未交数量" width="110" align="right">
-          <template #default="{ row }">
-            <span :style="{ color: Number(row.undeliveredTotal) > 0 ? 'var(--app-color-warning)' : '', fontWeight: Number(row.undeliveredTotal) > 0 ? 600 : 400 }">{{ fmtQty(row.undeliveredTotal) }}</span>
-          </template>
-        </el-table-column>
         <el-table-column label="操作" width="130" align="center" fixed="right">
           <template #default="{row}"><el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button><el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button></template>
         </el-table-column>
@@ -215,7 +191,6 @@ onMounted(async () => {
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="720px" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px">
-        <el-form-item label="所属项目"><RemoteSelect v-model="form.projectIdArr" multiple :fetch="fetchProjects" placeholder="可多选" style="width:100%" @pick="onPickProjects" @change="onProjectChange"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
         <el-form-item required label="物料类型"><RemoteSelect v-model="form.materialTypeId" :fetch="fetchMaterialTypes" :label-key="(t: any) => t.typeName" placeholder="请选择" style="width:100%" /></el-form-item>
         <el-form-item label="物料名称" required><el-input v-model="form.materialName" /></el-form-item>
         <el-form-item label="供应商"><RemoteSelect v-model="form.supplierIdArr" multiple :fetch="fetchSuppliers" placeholder="可多选" style="width:100%" @change="onSupplierChange"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>

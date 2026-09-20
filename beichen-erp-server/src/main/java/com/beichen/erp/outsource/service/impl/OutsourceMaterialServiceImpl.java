@@ -144,7 +144,7 @@ public class OutsourceMaterialServiceImpl implements OutsourceMaterialService {
     }
 
     private void fill(OutsourceMaterial m, Map<String, Object> body) {
-        m.setProjectIds(body.get("projectIds") != null ? body.get("projectIds").toString() : null);
+        // 2026-09-21：「所属项目」字段已下线（project_ids 列已 DROP）⇒ 不再接收 body 里的 projectIds
         m.setMaterialName((String) body.get("materialName"));
         // 仅存储 物料类型ID，类型名称在展示时关联 material_type 查名
         if (body.get("materialTypeId") != null) {

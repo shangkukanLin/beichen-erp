@@ -4,9 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.dev.entity.MaterialType;
-import com.beichen.erp.dev.entity.Project;
 import com.beichen.erp.dev.mapper.MaterialTypeMapper;
-import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
@@ -14,12 +12,9 @@ import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
 import com.beichen.erp.outsource.service.OutsourceMaterialService;
 import com.beichen.erp.outsource.service.SupplierMaterialService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/outsource/material")
@@ -27,35 +22,38 @@ import java.util.stream.Collectors;
 public class OutsourceMaterialController {
 
     private final OutsourceMaterialMapper mapper;
-    private final ProjectMapper projectMapper;
     private final MaterialTypeMapper materialTypeMapper;
     private final SupplierMaterialService supplierMaterialService;
     private final OutsourceMaterialService materialService;
-    private final JdbcTemplate jdbcTemplate;
 
+    /**
+     * 分页查询。
+     * <p>2026-09-21（用户：「物料信息管理的列表，去掉库存/未交」+「不要所属项目了，这个字段没什么用」）
+     * 随列表改版一并清理，不再返回/计算以下 4 个字段：</p>
+     * <ul>
+     *   <li>{@code projectIds} / {@code projectName}：「所属项目」整字段下线（现网 30 行填充率 0%），
+     *       实体字段与 DB 列已同步移除；删列前的备份见
+     *       {@code tools/db-archive/before-drop-outsource-material-project-ids.txt}；</li>
+     *   <li>{@code stockTotal} / {@code undeliveredTotal}：列表已不再展示这两列。</li>
+     * </ul>
+     * <p>⇒ 附带收益：本接口**每次分页请求少跑 2 条聚合 SQL**（全仓库存合计 / 交货中未交合计），
+     * 所有调用方（供应商详情的供应物料、销售出库物料下拉、研发项目 BOM 下拉等）一并受益。</p>
+     */
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize,
             @RequestParam(required = false) String materialName,
-            @RequestParam(required = false) String projectId,
             @RequestParam(required = false) Long materialTypeId) {
         LambdaQueryWrapper<OutsourceMaterial> w = new LambdaQueryWrapper<OutsourceMaterial>()
                 .like(materialName != null && !materialName.isBlank(), OutsourceMaterial::getMaterialName, materialName)
-                .like(projectId != null && !projectId.isBlank(), OutsourceMaterial::getProjectIds, projectId)
                 .eq(materialTypeId != null, OutsourceMaterial::getMaterialTypeId, materialTypeId)
                 .orderByDesc(OutsourceMaterial::getId);
         Page<OutsourceMaterial> page = mapper.selectPage(new Page<>(pageNum, pageSize), w);
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, page.getTotal());
-        // 当前页物料的两个聚合：全仓库存总和、交货中订单的未交数量总和（批量查询避免 N+1）
-        List<Long> pageMaterialIds = page.getRecords().stream().map(OutsourceMaterial::getId).toList();
-        Map<Long, BigDecimal> stockTotalMap = aggregateStockTotal(pageMaterialIds);
-        Map<Long, BigDecimal> undeliveredMap = aggregateUndelivered(pageMaterialIds);
         result.setRecords(page.getRecords().stream().map(m -> {
             Map<String, Object> map = new HashMap<>();
             map.put("id", m.getId());
-            map.put("projectIds", m.getProjectIds());
-            map.put("projectName", idsToNames(m.getProjectIds(), projectMapper));
             map.put("materialName", m.getMaterialName());
             map.put("materialTypeId", m.getMaterialTypeId());
             map.put("materialTypeName", getMaterialTypeNameById(m.getMaterialTypeId()));
@@ -66,53 +64,9 @@ public class OutsourceMaterialController {
             map.put("status", m.getStatus());
             map.put("remark", m.getRemark());
             map.put("price", m.getPrice());
-            map.put("stockTotal", stockTotalMap.getOrDefault(m.getId(), BigDecimal.ZERO));
-            map.put("undeliveredTotal", undeliveredMap.getOrDefault(m.getId(), BigDecimal.ZERO));
             return map;
         }).toList());
         return R.ok(result);
-    }
-
-    /** 全部仓库的库存数量总和（不分品质/仓库，物料维度汇总） */
-    private Map<Long, BigDecimal> aggregateStockTotal(List<Long> materialIds) {
-        if (materialIds.isEmpty()) return Collections.emptyMap();
-        String in = String.join(",", materialIds.stream().map(String::valueOf).toList());
-        Map<Long, BigDecimal> map = new HashMap<>();
-        jdbcTemplate.query("SELECT material_id, SUM(quantity) AS total FROM warehouse_stock WHERE material_id IN (" + in + ") GROUP BY material_id",
-            rs -> { map.put(rs.getLong("material_id"), rs.getBigDecimal("total")); });
-        return map;
-    }
-
-    /** 交货中（RECEIVING）订单的未交数量总和 = Σ(订购量 - 已收量)，仅累计未交完的明细 */
-    private Map<Long, BigDecimal> aggregateUndelivered(List<Long> materialIds) {
-        if (materialIds.isEmpty()) return Collections.emptyMap();
-        String receiving = com.beichen.erp.outsource.common.MaterialOrderStatus.RECEIVING.getCode();
-        String in = String.join(",", materialIds.stream().map(String::valueOf).toList());
-        Map<Long, BigDecimal> map = new HashMap<>();
-        jdbcTemplate.query(
-            "SELECT moi.outsource_material_id AS mid, SUM(moi.order_quantity - IFNULL(moi.received_quantity, 0)) AS undelivered " +
-            "FROM outsource_material_order_item moi " +
-            "INNER JOIN outsource_material_order mo ON moi.order_id = mo.id " +
-            "WHERE moi.deleted = 0 AND mo.status = '" + receiving + "' " +
-            "AND moi.outsource_material_id IN (" + in + ") " +
-            "AND moi.order_quantity > IFNULL(moi.received_quantity, 0) " +
-            "GROUP BY moi.outsource_material_id",
-            rs -> { map.put(rs.getLong("mid"), rs.getBigDecimal("undelivered")); });
-        return map;
-    }
-
-    private String idsToNames(String ids, ProjectMapper projectMapper) {
-        if (ids == null || ids.isBlank()) return "";
-        return Arrays.stream(ids.split(","))
-                .map(String::trim).filter(s -> !s.isEmpty())
-                .map(id -> {
-                    try {
-                        Project p = projectMapper.selectById(Long.valueOf(id));
-                        return p != null ? p.getName() : id;
-                    } catch (Exception e) {
-                        return id;
-                    }
-                }).collect(Collectors.joining(", "));
     }
 
     /** 根据 物料类型ID 查询类型名称，空安全返回 "-" */

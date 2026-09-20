@@ -1,0 +1,35 @@
+﻿# Backup of outsource_material.project_ids values BEFORE dropping the column (2026-09-21).
+# Restore procedure: ALTER TABLE outsource_material ADD COLUMN project_ids VARCHAR(255) DEFAULT NULL,
+#   then set the values listed below (rows absent from this file were empty/NULL before the drop).
+# Verified statistics at backup time: 30 rows total, 0 rows with a non-empty value.
+
+id=33 | project_ids=
+id=34 | project_ids=
+id=35 | project_ids=
+id=36 | project_ids=
+id=37 | project_ids=
+id=38 | project_ids=
+id=39 | project_ids=
+id=40 | project_ids=
+id=41 | project_ids=
+id=42 | project_ids=
+id=43 | project_ids=
+id=44 | project_ids=
+id=45 | project_ids=
+id=46 | project_ids=
+id=47 | project_ids=
+id=48 | project_ids=
+id=49 | project_ids=
+id=50 | project_ids=
+id=51 | project_ids=
+id=52 | project_ids=
+id=53 | project_ids=
+id=54 | project_ids=
+id=55 | project_ids=
+id=56 | project_ids=
+id=57 | project_ids=
+id=58 | project_ids=
+id=59 | project_ids=
+id=60 | project_ids=
+id=61 | project_ids=EMPTY
+id=62 | project_ids=EMPTY

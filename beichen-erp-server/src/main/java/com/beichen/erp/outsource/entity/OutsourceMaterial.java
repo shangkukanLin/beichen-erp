@@ -10,7 +10,9 @@ import java.time.LocalDateTime;
 public class OutsourceMaterial {
     @TableId(type = IdType.AUTO)
     private Long id;
-    private String projectIds;
+    // 2026-09-21（用户：「不要所属项目了，这个字段没什么用」）：删除 projectIds 字段 ——
+    // 实测现网 30 行 project_ids 有值 0 行（填充率 0%），列已由 DDL 同步 DROP，
+    // 备份见 tools/db-archive/before-drop-outsource-material-project-ids.txt。
     private String materialName;
     /** 物料类型ID（关联 material_type.id），物料按此ID归类 */
     private Long materialTypeId;

@@ -359,7 +359,6 @@ CREATE TABLE IF NOT EXISTS outsource_material (
     cost_price DECIMAL(18,4) DEFAULT NULL COMMENT '移动加权平均成本价(委外仓入库自动更新)',
     cost_manual TINYINT DEFAULT 0 COMMENT '成本价是否手工锁定 0否 1是',
     last_in_price DECIMAL(18,4) DEFAULT NULL COMMENT '最近入库单价',
-    project_ids VARCHAR(500) COMMENT '关联项目ID列表(逗号分隔)',
     warehouse_id BIGINT COMMENT '仓库ID',
     material_name VARCHAR(100) NOT NULL COMMENT '物料名称',
     material_type_id BIGINT DEFAULT NULL COMMENT '物料类型ID(关联material_type.id)',
