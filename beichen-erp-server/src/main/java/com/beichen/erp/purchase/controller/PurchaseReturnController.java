@@ -115,6 +115,15 @@ public class PurchaseReturnController {
         if (body.get("returnDate") != null) o.setReturnDate(java.time.LocalDate.parse(body.get("returnDate").toString()));
         if (body.get("totalAmount") != null) o.setTotalAmount(new java.math.BigDecimal(body.get("totalAmount").toString()));
         if (body.get("remark") != null) o.setRemark(body.get("remark").toString());
+        // 是否付费（2026-09-21 用户口径：采购退货单也要有「是否付费」，方向 = 我们付给供货商，精确到产品）。
+        // ⚠️ 这 4 个字段必须**手抄**：create/update 收到的实体是这里 new 出来的，
+        // 漏登记会让前端传了也进不了实体（实测漏登记时：付费校验不触发、charge_flag 永远 0）。
+        if (body.get("chargeFlag") != null && !body.get("chargeFlag").toString().isBlank())
+            o.setChargeFlag(Integer.valueOf(body.get("chargeFlag").toString().trim()));
+        if (body.get("chargeType") != null) o.setChargeType(body.get("chargeType").toString());
+        if (body.get("chargeAmount") != null && !body.get("chargeAmount").toString().isBlank())
+            o.setChargeAmount(new java.math.BigDecimal(body.get("chargeAmount").toString()));
+        if (body.get("chargeReason") != null) o.setChargeReason(body.get("chargeReason").toString());
         return o;
     }
 }

@@ -20,6 +20,7 @@ import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
+import com.beichen.erp.purchase.common.PurchaseChargeType;
 import com.beichen.erp.purchase.entity.*;
 import com.beichen.erp.purchase.mapper.PurchaseOrderItemMapper;
 import com.beichen.erp.purchase.mapper.PurchaseOrderMapper;
@@ -144,6 +145,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         order.setCode(generateCode());
         fillPurchaseOrderInfo(order);
         validateReturnQuantity(order, itemMaps);
+        normalizeCharge(order, itemMaps);
         if (order.getTotalAmount() == null) order.setTotalAmount(BigDecimal.ZERO);
         returnMapper.insert(order);
         saveItems(order.getId(), itemMaps);
@@ -164,6 +166,7 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         order.setStatus(null);
         fillPurchaseOrderInfo(order);
         validateReturnQuantity(order, itemMaps);
+        normalizeCharge(order, itemMaps);
         if (order.getTotalAmount() == null) order.setTotalAmount(BigDecimal.ZERO);
         returnMapper.updateById(order);
         itemMapper.delete(new LambdaQueryWrapper<PurchaseReturnItem>().eq(PurchaseReturnItem::getReturnId, id));
@@ -243,6 +246,9 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         // 按 bill_no 保存：反审核后该单号台账已存在（仅置 CANCELLED 留痕），必须复用重置，
         // 否则再次审核会撞 finance_payable.uk_bill_no（2026-09-10 审核发现，P1-01）
         payableHelper.saveByBillNo(fp);
+        // 2.5) 是否付费（2026-09-21 用户口径）：**我们向供货商付费** ⇒ 额外一条**正向应付**
+        //      金额 = Σ 明细行付费（精确到产品），remark 逐产品列出（口径 A：一张单据一条台账）
+        saveChargePayable(order);
         // 3) 更新状态
         PurchaseReturn u = new PurchaseReturn();
         u.setId(id);
@@ -291,8 +297,11 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                 DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
             throw new BusinessException("只有已完成的退货单可反审核");
         // 1) 检查应付台账
+        // 2026-09-21：本单所有台账都要查 —— 退回冲减（PURCHASE_RETURN）+ 付费（PURCHASE_RETURN_CHARGE），
+        // 下面既做"已核销/已转应收"护栏，也统一冲销（漏掉付费那条会让应付永远挂着）
         LambdaQueryWrapper<FinancePayable> payableW = new LambdaQueryWrapper<FinancePayable>()
-                .eq(FinancePayable::getSourceBillType, SourceBillType.PURCHASE_RETURN.getCode())
+                .in(FinancePayable::getSourceBillType, SourceBillType.PURCHASE_RETURN.getCode(),
+                        SourceBillType.PURCHASE_RETURN_CHARGE.getCode())
                 .eq(FinancePayable::getSourceBillNo, order.getCode());
         List<FinancePayable> payables = payableMapper.selectList(payableW);
         for (FinancePayable fp : payables) {
@@ -478,9 +487,162 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                 if (map.get("amount") != null) it.setAmount(new BigDecimal(map.get("amount").toString()));
                 if (map.get("remark") != null) it.setRemark(map.get("remark").toString());
                 if (map.get("qualityType") != null) it.setQualityType(map.get("qualityType").toString());
+                // 逐产品付费（2026-09-21）：一行 = 一个产品；金额 > 0 即付费，类型由 normalizeCharge 保证
+                BigDecimal payAmt = toBig(map.get("chargeAmount"));
+                it.setChargeFlag(payAmt.compareTo(BigDecimal.ZERO) > 0 ? 1 : 0);
+                it.setChargeAmount(payAmt);
+                it.setChargeType(payAmt.compareTo(BigDecimal.ZERO) > 0 && map.get("chargeType") != null
+                        ? map.get("chargeType").toString() : null);
+                it.setChargeReason(map.get("chargeReason") != null ? map.get("chargeReason").toString() : null);
                 itemMapper.insert(it);
             }
         }
+        // 明细写完后统一回写单据级派生值（金额 = Σ 明细）—— 同时覆盖 create 与 update 两条路径
+        recalcDocCharge(returnId);
+    }
+
+    // ==================== 逐产品付费（2026-09-21 用户口径：采购退货单也要有「是否付费」，且精确到产品） ====================
+
+    /**
+     * 付费归一化：**明细级为准**，单据级 charge_amount 由 {@link #recalcDocCharge} 按 Σ 明细回写。
+     *
+     * <p>单行金额 &gt; 0 必须**本行自带类型**；单据级类型只作整单外带值（校验合法），说明缺省时落到各行。
+     * 兼容旧形状（只填单据级金额、没逐行填）时落到**第一条明细**（类型缺省 OTHER）。</p>
+     *
+     * <p>⚠️ 方向：<b>我们向供货商付费</b> ⇒ 审核生成一条正向应付
+     * （source_bill_type = {@code PURCHASE_RETURN_CHARGE}），与退回侧冲减应付分开记账。</p>
+     */
+    private void normalizeCharge(PurchaseReturn order, List<Map<String, Object>> itemMaps) {
+        if (order.getChargeType() != null && !order.getChargeType().isBlank()
+                && !PurchaseChargeType.isValid(order.getChargeType()))
+            throw new BusinessException("非法的付费类型：" + order.getChargeType());
+        boolean anyItem = hasItemCharge(itemMaps);
+        if (!anyItem && order.getChargeFlag() != null && order.getChargeFlag() == 1
+                && toBig(order.getChargeAmount()).compareTo(BigDecimal.ZERO) > 0) {
+            applyDocChargeToFirstItem(itemMaps, order.getChargeType(), order.getChargeAmount(), order.getChargeReason());
+            anyItem = true;
+        }
+        if (!anyItem && order.getChargeFlag() != null && order.getChargeFlag() == 1)
+            throw new BusinessException("已选择付费，请为具体产品填写付费金额（付费精确到产品）");
+        if (itemMaps != null) {
+            for (Map<String, Object> m : itemMaps) {
+                BigDecimal amt = toBig(m.get("chargeAmount"));
+                Object typeObj = m.get("chargeType");
+                String type = typeObj != null ? typeObj.toString() : null;
+                if (amt.compareTo(BigDecimal.ZERO) > 0) {
+                    if (type == null || type.isBlank())
+                        throw new BusinessException("产品["
+                                + (m.get("productName") != null ? m.get("productName") : m.get("productId"))
+                                + "]已填付费金额，请选择付费类型");
+                    if (!PurchaseChargeType.isValid(type))
+                        throw new BusinessException("非法的付费类型：" + type);
+                    if (m.get("chargeReason") == null && order.getChargeReason() != null)
+                        m.put("chargeReason", order.getChargeReason());
+                } else {
+                    m.put("chargeAmount", BigDecimal.ZERO);
+                    m.remove("chargeType");
+                }
+            }
+        }
+        order.setChargeFlag(anyItem ? 1 : 0);
+        order.setChargeAmount(BigDecimal.ZERO); // 交给 recalcDocCharge 按 Σ 明细回写
+        if (!anyItem) {
+            order.setChargeType(null);
+            order.setChargeReason(null);
+        }
+    }
+
+    /** 兼容旧形状：把"单据级付费"落到第一条明细（类型缺省 OTHER） */
+    private void applyDocChargeToFirstItem(List<Map<String, Object>> itemMaps, String type,
+                                          BigDecimal amount, String reason) {
+        if (itemMaps == null || itemMaps.isEmpty())
+            throw new BusinessException("已选择付费，请先添加明细（付费精确到产品）");
+        Map<String, Object> first = itemMaps.get(0);
+        first.put("chargeAmount", amount);
+        first.put("chargeType", type != null && !type.isBlank() ? type : PurchaseChargeType.OTHER.getCode());
+        if (reason != null) first.put("chargeReason", reason);
+    }
+
+    /** 本次提交里是否有任意一行填了付费金额（&gt; 0） */
+    private boolean hasItemCharge(List<Map<String, Object>> itemMaps) {
+        if (itemMaps == null) return false;
+        for (Map<String, Object> m : itemMaps) {
+            if (toBig(m.get("chargeAmount")).compareTo(BigDecimal.ZERO) > 0) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 主表付费 = Σ(明细)：charge_flag=任一行付费；charge_amount=Σ；
+     * charge_type 仅当各付费行**类型一致**时回填，否则留空（详情显示"多类型"）。
+     */
+    private void recalcDocCharge(Long returnId) {
+        List<PurchaseReturnItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<PurchaseReturnItem>().eq(PurchaseReturnItem::getReturnId, returnId));
+        BigDecimal sum = BigDecimal.ZERO;
+        java.util.Set<String> types = new java.util.LinkedHashSet<>();
+        for (PurchaseReturnItem it : items) {
+            BigDecimal amt = it.getChargeAmount() != null ? it.getChargeAmount() : BigDecimal.ZERO;
+            if (amt.compareTo(BigDecimal.ZERO) > 0) {
+                sum = sum.add(amt);
+                if (it.getChargeType() != null && !it.getChargeType().isBlank()) types.add(it.getChargeType());
+            }
+        }
+        returnMapper.update(null, new LambdaUpdateWrapper<PurchaseReturn>()
+                .eq(PurchaseReturn::getId, returnId)
+                .set(PurchaseReturn::getChargeFlag, sum.compareTo(BigDecimal.ZERO) > 0 ? 1 : 0)
+                .set(PurchaseReturn::getChargeAmount, sum)
+                .set(PurchaseReturn::getChargeType, types.size() == 1 ? types.iterator().next() : null));
+    }
+
+    /**
+     * 审核时生成付费应付：**我们向供货商付费** ⇒ 一条正向应付（与退回侧的负向冲减分开记账）。
+     * <p>口径 A（与销售侧一致）：金额 = Σ 明细行付费，remark 逐产品列出；未付费时不写任何台账。</p>
+     */
+    private void saveChargePayable(PurchaseReturn order) {
+        // 用 getItems(...) 而不是裸 mapper：productName/sku 是 @TableField(exist=false) 的非表字段，
+        // 裸 select 拿到的是 null ⇒ 台账 remark 会退化成"产品<id>"（实测踩到，断言 remark 含产品名失败）
+        List<PurchaseReturnItem> items = getItems(order.getId());
+        BigDecimal total = BigDecimal.ZERO;
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        for (PurchaseReturnItem it : items) {
+            BigDecimal amt = it.getChargeAmount() != null ? it.getChargeAmount() : BigDecimal.ZERO;
+            if (amt.compareTo(BigDecimal.ZERO) <= 0) continue;
+            total = total.add(amt);
+            String name = it.getProductName() != null && !it.getProductName().isBlank()
+                    ? it.getProductName() : "产品" + it.getProductId();
+            parts.add(name + " " + amt.stripTrailingZeros().toPlainString()
+                    + (it.getChargeType() != null && !it.getChargeType().isBlank()
+                    ? "（" + it.getChargeType() + "）" : ""));
+        }
+        if (total.compareTo(BigDecimal.ZERO) <= 0) return;
+        FinancePayable fp = new FinancePayable();
+        fp.setBillNo(payableHelper.newBillNo());
+        fp.setSupplierId(order.getSupplierId());
+        Supplier s = order.getSupplierId() != null ? supplierMapper.selectById(order.getSupplierId()) : null;
+        fp.setSupplierName(s != null ? s.getName() : "");
+        fp.setSourceBillType(SourceBillType.PURCHASE_RETURN_CHARGE.getCode());
+        fp.setSourceBillNo(order.getCode());
+        fp.setSourceId(order.getId());
+        fp.setAmount(total);
+        fp.setPaidAmount(BigDecimal.ZERO);
+        fp.setUnpaidAmount(total);
+        fp.setDueDate(order.getReturnDate());
+        fp.setStatus(SettlementStatus.UNSETTLED.getCode());
+        Long cid = CompanyContext.get();
+        if (cid != null && cid > 0) fp.setCompanyId(cid);
+        fp.setRemark("采购退货付费（逐产品，我方付给供货商）：" + String.join("；", parts)
+                + (order.getChargeReason() != null && !order.getChargeReason().isBlank()
+                ? "；说明：" + order.getChargeReason() : ""));
+        payableHelper.saveByBillNo(fp);
+    }
+
+    /** 宽松数值转换（Map 取值为 Object；null/非法一律按 0，避免 NPE 让整单保存失败） */
+    private BigDecimal toBig(Object v) {
+        if (v == null) return BigDecimal.ZERO;
+        String s = v.toString().trim();
+        if (s.isEmpty()) return BigDecimal.ZERO;
+        try { return new BigDecimal(s); } catch (Exception e) { return BigDecimal.ZERO; }
     }
 
     private String generateCode() {

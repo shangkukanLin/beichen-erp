@@ -78,7 +78,7 @@ public class PurchaseExchange {
     /** 是否付费：0否 1是（2026-09-21 新增）。⚠️ 方向：**我们向供货商付费** */
     private Integer chargeFlag;
 
-    /** 付费类型：SERVICE服务费 / DIFF品质差价 / FULL全额货值 / OTHER其他（见 {@code ExchangePayType}） */
+    /** 付费类型：SERVICE服务费 / DIFF品质差价 / FULL全额货值 / OTHER其他（见 {@code PurchaseChargeType}；2026-09-21 改名） */
     private String chargeType;
 
     /** 付费金额（手工填写）：我方付给供货商的金额，审核后生成一条正向应付 */

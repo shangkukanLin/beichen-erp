@@ -22,7 +22,7 @@ import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.material.service.ProductService;
-import com.beichen.erp.purchase.common.ExchangePayType;
+import com.beichen.erp.purchase.common.PurchaseChargeType;
 import com.beichen.erp.purchase.entity.PurchaseExchange;
 import com.beichen.erp.purchase.entity.PurchaseExchangeItem;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
@@ -359,10 +359,20 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
                     ? toBig(m.get("inUnitPrice")) : it.getUnitPrice());
             it.setInAmount(inQty.multiply(it.getInUnitPrice()).setScale(2, RoundingMode.HALF_UP));
 
+            // 逐产品付费（2026-09-21 第二轮）：一行 = 一个产品
+            BigDecimal payAmt = toBig(m.get("chargeAmount"));
+            it.setChargeFlag(payAmt.compareTo(BigDecimal.ZERO) > 0 ? 1 : 0);
+            it.setChargeAmount(payAmt);
+            it.setChargeType(payAmt.compareTo(BigDecimal.ZERO) > 0 && m.get("chargeType") != null
+                    ? m.get("chargeType").toString() : null);
+            it.setChargeReason(m.get("chargeReason") != null ? m.get("chargeReason").toString() : null);
+
             if (m.get("remark") != null) it.setRemark(m.get("remark").toString());
             it.setCompanyId(cid);
             itemMapper.insert(it);
         }
+        // 明细写完后统一回写单据级派生值（金额 = Σ 明细）—— 放在这里同时覆盖 create 与 update 两条路径
+        recalcDocCharge(exchangeId);
     }
 
     /**
@@ -589,8 +599,8 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
             qtyMap.merge(poiId, qty, BigDecimal::add);
             if (m.get("productName") != null) nameMap.put(poiId, m.get("productName").toString());
         }
-        // 付费字段归一化（2026-09-21）：是否付费=否 ⇒ 类型/金额/说明一律清空；=是 ⇒ 类型合法且金额 > 0
-        normalizeCharge(e);
+        // 付费字段归一化（2026-09-21 第二轮：精确到产品；含"只传单据级"的兼容兜底）
+        normalizeCharge(e, itemMaps);
         // 编辑草稿时以自身 id 作排除项（草稿不计入"已换"，此处仅为口径统一）；
         // 锚点归属按本单来源采购单校验（F1-2）；无单换货时 qtyMap 为空、直接返回
         checkCanExchangeMap(qtyMap, nameMap, e.getId(), e.getPurchaseOrderId());
@@ -747,44 +757,124 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
     }
 
     /**
-     * 付费字段归一化（2026-09-21 用户口径「需要有是否付费」）。
+     * 付费归一化（2026-09-21 第二轮：**精确到产品**）。
      *
-     * <p>不付费：类型/说明清空、金额归零（避免"关掉开关还留着上次的金额"被误写入台账）；
-     * 付费：类型必须合法、金额必须 &gt; 0。</p>
+     * <p>金额挂在明细行（一行 = 一个产品），单据级 charge_amount 由 {@link #recalcDocCharge} 按 Σ 明细回写；
+     * 单据级类型/说明只作"整单共用"的外带值（说明缺省时落到各行）。</p>
      *
-     * <p>⚠️ <b>方向：我们向供货商付费</b> ⇒ 审核生成的正向应付是"我方欠供货商的钱变多"，
+     * <p>单行金额 &gt; 0 必须**本行自带类型**（没有批量类型可继承）；兼容旧前端（只填单据级金额、没逐行填）
+     * 时落到**第一条明细**（类型缺省 OTHER），保证「Σ明细 = 单据金额」恒等，既不丢钱也不报错。</p>
+     *
+     * <p>⚠️ <b>方向：我们向供货商付费</b> ⇒ 审核生成一条正向应付（我方欠供货商变多），
      * 与销售换货 {@code sale.common.ExchangeChargeType}（向客户收费 ⇒ 应收）方向相反。</p>
      */
-    private void normalizeCharge(PurchaseExchange e) {
-        boolean charged = e.getChargeFlag() != null && e.getChargeFlag() == 1;
-        if (!charged) {
-            e.setChargeFlag(0);
-            e.setChargeType(null);
-            e.setChargeAmount(BigDecimal.ZERO);
-            e.setChargeReason(null);
-            return;
-        }
-        if (e.getChargeType() == null || e.getChargeType().isBlank())
-            throw new BusinessException("已选择付费，请选择付费类型");
-        if (!ExchangePayType.isValid(e.getChargeType()))
+    private void normalizeCharge(PurchaseExchange e, List<Map<String, Object>> itemMaps) {
+        if (e.getChargeType() != null && !e.getChargeType().isBlank() && !PurchaseChargeType.isValid(e.getChargeType()))
             throw new BusinessException("非法的付费类型：" + e.getChargeType());
-        if (nz(e.getChargeAmount()).compareTo(BigDecimal.ZERO) <= 0)
-            throw new BusinessException("已选择付费，付费金额必须大于 0");
+        boolean anyItem = hasItemCharge(itemMaps);
+        if (!anyItem && e.getChargeFlag() != null && e.getChargeFlag() == 1
+                && nz(e.getChargeAmount()).compareTo(BigDecimal.ZERO) > 0) {
+            applyDocChargeToFirstItem(itemMaps, e.getChargeType(), e.getChargeAmount(), e.getChargeReason());
+            anyItem = true;
+        }
+        if (!anyItem && e.getChargeFlag() != null && e.getChargeFlag() == 1)
+            throw new BusinessException("已选择付费，请为具体产品填写付费金额（付费精确到产品）");
+        if (itemMaps != null) {
+            for (Map<String, Object> m : itemMaps) {
+                BigDecimal amt = toBig(m.get("chargeAmount"));
+                Object typeObj = m.get("chargeType");
+                String type = typeObj != null ? typeObj.toString() : null;
+                if (amt.compareTo(BigDecimal.ZERO) > 0) {
+                    if (type == null || type.isBlank())
+                        throw new BusinessException("产品["
+                                + (m.get("productName") != null ? m.get("productName") : m.get("productId"))
+                                + "]已填付费金额，请选择付费类型");
+                    if (!PurchaseChargeType.isValid(type))
+                        throw new BusinessException("非法的付费类型：" + type);
+                    if (m.get("chargeReason") == null && e.getChargeReason() != null)
+                        m.put("chargeReason", e.getChargeReason());
+                } else {
+                    m.put("chargeAmount", BigDecimal.ZERO);
+                    m.remove("chargeType");
+                }
+            }
+        }
+        e.setChargeFlag(anyItem ? 1 : 0);
+        e.setChargeAmount(BigDecimal.ZERO); // 交给 recalcDocCharge 按 Σ 明细回写
+        if (!anyItem) {
+            e.setChargeType(null);
+            e.setChargeReason(null);
+        }
+    }
+
+    /** 兼容旧前端：把"单据级付费"落到第一条明细（类型缺省 OTHER） */
+    private void applyDocChargeToFirstItem(List<Map<String, Object>> itemMaps, String type,
+                                           BigDecimal amount, String reason) {
+        if (itemMaps == null || itemMaps.isEmpty())
+            throw new BusinessException("已选择付费，请先添加明细（付费精确到产品）");
+        Map<String, Object> first = itemMaps.get(0);
+        first.put("chargeAmount", amount);
+        first.put("chargeType", type != null && !type.isBlank() ? type : PurchaseChargeType.OTHER.getCode());
+        if (reason != null) first.put("chargeReason", reason);
+    }
+
+    /** 本次提交里是否有任意一行填了付费金额（&gt; 0） */
+    private boolean hasItemCharge(List<Map<String, Object>> itemMaps) {
+        if (itemMaps == null) return false;
+        for (Map<String, Object> m : itemMaps) {
+            if (toBig(m.get("chargeAmount")).compareTo(BigDecimal.ZERO) > 0) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 主表付费 = Σ(明细)：charge_flag=任一行付费；charge_amount=Σ；
+     * charge_type 仅当各付费行**类型一致**时回填，否则留空（详情显示"多类型"）。
+     */
+    private void recalcDocCharge(Long exchangeId) {
+        List<PurchaseExchangeItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<PurchaseExchangeItem>().eq(PurchaseExchangeItem::getExchangeId, exchangeId));
+        BigDecimal sum = BigDecimal.ZERO;
+        java.util.Set<String> types = new java.util.LinkedHashSet<>();
+        for (PurchaseExchangeItem it : items) {
+            if (nz(it.getChargeAmount()).compareTo(BigDecimal.ZERO) > 0) {
+                sum = sum.add(it.getChargeAmount());
+                if (it.getChargeType() != null && !it.getChargeType().isBlank()) types.add(it.getChargeType());
+            }
+        }
+        exchangeMapper.update(null, new LambdaUpdateWrapper<PurchaseExchange>()
+                .eq(PurchaseExchange::getId, exchangeId)
+                .set(PurchaseExchange::getChargeFlag, sum.compareTo(BigDecimal.ZERO) > 0 ? 1 : 0)
+                .set(PurchaseExchange::getChargeAmount, sum)
+                .set(PurchaseExchange::getChargeType, types.size() == 1 ? types.iterator().next() : null));
     }
 
     /**
      * 审核时生成付费应付：**我们向供货商付费** ⇒ 一条正向应付（与退回/换入两条台账分开记账，便于对账与冲销）。
-     * <p>未付费（chargeFlag≠1 或金额≤0）时什么都不写 —— 反审核不用特殊处理，reversePayable 找不到行即跳过。</p>
+     *
+     * <p>2026-09-21 第二轮（口径 A：一张单据一条台账）：金额 = <b>Σ 明细行付费</b>，remark **逐产品**列出，
+     * 财务列表能直接看到"哪个产品付了多少"；未付费时什么都不写（反审核找不到行即跳过）。</p>
      */
     private void saveChargePayable(PurchaseExchange e) {
-        boolean charged = e.getChargeFlag() != null && e.getChargeFlag() == 1;
-        if (!charged || nz(e.getChargeAmount()).compareTo(BigDecimal.ZERO) <= 0) return;
+        List<PurchaseExchangeItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<PurchaseExchangeItem>().eq(PurchaseExchangeItem::getExchangeId, e.getId()));
+        BigDecimal total = BigDecimal.ZERO;
+        List<String> parts = new ArrayList<>();
+        for (PurchaseExchangeItem it : items) {
+            BigDecimal amt = nz(it.getChargeAmount());
+            if (amt.compareTo(BigDecimal.ZERO) <= 0) continue;
+            total = total.add(amt);
+            String name = it.getProductName() != null && !it.getProductName().isBlank()
+                    ? it.getProductName() : "产品" + it.getProductId();
+            parts.add(name + " " + amt.stripTrailingZeros().toPlainString()
+                    + (it.getChargeType() != null && !it.getChargeType().isBlank()
+                    ? "（" + it.getChargeType() + "）" : ""));
+        }
+        if (total.compareTo(BigDecimal.ZERO) <= 0) return;
         String reason = e.getChargeReason();
-        savePayable(e, SourceBillType.PURCHASE_EXCHANGE_CHARGE, e.getChargeAmount(),
-                "采购换货付费（我方付给供货商）：" + e.getCode()
-                        + (e.getChargeType() != null && !e.getChargeType().isBlank()
-                        ? "（" + e.getChargeType() + "）" : "")
-                        + (reason != null && !reason.isBlank() ? "：" + reason : ""));
+        savePayable(e, SourceBillType.PURCHASE_EXCHANGE_CHARGE, total,
+                "采购换货付费（逐产品，我方付给供货商）：" + String.join("；", parts)
+                        + (reason != null && !reason.isBlank() ? "；说明：" + reason : ""));
     }
 
     /** 应付台账入库（D1 口径：台账号一律 YF- 流水号；来源单号写 source_bill_no 便于按来源检索） */

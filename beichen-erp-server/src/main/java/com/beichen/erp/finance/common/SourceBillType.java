@@ -28,6 +28,12 @@ public enum SourceBillType {
      * <p>⚠️ 方向：**我们向供货商付费**（换货服务费 / 补差价等），与销售换货的 SALE_EXCHANGE_CHARGE（向客户收费）相反。</p>
      */
     PURCHASE_EXCHANGE_CHARGE("采购换货付费"),
+    /**
+     * 采购退货-付费（2026-09-21 新增）：退货单「是否付费」时生成的正向应付。
+     * <p>⚠️ 方向：**我们向供货商付费**（退货处理费 / 品质折让补价等），与销售退单的 SALE_RETURN_CHARGE（向客户收费）相反。
+     * 金额 = Σ 明细行付费（精确到产品），remark 逐产品列出。</p>
+     */
+    PURCHASE_RETURN_CHARGE("采购退货付费"),
     /** 销售退货 */
     SALE_RETURN("销售退货"),
     /** 委外加工单交货（成品报工入库产生应付） */
