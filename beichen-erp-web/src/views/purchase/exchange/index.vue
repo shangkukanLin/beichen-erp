@@ -105,32 +105,34 @@ async function handleCancel(row: any) {
       </el-form>
 
       <el-table v-loading="loading" :data="list" border stripe @row-click="goDetail">
-        <!-- 列宽全部用 min-width（合计 ~915px）以「一屏一行显示」：来源采购单 / 应付净额 只在详情页展示 -->
-        <el-table-column prop="exchangeDate" label="换货日期" min-width="95" />
-        <el-table-column prop="code" label="换货单号" min-width="140" />
+        <!-- 列宽全部用 min-width 以「一屏一行显示」：来源采购单 / 应付净额 只在详情页展示。
+             2026-09-21（UI 优化）：原 min-width 合计 915px（1262 窗口下刚好铺满 948、零余量 ⇒ 窗口略窄就横向滚动），
+             现收到 **859px**（项目设计线 ≤900），给窗口宽度留出余量；内容不变，「操作」列保持 155 不动。 -->
+        <el-table-column prop="exchangeDate" label="换货日期" min-width="88" />
+        <el-table-column prop="code" label="换货单号" min-width="134" />
         <!-- 换货概况：退回侧 → 换入侧；「付费」标签（2026-09-21）标出"要向供货商付费"的单据。
              放在 min-width 弹性列内 ⇒ 不新增列、不改变列宽合计（本页面有"一行显示完、不横向滚动"的守卫断言）。 -->
-        <el-table-column label="换货概况" min-width="150" show-overflow-tooltip>
+        <el-table-column label="换货概况" min-width="138" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag v-if="Number(row.chargeFlag) === 1" type="warning" size="small" style="margin-right:4px"
               :title="'我方付给供货商 ' + Number(row.chargeAmount || 0).toFixed(2)">付费</el-tag>
             {{ row.exchangeSummary || '—' }}
           </template>
         </el-table-column>
-        <el-table-column prop="supplierName" label="供货商" min-width="100" show-overflow-tooltip />
-        <el-table-column label="退回出库仓" min-width="100" show-overflow-tooltip>
+        <el-table-column prop="supplierName" label="供货商" min-width="94" show-overflow-tooltip />
+        <el-table-column label="退回出库仓" min-width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseOutId" type="primary" link @click.stop="goWarehouse(row.warehouseOutId)">{{ row.warehouseOutName || '—' }}</el-button>
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="换入入库仓" min-width="100" show-overflow-tooltip>
+        <el-table-column label="换入入库仓" min-width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseInId" type="primary" link @click.stop="goWarehouse(row.warehouseInId)">{{ row.warehouseInName || '—' }}</el-button>
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" min-width="75" align="center">
+        <el-table-column prop="status" label="状态" min-width="70" align="center">
           <template #default="{ row }">
             <el-tag :type="DocStatusTag[row.status] || 'info'" size="small">
               {{ DocStatusLabel[row.status] ?? row.status }}

@@ -223,6 +223,9 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
             m.put("purchaseOrderItemId", oi.getId());
             m.put("productId", oi.getProductId());
             m.put("productName", p != null ? p.getName() : "");
+            // 2026-09-21（UI 优化）：前端明细表把「SKU | 名称」并到一列（原 SKU 独占一列 ⇒ 表格必然横向滚动），
+            // 有采购单模式的产品名也来自行/主数据，这里一并回 SKU（pMap 已批量取，零额外查询）。
+            m.put("sku", p != null ? p.getSku() : "");
             m.put("unit", p != null ? p.getUnit() : "");
             m.put("qualityType", oi.getQualityType());
             m.put("quantity", purchased);

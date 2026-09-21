@@ -144,5 +144,27 @@ $errs = Errs
 Write-Host ('  errs=' + $errs)
 Ok ($errs -notmatch 'JSERR') 'no JS runtime errors captured'
 
+Write-Host '--- 9) 2026-09-21 UI 优化守卫：三张表都必须一行显示完（无横向滚动）'
+# 量的是 .el-table__body-wrapper —— Element Plus 2.x 里真正滚动的容器；
+# 量 .el-table__body 会得到"scrollWidth == clientWidth"的**假通过**（它本身不滚动）。
+function TableOver([int]$idx) {
+  $js = "(()=>{const vis=e=>e.getClientRects().length>0;const ts=[...document.querySelectorAll('.el-table')].filter(vis);const t=ts[$idx];if(!t)return 'NOTABLE/'+ts.length;const w=t.querySelector('.el-table__body-wrapper');if(!w)return 'NOWRAP';const hs=[...t.querySelectorAll('.el-table__header th')].map(th=>(th.innerText||'').replace(/\s+/g,' ').trim());return JSON.stringify({over:w.scrollWidth-w.clientWidth,cols:hs.length,head:hs.join('|')})})()"
+  $r = EvalJs $js
+  Write-Host ('  [' + $idx + '] ' + $r)
+  try { return ($r.Replace('\"', '"') | ConvertFrom-Json) } catch { return $null }
+}
+# (a) 新增页：明细表（12 列压到 920px；原 1440px 会横向滚动 492px）
+Open '/inventory/purchase-exchange/add' 2800
+$t1 = TableOver 0
+Ok ($null -ne $t1 -and ([int]$t1.over) -le 2) ('新增页明细表一行显示完（overflow=' + $t1.over + 'px, cols=' + $t1.cols + '）')
+# (b) 详情页：明细表（888px；原 1420px）
+Open ("/inventory/purchase-exchange/detail/" + $xid) 2800
+$t2 = TableOver 0
+Ok ($null -ne $t2 -and ([int]$t2.over) -le 2) ('详情页明细表一行显示完（overflow=' + $t2.over + 'px, cols=' + $t2.cols + '）')
+# (c) 列表页：min-width 合计收到 859px（原 915 ⇒ 窗口略窄就滚）
+Open '/inventory/purchase-exchange' 2800
+$t3 = TableOver 0
+Ok ($null -ne $t3 -and ([int]$t3.over) -le 2) ('列表页一行显示完（overflow=' + $t3.over + 'px, cols=' + $t3.cols + '）')
+
 Write-Host ('  final: id=' + $xid + ' code=' + $xcode + ' status=' + (SqlOne ("SELECT status FROM purchase_exchange WHERE id=$xid")))
 Summary 'purchase-exchange free-form + paid (P11b)'

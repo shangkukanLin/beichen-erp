@@ -56,44 +56,44 @@
       </el-descriptions>
 
       <el-divider content-position="left">换货明细（同品换货）</el-divider>
+      <!-- 2026-09-21（UI 优化）：原来 12 列、合计 1420px ⇒ 横向滚动 472px。现：①SKU 不单列，产品格显示
+           「SKU | 名称」（SKU 仍可点击进产品详情）②「换入产品」列去掉 —— **同品换货**下它与退回产品必然相同
+           （异型号是后端预留能力、当前 UI 不开放；真出现时换入侧的数量/品质/单价仍在表内）
+           ③按内容重新配宽 ⇒ 合计 888px < 内容区 948px ⇒ 一行显示完、不左右滑动 -->
       <el-table :data="items" border>
         <!-- ===== 退回侧：退给供货商，从我方仓扣减 ===== -->
-        <el-table-column label="退回（退给供货商，从我方仓扣减）" align="center">
-          <el-table-column label="SKU" width="130">
+        <el-table-column label="退回（退给供货商）" align="center">
+          <el-table-column label="退回产品" width="156" show-overflow-tooltip>
             <template #default="{ row }">
-              <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ row.sku || '—' }}</el-button>
-              <span v-else>{{ row.sku || '—' }}</span>
+              <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ productText(row) }}</el-button>
+              <span v-else>{{ productText(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="productName" label="退回产品" min-width="150" show-overflow-tooltip />
-          <el-table-column prop="quantity" label="退回数量" width="100" align="right" />
-          <el-table-column label="退回品质" width="100" align="center">
+          <el-table-column prop="quantity" label="退回数量" width="74" align="right" />
+          <el-table-column label="退回品质" width="72" align="center">
             <template #default="{ row }">{{ ProductQualityTypeLabel[String(row.qualityType)] || row.qualityType || '-' }}</template>
           </el-table-column>
-          <el-table-column label="退回单价" width="100" align="right">
+          <el-table-column label="退回单价" width="82" align="right">
             <template #default="{ row }">{{ formatMoney(row.unitPrice) }}</template>
           </el-table-column>
-          <el-table-column label="退回金额" width="110" align="right">
+          <el-table-column label="退回金额" width="90" align="right">
             <template #default="{ row }">{{ formatMoney(row.amount) }}</template>
           </el-table-column>
         </el-table-column>
         <!-- ===== 换入侧：供货商换回，入我方仓 ===== -->
-        <el-table-column label="换入（供货商换回，入我方仓）" align="center">
-          <el-table-column label="换入产品" min-width="180">
-            <template #default="{ row }">{{ row.productName }}</template>
-          </el-table-column>
-          <el-table-column prop="inQuantity" label="换入数量" width="100" align="right" />
-          <el-table-column label="换入品质" width="100" align="center">
+        <el-table-column label="换入（供货商换回）" align="center">
+          <el-table-column prop="inQuantity" label="换入数量" width="74" align="right" />
+          <el-table-column label="换入品质" width="72" align="center">
             <template #default="{ row }">{{ ProductQualityTypeLabel[String(row.inQualityType)] || row.inQualityType || '-' }}</template>
           </el-table-column>
-          <el-table-column label="换入单价" width="100" align="right">
+          <el-table-column label="换入单价" width="82" align="right">
             <template #default="{ row }">{{ formatMoney(row.inUnitPrice) }}</template>
           </el-table-column>
-          <el-table-column label="换入金额" width="110" align="right">
+          <el-table-column label="换入金额" width="90" align="right">
             <template #default="{ row }">{{ formatMoney(row.inAmount) }}</template>
           </el-table-column>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip>
+        <el-table-column prop="remark" label="备注" width="96" show-overflow-tooltip>
           <template #default="{ row }">{{ row.remark || '-' }}</template>
         </el-table-column>
       </el-table>
@@ -176,6 +176,11 @@ function statusTagType(s: string) {
 function formatMoney(v: any) {
   const n = Number(v || 0)
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+/** 明细表「退回产品」展示：有 SKU 时 `SKU | 名称`（不再单列 SKU，信息不丢） */
+function productText(row: any) {
+  const name = row?.productName || ''
+  return row?.sku ? `${row.sku} | ${name}` : name
 }
 
 async function loadDetail(id: number) {

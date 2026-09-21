@@ -64,81 +64,84 @@
       </div>
       <el-table :data="items" border size="small" max-height="380">
         <!-- ===== 退回侧：退回供货商，从我方仓出库 ===== -->
-        <el-table-column label="退回（退给供货商，从我方仓扣减）" align="center">
-          <el-table-column label="SKU" width="130">
-            <template #default="{ row }">
-              <span v-if="row.sku">{{ row.sku }}</span>
-              <span v-else style="color:var(--app-text-secondary)">自动生成</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="退回产品" min-width="170" show-overflow-tooltip>
+        <el-table-column label="退回（退给供货商）" align="center">
+          <!-- 2026-09-21（UI 优化）：明细表原来 12 列、合计 1440px ⇒ 必然横向滚动。
+               ① 删掉「SKU」独占列（产品格显示「SKU | 名称」，与选品下拉同一格式，信息不丢）
+               ② 输入控件统一 size="small"，数量/单价用 :controls="false"（不带加减按钮 ⇒ 更窄）
+               ③ 按内容重新配宽 ⇒ 合计 920px < 内容区 948px（1262 窗口），**一行显示完、不左右滑动** -->
+          <el-table-column label="退回产品" width="146" show-overflow-tooltip>
             <template #default="{ row }">
               <!-- 无单换货：手工选产品（可输 SKU 远程搜）；关联采购单：产品由采购明细带出，只读 -->
               <el-select v-if="!form.purchaseOrderId" v-model="row.productId" placeholder="选择产品（可输SKU）"
-                filterable remote :remote-method="loadProducts" style="width:100%"
+                size="small" filterable remote :remote-method="loadProducts" style="width:100%"
                 @change="(v: number) => onProductChange(v, row)">
                 <el-option v-for="m in productOptions" :key="m.id" :label="productLabel(m)" :value="m.id" />
               </el-select>
-              <span v-else>{{ row.productName }}</span>
+              <span v-else>{{ productText(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="可换数量" width="90" align="right">
+          <el-table-column label="可换数量" width="64" align="right">
             <template #default="{ row }">{{ row.maxQuantity ?? '-' }}</template>
           </el-table-column>
-          <el-table-column label="退回数量" width="130">
+          <el-table-column label="退回数量" width="78">
             <template #default="{ row }">
-              <el-input-number v-model="row.quantity" :min="0" :precision="0" :step="1" controls-position="right" style="width:100%" />
+              <el-input-number v-model="row.quantity" :min="0" :precision="0" :step="1" size="small" :controls="false" style="width:100%" />
             </template>
           </el-table-column>
-          <el-table-column label="退回品质" width="120">
+          <el-table-column label="退回品质" width="78">
             <template #default="{ row }">
-              <el-select v-model="row.qualityType" style="width:100%">
+              <el-select v-model="row.qualityType" size="small" style="width:100%">
                 <el-option v-for="o in qualityOptions" :key="o.value" :label="o.label" :value="o.value" />
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="退回单价" width="120">
+          <el-table-column label="退回单价" width="86">
             <template #default="{ row }">
-              <el-input-number v-model="row.unitPrice" :min="0" :precision="2" controls-position="right" style="width:100%" />
+              <el-input-number v-model="row.unitPrice" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
             </template>
           </el-table-column>
         </el-table-column>
 
         <!-- ===== 换入侧：供货商换回，入我方仓 ===== -->
-        <el-table-column label="换入（供货商换回，入我方仓）" align="center">
-          <el-table-column label="换入数量" width="130">
+        <el-table-column label="换入（供货商换回）" align="center">
+          <el-table-column label="换入数量" width="78">
             <template #default="{ row }">
-              <el-input-number v-model="row.inQuantity" :min="0" :precision="0" :step="1" controls-position="right" style="width:100%" />
+              <el-input-number v-model="row.inQuantity" :min="0" :precision="0" :step="1" size="small" :controls="false" style="width:100%" />
             </template>
           </el-table-column>
-          <el-table-column label="换入品质" width="120">
+          <el-table-column label="换入品质" width="78">
             <template #default="{ row }">
-              <el-select v-model="row.inQualityType" style="width:100%">
+              <el-select v-model="row.inQualityType" size="small" style="width:100%">
                 <el-option v-for="o in qualityOptions" :key="o.value" :label="o.label" :value="o.value" />
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="换入单价" width="130">
+          <el-table-column label="换入单价" width="86">
             <template #default="{ row }">
-              <el-input-number v-model="row.inUnitPrice" :min="0" :precision="2" controls-position="right" style="width:100%" />
+              <el-input-number v-model="row.inUnitPrice" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
             </template>
           </el-table-column>
         </el-table-column>
 
-        <el-table-column label="应付净额" width="110" align="right">
+        <el-table-column label="应付净额" width="86" align="right">
           <template #default="{ row }">
             {{ ((Number(row.inQuantity) || 0) * (Number(row.inUnitPrice) || 0) - (Number(row.quantity) || 0) * (Number(row.unitPrice) || 0)).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column label="备注" min-width="120">
-          <template #default="{ row }"><el-input v-model="row.remark" /></template>
+        <el-table-column label="备注" min-width="88">
+          <template #default="{ row }"><el-input v-model="row.remark" size="small" /></template>
         </el-table-column>
-        <el-table-column label="操作" width="70" align="center">
+        <el-table-column label="操作" width="52" align="center">
           <template #default="{ $index }">
             <el-button link type="danger" @click="removeItem($index)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
+      <!-- 合计（净额列已挪到行尾，整单位汇总在这里看；加价换新的差额一眼可见） -->
+      <div v-if="items.length" style="margin-top:8px;font-size:var(--app-font-xs);color:var(--app-text-secondary)">
+        合计：退回 {{ totalReturnAmount.toFixed(2) }} ｜ 换入 {{ totalInAmount.toFixed(2) }} ｜
+        应付净额 <b style="color:var(--app-text-primary)">{{ (totalInAmount - totalReturnAmount).toFixed(2) }}</b>
+      </div>
       <div v-if="items.length===0" style="text-align:center;color:#999;padding:16px">
         选择供货商后：<b>选了来源采购单</b>会自动带出可换明细；<b>不选采购单</b>（无单换货）请点「添加明细」手工录入
       </div>
@@ -239,6 +242,11 @@ const qualityOptions = computed(() =>
 const payTypeOptions = computed(() =>
   Object.values(ExchangePayType).map((v) => ({ value: v, label: ExchangePayTypeLabel[v] || v }))
 )
+/** 明细合计（表下方）：净额 = 换入 − 退回，「加价换新」为正、等价换货为 0 */
+const totalReturnAmount = computed(() =>
+  items.value.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0), 0))
+const totalInAmount = computed(() =>
+  items.value.reduce((s, i) => s + (Number(i.inQuantity) || 0) * (Number(i.inUnitPrice) || 0), 0))
 
 // ===== 下拉 =====
 /** 供货商：进货侧只选"成品商"（与采购单/采购退货口径一致） */
@@ -274,6 +282,8 @@ async function onPurchaseOrderChange(purchaseOrderId: number | null, opt: any) {
       // ===== 退回侧（默认不良品，采购价）=====
       productId: r.productId,
       productName: r.productName,
+      // SKU 由后端随可换明细一起返回（2026-09-21）：明细表把「SKU | 名称」并到一列，不再单列 SKU
+      sku: r.sku || '',
       quantity: qty,
       maxQuantity: qty,
       qualityType: ProductQualityType.DEFECT,
@@ -335,6 +345,12 @@ async function loadEdit(id: number) {
 }
 
 function removeItem(i: number) { items.value.splice(i, 1) }
+
+/** 明细表「退回产品」只读展示：有 SKU 时用 `SKU | 名称`（与选品下拉 productLabel 同格式，所以不再单列 SKU） */
+function productText(row: any) {
+  const name = row?.productName || ''
+  return row?.sku ? `${row.sku} | ${name}` : name
+}
 
 /**
  * 添加明细（无单换货用，2026-09-21）：一行 = 退回侧 + 换入侧配对。
