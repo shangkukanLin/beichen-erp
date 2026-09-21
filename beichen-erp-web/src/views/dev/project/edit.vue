@@ -46,6 +46,12 @@ const productId = ref<number | undefined>(undefined)
 const skuOnLoad = ref('')
 
 /**
+ * 进页面时的「规格」：2026-09-21 阶段模板分原配/改配两套后，规格决定"新建项目套哪一套模板"，
+ * 但**已有阶段不回改**（阶段进度是历史快照）⇒ 改过时保存后给一句提示，避免用户以为阶段会跟着变。
+ */
+const specOnLoad = ref('')
+
+/**
  * 需求 3：规格下拉只给「原配 / 改配」（与立项新增页同一口径）；改动会同步到关联产品。
  */
 const SPEC_OPTIONS = [
@@ -103,6 +109,7 @@ async function loadProject() {
   // 2026-09-21（需求 1）：记录"是否已关联产品"与"进页面时的 SKU"，供产品SKU 的可编辑性与二次确认判断
   productId.value = p.productId
   skuOnLoad.value = p.productSku || ''
+  specOnLoad.value = p.specType || ''
   await loadConfigNames()
 }
 
@@ -143,10 +150,16 @@ async function handleSave() {
       return
     }
   }
+  // 2026-09-21（阶段模板分原配/改配）：规格改动**不回改已有阶段**（阶段进度是历史快照），
+  // 只影响之后新建的项目；保存成功后给一句明确提示，避免用户误以为阶段会跟着重算。
+  const specChanged = !!form.specType && form.specType !== specOnLoad.value
   saving.value = true
   try {
     await updateProject(form as any)
     ElMessage.success('保存成功'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    if (specChanged) {
+      ElMessage.info('规格已变更：已有阶段不会重算（阶段进度是历史快照），仅之后新建的项目按新规格套用阶段模板')
+    }
     await loadProject()
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')); await loadProject() }
   saving.value = false
@@ -575,11 +588,14 @@ function onNameBlur() {
                 </div>
               </el-form-item></el-col>
               <el-col :span="8"><el-form-item label="产品名称" prop="productName" :rules="[{ required: true, message: '请输入产品名称', trigger: 'blur' }]"><el-input v-model="form.productName" /></el-form-item></el-col>
-              <!-- 需求 3：规格（原配/改配）——改动会同步到关联产品 -->
+              <!-- 需求 3：规格（原配/改配）——改动会同步到关联产品规格，但**不回改已有阶段** -->
               <el-col :span="8"><el-form-item label="规格" prop="specType" :rules="[{ required: true, message: '请选择规格', trigger: 'change' }]">
                 <el-select v-model="form.specType" placeholder="请选择（原配/改配）" style="width:100%">
                   <el-option v-for="o in SPEC_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
                 </el-select>
+                <div style="font-size:var(--app-font-xs);color:var(--app-text-secondary);line-height:1.4">
+                  规格决定新建项目套用哪一套阶段模板（原配 7 个阶段 / 改配 14 个）；改规格不会重算已有阶段
+                </div>
               </el-form-item></el-col>
 
               <el-col :span="8"><el-form-item label="立项日期"><el-input v-model="form.startDate" type="date" /></el-form-item></el-col>

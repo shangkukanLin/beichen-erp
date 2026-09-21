@@ -737,6 +737,9 @@ CREATE TABLE IF NOT EXISTS dev_project_phase (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     project_id BIGINT NOT NULL COMMENT '项目ID',
     phase_name VARCHAR(50) NOT NULL COMMENT '节点名称',
+    -- 2026-09-21 新增：记来源模板ID —— 消除"用可变阶段名回查模板"（F7-94 根因），
+    -- 模板改名/改默认天数不再影响已生成的阶段。历史行按 (项目规格, 阶段名) 回填。
+    template_id BIGINT DEFAULT NULL COMMENT '来源阶段模板ID(dev_phase_template.id)',
     sort_order INT DEFAULT 0 COMMENT '排序',
     default_days INT DEFAULT 0 COMMENT '默认天数',
     planned_end DATE COMMENT '计划完成日期',
@@ -746,12 +749,16 @@ CREATE TABLE IF NOT EXISTS dev_project_phase (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_project_id (project_id),
+    INDEX idx_template_id (template_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目阶段表';
 
 CREATE TABLE IF NOT EXISTS dev_phase_template (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     name VARCHAR(50) NOT NULL COMMENT '阶段名称',
+    -- 2026-09-21 新增：阶段模板分「原配 / 改配」两套，立项时按项目规格自动套用对应的一套。
+    -- 默认 MODIFIED ⇒ 存量 14 条自动归入「改配」，与既有行为一致。
+    spec_type VARCHAR(20) NOT NULL DEFAULT 'MODIFIED' COMMENT '适用规格: MATCHED原配/MODIFIED改配',
     default_days INT DEFAULT 0 COMMENT '默认天数',
     sort_order INT DEFAULT 0 COMMENT '排序',
     product_status_sync TINYINT(1) DEFAULT 0 COMMENT '是否触发产品状态同步(研发中→正常)',
@@ -759,9 +766,11 @@ CREATE TABLE IF NOT EXISTS dev_phase_template (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_company_name (company_id, name),
-    INDEX idx_sort (sort_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目阶段模板表';
+    -- 唯一键必须含 spec_type：两套模板有 7 个同名阶段（立项/排线打样/背贴盖板打样/总成样品/测试/小批量/结项）
+    UNIQUE KEY uk_company_spec_name (company_id, spec_type, name),
+    INDEX idx_sort (sort_order),
+    INDEX idx_spec_sort (spec_type, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目阶段模板表（原配/改配各一套）';
 
 -- dev_material 已重命名为 dev_purchase_item
 

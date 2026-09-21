@@ -21,7 +21,13 @@ if ($bad) {
 }
 
 Push-Location $root
-& cmd /c "mvn -q -DskipTests compile > `"$log`" 2>&1"
+# 2026-09-21：**必须带 clean** —— 只写 compile 会被 maven-compiler-plugin 的"新不新增"判断骗到。
+# 实测（3.11.0 / Maven 3.9.9）：源码里植入一处真实类型错误（int = "字符串"），本脚本仍
+# exit 0 报"编译通过"；手跑 mvn 的输出是 `[INFO] Nothing to compile - all classes are up to date`
+# ⇒ 门禁给出**假绿灯**（2 分钟后 spring-boot:run 一编译就立刻暴露）。
+# 补 `-Dmaven.compiler.useIncrementalCompilation=false` **仍然无效**，故直接 clean 强制重建。
+# 门禁宁可慢十几秒，也绝不能放过编译不过的代码。
+& cmd /c "mvn -q -DskipTests clean compile > `"$log`" 2>&1"
 $code = $LASTEXITCODE
 Pop-Location
 

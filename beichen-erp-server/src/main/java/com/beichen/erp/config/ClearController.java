@@ -6,6 +6,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import com.beichen.erp.common.R;
 import com.beichen.erp.common.DefaultMaterialTypes;
 import com.beichen.erp.common.DefaultContractTemplate;
+import com.beichen.erp.common.DefaultPhaseTemplates;
 import com.beichen.erp.system.common.SystemConstants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -163,28 +164,13 @@ public class ClearController {
             for (int i = 0; i < defaultTypes.length; i++) {
                 stmt.execute("INSERT INTO material_type (type_name, sort_order, status, is_default, company_id) VALUES ('" + defaultTypes[i] + "', " + (i + 1) + ", 1, 1, " + companyId + ")");
             }
-            // 重新初始化阶段模板默认数据
-            String[][] phaseDefaults = {
-                {"立项", "0", "1", ""},
-                {"结构评估", "2", "2", "根据玻璃尺寸和摄像头孔位与R角来综合评估结构是否支持立项。"},
-                {"立项准备", "5", "3", "根据项目型号收手机，拆分成机板和屏幕分体状态，交给触摸方案公司抓取触摸协议，明确是否可以破解协议以及用哪颗物料可以满足技术标准。"},
-                {"显示评估", "2", "4", "提供机板和原屏给到显示方案公司，并告知触摸方案商建议使用的触摸IC料号及规格书与触摸原理图，让显示方案公司抓取显示协议，根据手机的分辨率与刷新率和玻璃的分辨率综合评估用哪颗码片物料，以及驱动IC。"},
-                {"排线图纸", "3", "5", "根据触摸方案公司建议的触摸IC和显示方案公司建议的码片，开始画图纸，一般都可以画，后期一般是谁画的图纸就和谁买码片。"},
-                {"排线打样", "4", "6", "出图纸后，把图纸给到排线工厂打样，一般打10PCS，码片和触摸IC需要找方案公司提供，哪个公司画的排线图纸就找哪个公司寄码片，触摸公司寄触摸IC。"},
-                {"FOG打样", "2", "7", "排线打样好之后直接让工厂寄给打样加工厂，同时需要寄驱动IC过去和玻璃过去，一般先打样5PCS。"},
-                {"显示调试", "5", "8", "FOG打样直接寄到显示方案公司，并且提供机板，开始调试显示功能。其他兼容的基板，等没什么大问题再去购买给方案公司做兼容。"},
-                {"触摸调试", "5", "9", "初版显示做好以后，移交机板和FOG去触摸方案公司调试触摸。同时保留一个机板和FOG去盖板厂根据屏幕的实际显示效果开模做盖板样品，然后去背贴厂开背贴样品。"},
-                {"背贴盖板打样", "2", "10", "使用保留的一个机板和FOG去盖板厂根据屏幕的实际显示效果开模做盖板样品，然后去背贴厂开背贴样品。"},
-                {"总成样品", "2", "11", "将盖板和背贴样品寄到加工厂做成总成，需要寄2PCS总成和机板过去方案公司优化触摸。"},
-                {"测试", "5", "12", "开始测试，需要测试结构/显示/触摸，详见测试文档。"},
-                {"小批量", "3", "13", "测试没问题之后，下物料寄到工厂，先进行100PCS的小批量，到货后过一遍，没有批次问题，就可以结项了。"},
-                {"结项", "0", "14", "结项，通知工厂开始量产。"},
-            };
-            for (String[] p : phaseDefaults) {
-                stmt.execute("INSERT INTO dev_phase_template (name, default_days, sort_order, remark, company_id) VALUES ('"
-                    + p[0].replace("'", "''") + "', " + p[1] + ", " + p[2] + ", '"
-                    + p[3].replace("'", "''") + "', " + companyId + ")");
-            }
+            // 重新初始化阶段模板默认数据（2026-09-21：**原配 / 改配各一套**，统一取 DefaultPhaseTemplates，
+            // 与 DataInitializer 共用一份数据，避免两处漂移；并补上原先漏写的 spec_type 与
+            // product_status_sync —— 漏后者会导致"清空数据"后小批量/结项不再触发产品状态同步）
+            int tplCount = 0;
+            tplCount += insertPhaseTemplates(stmt, DefaultPhaseTemplates.MODIFIED, DefaultPhaseTemplates.SPEC_MODIFIED, companyId);
+            tplCount += insertPhaseTemplates(stmt, DefaultPhaseTemplates.MATCHED, DefaultPhaseTemplates.SPEC_MATCHED, companyId);
+            log.info("重置阶段模板默认数据 {} 条（原配/改配各一套）", tplCount);
             // 重新初始化默认合同模板（加工合同、采购合同），与 物料类型/阶段模板一致
             insertContractTemplate(stmt, companyId, DefaultContractTemplate.TYPE_PROCESSING,
                     DefaultContractTemplate.NAME_PROCESSING, DefaultContractTemplate.PROCESSING_CONTRACT_HTML);
@@ -197,6 +183,22 @@ public class ClearController {
         } catch (Exception e) {
             return R.fail(e.getMessage());
         }
+    }
+
+    /**
+     * 插入一整套默认阶段模板（2026-09-21：原配 7 条 / 改配 14 条），返回插入条数。
+     * <p>与 {@code DataInitializer} 共用 {@link DefaultPhaseTemplates} 常量；SQL 里**必须**带上
+     * {@code spec_type} 与 {@code product_status_sync} —— 后者原先被漏掉，导致"清空数据"后
+     * 小批量/结项不再触发产品状态同步（现网 14 条全 0 的成因）。</p>
+     */
+    private int insertPhaseTemplates(Statement stmt, DefaultPhaseTemplates.Row[] rows, String specType, Long companyId) throws Exception {
+        for (DefaultPhaseTemplates.Row r : rows) {
+            stmt.execute("INSERT INTO dev_phase_template (name, spec_type, default_days, sort_order, product_status_sync, remark, company_id) VALUES ('"
+                    + r.name().replace("'", "''") + "', '" + specType + "', " + r.defaultDays() + ", "
+                    + r.sortOrder() + ", " + r.productStatusSync() + ", '"
+                    + r.remark().replace("'", "''") + "', " + companyId + ")");
+        }
+        return rows.length;
     }
 
     /** 插入一条默认合同模板（清空数据后重置用，与 DataInitializer 共用 DefaultContractTemplate 常量） */

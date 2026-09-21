@@ -3,6 +3,7 @@ package com.beichen.erp.config;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.common.DefaultMaterialTypes;
 import com.beichen.erp.common.DefaultContractTemplate;
+import com.beichen.erp.common.DefaultPhaseTemplates;
 import com.beichen.erp.auth.entity.User;
 import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.dev.entity.MaterialType;
@@ -835,41 +836,37 @@ public class DataInitializer implements ApplicationRunner {
         if (added > 0) log.info("补齐默认物料类型 {} 条", added);
     }
 
-    /** 初始化14个研发阶段模板 */
+    /**
+     * 初始化研发阶段模板 —— 2026-09-21（用户需求）：**原配 / 改配各一套**。
+     * <p>默认数据统一取自 {@link DefaultPhaseTemplates}：原先本方法与 {@code ClearController} 各硬编码
+     * 了一份 14 条（备注文本已经漂移），且后者**漏写 product_status_sync** ⇒ 用户点一次"清空数据"后
+     * 小批量/结项就不再触发产品状态同步（现网 14 条全 0 的成因）。现改为共用一份数据。</p>
+     */
     private void initPhaseTemplates() {
         Long count = phaseTemplateMapper.selectCount(null);
         if (count != null && count > 0) {
             log.info("阶段模板数据已存在，跳过初始化");
             return;
         }
-        // 阶段模板：name, defaultDays, sortOrder, remark, productStatusSync
-        // 小批量/结项阶段需触发关联产品状态由"研发中"改为"正常"
-        Object[][] defaultPhases = {
-            {"立项", 0, 1, "", 0},
-            {"结构评估", 2, 2, "根据玻璃尺寸和摄像头孔位与R角来综合评估结构是否支持立项。", 0},
-            {"立项准备", 5, 3, "根据项目型号收手机，拆分成机板和屏幕分体状态，交给触摸方案公司抓取触摸协议，明确是否可以破解协议以及用哪颗物料可以满足技术标准。", 0},
-            {"显示评估", 2, 4, "提供机板和原屏给到显示方案公司，并告知触摸方案商建议使用的触摸IC料号及规格书与触摸原理图，让显示方案公司抓取显示协议，根据手机的分辨率与刷新率和玻璃的分辨率综合评估用哪颗码片物料，以及驱动IC。", 0},
-            {"排线图纸", 3, 5, "根据触摸方案公司建议的触摸IC和显示方案公司建议的码片，开始画图纸，一般都可以画。", 0},
-            {"排线打样", 4, 6, "出图纸后，把图纸给到排线工厂打样，一般打10PCS，码片和触摸IC需要找方案公司提供。", 0},
-            {"FOG打样", 2, 7, "排线打样好之后直接让工厂寄给打样加工厂，同时需要寄驱动IC过去和玻璃过去，一般先打样5PCS。", 0},
-            {"显示调试", 5, 8, "FOG打样直接寄到显示方案公司，并且提供机板，开始调试显示功能。", 0},
-            {"触摸调试", 5, 9, "初版显示做好以后，移交机板和FOG去触摸方案公司调试触摸。同时保留一个机板和FOG去盖板厂开模做盖板样品。", 0},
-            {"背贴盖板打样", 2, 10, "使用保留的一个机板和FOG去盖板厂根据屏幕的实际显示效果开模做盖板样品，然后去背贴厂开背贴样品。", 0},
-            {"总成样品", 2, 11, "将盖板和背贴样品寄到加工厂做成总成，需要寄2PCS总成和机板过去方案公司优化触摸。", 0},
-            {"测试", 5, 12, "开始测试，需要测试结构/显示/触摸，详见测试文档。", 0},
-            {"小批量", 3, 13, "测试没问题之后，下物料寄到工厂，先进行100PCS的小批量，到货后过一遍，没有批次问题，就可以结项了。", 1},
-            {"结项", 0, 14, "结项，通知工厂开始量产。", 1}
-        };
-        for (Object[] p : defaultPhases) {
+        int n = 0;
+        n += insertPhaseTemplates(DefaultPhaseTemplates.MODIFIED, DefaultPhaseTemplates.SPEC_MODIFIED);
+        n += insertPhaseTemplates(DefaultPhaseTemplates.MATCHED, DefaultPhaseTemplates.SPEC_MATCHED);
+        log.info("初始化阶段模板数据完成（原配/改配共 {} 条）", n);
+    }
+
+    /** 按规格批量插入某套默认阶段，返回插入条数 */
+    private int insertPhaseTemplates(DefaultPhaseTemplates.Row[] rows, String specType) {
+        for (DefaultPhaseTemplates.Row r : rows) {
             PhaseTemplate t = new PhaseTemplate();
-            t.setName((String) p[0]);
-            t.setDefaultDays((Integer) p[1]);
-            t.setSortOrder((Integer) p[2]);
-            t.setRemark((String) p[3]);
-            t.setProductStatusSync((Integer) p[4]);
+            t.setName(r.name());
+            t.setSpecType(specType);
+            t.setDefaultDays(r.defaultDays());
+            t.setSortOrder(r.sortOrder());
+            t.setRemark(r.remark());
+            t.setProductStatusSync(r.productStatusSync());
             t.setCompanyId(1L);
             phaseTemplateMapper.insert(t);
         }
-        log.info("初始化阶段模板数据完成（共 {} 条）", defaultPhases.length);
+        return rows.length;
     }
 }

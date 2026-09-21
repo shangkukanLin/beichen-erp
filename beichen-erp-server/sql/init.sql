@@ -420,6 +420,8 @@ CREATE TABLE IF NOT EXISTS dev_project_phase (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
     project_id BIGINT NOT NULL COMMENT '项目ID',
     phase_name VARCHAR(50) NOT NULL COMMENT '节点名称',
+    -- 2026-09-21：记来源模板ID（与 resources/schema.sql 保持一致）
+    template_id BIGINT DEFAULT NULL COMMENT '来源阶段模板ID(dev_phase_template.id)',
     sort_order INT DEFAULT 0 COMMENT '排序',
     planned_end DATE COMMENT '计划完成日期',
     actual_end DATE COMMENT '实际完成日期',
@@ -427,6 +429,7 @@ CREATE TABLE IF NOT EXISTS dev_project_phase (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_project_id (project_id),
+    INDEX idx_template_id (template_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目项目阶段表';
 

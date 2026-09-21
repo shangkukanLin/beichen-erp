@@ -12,6 +12,8 @@
 # F7-93 duplicate phase-template names made checkProductStatusSync's selectOne hit 2 rows ->
 #        TooManyResultsException -> complete/skip/save-phase returned 500 for every project.
 #        Fix: uniqueness check on create/update + LIMIT 1 fallback + UNIQUE KEY uk_company_name.
+#        2026-09-21: that unique key became uk_company_spec_name(company_id,spec_type,name) when the
+#        templates were split into two sets (matched/modified); the assertions below were updated.
 # F7-99 screen_model is an industry-wide shared knowledge base, but it was tenant-filtered, so the
 #        2336 seed rows (all company_id=1) were invisible to companies 2/3. Fix: IGNORE_TABLES +
 #        company_id normalised to NULL + entity no longer auto-fills it.
@@ -124,15 +126,18 @@ else { Ok "edit.vue does not reference form.status" }
 # ================= F7-93: duplicate phase-template names =================
 Write-Output '=== F7-93: phase template uniqueness + selectOne fallback ==='
 
-if ((IndexExists 'dev_phase_template' 'uk_company_name') -ge 1) { Ok "dev_phase_template has UNIQUE KEY uk_company_name(company_id,name)" }
-else { Bad "dev_phase_template has no unique key on (company_id,name)" }
+if ((IndexExists 'dev_phase_template' 'uk_company_spec_name') -ge 1) { Ok "dev_phase_template has UNIQUE KEY uk_company_spec_name(company_id,spec_type,name)" }
+else { Bad "dev_phase_template has no unique key on (company_id,spec_type,name)" }
 
-$dupTpl = [int](SqlOne "SELECT COUNT(*) FROM (SELECT company_id,name FROM dev_phase_template GROUP BY company_id,name HAVING COUNT(*)>1) t")
-if ($dupTpl -eq 0) { Ok "no duplicate phase-template names exist right now" }
+# 2026-09-21: the unique key now INCLUDES spec_type -- phase templates come in two sets
+# (matched = 7 phases / modified = 14 phases) which share 7 names, so the duplicate probe must
+# group by spec_type as well, otherwise the legit cross-set duplicates would be reported as dirty.
+$dupTpl = [int](SqlOne "SELECT COUNT(*) FROM (SELECT company_id,spec_type,name FROM dev_phase_template GROUP BY company_id,spec_type,name HAVING COUNT(*)>1) t")
+if ($dupTpl -eq 0) { Ok "no duplicate phase-template names exist right now (per company+spec)" }
 else { Bad "$dupTpl duplicate phase-template name(s) exist -- complete/skip phase would have 500'd" }
 
 $tplSvc = "$SERVER\dev\service\impl\PhaseTemplateServiceImpl.java"
-if (Has $tplSvc 'selectCount\(buildWrapper\(\)') { Ok "PhaseTemplateServiceImpl validates duplicate names on create/update" }
+if (Has $tplSvc 'selectCount\(buildWrapper\(') { Ok "PhaseTemplateServiceImpl validates duplicate names on create/update" }
 else { Bad "PhaseTemplateServiceImpl has no duplicate-name validation" }
 if (Has $tplSvc 'ne\(PhaseTemplate::getId') { Ok "the update path excludes its own id when checking duplicates" }
 else { Bad "the update path does not exclude its own id" }

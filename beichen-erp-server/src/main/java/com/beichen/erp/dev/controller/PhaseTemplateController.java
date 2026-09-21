@@ -15,16 +15,27 @@ public class PhaseTemplateController {
 
     private final PhaseTemplateService service;
 
+    /**
+     * 分页查询阶段模板。
+     *
+     * @param specType 适用规格（MATCHED 原配 / MODIFIED 改配）；**不传则返回两套**（向后兼容）
+     */
     @GetMapping("/page")
     public R<?> page(
             @RequestParam(defaultValue = "1") int pageNum,
-            @RequestParam(defaultValue = "100") int pageSize) {
-        return R.ok(service.page(pageNum, pageSize));
+            @RequestParam(defaultValue = "100") int pageSize,
+            @RequestParam(required = false) String specType) {
+        return R.ok(service.page(pageNum, pageSize, specType));
     }
 
+    /**
+     * 阶段模板列表。
+     *
+     * @param specType 适用规格（MATCHED 原配 / MODIFIED 改配）；**不传则返回两套**（向后兼容）
+     */
     @GetMapping("/list")
-    public R<List<PhaseTemplate>> list() {
-        return R.ok(service.list());
+    public R<List<PhaseTemplate>> list(@RequestParam(required = false) String specType) {
+        return R.ok(service.list(specType));
     }
 
     @PostMapping

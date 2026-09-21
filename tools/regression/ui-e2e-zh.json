@@ -471,5 +471,6 @@
   "pj_opt_spec_modified": "改配",
   "pj_btn_create": "创建项目",
   "pj_ph_project_name": "请输入项目名称",
-  "pj_ph_product_name": "请输入产品名称"
+  "pj_ph_product_name": "请输入产品名称",
+  "phase_matched_names": "立项|排线打样|背贴盖板打样|总成样品|测试|小批量|结项"
 }

@@ -14,6 +14,7 @@ import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.dev.mapper.ProjectPhaseMapper;
 import com.beichen.erp.dev.service.ProjectProductSyncService;
 import com.beichen.erp.dev.service.ProjectPhaseService;
+import com.beichen.erp.material.common.ProductSpec;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,14 +46,30 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     @Override
     @Transactional
     public void initPhase(Long projectId) {
+        // 2026-09-21（用户需求：原配和改配的阶段不一样）：**按项目规格取对应那一套模板**。
+        // 原配 = 7 个（立项/排线打样/背贴盖板打样/总成样品/测试/小批量/结项）；改配 = 原来那 14 个。
+        // 项目规格为空（存量项目）⇒ 兜底「改配」，与改动前的行为逐字一致。
+        Project project = projectMapper.selectById(projectId);
+        String specType = PhaseTemplate.normalizeSpecType(project == null ? null : project.getSpecType());
         List<PhaseTemplate> templates = phaseTemplateMapper.selectList(
-                new LambdaQueryWrapper<PhaseTemplate>().orderByAsc(PhaseTemplate::getSortOrder));
+                new LambdaQueryWrapper<PhaseTemplate>()
+                        .eq(PhaseTemplate::getSpecType, specType)
+                        .orderByAsc(PhaseTemplate::getSortOrder));
+        // 该规格下一旦没有任何模板，项目会被建出 **0 个阶段**（阶段护栏、下一阶段激活、结项推导全部失效
+        // 且无任何提示）⇒ 明确报错并在事务内回滚，不静默造出空壳项目。
+        if (templates.isEmpty()) {
+            log.warn("未找到规格[{}]的阶段模板，拒绝初始化项目阶段: projectId={}", specType, projectId);
+            throw new BusinessException("未找到「" + specLabelOf(specType)
+                    + "」的阶段模板，无法初始化项目阶段；请先在「基础数据 → 模版管理 → 阶段模板管理」中配置");
+        }
         LocalDate today = LocalDate.now();
         for (int i = 0; i < templates.size(); i++) {
             PhaseTemplate tpl = templates.get(i);
             ProjectPhase tl = new ProjectPhase();
             tl.setProjectId(projectId);
             tl.setPhaseName(tpl.getName());
+            // 2026-09-21：记来源模板ID —— 产品状态同步从此直查模板，不再依赖可变的阶段名（F7-94 根因）
+            tl.setTemplateId(tpl.getId());
             tl.setDefaultDays(tpl.getDefaultDays());
             tl.setSortOrder(tpl.getSortOrder());
             tl.setStatus(i == 0 ? PhaseStatus.IN_PROGRESS.getCode() : PhaseStatus.NOT_STARTED.getCode());
@@ -63,6 +80,14 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
             tl.setCreateTime(LocalDateTime.now());
             projectPhaseMapper.insert(tl);
         }
+        log.info("初始化项目阶段完成: projectId={}, specType={}, 阶段数={}", projectId, specType, templates.size());
+    }
+
+    /** 规格的中文名（仅用于给用户看的报错文案；枚举比较一律用 code） */
+    private static String specLabelOf(String specType) {
+        return ProductSpec.MATCHED.getCode().equals(specType)
+                ? ProductSpec.MATCHED.getLabel()
+                : ProductSpec.MODIFIED.getLabel();
     }
 
     /**
@@ -102,7 +127,7 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
         }
         projectPhaseMapper.updateById(current);
 
-        checkProductStatusSync(current.getPhaseName(), projectId);
+        checkProductStatusSync(current, projectId);
         activateNextPhase(projectId, current.getSortOrder());
         syncProjectStatus(projectId);
     }
@@ -154,7 +179,7 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
             projectPhaseMapper.updateById(p);
             done++;
             // 逐个调用时每个阶段都会判一次；这里只记录"是否需要同步"，循环结束后统一同步一次
-            if (needsProductStatusSync(p.getPhaseName(), projectId)) {
+            if (needsProductStatusSync(p, projectId)) {
                 needProductSync = true;
             }
         }
@@ -189,7 +214,7 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
         }
         projectPhaseMapper.updateById(current);
 
-        checkProductStatusSync(current.getPhaseName(), projectId);
+        checkProductStatusSync(current, projectId);
         activateNextPhase(projectId, current.getSortOrder());
         syncProjectStatus(projectId);
     }
@@ -326,7 +351,8 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
         if (statusChanged) {
             if (PhaseStatus.FINISHED.getCode().equals(newStatus)
                     || PhaseStatus.SKIPPED.getCode().equals(newStatus)) {
-                checkProductStatusSync(existing.getPhaseName(), projectId);
+                // 2026-09-21：入参由阶段名改为整行（行上带 templateId，解析模板不再依赖可变阶段名）
+                checkProductStatusSync(existing, projectId);
                 activateNextPhase(projectId, existing.getSortOrder());
                 syncProjectStatus(projectId);
             }
@@ -440,34 +466,54 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
         }
     }
 
-    private void checkProductStatusSync(String phaseName, Long projectId) {
-        if (needsProductStatusSync(phaseName, projectId)) {
+    private void checkProductStatusSync(ProjectPhase phase, Long projectId) {
+        if (needsProductStatusSync(phase, projectId)) {
             projectProductSyncService.syncProductStatus(projectId);
         }
     }
 
     /**
-     * 该阶段（按名称匹配模板）完成/跳过时**是否需要**同步产品状态。
+     * 该阶段完成/跳过时**是否需要**同步产品状态。
      * <p>2026-09-21 从 {@link #checkProductStatusSync} 抽出 —— 一键完成需要"先判断、最后只同步一次"，
-     * 若沿用原方法会在循环里同步 N 次。判断逻辑与日志口径与原方法逐字保持一致。</p>
+     * 若沿用原方法会在循环里同步 N 次。</p>
+     * <p>2026-09-21 改版：入参由"阶段名"改为**整行阶段记录** —— 阶段行上已带 {@code templateId}，
+     * 解析模板不再依赖可变的阶段名（见 {@link #resolveTemplate}）。</p>
      */
-    private boolean needsProductStatusSync(String phaseName, Long projectId) {
-        // F7-93（2026-09-19）：原用 selectOne(eq(name)) —— 一旦同名模板存在两条（历史脏数据，或
-        // 未加唯一索引前建出来），MyBatis-Plus 会抛 TooManyResultsException ⇒ 完成/跳过/保存
-        // 阶段全部 500（研发主线被脏数据打断）。改为按 id 升序取第一条兜底，入口侧另加了重名校验。
-        PhaseTemplate tpl = phaseTemplateMapper.selectOne(
-                new LambdaQueryWrapper<PhaseTemplate>()
-                        .eq(PhaseTemplate::getName, phaseName)
-                        .orderByAsc(PhaseTemplate::getId)
-                        .last("LIMIT 1"));
+    private boolean needsProductStatusSync(ProjectPhase phase, Long projectId) {
+        PhaseTemplate tpl = resolveTemplate(phase);
         if (tpl == null) {
             // F7-94（2026-09-19）：原为静默跳过 —— 阶段模板被改名或删除后，本阶段不再触发产品状态
-            // 同步（阶段名是建项目时复制进 dev_project_phase 的快照，模板改名不会回溯），
-            // 且没有任何提示，只能靠"产品状态一直停在研发中"来间接发现
-            log.warn("未找到阶段模板[{}]，跳过产品状态同步: projectId={}", phaseName, projectId);
+            // 同步，且没有任何提示，只能靠"产品状态一直停在研发中"来间接发现
+            log.warn("未找到阶段模板[{}]，跳过产品状态同步: projectId={}", phase.getPhaseName(), projectId);
             return false;
         }
         return PhaseTemplate.SYNC_PRODUCT_STATUS == valueOf(tpl.getProductStatusSync());
+    }
+
+    /**
+     * 解析阶段对应的模板（2026-09-21）。
+     * <p><b>优先按 {@code template_id} 直查</b>（建阶段时从模板写入）—— 这是 F7-94「用可变展示名当关联键」
+     * 的**治本修法**：模板改名、改默认天数都不再让关联失效。</p>
+     * <p>回落（历史行 / 模板已被删）：按 **(项目规格, 阶段名)** 精确匹配。规格取项目当前
+     * {@code spec_type}（为空 ⇒ 改配），这样在"原配/改配各一套、且有 7 个同名阶段"的新结构下
+     * **不会取到另一套模板**；沿用 {@code LIMIT 1} 兜底，避免历史同名脏数据抛
+     * {@code TooManyResultsException} 把研发主线打断（F7-93）。</p>
+     */
+    private PhaseTemplate resolveTemplate(ProjectPhase phase) {
+        if (phase.getTemplateId() != null) {
+            PhaseTemplate byId = phaseTemplateMapper.selectById(phase.getTemplateId());
+            if (byId != null) return byId;
+            log.warn("阶段[{}]的来源模板已不存在(templateId={})，回落按(规格,阶段名)匹配",
+                    phase.getPhaseName(), phase.getTemplateId());
+        }
+        Project project = projectMapper.selectById(phase.getProjectId());
+        String specType = PhaseTemplate.normalizeSpecType(project == null ? null : project.getSpecType());
+        return phaseTemplateMapper.selectOne(
+                new LambdaQueryWrapper<PhaseTemplate>()
+                        .eq(PhaseTemplate::getSpecType, specType)
+                        .eq(PhaseTemplate::getName, phase.getPhaseName())
+                        .orderByAsc(PhaseTemplate::getId)
+                        .last("LIMIT 1"));
     }
 
     /** 将可能为 null 的 Integer 规整为语义值，避免 null 拆箱与魔法值比较 */
