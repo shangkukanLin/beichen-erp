@@ -130,7 +130,8 @@ if ($need -gt 0) {
     Write-Host ('  toast@900=' + $t1)
     Start-Sleep -Milliseconds 2000
     $cnt = D (SqlOne 'SELECT COUNT(*) FROM sale_order')
-    Ok (($cnt -eq ($before + ($i - $before)))) ('sale order #' + $i + ' created (db=' + $cnt + $(if ($cnt -eq $before) { ', toast=' + $t1 } else { '' }) + ')')
+    # 2026-09-21: 原式 $before + ($i - $before) 恒等于 $i（写错了 ⇒ 新建后必然为假）；应为 $before + $i
+    Ok (($cnt -eq ($before + $i))) ('sale order #' + $i + ' created (db=' + $cnt + $(if ($cnt -eq $before) { ', toast=' + $t1 } else { '' }) + ')')
   }
 }
 
@@ -162,15 +163,22 @@ $amountSum = D (SqlOne "SELECT COALESCE(SUM(total_amount),0) FROM sale_order WHE
 $autoReceipts = D (SqlOne "SELECT COUNT(*) FROM finance_receipt WHERE source_bill_no LIKE 'XS-%'")
 $autoReceiptDraft = D (SqlOne "SELECT COUNT(*) FROM finance_receipt WHERE source_bill_no LIKE 'XS-%' AND status='DRAFT'")
 $autoReceiptAmt = D (SqlOne "SELECT COALESCE(SUM(amount),0) FROM finance_receipt WHERE source_bill_no LIKE 'XS-%'")
-$recvAmt = D (SqlOne "SELECT COALESCE(SUM(amount),0) FROM finance_receivable WHERE source_bill_no LIKE 'XS-%'")
-$recvRows = D (SqlOne "SELECT COUNT(*) FROM finance_receivable WHERE source_bill_no LIKE 'XS-%'")
+# 2026-09-21: 口径修正 —— 只统计**有效台账**：排除 ADVANCE（预收/多收退款）与 CANCELLED（随作废单冲销的留痕）。
+#   ADVANCE：现金单超额收款会生成一条**负数**应收（单号沿用销售单号 ⇒ 也 LIKE 'XS-%'），它不属于"该单的应收"，
+#   混进 SUM 会让 receivable == sale amount 恒差一个金额（实测差 -100，即某张现金单多收了 100）。
+#   CANCELLED：销售单作废后其应收被置 CANCELLED 但行仍在 ⇒ 与"有效单据张数"比对时会被多算（实测 40 vs 33）。
+$recvAmt = D (SqlOne "SELECT COALESCE(SUM(amount),0) FROM finance_receivable WHERE source_bill_no LIKE 'XS-%' AND status NOT IN ('ADVANCE','CANCELLED')")
+$recvRows = D (SqlOne "SELECT COUNT(*) FROM finance_receivable WHERE source_bill_no LIKE 'XS-%' AND status NOT IN ('ADVANCE','CANCELLED')")
 $outLogs = D (SqlOne "SELECT COUNT(*) FROM warehouse_stock_log WHERE related_bill_no LIKE 'XS-%'")
 $stockA2 = D (SqlOne ("SELECT COALESCE(SUM(quantity),0) FROM warehouse_stock WHERE product_id=" + $prodIdA))
 $stockB2 = D (SqlOne ("SELECT COALESCE(SUM(quantity),0) FROM warehouse_stock WHERE product_id=" + $prodIdB))
 Write-Host ("[DB] orders=$orders audited=$audited cash=$cashAudited credit=$creditAudited items=$items qty=$qtySum amount=$amountSum")
 Write-Host ("[DB] autoReceipts=$autoReceipts (draft=$autoReceiptDraft amt=$autoReceiptAmt) receivableRows=$recvRows recvAmt=$recvAmt outLogs=$outLogs")
 Ok (($orders -ge $TARGET)) ('sale orders >= 10 (got ' + $orders + ')')
-Ok (($audited -eq $orders)) 'all sale orders audited (= 发货完成)'
+# 2026-09-21: 口径修正 —— 只统计"有效单据"（排除 CANCELLED）。作废是正常业务动作（手工作废 / 探针脚本
+# 建单后作废留痕），把它们算成"未审核"会让本断言被无关数据带红（与 p6b 的 all sale returns audited 同一处修正）。
+$ordersLive = D (SqlOne "SELECT COUNT(*) FROM sale_order WHERE status<>'CANCELLED'")
+Ok (($audited -eq $ordersLive)) ('all live sale orders audited (= 发货完成) [' + $audited + '/' + $ordersLive + ', cancelled excluded]')
 Ok (($cashAudited -ge 6)) ('cash-settled orders >= 6 (got ' + $cashAudited + ')')
 Ok (($creditAudited -ge 4)) ('credit-settled orders >= 4 (got ' + $creditAudited + ')')
 Ok (($items -ge $TARGET)) ('sale items >= 10 (got ' + $items + ')')
@@ -182,12 +190,17 @@ $badRc = D (SqlOne "SELECT COUNT(*) FROM finance_receipt WHERE source_bill_no LI
 Ok (($badRc -eq 0)) ('no auto receipt in an unexpected state (bad=' + $badRc + ')')
 $dupRc = D (SqlOne "SELECT COUNT(*) FROM (SELECT source_bill_no FROM finance_receipt WHERE source_bill_no LIKE 'XS-%' AND status IN ('DRAFT','AUDITED') GROUP BY source_bill_no HAVING COUNT(*)>1) t")
 Ok (($dupRc -eq 0)) ('no cash order carries more than one active receipt (dup=' + $dupRc + ')')
-Ok (($recvRows -eq $orders)) ('one receivable per sale order (got ' + $recvRows + ')')
+# 2026-09-21: 同样只比"有效单据"（排除 CANCELLED）—— 作废单没有应收台账，用全量比会被作废留痕带红。
+Ok (($recvRows -eq $ordersLive)) ('one receivable per live sale order (' + $recvRows + '/' + $ordersLive + ', cancelled excluded)')
 Ok (($recvAmt -eq $amountSum)) ('receivable == sale amount (' + $recvAmt + ' = ' + $amountSum + ')')
 Ok (($outLogs -ge $orders)) ('sale stock-out logs >= orders (got ' + $outLogs + ')')
 Write-Host ('[STOCK] ' + $prodA + ' ' + $stockA + ' -> ' + $stockA2 + ' | ' + $prodB + ' ' + $stockB + ' -> ' + $stockB2)
 # 可重跑口径：只比对"本轮真正新建订单"发出的数量（skipCreate 时该值为 0 -> 库存不变才是正确结果）
-$shippedThisRun = [decimal](($orders - $before) * $qty)
+# 2026-09-21: 补上"本轮被补审的历史遗留草稿" —— 本脚本会审核库里所有 DRAFT 销售单（上面 all live audited
+# 的保证），遗留草稿审核同样要出库；漏算它们会得到"库存少了 2 而本轮新建 0"的假红（实测踩到）。
+$leftoverQty = D (SqlOne ("SELECT COALESCE(SUM(i.quantity),0) FROM sale_order_item i JOIN sale_order o ON o.id=i.order_id WHERE o.status='DRAFT' AND i.product_id IN (" + $prodIdA + "," + $prodIdB + ")"))
+Write-Host ('[DRAFT] leftover qty for the two probe products = ' + $leftoverQty + ' (will be audited by this run)')
+$shippedThisRun = [decimal](($orders - $before) * $qty) + $leftoverQty
 $deltaAB = ($stockA - $stockA2) + ($stockB - $stockB2)
 Ok (($deltaAB -eq $shippedThisRun)) ('stock decrease == qty shipped by this run (' + $deltaAB + ' = ' + $shippedThisRun + ')')
 Write-Host ('errs=' + (Errs))

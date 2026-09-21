@@ -537,6 +537,23 @@ export const ProductQualityTypeTag: Record<string, 'success' | 'warning' | 'info
   [ProductQualityType.PENDING]: 'info'
 }
 
+/**
+ * 销售单可售品质（2026-09-21 用户口径：「销售单产品明细的品质，**不能有不良品和待分类**」）
+ * ⇒ 只允许 **A规/B规/C规** 良品（DEFECT 不良品、PENDING 待分类一律不可售）。
+ *
+ * <p>与后端 `SaleOrderServiceImpl#assertItemQualitySellable` **同一口径**：前端过滤下拉只是体验，
+ * 服务层在「保存草稿」与「审核」两处兜底（直调接口 / 编辑历史草稿都绕不过）。</p>
+ * <p>注意：只有**销售单**受此约束 —— 退货/换货/整理单等场景仍然需要不良品与待分类。</p>
+ */
+export const SALE_SELLABLE_QUALITY_TYPES: string[] = [
+  ProductQualityType.A, ProductQualityType.B, ProductQualityType.C
+]
+
+/** 该品质是否可销售（空值按 A规 处理 ⇒ true；不良品/待分类 ⇒ false） */
+export function isSellableQuality(code?: string | null): boolean {
+  return SALE_SELLABLE_QUALITY_TYPES.includes(code || ProductQualityType.A)
+}
+
 /** 销售换货单收费类型（对应 ExchangeChargeType 枚举，存储值为 SERVICE/DIFF/FULL/OTHER） */
 export const ExchangeChargeType = {
   SERVICE: 'SERVICE',      // 服务费（客户人为损坏、超出保修等）
