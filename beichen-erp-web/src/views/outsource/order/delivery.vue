@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 成品收货 — 收货详细（委外加工 → 成品收货 → 点单号进入）
- * <p>2026-09-16：原「加工订单详情 → 交货管理」页签整块迁出至此（含新增/编辑/删除/审核/反审核收货 + 退不良），
+ * <p>2026-09-16：原「加工订单详情 → 交货管理」页签整块迁出至此（含新增/编辑/删除/审核/反审核收货 + 加工退货），
  * 详情页只保留一个跳转按钮。列表页带 ?add=1 进入时自动打开「新增收货」弹窗。</p>
  */
 import { localDate } from '@/utils/date'
@@ -24,7 +24,7 @@ const summary = ref<any>({})
 const products = ref<any[]>([])
 const warehouseOptions = ref<any[]>([])
 
-/** 只有生产中的加工单可录入收货/退不良（与后端校验一致） */
+/** 只有生产中的加工单可录入收货/加工退货（与后端校验一致） */
 const canDeliver = computed(() => order.status === OutsourceOrderStatus.PRODUCING)
 
 // ===== 收货弹窗 =====
@@ -54,7 +54,7 @@ async function loadWarehouses() {
   } catch (e: any) { console.warn('加载仓库失败', e?.message || e) }
 }
 
-/** 收货记录表格行样式：退不良行高亮 */
+/** 收货记录表格行样式：加工退货行高亮 */
 function deliveryRowClass({ row }: { row: any }) {
   return row.deliveryType === DeliveryType.DEFECT_RETURN ? 'defect-row' : ''
 }
@@ -64,7 +64,7 @@ function openAttach(url: string) { window.open(url + '?inline=true') }
 /**
  * 列表从此瘦身为 7 列（收货日期/产品名称/类型/等级分布/数量/状态/操作），
  * 「收货仓库 / 物流单号 / 备注 / 附件」全部移入本抽屉；并顺带补上原先**任何界面都看不到**的字段：
- * SKU、退不良规格、记录ID、创建时间。
+ * SKU、加工退货规格、记录ID、创建时间。
  */
 const detailVisible = ref(false)
 const detailRow = ref<any>(null)
@@ -88,16 +88,23 @@ function warehouseNameOf(row: any) {
   if (!row.warehouseId) return '-'
   return warehouseOptions.value.find((w: any) => w.id === row.warehouseId)?.warehouseName || row.warehouseId
 }
-/** 退不良规格文案：A/B/C → A规/B规/C规；DEFECT → 不良（普通收货为空） */
+/** 加工退货规格文案：A/B/C → A规/B规/C规；DEFECT → 不良（普通收货为空） */
 function qualityTextOf(row: any) {
   const q = row?.qualityType
   if (!q) return '-'
   return q === 'DEFECT' ? '不良' : q + '规'
 }
-/** 类型文案（列表与详情共用）：空=普通收货，DEFECT_RETURN=退不良 */
+/**
+ * 类型文案（列表与详情共用）：空=普通收货，DELIVERY=收货，DEFECT_RETURN=**加工退货**。
+ * <p>2026-09-21（用户口径）：本页把这个动作叫「**加工退货**」（实现不变 —— 仍是往收货记录里写一条
+ * **负数**的 `DEFECT_RETURN` 红冲行）。故这里**不走共享的 `DeliveryTypeLabel`**：物料收货页那边
+ * 仍叫「退不良」，两处文案各自独立、互不影响；枚举值 / 列名 / 后端一律不动。</p>
+ */
 function typeTextOf(row: any) {
   if (!row?.deliveryType) return '普通收货'
-  return row.deliveryType === DeliveryType.DELIVERY ? '收货' : (DeliveryTypeLabel[row.deliveryType] || row.deliveryType)
+  if (row.deliveryType === DeliveryType.DELIVERY) return '收货'
+  if (row.deliveryType === DeliveryType.DEFECT_RETURN) return '加工退货'
+  return DeliveryTypeLabel[row.deliveryType] || row.deliveryType
 }
 
 async function loadData() {
@@ -212,9 +219,9 @@ async function handleUnaudit(row: any) {
 }
 
 /**
- * 2026-09-21（用户口径）：本页**只保留「退不良」**（红冲收货）。
+ * 2026-09-21（用户口径）：本页**只保留「加工退货」**（= 红冲收货；原名「退不良」）。
  * <p>本页每一条收货记录都挂在**一张委外加工单**上，退回本质就是"这张单少收了多少" ——
- * 写一条**负数**的退不良记录（`deliveryType=DEFECT_RETURN`、`isReverse=1`）红冲掉，
+ * 写一条**负数**的加工退货记录（`deliveryType=DEFECT_RETURN`、`isReverse=1`）红冲掉，
  * 已收数量 / 剩余数量 / 应付就会一并改对，**不需要**再跳独立单据。</p>
  * <p>原有的「退货」入口（良品退回加工厂 → 加工退货单 `outsource_return_order`：成品出库 +
  * BOM 料还回工厂委外仓 + 冲减应付 + 可选收费）已按该口径**整体移除**。
@@ -222,7 +229,7 @@ async function handleUnaudit(row: any) {
  * 维修返回 / 结案），与本页无关。</p>
  */
 
-// ===== 退不良（拆分还料） =====
+// ===== 加工退货（拆分还料） =====
 const defectVisible = ref(false); const defectSaving = ref(false)
 const defectItems = ref<any[]>([])
 const defectWarehouseId = ref<number>()
@@ -259,18 +266,18 @@ async function handleDefectReturn() {
       const q = Number(r[qtyKey]); if (q > 0) data.push({ productId: r.productId, qualityType, quantity: q })
     }
   }
-  if (data.length === 0) { ElMessage.warning('请输入退不良数量'); return }
-  if (!defectWarehouseId.value) { ElMessage.warning('请选择退不良仓库'); return }
+  if (data.length === 0) { ElMessage.warning('请输入加工退货数量'); return }
+  if (!defectWarehouseId.value) { ElMessage.warning('请选择加工退货仓库'); return }
   defectSaving.value = true
   try {
     // 逐规格存草稿，审核时统一落账
     for (const r of data) {
       await request.post(`/outsource/order-delivery/return-defect/${orderId}`, { productId: r.productId, qualityType: r.qualityType, quantity: r.quantity, warehouseId: defectWarehouseId.value })
     }
-    ElMessage.success('退不良草稿已保存，请在收货记录中审核')
+    ElMessage.success('加工退货草稿已保存，请在收货记录中审核')
     defectVisible.value = false
     await loadData()
-  } catch (e: any) { ElMessage.error(e?.message || '退不良失败') } finally { defectSaving.value = false }
+  } catch (e: any) { ElMessage.error(e?.message || '加工退货失败') } finally { defectSaving.value = false }
 }
 
 /**
@@ -286,7 +293,7 @@ function maybeAutoOpen() {
   if (lastAutoOpenedPath === route.fullPath) return
   lastAutoOpenedPath = route.fullPath
   if (flag === 'add') { if (canDeliver.value) openAdd(); else ElMessage.warning('只有生产中的加工单可录入收货') }
-  else { if (canDeliver.value) openDefectReturn(); else ElMessage.warning('只有生产中的加工单可退不良') }
+  else { if (canDeliver.value) openDefectReturn(); else ElMessage.warning('只有生产中的加工单可做加工退货') }
 }
 
 onActivated(async () => { await loadData(); await maybeAutoOpen() })
@@ -334,9 +341,9 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         <div style="display:flex;gap:8px">
           <template v-if="canDeliver">
             <el-button type="primary" size="small" @click="openAdd">新增收货</el-button>
-            <el-button type="danger" size="small" @click="openDefectReturn">退不良</el-button>
+            <el-button type="danger" size="small" @click="openDefectReturn">加工退货</el-button>
           </template>
-          <!-- 2026-09-21（用户口径）：本页退回一律走「退不良」红冲收货 ⇒ 原「退货」按钮已移除 -->
+          <!-- 2026-09-21（用户口径）：本页退回一律走「加工退货」红冲收货（原「退不良」按钮，2026-09-21 按用户口径改文案）⇒ 原「退货」按钮已移除 -->
         </div>
       </div>
       <!--
@@ -344,7 +351,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         那列表就不用显示这么多信息了」）：采纳"列表只做扫读、明细看详情"的结构。
         列表瘦身为 **7 列**（合计约 686px，容器约 963px）：富余的 ~277px 全部补给两个 min-width 列
         （产品名称/等级分布）⇒ 基本不再出现省略号；
-        「收货仓库 / 物流单号 / 备注 / 附件」+ SKU / 退不良规格 / 记录ID / 创建时间
+        「收货仓库 / 物流单号 / 备注 / 附件」+ SKU / 加工退货规格 / 记录ID / 创建时间
         **一律移入行内「详情」抽屉**（见下方 el-drawer）。
         ⚠️ 日后加列前先算总宽：容器 ≈ window.innerWidth − 299（1262px 窗口 → 963px），别又撑出横向滚动。
       -->
@@ -412,9 +419,9 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
       <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="handleSubmit()">保存</el-button></template>
     </el-dialog>
 
-    <!-- 退不良弹窗 -->
-    <el-dialog v-model="defectVisible" title="退不良（拆分还料）" width="780px" :close-on-click-modal="false">
-      <el-form-item label="退不良仓库" style="margin-bottom:12px"><RemoteSelect v-model="defectWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择扣减的成品仓库" @change="onDefectWhChange" /></el-form-item>
+    <!-- 加工退货弹窗（原名「退不良（拆分还料）」，2026-09-21 按用户口径改文案） -->
+    <el-dialog v-model="defectVisible" title="加工退货（拆分还料）" width="780px" :close-on-click-modal="false">
+      <el-form-item label="加工退货仓库" style="margin-bottom:12px"><RemoteSelect v-model="defectWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择扣减的成品仓库" @change="onDefectWhChange" /></el-form-item>
       <el-table :data="defectItems" border size="small">
         <el-table-column prop="productName" label="产品" min-width="160" />
         <el-table-column label="A规" width="130"><template #default="{ row }"><div style="font-size:var(--app-font-xs);color:var(--app-text-regular)">库存 {{ row.stocks?.a ?? 0 }}</div><el-input-number v-model="row.aQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" /></template></el-table-column>
@@ -422,7 +429,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         <el-table-column label="C规" width="130"><template #default="{ row }"><div style="font-size:var(--app-font-xs);color:var(--app-text-regular)">库存 {{ row.stocks?.c ?? 0 }}</div><el-input-number v-model="row.cQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" /></template></el-table-column>
         <el-table-column label="不良" width="130"><template #default="{ row }"><div style="font-size:var(--app-font-xs);color:var(--app-text-regular)">库存 {{ row.stocks?.defect ?? 0 }}</div><el-input-number v-model="row.defectQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" /></template></el-table-column>
       </el-table>
-      <template #footer><el-button @click="defectVisible = false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认退不良</el-button></template>
+      <template #footer><el-button @click="defectVisible = false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认加工退货</el-button></template>
     </el-dialog>
 
     <!--
@@ -441,7 +448,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         <!-- SKU：原先任何界面都看不到 -->
         <el-descriptions-item label="SKU">{{ skuOf(detailRow) }}</el-descriptions-item>
         <el-descriptions-item label="类型">{{ typeTextOf(detailRow) }}</el-descriptions-item>
-        <el-descriptions-item label="退不良规格">{{ qualityTextOf(detailRow) }}</el-descriptions-item>
+        <el-descriptions-item label="加工退货规格">{{ qualityTextOf(detailRow) }}</el-descriptions-item>
         <el-descriptions-item label="收货仓库">{{ warehouseNameOf(detailRow) }}</el-descriptions-item>
         <el-descriptions-item label="物流单号">{{ detailRow.trackingNo || '-' }}</el-descriptions-item>
         <el-descriptions-item label="A规数量">{{ detailRow.aQty || 0 }}</el-descriptions-item>

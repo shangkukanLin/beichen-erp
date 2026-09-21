@@ -252,6 +252,8 @@
   "opt_loss_broken": "破损",
   "opt_expense_other": "其他",
   "btn_return": "退货",
+  "btn_mfg_return": "加工退货",
+  "btn_confirm_mfg_return": "确认加工退货",
   "btn_bom_snapshot": "历史快照",
   "tab_bom_info": "BOM信息",
   "txt_bom_version": "BOM版本",

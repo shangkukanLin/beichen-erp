@@ -69,7 +69,7 @@ onActivated(loadData)
            由弹性列「产品」min-width 等量减回（100→77）；②新增行内「退货」按钮（良品退回加工厂 →
            加工退货单），操作列 84→138，由「加工单号 −12、下单/已收/剩余 −10、收货进度 −8、
            最近收货 −8、计划完成 −8、状态 −8」抵平。
-           2026-09-21（用户口径「成品收货页只留退不良、退回走红冲收货」）：**移除**行内「退货」按钮 ⇒
+           2026-09-21（用户口径「成品收货页只留加工退货、退回走红冲收货」）：**移除**行内「退货」按钮 ⇒
            操作列 124→84；腾出的 40px **自动归弹性列「产品」**（无需手工抵平，合计仍 ≤ 容器 ⇒ 依旧不横向滑动）。 -->
       <el-table :data="tableData" border stripe v-loading="loading" style="width:100%" @row-click="goDetail">
         <el-table-column label="加工单号" width="140" show-overflow-tooltip>
@@ -101,7 +101,7 @@ onActivated(loadData)
         <el-table-column label="操作" width="84" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDelivery(row)">收货</el-button>
-            <!-- 2026-09-21（用户口径）：退回进详情页做「退不良」红冲收货，原「退货」按钮已移除 -->
+            <!-- 2026-09-21（用户口径）：退回进详情页做「加工退货」红冲收货，原「退货」按钮已移除 -->
           </template>
         </el-table-column>
       </el-table>

@@ -96,27 +96,29 @@ if ($d3) {
 # ④ 关闭弹窗后：汇总卡 / 收货记录 / 返回列表
 EvalJs "(()=>{const d=[...document.querySelectorAll('.el-dialog')].find(x=>x.offsetParent!==null);if(d){const btns=[...d.querySelectorAll('button')];for(const b of btns){if(b.innerText.trim()==='取消'){b.click();return 'cancel'}}}return 'none'})()" | Out-Null
 agent-browser wait 1600
-$d4 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({sum:t.includes('订单总量')&&t.includes('已收数量')&&t.includes('剩余数量'),rec:t.includes('收货记录'),back:t.includes('返回列表'),ret:b.some(x=>x==='退货'),def:b.includes('退不良')});})()" '收货详细页'
+$d4 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({sum:t.includes('订单总量')&&t.includes('已收数量')&&t.includes('剩余数量'),rec:t.includes('收货记录'),back:t.includes('返回列表'),ret:b.some(x=>x==='退货'),mfg:b.some(x=>x==='加工退货'),old:b.some(x=>x==='退不良')});})()" '收货详细页'
 if ($d4) {
   if ($d4.sum) { Ok '收货详细页有汇总卡（订单总量/已收数量/剩余数量）' } else { Bad '收货详细页缺少汇总卡' }
   if ($d4.rec) { Ok '收货详细页有「收货记录」区块' } else { Bad '收货详细页缺少「收货记录」区块' }
   if ($d4.back) { Ok '收货详细页有「返回列表」按钮' } else { Bad '收货详细页缺少「返回列表」按钮' }
-  # 2026-09-21（用户口径）：本页**只保留「退不良」**（红冲收货，记录挂在这张委外加工单上），
-  # 「退货」入口（跳独立加工退货单）已整体移除 —— 两条断言一起锁住，防止日后被加回来。
+  # 2026-09-21（用户口径）：本页**只保留「加工退货」**（红冲收货，记录挂在这张委外加工单上）：
+  # 「退货」入口（跳独立加工退货单）已整体移除；原「退不良」按钮 2026-09-21 按用户口径改文案为
+  # 「加工退货」（实现不变，仍是负数红冲）。三条断言一起锁住，防止日后被加回来或改回去。
   if (-not $d4.ret) { Ok '收货详细页已无「退货」入口' } else { Bad '收货详细页仍出现「退货」按钮（应已移除）' }
-  if ($d4.def) { Ok '收货详细页有「退不良」入口（红冲收货）' } else { Bad '收货详细页缺少「退不良」按钮' }
+  if ($d4.mfg) { Ok '收货详细页有「加工退货」入口（红冲收货）' } else { Bad '收货详细页缺少「加工退货」按钮' }
+  if (-not $d4.old) { Ok '收货详细页已无「退不良」字样（已按口径改名为加工退货）' } else { Bad '收货详细页仍出现「退不良」按钮' }
 }
 
 # ⑤ 加工单详情：页签已无「交货管理」，改由「成品收货」按钮跳转
 $oid = if ($d3 -and $d3.p -match '(\d+)$') { $Matches[1] } else { '' }
 if ($oid) {
   OpenFresh "$base/outsource/order/detail/$oid"
-  $d5 = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim());const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:t,hasDelivery:false,hasBtn:(b.includes('成品收货')==true),hasDefect:(b.includes('退不良')==true)});})()" '加工单详情'
+  $d5 = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim());const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:t,hasDelivery:false,hasBtn:(b.includes('成品收货')==true),hasDefect:(b.includes('退不良')==true),hasMfg:(b.includes('加工退货')==true)});})()" '加工单详情'
   if ($d5) {
     Write-Output ('加工单详情 页签 = ' + ($d5.tabs -join ' | '))
     if (($d5.tabs -join ',') -match '交货管理') { Bad '加工单详情仍有「交货管理」页签（应已移出）' } else { Ok '加工单详情已无「交货管理」页签' }
     if ($d5.hasBtn) { Ok '加工单详情有「成品收货」跳转按钮' } else { Bad '加工单详情缺少「成品收货」跳转按钮' }
-    if (-not $d5.hasDefect) { Ok '加工单详情已无「退不良」按钮（随交货管理移出）' } else { Bad '加工单详情仍有「退不良」按钮（应随交货管理移出）' }
+    if (-not $d5.hasDefect -and -not $d5.hasMfg) { Ok '加工单详情已无「退不良/加工退货」按钮（随交货管理移出）' } else { Bad ('加工单详情仍有退回按钮：defect=' + $d5.hasDefect + ' mfg=' + $d5.hasMfg) }
     # 点按钮跳转
     EvalJs "(()=>{for(const b of document.querySelectorAll('button')){if(b.innerText.trim()==='成品收货'){b.click();return 'clicked'}}return 'no-btn'})()" | Out-Null
     agent-browser wait 3000

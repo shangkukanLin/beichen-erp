@@ -421,7 +421,15 @@ public class OutsourceOrderDeliveryServiceImpl
         }
     }
 
-    /** 退不良：拆分产品为BOM物料还回工厂委外仓库，扣减所选成品仓库库存 */
+    /**
+     * 加工退货：拆分产品为 BOM 物料还回工厂委外仓库，并扣减所选成品仓库存。
+     * <p>2026-09-21（用户口径）：**成品收货页把这个动作叫「加工退货」**（原「退不良」），实现完全不变
+     * —— 往 `outsource_order_delivery` 写一条**负数**记录（`delivery_type=DEFECT_RETURN`、
+     * `is_reverse=1`），审核时由 {@link #applyDefectStock} 落账（扣成品 + BOM 料还回工厂委外仓 + 冲减应付）。</p>
+     * <p>⚠️ 枚举值 / DB 列名 / 服务方法名**一律不动**（物料收货页那边仍叫「退不良」）；但下面
+     * **会弹给用户的提示语**已随之改成「加工退货」，避免界面叫加工退货、一报错又弹「退不良」。
+     * 内部注释与日志保留原词（用户不可见）。</p>
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void returnDefect(Long orderId, Map<String, Object> body) {
@@ -429,28 +437,28 @@ public class OutsourceOrderDeliveryServiceImpl
         OutsourceOrder order = orderService.getById(orderId);
         if (order == null) throw new BusinessException("加工单不存在");
         if (!OutsourceOrderStatus.PRODUCING.getCode().equals(order.getStatus()) && !OutsourceOrderStatus.FINISHED.getCode().equals(order.getStatus()))
-            throw new BusinessException("只有生产中或已完成的加工单可退不良");
+            throw new BusinessException("只有生产中或已完成的加工单可以做加工退货");
 
         Long productId = body.get("productId") != null ? Long.valueOf(body.get("productId").toString()) : null;
         if (productId == null) throw new BusinessException("产品ID不能为空");
         // F7-65②（2026-09-20）：数量缺失/畸形时给业务提示（原先 `body.get("quantity").toString()` 直接 NPE ⇒ 500）
         Object defectQtyObj = body.get("quantity");
         if (defectQtyObj == null || defectQtyObj.toString().isBlank())
-            throw new BusinessException("退不良数量不能为空");
+            throw new BusinessException("加工退货数量不能为空");
         BigDecimal defectQty;
         try {
             defectQty = new BigDecimal(defectQtyObj.toString());
         } catch (NumberFormatException e) {
-            throw new BusinessException("退不良数量格式不正确：" + defectQtyObj);
+            throw new BusinessException("加工退货数量格式不正确：" + defectQtyObj);
         }
         // 退不良规格：A/B/C/DEFECT，缺省按 A 规处理（兼容旧调用）
         String qualityType = body.get("qualityType") != null && !body.get("qualityType").toString().isBlank()
                 ? body.get("qualityType").toString() : "A";
-        if (!isValidQualityType(qualityType)) throw new BusinessException("非法的退不良规格: " + qualityType);
+        if (!isValidQualityType(qualityType)) throw new BusinessException("非法的加工退货规格: " + qualityType);
         Long warehouseId = body.get("warehouseId") != null
                 ? Long.valueOf(body.get("warehouseId").toString()) : null;
-        if (warehouseId == null) throw new BusinessException("请选择退不良仓库");
-        if (defectQty.compareTo(BigDecimal.ZERO) <= 0) throw new BusinessException("退不良数量必须大于0");
+        if (warehouseId == null) throw new BusinessException("请选择加工退货仓库");
+        if (defectQty.compareTo(BigDecimal.ZERO) <= 0) throw new BusinessException("加工退货数量必须大于0");
 
         // 匹配产品
         List<OutsourceOrderProduct> products = orderService.getProducts(orderId);
@@ -476,7 +484,7 @@ public class OutsourceOrderDeliveryServiceImpl
                 .map(d -> d.getQuantity() != null && d.getQuantity().signum() < 0 ? d.getQuantity().abs() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (returnedQty.add(defectQty).compareTo(deliveredQty) > 0)
-            throw new BusinessException("累计退不良数量(" + returnedQty.add(defectQty) + ")不能超过已收数量(" + deliveredQty + ")");
+            throw new BusinessException("累计加工退货数量(" + returnedQty.add(defectQty) + ")不能超过已收数量(" + deliveredQty + ")");
 
         // 校验该规格仓库成品库存（按产品主数据ID+规格定位）
         WarehouseStock stock = stockMapper.selectOne(
@@ -502,7 +510,9 @@ public class OutsourceOrderDeliveryServiceImpl
         delivery.setDeliveryType(DeliveryType.DEFECT_RETURN.getCode());
         delivery.setWarehouseId(warehouseId);
         delivery.setDeliveryDate(LocalDate.now());
-        delivery.setRemark(DeliveryType.DEFECT_RETURN.getLabel());
+        // 2026-09-21（用户口径）：本页把该动作叫「加工退货」，备注快照随之改（枚举 label 仍为「退不良」，
+        // 因为物料收货页共用同一枚举，不能在这里改共享文案）
+        delivery.setRemark("加工退货");
         delivery.setIsReverse(true);
         delivery.setStatus(DocStatus.DRAFT.getCode());
         baseMapper.insert(delivery);
@@ -532,7 +542,7 @@ public class OutsourceOrderDeliveryServiceImpl
         String productName = productNameOf(delivery.getOrderId(), delivery);
         BigDecimal defectQty = delivery.getQuantity().abs();
         Long warehouseId = delivery.getWarehouseId();
-        if (warehouseId == null) throw new BusinessException("退不良记录缺少仓库");
+        if (warehouseId == null) throw new BusinessException("加工退货记录缺少仓库");
 
         // 1. 扣减成品库存（按产品主数据ID+规格落账）
         Long masterId = masterIdOf(delivery);

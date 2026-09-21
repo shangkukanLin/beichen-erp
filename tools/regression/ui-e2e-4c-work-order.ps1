@@ -92,7 +92,7 @@ Write-Host ('errs=' + (Errs))
 
 Step 'defect return'
 Open "/outsource/order/delivery/$ORDID" 3000
-Write-Host ('defect btn: ' + (ClickBtn 'btn_defect'))
+Write-Host ('defect btn: ' + (ClickBtn 'btn_mfg_return'))
 Start-Sleep -Milliseconds 2000
 $dlg = "(()=>{const vis=e=>e.getClientRects().length>0;const d=[...document.querySelectorAll('.el-dialog')].filter(vis)[0];if(!d)return 'NODLG';return JSON.stringify({text:(d.innerText||'').replace(/\s+/g,' ').slice(0,200),ins:[...d.querySelectorAll('input:not([type=hidden])')].filter(vis).map((e,i)=>i+':'+(e.placeholder||e.value)),sels:[...d.querySelectorAll('.el-select')].filter(vis).length})})()"
 Write-Host ('DEFECTDLG ' + (EvalJs $dlg))
@@ -101,7 +101,7 @@ Start-Sleep -Milliseconds 1400
 Write-Host ('pick wh: ' + (PickOptionContains (ZH 'pfx_wh')))
 Write-Host ('A qty: ' + (DialogSetInput 1 '4'))
 Start-Sleep -Milliseconds 600
-Write-Host ('confirm defect: ' + (ClickDialogBtn 'btn_confirm_defect'))
+Write-Host ('confirm defect: ' + (ClickDialogBtn 'btn_confirm_mfg_return'))
 Start-Sleep -Milliseconds 3000
 Write-Host ('msg=' + (Txt '.el-message') + ' errs=' + (Errs))
 Open '/inventory/stock' 2600
@@ -113,7 +113,7 @@ Step 'audit defect record'
 Open "/outsource/order/delivery/$ORDID" 3000
 $r = Rows 0
 foreach ($rw in $r.rows) { Write-Host ('rec=' + ($rw -join ' | ')) }
-$idx = [int](FindRow (ZH 'btn_defect'))
+$idx = [int](FindRow (ZH 'btn_mfg_return'))
 Write-Host ('defect rec idx=' + $idx)
 if ($idx -ge 0) {
   Write-Host ('audit: ' + (ClickRowBtnContains $idx (ZH 'btn_audit')))
