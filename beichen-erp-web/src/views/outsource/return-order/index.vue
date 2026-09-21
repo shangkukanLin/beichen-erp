@@ -7,9 +7,13 @@
  * 它们本来就是同一条负数收货记录（`delivery_type=DEFECT_RETURN`、`is_reverse=1`），审核/反审核/删除
  * 也走同一套端点，所以合并成一张表不需要任何"按来源分派动作"的分支。</p>
  *
- * <p>三个页签：①**不良退货**＝红冲收货台账（有单+无单，本页可新增"无单"那条）②**历史不良退货单**
- * ＝上一代的独立退货单（2026-09-21 起停止新增，只在存在存量单据时出现，仅供审核/反审核/作废）
- * ③**维修退货**＝售后品推给工厂维修（送修/返回/结案）。</p>
+ * <p>两个页签：①**不良退货**＝红冲收货台账（有单+无单，本页可新增"无单"那条）②**维修退货**
+ * ＝售后品推给工厂维修（送修/返回/结案）。</p>
+ *
+ * <p>2026-09-21（用户口径「统一命名」+「历史不良退货单不要了」）：动作名统一成**不良退货**
+ * （加工单收货详细页的按钮同步改名）；上一代独立不良退货单（`outsource_return_order` 的 DEFECT，
+ * 已停止新增）**不再单独列页签** —— 存量单据如需反审核/作废，走详情页 URL 直达
+ * （`/outsource/return-order/detail/{id}`）。</p>
  */
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
@@ -20,11 +24,9 @@ import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_K
 
 const router = useRouter()
 
-/** 页签：DEFECT=不良退货（红冲收货台账）/ DEFECT_LEGACY=历史不良退货单 / REPAIR=维修退货 */
-type TabKey = 'DEFECT' | 'DEFECT_LEGACY' | 'REPAIR'
+/** 页签：DEFECT=不良退货（红冲收货台账）/ REPAIR=维修退货（独立退货单） */
+type TabKey = 'DEFECT' | 'REPAIR'
 const activeTab = ref<TabKey>('DEFECT')
-/** 独立退货单的类型（历史页签=DEFECT / 维修页签=REPAIR），驱动 /outsource/return-order/page 查询 */
-const activeType = ref<string>(OutsourceReturnType.DEFECT)
 /** 维修退货的返回进度筛选（2026-09-17）：PENDING_RETURN 还有未返回 / CLOSED 已结案 */
 const progress = ref<string>('')
 
@@ -121,41 +123,28 @@ async function submitNoOrder() {
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { noOrderSaving.value = false }
 }
 
-// ==================== ②③ 独立退货单（历史不良退货单 / 维修退货） ====================
+// ==================== ② 独立退货单（维修退货） ====================
 const loading = ref(false)
 const list = ref<any[]>([])
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
-/** 历史不良退货单存量数：>0 才显示该页签（2026-09-21 起不再新增，存量清完页签自动消失） */
-const legacyTotal = ref(0)
 
 async function loadData() {
   loading.value = true
   try {
     const r = await request.get<any, any>('/outsource/return-order/page', {
       params: {
-        pageNum: pagination.pageNum, pageSize: pagination.pageSize, returnType: activeType.value,
-        progress: activeType.value === OutsourceReturnType.REPAIR ? (progress.value || undefined) : undefined
+        pageNum: pagination.pageNum, pageSize: pagination.pageSize, returnType: OutsourceReturnType.REPAIR,
+        progress: progress.value || undefined
       }
     })
     list.value = r?.records || []; pagination.total = r?.total || 0
   } finally { loading.value = false }
 }
-/** 拉一次存量数，决定"历史不良退货单"页签是否出现 */
-async function loadLegacyTotal() {
-  try {
-    const r = await request.get<any, any>('/outsource/return-order/page', {
-      params: { pageNum: 1, pageSize: 1, returnType: OutsourceReturnType.DEFECT }
-    })
-    legacyTotal.value = Number(r?.total || 0)
-    if (legacyTotal.value === 0 && activeTab.value === 'DEFECT_LEGACY') activeTab.value = 'DEFECT'
-  } catch { legacyTotal.value = 0 }
-}
 
-/** 切页签：不良退货看台账、历史/维修看独立退货单；分页与进度筛选各自重置 */
+/** 切页签：不良退货看台账、维修退货看独立退货单；分页与进度筛选各自重置 */
 function handleTabChange() {
   pagination.pageNum = 1; ledgerPage.pageNum = 1; progress.value = ''
   if (activeTab.value === 'DEFECT') { loadLedger(); return }
-  activeType.value = activeTab.value === 'REPAIR' ? OutsourceReturnType.REPAIR : OutsourceReturnType.DEFECT
   loadData()
 }
 
@@ -195,7 +184,6 @@ function handleEdit(row: any) { router.push(`/outsource/return-order/edit/${row.
 function goOrder(row: any) { if (row.orderId) router.push(`/outsource/order/detail/${row.orderId}`) }
 
 function reloadCurrent() {
-  loadLegacyTotal()
   if (activeTab.value === 'DEFECT') loadLedger()
   else loadData()
 }
@@ -207,7 +195,7 @@ onActivated(() => {
     reloadCurrent()
   }
 })
-onMounted(() => { loadLegacyTotal(); loadLedger() })
+onMounted(() => { loadLedger() })
 
 </script>
 
@@ -215,12 +203,12 @@ onMounted(() => { loadLegacyTotal(); loadLedger() })
   <div style="display:flex;flex-direction:column;gap:12px">
     <el-card shadow="never">
       <!-- 新增入口按页签切换（2026-09-21 用户口径）：不良退货页只新增"无单"那种（有单的请到加工单收货详细页），
-           维修退货页新增独立维修退货单；历史页签只读（上一代单据，只保留审核/反审核/作废）。 -->
+           维修退货页新增独立维修退货单。 -->
       <template v-if="activeTab === 'DEFECT'">
         <el-button type="danger" :icon="'Plus'" @click="openNoOrder">新增无单不良退货</el-button>
         <span style="margin-left:12px;color:var(--app-text-secondary);font-size:var(--app-font-xs);line-height:1.6">
           退回某批已收成品、但**不挂加工单**（单据已结／无需挂单）时在此登记；<b>有关联加工单的退回</b>请到该加工单的
-          收货详细页用「加工退货」—— 两者是同一个动作（红冲收货），都会出现在下方同一张表里，用「关联加工单」列区分。
+          收货详细页用「不良退货」—— 两者是同一个动作（红冲收货），都会出现在下方同一张表里，用「关联加工单」列区分。
         </span>
       </template>
       <template v-else-if="activeTab === 'REPAIR'">
@@ -234,11 +222,10 @@ onMounted(() => { loadLegacyTotal(); loadLedger() })
       </template>
     </el-card>
     <el-card shadow="never">
-      <!-- 页签（2026-09-21）：不良退货 = 红冲收货台账（有单+无单一张表）；历史不良退货单 = 上一代独立单据
-           （仅在存有历史单据时出现）；维修退货 = 售后送修（送修/返回/结案）。 -->
+      <!-- 页签（2026-09-21）：不良退货 = 红冲收货台账（有单+无单一张表）；维修退货 = 售后送修（送修/返回/结案）。
+           ⚠️ 上一代独立不良退货单不再单独列页签（用户口径「不要了」）⇒ 存量单据走详情页 URL 直达。 -->
       <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
         <el-tab-pane :label="OutsourceReturnTypeLabel[OutsourceReturnType.DEFECT]" name="DEFECT" />
-        <el-tab-pane v-if="legacyTotal > 0" label="历史不良退货单" name="DEFECT_LEGACY" />
         <el-tab-pane :label="OutsourceReturnTypeLabel[OutsourceReturnType.REPAIR]" name="REPAIR" />
       </el-tabs>
 
@@ -297,22 +284,19 @@ onMounted(() => { loadLegacyTotal(); loadLedger() })
         </div>
       </template>
 
-      <!-- ============ ②③ 独立退货单：历史不良退货单（只读存量）/ 维修退货 ============ -->
+      <!-- ============ ② 独立退货单：维修退货（送修 / 返回 / 结案） ============ -->
       <template v-else>
         <!-- 列宽合计 ≈932px（**留余量**）＜ 内容区，保证「一行显示完、不横向滑动」。
              注意：行数多时出现纵向滚动条会让内容区从 963 缩到约 948，故按 948 兜底。
-             2026-09-17：①**去掉「类型」列**——页面已按类型分页签；②压缩各列解决原先 1252px 宽导致状态/操作被挤出屏幕的问题。 -->
+             2026-09-17：①**去掉「类型」列**——页面已按类型分页签；②压缩各列解决原先 1252px 宽导致状态/操作被挤出屏幕的问题。
+             2026-09-21：不良退货已迁到「不良退货」页签（另一张台账表），本表只剩维修退货 ⇒ 去掉「关联加工单」列。 -->
         <el-table :data="list" border stripe v-loading="loading" @row-click="(row: any) => router.push(`/outsource/return-order/detail/${row.id}`)">
           <el-table-column prop="code" label="退货单号" width="140" />
           <el-table-column label="加工厂" width="120" show-overflow-tooltip>
             <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
           </el-table-column>
-          <!-- 不良退货：可关联加工单（也可不关联，按 BOM 快照带料）；维修退货不关联加工单，该列换「送修/已返回」 -->
-          <el-table-column v-if="activeType === OutsourceReturnType.DEFECT" label="关联加工单" width="120" show-overflow-tooltip>
-            <template #default="{ row }"><span v-if="row.orderCode">{{ row.orderCode }}</span><span v-else style="color:var(--app-text-placeholder)">未关联</span></template>
-          </el-table-column>
           <!-- 送修 / 已返回（2026-09-17）：橙=工厂还没送完、绿=已全部送回；结案入口见操作列 -->
-          <el-table-column v-else label="送修/已返回" width="110" align="center" show-overflow-tooltip>
+          <el-table-column label="送修/已返回" width="110" align="center" show-overflow-tooltip>
             <template #default="{ row }">
               <span :style="{ color: Number(row.unreturnedQty) > 0 ? 'var(--app-color-warning)' : 'var(--app-color-success)', fontWeight: 500 }"
                 :title="Number(row.unreturnedQty) > 0 ? ('还有 ' + row.unreturnedQty + ' 件未返回') : '已全部返回'">
