@@ -79,13 +79,11 @@ function openRow(row: any) {
 }
 
 async function handleAudit(row: any) {
-  const loss = Number(row.lossAmount) || 0
-  const lossTip = loss > 0 ? `\n并将生成一条向客户收取的折损应收 ${loss.toFixed(2)} 元（台账单号 ${row.code}-LOSS）。` : ''
   // 2026-09-20（F7-173）：confirm 与业务请求**必须各自 try/catch** —— 原先共用一个 try/catch，
   // `catch { /* 取消 */ }` 会把**接口报错也当成"用户取消"静默吞掉**；审核/反审核/删除都是**不可逆库存动作**，
   // 失败却无任何提示（用户以为是自己点了取消）。同单据 `detail.vue:78-98` 已是正确范式，此处对齐。
   try {
-    await ElMessageBox.confirm(`确认审核单号「${row.code}」？审核后将从成品仓扣减待分类品并分品质入库（A/B/C/不良 均入成品仓，按品质区分）。${lossTip}`, '审核确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确认审核单号「${row.code}」？审核后将从成品仓扣减待分类品并分品质入库（A/B/C/不良 均入成品仓，按品质区分）。`, '审核确认', { type: 'warning' })
   } catch { return }
   try {
     await auditReturnSort(row.id)
@@ -230,7 +228,6 @@ async function submitBatch() {
   }
   batchSaving.value = true
   try {
-    // 不传 lossAmount：折损收款按单填写（批量若带上会在每张草稿上各生成一条应收）
     const data = {
       pendingIds: selectedIds.value,
       defaultQuality: batchForm.defaultQuality,
@@ -446,12 +443,6 @@ onActivated(() => {
             <el-table-column label="整理概况" min-width="220" show-overflow-tooltip>
               <template #default="{ row }">{{ row.sortSummary || '—' }}</template>
             </el-table-column>
-            <el-table-column label="折损收款" width="110" align="right">
-              <template #default="{ row }">
-                <span v-if="Number(row.lossAmount) > 0" style="color:#e6a23c;font-weight:600">{{ Number(row.lossAmount).toFixed(2) }}</span>
-                <span v-else>-</span>
-              </template>
-            </el-table-column>
             <el-table-column label="状态" width="90">
               <template #default="{ row }">
                 <el-tag :type="DocStatusTag[row.status]||'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
@@ -479,7 +470,7 @@ onActivated(() => {
     <el-dialog v-model="batchVisible" title="批量生成整理草稿" width="720px">
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px"
         :title="`已勾选 ${selectedIds.length} 个来源批次 / ${selectedQty} 件`"
-        description="服务端按 (仓库, 客户) 各生成一张草稿（一张整理单只对应一个客户）；分选数量先按所选品质整批预置，之后可到「整理单」里按单调整。折损收款请生成后按单填写。" />
+        description="服务端按 (仓库, 客户) 各生成一张草稿（一张整理单只对应一个客户）；分选数量先按所选品质整批预置，之后可到「整理单」里按单调整。" />
       <el-form :model="batchForm" label-width="110px">
         <el-row :gutter="12">
           <el-col :span="8">

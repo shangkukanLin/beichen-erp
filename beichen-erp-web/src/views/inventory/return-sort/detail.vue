@@ -25,8 +25,6 @@ const head = reactive({
   targetWarehouseB: undefined as number | undefined,
   targetWarehouseC: undefined as number | undefined,
   targetWarehouseDefect: undefined as number | undefined,
-  lossAmount: 0,
-  lossRemark: '',
   remark: '',
   status: DocStatus.DRAFT as string,
   createTime: ''
@@ -54,7 +52,6 @@ async function loadDetail() {
       code: io.code, warehouseId: io.warehouseId, sortDate: io.sortDate,
       targetWarehouseA: io.targetWarehouseA, targetWarehouseB: io.targetWarehouseB,
       targetWarehouseC: io.targetWarehouseC, targetWarehouseDefect: io.targetWarehouseDefect,
-      lossAmount: Number(io.lossAmount || 0), lossRemark: io.lossRemark || '',
       remark: io.remark, status: io.status, createTime: io.createTime
     })
     items.value = await getReturnSortItems(id) || []
@@ -73,10 +70,8 @@ function goSource(row: any) {
 }
 
 async function doAudit() {
-  const loss = Number(head.lossAmount) || 0
-  const lossTip = loss > 0 ? `\n并将生成一条向客户收取的折损应收 ${loss.toFixed(2)} 元（台账单号 ${head.code}-LOSS）。` : ''
   try {
-    await ElMessageBox.confirm(`确认审核单号「${head.code}」？审核后将从成品仓扣减待分类品并分品质入库（A/B/C/不良 均入成品仓，按品质区分）。${lossTip}`, '审核确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确认审核单号「${head.code}」？审核后将从成品仓扣减待分类品并分品质入库（A/B/C/不良 均入成品仓，按品质区分）。`, '审核确认', { type: 'warning' })
   } catch { return }
   acting.value = true
   try {
@@ -136,12 +131,7 @@ onActivated(() => { loadDetail() })
           <el-button v-if="head.targetWarehouseDefect" type="primary" link @click="goWarehouse(head.targetWarehouseDefect)">{{ warehouseName(head.targetWarehouseDefect) }}</el-button>
           <span v-else>—</span>
         </el-descriptions-item>
-        <el-descriptions-item label="折损收款">
-          <span v-if="Number(head.lossAmount) > 0" style="color:#e6a23c;font-weight:600">{{ Number(head.lossAmount).toFixed(2) }}</span>
-          <span v-else>—</span>
-        </el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ head.createTime || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="折损说明" :span="2">{{ head.lossRemark || '—' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ head.remark || '—' }}</el-descriptions-item>
       </el-descriptions>
 

@@ -25,7 +25,7 @@ import java.util.*;
 /**
  * 财务分析 Service 实现：纯查询聚合，不改任何业务数据。
  * <p>口径（2026-09-11 起，P2-27 定稿为"销售成本"口径；**归期 2026-09-15 全站统一为「建单日」create_time**）：
- * 收入 = 已审核销售单(create_time 归月) − 销售退货(create_time) + 退货折损收款；
+ * 收入 = 已审核销售单(create_time 归月) − 销售退货(create_time)（2026-09-21 起不再加退货折损收款）；
  * 成本 = Σ(销售明细数量 − 退货明细数量) × 产品当前移动加权成本价 {@code product.cost_price}
  * （与客户分析/销售分析同源，保证跨页面"毛利"可对账）；
  * 费用 = 已审核费用单(create_time 归月)；净利润 = 毛利 − 费用；现金流 = 资金流水按月收 − 支。
@@ -197,14 +197,15 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
 
     /**
      * 单日 4 指标（**区间汇总 sumKpi 与趋势序列 buildSeries 共用**，避免两处口径漂移）：
-     * 销售金额 = 销售单 − 销售退货 + 折损收款；采购支出 = 采购单 − 采购退货（采购入库属资产、不计入损益）；
+     * 销售金额 = 销售单 − 销售退货（2026-09-21 起**不含**折损收款：该收费已取消）；采购支出 = 采购单 − 采购退货（采购入库属资产、不计入损益）；
      * 费用支出 = 费用单；净利润 = 销售金额 − 销售成本 − 费用支出（销售成本 = 销售出库成本 − 退货冲回成本）。
      */
     private Map<String, BigDecimal> dayKpi(Map<String, Map<String, BigDecimal>> dm, LocalDate d) {
         String k = d.toString();
         BigDecimal sale = dm.get("sale").getOrDefault(k, ZERO)
-                .subtract(dm.get("saleRet").getOrDefault(k, ZERO))
-                .add(dm.get("loss").getOrDefault(k, ZERO));
+                .subtract(dm.get("saleRet").getOrDefault(k, ZERO));
+        // 2026-09-21（用户口径：现在没有折损收款了）：不再把退货折损收款并入营业收入，
+        // 与前端 KPI_FORMULA.sale 的文案保持一致（dm 里的 loss 仍加载但不参与计算，避免口径两处漂移）。
         BigDecimal cost = dm.get("saleCost").getOrDefault(k, ZERO).subtract(dm.get("retCost").getOrDefault(k, ZERO));
         BigDecimal purchase = dm.get("purchase").getOrDefault(k, ZERO).subtract(dm.get("purchaseRet").getOrDefault(k, ZERO));
         BigDecimal expense = dm.get("expense").getOrDefault(k, ZERO);
@@ -547,7 +548,7 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         dm.put("sale", toAmtMap(analysisMapper.saleByMonth()));
         dm.put("saleRet", toAmtMap(analysisMapper.saleReturnByMonth()));
         dm.put("exp", toAmtMap(analysisMapper.expenseByMonth()));
-        // 折损收款：退货环节向客户收取的补偿，并入营业收入
+        // 折损收款：⚠️ 2026-09-21 用户口径已取消该收费，**不再并入营业收入**（仅保留加载，便于按需回溯历史）
         dm.put("loss", toAmtMap(analysisMapper.saleReturnLossByMonth()));
         // 成本（口径 B）：按天聚合结果汇总到月，保证按月与按天两条链路完全一致
         dm.put("saleCost", dayToMonthMap(analysisMapper.saleCostByDay()));

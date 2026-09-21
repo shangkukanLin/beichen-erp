@@ -42,9 +42,6 @@ const form = reactive({
   targetWarehouseB: undefined as any,
   targetWarehouseC: undefined as any,
   targetWarehouseDefect: undefined as any,
-  /** 折损收款：整理后 B/C/不良品的折损，向客户收取，审核后生成一条正向应收（单号 -LOSS） */
-  lossAmount: 0,
-  lossRemark: '',
   remark: ''
 })
 const items = ref<any[]>([])
@@ -65,7 +62,7 @@ function resetForm() {
     sortDate: localDate(),
     targetWarehouseA: undefined, targetWarehouseB: undefined,
     targetWarehouseC: undefined, targetWarehouseDefect: undefined,
-    lossAmount: 0, lossRemark: '', remark: ''
+    remark: ''
   })
   items.value = []
 }
@@ -156,7 +153,6 @@ async function init() {
       id: io.id, warehouseId: io.warehouseId, sortDate: io.sortDate,
       targetWarehouseA: io.targetWarehouseA, targetWarehouseB: io.targetWarehouseB,
       targetWarehouseC: io.targetWarehouseC, targetWarehouseDefect: io.targetWarehouseDefect,
-      lossAmount: Number(io.lossAmount || 0), lossRemark: io.lossRemark || '',
       remark: io.remark
     })
     const its = await getReturnSortItems(id.value)
@@ -205,7 +201,6 @@ async function handleSave() {
     ElMessage.warning('请选择 A规/B规/C规/不良 的目标入库仓库'); return
   }
   if (items.value.length === 0) { ElMessage.warning('请先加载成品仓待整理库存并录入分选数量'); return }
-  if (Number(form.lossAmount) < 0) { ElMessage.warning('折损收款金额不能为负数'); return }
   for (const it of items.value) {
     if (!it.totalQuantity || it.totalQuantity <= 0) { ElMessage.warning(`产品「${it.productName || it.productId}」待整理数量必须大于0`); return }
     if (it.available != null && it.totalQuantity > it.available) {
@@ -285,20 +280,6 @@ watch(() => route.fullPath, () => { init() })
           <el-col :span="6">
             <el-form-item label="不良入库仓" required>
               <RemoteSelect v-model="form.targetWarehouseDefect" :fetch="fetchFinishedWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择成品仓" style="width:100%" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <!-- 折损收款：整理后才知道 B/C/不良 各多少，因此金额挂在本单而非销售退单 -->
-        <el-row :gutter="12">
-          <el-col :span="6">
-            <el-form-item label="折损金额">
-              <el-input-number v-model="form.lossAmount" :min="0" :precision="2" :step="10"
-                controls-position="right" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="18">
-            <el-form-item label="折损说明">
-              <el-input v-model="form.lossRemark" placeholder="选填，如：C规 5 台按残值折损；审核后生成应收向客户收取" />
             </el-form-item>
           </el-col>
         </el-row>

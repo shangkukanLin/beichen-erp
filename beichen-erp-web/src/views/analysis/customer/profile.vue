@@ -217,8 +217,8 @@ onUnmounted(() => {
         <div class="stat-value sm" :style="{color: Number(summary.profit)>=0?'var(--app-color-success)':'var(--app-color-danger)', fontWeight:'600'}">{{ fmtN(summary.profit) }}</div>
       </div>
       <div class="stat-card mini">
-        <div class="stat-label">订单数 / 折损收款</div>
-        <div class="stat-value sm">{{ summary.orderCount || 0 }} 单 / {{ fmtN(summary.lossAmount) }}</div>
+        <div class="stat-label">订单数</div>
+        <div class="stat-value sm">{{ summary.orderCount || 0 }} 单</div>
       </div>
     </div>
 
@@ -293,7 +293,6 @@ onUnmounted(() => {
         <el-table-column label="数量" min-width="76" align="right"><template #default="{row}">{{ fmt(row.quantity) }}</template></el-table-column>
         <el-table-column label="金额" min-width="90" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.amount) }}</span></template></el-table-column>
         <el-table-column prop="chargeType" label="收费类型" min-width="90" align="center"/>
-        <el-table-column label="折损收款" min-width="88" align="right"><template #default="{row}">{{ fmt(row.lossAmount) }}</template></el-table-column>
         <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip/>
       </el-table>
     </el-card>

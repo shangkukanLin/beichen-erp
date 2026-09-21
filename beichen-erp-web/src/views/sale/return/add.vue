@@ -124,9 +124,6 @@
           <el-button type="primary" plain :icon="Plus" @click="addItem">添加明细</el-button>
           <el-button type="success" plain :icon="Download" :disabled="!form.saleOrderId" @click="loadFromSaleOrder">从销售单带入明细</el-button>
           <span style="margin-left: 16px">合计金额：<b>{{ totalAmount }}</b></span>
-          <span style="margin-left: 16px; color: #909399; font-size: var(--app-font-xs)">
-            折损收款请在「退货整理单」上填写（整理后才知道 B/C/不良 各多少）
-          </span>
         </div>
       </el-form>
       <div class="footer">
