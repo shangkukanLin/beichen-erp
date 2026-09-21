@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <!-- 查询区用 4 列固定栅格（与物料交货信息一致）：行距 16 / 列距 24，控件填满格子，不随窗口流式换行 -->
+    <!-- 查询区用 4 列固定栅格（与物料收货页一致）：行距 16 / 列距 24，控件填满格子，不随窗口流式换行 -->
     <el-card shadow="never" class="query-card">
       <el-form :inline="true" :model="query" label-width="84px" class="query-form">
         <el-form-item label="报损单号">

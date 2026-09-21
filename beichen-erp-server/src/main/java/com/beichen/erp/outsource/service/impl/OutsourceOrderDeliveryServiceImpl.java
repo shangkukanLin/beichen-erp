@@ -229,7 +229,7 @@ public class OutsourceOrderDeliveryServiceImpl
         if (delivery.getProductId() == null) throw new BusinessException("产品ID不能为空");
         OutsourceOrder order = orderService.getById(delivery.getOrderId());
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!OutsourceOrderStatus.PRODUCING.getCode().equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可录入交货");
+        if (!OutsourceOrderStatus.PRODUCING.getCode().equals(order.getStatus())) throw new BusinessException("只有生产中的加工单可录入收货");
         // 工厂必须有委外仓库，否则交货时无法正确扣减我方物料
         if (resolveOutsourceWarehouseId(order) == null)
             throw new BusinessException("工厂无委外仓库，请先在【委外仓库】页面为该工厂创建委外仓库");
@@ -287,7 +287,7 @@ public class OutsourceOrderDeliveryServiceImpl
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
         OutsourceOrderDelivery delivery = baseMapper.selectById(id);
-        if (delivery == null) throw new BusinessException("交货记录不存在");
+        if (delivery == null) throw new BusinessException("收货记录不存在");
         // P2-29：原子抢占 DRAFT→AUDITED，避免并发/双击重复扣物料 + 重复入库 + 重复生成应付
         if (!DocStatusGuard.claim(baseMapper, OutsourceOrderDelivery::getId, id,
                 OutsourceOrderDelivery::getStatus, DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode())) {
@@ -315,7 +315,7 @@ public class OutsourceOrderDeliveryServiceImpl
             // ⇒ "审核通过但成品不入库，而扣料与应付照落" = 账实不符）。草稿侧已由 validateDraftPayload 保证，
             // 此处兜住"历史草稿 / 直改库"等绕过路径。
             if (delivery.getWarehouseId() == null)
-                throw new BusinessException("交货记录缺少入库仓库，无法审核（请先反审核、补全收货仓库后再审核）");
+                throw new BusinessException("收货记录缺少入库仓库，无法审核（请先反审核、补全收货仓库后再审核）");
             addInventoryStock(delivery, order.getCode());
             createDeliveryPayable(order, matchedProduct, delivery);
             // 移动加权成本：本批单位成本 = (加工费 + 耗用材料成本) ÷ 交货数量（包工包料时材料成本为 0）
@@ -340,7 +340,7 @@ public class OutsourceOrderDeliveryServiceImpl
     @Transactional(rollbackFor = Exception.class)
     public void unaudit(Long id) {
         OutsourceOrderDelivery delivery = baseMapper.selectById(id);
-        if (delivery == null) throw new BusinessException("交货记录不存在");
+        if (delivery == null) throw new BusinessException("收货记录不存在");
         // P2-29：原子抢占 AUDITED→DRAFT，避免并发反审核重复回滚库存与应付
         if (!DocStatusGuard.claim(baseMapper, OutsourceOrderDelivery::getId, id,
                 OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode())) {
@@ -369,7 +369,7 @@ public class OutsourceOrderDeliveryServiceImpl
     @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> updateDelivery(Long id, OutsourceOrderDelivery delivery, boolean forceDelivery) {
         OutsourceOrderDelivery old = baseMapper.selectById(id);
-        if (old == null) throw new BusinessException("交货记录不存在");
+        if (old == null) throw new BusinessException("收货记录不存在");
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) {
             throw new BusinessException("仅草稿状态可编辑，已审核记录请先反审核");
         }
@@ -416,7 +416,7 @@ public class OutsourceOrderDeliveryServiceImpl
                 .eq(OutsourceOrderDelivery::getId, id)
                 .eq(OutsourceOrderDelivery::getStatus, DocStatus.DRAFT.getCode()));
         if (rows == 0) {
-            if (baseMapper.selectById(id) == null) throw new BusinessException("交货记录不存在");
+            if (baseMapper.selectById(id) == null) throw new BusinessException("收货记录不存在");
             throw new BusinessException("仅草稿状态可删除，已审核记录请先反审核");
         }
     }
@@ -681,7 +681,7 @@ public class OutsourceOrderDeliveryServiceImpl
     /** 获取交货记录关联的产品主数据ID(product.id)，为 null 时抛异常，防止库存落错账 */
     private Long masterIdOf(OutsourceOrderDelivery delivery) {
         if (delivery.getProductMasterId() == null) {
-            throw new BusinessException("交货记录(id=" + delivery.getId() + ")未关联产品主数据，请先反审核后重新录入交货");
+            throw new BusinessException("收货记录(id=" + delivery.getId() + ")未关联产品主数据，请先反审核后重新录入收货");
         }
         return delivery.getProductMasterId();
     }
@@ -761,7 +761,7 @@ public class OutsourceOrderDeliveryServiceImpl
         }
         if (delivered.add(thisQty).compareTo(planned) > 0) {
             String pn = matched.getProductName() != null ? matched.getProductName() : ("#" + matched.getId());
-            throw new BusinessException("交货数量超过该产品剩余待交量（产品[" + pn + "]计划 "
+            throw new BusinessException("收货数量超过该产品剩余待收量（产品[" + pn + "]计划 "
                     + planned.stripTrailingZeros().toPlainString()
                     + "、已交 " + delivered.stripTrailingZeros().toPlainString()
                     + "、本次 " + thisQty.stripTrailingZeros().toPlainString() + "）");
@@ -980,7 +980,7 @@ public class OutsourceOrderDeliveryServiceImpl
      */
     private void validateDraftPayload(OutsourceOrderDelivery delivery) {
         if (delivery.getQuantity() == null || delivery.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
-            throw new BusinessException("交货数量必须大于0");
+            throw new BusinessException("收货数量必须大于0");
         BigDecimal a = delivery.getAQty() == null ? BigDecimal.ZERO : delivery.getAQty();
         BigDecimal b = delivery.getBQty() == null ? BigDecimal.ZERO : delivery.getBQty();
         BigDecimal c = delivery.getCQty() == null ? BigDecimal.ZERO : delivery.getCQty();
@@ -989,7 +989,7 @@ public class OutsourceOrderDeliveryServiceImpl
         if (gradeSum.compareTo(BigDecimal.ZERO) <= 0)
             throw new BusinessException("请至少填写一个等级的数量（A规/B规/C规/不良）");
         if (gradeSum.compareTo(delivery.getQuantity()) != 0)
-            throw new BusinessException("各等级数量之和(" + gradeSum + ")必须等于交货总数量(" + delivery.getQuantity() + ")");
+            throw new BusinessException("各等级数量之和(" + gradeSum + ")必须等于收货总数量(" + delivery.getQuantity() + ")");
         if (delivery.getWarehouseId() == null)
             throw new BusinessException("入库仓库不能为空");
     }
@@ -1016,10 +1016,10 @@ public class OutsourceOrderDeliveryServiceImpl
         BigDecimal thisQty = qty != null ? qty : BigDecimal.ZERO;
         BigDecimal total = delivered.add(thisQty);
         if (total.compareTo(orderQty) > 0) {
-            throw new BusinessException("累计交货量(" + delivered.stripTrailingZeros().toPlainString()
+            throw new BusinessException("累计收货量(" + delivered.stripTrailingZeros().toPlainString()
                     + " + 本次" + thisQty.stripTrailingZeros().toPlainString()
                     + " = " + total.stripTrailingZeros().toPlainString()
-                    + ")超出订单数量(" + orderQty.stripTrailingZeros().toPlainString() + ")，请调整交货数量");
+                    + ")超出订单数量(" + orderQty.stripTrailingZeros().toPlainString() + ")，请调整收货数量");
         }
     }
 }

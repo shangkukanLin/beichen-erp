@@ -510,7 +510,7 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
                 new LambdaQueryWrapper<OutsourceOrderDelivery>()
                         .eq(OutsourceOrderDelivery::getOrderId, id)
                         .eq(OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.getCode()));
-        if (!audited.isEmpty()) throw new BusinessException("加工单存在已审核交货单，请先反审核后再取消");
+        if (!audited.isEmpty()) throw new BusinessException("加工单存在已审核收货单，请先反审核后再取消");
         // 草稿态交货单不影响库存/账务，但订单作废后会成为孤儿记录，此处一并清理
         List<OutsourceOrderDelivery> drafts = orderDeliveryMapper.selectList(
                 new LambdaQueryWrapper<OutsourceOrderDelivery>()

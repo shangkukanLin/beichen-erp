@@ -3,8 +3,8 @@
 # 断言：① 侧栏委外加工子菜单 = sys_menu(parent_id=4, visible=1) 按 sort_order
 #          （2026-09-17 用户定稿：加工订单 → 成品收货 → 加工退货 → 物料订单 → 物料收货 → 物料退货；409 供应商管理已下线）
 #       ② /outsource/order/delivery 直达不 403，只列正在加工（PRODUCING）的加工单
-#       ③ 行内「交货」→ 进入 /outsource/order/delivery/:id 且**自动弹出新增交货弹窗**（一步交货）
-#       ④ 交货详细页有 汇总卡 / 交货记录区块 / 返回列表
+#       ③ 行内「收货」→ 进入 /outsource/order/delivery/:id 且**自动弹出新增收货弹窗**（一步收货）
+#       ④ 收货详细页有 汇总卡 / 收货记录区块 / 返回列表
 #       ⑤ 加工单详情页签已无「交货管理」，改为「成品收货」按钮跳转
 #       ⑥ /outsource/material-order/delivery 直达不 403（当前库中收货中订单 0 条属正常，只验渲染与不报错）
 $ErrorActionPreference = 'Continue'
@@ -71,33 +71,33 @@ OpenFresh "$base/outsource/order/delivery"
 $p2 = EvalJs "location.pathname"
 if ($p2 -match '/login' -or $p2 -match '403') { Bad ('/outsource/order/delivery 未正常进入，落在 ' + $p2) }
 else { Ok '/outsource/order/delivery 直达正常（非 403）' }
-$d2 = ReadJson "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const t=document.body.innerText;return JSON.stringify({n:rows.length,prod:t.includes('生产中')==true,pending:t.includes('待审核')==true,prog:t.includes('交货进度')==true,btn:t.includes('交货')==true});})()" '成品收货列表'
+$d2 = ReadJson "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const t=document.body.innerText;return JSON.stringify({n:rows.length,prod:t.includes('生产中')==true,pending:t.includes('待审核')==true,prog:t.includes('收货进度')==true,btn:t.includes('收货')==true});})()" '成品收货列表'
 if ($d2) {
   Write-Output ('成品收货列表行数 = ' + $d2.n)
   if ($d2.n -ge 1) { Ok ('列表有数据（' + $d2.n + ' 行）') } else { Bad '列表无数据（库中应有 1 张 PRODUCING 加工单）' }
-  if ($d2.prog -and $d2.btn) { Ok '列表含 交货进度 列与 交货 按钮' } else { Bad '列表缺少 交货进度 列或 交货 按钮' }
+  if ($d2.prog -and $d2.btn) { Ok '列表含 收货进度 列与 收货 按钮' } else { Bad '列表缺少 收货进度 列或 收货 按钮' }
   if ($d2.prod -and -not $d2.pending) { Ok '列表只含正在加工（生产中）的加工单' } else { Bad ('列表含非生产中订单：prod=' + $d2.prod + ' pending=' + $d2.pending) }
 }
 
-# ③ 行内「交货」→ 自动弹出新增交货弹窗（一步交货）
-$clicked = EvalJs "(()=>{const tr=document.querySelectorAll('.el-table__body tbody tr')[0];if(!tr)return 'no-row';for(const b of tr.querySelectorAll('button')){if(b.innerText.trim()==='交货'){b.click();return 'clicked'}}return 'no-btn'})()"
-Write-Output ('点击 交货 按钮 = ' + $clicked)
+# ③ 行内「收货」→ 自动弹出新增收货弹窗（一步收货）
+$clicked = EvalJs "(()=>{const tr=document.querySelectorAll('.el-table__body tbody tr')[0];if(!tr)return 'no-row';for(const b of tr.querySelectorAll('button')){if(b.innerText.trim()==='收货'){b.click();return 'clicked'}}return 'no-btn'})()"
+Write-Output ('点击 收货 按钮 = ' + $clicked)
 agent-browser wait 3200
-$d3 = ReadJson "(()=>{const d=[...document.querySelectorAll('.el-dialog')].find(x=>x.offsetParent!==null);return JSON.stringify({p:location.pathname,title:d?(d.querySelector('.el-dialog__title')?.innerText.trim()||''):''});})()" '交货详细页'
+$d3 = ReadJson "(()=>{const d=[...document.querySelectorAll('.el-dialog')].find(x=>x.offsetParent!==null);return JSON.stringify({p:location.pathname,title:d?(d.querySelector('.el-dialog__title')?.innerText.trim()||''):''});})()" '收货详细页'
 if ($d3) {
   Write-Output ('跳转后地址 = ' + $d3.p + ' / 弹窗标题 = ' + $d3.title)
-  if ($d3.p -match '^/outsource/order/delivery/\d+') { Ok ('已进入交货详细页（' + $d3.p + '）') } else { Bad ('未进入交货详细页：' + $d3.p) }
-  if ($d3.title -match '新增交货记录') { Ok '进入即自动弹出「新增交货记录」弹窗' } else { Bad ('未自动弹出新增交货弹窗，标题=' + $d3.title) }
+  if ($d3.p -match '^/outsource/order/delivery/\d+') { Ok ('已进入收货详细页（' + $d3.p + '）') } else { Bad ('未进入收货详细页：' + $d3.p) }
+  if ($d3.title -match '新增收货记录') { Ok '进入即自动弹出「新增收货记录」弹窗' } else { Bad ('未自动弹出新增收货弹窗，标题=' + $d3.title) }
 }
 
-# ④ 关闭弹窗后：汇总卡 / 交货记录 / 返回列表
+# ④ 关闭弹窗后：汇总卡 / 收货记录 / 返回列表
 EvalJs "(()=>{const d=[...document.querySelectorAll('.el-dialog')].find(x=>x.offsetParent!==null);if(d){const btns=[...d.querySelectorAll('button')];for(const b of btns){if(b.innerText.trim()==='取消'){b.click();return 'cancel'}}}return 'none'})()" | Out-Null
 agent-browser wait 1600
-$d4 = ReadJson "(()=>{const t=document.body.innerText;return JSON.stringify({sum:t.includes('订单总量')&&t.includes('已交数量')&&t.includes('剩余数量'),rec:t.includes('交货记录'),back:t.includes('返回列表')});})()" '交货详细页'
+$d4 = ReadJson "(()=>{const t=document.body.innerText;return JSON.stringify({sum:t.includes('订单总量')&&t.includes('已交数量')&&t.includes('剩余数量'),rec:t.includes('收货记录'),back:t.includes('返回列表')});})()" '收货详细页'
 if ($d4) {
-  if ($d4.sum) { Ok '交货详细页有汇总卡（订单总量/已交数量/剩余数量）' } else { Bad '交货详细页缺少汇总卡' }
-  if ($d4.rec) { Ok '交货详细页有「交货记录」区块' } else { Bad '交货详细页缺少「交货记录」区块' }
-  if ($d4.back) { Ok '交货详细页有「返回列表」按钮' } else { Bad '交货详细页缺少「返回列表」按钮' }
+  if ($d4.sum) { Ok '收货详细页有汇总卡（订单总量/已交数量/剩余数量）' } else { Bad '收货详细页缺少汇总卡' }
+  if ($d4.rec) { Ok '收货详细页有「收货记录」区块' } else { Bad '收货详细页缺少「收货记录」区块' }
+  if ($d4.back) { Ok '收货详细页有「返回列表」按钮' } else { Bad '收货详细页缺少「返回列表」按钮' }
 }
 
 # ⑤ 加工单详情：页签已无「交货管理」，改由「成品收货」按钮跳转
@@ -155,34 +155,34 @@ foreach ($u in @("$base/outsource/order/delivery", "$base/outsource/material-ord
   }
 }
 
-# ⑧b 交货详细页的「交货记录」表「一行显示完、不横向滑动」（2026-09-21 用户要求）
-#   注：⑧ 覆盖的是两个**列表页**的首张表；这里补的是**交货详细页**里的「交货记录」表
+# ⑧b 收货详细页的「收货记录」表「一行显示完、不横向滑动」（2026-09-21 用户要求）
+#   注：⑧ 覆盖的是两个**列表页**的首张表；这里补的是**收货详细页**里的「收货记录」表
 #   （该页还有一张「按产品分类统计」表 ⇒ 遍历本页所有可见表，任一张溢出即判失败）。
 #   改动背景：该表原 11 列、列宽合计 1310px，而内容区仅约 963px ⇒ 横向溢出 347px（真机实测）；
 #   现重排为 10 列约 924px（附件列并入操作列、长文本列一律 tooltip），实测 scrollWidth == clientWidth。
 if ($oid) {
   OpenFresh "$base/outsource/order/delivery/$oid"
-  $d8b = ReadJson "(()=>{const ts=[...document.querySelectorAll('.el-table')].filter(t=>t.getClientRects().length>0);return JSON.stringify(ts.map(t=>{const ths=[...t.querySelectorAll('.el-table__header th')];const sum=ths.reduce((s,x)=>s+x.offsetWidth,0);const w=t.querySelector('.el-table__body-wrapper .el-scrollbar__wrap');return {cols:ths.length,sum:sum,box:t.clientWidth,sc:t.classList.contains('el-table--scrollable-x'),over:(w?w.scrollWidth>w.clientWidth:true)};}));})()" '交货记录表宽度'
+  $d8b = ReadJson "(()=>{const ts=[...document.querySelectorAll('.el-table')].filter(t=>t.getClientRects().length>0);return JSON.stringify(ts.map(t=>{const ths=[...t.querySelectorAll('.el-table__header th')];const sum=ths.reduce((s,x)=>s+x.offsetWidth,0);const w=t.querySelector('.el-table__body-wrapper .el-scrollbar__wrap');return {cols:ths.length,sum:sum,box:t.clientWidth,sc:t.classList.contains('el-table--scrollable-x'),over:(w?w.scrollWidth>w.clientWidth:true)};}));})()" '收货记录表宽度'
   if ($d8b) {
-    Write-Output ('交货详细页 表数=' + @($d8b).Count)
+    Write-Output ('收货详细页 表数=' + @($d8b).Count)
     $i = 0
     foreach ($tb in @($d8b)) {
       $i++
       Write-Output ('  表#' + $i + ' 列数=' + $tb.cols + ' 列宽合计=' + $tb.sum + ' 容器=' + $tb.box)
-      if (-not $tb.sc -and -not $tb.over) { Ok ('交货详细页 表#' + $i + ' 无横向滚动（一行显示完）') }
-      else { Bad ('交货详细页 表#' + $i + ' 出现横向滚动条（列宽合计 ' + $tb.sum + ' vs 容器 ' + $tb.box + '）') }
+      if (-not $tb.sc -and -not $tb.over) { Ok ('收货详细页 表#' + $i + ' 无横向滚动（一行显示完）') }
+      else { Bad ('收货详细页 表#' + $i + ' 出现横向滚动条（列宽合计 ' + $tb.sum + ' vs 容器 ' + $tb.box + '）') }
     }
   }
 }
 
-# ⑧c 交货记录表结构（2026-09-21 用户建议「有一个详细会不会好一点，那列表就不用显示这么多信息了」）：
+# ⑧c 收货记录表结构（2026-09-21 用户建议「有一个详细会不会好一点，那列表就不用显示这么多信息了」）：
 #   列表瘦身为 7 列，「收货仓库 / 物流单号 / 备注 / 附件」移入行内「详情」抽屉 ⇒ 断言列数 + 详情入口，
-#   避免日后有人把列又加回列表把横向滚动带回来。（⑧b 已开着交货详细页，此处复用同一页。）
-$d8c = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-table')].filter(x=>x.getClientRects().length>0)[0];if(!t)return JSON.stringify({ok:false});const ths=[...t.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim());const tr=t.querySelector('.el-table__body tbody tr');const ops=tr?[...tr.children][[...tr.children].length-1].innerText:'';return JSON.stringify({ok:true,cols:ths.length,hasDetail:ops.indexOf('\u8BE6\u60C5')>=0});})()" '交货记录表结构'
+#   避免日后有人把列又加回列表把横向滚动带回来。（⑧b 已开着收货详细页，此处复用同一页。）
+$d8c = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-table')].filter(x=>x.getClientRects().length>0)[0];if(!t)return JSON.stringify({ok:false});const ths=[...t.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim());const tr=t.querySelector('.el-table__body tbody tr');const ops=tr?[...tr.children][[...tr.children].length-1].innerText:'';return JSON.stringify({ok:true,cols:ths.length,hasDetail:ops.indexOf('\u8BE6\u60C5')>=0});})()" '收货记录表结构'
 if ($d8c -and $d8c.ok) {
-  Write-Output ('交货记录表 列数=' + $d8c.cols)
-  if ([int]$d8c.cols -eq 7) { Ok '交货记录表已瘦身为 7 列（仓库/物流单号/备注/附件移入详情抽屉）' } else { Bad ('交货记录表列数=' + $d8c.cols + '，应为 7') }
-  if ($d8c.hasDetail) { Ok '交货记录操作列有「详情」入口' } else { Bad '交货记录操作列缺少「详情」入口' }
+  Write-Output ('收货记录表 列数=' + $d8c.cols)
+  if ([int]$d8c.cols -eq 7) { Ok '收货记录表已瘦身为 7 列（仓库/物流单号/备注/附件移入详情抽屉）' } else { Bad ('收货记录表列数=' + $d8c.cols + '，应为 7') }
+  if ($d8c.hasDetail) { Ok '收货记录操作列有「详情」入口' } else { Bad '收货记录操作列缺少「详情」入口' }
 }
 
-if ($global:fail -eq 0) { Write-Output 'RESULT PASS 成品收货/物料收货独立菜单与一步交货均正常' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }
+if ($global:fail -eq 0) { Write-Output 'RESULT PASS 成品收货/物料收货独立菜单与一步收货均正常' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }

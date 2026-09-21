@@ -169,7 +169,7 @@ async function handleSubmit() {
       if (v === '' || v === undefined) continue
       cleanForm[k] = v
     }
-    // 提交时映射 productName 为项目总成名称(与产品主数据一致)，并携带产品主数据ID(用于交货/库存落账)
+    // 提交时映射 productName 为项目总成名称(与产品主数据一致)，并携带产品主数据ID(用于收货/库存落账)
     const submitProducts = products.value.map((p:any) => {
       const proj = projectOptions.value.find((pr:any) => pr.id === p.projectId)
       return { ...p, productName: proj?.productName || proj?.name || '', productId: proj?.productId || null }

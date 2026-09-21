@@ -1,4 +1,4 @@
-﻿# Temp test 4c: work order (加工单) -> audit -> finished-goods receipt (交货) -> audit -> defect return
+﻿# Temp test 4c: work order (加工单) -> audit -> finished-goods receipt (收货) -> audit -> defect return
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 EnsureLogin
 WatchErrors

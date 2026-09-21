@@ -15,7 +15,7 @@ const tabStore = useTabStore()
 const editId = Number(route.params.id) || 0
 /**
  * 来源参数（2026-09-17）：从「成品收货」发起退货时带出。
- * <p>?sourceDeliveryId= 按某条交货记录退（带出各规格「已交 − 已退 = 可退」）；
+ * <p>?sourceDeliveryId= 按某条收货记录退（带出各规格「已交 − 已退 = 可退」）；
  * ?orderId=&factoryId= 按加工单退（列表行入口，数量留空）。</p>
  */
 const prefillDeliveryId = Number(route.query.sourceDeliveryId) || 0
@@ -38,7 +38,7 @@ const linkedOrderCode = ref('')
 /**
  * 真正要落库的「关联加工单」：可选可清空（2026-09-17）。
  * <p>选了 → 落 <code>order_id</code>（并按该单那一版 BOM 快照带料）；清空 → 不关联。
- * 来源入口（成品收货 / 交货记录）进入时自动选中。**初值必须是空（undefined）**：
+ * 来源入口（成品收货 / 收货记录）进入时自动选中。**初值必须是空（undefined）**：
  * 用 0 会被 el-select 当成"已选值"渲染成字面量 0（E2E 实证）。</p>
  */
 const linkedOrderId = ref<number | undefined>(undefined)
@@ -114,7 +114,7 @@ function createEmptyRow() {
     stock: undefined as number | undefined,
     // 该仓该产品「按规格」的库存（2026-09-17：选产品后一次取回，用于默认落在有库存的规格 + 0库存置灰）
     stockByQuality: {} as Record<string, number>, stockLoaded: false,
-    // 来源记录带出的规格：不自动改判（交货记录是什么规格就退什么规格），手工选产品时才自动挑有库存的
+    // 来源记录带出的规格：不自动改判（收货记录是什么规格就退什么规格），手工选产品时才自动挑有库存的
     qualityLocked: false
   }
 }
@@ -262,7 +262,7 @@ async function loadStockAll(idx: number) {
     }
     row.stockByQuality = map
     row.stockLoaded = true
-    // 默认规格：仅"手工选产品"时自动挑有库存的规格（来源交货记录带出的规格不动，避免把 A 规退成 B 规）
+    // 默认规格：仅"手工选产品"时自动挑有库存的规格（来源收货记录带出的规格不动，避免把 A 规退成 B 规）
     if (!row.qualityLocked && Number(row.returnQuantity) <= 0) {
       const priority = isRepair.value
         ? [ProductQualityType.DEFECT]
@@ -326,7 +326,7 @@ function refreshMerged() {
  * 工厂/成品出库仓/产品与 BOM 版本来源(该加工单)/退回规格/退回数量（默认 = 已交 − 已退，可改）。
  */
 async function loadFromQuery() {
-  // 维修退货：不关联加工单/交货记录，没有来源可带（货从库存选），保持空表单
+  // 维修退货：不关联加工单/收货记录，没有来源可带（货从库存选），保持空表单
   if (isRepair.value) { onTypeChange(); return }
   if (!prefillDeliveryId && !prefillOrderId) return
   loading.value = true
@@ -342,18 +342,18 @@ async function loadFromQuery() {
     linkedOrderId.value = Number(d.orderId) || undefined
     if (d.warehouseId) form.warehouseId = d.warehouseId
     const lines: any[] = (d.lines || []).filter((l: any) => l.returnableQty == null || Number(l.returnableQty) > 0)
-    if (lines.length === 0) { ElMessage.warning('该交货记录已无可退数量（可能已全部退货）'); return }
+    if (lines.length === 0) { ElMessage.warning('该收货记录已无可退数量（可能已全部退货）'); return }
     rows.value = lines.map((l: any) => {
       const row: any = createEmptyRow()
       row.productName = l.productName
       const info = productList.value.find((x: any) => x.productName === l.productName)
       row.snapshots = info?.snapshots || []
       row.productMasterId = info?.productMasterId || l.productMasterId
-      // 自动选中「这张加工单/这条交货记录」所用的 BOM 快照（后端带出的 snapshotId 优先）
+      // 自动选中「这张加工单/这条收货记录」所用的 BOM 快照（后端带出的 snapshotId 优先）
       const prefSnapId = l.snapshotId || d.snapshotId
       row.selectedSnapshot = (prefSnapId ? row.snapshots.find((s: any) => s.snapshotId === prefSnapId) : null)
         || findSnapshotOfOrder(row, d.orderId) || row.snapshots[0] || null
-      // 规格：按"交货记录"进入时锁定该记录的规格（不把 A 规自动改成 B 规）；
+      // 规格：按"收货记录"进入时锁定该记录的规格（不把 A 规自动改成 B 规）；
       // 按"加工单"进入（列表行入口，lines 只给产品不给规格）时允许按仓库库存自动挑规格
       row.qualityType = l.qualityType || ProductQualityType.A
       row.qualityLocked = !!prefillDeliveryId
@@ -416,7 +416,7 @@ async function handleSubmit() {
   }
   const payload = {
     returnType: form.returnType,
-    // 关联加工单 + 来源交货记录：维修退货**不关联**加工单（后端也会拦截）；
+    // 关联加工单 + 来源收货记录：维修退货**不关联**加工单（后端也会拦截）；
     // 不良退货：只落"来源入口带来的加工单"，手工新建一律不关联（BOM 快照只用于带出退货物料）
     orderId: isRepair.value ? null : (linkedOrderId.value || prefillOrderId || null),
     sourceDeliveryId: isRepair.value ? null : (prefillDeliveryId || null),

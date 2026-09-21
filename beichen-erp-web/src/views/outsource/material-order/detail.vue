@@ -73,7 +73,7 @@ async function handleDeleteAttach() {
 async function loadAll() {
   loading.value = true
   try {
-    // 交货记录（收料/退不良）已移到独立菜单页「物料收货」加载，本页不再拉 /deliveries
+    // 收货记录（收料/退不良）已移到独立菜单页「物料收货」加载，本页不再拉 /deliveries
     const o = await request.get<any, any>(`/outsource/material-order/${id}`)
     if (o) {
       Object.assign(order, { id: o.id, code: o.code, status: o.status, orderType: o.orderType || OrderType.PURCHASE, supplierId: o.supplierId, supplierName: o.supplierName, deliveryDate: o.deliveryDate || '', finishTime: o.finishTime || '', remark: o.remark || '', attachUrl: o.attachUrl || '' })

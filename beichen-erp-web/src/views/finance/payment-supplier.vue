@@ -28,7 +28,7 @@ async function goSourceDetail(row: any) {
   const base = SourceBillDetailRoute[row.sourceBillType]
   if (!base || row.sourceBillNo == null) return
   let targetId = row.sourceId
-  // 委外加工交货/超损的 sourceId 是交货记录/结单报表ID，需按单号反查加工单ID。
+  // 委外加工收货/超损的 sourceId 是收货记录/结单报表ID，需按单号反查加工单ID。
   // 期 2（2026-09-19 读隔离）：改用通用单号解析器 /common/resolve-code（跨模块单号跳转的标准做法，
   // 属豁免前缀），不再直读加工单页的 /outsource/order/page（需 outsource:order ⇒ 只有 finance:payment 的用户会 403）。
   if (row.sourceBillType === 'OUTSOURCE_DELIVERY' || row.sourceBillType === 'OUTSOURCE_EXCESS_LOSS') {

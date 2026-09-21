@@ -26,7 +26,7 @@ const deliveredQuantity = computed(() => items.value.reduce((s: number, it: any)
 const remainingQuantity = computed(() => totalQuantity.value - deliveredQuantity.value)
 const deliveryProgress = computed(() => totalQuantity.value ? Math.min(100, Math.round(deliveredQuantity.value / totalQuantity.value * 100)) : 0)
 
-/** 只有收货中的订单可新增交货（退不良在收货中/已完成都允许，与后端一致） */
+/** 只有收货中的订单可新增收货（退不良在收货中/已完成都允许，与后端一致） */
 const canReceive = computed(() => order.status === MaterialOrderStatus.RECEIVING)
 const canDefectReturn = computed(() => order.status === MaterialOrderStatus.RECEIVING || order.status === MaterialOrderStatus.FINISHED)
 
@@ -74,7 +74,7 @@ function openReceive() {
 async function handleReceive(force?: boolean) {
   if (!recWarehouseId.value) { ElMessage.warning('请选择收货仓库'); return }
   const data = recItems.value.filter((r: any) => r.quantity && Number(r.quantity) > 0)
-  if (data.length === 0) { ElMessage.warning('请输入交货数量'); return }
+  if (data.length === 0) { ElMessage.warning('请输入收货数量'); return }
   recSaving.value = true
   try {
     const res = await request.post<any, any>(`/outsource/material-order/${id}/receive`, { warehouseId: recWarehouseId.value, items: data, force: force || false })
@@ -107,9 +107,9 @@ async function handleReceive(force?: boolean) {
       try { await request.put(`/outsource/material-order/delivery/${deliveryId}/audit`) }
       catch (err: any) { ElMessage.warning('草稿已保存但审核失败：' + (err?.message || '')) }
     }
-    ElMessage.success(force ? '缺料交货完成（子物料库存已为负数）' : '交货完成')
+    ElMessage.success(force ? '缺料收货完成（子物料库存已为负数）' : '收货完成')
     recVisible.value = false; await loadAll(); markOrderDirty()
-  } catch (e: any) { ElMessage.error(e?.message || '交货失败') } finally { recSaving.value = false }
+  } catch (e: any) { ElMessage.error(e?.message || '收货失败') } finally { recSaving.value = false }
 }
 
 /** 收货/退不良草稿单审核 */
@@ -131,7 +131,7 @@ function isMaterialDelivery(row: any) {
 
 /**
  * 退货（2026-09-17）：把已收的物料退回**物料商** —— 走**委外物料退货单**（独立单据：源仓扣减 + 冲减应付），
- * 与「退不良」（不良品维修返还/折现退款，写在本页交货记录里并影响净已收）是两件事。
+ * 与「退不良」（不良品维修返还/折现退款，写在本页收货记录里并影响净已收）是两件事。
  * 传收料记录时后端会按该单「已收 − 已退」算可退数量并预填供应商/源仓/物料。
  */
 function goReturn(row?: any) {
@@ -209,7 +209,7 @@ function maybeAutoOpen() {
   if (!flag) return
   if (lastAutoOpenedPath === route.fullPath) return
   lastAutoOpenedPath = route.fullPath
-  if (flag === 'add') { if (canReceive.value) openReceive(); else ElMessage.warning('只有收货中的订单可新增交货') }
+  if (flag === 'add') { if (canReceive.value) openReceive(); else ElMessage.warning('只有收货中的订单可新增收货') }
   else { if (canDefectReturn.value) openDefectReturn(); else ElMessage.warning('当前状态不可退不良') }
 }
 
@@ -234,7 +234,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
       <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">订单总量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0">{{ totalQuantity }}</p></el-card></el-col>
       <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">已交数量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-success)">{{ deliveredQuantity }}</p></el-card></el-col>
       <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">剩余数量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-warning)">{{ remainingQuantity }}</p></el-card></el-col>
-      <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">交货进度</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-primary)">{{ deliveryProgress }}%</p></el-card></el-col>
+      <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">收货进度</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-primary)">{{ deliveryProgress }}%</p></el-card></el-col>
     </el-row>
     <el-card shadow="never" style="margin-bottom:12px">
       <el-progress :percentage="deliveryProgress" :stroke-width="16" :text-inside="true" :color="deliveredQuantity >= totalQuantity ? 'var(--app-color-success)' : 'var(--app-color-primary)'" />
@@ -242,9 +242,9 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
 
     <el-card shadow="never">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <span style="font-weight:600">交货记录</span>
+        <span style="font-weight:600">收货记录</span>
         <div style="display:flex;gap:8px">
-          <el-button v-if="canReceive" type="primary" size="small" @click="openReceive">新增交货</el-button>
+          <el-button v-if="canReceive" type="primary" size="small" @click="openReceive">新增收货</el-button>
           <el-button v-if="canDefectReturn" type="warning" size="small" @click="openDefectReturn">退不良</el-button>
           <!-- 退货：把已收物料退回物料商（走物料退货单）；不限于收货中，已完成也能退 -->
           <el-button type="warning" plain size="small" @click="goReturn()">退货</el-button>
@@ -285,7 +285,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
     </el-card>
 
     <!-- 收货弹窗 -->
-    <el-dialog v-model="recVisible" title="新增交货" width="700px" :close-on-click-modal="false">
+    <el-dialog v-model="recVisible" title="新增收货" width="700px" :close-on-click-modal="false">
       <div style="margin-bottom:8px;display:flex;align-items:center;gap:16px">
         <span style="font-size:var(--app-font-base);color:var(--app-text-regular)">供应商：<b>{{ order.supplierName || '-' }}</b></span>
         <span style="font-size:var(--app-font-base)">收货仓库：</span>
@@ -295,7 +295,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         <el-table-column type="expand" v-if="recItems.some((it: any) => it.components && it.components.length > 0)">
           <template #default="{ row }">
             <div v-if="row.components && row.components.length > 0" style="margin:4px 20px">
-              <div style="font-size:var(--app-font-xs);color:var(--app-color-danger);margin-bottom:4px">交货将扣减以下子物料库存：</div>
+              <div style="font-size:var(--app-font-xs);color:var(--app-color-danger);margin-bottom:4px">收货将扣减以下子物料库存：</div>
               <el-table :data="row.components" border size="small">
                 <el-table-column prop="childMaterialName" label="子物料" min-width="100" />
                 <el-table-column prop="childUnit" label="单位" width="50" />
@@ -307,11 +307,11 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         </el-table-column>
         <el-table-column prop="materialName" label="物料" min-width="140" />
         <el-table-column label="已收" width="70" align="right"><template #default="{ row }">{{ (row.receivedQuantity || 0) - (row.defectReturnedQty || 0) }}</template></el-table-column>
-        <el-table-column label="本次交货" width="140"><template #default="{ row }"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" :max="row.maxReceive" style="width:100%" placeholder="数量" /></template></el-table-column>
+        <el-table-column label="本次收货" width="140"><template #default="{ row }"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" :max="row.maxReceive" style="width:100%" placeholder="数量" /></template></el-table-column>
         <el-table-column prop="orderQuantity" label="下单数" width="80" />
         <el-table-column label="剩余可收" width="80" align="right"><template #default="{ row }">{{ row.maxReceive }}</template></el-table-column>
       </el-table>
-      <template #footer><el-button @click="recVisible = false">取消</el-button><el-button type="primary" :loading="recSaving" @click="handleReceive()">确认交货</el-button></template>
+      <template #footer><el-button @click="recVisible = false">取消</el-button><el-button type="primary" :loading="recSaving" @click="handleReceive()">确认收货</el-button></template>
     </el-dialog>
 
     <!-- 退不良弹窗 -->

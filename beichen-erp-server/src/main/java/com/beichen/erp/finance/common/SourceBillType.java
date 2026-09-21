@@ -26,7 +26,7 @@ public enum SourceBillType {
     /** 销售退货 */
     SALE_RETURN("销售退货"),
     /** 委外加工单交货（成品报工入库产生应付） */
-    OUTSOURCE_DELIVERY("委外加工交货"),
+    OUTSOURCE_DELIVERY("委外加工收货"),
     /** 委外物料订单收货 / 退不良（收发单审核产生应付） */
     OUTSOURCE_MATERIAL_DELIVERY("委外物料收发"),
     /** 委外退料（负向应付冲减） */

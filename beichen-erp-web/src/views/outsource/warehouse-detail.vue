@@ -37,7 +37,7 @@ async function loadProjects() {
 const PRIORITY_SORT_ORDER_MAX = 2
 
 /**
- * 负库存项（2026-09-17 F3）：委外仓允许"缺料强制出库"（交货领料走 force 口径）会形成负库存，
+ * 负库存项（2026-09-17 F3）：委外仓允许"缺料强制出库"（收货领料走 force 口径）会形成负库存，
  * 但必须**显式可见**并说明成因，否则容易被误认为账错。
  */
 const negativeItems = computed(() => materials.value.filter((m: any) => Number(m.quantity) < 0))
@@ -139,7 +139,7 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
         <template #title>
           <span style="font-size:var(--app-font-xs)">
             本仓有 {{ negativeItems.length }} 项物料为负库存（{{ negativeItems.map((m: any) => m.materialName).slice(0, 5).join('、') }}{{ negativeItems.length > 5 ? ' 等' : '' }}）——
-            由交货领料时确认「继续出库（物料将变为负数）」形成，属缺料未补、非账错，请尽快补料。
+            由收货领料时确认「继续出库（物料将变为负数）」形成，属缺料未补、非账错，请尽快补料。
           </span>
         </template>
       </el-alert>
@@ -152,7 +152,7 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
           <template #default="{row}">
             <span :style="{color: Number(row.quantity)<0?'var(--app-color-danger)':'',fontWeight:Number(row.quantity)<0?600:400}">{{ row.quantity }}</span>
             <!-- 负库存显式标注（2026-09-17 F3）：本仓允许"缺料强制出库"，负数是缺料未补，不是账错 -->
-            <el-tooltip v-if="Number(row.quantity)<0" content="负库存＝交货领料时确认「继续出库（物料将变为负数）」形成，待补料后转正；建议尽快补料" placement="top">
+            <el-tooltip v-if="Number(row.quantity)<0" content="负库存＝收货领料时确认「继续出库（物料将变为负数）」形成，待补料后转正；建议尽快补料" placement="top">
               <el-tag type="danger" size="small" style="margin-left:4px">缺料</el-tag>
             </el-tooltip>
           </template>

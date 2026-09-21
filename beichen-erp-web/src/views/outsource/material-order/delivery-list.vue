@@ -78,7 +78,7 @@ onActivated(loadData)
            为此：①「订单类型」并入订单号单元格第二行小字；②「下单总数/已收/剩余」合并为一列；
            ③订单号做成链接（点它进收货详细）。
            2026-09-17：按用户要求新增行内「退货」按钮（物料退回物料商 → 委外物料退货单）：
-           操作列 84→134，由「订单号 −6、最近交货 −4、交期 −4」抵平。 -->
+           操作列 84→134，由「订单号 −6、最近收货 −4、交期 −4」抵平。 -->
       <el-table :data="tableData" border stripe v-loading="loading" style="width:100%" @row-click="goDetail">
         <el-table-column label="订单号" width="144" show-overflow-tooltip>
           <template #default="{ row }">
@@ -97,7 +97,7 @@ onActivated(loadData)
           </template>
         </el-table-column>
         <el-table-column label="收货进度" width="80"><template #default="{ row }"><el-progress :percentage="progressOf(row)" :stroke-width="10" :color="progressOf(row) >= 100 ? 'var(--app-color-success)' : 'var(--app-color-primary)'" /></template></el-table-column>
-        <el-table-column label="最近交货" width="96"><template #default="{ row }">{{ $fmtDate(row.lastDeliveryTime) }}</template></el-table-column>
+        <el-table-column label="最近收货" width="96"><template #default="{ row }">{{ $fmtDate(row.lastDeliveryTime) }}</template></el-table-column>
         <el-table-column label="交期" width="96"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column label="状态" width="84" align="center"><template #default="{ row }"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="134" align="center" fixed="right">

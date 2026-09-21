@@ -24,7 +24,7 @@ function SqlList([string]$q) {
 }
 function D($s) { if (-not $s) { return [decimal]0 }; return [decimal]$s }
 $whAux = ZH 'wh_auxA'
-# NOTE: the lib's SetRowInput targets the LAST visible table; on the close page that is 交货记录 (no inputs).
+# NOTE: the lib's SetRowInput targets the LAST visible table; on the close page that is 收货记录 (no inputs).
 # The editable quantity columns live in the FIRST table -> dedicated helper.
 function SetRowInputT([int]$tblIdx, [int]$rowIdx, [int]$inputIdx, [string]$value) {
   $v = B64 $value

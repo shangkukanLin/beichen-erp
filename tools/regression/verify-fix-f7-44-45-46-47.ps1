@@ -180,7 +180,7 @@ if ($payNow -eq $payBase) { Ok "payable rows restored ($payNow)" } else { Bad "p
 
 # ---------------- F7-46 (parallel CAS on material order) ----------------
 # NOTE: every RECEIVING material order in this DB already has deliveries, so un-audit / cancel are
-# blocked by the业务护栏 ("该订单已有交货记录"). `finish` (RECEIVING -> FINISHED) has no side effects
+# blocked by the业务护栏 ("该订单已有收货记录"). `finish` (RECEIVING -> FINISHED) has no side effects
 # and can be restored with a targeted SQL update, so it is used as the CAS discriminator: before the
 # fix all N calls passed the non-atomic status check, after the fix exactly one must win.
 Write-Output "=== 5) F7-46 物料订单并发流转（finish）：$PAR 个请求只能有一个成功 ==="

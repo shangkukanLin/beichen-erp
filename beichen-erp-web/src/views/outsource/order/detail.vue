@@ -8,7 +8,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { getProjectBom } from '@/api/system'
 import { exportContractPdf } from '@/api/contract-template'
-// 2026-09-16：交货相关的枚举/状态（DeliveryType、DocStatus 等）随「交货管理」页签移出到
+// 2026-09-16：收货相关的枚举/状态（DeliveryType、DocStatus 等）随「交货管理」页签移出到
 // 独立菜单页「成品收货」（views/outsource/order/delivery.vue），本页不再使用
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, OrderType, OUTSOURCE_ORDER_DIRTY_KEY } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
@@ -210,7 +210,7 @@ async function handleAudit() {
 }
 
 async function handleUnaudit() {
-  try { await ElMessageBox.confirm('反审核将回滚所有交货记录和库存变动，确认继续？', '反审核加工单', { type:'warning' }); await request.put(`/outsource/order/${form.id}/un-audit`); ElMessage.success('已反审核，回到待审核状态'); await loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('反审核将回滚所有收货记录和库存变动，确认继续？', '反审核加工单', { type:'warning' }); await request.put(`/outsource/order/${form.id}/un-audit`); ElMessage.success('已反审核，回到待审核状态'); await loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
 
@@ -290,7 +290,7 @@ onActivated(async () => { await loadOptions(); await loadData() })
             <el-button v-if="form.status===OutsourceOrderStatus.PENDING" type="success" size="small" @click="handleAudit">审核</el-button>
             <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="danger" size="small" @click="handleUnaudit">反审核</el-button>
             <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="warning" size="small" @click="router.push(`/outsource/order/close/${form.id}`)">结单</el-button>
-            <!-- 交货管理（新增交货/审核/退不良）2026-09-16 移出为独立菜单页「成品收货」，此处只留跳转入口 -->
+            <!-- 交货管理（新增收货/审核/退不良）2026-09-16 移出为独立菜单页「成品收货」，此处只留跳转入口 -->
             <el-button type="warning" size="small" @click="router.push(`/outsource/order/delivery/${form.id}`)">成品收货</el-button>
             <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="form.status===OutsourceOrderStatus.CANCELLED">保存</el-button>
           </div>

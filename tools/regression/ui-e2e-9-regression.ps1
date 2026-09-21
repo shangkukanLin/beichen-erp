@@ -135,7 +135,7 @@ Write-Host ('second click: ' + (ClickRowBtnContains 0 (ZH 'btn_deliver')))
 Start-Sleep -Milliseconds 3200
 $d2 = EvalJs "String([...document.querySelectorAll('.el-dialog')].filter(e=>e.getClientRects().length>0).length)"
 Write-Host ('dlg2=' + $d2)
-Ok ($d1 -eq '1' -and $d2 -eq '1') 'D3 both 交货 clicks auto-opened the dialog'
+Ok ($d1 -eq '1' -and $d2 -eq '1') 'D3 both 收货 clicks auto-opened the dialog'
 Write-Host ('cancel2: ' + (ClickDialogBtn 'btn_cancel' 900))
 Write-Host ('errs-final=' + (Errs))
 Summary 'regression D1+D2+D3'

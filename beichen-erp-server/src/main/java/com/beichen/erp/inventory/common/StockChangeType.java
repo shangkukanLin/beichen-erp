@@ -58,7 +58,7 @@ public enum StockChangeType {
     /** 委外发料出库：加工单发料，从我方仓库扣除物料 */
     OUTSOURCE_DELIVERY_OUT("委外发料出库"),
     /** 委外交货入库：加工单完工交货，成品入库 */
-    OUTSOURCE_FINISH_IN("委外交货入库"),
+    OUTSOURCE_FINISH_IN("委外收货入库"),
     /** 委外退料出：委外退货退回供应商，从委外仓扣减 */
     OUTSOURCE_RETURN_OUT("委外退料出"),
     /** 委外退料出反审核：委外加工退货取消审核，恢复已出库成品 */
@@ -66,11 +66,11 @@ public enum StockChangeType {
     /** 委外退不良：加工单退回不良品 */
     OUTSOURCE_DEFECT_RETURN("委外退不良"),
     /** 交货回滚：委外交货回滚，撤销入库操作 */
-    OUTSOURCE_ROLLBACK("交货回滚"),
+    OUTSOURCE_ROLLBACK("收货回滚"),
     /** 交货扣料：委外交货收货时按 BOM 扣减子物料 */
-    OUTSOURCE_CONSUME("交货扣料"),
+    OUTSOURCE_CONSUME("收货扣料"),
     /** 取消交货扣料：委外交货反审核时恢复已扣减的子物料 */
-    CANCEL_OUTSOURCE_CONSUME("取消交货扣料"),
+    CANCEL_OUTSOURCE_CONSUME("取消收货扣料"),
     /** 委外退不良反审核：退不良反审核时扣回已还的物料 */
     OUTSOURCE_DEFECT_RETURN_UN_AUDIT("委外退不良反审核"),
     /** 委外维修出库：维修退货单送修审核，从我方成品仓扣除待修品（2026-09-17） */

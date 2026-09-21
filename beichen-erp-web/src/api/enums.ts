@@ -295,7 +295,7 @@ export const QualityTypeLabel: Record<string, string> = {
   [QualityType.DEFECT]: '不良品'
 }
 
-/** 交货记录状态（对应 DeliveryItemStatus 枚举） */
+/** 收货记录状态（对应 DeliveryItemStatus 枚举） */
 export const DeliveryItemStatus = {
   NORMAL: 'NORMAL',
   REVERSED: 'REVERSED'
@@ -371,7 +371,7 @@ export const SourceBillTypeLabel: Record<string, string> = {
   SALE_OUTBOUND: '销售出库', SALE_ORDER: '销售单',
   PURCHASE_ORDER: '采购单', PURCHASE_INBOUND: '采购入库',
   PURCHASE_RETURN: '采购退货单', SALE_RETURN: '销售退货',
-  OUTSOURCE_DELIVERY: '委外加工交货', OUTSOURCE_MATERIAL_DELIVERY: '委外物料收发',
+  OUTSOURCE_DELIVERY: '委外加工收货', OUTSOURCE_MATERIAL_DELIVERY: '委外物料收发',
   OUTSOURCE_RETURN: '委外退料', OUTSOURCE_MATERIAL_RETURN: '委外物料退货',
   OUTSOURCE_RETURN_CHARGE: '委外加工退货收费',
   OUTSOURCE_REPAIR_CHARGE: '委外维修收费',
@@ -770,13 +770,13 @@ export const StockChangeTypeLabel: Record<string, string> = {
   [StockChangeType.CANCEL_IN]: '取消入库',
   [StockChangeType.CANCEL_OUT]: '取消出库',
   [StockChangeType.OUTSOURCE_DELIVERY_OUT]: '委外发料出库',
-  [StockChangeType.OUTSOURCE_FINISH_IN]: '委外交货入库',
+  [StockChangeType.OUTSOURCE_FINISH_IN]: '委外收货入库',
   [StockChangeType.OUTSOURCE_RETURN_OUT]: '委外退料出',
   [StockChangeType.OUTSOURCE_RETURN_OUT_UN_AUDIT]: '委外退料出反审核',
   [StockChangeType.OUTSOURCE_DEFECT_RETURN]: '委外退不良',
-  [StockChangeType.OUTSOURCE_ROLLBACK]: '交货回滚',
-  [StockChangeType.OUTSOURCE_CONSUME]: '交货扣料',
-  [StockChangeType.CANCEL_OUTSOURCE_CONSUME]: '取消交货扣料',
+  [StockChangeType.OUTSOURCE_ROLLBACK]: '收货回滚',
+  [StockChangeType.OUTSOURCE_CONSUME]: '收货扣料',
+  [StockChangeType.CANCEL_OUTSOURCE_CONSUME]: '取消收货扣料',
   [StockChangeType.OUTSOURCE_DEFECT_RETURN_UN_AUDIT]: '委外退不良反审核',
   [StockChangeType.OUTSOURCE_REPAIR_OUT]: '委外维修出库',
   [StockChangeType.OUTSOURCE_REPAIR_OUT_UN_AUDIT]: '委外维修出库反审核',

@@ -186,7 +186,7 @@ public class CloseReportController {
         if (deliveriesRaw != null && !deliveriesRaw.isEmpty()) {
             rowIdx++;
             Row s3 = sheet.createRow(rowIdx++); s3.setHeightInPoints(18);
-            Cell sc3 = s3.createCell(0); sc3.setCellValue("三、交货记录"); sc3.setCellStyle(sectionStyle);
+            Cell sc3 = s3.createCell(0); sc3.setCellValue("三、收货记录"); sc3.setCellStyle(sectionStyle);
             merge(s3, 0, 0, 5);
 
             String[] dHeaders = {"日期","产品名称","数量","类型","收货仓库","备注"};
@@ -207,7 +207,7 @@ public class CloseReportController {
                 textCell(dr, 1, str(d.get("productName")), textStyle);
                 numCellRaw(dr, 2, d.get("quantity"), numStyle);
                 String dtype = str(d.get("deliveryType"));
-                textCell(dr, 3, DeliveryType.DEFECT_RETURN.getCode().equals(dtype) ? DeliveryType.DEFECT_RETURN.getLabel() : "交货", textStyle);
+                textCell(dr, 3, DeliveryType.DEFECT_RETURN.getCode().equals(dtype) ? DeliveryType.DEFECT_RETURN.getLabel() : "收货", textStyle);
                 String whName = "";
                 Object whIdObj = d.get("warehouseId");
                 if (whIdObj != null) { Warehouse iw = WarehouseMapper.selectById(Long.valueOf(whIdObj.toString())); if (iw != null) whName = iw.getWarehouseName(); }

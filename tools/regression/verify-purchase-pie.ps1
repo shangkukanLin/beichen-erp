@@ -1,11 +1,11 @@
 ﻿# 进货分析「直接采购成品 / 委外加工成品入库」两个饼图 —— 接口 vs SQL 直查（2026-09-15）
 # 口径：① 直接采购成品 = Σ采购明细 − Σ采购退货明细（净额，采购按审核日、退货按建单日），按产品
-#       ② 委外加工成品入库 = Σ(交货数量 × 加工单价)，按成品产品；归期 = **建单日**（2026-09-15 全站统一）；退不良负数自动冲减
+#       ② 委外加工成品入库 = Σ(收货数量 × 加工单价)，按成品产品；归期 = **建单日**（2026-09-15 全站统一）；退不良负数自动冲减
 # 区间：**动态取"全量已审核单据"的日期跨度**（2026-09-21 修正）
 #   原为硬编码 2026-08-01 ~ 2026-09-15 ⇒ 2026-09-18 清库重建后所有单据归期整体漂移到 9/18，
 #   区间内接口与 SQL 同为 0（前 6 条互相 PASS），但末尾"与应付台账对账"那条**不带区间过滤**
 #   （取全量未作废 OUTSOURCE_DELIVERY 应付）⇒ 0 ≠ 10000，**长期假红**。
-#   ⇒ 现取 采购单/采购退货/委外交货（三者均 AUDITED）的 MIN/MAX(DATE(create_time)) 作为区间，
+#   ⇒ 现取 采购单/采购退货/委外收货（三者均 AUDITED）的 MIN/MAX(DATE(create_time)) 作为区间，
 #     保证"区间 = 全量数据"这一前提成立、台账对账语义正确；查不到时回退本月。
 # 用法：powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-purchase-pie.ps1
 $ErrorActionPreference = 'Continue'
@@ -66,7 +66,7 @@ ChkNum '直接采购成品·件数净额合计' $t.directPurchaseQuantity $dpQ.a
 ChkNum '委外入库·金额合计' $apiOsAmt $osA.all 0.05
 ChkNum '委外入库·件数合计' $apiOsQty $osQ.all 0.01
 
-# 交叉对账：委外入库金额应 = 应付台账（委外加工交货，未作废）
+# 交叉对账：委外入库金额应 = 应付台账（委外加工收货，未作废）
 $ap = SqlMap "SELECT 1 AS k, IFNULL(SUM(amount), 0) AS v FROM finance_payable WHERE source_bill_type = 'OUTSOURCE_DELIVERY' AND status <> 'CANCELLED';"
 $apAmt = if ($ap.ContainsKey(1)) { [Math]::Round($ap[1], 2) } else { $null }
 if ($null -ne $apAmt) { ChkNum '委外入库金额 与应付台账对账' $osA.all $apAmt 0.05 }

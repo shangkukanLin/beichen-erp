@@ -202,7 +202,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         List<MaterialOrderItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
         boolean hasDelivery = items.stream().anyMatch(it -> it.getReceivedQuantity() != null && it.getReceivedQuantity().compareTo(BigDecimal.ZERO) > 0);
-        if (hasDelivery) throw new BusinessException("该订单已有交货记录，不可反审核");
+        if (hasDelivery) throw new BusinessException("该订单已有收货记录，不可反审核");
         MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.PENDING.getCode());
         orderMapper.updateById(upd);
     }
@@ -573,7 +573,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         List<MaterialOrderItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
         boolean hasDelivery = items.stream().anyMatch(it -> it.getReceivedQuantity() != null && it.getReceivedQuantity().compareTo(BigDecimal.ZERO) > 0);
-        if (hasDelivery) throw new BusinessException("该订单已有交货记录，不可作废");
+        if (hasDelivery) throw new BusinessException("该订单已有收货记录，不可作废");
         MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.CANCELLED.getCode());
         orderMapper.updateById(upd);
     }

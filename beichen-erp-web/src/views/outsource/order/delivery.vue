@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * 成品收货 — 交货详细（委外加工 → 成品收货 → 点单号进入）
- * <p>2026-09-16：原「加工订单详情 → 交货管理」页签整块迁出至此（含新增/编辑/删除/审核/反审核交货 + 退不良），
- * 详情页只保留一个跳转按钮。列表页带 ?add=1 进入时自动打开「新增交货」弹窗。</p>
+ * 成品收货 — 收货详细（委外加工 → 成品收货 → 点单号进入）
+ * <p>2026-09-16：原「加工订单详情 → 交货管理」页签整块迁出至此（含新增/编辑/删除/审核/反审核收货 + 退不良），
+ * 详情页只保留一个跳转按钮。列表页带 ?add=1 进入时自动打开「新增收货」弹窗。</p>
  */
 import { localDate } from '@/utils/date'
 import { reactive, ref, computed, onActivated } from 'vue'
@@ -24,10 +24,10 @@ const summary = ref<any>({})
 const products = ref<any[]>([])
 const warehouseOptions = ref<any[]>([])
 
-/** 只有生产中的加工单可录入交货/退不良（与后端校验一致） */
+/** 只有生产中的加工单可录入收货/退不良（与后端校验一致） */
 const canDeliver = computed(() => order.status === OutsourceOrderStatus.PRODUCING)
 
-// ===== 交货弹窗 =====
+// ===== 收货弹窗 =====
 const dialogVisible = ref(false); const isEdit = ref(false); const editId = ref<number>()
 const saving = ref(false); const uploadFile = ref<File | null>(null)
 const warehouseId = ref<number>()
@@ -54,15 +54,15 @@ async function loadWarehouses() {
   } catch (e: any) { console.warn('加载仓库失败', e?.message || e) }
 }
 
-/** 交货记录表格行样式：退不良行高亮 */
+/** 收货记录表格行样式：退不良行高亮 */
 function deliveryRowClass({ row }: { row: any }) {
   return row.deliveryType === DeliveryType.DEFECT_RETURN ? 'defect-row' : ''
 }
 function openAttach(url: string) { window.open(url + '?inline=true') }
 
-// ===== 交货记录「详情」抽屉（2026-09-21 用户建议：列表只做扫读，明细放到详情里看） =====
+// ===== 收货记录「详情」抽屉（2026-09-21 用户建议：列表只做扫读，明细放到详情里看） =====
 /**
- * 列表从此瘦身为 7 列（交货日期/产品名称/类型/等级分布/数量/状态/操作），
+ * 列表从此瘦身为 7 列（收货日期/产品名称/类型/等级分布/数量/状态/操作），
  * 「收货仓库 / 物流单号 / 备注 / 附件」全部移入本抽屉；并顺带补上原先**任何界面都看不到**的字段：
  * SKU、退不良规格、记录ID、创建时间。
  */
@@ -72,7 +72,7 @@ function openDetail(row: any) { detailRow.value = row; detailVisible.value = tru
 
 /**
  * 该记录对应的加工单产品行。**列表与详情共用同一套匹配口径**：
- * 优先按产品主数据ID匹配（加工单整单编辑会重建产品明细行、行ID会变，交货记录仍指向原产品），
+ * 优先按产品主数据ID匹配（加工单整单编辑会重建产品明细行、行ID会变，收货记录仍指向原产品），
  * 匹配不到再退回按产品行ID匹配。
  */
 function orderProductOf(row: any) {
@@ -88,16 +88,16 @@ function warehouseNameOf(row: any) {
   if (!row.warehouseId) return '-'
   return warehouseOptions.value.find((w: any) => w.id === row.warehouseId)?.warehouseName || row.warehouseId
 }
-/** 退不良规格文案：A/B/C → A规/B规/C规；DEFECT → 不良（普通交货为空） */
+/** 退不良规格文案：A/B/C → A规/B规/C规；DEFECT → 不良（普通收货为空） */
 function qualityTextOf(row: any) {
   const q = row?.qualityType
   if (!q) return '-'
   return q === 'DEFECT' ? '不良' : q + '规'
 }
-/** 类型文案（列表与详情共用）：空=普通交货，DEFECT_RETURN=退不良 */
+/** 类型文案（列表与详情共用）：空=普通收货，DEFECT_RETURN=退不良 */
 function typeTextOf(row: any) {
-  if (!row?.deliveryType) return '普通交货'
-  return row.deliveryType === DeliveryType.DELIVERY ? '交货' : (DeliveryTypeLabel[row.deliveryType] || row.deliveryType)
+  if (!row?.deliveryType) return '普通收货'
+  return row.deliveryType === DeliveryType.DELIVERY ? '收货' : (DeliveryTypeLabel[row.deliveryType] || row.deliveryType)
 }
 
 async function loadData() {
@@ -119,7 +119,7 @@ async function loadData() {
     products.value = prods || []
     if (warehouseOptions.value.length === 0) await loadWarehouses()
   } catch (e: any) {
-    ElMessage.error('加载交货数据失败：' + (e?.msg || e?.message || '未知错误'))
+    ElMessage.error('加载收货数据失败：' + (e?.msg || e?.message || '未知错误'))
   } finally { loading.value = false }
 }
 
@@ -187,7 +187,7 @@ async function handleSubmit(forceDelivery = false) {
       } catch { return }
       return handleSubmit(true)
     }
-    ElMessage.success(isEdit.value ? '交货记录已更新' : '交货记录已保存')
+    ElMessage.success(isEdit.value ? '收货记录已更新' : '收货记录已保存')
     dialogVisible.value = false
     await loadData()
   } catch (e: any) {
@@ -196,17 +196,17 @@ async function handleSubmit(forceDelivery = false) {
 }
 
 async function handleDelete(row: any) {
-  try { await ElMessageBox.confirm('确定删除该交货记录吗？', '删除', { type: 'warning' }) } catch { return }
+  try { await ElMessageBox.confirm('确定删除该收货记录吗？', '删除', { type: 'warning' }) } catch { return }
   try { await request.delete(`/outsource/order-delivery/${row.id}`); ElMessage.success('已删除'); await loadData() }
   catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 async function handleAudit(row: any) {
-  try { await ElMessageBox.confirm('确定审核该交货记录吗？审核后将扣减物料、成品入库并生成应付。', '审核', { type: 'warning' }) } catch { return }
+  try { await ElMessageBox.confirm('确定审核该收货记录吗？审核后将扣减物料、成品入库并生成应付。', '审核', { type: 'warning' }) } catch { return }
   try { await request.put(`/outsource/order-delivery/${row.id}/audit`); ElMessage.success('已审核'); await loadData() }
   catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 async function handleUnaudit(row: any) {
-  try { await ElMessageBox.confirm('确定反审核该交货记录吗？反审核后将回滚库存与应付，回到草稿。', '反审核', { type: 'warning' }) } catch { return }
+  try { await ElMessageBox.confirm('确定反审核该收货记录吗？反审核后将回滚库存与应付，回到草稿。', '反审核', { type: 'warning' }) } catch { return }
   try { await request.put(`/outsource/order-delivery/${row.id}/un-audit`); ElMessage.success('已反审核'); await loadData() }
   catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
@@ -214,7 +214,7 @@ async function handleUnaudit(row: any) {
 /**
  * 退货（2026-09-17）：把已交到我方成品仓的**良品**退回加工厂 —— 走**加工退货单**（独立单据：
  * 成品出库 + BOM 料还回工厂委外仓 + 冲减应付，可选收费），与「退不良」（不良品换料/退款，
- * 写在交货记录里并影响"已交/剩余"）是两件事。
+ * 写在收货记录里并影响"已交/剩余"）是两件事。
  * 传记录时后端会算出该记录各规格的「已交 − 已退 = 可退」并预填。
  */
 function goReturn(row?: any) {
@@ -267,14 +267,14 @@ async function handleDefectReturn() {
     for (const r of data) {
       await request.post(`/outsource/order-delivery/return-defect/${orderId}`, { productId: r.productId, qualityType: r.qualityType, quantity: r.quantity, warehouseId: defectWarehouseId.value })
     }
-    ElMessage.success('退不良草稿已保存，请在交货记录中审核')
+    ElMessage.success('退不良草稿已保存，请在收货记录中审核')
     defectVisible.value = false
     await loadData()
   } catch (e: any) { ElMessage.error(e?.message || '退不良失败') } finally { defectSaving.value = false }
 }
 
 /**
- * 从「成品收货」列表带参（?add=1 / ?defect=1）进入时自动打开对应弹窗，一步完成交货。
+ * 从「成品收货」列表带参（?add=1 / ?defect=1）进入时自动打开对应弹窗，一步完成收货。
  * <p>幂等标记按 **route.fullPath** 记录（2026-09-17 修复）：layout 的 keep-alive key 是
  * `fullPath + '-' + tabSeq[path]`，同一 path 会复用实例 —— 若只用一个布尔标记，
  * 第二次带参进入就不会再弹（实测）。列表点击已带 `_t=<时间戳>`，故每次都是新 fullPath。</p>
@@ -285,7 +285,7 @@ function maybeAutoOpen() {
   if (!flag) return
   if (lastAutoOpenedPath === route.fullPath) return
   lastAutoOpenedPath = route.fullPath
-  if (flag === 'add') { if (canDeliver.value) openAdd(); else ElMessage.warning('只有生产中的加工单可录入交货') }
+  if (flag === 'add') { if (canDeliver.value) openAdd(); else ElMessage.warning('只有生产中的加工单可录入收货') }
   else { if (canDeliver.value) openDefectReturn(); else ElMessage.warning('只有生产中的加工单可退不良') }
 }
 
@@ -309,7 +309,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
       <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">订单总量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0">{{ summary.totalQuantity || 0 }}</p></el-card></el-col>
       <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">已交数量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-success)">{{ summary.deliveredQuantity || 0 }}</p></el-card></el-col>
       <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">剩余数量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-warning)">{{ summary.remainingQuantity || 0 }}</p></el-card></el-col>
-      <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">交货进度</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-primary)">{{ progress }}%</p></el-card></el-col>
+      <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">收货进度</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-primary)">{{ progress }}%</p></el-card></el-col>
     </el-row>
 
     <el-card shadow="never" style="margin-bottom:12px">
@@ -330,10 +330,10 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
 
     <el-card shadow="never">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <span style="font-weight:600">交货记录</span>
+        <span style="font-weight:600">收货记录</span>
         <div style="display:flex;gap:8px">
           <template v-if="canDeliver">
-            <el-button type="primary" size="small" @click="openAdd">新增交货</el-button>
+            <el-button type="primary" size="small" @click="openAdd">新增收货</el-button>
             <el-button type="danger" size="small" @click="openDefectReturn">退不良</el-button>
           </template>
           <!-- 退货：良品退回加工厂（走加工退货单）；已结单的加工单也可能需要退货，故不受 canDeliver 限制 -->
@@ -341,7 +341,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         </div>
       </div>
       <!--
-        2026-09-21（用户：交货记录「一行就显示完毕、不要左右滑动」⇒ 随后「有一个详细会不会好一点，
+        2026-09-21（用户：收货记录「一行就显示完毕、不要左右滑动」⇒ 随后「有一个详细会不会好一点，
         那列表就不用显示这么多信息了」）：采纳"列表只做扫读、明细看详情"的结构。
         列表瘦身为 **7 列**（合计约 686px，容器约 963px）：富余的 ~277px 全部补给两个 min-width 列
         （产品名称/等级分布）⇒ 基本不再出现省略号；
@@ -350,7 +350,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         ⚠️ 日后加列前先算总宽：容器 ≈ window.innerWidth − 299（1262px 窗口 → 963px），别又撑出横向滚动。
       -->
       <el-table :data="deliveries" border stripe size="small" :row-class-name="deliveryRowClass">
-        <el-table-column label="交货日期" width="92"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
+        <el-table-column label="收货日期" width="92"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column label="产品名称" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ productNameOf(row) }}</template>
         </el-table-column>
@@ -376,7 +376,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
             <el-button type="primary" link size="small" @click="openDetail(row)">详情</el-button>
             <el-button type="success" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
             <el-button type="warning" link size="small" v-if="row.status === DocStatus.AUDITED" @click="handleUnaudit(row)">反审核</el-button>
-            <!-- 退货：仅对已审核的**普通交货**记录开放（退不良记录不再退货） -->
+            <!-- 退货：仅对已审核的**普通收货**记录开放（退不良记录不再退货） -->
             <el-button type="warning" link size="small" v-if="row.status === DocStatus.AUDITED && row.deliveryType !== DeliveryType.DEFECT_RETURN" @click="goReturn(row)">退货</el-button>
             <el-button type="primary" link size="small" v-if="row.status === DocStatus.DRAFT" @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleDelete(row)">删除</el-button>
@@ -385,8 +385,8 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
       </el-table>
     </el-card>
 
-    <!-- 新增/编辑交货弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑交货记录' : '新增交货记录'" width="600px" :close-on-click-modal="false">
+    <!-- 新增/编辑收货弹窗 -->
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑收货记录' : '新增收货记录'" width="600px" :close-on-click-modal="false">
       <el-form :model="form" label-width="85px" size="small">
         <el-form-item required label="产品名称"><el-select v-model="form.productId" filterable style="width:100%" placeholder="选择订单产品"><el-option v-for="p in products" :key="p.id" :label="p.productName" :value="p.id" /></el-select></el-form-item>
         <el-form-item label="总数量"><el-input :model-value="totalGrade" readonly placeholder="由等级数量自动合计" /></el-form-item>
@@ -400,10 +400,10 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
           </el-row>
         </el-form-item>
         <el-form-item required label="收货仓库"><RemoteSelect v-model="warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择入库仓库" /></el-form-item>
-        <el-form-item label="交货日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item>
+        <el-form-item label="收货日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item>
         <el-form-item label="物流单号"><el-input v-model="form.trackingNo" placeholder="选填" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" placeholder="选填" /></el-form-item>
-        <el-form-item label="交货图片">
+        <el-form-item label="收货图片">
           <div class="drop-zone" @dragover="handleDragOver" @drop="handleDrop" :style="{ borderColor: uploadFile ? '#67c23a' : '#dcdfe6', background: uploadFile ? '#f0f9eb' : '#fafafa' }">
             <template v-if="uploadFile"><div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap"><span style="color:#67c23a;font-weight:600">📎 {{ uploadFile.name }}</span><el-button type="danger" size="small" @click.stop="handleRemoveFile">移除</el-button></div></template>
             <template v-else-if="form.attachUrl"><div style="display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap"><span style="color:var(--app-color-primary)">📎 已有图片</span><el-button type="primary" size="small" @click.stop="openAttach(form.attachUrl)">查看</el-button><span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">可拖拽新文件替换</span></div></template>
@@ -429,15 +429,15 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
     </el-dialog>
 
     <!--
-      交货记录「详情」抽屉（2026-09-21 用户建议）：列表已瘦身为 7 列，明细字段都在这里看。
+      收货记录「详情」抽屉（2026-09-21 用户建议）：列表已瘦身为 7 列，明细字段都在这里看。
       沿用本项目既有抽屉惯例（sale/outbound、finance 系列：el-drawer + el-descriptions :column="2" border）。
       抽屉**只读** —— 审核/退货/编辑/删除等动作仍留在列表的「操作」列，避免两处入口不一致。
     -->
-    <el-drawer v-model="detailVisible" title="交货记录详情" size="60%">
+    <el-drawer v-model="detailVisible" title="收货记录详情" size="60%">
       <el-descriptions v-if="detailRow" :column="2" border>
         <el-descriptions-item label="记录ID">{{ detailRow.id }}</el-descriptions-item>
         <el-descriptions-item label="状态"><el-tag :type="DocStatusTag[detailRow.status] || 'info'" size="small">{{ DocStatusLabel[detailRow.status] || detailRow.status }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="交货日期">{{ $fmtDate(detailRow.deliveryDate) }}</el-descriptions-item>
+        <el-descriptions-item label="收货日期">{{ $fmtDate(detailRow.deliveryDate) }}</el-descriptions-item>
         <!-- 登记时间：原先任何界面都看不到，详情里补上（后端 create_time） -->
         <el-descriptions-item label="登记时间">{{ detailRow.createTime ? String(detailRow.createTime).replace('T', ' ') : '-' }}</el-descriptions-item>
         <el-descriptions-item label="产品名称">{{ productNameOf(detailRow) }}</el-descriptions-item>
@@ -452,7 +452,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         <el-descriptions-item label="C规数量">{{ detailRow.cQty || 0 }}</el-descriptions-item>
         <el-descriptions-item label="不良数量">{{ detailRow.defectQty || 0 }}</el-descriptions-item>
         <el-descriptions-item label="总数量"><span :style="{ color: Number(detailRow.quantity) < 0 ? 'var(--app-color-danger)' : '', fontWeight: '600' }">{{ detailRow.quantity }}</span></el-descriptions-item>
-        <el-descriptions-item label="交货图片">
+        <el-descriptions-item label="收货图片">
           <el-button v-if="detailRow.attachUrl" type="primary" link size="small" @click="openAttach(detailRow.attachUrl)">查看图片</el-button>
           <span v-else style="color:var(--app-text-placeholder)">—</span>
         </el-descriptions-item>

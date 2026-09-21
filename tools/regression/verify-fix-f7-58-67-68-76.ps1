@@ -155,10 +155,10 @@ $badQty  = @{ orderId = [long]$orderId; productId = [long]$rowId; quantity = -5;
 $badSum  = @{ orderId = [long]$orderId; productId = [long]$rowId; quantity = 1; aQty = 100; bQty = 0; cQty = 0; defectQty = 0; warehouseId = [long]$whProd }
 $badWh   = @{ orderId = [long]$orderId; productId = [long]$rowId; quantity = 1; aQty = 1; bQty = 0; cQty = 0; defectQty = 0; warehouseId = $null }
 
-ExpectReject 'POST quantity=-5'      (Req 'POST' '/outsource/order-delivery' $admin $badQty) '交货数量必须大于0'
-ExpectReject 'PUT  quantity=-5'      (Req 'PUT' ("/outsource/order-delivery/$obId") $admin $badQty) '交货数量必须大于0'
-ExpectReject 'POST grade sum != qty' (Req 'POST' '/outsource/order-delivery' $admin $badSum) '必须等于交货总数量'
-ExpectReject 'PUT  grade sum != qty' (Req 'PUT' ("/outsource/order-delivery/$obId") $admin $badSum) '必须等于交货总数量'
+ExpectReject 'POST quantity=-5'      (Req 'POST' '/outsource/order-delivery' $admin $badQty) '收货数量必须大于0'
+ExpectReject 'PUT  quantity=-5'      (Req 'PUT' ("/outsource/order-delivery/$obId") $admin $badQty) '收货数量必须大于0'
+ExpectReject 'POST grade sum != qty' (Req 'POST' '/outsource/order-delivery' $admin $badSum) '必须等于收货总数量'
+ExpectReject 'PUT  grade sum != qty' (Req 'PUT' ("/outsource/order-delivery/$obId") $admin $badSum) '必须等于收货总数量'
 ExpectReject 'POST no warehouse'     (Req 'POST' '/outsource/order-delivery' $admin $badWh) '入库仓库不能为空'
 ExpectReject 'PUT  no warehouse'     (Req 'PUT' ("/outsource/order-delivery/$obId") $admin $badWh) '入库仓库不能为空'
 
@@ -167,7 +167,7 @@ $good = @{ orderId = [long]$orderId; productId = [long]$rowId; quantity = 1; aQt
            warehouseId = [long]$whProd; deliveryType = 'DEFECT_RETURN' }
 $rg = Req 'PUT' ("/outsource/order-delivery/$obId") $admin $good
 if ((BCode $rg) -eq 200) { Ok 'PUT with a valid payload still accepted (no over-blocking)' }
-elseif ((BMsg $rg) -like '*交货数量必须大于0*' -or (BMsg $rg) -like '*必须等于交货总数量*' -or (BMsg $rg) -like '*入库仓库不能为空*') {
+elseif ((BMsg $rg) -like '*收货数量必须大于0*' -or (BMsg $rg) -like '*必须等于收货总数量*' -or (BMsg $rg) -like '*入库仓库不能为空*') {
   Bad ('a VALID payload was blocked by the payload validation: ' + (BMsg $rg))
 } else {
   Ok ('valid payload passed the payload validation (later rejected by a business rule: ' + (BMsg $rg) + ')')

@@ -220,7 +220,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/order/add', name: 'OutsourceOrderAdd', component: () => import('@/views/outsource/order/add.vue'), meta: { title: '新增加工单', requiresAuth: true, operate: true } },
       { path: 'outsource/order/detail/:id', name: 'OutsourceOrderDetail', component: () => import('@/views/outsource/order/detail.vue'), meta: { title: '委外加工单详情', requiresAuth: true, operate: true } },
       // 成品收货（2026-09-16）：原「加工订单详情 → 交货管理」页签移出独立成菜单页；
-      // 列表只列正在加工的加工单，:id 页是该单的交货详细（新增/审核/退不良都在这里）
+      // 列表只列正在加工的加工单，:id 页是该单的收货详细（新增/审核/退不良都在这里）
       { path: 'outsource/order/delivery', name: 'OutsourceOrderDelivery', component: () => import('@/views/outsource/order/delivery-list.vue'), meta: { title: '成品收货', requiresAuth: true } },
       { path: 'outsource/order/delivery/:id', name: 'OutsourceOrderDeliveryDetail', component: () => import('@/views/outsource/order/delivery.vue'), meta: { title: '成品收货', requiresAuth: true, operate: true } },
       { path: 'outsource/order/close/:id', name: 'OutsourceOrderClose', component: () => import('@/views/outsource/order/close.vue'), meta: { title: '结单报表', requiresAuth: true, operate: true } },
@@ -232,7 +232,7 @@ const routes: RouteRecordRaw[] = [
       // 列表只列收货中的物料订单，:id 页是该单的收料/退不良详细
       { path: 'outsource/material-order/delivery', name: 'OutsourceMaterialOrderDelivery', component: () => import('@/views/outsource/material-order/delivery-list.vue'), meta: { title: '物料收货', requiresAuth: true } },
       { path: 'outsource/material-order/delivery/:id', name: 'OutsourceMaterialOrderDeliveryDetail', component: () => import('@/views/outsource/material-order/delivery.vue'), meta: { title: '物料收货', requiresAuth: true, operate: true } },
-      // 交货信息 总览页 2026-09-16 按用户要求下线（页面已删）：交货记录改在
+      // 交货信息 总览页 2026-09-16 按用户要求下线（页面已删）：收货记录改在
       // 「加工订单详情 → 交货管理」与「物料订单详情 → 交货管理」页签内查看。旧地址重定向，避免老书签吃 403
       { path: 'outsource/delivery-info', redirect: '/outsource/order' },
       // 物料库存盘点（物料仓库，2026-09-16 新增）：与成品「库存盘点」共用面板，scope=MATERIAL 只盘物料仓

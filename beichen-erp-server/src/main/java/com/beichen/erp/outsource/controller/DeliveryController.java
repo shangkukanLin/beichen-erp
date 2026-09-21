@@ -127,7 +127,7 @@ public class DeliveryController {
     public R<Map<String, Object>> getById(@PathVariable Long id) {
         OutsourceDelivery d = deliveryService.getById(id);
         // 不存在（含被多租户隔离）统一返回 404，避免前端空白页无提示（见 §12.29 观察项 B）
-        if (d == null) throw new BusinessException(404, "交货单不存在或无权访问");
+        if (d == null) throw new BusinessException(404, "收货单不存在或无权访问");
         Map<String, Object> m = new HashMap<>();
         m.put("id", d.getId()); m.put("code", d.getCode()); m.put("deliveryType", d.getDeliveryType());
         m.put("deliveryDate", d.getDeliveryDate()); m.put("status", d.getStatus());

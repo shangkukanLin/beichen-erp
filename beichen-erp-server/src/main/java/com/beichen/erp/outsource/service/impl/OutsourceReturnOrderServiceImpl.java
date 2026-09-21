@@ -883,9 +883,9 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     @Override
     public Map<String, Object> returnPrefill(Long deliveryId, Long orderId) {
         OutsourceOrderDelivery d = deliveryId != null ? orderDeliveryMapper.selectById(deliveryId) : null;
-        if (deliveryId != null && d == null) throw new BusinessException("交货记录不存在");
+        if (deliveryId != null && d == null) throw new BusinessException("收货记录不存在");
         Long oid = (d != null && d.getOrderId() != null) ? d.getOrderId() : orderId;
-        if (oid == null) throw new BusinessException("缺少加工单或交货记录参数");
+        if (oid == null) throw new BusinessException("缺少加工单或收货记录参数");
         OutsourceOrder o = orderMapper.selectById(oid);
         if (o == null) throw new BusinessException("加工单不存在");
 
@@ -1071,7 +1071,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
             BigDecimal base = delivered.getOrDefault(pid, BigDecimal.ZERO);
             BigDecimal done = returned.getOrDefault(pid, BigDecimal.ZERO);
             if (done.add(e.getValue()).compareTo(base) > 0) {
-                throw new BusinessException("退货数量超过该产品已交货量（产品["
+                throw new BusinessException("退货数量超过该产品已收货量（产品["
                         + nameMap.getOrDefault(pid, "#" + pid) + "]已交 " + fmt(base)
                         + "、已退 " + fmt(done) + "、本次 " + fmt(e.getValue()) + "）");
             }

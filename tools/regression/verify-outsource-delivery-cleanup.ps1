@@ -2,7 +2,7 @@
 # 断言：① 侧栏委外加工无「交货信息」，且子菜单 = sys_menu(parent_id=4, visible=1) 按 sort_order
 #       ② 旧地址 /outsource/delivery-info 重定向到 /outsource/order（不 403）
 #       ③ 仪表盘不再有「交货信息」快捷入口
-#       ④ 【关键回归】交货业务本身完好：两个收货页（成品收货 / 物料收货）均能直达且不 403
+#       ④ 【关键回归】收货业务本身完好：两个收货页（成品收货 / 物料收货）均能直达且不 403
 #          —— 2026-09-16 起「交货管理」已由订单详情页签移出为独立菜单页，
 #             页签级的深度断言改由 verify-delivery-menu.ps1 覆盖
 $ErrorActionPreference = 'Continue'
@@ -72,7 +72,7 @@ if ($d3) {
   if (($d3.b -join ',') -match '交货信息') { Bad '仪表盘仍有「交货信息」按钮' } else { Ok '仪表盘已无「交货信息」按钮' }
 }
 
-# ④ 关键回归：交货业务完好（页签已移出 → 改为验收货独立页可直达）
+# ④ 关键回归：收货业务完好（页签已移出 → 改为验收货独立页可直达）
 foreach ($u in @("$base/outsource/order/delivery", "$base/outsource/material-order/delivery")) {
   OpenFresh $u
   $p = EvalJs "location.pathname"
@@ -80,4 +80,4 @@ foreach ($u in @("$base/outsource/order/delivery", "$base/outsource/material-ord
   else { Ok ($u + ' 直达正常（非 403）') }
 }
 
-if ($global:fail -eq 0) { Write-Output 'RESULT PASS 交货信息总览页已下线，交货业务（成品收货/物料收货 独立页）完好' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }
+if ($global:fail -eq 0) { Write-Output 'RESULT PASS 交货信息总览页已下线，收货业务（成品收货/物料收货 独立页）完好' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }

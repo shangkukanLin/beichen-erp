@@ -156,7 +156,7 @@
             </el-table-column>
             <el-table-column label="计划开始" width="110"><template #default="{row}">{{ row.planStartDate || '-' }}</template></el-table-column>
             <el-table-column label="计划完成" width="110"><template #default="{row}">{{ row.planEndDate || '-' }}</template></el-table-column>
-            <el-table-column label="最近交货" width="110"><template #default="{row}">{{ row.latestDeliveryDate || '-' }}</template></el-table-column>
+            <el-table-column label="最近收货" width="110"><template #default="{row}">{{ row.latestDeliveryDate || '-' }}</template></el-table-column>
             <el-table-column label="状态" width="90" align="center">
               <template #default="{row}"><el-tag :type="OutsourceOrderStatusTag[row.status] || 'info'" size="small">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag></template>
             </el-table-column>
@@ -189,7 +189,7 @@
                 </span>
               </template>
             </el-table-column>
-            <el-table-column label="最近交货" width="100" align="center"><template #default="{row}">{{ row.lastDeliveryTime ? row.lastDeliveryTime.slice(0,10) : '-' }}</template></el-table-column>
+            <el-table-column label="最近收货" width="100" align="center"><template #default="{row}">{{ row.lastDeliveryTime ? row.lastDeliveryTime.slice(0,10) : '-' }}</template></el-table-column>
             <el-table-column label="交期" width="100" align="center"><template #default="{row}">{{ row.deliveryDate || '-' }}</template></el-table-column>
             <el-table-column label="状态" width="80" align="center">
               <template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template>
@@ -199,7 +199,7 @@
 
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序 = 使用频率（2026-09-14）：加工/交货/物料订单（跟单）→ 物料信息 → 退货（售后）→ 供货商/合同模板（配置）
+          <!-- 顺序 = 使用频率（2026-09-14）：加工/收货/物料订单（跟单）→ 物料信息 → 退货（售后）→ 供货商/合同模板（配置）
                注：2026-09-16 「物料收发单 / 物料其他出入库 / 物料报损 / 委外仓库 / 自有物料仓」5 项
                已随新一级菜单「物料仓库」迁到独立的「物料仓库」TAB -->
           <el-button v-if="hasMenu['OutsourceOrder']" type="primary" size="small" text @click="$router.push('/outsource/order')">加工订单</el-button>

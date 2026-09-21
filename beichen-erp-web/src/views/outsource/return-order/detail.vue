@@ -151,8 +151,8 @@ onActivated(loadData)
           <span v-if="detail.orderCode">{{ detail.orderCode }}</span>
           <span v-else style="color:var(--app-text-placeholder)">{{ isRepair ? '不关联（维修退货）' : '未关联' }}</span>
         </el-descriptions-item>
-        <!-- 来源交货记录：从「成品收货」按记录发起退货时才有（2026-09-17） -->
-        <el-descriptions-item label="来源交货记录">{{ detail.sourceDeliveryId ? ('#' + detail.sourceDeliveryId) : '-' }}</el-descriptions-item>
+        <!-- 来源收货记录：从「成品收货」按记录发起退货时才有（2026-09-17） -->
+        <el-descriptions-item label="来源收货记录">{{ detail.sourceDeliveryId ? ('#' + detail.sourceDeliveryId) : '-' }}</el-descriptions-item>
         <el-descriptions-item label="退货日期">{{ $fmtDate(detail.returnDate) }}</el-descriptions-item>
         <el-descriptions-item label="送修/已返回" v-if="isRepair">
           {{ (detail.products || []).reduce((s: number, p: any) => s + (Number(p.quantity) || 0), 0) }} /

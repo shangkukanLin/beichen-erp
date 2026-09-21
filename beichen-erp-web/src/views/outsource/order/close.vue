@@ -20,7 +20,7 @@ const items = ref<any[]>([])
 const remark = ref('')
 const materialTypes = ref<any[]>([])
 const returnWarehouseId = ref<number | null>(null)
-// 强制退料（2026-09-16 问题①）：委外交货领料走"允许负"口径 → 工厂仓账面常为负/无库存行；
+// 强制退料（2026-09-16 问题①）：委外收货领料走"允许负"口径 → 工厂仓账面常为负/无库存行；
 // 此时严格口径会直接拦住结单，需显式勾选"强制退料"（按强制出库口径扣减，允许负数，流水留痕）
 const forceReturn = ref(false)
 const showForceDialog = ref(false)
@@ -254,11 +254,11 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
       </el-table>
     </el-card>
 
-    <!-- 交货记录 -->
+    <!-- 收货记录 -->
     <el-card shadow="never" style="margin-bottom:12px">
-      <template #header><span style="font-weight:600">交货记录</span></template>
+      <template #header><span style="font-weight:600">收货记录</span></template>
       <div style="display:flex;gap:20px;margin-bottom:12px;font-size:var(--app-font-base);color:var(--app-text-regular)">
-        <span>正常交货：<b style="color:var(--app-color-success)">{{ (report.deliveries || []).filter((d:any)=>d.deliveryType!==DeliveryType.DEFECT_RETURN).reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
+        <span>正常收货：<b style="color:var(--app-color-success)">{{ (report.deliveries || []).filter((d:any)=>d.deliveryType!==DeliveryType.DEFECT_RETURN).reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
         <span>退不良：<b style="color:var(--app-color-warning)">{{ Math.abs((report.deliveries || []).filter((d:any)=>d.deliveryType===DeliveryType.DEFECT_RETURN).reduce((s:number,d:any)=>s+(d.quantity||0),0)) }}</b></span>
         <span>实际已交：<b style="color:var(--app-color-primary)">{{ (report.deliveries || []).reduce((s:number,d:any)=>s+(d.quantity||0),0) }}</b></span>
       </div>
@@ -283,7 +283,7 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
     <el-dialog v-model="showForceDialog" title="存在退料超出工厂仓账面库存的物料" width="640px">
       <el-alert type="warning" :closable="false" show-icon
         title="以下物料的退料数量超过工厂委外仓账面库存"
-        description="委外交货领料走「允许负」口径，工厂仓账面常为负或没有库存行，此时严格口径会阻止结单。如需按实际情况退料，请勾选下方「强制退料」；否则请先补入库单或下调退料数量。" />
+        description="委外收货领料走「允许负」口径，工厂仓账面常为负或没有库存行，此时严格口径会阻止结单。如需按实际情况退料，请勾选下方「强制退料」；否则请先补入库单或下调退料数量。" />
       <el-table :data="shortageRows" border size="small" max-height="240" style="margin-top:12px">
         <el-table-column prop="materialName" label="物料" min-width="130" />
         <el-table-column label="工厂仓账面" width="110" align="right">
