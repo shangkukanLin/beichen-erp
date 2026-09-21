@@ -1,10 +1,22 @@
 ﻿# Browser E2E: launch a RETURN order from the receipt pages (2026-09-17).
-#   A) finished-goods receipt (/outsource/order/delivery)
-#      - list row button  (order level) -> /outsource/return-order/add?orderId=
-#      - receipt record button          -> /outsource/return-order/add?sourceDeliveryId=
-#   B) material receipt (/outsource/material-order/delivery)
-#      - list row button  (order level) -> /outsource/material-return/add?supplierId=
-#      - receive record button          -> /outsource/material-return/add?sourceDeliveryId=
+#
+# !! 2026-09-21 USER DECISION - the finished-goods half of this file is OBSOLETE BY DESIGN.
+#    /outsource/order/delivery must NOT offer a RETURN entry any more: every receipt row there hangs
+#    off a 委外加工单, so a return is just "that order received fewer pieces" and is posted as a
+#    negative DEFECT_RETURN record (红冲收货 / 退不良) on the very same page. The independent return
+#    order (委外加工退货, incl. REPAIR + charge + repair-return) stays reachable from its own menu.
+#    => the two blocks that used to click the RETURN button on the finished-goods pages are gone;
+#       their replacement guard rails ("list + detail must have NO 退货 button", "detail must have
+#       退不良") are frozen in verify-delivery-menu.ps1 sections 2 and 4.
+#
+# !! STATUS: STALE FIXTURES - every remaining block still references ids of an OLDER database
+#    generation (order 29 / delivery 30 / warehouse 37 / supplier 20 / DEL-20260916001 / MWO-...).
+#    The current DB was re-seeded (warehouse ids start at 58, outsource_order has 6 rows, no id 29),
+#    so THIS FILE CANNOT PASS until those fixtures are re-derived at runtime. Refresh = separate task.
+#
+#   Covered now: material receipt (/outsource/material-order/delivery)
+#      - list row button    (supplier level) -> /outsource/material-return/add?supplierId=
+#      - receive record btn                  -> /outsource/material-return/add?sourceDeliveryId=
 # Asserts: prefill values, DB persistence (source_delivery_id / order_id), audit side effects
 # (stock +/- and payable) and un-audit rollback. The created orders are CANCELLED at the end so the
 # script is re-runnable (cancelled orders do not consume the returnable quantity).
@@ -64,6 +76,9 @@ WatchErrors
 ClearErrs
 
 # =====================================================================
+# !! OBSOLETE (2026-09-21): the finished-goods receipt pages no longer offer the RETURN entry.
+#    S1/S2 below click a button that was removed by user decision - do NOT re-enable them; use
+#    verify-delivery-menu.ps1 (sections 2 + 4) for the current guard rails instead.
 Step 'S1 list-row entry of finished-goods receipt'
 Open '/outsource/order/delivery' 2800
 $t = Rows 0

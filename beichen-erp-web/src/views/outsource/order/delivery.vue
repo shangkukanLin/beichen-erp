@@ -18,7 +18,7 @@ defineOptions({ name: 'OutsourceOrderDeliveryDetail' })
 const route = useRoute(); const router = useRouter()
 const orderId = Number(route.params.id)
 const loading = ref(true)
-const order = reactive({ code: '', status: '', factoryId: undefined as any, factoryName: '', planEndDate: '' })
+const order = reactive({ code: '', status: '', factoryName: '', planEndDate: '' })
 const deliveries = ref<any[]>([])
 const summary = ref<any>({})
 const products = ref<any[]>([])
@@ -109,7 +109,7 @@ async function loadData() {
       request.get<any, any>(`/outsource/order-delivery/summary/${orderId}`),
       request.get<any, any>(`/outsource/order/${orderId}/products`)
     ])
-    Object.assign(order, { code: o?.code || '', status: o?.status || '', factoryId: o?.factoryId, planEndDate: o?.planEndDate || '', factoryName: '' })
+    Object.assign(order, { code: o?.code || '', status: o?.status || '', planEndDate: o?.planEndDate || '', factoryName: '' })
     if (o?.factoryId) {
       try { const s = await request.get<any, any>(`/supplier/${o.factoryId}`); order.factoryName = s?.name || '' }
       catch (e: any) { console.warn('加载加工厂失败', e?.message || e) }
@@ -212,15 +212,15 @@ async function handleUnaudit(row: any) {
 }
 
 /**
- * 退货（2026-09-17）：把已收到我方成品仓的**良品**退回加工厂 —— 走**加工退货单**（独立单据：
- * 成品出库 + BOM 料还回工厂委外仓 + 冲减应付，可选收费），与「退不良」（不良品换料/退款，
- * 写在收货记录里并影响"已收/剩余"）是两件事。
- * 传记录时后端会算出该记录各规格的「已收 − 已退 = 可退」并预填。
+ * 2026-09-21（用户口径）：本页**只保留「退不良」**（红冲收货）。
+ * <p>本页每一条收货记录都挂在**一张委外加工单**上，退回本质就是"这张单少收了多少" ——
+ * 写一条**负数**的退不良记录（`deliveryType=DEFECT_RETURN`、`isReverse=1`）红冲掉，
+ * 已收数量 / 剩余数量 / 应付就会一并改对，**不需要**再跳独立单据。</p>
+ * <p>原有的「退货」入口（良品退回加工厂 → 加工退货单 `outsource_return_order`：成品出库 +
+ * BOM 料还回工厂委外仓 + 冲减应付 + 可选收费）已按该口径**整体移除**。
+ * 加工退货单本身仍在「委外加工 → 委外加工退货」菜单独立使用（含维修退货 / 工厂收费 /
+ * 维修返回 / 结案），与本页无关。</p>
  */
-function goReturn(row?: any) {
-  if (row?.id) router.push(`/outsource/return-order/add?sourceDeliveryId=${row.id}`)
-  else router.push(`/outsource/return-order/add?orderId=${orderId}&factoryId=${order.factoryId || ''}`)
-}
 
 // ===== 退不良（拆分还料） =====
 const defectVisible = ref(false); const defectSaving = ref(false)
@@ -336,8 +336,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
             <el-button type="primary" size="small" @click="openAdd">新增收货</el-button>
             <el-button type="danger" size="small" @click="openDefectReturn">退不良</el-button>
           </template>
-          <!-- 退货：良品退回加工厂（走加工退货单）；已结单的加工单也可能需要退货，故不受 canDeliver 限制 -->
-          <el-button type="warning" size="small" @click="goReturn()">退货</el-button>
+          <!-- 2026-09-21（用户口径）：本页退回一律走「退不良」红冲收货 ⇒ 原「退货」按钮已移除 -->
         </div>
       </div>
       <!--
@@ -376,8 +375,6 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
             <el-button type="primary" link size="small" @click="openDetail(row)">详情</el-button>
             <el-button type="success" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
             <el-button type="warning" link size="small" v-if="row.status === DocStatus.AUDITED" @click="handleUnaudit(row)">反审核</el-button>
-            <!-- 退货：仅对已审核的**普通收货**记录开放（退不良记录不再退货） -->
-            <el-button type="warning" link size="small" v-if="row.status === DocStatus.AUDITED && row.deliveryType !== DeliveryType.DEFECT_RETURN" @click="goReturn(row)">退货</el-button>
             <el-button type="primary" link size="small" v-if="row.status === DocStatus.DRAFT" @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleDelete(row)">删除</el-button>
           </template>

@@ -71,12 +71,15 @@ OpenFresh "$base/outsource/order/delivery"
 $p2 = EvalJs "location.pathname"
 if ($p2 -match '/login' -or $p2 -match '403') { Bad ('/outsource/order/delivery 未正常进入，落在 ' + $p2) }
 else { Ok '/outsource/order/delivery 直达正常（非 403）' }
-$d2 = ReadJson "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const t=document.body.innerText;return JSON.stringify({n:rows.length,prod:t.includes('生产中')==true,pending:t.includes('待审核')==true,prog:t.includes('收货进度')==true,btn:t.includes('收货')==true});})()" '成品收货列表'
+$d2 = ReadJson "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({n:rows.length,prod:t.includes('生产中')==true,pending:t.includes('待审核')==true,prog:t.includes('收货进度')==true,btn:t.includes('收货')==true,ret:b.some(x=>x==='退货')});})()" '成品收货列表'
 if ($d2) {
   Write-Output ('成品收货列表行数 = ' + $d2.n)
   if ($d2.n -ge 1) { Ok ('列表有数据（' + $d2.n + ' 行）') } else { Bad '列表无数据（库中应有 1 张 PRODUCING 加工单）' }
   if ($d2.prog -and $d2.btn) { Ok '列表含 收货进度 列与 收货 按钮' } else { Bad '列表缺少 收货进度 列或 收货 按钮' }
   if ($d2.prod -and -not $d2.pending) { Ok '列表只含正在加工（生产中）的加工单' } else { Bad ('列表含非生产中订单：prod=' + $d2.prod + ' pending=' + $d2.pending) }
+  # 2026-09-21（用户口径「成品收货只留退不良、退回走红冲收货」）：列表页**不得**再有「退货」入口。
+  # 断言按**按钮**取值而不是 body 文本 —— 侧栏还有「委外加工退货」菜单，用文本判定必然假通过。
+  if (-not $d2.ret) { Ok '列表页已无「退货」入口（退回走红冲收货）' } else { Bad '列表页仍出现「退货」按钮（应已移除）' }
 }
 
 # ③ 行内「收货」→ 自动弹出新增收货弹窗（一步收货）
@@ -93,11 +96,15 @@ if ($d3) {
 # ④ 关闭弹窗后：汇总卡 / 收货记录 / 返回列表
 EvalJs "(()=>{const d=[...document.querySelectorAll('.el-dialog')].find(x=>x.offsetParent!==null);if(d){const btns=[...d.querySelectorAll('button')];for(const b of btns){if(b.innerText.trim()==='取消'){b.click();return 'cancel'}}}return 'none'})()" | Out-Null
 agent-browser wait 1600
-$d4 = ReadJson "(()=>{const t=document.body.innerText;return JSON.stringify({sum:t.includes('订单总量')&&t.includes('已收数量')&&t.includes('剩余数量'),rec:t.includes('收货记录'),back:t.includes('返回列表')});})()" '收货详细页'
+$d4 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({sum:t.includes('订单总量')&&t.includes('已收数量')&&t.includes('剩余数量'),rec:t.includes('收货记录'),back:t.includes('返回列表'),ret:b.some(x=>x==='退货'),def:b.includes('退不良')});})()" '收货详细页'
 if ($d4) {
   if ($d4.sum) { Ok '收货详细页有汇总卡（订单总量/已收数量/剩余数量）' } else { Bad '收货详细页缺少汇总卡' }
   if ($d4.rec) { Ok '收货详细页有「收货记录」区块' } else { Bad '收货详细页缺少「收货记录」区块' }
   if ($d4.back) { Ok '收货详细页有「返回列表」按钮' } else { Bad '收货详细页缺少「返回列表」按钮' }
+  # 2026-09-21（用户口径）：本页**只保留「退不良」**（红冲收货，记录挂在这张委外加工单上），
+  # 「退货」入口（跳独立加工退货单）已整体移除 —— 两条断言一起锁住，防止日后被加回来。
+  if (-not $d4.ret) { Ok '收货详细页已无「退货」入口' } else { Bad '收货详细页仍出现「退货」按钮（应已移除）' }
+  if ($d4.def) { Ok '收货详细页有「退不良」入口（红冲收货）' } else { Bad '收货详细页缺少「退不良」按钮' }
 }
 
 # ⑤ 加工单详情：页签已无「交货管理」，改由「成品收货」按钮跳转

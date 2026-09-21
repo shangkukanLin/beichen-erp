@@ -1,11 +1,20 @@
 ﻿# Browser E2E: outsourcing return order has two types now (2026-09-17)
 #   S0 data prep: make sure warehouse 38 has >=1 DEFECT unit of MFTEST(48) (repair source; made via return-sort if missing)
 #   S1 DEFECT return linked to a work order (via finished-goods receipt record) : type defaults to DEFECT, charging disabled
+#      !! 2026-09-21: this ENTRY POINT is GONE - /outsource/order/delivery no longer offers 退货 (user
+#         decision: that page returns goods only via 红冲收货 / 退不良). The branch itself still exists,
+#         it is just reachable from /outsource/return-order/add by picking the 关联加工单 dropdown;
+#         S1 needs to be re-written that way when this file is refreshed.
 #   S2 DEFECT return WITHOUT work order (manual) : materials filled from the BOM snapshot, order_id must be NULL
 #   S3 REPAIR return: must charge / must NOT link a work order / no material lines; audit = send-out (DEFECT-)
 #      plus ONE positive repair-charge payable (no negative return payable)
 #   S4 repair back: register the returned goods (A +1) / over-return blocked / revoke the return record
 #   S5 un-audit + cancel: stock & payable fully rolled back (a repair order needs all return records revoked first)
+#
+# !! STATUS: STALE FIXTURES - S0..S5 still reference ids of an OLDER database generation (warehouse
+#    38 / 41, order 29, delivery 30, MFTEST product 48). The current DB was re-seeded (warehouse ids
+#    start at 58, outsource_order has 6 rows, no id 29) so THIS FILE CANNOT PASS until those fixtures
+#    are re-derived at runtime. Refresh = separate task.
 # ASCII ONLY. Chinese strings live in ui-e2e-zh.json
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 
@@ -85,7 +94,7 @@ if ((D $d38) -lt 1) {
 Ok ((D $d38) -ge 1) ('S0 ready: defect stock=' + $d38 + ' (warehouse 38, MFTEST)')
 
 # =====================================================================
-Step 'S1 defect return linked to work order (entry from finished-goods receipt)'
+Step 'S1 defect return linked to work order (entry from finished-goods receipt)'   # !! entry removed 2026-09-21, see header
 Open '/outsource/order/delivery/29' 3000
 $ri = [int](RowIdxByCols 2 'opt_type_deliver' 9 'st_audited')
 Ok ($ri -ge 0) ('S1 found audited delivery row ri=' + $ri)

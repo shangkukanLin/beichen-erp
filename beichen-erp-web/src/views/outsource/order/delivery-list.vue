@@ -46,14 +46,6 @@ function progressOf(row: any) {
  */
 function goDelivery(row: any) { router.push(`/outsource/order/delivery/${row.id}?add=1&_t=${Date.now()}`) }
 function goDetail(row: any) { router.push(`/outsource/order/delivery/${row.id}`) }
-/**
- * 退货（2026-09-17）：良品退回加工厂 —— 走**加工退货单**（独立单据，冲减应付 + BOM 料还回工厂委外仓），
- * 与「退不良」（不良品换料/退款，写在收货记录里）是两件事。
- * 列表行是加工单维度，故带 orderId + factoryId 预填；按具体收货记录退货请进详情页。
- */
-function goReturn(row: any) {
-  router.push(`/outsource/return-order/add?orderId=${row.id}&factoryId=${row.factoryId || ''}`)
-}
 
 onActivated(loadData)
 </script>
@@ -76,7 +68,9 @@ onActivated(loadData)
            2026-09-17：①按用户要求「下单/已收/剩余」+40（114→154）、「收货进度」+20（80→100），
            由弹性列「产品」min-width 等量减回（100→77）；②新增行内「退货」按钮（良品退回加工厂 →
            加工退货单），操作列 84→138，由「加工单号 −12、下单/已收/剩余 −10、收货进度 −8、
-           最近收货 −8、计划完成 −8、状态 −8」抵平。 -->
+           最近收货 −8、计划完成 −8、状态 −8」抵平。
+           2026-09-21（用户口径「成品收货页只留退不良、退回走红冲收货」）：**移除**行内「退货」按钮 ⇒
+           操作列 124→84；腾出的 40px **自动归弹性列「产品」**（无需手工抵平，合计仍 ≤ 容器 ⇒ 依旧不横向滑动）。 -->
       <el-table :data="tableData" border stripe v-loading="loading" style="width:100%" @row-click="goDetail">
         <el-table-column label="加工单号" width="140" show-overflow-tooltip>
           <template #default="{ row }"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button></template>
@@ -104,11 +98,10 @@ onActivated(loadData)
         <el-table-column label="状态" width="82" align="center">
           <template #default="{ row }"><el-tag :type="OutsourceOrderStatusTag[row.status] || 'info'" size="small">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="124" align="center" fixed="right">
+        <el-table-column label="操作" width="84" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDelivery(row)">收货</el-button>
-            <!-- 退货：良品退回加工厂（加工退货单），与「退不良」区分 -->
-            <el-button type="warning" link @click.stop="goReturn(row)">退货</el-button>
+            <!-- 2026-09-21（用户口径）：退回进详情页做「退不良」红冲收货，原「退货」按钮已移除 -->
           </template>
         </el-table-column>
       </el-table>
