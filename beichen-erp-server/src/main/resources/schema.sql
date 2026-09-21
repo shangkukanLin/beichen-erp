@@ -989,6 +989,12 @@ CREATE TABLE IF NOT EXISTS purchase_return (
     return_date     DATE                              COMMENT '退货日期',
     status          VARCHAR(20) DEFAULT 'DRAFT'       COMMENT '状态: DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废',
     total_amount    DECIMAL(18,2) DEFAULT 0            COMMENT '退货总金额',
+    -- 是否付费（2026-09-21 用户口径：采购退货单/采购换货单都要有，⚠️ 方向 = 我们付给供货商 ⇒ 正向应付）
+    -- 单据级是**派生值**：金额 = Σ 明细行付费，类型仅当各付费行类型一致时回填，否则 NULL（详情显示"多类型"）
+    charge_flag     TINYINT DEFAULT 0                 COMMENT '是否付费: 0否 1是（我们向供货商付费；派生自明细）',
+    charge_type     VARCHAR(30) DEFAULT NULL          COMMENT '付费类型: SERVICE服务费/DIFF品质差价/FULL全额货值/OTHER其他（各明细一致才回填）',
+    charge_amount   DECIMAL(18,2) DEFAULT 0           COMMENT '付费金额 = Σ 明细行付费（审核生成一条正向应付）',
+    charge_reason   VARCHAR(255) DEFAULT NULL         COMMENT '付费说明（整单共用一句话）',
     remark          VARCHAR(500)                      COMMENT '备注',
     auditor_id      BIGINT                            COMMENT '审核人ID',
     auditor_name    VARCHAR(50)                       COMMENT '审核人姓名',
@@ -1012,6 +1018,11 @@ CREATE TABLE IF NOT EXISTS purchase_return_item (
     quantity     DECIMAL(18,0) DEFAULT 0           COMMENT '退货数量',
     unit_price  DECIMAL(18,4) DEFAULT 0           COMMENT '单价',
     amount      DECIMAL(18,4) DEFAULT 0           COMMENT '金额',
+    -- 逐产品付费（2026-09-21）：一行 = 一个产品 ⇒ 金额/类型/说明挂在本行；方向 = **我们付给供货商**
+    charge_flag   TINYINT DEFAULT 0               COMMENT '是否付费: 0否 1是(逐产品，我们向供货商付费)',
+    charge_type   VARCHAR(20) DEFAULT NULL        COMMENT '付费类型: SERVICE/DIFF/FULL/OTHER',
+    charge_amount DECIMAL(18,2) DEFAULT 0         COMMENT '该产品付费金额(我方付给供货商)',
+    charge_reason VARCHAR(200) DEFAULT NULL       COMMENT '该产品付费说明',
     remark      VARCHAR(255)                      COMMENT '备注',
     company_id  BIGINT DEFAULT NULL               COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -1077,6 +1088,11 @@ CREATE TABLE IF NOT EXISTS purchase_exchange_item (
     in_quantity  DECIMAL(18,0) DEFAULT 0           COMMENT '换入数量（默认=退回数量）',
     in_unit_price DECIMAL(18,4) DEFAULT 0          COMMENT '换入单价（默认=退回单价；改高表示加价换新）',
     in_amount   DECIMAL(18,4) DEFAULT 0            COMMENT '换入金额',
+    -- 逐产品付费（2026-09-21）：一行 = 一个产品 ⇒ 金额/类型/说明挂在本行；方向 = **我们付给供货商**
+    charge_flag   TINYINT DEFAULT 0               COMMENT '是否付费: 0否 1是(逐产品，我们向供货商付费)',
+    charge_type   VARCHAR(20) DEFAULT NULL        COMMENT '付费类型: SERVICE/DIFF/FULL/OTHER',
+    charge_amount DECIMAL(18,2) DEFAULT 0         COMMENT '该产品付费金额(我方付给供货商)',
+    charge_reason VARCHAR(200) DEFAULT NULL       COMMENT '该产品付费说明',
     remark      VARCHAR(255)                      COMMENT '备注',
     company_id  BIGINT DEFAULT NULL               COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

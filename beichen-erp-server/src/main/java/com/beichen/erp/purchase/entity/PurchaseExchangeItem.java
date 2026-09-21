@@ -71,6 +71,24 @@ public class PurchaseExchangeItem {
     /** 换入金额 = 换入数量 × 换入单价（生成正向应付） */
     private BigDecimal inAmount;
 
+    // ==================== 逐产品付费（2026-09-21 用户口径：是否付费且精确到产品） ====================
+
+    /**
+     * 是否付费：0否 1是（**逐产品**，2026-09-21 新增）。
+     * <p>⚠️ 方向：<b>我们向供货商付费</b>（采购侧的对方是供货商）⇒ 审核时并入一条正向应付，
+     * 与销售换货「向客户收费」（应收）方向相反。</p>
+     */
+    private Integer chargeFlag;
+
+    /** 该产品的付费类型：SERVICE服务费 / DIFF品质差价 / FULL全额货值 / OTHER其他（{@code PurchaseChargeType}） */
+    private String chargeType;
+
+    /** 该产品的付费金额（我方付给供货商）；金额 &gt; 0 即视为付费，必须同时给出类型 */
+    private BigDecimal chargeAmount;
+
+    /** 该产品的付费说明（默认取整单的「付费说明」） */
+    private String chargeReason;
+
     private String remark;
 
     @TableField(fill = FieldFill.INSERT)

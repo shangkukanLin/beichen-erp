@@ -68,6 +68,7 @@ public class DataInitializer implements ApplicationRunner {
         migrateDashboardTabs();
         migrateUserMenuMode();
         migratePurchaseExchangeCharge();
+        migratePurchaseChargePerProduct();
         migrateSaleItemCharge();
         initSuperAdmin();
         initMaterialTypes();
@@ -857,6 +858,44 @@ public class DataInitializer implements ApplicationRunner {
         } catch (Exception e) {
             log.debug("{} 历史收费回填跳过：{}", itemTable, e.getMessage());
         }
+    }
+
+    /**
+     * 存量库幂等迁移（2026-09-21 第二轮）：采购侧「逐产品付费」—— 付费金额/类型**下沉到明细行**。
+     * <p>用户口径：采购退货单与采购换货单都要有「是否付费」，方向是 <b>我们付给供货商</b>（生成正向应付），
+     * 且必须**精确到产品**。单据级 charge_* 改为派生值（金额 = Σ 明细，类型各明细一致才回填）。</p>
+     * <p>本方法为 {@code purchase_return} / {@code purchase_return_item} / {@code purchase_exchange_item}
+     * 三张表补列；{@code purchase_exchange} 的 4 列已由 {@link #migratePurchaseExchangeCharge()} 补过。
+     * MySQL 不支持 ADD COLUMN IF NOT EXISTS ⇒ 逐列 try/catch（{@link #addColumnIfMissing}）。</p>
+     */
+    private void migratePurchaseChargePerProduct() {
+        // 采购退货单主表（新）：4 列，与 purchase_exchange 同型
+        addColumnIfMissing("purchase_return",
+                "charge_flag TINYINT DEFAULT 0 COMMENT '是否付费: 0否 1是（我们向供货商付费；派生自明细）'");
+        addColumnIfMissing("purchase_return",
+                "charge_type VARCHAR(30) DEFAULT NULL COMMENT '付费类型: SERVICE/DIFF/FULL/OTHER（各明细一致才回填）'");
+        addColumnIfMissing("purchase_return",
+                "charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '付费金额 = Σ 明细行付费'");
+        addColumnIfMissing("purchase_return",
+                "charge_reason VARCHAR(255) DEFAULT NULL COMMENT '付费说明（整单共用一句话）'");
+        // 采购退货单明细（新）：逐产品 4 列，镜像 sale_return_item
+        addColumnIfMissing("purchase_return_item",
+                "charge_flag TINYINT DEFAULT 0 COMMENT '是否付费: 0否 1是(逐产品)'");
+        addColumnIfMissing("purchase_return_item",
+                "charge_type VARCHAR(20) DEFAULT NULL COMMENT '付费类型: SERVICE/DIFF/FULL/OTHER'");
+        addColumnIfMissing("purchase_return_item",
+                "charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '该产品付费金额(我方付给供货商)'");
+        addColumnIfMissing("purchase_return_item",
+                "charge_reason VARCHAR(200) DEFAULT NULL COMMENT '该产品付费说明'");
+        // 采购换货单明细（新）：逐产品 4 列（主表 4 列早前已有）
+        addColumnIfMissing("purchase_exchange_item",
+                "charge_flag TINYINT DEFAULT 0 COMMENT '是否付费: 0否 1是(逐产品)'");
+        addColumnIfMissing("purchase_exchange_item",
+                "charge_type VARCHAR(20) DEFAULT NULL COMMENT '付费类型: SERVICE/DIFF/FULL/OTHER'");
+        addColumnIfMissing("purchase_exchange_item",
+                "charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '该产品付费金额(我方付给供货商)'");
+        addColumnIfMissing("purchase_exchange_item",
+                "charge_reason VARCHAR(200) DEFAULT NULL COMMENT '该产品付费说明'");
     }
 
     /** 幂等补列：列已存在时 MySQL 报错，捕获忽略即可（不依赖 MySQL 版本特性） */
