@@ -262,7 +262,8 @@ onActivated(async () => { await loadOptions(); await loadData() })
   <div class="detail-page" v-loading="loading">
     <el-tabs v-model="activeTab" style="margin-bottom:12px" @tab-change="(t:any)=>{if(t==='close')loadCloseReport()}">
       <el-tab-pane label="加工详情" name="detail" />
-      <!-- 「交货管理」页签已于 2026-09-16 移出为独立菜单页「成品收货」（下方按钮跳转） -->
+      <!-- 「交货管理」页签已于 2026-09-16 移出为独立菜单页「成品收货」；页签移出时留下的「跳转按钮」
+           又于 2026-09-21 按用户口径移除（收货统一从「成品收货」菜单进） -->
       <el-tab-pane v-if="form.status===OutsourceOrderStatus.FINISHED||form.status===OutsourceOrderStatus.CANCELLED" label="结单详情" name="close" />
     </el-tabs>
 
@@ -290,8 +291,9 @@ onActivated(async () => { await loadOptions(); await loadData() })
             <el-button v-if="form.status===OutsourceOrderStatus.PENDING" type="success" size="small" @click="handleAudit">审核</el-button>
             <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="danger" size="small" @click="handleUnaudit">反审核</el-button>
             <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="warning" size="small" @click="router.push(`/outsource/order/close/${form.id}`)">结单</el-button>
-            <!-- 交货管理（新增收货/审核/退不良）2026-09-16 移出为独立菜单页「成品收货」，此处只留跳转入口 -->
-            <el-button type="warning" size="small" @click="router.push(`/outsource/order/delivery/${form.id}`)">成品收货</el-button>
+            <!-- 2026-09-21（用户口径：「委外加工单详情页面里面的成品收货按钮不要了。在成品收货里面收货就行」）：
+                 收货统一从左侧「委外加工 → 成品收货」菜单进（列表行内「收货」直达一步收货、行内「详情」看记录），
+                 本页不再保留跳转按钮（原先那个是 2026-09-16「交货管理」页签移出时留下的入口）。 -->
             <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="form.status===OutsourceOrderStatus.CANCELLED">保存</el-button>
           </div>
         </el-form>

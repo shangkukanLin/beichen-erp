@@ -5,7 +5,8 @@
 #       ② /outsource/order/delivery 直达不 403，只列正在加工（PRODUCING）的加工单
 #       ③ 行内「收货」→ 进入 /outsource/order/delivery/:id 且**自动弹出新增收货弹窗**（一步收货）
 #       ④ 收货详细页有 汇总卡 / 收货记录区块 / 返回列表
-#       ⑤ 加工单详情页签已无「交货管理」，改为「成品收货」按钮跳转
+#       ⑤ 加工单详情页签已无「交货管理」，且**不再有**「成品收货」跳转按钮
+#          （2026-09-21 用户口径：收货统一从「成品收货」菜单进）
 #       ⑥ /outsource/material-order/delivery 直达不 403（当前库中收货中订单 0 条属正常，只验渲染与不报错）
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
@@ -109,22 +110,21 @@ if ($d4) {
   if (-not $d4.old) { Ok '收货详细页已无「退不良」字样（已按口径改名为加工退货）' } else { Bad '收货详细页仍出现「退不良」按钮' }
 }
 
-# ⑤ 加工单详情：页签已无「交货管理」，改由「成品收货」按钮跳转
+# ⑤ 加工单详情：页签已无「交货管理」，且**不再有**「成品收货」跳转按钮
+#    2026-09-21（用户口径「委外加工单详情页面里面的成品收货按钮不要了。在成品收货里面收货就行」）：
+#    收货统一从「委外加工 → 成品收货」菜单进，故这里**反过来**断言"按钮必须不存在"。
 $oid = if ($d3 -and $d3.p -match '(\d+)$') { $Matches[1] } else { '' }
 if ($oid) {
   OpenFresh "$base/outsource/order/detail/$oid"
-  $d5 = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim());const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:t,hasDelivery:false,hasBtn:(b.includes('成品收货')==true),hasDefect:(b.includes('退不良')==true),hasMfg:(b.includes('加工退货')==true)});})()" '加工单详情'
+  $d5 = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim());const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:t,hasRecv:(b.includes('成品收货')==true),hasDefect:(b.includes('退不良')==true),hasMfg:(b.includes('加工退货')==true)});})()" '加工单详情'
   if ($d5) {
     Write-Output ('加工单详情 页签 = ' + ($d5.tabs -join ' | '))
     if (($d5.tabs -join ',') -match '交货管理') { Bad '加工单详情仍有「交货管理」页签（应已移出）' } else { Ok '加工单详情已无「交货管理」页签' }
-    if ($d5.hasBtn) { Ok '加工单详情有「成品收货」跳转按钮' } else { Bad '加工单详情缺少「成品收货」跳转按钮' }
+    if ($d5.hasRecv) { Bad '加工单详情仍有「成品收货」跳转按钮（2026-09-21 用户口径应已移除）' } else { Ok '加工单详情已无「成品收货」跳转按钮（收货统一从菜单进）' }
     if (-not $d5.hasDefect -and -not $d5.hasMfg) { Ok '加工单详情已无「退不良/加工退货」按钮（随交货管理移出）' } else { Bad ('加工单详情仍有退回按钮：defect=' + $d5.hasDefect + ' mfg=' + $d5.hasMfg) }
-    # 点按钮跳转
-    EvalJs "(()=>{for(const b of document.querySelectorAll('button')){if(b.innerText.trim()==='成品收货'){b.click();return 'clicked'}}return 'no-btn'})()" | Out-Null
-    agent-browser wait 3000
-    # agent-browser eval 返回带引号的 JSON 字符串，比较前先去掉首尾引号
+    # 已无按钮可点：只确认本页直达正常、没有被重定向走（防"移除按钮时顺手改坏了路由"）
     $p5 = (EvalJs "location.pathname").Trim('"')
-    if ($p5 -eq "/outsource/order/delivery/$oid") { Ok ('「成品收货」按钮跳转正确（' + $p5 + '）') } else { Bad ('「成品收货」按钮跳转异常：' + $p5) }
+    if ($p5 -like "/outsource/order/detail/*") { Ok ('加工单详情直达正常（' + $p5 + '）') } else { Bad ('加工单详情路径异常：' + $p5) }
   }
 } else { Write-Output '（未取到加工单 id，跳过详情页校验）' }
 
