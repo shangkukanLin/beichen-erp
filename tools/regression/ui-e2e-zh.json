@@ -408,6 +408,8 @@
   "tag_paid": "付费",
   "txt_no_po": "无单换货",
   "txt_pay_direction": "我方付给供货商",
+  "lbl_charge": "收费",
+  "lbl_charge_total": "收费合计",
   "val_vendor1": "测试供货商A1",
   "val_po_1": "CG-20260918006",
   "val_prod_po": "测试产品A11",

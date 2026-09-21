@@ -44,32 +44,32 @@
             <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
           </el-col>
           <el-col :span="6">
-            <el-form-item label="是否收费">
-              <el-switch v-model="form.chargeFlag" :active-value="1" :inactive-value="0"
-                active-text="收费" inactive-text="不收费" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="收费类型" :required="form.chargeFlag === 1">
-              <el-select v-model="form.chargeType" placeholder="请选择" clearable
-                style="width:100%" :disabled="form.chargeFlag !== 1">
+            <el-form-item label="收费类型（批量）">
+              <el-select v-model="form.chargeType" placeholder="选后点「套用全部」" clearable style="width:100%">
                 <el-option v-for="o in chargeTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="6">
-            <el-form-item label="收费金额" :required="form.chargeFlag === 1">
-              <el-input-number v-model="form.chargeAmount" :min="0" :precision="2" :step="10"
-                controls-position="right" style="width:100%" :disabled="form.chargeFlag !== 1" />
+            <el-form-item label="收费合计（自动）">
+              <span style="font-weight:600;color:#e6a23c">{{ chargeTotal.toFixed(2) }}</span>
+              <span style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">= Σ 明细行收费</span>
             </el-form-item>
           </el-col>
-          <el-col :span="24">
-            <el-form-item label="收费说明">
-              <el-input v-model="form.chargeReason" placeholder="选填，如：客户人为损坏 / 超出保修期"
-                :disabled="form.chargeFlag !== 1" />
+          <el-col :span="6">
+            <el-form-item label="收费说明（批量）">
+              <el-input v-model="form.chargeReason" placeholder="选填，逐行未填时套用" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label=" ">
+              <el-button plain :disabled="!form.chargeType" @click="applyChargeTypeToAll">套用到全部明细</el-button>
             </el-form-item>
           </el-col>
         </el-row>
+        <!-- 收费（2026-09-21 用户口径：**收费精确到产品**）：单据级不再手填金额（= Σ明细，后端回写），
+             上方只作「批量默认」（类型/说明可一键套用），金额在明细行逐产品填。
+             ⚠️ 方向：**向客户收取** ⇒ 审核生成一条正向应收（单号 -FEE，金额 = Σ明细）。 -->
       </el-form>
 
       <el-divider content-position="left">
@@ -78,52 +78,67 @@
           只支持同品换货：换出产品与退回产品相同，换出数量可与退回数量不等（如退2换1）
         </span>
       </el-divider>
+      <!-- 2026-09-21（UI + 逐产品收费）：原来 10 列 1160px ⇒ 横向滚动 212px。现：
+           ① 删「SKU」独占列 —— 退回产品列直接显示「SKU | 名称」（后端 saleOrderItems 已回 sku）
+           ② 控件 size=small、数量/单价 :controls=false ⇒ 更窄
+           ③ 新增「收费」列（金额 + 类型，**逐产品**；金额 0 = 不收费）
+           ④ 列宽合计 914px < 内容区 948px ⇒ 一行显示完、不左右滑动（有守卫断言） -->
       <el-table :data="items" border size="small" max-height="380">
         <!-- ===== 退回侧：客户退回，入成品仓（品质待分类 PENDING）待整理 ===== -->
         <el-table-column label="退回（客户退回，入成品仓待分类）" align="center">
-          <el-table-column label="SKU" width="130">
-            <template #default="{ row }">
-              <span v-if="row.sku">{{ row.sku }}</span>
-              <span v-else style="color:var(--app-text-secondary)">自动生成</span>
-            </template>
+          <el-table-column label="退回产品" width="140" show-overflow-tooltip>
+            <template #default="{ row }">{{ row.sku ? row.sku + ' | ' + row.productName : row.productName }}</template>
           </el-table-column>
-          <el-table-column prop="productName" label="退回产品" min-width="150" show-overflow-tooltip />
-          <el-table-column label="可换数量" width="90" align="right">
+          <el-table-column label="可换数量" width="64" align="right">
             <template #default="{ row }">{{ row.maxQuantity ?? '-' }}</template>
           </el-table-column>
-          <el-table-column label="退回数量" width="130">
+          <el-table-column label="退回数量" width="78">
             <template #default="{ row }">
-              <el-input-number v-model="row.quantity" :min="0" :precision="0" :step="1" controls-position="right" style="width:100%" />
+              <el-input-number v-model="row.quantity" :min="0" :precision="0" :step="1" size="small" :controls="false" style="width:100%" />
             </template>
           </el-table-column>
-          <el-table-column prop="unitPrice" label="原单价" width="90" align="right" />
+          <el-table-column prop="unitPrice" label="原单价" width="78" align="right" />
         </el-table-column>
 
         <!-- ===== 换出侧：发给客户，从成品仓扣减；只支持同品，产品固定为退回产品 ===== -->
         <el-table-column label="换出（同品换货，从成品仓扣减）" align="center">
-          <el-table-column label="换出数量" width="130">
+          <el-table-column label="换出数量" width="78">
             <template #default="{ row }">
-              <el-input-number v-model="row.outQuantity" :min="0" :precision="0" :step="1" controls-position="right" style="width:100%" />
+              <el-input-number v-model="row.outQuantity" :min="0" :precision="0" :step="1" size="small" :controls="false" style="width:100%" />
             </template>
           </el-table-column>
-          <el-table-column label="换出品质" width="120">
+          <el-table-column label="换出品质" width="78">
             <template #default="{ row }">
-              <el-select v-model="row.outQualityType" style="width:100%">
+              <el-select v-model="row.outQualityType" size="small" style="width:100%">
                 <el-option v-for="o in qualityOptions" :key="o.value" :label="o.label" :value="o.value" />
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="换出单价" width="130">
+          <el-table-column label="换出单价" width="82">
             <template #default="{ row }">
-              <el-input-number v-model="row.outUnitPrice" :min="0" :precision="2" controls-position="right" style="width:100%" />
+              <el-input-number v-model="row.outUnitPrice" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
             </template>
           </el-table-column>
         </el-table-column>
 
-        <el-table-column label="备注" min-width="120">
-          <template #default="{ row }"><el-input v-model="row.remark" /></template>
+        <!-- 逐产品收费：金额 > 0 即向客户收取该产品的费用；类型留空时套用上方「收费类型（批量）」 -->
+        <el-table-column label="收费" width="176" align="center">
+          <template #default="{ row }">
+            <div style="display:flex;gap:4px">
+              <el-input-number v-model="row.chargeAmount" :min="0" :precision="2" size="small" :controls="false"
+                placeholder="金额" style="width:80px" />
+              <el-select v-model="row.chargeType" size="small" placeholder="类型" clearable style="width:88px"
+                :disabled="!(Number(row.chargeAmount) > 0)">
+                <el-option v-for="o in chargeTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
+              </el-select>
+            </div>
+          </template>
         </el-table-column>
-        <el-table-column label="操作" width="70" align="center">
+
+        <el-table-column label="备注" min-width="88">
+          <template #default="{ row }"><el-input v-model="row.remark" size="small" /></template>
+        </el-table-column>
+        <el-table-column label="操作" width="52" align="center">
           <template #default="{ $index }">
             <el-button link type="danger" @click="removeItem($index)">删除</el-button>
           </template>
@@ -189,6 +204,21 @@ const chargeTypeOptions = computed(() =>
     value: v, label: ExchangeChargeTypeLabel[v] || v
   }))
 )
+/**
+ * 收费合计 = Σ 明细行收费（2026-09-21 逐产品口径）。
+ * <p>单据级 charge_amount 不再是"手填一个总数"，而是本合计 —— 保存时后端也会按 Σ明细 回写一次。</p>
+ */
+const chargeTotal = computed(() =>
+  items.value.reduce((s: number, it: any) => s + (Number(it.chargeAmount) || 0), 0))
+/** 把批量类型套用到全部明细行（逐行仍可单独改；金额逐行填 —— 金额才是"收多少"） */
+function applyChargeTypeToAll() {
+  if (!form.chargeType) return
+  items.value.forEach((it: any) => {
+    if (!(Number(it.chargeAmount) > 0)) it.chargeAmount = 0
+    it.chargeType = form.chargeType
+  })
+  ElMessage.success(`已把「${ExchangeChargeTypeLabel[form.chargeType] || form.chargeType}」套用到 ${items.value.length} 条明细`)
+}
 // ===== 下拉 =====
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 200, name: kw } })
 const fetchSaleOrders = async (kw: string) => {
@@ -224,6 +254,8 @@ async function onSaleOrderChange(saleOrderId: number | null, opt: any) {
       // ===== 退回侧 =====
       productId: r.productId,
       productName: r.productName,
+      // SKU：明细表把「SKU | 名称」并到一列（2026-09-21 UI），后端已随可换明细一并返回
+      sku: r.sku || '',
       quantity: qty,
       maxQuantity: qty,
       unitPrice: price,
@@ -231,6 +263,9 @@ async function onSaleOrderChange(saleOrderId: number | null, opt: any) {
       outQuantity: qty,
       outUnitPrice: price,
       outQualityType: r.qualityType || ProductQualityType.A,
+      // 逐产品收费（2026-09-21）：默认不收费，金额逐行填
+      chargeAmount: 0,
+      chargeType: '',
       remark: ''
     }
   })
@@ -278,7 +313,10 @@ async function loadEdit(id: number) {
     ...it,
     quantity: Number(it.quantity),
     outQuantity: Number(it.outQuantity ?? it.quantity),
-    outUnitPrice: Number(it.outUnitPrice ?? it.unitPrice ?? 0)
+    outUnitPrice: Number(it.outUnitPrice ?? it.unitPrice ?? 0),
+    // 逐产品收费（2026-09-21）：明细接口已回传逐行收费字段
+    chargeAmount: Number(it.chargeAmount || 0),
+    chargeType: it.chargeType || ''
   }))
 }
 
@@ -301,11 +339,13 @@ async function submit() {
       return
     }
   }
-  // 收费校验：选择收费时必须指定类型且金额 > 0（后端会再校验一次，此处提前给提示）
-  const charged = Number(form.chargeFlag) === 1
-  if (charged) {
-    if (!form.chargeType) { ElMessage.warning('已选择收费，请选择收费类型'); return }
-    if (!(Number(form.chargeAmount) > 0)) { ElMessage.warning('已选择收费，收费金额必须大于 0'); return }
+  // 收费校验（2026-09-21 逐产品口径）：**金额填在哪一行就算哪个产品收费**（金额 0 = 不收费）；
+  // 填了金额的行必须能确定类型（行类型或批量类型）——后端会再逐行校验一次
+  for (const it of its) {
+    if (Number(it.chargeAmount) > 0 && !(it.chargeType || form.chargeType)) {
+      ElMessage.warning(`产品「${it.productName || it.productId}」已填收费金额，请选择收费类型（可用上方「收费类型（批量）」套用）`)
+      return
+    }
   }
   saving.value = true
   try {
@@ -313,10 +353,11 @@ async function submit() {
       saleOrderId: form.saleOrderId, saleOrderCode: form.saleOrderCode, customerId: form.customerId,
       warehouseInId: form.warehouseInId, warehouseOutId: form.warehouseOutId,
       exchangeDate: form.exchangeDate,
-      chargeFlag: charged ? 1 : 0,
-      chargeType: charged ? form.chargeType : '',
-      chargeAmount: charged ? Number(form.chargeAmount) : 0,
-      chargeReason: charged ? (form.chargeReason || '') : '',
+      // 收费：单据级只作「批量默认」外带；金额由后端按 Σ明细 回写（这里传 0）
+      chargeFlag: chargeTotal.value > 0 ? 1 : 0,
+      chargeType: form.chargeType || '',
+      chargeAmount: 0,
+      chargeReason: form.chargeReason || '',
       remark: form.remark,
       items: its.map((i) => ({
         // 退回侧
@@ -325,6 +366,10 @@ async function submit() {
         // 换出侧（只支持同品：产品即退回产品；数量可不等如退2换1）
         outQuantity: i.outQuantity, outUnitPrice: i.outUnitPrice,
         outQualityType: i.outQualityType,
+        // 逐产品收费：金额 > 0 才收费；类型缺省套用批量类型
+        chargeAmount: Number(i.chargeAmount) || 0,
+        chargeType: Number(i.chargeAmount) > 0 ? (i.chargeType || form.chargeType || '') : '',
+        chargeReason: form.chargeReason || '',
         remark: i.remark
       }))
     }

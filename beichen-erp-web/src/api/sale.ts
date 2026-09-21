@@ -132,11 +132,22 @@ export interface SaleReturnItem {
   saleOrderItemId?: number
   productId?: number
   productName?: string
+  /** SKU（非表字段，明细接口按 productId 回填） */
+  sku?: string
   /** 品质等级：销售退货固定为 DEFECT(不良品) */
   qualityType?: string
   quantity?: number
   unitPrice?: number
   amount?: number
+  /**
+   * 逐产品收费（2026-09-21 用户口径：收费精确到产品）。
+   * <p>金额挂在**明细行**上（一行 = 一个产品）；单据级 amount = Σ(本字段)，由后端回写。
+   * 方向：**向客户收取** ⇒ 审核生成一条正向应收（单号 -FEE）。</p>
+   */
+  chargeFlag?: number
+  chargeType?: string
+  chargeAmount?: number
+  chargeReason?: string
   remark?: string
 }
 

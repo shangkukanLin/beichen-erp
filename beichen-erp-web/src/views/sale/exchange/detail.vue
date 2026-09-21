@@ -24,10 +24,14 @@
           <span v-else>{{ warehouseOutDisplayName }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="换货日期">{{ head.exchangeDate }}</el-descriptions-item>
-        <el-descriptions-item label="收费">
+        <!-- 收费（2026-09-21 逐产品）：单据级金额 = Σ明细行收费；chargeType 为空 = 各收款行类型不一致 ⇒ 显示"多类型" -->
+        <el-descriptions-item label="收费（逐产品合计）">
           <template v-if="Number(head.chargeFlag) === 1 && Number(head.chargeAmount) > 0">
             <span style="color:#e6a23c;font-weight:600">{{ formatMoney(head.chargeAmount) }}</span>
-            <span style="margin-left:6px;color:#909399">{{ ExchangeChargeTypeLabel[String(head.chargeType)] || head.chargeType || '' }}</span>
+            <span style="margin-left:6px;color:#909399">
+              {{ ExchangeChargeTypeLabel[String(head.chargeType)] || (head.chargeType ? head.chargeType : '多类型') }}
+            </span>
+            <span style="margin-left:6px;color:#c0c4cc;font-size:var(--app-font-xs)">（逐产品见下表）</span>
           </template>
           <span v-else style="color:#c0c4cc">不收费</span>
         </el-descriptions-item>
@@ -39,41 +43,52 @@
       </el-descriptions>
 
       <el-divider content-position="left">换货明细（同品换货）</el-divider>
+      <!-- 2026-09-21（UI + 逐产品收费）：原 11 列合计 1320px ⇒ 横向滚动 372px。现：
+           ① SKU 不单列，退回产品格显示「SKU | 名称」（SKU 仍可点击进产品详情）
+           ② 去掉冗余的「换出产品」列 —— 只支持**同品换货**，换出产品必然等于退回产品
+           ③ 新增「收费」列（逐产品向客户收取的金额 + 类型）
+           ④ 合计 928px < 内容区 948px ⇒ 一行显示完、不左右滑动 -->
       <el-table :data="items" border>
         <!-- ===== 退回侧：客户退回，入成品仓（品质待分类 PENDING）待整理 ===== -->
         <el-table-column label="退回（客户退回，入成品仓待分类）" align="center">
-          <el-table-column label="SKU" width="130">
+          <el-table-column label="退回产品" width="146" show-overflow-tooltip>
             <template #default="{ row }">
-              <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ row.sku || '—' }}</el-button>
-              <span v-else>{{ row.sku || '—' }}</span>
+              <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ productText(row) }}</el-button>
+              <span v-else>{{ productText(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="productName" label="退回产品" min-width="150" show-overflow-tooltip />
-          <el-table-column prop="quantity" label="退回数量" width="100" align="right" />
-          <el-table-column label="原单价" width="100" align="right">
+          <el-table-column prop="quantity" label="退回数量" width="72" align="right" />
+          <el-table-column label="原单价" width="80" align="right">
             <template #default="{ row }">{{ formatMoney(row.unitPrice) }}</template>
           </el-table-column>
-          <el-table-column label="退回金额" width="110" align="right">
+          <el-table-column label="退回金额" width="88" align="right">
             <template #default="{ row }">{{ formatMoney(row.amount) }}</template>
           </el-table-column>
         </el-table-column>
         <!-- ===== 换出侧：发给客户，从成品仓扣减 ===== -->
         <el-table-column label="换出（发给客户，从成品仓扣减）" align="center">
-          <el-table-column label="换出产品" min-width="180">
-            <template #default="{ row }">{{ row.productName }}</template>
-          </el-table-column>
-          <el-table-column prop="outQuantity" label="换出数量" width="100" align="right" />
-          <el-table-column label="换出品质" width="100" align="center">
+          <el-table-column prop="outQuantity" label="换出数量" width="72" align="right" />
+          <el-table-column label="换出品质" width="70" align="center">
             <template #default="{ row }">{{ ProductQualityTypeLabel[String(row.outQualityType)] || row.outQualityType || '-' }}</template>
           </el-table-column>
-          <el-table-column label="换出单价" width="100" align="right">
+          <el-table-column label="换出单价" width="80" align="right">
             <template #default="{ row }">{{ formatMoney(row.outUnitPrice) }}</template>
           </el-table-column>
-          <el-table-column label="换出金额" width="110" align="right">
+          <el-table-column label="换出金额" width="88" align="right">
             <template #default="{ row }">{{ formatMoney(row.outAmount) }}</template>
           </el-table-column>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip>
+        <!-- 逐产品收费：本行产品向客户收取的金额 + 类型 -->
+        <el-table-column label="收费" width="146" align="center" show-overflow-tooltip>
+          <template #default="{ row }">
+            <template v-if="Number(row.chargeAmount) > 0">
+              <span style="color:#e6a23c;font-weight:600">{{ formatMoney(row.chargeAmount) }}</span>
+              <span style="margin-left:4px;color:#909399">{{ ExchangeChargeTypeLabel[String(row.chargeType)] || row.chargeType || '' }}</span>
+            </template>
+            <span v-else style="color:#c0c4cc">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" width="86" show-overflow-tooltip>
           <template #default="{ row }">{{ row.remark || '-' }}</template>
         </el-table-column>
       </el-table>
@@ -164,6 +179,11 @@ function statusTagType(s: string) {
 function formatMoney(v: any) {
   const n = Number(v || 0)
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+/** 明细表「退回产品」展示：有 SKU 时用 `SKU | 名称`（2026-09-21：不再单列 SKU，信息不丢） */
+function productText(row: any) {
+  const name = row?.productName || ''
+  return row?.sku ? `${row.sku} | ${name}` : name
 }
 
 async function loadDetail(id: number) {

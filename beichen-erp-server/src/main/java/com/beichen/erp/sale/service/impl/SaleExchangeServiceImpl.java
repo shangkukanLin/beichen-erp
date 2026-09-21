@@ -213,6 +213,9 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             m.put("saleOrderItemId", oi.getId());
             m.put("productId", oi.getProductId());
             m.put("productName", p != null ? p.getName() : "");
+            // 2026-09-21（UI）：换货新增页明细表把「SKU | 名称」并到一列（原 SKU 独占一列 ⇒ 表格横向滚动），
+            // pMap 已批量取好产品，这里顺带回 SKU，零额外查询
+            m.put("sku", p != null ? p.getSku() : "");
             m.put("unit", p != null ? p.getUnit() : "");
             m.put("qualityType", oi.getQualityType());
             m.put("quantity", sold);

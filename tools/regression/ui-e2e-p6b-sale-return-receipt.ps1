@@ -139,7 +139,11 @@ $stkDelta = ($stkAAfter - $stkABefore) + ($stkBAfter - $stkBBefore)
 Write-Host ("[DB] returns=$rets audited=$retAud items=$retItems qty=$retQty newRetQty(thisRun)=$newRetQty stockA=$stkABefore->$stkAAfter stockB=$stkBBefore->$stkBAfter delta=$stkDelta")
 Write-Host ("[DB] receivableAmt=$recvAmt paid=$recvPaid unpaid=$recvUnpaid auditedReceipts=$rcptAudited receiptAmt=$rcptAmt returnLogs(XTH-)=$retLogs cashIn(CASH-01)=$cashIn cashflows(SK-)=$cashFlows")
 Ok (($rets -ge 5)) ('sale returns >= 5 (got ' + $rets + ')')
-Ok (($retAud -eq $rets)) 'all sale returns audited'
+# 2026-09-21: 口径修正 —— 只统计"有效单据"（排除 CANCELLED）。作废是业务正常动作（例如其它回归脚本
+# 建的探针单据、或本页手工录入后作废），把它们算成"未审核"会让本断言被无关数据带红。
+$retLive = D (SqlOne "SELECT COUNT(*) FROM sale_return WHERE status<>'CANCELLED'")
+$retAudLive = D (SqlOne "SELECT COUNT(*) FROM sale_return WHERE status='AUDITED'")
+Ok (($retAudLive -eq $retLive)) ('all live sale returns audited (' + $retAudLive + '/' + $retLive + ', cancelled excluded)')
 Ok (($retQty -ge 13)) ('returned qty >= 13 (got ' + $retQty + ')')
 Ok (($stkDelta -eq $newRetQty)) ('stock restored == qty created this run (' + $stkDelta + ' = ' + $newRetQty + ')')
 Ok (($retLogs -ge $rets)) ('return stock-out/in logs with XTH- bill no >= returns (got ' + $retLogs + ')')

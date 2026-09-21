@@ -24,10 +24,14 @@
         <el-descriptions-item label="退货日期">{{ head.returnDate }}</el-descriptions-item>
         <el-descriptions-item label="退货金额">{{ formatMoney(head.totalAmount) }}</el-descriptions-item>
         <el-descriptions-item label="审核人">{{ head.auditorName || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="收费" :span="2">
+        <!-- 收费（2026-09-21 逐产品）：单据级金额 = Σ明细行收费；chargeType 为空表示各收款行类型不一致 ⇒ 显示"多类型" -->
+        <el-descriptions-item label="收费（逐产品合计）" :span="2">
           <template v-if="Number(head.chargeFlag) === 1 && Number(head.chargeAmount) > 0">
             <span style="color:#e6a23c;font-weight:600">{{ formatMoney(head.chargeAmount) }}</span>
-            <span style="margin-left:6px;color:#909399">{{ ExchangeChargeTypeLabel[String(head.chargeType)] || head.chargeType || '' }}</span>
+            <span style="margin-left:6px;color:#909399">
+              {{ ExchangeChargeTypeLabel[String(head.chargeType)] || (head.chargeType ? head.chargeType : '多类型') }}
+            </span>
+            <span style="margin-left:6px;color:#c0c4cc;font-size:var(--app-font-xs)">（逐产品明细见下表「收费」列）</span>
           </template>
           <span v-else style="color:#c0c4cc">不收费</span>
         </el-descriptions-item>
@@ -36,27 +40,39 @@
       </el-descriptions>
 
       <el-divider content-position="left">退货明细</el-divider>
+      <!-- 2026-09-21（UI + 逐产品收费）：原 7 列 min 合计 990px ⇒ 横向滚动。现：
+           ① SKU 不单列，产品格显示「SKU | 名称」（SKU 仍可点击进产品详情）
+           ② 新增「收费」列（逐产品向客户收取的金额 + 类型）
+           ③ 合计 752px < 内容区 948px ⇒ 一行显示完、不左右滑动 -->
       <el-table :data="items" border>
-        <el-table-column label="SKU" width="130">
+        <el-table-column label="产品" width="176" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ row.sku || '—' }}</el-button>
-            <span v-else>{{ row.sku || '—' }}</span>
+            <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ productText(row) }}</el-button>
+            <span v-else>{{ productText(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="productName" label="产品" min-width="200" />
-        <el-table-column label="品质等级" width="110" align="center">
+        <el-table-column label="品质等级" width="88" align="center">
           <template #default="{ row }">
             <el-tag :type="ProductQualityTypeTag[row.qualityType] || 'info'">{{ ProductQualityTypeLabel[row.qualityType] || '待分类' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="quantity" label="退货数量" width="130" align="right" />
-        <el-table-column prop="unitPrice" label="单价" width="130" align="right">
+        <el-table-column prop="quantity" label="退货数量" width="74" align="right" />
+        <el-table-column prop="unitPrice" label="单价" width="82" align="right">
           <template #default="{ row }">{{ formatMoney(row.unitPrice) }}</template>
         </el-table-column>
-        <el-table-column prop="amount" label="金额" width="130" align="right">
+        <el-table-column prop="amount" label="金额" width="90" align="right">
           <template #default="{ row }">{{ formatMoney(row.amount) }}</template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="160" />
+        <el-table-column label="收费" width="150" align="center" show-overflow-tooltip>
+          <template #default="{ row }">
+            <template v-if="Number(row.chargeAmount) > 0">
+              <span style="color:#e6a23c;font-weight:600">{{ formatMoney(row.chargeAmount) }}</span>
+              <span style="margin-left:4px;color:#909399">{{ ExchangeChargeTypeLabel[String(row.chargeType)] || row.chargeType || '' }}</span>
+            </template>
+            <span v-else style="color:#c0c4cc">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" min-width="92" />
       </el-table>
 
       <div class="footer">
@@ -139,6 +155,11 @@ function statusTagType(s: string) {
 function formatMoney(v: any) {
   const n = Number(v || 0)
   return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+/** 明细表「产品」展示：有 SKU 时用 `SKU | 名称`（2026-09-21：不再单列 SKU，信息不丢） */
+function productText(row: any) {
+  const name = row?.productName || ''
+  return row?.sku ? `${row.sku} | ${name}` : name
 }
 
 async function loadDetail(id: number) {
