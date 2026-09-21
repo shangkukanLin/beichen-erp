@@ -39,6 +39,10 @@ $stkABefore = D (SqlOne ("SELECT COALESCE(SUM(quantity),0) FROM warehouse_stock 
 $stkBBefore = D (SqlOne ("SELECT COALESCE(SUM(quantity),0) FROM warehouse_stock WHERE product_id=" + $pIdB))
 $recvBefore = D (SqlOne "SELECT COALESCE(SUM(amount),0) FROM finance_receivable WHERE source_bill_no LIKE 'XS-%'")
 $retBefore = D (SqlOne 'SELECT COUNT(*) FROM sale_return')
+# 2026-09-21：记录"开工前就已存在的草稿收款单"。下面的审核步骤只处理**本次运行新生成**的草稿 ——
+# 库里的历史遗留草稿（早于 I27/F7 护栏的探针数据）**按设计就审不过**（实测两例：核销目标是 ADVANCE
+# 预收台账；或收款主体=客户 / 应收主体=供应商 主体串账），它们既不该让本用例变红，也永远不会变绿。
+$draftBefore = @(SqlList "SELECT code FROM finance_receipt WHERE status='DRAFT'")
 $rcptAuditedBefore = D (SqlOne "SELECT COUNT(*) FROM finance_receipt WHERE status='AUDITED'")
 Write-Host ('[BASE] sale returns=' + $retBefore + ' receivable=' + $recvBefore + ' stockA=' + $stkABefore + ' stockB=' + $stkBBefore)
 
@@ -101,8 +105,11 @@ $rbtns = "(()=>{const vis=e=>e.getClientRects().length>0;return JSON.stringify([
 Write-Host ('receipt page buttons=' + (EvalJs $rbtns))
 
 Step 'audit the auto-generated DRAFT receipts (收款核销)'
-$drafts = @(SqlList "SELECT code FROM finance_receipt WHERE status='DRAFT' ORDER BY id")
-Write-Host ('draft receipts=' + $drafts.Count)
+# 2026-09-21：只审**本次运行**新生成的草稿收款单（= 审核本脚本新建的销售退单时自动产生的）。
+# 原实现圈"全库所有 DRAFT"：历史遗留草稿按设计审不过（见 $draftBefore 处注释），会把无关数据算成 FAIL。
+# 注：收款列表默认 10 条/页且无单号搜索 ⇒ 老单号本来就翻不到，这也是"receipt row not found"的来源。
+$drafts = @(SqlList "SELECT code FROM finance_receipt WHERE status='DRAFT' ORDER BY id" | Where-Object { $draftBefore -notcontains $_ })
+Write-Host ('draft receipts(this run)=' + $drafts.Count + ' leftover-ignored=' + (@($draftBefore) -join ','))
 $auditedOk = 0
 foreach ($rc in $drafts) {
   Open '/finance/receipt' 2800
