@@ -195,6 +195,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/material-return', name: 'OutsourceMaterialReturn', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '委外物料退货', requiresAuth: true } },
       { path: 'outsource/material-return/add', name: 'OutsourceMaterialReturnAdd', component: () => import('@/views/outsource/material-return/add.vue'), meta: { title: '新增委外物料退货', requiresAuth: true, operate: true } },
       { path: 'outsource/material-return/detail/:id', name: 'OutsourceMaterialReturnDetail', component: () => import('@/views/outsource/material-return/detail.vue'), meta: { title: '委外物料退货详情', requiresAuth: true, operate: true } },
+      // D 档（2026-09-21）：草稿编辑（复用新增页，后端 PUT /{id} 仅允许草稿）—— 与加工退货页对称
+      { path: 'outsource/material-return/edit/:id', name: 'OutsourceMaterialReturnEdit', component: () => import('@/views/outsource/material-return/add.vue'), meta: { title: '编辑委外物料退货', requiresAuth: true, operate: true } },
       // 销售退单（售后：只退不换，退回货品入成品仓、品质为「待分类」，后续由退货整理单分流）
       { path: 'sale/return', name: 'SaleReturn', component: () => import('@/views/sale/return/index.vue'), meta: { title: '销售退单', requiresAuth: true } },
       { path: 'sale/return/add', name: 'SaleReturnAdd', component: () => import('@/views/sale/return/add.vue'), meta: { title: '新增销售退单', requiresAuth: true, operate: true } },

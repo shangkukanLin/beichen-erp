@@ -20,7 +20,7 @@ public class MaterialOrderItem {
     private BigDecimal receivedQuantity;
     private BigDecimal defectReturnedQty;
     /**
-     * 送修中数量（2026-09-17）：维修返还单已送修、供应商尚未修好送回的部分。
+     * 送修中数量（2026-09-17）：维修退货单已送修、供应商尚未修好送回的部分。
      * <p>关联订单未完成时，送修审核同时扣减 receivedQuantity（净收料 = 已收 − 送修），
      * 修好「登记维修返回」时回补；本列用于在订单上区分"未收 / 送修中"。</p>
      */

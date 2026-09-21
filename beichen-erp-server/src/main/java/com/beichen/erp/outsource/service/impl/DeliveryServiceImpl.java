@@ -212,7 +212,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity(),
                         QualityType.GOOD.getCode(), StockChangeType.RECEIVE_IN.getCode(), delivery.getCode(), delivery.getId());
             } else {
-                // 退不良：维修返还、折现退款均扣减目标仓库良品库存
+                // 退不良：维修退货、折现退款均扣减目标仓库良品库存
                 changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity().negate(),
                         QualityType.GOOD.getCode(), StockChangeType.DEFECT_OUT.getCode(), delivery.getCode(), delivery.getId());
             }
@@ -223,7 +223,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             deductComponents(order, items, delivery);
         }
 
-        // 3. 生成应付：收货为正应付；退不良-折现退款为负应付（冲减）；退不良-维修返还不涉及款项
+        // 3. 生成应付：收货为正应付；退不良-折现退款为负应付（冲减）；退不良-维修退货不涉及款项
         if (isReceive) {
             BigDecimal totalAmount = items.stream()
                     .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
@@ -324,7 +324,7 @@ public class DeliveryServiceImpl implements DeliveryService {
                 changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity().negate(),
                         QualityType.GOOD.getCode(), StockChangeType.CANCEL_RECEIVE_IN.getCode(), delivery.getCode(), delivery.getId());
             } else {
-                // 反审核：恢复退不良扣减的库存（+qty，维修返还、折现退款均恢复）
+                // 反审核：恢复退不良扣减的库存（+qty，维修退货、折现退款均恢复）
                 changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity(),
                         QualityType.GOOD.getCode(), StockChangeType.CANCEL_DEFECT_OUT.getCode(), delivery.getCode(), delivery.getId());
             }
@@ -341,7 +341,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         }
 
         // 3. 冲回应付（已付款的阻止）+ 回退供应商应付余额
-        // 收货：回滚正应付；退不良：仅折现退款回滚负应付（维修返还无应付）
+        // 收货：回滚正应付；退不良：仅折现退款回滚负应付（维修退货无应付）
         BigDecimal reverseAmount;
         if (isReceive) {
             reverseAmount = items.stream()

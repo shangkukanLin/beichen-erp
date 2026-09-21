@@ -38,9 +38,13 @@ Step 'S1 material-return list: type tabs + repair entry'
 Open '/outsource/material-return' 3000
 Ok ((BodyHas (ZH 'tab_mr_refund')) -eq 'true') 'S1 tab REFUND present'
 Ok ((BodyHas (ZH 'tab_mr_repair')) -eq 'true') 'S1 tab REPAIR present'
-Ok ((BodyHas (ZH 'btn_new_mr_repair')) -eq 'true') 'S1 button "new repair-return" present'
+# 2026-09-21（UI 统一）：新增按钮随页签切换（与加工退货页一致）⇒ REFUND 页签上是「新增物料退货」，
+#   「新增维修退货」要切到维修页签才出现（原先两个按钮常驻）
+Ok ((BodyHas (ZH 'btn_new_refund')) -eq 'true') 'S1 button "new material-return" present (REFUND tab)'
+Ok ((BodyHas (ZH 'btn_new_mr_repair')) -eq 'false') 'S1 repair button hidden on the REFUND tab'
 Write-Host ('S1 tab click: ' + (ClickText (ZH 'tab_mr_repair')))
 Start-Sleep -Milliseconds 1600
+Ok ((BodyHas (ZH 'btn_new_mr_repair')) -eq 'true') 'S1 button "new repair-return" present (REPAIR tab)'
 Ok ((Errs) -eq '[]') 'S1 no errors after switching tab'
 
 # =====================================================================

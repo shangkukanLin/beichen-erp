@@ -20,17 +20,26 @@ const tabStore = useTabStore()
  */
 const prefillDeliveryId = Number(route.query.sourceDeliveryId) || 0
 const prefillSupplierId = Number(route.query.supplierId) || 0
-/** ?returnType=REPAIR 直接从列表页签的「新增维修返还」进入（2026-09-17 两类型） */
+/** ?returnType=REPAIR 直接从列表页签的「新增维修退货」进入（2026-09-17 两类型；术语 2026-09-21 统一为"维修退货"） */
 const prefillReturnType = String(route.query.returnType || '')
+/**
+ * 编辑草稿（D 档 2026-09-21，与加工退货页对称）：路由 `/outsource/material-return/edit/:id`，0 = 新增。
+ * <p>后端 `PUT /api/outsource/material-return/{id}` 早已存在（仅 DRAFT 可编辑，明细整体替换，草稿不动库存/应付），
+ * 本页只补前端回填与提交分支。</p>
+ */
+const editId = Number(route.params.id) || 0
+const editing = ref(false)
+/** 编辑时保留原「来源收料单」：显式回传（后端 updateById 会忽略 null，但显式传值更稳，不会被误清） */
+const editSourceDeliveryId = ref<number | null>(null)
 
 const form = reactive({
-  // 退货类型（2026-09-17）：REFUND 退货退款（冲减应付）/ REPAIR 维修返还（不冲应付，修好登记返纳入库）
+  // 退货类型（2026-09-17；术语 2026-09-21 统一为"维修退货"）：REFUND 退货退款（冲减应付）/ REPAIR 维修退货（不冲应付，修好登记返回入库）
   returnType: (prefillReturnType === MaterialReturnType.REPAIR ? MaterialReturnType.REPAIR : MaterialReturnType.REFUND) as string,
   supplierId: undefined as any, fromWarehouseId: undefined as any, returnDate: localDate(), remark: '',
-  // 关联物料订单（2026-09-17 维修返还闭环）：可清空；不选=不关联（靠本单「送修/已返回」跟踪）
+  // 关联物料订单（2026-09-17 维修退货闭环）：可清空；不选=不关联（靠本单「送修/已返回」跟踪）
   materialOrderId: undefined as any
 })
-/** 维修返还：不冲减应付；审核后在详情页登记「维修返回」把物料入回来 */
+/** 维修退货：不冲减应付；审核后在详情页登记「维修返回」把物料入回来 */
 const isRepair = computed(() => form.returnType === MaterialReturnType.REPAIR)
 const warehouseOptions = ref<any[]>([])
 const stockList = ref<any[]>([])
@@ -40,7 +49,7 @@ const submitting = ref(false)
 // Odoo 风格：退回对象（物料商）实时查库
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
 
-// ===== 关联物料订单（维修返还闭环）=====
+// ===== 关联物料订单（维修退货闭环）=====
 /** 选中的物料订单行（含状态，用于提示"扣减订单收料 / 靠本单跟踪"两种收尾方式） */
 const pickedOrder = ref<any>(null)
 /** 该物料商的物料订单（收货中/已完成）：收货中的单审核会扣减收料数，已完成的靠本单跟踪 */
@@ -134,27 +143,89 @@ async function handleSubmit() {
   if (items.length === 0) { ElMessage.warning(isRepair.value ? '请输入送修数量' : '请输入退货数量'); return }
   submitting.value = true
   try {
-    await request.post('/outsource/material-return', {
+    const payload = {
       supplierId: form.supplierId, fromWarehouseId: form.fromWarehouseId,
       returnDate: form.returnDate, remark: form.remark,
-      // 类型（2026-09-17）：REFUND 退货退款 / REPAIR 维修返还（原先写死 MATERIAL，业务从不读）
+      // 类型（2026-09-17）：REFUND 退货退款 / REPAIR 维修退货（原先写死 MATERIAL，业务从不读）
       returnType: form.returnType, items,
-      // 来源收料单（从「物料收货」发起时落库，用于按记录算可退数量并追溯）
-      sourceDeliveryId: prefillDeliveryId || null,
-      // 关联物料订单（维修返还闭环，2026-09-17）：未选/清空=不关联
+      // 来源收料单（从「物料收货」发起时落库，用于按记录算可退数量并追溯；编辑时保留原值）
+      sourceDeliveryId: editId ? editSourceDeliveryId.value : (prefillDeliveryId || null),
+      // 关联物料订单（维修退货闭环，2026-09-17）：未选/清空=不关联
       materialOrderId: isRepair.value ? (form.materialOrderId || null) : null
-    })
-    ElMessage.success('退货单草稿已保存，请在列表中审核生效'); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
+    }
+    // D 档（2026-09-21）：编辑草稿走 PUT（后端仅允许 DRAFT 编辑，明细整体替换；草稿不动库存/应付）
+    if (editId) {
+      await request.put(`/outsource/material-return/${editId}`, payload)
+      ElMessage.success('退货单已更新')
+    } else {
+      await request.post('/outsource/material-return', payload)
+      ElMessage.success('退货单草稿已保存，请在列表中审核生效')
+    }
+    sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
     tabStore.removeTab(window.location.hash.replace('#', ''))
     router.replace('/outsource/material-return')
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { submitting.value = false }
+}
+
+/**
+ * 编辑草稿（D 档 2026-09-21）：回填表头 + 按明细回填数量/单价（明细整体替换交由后端）。
+ * <p>⚠️ 源仓当前库存里已没有该物料的（例如被别的单占掉）也要带上，否则一保存就会把这行**静默删掉**。</p>
+ */
+async function loadForEdit(id: number) {
+  loading.value = true
+  prefilling = true // 回填期间压住"换供应商清空关联订单"的联动
+  try {
+    const d: any = await request.get(`/outsource/material-return/${id}`)
+    editing.value = true
+    editSourceDeliveryId.value = d.sourceDeliveryId ?? null
+    Object.assign(form, {
+      returnType: d.returnType || MaterialReturnType.REFUND,
+      supplierId: d.supplierId, fromWarehouseId: d.fromWarehouseId,
+      returnDate: d.returnDate ? String(d.returnDate).slice(0, 10) : localDate(),
+      remark: d.remark || '',
+      materialOrderId: d.materialOrderId ?? undefined
+    })
+    if (d.materialOrderId) pickedOrder.value = { id: d.materialOrderId, code: d.materialOrderCode, status: d.materialOrderStatus }
+    // 载入该源仓当前可退物料，再按本单明细回填
+    await onWarehouseChange()
+    const byMaterial: Record<string, any[]> = {}
+    for (const it of ((d.items || []) as any[])) {
+      const k = String(it.materialId)
+      byMaterial[k] = byMaterial[k] || []
+      byMaterial[k].push(it)
+    }
+    const used = new Set<string>()
+    stockList.value = stockList.value.map((m: any) => {
+      const list = byMaterial[String(m.materialId)]
+      if (!list) return m
+      used.add(String(m.materialId))
+      return {
+        ...m,
+        returnQuantity: list.reduce((s: number, x: any) => s + Number(x.quantity || 0), 0),
+        unitPrice: list[0]?.unitPrice ?? undefined
+      }
+    })
+    // 源仓库存里已经没有、但本单明细里有的物料：补到列表尾部，避免保存时被静默删除
+    for (const [mid, list] of Object.entries(byMaterial)) {
+      if (used.has(mid)) continue
+      stockList.value.push({
+        materialId: Number(mid), materialName: list[0]?.materialName || ('物料#' + mid),
+        materialTypeId: list[0]?.materialTypeId, materialTypeName: list[0]?.materialTypeName, unit: list[0]?.unit || '',
+        quantity: 0, returnQuantity: list.reduce((s: number, x: any) => s + Number(x.quantity || 0), 0),
+        unitPrice: list[0]?.unitPrice ?? undefined
+      })
+    }
+  } catch (e: any) {
+    ElMessage.error('加载退货单失败：' + (e?.message || '未知错误'))
+  } finally { loading.value = false; prefilling = false }
 }
 
 // 顶栏"刷新数据"：重新加载出库源仓下拉
 async function handleRefreshData() { await loadOptions() }
 onMounted(async () => {
   await loadOptions()      // 先备好仓库下拉，再按来源预填源仓（否则下拉只显示 ID）
-  await loadFromQuery()
+  if (editId) await loadForEdit(editId)
+  else await loadFromQuery()
   window.addEventListener('refresh:dropdown-data', handleRefreshData)
 })
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
@@ -164,13 +235,13 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
 <template>
   <div style="display:flex;flex-direction:column;gap:12px">
     <el-card shadow="never">
-      <template #header><span style="font-weight:600">{{ isRepair ? '维修返还信息' : '退货信息' }}</span></template>
+      <template #header><span style="font-weight:600">{{ editing ? (isRepair ? '编辑维修退货' : '编辑物料退货') : (isRepair ? '维修退货信息' : '退货信息') }}</span></template>
       <!-- 类型说明整行展示（2026-09-17）：两类型的库存/应付/后续动作不同，写在字段区里会把同行字段挤窄 -->
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px">
         <template #title>
           <span style="font-size:var(--app-font-xs);line-height:1.5">
             {{ isRepair
-              ? '维修返还：把物料送供应商维修 —— 审核只扣源仓、不冲减应付；供应商修好后在详情页「登记维修返回」把物料入回来（可分批、可撤销）。关联物料订单且订单未完成时，审核会同时扣减该订单收料数（修好返回自动回补）；订单已完成或不关联时，靠本单「送修 / 已返回」跟踪，全部返回后结案。'
+              ? '维修退货：把物料送供应商维修 —— 审核只扣源仓、不冲减应付；供应商修好后在详情页「登记维修返回」把物料入回来（可分批、可撤销）。关联物料订单且订单未完成时，审核会同时扣减该订单收料数（修好返回自动回补）；订单已完成或不关联时，靠本单「送修 / 已返回」跟踪，全部返回后结案。'
               : '退货退款：物料退回供应商 —— 审核扣源仓并生成负向应付（冲减应付账款）；供应商把货款退给我们后走付款/核销。' }}
           </span>
         </template>
@@ -187,7 +258,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
           </el-col>
           <el-col :span="8"><el-form-item required :label="isRepair ? '维修供应商' : '退回对象'"><RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" :placeholder="isRepair ? '选择维修供应商' : '选择物料商'" style="width:100%" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item required label="出库源仓"><el-select v-model="form.fromWarehouseId" filterable clearable style="width:100%" placeholder="选择物料所在仓库" @change="onWarehouseChange"><el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
-          <!-- 关联物料订单（2026-09-17 维修返还闭环）：可清空=不关联；订单未完成时审核会扣减其收料数 -->
+          <!-- 关联物料订单（2026-09-17 维修退货闭环）：可清空=不关联；订单未完成时审核会扣减其收料数 -->
           <el-col :span="8" v-if="isRepair">
             <el-form-item label="关联物料订单">
               <RemoteSelect v-model="form.materialOrderId" :fetch="fetchMaterialOrders" :label-key="materialOrderLabel" :disabled="!form.supplierId"
@@ -223,7 +294,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
           <template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" placeholder="自动" /></template>
         </el-table-column>
       </el-table>
-      <div style="margin-top:12px;text-align:right"><el-button type="primary" :loading="submitting" @click="handleSubmit">保存草稿</el-button></div>
+      <div style="margin-top:12px;text-align:right"><el-button type="primary" :loading="submitting" @click="handleSubmit">{{ editing ? '保存' : '保存草稿' }}</el-button></div>
     </el-card>
   </div>
 </template>

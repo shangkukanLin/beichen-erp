@@ -48,7 +48,11 @@ $r1 = Rows 0
 $head = ($r1.head -join '|')
 Write-Host ('S1 head=' + $head)
 Ok ($head -match [regex]::Escape((ZH 'txt_mr_sent_returned'))) 'S1 column "sent/returned" present on repair tab'
-Ok ($head -match [regex]::Escape((ZH 'txt_mr_progress'))) 'S1 column "progress" present on repair tab'
+# 2026-09-21（UI 统一）：返回进度**不再单列**（已并入「送修/已返回」+「状态」列显示已结案）
+#   ⇒ 断言它从列里消失、改为出现在**筛选行**（el-select 的占位符文本会在 innerText 里）
+Ok (-not ($head -match [regex]::Escape((ZH 'txt_mr_progress')))) 'S1 column "progress" is gone (merged into sent/returned)'
+Ok ((BodyHas (ZH 'txt_mr_progress')) -eq 'true') 'S1 "progress" is now a filter on the repair tab'
+Ok ((BodyHas (ZH 'col_return_amount')) -eq 'true') 'S1 the amount column is renamed to 退货金额'
 Ok ((Errs) -eq '[]') 'S1 no errors'
 
 # =====================================================================

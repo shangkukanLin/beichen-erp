@@ -5,7 +5,7 @@
  * 记录审核/反审核），详情页只保留一个跳转按钮。列表页带 ?add=1 / ?defect=1 进入时自动打开对应弹窗。</p>
  * <p>2026-09-21（用户口径「操作文案从收料/退料改成收货/退货」）：本页新增弹窗早已叫「收货」；
  * 「退不良」弹窗里的「退料仓库 / 退料数量 / 确认退料」一并改为「**退货仓库 / 退货数量 / 确认退货**」，
- * 提示语同样。⚠️「退不良」是**独立动作**（维修返还/折现退款，写在本表的 DEFECT_RETURN 记录），
+ * 提示语同样。⚠️「退不良」是**独立动作**（维修退货/折现退款，写在本表的 DEFECT_RETURN 记录），
  * 与本页工具栏那个「退货」（走委外物料退货单 `outsource_material_return`）不是同一条路；
  * 枚举 label（`RECEIVE`=收料、`DEFECT_RETURN`=退不良）被**库存流水等页面共用**，故未动。</p>
  */
@@ -136,7 +136,7 @@ function isMaterialDelivery(row: any) {
 
 /**
  * 退货（2026-09-17）：把已收的物料退回**物料商** —— 走**委外物料退货单**（独立单据：源仓扣减 + 冲减应付），
- * 与「退不良」（不良品维修返还/折现退款，写在本页收货记录里并影响净已收）是两件事。
+ * 与「退不良」（不良品维修退货/折现退款，写在本页收货记录里并影响净已收）是两件事。
  * 传收货记录时后端会按该单「已收 − 已退」算可退数量并预填供应商/源仓/物料。
  */
 function goReturn(row?: any) {
@@ -324,7 +324,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
       <div style="margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <span style="font-size:var(--app-font-base);color:var(--app-text-regular)">供应商：<b>{{ order.supplierName || '-' }}</b></span>
         <span style="font-size:var(--app-font-base)">处理方式：</span>
-        <el-radio-group v-model="defectHandleType" size="small" @change="defectWarehouseId = undefined"><el-radio :value="DefectHandleType.REPAIR_RETURN">维修返还</el-radio><el-radio :value="DefectHandleType.CASH_REFUND">折现退款</el-radio></el-radio-group>
+        <el-radio-group v-model="defectHandleType" size="small" @change="defectWarehouseId = undefined"><el-radio :value="DefectHandleType.REPAIR_RETURN">维修退货</el-radio><el-radio :value="DefectHandleType.CASH_REFUND">折现退款</el-radio></el-radio-group>
       </div>
       <div style="margin-bottom:8px"><el-select v-model="defectWarehouseId" filterable style="width:100%" placeholder="选择退货仓库" @change="onDefectWhChange"><el-option v-for="w in defectWarehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></div>
       <div v-if="defectHandleType === DefectHandleType.CASH_REFUND" style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid var(--app-color-warning);font-size:var(--app-font-xs);color:var(--app-color-warning)">折现退款将扣减退货仓库库存，并按退货金额自动冲减供应商应付。</div>

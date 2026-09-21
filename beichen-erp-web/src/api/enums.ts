@@ -280,7 +280,8 @@ export const DefectHandleType = {
 } as const
 
 export const DefectHandleTypeLabel: Record<string, string> = {
-  [DefectHandleType.REPAIR_RETURN]: '维修返还',
+  // 术语 2026-09-21 统一：原「维修返还」→**维修退货**（与物料退货页的「维修退货」页签、与加工侧同词）
+  [DefectHandleType.REPAIR_RETURN]: '维修退货',
   [DefectHandleType.CASH_REFUND]: '折现退款'
 }
 
@@ -657,7 +658,8 @@ export const DocStatusTag: Record<string, 'success' | 'warning' | 'info' | 'dang
 /**
  * 委外物料退货类型（对应后端 MaterialReturnType 枚举，2026-09-17 定稿两类型，对齐加工退货）
  * - REFUND 退货退款：物料退给供应商，供应商把货款退给我们 → 审核扣源仓 + 负向应付
- * - REPAIR 维修返还：退给供应商维修，修好后把物料还给我们 → 审核扣源仓（不冲应付）+ 登记维修返回入库
+ * - REPAIR 维修退货：退给供应商维修，修好后把物料还给我们 → 审核扣源仓（不冲应付）+ 登记维修返回入库
+ *   （术语 2026-09-21 统一：原「维修返还」→**维修退货**，与加工退货页的「维修退货」页签同词）
  * ⚠️ 历史值 MATERIAL 由后端归一成 REFUND，前端只需兜底显示
  */
 export const MaterialReturnType = {
@@ -667,7 +669,7 @@ export const MaterialReturnType = {
 
 export const MaterialReturnTypeLabel: Record<string, string> = {
   [MaterialReturnType.REFUND]: '退货退款',
-  [MaterialReturnType.REPAIR]: '维修返还',
+  [MaterialReturnType.REPAIR]: '维修退货',
   // 历史值兜底（旧枚举"物料商退货"= 退货退款）
   MATERIAL: '退货退款'
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 委外加工退货
+ * 委外加工退货（页面 = 加工退货；两个页签 = 加工退货 / 维修退货）
  *
  * <p>2026-09-21（用户口径）：**「加工退货」页签改成一张台账表** —— 有单（挂加工单、在该单收货详细页
  * 发起）与无单（本页发起）**同表同字段**，只用「关联加工单」列区分（有单显示加工单号、无单显示"未关联"）。
@@ -15,6 +15,20 @@
  * 收货详细页的按钮、后端提示语与备注快照同步改名；沿革 退不良 → 加工退货 → 不良退货 → **定稿加工退货**）；
  * 上一代独立加工退货单（`outsource_return_order` 的 DEFECT，已停止新增）**不再单独列页签** ——
  * 存量单据如需反审核/作废，走详情页 URL 直达（`/outsource/return-order/detail/{id}`）。</p>
+ *
+ * <p>2026-09-21（用户口径「加工退货页面和物料退货的 UI 需要优化和统一，按 A+B+C+D 做」）：
+ * 本页与「物料退货」页（`outsource/material-return`）**对齐成同一套列表页家规** ——
+ * ①**一页一张卡片**：页签 → 筛选行 → 表格 → 分页（原先「新增/说明卡片 + 表格卡片」两张卡片）；
+ * ②**筛选行统一**：左侧筛选 + [查询][重置]，**新增按钮靠右且随页签切换**（原先新增按钮在另一张卡片里，
+ *   而筛选（台账）在表格上方、（维修的返回进度）却在按钮卡片上 —— 两页签位置不一致）；
+ * ③**页头说明改用 `el-alert`**（原先写在一段普通文字里，里面的 `**` **会被原样显示出来**，实测确认）；
+ * ④**列宽/动作集/详情入口与物料退货页统一**：操作列 174、动作顺序 = 详情 → 编辑 → 审核 → 反审核 →
+ *   作废 → 结案 → 撤销结案；「详情」在台账走**抽屉**（该记录没有独立详情页）、在维修退货走**详情页**。</p>
+ *
+ * <p>📏 列宽预算（家规：合计 ≤ 930；纵向滚动条出现时内容区从 963 缩到约 948，故留余量）：
+ * 台账 = 96+100+110+64+84+78+174 = 706 固定 ＋ 产品/备注 min 110+110 = **926** ✓；
+ * 维修退货 = 132+100+116+100+96+78+174 = 796 固定 ＋ 内容列 min 136 = **932** ✓
+ * （与物料退货页的公共列**同宽**：单号 132、对方 100、内容 min136、日期 96、状态 78、操作 174）。</p>
  */
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
@@ -156,7 +170,7 @@ async function loadData() {
         progress: progress.value || undefined
       }
     })
-    list.value = r?.records || []; pagination.total = r?.total || 0
+    list.value = r?.records || []; pagination.total = Number(r?.total || 0)
   } finally { loading.value = false }
 }
 
@@ -166,6 +180,9 @@ function handleTabChange() {
   if (activeTab.value === 'DEFECT') { loadLedger(); return }
   loadData()
 }
+/** 维修退货页签的「查询/重置」（与物料退货页同一套交互；台账页签有各自的即时筛选） */
+function handleSearch() { pagination.pageNum = 1; loadData() }
+function handleReset() { progress.value = ''; handleSearch() }
 
 async function handleAudit(row: any) {
   const tip = row.returnType === OutsourceReturnType.REPAIR
@@ -201,6 +218,7 @@ function handleAdd(type: string) { router.push(`/outsource/return-order/add?retu
 function handleEdit(row: any) { router.push(`/outsource/return-order/edit/${row.id}`) }
 /** 加工单号 → 该加工单详情（有单的加工退货由它承载数量回退） */
 function goOrder(row: any) { if (row.orderId) router.push(`/outsource/order/detail/${row.orderId}`) }
+function goReturnDetail(row: any) { router.push(`/outsource/return-order/detail/${row.id}`) }
 
 function reloadCurrent() {
   if (activeTab.value === 'DEFECT') loadLedger()
@@ -219,63 +237,66 @@ onMounted(() => { loadLedger() })
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
+  <!-- 一页一张卡片（家规）：页签 → 筛选行（含新增按钮）→ 业务提示 → 表格 → 分页 -->
+  <div>
     <el-card shadow="never">
-      <!-- 新增入口按页签切换（2026-09-21 用户口径）：加工退货页只新增"无单"那种（有单的请到加工单收货详细页），
-           维修退货页新增独立维修退货单。 -->
-      <template v-if="activeTab === 'DEFECT'">
-        <el-button type="danger" :icon="'Plus'" @click="openNoOrder">新增无单加工退货</el-button>
-        <span style="margin-left:12px;color:var(--app-text-secondary);font-size:var(--app-font-xs);line-height:1.6">
-          退回某批已收成品、但**不挂加工单**（单据已结／无需挂单）时在此登记；<b>有关联加工单的退回</b>请到该加工单的
-          收货详细页用「加工退货」—— 两者是同一个动作（红冲收货），都会出现在下方同一张表里，用「关联加工单」列区分。
-        </span>
-      </template>
-      <template v-else-if="activeTab === 'REPAIR'">
-        <el-button type="warning" :icon="'Plus'" @click="handleAdd(OutsourceReturnType.REPAIR)">新增维修退货</el-button>
-        <!-- 返回进度（2026-09-17，仅维修退货）：跟踪"工厂还有多少没送回来" -->
-        <el-select v-model="progress" placeholder="返回进度" clearable
-          style="width:150px;margin-left:12px" @change="() => { pagination.pageNum = 1; loadData() }">
-          <el-option label="待返回" value="PENDING_RETURN" />
-          <el-option label="已结案" value="CLOSED" />
-        </el-select>
-      </template>
-    </el-card>
-    <el-card shadow="never">
-      <!-- 页签（2026-09-21）：加工退货 = 红冲收货台账（有单+无单一张表）；维修退货 = 售后送修（送修/返回/结案）。
+      <!-- 页签：加工退货 = 红冲收货台账（有单+无单一张表）；维修退货 = 售后送修（送修/返回/结案）。
            ⚠️ 上一代独立加工退货单不再单独列页签（用户口径「不要了」）⇒ 存量单据走详情页 URL 直达。 -->
       <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
         <el-tab-pane :label="OutsourceReturnTypeLabel[OutsourceReturnType.DEFECT]" name="DEFECT" />
         <el-tab-pane :label="OutsourceReturnTypeLabel[OutsourceReturnType.REPAIR]" name="REPAIR" />
       </el-tabs>
 
+      <!-- 筛选行（与物料退货页同一布局）：左侧筛选 + 查询/重置，右侧新增按钮（随页签切换） -->
+      <div v-if="activeTab === 'DEFECT'" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <el-select v-model="ledgerQuery.linked" placeholder="关联加工单" clearable style="width:150px" @change="ledgerSearch">
+          <el-option label="已关联加工单" value="WITH_ORDER" />
+          <el-option label="未关联（无单）" value="WITHOUT_ORDER" />
+        </el-select>
+        <el-select v-model="ledgerQuery.status" placeholder="状态" clearable style="width:130px" @change="ledgerSearch">
+          <el-option label="草稿" :value="DocStatus.DRAFT" />
+          <el-option label="已审核" :value="DocStatus.AUDITED" />
+        </el-select>
+        <el-button @click="ledgerQuery.linked = ''; ledgerQuery.status = ''; ledgerSearch()">重置</el-button>
+        <div style="margin-left:auto">
+          <el-button type="danger" :icon="'Plus'" @click="openNoOrder">新增无单加工退货</el-button>
+        </div>
+      </div>
+      <div v-else style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <!-- 返回进度（仅维修退货）：跟踪"工厂还有多少没送回来" -->
+        <el-select v-model="progress" placeholder="返回进度" clearable style="width:150px">
+          <el-option label="待返回" value="PENDING_RETURN" />
+          <el-option label="已结案" value="CLOSED" />
+        </el-select>
+        <el-button type="primary" @click="handleSearch">查询</el-button>
+        <el-button @click="handleReset">重置</el-button>
+        <div style="margin-left:auto">
+          <el-button type="warning" :icon="'Plus'" @click="handleAdd(OutsourceReturnType.REPAIR)">新增维修退货</el-button>
+        </div>
+      </div>
+
+      <!-- 台账的业务提示：改用 el-alert 承载（原先写成普通文字，里面的 `**` 会被原样显示出来） -->
+      <el-alert v-if="activeTab === 'DEFECT'" type="info" :closable="false" show-icon style="margin-bottom:8px">
+        <template #title>
+          <span style="font-size:var(--app-font-xs);line-height:1.5">
+            退回某批已收成品、但<b>不挂加工单</b>（单据已结 / 无需挂单）时在此登记；
+            <b>有关联加工单的退回</b>请到该加工单的收货详细页用「加工退货」——
+            两者是同一个动作（红冲收货），都会出现在下方同一张表里，用「关联加工单」列区分。
+          </span>
+        </template>
+      </el-alert>
+
       <!-- ============ ① 加工退货台账：有单 + 无单一张表（「关联加工单」列区分） ============ -->
       <template v-if="activeTab === 'DEFECT'">
-        <el-form :inline="true" style="margin-bottom:8px">
-          <el-form-item label="关联加工单">
-            <el-select v-model="ledgerQuery.linked" placeholder="全部" clearable style="width:130px" @change="ledgerSearch">
-              <el-option label="已关联加工单" value="WITH_ORDER" />
-              <el-option label="未关联（无单）" value="WITHOUT_ORDER" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="状态">
-            <el-select v-model="ledgerQuery.status" placeholder="全部" clearable style="width:120px" @change="ledgerSearch">
-              <el-option label="草稿" :value="DocStatus.DRAFT" />
-              <el-option label="已审核" :value="DocStatus.AUDITED" />
-            </el-select>
-          </el-form-item>
-          <el-form-item>
-            <el-button @click="ledgerQuery.linked = ''; ledgerQuery.status = ''; ledgerSearch()">重置</el-button>
-          </el-form-item>
-        </el-form>
-        <!-- 列宽合计 ≈920px（**留余量**）＜ 内容区（行数多时纵向滚动条约吃掉 15px：963→948），一行显示完、不横向滑动。
+        <!-- 列宽合计 926px（**留余量**）＜ 内容区（行数多时纵向滚动条约吃掉 15px：963→948），一行显示完、不横向滑动。
              扣减仓库不单独占列，挂在「退货数量」的 title 上（该信息主要给查账用）。 -->
-        <el-table :data="ledger" border stripe v-loading="ledgerLoading">
+        <el-table :data="ledger" border stripe v-loading="ledgerLoading" @row-click="openDetail">
           <el-table-column label="退货日期" width="96"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
           <el-table-column prop="factoryName" label="加工厂" width="100" show-overflow-tooltip />
           <!-- 「关联加工单」= 本表唯一的"有无单"区分：有单显示可点的加工单号，无单显示"未关联" -->
           <el-table-column label="关联加工单" width="110" show-overflow-tooltip>
             <template #default="{ row }">
-              <el-button v-if="row.orderCode" type="primary" link @click="goOrder(row)">{{ row.orderCode }}</el-button>
+              <el-button v-if="row.orderCode" type="primary" link @click.stop="goOrder(row)">{{ row.orderCode }}</el-button>
               <span v-else style="color:var(--app-text-placeholder)">未关联</span>
             </template>
           </el-table-column>
@@ -286,19 +307,18 @@ onMounted(() => { loadLedger() })
               <span :title="row.warehouseName ? ('扣减仓库：' + row.warehouseName) : ''" style="color:var(--app-color-danger);font-weight:500">{{ Math.abs(Number(row.quantity || 0)) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="76" align="center">
+          <el-table-column label="状态" width="78" align="center">
             <template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
           </el-table-column>
           <el-table-column prop="remark" label="备注" min-width="110" show-overflow-tooltip />
-          <!-- 2026-09-21（用户口径「列表也应该有详情」）：细节（记录ID/建单时间/扣减仓库/还料清单/应付冲减）进详情抽屉
-               ⇒ 操作列 140→180（详情+审核+反审核+删除），腾出的 40px 由 加工厂 −10、关联加工单 −10、备注 −10、
-               产品 min-width 弹性列吸收 ⇒ 合计仍 ≤ 948（纵向滚动条下）不横向滑动。 -->
-          <el-table-column label="操作" width="180" align="center" fixed="right">
+          <!-- 动作集与顺序统一（与物料退货页一致）：详情 → 审核 → 反审核 → 删除。
+               这些是**收货记录**（没有独立详情页）⇒ 详情走抽屉；单据型的维修退货页签则跳详情页。 -->
+          <el-table-column label="操作" width="174" align="center" fixed="right">
             <template #default="{ row }">
-              <el-button type="primary" link @click="openDetail(row)">详情</el-button>
-              <el-button type="success" link v-if="row.status === DocStatus.DRAFT" @click="auditLedger(row)">审核</el-button>
-              <el-button type="warning" link v-if="row.status === DocStatus.AUDITED" @click="unauditLedger(row)">反审核</el-button>
-              <el-button type="danger" link v-if="row.status === DocStatus.DRAFT" @click="deleteLedger(row)">删除</el-button>
+              <el-button type="primary" link @click.stop="openDetail(row)">详情</el-button>
+              <el-button type="success" link v-if="row.status === DocStatus.DRAFT" @click.stop="auditLedger(row)">审核</el-button>
+              <el-button type="warning" link v-if="row.status === DocStatus.AUDITED" @click.stop="unauditLedger(row)">反审核</el-button>
+              <el-button type="danger" link v-if="row.status === DocStatus.DRAFT" @click.stop="deleteLedger(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -309,17 +329,16 @@ onMounted(() => { loadLedger() })
 
       <!-- ============ ② 独立退货单：维修退货（送修 / 返回 / 结案） ============ -->
       <template v-else>
-        <!-- 列宽合计 ≈932px（**留余量**）＜ 内容区，保证「一行显示完、不横向滑动」。
-             注意：行数多时出现纵向滚动条会让内容区从 963 缩到约 948，故按 948 兜底。
-             2026-09-17：①**去掉「类型」列**——页面已按类型分页签；②压缩各列解决原先 1252px 宽导致状态/操作被挤出屏幕的问题。
-             2026-09-21：加工退货已迁到「加工退货」页签（另一张台账表），本表只剩维修退货 ⇒ 去掉「关联加工单」列。 -->
-        <el-table :data="list" border stripe v-loading="loading" @row-click="(row: any) => router.push(`/outsource/return-order/detail/${row.id}`)">
-          <el-table-column prop="code" label="退货单号" width="140" />
-          <el-table-column label="加工厂" width="120" show-overflow-tooltip>
+        <!-- 列宽合计 932px（**留余量**）＜ 内容区，保证「一行显示完、不横向滑动」。
+             2026-09-21 与物料退货页对齐：单号 132 / 加工厂 100 / 送修已返回 116 / 内容 min136 /
+             工厂收费 100 / 退货日期 96 / 状态 78 / 操作 174（公共列同宽）。 -->
+        <el-table :data="list" border stripe v-loading="loading" @row-click="goReturnDetail">
+          <el-table-column prop="code" label="退货单号" width="132" />
+          <el-table-column label="加工厂" width="100" show-overflow-tooltip>
             <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
           </el-table-column>
           <!-- 送修 / 已返回（2026-09-17）：橙=工厂还没送完、绿=已全部送回；结案入口见操作列 -->
-          <el-table-column label="送修/已返回" width="110" align="center" show-overflow-tooltip>
+          <el-table-column label="送修/已返回" width="116" align="center" show-overflow-tooltip>
             <template #default="{ row }">
               <span :style="{ color: Number(row.unreturnedQty) > 0 ? 'var(--app-color-warning)' : 'var(--app-color-success)', fontWeight: 500 }"
                 :title="Number(row.unreturnedQty) > 0 ? ('还有 ' + row.unreturnedQty + ' 件未返回') : '已全部返回'">
@@ -327,8 +346,8 @@ onMounted(() => { loadLedger() })
               </span>
             </template>
           </el-table-column>
-          <el-table-column label="退货/送修内容" min-width="100" show-overflow-tooltip>
-            <!-- 加工退货显示"退货物料"（BOM 快照），维修退货没有物料 → 显示"产品×数量" -->
+          <el-table-column label="退货/送修内容" min-width="136" show-overflow-tooltip>
+            <!-- 维修退货没有物料明细 → 显示"产品×数量"；加工退货显示"退货物料"（BOM 快照） -->
             <template #default="{ row }">{{ row.itemSummary || row.productSummary || '-' }}</template>
           </el-table-column>
           <!-- 收费方向：加工厂向我方收取（我方付加工厂，审核后生成正向应付） -->
@@ -341,19 +360,20 @@ onMounted(() => { loadLedger() })
               <span v-else style="color:#c0c4cc">不收费</span>
             </template>
           </el-table-column>
-          <el-table-column label="退货日期" width="104" align="center">
+          <el-table-column label="退货日期" width="96" align="center">
             <template #default="{ row }">{{ $fmtDate(row.returnDate) }}</template>
           </el-table-column>
-          <el-table-column label="状态" width="84" align="center">
+          <el-table-column label="状态" width="78" align="center">
             <!-- 维修退货已结案时直接显示「已结案」（替代"已审核"），未结案按原状态（2026-09-17） -->
             <template #default="{ row }">
               <el-tag v-if="row.returnType === OutsourceReturnType.REPAIR && row.closedFlag === 1" type="success" size="small">已结案</el-tag>
               <el-tag v-else :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="164" align="center">
+          <!-- 动作集与顺序统一（与物料退货页一致）：详情 → 编辑 → 审核 → 反审核 → 作废 → 结案 → 撤销结案 -->
+          <el-table-column label="操作" width="174" align="center" fixed="right">
             <template #default="{ row }">
-              <el-button type="primary" link @click.stop="router.push(`/outsource/return-order/detail/${row.id}`)">详情</el-button>
+              <el-button type="primary" link @click.stop="goReturnDetail(row)">详情</el-button>
               <el-button type="warning" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleEdit(row)">编辑</el-button>
               <el-button type="success" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleAudit(row)">审核</el-button>
               <el-button type="warning" link v-if="row.status===DocStatus.AUDITED && row.closedFlag!==1" @click.stop="handleUnAudit(row)">反审核</el-button>
@@ -365,7 +385,7 @@ onMounted(() => { loadLedger() })
           </el-table-column>
         </el-table>
         <div style="margin-top:16px;display:flex;justify-content:flex-end">
-          <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="()=>{pagination.pageNum=1;loadData()}" />
+          <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleSearch" />
         </div>
       </template>
     </el-card>

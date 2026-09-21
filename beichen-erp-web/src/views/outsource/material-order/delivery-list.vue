@@ -51,7 +51,7 @@ function goReceive(row: any) { router.push(`/outsource/material-order/delivery/$
 function goDetail(row: any) { router.push(`/outsource/material-order/delivery/${row.id}`) }
 /**
  * 退货（2026-09-17）：把已收的物料退回物料商 —— 走**委外物料退货单**（独立单据：源仓扣减 + 冲减应付），
- * 与「退不良」（不良品维修返还/折现退款，写在收货记录里并影响净已收）是两件事。
+ * 与「退不良」（不良品维修退货/折现退款，写在收货记录里并影响净已收）是两件事。
  * 列表行是订单维度（不知具体收料单），故只带供应商预填；按收料记录退货请进详情页。
  */
 function goReturn(row: any) {

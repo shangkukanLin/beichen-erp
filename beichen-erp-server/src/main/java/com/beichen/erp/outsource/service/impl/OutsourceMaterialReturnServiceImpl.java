@@ -58,7 +58,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
 
     private final OutsourceMaterialReturnMapper returnMapper;
     private final OutsourceMaterialReturnItemMapper itemMapper;
-    /** 维修返回记录（维修返还单的"回来"腿，2026-09-17） */
+    /** 维修返回记录（维修退货单的"回来"腿，2026-09-17） */
     private final OutsourceMaterialReturnRepairMapper repairMapper;
     private final SupplierMapper supplierMapper;
     private final WarehouseMapper warehouseMapper;
@@ -83,10 +83,10 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                 .eq(code != null && !code.isBlank(), OutsourceMaterialReturn::getCode, code)
                 .eq(supplierId != null, OutsourceMaterialReturn::getSupplierId, supplierId)
                 .eq(status != null && !status.isBlank(), OutsourceMaterialReturn::getStatus, status)
-                // 类型页签（2026-09-17）：退货退款 / 维修返还
+                // 类型页签（2026-09-17）：退货退款 / 维修退货
                 .eq(returnType != null && !returnType.isBlank(), OutsourceMaterialReturn::getReturnType, returnType)
                 .orderByDesc(OutsourceMaterialReturn::getId);
-        // 进度筛选（维修返还，2026-09-17）：
+        // 进度筛选（维修退货，2026-09-17）：
         //   PENDING_RETURN = 已审核、未结案，且「送修合计 > 已返回合计」（还有货在供应商处没回来）
         //   CLOSED         = 已结案（未返回清零并人工确认收尾）
         if (PROGRESS_PENDING_RETURN.equalsIgnoreCase(progress)) {
@@ -166,7 +166,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
             m.put("fromWarehouseId", o.getFromWarehouseId());
             m.put("sourceDeliveryId", o.getSourceDeliveryId());
             if (o.getSourceDeliveryId() != null) m.put("sourceDeliveryCode", deliveryCodeMap.get(o.getSourceDeliveryId()));
-            // 关联物料订单（2026-09-17 维修返还闭环）：前端展示"已扣减收料 / 靠本单跟踪"
+            // 关联物料订单（2026-09-17 维修退货闭环）：前端展示"已扣减收料 / 靠本单跟踪"
             m.put("materialOrderId", o.getMaterialOrderId());
             m.put("materialOrderCode", o.getMaterialOrderId() != null ? moCodeMap.get(o.getMaterialOrderId()) : null);
             m.put("deductedFlag", nzInt(o.getDeductedFlag()));
@@ -193,7 +193,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
             m.put("totalQuantity", totalQty);
             m.put("totalAmount", totalAmount);
             m.put("itemSummary", sb.toString());
-            // 送修 / 已返回（维修返还跟踪用；退货退款也返回，前端只在维修页签展示）
+            // 送修 / 已返回（维修退货跟踪用；退货退款也返回，前端只在维修页签展示）
             BigDecimal returnedQty = returnedMap.getOrDefault(o.getId(), BigDecimal.ZERO);
             m.put("sentQty", totalQty);
             m.put("returnedQty", returnedQty);
@@ -215,7 +215,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         m.put("fromWarehouseId", o.getFromWarehouseId());
         m.put("sourceDeliveryId", o.getSourceDeliveryId());
         if (o.getSourceDeliveryId() != null) m.put("sourceDeliveryCode", sourceDeliveryCode(o.getSourceDeliveryId()));
-        // 关联物料订单（2026-09-17 维修返还闭环）：是否已在订单上扣减收料（deductedFlag）、订单当前状态
+        // 关联物料订单（2026-09-17 维修退货闭环）：是否已在订单上扣减收料（deductedFlag）、订单当前状态
         m.put("materialOrderId", o.getMaterialOrderId());
         MaterialOrder mo = o.getMaterialOrderId() != null ? materialOrderMapper.selectById(o.getMaterialOrderId()) : null;
         m.put("materialOrderCode", mo != null ? mo.getCode() : null);
@@ -255,7 +255,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         }
         m.put("items", itemList);
 
-        // 维修返回记录（仅维修返还单会有；详情页展示并可撤销）2026-09-17
+        // 维修返回记录（仅维修退货单会有；详情页展示并可撤销）2026-09-17
         List<OutsourceMaterialReturnRepair> repairs = repairMapper.selectList(
                 new LambdaQueryWrapper<OutsourceMaterialReturnRepair>()
                         .eq(OutsourceMaterialReturnRepair::getReturnOrderId, id));
@@ -278,7 +278,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         }
         m.put("repairReturns", repairList);
         m.put("repairReturnedQty", repairReturnedQty);
-        // 送修 / 已返回 / 未返回（维修返还的进度口径，与列表、结案校验一致）
+        // 送修 / 已返回 / 未返回（维修退货的进度口径，与列表、结案校验一致）
         BigDecimal sentQty = items.stream()
                 .map(it -> it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -287,10 +287,10 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         return m;
     }
 
-    // ===== 维修返回（维修返还单的"回来"腿，2026-09-17） =====
+    // ===== 维修返回（维修退货单的"回来"腿，2026-09-17） =====
 
     /**
-     * 登记维修返回：维修返还单已审核（货已送供应商）后，供应商修好分批把物料送回来。
+     * 登记维修返回：维修退货单已审核（货已送供应商）后，供应商修好分批把物料送回来。
      * <p>登记即生效：物料入指定仓（`MATERIAL_REPAIR_IN`，物料固定良品 GOOD），**不产生任何应付**；
      * 数量按**物料**校验不超过送修量（送修量 = 本单明细数量合计）。</p>
      * <p>关联订单未完成时（审核已扣过收料数）：本次返回同时<b>回补</b>该订单明细的收料数并冲减「送修中」，
@@ -306,9 +306,9 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         OutsourceMaterialReturn order = returnMapper.selectForUpdate(id, lockCid);
         if (order == null) throw new BusinessException("退货单不存在");
         if (!MaterialReturnType.isRepair(order.getReturnType()))
-            throw new BusinessException("只有维修返还单可以登记维修返回");
+            throw new BusinessException("只有维修退货单可以登记维修返回");
         if (!DocStatus.AUDITED.getCode().equals(order.getStatus()))
-            throw new BusinessException("只有已审核（已送修）的维修返还单才能登记维修返回");
+            throw new BusinessException("只有已审核（已送修）的维修退货单才能登记维修返回");
         if (nzInt(order.getClosedFlag()) == 1)
             throw new BusinessException("该单已结案，如需继续登记请先「撤销结案」");
 
@@ -524,11 +524,11 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         if (del == 0) throw new BusinessException("该维修返回记录已被撤销，请刷新后重试");
     }
 
-    // ===== 结案 / 撤销结案（维修返还的收尾动作，2026-09-17） =====
+    // ===== 结案 / 撤销结案（维修退货的收尾动作，2026-09-17） =====
 
     /**
-     * 结案：维修返还单全部送修数量都已返回（未返回 = 0）后人工确认收尾。
-     * <p>只有维修返还单需要结案（退货退款审核即终结）。结案后禁登记返回、禁撤销返回、禁反审核。</p>
+     * 结案：维修退货单全部送修数量都已返回（未返回 = 0）后人工确认收尾。
+     * <p>只有维修退货单需要结案（退货退款审核即终结）。结案后禁登记返回、禁撤销返回、禁反审核。</p>
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -538,10 +538,10 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         if (lockCid != null && lockCid <= 0) lockCid = null;
         OutsourceMaterialReturn order = returnMapper.selectForUpdate(id, lockCid);
         if (order == null) throw new BusinessException("退货单不存在");
-        if (!MaterialReturnType.isRepair(order.getReturnType())) throw new BusinessException("只有维修返还单需要结案");
+        if (!MaterialReturnType.isRepair(order.getReturnType())) throw new BusinessException("只有维修退货单需要结案");
         if (nzInt(order.getClosedFlag()) == 1) throw new BusinessException("该单已结案");
         if (!DocStatus.AUDITED.getCode().equals(order.getStatus()))
-            throw new BusinessException("只有已审核（已送修）的维修返还单才能结案");
+            throw new BusinessException("只有已审核（已送修）的维修退货单才能结案");
         BigDecimal unreturned = unreturnedQty(id);
         if (unreturned.compareTo(BigDecimal.ZERO) > 0)
             throw new BusinessException("还有 " + unreturned.stripTrailingZeros().toPlainString()
@@ -622,7 +622,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         order.setStatus(DocStatus.DRAFT.getCode());
         // 类型归一（空值/历史值 MATERIAL → REFUND 退货退款，2026-09-17）
         order.setReturnType(MaterialReturnType.normalize(order.getReturnType()).getCode());
-        // 关联物料订单（2026-09-17 维修返还闭环）：显式传入优先；从「物料收货」按记录发起时
+        // 关联物料订单（2026-09-17 维修退货闭环）：显式传入优先；从「物料收货」按记录发起时
         // 按收料单的来源订单（outsource_delivery.source_order_id）自动带出
         if (order.getMaterialOrderId() == null && order.getSourceDeliveryId() != null) {
             OutsourceDelivery d = outsourceDeliveryMapper.selectById(order.getSourceDeliveryId());
@@ -678,7 +678,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
 
         // 1. 物料出源仓（默认扣良品 GOOD 库存）—— 统一走 WarehouseStockService（架构债 A1），
         //    严格口径：源仓库存不足直接抛错（与原先的私有实现行为一致）
-        //    类型分流（2026-09-17）：退货退款 = MATERIAL_RETURN_OUT；维修返还 = MATERIAL_REPAIR_OUT（送修，货会回来）
+        //    类型分流（2026-09-17）：退货退款 = MATERIAL_RETURN_OUT；维修退货 = MATERIAL_REPAIR_OUT（送修，货会回来）
         boolean repair = MaterialReturnType.isRepair(order.getReturnType());
         String outType = repair ? StockChangeType.MATERIAL_REPAIR_OUT.getCode()
                 : StockChangeType.MATERIAL_RETURN_OUT.getCode();
@@ -700,7 +700,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         }
 
         // 2. 冲减应付（负向应付，允许负应付）—— **仅退货退款**；
-        //    维修返还只是把物料送去维修、修好会还回来，不冲减应付（用户口径 2026-09-17：不收费、不动应付）
+        //    维修退货只是把物料送去维修、修好会还回来，不冲减应付（用户口径 2026-09-17：不收费、不动应付）
         BigDecimal totalAmount = items.stream()
                 .map(it -> it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -710,7 +710,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                     "委外物料退货 - " + order.getCode());
         }
 
-        // 3. 关联物料订单（2026-09-17 维修返还闭环，三种情况按订单是否完成分流）：
+        // 3. 关联物料订单（2026-09-17 维修退货闭环，三种情况按订单是否完成分流）：
         //    ①订单未完成(RECEIVING) → 扣减该订单明细的收料数（净收料 = 收料总数 − 送修数）+ 记「送修中」，
         //      修好「登记维修返回」时自动回补，订单台账闭环；审核瞬间按订单状态冻结进 deducted_flag。
         //    ②订单已完成(FINISHED) / ③未关联订单 → 不动订单，返回情况靠本单「送修/已返回」+ 结案跟踪。
@@ -831,10 +831,10 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         List<OutsourceMaterialReturnItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<OutsourceMaterialReturnItem>().eq(OutsourceMaterialReturnItem::getReturnOrderId, id));
         boolean repair = MaterialReturnType.isRepair(order.getReturnType());
-        // 0. 已结案的维修返还单禁止反审核（先撤销结案）
+        // 0. 已结案的维修退货单禁止反审核（先撤销结案）
         if (nzInt(order.getClosedFlag()) == 1)
             throw new BusinessException("该单已结案，请先「撤销结案」再反审核");
-        // 0.1 维修返还：已经有"维修返回入库"记录的单禁止反审核（否则会与已入库的返还数量打架）
+        // 0.1 维修退货：已经有"维修返回入库"记录的单禁止反审核（否则会与已入库的返还数量打架）
         if (repair && repairMapper.selectCount(new LambdaQueryWrapper<OutsourceMaterialReturnRepair>()
                 .eq(OutsourceMaterialReturnRepair::getReturnOrderId, id)) > 0) {
             throw new BusinessException("该单已有维修返回记录，请先撤销全部维修返回再反审核");
@@ -852,7 +852,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                     it.getQuantity(), backType, order.getCode(),
                     backBill, null, null, order.getId());
         }
-        // 2. 冲销应付（内部校验已付款则阻止）—— 仅退货退款有应付；维修返还没动过应付，不用冲
+        // 2. 冲销应付（内部校验已付款则阻止）—— 仅退货退款有应付；维修退货没动过应付，不用冲
         if (!repair) payableHelper.reversePayable(id, SourceBillType.OUTSOURCE_MATERIAL_RETURN.getCode());
         // 3. 回草稿
         // 审核信息必须用 UpdateWrapper 显式置 null：updateById 忽略 null 字段，反审核后仍显示审核人/时间
@@ -957,7 +957,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         m.put("supplierId", supplierId);
         Supplier s = supplierId != null ? supplierMapper.selectById(supplierId) : null;
         m.put("supplierName", s != null ? s.getName() : "");
-        // 关联物料订单（2026-09-17 维修返还闭环）：收料单的来源订单，前端自动带出并按其状态提示
+        // 关联物料订单（2026-09-17 维修退货闭环）：收料单的来源订单，前端自动带出并按其状态提示
         m.put("materialOrderId", d.getSourceOrderId());
         MaterialOrder mo = d.getSourceOrderId() != null ? materialOrderMapper.selectById(d.getSourceOrderId()) : null;
         m.put("materialOrderCode", mo != null ? mo.getCode() : null);

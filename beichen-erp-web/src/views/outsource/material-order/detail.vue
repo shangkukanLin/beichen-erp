@@ -220,7 +220,7 @@ onActivated(() => { loadAll() })
           </template></el-table-column>
           <el-table-column label="已出货" width="90"><template #default="{row}"><span :style="{color:row.receivedQuantity>0?'var(--app-color-success)':''}">{{ row.receivedQuantity || 0 }}</span></template></el-table-column>
           <el-table-column label="已退(不良)" width="90"><template #default="{row}"><span :style="{color:row.defectReturnedQty>0?'var(--app-color-danger)':''}">{{ row.defectReturnedQty || 0 }}</span></template></el-table-column>
-          <!-- 送修中（2026-09-17）：维修返还已送修未返回的数量，已从「已出货」中扣出（修好返回后自动加回） -->
+          <!-- 送修中（2026-09-17）：维修退货已送修未返回的数量，已从「已出货」中扣出（修好返回后自动加回） -->
           <el-table-column label="送修中" width="80"><template #default="{row}"><span :style="{color:Number(row.repairReturnedQty)>0?'var(--app-color-warning)':''}">{{ row.repairReturnedQty || 0 }}</span></template></el-table-column>
           <el-table-column label="单价" width="110"><template #default="{row}">
             <el-input-number v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.unitPrice" :min="0" :precision="2" size="small" style="width:100%" />

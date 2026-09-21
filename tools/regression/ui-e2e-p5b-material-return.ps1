@@ -56,6 +56,11 @@ if ($need -gt 0) {
     Step ('material return #' + $i + ' (' + $typeName + ')')
     Open '/outsource/material-return' 3000
     ClearErrs | Out-Null
+    # 2026-09-21（UI 统一）：新增按钮随页签切换 ⇒ REPAIR 必须先切到「维修退货」页签
+    if ($typeName -eq 'REPAIR') {
+      Write-Host ('  tab: ' + (ClickText (ZH 'tab_mr_repair')))
+      Start-Sleep -Milliseconds 1600
+    }
     Write-Host ('  open add page: ' + (ClickBtn $typeKey))
     Start-Sleep -Milliseconds 2400
     Write-Host ('  path=' + (EvalJs 'String(location.pathname)'))
@@ -118,7 +123,11 @@ $refundPay = D (SqlOne "SELECT COALESCE(SUM(amount),0) FROM finance_payable WHER
 $repairPay = D (SqlOne "SELECT COUNT(*) FROM finance_payable WHERE source_bill_type LIKE 'OUTSOURCE_MATERIAL_REPAIR%'")
 Write-Host ("[DB] returns=$ret audited=$aud refund=$refundAud repair=$repairAud auxStock=$auxStockBefore->$auxAfter refundOut=$refundOut repairOut=$repairOut refundPayableSum=$refundPay repairPayableRows=$repairPay")
 Ok (($ret -ge 3)) ('material returns >= 3 (got ' + $ret + ')')
-Ok (($aud -eq $ret)) 'all material returns audited'
+# 2026-09-21: the table may also hold **CANCELLED** historical documents (other suites cancel their own
+# drafts so they can re-run), so "everything is AUDITED" was wrong. What this sweep actually guarantees is
+# that no DRAFT is left behind => assert audited + cancelled == total.
+$cancelledRet = D (SqlOne "SELECT COUNT(*) FROM outsource_material_return WHERE status='CANCELLED'")
+Ok ((($aud + $cancelledRet) -eq $ret)) ('all non-cancelled material returns audited (audited=' + $aud + ' cancelled=' + $cancelledRet + ' total=' + $ret + ')')
 Ok (($refundAud -ge 2)) ('refund returns >= 2 (got ' + $refundAud + ')')
 Ok (($repairAud -ge 1)) ('repair returns >= 1 (got ' + $repairAud + ')')
 Ok (($refundOut -ge 100)) ('refund stock-out qty >= 100 (got ' + $refundOut + ')')

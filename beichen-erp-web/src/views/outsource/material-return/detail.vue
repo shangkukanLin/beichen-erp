@@ -12,7 +12,7 @@ const id = route.params.id as string
 const detail = ref<any>({})
 const loading = ref(false)
 
-/** 维修返还（2026-09-17）：审核=送修出库（不冲应付）；供应商修好后「登记维修返回」把物料入回来 */
+/** 维修退货（2026-09-17）：审核=送修出库（不冲应付）；供应商修好后「登记维修返回」把物料入回来 */
 const isRepair = computed(() => (detail.value.returnType || MaterialReturnType.REFUND) === MaterialReturnType.REPAIR)
 
 // ===== 维修返回（对齐加工退货的维修返回实现）=====
@@ -83,7 +83,7 @@ async function loadData() {
 
 async function handleAudit() {
   const tip = isRepair.value
-    ? ('确认审核该维修返还单？审核后物料出源仓送供应商维修（不冲减应付）' + (detail.value.materialOrderCode ? `；关联订单 ${detail.value.materialOrderCode} 若未完成，将同时扣减其收料数` : ''))
+    ? ('确认审核该维修退货单？审核后物料出源仓送供应商维修（不冲减应付）' + (detail.value.materialOrderCode ? `；关联订单 ${detail.value.materialOrderCode} 若未完成，将同时扣减其收料数` : ''))
     : '确认审核该退货单？审核后物料出源仓并冲减应付'
   try { await ElMessageBox.confirm(tip, '确认审核', { type: 'warning' }) } catch { return }
   try { await request.put(`/outsource/material-return/${id}/audit`); ElMessage.success('审核成功'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
@@ -97,7 +97,7 @@ async function handleUnAudit() {
   try { await request.put(`/outsource/material-return/${id}/un-audit`); ElMessage.success('已反审核'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 
-/** 结案（仅维修返还）：未返回=0 后收尾；场景②（订单已完成）/③（未关联）的跟踪终点 */
+/** 结案（仅维修退货）：未返回=0 后收尾；场景②（订单已完成）/③（未关联）的跟踪终点 */
 async function handleClose() {
   try { await ElMessageBox.confirm('确认结案？结案后不能再登记/撤销维修返回，也不能反审核（需先撤销结案）。', '确认结案', { type: 'warning' }) } catch { return }
   try { await request.put(`/outsource/material-return/${id}/close`); ElMessage.success('已结案'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '结案失败') }
@@ -127,7 +127,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
             <el-button type="success" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
             <el-button type="warning" v-if="detail.status===DocStatus.AUDITED && detail.closedFlag!==1" @click="handleUnAudit">反审核</el-button>
             <el-button type="danger" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
-            <!-- 结案 / 撤销结案（仅维修返还，2026-09-17）：未返回=0 才可结案 -->
+            <!-- 结案 / 撤销结案（仅维修退货，2026-09-17）：未返回=0 才可结案 -->
             <el-button type="success" v-if="isRepair && detail.status===DocStatus.AUDITED && detail.closedFlag!==1 && Number(detail.unreturnedQty)===0" @click="handleClose">结案</el-button>
             <el-button type="warning" v-if="isRepair && detail.closedFlag===1" @click="handleReOpen">撤销结案</el-button>
             <el-button @click="router.back()">返回</el-button>
@@ -136,7 +136,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
       </template>
       <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="退货单号">{{ detail.code }}</el-descriptions-item>
-        <!-- 两类型（2026-09-17）：退货退款 = 冲减应付；维修返还 = 送修，修好登记维修返回入库 -->
+        <!-- 两类型（2026-09-17）：退货退款 = 冲减应付；维修退货 = 送修，修好登记维修返回入库 -->
         <el-descriptions-item label="类型">
           <el-tag :type="MaterialReturnTypeTag[detail.returnType] || 'info'" size="small">{{ MaterialReturnTypeLabel[detail.returnType] || detail.returnType }}</el-tag>
         </el-descriptions-item>
@@ -144,7 +144,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
         <el-descriptions-item label="出库源仓">{{ detail.warehouseName || '-' }}</el-descriptions-item>
         <!-- 来源收料单：从「物料收货」按记录发起退货时才有（2026-09-17） -->
         <el-descriptions-item label="来源收料单">{{ detail.sourceDeliveryCode || (detail.sourceDeliveryId ? ('#' + detail.sourceDeliveryId) : '-') }}</el-descriptions-item>
-        <!-- 关联物料订单（2026-09-17 维修返还闭环）：订单未完成=已扣减其收料数（修好回补）；已完成/未关联=靠本单跟踪 -->
+        <!-- 关联物料订单（2026-09-17 维修退货闭环）：订单未完成=已扣减其收料数（修好回补）；已完成/未关联=靠本单跟踪 -->
         <el-descriptions-item v-if="isRepair" label="关联物料订单">
           <template v-if="detail.materialOrderId">
             <el-button type="primary" link @click="router.push(`/outsource/material-order/detail/${detail.materialOrderId}`)">{{ detail.materialOrderCode || ('#' + detail.materialOrderId) }}</el-button>
@@ -155,7 +155,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
           <span v-else style="color:var(--app-text-placeholder)">未关联（返回情况靠本单跟踪）</span>
         </el-descriptions-item>
         <el-descriptions-item label="退货日期">{{ $fmtDate(detail.returnDate) }}</el-descriptions-item>
-        <!-- 送修 / 已返回 / 未返回（仅维修返还）：场景②③"是否有返回来"的跟踪口径 -->
+        <!-- 送修 / 已返回 / 未返回（仅维修退货）：场景②③"是否有返回来"的跟踪口径 -->
         <el-descriptions-item v-if="isRepair" label="送修 / 已返回">
           {{ Number(detail.sentQty || 0) }} /
           <span style="color:var(--app-color-success);font-weight:600">{{ Number(detail.repairReturnedQty || 0) }}</span>
@@ -183,7 +183,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
       </el-table>
     </el-card>
 
-    <!-- 维修返回记录（仅维修返还单，2026-09-17）：登记即入库，可逐行撤销 -->
+    <!-- 维修返回记录（仅维修退货单，2026-09-17）：登记即入库，可逐行撤销 -->
     <el-card shadow="never" style="margin-top:12px" v-if="isRepair">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">

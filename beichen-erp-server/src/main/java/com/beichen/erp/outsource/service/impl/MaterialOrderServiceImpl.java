@@ -481,7 +481,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         if (factoryId == null) throw new BusinessException("订单未关联供应商");
         String handleType = body.get("handleType") != null ? body.get("handleType").toString() : DefectHandleType.REPAIR_RETURN.getCode();
 
-        // 退不良仓库（维修返还、折现退款均需退料仓库，缺省取供应商第一委外仓）
+        // 退不良仓库（维修退货、折现退款均需退料仓库，缺省取供应商第一委外仓）
         Long whId = body.get("warehouseId") != null ? Long.valueOf(body.get("warehouseId").toString()) : null;
         if (whId == null) {
             List<Warehouse> whs = warehouseMapper.selectList(
@@ -516,7 +516,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             if (orderItem.getReceivedQuantity().subtract(orderItem.getDefectReturnedQty()).compareTo(qty) < 0)
                 throw new BusinessException(getMaterialNameById(orderItem.getMaterialId()) + " 可退数量不足");
 
-            // 退不良（维修返还、折现退款均校验仓库库存是否足够，实际扣减推迟到审核）
+            // 退不良（维修退货、折现退款均校验仓库库存是否足够，实际扣减推迟到审核）
             if (whId != null && orderItem.getMaterialId() != null) {
                 WarehouseStock s = warehouseStockMapper.selectOne(
                     new LambdaQueryWrapper<WarehouseStock>()
@@ -772,7 +772,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             map.put("orderQuantity", it.getOrderQuantity());
             map.put("receivedQuantity", it.getReceivedQuantity());
             map.put("defectReturnedQty", it.getDefectReturnedQty());
-            // 送修中（2026-09-17）：维修返还已送修未返回的数量（已从 receivedQuantity 中扣出）
+            // 送修中（2026-09-17）：维修退货已送修未返回的数量（已从 receivedQuantity 中扣出）
             map.put("repairReturnedQty", it.getRepairReturnedQty());
             map.put("unitPrice", it.getUnitPrice());
             map.put("amount", it.getAmount());

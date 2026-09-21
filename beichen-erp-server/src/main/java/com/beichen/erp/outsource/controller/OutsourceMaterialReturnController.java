@@ -26,7 +26,7 @@ public class OutsourceMaterialReturnController {
     private final com.beichen.erp.outsource.service.MaterialOrderService materialOrderService;
 
     /**
-     * 该物料商的物料订单（物料退货页「关联物料订单」下拉；维修返还闭环：收货中/已完成）。
+     * 该物料商的物料订单（物料退货页「关联物料订单」下拉；维修退货闭环：收货中/已完成）。
      * <p>期 3（2026-09-19 读隔离）：原先物料退货页直读 {@code /api/outsource/material-order/page}
      * （需 {@code outsource:material-order}）⇒ 只被授予 {@code outsource:material-return} 的用户会 403。
      * 现走本页前缀，复用物料订单模块的**同一分页查询**。</p>
@@ -104,7 +104,7 @@ public class OutsourceMaterialReturnController {
         return R.ok();
     }
 
-    /** 登记维修返回（维修返还单已审核后，供应商修好把物料送回来 → 入库；不产生应付，2026-09-17） */
+    /** 登记维修返回（维修退货单已审核后，供应商修好把物料送回来 → 入库；不产生应付，2026-09-17） */
     @PostMapping("/{id}/repair-return")
     public R<Void> repairReturn(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         returnService.repairReturn(id, body);
@@ -119,7 +119,7 @@ public class OutsourceMaterialReturnController {
     }
 
     /**
-     * 结案（仅维修返还，2026-09-17）：全部送修数量都已返回（未返回=0）后确认收尾 —— 场景②/③的跟踪终点。
+     * 结案（仅维修退货，2026-09-17）：全部送修数量都已返回（未返回=0）后确认收尾 —— 场景②/③的跟踪终点。
      * <p>结案后禁止登记/撤销维修返回、禁止反审核（需先「撤销结案」）。</p>
      */
     @PutMapping("/{id}/close")
@@ -170,7 +170,7 @@ public class OutsourceMaterialReturnController {
         // 来源收料单（物料收货页发起退货时带出，用于按记录算「可退数量」）
         Object sdid = body.get("sourceDeliveryId");
         if (sdid != null && !sdid.toString().isBlank()) o.setSourceDeliveryId(Long.valueOf(sdid.toString()));
-        // 关联物料订单（维修返还闭环，2026-09-17）：未传/清空=不关联（返回情况靠本单「送修/已返回」跟踪）
+        // 关联物料订单（维修退货闭环，2026-09-17）：未传/清空=不关联（返回情况靠本单「送修/已返回」跟踪）
         Object moid = body.get("materialOrderId");
         if (moid != null && !moid.toString().isBlank()) o.setMaterialOrderId(Long.valueOf(moid.toString()));
         Object rt = body.get("returnType");

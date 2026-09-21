@@ -34,7 +34,7 @@ public class OutsourceMaterialReturn {
     private Long sourceDeliveryId;
 
     /**
-     * 关联物料订单ID(outsource_material_order.id)，2026-09-17 维修返还闭环：
+     * 关联物料订单ID(outsource_material_order.id)，2026-09-17 维修退货闭环：
      * <ul>
      *   <li>订单<b>未完成</b>(RECEIVING)：审核时扣减该订单明细的收料数（净收料 = 收料总数 − 送修数），
      *       修好「登记维修返回」时回补 → 订单台账自动闭环，无需另行跟踪；</li>

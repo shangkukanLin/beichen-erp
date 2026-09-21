@@ -71,7 +71,7 @@ public class MaterialOrderController {
         return R.ok(materialOrderService.receive(id, body));
     }
 
-    /** 退不良，使用订单关联的供应商作为工厂。支持处理方式：维修返还(扣库存)/折现退款(仅记录) */
+    /** 退不良，使用订单关联的供应商作为工厂。支持处理方式：维修退货(扣库存)/折现退款(仅记录) */
     @PostMapping("/{id}/return-defect")
     public R<?> returnDefect(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         return R.ok(materialOrderService.returnDefect(id, body));

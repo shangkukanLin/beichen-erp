@@ -37,7 +37,7 @@ public interface MaterialOrderService {
      */
     Object receive(Long id, Map<String, Object> body);
 
-    /** 退不良：生成收发单草稿（维修返还/折现退款），审核时统一落账。返回收发单ID */
+    /** 退不良：生成收发单草稿（维修退货/折现退款），审核时统一落账。返回收发单ID */
     Object returnDefect(Long id, Map<String, Object> body);
 
     /** 结单：标记已完成 */
