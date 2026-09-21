@@ -197,6 +197,16 @@ async function handleUnAudit(row: PurchaseOrder) {
 function handleDetail(row: PurchaseOrder) {
   router.push(`/inventory/purchase/detail/${row.id}`)
 }
+/**
+ * 售后退货 / 换货**快捷入口**（2026-09-21 用户口径：销售单列表要有退货换货快捷键 ⇒ 采购单列表同样要有）。
+ * <p>带 fromOrder=采购单ID 跳到采购退货单 / 采购换货单的新增页；目标页会反查采购单带出供货商、单号与
+ * 默认仓，并自动载入可退 / 可换明细（与采购单详情页的「发起退货 / 换货」完全一致）。</p>
+ * <p>⚠️ 两点必须保持：①只有**已审核**采购单能发起 —— 未审核还没入库，没有可退/可换的量（后端可退量
+ * 就是按已入库数量算的，换货还额外受可换量约束）②按钮必须 .stop —— 本列表有 @row-click=handleDetail，
+ * 不阻止冒泡会被行点击抢去详情页（采购换货列表与销售单列表都踩过这个坑）。</p>
+ */
+function handleReturn(row: PurchaseOrder) { router.push(`/inventory/purchase-return/add?fromOrder=${row.id}`) }
+function handleExchange(row: PurchaseOrder) { router.push(`/inventory/purchase-exchange/add?fromOrder=${row.id}`) }
 
 function handleSupplierClick(id?: number) {
   if (id) router.push(`/supplier/detail/${id}`)
@@ -283,9 +293,12 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="240" align="center" fixed="right">
+        <el-table-column label="操作" width="300" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
+            <!-- 售后快捷入口（2026-09-21 用户口径）：仅已审核采购单可发起，带 fromOrder 跳转 ⇒ 新增页自动带出供货商与可退/可换明细 -->
+            <el-button v-if="row.status === PurchaseStatus.AUDITED" type="warning" link @click.stop="handleReturn(row)">退货</el-button>
+            <el-button v-if="row.status === PurchaseStatus.AUDITED" type="warning" link @click.stop="handleExchange(row)">换货</el-button>
             <el-button v-if="row.status === PurchaseStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
             <el-button v-if="row.status === PurchaseStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
             <el-button v-if="row.status === PurchaseStatus.DRAFT" type="warning" link @click.stop="handleEdit(row)">编辑</el-button>

@@ -88,6 +88,47 @@ for ($i = 1; $i -le $N; $i++) {
   Ok ($aud -ge $i) ('order ' + $i + ' audited (audited total=' + $aud + ')')
 }
 
+Step 'purchase list: after-sale shortcuts (return / exchange) on an audited row'
+# 2026-09-21 用户口径：采购单列表的操作列也要有「退货 / 换货」快捷入口（与销售单列表对称），
+# 点击后跳到新增页并带出来源采购单。取行方式与销售侧一致：**扫描同时含两个入口的行** ——
+# 不按供货商/单号 FindRow（同一供货商可能有多张单，会命中草稿行，而草稿本来就不该有这两个入口）。
+Open '/inventory/purchase' 2600
+$scanJs = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const R=T('" + (B64 (ZH 'btn_return')) + "');const E=T('" + (B64 (ZH 'btn_exchange')) + "');const vis=e=>e.getClientRects().length>0;const t=[...document.querySelectorAll('.el-table')].filter(vis)[0];if(!t)return 'NOTABLE';const rs=[...t.querySelectorAll('.el-table__body tbody tr')];for(let i=0;i<rs.length;i++){const txt=(rs[i].innerText||'').replace(/\s+/g,' ');if(txt.indexOf(R)>=0&&txt.indexOf(E)>=0)return i+'~'+txt}return '-1~none'})()"
+$scan = EvalJs $scanJs
+Write-Host ('  scan=' + $scan)
+$si = [int](($scan -split '~')[0])
+Ok ($si -ge 0) 'an audited purchase order row offers BOTH shortcuts (return + exchange)'
+if ($si -ge 0) {
+  Write-Host ('  click return: ' + (ClickRowBtnContains $si (ZH 'btn_return')))
+  Start-Sleep -Milliseconds 2600
+  $p2 = EvalJs 'String(location.pathname)'
+  Write-Host ('  path after return click=' + $p2)
+  Ok ($p2 -match '/inventory/purchase-return/add') 'the RETURN shortcut opens the purchase-return add page'
+  $supName = SqlOne("SELECT s.name FROM purchase_order o JOIN supplier s ON s.id=o.supplier_id WHERE o.status='AUDITED' ORDER BY o.id DESC LIMIT 1")
+  Write-Host ('  supplier carried over=' + $supName)
+  Ok ((BodyHas $supName) -eq 'True') ('the add page carries the source order over (' + $supName + ')')
+  Open '/inventory/purchase' 2600
+  $scan2 = EvalJs $scanJs
+  $si2 = [int](($scan2 -split '~')[0])
+  if ($si2 -ge 0) {
+    Write-Host ('  click exchange: ' + (ClickRowBtnContains $si2 (ZH 'btn_exchange')))
+    Start-Sleep -Milliseconds 2600
+  }
+  $p3 = EvalJs 'String(location.pathname)'
+  Write-Host ('  path after exchange click=' + $p3)
+  Ok ($p3 -match '/inventory/purchase-exchange/add') 'the EXCHANGE shortcut opens the purchase-exchange add page'
+}
+
+Step 'purchase list table fits (operation column widened to fit 4 buttons)'
+# 操作列 240→300 才能容下「详情 退货 换货 反审核」4 个 link 按钮 ⇒ 顺手守住"一行显示完、不左右滑动"。
+# 量的是 .el-table__body-wrapper（Element Plus 2.x 里真正滚动的容器；量 .el-table__body 会得到恒等的假通过）。
+Open '/inventory/purchase' 2600
+$ovRaw = EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const ts=[...document.querySelectorAll('.el-table')].filter(vis);const t=ts[0];if(!t)return 'NOTABLE';const w=t.querySelector('.el-table__body-wrapper');if(!w)return 'NOWRAP';return String(w.scrollWidth-w.clientWidth)})()"
+$ovNum = 0
+[void][int]::TryParse([string]$ovRaw, [ref]$ovNum)
+Write-Host ('  list overflow raw=' + $ovRaw)
+Ok ($ovNum -le 2) ('purchase order list fits on one line (overflow=' + $ovRaw + 'px)')
+
 Step 'DB cross-check'
 $po = D (SqlOne 'SELECT COUNT(*) FROM purchase_order')
 $poAud = D (SqlOne 'SELECT COUNT(*) FROM purchase_order WHERE status=''AUDITED''')
