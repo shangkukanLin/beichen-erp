@@ -117,7 +117,12 @@ function DoAct([string]$act) {
       $r1 = OpenSelect 'lbl_rel_order'; Start-Sleep -Milliseconds 1300; $r2 = PickFirstOption 200
       return ("$r1/$r2")
     }
-    'returnTarget' { return (SelectLabelContains 'lbl_return_target' (ZH 'val_supplier_jh')) }
+    # 2026-09-21: was SelectLabelContains ... (ZH 'val_supplier_jh') -- that supplier name no longer exists
+    # in the DB (0 rows), so the pick could never succeed. Pick the first option instead, like 'mrOrder' does.
+    'returnTarget' {
+      $r1 = OpenSelect 'lbl_return_target'; Start-Sleep -Milliseconds 1300; $r2 = PickFirstOption 200
+      return ("$r1/$r2")
+    }
     'mrOrder' {
       $r1 = OpenSelect 'lbl_mr_order'; Start-Sleep -Milliseconds 1300; $r2 = PickFirstOption 200
       return ("$r1/$r2")

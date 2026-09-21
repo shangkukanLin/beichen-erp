@@ -28,10 +28,35 @@ function PaySum([int]$sid) { return SqlOne "SELECT COALESCE(SUM(amount),0) FROM 
 function MaxId([string]$tbl) { return SqlOne "SELECT COALESCE(MAX(id),0) FROM $tbl" }
 function CurUrl() { return (EvalJs "location.href.replace(location.origin,'')") }
 function Step($n) { Write-Host ('--- STEP ' + $n) }
+function SqlRow([string]$q) {
+  $v = SqlRaw $q
+  if (-not $v) { return @() }
+  $ls = $v -split "`n"
+  if ($ls.Count -lt 2) { return @() }
+  return (($ls[1] -split "`t") | ForEach-Object { "$_".Trim() })
+}
+# The add page lists EVERY material of the picked warehouse, so "row 0" is not necessarily the material we
+# care about -- set the qty on the row whose material name matches instead.
+function SetQtyByMaterial([string]$matName, [string]$val) {
+  $b = B64 $matName; $v = B64 $val
+  $js = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const N=T('$b').replace(/\s+/g,'');const V=T('$v');const vis=e=>e.getClientRects().length>0;const t=[...document.querySelectorAll('.el-table')].filter(vis)[0];if(!t)return 'NOTABLE';for(const tr of [...t.querySelectorAll('.el-table__body tbody tr')]){if((tr.innerText||'').replace(/\s+/g,'').indexOf(N)<0)continue;const inp=tr.querySelector('input');if(!inp)return 'NOINPUT';const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;s.call(inp,V);inp.dispatchEvent(new Event('input',{bubbles:true}));inp.dispatchEvent(new Event('change',{bubbles:true}));inp.blur();return 'OK'}return 'NOROW'})()"
+  return (EvalJs $js)
+}
 
 EnsureLogin
 WatchErrors
 ClearErrs
+
+# =====================================================================
+# 2026-09-21: fixtures are now derived at runtime. The old hardcoded set (supplier 捷鹤 / warehouse 捷鹤仓 /
+#   warehouse 37 + material 25 / payable supplier 20) no longer exists -- the suppliers in the DB are named
+#   测试供货商Ax, so the script died at "S2 pick supplier". Pick a (warehouse, material) pair that REALLY
+#   holds GOOD stock of at least 10, plus any supplier (the material-return form does not tie the two).
+$fx = SqlRow "SELECT st.warehouse_id, st.material_id, w.warehouse_name, m.material_name, st.quantity, sup.id, sup.name FROM warehouse_stock st JOIN warehouse w ON w.id=st.warehouse_id JOIN outsource_material m ON m.id=st.material_id JOIN supplier sup ON sup.id=(SELECT MIN(id) FROM supplier) WHERE st.material_id IS NOT NULL AND st.quality_type='GOOD' AND st.quantity >= 10 ORDER BY st.quantity DESC LIMIT 1"
+$whId = [int]$fx[0]; $matId = [int]$fx[1]; $whName = "$($fx[2])"; $matName = "$($fx[3])"
+$supId = [int]$fx[5]; $supName = "$($fx[6])"
+Write-Host ('FIXTURE wh=' + $whId + ' (' + $whName + ') material=' + $matId + ' (' + $matName + ') supplier=' + $supId + ' (' + $supName + ')')
+Ok (($whId -gt 0) -and ($matId -gt 0) -and ($supId -gt 0) -and ($whName -ne '') -and ($matName -ne '')) 'fixture derived (warehouse + material with GOOD stock + supplier)'
 
 # =====================================================================
 Step 'S1 material-return list: type tabs + repair entry'
@@ -49,18 +74,18 @@ Ok ((Errs) -eq '[]') 'S1 no errors after switching tab'
 
 # =====================================================================
 Step 'S2 create REPAIR draft'
-$b37 = StockQty 37 'material_id' 25 'GOOD'
-$bpay = PaySum 20
-Write-Host ("BASE wh37.m25=" + $b37 + " payable20=" + $bpay)
+$bStock = D (StockQty $whId 'material_id' $matId 'GOOD')
+$bpay = PaySum $supId
+Write-Host ('BASE wh' + $whId + '.m' + $matId + '=' + $bStock + ' payable' + $supId + '=' + $bpay)
 Ok ((ClickBtn 'btn_new_mr_repair') -match 'OK') 'S2 click "new repair-return"'
 Start-Sleep -Milliseconds 3000
 Ok ((CurUrl) -match 'returnType=REPAIR') ('S2 url carries returnType=REPAIR url=' + (CurUrl))
 Ok ((BodyHas (ZH 'lbl_mr_repair_supplier')) -eq 'true') 'S2 supplier label switched to repair mode'
-Ok ((SelectLabelText 'lbl_mr_repair_supplier' (ZH 'val_supplier_jh')) -match 'OK') 'S2 pick supplier'
+Ok ((SelectLabelText 'lbl_mr_repair_supplier' $supName) -match 'OK') ('S2 pick supplier=' + $supName)
 Start-Sleep -Milliseconds 1400
-Ok ((SelectLabelText 'lbl_src_wh_out' (ZH 'wh_jiehe')) -match 'OK') 'S2 pick source warehouse'
+Ok ((SelectLabelText 'lbl_src_wh_out' $whName) -match 'OK') ('S2 pick source warehouse=' + $whName)
 Start-Sleep -Milliseconds 2200
-Ok ((SetRowInput 0 0 '3') -match 'OK') 'S2 qty=3'
+Ok ((SetQtyByMaterial $matName '3') -match 'OK') ('S2 qty=3 on material ' + $matName)
 Ok ((ClickBtn 'btn_save_draft') -match 'OK') 'S2 save draft'
 Start-Sleep -Milliseconds 3400
 $rid = [int](MaxId 'outsource_material_return')
@@ -79,9 +104,9 @@ Ok ($hasRR -eq 'false') 'S3 repair-return button hidden before audit'
 Ok ((ClickBtn 'btn_audit') -match 'OK') 'S3 audit'
 ConfirmBox 1500 | Out-Null
 Start-Sleep -Milliseconds 3200
-Write-Host ('S3 after audit wh37.m25=' + (StockQty 37 'material_id' 25 'GOOD') + ' payable20=' + (PaySum 20))
-Ok ((D (StockQty 37 'material_id' 25 'GOOD')) -eq ((D $b37) - 3)) 'S3 source warehouse -3 (sent out for repair)'
-Ok ((D (PaySum 20)) -eq (D $bpay)) 'S3 payable UNCHANGED (repair return does not offset payable)'
+Write-Host ('S3 after audit wh' + $whId + '.m' + $matId + '=' + (StockQty $whId 'material_id' $matId 'GOOD') + ' payable' + $supId + '=' + (PaySum $supId))
+Ok ((D (StockQty $whId 'material_id' $matId 'GOOD')) -eq ($bStock - 3)) 'S3 source warehouse -3 (sent out for repair)'
+Ok ((D (PaySum $supId)) -eq (D $bpay)) 'S3 payable UNCHANGED (repair return does not offset payable)'
 Ok ((SqlOne "SELECT status FROM outsource_material_return WHERE id=$rid") -eq 'AUDITED') 'S3 status=AUDITED'
 $hasRR2 = EvalJs "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const t=T('$rrKey');return String([...document.querySelectorAll('button')].filter(e=>e.getClientRects().length>0&&(e.innerText||'').trim()===t).length>0)})()"
 Ok ($hasRR2 -eq 'true') 'S3 repair-return button appears after audit'
@@ -93,8 +118,8 @@ Start-Sleep -Milliseconds 1800
 Ok ((SetRowInput 0 0 '3') -match 'OK') 'S4 repair qty=3'
 Ok ((ClickDialogBtn 'btn_repair_confirm') -match 'OK') 'S4 confirm'
 Start-Sleep -Milliseconds 3400
-Write-Host ('S4 after receive wh37.m25=' + (StockQty 37 'material_id' 25 'GOOD'))
-Ok ((D (StockQty 37 'material_id' 25 'GOOD')) -eq (D $b37)) 'S4 material back into source warehouse'
+Write-Host ('S4 after receive wh' + $whId + '.m' + $matId + '=' + (StockQty $whId 'material_id' $matId 'GOOD'))
+Ok ((D (StockQty $whId 'material_id' $matId 'GOOD')) -eq $bStock) 'S4 material back into source warehouse'
 $rc = [int](SqlOne "SELECT COUNT(*) FROM outsource_material_return_repair WHERE return_order_id=$rid")
 Ok ($rc -eq 1) 'S4 repair-return record persisted'
 
@@ -114,13 +139,13 @@ Open ("/outsource/material-return/detail/$rid") 2800
 Ok ((ClickRowBtn 0 'btn_revoke') -match 'OK') 'S6 click 撤销 on repair record'
 ConfirmBox 1500 | Out-Null
 Start-Sleep -Milliseconds 3200
-Ok ((D (StockQty 37 'material_id' 25 'GOOD')) -eq ((D $b37) - 3)) 'S6 stock rolled back to sent-out state'
+Ok ((D (StockQty $whId 'material_id' $matId 'GOOD')) -eq ($bStock - 3)) 'S6 stock rolled back to sent-out state'
 Ok ([int](SqlOne "SELECT COUNT(*) FROM outsource_material_return_repair WHERE return_order_id=$rid") -eq 0) 'S6 repair record removed'
 Ok ((ClickBtn 'btn_unaudit') -match 'OK') 'S6 un-audit now allowed'
 ConfirmBox 1500 | Out-Null
 Start-Sleep -Milliseconds 3200
-Ok ((D (StockQty 37 'material_id' 25 'GOOD')) -eq (D $b37)) 'S6 source warehouse fully restored'
-Ok ((D (PaySum 20)) -eq (D $bpay)) 'S6 payable still unchanged'
+Ok ((D (StockQty $whId 'material_id' $matId 'GOOD')) -eq $bStock) 'S6 source warehouse fully restored'
+Ok ((D (PaySum $supId)) -eq (D $bpay)) 'S6 payable still unchanged'
 Ok ((ClickBtn 'btn_cancel_doc') -match 'OK') 'S6 cancel doc'
 ConfirmBox 1500 | Out-Null
 Start-Sleep -Milliseconds 2200
