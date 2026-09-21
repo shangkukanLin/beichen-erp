@@ -12,6 +12,7 @@ $OUT_WH = 71      # 退回出库仓（我方成品仓）
 $IN_WH  = 71      # 换入入库仓（可同仓，仓内按品质分行）
 $PO_ID  = 255     # 来源采购单（已审核）—— 下面会用 SQL 覆盖成"可换量最大"的那张
 $PO_CODE = 'CG-20260918006'
+$SUP_ID = 26      # 供应商 —— 同样由 SQL 从选中采购单解析（后端校验两者必须一致）
 $PROD   = 60      # 采购单明细产品 —— 同上，会被 SQL 覆盖
 $QTY    = 3       # 本次退回/换入数量
 $PRICE  = 16      # 采购原价
@@ -42,12 +43,15 @@ Write-Host '--- 0.5) fixture: auto-pick an audited purchase order item that is s
 # 2026-09-21（夹具自适应）：本用例按"关联采购单的可换量"建单，而 可换量 = 已购 − 已退 − 已换 ⇒
 # **反复运行必然把某张采购单耗尽**（实测 CG-20260918006 用完 ⇒ 建单 code=500 + 18 项连锁红，是夹具问题不是回归）。
 # 挑选必须放在 ①函数定义之后（早于 SqlOne 定义调用会静默取空）②DEFECT 备货之前（备货要按选中的产品/仓库来）。
-$fxPick = [string](SqlOne ("SELECT CONCAT(oi.order_id,'|',oi.id,'|',oi.product_id,'|',oi.quantity - IFNULL((SELECT SUM(ri.quantity) FROM purchase_return_item ri WHERE ri.purchase_order_item_id=oi.id AND ri.return_id IN (SELECT id FROM purchase_return WHERE status<>'CANCELLED')),0) - IFNULL((SELECT SUM(xi.quantity) FROM purchase_exchange_item xi WHERE xi.purchase_order_item_id=oi.id AND xi.exchange_id IN (SELECT id FROM purchase_exchange WHERE status<>'CANCELLED')),0),'|',o.code) FROM purchase_order_item oi JOIN purchase_order o ON o.id=oi.order_id WHERE o.status='AUDITED' AND EXISTS (SELECT 1 FROM warehouse_stock ws WHERE ws.warehouse_id=$OUT_WH AND ws.product_id=oi.product_id AND ws.quality_type='A' AND IFNULL(ws.quantity,0) > 5) ORDER BY (oi.quantity - IFNULL((SELECT SUM(ri.quantity) FROM purchase_return_item ri WHERE ri.purchase_order_item_id=oi.id AND ri.return_id IN (SELECT id FROM purchase_return WHERE status<>'CANCELLED')),0) - IFNULL((SELECT SUM(xi.quantity) FROM purchase_exchange_item xi WHERE xi.purchase_order_item_id=oi.id AND xi.exchange_id IN (SELECT id FROM purchase_exchange WHERE status<>'CANCELLED')),0)) DESC LIMIT 1"))
+$fxPick = [string](SqlOne ("SELECT CONCAT(oi.order_id,'|',oi.id,'|',oi.product_id,'|',oi.quantity - IFNULL((SELECT SUM(ri.quantity) FROM purchase_return_item ri WHERE ri.purchase_order_item_id=oi.id AND ri.return_id IN (SELECT id FROM purchase_return WHERE status<>'CANCELLED')),0) - IFNULL((SELECT SUM(xi.quantity) FROM purchase_exchange_item xi WHERE xi.purchase_order_item_id=oi.id AND xi.exchange_id IN (SELECT id FROM purchase_exchange WHERE status<>'CANCELLED')),0),'|',o.code,'|',o.supplier_id) FROM purchase_order_item oi JOIN purchase_order o ON o.id=oi.order_id WHERE o.status='AUDITED' AND EXISTS (SELECT 1 FROM warehouse_stock ws WHERE ws.warehouse_id=$OUT_WH AND ws.product_id=oi.product_id AND ws.quality_type='A' AND IFNULL(ws.quantity,0) > 5) ORDER BY (oi.quantity - IFNULL((SELECT SUM(ri.quantity) FROM purchase_return_item ri WHERE ri.purchase_order_item_id=oi.id AND ri.return_id IN (SELECT id FROM purchase_return WHERE status<>'CANCELLED')),0) - IFNULL((SELECT SUM(xi.quantity) FROM purchase_exchange_item xi WHERE xi.purchase_order_item_id=oi.id AND xi.exchange_id IN (SELECT id FROM purchase_exchange WHERE status<>'CANCELLED')),0)) DESC LIMIT 1"))
 $fxp = @($fxPick -split '\|')
-if ($fxp.Count -ge 5) {
+if ($fxp.Count -ge 6) {
   $PO_ID = [int]$fxp[0]; $PROD = [int]$fxp[2]; $PO_CODE = [string]$fxp[4]
+  # 供应商必须跟着采购单走：后端有"供货商与来源采购单不一致"护栏（实测踩到：原写死 supplierId=26，
+  # 而自动选中的采购单属于供应商 27 ⇒ 建单被拒）。
+  $SUP_ID = [int]$fxp[5]
   $QTY = [Math]::Min($QTY, [int]$fxp[3])
-  Write-Host ('  fixture auto-picked: po=' + $PO_ID + ' code=' + $PO_CODE + ' product=' + $PROD + ' swapable=' + $fxp[3] + ' qty=' + $QTY + ' (hardcoded 255/60 overridden)')
+  Write-Host ('  fixture auto-picked: po=' + $PO_ID + ' code=' + $PO_CODE + ' product=' + $PROD + ' supplier=' + $SUP_ID + ' swapable=' + $fxp[3] + ' qty=' + $QTY)
 }
 
 Write-Host '--- 1) precondition: DEFECT stock in the return warehouse (reclassify A -> DEFECT if needed)'
@@ -92,7 +96,7 @@ if ($canSwap -lt 1) {
 }
 if ($QTY -gt $canSwap) { $QTY = $canSwap; Write-Host ('  QTY clamped to the real swapable qty = ' + $QTY) }
 $body = @{
-  supplierId = 26; purchaseOrderId = $PO_ID; purchaseOrderCode = $PO_CODE
+  supplierId = $SUP_ID; purchaseOrderId = $PO_ID; purchaseOrderCode = $PO_CODE
   warehouseOutId = $OUT_WH; warehouseInId = $IN_WH
   exchangeDate = (Get-Date -Format 'yyyy-MM-dd'); remark = 'verify-purchase-exchange'
   items = @(@{
@@ -140,7 +144,7 @@ Ok ((D (SqlOne ("SELECT COUNT(*) FROM finance_payable WHERE source_bill_no='$xco
 
 Write-Host '--- 4) guard: over-quantity must be rejected (can-exchange = purchased - returned - exchanged)'
 $overBody = @{
-  supplierId = 26; purchaseOrderId = $PO_ID; warehouseOutId = $OUT_WH; warehouseInId = $IN_WH
+  supplierId = $SUP_ID; purchaseOrderId = $PO_ID; warehouseOutId = $OUT_WH; warehouseInId = $IN_WH
   exchangeDate = (Get-Date -Format 'yyyy-MM-dd')
   items = @(@{ purchaseOrderItemId = $poiId; productId = $PROD; qualityType = 'DEFECT'; quantity = 99999; unitPrice = $PRICE; inQuantity = 99999; inQualityType = 'A'; inUnitPrice = $PRICE })
 } | ConvertTo-Json -Depth 6

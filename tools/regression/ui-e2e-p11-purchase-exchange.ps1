@@ -34,6 +34,20 @@ function LastToast() {
 function ListLayout() {
   return (EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const ts=[...document.querySelectorAll('.el-table')].filter(vis);const t=ts[0];if(!t)return JSON.stringify({err:'NOTABLE'});const hs=[...t.querySelectorAll('.el-table__header th')].map(th=>(th.innerText||'').replace(/\s+/g,' ').trim()).filter(x=>x);const w=t.querySelector('.el-scrollbar__wrap')||t.querySelector('.el-table__body-wrapper');return JSON.stringify({head:hs,scroll:w?w.scrollWidth:0,client:w?w.clientWidth:0})})()")
 }
+# 2026-09-21（夹具自适应，同 verify-purchase-exchange）：本用例在**界面里**选"供应商 + 来源采购单"，
+# 而 可换量 = 已购 − 已退 − 已换 ⇒ 反复运行必然把写死的那张采购单耗尽（实测 CG-20260918006 归零后
+# 保存静默失败、9 项断言连锁红 —— 是夹具问题不是回归）。⇒ 运行时自动挑"仍可换 + 我方仓有 A 规现货"
+# 的采购单明细；下面的供应商、来源采购单、产品行、单价全部改用解析结果（供应商与单号都在 UI 里按
+# 名字/单号选：采购单下拉显示的是单号）。
+$fx = [string](SqlOne ("SELECT CONCAT(o.supplier_id,'|',s.name,'|',o.id,'|',o.code,'|',oi.product_id,'|',p.name,'|',oi.unit_price,'|',oi.quantity - IFNULL((SELECT SUM(ri.quantity) FROM purchase_return_item ri WHERE ri.purchase_order_item_id=oi.id AND ri.return_id IN (SELECT id FROM purchase_return WHERE status<>'CANCELLED')),0) - IFNULL((SELECT SUM(xi.quantity) FROM purchase_exchange_item xi WHERE xi.purchase_order_item_id=oi.id AND xi.exchange_id IN (SELECT id FROM purchase_exchange WHERE status<>'CANCELLED')),0)) FROM purchase_order_item oi JOIN purchase_order o ON o.id=oi.order_id JOIN supplier s ON s.id=o.supplier_id JOIN product p ON p.id=oi.product_id WHERE o.status='AUDITED' AND EXISTS (SELECT 1 FROM warehouse_stock ws WHERE ws.warehouse_id=$OUT_WH AND ws.product_id=oi.product_id AND ws.quality_type='A' AND IFNULL(ws.quantity,0) > 5) ORDER BY (oi.quantity - IFNULL((SELECT SUM(ri.quantity) FROM purchase_return_item ri WHERE ri.purchase_order_item_id=oi.id AND ri.return_id IN (SELECT id FROM purchase_return WHERE status<>'CANCELLED')),0) - IFNULL((SELECT SUM(xi.quantity) FROM purchase_exchange_item xi WHERE xi.purchase_order_item_id=oi.id AND xi.exchange_id IN (SELECT id FROM purchase_exchange WHERE status<>'CANCELLED')),0)) DESC LIMIT 1"))
+$f = @($fx -split '\|')
+if ($f.Count -lt 8) { Write-Host 'RESULT FAIL p11 (fixture missing: no audited PO item is swapable with grade-A stock)'; exit 1 }
+$SUP_ID = [int]$f[0]; $SUP_NAME = [string]$f[1]; $PO_ID = [int]$f[2]; $PO_CODE = [string]$f[3]
+$PROD = [int]$f[4]; $PROD_NAME = [string]$f[5]; $PRICE = [decimal]$f[6]; $CAN = [decimal]$f[7]
+if ($CAN -lt 1) { Write-Host 'RESULT FAIL p11 (fixture exhausted: swapable=0)'; exit 1 }
+if ($QTY -gt $CAN) { $QTY = [int]$CAN }
+Write-Host ('[FIXTURE] supplier=' + $SUP_ID + ' (' + $SUP_NAME + ') po=' + $PO_ID + ' (' + $PO_CODE + ') product=' + $PROD + ' (' + $PROD_NAME + ') price=' + $PRICE + ' swapable=' + $CAN + ' qty=' + $QTY)
+
 Write-Host '--- 0.5) precondition (seeded via API, business flow below is UI-only): DEFECT stock in the return warehouse'
 $defNow = StockOf 'DEFECT'
 if ($defNow -lt ($QTY + 2)) {
@@ -88,9 +102,9 @@ Ok ($c -match 'OK') ('clicked the new button (' + $c + ')')
 start-sleep -Milliseconds 2500
 $path1 = EvalJs 'location.pathname'
 Ok ($path1 -match '/purchase-exchange/add') ('navigated to the add page (' + $path1 + ')')
-$r1 = SelectLabelContains 'lbl_vendor' (ZH 'val_vendor1') 1500
+$r1 = SelectLabelContains 'lbl_vendor' $SUP_NAME 1500
 Ok ($r1 -match 'OK') ('supplier selected (' + $r1 + ')')
-$r2 = SelectLabelContains 'lbl_src_purchase_order' (ZH 'val_po_1') 1800
+$r2 = SelectLabelContains 'lbl_src_purchase_order' $PO_CODE 1800
 Ok ($r2 -match 'OK') ('source purchase order selected (' + $r2 + ')')
 start-sleep -Milliseconds 2000
 $r3 = SelectLabelContains 'lbl_return_out_wh' (ZH 'wh_finished2') 1500
@@ -106,17 +120,29 @@ if ($tb -and $tb.rows -and $tb.rows.Count -gt 0) {
   Ok ($hdr -match (ZH 'lbl_in_qty')) 'detail table shows the exchange-in column'
   $row0 = ($tb.rows[0] -join '|')
   Write-Host ('  detail row=' + $row0)
-  $prodName = ZH 'val_prod_po'
+  $prodName = $PROD_NAME
   Ok ($row0 -match $prodName) ('detail auto-loaded from the purchase order (' + $prodName + ')')
-  # 明细默认带出该采购单的**全部**产品行；本用例只操作第一行（测试产品A11），其余行用「删除」按钮移除
-  # （否则其他产品没有不良品库存，审核会被正确的库存校验拦下）
-  $nRows = [int]$tb.n
-  if ($nRows -gt 1) {
-    for ($k = $nRows - 1; $k -ge 1; $k--) { ClickRowBtn $k 'btn_del' | Out-Null; start-sleep -Milliseconds 500 }
-    $tb2 = Rows 0
-    Write-Host ('  detail rows after cleanup=' + $tb2.n)
-    Ok (([int]$tb2.n -eq 1)) 'extra purchase-order rows removed via the delete button'
-  } else { Ok $true 'only one purchase-order row (nothing to remove)' }
+  # 明细默认带出该采购单的**全部**产品行；本用例只保留**目标产品**那一行（其余产品没有不良品库存，
+  # 留着会被库存校验正确拦下）。2026-09-21：目标行不再假设是第 0 行 —— 按产品名找行，循环删除其余行，
+  # 每轮重算（删掉目标行上方的行会让它上移，索引会变）。
+  $findJs = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const N=T('" + (B64 $PROD_NAME) + "');const vis=e=>e.getClientRects().length>0;const ts=[...document.querySelectorAll('.el-table')].filter(vis);const t=ts[ts.length-1];if(!t)return -1;const rs=[...t.querySelectorAll('.el-table__body tbody tr')];for(let i=0;i<rs.length;i++){if((rs[i].innerText||'').indexOf(N)>=0)return i}return -1})()"
+  $keep0 = [int](EvalJs $findJs)
+  Ok (($keep0 -ge 0)) ('the target product row is present (idx=' + $keep0 + ')')
+  $guard = 0
+  while ($guard -lt 20) {
+    $guard++
+    $tbx = Rows 0
+    if (($null -eq $tbx) -or ([int]$tbx.n -le 1)) { break }
+    $curKeep = [int](EvalJs $findJs)
+    $del = -1
+    for ($k = [int]$tbx.n - 1; $k -ge 0; $k--) { if ($k -ne $curKeep) { $del = $k; break } }
+    if ($del -lt 0) { break }
+    ClickRowBtn $del 'btn_del' | Out-Null
+    start-sleep -Milliseconds 500
+  }
+  $tb2 = Rows 0
+  Write-Host ('  detail rows after cleanup=' + $tb2.n)
+  Ok (([int]$tb2.n -eq 1)) 'only the target product row is kept (the rest removed via delete)'
 } else { Ok $false 'details were auto-loaded from the purchase order' }
 
 Write-Host '--- 2) guard: over-quantity is blocked in the page (client-side, can-exchange)'
