@@ -142,15 +142,15 @@ export interface ReturnSortItem {
   qtyDefect?: number
   remark?: string
   /**
-   * 来源售后待整理批次ID（after_sale_pending.id）：提交后端，退单/换货退回货品统一的追溯锚点。
-   * 取代原 saleReturnItemId（后者只能追溯到销售退单，换货退回的货品无对应记录）。
+   * 来源售后待整理批次ID（after_sale_pending.id）：提交后端，退货单/换货退回货品统一的追溯锚点。
+   * 取代原 saleReturnItemId（后者只能追溯到销售退货单，换货退回的货品无对应记录）。
    */
   pendingId?: number
   /** [已废弃] 来源销售退货明细ID，追溯统一走 pendingId */
   saleReturnItemId?: number
-  /** 本地字段：来源单据类型（SALE_RETURN 销售退单 / SALE_EXCHANGE 销售换货单），展示用 */
+  /** 本地字段：来源单据类型（SALE_RETURN 销售退货单 / SALE_EXCHANGE 销售换货单），展示用 */
   sourceType?: string
-  /** 本地字段：来源单号（退单号/换货单号），展示用，不提交 */
+  /** 本地字段：来源单号（退货单号/换货单号），展示用，不提交 */
   sourceCode?: string
   /** 本地字段：来源单据业务日期，展示用，不提交 */
   sourceDate?: string

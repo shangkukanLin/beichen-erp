@@ -324,8 +324,8 @@ public class DataInitializer implements ApplicationRunner {
             // 故与 409/104/405/302/303 同范式：不再 upsert，下方统一置 visible=0（保留行与角色授权，便于回滚）。
             // 注意：sales / merchandiser 原先只授了 602，下线后必须补授 105（见 initRoleMenus 的存量补授块），
             // 否则这两个角色会失去「客户管理」入口与其前端菜单白名单。
-            // 售后：销售退单 → 销售换货单（换货可选择性收费）；「退货整理」已于 2026-09-18 移到「成品库存」
-            {603L, 6L, "销售退单", "menu", "/sale/return", "SaleReturn", "Refund", 2},
+            // 售后：销售退货单 → 销售换货单（换货可选择性收费）；「退货整理」已于 2026-09-18 移到「成品库存」
+            {603L, 6L, "销售退货单", "menu", "/sale/return", "SaleReturn", "Refund", 2},
             {605L, 6L, "销售换货单", "menu", "/sale/exchange", "SaleExchange", "Refresh", 3},
             // 成品库存子菜单顺序（2026-09-18 用户定稿重排）：
             // 成品移仓单 → 退货整理 → 成品库存情况 → 成品库存流水 → 库存盘点 → 成品报损 → 成品其他出入库 → 成品品质重分类 → 成品仓库管理
@@ -439,6 +439,18 @@ public class DataInitializer implements ApplicationRunner {
             jdbcTemplate.update("UPDATE sys_menu SET sort_order = 99 WHERE id = 701 AND sort_order <> 99");
         } catch (Exception e) {
             log.warn("调整 701 排序位异常: {}", e.getMessage());
+        }
+
+        // 2026-09-21（用户口径）：子菜单「销售退单」改名「销售退货单」—— 与采购侧「采购退货单」、
+        // 财务来源类型「销售退货」统一术语。只改**展示名**：菜单 id / perms(sale:return) / 路由 path
+        // 一律不动（不动就等于不迁权限、不动前端白名单）。幂等：仅当值仍是旧名时才更新，重复启动零写入；
+        // 新库/其它环境由上面的 upsert（同一 id=603 已用新名）写入，这里兜住"库里还是旧名"的存量库。
+        try {
+            int renamed = jdbcTemplate.update(
+                    "UPDATE sys_menu SET menu_name = '销售退货单' WHERE id = 603 AND menu_name = '销售退单'");
+            if (renamed > 0) log.info("已重命名菜单 603：销售退单 -> 销售退货单");
+        } catch (Exception e) {
+            log.warn("重命名菜单 603 异常: {}", e.getMessage());
         }
 
         // F3-3（2026-09-18 接口级权限专项）：写页面级接口权限码（幂等）
@@ -818,8 +830,8 @@ public class DataInitializer implements ApplicationRunner {
     }
 
     /**
-     * 存量库幂等迁移（2026-09-21）：销售退单 / 销售换货单的**逐产品收费**。
-     * <p>用户口径：「销售退单和销售换货单应该都有付费，而且付费需要精确到产品上」⇒ 原本挂在单据上的
+     * 存量库幂等迁移（2026-09-21）：销售退货单 / 销售换货单的**逐产品收费**。
+     * <p>用户口径：「销售退货单和销售换货单应该都有付费，而且付费需要精确到产品上」⇒ 原本挂在单据上的
      * charge_flag/charge_type/charge_amount 下沉到明细行，单据级改为 Σ(明细)（由服务层回写）。
      * 新库由 schema.sql 直接建列；老库逐列 ALTER（{@link #addColumnIfMissing}，重复启动无副作用）。</p>
      */

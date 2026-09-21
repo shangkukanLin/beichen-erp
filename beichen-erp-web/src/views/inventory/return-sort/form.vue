@@ -92,7 +92,7 @@ async function loadDefectStock() {
     const only = presetPendingIdSet.value
     const rows: any[] = only ? all.filter((r) => only.has(Number(r.pendingId))) : all
     for (const r of rows) {
-      // 按待整理批次逐行展开：同一产品可来自多张退单/换货单，各自独立成行以便追溯
+      // 按待整理批次逐行展开：同一产品可来自多张退货单/换货单，各自独立成行以便追溯
       const exist = r.pendingId
         ? items.value.find((it) => it.pendingId === r.pendingId)
         : items.value.find((it) => it.productId === r.productId)

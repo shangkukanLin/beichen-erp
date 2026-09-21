@@ -281,7 +281,7 @@ onUnmounted(() => {
     <el-card shadow="never" style="margin-top:12px">
       <template #header>退货明细</template>
       <el-table :data="data.returns" border stripe size="small" show-summary :summary-method="returnSummaries" max-height="320">
-        <el-table-column label="退单号" min-width="140">
+        <el-table-column label="退货单号" min-width="140">
           <template #default="{ row }">
             <el-link type="primary" underline="never" @click="router.push(`/sale/return/detail/${row.billId}`)">{{ row.billNo }}</el-link>
           </template>

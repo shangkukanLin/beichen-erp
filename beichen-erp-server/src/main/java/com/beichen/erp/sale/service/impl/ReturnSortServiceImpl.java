@@ -162,7 +162,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
     /**
      * 售后仓待整理库存清单（新增整理单时带出）。
      * <p>库存按 (仓库,产品,品质) 聚合、不记录来源，无法直接追溯。此处按批次ID 升序(FIFO)
-     * 将售后仓待整理库存分配回各「售后待整理批次」（after_sale_pending，销售退单与销售换货单共用入口），
+     * 将售后仓待整理库存分配回各「售后待整理批次」（after_sale_pending，销售退货单与销售换货单共用入口），
      * 使每行都能追溯到具体来源单据，并给出「原数量 / 已整理数量 / 本次可整理数量」。</p>
      *
      * <p>口径与 {@link #pendingOverview(boolean)} 完全一致（同一 {@link #pendingRows}），此处只保留
@@ -651,7 +651,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         // 财务联动：冲销折损收款台账（未填折损金额时台账不存在，跳过）
         reverseReceivableIfExists(s.getCode() + "-LOSS");
 
-        // 反审核回到草稿态（与销售退单 unAudit 保持一致，便于修正后重新审核）
+        // 反审核回到草稿态（与销售退货单 unAudit 保持一致，便于修正后重新审核）
         ReturnSort u = new ReturnSort(); u.setId(id); u.setStatus(DocStatus.DRAFT.getCode());
         rsMapper.updateById(u);
     }
@@ -777,7 +777,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
     // ==================== 折损收款 ====================
 
     /**
-     * 折损收款：整理后才知道 B/C/不良 各多少，因此金额挂在整理单上而非销售退单。
+     * 折损收款：整理后才知道 B/C/不良 各多少，因此金额挂在整理单上而非销售退货单。
      * 审核时生成一条独立正向应收，单号 -LOSS 后缀，与整理单本体区分。
      */
     private void saveLossReceivable(ReturnSort s, List<ReturnSortItem> items) {

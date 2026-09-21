@@ -3,7 +3,7 @@
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="search-form">
-        <el-form-item label="退单号">
+        <el-form-item label="退货单号">
           <el-input v-model="query.code" placeholder="请输入单号" clearable style="width: 180px" />
         </el-form-item>
         <el-form-item label="客户">
@@ -19,12 +19,12 @@
         <div class="toolbar">
           <el-button type="primary" :icon="Search" @click="load(1)">查询</el-button>
           <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
-          <el-button type="primary" :icon="Plus" @click="goAdd">新增销售退单</el-button>
+          <el-button type="primary" :icon="Plus" @click="goAdd">新增销售退货单</el-button>
         </div>
       </div>
       <el-table :data="list" v-loading="loading" border stripe @row-click="goDetail">
         <el-table-column prop="returnDate" label="退货日期" width="110" />
-        <el-table-column prop="code" label="退单号" width="140" />
+        <el-table-column prop="code" label="退货单号" width="140" />
         <el-table-column label="客户" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.customerId" type="primary" link @click.stop="goCustomer(row.customerId)">{{ row.customerName || '—' }}</el-button>
@@ -58,7 +58,7 @@
             <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发 -->
             <el-button v-if="row.status === SaleReturnStatus.DRAFT" v-perm="'sale:return:audit'" link type="success" @click.stop="doAudit(row)">审核</el-button>
             <el-button v-if="row.status === SaleReturnStatus.AUDITED" v-perm="'sale:return:unaudit'" link type="warning" @click.stop="doUnAudit(row)">反审核</el-button>
-            <!-- 销售退单不提供删除：单据需留痕，只能作废（后端 delete 语义也等同作废） -->
+            <!-- 销售退货单不提供删除：单据需留痕，只能作废（后端 delete 语义也等同作废） -->
             <el-button v-if="row.status === SaleReturnStatus.DRAFT" v-perm="'sale:return:cancel'" link type="danger" @click.stop="doCancel(row)">作废</el-button>
           </template>
         </el-table-column>
@@ -163,7 +163,7 @@ function goCustomer(id?: number) {
 }
 
 function doAudit(row: any) {
-  ElMessageBox.confirm(`确认审核销售退单 ${row.code}？审核后客户退回的待整理品将入库成品仓增加库存。`, '提示', {
+  ElMessageBox.confirm(`确认审核销售退货单 ${row.code}？审核后客户退回的待整理品将入库成品仓增加库存。`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',
@@ -177,7 +177,7 @@ function doAudit(row: any) {
 }
 
 function doUnAudit(row: any) {
-  ElMessageBox.confirm(`确认反审核销售退单 ${row.code}？将扣减已入库的待整理品库存。`, '提示', {
+  ElMessageBox.confirm(`确认反审核销售退货单 ${row.code}？将扣减已入库的待整理品库存。`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',
@@ -191,7 +191,7 @@ function doUnAudit(row: any) {
 }
 
 function doCancel(row: any) {
-  ElMessageBox.confirm(`确认作废销售退单 ${row.code}？`, '提示', {
+  ElMessageBox.confirm(`确认作废销售退货单 ${row.code}？`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',

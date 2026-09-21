@@ -111,8 +111,8 @@ export function checkSaleOrderStock(data: { warehouseId?: number; items: SaleOrd
 export function getSaleOutboundPage(params: any) {
   return request.get<PageResult<SaleOutbound>>('/inventory/outbound/page', { params })
 }
-// ==================== 销售退单（售后：只退不换） ====================
-/** 销售退单状态：DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废（与后端 DocStatus 一致） */
+// ==================== 销售退货单（售后：只退不换） ====================
+/** 销售退货单状态：DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废（与后端 DocStatus 一致） */
 export const SaleReturnStatus = {
   DRAFT: 'DRAFT',
   AUDITED: 'AUDITED',

@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
  * 售后待整理批次
  * <p>
  * 售后仓的待整理(PENDING)库存按 (仓库, 产品, 品质) 聚合，本身不记录来源、无法追溯。
- * 销售退单 / 销售换货单审核时各写入一条本批次，退货整理单消费本表并回写 {@code sortedQuantity}，
+ * 销售退货单 / 销售换货单审核时各写入一条本批次，退货整理单消费本表并回写 {@code sortedQuantity}，
  * 从而统一回答「这批待整理品来自哪张单据、还剩多少没整理」。
  * </p>
  * <p>剩余可整理数量 = {@code quantity − sortedQuantity}。</p>
@@ -40,7 +40,7 @@ public class AfterSalePending {
     /** 来源单号（冗余，便于列表展示与检索） */
     private String sourceCode;
 
-    /** 来源单据业务日期（退单的退货日期 / 换货的换货日期，冗余展示） */
+    /** 来源单据业务日期（退货单的退货日期 / 换货的换货日期，冗余展示） */
     private LocalDate sourceDate;
 
     /** 售后仓ID：待整理品所在仓 */

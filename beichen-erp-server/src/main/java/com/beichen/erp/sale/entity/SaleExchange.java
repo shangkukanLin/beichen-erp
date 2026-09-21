@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
  * <p>审核时双向联动：退回货品入售后仓（品质 PENDING 待整理，走退货整理），
  * 换出货品从成品仓按退回产品({@code productId})与 {@code outQualityType} 扣减库存。</p>
  * <p>是否收费由 {@code chargeFlag} 控制，金额手工填写，审核后生成一条正向应收（单号 -FEE 后缀）。
- * 只支持正向收费：换出的产品比退回的便宜需要退款时，另开销售退单处理。</p>
+ * 只支持正向收费：换出的产品比退回的便宜需要退款时，另开销售退货单处理。</p>
  */
 @Data
 @TableName("sale_exchange")

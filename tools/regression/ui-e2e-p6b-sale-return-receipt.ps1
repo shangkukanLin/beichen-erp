@@ -105,7 +105,7 @@ $rbtns = "(()=>{const vis=e=>e.getClientRects().length>0;return JSON.stringify([
 Write-Host ('receipt page buttons=' + (EvalJs $rbtns))
 
 Step 'audit the auto-generated DRAFT receipts (收款核销)'
-# 2026-09-21：只审**本次运行**新生成的草稿收款单（= 审核本脚本新建的销售退单时自动产生的）。
+# 2026-09-21：只审**本次运行**新生成的草稿收款单（= 审核本脚本新建的销售退货单时自动产生的）。
 # 原实现圈"全库所有 DRAFT"：历史遗留草稿按设计审不过（见 $draftBefore 处注释），会把无关数据算成 FAIL。
 # 注：收款列表默认 10 条/页且无单号搜索 ⇒ 老单号本来就翻不到，这也是"receipt row not found"的来源。
 $drafts = @(SqlList "SELECT code FROM finance_receipt WHERE status='DRAFT' ORDER BY id" | Where-Object { $draftBefore -notcontains $_ })

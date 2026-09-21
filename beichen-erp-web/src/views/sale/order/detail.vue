@@ -527,13 +527,13 @@ onActivated(() => { loadData() })
         </el-table>
       </template>
 
-      <!-- ===== 售后记录：本销售单发起的销售退单与销售换货单 ===== -->
+      <!-- ===== 售后记录：本销售单发起的销售退货单与销售换货单 ===== -->
       <template v-if="!isDraft">
         <el-divider content-position="left">售后记录</el-divider>
         <el-tabs v-model="afterSaleTab">
-          <el-tab-pane :label="`销售退单 (${returns.length})`" name="return">
+          <el-tab-pane :label="`销售退货单 (${returns.length})`" name="return">
             <el-table :data="returns" border size="small" empty-text="暂无退货记录">
-              <el-table-column prop="code" label="退单号" width="170" />
+              <el-table-column prop="code" label="退货单号" width="170" />
               <el-table-column prop="returnDate" label="退货日期" width="110" />
               <el-table-column label="状态" width="100" align="center">
                 <template #default="{ row }">

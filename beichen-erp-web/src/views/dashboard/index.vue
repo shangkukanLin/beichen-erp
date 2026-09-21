@@ -296,7 +296,7 @@
       </el-tab-pane>
 
       <el-tab-pane v-if="hasModule['sale']" label="销售业务" name="sale">
-        <!-- ============ 当日单据量（2026-09-15 用户要求：卡片改为「当日销售单/退单/换货单/退货整理单」，
+        <!-- ============ 当日单据量（2026-09-15 用户要求：卡片改为「当日销售单/退货单/换货单/退货整理单」，
              并去掉"今天要处理"小标题与"超期应收"卡） ============ -->
         <div class="stat-grid">
           <div class="stat-card clickable" v-for="t in saleTodayCards" :key="t.label" @click="$router.push(t.path)">
@@ -323,10 +323,10 @@
         </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序 = 使用频率（2026-09-15 用户要求改为：销售单 → 销售换货单 → 销售退单 → 退货整理 → 客户管理） -->
+          <!-- 顺序 = 使用频率（2026-09-15 用户要求改为：销售单 → 销售换货单 → 销售退货单 → 退货整理 → 客户管理） -->
           <el-button v-if="hasMenu['InventorySale']" type="primary" size="small" text @click="$router.push('/inventory/sale')">销售单</el-button>
           <el-button v-if="hasMenu['SaleExchange']" type="primary" size="small" text @click="$router.push('/sale/exchange')">销售换货单</el-button>
-          <el-button v-if="hasMenu['SaleReturn']" type="primary" size="small" text @click="$router.push('/sale/return')">销售退单</el-button>
+          <el-button v-if="hasMenu['SaleReturn']" type="primary" size="small" text @click="$router.push('/sale/return')">销售退货单</el-button>
           <el-button v-if="hasMenu['InventoryReturnSort']" type="primary" size="small" text @click="$router.push('/inventory/return-sort')">退货整理</el-button>
           <el-button v-if="hasMenu['InventoryCustomer']" type="primary" size="small" text @click="$router.push('/inventory/customer')">客户管理</el-button>
         </div>
@@ -778,7 +778,7 @@ const saleTodayCards = computed(() => {
   const t = saleWork.value.todos || {}
   return [
     { label: '当日销售单', count: Number(t.saleOrderToday) || 0, path: '/inventory/sale' },
-    { label: '当日销售退单', count: Number(t.saleReturnToday) || 0, path: '/sale/return' },
+    { label: '当日销售退货单', count: Number(t.saleReturnToday) || 0, path: '/sale/return' },
     { label: '当日销售换货单', count: Number(t.saleExchangeToday) || 0, path: '/sale/exchange' },
     { label: '当日退货整理单', count: Number(t.returnSortToday) || 0, path: '/inventory/return-sort' },
   ]
@@ -943,7 +943,7 @@ async function loadStats() {
       // 客户档案（共享基础数据）与销售工作台（本模块接口）仍直连。
       const [cusRes, workRes] = await Promise.all([
         request.get<any, any>('/inventory/customer/page', { params: { pageSize: 200 } }).catch(() => ({})),
-        // 销售工作台（2026-09-15）：**当日单据量** 4 项（销售单/退单/换货单/退货整理单）
+        // 销售工作台（2026-09-15）：**当日单据量** 4 项（销售单/退货单/换货单/退货整理单）
         request.get<any, any>('/dashboard/sale-workbench').catch(() => ({})),
       ])
       const custAnRes: any = aggRes?.customerAnalysis || {}

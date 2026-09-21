@@ -2,7 +2,7 @@
   <div class="app-container">
     <el-card shadow="never">
       <template #header>
-        <span>{{ isEdit ? '编辑销售退单' : '新增销售退单' }}</span>
+        <span>{{ isEdit ? '编辑销售退货单' : '新增销售退货单' }}</span>
       </template>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
         <el-row :gutter="16">

@@ -632,12 +632,12 @@ export const OutsourceReturnTypeTag: Record<string, 'warning' | 'primary'> = {
 
 /** 售后待整理批次来源单据类型（对应 AfterSaleSourceType 枚举） */
 export const AfterSaleSourceType = {
-  SALE_RETURN: 'SALE_RETURN',     // 销售退单
+  SALE_RETURN: 'SALE_RETURN',     // 销售退货单
   SALE_EXCHANGE: 'SALE_EXCHANGE'  // 销售换货单
 } as const
 
 export const AfterSaleSourceTypeLabel: Record<string, string> = {
-  [AfterSaleSourceType.SALE_RETURN]: '销售退单',
+  [AfterSaleSourceType.SALE_RETURN]: '销售退货单',
   [AfterSaleSourceType.SALE_EXCHANGE]: '销售换货单'
 }
 

@@ -55,7 +55,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 销售退单业务实现
+ * 销售退货单业务实现
  * <p>客户退回待整理品（品质默认待整理），审核时按 (warehouseId, productId, qualityType) 入库增加库存，并写库存流水，
  * 同时登记售后待整理批次（after_sale_pending），由退货整理单统一消费并分选入成品仓/不良仓。</p>
  */
@@ -146,7 +146,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     @Override
     public SaleReturn getById(Long id) {
         SaleReturn order = returnMapper.selectById(id);
-        if (order == null) throw new BusinessException("销售退单不存在");
+        if (order == null) throw new BusinessException("销售退货单不存在");
         fillCustomerName(order);
         return order;
     }
@@ -200,7 +200,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
 
     /**
      * 收费归一化：**明细级为准，单据级只作"批量默认"**。
-     * <p>用户口径（2026-09-21）：「销售退单和销售换货单应该都有付费，而且付费需要精确到产品上」⇒
+     * <p>用户口径（2026-09-21）：「销售退货单和销售换货单应该都有付费，而且付费需要精确到产品上」⇒
      * 金额挂在明细行（一行 = 一个产品），单据级 charge_amount 由 {@link #recalcDocCharge} 按 Σ 明细回写；
      * 前端把单据级的类型/说明当"批量默认"下发，逐行可改。</p>
      * <p>⚠️ 只选了单据级收费、却没有任何一行填金额 ⇒ **报错**（避免"看起来收了费、台账却是 0"）。</p>
@@ -268,7 +268,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     }
 
     /**
-     * 审核时生成退货收费应收：单号 -FEE 后缀（与退单本体的负向冲抵区分，便于反审核精确冲销）。
+     * 审核时生成退货收费应收：单号 -FEE 后缀（与退货单本体的负向冲抵区分，便于反审核精确冲销）。
      * <p>金额 = <b>Σ 明细行收费</b>（口径 A：一张单据一条台账）；remark 逐产品列出，
      * 财务列表能直接看到"哪个产品收了多少"，客户付款仍可一笔核销整单。</p>
      */
@@ -316,7 +316,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     // ==================== 售后待整理批次（统一追溯池） ====================
 
     /**
-     * 登记售后待整理批次：退单审核后退回的待整理品进入统一待整理池，供退货整理单消费。
+     * 登记售后待整理批次：退货单审核后退回的待整理品进入统一待整理池，供退货整理单消费。
      * <p>先按 (source_type, source_item_id) 清掉残留再插入，保证「反审核 → 重新审核」不重复登记。</p>
      */
     private void createPendingBatches(SaleReturn order, List<SaleReturnItem> items, Map<Long, Product> pMap) {
@@ -436,7 +436,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     @Transactional(rollbackFor = Exception.class)
     public SaleReturn update(Long id, SaleReturn order, List<Map<String, Object>> itemMaps) {
         SaleReturn old = returnMapper.selectById(id);
-        if (old == null) throw new BusinessException("销售退单不存在");
+        if (old == null) throw new BusinessException("销售退货单不存在");
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         order.setId(id);
         order.setCode(null);
@@ -458,14 +458,14 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     @Transactional(rollbackFor = Exception.class)
     public void audit(Long id) {
         SaleReturn order = returnMapper.selectById(id);
-        if (order == null) throw new BusinessException("销售退单不存在");
+        if (order == null) throw new BusinessException("销售退货单不存在");
         // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免库存/应收重复写
         if (!DocStatusGuard.claim(returnMapper, SaleReturn::getId, id, SaleReturn::getStatus,
                 DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
             throw new BusinessException("只有草稿状态可审核");
         List<SaleReturnItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleReturnItem>().eq(SaleReturnItem::getReturnId, id));
-        if (items.isEmpty()) throw new BusinessException("销售退单明细不能为空");
+        if (items.isEmpty()) throw new BusinessException("销售退货单明细不能为空");
         // P2-33：数量必须为正（负数量会生成负向应收/负向库存）
         for (SaleReturnItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
@@ -509,7 +509,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
                     StockChangeType.SALE_RETURN_IN, order.getCode(), RelatedBillType.SALE_RETURN, it.getProductId(),
                     "", order.getId(), it.getQualityType() != null ? it.getQualityType() : ProductQualityType.PENDING.getCode());
         }
-        // 追溯联动：登记售后待整理批次，供退货整理单消费（退单与换货单统一入口）
+        // 追溯联动：登记售后待整理批次，供退货整理单消费（退货单与换货单统一入口）
         createPendingBatches(order, items, pMap);
         // 财务联动：生成负向应收冲抵原销售应收
         if (order.getTotalAmount() != null && order.getTotalAmount().compareTo(BigDecimal.ZERO) > 0) {
@@ -533,7 +533,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             saveReceivable(fr);
         }
         // 注：折损收款已迁移到「退货整理单」（整理后才知道 B/C/不良 各多少，金额应在整理环节确定），此处不再生成 -LOSS 应收
-        // 财务联动：选择收费时生成一条独立正向应收（单号 -FEE 后缀，与退单本体的负向冲抵区分）
+        // 财务联动：选择收费时生成一条独立正向应收（单号 -FEE 后缀，与退货单本体的负向冲抵区分）
         saveChargeReceivable(order);
         SaleReturn u = new SaleReturn();
         u.setId(id);
@@ -548,16 +548,16 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     @Transactional(rollbackFor = Exception.class)
     public void unAudit(Long id) {
         SaleReturn order = returnMapper.selectById(id);
-        if (order == null) throw new BusinessException("销售退单不存在");
+        if (order == null) throw new BusinessException("销售退货单不存在");
         // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免库存/应收重复冲销
         if (!DocStatusGuard.claim(returnMapper, SaleReturn::getId, id, SaleReturn::getStatus,
                 DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
-            throw new BusinessException("只有已审核的销售退单可反审核");
+            throw new BusinessException("只有已审核的销售退货单可反审核");
         // 对称回滚：扣减已入库的待整理品库存
         List<SaleReturnItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleReturnItem>().eq(SaleReturnItem::getReturnId, id));
         // 已被退货整理的货物不允许反审核：整理单会把售后仓待整理库存转走，反审核将扣不动或造成跨单据不一致
-        assertNotSorted(AfterSaleSourceType.SALE_RETURN, id, "销售退单");
+        assertNotSorted(AfterSaleSourceType.SALE_RETURN, id, "销售退货单");
         // 批量取产品，避免循环内逐条查库（N+1）
         Map<Long, Product> pMap = productMap(items);
         for (SaleReturnItem it : items) {
@@ -590,7 +590,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     @Transactional(rollbackFor = Exception.class)
     public void cancel(Long id) {
         SaleReturn old = returnMapper.selectById(id);
-        if (old == null) throw new BusinessException("销售退单不存在");
+        if (old == null) throw new BusinessException("销售退货单不存在");
         // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败
         if (!DocStatusGuard.claim(returnMapper, SaleReturn::getId, id, SaleReturn::getStatus,
                 DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode()))

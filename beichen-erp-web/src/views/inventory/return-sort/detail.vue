@@ -62,7 +62,7 @@ function itemSum(it: any) { return Number(it.qtyA || 0) + Number(it.qtyB || 0) +
 
 function goWarehouse(id?: number | null) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 function goProduct(id?: number) { if (id) router.push(`/product/detail/${id}`) }
-/** 来源单据按类型跳转：换货单 → 换货详情；销售退单 → 退单详情 */
+/** 来源单据按类型跳转：换货单 → 换货详情；销售退货单 → 退货单详情 */
 function goSource(row: any) {
   if (!row.sourceId) return
   if (row.sourceType === AfterSaleSourceType.SALE_EXCHANGE) router.push(`/sale/exchange/detail/${row.sourceId}`)

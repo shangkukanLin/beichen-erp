@@ -3,12 +3,12 @@
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>销售退单详情</span>
+          <span>销售退货单详情</span>
           <el-tag :type="statusTagType(header.status)">{{ statusLabel(header.status) }}</el-tag>
         </div>
       </template>
       <el-descriptions :column="3" border>
-        <el-descriptions-item label="退单号">{{ header.code }}</el-descriptions-item>
+        <el-descriptions-item label="退货单号">{{ header.code }}</el-descriptions-item>
         <el-descriptions-item label="客户">
           <el-button v-if="head.customerId" type="primary" link @click="goCustomer(head.customerId)">{{ header.customerName || '—' }}</el-button>
           <span v-else>{{ header.customerName || '—' }}</span>
@@ -219,7 +219,7 @@ async function doUnAudit() {
   }
 }
 async function doCancel() {
-  await ElMessageBox.confirm('确认作废该销售退单？', '提示', { type: 'warning' })
+  await ElMessageBox.confirm('确认作废该销售退货单？', '提示', { type: 'warning' })
   acting.value = true
   try {
     await cancelSaleReturn(Number(route.params.id))

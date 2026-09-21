@@ -51,7 +51,7 @@ public interface CustomerAnalysisMapper {
     @Select("SELECT return_id, product_id, IFNULL(quantity, 0) AS qty FROM sale_return_item")
     List<Map<String, Object>> saleReturnItemAll();
 
-    /** 已审核销售退单（用于把退货明细归到客户并做区间过滤） */
+    /** 已审核销售退货单（用于把退货明细归到客户并做区间过滤） */
     @Select("SELECT id, code, customer_id, total_amount, loss_amount, charge_type, charge_amount, remark, DATE_FORMAT(create_time, '%Y-%m-%d') AS d FROM sale_return WHERE status = 'AUDITED' AND customer_id IS NOT NULL")
     List<Map<String, Object>> saleReturnAll();
 

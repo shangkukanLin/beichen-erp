@@ -229,8 +229,8 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
     }
 
     /**
-     * 批量取已退量（按销售单明细ID聚合）：已审核销售退单中该销售明细的累计数量。
-     * <p><b>F7-113（2026-09-20）</b>：改为一条 JOIN 聚合 SQL（原实现"查全部已审核退单 → in(ids) 查明细"，
+     * 批量取已退量（按销售单明细ID聚合）：已审核销售退货单中该销售明细的累计数量。
+     * <p><b>F7-113（2026-09-20）</b>：改为一条 JOIN 聚合 SQL（原实现"查全部已审核退货单 → in(ids) 查明细"，
      * 随单据增长是平方级 + 受 {@code max_allowed_packet} 限制；与 {@code SaleReturnServiceImpl} 的写法统一）。</p>
      */
     private Map<Long, BigDecimal> alreadyReturnedBatch(Set<Long> saleOrderItemIds) {
@@ -444,7 +444,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
                     StockChangeType.EXCHANGE_OUT, e.getCode(), RelatedBillType.SALE_EXCHANGE,
                     "", e.getId(), qt);
         }
-        // 追溯联动：退回的待整理品登记到统一待整理池，供退货整理单消费（与销售退单同一入口）
+        // 追溯联动：退回的待整理品登记到统一待整理池，供退货整理单消费（与销售退货单同一入口）
         createPendingBatches(e, items, pMap);
         // 财务联动：选择收费时生成一条独立正向应收（单号 -FEE 后缀，与换货单本体区分）
         saveChargeReceivable(e);
@@ -634,7 +634,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         return qt;
     }
 
-    // ==================== 售后待整理批次（与销售退单共用统一追溯池） ====================
+    // ==================== 售后待整理批次（与销售退货单共用统一追溯池） ====================
 
     /**
      * 登记售后待整理批次：换货退回的待整理品进入统一待整理池，供退货整理单消费。
@@ -697,7 +697,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
 
     /**
      * 收费归一化（2026-09-21 逐产品口径）：**明细级为准，单据级只作"批量默认"**。
-     * <p>用户口径：「销售退单和销售换货单应该都有付费，而且付费需要精确到产品上」⇒ 金额挂在明细行
+     * <p>用户口径：「销售退货单和销售换货单应该都有付费，而且付费需要精确到产品上」⇒ 金额挂在明细行
      * （一行 = 一个产品），单据级 charge_amount 由 {@link #recalcDocCharge} 按 Σ 明细回写。</p>
      */
     private void normalizeCharge(SaleExchange e, List<Map<String, Object>> itemMaps) {

@@ -1,8 +1,8 @@
-# 销售退单 / 销售换货单：**逐产品收费**（用户口径 2026-09-21「销售退单和销售换货单应该都有付费，
+# 销售退货单 / 销售换货单：**逐产品收费**（用户口径 2026-09-21「销售退货单和销售换货单应该都有付费，
 #   而且付费需要精确到产品上」）的耐久 API 用例。口径 A：一张单据一条应收，金额 = Σ明细行收费，
 #   remark 逐产品；反审核按 单号-FEE 全额冲销。
 #
-#   覆盖：①退单——逐行不同收费 ⇒ 单据 = Σ、审核后应收 = Σ 且 remark 含产品名与类型、反审核冲销干净
+#   覆盖：①退货单——逐行不同收费 ⇒ 单据 = Σ、审核后应收 = Σ 且 remark 含产品名与类型、反审核冲销干净
 #         ②负例——某行填了金额但没选类型 ⇒ 建单被拒（中文提示）+ 不落库
 #         ③换货——逐行收费同样成立
 #         ④兼容——只填单据级金额（旧前端形状）⇒ 自动落到第一条明细，不丢钱
@@ -31,7 +31,7 @@ $lg = Invoke-RestMethod -Uri "$base/auth/login" -Method Post -ContentType 'appli
 $h = @{ Authorization = $lg.data.token }
 Ok ([bool]$lg.data.token) 'logged in'
 
-# ===================== A) 销售退单 =====================
+# ===================== A) 销售退货单 =====================
 Write-Host '--- A) sale return: per-product charge'
 $cust = [int](SqlOne "SELECT id FROM customer ORDER BY id LIMIT 1")
 $wh = [int](SqlOne "SELECT id FROM warehouse WHERE warehouse_type='FINISHED' ORDER BY id LIMIT 1")

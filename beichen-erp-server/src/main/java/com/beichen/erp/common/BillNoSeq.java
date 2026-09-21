@@ -4,7 +4,7 @@ package com.beichen.erp.common;
  * 单号序号解析 / 生成（F7-109 / F7-116 · 2026-09-20）。
  *
  * <p><b>背景</b>：本工程有 5 处"前缀 + yyyyMMdd + 三位序号"的单号生成器（销售单 / 销售出库单 /
- * 销售退单 / 销售换货单 / 退货整理单），原先都是同一段手写逻辑：</p>
+ * 销售退货单 / 销售换货单 / 退货整理单），原先都是同一段手写逻辑：</p>
  * <pre>
  *   try { seq = Integer.parseInt(last.getCode().substring(last.getCode().length() - 3)) + 1; }
  *   catch (Exception e) { seq = 1; }

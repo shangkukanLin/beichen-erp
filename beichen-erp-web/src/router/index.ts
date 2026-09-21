@@ -197,10 +197,10 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/material-return/detail/:id', name: 'OutsourceMaterialReturnDetail', component: () => import('@/views/outsource/material-return/detail.vue'), meta: { title: '委外物料退货详情', requiresAuth: true, operate: true } },
       // D 档（2026-09-21）：草稿编辑（复用新增页，后端 PUT /{id} 仅允许草稿）—— 与加工退货页对称
       { path: 'outsource/material-return/edit/:id', name: 'OutsourceMaterialReturnEdit', component: () => import('@/views/outsource/material-return/add.vue'), meta: { title: '编辑委外物料退货', requiresAuth: true, operate: true } },
-      // 销售退单（售后：只退不换，退回货品入成品仓、品质为「待整理」，后续由退货整理单分流）
-      { path: 'sale/return', name: 'SaleReturn', component: () => import('@/views/sale/return/index.vue'), meta: { title: '销售退单', requiresAuth: true } },
-      { path: 'sale/return/add', name: 'SaleReturnAdd', component: () => import('@/views/sale/return/add.vue'), meta: { title: '新增销售退单', requiresAuth: true, operate: true } },
-      { path: 'sale/return/detail/:id', name: 'SaleReturnDetail', component: () => import('@/views/sale/return/detail.vue'), meta: { title: '销售退单详情', requiresAuth: true, operate: true } },
+      // 销售退货单（售后：只退不换，退回货品入成品仓、品质为「待整理」，后续由退货整理单分流）
+      { path: 'sale/return', name: 'SaleReturn', component: () => import('@/views/sale/return/index.vue'), meta: { title: '销售退货单', requiresAuth: true } },
+      { path: 'sale/return/add', name: 'SaleReturnAdd', component: () => import('@/views/sale/return/add.vue'), meta: { title: '新增销售退货单', requiresAuth: true, operate: true } },
+      { path: 'sale/return/detail/:id', name: 'SaleReturnDetail', component: () => import('@/views/sale/return/detail.vue'), meta: { title: '销售退货单详情', requiresAuth: true, operate: true } },
       // 销售换货（同品换货，强关联销售单：退回入售后仓 + 换出从成品仓扣减）
       { path: 'sale/exchange', name: 'SaleExchange', component: () => import('@/views/sale/exchange/index.vue'), meta: { title: '销售换货单', requiresAuth: true } },
       { path: 'sale/exchange/add', name: 'SaleExchangeAdd', component: () => import('@/views/sale/exchange/add.vue'), meta: { title: '新增/编辑销售换货单', requiresAuth: true, operate: true } },
@@ -317,7 +317,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/stock-loss/detail/:id', name: 'InventoryStockLossDetail', component: () => import('@/views/inventory/stock-loss/detail.vue'), meta: { title: '成品报损单详情', requiresAuth: true, operate: true } },
       { path: 'inventory/stock-log', name: 'InventoryStockLog', component: () => import('@/views/inventory/stock-log.vue'), meta: { title: '成品库存流水', requiresAuth: true } },
       { path: 'inventory/sale', name: 'InventorySale', component: () => import('@/views/sale/order/index.vue'), meta: { title: '销售单', requiresAuth: true } },
-      // 新增/编辑销售单独立页面（带 ?id= 为编辑），与销售退单的 add 页模式保持一致
+      // 新增/编辑销售单独立页面（带 ?id= 为编辑），与销售退货单的 add 页模式保持一致
       { path: 'inventory/sale/add', name: 'SaleOrderAdd', component: () => import('@/views/sale/order/add.vue'), meta: { title: '新增销售单', requiresAuth: true, operate: true } },
       { path: 'inventory/sale/detail/:id', name: 'SaleOrderDetail', component: () => import('@/views/sale/order/detail.vue'), meta: { title: '销售单详情', requiresAuth: true, operate: true } },
       // 经营分析（目录置于首页之下）：原「财务分析」拆分 + 销售分析 / 客户分析

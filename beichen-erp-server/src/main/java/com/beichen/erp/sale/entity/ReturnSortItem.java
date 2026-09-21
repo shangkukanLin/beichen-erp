@@ -29,7 +29,7 @@ public class ReturnSortItem {
     @TableField(exist = false)
     private String sku;
 
-    /** 来源售后待整理批次ID（after_sale_pending.id）：唯一追溯锚点，退单/换货退回的货品共用 */
+    /** 来源售后待整理批次ID（after_sale_pending.id）：唯一追溯锚点，退货单/换货退回的货品共用 */
     private Long pendingId;
 
     // ==================== 来源追溯（非表字段，getItems 按 pendingId 从售后待整理批次回填） ====================
@@ -46,7 +46,7 @@ public class ReturnSortItem {
     @TableField(exist = false)
     private Long sourceId;
 
-    /** 来源单据业务日期（退单的退货日期 / 换货的换货日期） */
+    /** 来源单据业务日期（退货单的退货日期 / 换货的换货日期） */
     @TableField(exist = false)
     private String sourceDate;
 
