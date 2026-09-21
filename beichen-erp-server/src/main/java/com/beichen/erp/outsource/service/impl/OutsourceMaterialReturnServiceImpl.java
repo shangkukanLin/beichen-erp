@@ -23,8 +23,11 @@ import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.outsource.service.OutsourceMaterialReturnService;
+import com.beichen.erp.supplier.common.SupplierTypeEnum;
 import com.beichen.erp.supplier.entity.Supplier;
+import com.beichen.erp.supplier.entity.SupplierTypeRef;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
+import com.beichen.erp.supplier.mapper.SupplierTypeRefMapper;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
@@ -61,6 +64,8 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     /** 维修返回记录（维修退货单的"回来"腿，2026-09-17） */
     private final OutsourceMaterialReturnRepairMapper repairMapper;
     private final SupplierMapper supplierMapper;
+    /** 2026-09-21（用户口径）：退货对象只能是辅料商/供应商，不能是供货商（成品商）⇒ 需要读类型关联 */
+    private final SupplierTypeRefMapper supplierTypeRefMapper;
     private final WarehouseMapper warehouseMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final MaterialTypeMapper materialTypeMapper;
@@ -607,6 +612,25 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         return map;
     }
 
+    /**
+     * 退货对象类型校验（2026-09-21 用户口径）：**物料退货只能退给「辅料商 + 供应商」，不能退给供货商（成品商）**。
+     * <p>与加工退货同一条业务规则的两半之一（那半边在 {@code OutsourceOrderDeliveryServiceImpl#returnDefectNoOrder}）。
+     * 前端下拉已按 {@code excludeSupplierType=product} 过滤（放行 辅料商/方案商/加工厂），这里再兜一道：
+     * 前端过滤只是体验，业务规则必须在服务层成立，否则直接调 API 就能绕过。</p>
+     */
+    private void assertReturnTargetAllowed(Long supplierId) {
+        if (supplierId == null) return; // 必填校验由上层/前端负责，这里只判"类型越界"
+        Supplier target = supplierMapper.selectById(supplierId);
+        if (target == null) throw new BusinessException("退货对象不存在");
+        boolean isVendor = supplierTypeRefMapper.selectList(
+                        new LambdaQueryWrapper<SupplierTypeRef>().eq(SupplierTypeRef::getSupplierId, supplierId))
+                .stream()
+                .anyMatch(r -> SupplierTypeEnum.PRODUCT.getCode().equals(r.getTypeCode()));
+        if (isVendor)
+            throw new BusinessException("「" + target.getName()
+                    + "」是供货商（成品商）：物料退货只能退给辅料商或供应商");
+    }
+
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> asListMap(Object o) {
         return o instanceof List ? (List<Map<String, Object>>) o : new ArrayList<>();
@@ -616,6 +640,8 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     @Transactional(rollbackFor = Exception.class)
     public void create(OutsourceMaterialReturn order, List<Map<String, Object>> itemsRaw) {
         if (itemsRaw == null || itemsRaw.isEmpty()) throw new BusinessException("请添加退货物料");
+        // 2026-09-21（用户口径）：只能退给辅料商或供应商，不能退给供货商（成品商）
+        assertReturnTargetAllowed(order.getSupplierId());
 
         order.setCode(generateCode());
         if (order.getReturnDate() == null) order.setReturnDate(LocalDate.now());
@@ -642,6 +668,8 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         OutsourceMaterialReturn old = returnMapper.selectById(id);
         if (old == null) throw new BusinessException("退货单不存在");
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        // 2026-09-21（用户口径）：改对象时同样受"不能退给供货商（成品商）"约束（updateById 忽略 null ⇒ 不传即保留原值）
+        if (order.getSupplierId() != null) assertReturnTargetAllowed(order.getSupplierId());
 
         order.setId(id);
         order.setCode(null); // 单号不可改

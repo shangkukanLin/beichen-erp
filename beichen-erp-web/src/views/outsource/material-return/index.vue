@@ -51,8 +51,13 @@ const TAB_LABELS: Record<string, string> = {
   [MaterialReturnType.REPAIR]: '维修退货'
 }
 
-// Odoo 风格：退货对象（物料商）实时查库
-const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
+/**
+ * 退货对象（辅料商/供应商）实时查库。
+ * <p>2026-09-21（用户口径）：**物料退货的对方只可能是辅料商或供应商，不会是供货商** ⇒
+ * 筛选与表单下拉一律 `excludeSupplierType: 'product'`（与新增页、与后端兜底校验同一口径 ✓）。</p>
+ */
+const fetchSuppliers = (kw: string) =>
+  request.get('/supplier/page', { params: { pageSize: 500, name: kw, excludeSupplierType: 'product' } })
 
 const isRepairTab = () => activeType.value === MaterialReturnType.REPAIR
 

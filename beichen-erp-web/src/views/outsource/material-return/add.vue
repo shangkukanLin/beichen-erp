@@ -46,8 +46,14 @@ const stockList = ref<any[]>([])
 const loading = ref(false)
 const submitting = ref(false)
 
-// Odoo 风格：退回对象（物料商）实时查库
-const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
+/**
+ * 退回对象 / 维修供应商 实时查库（Odoo 风格）。
+ * <p>2026-09-21（用户口径）：**物料退货只允许退给辅料商 + 供应商，不能退给供货商** ⇒
+ * `excludeSupplierType: 'product'`（供货商=成品商 product；其余 辅料商/方案商/加工厂 都放行）。
+ * 后端 `create` / `update` 有同一口径的兜底校验 ✓。</p>
+ */
+const fetchSuppliers = (kw: string) =>
+  request.get('/supplier/page', { params: { pageSize: 500, name: kw, excludeSupplierType: 'product' } })
 
 // ===== 关联物料订单（维修退货闭环）=====
 /** 选中的物料订单行（含状态，用于提示"扣减订单收料 / 靠本单跟踪"两种收尾方式） */

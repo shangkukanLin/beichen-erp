@@ -51,8 +51,11 @@ ClearErrs
 # 2026-09-21: fixtures are now derived at runtime. The old hardcoded set (supplier 捷鹤 / warehouse 捷鹤仓 /
 #   warehouse 37 + material 25 / payable supplier 20) no longer exists -- the suppliers in the DB are named
 #   测试供货商Ax, so the script died at "S2 pick supplier". Pick a (warehouse, material) pair that REALLY
-#   holds GOOD stock of at least 10, plus any supplier (the material-return form does not tie the two).
-$fx = SqlRow "SELECT st.warehouse_id, st.material_id, w.warehouse_name, m.material_name, st.quantity, sup.id, sup.name FROM warehouse_stock st JOIN warehouse w ON w.id=st.warehouse_id JOIN outsource_material m ON m.id=st.material_id JOIN supplier sup ON sup.id=(SELECT MIN(id) FROM supplier) WHERE st.material_id IS NOT NULL AND st.quality_type='GOOD' AND st.quantity >= 10 ORDER BY st.quantity DESC LIMIT 1"
+#   holds GOOD stock of at least 10, plus a supplier (the material-return form does not tie the two).
+#   NOTE (same day, user rule "a material return may only go to a 辅料商 or a 供应商, never to a 供货商"):
+#   the supplier must NOT carry the product type -- MIN(id) would hand us 测试供货商A1 (type=product), which
+#   the backend now refuses.
+$fx = SqlRow "SELECT st.warehouse_id, st.material_id, w.warehouse_name, m.material_name, st.quantity, sup.id, sup.name FROM warehouse_stock st JOIN warehouse w ON w.id=st.warehouse_id JOIN outsource_material m ON m.id=st.material_id JOIN supplier sup ON sup.id=(SELECT MIN(s2.id) FROM supplier s2 WHERE NOT EXISTS (SELECT 1 FROM supplier_type_ref r WHERE r.supplier_id=s2.id AND r.type_code='product')) WHERE st.material_id IS NOT NULL AND st.quality_type='GOOD' AND st.quantity >= 10 ORDER BY st.quantity DESC LIMIT 1"
 $whId = [int]$fx[0]; $matId = [int]$fx[1]; $whName = "$($fx[2])"; $matName = "$($fx[3])"
 $supId = [int]$fx[5]; $supName = "$($fx[6])"
 Write-Host ('FIXTURE wh=' + $whId + ' (' + $whName + ') material=' + $matId + ' (' + $matName + ') supplier=' + $supId + ' (' + $supName + ')')
