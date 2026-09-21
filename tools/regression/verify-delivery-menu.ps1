@@ -175,4 +175,14 @@ if ($oid) {
   }
 }
 
+# ⑧c 交货记录表结构（2026-09-21 用户建议「有一个详细会不会好一点，那列表就不用显示这么多信息了」）：
+#   列表瘦身为 7 列，「收货仓库 / 物流单号 / 备注 / 附件」移入行内「详情」抽屉 ⇒ 断言列数 + 详情入口，
+#   避免日后有人把列又加回列表把横向滚动带回来。（⑧b 已开着交货详细页，此处复用同一页。）
+$d8c = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-table')].filter(x=>x.getClientRects().length>0)[0];if(!t)return JSON.stringify({ok:false});const ths=[...t.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim());const tr=t.querySelector('.el-table__body tbody tr');const ops=tr?[...tr.children][[...tr.children].length-1].innerText:'';return JSON.stringify({ok:true,cols:ths.length,hasDetail:ops.indexOf('\u8BE6\u60C5')>=0});})()" '交货记录表结构'
+if ($d8c -and $d8c.ok) {
+  Write-Output ('交货记录表 列数=' + $d8c.cols)
+  if ([int]$d8c.cols -eq 7) { Ok '交货记录表已瘦身为 7 列（仓库/物流单号/备注/附件移入详情抽屉）' } else { Bad ('交货记录表列数=' + $d8c.cols + '，应为 7') }
+  if ($d8c.hasDetail) { Ok '交货记录操作列有「详情」入口' } else { Bad '交货记录操作列缺少「详情」入口' }
+}
+
 if ($global:fail -eq 0) { Write-Output 'RESULT PASS 成品收货/物料收货独立菜单与一步交货均正常' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }

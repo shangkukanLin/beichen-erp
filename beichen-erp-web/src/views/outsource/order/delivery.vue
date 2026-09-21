@@ -60,6 +60,46 @@ function deliveryRowClass({ row }: { row: any }) {
 }
 function openAttach(url: string) { window.open(url + '?inline=true') }
 
+// ===== 交货记录「详情」抽屉（2026-09-21 用户建议：列表只做扫读，明细放到详情里看） =====
+/**
+ * 列表从此瘦身为 7 列（交货日期/产品名称/类型/等级分布/数量/状态/操作），
+ * 「收货仓库 / 物流单号 / 备注 / 附件」全部移入本抽屉；并顺带补上原先**任何界面都看不到**的字段：
+ * SKU、退不良规格、记录ID、创建时间。
+ */
+const detailVisible = ref(false)
+const detailRow = ref<any>(null)
+function openDetail(row: any) { detailRow.value = row; detailVisible.value = true }
+
+/**
+ * 该记录对应的加工单产品行。**列表与详情共用同一套匹配口径**：
+ * 优先按产品主数据ID匹配（加工单整单编辑会重建产品明细行、行ID会变，交货记录仍指向原产品），
+ * 匹配不到再退回按产品行ID匹配。
+ */
+function orderProductOf(row: any) {
+  return products.value.find((p: any) => row.productMasterId && p.productId === row.productMasterId)
+    || products.value.find((p: any) => p.id === row.productId)
+}
+/** 产品名称（列表与详情共用） */
+function productNameOf(row: any) { return orderProductOf(row)?.productName || '-' }
+/** SKU（列表不显示，详情里给；加工单产品行未回填时显示 -） */
+function skuOf(row: any) { return orderProductOf(row)?.sku || '-' }
+/** 收货仓库名（列表不显示，详情里给） */
+function warehouseNameOf(row: any) {
+  if (!row.warehouseId) return '-'
+  return warehouseOptions.value.find((w: any) => w.id === row.warehouseId)?.warehouseName || row.warehouseId
+}
+/** 退不良规格文案：A/B/C → A规/B规/C规；DEFECT → 不良（普通交货为空） */
+function qualityTextOf(row: any) {
+  const q = row?.qualityType
+  if (!q) return '-'
+  return q === 'DEFECT' ? '不良' : q + '规'
+}
+/** 类型文案（列表与详情共用）：空=普通交货，DEFECT_RETURN=退不良 */
+function typeTextOf(row: any) {
+  if (!row?.deliveryType) return '普通交货'
+  return row.deliveryType === DeliveryType.DELIVERY ? '交货' : (DeliveryTypeLabel[row.deliveryType] || row.deliveryType)
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -301,30 +341,23 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         </div>
       </div>
       <!--
-        2026-09-21（用户要求：交货记录「一行就显示完毕，不要左右滑动」）：
-        原 11 列、列宽合计 1310px，而内容区仅约 963px ⇒ 横向必然溢出 347px（真机实测）。
-        现按"这一行到底要看到什么"重排为 10 列、合计约 924px：
-        · 各列按真实内容收窄（日期/类型/数量/状态/仓库等），长文本列一律 show-overflow-tooltip，
-          鼠标悬停仍能看到全文，信息不丢；
-        · 「附件」列**并入「操作」列**（附件查看本就是"对这一行的操作"，这样省下 80px 才够塞进一屏）；
-        · 「操作」保留 fixed="right"：窗口更窄时按钮组仍固定可见，不会被内容顶出去。
-        ⚠️ 若日后新增列，请先算一下总宽（固定宽 + min-width 之和）别超过 ~950，否则又会横向滚动。
+        2026-09-21（用户：交货记录「一行就显示完毕、不要左右滑动」⇒ 随后「有一个详细会不会好一点，
+        那列表就不用显示这么多信息了」）：采纳"列表只做扫读、明细看详情"的结构。
+        列表瘦身为 **7 列**（合计约 686px，容器约 963px）：富余的 ~277px 全部补给两个 min-width 列
+        （产品名称/等级分布）⇒ 基本不再出现省略号；
+        「收货仓库 / 物流单号 / 备注 / 附件」+ SKU / 退不良规格 / 记录ID / 创建时间
+        **一律移入行内「详情」抽屉**（见下方 el-drawer）。
+        ⚠️ 日后加列前先算总宽：容器 ≈ window.innerWidth − 299（1262px 窗口 → 963px），别又撑出横向滚动。
       -->
       <el-table :data="deliveries" border stripe size="small" :row-class-name="deliveryRowClass">
         <el-table-column label="交货日期" width="92"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column label="产品名称" min-width="104" show-overflow-tooltip>
-          <template #default="{ row }">
-            <!-- 优先按产品主数据ID匹配：加工单整单编辑会重建产品明细行，行ID会变化（交货记录仍指向原产品） -->
-            {{ (products.find((p:any)=>row.productMasterId && p.productId===row.productMasterId) || products.find((p:any)=>p.id===row.productId))?.productName || '-' }}
-          </template>
+        <el-table-column label="产品名称" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">{{ productNameOf(row) }}</template>
         </el-table-column>
         <el-table-column label="类型" width="60" align="center">
-          <template #default="{ row }"><el-tag v-if="row.deliveryType" :type="row.deliveryType === DeliveryType.DEFECT_RETURN ? 'warning' : 'info'" size="small">{{ row.deliveryType === DeliveryType.DELIVERY ? '交货' : (DeliveryTypeLabel[row.deliveryType] || row.deliveryType) }}</el-tag><span v-else style="color:var(--app-text-secondary)">—</span></template>
+          <template #default="{ row }"><el-tag v-if="row.deliveryType" :type="row.deliveryType === DeliveryType.DEFECT_RETURN ? 'warning' : 'info'" size="small">{{ typeTextOf(row) }}</el-tag><span v-else style="color:var(--app-text-secondary)">—</span></template>
         </el-table-column>
-        <el-table-column label="收货仓库" width="84" show-overflow-tooltip>
-          <template #default="{ row }"><span v-if="row.warehouseId">{{ warehouseOptions.find((w:any)=>w.id===row.warehouseId)?.warehouseName || row.warehouseId }}</span><span v-else style="color:var(--app-text-placeholder)">—</span></template>
-        </el-table-column>
-        <el-table-column label="等级分布" min-width="112">
+        <el-table-column label="等级分布" min-width="130">
           <template #default="{ row }">
             <span v-if="row.aQty || row.bQty || row.cQty || row.defectQty">
               <span style="color:var(--app-color-success)">A{{ row.aQty || 0 }}</span> /
@@ -336,19 +369,17 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
           </template>
         </el-table-column>
         <el-table-column label="数量" width="64" align="right"><template #default="{ row }"><span :style="{ color: Number(row.quantity) < 0 ? 'var(--app-color-danger)' : '' }">{{ row.quantity }}</span></template></el-table-column>
-        <el-table-column prop="trackingNo" label="物流单号" width="92" show-overflow-tooltip />
-        <el-table-column prop="remark" label="备注" min-width="80" show-overflow-tooltip />
         <el-table-column label="状态" width="60"><template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="176" align="center" fixed="right">
+        <el-table-column label="操作" width="160" align="center" fixed="right">
           <template #default="{ row }">
+            <!-- 详情：仓库/物流单号/备注/附件/SKU/等级明细/创建时间等明细字段都在抽屉里看 -->
+            <el-button type="primary" link size="small" @click="openDetail(row)">详情</el-button>
             <el-button type="success" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
             <el-button type="warning" link size="small" v-if="row.status === DocStatus.AUDITED" @click="handleUnaudit(row)">反审核</el-button>
             <!-- 退货：仅对已审核的**普通交货**记录开放（退不良记录不再退货） -->
             <el-button type="warning" link size="small" v-if="row.status === DocStatus.AUDITED && row.deliveryType !== DeliveryType.DEFECT_RETURN" @click="goReturn(row)">退货</el-button>
             <el-button type="primary" link size="small" v-if="row.status === DocStatus.DRAFT" @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleDelete(row)">删除</el-button>
-            <!-- 2026-09-21：原独立「附件」列并入此处（省一列宽度才够一屏放下） -->
-            <el-button type="primary" link size="small" v-if="row.attachUrl" @click="openAttach(row.attachUrl)">图片</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -396,6 +427,38 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
       </el-table>
       <template #footer><el-button @click="defectVisible = false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认退不良</el-button></template>
     </el-dialog>
+
+    <!--
+      交货记录「详情」抽屉（2026-09-21 用户建议）：列表已瘦身为 7 列，明细字段都在这里看。
+      沿用本项目既有抽屉惯例（sale/outbound、finance 系列：el-drawer + el-descriptions :column="2" border）。
+      抽屉**只读** —— 审核/退货/编辑/删除等动作仍留在列表的「操作」列，避免两处入口不一致。
+    -->
+    <el-drawer v-model="detailVisible" title="交货记录详情" size="60%">
+      <el-descriptions v-if="detailRow" :column="2" border>
+        <el-descriptions-item label="记录ID">{{ detailRow.id }}</el-descriptions-item>
+        <el-descriptions-item label="状态"><el-tag :type="DocStatusTag[detailRow.status] || 'info'" size="small">{{ DocStatusLabel[detailRow.status] || detailRow.status }}</el-tag></el-descriptions-item>
+        <el-descriptions-item label="交货日期">{{ $fmtDate(detailRow.deliveryDate) }}</el-descriptions-item>
+        <!-- 登记时间：原先任何界面都看不到，详情里补上（后端 create_time） -->
+        <el-descriptions-item label="登记时间">{{ detailRow.createTime ? String(detailRow.createTime).replace('T', ' ') : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="产品名称">{{ productNameOf(detailRow) }}</el-descriptions-item>
+        <!-- SKU：原先任何界面都看不到 -->
+        <el-descriptions-item label="SKU">{{ skuOf(detailRow) }}</el-descriptions-item>
+        <el-descriptions-item label="类型">{{ typeTextOf(detailRow) }}</el-descriptions-item>
+        <el-descriptions-item label="退不良规格">{{ qualityTextOf(detailRow) }}</el-descriptions-item>
+        <el-descriptions-item label="收货仓库">{{ warehouseNameOf(detailRow) }}</el-descriptions-item>
+        <el-descriptions-item label="物流单号">{{ detailRow.trackingNo || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="A规数量">{{ detailRow.aQty || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="B规数量">{{ detailRow.bQty || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="C规数量">{{ detailRow.cQty || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="不良数量">{{ detailRow.defectQty || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="总数量"><span :style="{ color: Number(detailRow.quantity) < 0 ? 'var(--app-color-danger)' : '', fontWeight: '600' }">{{ detailRow.quantity }}</span></el-descriptions-item>
+        <el-descriptions-item label="交货图片">
+          <el-button v-if="detailRow.attachUrl" type="primary" link size="small" @click="openAttach(detailRow.attachUrl)">查看图片</el-button>
+          <span v-else style="color:var(--app-text-placeholder)">—</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ detailRow.remark || '-' }}</el-descriptions-item>
+      </el-descriptions>
+    </el-drawer>
   </div>
 </template>
 
