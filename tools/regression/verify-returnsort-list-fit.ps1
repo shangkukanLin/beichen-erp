@@ -37,19 +37,36 @@ function LoginFlow() {
   } else { Write-Output 'WARN login form not found in snapshot' }
 }
 
-# 测量：对每张可见表返回 溢出 / 容器宽 / 列宽合计 / 列数（键名固定，用 node 风格字符串解析）
+# 测量：对每张可见表返回 溢出 / 容器宽 / 列宽合计 / 列数 / 被裁的表头 / 表头行高
+#   被裁判定：th 内 .cell 的 scrollWidth > clientWidth + 1（2026-09-22 用户反馈"标题显示不全"就是它）
+#   表头行高 > 44 说明标题被挤成两行（同样是"显示不全"的一种）
 $measure = @'
 (()=>{
   const vis=e=>e.getClientRects().length>0;
   return JSON.stringify([...document.querySelectorAll('.el-table')].filter(vis).map(t=>{
     const wrap=t.querySelector('.el-table__body-wrapper .el-scrollbar__wrap')||t.querySelector('.el-table__body-wrapper');
     const cols=[...t.querySelectorAll('.el-table__header col')].map(c=>Number(c.getAttribute('width')||0));
+    const ths=[...t.querySelectorAll('.el-table__header th')];
+    const clipped=ths.filter(th=>{const c=th.querySelector('.cell')||th;return c.scrollWidth>c.clientWidth+1})
+                     .map(th=>((th.innerText||'').replace(/\s+/g,' ').trim()));
     return { over: wrap?Math.round(wrap.scrollWidth-wrap.clientWidth):-1,
              wrapW: wrap?Math.round(wrap.clientWidth):0,
-             sumCols: cols.reduce((a,b)=>a+b,0), nCols: cols.length };
+             sumCols: cols.reduce((a,b)=>a+b,0), nCols: cols.length,
+             clipped: clipped, rowH: ths.length?Math.round(ths[0].getBoundingClientRect().height):0 };
   }));
 })()
 '@
+
+# 表头完整性断言：一个都不能被裁，且表头行必须是单行（≤44px）
+# NOTE: 空数组经 JSON 往返可能变成 $null 或 ['']，直接 .Count 会误判 ⇒ 先滤掉空串再计数
+function AssertHeaders([string]$label, $t) {
+  $clipped = @($t.clipped | Where-Object { ("$_" -replace '\s', '') -ne '' })
+  Write-Output ('  ' + $label + ': clipped=' + $clipped.Count + ' rowH=' + [int]$t.rowH)
+  if ($clipped.Count -eq 0) { Ok ($label + ': no header is clipped') }
+  else { Bad ($label + ': clipped headers -> ' + ($clipped -join ' / ')) }
+  if ([int]$t.rowH -le 44) { Ok ($label + ': header row stays single line (h=' + $t.rowH + 'px)') }
+  else { Bad ($label + ': header wrapped to ' + $t.rowH + 'px (titles are squeezed)') }
+}
 
 EvalJs2 "localStorage.removeItem('beichen_erp_menus'); 'cleared'" | Out-Null
 agent-browser open "$base/inventory/return-sort" | Out-Null
@@ -70,6 +87,7 @@ if ($t1.Count -ge 1) {
   else { Bad ('columns wider than the container: ' + $a.sumCols + ' > ' + $a.wrapW) }
   if ([int]$a.nCols -eq 12) { Ok 'all 12 columns are still present (nothing removed to hide the scrollbar)' }
   else { Bad ('expected 12 columns, got ' + $a.nCols) }
+  AssertHeaders 'TAB1 pending' $a
 } else { Bad ('cannot measure the pending table: ' + $raw1) }
 
 Write-Output '--- 2) TAB 2 bills: fits on one line, 6 columns kept'
@@ -89,6 +107,7 @@ if ($t2.Count -ge 1) {
   else { Bad ('columns wider than the container: ' + $b.sumCols + ' > ' + $b.wrapW) }
   if ([int]$b.nCols -eq 6) { Ok 'all 6 columns are still present' }
   else { Bad ('expected 6 columns, got ' + $b.nCols) }
+  AssertHeaders 'TAB2 bills' $b
 } else { Bad ('cannot measure the bills table: ' + $raw2) }
 
 # ---- 明细表（「整理待整理品」2026-09-22 由抽屉改为**独立页面**；与编辑页共用 form.vue）----
@@ -118,6 +137,7 @@ if ($tD.Count -ge 1) {
   # （来源日期 + SKU + 单位 已按用户要求相继去掉）
   if ([int]$d.nCols -eq 11) { Ok 'all 11 item columns are present (source-date, SKU and unit were dropped on request)' }
   else { Bad ('expected 11 item columns, got ' + $d.nCols) }
+  AssertHeaders 'sort form items' $d
 } else { Bad ('cannot measure the sort form item table: ' + $rawD) }
 
 Write-Output '--- 4) EDIT page (same form.vue) also fits one line'
@@ -137,6 +157,7 @@ if ([int]$draftId -gt 0) {
     else { Bad ('edit page item table overflows by ' + $e.over + 'px') }
     if ([int]$e.sumCols -le [int]$e.wrapW + 2) { Ok ('edit page item columns fit the container (' + $e.sumCols + ' <= ' + $e.wrapW + ')') }
     else { Bad ('edit page item columns wider than the container: ' + $e.sumCols + ' > ' + $e.wrapW) }
+    AssertHeaders 'edit page items' $e
   } else { Bad ('cannot measure the edit page table: ' + $rawE) }
 } else { Bad 'no DRAFT return-sort row to open the edit page with' }
 
