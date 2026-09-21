@@ -62,17 +62,12 @@ if (-not $pick) { Bad 'no SORTABLE pending batch available to build a draft'; Wr
 Write-Output ('  fixture pending=' + $pick.pendingId + ' wh=' + $pick.warehouseId + ' product=' + $pick.productId + ' remain=' + $pick.remainQuantity)
 $wh = [int]$pick.warehouseId; $prod = [int]$pick.productId; $pendingId = [int]$pick.pendingId
 
-# fixture (b): target warehouses copied from an existing sort doc (passes assertTargetWarehouses)
-$tg = SqlOne 'SELECT CONCAT(target_warehouse_a,''|'',target_warehouse_b,''|'',target_warehouse_c,''|'',target_warehouse_defect) FROM return_sort WHERE target_warehouse_a IS NOT NULL ORDER BY id LIMIT 1'
-$t = @($tg -split '\|')
-if ($t.Count -lt 4) { Bad ('cannot resolve target warehouses from an existing sort doc: ' + $tg); Write-Output ('RESULT FAIL count ' + $fail); exit 1 }
-$pa = [int]$t[0]; $pb = [int]$t[1]; $pc = [int]$t[2]; $pd = [int]$t[3]
-Write-Output ('  targets A|B|C|def = ' + $tg)
+# fixture (b) no longer needed: since 2026-09-22 the 4 target warehouses are NOT sent by the client
+# (they default back to the SOURCE warehouse) -- asserted right below.
 
 $item = @{ productId = $prod; pendingId = $pendingId; totalQuantity = 1; qtyA = 1; qtyB = 0; qtyC = 0; qtyDefect = 0 }
 $payload = @{
   warehouseId = $wh; sortDate = (Get-Date -Format 'yyyy-MM-dd')
-  targetWarehouseA = $pa; targetWarehouseB = $pb; targetWarehouseC = $pc; targetWarehouseDefect = $pd
   remark = $REMARK
   sortUserId = 999999; sortUserName = 'HACKER'
   items = @($item)
@@ -89,6 +84,15 @@ if ($newId -gt 0) {
   if ($d.data.sortUserName -eq 'lin') { Ok 'the API reports the LOGGED-IN user as the sorter (spoofed name ignored)' }
   else { Bad ('sorter name is not the logged-in user: ' + $d.data.sortUserName) }
   if ([int]$d.data.sortUserId -ne 999999) { Ok 'the spoofed user id was ignored as well' } else { Bad 'the spoofed user id was stored (server-side stamping broken)' }
+
+  # 2026-09-22 用户口径：前端不再传 A/B/C/不良 入库仓 ⇒ 服务端把它们回填成**源仓库**
+  $tg = @($d.data.targetWarehouseA, $d.data.targetWarehouseB, $d.data.targetWarehouseC, $d.data.targetWarehouseDefect)
+  Write-Output ('  targets A|B|C|def = ' + ($tg -join '|') + ' (source=' + $wh + ')')
+  if ((@($tg | Where-Object { [int]$_ -ne $wh }).Count -eq 0)) { Ok 'the 4 target warehouses default back to the SOURCE warehouse' }
+  else { Bad ('targets did not default to the source: ' + ($tg -join '|')) }
+  $dbTg = SqlOne ("SELECT COUNT(*) FROM return_sort WHERE id=" + $newId + " AND target_warehouse_a=" + $wh + " AND target_warehouse_b=" + $wh + " AND target_warehouse_c=" + $wh + " AND target_warehouse_defect=" + $wh)
+  if ($dbTg -eq '1') { Ok 'db target columns store the source warehouse too (un-audit/re-audit stays in the same warehouse)' }
+  else { Bad 'db target columns are not the source warehouse' }
 
   Write-Output '--- 2) API: updating the draft refreshes the sorter to the operator (still not the client value)'
   $payload.sortUserName = 'HACKER2'; $payload.sortUserId = 888888
