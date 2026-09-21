@@ -115,6 +115,18 @@ function ClickBtnIdx([string]$key, [int]$idx) {
   $js = "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const t=T('$b');const vis=e=>e.getClientRects().length>0;const bs=[...document.querySelectorAll('button')].filter(e=>vis(e)&&(e.innerText||'').trim()===t);if(bs.length<=$idx)return 'NOIDX:'+t+'/'+bs.length;bs[$idx].click();return 'OK'})()"
   return (EvalJs $js)
 }
+# 2026-09-21: click a TAB by ELEMENT (.el-tabs__item), not by raw text search. A tab label can be IDENTICAL
+# to a left-menu item (e.g. the "加工退货" tab vs the "加工退货" menu), and ClickText walks the document in
+# DOM order, so it hits the sidebar menu first and the tab never switches. Use this helper for page tabs.
+function ClickTab([string]$text) {
+  $b = B64 $text
+  $js = "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const t=T('$b');const vis=e=>e.getClientRects().length>0;const it=[...document.querySelectorAll('.el-tabs__item')].filter(e=>vis(e)&&(e.innerText||'').trim()===t);if(!it.length)return 'NOTAB:'+t;it[0].click();return 'OK'})()"
+  return (EvalJs $js)
+}
+function ClickTabIdx([int]$idx) {
+  $js = "(()=>{const vis=e=>e.getClientRects().length>0;const it=[...document.querySelectorAll('.el-tabs__item')].filter(vis);if(it.length<=$idx)return 'NOTAB have='+it.length;it[$idx].click();return 'OK'})()"
+  return (EvalJs $js)
+}
 function ClickText([string]$text) {
   $b = B64 $text
   $js = "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const t=T('$b');const vis=e=>e.getClientRects().length>0;const es=[...document.querySelectorAll('a,span,div,li,td,button')].filter(e=>vis(e)&&(e.innerText||'').trim()===t);if(!es.length)return 'NOTEXT:'+t;es[0].click();return 'OK'})()"

@@ -249,14 +249,16 @@ onMounted(() => { loadLedger() })
 
       <!-- 筛选行（与物料退货页同一布局）：左侧筛选 + 查询/重置，右侧新增按钮（随页签切换） -->
       <div v-if="activeTab === 'DEFECT'" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
-        <el-select v-model="ledgerQuery.linked" placeholder="关联加工单" clearable style="width:150px" @change="ledgerSearch">
+        <el-select v-model="ledgerQuery.linked" placeholder="关联加工单" clearable style="width:150px">
           <el-option label="已关联加工单" value="WITH_ORDER" />
           <el-option label="未关联（无单）" value="WITHOUT_ORDER" />
         </el-select>
-        <el-select v-model="ledgerQuery.status" placeholder="状态" clearable style="width:130px" @change="ledgerSearch">
+        <el-select v-model="ledgerQuery.status" placeholder="状态" clearable style="width:130px">
           <el-option label="草稿" :value="DocStatus.DRAFT" />
           <el-option label="已审核" :value="DocStatus.AUDITED" />
         </el-select>
+        <!-- 2026-09-21：与另外三个页签一致 —— 筛选只改条件，点「查询」才生效（原先台账页签是即时查询，同页两套手感） -->
+        <el-button type="primary" @click="ledgerSearch">查询</el-button>
         <el-button @click="ledgerQuery.linked = ''; ledgerQuery.status = ''; ledgerSearch()">重置</el-button>
         <div style="margin-left:auto">
           <el-button type="danger" :icon="'Plus'" @click="openNoOrder">新增无单加工退货</el-button>
