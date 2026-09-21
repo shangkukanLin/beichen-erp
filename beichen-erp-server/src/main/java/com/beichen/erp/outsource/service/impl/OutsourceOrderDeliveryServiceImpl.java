@@ -527,6 +527,9 @@ public class OutsourceOrderDeliveryServiceImpl
         // 校验通过：仅存草稿记录（isReverse=true），库存/BOM还料/应付在审核时由 applyDefectStock 统一落账
         OutsourceOrderDelivery delivery = new OutsourceOrderDelivery();
         delivery.setOrderId(orderId);
+        // 2026-09-21：有单红冲也写加工厂（原先只有"无单"路径写 ⇒ 不良退货台账的「加工厂」列为空，用户实测反馈）。
+        // 无副作用：全库无 SQL 用 outsource_order_delivery.factory_id 做筛选/归集（已核）；落账仍按加工单口径。
+        delivery.setFactoryId(order.getFactoryId());
         delivery.setProductId(matchedProduct.getId());
         delivery.setProductMasterId(masterId);
         delivery.setQualityType(qualityType);
@@ -647,6 +650,9 @@ public class OutsourceOrderDeliveryServiceImpl
      * （有单回填加工单号、无单留空显示"未关联"）；审核/反审核/删除沿用通用端点，
      * 因此台账不需要任何"按来源分派动作"的分支。</p>
      * <p>名称一律**批量回填**（加工单号 / 产品 / 加工厂 / 仓库），避免逐行查询的 N+1。</p>
+     * <p>⚠️「加工厂」取**有效值**：无单红冲记录自带 `factory_id`；**有单红冲历史上没写这一列**（2026-09-21 前），
+     * 故回退到其关联加工单的加工厂 —— 否则台账该列会空（用户实测反馈）。新记录已改为写入，见
+     * {@link #returnDefect}。</p>
      */
     @Override
     public Map<String, Object> pageDefectReturns(Integer pageNo, Integer size, String linked, String status) {
@@ -661,12 +667,16 @@ public class OutsourceOrderDeliveryServiceImpl
                 new Page<>(pageNo == null || pageNo < 1 ? 1 : pageNo, size == null || size < 1 ? 10 : size), qw);
         List<OutsourceOrderDelivery> records = pageResult.getRecords();
 
-        // 加工单号（有单才有）
+        // 加工单号（有单才有）+ 该单的加工厂（有单红冲记录历史上不写 factory_id，这里兜底解析）
         Map<Long, String> orderCodeMap = new HashMap<>();
+        Map<Long, Long> orderFactoryMap = new HashMap<>();
         List<Long> orderIds = records.stream().map(OutsourceOrderDelivery::getOrderId)
                 .filter(id -> id != null).distinct().collect(Collectors.toList());
         if (!orderIds.isEmpty()) {
-            for (OutsourceOrder o : orderMapper.selectBatchIds(orderIds)) orderCodeMap.put(o.getId(), o.getCode());
+            for (OutsourceOrder o : orderMapper.selectBatchIds(orderIds)) {
+                orderCodeMap.put(o.getId(), o.getCode());
+                orderFactoryMap.put(o.getId(), o.getFactoryId());
+            }
         }
         // 产品（主数据）
         Map<Long, Product> productMap = new HashMap<>();
@@ -675,10 +685,13 @@ public class OutsourceOrderDeliveryServiceImpl
         if (!masterIds.isEmpty()) {
             for (Product p : productService.listByIds(masterIds)) productMap.put(p.getId(), p);
         }
-        // 加工厂
+        // 加工厂（取有效值：记录自身 factory_id 缺失时回退到关联加工单的加工厂）
         Map<Long, String> factoryNameMap = new HashMap<>();
-        List<Long> factoryIds = records.stream().map(OutsourceOrderDelivery::getFactoryId)
-                .filter(id -> id != null).distinct().collect(Collectors.toList());
+        List<Long> factoryIds = new ArrayList<>();
+        for (OutsourceOrderDelivery d : records) {
+            Long fid = effectiveFactoryId(d, orderFactoryMap);
+            if (fid != null && !factoryIds.contains(fid)) factoryIds.add(fid);
+        }
         if (!factoryIds.isEmpty()) {
             for (Supplier s : supplierMapper.selectBatchIds(factoryIds)) factoryNameMap.put(s.getId(), s.getName());
         }
@@ -694,14 +707,15 @@ public class OutsourceOrderDeliveryServiceImpl
         List<Map<String, Object>> rows = new ArrayList<>();
         for (OutsourceOrderDelivery d : records) {
             Product p = d.getProductMasterId() != null ? productMap.get(d.getProductMasterId()) : null;
+            Long fid = effectiveFactoryId(d, orderFactoryMap);
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", d.getId());
             m.put("deliveryDate", d.getDeliveryDate());
             m.put("orderId", d.getOrderId());
             // 「关联加工单」列：有单给单号、无单为空（前端显示"未关联"）
             m.put("orderCode", d.getOrderId() != null ? orderCodeMap.get(d.getOrderId()) : null);
-            m.put("factoryId", d.getFactoryId());
-            m.put("factoryName", d.getFactoryId() != null ? factoryNameMap.get(d.getFactoryId()) : "");
+            m.put("factoryId", fid);
+            m.put("factoryName", fid != null ? factoryNameMap.get(fid) : "");
             m.put("productMasterId", d.getProductMasterId());
             m.put("productName", p != null ? p.getName() : "");
             m.put("sku", p != null ? p.getSku() : "");
@@ -717,6 +731,15 @@ public class OutsourceOrderDeliveryServiceImpl
         out.put("total", pageResult.getTotal());
         out.put("records", rows);
         return out;
+    }
+
+    /**
+     * 台账「加工厂」取有效值：记录自身 `factory_id` 优先（"无单"红冲写入），缺失时回退到**关联加工单的加工厂**
+     * （"有单"红冲在 2026-09-21 前不写该列 ⇒ 不回退该列就会显示为空）。
+     */
+    private Long effectiveFactoryId(OutsourceOrderDelivery d, Map<Long, Long> orderFactoryMap) {
+        if (d.getFactoryId() != null) return d.getFactoryId();
+        return d.getOrderId() != null ? orderFactoryMap.get(d.getOrderId()) : null;
     }
 
     /**

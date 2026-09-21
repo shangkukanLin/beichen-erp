@@ -77,6 +77,11 @@ if ($rw) {
   Ok ("$($rw.warehouseName)" -ne '') ('linked row carries the finished warehouse (' + $rw.warehouseName + ')')
   Ok ("$($rw.productName)" -ne '') ('linked row carries the product name (' + $rw.productName + ')')
   Ok (-not ("$($rw.remark)" -eq '')) ('linked row carries a remark (' + $rw.remark + ')')
+  # Regression (2026-09-21 user report: the ledger showed NO factory for on-order rows):
+  # an on-order red-reversal used to leave factory_id NULL, and the page reads that column.
+  # The backend now writes it AND falls back to the linked work order's factory.
+  Ok ([int]$rw.factoryId -eq $fid) ('linked row carries the work order factory id (' + $rw.factoryId + ')')
+  Ok ("$($rw.factoryName)" -ne '') ('linked row shows the factory name (' + $rw.factoryName + ')')
 } else { Ok $false 'linked row is MISSING from the ledger' }
 if ($rn) {
   Ok ($null -eq $rn.orderId) 'order-less row has no orderId'
