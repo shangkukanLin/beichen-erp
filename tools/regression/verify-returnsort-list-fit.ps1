@@ -8,12 +8,19 @@
 #   ASCII ONLY：中文一律经 ui-e2e-zh.json 注入。
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
+$MYSQL = 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe'
 $fail = 0
 
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 function Ok($msg) { Write-Output ("PASS " + $msg) }
 function Bad($msg) { Write-Output ("FAIL " + $msg); $script:fail++ }
 function EvalJs2($js) { return (((agent-browser eval $js) -join "`n").Trim()) }
+function SqlOne([string]$q) {
+  $o = & $MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -e $q 2>$null
+  $l = @((@($o) | Select-Object -Skip 1) | ForEach-Object { "$_" } | Where-Object { $_ -ne '' })
+  if ($l.Count -lt 1) { return '' }
+  return (($l[0] -split "`t")[0]).Trim()
+}
 function LoginFlow() {
   Write-Output '(session expired, logging in)'
   $snap = (agent-browser snapshot -i) -join "`n"
@@ -82,4 +89,60 @@ if ($t2.Count -ge 1) {
   else { Bad ('expected 6 columns, got ' + $b.nCols) }
 } else { Bad ('cannot measure the bills table: ' + $raw2) }
 
-if ($fail -eq 0) { Write-Output 'RESULT PASS return-sort tables fit one line (both tabs, no horizontal scroll)' } else { Write-Output ('RESULT FAIL count ' + $fail); exit 1 }
+# ---- 明细表（抽屉开单 / 编辑页是**同一个 form.vue**，2026-09-22 用户要求两处都要一行显示完）----
+Write-Output '--- 3) DRAWER form: the item table (form.vue, embedded) fits one line'
+# 点待整理表第一行的操作按钮打开抽屉（有该按钮的行就是 SORTABLE 行，避免依赖中文文案）
+agent-browser open "$base/inventory/return-sort" | Out-Null
+agent-browser wait 3400
+$clickRow = "(()=>{const vis=e=>e.getClientRects().length>0;const b=[...document.querySelectorAll('.el-table__body td:last-child button')].filter(vis);if(!b.length)return 'NOBTN';b[0].click();return 'CLICKED';})()"
+Write-Output ('  open drawer: ' + (EvalJs2 $clickRow))
+agent-browser wait 3000
+# 只量抽屉内的表格（抽屉盖在列表上，外层那张表还在 DOM 里，量它没意义）
+$measureDrawer = @'
+(()=>{
+  const vis=e=>e.getClientRects().length>0;
+  const root=document.querySelector('.el-drawer')||document;
+  return JSON.stringify([...root.querySelectorAll('.el-table')].filter(vis).map(t=>{
+    const wrap=t.querySelector('.el-table__body-wrapper .el-scrollbar__wrap')||t.querySelector('.el-table__body-wrapper');
+    const cols=[...t.querySelectorAll('.el-table__header col')].map(c=>Number(c.getAttribute('width')||0));
+    return { over: wrap?Math.round(wrap.scrollWidth-wrap.clientWidth):-1, wrapW: wrap?Math.round(wrap.clientWidth):0,
+             sumCols: cols.reduce((a,b)=>a+b,0), nCols: cols.length, drawerW: Math.round(root.getBoundingClientRect().width) };
+  }));
+})()
+'@
+$rawD = (EvalJs2 $measureDrawer).Replace('\"', '"')
+$mD = [regex]::Match($rawD, '\[.*\]')
+$tD = @()
+if ($mD.Success) { $tD = @($mD.Value | ConvertFrom-Json) }
+Write-Output ('  drawer tables=' + $tD.Count + ' first=' + ($tD[0] | ConvertTo-Json -Compress))
+if ($tD.Count -ge 1) {
+  $d = $tD[0]
+  if ([int]$d.over -le 2) { Ok ('drawer item table does not scroll horizontally (overflow=' + $d.over + 'px, drawer=' + $d.drawerW + ')') }
+  else { Bad ('drawer item table overflows by ' + $d.over + 'px') }
+  if ([int]$d.sumCols -le [int]$d.wrapW + 2) { Ok ('drawer item columns fit the container (' + $d.sumCols + ' <= ' + $d.wrapW + ')') }
+  else { Bad ('drawer item columns wider than the container: ' + $d.sumCols + ' > ' + $d.wrapW) }
+  if ([int]$d.nCols -eq 13) { Ok 'all 13 item columns are still present (the redundant source-date column was the one dropped)' }
+  else { Bad ('expected 13 item columns, got ' + $d.nCols) }
+} else { Bad ('cannot measure the drawer item table: ' + $rawD) }
+
+Write-Output '--- 4) EDIT page (same form.vue) also fits one line'
+$draftId = SqlOne "SELECT id FROM return_sort WHERE status='DRAFT' ORDER BY id DESC LIMIT 1"
+Write-Output ('  draft id = ' + $draftId)
+if ([int]$draftId -gt 0) {
+  agent-browser open "$base/inventory/return-sort/edit/$draftId" | Out-Null
+  agent-browser wait 3400
+  $rawE = (EvalJs2 $measure).Replace('\"', '"')
+  $mE = [regex]::Match($rawE, '\[.*\]')
+  $tE = @()
+  if ($mE.Success) { $tE = @($mE.Value | ConvertFrom-Json) }
+  Write-Output ('  edit page tables=' + $tE.Count + ' first=' + ($tE[0] | ConvertTo-Json -Compress))
+  if ($tE.Count -ge 1) {
+    $e = $tE[0]
+    if ([int]$e.over -le 2) { Ok ('edit page item table does not scroll horizontally (overflow=' + $e.over + 'px)') }
+    else { Bad ('edit page item table overflows by ' + $e.over + 'px') }
+    if ([int]$e.sumCols -le [int]$e.wrapW + 2) { Ok ('edit page item columns fit the container (' + $e.sumCols + ' <= ' + $e.wrapW + ')') }
+    else { Bad ('edit page item columns wider than the container: ' + $e.sumCols + ' > ' + $e.wrapW) }
+  } else { Bad ('cannot measure the edit page table: ' + $rawE) }
+} else { Bad 'no DRAFT return-sort row to open the edit page with' }
+
+if ($fail -eq 0) { Write-Output 'RESULT PASS return-sort tables fit one line (2 list tabs + drawer + edit page, no horizontal scroll)' } else { Write-Output ('RESULT FAIL count ' + $fail); exit 1 }
