@@ -319,6 +319,211 @@ public class WarehouseStockController {
         return R.ok(result);
     }
 
+    /**
+     * 物料库存聚合查询：按（仓库×物料）聚合为一行，展示良品/不良数量与物料档案，供「物料库存情况」详情页使用。
+     * <p>与 {@link #productStockPage} 对称，差异只有两处：
+     * ①统计 material_id 非空（成品统计 product_id 非空）；
+     * ②品质走 {@link QualityType} —— **只有 GOOD/DEFECT 两档**（物料没有成品的 A/B/C/待整理，别照抄五档）。</p>
+     * <p>不影响 /page（明细结构，供其他页面使用）。</p>
+     */
+    @GetMapping("/material-stock/page")
+    public R<Page<Map<String, Object>>> materialStockPage(
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) Long warehouseId,
+            @RequestParam(required = false) List<Long> warehouseIds,
+            @RequestParam(required = false) Long materialTypeId,
+            @RequestParam(required = false) Long materialId,
+            @RequestParam(required = false) String materialName) {
+
+        Set<Long> whFilter = buildWarehouseFilter(warehouseId, warehouseIds);
+        LambdaQueryWrapper<WarehouseStock> qw = new LambdaQueryWrapper<WarehouseStock>()
+                .in(!whFilter.isEmpty(), WarehouseStock::getWarehouseId, whFilter)
+                .eq(materialId != null, WarehouseStock::getMaterialId, materialId)
+                .isNotNull(WarehouseStock::getMaterialId);
+
+        Set<Long> filteredMaterialIds = buildMaterialIdFilter(materialTypeId, materialName);
+        if (filteredMaterialIds != null) {
+            if (filteredMaterialIds.isEmpty()) {
+                Page<Map<String, Object>> empty = new Page<>(pageNum, pageSize, 0);
+                empty.setRecords(Collections.emptyList());
+                return R.ok(empty);
+            }
+            qw.in(WarehouseStock::getMaterialId, filteredMaterialIds);
+        }
+
+        List<WarehouseStock> all = stockMapper.selectList(qw);
+
+        // 聚合：键 = 仓库ID + 物料ID
+        Map<String, Map<String, Object>> agg = new LinkedHashMap<>();
+        Set<Long> whIds = new HashSet<>();
+        Set<Long> mIds = new HashSet<>();
+        for (WarehouseStock s : all) {
+            Long whId = s.getWarehouseId();
+            Long mId = s.getMaterialId();
+            if (whId == null || mId == null) continue;
+            whIds.add(whId);
+            mIds.add(mId);
+            String key = whId + "_" + mId;
+            Map<String, Object> row = agg.computeIfAbsent(key, k -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("warehouseId", whId);
+                m.put("materialId", mId);
+                m.put("qtyGood", BigDecimal.ZERO);
+                m.put("qtyDefect", BigDecimal.ZERO);
+                return m;
+            });
+            BigDecimal q = s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
+            // 按物料品质枚举显式归类：**不可用 else 兜底**，否则未知/脏值会被静默算进良品
+            String qt = s.getQualityType();
+            if (QualityType.DEFECT.getCode().equals(qt)) {
+                row.put("qtyDefect", ((BigDecimal) row.get("qtyDefect")).add(q));
+            } else if (QualityType.GOOD.getCode().equals(qt)) {
+                row.put("qtyGood", ((BigDecimal) row.get("qtyGood")).add(q));
+            }
+        }
+
+        // 批量补齐：仓库（含类别/工厂，供前端区分委外仓与自有仓）+ 物料档案（名称/单位/类型）
+        Map<Long, Warehouse> whMap = new HashMap<>();
+        if (!whIds.isEmpty()) warehouseMapper.selectBatchIds(whIds).forEach(w -> whMap.put(w.getId(), w));
+        Map<Long, OutsourceMaterial> matMap = new HashMap<>();
+        if (!mIds.isEmpty()) outsourceMaterialMapper.selectBatchIds(mIds).forEach(m -> matMap.put(m.getId(), m));
+        Map<Long, MaterialType> mtMap = new HashMap<>();
+        Set<Long> mtIds = matMap.values().stream().map(OutsourceMaterial::getMaterialTypeId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        if (!mtIds.isEmpty()) materialTypeMapper.selectBatchIds(mtIds).forEach(t -> mtMap.put(t.getId(), t));
+
+        for (Map<String, Object> row : agg.values()) {
+            Warehouse wh = whMap.get(row.get("warehouseId"));
+            row.put("warehouseName", wh != null && wh.getWarehouseName() != null ? wh.getWarehouseName() : "");
+            row.put("warehouseCategory", wh != null ? wh.getWarehouseCategory() : null);
+            row.put("factoryId", wh != null ? wh.getFactoryId() : null);
+            OutsourceMaterial m = matMap.get(row.get("materialId"));
+            row.put("materialName", m != null && m.getMaterialName() != null ? m.getMaterialName() : "");
+            row.put("unit", m != null && m.getUnit() != null ? m.getUnit() : "");
+            Long mtId = m != null ? m.getMaterialTypeId() : null;
+            MaterialType mt = mtId != null ? mtMap.get(mtId) : null;
+            row.put("materialTypeId", mtId);
+            row.put("materialTypeName", mt != null && mt.getTypeName() != null ? mt.getTypeName() : "");
+            row.put("materialTypeSortOrder", mt != null && mt.getSortOrder() != null ? mt.getSortOrder() : 999);
+            BigDecimal g = (BigDecimal) row.get("qtyGood");
+            BigDecimal d = (BigDecimal) row.get("qtyDefect");
+            row.put("totalQuantity", g.add(d));
+        }
+
+        List<Map<String, Object>> list = new ArrayList<>(agg.values());
+        long total = list.size();
+        int from = (pageNum - 1) * pageSize;
+        List<Map<String, Object>> records = (from < list.size())
+                ? list.subList(from, Math.min(from + pageSize, list.size()))
+                : Collections.emptyList();
+        Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, total);
+        result.setRecords(new ArrayList<>(records));
+        return R.ok(result);
+    }
+
+    /**
+     * 物料库存情况：按【物料】聚合，每个物料一行，跨仓库汇总良品/不良、总库存与分布仓库数。
+     * <p>供「物料库存情况」列表页使用；点进某物料看各仓库分布时，再用 material-stock/page?materialId= 查明细。</p>
+     * <p>只统计物料（material_id 非空）；物料**没有安全库存字段** ⇒ 不做低库存预警（与成品侧的差异点之一）。</p>
+     */
+    @GetMapping("/material-summary/page")
+    public R<Page<Map<String, Object>>> materialSummaryPage(
+            @RequestParam(defaultValue = "1") int pageNum,
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(required = false) Long warehouseId,
+            @RequestParam(required = false) List<Long> warehouseIds,
+            @RequestParam(required = false) Long materialTypeId,
+            @RequestParam(required = false) Long materialId,
+            @RequestParam(required = false) String materialName) {
+
+        Set<Long> whFilter = buildWarehouseFilter(warehouseId, warehouseIds);
+        LambdaQueryWrapper<WarehouseStock> qw = new LambdaQueryWrapper<WarehouseStock>()
+                .in(!whFilter.isEmpty(), WarehouseStock::getWarehouseId, whFilter)
+                .eq(materialId != null, WarehouseStock::getMaterialId, materialId)
+                .isNotNull(WarehouseStock::getMaterialId);
+
+        Set<Long> filteredMaterialIds = buildMaterialIdFilter(materialTypeId, materialName);
+        if (filteredMaterialIds != null) {
+            if (filteredMaterialIds.isEmpty()) {
+                Page<Map<String, Object>> empty = new Page<>(pageNum, pageSize, 0);
+                empty.setRecords(Collections.emptyList());
+                return R.ok(empty);
+            }
+            qw.in(WarehouseStock::getMaterialId, filteredMaterialIds);
+        }
+
+        List<WarehouseStock> all = stockMapper.selectList(qw);
+
+        // 聚合：键 = 物料ID；同时记录每个物料涉及的仓库，用于统计分布仓库数
+        Map<Long, Map<String, Object>> agg = new LinkedHashMap<>();
+        Map<Long, Set<Long>> materialWarehouses = new HashMap<>();
+        Set<Long> mIds = new HashSet<>();
+        for (WarehouseStock s : all) {
+            Long mId = s.getMaterialId();
+            if (mId == null) continue;
+            mIds.add(mId);
+            if (s.getWarehouseId() != null) {
+                materialWarehouses.computeIfAbsent(mId, k -> new HashSet<>()).add(s.getWarehouseId());
+            }
+            Map<String, Object> row = agg.computeIfAbsent(mId, k -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("materialId", mId);
+                m.put("qtyGood", BigDecimal.ZERO);
+                m.put("qtyDefect", BigDecimal.ZERO);
+                return m;
+            });
+            BigDecimal q = s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
+            // 按物料品质枚举显式归类（同 material-stock/page：不可用 else 兜底）
+            String qt = s.getQualityType();
+            if (QualityType.DEFECT.getCode().equals(qt)) {
+                row.put("qtyDefect", ((BigDecimal) row.get("qtyDefect")).add(q));
+            } else if (QualityType.GOOD.getCode().equals(qt)) {
+                row.put("qtyGood", ((BigDecimal) row.get("qtyGood")).add(q));
+            }
+        }
+
+        Map<Long, OutsourceMaterial> matMap = new HashMap<>();
+        if (!mIds.isEmpty()) outsourceMaterialMapper.selectBatchIds(mIds).forEach(m -> matMap.put(m.getId(), m));
+        Map<Long, MaterialType> mtMap = new HashMap<>();
+        Set<Long> mtIds = matMap.values().stream().map(OutsourceMaterial::getMaterialTypeId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        if (!mtIds.isEmpty()) materialTypeMapper.selectBatchIds(mtIds).forEach(t -> mtMap.put(t.getId(), t));
+
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (Map<String, Object> row : agg.values()) {
+            Long mid = (Long) row.get("materialId");
+            OutsourceMaterial m = matMap.get(mid);
+            Long mtId = m != null ? m.getMaterialTypeId() : null;
+            MaterialType mt = mtId != null ? mtMap.get(mtId) : null;
+            BigDecimal g = (BigDecimal) row.get("qtyGood");
+            BigDecimal d = (BigDecimal) row.get("qtyDefect");
+            row.put("materialName", m != null && m.getMaterialName() != null ? m.getMaterialName() : "");
+            row.put("unit", m != null && m.getUnit() != null ? m.getUnit() : "");
+            row.put("materialTypeId", mtId);
+            row.put("materialTypeName", mt != null && mt.getTypeName() != null ? mt.getTypeName() : "");
+            row.put("materialTypeSortOrder", mt != null && mt.getSortOrder() != null ? mt.getSortOrder() : 999);
+            row.put("totalQuantity", g.add(d));
+            row.put("warehouseCount", materialWarehouses.getOrDefault(mid, Collections.emptySet()).size());
+            list.add(row);
+        }
+
+        // 库存多的排前面，便于优先关注积压物料；同库存按「物料类型排序位 → 物料名称」稳定排序
+        list.sort(Comparator
+                .comparing((Map<String, Object> r) -> (BigDecimal) r.get("totalQuantity")).reversed()
+                .thenComparing(r -> (Integer) r.getOrDefault("materialTypeSortOrder", 999))
+                .thenComparing(r -> String.valueOf(r.get("materialName"))));
+
+        long total = list.size();
+        int from = (pageNum - 1) * pageSize;
+        List<Map<String, Object>> records = (from < list.size())
+                ? list.subList(from, Math.min(from + pageSize, list.size()))
+                : Collections.emptyList();
+        Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, total);
+        result.setRecords(new ArrayList<>(records));
+        return R.ok(result);
+    }
+
     /** 仓库筛选：支持单值 warehouseId 与多选 warehouseIds，合并去重（warehouseId 保留向后兼容） */
     private Set<Long> buildWarehouseFilter(Long warehouseId, List<Long> warehouseIds) {
         Set<Long> whFilter = new LinkedHashSet<>();
@@ -352,6 +557,30 @@ public class WarehouseStockController {
                     : filteredProductIds.stream().filter(nameIds::contains).collect(Collectors.toSet());
         }
         return filteredProductIds;
+    }
+
+    /**
+     * 物料筛选：物料类型 + 名称关键字，两个条件同时存在时取交集。
+     * 返回 null 表示不筛选；返回空集合表示查无结果（调用方直接返回空页，避免 in() 空集合报错）。
+     */
+    private Set<Long> buildMaterialIdFilter(Long materialTypeId, String materialName) {
+        Set<Long> filteredMaterialIds = null;
+        if (materialTypeId != null) {
+            filteredMaterialIds = outsourceMaterialMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceMaterial>()
+                            .eq(OutsourceMaterial::getMaterialTypeId, materialTypeId))
+                    .stream().map(OutsourceMaterial::getId).collect(Collectors.toSet());
+        }
+        if (materialName != null && !materialName.isBlank()) {
+            Set<Long> nameIds = outsourceMaterialMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceMaterial>()
+                            .like(OutsourceMaterial::getMaterialName, materialName))
+                    .stream().map(OutsourceMaterial::getId).collect(Collectors.toSet());
+            filteredMaterialIds = (filteredMaterialIds == null)
+                    ? nameIds
+                    : filteredMaterialIds.stream().filter(nameIds::contains).collect(Collectors.toSet());
+        }
+        return filteredMaterialIds;
     }
 
     /** 库存流水追溯（stockType: PRODUCT=成品流水 / MATERIAL=物料流水，不传则全量） */

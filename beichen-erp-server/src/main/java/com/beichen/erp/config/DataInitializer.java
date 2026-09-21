@@ -299,15 +299,19 @@ public class DataInitializer implements ApplicationRunner {
             // 405「加工合同模板」已并入 108「模版管理」（基础数据，2026-09-15），不再在此 upsert
             // 物料仓库（11，2026-09-16 新增；同日按用户要求重排为「仓库 → 盘点 → 单据」）：
             {404L, 11L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 1},
-            {410L, 11L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 2},
+            // 物料库存情况（2026-09-21 用户要求）：镜像「成品库存情况」（712），只是统计物料而非成品 ——
+            // 列表按物料跨仓汇总（良品/不良两档，物料走 QualityType，没有成品的 A/B/C/待整理/安全库存），
+            // 点行进详情看该物料在各仓库的分布。sorts 顺移：查询类在前（委外仓库 1 → 本页 2 → 自有物料仓 3 → 盘点 4 → 报损 5 → 其他出入库 6 → 收发单 7）
+            {416L, 11L, "物料库存情况", "menu", "/outsource/material-stock", "OutsourceMaterialStock", "Box", 2},
+            {410L, 11L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 3},
             // 物料库存盘点（2026-09-16 用户要求）：与成品「库存盘点」按仓库类别彻底分开 ——
             // 本页只盘物料仓（委外仓 + 自有物料仓），成品页只盘成品类仓库；
             // 且本页**接口级限「跟单专员」**（见 StockTakeServiceImpl.assertRoleForScope，管理员兜底）
-            {414L, 11L, "物料库存盘点", "menu", "/outsource/material-stock-take", "OutsourceMaterialStockTake", "DocumentChecked", 3},
+            {414L, 11L, "物料库存盘点", "menu", "/outsource/material-stock-take", "OutsourceMaterialStockTake", "DocumentChecked", 4},
             // 物料报损：与成品报损独立成表（主体为 outsource_material，物料库存不区分品质，固定按良品扣减）
-            {413L, 11L, "物料报损", "menu", "/outsource/stock-loss", "OutsourceStockLoss", "DeleteFilled", 4},
-            {407L, 11L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 5},
-            {406L, 11L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6},
+            {413L, 11L, "物料报损", "menu", "/outsource/stock-loss", "OutsourceStockLoss", "DeleteFilled", 5},
+            {407L, 11L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 6},
+            {406L, 11L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 7},
             {501L, 5L, "成品采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1},
             {502L, 5L, "采购退货单", "menu", "/inventory/purchase-return", "InventoryPurchaseReturn", "Refrigerator", 2},
             // 采购换货单（2026-09-18 用户要求）：向供货商采购的成品也可换货 —— 把不良品退回供货商 + 换回良品，
@@ -543,6 +547,9 @@ public class DataInitializer implements ApplicationRunner {
                 {410L, "outsource:material-warehouse"},
                 {413L, "outsource:stock-loss"},
                 {414L, "outsource:material-stock-take"},
+                // 物料库存情况（2026-09-21）：与成品侧 712 的 stock:product-stock 同范式，
+                // 页面菜单的 perms 即接口级权限码 —— 漏登记会让新页面的接口调用被拦。
+                {416L, "outsource:material-stock"},
         };
         int updated = 0;
         for (Object[] p : perms) {
@@ -704,6 +711,18 @@ public class DataInitializer implements ApplicationRunner {
             if (granted > 0) log.info("已补授「物料仓库」整组给仓管员，共 {} 条", granted);
         } catch (Exception e) {
             log.warn("补授仓管员物料仓库权限异常: {}", e.getMessage());
+        }
+
+        // 存量库幂等补授（2026-09-21）：416「物料库存情况」是新增菜单 —— assignRoleMenus 只在角色
+        // 「尚无任何菜单」时才写入 ⇒ 存量库必须单独补授，否则除 admin 外的角色（含仓管员）看不到它、
+        // 前端白名单也没有该路由（直输 URL 吃 403）。查询类页面 ⇒ 给 物料仓管员 / 跟单专员 / admin。
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, 416 FROM sys_role r WHERE r.role_code IN ('admin','merchandiser','warehouse')");
+            if (granted > 0) log.info("已补授 416「物料库存情况」给 {} 个角色", granted);
+        } catch (Exception e) {
+            log.warn("补授物料库存情况菜单异常: {}", e.getMessage());
         }
 
         // 存量库幂等补授：412「成品收货」/ 415「物料收货」是 2026-09-16 由详情页签移出成菜单的新行，

@@ -239,6 +239,12 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/delivery-info', redirect: '/outsource/order' },
       // 物料库存盘点（物料仓库，2026-09-16 新增）：与成品「库存盘点」共用面板，scope=MATERIAL 只盘物料仓
       { path: 'outsource/material-stock-take', name: 'OutsourceMaterialStockTake', component: () => import('@/views/outsource/material-stock-take/index.vue'), meta: { title: '物料库存盘点', requiresAuth: true } },
+      // 物料库存情况（物料仓库，2026-09-21 新增，镜像「成品库存情况」）：
+      // 列表按物料汇总跨仓库库存（良品/不良两档），点行进详情看该物料在各仓库的分布。
+      // ⚠️ 物料品质走 outsource.common.QualityType（GOOD/DEFECT），没有成品的 A/B/C/待整理；物料也没有安全库存。
+      { path: 'outsource/material-stock', name: 'OutsourceMaterialStock', component: () => import('@/views/outsource/material-stock/index.vue'), meta: { title: '物料库存情况', requiresAuth: true } },
+      // 物料库存分布详情：operate=true ⇒ 不走菜单白名单（任何登录用户点击都不会被拦到 403），与成品侧一致
+      { path: 'outsource/material-stock/detail/:id', name: 'OutsourceMaterialStockDetail', component: () => import('@/views/outsource/material-stock/detail.vue'), meta: { title: '物料库存分布详情', requiresAuth: true, operate: true } },
       // 加工合同模板已并入「基础数据 → 模版管理」（2026-09-15）；旧地址重定向到该页的「加工合同模板」页签
       { path: 'outsource/contract-template', redirect: '/template?tab=contract' },
       { path: 'outsource/other-io', name: 'OutsourceOtherIo', component: () => import('@/views/outsource/other-io/index.vue'), meta: { title: '物料其他出入库', requiresAuth: true } },
