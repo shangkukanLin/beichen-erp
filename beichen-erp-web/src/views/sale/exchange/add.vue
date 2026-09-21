@@ -70,6 +70,11 @@
         <!-- 收费（2026-09-21 用户口径：**收费精确到产品**）：单据级不再手填金额（= Σ明细，后端回写），
              上方只作「批量默认」（类型/说明可一键套用），金额在明细行逐产品填。
              ⚠️ 方向：**向客户收取** ⇒ 审核生成一条正向应收（单号 -FEE，金额 = Σ明细）。 -->
+        <div style="margin: 0 0 12px 100px; font-size: var(--app-font-xs); color: var(--app-text-secondary); line-height: 1.5">
+          收费方向：<b style="color: var(--app-color-warning)">向客户收取</b>（我方应收客户）
+          <span v-if="chargeTotal > 0"> ⇒ 审核后生成一条应收 <b style="color: var(--app-color-warning)">{{ chargeTotal.toFixed(2) }}</b>（单号后缀 -FEE，可整单核销）</span>
+          <span v-else> ⇒ 在明细行逐产品填收费金额，审核时汇总成一条应收</span>
+        </div>
       </el-form>
 
       <el-divider content-position="left">

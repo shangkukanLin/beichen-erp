@@ -418,6 +418,7 @@
   "lbl_src_sale_order": "来源销售单",
   "lbl_in_wh_ex": "换入仓",
   "lbl_out_wh_ex": "换出仓",
+  "txt_sale_charge_direction": "收费方向",
   "val_vendor1": "测试供货商A1",
   "val_po_1": "CG-20260918006",
   "val_prod_po": "测试产品A11",

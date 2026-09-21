@@ -80,6 +80,7 @@ Open '/sale/return/add' 3200
 Ok ((BodyHas (ZH 'lbl_charge_type_batch')) -eq 'True') 'add page renders the batch charge-type field'
 Ok ((BodyHas (ZH 'lbl_charge_total_batch')) -eq 'True') 'add page renders the auto charge total'
 Ok ((BodyHas (ZH 'btn_apply_charge')) -eq 'True') 'add page renders the apply-to-all button'
+Ok ((BodyHas (ZH 'txt_sale_charge_direction')) -eq 'True') 'add page states the charge direction (we collect from the customer)'
 $rc = SelectLabelContains 'lbl_customer' $CUST 1500
 Ok ($rc -match 'OK') ('customer selected (' + $rc + ')')
 $rw = SelectLabelContains 'lbl_return_wh' (ZH 'wh_finished2') 1500
@@ -188,6 +189,7 @@ Write-Host '--- B) /sale/exchange/add : charge the row (per product)'
 # document ends up CANCELLED (only AUDITED documents count against can-exchange) -- see A3.
 Open '/sale/exchange/add' 3200
 Ok ((BodyHas (ZH 'lbl_charge_total_batch')) -eq 'True') 'exchange add page renders the auto charge total'
+Ok ((BodyHas (ZH 'txt_sale_charge_direction')) -eq 'True') 'exchange add page states the charge direction (we collect from the customer)'
 $ec = SelectLabelContains 'lbl_customer' $CUST 1500
 Ok ($ec -match 'OK') ('exchange customer selected (' + $ec + ')')
 $eo = OpenSelect 'lbl_src_sale_order'
