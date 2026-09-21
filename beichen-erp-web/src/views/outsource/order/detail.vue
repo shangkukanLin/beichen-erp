@@ -310,7 +310,7 @@ onActivated(async () => { await loadOptions(); await loadData() })
         </el-form>
         <div style="margin-top:8px">
           <div style="margin-bottom:6px;display:flex;align-items:center;gap:8px">
-            <span style="font-weight:500;font-size:var(--app-font-base)">BOM物料清单</span>
+            <span style="font-weight:500;font-size:var(--app-font-base)">BOM清单</span>
             <!-- BOM 快照版本（2026-09-17）：同 BOM 版本同内容的多张加工单共享一份快照，明细不再随单重复生成 -->
             <el-tag v-if="p.bomVersion != null" type="info" size="small">BOM版本 v{{ p.bomVersion }}</el-tag>
             <span v-if="p.bomSnapshotKind" style="color:var(--app-text-placeholder);font-size:var(--app-font-xs)">
@@ -392,6 +392,6 @@ onActivated(async () => { await loadOptions(); await loadData() })
 
 .drop-zone { position:relative; border:2px dashed var(--app-border-color); border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
 .drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }
-/* BOM物料清单操作列：确保按钮组在单元格内垂直居中 */
+/* BOM清单操作列：确保按钮组在单元格内垂直居中 */
 :deep(.bom-table .action-col .cell) { display:flex !important; align-items:center !important; justify-content:center !important; height:100% !important; }
 </style>
