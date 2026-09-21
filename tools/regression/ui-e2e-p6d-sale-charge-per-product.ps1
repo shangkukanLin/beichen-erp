@@ -77,9 +77,11 @@ try {
 # ==================== A) sale return: per-product charge ====================
 Write-Host '--- A) /sale/return/add : charge the row (per product)'
 Open '/sale/return/add' 3200
-Ok ((BodyHas (ZH 'lbl_charge_type_batch')) -eq 'True') 'add page renders the batch charge-type field'
 Ok ((BodyHas (ZH 'lbl_charge_total_batch')) -eq 'True') 'add page renders the auto charge total'
-Ok ((BodyHas (ZH 'btn_apply_charge')) -eq 'True') 'add page renders the apply-to-all button'
+# 2026-09-21 (user rule): the batch charge-TYPE field and its apply-to-all button were removed --
+# the type is picked per product on the detail row, so the page must NOT offer them any more.
+Ok ((BodyHas (ZH 'lbl_charge_type_batch')) -eq 'False') 'the batch charge-type field is gone'
+Ok ((BodyHas (ZH 'btn_apply_charge')) -eq 'False') 'the apply-to-all button is gone'
 Ok ((BodyHas (ZH 'txt_sale_charge_direction')) -eq 'True') 'add page states the charge direction (we collect from the customer)'
 $rc = SelectLabelContains 'lbl_customer' $CUST 1500
 Ok ($rc -match 'OK') ('customer selected (' + $rc + ')')
@@ -103,6 +105,15 @@ if ($tb.n -ge 1) {
   $fee = SetRowNumberField 0 2 "$ITEM_FEE"
   Ok ($fee -match 'OK') ('per-product charge amount set (' + $fee + ')')
   Start-Sleep -Milliseconds 700
+  # 2026-09-21: with an amount but NO type of its own the save must be refused -- the batch field used to
+  # supply that fallback and is gone, so every charged row has to carry its own type.
+  $negBefore = D (SqlOne 'SELECT COUNT(*) FROM sale_return')
+  ClickBtn 'btn_save' | Out-Null
+  Start-Sleep -Milliseconds 1500
+  $negToast = Txt '.el-message'
+  Write-Host ('  save-without-type toast=' + $negToast)
+  Ok ($negToast -match [regex]::Escape((ZH 'msg_item_charge_type'))) 'a charged row without its own type is refused'
+  Ok ((D (SqlOne 'SELECT COUNT(*) FROM sale_return')) -eq $negBefore) 'the refused document was not persisted'
   # the charge type select is the LAST select of the row (product remote-select comes first)
   OpenRowSelect 0 1 | Out-Null
   Start-Sleep -Milliseconds 1300
@@ -189,6 +200,8 @@ Write-Host '--- B) /sale/exchange/add : charge the row (per product)'
 # document ends up CANCELLED (only AUDITED documents count against can-exchange) -- see A3.
 Open '/sale/exchange/add' 3200
 Ok ((BodyHas (ZH 'lbl_charge_total_batch')) -eq 'True') 'exchange add page renders the auto charge total'
+Ok ((BodyHas (ZH 'lbl_charge_type_batch')) -eq 'False') 'exchange add page no longer offers the batch charge-type field'
+Ok ((BodyHas (ZH 'btn_apply_charge')) -eq 'False') 'exchange add page no longer offers the apply-to-all button'
 Ok ((BodyHas (ZH 'txt_sale_charge_direction')) -eq 'True') 'exchange add page states the charge direction (we collect from the customer)'
 $ec = SelectLabelContains 'lbl_customer' $CUST 1500
 Ok ($ec -match 'OK') ('exchange customer selected (' + $ec + ')')

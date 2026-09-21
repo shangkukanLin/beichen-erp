@@ -43,27 +43,16 @@
           <el-col :span="8">
             <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
           </el-col>
-          <el-col :span="6">
-            <el-form-item label="收费类型（批量）">
-              <el-select v-model="form.chargeType" placeholder="选后点「套用全部」" clearable style="width:100%">
-                <el-option v-for="o in chargeTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
+          <!-- 2026-09-21（用户口径）：去掉「收费类型（批量）」+「套用全部」—— 类型一律在明细行按产品选 -->
+          <el-col :span="8">
             <el-form-item label="收费合计（自动）">
               <span style="font-weight:600;color:#e6a23c">{{ chargeTotal.toFixed(2) }}</span>
               <span style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">= Σ 明细行收费</span>
             </el-form-item>
           </el-col>
-          <el-col :span="6">
-            <el-form-item label="收费说明（批量）">
-              <el-input v-model="form.chargeReason" placeholder="选填，逐行未填时套用" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label=" ">
-              <el-button plain :disabled="!form.chargeType" @click="applyChargeTypeToAll">套用到全部明细</el-button>
+          <el-col :span="16">
+            <el-form-item label="收费说明">
+              <el-input v-model="form.chargeReason" placeholder="选填，整单共用一句话（会写入财务台账备注）" />
             </el-form-item>
           </el-col>
         </el-row>
@@ -215,15 +204,6 @@ const chargeTypeOptions = computed(() =>
  */
 const chargeTotal = computed(() =>
   items.value.reduce((s: number, it: any) => s + (Number(it.chargeAmount) || 0), 0))
-/** 把批量类型套用到全部明细行（逐行仍可单独改；金额逐行填 —— 金额才是"收多少"） */
-function applyChargeTypeToAll() {
-  if (!form.chargeType) return
-  items.value.forEach((it: any) => {
-    if (!(Number(it.chargeAmount) > 0)) it.chargeAmount = 0
-    it.chargeType = form.chargeType
-  })
-  ElMessage.success(`已把「${ExchangeChargeTypeLabel[form.chargeType] || form.chargeType}」套用到 ${items.value.length} 条明细`)
-}
 // ===== 下拉 =====
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 200, name: kw } })
 const fetchSaleOrders = async (kw: string) => {
@@ -309,7 +289,6 @@ async function loadEdit(id: number) {
     warehouseOutId: h.warehouseOutId,
     exchangeDate: h.exchangeDate ? String(h.exchangeDate).slice(0, 10) : '',
     chargeFlag: Number(h.chargeFlag || 0),
-    chargeType: h.chargeType || '',
     chargeAmount: Number(h.chargeAmount || 0),
     chargeReason: h.chargeReason || '',
     remark: h.remark || '',
@@ -323,6 +302,10 @@ async function loadEdit(id: number) {
     chargeAmount: Number(it.chargeAmount || 0),
     chargeType: it.chargeType || ''
   }))
+  // 2026-09-21（去掉批量类型后）：旧草稿里"靠单据级类型兜底"的行显性化到行上 —— 否则编辑这类旧单
+  // 会被新的"逐行必选类型"校验拦住、存不回去。单据级类型本就是按各明细类型一致派生的，落回无损。
+  const docChargeType = h.chargeType || ''
+  if (docChargeType) items.value.forEach((it: any) => { if (!it.chargeType) it.chargeType = docChargeType })
 }
 
 function removeItem(i: number) { items.value.splice(i, 1) }
@@ -345,10 +328,10 @@ async function submit() {
     }
   }
   // 收费校验（2026-09-21 逐产品口径）：**金额填在哪一行就算哪个产品收费**（金额 0 = 不收费）；
-  // 填了金额的行必须能确定类型（行类型或批量类型）——后端会再逐行校验一次
+  // 去掉批量类型后，填了金额的行必须**自己**选了类型（没有可继承的兜底）——后端会再逐行校验一次
   for (const it of its) {
-    if (Number(it.chargeAmount) > 0 && !(it.chargeType || form.chargeType)) {
-      ElMessage.warning(`产品「${it.productName || it.productId}」已填收费金额，请选择收费类型（可用上方「收费类型（批量）」套用）`)
+    if (Number(it.chargeAmount) > 0 && !it.chargeType) {
+      ElMessage.warning(`产品「${it.productName || it.productId}」已填收费金额，请选择收费类型`)
       return
     }
   }
@@ -358,9 +341,9 @@ async function submit() {
       saleOrderId: form.saleOrderId, saleOrderCode: form.saleOrderCode, customerId: form.customerId,
       warehouseInId: form.warehouseInId, warehouseOutId: form.warehouseOutId,
       exchangeDate: form.exchangeDate,
-      // 收费：单据级只作「批量默认」外带；金额由后端按 Σ明细 回写（这里传 0）
+      // 收费：单据级金额由后端按 Σ明细 回写（传 0）；单据级类型不再从界面下发（后端按明细派生）
       chargeFlag: chargeTotal.value > 0 ? 1 : 0,
-      chargeType: form.chargeType || '',
+      chargeType: '',
       chargeAmount: 0,
       chargeReason: form.chargeReason || '',
       remark: form.remark,
@@ -371,9 +354,9 @@ async function submit() {
         // 换出侧（只支持同品：产品即退回产品；数量可不等如退2换1）
         outQuantity: i.outQuantity, outUnitPrice: i.outUnitPrice,
         outQualityType: i.outQualityType,
-        // 逐产品收费：金额 > 0 才收费；类型缺省套用批量类型
+        // 逐产品收费：金额 > 0 才收费，且类型必须是**本行自己**选的（校验见 submit）
         chargeAmount: Number(i.chargeAmount) || 0,
-        chargeType: Number(i.chargeAmount) > 0 ? (i.chargeType || form.chargeType || '') : '',
+        chargeType: Number(i.chargeAmount) > 0 ? (i.chargeType || '') : '',
         chargeReason: form.chargeReason || '',
         remark: i.remark
       }))
