@@ -54,6 +54,16 @@ public class ReturnSort {
     /** 折损收款说明 */
     private String lossRemark;
 
+    /**
+     * 整理人（用户ID）—— 2026-09-22 用户要求：「谁操作的就是谁整理的」。
+     * <p><b>只由服务端按当前登录用户写入</b>（新建 / 批量生成草稿 / 编辑时刷新为最后操作人；审核时若为空则补写审核人），
+     * 控制器**不解析**前端传的同名字段 ⇒ 无法伪造。</p>
+     */
+    private Long sortUserId;
+
+    /** 整理人（登录名，落库冗余一份，详情/列表直接展示，无需再关联用户表） */
+    private String sortUserName;
+
     private String remark;
 
     private Long companyId;

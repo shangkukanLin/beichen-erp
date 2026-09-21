@@ -70,6 +70,7 @@ public class DataInitializer implements ApplicationRunner {
         migratePurchaseExchangeCharge();
         migratePurchaseChargePerProduct();
         migrateSaleItemCharge();
+        migrateReturnSortSorter();
         initSuperAdmin();
         initMaterialTypes();
         initPhaseTemplates();
@@ -929,6 +930,18 @@ public class DataInitializer implements ApplicationRunner {
                 "charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '该产品付费金额(我方付给供货商)'");
         addColumnIfMissing("purchase_exchange_item",
                 "charge_reason VARCHAR(200) DEFAULT NULL COMMENT '该产品付费说明'");
+    }
+
+    /**
+     * 退货整理「整理人」（2026-09-22 用户要求）：谁操作的就是谁整理的。
+     * <p>两列都只由服务端按当前登录用户写入（新建/批量生成草稿/编辑刷新为最后操作人；审核时为空则补写），
+     * 因此历史单为空属正常，详情显示「—」。</p>
+     */
+    private void migrateReturnSortSorter() {
+        addColumnIfMissing("return_sort",
+                "sort_user_id BIGINT DEFAULT NULL COMMENT '整理人用户ID（服务端按当前登录用户写入）'");
+        addColumnIfMissing("return_sort",
+                "sort_user_name VARCHAR(50) DEFAULT NULL COMMENT '整理人登录名（冗余，便于详情直接展示）'");
     }
 
     /** 幂等补列：列已存在时 MySQL 报错，捕获忽略即可（不依赖 MySQL 版本特性） */

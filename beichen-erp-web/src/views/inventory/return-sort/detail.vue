@@ -27,6 +27,8 @@ const head = reactive({
   targetWarehouseDefect: undefined as number | undefined,
   remark: '',
   status: DocStatus.DRAFT as string,
+  // 整理人：谁操作的就是谁整理的（服务端按登录用户写入，前端只读展示）
+  sortUserName: '',
   createTime: ''
 })
 
@@ -52,7 +54,8 @@ async function loadDetail() {
       code: io.code, warehouseId: io.warehouseId, sortDate: io.sortDate,
       targetWarehouseA: io.targetWarehouseA, targetWarehouseB: io.targetWarehouseB,
       targetWarehouseC: io.targetWarehouseC, targetWarehouseDefect: io.targetWarehouseDefect,
-      remark: io.remark, status: io.status, createTime: io.createTime
+      remark: io.remark, status: io.status, createTime: io.createTime,
+      sortUserName: io.sortUserName || ''
     })
     items.value = await getReturnSortItems(id) || []
   } finally { loading.value = false }
@@ -115,6 +118,11 @@ onActivated(() => { loadDetail() })
           <span v-else>—</span>
         </el-descriptions-item>
         <el-descriptions-item label="整理日期">{{ head.sortDate || '—' }}</el-descriptions-item>
+        <!-- 整理人（2026-09-22 用户要求）：谁操作的就是谁整理的 —— 新建/批量生成草稿/编辑时由服务端按登录用户写入 -->
+        <el-descriptions-item label="整理人">
+          <span v-if="head.sortUserName" style="font-weight:600">{{ head.sortUserName }}</span>
+          <span v-else style="color:#999">—（历史单据未记录）</span>
+        </el-descriptions-item>
         <el-descriptions-item label="A规入库仓">
           <el-button v-if="head.targetWarehouseA" type="primary" link @click="goWarehouse(head.targetWarehouseA)">{{ warehouseName(head.targetWarehouseA) }}</el-button>
           <span v-else>—</span>

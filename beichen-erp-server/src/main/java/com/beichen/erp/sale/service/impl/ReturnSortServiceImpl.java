@@ -3,6 +3,9 @@ package com.beichen.erp.sale.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import cn.dev33.satoken.stp.StpUtil;
+import com.beichen.erp.auth.entity.User;
+import com.beichen.erp.auth.mapper.UserMapper;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.BillNoSeq;
 import com.beichen.erp.common.DocStatus;
@@ -57,6 +60,8 @@ import java.util.stream.Collectors;
 public class ReturnSortServiceImpl implements ReturnSortService {
 
     private final ReturnSortMapper rsMapper;
+    /** 整理人（「谁操作的就是谁整理的」）要按当前登录用户查名字，故注入用户 mapper */
+    private final UserMapper userMapper;
     private final ReturnSortItemMapper itemMapper;
     private final WarehouseStockService stockService;
     private final WarehouseStockMapper stockMapper;
@@ -508,6 +513,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         validate(s, items);
         s.setCode(gen(BillPrefix.RETURN_SORT));
         s.setStatus(DocStatus.DRAFT.getCode());
+        stampSorter(s);   // 整理人 = 当前登录用户（批量生成草稿内部也走本方法 ⇒ 一并覆盖）
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) s.setCompanyId(cid);
         rsMapper.insert(s);
@@ -527,6 +533,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         validate(s, items);
 
         s.setCode(old.getCode()); s.setStatus(DocStatus.DRAFT.getCode());
+        stampSorter(s);   // 编辑算一次整理操作 ⇒ 整理人刷新为最后操作人
         rsMapper.updateById(s);
 
         itemMapper.delete(new LambdaQueryWrapper<ReturnSortItem>().eq(ReturnSortItem::getSortId, s.getId()));
@@ -543,6 +550,8 @@ public class ReturnSortServiceImpl implements ReturnSortService {
     public void audit(Long id) {
         ReturnSort s = rsMapper.selectById(id);
         if (s == null) throw new BusinessException("退货整理单不存在");
+        // 整理人为空（历史单）时补写当前用户；已有整理人的不覆盖
+        backfillSorterOnAudit(s);
         // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免分选库存重复变动
         if (!DocStatusGuard.claim(rsMapper, ReturnSort::getId, id, ReturnSort::getStatus,
                 DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
@@ -742,6 +751,50 @@ public class ReturnSortServiceImpl implements ReturnSortService {
                 .setSql(add
                         ? "sorted_quantity = IFNULL(sorted_quantity, 0) + (" + qtySql + ")"
                         : "sorted_quantity = GREATEST(IFNULL(sorted_quantity, 0) - (" + qtySql + "), 0)"));
+    }
+
+    // ==================== 整理人（2026-09-22 用户要求：谁操作的就是谁整理的） ====================
+
+    /**
+     * 打上/刷新整理人 = 当前登录用户。
+     * <p>新建、批量生成草稿（内部也走 {@link #create}）、编辑三条路径都调用 ⇒ 最后一次操作的人就是整理人。</p>
+     */
+    private void stampSorter(ReturnSort s) {
+        Long uid = getCurrentUserId();
+        String name = getCurrentUserName();
+        if (uid != null) s.setSortUserId(uid);
+        if (name != null) s.setSortUserName(name);
+    }
+
+    /**
+     * 审核时补写整理人：**仅当为空**（历史单兜底）。
+     * <p>已有整理人的单**不覆盖** —— 整理人与审核人可能不是同一个人，覆盖会把"谁整理的"记错。</p>
+     */
+    private void backfillSorterOnAudit(ReturnSort s) {
+        if (s.getSortUserName() != null && !s.getSortUserName().isBlank()) return;
+        Long uid = getCurrentUserId();
+        String name = getCurrentUserName();
+        if (uid == null && name == null) return;
+        rsMapper.update(null, new LambdaUpdateWrapper<ReturnSort>()
+                .eq(ReturnSort::getId, s.getId())
+                .set(uid != null, ReturnSort::getSortUserId, uid)
+                .set(name != null, ReturnSort::getSortUserName, name));
+        if (uid != null) s.setSortUserId(uid);
+        if (name != null) s.setSortUserName(name);
+    }
+
+    /** 当前登录用户ID（未登录/异常一律 null，不影响主流程） */
+    private Long getCurrentUserId() {
+        try { return StpUtil.getLoginIdAsLong(); } catch (Exception e) { return null; }
+    }
+
+    /** 当前登录用户名（取 sys_user.username；查不到则 null） */
+    private String getCurrentUserName() {
+        try {
+            Long userId = StpUtil.getLoginIdAsLong();
+            User user = userMapper.selectById(userId);
+            return user != null ? user.getUsername() : null;
+        } catch (Exception e) { return null; }
     }
 
     private void validate(ReturnSort s, List<ReturnSortItem> items) {

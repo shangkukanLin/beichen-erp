@@ -1475,6 +1475,8 @@ CREATE TABLE IF NOT EXISTS return_sort (
     loss_amount           DECIMAL(18,2) DEFAULT 0            COMMENT '折损收款金额(整理后B/C/不良品的折损，向客户收取，审核后生成正向应收，单号后缀 -LOSS)',
     loss_remark           VARCHAR(200)                       COMMENT '折损收款说明',
     remark                VARCHAR(500)                       COMMENT '备注',
+    sort_user_id          BIGINT DEFAULT NULL                COMMENT '整理人用户ID（2026-09-22：谁操作的就是谁整理的，服务端按当前登录用户写入，前端不可传）',
+    sort_user_name        VARCHAR(50) DEFAULT NULL           COMMENT '整理人登录名（冗余，便于详情直接展示）',
     company_id            BIGINT DEFAULT NULL                COMMENT '公司ID',
     create_time           DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time           DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

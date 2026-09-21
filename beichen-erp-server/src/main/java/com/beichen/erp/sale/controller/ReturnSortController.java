@@ -132,6 +132,8 @@ public class ReturnSortController {
             s.setLossAmount(new BigDecimal(body.get("lossAmount").toString()));
         if (body.get("lossRemark") != null) s.setLossRemark(body.get("lossRemark").toString());
         s.setRemark((String) body.get("remark"));
+        // ⚠️ 整理人（sortUserId / sortUserName）**故意不从 body 里解析**：由服务层按当前登录用户写入。
+        // 若在这里接收前端传值，前端就能伪造「谁整理的」（2026-09-22 用户口径：谁操作的就是谁整理的）。
         return s;
     }
 
