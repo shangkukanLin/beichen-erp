@@ -76,6 +76,24 @@ async function deleteLedger(row: any) {
   catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 
+// ---------- 详情抽屉（2026-09-21 用户口径「加工退货页面的列表也应该有详情」）----------
+// 列表只留扫读几列，细节进抽屉（与「收货记录」同一家规）：记录全字段 + 落账明细
+//（审核后实际扣的成品、按 BOM 还回工厂委外仓的物料、冲减的应付）。
+const detailVisible = ref(false)
+const detailLoading = ref(false)
+const detail = ref<any>({})
+
+async function openDetail(row: any) {
+  detailVisible.value = true
+  detailLoading.value = true
+  detail.value = {}
+  try {
+    detail.value = (await request.get<any, any>(`/outsource/order-delivery/return-defect/${row.id}/detail`)) || {}
+  } catch (e: any) {
+    ElMessage.error('加载详情失败：' + (e?.msg || e?.message || '未知错误'))
+  } finally { detailLoading.value = false }
+}
+
 // ---------- 新增"无单"加工退货（不关联加工单；有单的退回请到该加工单的收货详细页） ----------
 const noOrderVisible = ref(false)
 const noOrderSaving = ref(false)
@@ -253,9 +271,9 @@ onMounted(() => { loadLedger() })
              扣减仓库不单独占列，挂在「退货数量」的 title 上（该信息主要给查账用）。 -->
         <el-table :data="ledger" border stripe v-loading="ledgerLoading">
           <el-table-column label="退货日期" width="96"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-          <el-table-column prop="factoryName" label="加工厂" width="110" show-overflow-tooltip />
+          <el-table-column prop="factoryName" label="加工厂" width="100" show-overflow-tooltip />
           <!-- 「关联加工单」= 本表唯一的"有无单"区分：有单显示可点的加工单号，无单显示"未关联" -->
-          <el-table-column label="关联加工单" width="120" show-overflow-tooltip>
+          <el-table-column label="关联加工单" width="110" show-overflow-tooltip>
             <template #default="{ row }">
               <el-button v-if="row.orderCode" type="primary" link @click="goOrder(row)">{{ row.orderCode }}</el-button>
               <span v-else style="color:var(--app-text-placeholder)">未关联</span>
@@ -271,9 +289,13 @@ onMounted(() => { loadLedger() })
           <el-table-column label="状态" width="76" align="center">
             <template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
           </el-table-column>
-          <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
-          <el-table-column label="操作" width="140" align="center" fixed="right">
+          <el-table-column prop="remark" label="备注" min-width="110" show-overflow-tooltip />
+          <!-- 2026-09-21（用户口径「列表也应该有详情」）：细节（记录ID/建单时间/扣减仓库/还料清单/应付冲减）进详情抽屉
+               ⇒ 操作列 140→180（详情+审核+反审核+删除），腾出的 40px 由 加工厂 −10、关联加工单 −10、备注 −10、
+               产品 min-width 弹性列吸收 ⇒ 合计仍 ≤ 948（纵向滚动条下）不横向滑动。 -->
+          <el-table-column label="操作" width="180" align="center" fixed="right">
             <template #default="{ row }">
+              <el-button type="primary" link @click="openDetail(row)">详情</el-button>
               <el-button type="success" link v-if="row.status === DocStatus.DRAFT" @click="auditLedger(row)">审核</el-button>
               <el-button type="warning" link v-if="row.status === DocStatus.AUDITED" @click="unauditLedger(row)">反审核</el-button>
               <el-button type="danger" link v-if="row.status === DocStatus.DRAFT" @click="deleteLedger(row)">删除</el-button>
@@ -377,5 +399,62 @@ onMounted(() => { loadLedger() })
         <el-button type="primary" :loading="noOrderSaving" @click="submitNoOrder">保存草稿</el-button>
       </template>
     </el-dialog>
+
+    <!-- 加工退货详情抽屉（2026-09-21 用户口径）：记录全字段 + **落账明细**（审核后实际扣的成品、
+         按 BOM 还回工厂委外仓的物料、冲减的应付）—— 列表不显示的字段（记录ID/建单时间/扣减仓库）也在这里。 -->
+    <el-drawer v-model="detailVisible" title="加工退货详情" size="580px">
+      <div v-loading="detailLoading">
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item label="记录ID">{{ detail.id ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="退货日期">{{ $fmtDate(detail.deliveryDate) }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="DocStatusTag[detail.status] || 'info'" size="small">{{ DocStatusLabel[detail.status] || detail.status }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="加工厂">{{ detail.factoryName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="关联加工单">
+            <el-button v-if="detail.orderCode" type="primary" link @click="goOrder(detail)">{{ detail.orderCode }}</el-button>
+            <span v-else style="color:var(--app-text-placeholder)">未关联（无单退回）</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="产品">{{ (detail.productName || '-') + (detail.sku ? '（' + detail.sku + '）' : '') }}</el-descriptions-item>
+          <el-descriptions-item label="退货规格">{{ specText(detail.qualityType) }}</el-descriptions-item>
+          <el-descriptions-item label="退货数量">
+            <span style="color:var(--app-color-danger);font-weight:500">{{ Math.abs(Number(detail.quantity || 0)) }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="扣减仓库">{{ detail.warehouseName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="建单时间">{{ detail.createTime ? String(detail.createTime).replace('T', ' ').slice(0, 19) : '-' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div style="margin:16px 0 8px;font-weight:600">落账明细</div>
+        <el-alert v-if="detail.id && !detail.settled" type="info" :closable="false" show-icon
+          title="尚未落账（草稿 / 已反审核）：审核后才会扣减成品、把 BOM 料还回工厂委外仓并冲减应付。" />
+        <template v-else-if="detail.settled">
+          <p style="margin:0 0 8px;line-height:1.6;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
+            ① 成品：已从「{{ detail.warehouseName || '-' }}」扣减
+            <b style="color:var(--app-color-danger)">{{ Math.abs(Number(detail.quantity || 0)) }}</b> 件（{{ specText(detail.qualityType) }}）；
+            ② 还料：按 BOM 还回工厂委外仓的物料如下<template v-if="detail.orderCode">，并回退该加工单的已收数量</template>。
+          </p>
+          <el-table :data="detail.materials || []" border stripe size="small">
+            <el-table-column prop="materialName" label="还回物料" min-width="130" show-overflow-tooltip />
+            <el-table-column label="品质" width="70" align="center">
+              <template #default="{ row }">{{ row.qualityType === 'DEFECT' ? '不良' : '良品' }}</template>
+            </el-table-column>
+            <el-table-column label="数量" width="80" align="right"><template #default="{ row }">{{ row.quantity }}</template></el-table-column>
+            <el-table-column prop="warehouseName" label="还入的委外仓" min-width="120" show-overflow-tooltip />
+          </el-table>
+          <p v-if="!(detail.materials || []).length" style="margin:6px 0 0;color:var(--app-text-placeholder);font-size:var(--app-font-xs)">
+            无还料记录（包工包料产品 / 该产品无 BOM 快照 ⇒ 只扣成品、不还料）
+          </p>
+          <p style="margin:12px 0 0;line-height:1.6;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
+            ③ 应付冲减：
+            <b :style="{ color: Number(detail.payableAmount) < 0 ? 'var(--app-color-success)' : 'var(--app-text-regular)' }">
+              {{ Number(detail.payableAmount || 0).toFixed(2) }}
+            </b>
+            <span v-if="detail.payableStatus">（{{ detail.payableStatus === 'UNSETTLED' ? '未付款' : detail.payableStatus === 'SETTLED' ? '已付款' : detail.payableStatus }}）</span>
+            <span style="color:var(--app-text-placeholder)"> —— 负数表示冲减已生成的加工应付。</span>
+          </p>
+        </template>
+      </div>
+    </el-drawer>
   </div>
 </template>

@@ -92,4 +92,13 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
      * @param status 单据状态筛选（DRAFT / AUDITED，可空）
      */
     Map<String, Object> pageDefectReturns(Integer pageNo, Integer size, String linked, String status);
+
+    /**
+     * 加工退货**详情**（2026-09-21 用户口径「加工退货页面的列表也应该有详情」）：记录全字段
+     * （含记录ID/仓库/建单时间/是否关联加工单）+ **审核后的落账明细** —— 还回工厂委外仓的物料
+     * （按库存流水回溯）与冲减的应付金额（`finance_payable`）。草稿未落账时这两项为空。
+     *
+     * <p>供「加工退货」页台账的行内「详情」抽屉使用（列表只留扫读几列、细节进详情）。</p>
+     */
+    Map<String, Object> defectReturnDetail(Long id);
 }

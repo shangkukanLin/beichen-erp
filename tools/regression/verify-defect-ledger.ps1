@@ -104,6 +104,33 @@ $pd = Invoke-RestMethod -Uri ($ledger + '?page=1&size=200&status=DRAFT') -Header
 $idsD = @($pd.data.records | ForEach-Object { [int]$_.id })
 Ok (($idsD -contains $idNo) -and ($idsD -contains $idWith)) 'status=DRAFT contains both drafts'
 
+Step 'detail endpoint (record fields + settled impact)'
+$dUrl = 'http://localhost:8080/api/outsource/order-delivery/return-defect/'
+$dd = Invoke-RestMethod -Uri ($dUrl + $idWith + '/detail') -Headers $h
+Ok ($dd.code -eq 200) ('detail(linked): ' + $dd.code)
+Ok ([int]$dd.data.orderId -eq $oid) ('detail carries orderId=' + $dd.data.orderId)
+Ok ("$($dd.data.orderCode)" -eq $ocode) ('detail carries orderCode=' + $dd.data.orderCode)
+Ok ([int]$dd.data.factoryId -eq $fid) ('detail carries the factory id (' + $dd.data.factoryId + ')')
+Ok ("$($dd.data.factoryName)" -ne '') ('detail carries the factory name (' + $dd.data.factoryName + ')')
+Ok ("$($dd.data.warehouseName)" -ne '') ('detail carries the warehouse (' + $dd.data.warehouseName + ')')
+Ok ($dd.data.settled -eq $false) 'draft: not settled'
+Ok (@($dd.data.materials).Count -eq 0) 'draft: no material lines yet'
+
+# audit the order-less one, then the detail must report the settled impact, then roll back
+Step 'detail after audit (materials + payable), then un-audit'
+$ra = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/$idNo/audit") -Method Put -Headers $h
+Ok ($ra.code -eq 200) ('audit no-order draft: ' + $ra.code + ' ' + $ra.msg)
+$dn = Invoke-RestMethod -Uri ($dUrl + $idNo + '/detail') -Headers $h
+Ok ($dn.data.settled -eq $true) 'audited: settled=true'
+Ok (@($dn.data.materials).Count -ge 1) ('audited: material lines returned (' + @($dn.data.materials).Count + ')')
+Ok ("$(@($dn.data.materials)[0].materialName)" -ne '') ('audited: first returned material has a name')
+Ok ([decimal]$dn.data.payableAmount -lt 0) ('audited: payable credited (' + $dn.data.payableAmount + ')')
+Ok ("$($dn.data.payableStatus)" -eq 'UNSETTLED') ('audited: payable status=' + $dn.data.payableStatus)
+$ru = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/$idNo/un-audit") -Method Put -Headers $h
+Ok ($ru.code -eq 200) 'un-audited (back to draft so the cleanup below works)'
+$dz = Invoke-RestMethod -Uri ($dUrl + $idNo + '/detail') -Headers $h
+Ok ($dz.data.settled -eq $false) 'after un-audit: settled=false again'
+
 Step 'delete both drafts (keeps this probe repeatable)'
 $d1 = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/$idNo") -Method Delete -Headers $h
 $d2 = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/$idWith") -Method Delete -Headers $h

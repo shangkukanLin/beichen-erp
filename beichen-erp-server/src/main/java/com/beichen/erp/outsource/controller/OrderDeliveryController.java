@@ -121,6 +121,15 @@ public class OrderDeliveryController {
     }
 
     /**
+     * **加工退货详情**（2026-09-21 用户口径「列表也应该有详情」）：台账行内「详情」抽屉的数据源 ——
+     * 记录全字段 + 审核后的落账明细（还回物料 / 冲减应付）。草稿未落账时后两项为空。
+     */
+    @GetMapping("/return-defect/{id}/detail")
+    public R<Map<String, Object>> defectReturnDetail(@PathVariable Long id) {
+        return R.ok(deliveryService.defectReturnDetail(id));
+    }
+
+    /**
      * F7-128（2026-09-20）：**白名单解析请求体**。
      *
      * <p>原实现用 `@RequestBody OutsourceOrderDelivery` **整实体直绑** ⇒ 前端可顺带提交

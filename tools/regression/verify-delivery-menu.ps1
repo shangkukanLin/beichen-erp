@@ -210,12 +210,17 @@ if ($d9) {
 #     本页可新增"无单"那条（有单的退回仍在该加工单的收货详细页发起）。
 #     该台账的业务口径（扣成品/还料/冲应付、可反审核、草稿可删）由 verify-no-order-return.ps1 覆盖（API 级）
 OpenFresh "$base/outsource/return-order"
-$d9b = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-table')].filter(x=>x.getClientRects().length>0)[0];const ths=t?[...t.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim()):[];const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim()),cols:ths,w:ths.includes('关联加工单'),qty:ths.includes('退货数量'),btn:b.includes('新增无单加工退货')});})()" '加工退货页·加工退货台账'
+$d9b = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-table')].filter(x=>x.getClientRects().length>0)[0];const ths=t?[...t.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim()):[];const trs=t?[...t.querySelectorAll('.el-table__body tbody tr')]:[];const tr=trs.length?trs[0]:null;const ops=tr?[...tr.children][[...tr.children].length-1].innerText:'';const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim()),cols:ths,rows:trs.length,w:ths.includes('关联加工单'),qty:ths.includes('退货数量'),btn:b.includes('新增无单加工退货'),det:b.includes('详情'),opsHasDet:(ops.indexOf('\u8BE6\u60C5')>=0)});})()" '加工退货页·加工退货台账'
 if ($d9b) {
   Write-Output ('加工退货页签 = ' + ($d9b.tabs -join ' | ') + ' ；台账列 = ' + ($d9b.cols -join '/'))
   if ($d9b.w -and $d9b.qty) { Ok '加工退货台账=一张表：含「关联加工单」（有单显示单号/无单显示未关联）与「退货数量」列' }
   else { Bad ('加工退货台账列不符（缺 关联加工单 或 退货数量）：' + ($d9b.cols -join '/')) }
   if ($d9b.btn) { Ok '加工退货页签有「新增无单加工退货」入口（有单的退回在加工单收货详细页）' } else { Bad '加工退货页签缺少「新增无单加工退货」入口' }
+  # 2026-09-21（用户口径「加工退货页面的列表也应该有详情」）：台账行内必须有「详情」入口
+  # ⚠️ 台账可能为空（新库）⇒ 无数据行时只提示跳过，避免假 FAIL
+  if ($d9b.opsHasDet) { Ok '加工退货台账行内操作列有「详情」入口' }
+  elseif ([int]$d9b.rows -eq 0) { Write-Output ('（台账暂无数据行，跳过「详情」入口断言；页面上有「详情」按钮=' + $d9b.det + '）') }
+  else { Bad ('加工退货台账操作列缺少「详情」入口（行内操作=' + $d9b.opsHasDet + '）') }
   # 2026-09-21（用户口径「历史加工退货单不要了」）：上一代独立退货单**不再单独列页签** ⇒ 本页只应有两个页签
   if (($d9b.tabs -join ',') -eq '加工退货,维修退货') { Ok '加工退货页只有两个页签（与页面同名 + 维修退货；「历史加工退货单」页签已按口径撤掉）' }
   else { Bad ('加工退货页签不符（期望 加工退货/维修退货）：' + ($d9b.tabs -join '/')) }

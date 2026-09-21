@@ -7,6 +7,8 @@ import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.dev.entity.Bom;
 import com.beichen.erp.dev.mapper.BomMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.entity.FinancePayable;
+import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
@@ -39,7 +41,9 @@ import com.beichen.erp.supplier.mapper.SupplierMapper;
 import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
+import com.beichen.erp.warehouse.entity.WarehouseStockLog;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockLogMapper;
 import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
 import lombok.RequiredArgsConstructor;
@@ -89,6 +93,10 @@ public class OutsourceOrderDeliveryServiceImpl
     private final BomSnapshotItemMapper bomSnapshotItemMapper;
     /** 还回物料计价（FIFO + 兜底链，F7-77 的唯一实现）—— 无单红冲按料价值冲减应付 */
     private final OutsourceMaterialPricingService pricingService;
+    /** 加工退货详情：按库存流水回溯「还回了哪些料」（related_delivery_id = 本记录） */
+    private final WarehouseStockLogMapper stockLogMapper;
+    /** 加工退货详情：本记录产生的应付冲减（source_id = 本记录、source_bill_type = OUTSOURCE_DELIVERY） */
+    private final FinancePayableMapper payableMapper;
 
     /** 来源类型：不关联加工单的加工退货（与实体 sourceType 注释里的 RETURN_DEFECT 一致） */
     private static final String SOURCE_RETURN_DEFECT = "RETURN_DEFECT";
@@ -740,6 +748,102 @@ public class OutsourceOrderDeliveryServiceImpl
     private Long effectiveFactoryId(OutsourceOrderDelivery d, Map<Long, Long> orderFactoryMap) {
         if (d.getFactoryId() != null) return d.getFactoryId();
         return d.getOrderId() != null ? orderFactoryMap.get(d.getOrderId()) : null;
+    }
+
+    /**
+     * 加工退货**详情**（2026-09-21 用户口径「加工退货页面的列表也应该有详情」）：一条红冲收货记录的
+     * 完整信息 + **它审核后实际动了什么**——
+     * <ol>
+     *   <li>扣减的成品：就是记录自身的 产品/规格/数量/扣减仓库（无需回溯）；</li>
+     *   <li>还回工厂委外仓的物料：按库存流水回溯（`related_delivery_id = 本记录`、
+     *       `related_bill_type = OUTSOURCE_DEFECT`、只取审核动作 `OUTSOURCE_DEFECT_RETURN`）；</li>
+     *   <li>冲减的应付金额：`finance_payable` 里 `source_id = 本记录`、`source_bill_type = OUTSOURCE_DELIVERY`
+     *       （负数=冲减应付）。</li>
+     * </ol>
+     * <p>②③ 只在**已审核**时有意义（草稿未落账、反审核会等量逆回），故仅当 status=AUDITED 才查；
+     * 前端据此显示"未落账"。</p>
+     */
+    @Override
+    public Map<String, Object> defectReturnDetail(Long id) {
+        OutsourceOrderDelivery d = baseMapper.selectById(id);
+        if (d == null || !DeliveryType.DEFECT_RETURN.getCode().equals(d.getDeliveryType()))
+            throw new BusinessException("加工退货记录不存在");
+
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", d.getId());
+        m.put("deliveryDate", d.getDeliveryDate());
+        m.put("status", d.getStatus());
+        m.put("createTime", d.getCreateTime());
+        m.put("orderId", d.getOrderId());
+        OutsourceOrder order = d.getOrderId() != null ? orderMapper.selectById(d.getOrderId()) : null;
+        m.put("orderCode", order != null ? order.getCode() : null);
+        // 加工厂与台账同口径：记录自身 factory_id 优先，缺失时回退到关联加工单
+        Long factoryId = d.getFactoryId() != null ? d.getFactoryId()
+                : (order != null ? order.getFactoryId() : null);
+        m.put("factoryId", factoryId);
+        m.put("factoryName", supplierNameOf(factoryId));
+        Product p = d.getProductMasterId() != null ? productService.getById(d.getProductMasterId()) : null;
+        m.put("productMasterId", d.getProductMasterId());
+        m.put("productName", p != null ? p.getName() : "");
+        m.put("sku", p != null ? p.getSku() : "");
+        m.put("qualityType", d.getQualityType());
+        m.put("quantity", d.getQuantity());
+        m.put("warehouseId", d.getWarehouseId());
+        m.put("warehouseName", warehouseNameOf(d.getWarehouseId()));
+        m.put("remark", d.getRemark());
+        m.put("sourceType", d.getSourceType());
+        m.put("linked", d.getOrderId() != null);
+
+        boolean audited = DocStatus.AUDITED.getCode().equals(d.getStatus());
+        m.put("settled", audited);
+        List<Map<String, Object>> materials = new ArrayList<>();
+        BigDecimal payableAmount = BigDecimal.ZERO;
+        String payableStatus = null;
+        if (audited) {
+            // ② 还回工厂委外仓的物料（审核动作的流水；反审核的等量逆回流水不算）
+            for (WarehouseStockLog log : stockLogMapper.selectList(new LambdaQueryWrapper<WarehouseStockLog>()
+                    .eq(WarehouseStockLog::getRelatedDeliveryId, d.getId())
+                    .eq(WarehouseStockLog::getRelatedBillType, RelatedBillType.OUTSOURCE_DEFECT.getCode())
+                    .eq(WarehouseStockLog::getChangeType, StockChangeType.OUTSOURCE_DEFECT_RETURN.getCode())
+                    .isNotNull(WarehouseStockLog::getMaterialId)
+                    .orderByAsc(WarehouseStockLog::getId))) {
+                Map<String, Object> mm = new LinkedHashMap<>();
+                mm.put("materialId", log.getMaterialId());
+                mm.put("materialName", log.getMaterialName());
+                mm.put("qualityType", log.getQualityType());
+                mm.put("quantity", log.getChangeQuantity());
+                mm.put("warehouseId", log.getWarehouseId());
+                mm.put("warehouseName", warehouseNameOf(log.getWarehouseId()));
+                materials.add(mm);
+            }
+            // ③ 本记录产生的应付（负数=冲减）
+            List<FinancePayable> payables = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
+                    .eq(FinancePayable::getSourceId, d.getId())
+                    .eq(FinancePayable::getSourceBillType, SourceBillType.OUTSOURCE_DELIVERY.getCode())
+                    .orderByAsc(FinancePayable::getId));
+            for (FinancePayable f : payables) {
+                if (f.getAmount() != null) payableAmount = payableAmount.add(f.getAmount());
+                if (payableStatus == null) payableStatus = f.getStatus();
+            }
+        }
+        m.put("materials", materials);
+        m.put("payableAmount", payableAmount);
+        m.put("payableStatus", payableStatus);
+        return m;
+    }
+
+    /** 加工厂名（单条查询，供详情用） */
+    private String supplierNameOf(Long supplierId) {
+        if (supplierId == null) return "";
+        Supplier s = supplierMapper.selectById(supplierId);
+        return s != null ? s.getName() : "";
+    }
+
+    /** 仓库名（单条查询，供详情用） */
+    private String warehouseNameOf(Long warehouseId) {
+        if (warehouseId == null) return "";
+        Warehouse w = warehouseMapper.selectById(warehouseId);
+        return w != null ? w.getWarehouseName() : "";
     }
 
     /**
