@@ -99,10 +99,25 @@ public class OrderDeliveryController {
         return R.ok();
     }
 
-    /** 无单加工退货列表（成品收货列表页「无单加工退货」区块） */
+    /**
+     * 无单加工退货列表（**兼容保留**：2026-09-21 起前端已改用下面的台账端点
+     * {@link #defectReturnPage} 把有单/无单展示在一张表；本端点供既有回归脚本与外部调用继续使用）。
+     */
     @GetMapping("/return-defect-no-order/list")
     public R<List<Map<String, Object>>> listNoOrderReturns() {
         return R.ok(deliveryService.listNoOrderReturns());
+    }
+
+    /**
+     * **不良退货台账**（2026-09-21 用户口径）：有单 + 无单**一张表** ——「加工退货」菜单页
+     * 「不良退货」页签的数据源，用「关联加工单」列区分（有单显示加工单号、无单显示"未关联"）。
+     */
+    @GetMapping("/return-defect/page")
+    public R<Map<String, Object>> defectReturnPage(@RequestParam(defaultValue = "1") Integer page,
+                                                   @RequestParam(defaultValue = "10") Integer size,
+                                                   @RequestParam(required = false) String linked,
+                                                   @RequestParam(required = false) String status) {
+        return R.ok(deliveryService.pageDefectReturns(page, size, linked, status));
     }
 
     /**

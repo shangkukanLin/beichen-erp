@@ -194,21 +194,47 @@ if ($d8c -and $d8c.ok) {
   if ($d8c.hasDetail) { Ok '收货记录操作列有「详情」入口' } else { Bad '收货记录操作列缺少「详情」入口' }
 }
 
-# ⑨ 无单加工退货（2026-09-21 用户口径）：成品收货列表页必须有该区块；加工退货页不再提供不良退货入口
-#    该功能的业务口径（扣成品/还料/冲应付、可反审核、草稿可删）由 verify-no-order-return.ps1 覆盖（API 级）
+# ⑨ 成品收货页**只做收货**（2026-09-21 用户口径「成品收货里面一个页面还有两个列表很别扭」）：
+#    原先挂在本页下方的「无单加工退货」区块已迁到「加工退货」页 ⇒ 本页不得再出现该区块/退货按钮。
+#    ⚠️ 断言一律按**按钮文本**取值：侧栏有「加工退货」菜单，用 body 文本判定必然假通过。
 OpenFresh "$base/outsource/order/delivery"
-$d9 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({title:t.includes('无单加工退货'),btn:b.includes('新增无单加工退货'),col:t.includes('退货数量')==true});})()" '成品收货列表页·无单区块'
+$d9 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({title:t.includes('无单加工退货'),btn:b.includes('新增无单加工退货'),ret:b.some(x=>x==='退货')});})()" '成品收货列表页'
 if ($d9) {
-  if ($d9.title) { Ok '成品收货列表页有「无单加工退货」区块' } else { Bad '成品收货列表页缺少「无单加工退货」区块' }
-  if ($d9.btn) { Ok '无单加工退货区块有「新增无单加工退货」按钮' } else { Bad '无单加工退货区块缺少「新增无单加工退货」按钮' }
-  if ($d9.col) { Ok '无单加工退货区块有「退货数量」列' } else { Bad '无单加工退货区块缺少「退货数量」列' }
+  if (-not $d9.title) { Ok '成品收货列表页已无「无单加工退货」区块（退回统一到加工退货页）' } else { Bad '成品收货列表页仍有「无单加工退货」区块（应已迁走）' }
+  if (-not $d9.btn) { Ok '成品收货列表页已无「新增无单加工退货」按钮' } else { Bad '成品收货列表页仍有「新增无单加工退货」按钮' }
+  if (-not $d9.ret) { Ok '成品收货列表页已无「退货」入口' } else { Bad '成品收货列表页仍出现「退货」按钮' }
 }
+
+# ⑨b 加工退货页「不良退货」页签 = **有单 + 无单一张台账表**（2026-09-21 用户口径）：
+#     行来自 outsource_order_delivery 的 DEFECT_RETURN 记录，用「关联加工单」列区分有单/无单；
+#     本页可新增"无单"那条（有单的退回仍在该加工单的收货详细页发起）。
+#     该台账的业务口径（扣成品/还料/冲应付、可反审核、草稿可删）由 verify-no-order-return.ps1 覆盖（API 级）
 OpenFresh "$base/outsource/return-order"
-$d10 = ReadJson "(()=>{const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({defect:b.includes('新增不良退货'),repair:b.includes('新增维修退货')});})()" '加工退货列表页'
+$d9b = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-table')].filter(x=>x.getClientRects().length>0)[0];const ths=t?[...t.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim()):[];const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim()),cols:ths,w:ths.includes('关联加工单'),qty:ths.includes('退货数量'),btn:b.includes('新增无单不良退货')});})()" '加工退货页·不良退货台账'
+if ($d9b) {
+  Write-Output ('加工退货页签 = ' + ($d9b.tabs -join ' | ') + ' ；台账列 = ' + ($d9b.cols -join '/'))
+  if ($d9b.w -and $d9b.qty) { Ok '不良退货台账=一张表：含「关联加工单」（有单显示单号/无单显示未关联）与「退货数量」列' }
+  else { Bad ('不良退货台账列不符（缺 关联加工单 或 退货数量）：' + ($d9b.cols -join '/')) }
+  if ($d9b.btn) { Ok '不良退货页签有「新增无单不良退货」入口（有单的退回在加工单收货详细页）' } else { Bad '不良退货页签缺少「新增无单不良退货」入口' }
+}
+# 台账表「一行显示完、不横向滑动」（与其它列表同一家规）
+$w9 = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-table')].filter(x=>x.getClientRects().length>0)[0];const ths=[...document.querySelectorAll('.el-table__header th')];const sum=ths.reduce((s,x)=>s+x.offsetWidth,0);const box=t?t.clientWidth:0;const sc=t?t.classList.contains('el-table--scrollable-x'):true;const w=document.querySelector('.el-table__body-wrapper .el-scrollbar__wrap');return JSON.stringify({sum:sum,box:box,sc:sc,wrapOver:(w?w.scrollWidth>w.clientWidth:true),cols:ths.length});})()" '台账表宽度'
+if ($w9) {
+  Write-Output ('不良退货台账 列数=' + $w9.cols + ' 列宽合计=' + $w9.sum + ' 容器=' + $w9.box)
+  if (-not $w9.sc -and -not $w9.wrapOver) { Ok '不良退货台账无横向滚动（一行显示完）' }
+  else { Bad ('不良退货台账出现横向滚动条（列宽合计 ' + $w9.sum + ' vs 容器 ' + $w9.box + '）') }
+}
+$d10 = ReadJson "(()=>{const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({defect:b.includes('新增不良退货')});})()" '加工退货页·不良退货页签'
 if ($d10) {
-  # 不良退货已统一到「成品收货」（有单走该单的加工退货、无单走成品收货列表的无单加工退货）
-  if (-not $d10.defect) { Ok '加工退货页已无「新增不良退货」入口（已统一到成品收货）' } else { Bad '加工退货页仍有「新增不良退货」按钮（应已移除）' }
-  if ($d10.repair) { Ok '加工退货页仍保留「新增维修退货」（维修退货不在本次统一范围）' } else { Bad '加工退货页缺少「新增维修退货」按钮' }
+  # 「新增不良退货」= 上一代独立退货单的新增入口：已停止新增（存量单据仍在「历史不良退货单」页签可审核/反审核/作废）
+  if (-not $d10.defect) { Ok '不良退货页签已无「新增不良退货」（独立单据停止新增）' } else { Bad '仍出现「新增不良退货」按钮（应已移除）' }
+}
+# 切到「维修退货」页签：独立维修退货单的新增入口应出现（维修退货不在本次统一范围）
+EvalJs "(()=>{const t=[...document.querySelectorAll('.el-tabs__item')].find(x=>x.innerText.trim()==='维修退货');if(t)t.click();return 'clicked';})()" | Out-Null
+agent-browser wait 1500
+$d10b = ReadJson "(()=>{const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({repair:b.includes('新增维修退货')});})()" '加工退货页·维修退货页签'
+if ($d10b) {
+  if ($d10b.repair) { Ok '维修退货页签保留「新增维修退货」（维修退货不在本次统一范围）' } else { Bad '维修退货页签缺少「新增维修退货」按钮' }
 }
 
 if ($global:fail -eq 0) { Write-Output 'RESULT PASS 成品收货/物料收货独立菜单与一步收货均正常' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }

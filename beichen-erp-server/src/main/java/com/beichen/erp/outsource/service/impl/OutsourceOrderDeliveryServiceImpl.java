@@ -636,6 +636,85 @@ public class OutsourceOrderDeliveryServiceImpl
     }
 
     /**
+     * **不良退货台账**（2026-09-21 用户口径）：**有单 + 无单都在这张表里**。
+     * <p>行 = 本表 `delivery_type=DEFECT_RETURN` 的记录 —— 有单红冲（挂加工单）与无单红冲
+     * （{@link #returnDefectNoOrder}）**同表且字段同构**，前端只用「关联加工单」列区分
+     * （有单回填加工单号、无单留空显示"未关联"）；审核/反审核/删除沿用通用端点，
+     * 因此台账不需要任何"按来源分派动作"的分支。</p>
+     * <p>名称一律**批量回填**（加工单号 / 产品 / 加工厂 / 仓库），避免逐行查询的 N+1。</p>
+     */
+    @Override
+    public Map<String, Object> pageDefectReturns(Integer pageNo, Integer size, String linked, String status) {
+        LambdaQueryWrapper<OutsourceOrderDelivery> qw = new LambdaQueryWrapper<OutsourceOrderDelivery>()
+                .eq(OutsourceOrderDelivery::getDeliveryType, DeliveryType.DEFECT_RETURN.getCode());
+        if ("WITH_ORDER".equalsIgnoreCase(linked)) qw.isNotNull(OutsourceOrderDelivery::getOrderId);
+        else if ("WITHOUT_ORDER".equalsIgnoreCase(linked)) qw.isNull(OutsourceOrderDelivery::getOrderId);
+        if (status != null && !status.isBlank()) qw.eq(OutsourceOrderDelivery::getStatus, status);
+        qw.orderByDesc(OutsourceOrderDelivery::getId);
+
+        Page<OutsourceOrderDelivery> pageResult = baseMapper.selectPage(
+                new Page<>(pageNo == null || pageNo < 1 ? 1 : pageNo, size == null || size < 1 ? 10 : size), qw);
+        List<OutsourceOrderDelivery> records = pageResult.getRecords();
+
+        // 加工单号（有单才有）
+        Map<Long, String> orderCodeMap = new HashMap<>();
+        List<Long> orderIds = records.stream().map(OutsourceOrderDelivery::getOrderId)
+                .filter(id -> id != null).distinct().collect(Collectors.toList());
+        if (!orderIds.isEmpty()) {
+            for (OutsourceOrder o : orderMapper.selectBatchIds(orderIds)) orderCodeMap.put(o.getId(), o.getCode());
+        }
+        // 产品（主数据）
+        Map<Long, Product> productMap = new HashMap<>();
+        List<Long> masterIds = records.stream().map(OutsourceOrderDelivery::getProductMasterId)
+                .filter(id -> id != null).distinct().collect(Collectors.toList());
+        if (!masterIds.isEmpty()) {
+            for (Product p : productService.listByIds(masterIds)) productMap.put(p.getId(), p);
+        }
+        // 加工厂
+        Map<Long, String> factoryNameMap = new HashMap<>();
+        List<Long> factoryIds = records.stream().map(OutsourceOrderDelivery::getFactoryId)
+                .filter(id -> id != null).distinct().collect(Collectors.toList());
+        if (!factoryIds.isEmpty()) {
+            for (Supplier s : supplierMapper.selectBatchIds(factoryIds)) factoryNameMap.put(s.getId(), s.getName());
+        }
+        // 扣减的成品仓
+        Map<Long, String> warehouseNameMap = new HashMap<>();
+        List<Long> warehouseIds = records.stream().map(OutsourceOrderDelivery::getWarehouseId)
+                .filter(id -> id != null).distinct().collect(Collectors.toList());
+        if (!warehouseIds.isEmpty()) {
+            for (Warehouse w : warehouseMapper.selectBatchIds(warehouseIds))
+                warehouseNameMap.put(w.getId(), w.getWarehouseName());
+        }
+
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (OutsourceOrderDelivery d : records) {
+            Product p = d.getProductMasterId() != null ? productMap.get(d.getProductMasterId()) : null;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", d.getId());
+            m.put("deliveryDate", d.getDeliveryDate());
+            m.put("orderId", d.getOrderId());
+            // 「关联加工单」列：有单给单号、无单为空（前端显示"未关联"）
+            m.put("orderCode", d.getOrderId() != null ? orderCodeMap.get(d.getOrderId()) : null);
+            m.put("factoryId", d.getFactoryId());
+            m.put("factoryName", d.getFactoryId() != null ? factoryNameMap.get(d.getFactoryId()) : "");
+            m.put("productMasterId", d.getProductMasterId());
+            m.put("productName", p != null ? p.getName() : "");
+            m.put("sku", p != null ? p.getSku() : "");
+            m.put("qualityType", d.getQualityType());
+            m.put("quantity", d.getQuantity());
+            m.put("warehouseId", d.getWarehouseId());
+            m.put("warehouseName", d.getWarehouseId() != null ? warehouseNameMap.get(d.getWarehouseId()) : "");
+            m.put("status", d.getStatus());
+            m.put("remark", d.getRemark());
+            rows.add(m);
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("total", pageResult.getTotal());
+        out.put("records", rows);
+        return out;
+    }
+
+    /**
      * 无单加工退货审核：与有单红冲同口径，只是把"加工单"换成"工厂 + 产品 BOM 快照"。
      * <p>① 扣所选规格的成品库存；② 按 BOM 快照拆料、料还回**该工厂的委外仓**；
      * ③ 按**还回物料的 FIFO 价值**冲减应付（负数）。</p>

@@ -77,4 +77,15 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
 
     /** 无单加工退货列表（成品收货列表页「无单加工退货」区块，按ID倒序） */
     List<Map<String, Object>> listNoOrderReturns();
+
+    /**
+     * **不良退货台账**（2026-09-21 用户口径）：**有单 + 无单都在这张表里** ——
+     * 行取自本表 `delivery_type=DEFECT_RETURN` 的记录：有关联加工单的（该单收货详细页发起的红冲收货）
+     * 与不关联加工单的（{@link #returnDefectNoOrder}），字段完全同构，前端只用「关联加工单」列区分
+     * （有单显示加工单号 / 无单显示"未关联"），审核·反审核·删除沿用通用端点。
+     *
+     * @param linked ALL（默认，全部）/ WITH_ORDER（只看关联加工单）/ WITHOUT_ORDER（只看无单）
+     * @param status 单据状态筛选（DRAFT / AUDITED，可空）
+     */
+    Map<String, Object> pageDefectReturns(Integer pageNo, Integer size, String linked, String status);
 }
