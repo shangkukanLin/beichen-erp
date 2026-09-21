@@ -6,7 +6,7 @@ package com.beichen.erp.outsource.common;
  * <p>同一张「加工退货单」承载两类业务，规则差异集中在
  * {@code OutsourceReturnOrderServiceImpl} 的类型校验里：</p>
  * <ul>
- *   <li>{@link #DEFECT} <b>不良退货</b>：工厂交货给我方后我方发现不良 → 退回工厂。
+ *   <li>{@link #DEFECT} <b>加工退货</b>：工厂交货给我方后我方发现不良 → 退回工厂。
  *       可关联加工单（也可不关联）；<b>不产生工厂收费</b>（不良是工厂的问题，加工厂不向我方收费）；
  *       退货物料按 BOM 快照还回工厂委外仓并按明细金额冲减已生成的加工应付。</li>
  *   <li>{@link #REPAIR} <b>维修退货</b>：客户使用后退回我方的售后品 → 推给工厂维修。
@@ -16,8 +16,8 @@ package com.beichen.erp.outsource.common;
  */
 public enum OutsourceReturnType {
 
-    /** 不良退货（工厂交货发现不良，退回工厂） */
-    DEFECT("不良退货"),
+    /** 加工退货（工厂交货发现不良，退回工厂） */
+    DEFECT("加工退货"),
 
     /** 维修退货（客户退货的售后品推给工厂维修，工厂收费） */
     REPAIR("维修退货");

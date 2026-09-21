@@ -109,8 +109,8 @@ public class OrderDeliveryController {
     }
 
     /**
-     * **不良退货台账**（2026-09-21 用户口径）：有单 + 无单**一张表** ——「加工退货」菜单页
-     * 「不良退货」页签的数据源，用「关联加工单」列区分（有单显示加工单号、无单显示"未关联"）。
+     * **加工退货台账**（2026-09-21 用户口径）：有单 + 无单**一张表** ——「加工退货」菜单页
+     * 「加工退货」页签的数据源，用「关联加工单」列区分（有单显示加工单号、无单显示"未关联"）。
      */
     @GetMapping("/return-defect/page")
     public R<Map<String, Object>> defectReturnPage(@RequestParam(defaultValue = "1") Integer page,

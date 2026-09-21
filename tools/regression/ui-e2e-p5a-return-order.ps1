@@ -1,4 +1,4 @@
-﻿# P5a (2026-09-18 full-flow E2E): 加工退货 - 不良退货(DEFECT) x2 through the frontend only.
+﻿# P5a (2026-09-18 full-flow E2E): 加工退货 - the DEFECT type x2 through the frontend only.
 #   #1 linked to a work order (BOM snapshot forced by the order), #2 unlinked (pick snapshot manually).
 #   audit -> assert: finished stock out (OUTSOURCE_RETURN_OUT), BOM materials back into the factory warehouse,
 #                    negative payable generated.
@@ -56,7 +56,7 @@ if ($need -gt 0) {
     Step ('defect return #' + $i)
     Open '/outsource/return-order' 3000
     ClearErrs | Out-Null
-    # type tabs: click the 不良退货 tab first, then the 新增不良退货 button
+    # type tabs: click the 加工退货 tab first, then the 新增加工退货 button
     ClickText (ZH 'val_defect_type') | Out-Null
     Start-Sleep -Milliseconds 1200
     Write-Host ('  new defect return: ' + (ClickBtn 'btn_new_defect_return'))

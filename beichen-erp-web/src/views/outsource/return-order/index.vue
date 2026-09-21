@@ -2,18 +2,19 @@
 /**
  * 委外加工退货
  *
- * <p>2026-09-21（用户口径）：**「不良退货」页签改成一张台账表** —— 有单（挂加工单、在该单收货详细页
+ * <p>2026-09-21（用户口径）：**「加工退货」页签改成一张台账表** —— 有单（挂加工单、在该单收货详细页
  * 发起）与无单（本页发起）**同表同字段**，只用「关联加工单」列区分（有单显示加工单号、无单显示"未关联"）。
  * 它们本来就是同一条负数收货记录（`delivery_type=DEFECT_RETURN`、`is_reverse=1`），审核/反审核/删除
  * 也走同一套端点，所以合并成一张表不需要任何"按来源分派动作"的分支。</p>
  *
- * <p>两个页签：①**不良退货**＝红冲收货台账（有单+无单，本页可新增"无单"那条）②**维修退货**
- * ＝售后品推给工厂维修（送修/返回/结案）。</p>
+ * <p>两个页签：①**加工退货**＝红冲收货台账（有单+无单，本页可新增"无单"那条）②**维修退货**
+ * ＝售后品推给工厂维修（送修/返回/结案）。⚠️ 页签①与页面/菜单同名是有意的（用户口径「文案改成加工退货」）——
+ * 本页按「退回加工厂」这一大类组织，两个页签是它的两种情形。</p>
  *
- * <p>2026-09-21（用户口径「统一命名」+「历史不良退货单不要了」）：动作名统一成**不良退货**
- * （加工单收货详细页的按钮同步改名）；上一代独立不良退货单（`outsource_return_order` 的 DEFECT，
- * 已停止新增）**不再单独列页签** —— 存量单据如需反审核/作废，走详情页 URL 直达
- * （`/outsource/return-order/detail/{id}`）。</p>
+ * <p>2026-09-21（用户口径「文案统一成加工退货」+「历史加工退货单不要了」）：动作名全链一个词（加工单
+ * 收货详细页的按钮、后端提示语与备注快照同步改名；沿革 退不良 → 加工退货 → 不良退货 → **定稿加工退货**）；
+ * 上一代独立加工退货单（`outsource_return_order` 的 DEFECT，已停止新增）**不再单独列页签** ——
+ * 存量单据如需反审核/作废，走详情页 URL 直达（`/outsource/return-order/detail/{id}`）。</p>
  */
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
@@ -24,13 +25,13 @@ import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_K
 
 const router = useRouter()
 
-/** 页签：DEFECT=不良退货（红冲收货台账）/ REPAIR=维修退货（独立退货单） */
+/** 页签：DEFECT=加工退货（红冲收货台账）/ REPAIR=维修退货（独立退货单） */
 type TabKey = 'DEFECT' | 'REPAIR'
 const activeTab = ref<TabKey>('DEFECT')
 /** 维修退货的返回进度筛选（2026-09-17）：PENDING_RETURN 还有未返回 / CLOSED 已结案 */
 const progress = ref<string>('')
 
-// ==================== ① 不良退货台账（有单 + 无单一张表，2026-09-21 用户口径） ====================
+// ==================== ① 加工退货台账（有单 + 无单一张表，2026-09-21 用户口径） ====================
 const ledger = ref<any[]>([])
 const ledgerLoading = ref(false)
 /** 关联加工单筛选：'' 全部 / WITH_ORDER 已关联 / WITHOUT_ORDER 未关联 */
@@ -49,7 +50,7 @@ async function loadLedger() {
     ledger.value = r?.records || []
     ledgerPage.total = Number(r?.total || 0)
   } catch (e: any) {
-    ElMessage.error('加载不良退货失败：' + (e?.msg || e?.message || '未知错误'))
+    ElMessage.error('加载加工退货失败：' + (e?.msg || e?.message || '未知错误'))
   } finally { ledgerLoading.value = false }
 }
 function ledgerSearch() { ledgerPage.pageNum = 1; loadLedger() }
@@ -58,8 +59,8 @@ function specText(q?: string) { return q === 'DEFECT' ? '不良' : (q ? q + '规
 
 async function auditLedger(row: any) {
   const tip = row.orderCode
-    ? '确定审核该不良退货吗？审核后将扣减成品库存、把 BOM 料还回工厂委外仓并冲减应付，该加工单的已收数量同步回退。'
-    : '确定审核该不良退货吗？审核后将扣减成品库存、把 BOM 料还回所选加工厂的委外仓，并按还回料的 FIFO 价值冲减应付。'
+    ? '确定审核该加工退货吗？审核后将扣减成品库存、把 BOM 料还回工厂委外仓并冲减应付，该加工单的已收数量同步回退。'
+    : '确定审核该加工退货吗？审核后将扣减成品库存、把 BOM 料还回所选加工厂的委外仓，并按还回料的 FIFO 价值冲减应付。'
   try { await ElMessageBox.confirm(tip, '审核', { type: 'warning' }) } catch { return }
   try { await request.put(`/outsource/order-delivery/${row.id}/audit`); ElMessage.success('已审核'); await loadLedger() }
   catch (e: any) { ElMessage.error(e?.message || '审核失败') }
@@ -70,12 +71,12 @@ async function unauditLedger(row: any) {
   catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 async function deleteLedger(row: any) {
-  try { await ElMessageBox.confirm('确定删除该不良退货草稿吗？', '删除', { type: 'warning' }) } catch { return }
+  try { await ElMessageBox.confirm('确定删除该加工退货草稿吗？', '删除', { type: 'warning' }) } catch { return }
   try { await request.delete(`/outsource/order-delivery/${row.id}`); ElMessage.success('已删除'); await loadLedger() }
   catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 
-// ---------- 新增"无单"不良退货（不关联加工单；有单的退回请到该加工单的收货详细页） ----------
+// ---------- 新增"无单"加工退货（不关联加工单；有单的退回请到该加工单的收货详细页） ----------
 const noOrderVisible = ref(false)
 const noOrderSaving = ref(false)
 /** 退货规格：与加工单收货详细页的退货弹窗同一口径（A/B/C/不良） */
@@ -116,7 +117,7 @@ async function submitNoOrder() {
       productMasterId: noOrderForm.productMasterId, qualityType: noOrderForm.qualityType,
       quantity: qty, remark: noOrderForm.remark
     })
-    ElMessage.success('不良退货草稿已保存，请在下方列表审核')
+    ElMessage.success('加工退货草稿已保存，请在下方列表审核')
     noOrderVisible.value = false
     activeTab.value = 'DEFECT'
     await loadLedger()
@@ -141,7 +142,7 @@ async function loadData() {
   } finally { loading.value = false }
 }
 
-/** 切页签：不良退货看台账、维修退货看独立退货单；分页与进度筛选各自重置 */
+/** 切页签：加工退货看台账、维修退货看独立退货单；分页与进度筛选各自重置 */
 function handleTabChange() {
   pagination.pageNum = 1; ledgerPage.pageNum = 1; progress.value = ''
   if (activeTab.value === 'DEFECT') { loadLedger(); return }
@@ -176,11 +177,11 @@ async function handleCancel(row: any) {
   try { await request.put(`/outsource/return-order/${row.id}/cancel`); ElMessage.success('已作废'); loadData() } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
-/** 新增时带上类型（维修退货），进新增页后表单按类型切换（2026-09-21：不良退货已不在本页新增） */
+/** 新增时带上类型（维修退货），进新增页后表单按类型切换（2026-09-21：加工退货已不在本页新增） */
 function handleAdd(type: string) { router.push(`/outsource/return-order/add?returnType=${type || OutsourceReturnType.REPAIR}`) }
 /** E4：草稿可编辑（后端 PUT /outsource/return-order/{id}，仅 DRAFT） */
 function handleEdit(row: any) { router.push(`/outsource/return-order/edit/${row.id}`) }
-/** 加工单号 → 该加工单详情（有单的不良退货由它承载数量回退） */
+/** 加工单号 → 该加工单详情（有单的加工退货由它承载数量回退） */
 function goOrder(row: any) { if (row.orderId) router.push(`/outsource/order/detail/${row.orderId}`) }
 
 function reloadCurrent() {
@@ -202,13 +203,13 @@ onMounted(() => { loadLedger() })
 <template>
   <div style="display:flex;flex-direction:column;gap:12px">
     <el-card shadow="never">
-      <!-- 新增入口按页签切换（2026-09-21 用户口径）：不良退货页只新增"无单"那种（有单的请到加工单收货详细页），
+      <!-- 新增入口按页签切换（2026-09-21 用户口径）：加工退货页只新增"无单"那种（有单的请到加工单收货详细页），
            维修退货页新增独立维修退货单。 -->
       <template v-if="activeTab === 'DEFECT'">
-        <el-button type="danger" :icon="'Plus'" @click="openNoOrder">新增无单不良退货</el-button>
+        <el-button type="danger" :icon="'Plus'" @click="openNoOrder">新增无单加工退货</el-button>
         <span style="margin-left:12px;color:var(--app-text-secondary);font-size:var(--app-font-xs);line-height:1.6">
           退回某批已收成品、但**不挂加工单**（单据已结／无需挂单）时在此登记；<b>有关联加工单的退回</b>请到该加工单的
-          收货详细页用「不良退货」—— 两者是同一个动作（红冲收货），都会出现在下方同一张表里，用「关联加工单」列区分。
+          收货详细页用「加工退货」—— 两者是同一个动作（红冲收货），都会出现在下方同一张表里，用「关联加工单」列区分。
         </span>
       </template>
       <template v-else-if="activeTab === 'REPAIR'">
@@ -222,14 +223,14 @@ onMounted(() => { loadLedger() })
       </template>
     </el-card>
     <el-card shadow="never">
-      <!-- 页签（2026-09-21）：不良退货 = 红冲收货台账（有单+无单一张表）；维修退货 = 售后送修（送修/返回/结案）。
-           ⚠️ 上一代独立不良退货单不再单独列页签（用户口径「不要了」）⇒ 存量单据走详情页 URL 直达。 -->
+      <!-- 页签（2026-09-21）：加工退货 = 红冲收货台账（有单+无单一张表）；维修退货 = 售后送修（送修/返回/结案）。
+           ⚠️ 上一代独立加工退货单不再单独列页签（用户口径「不要了」）⇒ 存量单据走详情页 URL 直达。 -->
       <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
         <el-tab-pane :label="OutsourceReturnTypeLabel[OutsourceReturnType.DEFECT]" name="DEFECT" />
         <el-tab-pane :label="OutsourceReturnTypeLabel[OutsourceReturnType.REPAIR]" name="REPAIR" />
       </el-tabs>
 
-      <!-- ============ ① 不良退货台账：有单 + 无单一张表（「关联加工单」列区分） ============ -->
+      <!-- ============ ① 加工退货台账：有单 + 无单一张表（「关联加工单」列区分） ============ -->
       <template v-if="activeTab === 'DEFECT'">
         <el-form :inline="true" style="margin-bottom:8px">
           <el-form-item label="关联加工单">
@@ -289,7 +290,7 @@ onMounted(() => { loadLedger() })
         <!-- 列宽合计 ≈932px（**留余量**）＜ 内容区，保证「一行显示完、不横向滑动」。
              注意：行数多时出现纵向滚动条会让内容区从 963 缩到约 948，故按 948 兜底。
              2026-09-17：①**去掉「类型」列**——页面已按类型分页签；②压缩各列解决原先 1252px 宽导致状态/操作被挤出屏幕的问题。
-             2026-09-21：不良退货已迁到「不良退货」页签（另一张台账表），本表只剩维修退货 ⇒ 去掉「关联加工单」列。 -->
+             2026-09-21：加工退货已迁到「加工退货」页签（另一张台账表），本表只剩维修退货 ⇒ 去掉「关联加工单」列。 -->
         <el-table :data="list" border stripe v-loading="loading" @row-click="(row: any) => router.push(`/outsource/return-order/detail/${row.id}`)">
           <el-table-column prop="code" label="退货单号" width="140" />
           <el-table-column label="加工厂" width="120" show-overflow-tooltip>
@@ -305,7 +306,7 @@ onMounted(() => { loadLedger() })
             </template>
           </el-table-column>
           <el-table-column label="退货/送修内容" min-width="100" show-overflow-tooltip>
-            <!-- 不良退货显示"退货物料"（BOM 快照），维修退货没有物料 → 显示"产品×数量" -->
+            <!-- 加工退货显示"退货物料"（BOM 快照），维修退货没有物料 → 显示"产品×数量" -->
             <template #default="{ row }">{{ row.itemSummary || row.productSummary || '-' }}</template>
           </el-table-column>
           <!-- 收费方向：加工厂向我方收取（我方付加工厂，审核后生成正向应付） -->
@@ -347,8 +348,8 @@ onMounted(() => { loadLedger() })
       </template>
     </el-card>
 
-    <!-- 新增无单不良退货弹窗：不关联加工单，靠"加工厂 + 产品 + 规格 + 数量"定位（后端按产品 BOM 快照还料） -->
-    <el-dialog v-model="noOrderVisible" title="新增无单不良退货" width="560px" :close-on-click-modal="false">
+    <!-- 新增无单加工退货弹窗：不关联加工单，靠"加工厂 + 产品 + 规格 + 数量"定位（后端按产品 BOM 快照还料） -->
+    <el-dialog v-model="noOrderVisible" title="新增无单加工退货" width="560px" :close-on-click-modal="false">
       <el-form :model="noOrderForm" label-width="120px" size="small">
         <el-form-item required label="加工厂">
           <RemoteSelect v-model="noOrderForm.factoryId" :fetch="fetchFactories" :label-key="(row:any)=>row.name" style="width:100%" placeholder="加工厂（还料/应付对象）" />

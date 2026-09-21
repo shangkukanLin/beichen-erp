@@ -24,10 +24,10 @@ const prefillOrderId = Number(route.query.orderId) || 0
 const prefillReturnType = String(route.query.returnType || '')
 
 const form = reactive({
-  // 退货类型（2026-09-17）：DEFECT 不良退货 / REPAIR 维修退货 —— 规则差异见 onTypeChange 与提交校验
-  // 2026-09-21（用户口径）：不良退货已统一到「成品收货」办理（有单走该单的加工退货、无单走成品收货列表的
+  // 退货类型（2026-09-17）：DEFECT 加工退货 / REPAIR 维修退货 —— 规则差异见 onTypeChange 与提交校验
+  // 2026-09-21（用户口径）：加工退货已统一到「成品收货」办理（有单走该单的加工退货、无单走成品收货列表的
   // 「无单加工退货」）⇒ 本页（独立退货单）**默认维修退货**；显式带 ?returnType=DEFECT 仍按 DEFECT 渲染
-  // （存量不良退货草稿编辑时保持原类型，后端会拒绝把它改成维修退货或新建不良退货）。
+  // （存量加工退货草稿编辑时保持原类型，后端会拒绝把它改成维修退货或新建加工退货）。
   returnType: (prefillReturnType === OutsourceReturnType.DEFECT ? OutsourceReturnType.DEFECT : OutsourceReturnType.REPAIR) as string,
   factoryId: undefined as any, warehouseId: undefined as any,
   returnDate: localDate(), remark: '',
@@ -47,8 +47,8 @@ const linkedOrderCode = ref('')
 const linkedOrderId = ref<number | undefined>(undefined)
 
 /**
- * 切换退货类型：清空明细行（物料明细只对不良退货有意义），
- * 维修退货自动带上「返工费」并锁定收费必填；不良退货强制不收费（不良是工厂的问题，加工厂不向我方收费）。
+ * 切换退货类型：清空明细行（物料明细只对加工退货有意义），
+ * 维修退货自动带上「返工费」并锁定收费必填；加工退货强制不收费（不良是工厂的问题，加工厂不向我方收费）。
  */
 function onTypeChange() {
   rows.value = [createEmptyRow()]
@@ -376,14 +376,14 @@ async function handleSubmit() {
   // 出库仓必选：库存按「仓库+产品」校验，不先选仓就没有比对基准
   if (!form.warehouseId) { ElMessage.warning(isRepair.value ? '请选择送修出库仓' : '请选择成品出库仓'); return }
   // 收费方向：**加工厂向我方收取**（我方付加工厂）。
-  // 维修退货必须收费（工厂收我方维修费）；不良退货禁止收费（不良是工厂的问题，工厂不向我方收费）
+  // 维修退货必须收费（工厂收我方维修费）；加工退货禁止收费（不良是工厂的问题，工厂不向我方收费）
   const charged = Number(form.chargeFlag) === 1
   if (isRepair.value) {
     if (!charged) { ElMessage.warning('维修退货必须填写「加工厂向我方收取」的维修费，请打开「工厂收费」'); return }
     if (!form.chargeType) { ElMessage.warning('请选择收费类型（如返工费）'); return }
     if (!(Number(form.chargeAmount) > 0)) { ElMessage.warning('收费金额必须大于 0'); return }
   } else if (charged) {
-    ElMessage.warning('不良退货不产生工厂收费（不良是工厂的问题，加工厂不向我方收费）')
+    ElMessage.warning('加工退货不产生工厂收费（不良是工厂的问题，加工厂不向我方收费）')
     return
   }
   // 库存校验：退回/送修数量不能超出所选仓**该规格**的库存（未选仓库时查不到库存，不拦截）
@@ -413,14 +413,14 @@ async function handleSubmit() {
     }))
   if (products.length === 0) { ElMessage.warning(isRepair.value ? '请选择产品并填写送修数量' : '请选择产品并填写退回数量'); return }
   if (!isRepair.value) {
-    // 不良退货：退货物料按 BOM 快照自动带出（可不带：包工包料产品 / 该产品无 BOM 快照 → 只退成品）
+    // 加工退货：退货物料按 BOM 快照自动带出（可不带：包工包料产品 / 该产品无 BOM 快照 → 只退成品）
     if (items.some((m: any) => !m.materialId)) { ElMessage.warning('存在未关联委外物料的明细，无法保存，请检查BOM物料是否已登记'); return }
     if (items.length === 0) ElMessage.warning('该产品没有 BOM 快照（无退货物料），将只做成品出库')
   }
   const payload = {
     returnType: form.returnType,
     // 关联加工单 + 来源收货记录：维修退货**不关联**加工单（后端也会拦截）；
-    // 不良退货：只落"来源入口带来的加工单"，手工新建一律不关联（BOM 快照只用于带出退货物料）
+    // 加工退货：只落"来源入口带来的加工单"，手工新建一律不关联（BOM 快照只用于带出退货物料）
     orderId: isRepair.value ? null : (linkedOrderId.value || prefillOrderId || null),
     sourceDeliveryId: isRepair.value ? null : (prefillDeliveryId || null),
     factoryId: form.factoryId, warehouseId: form.warehouseId,
@@ -516,7 +516,7 @@ async function loadMaterialTypes() {
           <span style="font-size:var(--app-font-xs);line-height:1.5">
             {{ isRepair
               ? '维修退货：客户退回的售后品推给工厂维修 —— 不关联加工单、不还料；加工厂向我方收取维修费（必填）；修好后在详情页「登记维修返回」把货入回来。'
-              : '不良退货：工厂交货后发现不良退回工厂 —— 可关联加工单（也可不关联）；退货物料按 BOM 快照还回工厂委外仓；加工厂不向我方收费（不良是工厂的问题）。' }}
+              : '加工退货：工厂交货后发现不良退回工厂 —— 可关联加工单（也可不关联）；退货物料按 BOM 快照还回工厂委外仓；加工厂不向我方收费（不良是工厂的问题）。' }}
           </span>
         </template>
       </el-alert>

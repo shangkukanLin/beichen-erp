@@ -13,7 +13,7 @@ public class ReturnOrder {
     private Long id;
     private String code;
     private Long factoryId;
-    /** 退货类型：见 {@link com.beichen.erp.outsource.common.OutsourceReturnType}（DEFECT不良退货 / REPAIR维修退货） */
+    /** 退货类型：见 {@link com.beichen.erp.outsource.common.OutsourceReturnType}（DEFECT加工退货 / REPAIR维修退货） */
     private String returnType;
     private Long orderId;
     /** 来源交货记录ID（outsource_order_delivery.id）：成品收货页按记录发起退货时落库 */
@@ -36,7 +36,7 @@ public class ReturnOrder {
     /**
      * 结案：0未结案 1已结案（仅维修退货用，2026-09-17）。
      * <p>维修退货是"货在工厂手上、修好陆续送回"的单据，全部送回（未返回=0）后人工确认收尾；
-     * 结案后禁止再登记/撤销维修返回、禁止反审核（需先撤销结案）。不良退货审核即终结，不使用本字段。</p>
+     * 结案后禁止再登记/撤销维修返回、禁止反审核（需先撤销结案）。加工退货审核即终结，不使用本字段。</p>
      */
     private Integer closedFlag;
     /** 结案时间 */

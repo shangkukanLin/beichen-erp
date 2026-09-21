@@ -246,16 +246,16 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void create(ReturnOrder order, Map<String, Object> body) {
-        // 退货类型（2026-09-17）：空值按「不良退货」（与建表默认值一致，兼容存量调用）
+        // 退货类型（2026-09-17）：空值按「加工退货」（与建表默认值一致，兼容存量调用）
         String type = OutsourceReturnType.normalize(order.getReturnType());
-        // 2026-09-21 用户口径：**不良退货不再是本页的职责** —— 该动作本意是"可以不关联加工单"的
-        // 红冲收货，已统一到成品收货侧（有单 → 该加工单收货详细页的「不良退货」；无单 → 「加工退货」
-        // 页「不良退货」页签的「新增无单不良退货」），两者都往 outsource_order_delivery 写负数记录、
-        // 走同一套审核，并汇总到同一张台账。本页只保留维修退货（送修/收费/维修返回/结案确实不是一回事）。
-        // 存量不良退货单不受影响，仍可审核/作废（走详情页 URL）。
+        // 2026-09-21 用户口径：**"退回加工厂"不再是本页的职责** —— 该动作本意是"可以不关联加工单"的
+        // 红冲收货，已统一到「加工退货」页（有单 → 该加工单收货详细页的「加工退货」按钮；无单 →
+        // 该页的「新增无单加工退货」），两者都往 outsource_order_delivery 写负数记录、走同一套审核，
+        // 并汇总到该页同一张台账。本页只保留维修退货（送修/收费/维修返回/结案确实不是一回事）。
+        // 存量独立退货单不受影响，仍可审核/作废（走详情页 URL）。
         if (!OutsourceReturnType.isRepair(type))
-            throw new BusinessException("不良退货请在「加工退货」页的「不良退货」页签办理（有加工单 → 该单收货详细页的"
-                    + "「不良退货」；没有加工单 → 该页签的「新增无单不良退货」）；本页只处理维修退货");
+            throw new BusinessException("本页只处理维修退货；退回加工厂请在「加工退货」页办理（有加工单 → 该加工单的"
+                    + "收货详细页；没有加工单 → 该页的「新增无单加工退货」）");
         order.setReturnType(type);
         // 收费字段先规范化（不收费归零；收费则类型合法且金额 > 0），再做类型专属校验
         normalizeCharge(order, body);
@@ -278,7 +278,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     /**
      * 类型专属校验（2026-09-17 新增，create / update 共用）：
      * <ul>
-     *   <li><b>不良退货</b>：可关联加工单（也可不关联）；<b>不产生工厂收费</b>（不良是工厂的问题，加工厂不向我方收费）。</li>
+     *   <li><b>加工退货</b>：可关联加工单（也可不关联）；<b>不产生工厂收费</b>（不良是工厂的问题，加工厂不向我方收费）。</li>
      *   <li><b>维修退货</b>：<b>必须不关联加工单</b>；<b>必须由加工厂向我方收费</b>（收费类型 + 金额 &gt; 0）；
      *       不涉及 BOM 还料（物料明细必须为空）。</li>
      * </ul>
@@ -293,7 +293,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                     || order.getChargeAmount() == null || order.getChargeAmount().compareTo(BigDecimal.ZERO) <= 0)
                 throw new BusinessException("维修退货必须填写加工厂向我方收取的维修费（收费类型 + 金额大于 0）");
         } else if (order.getChargeFlag() != null && order.getChargeFlag() == 1) {
-            throw new BusinessException("不良退货不产生工厂收费（不良是工厂的问题，加工厂不向我方收费）");
+            throw new BusinessException("加工退货不产生工厂收费（不良是工厂的问题，加工厂不向我方收费）");
         }
         Object productsObj = body.get("products");
         boolean hasProduct = false;
@@ -324,10 +324,10 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         }
         // 退货类型：不传保持原值（草稿可改类型，改后校验按新类型走）
         String type = OutsourceReturnType.normalize(order.getReturnType() == null ? exist.getReturnType() : order.getReturnType());
-        // 2026-09-21：不良退货已统一到成品收货侧 ⇒ 不允许把维修退货改成不良退货
-        // （存量不良退货草稿保持原类型仍可编辑，故只拦"改类型"这一种）
+        // 2026-09-21：退回加工厂已统一到「加工退货」页 ⇒ 不允许把维修退货改成加工退货
+        // （存量加工退货草稿保持原类型仍可编辑，故只拦"改类型"这一种）
         if (!OutsourceReturnType.isRepair(type) && OutsourceReturnType.isRepair(exist.getReturnType()))
-            throw new BusinessException("不良退货已统一到「加工退货」页的「不良退货」页签办理（有单走该单收货详细页、无单走该页签的「新增无单不良退货」），不能再把维修退货改成不良退货");
+            throw new BusinessException("退回加工厂请到「加工退货」页办理（有加工单走该单收货详细页、没有加工单走该页的「新增无单加工退货」），不能再把维修退货改成加工退货");
         order.setReturnType(type);
         // 收费字段先规范化，再做类型专属校验
         normalizeCharge(order, body);
@@ -361,7 +361,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                 throw new BusinessException("维修退货不涉及退货物料（BOM 还料），请清除物料明细");
             itemsRaw = null;
         }
-        // 不良退货：明细按 BOM 快照带出，**允许为空**（包工包料产品无物料，或该产品无 BOM 快照时只退成品）
+        // 加工退货：明细按 BOM 快照带出，**允许为空**（包工包料产品无物料，或该产品无 BOM 快照时只退成品）
         if (itemsRaw == null) itemsRaw = new ArrayList<>();
         // 保存退货物料明细（FIFO 价，草稿阶段不动库存/应付）
         for (Map<String, Object> it : itemsRaw) {
@@ -422,7 +422,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         boolean repair = OutsourceReturnType.isRepair(order.getReturnType());
         List<ReturnOrderItem> items = returnOrderItemMapper.selectList(
             new LambdaQueryWrapper<ReturnOrderItem>().eq(ReturnOrderItem::getReturnOrderId, id));
-        // 2026-09-17：维修退货不还料（明细必须为空）；不良退货允许无明细（包工包料 / 该产品无 BOM 快照 → 只退成品）
+        // 2026-09-17：维修退货不还料（明细必须为空）；加工退货允许无明细（包工包料 / 该产品无 BOM 快照 → 只退成品）
         if (repair && !items.isEmpty())
             throw new BusinessException("维修退货不涉及退货物料，请先清除物料明细");
         // P2-33：数量必须为正；加工厂必须存在（否则找不到工厂委外仓会静默跳过退料入库）
@@ -469,7 +469,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
             if (it.getAmount() != null) totalReturnAmount = totalReturnAmount.add(it.getAmount());
         }
 
-        // 2. 成品从我方仓减少（维修退货=送修出库，用维修流水；不良退货沿用委外退料流水）
+        // 2. 成品从我方仓减少（维修退货=送修出库，用维修流水；加工退货沿用委外退料流水）
         StockChangeType outType = repair ? StockChangeType.OUTSOURCE_REPAIR_OUT : StockChangeType.OUTSOURCE_RETURN_OUT;
         RelatedBillType outBill = repair ? RelatedBillType.OUTSOURCE_REPAIR : RelatedBillType.OUTSOURCE_RETURN;
         if (invWhId != null) {
@@ -486,14 +486,14 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
             }
         } else {
             // F2-1（2026-09-18 审核修复）：两类退货都**必须**先选仓才能审核 ——
-            // 不良退货原先在未选仓时"静默跳过成品扣减"，却照旧执行「退货物料入工厂委外仓 + 负向应付」
+            // 加工退货原先在未选仓时"静默跳过成品扣减"，却照旧执行「退货物料入工厂委外仓 + 负向应付」
             // ⇒ 料账/应付动了、成品库存没动，账实不符（前端已必填，此处是接口层兜底）。
             throw new BusinessException(repair
                     ? "请选择送修出库仓（我方成品仓）"
                     : "请选择成品出库仓（我方成品仓）");
         }
 
-        // 3. 应付冲减（负向应付）：仅不良退货；维修退货不冲减（维修不是退货，加工费照付）
+        // 3. 应付冲减（负向应付）：仅加工退货；维修退货不冲减（维修不是退货，加工费照付）
         if (totalReturnAmount.compareTo(BigDecimal.ZERO) > 0) {
             payableHelper.createPayable(order.getFactoryId(), SourceBillType.OUTSOURCE_RETURN.getCode(),
                 order.getCode(), order.getId(), totalReturnAmount.negate(), order.getReturnDate(),
@@ -501,8 +501,8 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         }
 
         // 4. 收费应付（正向）：**加工厂向我方收取**的费用（我方付加工厂）
-        //    维修退货 → OUTSOURCE_REPAIR_CHARGE「委外维修收费」（单独分账，便于与不良退货对账）
-        //    不良退货 → OUTSOURCE_RETURN_CHARGE（保留历史口径；新建时已禁止收费）
+        //    维修退货 → OUTSOURCE_REPAIR_CHARGE「委外维修收费」（单独分账，便于与加工退货对账）
+        //    加工退货 → OUTSOURCE_RETURN_CHARGE（保留历史口径；新建时已禁止收费）
         if (order.getChargeFlag() != null && order.getChargeFlag() == 1
                 && order.getChargeAmount() != null && order.getChargeAmount().compareTo(BigDecimal.ZERO) > 0) {
             String chargeType = repair ? SourceBillType.OUTSOURCE_REPAIR_CHARGE.getCode()
@@ -577,7 +577,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                         "", order.getId(), normalizeQualityType(p.getQualityType()));   // F7-65①：spec 按约定传 ""（原传 null）
             }
         }
-        // 3. 冲销应付：不良退货=退料负向 + 退货收费正向；维修退货=仅维修收费正向
+        // 3. 冲销应付：加工退货=退料负向 + 退货收费正向；维修退货=仅维修收费正向
         if (repair) {
             payableHelper.reversePayable(id, SourceBillType.OUTSOURCE_REPAIR_CHARGE.getCode());
         } else {
@@ -718,7 +718,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
 
     /**
      * 结案：维修退货单中工厂送修的全部成品都已送回（未返回 = 0）后，人工确认收尾。
-     * <p>只有维修退货需要结案（不良退货审核即终结：料入工厂仓 + 成品出库 + 负应付，没有"回来"腿）。
+     * <p>只有维修退货需要结案（加工退货审核即终结：料入工厂仓 + 成品出库 + 负应付，没有"回来"腿）。
      * 结案后禁止再登记/撤销维修返回、禁止反审核，需先「撤销结案」。</p>
      */
     @Override
@@ -815,7 +815,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
 
     @Override
     public List<Map<String, Object>> orderProducts(Long factoryId) {
-        // 查该工厂**所有**加工单（2026-09-17 放开状态限制）：不良退货可以不关联加工订单，
+        // 查该工厂**所有**加工单（2026-09-17 放开状态限制）：加工退货可以不关联加工订单，
         // 但退货物料要按「BOM 快照」带出 —— 只要该工厂加工过这个产品，就能取到当时的 BOM 用量快照。
         // 2026-09-17 再调（用户口径）：选项单位从「加工单」改为「BOM 快照」——
         //   同一份快照被多张加工单共享时**只出现一次**（不再"有 10 张单就重复 10 行"），
@@ -1014,7 +1014,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
      *
      * <p>三个关键口径：</p>
      * <ol>
-     *   <li><b>按产品主数据ID合计，不按规格</b>：不良退货常把 A 规交来的货以 DEFECT 规格退回，
+     *   <li><b>按产品主数据ID合计，不按规格</b>：加工退货常把 A 规交来的货以 DEFECT 规格退回，
      *       若按「产品+规格」比对，DEFECT 已交量为 0 会把正常业务全部拦死；</li>
      *   <li><b>"已退"只统计已审核的其它退货单</b>（草稿未生效不该占用额度），且**必须排除本单** ——
      *       claim 已把本单置为 AUDITED，不排除就会把自己算进去（批 1 F1-1 的同类坑）；</li>

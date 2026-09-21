@@ -143,7 +143,7 @@ WatchErrors
 ClearErrs
 
 # =====================================================================
-# S1 DISABLED 2026-09-21（用户口径）：不良退货不再由「独立退货单」承担 —— 该入口已从
+# S1 DISABLED 2026-09-21（用户口径）：加工退货不再由「独立退货单」承担 —— 该入口已从
 # /outsource/return-order 页面移除，且后端会拒绝新建 DEFECT 单据（提示去成品收货办理）。
 # 替代覆盖：
 #   ① 有加工单 → 成品收货页的「加工退货」（红冲）—— verify-delivery-menu §④ + verify-fix-f7-64-74
@@ -267,8 +267,8 @@ Ok ((SqlOne "SELECT status FROM outsource_return_order WHERE id=$rid") -eq 'CANC
 
 # =====================================================================
 Step 'S2 the two types differ on the FORM'
-# 显式指定类型：本页默认已改为**维修退货**（不良退货已统一到成品收货），但 ?returnType=DEFECT
-# 仍会按 DEFECT 渲染表单（存量不良退货草稿编辑用）—— 这里就是要对照两种类型的表单差异。
+# 显式指定类型：本页默认已改为**维修退货**（加工退货已统一到成品收货），但 ?returnType=DEFECT
+# 仍会按 DEFECT 渲染表单（存量加工退货草稿编辑用）—— 这里就是要对照两种类型的表单差异。
 Open '/outsource/return-order/add?returnType=DEFECT' 3000
 Ok ((HasLabel (ZH 'lbl_rel_order')) -eq 'true') 'S2 DEFECT: the work-order link field exists'
 Ok ((HasCol 'BOM') -eq 'true') 'S2 DEFECT: the BOM column exists'

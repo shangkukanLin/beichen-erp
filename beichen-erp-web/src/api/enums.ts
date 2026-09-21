@@ -570,16 +570,16 @@ export const OutsourceChargeTypeLabel: Record<string, string> = {
 
 /**
  * 委外加工退货类型（对应后端 OutsourceReturnType 枚举，2026-09-17）
- * <p>DEFECT 不良退货：工厂交货后发现不良退回工厂 —— 可关联加工单（也可不关联）、**禁止向工厂收费**；
+ * <p>DEFECT 加工退货：工厂交货后发现不良退回工厂 —— 可关联加工单（也可不关联）、**禁止向工厂收费**；
  * REPAIR 维修退货：客户使用后退回我方的售后品推给工厂维修 —— **不关联加工单**、**必须由工厂收费**、修好走「维修返回」。</p>
  */
 export const OutsourceReturnType = {
-  DEFECT: 'DEFECT',   // 不良退货
+  DEFECT: 'DEFECT',   // 加工退货
   REPAIR: 'REPAIR'    // 维修退货
 } as const
 
 export const OutsourceReturnTypeLabel: Record<string, string> = {
-  [OutsourceReturnType.DEFECT]: '不良退货',
+  [OutsourceReturnType.DEFECT]: '加工退货',
   [OutsourceReturnType.REPAIR]: '维修退货'
 }
 

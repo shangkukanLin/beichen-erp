@@ -12,12 +12,12 @@ import java.util.Map;
  * <p>退货物料入工厂委外仓、成品出库、负向应付 + 收费应付。草稿-审核-取消审核状态机。</p>
  * <p><b>维修退货的收尾（2026-09-17）</b>：货在工厂手上、修好陆续送回，故按「送修 / 已返回」跟踪，
  * 全部送回（未返回 = 0）后「结案」收尾；结案后禁登记/撤销维修返回、禁反审核。
- * 不良退货审核即终结（无"回来"腿），不使用结案。</p>
+ * 加工退货审核即终结（无"回来"腿），不使用结案。</p>
  */
 public interface OutsourceReturnOrderService {
 
     /**
-     * 分页查询（returnType 为空 = 全部；DEFECT 不良退货 / REPAIR 维修退货）。
+     * 分页查询（returnType 为空 = 全部；DEFECT 加工退货 / REPAIR 维修退货）。
      * @param progress 维修退货进度筛选：PENDING_RETURN 还有未返回 / CLOSED 已结案 / 空=全部
      */
     Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long factoryId, String returnType, String progress);

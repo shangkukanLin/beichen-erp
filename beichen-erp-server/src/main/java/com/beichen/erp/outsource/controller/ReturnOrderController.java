@@ -153,7 +153,7 @@ public class ReturnOrderController {
 
     private ReturnOrder parseOrder(Map<String, Object> body) {
         ReturnOrder o = new ReturnOrder();
-        // 退货类型（2026-09-17）：DEFECT 不良退货 / REPAIR 维修退货；不传则保持原值/默认不良退货
+        // 退货类型（2026-09-17）：DEFECT 加工退货 / REPAIR 维修退货；不传则保持原值/默认加工退货
         Object rt = body.get("returnType");
         if (rt != null && !rt.toString().isBlank()) o.setReturnType(rt.toString());
         Object fid = body.get("factoryId");

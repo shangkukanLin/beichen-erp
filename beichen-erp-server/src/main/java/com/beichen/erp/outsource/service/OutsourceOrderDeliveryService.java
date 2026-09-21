@@ -60,11 +60,11 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
     /** 删除交货记录（仅草稿态可删除） */
     void deleteDelivery(Long id);
 
-    /** 不良退货（成品侧命名，原名「退不良」）：校验后存草稿记录（isReverse=true），落账在审核时执行 */
+    /** 加工退货（成品侧命名，原名「退不良」）：校验后存草稿记录（isReverse=true），落账在审核时执行 */
     void returnDefect(Long orderId, Map<String, Object> body);
 
     /**
-     * **不关联加工单的不良退货**（2026-09-21 用户口径）：与 {@link #returnDefect} 是**同一个动作**，
+     * **不关联加工单的加工退货**（2026-09-21 用户口径）：与 {@link #returnDefect} 是**同一个动作**，
      * 只是不挂加工单 —— 同样往本表写一条负数记录（`delivery_type=DEFECT_RETURN`、`is_reverse=1`），
      * 同样由 {@link #audit(Long)} 落账（扣成品 + BOM 料还回工厂委外仓 + 冲减应付），
      * 同样由 {@link #unaudit(Long)} 回滚、{@link #deleteDelivery(Long)} 删草稿。
@@ -76,14 +76,14 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
     void returnDefectNoOrder(Map<String, Object> body);
 
     /**
-     * 无单不良退货列表（按ID倒序）。
+     * 无单加工退货列表（按ID倒序）。
      * <p>⚠️ **兼容保留**：2026-09-21 起前端改用 {@link #pageDefectReturns} 把有单/无单展示在一张台账；
      * 本方法供既有回归脚本与外部调用继续使用，新代码请用台账端点。</p>
      */
     List<Map<String, Object>> listNoOrderReturns();
 
     /**
-     * **不良退货台账**（2026-09-21 用户口径）：**有单 + 无单都在这张表里** ——
+     * **加工退货台账**（2026-09-21 用户口径）：**有单 + 无单都在这张表里** ——
      * 行取自本表 `delivery_type=DEFECT_RETURN` 的记录：有关联加工单的（该单收货详细页发起的红冲收货）
      * 与不关联加工单的（{@link #returnDefectNoOrder}），字段完全同构，前端只用「关联加工单」列区分
      * （有单显示加工单号 / 无单显示"未关联"），审核·反审核·删除沿用通用端点。
