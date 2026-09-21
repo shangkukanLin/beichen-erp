@@ -155,4 +155,24 @@ foreach ($u in @("$base/outsource/order/delivery", "$base/outsource/material-ord
   }
 }
 
+# ⑧b 交货详细页的「交货记录」表「一行显示完、不横向滑动」（2026-09-21 用户要求）
+#   注：⑧ 覆盖的是两个**列表页**的首张表；这里补的是**交货详细页**里的「交货记录」表
+#   （该页还有一张「按产品分类统计」表 ⇒ 遍历本页所有可见表，任一张溢出即判失败）。
+#   改动背景：该表原 11 列、列宽合计 1310px，而内容区仅约 963px ⇒ 横向溢出 347px（真机实测）；
+#   现重排为 10 列约 924px（附件列并入操作列、长文本列一律 tooltip），实测 scrollWidth == clientWidth。
+if ($oid) {
+  OpenFresh "$base/outsource/order/delivery/$oid"
+  $d8b = ReadJson "(()=>{const ts=[...document.querySelectorAll('.el-table')].filter(t=>t.getClientRects().length>0);return JSON.stringify(ts.map(t=>{const ths=[...t.querySelectorAll('.el-table__header th')];const sum=ths.reduce((s,x)=>s+x.offsetWidth,0);const w=t.querySelector('.el-table__body-wrapper .el-scrollbar__wrap');return {cols:ths.length,sum:sum,box:t.clientWidth,sc:t.classList.contains('el-table--scrollable-x'),over:(w?w.scrollWidth>w.clientWidth:true)};}));})()" '交货记录表宽度'
+  if ($d8b) {
+    Write-Output ('交货详细页 表数=' + @($d8b).Count)
+    $i = 0
+    foreach ($tb in @($d8b)) {
+      $i++
+      Write-Output ('  表#' + $i + ' 列数=' + $tb.cols + ' 列宽合计=' + $tb.sum + ' 容器=' + $tb.box)
+      if (-not $tb.sc -and -not $tb.over) { Ok ('交货详细页 表#' + $i + ' 无横向滚动（一行显示完）') }
+      else { Bad ('交货详细页 表#' + $i + ' 出现横向滚动条（列宽合计 ' + $tb.sum + ' vs 容器 ' + $tb.box + '）') }
+    }
+  }
+}
+
 if ($global:fail -eq 0) { Write-Output 'RESULT PASS 成品收货/物料收货独立菜单与一步交货均正常' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }

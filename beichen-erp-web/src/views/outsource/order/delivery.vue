@@ -300,21 +300,31 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
           <el-button type="warning" size="small" @click="goReturn()">退货</el-button>
         </div>
       </div>
+      <!--
+        2026-09-21（用户要求：交货记录「一行就显示完毕，不要左右滑动」）：
+        原 11 列、列宽合计 1310px，而内容区仅约 963px ⇒ 横向必然溢出 347px（真机实测）。
+        现按"这一行到底要看到什么"重排为 10 列、合计约 924px：
+        · 各列按真实内容收窄（日期/类型/数量/状态/仓库等），长文本列一律 show-overflow-tooltip，
+          鼠标悬停仍能看到全文，信息不丢；
+        · 「附件」列**并入「操作」列**（附件查看本就是"对这一行的操作"，这样省下 80px 才够塞进一屏）；
+        · 「操作」保留 fixed="right"：窗口更窄时按钮组仍固定可见，不会被内容顶出去。
+        ⚠️ 若日后新增列，请先算一下总宽（固定宽 + min-width 之和）别超过 ~950，否则又会横向滚动。
+      -->
       <el-table :data="deliveries" border stripe size="small" :row-class-name="deliveryRowClass">
-        <el-table-column label="交货日期" width="110"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column label="产品名称" min-width="120">
+        <el-table-column label="交货日期" width="92"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
+        <el-table-column label="产品名称" min-width="104" show-overflow-tooltip>
           <template #default="{ row }">
             <!-- 优先按产品主数据ID匹配：加工单整单编辑会重建产品明细行，行ID会变化（交货记录仍指向原产品） -->
             {{ (products.find((p:any)=>row.productMasterId && p.productId===row.productMasterId) || products.find((p:any)=>p.id===row.productId))?.productName || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="80" align="center">
+        <el-table-column label="类型" width="60" align="center">
           <template #default="{ row }"><el-tag v-if="row.deliveryType" :type="row.deliveryType === DeliveryType.DEFECT_RETURN ? 'warning' : 'info'" size="small">{{ row.deliveryType === DeliveryType.DELIVERY ? '交货' : (DeliveryTypeLabel[row.deliveryType] || row.deliveryType) }}</el-tag><span v-else style="color:var(--app-text-secondary)">—</span></template>
         </el-table-column>
-        <el-table-column label="收货仓库" width="120">
+        <el-table-column label="收货仓库" width="84" show-overflow-tooltip>
           <template #default="{ row }"><span v-if="row.warehouseId">{{ warehouseOptions.find((w:any)=>w.id===row.warehouseId)?.warehouseName || row.warehouseId }}</span><span v-else style="color:var(--app-text-placeholder)">—</span></template>
         </el-table-column>
-        <el-table-column label="等级分布" min-width="160">
+        <el-table-column label="等级分布" min-width="112">
           <template #default="{ row }">
             <span v-if="row.aQty || row.bQty || row.cQty || row.defectQty">
               <span style="color:var(--app-color-success)">A{{ row.aQty || 0 }}</span> /
@@ -325,12 +335,11 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
             <span v-else style="color:var(--app-text-secondary)">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="数量" width="90" align="right"><template #default="{ row }"><span :style="{ color: Number(row.quantity) < 0 ? 'var(--app-color-danger)' : '' }">{{ row.quantity }}</span></template></el-table-column>
-        <el-table-column prop="trackingNo" label="物流单号" width="140" />
-        <el-table-column label="附件" width="80" align="center"><template #default="{ row }"><el-button v-if="row.attachUrl" type="primary" link size="small" @click="openAttach(row.attachUrl)">查看</el-button><span v-else style="color:var(--app-text-placeholder)">—</span></template></el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
-        <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="200" align="center" fixed="right">
+        <el-table-column label="数量" width="64" align="right"><template #default="{ row }"><span :style="{ color: Number(row.quantity) < 0 ? 'var(--app-color-danger)' : '' }">{{ row.quantity }}</span></template></el-table-column>
+        <el-table-column prop="trackingNo" label="物流单号" width="92" show-overflow-tooltip />
+        <el-table-column prop="remark" label="备注" min-width="80" show-overflow-tooltip />
+        <el-table-column label="状态" width="60"><template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="176" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="success" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
             <el-button type="warning" link size="small" v-if="row.status === DocStatus.AUDITED" @click="handleUnaudit(row)">反审核</el-button>
@@ -338,6 +347,8 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
             <el-button type="warning" link size="small" v-if="row.status === DocStatus.AUDITED && row.deliveryType !== DeliveryType.DEFECT_RETURN" @click="goReturn(row)">退货</el-button>
             <el-button type="primary" link size="small" v-if="row.status === DocStatus.DRAFT" @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleDelete(row)">删除</el-button>
+            <!-- 2026-09-21：原独立「附件」列并入此处（省一列宽度才够一屏放下） -->
+            <el-button type="primary" link size="small" v-if="row.attachUrl" @click="openAttach(row.attachUrl)">图片</el-button>
           </template>
         </el-table-column>
       </el-table>
