@@ -6,8 +6,12 @@
 #   F1-2  purchase exchange: a forged or cross-order purchase_order_item_id anchor must be rejected
 #         (old code silently skipped the quantity check when the anchor did not resolve).
 #   F1-4  purchase exchange payable ledger bill_no now uses the D1 'YF-' numbering (not '<code>-RET').
-#   F2-1  outsource defect return without an outbound warehouse must be refused at audit
+#   F2-1  outsource defect return without an outbound warehouse must be refused
 #         (old code silently skipped the finished-goods deduction while still booking material-in + payable).
+#         Updated 2026-09-21: 加工退货 now lives in outsource_order_delivery (POST
+#         /outsource/order-delivery/return-defect-no-order, delivery_type=DEFECT_RETURN); /outsource/return-order
+#         only accepts REPAIR (维修退货) any more, and the missing-warehouse guard moved to CREATE time. The case
+#         below therefore covers both shapes (create-refused / created-but-audit-refused).
 #
 # Side effects: only its own test documents, which are reverted (un-audit + cancel); the seeded
 # DEFECT stock (quality reclassify) is reverted too, and stock is asserted back to baseline.
@@ -161,79 +165,92 @@ try {
   }
 
   # ---------------------------------------------------------------- F2-1
-  Write-Output '--- 4) F2-1: defect return without an outbound warehouse must be refused at audit'
+  Write-Output '--- 4) F2-1: a processing return without an outbound warehouse must be refused'
+  # 2026-09-21: the old caller (POST /outsource/return-order with returnType=DEFECT) is gone -- that endpoint now
+  #   only takes REPAIR documents. 加工退货 writes into outsource_order_delivery via return-defect-no-order, and
+  #   its missing-warehouse guard fires at CREATE time. Both shapes are asserted below, and the document (if one
+  #   is created at all) is located by "id > MAX(id) before the call" -- never by remark, which used to pick up
+  #   stale rows from earlier runs and produced phantom failures.
   $factoryId = I (SqlOne "SELECT factory_id FROM outsource_order WHERE factory_id IS NOT NULL ORDER BY id DESC LIMIT 1;")
   $payBefore = SqlOne "SELECT COUNT(*) FROM finance_payable;"
+  $logBefore = I (SqlOne "SELECT COUNT(*) FROM warehouse_stock_log;")
+  $rowBefore = I (SqlOne "SELECT IFNULL(MAX(id),0) FROM outsource_order_delivery;")
   if ($factoryId -gt 0) {
-    $rtBody = (@{ returnType = 'DEFECT'; factoryId = $factoryId; returnDate = (Get-Date -Format 'yyyy-MM-dd')
-        remark = 'audit-fix verify F2-1'; chargeFlag = 0; orderId = $null; items = @()
-        products = @(@{ productId = $prodId; productMasterId = $prodId; productName = 'audit-fix'; quantity = 1; qualityType = 'DEFECT' }) } | ConvertTo-Json -Depth 6)
-    $rt = CallPost "$api/outsource/return-order" $h $rtBody
-    # POST /outsource/return-order returns R<Void> (no id) -> resolve by remark
-    $rtId = I (SqlOne "SELECT IFNULL(MAX(id),0) FROM outsource_return_order WHERE remark='audit-fix verify F2-1';")
-    Write-Output ('  create without warehouseId -> code=' + (CodeOf $rt) + ' resolvedId=' + $rtId + ' msg=' + (MsgOf $rt))
-    if ($rtId -gt 0) {
-      $ra = CallPut "$api/outsource/return-order/$rtId/audit" $h
-      Write-Output ('  audit -> code=' + (CodeOf $ra) + ' msg=' + (MsgOf $ra))
-      Ok ((CodeOf $ra) -ne '200') 'audit refused when the outbound warehouse is missing (was silently skipped before)'
-      Ok ((SqlOne "SELECT status FROM outsource_return_order WHERE id=$rtId;") -eq 'DRAFT') 'document stayed DRAFT'
-      Ok ((SqlOne "SELECT COUNT(*) FROM finance_payable;") -eq $payBefore) 'no payable row was created (no half-booked doc)'
+    $rtBody = (@{ factoryId = $factoryId; productMasterId = $prodId; qualityType = 'A'; quantity = 1
+        remark = 'audit-fix verify F2-1' }) | ConvertTo-Json -Depth 6
+    $rt = CallPost "$api/outsource/order-delivery/return-defect-no-order" $h $rtBody
+    $rtMsg = MsgOf $rt
+    $rtId = I (SqlOne "SELECT IFNULL(MAX(id),0) FROM outsource_order_delivery WHERE id>$rowBefore AND remark='audit-fix verify F2-1';")
+    Write-Output ('  create without warehouseId -> code=' + (CodeOf $rt) + ' newId=' + $rtId + ' msg=' + $rtMsg)
+    if ((CodeOf $rt) -ne '200') {
+      Ok ($rtMsg -match '[\u4e00-\u9fa5]') 'a processing return without a warehouse is refused with an explanation'
+      Ok ($rtId -le 0) 'no document was written for the refused return'
     } else {
-      Write-Output '  (create rejected - acceptable, the guard is even earlier now)'
-      Ok $true 'defect return without a warehouse could not even be created'
+      Write-Output ('  (created anyway as id=' + $rtId + ' - the audit must refuse it)')
+      if ($rtId -gt 0) {
+        $ra = CallPut "$api/outsource/order-delivery/$rtId/audit" $h
+        Write-Output ('  audit -> code=' + (CodeOf $ra) + ' msg=' + (MsgOf $ra))
+        Ok ((CodeOf $ra) -ne '200') 'audit refused when the outbound warehouse is missing (was silently skipped before)'
+        Ok ((SqlOne "SELECT status FROM outsource_order_delivery WHERE id=$rtId;") -eq 'DRAFT') 'document stayed DRAFT'
+      }
     }
+    Ok ((SqlOne "SELECT COUNT(*) FROM finance_payable;") -eq $payBefore) 'no payable row was created (no half-booked doc)'
+    Ok ((I (SqlOne "SELECT COUNT(*) FROM warehouse_stock_log;") -eq $logBefore)) 'no stock movement was written'
   } else {
     Write-Output '  (no factory found - F2-1 case skipped)'
   }
 
   # ---------------------------------------------------------------- F2-2 (return side)
   Write-Output '--- 5) F2-2 return side: cumulative return must not exceed the delivered qty'
-  $rdId = I (SqlOne "SELECT d.id FROM outsource_order_delivery d JOIN outsource_order o ON o.id=d.order_id WHERE d.status='AUDITED' AND d.quantity>0 AND d.warehouse_id IS NOT NULL AND d.is_reverse=0 ORDER BY d.id LIMIT 1;")
+  # 2026-09-21: 加工退货 is an outsource_order_delivery row now -- POST /outsource/order-delivery/return-defect/{orderId}
+  #   with the ORDER-PRODUCT row id in productId (delivery_type=DEFECT_RETURN). 已交/已退 are therefore summed
+  #   from that same table with the service's matching rule (master id first, row id fallback), and the guard
+  #   order is 累计量 -> 库存, so an over-quantity attempt always fails with the cumulative message.
+  $rdId = I (SqlOne "SELECT d.id FROM outsource_order_delivery d JOIN outsource_order o ON o.id=d.order_id WHERE d.status='AUDITED' AND d.quantity>0 AND d.warehouse_id IS NOT NULL AND IFNULL(d.is_reverse,0)=0 AND o.status IN ('PRODUCING','FINISHED') ORDER BY d.id LIMIT 1;")
   if ($rdId -gt 0) {
     $rd = SqlOne ("SELECT CONCAT_WS('|', order_id, product_id, IFNULL(product_master_id,0), quantity, warehouse_id) FROM outsource_order_delivery WHERE id=$rdId;")
     $rp = ([string]$rd) -split '\|'
     $rdOrder = [int]$rp[0]; $rdRow = [int]$rp[1]; $rdMaster = [int]$rp[2]; $rdQty = D $rp[3]; $rdWh = [int]$rp[4]
     if ($rdMaster -le 0) { $rdMaster = I (SqlOne "SELECT product_id FROM outsource_order_product WHERE id=$rdRow;") }
     $rdFactory = I (SqlOne "SELECT factory_id FROM outsource_order WHERE id=$rdOrder;")
-    $rdReturned = D (SqlOne "SELECT IFNULL(SUM(p.quantity),0) FROM outsource_return_order_product p JOIN outsource_return_order r ON r.id=p.return_order_id WHERE r.source_delivery_id=$rdId AND r.status='AUDITED';")
+    $rdMatch = "(product_master_id = $rdMaster OR (product_master_id IS NULL AND product_id = $rdRow))"
+    $rdDelivered = D (SqlOne "SELECT IFNULL(SUM(quantity),0) FROM outsource_order_delivery WHERE order_id=$rdOrder AND $rdMatch;")
+    $rdReturned = D (SqlOne "SELECT IFNULL(SUM(ABS(quantity)),0) FROM outsource_order_delivery WHERE order_id=$rdOrder AND $rdMatch AND delivery_type='DEFECT_RETURN';")
     $rdStock = D (SqlOne "SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$rdWh AND product_id=$rdMaster AND quality_type='A';")
-    $rdRemain = $rdQty - $rdReturned
-    Write-Output ("  return fixtures: delivery=$rdId order=$rdOrder row=$rdRow master=$rdMaster deliveredQty=" + $rdQty + " alreadyReturned=" + $rdReturned + " wh=$rdWh A=" + $rdStock)
-    if (($rdFactory -gt 0) -and ($rdRemain -ge 1)) {
+    $rdRemain = $rdDelivered - $rdReturned
+    Write-Output ("  return fixtures: delivery=$rdId order=$rdOrder row=$rdRow master=$rdMaster delivered=" + $rdDelivered + " returned=" + $rdReturned + " remaining=" + $rdRemain + " wh=$rdWh A=" + $rdStock)
+    if (($rdFactory -gt 0) -and ($rdRemain -ge 1) -and ($rdStock -ge 1)) {
       $logB2 = I (SqlOne "SELECT COUNT(*) FROM warehouse_stock_log;")
       $payB2 = I (SqlOne "SELECT COUNT(*) FROM finance_payable;")
-      $over = $rdRemain + 2
-      $overBody = (@{ returnType = 'DEFECT'; factoryId = $rdFactory; warehouseId = $rdWh; sourceDeliveryId = $rdId
-          returnDate = (Get-Date -Format 'yyyy-MM-dd'); remark = 'audit-fix verify F2-2 over'; chargeFlag = 0; items = @()
-          products = @(@{ productId = $rdMaster; productMasterId = $rdMaster; productName = 'audit-fix'; quantity = $over; qualityType = 'A' }) } | ConvertTo-Json -Depth 6)
-      $oc = CallPost "$api/outsource/return-order" $h $overBody
-      $overId = I (SqlOne "SELECT IFNULL(MAX(id),0) FROM outsource_return_order WHERE remark='audit-fix verify F2-2 over';")
-      Write-Output ('  over return (qty=' + $over + ' vs delivered ' + $rdQty + ') create=' + (CodeOf $oc) + ' id=' + $overId)
-      if ($overId -gt 0) {
-        $oa = CallPut "$api/outsource/return-order/$overId/audit" $h
-        Write-Output ('  audit -> code=' + (CodeOf $oa) + ' msg=' + (MsgOf $oa))
-        Ok ((CodeOf $oa) -ne '200') 'F2-2 return: returning more than delivered is refused at audit'
-        Ok ((SqlOne "SELECT status FROM outsource_return_order WHERE id=$overId;") -eq 'DRAFT') 'over return stayed DRAFT'
-        Ok ((I (SqlOne "SELECT COUNT(*) FROM warehouse_stock_log;") -eq $logB2) -and (I (SqlOne "SELECT COUNT(*) FROM finance_payable;") -eq $payB2)) 'no stock/payable side effect on the refused return'
-        CallPut "$api/outsource/return-order/$overId/cancel" $h | Out-Null
+      # over case: one unit more than the remaining allowed quantity -> refused with the cumulative message
+      $over = $rdRemain + 1
+      $rowB2 = I (SqlOne "SELECT IFNULL(MAX(id),0) FROM outsource_order_delivery;")
+      $overBody = (@{ productId = $rdRow; quantity = $over; qualityType = 'A'; warehouseId = $rdWh }) | ConvertTo-Json -Depth 6
+      $oc = CallPost "$api/outsource/order-delivery/return-defect/$rdOrder" $h $overBody
+      $overId = I (SqlOne "SELECT IFNULL(MAX(id),0) FROM outsource_order_delivery WHERE id>$rowB2;")
+      Write-Output ('  over return (qty=' + $over + ' vs remaining ' + $rdRemain + ') create=' + (CodeOf $oc) + ' newId=' + $overId + ' msg=' + (MsgOf $oc))
+      Ok ((CodeOf $oc) -ne '200') 'F2-2 return: returning more than the remaining delivered qty is refused'
+      Ok ((MsgOf $oc) -match '[\u4e00-\u9fa5]') 'the over-quantity refusal is explained'
+      Ok ($overId -le 0) 'no draft was written for the refused return'
+      Ok ((I (SqlOne "SELECT COUNT(*) FROM warehouse_stock_log;") -eq $logB2) -and (I (SqlOne "SELECT COUNT(*) FROM finance_payable;") -eq $payB2)) 'no stock/payable side effect on the refused return'
+      # control: one unit inside the remaining qty must still be ALLOWED (guards against an always-reject regression)
+      $rowB3 = I (SqlOne "SELECT IFNULL(MAX(id),0) FROM outsource_order_delivery;")
+      $okBody = (@{ productId = $rdRow; quantity = 1; qualityType = 'A'; warehouseId = $rdWh }) | ConvertTo-Json -Depth 6
+      $kc = CallPost "$api/outsource/order-delivery/return-defect/$rdOrder" $h $okBody
+      $okId = I (SqlOne "SELECT IFNULL(MAX(id),0) FROM outsource_order_delivery WHERE id>$rowB3;")
+      Write-Output ('  control qty=1 -> create=' + (CodeOf $kc) + ' newId=' + $okId + ' msg=' + (MsgOf $kc))
+      Ok ((CodeOf $kc) -eq '200') 'F2-2 return: a return inside the delivered qty is still accepted'
+      if ($okId -gt 0) {
+        $ka = CallPut "$api/outsource/order-delivery/$okId/audit" $h
+        Write-Output ('  control audit -> code=' + (CodeOf $ka) + ' msg=' + (MsgOf $ka))
+        Ok ((CodeOf $ka) -eq '200') 'F2-2 return: a return well inside the delivered qty is accepted at audit'
+        if ((CodeOf $ka) -eq '200') { CallPut "$api/outsource/order-delivery/$okId/un-audit" $h | Out-Null }
+        try { Invoke-RestMethod -Uri "$api/outsource/order-delivery/$okId" -Method Delete -Headers $h | Out-Null } catch { }
       }
-      # control: exactly the remaining qty must be ALLOWED (guards against an always-reject regression)
-      if ($rdStock -ge 1) {
-        $okBody = (@{ returnType = 'DEFECT'; factoryId = $rdFactory; warehouseId = $rdWh; sourceDeliveryId = $rdId
-            returnDate = (Get-Date -Format 'yyyy-MM-dd'); remark = 'audit-fix verify F2-2 within'; chargeFlag = 0; items = @()
-            products = @(@{ productId = $rdMaster; productMasterId = $rdMaster; productName = 'audit-fix'; quantity = 1; qualityType = 'A' }) } | ConvertTo-Json -Depth 6)
-        $kc = CallPost "$api/outsource/return-order" $h $okBody
-        $okId = I (SqlOne "SELECT IFNULL(MAX(id),0) FROM outsource_return_order WHERE remark='audit-fix verify F2-2 within';")
-        if ($okId -gt 0) {
-          $ka = CallPut "$api/outsource/return-order/$okId/audit" $h
-          Write-Output ('  control qty=1 -> audit code=' + (CodeOf $ka) + ' msg=' + (MsgOf $ka))
-          Ok ((CodeOf $ka) -eq '200') 'F2-2 return: a return well inside the delivered qty is still accepted'
-          if ((CodeOf $ka) -eq '200') { CallPut "$api/outsource/return-order/$okId/un-audit" $h | Out-Null }
-          CallPut "$api/outsource/return-order/$okId/cancel" $h | Out-Null
-        }
-      }
+      Ok ((I (SqlOne "SELECT COUNT(*) FROM warehouse_stock_log;") -eq $logB2)) 'stock log back to baseline after the control round trip'
+      Ok ((I (SqlOne "SELECT COUNT(*) FROM finance_payable;") -eq $payB2)) 'no payable left behind by the control round trip'
     } else {
-      Write-Output '  (return fixtures unusable - F2-2 return case skipped)'
+      Write-Output ("  (return fixtures unusable: factory=" + $rdFactory + " remaining=" + $rdRemain + " stock=" + $rdStock + " - F2-2 return case skipped)")
     }
   } else {
     Write-Output '  (no audited delivery - F2-2 return case skipped)'
@@ -304,10 +321,13 @@ try {
     CallPut "$api/sale/exchange/$sxid/un-audit" $h | Out-Null
     CallPut "$api/sale/exchange/$sxid/cancel" $h | Out-Null
   }
-  if ($rtId -gt 0) { CallPut "$api/outsource/return-order/$rtId/cancel" $h | Out-Null }
-  # self-cleaning: cancel any drafts this script left behind on earlier runs (id was not returned by POST)
-  foreach ($rid in @(Sql "SELECT id FROM outsource_return_order WHERE remark LIKE 'audit-fix verify%' AND status='DRAFT';")) {
-    if (([string]$rid).Trim() -ne '') { CallPut ("$api/outsource/return-order/" + ([string]$rid).Trim() + '/cancel') $h | Out-Null }
+  # 2026-09-21: the processing-return drafts now live in outsource_order_delivery (DELETE works on drafts only)
+  if ($rtId -gt 0) { try { Invoke-RestMethod -Uri "$api/outsource/order-delivery/$rtId" -Method Delete -Headers $h | Out-Null } catch { } }
+  # self-cleaning: delete any drafts this script left behind on earlier runs
+  foreach ($rid in @(Sql "SELECT id FROM outsource_order_delivery WHERE remark LIKE 'audit-fix verify%' AND status='DRAFT';")) {
+    if (([string]$rid).Trim() -ne '') {
+      try { Invoke-RestMethod -Uri ("$api/outsource/order-delivery/" + ([string]$rid).Trim()) -Method Delete -Headers $h | Out-Null } catch { }
+    }
   }
   # self-cleaning: drafts of the over-planned delivery test (DELETE only works on drafts)
   foreach ($did in @(Sql "SELECT id FROM outsource_order_delivery WHERE remark='audit-fix verify F2-2 delivery' AND status='DRAFT';")) {
