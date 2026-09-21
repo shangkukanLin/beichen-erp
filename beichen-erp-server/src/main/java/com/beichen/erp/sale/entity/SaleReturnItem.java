@@ -65,6 +65,25 @@ public class SaleReturnItem {
     /** 金额 */
     private BigDecimal amount;
 
+    // ==================== 逐产品收费（2026-09-21 用户口径「付费要精确到产品上」） ====================
+
+    /**
+     * 是否收费：0否 1是（逐产品）。
+     * <p>收费由**单据级下沉到明细行**：一行 = 一个产品。单据级 {@code sale_return.charge_amount}
+     * 改由服务层回写为 **Σ(本表 charge_amount)**、{@code charge_flag} = 任一行收费（列表/详情展示口径不变）。</p>
+     * <p>⚠️ 方向：**向客户收取** —— 审核生成一条正向应收（{@code 单号-FEE}，金额 = Σ本表）。</p>
+     */
+    private Integer chargeFlag;
+
+    /** 收费类型：SERVICE服务费 / DIFF品质差价 / FULL全额货值 / OTHER其他（逐行可不同） */
+    private String chargeType;
+
+    /** 该产品收费金额（> 0 才计入应收） */
+    private BigDecimal chargeAmount;
+
+    /** 该产品收费说明（前端不逐行填时，取单据级说明作为批量默认） */
+    private String chargeReason;
+
     /** 备注 */
     private String remark;
 

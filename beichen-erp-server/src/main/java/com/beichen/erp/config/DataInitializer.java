@@ -68,6 +68,7 @@ public class DataInitializer implements ApplicationRunner {
         migrateDashboardTabs();
         migrateUserMenuMode();
         migratePurchaseExchangeCharge();
+        migrateSaleItemCharge();
         initSuperAdmin();
         initMaterialTypes();
         initPhaseTemplates();
@@ -813,6 +814,49 @@ public class DataInitializer implements ApplicationRunner {
                 "charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '付费金额（我方付给供货商）'");
         addColumnIfMissing("purchase_exchange",
                 "charge_reason VARCHAR(255) DEFAULT NULL COMMENT '付费说明'");
+    }
+
+    /**
+     * 存量库幂等迁移（2026-09-21）：销售退单 / 销售换货单的**逐产品收费**。
+     * <p>用户口径：「销售退单和销售换货单应该都有付费，而且付费需要精确到产品上」⇒ 原本挂在单据上的
+     * charge_flag/charge_type/charge_amount 下沉到明细行，单据级改为 Σ(明细)（由服务层回写）。
+     * 新库由 schema.sql 直接建列；老库逐列 ALTER（{@link #addColumnIfMissing}，重复启动无副作用）。</p>
+     */
+    private void migrateSaleItemCharge() {
+        for (String t : new String[]{"sale_return_item", "sale_exchange_item"}) {
+            addColumnIfMissing(t, "charge_flag TINYINT DEFAULT 0 COMMENT '是否收费: 0否 1是(逐产品)'");
+            addColumnIfMissing(t, "charge_type VARCHAR(20) DEFAULT NULL COMMENT '收费类型: SERVICE/DIFF/FULL/OTHER'");
+            addColumnIfMissing(t, "charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '该产品收费金额(向客户收取)'");
+            addColumnIfMissing(t, "charge_reason VARCHAR(200) COMMENT '该产品收费说明'");
+        }
+        // 存量兜底：老数据把金额挂在**单据**上（当前库 0 行，生产可能有）⇒ 回填到该单**第一条明细**，
+        // 保证「Σ(明细) = 单据金额」恒等、台账金额不变。已是逐产品的单据不会被匹配到 ⇒ 幂等。
+        backfillFirstItemCharge("sale_return_item", "return_id", "sale_return");
+        backfillFirstItemCharge("sale_exchange_item", "exchange_id", "sale_exchange");
+    }
+
+    /** 把"单据级收费"回填到第一条明细（幂等：该单已有逐产品收费时跳过） */
+    private void backfillFirstItemCharge(String itemTable, String fk, String docTable) {
+        try {
+            List<Long> docIds = jdbcTemplate.queryForList(
+                    "SELECT d.id FROM " + docTable + " d WHERE IFNULL(d.charge_flag,0) = 1 AND IFNULL(d.charge_amount,0) > 0"
+                            + " AND NOT EXISTS (SELECT 1 FROM " + itemTable + " i WHERE i." + fk + " = d.id AND IFNULL(i.charge_amount,0) > 0)",
+                    Long.class);
+            int n = 0;
+            for (Long did : docIds) {
+                java.util.Map<String, Object> d = jdbcTemplate.queryForMap(
+                        "SELECT charge_type, charge_amount, charge_reason FROM " + docTable + " WHERE id = " + did);
+                Long itemId = jdbcTemplate.queryForObject(
+                        "SELECT MIN(id) FROM " + itemTable + " WHERE " + fk + " = " + did, Long.class);
+                if (itemId == null) continue;
+                jdbcTemplate.update("UPDATE " + itemTable + " SET charge_flag = 1, charge_type = ?, charge_amount = ?, charge_reason = ? WHERE id = ?",
+                        d.get("charge_type"), d.get("charge_amount"), d.get("charge_reason"), itemId);
+                n++;
+            }
+            if (n > 0) log.info("已把 {} 张单据的历史收费回填到 {} 的第一条明细", n, itemTable);
+        } catch (Exception e) {
+            log.debug("{} 历史收费回填跳过：{}", itemTable, e.getMessage());
+        }
     }
 
     /** 幂等补列：列已存在时 MySQL 报错，捕获忽略即可（不依赖 MySQL 版本特性） */

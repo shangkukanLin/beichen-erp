@@ -290,9 +290,11 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         // 自动填充器（strictInsertFill）本身也只在 cid > 0 时才兜底，故这里不能只判 null。
         if (cid != null && cid > 0) exchange.setCompanyId(cid);
         validate(exchange, itemMaps);
-        normalizeCharge(exchange);
+        normalizeCharge(exchange, itemMaps);
         exchangeMapper.insert(exchange);
-        saveItems(exchange.getId(), itemMaps);
+        saveItems(exchange.getId(), itemMaps, exchange.getChargeReason());
+        // 主表收费 = Σ(明细)（2026-09-21 逐产品口径）
+        recalcDocCharge(exchange.getId());
         return exchangeMapper.selectById(exchange.getId());
     }
 
@@ -305,11 +307,13 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可修改");
         fillSaleOrderInfo(exchange);
         validate(exchange, itemMaps);
-        normalizeCharge(exchange);
+        normalizeCharge(exchange, itemMaps);
         exchange.setCode(old.getCode());
         exchange.setStatus(old.getStatus());
         exchangeMapper.updateById(exchange);
-        saveItems(exchange.getId(), itemMaps);
+        saveItems(exchange.getId(), itemMaps, exchange.getChargeReason());
+        // 主表收费 = Σ(明细)；返回体重取，保证 charge_* 是回写后的值
+        recalcDocCharge(exchange.getId());
         return exchangeMapper.selectById(exchange.getId());
     }
 
@@ -318,7 +322,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
      * <p>明细拆「退回侧 + 换出侧」：只支持同品换货，换出产品固定为退回产品；
      * 换出数量未指定时默认等于退回数量，换出单价默认取原销售单价。</p>
      */
-    private void saveItems(Long exchangeId, List<Map<String, Object>> itemMaps) {
+    private void saveItems(Long exchangeId, List<Map<String, Object>> itemMaps, String docChargeReason) {
         exchangeItemMapper.delete(
                 new LambdaQueryWrapper<SaleExchangeItem>().eq(SaleExchangeItem::getExchangeId, exchangeId));
         if (itemMaps == null || itemMaps.isEmpty()) return;
@@ -355,6 +359,25 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
             assertOutQuality(qt);   // F7-27：换出品质仅允许 A/B/C
             it.setOutQualityType(qt);
 
+            // 逐产品收费（2026-09-21 用户口径）：金额 > 0 即收费；类型必须合法；说明缺省取单据级（批量默认）
+            BigDecimal chargeAmt = m.get("chargeAmount") == null || m.get("chargeAmount").toString().isBlank()
+                    ? BigDecimal.ZERO : toBig(m.get("chargeAmount"));
+            if (chargeAmt.compareTo(BigDecimal.ZERO) < 0) throw new BusinessException("产品收费金额不能为负数");
+            String chargeType = m.get("chargeType") != null && !m.get("chargeType").toString().isBlank()
+                    ? m.get("chargeType").toString() : null;
+            if (chargeAmt.compareTo(BigDecimal.ZERO) > 0) {
+                if (chargeType == null) throw new BusinessException("产品[" + it.getProductName() + "]已填收费金额，请选择收费类型");
+                if (!ExchangeChargeType.isValid(chargeType)) throw new BusinessException("非法的收费类型：" + chargeType);
+            } else {
+                chargeType = null;
+            }
+            String chargeReason = m.get("chargeReason") != null && !m.get("chargeReason").toString().isBlank()
+                    ? m.get("chargeReason").toString()
+                    : (docChargeReason != null && !docChargeReason.isBlank() ? docChargeReason : null);
+            it.setChargeFlag(chargeAmt.compareTo(BigDecimal.ZERO) > 0 ? 1 : 0);
+            it.setChargeType(chargeType);
+            it.setChargeAmount(chargeAmt);
+            it.setChargeReason(chargeAmt.compareTo(BigDecimal.ZERO) > 0 ? chargeReason : null);
             if (m.get("remark") != null) it.setRemark(m.get("remark").toString());
             // F7-114（2026-09-20）：同 create —— 只在 cid > 0 时赋值（超管模式不落 company_id = 0）
             if (cid != null && cid > 0) it.setCompanyId(cid);
@@ -669,28 +692,89 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
 
     // ==================== 换货收费 ====================
 
-    /** 收费字段归一化：不收费则金额归零、类型清空；收费则类型必须合法且金额必须 &gt; 0 */
-    private void normalizeCharge(SaleExchange e) {
-        boolean charged = e.getChargeFlag() != null && e.getChargeFlag() == 1;
-        if (!charged) {
-            e.setChargeFlag(0);
-            e.setChargeType(null);
-            e.setChargeAmount(BigDecimal.ZERO);
-            e.setChargeReason(null);
-            return;
-        }
-        if (e.getChargeType() == null || e.getChargeType().isBlank())
-            throw new BusinessException("已选择收费，请选择收费类型");
-        if (!ExchangeChargeType.isValid(e.getChargeType()))
+    /**
+     * 收费归一化（2026-09-21 逐产品口径）：**明细级为准，单据级只作"批量默认"**。
+     * <p>用户口径：「销售退单和销售换货单应该都有付费，而且付费需要精确到产品上」⇒ 金额挂在明细行
+     * （一行 = 一个产品），单据级 charge_amount 由 {@link #recalcDocCharge} 按 Σ 明细回写。</p>
+     */
+    private void normalizeCharge(SaleExchange e, List<Map<String, Object>> itemMaps) {
+        if (e.getChargeType() != null && !e.getChargeType().isBlank() && !ExchangeChargeType.isValid(e.getChargeType()))
             throw new BusinessException("非法的收费类型：" + e.getChargeType());
-        if (nz(e.getChargeAmount()).compareTo(BigDecimal.ZERO) <= 0)
-            throw new BusinessException("已选择收费，收费金额必须大于 0");
+        boolean anyItem = hasItemCharge(itemMaps);
+        // 兼容旧前端（只填单据级金额、没逐行填）：落到**第一条明细**（保证「Σ明细 = 单据金额」恒等）
+        if (!anyItem && e.getChargeFlag() != null && e.getChargeFlag() == 1
+                && toBig(e.getChargeAmount()).compareTo(BigDecimal.ZERO) > 0) {
+            applyDocChargeToFirstItem(itemMaps, e.getChargeType(), e.getChargeAmount(), e.getChargeReason());
+            anyItem = true;
+        }
+        if (!anyItem && e.getChargeFlag() != null && e.getChargeFlag() == 1)
+            throw new BusinessException("已选择收费，请为具体产品填写收费金额（收费精确到产品）");
+        e.setChargeFlag(anyItem ? 1 : 0);
+        e.setChargeAmount(BigDecimal.ZERO);
+        if (!anyItem) {
+            e.setChargeType(null);
+            e.setChargeReason(null);
+        }
     }
 
-    /** 审核时生成换货收费应收：单号 -FEE 后缀，与换货单本体区分，便于反审核精确冲销 */
+    /** 兼容旧前端：把"单据级收费"落到第一条明细（类型缺省 OTHER） */
+    private void applyDocChargeToFirstItem(List<Map<String, Object>> itemMaps, String type, BigDecimal amount, String reason) {
+        if (itemMaps == null || itemMaps.isEmpty())
+            throw new BusinessException("已选择收费，请先添加明细（收费精确到产品）");
+        Map<String, Object> first = itemMaps.get(0);
+        first.put("chargeAmount", amount);
+        first.put("chargeType", type != null && !type.isBlank() ? type : ExchangeChargeType.OTHER.getCode());
+        if (reason != null) first.put("chargeReason", reason);
+    }
+
+    /** 本次提交里是否有任意一行填了收费金额（> 0） */
+    private boolean hasItemCharge(List<Map<String, Object>> itemMaps) {
+        if (itemMaps == null) return false;
+        for (Map<String, Object> m : itemMaps) {
+            Object amt = m.get("chargeAmount");
+            if (amt != null && !amt.toString().isBlank() && toBig(amt).compareTo(BigDecimal.ZERO) > 0) return true;
+        }
+        return false;
+    }
+
+    /** 主表收费 = Σ(明细)：charge_flag=任一行收费；charge_amount=Σ；charge_type 仅当各收费行**类型一致**时回填 */
+    private void recalcDocCharge(Long exchangeId) {
+        List<SaleExchangeItem> items = exchangeItemMapper.selectList(
+                new LambdaQueryWrapper<SaleExchangeItem>().eq(SaleExchangeItem::getExchangeId, exchangeId));
+        BigDecimal sum = BigDecimal.ZERO;
+        Set<String> types = new java.util.LinkedHashSet<>();
+        for (SaleExchangeItem it : items) {
+            if (toBig(it.getChargeAmount()).compareTo(BigDecimal.ZERO) > 0) {
+                sum = sum.add(it.getChargeAmount());
+                if (it.getChargeType() != null && !it.getChargeType().isBlank()) types.add(it.getChargeType());
+            }
+        }
+        exchangeMapper.update(null, new LambdaUpdateWrapper<SaleExchange>()
+                .eq(SaleExchange::getId, exchangeId)
+                .set(SaleExchange::getChargeFlag, sum.compareTo(BigDecimal.ZERO) > 0 ? 1 : 0)
+                .set(SaleExchange::getChargeAmount, sum)
+                .set(SaleExchange::getChargeType, types.size() == 1 ? types.iterator().next() : null));
+    }
+
+    /**
+     * 审核时生成换货收费应收：单号 -FEE 后缀（与换货单本体区分，便于反审核精确冲销）。
+     * <p>金额 = <b>Σ 明细行收费</b>（口径 A：一张单据一条台账）；remark 逐产品列出，
+     * 财务列表能直接看到"哪个产品收了多少"，客户付款仍可一笔核销整单。</p>
+     */
     private void saveChargeReceivable(SaleExchange e) {
-        boolean charged = e.getChargeFlag() != null && e.getChargeFlag() == 1;
-        if (!charged || nz(e.getChargeAmount()).compareTo(BigDecimal.ZERO) <= 0) return;
+        List<SaleExchangeItem> items = getItems(e.getId()); // 已回填 SKU/产品名
+        BigDecimal total = BigDecimal.ZERO;
+        List<String> parts = new ArrayList<>();
+        for (SaleExchangeItem it : items) {
+            BigDecimal amt = toBig(it.getChargeAmount());
+            if (amt.compareTo(BigDecimal.ZERO) <= 0) continue;
+            total = total.add(amt);
+            String name = it.getProductName() != null && !it.getProductName().isBlank()
+                    ? it.getProductName() : "产品" + it.getProductId();
+            parts.add(name + " " + amt.stripTrailingZeros().toPlainString()
+                    + (it.getChargeType() != null && !it.getChargeType().isBlank() ? "（" + it.getChargeType() + "）" : ""));
+        }
+        if (total.compareTo(BigDecimal.ZERO) <= 0) return;
         FinanceReceivable fr = new FinanceReceivable();
         fr.setBillNo(e.getCode() + "-FEE");
         fr.setCustomerId(e.getCustomerId());
@@ -698,13 +782,13 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         fr.setSourceBillType(SourceBillType.SALE_EXCHANGE_CHARGE.getCode());
         fr.setSourceBillNo(e.getCode());
         fr.setSourceId(e.getId());
-        fr.setAmount(e.getChargeAmount());
+        fr.setAmount(total);
         fr.setPaidAmount(BigDecimal.ZERO);
-        fr.setUnpaidAmount(e.getChargeAmount());
+        fr.setUnpaidAmount(total);
         fr.setDueDate(e.getExchangeDate());
         fr.setStatus(SettlementStatus.UNSETTLED.getCode());
-        fr.setRemark("销售换货收费"
-                + (e.getChargeReason() != null && !e.getChargeReason().isBlank() ? "：" + e.getChargeReason() : ""));
+        fr.setRemark("销售换货收费（逐产品）：" + String.join("；", parts)
+                + (e.getChargeReason() != null && !e.getChargeReason().isBlank() ? "；说明：" + e.getChargeReason() : ""));
         saveReceivable(fr);
     }
 

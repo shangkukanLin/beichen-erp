@@ -1209,6 +1209,11 @@ CREATE TABLE IF NOT EXISTS sale_return_item (
     sorted_quantity DECIMAL(18,0) DEFAULT 0 COMMENT '已整理数量(退货整理单审核后累加、反审核扣回)',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
     amount DECIMAL(18,2) DEFAULT 0 COMMENT '金额',
+    -- 逐产品收费（2026-09-21 用户口径：收费要精确到产品）——单据级 charge_* 变为 Σ(本表)
+    charge_flag TINYINT DEFAULT 0 COMMENT '是否收费: 0否 1是(逐产品)',
+    charge_type VARCHAR(20) DEFAULT NULL COMMENT '收费类型: SERVICE服务费/DIFF品质差价/FULL全额货值/OTHER其他',
+    charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '该产品收费金额(向客户收取)',
+    charge_reason VARCHAR(200) COMMENT '该产品收费说明',
     remark VARCHAR(500) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -1557,6 +1562,11 @@ CREATE TABLE IF NOT EXISTS sale_exchange_item (
     out_unit_price        DECIMAL(18,4) DEFAULT 0           COMMENT '换出单价(默认取原销售单价，可手工改，仅用于展示与差价参考)',
     out_amount            DECIMAL(18,2) DEFAULT 0           COMMENT '换出金额(换出数量×换出单价，仅展示)',
     out_quality_type      VARCHAR(10) DEFAULT 'A'           COMMENT '换出品质: A/B/C/DEFECT(退回统一记 PENDING 待分类)',
+    -- 逐产品收费（2026-09-21 用户口径：收费要精确到产品）——单据级 charge_* 变为 Σ(本表)
+    charge_flag           TINYINT DEFAULT 0                 COMMENT '是否收费: 0否 1是(逐产品)',
+    charge_type           VARCHAR(20) DEFAULT NULL          COMMENT '收费类型: SERVICE服务费/DIFF品质差价/FULL全额货值/OTHER其他',
+    charge_amount         DECIMAL(18,2) DEFAULT 0           COMMENT '该产品收费金额(向客户收取)',
+    charge_reason         VARCHAR(200)                      COMMENT '该产品收费说明',
     remark                VARCHAR(500)                      COMMENT '备注',
     company_id            BIGINT DEFAULT NULL               COMMENT '公司ID',
     create_time           DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
