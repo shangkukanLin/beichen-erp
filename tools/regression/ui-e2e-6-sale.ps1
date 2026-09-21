@@ -1,4 +1,4 @@
-# Temp test 6: sales chain (sale order -> audit -> sale return -> audit)
+﻿# Temp test 6: sales chain (sale order -> audit -> sale return -> audit)
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 EnsureLogin
 WatchErrors
@@ -52,6 +52,30 @@ Open '/inventory/sale' 2600
 $r = Rows 0
 $idx = [int](FindRow (ZH 'val_customer'))
 Write-Host ('row after audit=' + $(if ($idx -ge 0) { ($r.rows[$idx] -join ' | ') } else { 'NOT FOUND' }))
+
+Step 'sale list: after-sale shortcuts (return / exchange) on an audited row'
+# 2026-09-21 用户口径：销售单列表的操作列要有「退货 / 换货」快捷入口。
+# 期望：仅已审核单据出现这两个入口；点击后到新增页并预填来源销售单（客户随之带入）。
+$si = [int](FindRow (ZH 'val_customer'))
+Ok ($si -ge 0) 'audited sale order row found on the list'
+# 取行不能靠 FindRow 客户名（列表里同一客户有多张单，会命中更早的**草稿**行 —— 草稿本来就不该有这两个入口）。
+# 改为直接扫描"同时含退货与换货入口"的行 ⇒ 与具体哪一行无关，测的正是"已审核行才有这两个快捷入口"。
+$scanJs = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const R=T('" + (B64 (ZH 'btn_return')) + "');const E=T('" + (B64 (ZH 'btn_exchange')) + "');const vis=e=>e.getClientRects().length>0;const t=[...document.querySelectorAll('.el-table')].filter(vis)[0];if(!t)return 'NOTABLE';const rs=[...t.querySelectorAll('.el-table__body tbody tr')];for(let i=0;i<rs.length;i++){const txt=(rs[i].innerText||'').replace(/\s+/g,' ');if(txt.indexOf(R)>=0&&txt.indexOf(E)>=0)return i+'~'+txt}return '-1~none'})()"
+$scan = EvalJs $scanJs
+Write-Host ('  scan=' + $scan)
+$si2 = [int](($scan -split '~')[0])
+Ok ($si2 -ge 0) 'an audited sale order row offers BOTH shortcuts (return + exchange)'
+if ($si2 -ge 0) {
+  $clk = ClickRowBtnContains $si2 (ZH 'btn_return')
+  Write-Host ('  click return: ' + $clk)
+  Start-Sleep -Milliseconds 2600
+  $p2 = EvalJs 'String(location.pathname)'
+  Write-Host ('  path after return click=' + $p2)
+  Ok ($p2 -match '/sale/return/add') 'the RETURN shortcut opens the sale-return add page'
+  Ok ((BodyHas (ZH 'val_customer')) -eq 'True') 'the add page is pre-filled from the source order (customer carried over)'
+  # NOTE: 不要再断言"页面上没有退货二字" —— 退货新增页里到处是「退货数量」，这种子串断言不成立；
+  # 导航是否真的发生，用上面的 location.pathname 断言即可。
+}
 Open '/inventory/stock' 2600
 $st = Rows 0
 $si = [int](FindRow $P)

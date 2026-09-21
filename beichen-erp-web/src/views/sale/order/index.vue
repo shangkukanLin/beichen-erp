@@ -87,6 +87,16 @@ function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/de
 /** 新增/编辑统一走独立页面 /inventory/sale/add（带 id 为编辑） */
 function goAdd() { router.push('/inventory/sale/add') }
 function goEdit(row: SaleOrder) { router.push('/inventory/sale/add?id=' + row.id) }
+/**
+ * 售后退货 / 换货**快捷入口**（2026-09-21 用户口径：销售单列表的操作列要有退货、换货快捷键）。
+ * <p>与销售单详情页的「退货 / 换货」完全一致：带 saleOrderId 跳转让新增页自动预填来源销售单并带入
+ * （可退/可换）明细，省去再选一次客户与销售单。</p>
+ * <p>⚠️ 两点必须保持：①只有**已审核**销售单能发起（未审核还没出库，没有可退的量 —— 后端 saleOrders
+ * 也只返回已审核单据）②按钮必须 .stop —— 本列表有 @row-click=goDetail，不阻止冒泡会被行点击抢去详情页
+ * （同类问题在采购换货列表踩过，修法是给操作列按钮补 .stop）。</p>
+ */
+function goReturn(row: SaleOrder) { router.push(`/sale/return/add?saleOrderId=${row.id}`) }
+function goExchange(row: SaleOrder) { router.push(`/sale/exchange/add?saleOrderId=${row.id}`) }
 
 onMounted(() => { loadCustomers(); loadWarehouses(); loadData() })
 // 数据变动（新增/编辑页、详情页编辑/审核/反审核/作废）后返回列表时按需刷新，保留查询条件与分页现场
@@ -156,6 +166,9 @@ onActivated(() => {
         <el-table-column label="操作" width="320" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
+            <!-- 售后快捷入口（2026-09-21 用户口径）：仅已审核单据可发起，带 saleOrderId 跳转 ⇒ 新增页自动预填来源销售单与明细 -->
+            <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click.stop="goReturn(row)">退货</el-button>
+            <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click.stop="goExchange(row)">换货</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click.stop="goEdit(row)">编辑</el-button>
             <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发 -->
             <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'sale:order:audit'" type="success" link @click.stop="handleAudit(row)">审核</el-button>
