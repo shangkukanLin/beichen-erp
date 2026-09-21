@@ -472,5 +472,10 @@
   "pj_btn_create": "创建项目",
   "pj_ph_project_name": "请输入项目名称",
   "pj_ph_product_name": "请输入产品名称",
-  "phase_matched_names": "立项|排线打样|背贴盖板打样|总成样品|测试|小批量|结项"
+  "phase_matched_names": "立项|排线打样|背贴盖板打样|总成样品|测试|小批量|结项",
+  "lbl_send_out_wh": "送修出库仓",
+  "lbl_return_qty": "退回数量",
+  "lbl_factory_charge": "工厂收费",
+  "txt_repair_hint": "客户退回的售后品推给工厂维修",
+  "msg_repair_need_charge": "维修退货必须填写"
 }
