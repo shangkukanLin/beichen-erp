@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 // 2026-09-20（F7-157）：详情页的保存原为页内直接 request.put('/inventory/purchase-return/{id}') ⇒ 统一走 API 封装
 import { getPurchaseReturn, getPurchaseReturnItems, getPurchaseReturnPurchaseOrderItems, auditPurchaseReturn, cancelPurchaseReturn, unAuditPurchaseReturn, updatePurchaseReturn, ReturnStatus, ReturnStatusLabel, type PurchaseReturn, type PurchaseReturnItem } from '@/api/purchase'
-import { PURCHASE_RETURN_DIRTY_KEY } from '@/api/enums'
+import { PURCHASE_RETURN_DIRTY_KEY, PurchaseChargeType, PurchaseChargeTypeLabel } from '@/api/enums'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
@@ -13,6 +13,8 @@ const loading = ref(false)
 const saving = ref(false)
 const detail = ref<Partial<PurchaseReturn>>({})
 const items = ref<any[]>([])
+/** 逐产品付费（2026-09-21）：详情页草稿态可改明细行付费，类型下拉用这里的选项 */
+const chargeTypeOptions = Object.values(PurchaseChargeType).map((v) => ({ value: v, label: PurchaseChargeTypeLabel[v] || v }))
 // 2026-09-20（F7-177）：详情只需显示**一个**仓库名 ⇒ 改为按 id 单取（原先是 pageSize=500 全量拉回再前端 find）
 const warehouseDisplayName = ref('')
 
@@ -154,12 +156,20 @@ async function handleSave() {
       purchaseOrderCode: detail.value.purchaseOrderCode || '',
       returnDate: detail.value.returnDate,
       remark: detail.value.remark || '',
+      // 逐产品付费（2026-09-21）：明细级为准；单据级金额由后端按 Σ 回写 ⇒ 这里传 0
+      chargeFlag: items.value.some((it: any) => Number(it.chargeAmount) > 0) ? 1 : 0,
+      chargeType: '',
+      chargeAmount: 0,
+      chargeReason: detail.value.chargeReason || '',
       items: items.value.map((it: any) => ({
         purchaseOrderItemId: it.purchaseOrderItemId,
         productId: it.productId,
         qualityType: it.qualityType || 'A',
         quantity: it.quantity,
         unitPrice: it.unitPrice,
+        chargeAmount: Number(it.chargeAmount) || 0,
+        chargeType: Number(it.chargeAmount) > 0 ? (it.chargeType || '') : '',
+        chargeReason: detail.value.chargeReason || '',
         remark: it.remark || '',
       })),
     }
@@ -213,6 +223,19 @@ onActivated(() => { loadData() })
           <span v-else>{{ detail.returnDate }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="退货总金额">{{ fmt(detail.totalAmount) }}</el-descriptions-item>
+        <!-- 逐产品付费（2026-09-21 用户口径：采购退货也要有付费、精确到产品；方向 = 我方付给供货商）。
+             单据级金额 = Σ明细行付费；chargeType 为空 = 各付费行类型不一致 ⇒ 显示"多类型"。 -->
+        <el-descriptions-item label="付费（逐产品合计，我方付给供货商）">
+          <template v-if="Number(detail.chargeFlag) === 1 && Number(detail.chargeAmount) > 0">
+            <span style="color:#e6a23c;font-weight:600">{{ fmt(detail.chargeAmount) }}</span>
+            <span style="margin-left:6px;color:#909399">
+              {{ PurchaseChargeTypeLabel[String(detail.chargeType)] || (detail.chargeType ? detail.chargeType : '多类型') }}
+            </span>
+            <span style="margin-left:6px;color:#c0c4cc;font-size:var(--app-font-xs)">（逐产品见下表「付费」列）</span>
+          </template>
+          <span v-else>不付费</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="付费说明（整单）">{{ detail.chargeReason || '—' }}</el-descriptions-item>
         <el-descriptions-item label="备注">
           <el-input v-if="isDraft()" v-model="detail.remark" placeholder="备注" />
           <span v-else>{{ detail.remark || '—' }}</span>
@@ -224,26 +247,45 @@ onActivated(() => { loadData() })
         <el-button v-if="isDraft()" type="primary" size="small" style="margin-left:12px" @click="openAddRowDialog">+ 添加行</el-button>
       </el-divider>
       <el-table :data="items" border stripe size="small">
-        <el-table-column prop="sku" label="SKU" width="130" />
-        <el-table-column label="产品" min-width="140">
+        <el-table-column prop="sku" label="SKU" width="112" />
+        <el-table-column label="产品" width="132" show-overflow-tooltip>
           <template #default="{ row }">{{ row.productName || productName(row) }}</template>
         </el-table-column>
-        <el-table-column label="数量" width="150" align="right">
+        <el-table-column label="数量" width="86" align="right">
           <template #default="{ row }">
-            <el-input-number v-if="isDraft()" v-model="row.quantity" :min="1" :precision="0" size="small" style="width:120px" />
+            <el-input-number v-if="isDraft()" v-model="row.quantity" :min="1" :precision="0" size="small" :controls="false" style="width:100%" />
             <span v-else>{{ row.quantity }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="单价" width="150" align="right">
+        <el-table-column label="单价" width="86" align="right">
           <template #default="{ row }">
-            <el-input-number v-if="isDraft()" v-model="row.unitPrice" :min="0" :precision="2" size="small" style="width:120px" />
+            <el-input-number v-if="isDraft()" v-model="row.unitPrice" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
             <span v-else>{{ row.unitPrice }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="金额" width="110" align="right">
+        <el-table-column label="金额" width="82" align="right">
           <template #default="{ row }">{{ fmt(rowAmount(row)) }}</template>
         </el-table-column>
-        <el-table-column label="备注" min-width="130">
+        <!-- 逐产品付费（2026-09-21 用户口径：采购退货也要有付费、精确到产品；方向 = 我方付给供货商）。
+             草稿态可直接改（金额 > 0 ⇒ 类型必选）；已审核只读展示 -->
+        <el-table-column label="付费" width="146" align="center">
+          <template #default="{ row }">
+            <div v-if="isDraft()" style="display:flex;gap:4px">
+              <el-input-number v-model="row.chargeAmount" :min="0" :precision="2" size="small" :controls="false"
+                placeholder="金额" style="width:68px" />
+              <el-select v-model="row.chargeType" size="small" placeholder="类型" clearable style="width:66px"
+                :disabled="!(Number(row.chargeAmount) > 0)">
+                <el-option v-for="o in chargeTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
+              </el-select>
+            </div>
+            <template v-else-if="Number(row.chargeAmount) > 0">
+              <span style="color:#e6a23c;font-weight:600">{{ fmt(row.chargeAmount) }}</span>
+              <span style="margin-left:4px;color:#909399">{{ PurchaseChargeTypeLabel[String(row.chargeType)] || row.chargeType || '' }}</span>
+            </template>
+            <span v-else style="color:#c0c4cc">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="备注" width="76" show-overflow-tooltip>
           <template #default="{ row }">
             <el-input v-if="isDraft()" v-model="row.remark" size="small" placeholder="备注" />
             <span v-else>{{ row.remark || '—' }}</span>

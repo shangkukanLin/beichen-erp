@@ -69,7 +69,7 @@
                ① 删掉「SKU」独占列（产品格显示「SKU | 名称」，与选品下拉同一格式，信息不丢）
                ② 输入控件统一 size="small"，数量/单价用 :controls="false"（不带加减按钮 ⇒ 更窄）
                ③ 按内容重新配宽 ⇒ 合计 920px < 内容区 948px（1262 窗口），**一行显示完、不左右滑动** -->
-          <el-table-column label="退回产品" width="146" show-overflow-tooltip>
+          <el-table-column label="退回产品" width="128" show-overflow-tooltip>
             <template #default="{ row }">
               <!-- 无单换货：手工选产品（可输 SKU 远程搜）；关联采购单：产品由采购明细带出，只读 -->
               <el-select v-if="!form.purchaseOrderId" v-model="row.productId" placeholder="选择产品（可输SKU）"
@@ -95,7 +95,7 @@
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="退回单价" width="86">
+          <el-table-column label="退回单价" width="78">
             <template #default="{ row }">
               <el-input-number v-model="row.unitPrice" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
             </template>
@@ -116,16 +116,26 @@
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="换入单价" width="86">
+          <el-table-column label="换入单价" width="78">
             <template #default="{ row }">
               <el-input-number v-model="row.inUnitPrice" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
             </template>
           </el-table-column>
         </el-table-column>
 
-        <el-table-column label="应付净额" width="86" align="right">
+        <!-- 逐产品付费（2026-09-21 用户口径：采购换货也要有付费、且精确到产品；方向=我方付给供货商）。
+             金额 > 0 即该产品付费；类型**必选**（与销售侧一致：填了金额必须能定类型）。
+             原来这列是「应付净额」——每行净额已由下方合计给出，改用它换付费列，表格仍一行显示完。 -->
+        <el-table-column label="付费" width="146" align="center">
           <template #default="{ row }">
-            {{ ((Number(row.inQuantity) || 0) * (Number(row.inUnitPrice) || 0) - (Number(row.quantity) || 0) * (Number(row.unitPrice) || 0)).toFixed(2) }}
+            <div style="display:flex;gap:4px">
+              <el-input-number v-model="row.chargeAmount" :min="0" :precision="2" size="small" :controls="false"
+                placeholder="金额" style="width:68px" />
+              <el-select v-model="row.chargeType" size="small" placeholder="类型" clearable style="width:66px"
+                :disabled="!(Number(row.chargeAmount) > 0)">
+                <el-option v-for="o in payTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
+              </el-select>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="备注" min-width="88">
@@ -147,36 +157,24 @@
       </div>
 
       <!-- 是否付费（2026-09-21 用户口径）：⚠️ 方向是「**我们向供货商付费**」⇒ 审核生成一条正向应付 -->
+      <!-- 逐产品付费（2026-09-21 用户口径）：金额填在**明细行的「付费」列**上（一行 = 一个产品），
+           这里只留「合计（自动，只读）」+「整单说明」；是否付费由明细推导（合计 > 0 ⇒ 付费）。
+           ⚠️ 方向：**我方付给供货商** ⇒ 审核生成一条正向应付（金额 = Σ明细，remark 逐产品）。 -->
       <el-row :gutter="16" style="margin-top:8px">
         <el-col :span="6">
-          <el-form-item label="是否付费">
-            <el-switch v-model="form.chargeFlag" :active-value="1" :inactive-value="0"
-              active-text="付费" inactive-text="不付费" />
+          <el-form-item label="付费合计（自动）">
+            <span style="font-weight:600;color:#e6a23c">{{ chargeTotal.toFixed(2) }}</span>
+            <span style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">= Σ 明细行付费</span>
           </el-form-item>
         </el-col>
-        <el-col :span="6">
-          <el-form-item label="付费类型" :required="form.chargeFlag === 1">
-            <el-select v-model="form.chargeType" placeholder="请选择" clearable style="width:100%"
-              :disabled="form.chargeFlag !== 1">
-              <el-option v-for="o in payTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
-            </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="6">
-          <el-form-item label="付费金额" :required="form.chargeFlag === 1">
-            <el-input-number v-model="form.chargeAmount" :min="0" :precision="2" :step="10"
-              controls-position="right" style="width:100%" :disabled="form.chargeFlag !== 1" />
-          </el-form-item>
-        </el-col>
-        <el-col :span="6">
-          <el-form-item label="付费说明">
-            <el-input v-model="form.chargeReason" placeholder="选填，如：换货服务费 / 补差价"
-              :disabled="form.chargeFlag !== 1" />
+        <el-col :span="10">
+          <el-form-item label="付费说明（整单）">
+            <el-input v-model="form.chargeReason" placeholder="选填，如：换货服务费 / 补差价（落到该单付费台账备注）" />
           </el-form-item>
         </el-col>
       </el-row>
-      <div v-if="form.chargeFlag === 1" style="margin:0 0 10px 110px;font-size:var(--app-font-xs);color:var(--app-color-warning)">
-        付费方向：<b>我方付给供货商</b> ⇒ 审核后额外生成一条正向应付（我方欠供货商 +{{ (Number(form.chargeAmount) || 0).toFixed(2) }}）
+      <div v-if="chargeTotal > 0" style="margin:0 0 10px 110px;font-size:var(--app-font-xs);color:var(--app-color-warning)">
+        付费方向：<b>我方付给供货商</b> ⇒ 审核后额外生成一条正向应付（我方欠供货商 +{{ chargeTotal.toFixed(2) }}）
       </div>
 
       <div class="footer">
@@ -196,7 +194,7 @@ import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import {
   ProductQualityType, ProductQualityTypeLabel,
-  WarehouseType, WarehouseCategory, ExchangePayType, ExchangePayTypeLabel,
+  WarehouseType, WarehouseCategory, PurchaseChargeType, PurchaseChargeTypeLabel,
   PURCHASE_EXCHANGE_DIRTY_KEY,
 } from '@/api/enums'
 // 产品下拉（无单换货手工加行时用）：与采购退货同款 productLabel（"SKU | 名称"）
@@ -238,10 +236,17 @@ const qualityOptions = computed(() =>
     value: v, label: ProductQualityTypeLabel[v] || v
   }))
 )
-/** 付费类型（对应后端 purchase/common/ExchangePayType；方向：我们向供货商付费） */
+/** 付费类型（对应后端 purchase/common/PurchaseChargeType；方向：我们向供货商付费） */
 const payTypeOptions = computed(() =>
-  Object.values(ExchangePayType).map((v) => ({ value: v, label: ExchangePayTypeLabel[v] || v }))
+  Object.values(PurchaseChargeType).map((v) => ({ value: v, label: PurchaseChargeTypeLabel[v] || v }))
 )
+/**
+ * 付费合计 = Σ 明细行付费（2026-09-21 逐产品口径）。
+ * <p>单据级 charge_amount 不再是"手填一个总数"，而是本合计 —— 保存时后端也会按 Σ明细 回写一次；
+ * 是否付费（chargeFlag）同样由它推导 ⇒ 前端不再单独放"是否付费"开关。</p>
+ */
+const chargeTotal = computed(() =>
+  items.value.reduce((s: number, it: any) => s + (Number(it.chargeAmount) || 0), 0))
 /** 明细合计（表下方）：净额 = 换入 − 退回，「加价换新」为正、等价换货为 0 */
 const totalReturnAmount = computed(() =>
   items.value.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0), 0))
@@ -341,6 +346,9 @@ async function loadEdit(id: number) {
     unitPrice: Number(it.unitPrice ?? 0),
     inQuantity: Number(it.inQuantity ?? it.quantity),
     inUnitPrice: Number(it.inUnitPrice ?? it.unitPrice ?? 0),
+    // 逐产品付费（2026-09-21）：明细接口已回传逐行付费字段
+    chargeAmount: Number(it.chargeAmount || 0),
+    chargeType: it.chargeType || '',
   }))
 }
 
@@ -362,6 +370,9 @@ function addItem() {
     productId: null,
     productName: '',
     sku: '',
+    // 逐产品付费（2026-09-21）：默认不付费，金额逐行填；类型在金额 > 0 时必选
+    chargeAmount: 0,
+    chargeType: '',
     quantity: 1,
     maxQuantity: null,
     qualityType: ProductQualityType.DEFECT,
@@ -416,12 +427,15 @@ async function submit() {
       return
     }
   }
-  // 付费校验：选付费时必须指定类型且金额 > 0（后端会再校验一次，此处提前给提示）
-  const charged = Number(form.chargeFlag) === 1
-  if (charged) {
-    if (!form.chargeType) { ElMessage.warning('已选择付费，请选择付费类型'); return }
-    if (!(Number(form.chargeAmount) > 0)) { ElMessage.warning('已选择付费，付费金额必须大于 0'); return }
+  // 付费校验（2026-09-21 逐产品口径）：**金额填在哪一行就算哪个产品付费**（金额 0 = 不付费）；
+  // 填了金额的行必须选类型（本行必选，没有批量类型可继承）——后端会再逐行校验一次
+  for (const it of its) {
+    if (Number(it.chargeAmount) > 0 && !it.chargeType) {
+      ElMessage.warning(`产品「${it.productName || it.productId}」已填付费金额，请选择付费类型`)
+      return
+    }
   }
+  const charged = chargeTotal.value > 0
   saving.value = true
   try {
     const body = {
@@ -431,10 +445,11 @@ async function submit() {
       purchaseOrderCode: form.purchaseOrderId ? form.purchaseOrderCode : '',
       warehouseOutId: form.warehouseOutId, warehouseInId: form.warehouseInId,
       exchangeDate: form.exchangeDate,
-      // 是否付费（方向：我们向供货商付费）⇒ 审核生成一条正向应付
+      // 是否付费（方向：我们向供货商付费）⇒ 审核生成一条正向应付；
+      // 金额由后端按 Σ明细 回写 ⇒ 这里只外带"是否付费"与整单说明（chargeAmount 传 0 不参与计算）
       chargeFlag: charged ? 1 : 0,
-      chargeType: charged ? form.chargeType : '',
-      chargeAmount: charged ? Number(form.chargeAmount) : 0,
+      chargeType: '',
+      chargeAmount: 0,
       chargeReason: charged ? (form.chargeReason || '') : '',
       remark: form.remark,
       items: its.map((i) => ({
@@ -443,6 +458,10 @@ async function submit() {
         qualityType: i.qualityType, quantity: i.quantity, unitPrice: i.unitPrice,
         // 换入侧（同品：产品即退回产品；数量可不等如退2换1）
         inQuantity: i.inQuantity, inQualityType: i.inQualityType, inUnitPrice: i.inUnitPrice,
+        // 逐产品付费：金额 > 0 才付费；类型必选（行内已校验）
+        chargeAmount: Number(i.chargeAmount) || 0,
+        chargeType: Number(i.chargeAmount) > 0 ? (i.chargeType || '') : '',
+        chargeReason: form.chargeReason || '',
         remark: i.remark
       }))
     }

@@ -32,52 +32,86 @@
           <el-button type="primary" :icon="'Plus'" @click="addItem">添加明细</el-button>
           <el-button type="success" :icon="'Download'" :disabled="!form.purchaseOrderId" @click="loadFromPurchaseOrder()">从采购单带入明细</el-button>
         </div>
-        <el-table :data="items" border>
-          <el-table-column label="SKU" width="130">
-            <template #default="{ row }">
-              <span v-if="row.sku">{{ row.sku }}</span>
-              <span v-else style="color:var(--app-text-secondary)">自动生成</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="产品" min-width="200" prop="productId">
+        <!-- 2026-09-21（UI + 逐产品付费）：原 9 列 ~1220px ⇒ 横向滚动。现：
+             ① 删掉「SKU」独占列（产品下拉已按 productLabel 显示「SKU | 名称」，信息不丢）
+             ② 控件 size=small、数量/单价 :controls=false ⇒ 更窄
+             ③ 新增「付费」列（金额 + 类型，**逐行可不同**；金额 0 = 该产品不付费）
+             ④ 列宽合计 802px < 内容区 948px ⇒ 一行显示完、不左右滑动 -->
+        <el-table :data="items" border size="small" max-height="420">
+          <el-table-column label="产品" width="176" show-overflow-tooltip>
             <template #default="{ row }">
               <el-select v-model="row.productId" placeholder="选择产品（可输SKU）" filterable remote :remote-method="loadProducts"
-                style="width:100%" @change="(v: number) => onProductChange(v, row)">
+                size="small" style="width:100%" @change="(v: number) => onProductChange(v, row)">
                 <el-option v-for="m in productOptions" :key="m.id" :label="productLabel(m)" :value="m.id" />
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="现有库存" width="140" align="center">
+          <el-table-column label="现有库存" width="68" align="center">
             <template #default="{ row }">
               <span :style="{ color: (row._stock ?? 0) <= 0 ? 'red' : '' }">{{ row._stock ?? '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="品质" width="90">
+          <el-table-column label="品质" width="72">
             <template #default="{ row }">
               <el-select v-model="row.qualityType" size="small" style="width:100%">
                 <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="可退数量" width="100" align="center">
+          <el-table-column label="可退数量" width="60" align="center">
             <template #default="{ row }">
               <span v-if="row.canReturn !== undefined">{{ row.canReturn }}</span>
               <span v-else>—</span>
             </template>
           </el-table-column>
-          <el-table-column label="退货数量" width="140">
-            <template #default="{ row }"><el-input-number v-model="row.quantity" :min="1" :step="1" :precision="0" :max="row.canReturn !== undefined ? row.canReturn : undefined" controls-position="right" style="width:100%" @change="calcAmount" /></template>
+          <el-table-column label="退货数量" width="74">
+            <template #default="{ row }"><el-input-number v-model="row.quantity" :min="1" :step="1" :precision="0" size="small" :controls="false" :max="row.canReturn !== undefined ? row.canReturn : undefined" style="width:100%" @change="calcAmount" /></template>
           </el-table-column>
-          <el-table-column label="单价" width="140">
-            <template #default="{ row }"><el-input-number v-model="row.unitPrice" :min="0" :precision="2" controls-position="right" style="width:100%" @change="calcAmount" /></template>
+          <el-table-column label="单价" width="74">
+            <template #default="{ row }"><el-input-number v-model="row.unitPrice" :min="0" :precision="2" size="small" :controls="false" style="width:100%" @change="calcAmount" /></template>
           </el-table-column>
-          <el-table-column label="金额" width="140" align="right">
+          <el-table-column label="金额" width="82" align="right">
             <template #default="{ row }">{{ ((Number(row.quantity) || 0) * (Number(row.unitPrice) || 0)).toFixed(2) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="70" align="center">
+          <!-- 逐产品付费（2026-09-21 用户口径：采购退货也要有付费、且精确到产品；方向=我方付给供货商）。
+               金额 > 0 即该产品付费；类型**必选**（填了金额必须能定类型） -->
+          <el-table-column label="付费" width="146" align="center">
+            <template #default="{ row }">
+              <div style="display:flex;gap:4px">
+                <el-input-number v-model="row.chargeAmount" :min="0" :precision="2" size="small" :controls="false"
+                  placeholder="金额" style="width:68px" />
+                <el-select v-model="row.chargeType" size="small" placeholder="类型" clearable style="width:66px"
+                  :disabled="!(Number(row.chargeAmount) > 0)">
+                  <el-option v-for="o in chargeTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
+                </el-select>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="50" align="center">
             <template #default="{ $index }"><el-button type="danger" link @click="items.splice($index, 1)">删除</el-button></template>
           </el-table-column>
         </el-table>
+
+        <!-- 逐产品付费（2026-09-21 用户口径）：金额填在**明细行的「付费」列**上（一行 = 一个产品），
+             这里只留「合计（自动，只读）」+「整单说明」；是否付费由明细推导（合计 > 0 ⇒ 付费）。
+             ⚠️ 方向：**我方付给供货商** ⇒ 审核生成一条正向应付（金额 = Σ明细，remark 逐产品）。
+             与退货本身分开记账：退货侧是负数应付（冲减欠款），付费是正数应付（额外要付的钱）。 -->
+        <el-row :gutter="16" style="margin-top:12px">
+          <el-col :span="6">
+            <el-form-item label="付费合计（自动）">
+              <span style="font-weight:600;color:#e6a23c">{{ chargeTotal.toFixed(2) }}</span>
+              <span style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">= Σ 明细行付费</span>
+            </el-form-item>
+          </el-col>
+          <el-col :span="10">
+            <el-form-item label="付费说明（整单）">
+              <el-input v-model="chargeReason" placeholder="选填，如：退货处理费 / 品质折让补价（落到该单付费台账备注）" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <div v-if="chargeTotal > 0" style="margin:0 0 10px 110px;font-size:var(--app-font-xs);color:var(--app-color-warning)">
+          付费方向：<b>我方付给供货商</b> ⇒ 审核后额外生成一条正向应付（我方欠供货商 +{{ chargeTotal.toFixed(2) }}）
+        </div>
       </el-form>
 
       <div style="text-align:center;margin-top:24px">
@@ -92,7 +126,7 @@
 import { localDate } from '@/utils/date'
 defineOptions({ name: 'PurchaseReturnAdd' })
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { PURCHASE_RETURN_DIRTY_KEY, WarehouseCategory, WarehouseType } from '@/api/enums'
+import { PURCHASE_RETURN_DIRTY_KEY, WarehouseCategory, WarehouseType, PurchaseChargeType, PurchaseChargeTypeLabel } from '@/api/enums'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
@@ -115,6 +149,13 @@ interface ReturnItem {
   _stock?: number
   quantity?: number
   unitPrice?: number
+  /**
+   * 逐产品付费（2026-09-21 用户口径：采购退货也要有付费、精确到产品；方向 = 我方付给供货商）。
+   * 金额挂在明细行（一行 = 一个产品）；金额 > 0 即该产品付费，类型必选。
+   */
+  chargeAmount?: number
+  chargeType?: string
+  chargeReason?: string
   remark?: string
 }
 
@@ -128,6 +169,18 @@ const submitLoading = ref(false)
 const qualityOptions = ref<QualityOption[]>([])
 const productOptions = ref<any[]>([])
 const items = ref<ReturnItem[]>([])
+/**
+ * 逐产品付费（2026-09-21 用户口径）：采购退货也要有"是否付费"，方向 = **我方付给供货商**，
+ * 且**精确到产品** —— 金额挂在明细行（每行一个产品，见明细表「付费」列），单据级只作整单说明。
+ * <p>是否付费（chargeFlag）与付费合计（chargeAmount）都由明细推导、后端按 Σ明细 回写 ⇒ 前端不放开关键开关。</p>
+ */
+const chargeReason = ref('')
+const chargeTotal = computed(() =>
+  items.value.reduce((s, it: any) => s + (Number(it.chargeAmount) || 0), 0))
+/** 付费类型（对应后端 purchase/common/PurchaseChargeType；方向：我们向供货商付费） */
+const chargeTypeOptions = computed(() =>
+  Object.values(PurchaseChargeType).map((v) => ({ value: v, label: PurchaseChargeTypeLabel[v] || v }))
+)
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw, supplierType: 'product' } })
 // 2026-09-20（F7-149）：只滤 category 仍会列出辅料仓 ⇒ 补 warehouseType=FINISHED（自有成品仓）
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page',
@@ -232,6 +285,8 @@ async function loadReturnData() {
       form.purchaseOrderCode = order.purchaseOrderCode || ''
       form.returnDate = order.returnDate
       form.remark = order.remark || ''
+      // 逐产品付费（2026-09-21）：整单付费说明回填（金额/类型逐行在明细里）
+      chargeReason.value = order.chargeReason || ''
     }
     const its: any = await getPurchaseReturnItems(id) || []
     items.value = (Array.isArray(its) ? its : (its?.records || [])).map((it: any) => ({
@@ -241,6 +296,9 @@ async function loadReturnData() {
       quantity: it.quantity,
       unitPrice: it.unitPrice,
       amount: it.amount,
+      // 逐产品付费（2026-09-21）：明细接口已回传逐行付费字段
+      chargeAmount: Number(it.chargeAmount || 0),
+      chargeType: it.chargeType || '',
       remark: it.remark,
     }))
     // 查询每个明细产品的现有库存
@@ -274,6 +332,13 @@ async function handleSubmit() {
         }
       }
     }
+    // 逐产品付费校验（2026-09-21）：填了金额的行必须选类型（后端保存/审核两处会再逐行校验一次）
+    for (const it of items.value) {
+      if (Number(it.chargeAmount) > 0 && !it.chargeType) {
+        ElMessage.warning(`产品「${it.productId}」已填付费金额，请选择付费类型`)
+        return
+      }
+    }
     const total = items.value.reduce((s, it) => s + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0)
     submitLoading.value = true
     try {
@@ -285,6 +350,12 @@ async function handleSubmit() {
         returnDate: form.returnDate,
         remark: form.remark,
         totalAmount: total,
+        // 是否付费（方向：我方付给供货商）⇒ 审核生成一条正向应付；
+        // 金额由后端按 Σ明细 回写 ⇒ 这里只外带"是否付费"与整单说明（chargeAmount 传 0 不参与计算）
+        chargeFlag: chargeTotal.value > 0 ? 1 : 0,
+        chargeType: '',
+        chargeAmount: 0,
+        chargeReason: chargeReason.value || '',
         items: items.value.map(it => ({
           productId: it.productId,
           qualityType: it.qualityType,
@@ -292,6 +363,10 @@ async function handleSubmit() {
           quantity: it.quantity,
           unitPrice: it.unitPrice,
           amount: (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0),
+          // 逐产品付费：金额 > 0 才付费；类型必选（行内已校验）
+          chargeAmount: Number(it.chargeAmount) || 0,
+          chargeType: Number(it.chargeAmount) > 0 ? (it.chargeType || '') : '',
+          chargeReason: chargeReason.value || '',
           remark: it.remark,
         }))
       }

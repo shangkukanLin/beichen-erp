@@ -10,10 +10,15 @@ $MYSQL = 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe'
 $pass = 0; $fail = 0
 $OUT_WH = 71      # 退回出库仓（我方成品仓）
 $IN_WH  = 71      # 换入入库仓（可同仓，仓内按品质分行）
-$PO_ID  = 255     # 来源采购单 CG-20260918006（已审核）
-$PROD   = 60      # 采购单明细产品「测试产品A11」
+$PO_ID  = 255     # 来源采购单（已审核）—— 下面会用 SQL 覆盖成"可换量最大"的那张
+$PO_CODE = 'CG-20260918006'
+$PROD   = 60      # 采购单明细产品 —— 同上，会被 SQL 覆盖
 $QTY    = 3       # 本次退回/换入数量
 $PRICE  = 16      # 采购原价
+# 2026-09-21（夹具自适应，重要）：本用例按"关联采购单的可换量"建单，而 可换量 = 已购 − 已退 − 已换 ⇒
+# **反复运行必然把某张采购单耗尽**（实测 CG-20260918006 只剩 2，随后变 0 ⇒ 建单 code=500，
+# 18 项断言连锁变红 —— 是夹具问题，不是回归）。⇒ 运行时自动挑"仍可换 + 我方仓有 A 规现货"的明细，
+# 挑选语句放在**函数定义之后**（早于 SqlOne 定义调用它会静默取空 —— 踩过）。
 function Ok($cond, $msg) {
   if ($cond) { Write-Host ('PASS ' + $msg); $script:pass++ } else { Write-Host ('FAIL ' + $msg); $script:fail++ }
 }
@@ -32,6 +37,18 @@ Ok (($badPay0 -eq 0)) ('baseline payable invariant holds on all rows (bad=' + $b
 $lg = Invoke-RestMethod -Uri "$base/auth/login" -Method Post -ContentType 'application/json' -Body '{"username":"lin","password":"123","companyId":1}'
 $h = @{ Authorization = $lg.data.token }
 Ok ($null -ne $lg.data.token) 'login ok (token acquired)'
+
+Write-Host '--- 0.5) fixture: auto-pick an audited purchase order item that is still swapable AND has grade-A stock here'
+# 2026-09-21（夹具自适应）：本用例按"关联采购单的可换量"建单，而 可换量 = 已购 − 已退 − 已换 ⇒
+# **反复运行必然把某张采购单耗尽**（实测 CG-20260918006 用完 ⇒ 建单 code=500 + 18 项连锁红，是夹具问题不是回归）。
+# 挑选必须放在 ①函数定义之后（早于 SqlOne 定义调用会静默取空）②DEFECT 备货之前（备货要按选中的产品/仓库来）。
+$fxPick = [string](SqlOne ("SELECT CONCAT(oi.order_id,'|',oi.id,'|',oi.product_id,'|',oi.quantity - IFNULL((SELECT SUM(ri.quantity) FROM purchase_return_item ri WHERE ri.purchase_order_item_id=oi.id AND ri.return_id IN (SELECT id FROM purchase_return WHERE status<>'CANCELLED')),0) - IFNULL((SELECT SUM(xi.quantity) FROM purchase_exchange_item xi WHERE xi.purchase_order_item_id=oi.id AND xi.exchange_id IN (SELECT id FROM purchase_exchange WHERE status<>'CANCELLED')),0),'|',o.code) FROM purchase_order_item oi JOIN purchase_order o ON o.id=oi.order_id WHERE o.status='AUDITED' AND EXISTS (SELECT 1 FROM warehouse_stock ws WHERE ws.warehouse_id=$OUT_WH AND ws.product_id=oi.product_id AND ws.quality_type='A' AND IFNULL(ws.quantity,0) > 5) ORDER BY (oi.quantity - IFNULL((SELECT SUM(ri.quantity) FROM purchase_return_item ri WHERE ri.purchase_order_item_id=oi.id AND ri.return_id IN (SELECT id FROM purchase_return WHERE status<>'CANCELLED')),0) - IFNULL((SELECT SUM(xi.quantity) FROM purchase_exchange_item xi WHERE xi.purchase_order_item_id=oi.id AND xi.exchange_id IN (SELECT id FROM purchase_exchange WHERE status<>'CANCELLED')),0)) DESC LIMIT 1"))
+$fxp = @($fxPick -split '\|')
+if ($fxp.Count -ge 5) {
+  $PO_ID = [int]$fxp[0]; $PROD = [int]$fxp[2]; $PO_CODE = [string]$fxp[4]
+  $QTY = [Math]::Min($QTY, [int]$fxp[3])
+  Write-Host ('  fixture auto-picked: po=' + $PO_ID + ' code=' + $PO_CODE + ' product=' + $PROD + ' swapable=' + $fxp[3] + ' qty=' + $QTY + ' (hardcoded 255/60 overridden)')
+}
 
 Write-Host '--- 1) precondition: DEFECT stock in the return warehouse (reclassify A -> DEFECT if needed)'
 $defBefore = D (SqlOne ("SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$OUT_WH AND product_id=$PROD AND quality_type='DEFECT'"))
@@ -61,8 +78,21 @@ Write-Host ("  stock before: A=" + $aBefore + " DEFECT=" + $defBefore)
 Write-Host '--- 2) create a purchase-exchange draft (same-product exchange, linked to the purchase order)'
 $poiId = D (SqlOne ("SELECT id FROM purchase_order_item WHERE order_id=$PO_ID AND product_id=$PROD LIMIT 1"))
 Write-Host ('  purchase order item anchor id=' + $poiId)
+# 2026-09-21（夹具自适应）：本用例按"关联采购单的可换量"建单，而可换量 = 已购 − 已退 − 已换 ⇒
+# **反复运行会把它耗尽**（实测 已购100 / 已退10 / 已换88 ⇒ 可换 2，原来写死 3 ⇒ code=500
+# "退回数量超过可换数量"，18 项断言连锁变红 —— 是夹具问题，不是回归）。改为运行时取实际可换量、
+# 并把 $QTY 统一改成实际值（后面的库存/台账断言都是**相对量**，QTY 变小不影响其正确性）。
+$canSwap = D (SqlOne ("SELECT (oi.quantity - IFNULL((SELECT SUM(ri.quantity) FROM purchase_return_item ri WHERE ri.purchase_order_item_id=oi.id AND ri.return_id IN (SELECT id FROM purchase_return WHERE status<>'CANCELLED')),0) - IFNULL((SELECT SUM(xi.quantity) FROM purchase_exchange_item xi WHERE xi.purchase_order_item_id=oi.id AND xi.exchange_id IN (SELECT id FROM purchase_exchange WHERE status<>'CANCELLED')),0)) FROM purchase_order_item oi WHERE oi.id=$poiId"))
+Write-Host ('  swapable qty on the linked purchase order = ' + $canSwap + ' (declared QTY=' + $QTY + ')')
+if ($canSwap -lt 1) {
+  Write-Host '  [FIXTURE EXHAUSTED] no audited purchase order item has a swapable qty left (market data exhausted);'
+  Write-Host '                     nothing was asserted. Re-seed by receiving a new purchase order, then rerun.'
+  Write-Host ('RESULT FAIL purchase-exchange (fixture exhausted, asserted nothing) pass=' + $pass + ' fail=' + $fail)
+  exit 1
+}
+if ($QTY -gt $canSwap) { $QTY = $canSwap; Write-Host ('  QTY clamped to the real swapable qty = ' + $QTY) }
 $body = @{
-  supplierId = 26; purchaseOrderId = $PO_ID; purchaseOrderCode = 'CG-20260918006'
+  supplierId = 26; purchaseOrderId = $PO_ID; purchaseOrderCode = $PO_CODE
   warehouseOutId = $OUT_WH; warehouseInId = $IN_WH
   exchangeDate = (Get-Date -Format 'yyyy-MM-dd'); remark = 'verify-purchase-exchange'
   items = @(@{
@@ -189,7 +219,10 @@ try {
   $feeZeroMsg = [string]$fz.msg
 } catch { $feeZeroMsg = [string]$_.ErrorDetails.Message }
 Write-Host ('  zero-fee replied: ' + $feeZeroMsg)
-Ok ($feeZeroMsg -like ('*' + $kwFeeAmt + '*')) 'paid=on with amount 0 is refused'
+# 2026-09-21（逐产品口径）：付费金额下沉到明细行 ⇒ "开关=付费但没给任何产品填金额"现在被拒为
+# 「已选择付费，请为具体产品填写付费金额（付费精确到产品）」。这里断言**行为**（被拒 + 有提示），
+# 具体文案由 ui-e2e-p11b 的前端用例覆盖（保持本文件不依赖中文关键字字面量）。
+Ok (($feeZeroMsg.Length -gt 0) -and (-not ($fz.code -eq 200) -and -not ($fz.code -eq 0))) 'paid=on with no per-product amount is refused'
 $feeBadTypeBody = @{
   supplierId = 26; warehouseOutId = $OUT_WH; warehouseInId = $IN_WH; exchangeDate = (Get-Date -Format 'yyyy-MM-dd')
   chargeFlag = 1; chargeType = 'NOT_A_TYPE'; chargeAmount = $FEE

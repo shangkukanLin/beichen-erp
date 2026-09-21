@@ -34,21 +34,18 @@
         <el-descriptions-item label="应付净额（差价）">
           <span style="font-weight:600">{{ formatMoney(Number(head.totalInAmount || 0) - Number(head.totalReturnAmount || 0)) }}</span>
         </el-descriptions-item>
-        <!-- 是否付费（2026-09-21）：⚠️ 方向 = 我方付给供货商 ⇒ 审核额外生成一条正向应付 -->
-        <el-descriptions-item label="是否付费">
-          <template v-if="Number(head.chargeFlag) === 1">
-            <el-tag type="warning" size="small">付费</el-tag>
-            <span v-if="head.chargeType" style="margin-left:6px">
-              {{ ExchangePayTypeLabel[String(head.chargeType)] || head.chargeType }}
+        <!-- 付费（2026-09-21 逐产品）：单据级金额 = Σ明细行付费；chargeType 为空 = 各付费行类型不一致 ⇒ 显示"多类型" -->
+        <el-descriptions-item label="付费（逐产品合计，我方付给供货商）">
+          <template v-if="Number(head.chargeFlag) === 1 && Number(head.chargeAmount) > 0">
+            <span style="color:#e6a23c;font-weight:600">{{ formatMoney(head.chargeAmount) }}</span>
+            <span style="margin-left:6px;color:#909399">
+              {{ PurchaseChargeTypeLabel[String(head.chargeType)] || (head.chargeType ? head.chargeType : '多类型') }}
             </span>
+            <span style="margin-left:6px;color:#c0c4cc;font-size:var(--app-font-xs)">（逐产品见下表「付费」列）</span>
           </template>
           <span v-else>不付费</span>
         </el-descriptions-item>
-        <el-descriptions-item label="付费金额（我方付给供货商）">
-          <span v-if="Number(head.chargeFlag) === 1" style="color:#e6a23c;font-weight:600">{{ formatMoney(head.chargeAmount) }}</span>
-          <span v-else>—</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="付费说明">{{ head.chargeReason || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="付费说明（整单）">{{ head.chargeReason || '—' }}</el-descriptions-item>
         <el-descriptions-item label="审核人">{{ head.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="审核时间">{{ head.auditTime || '—' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ head.createTime || '—' }}</el-descriptions-item>
@@ -63,7 +60,7 @@
       <el-table :data="items" border>
         <!-- ===== 退回侧：退给供货商，从我方仓扣减 ===== -->
         <el-table-column label="退回（退给供货商）" align="center">
-          <el-table-column label="退回产品" width="156" show-overflow-tooltip>
+          <el-table-column label="退回产品" width="132" show-overflow-tooltip>
             <template #default="{ row }">
               <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ productText(row) }}</el-button>
               <span v-else>{{ productText(row) }}</span>
@@ -93,7 +90,17 @@
             <template #default="{ row }">{{ formatMoney(row.inAmount) }}</template>
           </el-table-column>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" width="96" show-overflow-tooltip>
+        <!-- 逐产品付费（2026-09-21）：本行产品付给供货商的金额 + 类型（金额 0 = 该产品不付费） -->
+        <el-table-column label="付费" width="140" align="center" show-overflow-tooltip>
+          <template #default="{ row }">
+            <template v-if="Number(row.chargeAmount) > 0">
+              <span style="color:#e6a23c;font-weight:600">{{ formatMoney(row.chargeAmount) }}</span>
+              <span style="margin-left:4px;color:#909399">{{ PurchaseChargeTypeLabel[String(row.chargeType)] || row.chargeType || '' }}</span>
+            </template>
+            <span v-else style="color:#c0c4cc">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" width="72" show-overflow-tooltip>
           <template #default="{ row }">{{ row.remark || '-' }}</template>
         </el-table-column>
       </el-table>
@@ -117,7 +124,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import {
-  DocStatus, DocStatusLabel, ProductQualityTypeLabel, ExchangePayTypeLabel, PURCHASE_EXCHANGE_DIRTY_KEY,
+  DocStatus, DocStatusLabel, ProductQualityTypeLabel, PurchaseChargeTypeLabel, PURCHASE_EXCHANGE_DIRTY_KEY,
 } from '@/api/enums'
 import {
   getPurchaseExchange, auditPurchaseExchange, unAuditPurchaseExchange, cancelPurchaseExchange,

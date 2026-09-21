@@ -383,6 +383,8 @@ export const SourceBillTypeLabel: Record<string, string> = {
   PURCHASE_EXCHANGE_RETURN: '采购换货退回', PURCHASE_EXCHANGE_IN: '采购换货入库',
   // 2026-09-21：采购换货「是否付费=是」时的付费台账（方向：我们向供货商付费 ⇒ 正向应付）
   PURCHASE_EXCHANGE_CHARGE: '采购换货付费',
+  // 2026-09-21：采购**退货**「是否付费=是」时的付费台账（同上方向；枚举守卫会校验这行必须在）
+  PURCHASE_RETURN_CHARGE: '采购退货付费',
   SALE_EXCHANGE_CHARGE: '销售换货收费', SALE_RETURN_CHARGE: '销售退货收费',
   RETURN_SORT_LOSS: '退货整理折损', PAYABLE_TRANSFER: '应付转应收',
   // F7-53（2026-09-19）：预收/预付台账的来源标记（后端由 SettlementStatus.ADVANCE 归位而来）
@@ -570,22 +572,22 @@ export const ExchangeChargeTypeLabel: Record<string, string> = {
 }
 
 /**
- * 采购换货单付费类型（对应后端 purchase/common/ExchangePayType，存储值 SERVICE/DIFF/FULL/OTHER）
+ * 采购换货单付费类型（对应后端 purchase/common/PurchaseChargeType，存储值 SERVICE/DIFF/FULL/OTHER）
  * ⚠️ 方向与上面的销售侧 ExchangeChargeType 相反：这里是「**我们向供货商付费**」（审核生成正向应付），
  * 销售侧是「向客户收费」（审核生成正向应收）。两侧各自独立映射，避免方向混用。
  */
-export const ExchangePayType = {
+export const PurchaseChargeType = {
   SERVICE: 'SERVICE',      // 服务费（供货商收取的换货/翻新手续费等）
   DIFF: 'DIFF',            // 品质差价（换入品质更好，我方补差价）
   FULL: 'FULL',            // 全额货值（按货值全额付费换新）
   OTHER: 'OTHER'           // 其他
 } as const
 
-export const ExchangePayTypeLabel: Record<string, string> = {
-  [ExchangePayType.SERVICE]: '服务费',
-  [ExchangePayType.DIFF]: '品质差价',
-  [ExchangePayType.FULL]: '全额货值',
-  [ExchangePayType.OTHER]: '其他'
+export const PurchaseChargeTypeLabel: Record<string, string> = {
+  [PurchaseChargeType.SERVICE]: '服务费',
+  [PurchaseChargeType.DIFF]: '品质差价',
+  [PurchaseChargeType.FULL]: '全额货值',
+  [PurchaseChargeType.OTHER]: '其他'
 }
 
 /**

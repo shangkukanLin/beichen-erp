@@ -39,7 +39,9 @@ Write-Host '--- 1) the add page offers a free-form path (add-detail button) and 
 $hasAddBtn = BodyHas (ZH 'btn_add_detail')
 Ok ($hasAddBtn -eq 'True') 'the add page offers the add-detail button (free-form entry)'
 Ok ((BodyHas (ZH 'lbl_src_purchase_order')) -eq 'True') 'the source purchase order field is still offered'
-Ok ((BodyHas (ZH 'lbl_pay_flag')) -eq 'True') 'the paid flag field is rendered (whether-we-pay)'
+# 2026-09-21（逐产品口径）：单据级「是否付费」开关已移除 —— 付费改为**明细行**填写，
+# 单据级只留「付费合计（自动）」+「付费说明（整单）」；是否付费由明细推导。
+Ok ((BodyHas (ZH 'lbl_pay_total')) -eq 'True') 'the per-product paid total is rendered (charges live on the rows)'
 
 Write-Host '--- 2) supplier + both warehouses (purchase order intentionally left empty)'
 $r1 = SelectLabelContains 'lbl_vendor' (ZH 'val_vendor1') 1500
@@ -71,17 +73,20 @@ if ($tb -and $tb.n -ge 1) {
   Ok (($q1 -match 'OK') -and ($q2 -match 'OK')) ('quantities set (' + $q1 + '/' + $q2 + ')')
 } else { Ok $false ('the free-form detail row was not added (rows=' + $tb.n + ')') }
 
-Write-Host '--- 4) turn the paid flag ON, pick the type, fill the amount (WE pay the supplier)'
-$bLbl = B64 (ZH 'lbl_pay_flag')
-$swJs = "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const L=T('$bLbl');const vis=e=>e.getClientRects().length>0;const items=[...document.querySelectorAll('.el-form-item')].filter(vis);const it=items.find(x=>{const l=x.querySelector('.el-form-item__label');return l&&(l.innerText||'').trim().indexOf(L)>=0});if(!it)return 'NOITEM';const sw=it.querySelector('.el-switch');if(!sw)return 'NOSWITCH';if(sw.classList.contains('is-checked'))return 'ALREADY';sw.click();return 'OK'})()"
-$sw = EvalJs $swJs
-Ok (($sw -match 'OK') -or ($sw -eq 'ALREADY')) ('paid switch toggled (' + $sw + ')')
+Write-Host '--- 4) fill the PER-PRODUCT charge on the detail row (WE pay the supplier)'
+# 2026-09-21（逐产品口径）：付费已下沉到明细行 —— 该行最后一个数字输入框 = 「付费」金额，
+# 最后一个下拉 = 「付费」类型（前面的下拉是 产品 / 退回品质 / 换入品质）。金额 > 0 即该产品付费。
+$feeAmtJs = "(()=>{const vis=e=>e.getClientRects().length>0;const dlgs=[...document.querySelectorAll('.el-dialog,.el-drawer')].filter(vis);const root=dlgs.length?dlgs[dlgs.length-1]:document;const ts=[...root.querySelectorAll('.el-table')].filter(vis);const t=ts[ts.length-1];if(!t)return 'NOTABLE';const rs=[...t.querySelectorAll('.el-table__body tbody tr')];if(!rs.length)return 'NOROW';const ns=[...rs[0].querySelectorAll('.el-input-number input')];if(!ns.length)return 'NONUM';const el=ns[ns.length-1];const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;s.call(el,'$FEE');el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return 'OK:n='+ns.length})()"
+$fa = EvalJs $feeAmtJs
+Ok ($fa -match 'OK') ('paid amount filled on the detail row (' + $fa + ')')
+Start-Sleep -Milliseconds 700
+$ro = OpenRowSelect 0 3
+Ok ($ro -match 'OK') ('paid type select opened on the row (' + $ro + ')')
 Start-Sleep -Milliseconds 900
-$pt = SelectLabelText 'lbl_pay_type' (ZH 'pay_type_diff') 1200
-Ok ($pt -match 'OK') ('paid type picked (' + $pt + ')')
-$fa = FillLabel 'lbl_pay_amount' "$FEE"
-Ok ($fa -match 'OK') ('paid amount filled (' + $fa + ')')
+$pk = PickOptionB64 (B64 (ZH 'pay_type_diff'))
+Ok ($pk -match 'OK') ('paid type picked (' + $pk + ')')
 Start-Sleep -Milliseconds 800
+Ok ((BodyHas (ZH 'lbl_pay_total')) -eq 'True') 'the per-product paid total is rendered'
 Ok ((BodyHas (ZH 'txt_pay_direction')) -eq 'True') 'the form states the direction: WE pay the supplier'
 
 Write-Host '--- 5) save -> a DRAFT with NO purchase order and charge_flag=1'
@@ -101,6 +106,12 @@ Ok (($xid -gt 0)) 'the document exists in the DB'
 Ok (($poId -eq 0)) 'saved WITHOUT a purchase order (free-form exchange)'
 Ok (($cf -eq 1)) 'paid flag persisted from the page'
 Ok (($ca -eq $FEE)) ('paid amount persisted from the page (' + $FEE + ')')
+# 逐产品口径（2026-09-21）：金额必须落在**明细行**上，单据级只是 Σ 的派生值
+$caItem = D (SqlOne ("SELECT IFNULL(charge_amount,0) FROM purchase_exchange_item WHERE exchange_id=$xid LIMIT 1"))
+$ctItem = SqlOne ("SELECT IFNULL(charge_type,'') FROM purchase_exchange_item WHERE exchange_id=$xid LIMIT 1")
+Write-Host ('  item level: charge_amount=' + $caItem + ' charge_type=' + $ctItem)
+Ok (($caItem -eq $FEE)) 'the charge is stored on the ITEM (per product, page filled)'
+Ok (($ctItem -eq 'DIFF')) 'the item charge type persisted from the page'
 
 Write-Host '--- 6) audit it from the list -> stock moves + THREE ledgers (return / in / PAID)'
 $defBefore = D (SqlOne ("SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$OUT_WH AND product_id=$PROD AND quality_type='DEFECT'"))
@@ -134,8 +145,8 @@ Ok ($mark -eq 'PAID') 'the list marks the row as paid'
 
 Write-Host '--- 7) detail page: free-form + paid are both visible'
 Open "/inventory/purchase-exchange/detail/$xid" 2600
-Ok ((BodyHas (ZH 'lbl_pay_flag')) -eq 'True') 'detail shows the paid flag'
-Ok ((BodyHas (ZH 'lbl_pay_amount')) -eq 'True') 'detail shows the paid amount (we pay the supplier)'
+Ok ((BodyHas (ZH 'lbl_pay_total_detail')) -eq 'True') 'detail shows the per-product paid total (we pay the supplier)'
+Ok ((BodyHas (ZH 'lbl_pay_reason')) -eq 'True') 'detail shows the whole-document paid note'
 Ok ((BodyHas (ZH 'txt_no_po')) -eq 'True') 'detail marks the document as free-form (no purchase order)'
 Ok ((BodyHas (ZH 'val_prod_po')) -eq 'True') 'detail lists the manually entered product'
 

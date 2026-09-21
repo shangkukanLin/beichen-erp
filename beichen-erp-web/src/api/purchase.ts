@@ -59,10 +59,20 @@ export interface PurchaseReturnItem {
   productId?: number
   /** 产品名称（展示字段，后端回填） */
   productName?: string
+  /** SKU（展示字段，后端回填） */
+  sku?: string
   qualityType?: string
   quantity?: number
   unitPrice?: number
   amount?: number
+  /**
+   * 逐产品付费（2026-09-21 用户口径：采购退货也要有付费，方向 = **我方付给供货商**，且精确到产品）。
+   * <p>金额挂在**明细行**（一行 = 一个产品）；单据级 = Σ(本字段)，由后端回写。</p>
+   */
+  chargeFlag?: number
+  chargeType?: string
+  chargeAmount?: number
+  chargeReason?: string
   remark?: string
 }
 
@@ -78,6 +88,14 @@ export interface PurchaseReturn {
   returnDate?: string
   status?: number
   totalAmount?: number
+  /**
+   * 逐产品付费（2026-09-21）：单据级为**派生值** —— charge_amount = Σ明细行付费、charge_flag 由它推导；
+   * charge_type 仅当各付费行类型一致时回填，否则为空（前端显示"多类型"）。方向：**我方付给供货商**（正向应付）。
+   */
+  chargeFlag?: number
+  chargeType?: string
+  chargeAmount?: number
+  chargeReason?: string
   remark?: string
   itemsSummary?: string
   items?: PurchaseReturnItem[]
