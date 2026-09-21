@@ -56,7 +56,7 @@ function groupProductStocks(rows: any[]) {
     else if (qt === ProductQualityType.C) row.qtyC += q
     else if (qt === ProductQualityType.PENDING) row.qtyPending += q
     else if (qt === ProductQualityType.DEFECT) row.qtyDefect += q
-    // 其余未知品质不计数：不可用 else 兜底，否则待分类等会被误算成不良品
+    // 其余未知品质不计数：不可用 else 兜底，否则待整理等会被误算成不良品
   }
   return Array.from(map.values())
 }
@@ -85,7 +85,7 @@ function totalQty(row: any) {
 /**
  * 导出"当前页签"为 Excel：列与页面表格一致，数量按数值写入（整数不带小数）。
  * - 物料信息 → 物料清单（物料名称/物料类型/数量）
- * - 产品信息 → 成品清单（SKU/产品名称/A规…待分类/总库存）
+ * - 产品信息 → 成品清单（SKU/产品名称/A规…待整理/总库存）
  * - 仓库信息 → 仓库档案（项目/内容），避免"点了导出没反应"
  */
 function exportExcel() {
@@ -101,7 +101,7 @@ function exportExcel() {
     body = (materials.value || []).map((r: any) => [r.materialName || '', r.materialTypeName || '-', Number(r.quantity ?? 0)])
   } else if (activeTab.value === 'product') {
     sheetName = '成品库存'
-    cols = ['SKU', '产品名称', 'A规', 'B规', 'C规', '不良', '待分类', '总库存']
+    cols = ['SKU', '产品名称', 'A规', 'B规', 'C规', '不良', '待整理', '总库存']
     body = (products.value || []).map((r: any) => [
       r.sku || '', r.productName || '',
       Number(r.qtyA ?? 0), Number(r.qtyB ?? 0), Number(r.qtyC ?? 0),
@@ -204,7 +204,7 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
             <span v-else style="color:#999">0</span>
           </template>
         </el-table-column>
-        <el-table-column label="待分类" width="90" align="right">
+        <el-table-column label="待整理" width="90" align="right">
           <template #default="{row}">
             <el-tag v-if="Number(row.qtyPending)>0" type="primary" size="small" title="等待退货整理的库存">{{ fmt(row.qtyPending) }}</el-tag>
             <span v-else style="color:#999">0</span>

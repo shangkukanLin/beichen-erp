@@ -138,7 +138,7 @@ public class WarehouseStockController {
                 return m;
             });
             BigDecimal q = s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
-            // 按成品品质枚举显式归类：不可用 else 兜底，否则 PENDING(待分类) 等会被静默算成不良品
+            // 按成品品质枚举显式归类：不可用 else 兜底，否则 PENDING(待整理) 等会被静默算成不良品
             ProductQualityType type = ProductQualityType.of(s.getQualityType());
             if (type == null) continue;
             switch (type) {
@@ -252,7 +252,7 @@ public class WarehouseStockController {
                 return m;
             });
             BigDecimal q = s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
-            // 按成品品质枚举显式归类：不可用 else 兜底，否则 PENDING(待分类) 等会被静默算成不良品
+            // 按成品品质枚举显式归类：不可用 else 兜底，否则 PENDING(待整理) 等会被静默算成不良品
             ProductQualityType type = ProductQualityType.of(s.getQualityType());
             if (type == null) continue;
             switch (type) {

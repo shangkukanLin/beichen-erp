@@ -50,9 +50,9 @@
         <el-table-column label="不良" min-width="60" align="right">
           <template #default="{ row }"><span :class="qtyClass(row.qtyDefect, 'defect')">{{ fmt(row.qtyDefect) }}</span></template>
         </el-table-column>
-        <el-table-column label="待分类" min-width="74" align="right">
+        <el-table-column label="待整理" min-width="74" align="right">
           <template #default="{ row }">
-            <span :class="qtyClass(row.qtyPending, 'pending')" title="压在成品仓、等待退货整理的库存（品质待分类 PENDING）">{{ fmt(row.qtyPending) }}</span>
+            <span :class="qtyClass(row.qtyPending, 'pending')" title="压在成品仓、等待退货整理的库存（品质待整理 PENDING）">{{ fmt(row.qtyPending) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="总库存" min-width="74" align="right">
@@ -135,7 +135,7 @@ async function exportProductStock() {
     const res = await request.get<any, any>('/warehouse/stock/product-summary/page', { params })
     if (Array.isArray(res?.records)) data = res.records
   } catch { /* 拉取失败：退回当前页数据 */ }
-  const cols = ['SKU', '产品名称', '品牌', 'A规', 'B规', 'C规', '不良', '待分类', '总库存', '安全库存', '分布仓库']
+  const cols = ['SKU', '产品名称', '品牌', 'A规', 'B规', 'C规', '不良', '待整理', '总库存', '安全库存', '分布仓库']
   const aoa: (string | number)[][] = [
     [`成品库存汇总（导出时间：${new Date().toLocaleString('zh-CN')}，共 ${data.length} 行）`],
     [],

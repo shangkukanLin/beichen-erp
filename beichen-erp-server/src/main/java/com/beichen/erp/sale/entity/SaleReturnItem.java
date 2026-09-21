@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 
 /**
  * 销售退货单明细表
- * <p>退回商品品质默认"待分类"(PENDING)，待退货整理重新分类。</p>
+ * <p>退回商品品质默认"待整理"(PENDING)，待退货整理重新分类。</p>
  */
 @Data
 @TableName("sale_return_item")
@@ -37,7 +37,7 @@ public class SaleReturnItem {
     @TableField(exist = false)
     private String productName;
 
-    /** 品质等级：销售退货默认 PENDING(待分类)，退回后待退货整理重新分类 */
+    /** 品质等级：销售退货默认 PENDING(待整理)，退回后待退货整理重新分类 */
     private String qualityType;
 
     /** 退货数量 */

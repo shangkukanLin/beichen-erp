@@ -71,7 +71,7 @@ function goSource(row: any) {
 
 async function doAudit() {
   try {
-    await ElMessageBox.confirm(`确认审核单号「${head.code}」？审核后将从成品仓扣减待分类品并分品质入库（A/B/C/不良 均入成品仓，按品质区分）。`, '审核确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确认审核单号「${head.code}」？审核后将从成品仓扣减待整理品并分品质入库（A/B/C/不良 均入成品仓，按品质区分）。`, '审核确认', { type: 'warning' })
   } catch { return }
   acting.value = true
   try {

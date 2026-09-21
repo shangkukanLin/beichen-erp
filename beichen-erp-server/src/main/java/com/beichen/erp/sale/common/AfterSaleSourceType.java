@@ -5,7 +5,7 @@ import lombok.Getter;
 /**
  * 售后待整理批次来源单据类型（对应 after_sale_pending.source_type）
  * <p>
- * 销售退单与销售换货单审核后，退回货品均以「待分类(PENDING)」入售后仓，
+ * 销售退单与销售换货单审核后，退回货品均以「待整理(PENDING)」入售后仓，
  * 并在 {@code after_sale_pending} 各写一条待整理批次，由退货整理单统一消费。
  * 新增售后单据类型时只需在此扩展，无需改动整理单逻辑。
  * </p>

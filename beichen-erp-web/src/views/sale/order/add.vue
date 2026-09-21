@@ -227,13 +227,13 @@ async function handleSubmit() {
 }
 
 async function doSubmit() {
-  // 2026-09-21（用户口径）：销售单明细的品质**不能有不良品和待分类** ⇒ 只允许 A规/B规/C规。
+  // 2026-09-21（用户口径）：销售单明细的品质**不能有不良品和待整理** ⇒ 只允许 A规/B规/C规。
   // 下拉已过滤；这里再拦一道（编辑历史草稿可能带旧值），后端保存/审核两处有同一口径兜底。
   const badQuality = items.value.find(i => !isSellableQuality(i.qualityType))
   if (badQuality) {
     ElMessage.warning(`产品「${badQuality.productName || badQuality.productId}」的品质是「`
       + `${ProductQualityTypeLabel[String(badQuality.qualityType || '')] || badQuality.qualityType}」：`
-      + `销售单只能卖 A规/B规/C规 良品，不能是不良品或待分类`)
+      + `销售单只能卖 A规/B规/C规 良品，不能是不良品或待整理`)
     return
   }
   // 现金结算必须给出收款账户（后端 normalizeSettle 同样校验，这里先给友好提示）
@@ -253,7 +253,7 @@ function confirmStockCancel() { stockCheckVisible.value = false }
 function goBack() { router.push('/inventory/sale') }
 
 /**
- * 品质下拉（2026-09-21 用户口径）：**销售单明细的品质不能有不良品和待分类** ⇒
+ * 品质下拉（2026-09-21 用户口径）：**销售单明细的品质不能有不良品和待整理** ⇒
  * 只给 **A规/B规/C规**（`getQualityTypes()` 是含 DEFECT/PENDING 的全量字典，这里按销售口径过滤；
  * 后端 `SaleOrderServiceImpl#assertItemQualitySellable` 在保存与审核两处兜底同一口径）。
  */
@@ -366,9 +366,9 @@ onMounted(async () => {
           <el-table-column prop="unit" label="单位" width="70" />
           <el-table-column label="品质" width="90">
             <template #default="{ row }">
-              <!-- 2026-09-21：销售单只能卖良品 ⇒ 下拉只给 A规/B规/C规（不含不良品/待分类） -->
+              <!-- 2026-09-21：销售单只能卖良品 ⇒ 下拉只给 A规/B规/C规（不含不良品/待整理） -->
               <el-select v-model="row.qualityType" size="small" style="width:100%"
-                :title="'销售单只能卖 A规/B规/C规 良品（不含不良品与待分类）'" @change="refreshRowStock(row)">
+                :title="'销售单只能卖 A规/B规/C规 良品（不含不良品与待整理）'" @change="refreshRowStock(row)">
                 <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
               </el-select>
             </template>

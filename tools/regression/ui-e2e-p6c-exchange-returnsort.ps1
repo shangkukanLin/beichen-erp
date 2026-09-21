@@ -118,7 +118,7 @@ function PendingMap {
   return $m
 }
 $tryNo = 0
-# NOTE: a return-sort consumes BOTH the source batch (after_sale_pending) and the 售后仓 待分类 stock it
+# NOTE: a return-sort consumes BOTH the source batch (after_sale_pending) and the 售后仓 待整理 stock it
 # allocated. Auditing the first sort therefore drains the stock the NEXT sort would need, so we stop creating
 # new sorts once one is left un-auditable (it would only pile up un-auditable drafts — a pure test-setup artefact).
 while (((D (SqlOne "SELECT COUNT(*) FROM return_sort WHERE status='AUDITED'")) -lt $targetAud) -and ((D (SqlOne "SELECT COUNT(*) FROM return_sort WHERE status='DRAFT'")) -eq 0) -and ($tryNo -lt 3)) {
@@ -258,7 +258,7 @@ Ok (($runExAud -eq $runEx)) ('exchanges created in this run are audited (' + $ru
 Ok (($exItems -ge 2)) ('exchange items >= 2 (got ' + $exItems + ')')
 $rsDraft = D (SqlOne "SELECT COUNT(*) FROM return_sort WHERE status='DRAFT'")
 Ok (($rsAud -ge 2)) ('AUDITED return sorts >= 2 (got ' + $rsAud + ') — 3rd not reachable: its stock was consumed by the previous sort')
-Write-Host ('INFO DRAFT return sorts = ' + $rsDraft + ' — all blocked by the correct guard ("来源批次已整理完 / 待整理数量超过售后仓可用待分类库存"); a one-shot stock-consumption test-setup artefact, not a defect')
+Write-Host ('INFO DRAFT return sorts = ' + $rsDraft + ' — all blocked by the correct guard ("来源批次已整理完 / 待整理数量超过售后仓可用待整理库存"); a one-shot stock-consumption test-setup artefact, not a defect')
 Ok (($rsItems -ge 3)) ('return-sort items >= 3 (got ' + $rsItems + ')')
 Write-Host ('errs=' + (Errs))
 Summary 'P6c exchange + return-sort'

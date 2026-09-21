@@ -499,7 +499,7 @@ export const MaterialPlaceTypeLabel: Record<string, string> = {
  * 仓库类型（对应 Warehouse.warehouse_type 字段，DB 存 code）
  * 2026-09-16 方案 A：仓型由 4 种收敛为 **2 种**（辅料仓 / 成品仓）。
  * 原「不良仓(DEFECT)」「售后仓(AFTER_SALE)」已取消：退回品/不良品统一入成品仓，改用**品质**区分
- * （A/B/C 良品、DEFECT 不良、PENDING 待分类）；委外仓（OUTSOURCE）不再写仓型。
+ * （A/B/C 良品、DEFECT 不良、PENDING 待整理）；委外仓（OUTSOURCE）不再写仓型。
  */
 export const WarehouseType = {
   AUXILIARY: 'AUXILIARY',  // 辅料仓（自有物料仓）
@@ -528,7 +528,7 @@ export const ProductQualityTypeLabel: Record<string, string> = {
   [ProductQualityType.B]: 'B规',
   [ProductQualityType.C]: 'C规',
   [ProductQualityType.DEFECT]: '不良品',
-  [ProductQualityType.PENDING]: '待分类'
+  [ProductQualityType.PENDING]: '待整理'
 }
 
 export const ProductQualityTypeTag: Record<string, 'success' | 'warning' | 'info' | 'danger' | 'primary'> = {
@@ -540,18 +540,18 @@ export const ProductQualityTypeTag: Record<string, 'success' | 'warning' | 'info
 }
 
 /**
- * 销售单可售品质（2026-09-21 用户口径：「销售单产品明细的品质，**不能有不良品和待分类**」）
- * ⇒ 只允许 **A规/B规/C规** 良品（DEFECT 不良品、PENDING 待分类一律不可售）。
+ * 销售单可售品质（2026-09-21 用户口径：「销售单产品明细的品质，**不能有不良品和待整理**」）
+ * ⇒ 只允许 **A规/B规/C规** 良品（DEFECT 不良品、PENDING 待整理一律不可售）。
  *
  * <p>与后端 `SaleOrderServiceImpl#assertItemQualitySellable` **同一口径**：前端过滤下拉只是体验，
  * 服务层在「保存草稿」与「审核」两处兜底（直调接口 / 编辑历史草稿都绕不过）。</p>
- * <p>注意：只有**销售单**受此约束 —— 退货/换货/整理单等场景仍然需要不良品与待分类。</p>
+ * <p>注意：只有**销售单**受此约束 —— 退货/换货/整理单等场景仍然需要不良品与待整理。</p>
  */
 export const SALE_SELLABLE_QUALITY_TYPES: string[] = [
   ProductQualityType.A, ProductQualityType.B, ProductQualityType.C
 ]
 
-/** 该品质是否可销售（空值按 A规 处理 ⇒ true；不良品/待分类 ⇒ false） */
+/** 该品质是否可销售（空值按 A规 处理 ⇒ true；不良品/待整理 ⇒ false） */
 export function isSellableQuality(code?: string | null): boolean {
   return SALE_SELLABLE_QUALITY_TYPES.includes(code || ProductQualityType.A)
 }

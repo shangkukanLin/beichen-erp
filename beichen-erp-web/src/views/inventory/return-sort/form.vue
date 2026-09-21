@@ -49,7 +49,7 @@ const items = ref<any[]>([])
 /** 待整理库存超期预警阈值（天）：停留超过该天数则标红提示 */
 const STAY_ALERT_DAYS = 3
 
-// 源仓库：自有**成品仓**（2026-09-16 方案 A：原"售后仓"取消，退回品直接压在成品仓、品质 PENDING 待分类）
+// 源仓库：自有**成品仓**（2026-09-16 方案 A：原"售后仓"取消，退回品直接压在成品仓、品质 PENDING 待整理）
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.FINISHED } })
 // 目标入库仓（A/B/C/不良）：一律自有**成品仓** —— 不良品改用**品质 DEFECT** 区分，不再需要独立"不良仓"
 const fetchFinishedWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.FINISHED } })
@@ -82,7 +82,7 @@ const presetPendingIdSet = computed(() => {
   return ids.length > 0 ? new Set(ids.map((v) => Number(v))) : null
 })
 
-// 加载成品仓待整理库存（待分类品）
+// 加载成品仓待整理库存（待整理品）
 async function loadDefectStock() {
   if (!form.warehouseId) { ElMessage.warning('请先选择源仓库(成品仓)'); return }
   try {
@@ -113,7 +113,7 @@ async function loadDefectStock() {
     }
     if (rows.length === 0) {
       if (only) ElMessage.warning('该来源批次已无可整理数量（可能已被整理），请返回「待整理」刷新后重试')
-      else ElMessage.info('该成品仓暂无待整理库存（待分类品）')
+      else ElMessage.info('该成品仓暂无待整理库存（待整理品）')
     }
   } catch { ElMessage.error('加载待整理库存失败') }
 }
@@ -204,7 +204,7 @@ async function handleSave() {
   for (const it of items.value) {
     if (!it.totalQuantity || it.totalQuantity <= 0) { ElMessage.warning(`产品「${it.productName || it.productId}」待整理数量必须大于0`); return }
     if (it.available != null && it.totalQuantity > it.available) {
-      ElMessage.warning(`产品「${it.productName || it.productId}」待整理数量(${it.totalQuantity})超过成品仓可用待分类库存(${it.available})`)
+      ElMessage.warning(`产品「${it.productName || it.productId}」待整理数量(${it.totalQuantity})超过成品仓可用待整理库存(${it.available})`)
       return
     }
     if (itemSum(it) !== Number(it.totalQuantity)) {
@@ -239,7 +239,7 @@ watch(() => route.fullPath, () => { init() })
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>{{ isNew ? (props.embedded ? '整理待分类品（抽屉开单）' : '新增退货整理') : `编辑退货整理 — ${code}` }}</span>
+          <span>{{ isNew ? (props.embedded ? '整理待整理品（抽屉开单）' : '新增退货整理') : `编辑退货整理 — ${code}` }}</span>
           <div>
             <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
             <el-button @click="handleCancel">取消</el-button>

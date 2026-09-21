@@ -50,7 +50,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 退货整理：销售退货先入售后仓(待分类品/待整理)，再按 A/B/C/不良品 分选后分别入库（A/B/C 入成品仓）。
+ * 退货整理：销售退货先入售后仓(待整理品/待整理)，再按 A/B/C/不良品 分选后分别入库（A/B/C 入成品仓）。
  */
 @Service
 @RequiredArgsConstructor
@@ -162,7 +162,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
     /**
      * 售后仓待整理库存清单（新增整理单时带出）。
      * <p>库存按 (仓库,产品,品质) 聚合、不记录来源，无法直接追溯。此处按批次ID 升序(FIFO)
-     * 将售后仓待分类库存分配回各「售后待整理批次」（after_sale_pending，销售退单与销售换货单共用入口），
+     * 将售后仓待整理库存分配回各「售后待整理批次」（after_sale_pending，销售退单与销售换货单共用入口），
      * 使每行都能追溯到具体来源单据，并给出「原数量 / 已整理数量 / 本次可整理数量」。</p>
      *
      * <p>口径与 {@link #pendingOverview(boolean)} 完全一致（同一 {@link #pendingRows}），此处只保留
@@ -286,7 +286,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
                 BigDecimal remain = nz(p.getQuantity()).subtract(nz(p.getSortedQuantity()));
                 skipped.add(skipRow(pid, p.getSourceCode(), remain.compareTo(BigDecimal.ZERO) <= 0
                         ? "该批次已整理完"
-                        : "成品仓待分类实物不足（FIFO 已分配给更早批次）"));
+                        : "成品仓待整理实物不足（FIFO 已分配给更早批次）"));
                 continue;
             }
             groups.computeIfAbsent(p.getWarehouseId() + "#" + (p.getCustomerId() == null ? "-" : p.getCustomerId()),
@@ -367,7 +367,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
     }
 
     /**
-     * 待整理批次 × 待分类(PENDING)实物的 **FIFO 分配**（跨仓批量版）。
+     * 待整理批次 × 待整理(PENDING)实物的 **FIFO 分配**（跨仓批量版）。
      *
      * <p>这是「待整理」的唯一口径来源：{@link #defectStock(Long)}（表单带出）、
      * {@link #pendingOverview(boolean)}（跨仓总览）、{@link #batchCreateDrafts}（批量建单）
@@ -385,7 +385,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         List<Long> ids = warehouseIds.stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
         if (ids.isEmpty()) return res;
 
-        // 1) 各仓待分类(PENDING)实物，按 仓库+产品 聚合：决定每个仓每个产品实有多少可整理
+        // 1) 各仓待整理(PENDING)实物，按 仓库+产品 聚合：决定每个仓每个产品实有多少可整理
         Map<String, BigDecimal> avail = new LinkedHashMap<>();
         for (WarehouseStock s : stockMapper.selectList(new LambdaQueryWrapper<WarehouseStock>()
                 .in(WarehouseStock::getWarehouseId, ids)
@@ -403,7 +403,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
                         .orderByAsc(AfterSalePending::getId));
         if (pendings.isEmpty()) return res;
 
-        // 回填 SKU 与客户名（均批量，避免逐行查库）、各「仓库+产品」最早待分类入库日期
+        // 回填 SKU 与客户名（均批量，避免逐行查库）、各「仓库+产品」最早待整理入库日期
         productService.fillSku(pendings, AfterSalePending::getProductId, AfterSalePending::setSku);
         Map<Long, String> customerNames = customerNames(pendings);
         Map<String, LocalDate> firstIns = firstPendingInDates(ids);
@@ -447,7 +447,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
             m.put("sortedQuantity", nz(pending.getSortedQuantity()));
             m.put("remainQuantity", remain.max(BigDecimal.ZERO));
             m.put("unitPrice", nz(pending.getUnitPrice()));
-            // 停留天数：按该产品在该仓最早的待分类入库日期计算（预警用，无流水则为 0）
+            // 停留天数：按该产品在该仓最早的待整理入库日期计算（预警用，无流水则为 0）
             m.put("stayDays", stayDays);
             m.put("overdue", stayDays > STAY_ALERT_DAYS);
             res.add(m);
@@ -483,7 +483,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         return res;
     }
 
-    /** 各「仓库+产品」最早的待分类(PENDING)入库日期（批量，替代逐行查询；停留天数预警用） */
+    /** 各「仓库+产品」最早的待整理(PENDING)入库日期（批量，替代逐行查询；停留天数预警用） */
     private Map<String, LocalDate> firstPendingInDates(Collection<Long> warehouseIds) {
         Map<String, LocalDate> res = new LinkedHashMap<>();
         if (warehouseIds == null || warehouseIds.isEmpty()) return res;
@@ -565,11 +565,11 @@ public class ReturnSortServiceImpl implements ReturnSortService {
             BigDecimal avail = availablePending(s.getWarehouseId(), it.getProductId());
             if (it.getTotalQuantity().compareTo(avail) > 0)
                 throw new BusinessException("产品[" + nameOf(it) + "]待整理数量 " + it.getTotalQuantity()
-                        + " 超过售后仓可用待分类库存 " + avail + "，请刷新待整理库存后重试");
+                        + " 超过售后仓可用待整理库存 " + avail + "，请刷新待整理库存后重试");
             assertSourceAvailable(it);
 
 
-            // 扣售后仓 待分类品（changeStock 内部校验库存不足）
+            // 扣售后仓 待整理品（changeStock 内部校验库存不足）
             stockService.changeStock(s.getWarehouseId(), it.getProductId(), it.getTotalQuantity().negate(),
                     StockChangeType.RETURN_SORT_OUT, s.getCode(), RelatedBillType.RETURN_SORT,
                     "", s.getId(), ProductQualityType.PENDING.getCode());
@@ -624,7 +624,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
             if (it.getTotalQuantity() == null || it.getTotalQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
             BigDecimal a = nz(it.getQtyA()), b = nz(it.getQtyB()), c = nz(it.getQtyC()), d = nz(it.getQtyDefect());
 
-            // 加回售后仓 待分类品
+            // 加回售后仓 待整理品
             stockService.changeStock(s.getWarehouseId(), it.getProductId(), it.getTotalQuantity(),
                     StockChangeType.CANCEL_RETURN_SORT_OUT, s.getCode(), RelatedBillType.RETURN_SORT,
                     "", s.getId(), ProductQualityType.PENDING.getCode());
@@ -670,7 +670,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         itemMapper.delete(new LambdaQueryWrapper<ReturnSortItem>().eq(ReturnSortItem::getSortId, id));
     }
 
-    /** 源仓库必须为自有成品仓（2026-09-16 方案 A：原"售后仓"取消，退回品直接压在成品仓内按品质 PENDING 待分类）；前端下拉已过滤，此处防接口绕过 */
+    /** 源仓库必须为自有成品仓（2026-09-16 方案 A：原"售后仓"取消，退回品直接压在成品仓内按品质 PENDING 待整理）；前端下拉已过滤，此处防接口绕过 */
     private void assertSourceWarehouse(Long warehouseId) {
         Warehouse wh = warehouseMapper.selectById(warehouseId);
         if (wh == null) throw new BusinessException("源仓库不存在");
@@ -702,7 +702,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
                     + "，当前仓库类型为：" + wh.getWarehouseType());
     }
 
-    /** 售后仓指定产品的待分类(PENDING)可用库存 */
+    /** 售后仓指定产品的待整理(PENDING)可用库存 */
     private BigDecimal availablePending(Long warehouseId, Long productId) {
         WarehouseStock st = stockMapper.selectOne(new LambdaQueryWrapper<WarehouseStock>()
                 .eq(WarehouseStock::getWarehouseId, warehouseId)
@@ -761,11 +761,11 @@ public class ReturnSortServiceImpl implements ReturnSortService {
             BigDecimal a = nz(it.getQtyA()), b = nz(it.getQtyB()), c = nz(it.getQtyC()), d = nz(it.getQtyDefect());
             if (a.add(b).add(c).add(d).compareTo(it.getTotalQuantity()) != 0)
                 throw new BusinessException("产品[" + nameOf(it) + "]分选数量之和必须等于待整理数量");
-            // 可用量校验：待整理数量不得超过售后仓待分类库存，提前给出明确提示
+            // 可用量校验：待整理数量不得超过售后仓待整理库存，提前给出明确提示
             BigDecimal avail = availablePending(s.getWarehouseId(), it.getProductId());
             if (it.getTotalQuantity().compareTo(avail) > 0)
                 throw new BusinessException("产品[" + nameOf(it) + "]待整理数量 " + it.getTotalQuantity()
-                        + " 超过售后仓可用待分类库存 " + avail + "，请刷新待整理库存后重试");
+                        + " 超过售后仓可用待整理库存 " + avail + "，请刷新待整理库存后重试");
             assertSourceAvailable(it);
         }
     }

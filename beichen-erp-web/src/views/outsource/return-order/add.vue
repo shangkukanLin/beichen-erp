@@ -160,7 +160,7 @@ function inLinkedOrder(p: any) {
   return ((p?.snapshots || []) as any[]).some((s: any) => (s.orders || []).some((o: any) => o.orderId === linkedOrderId.value))
 }
 
-/** 退回成品规格可选项（加工退货只允许 A/B/C/不良，不含待分类）；维修退货只在「不良品」里选（送修件本身不良） */
+/** 退回成品规格可选项（加工退货只允许 A/B/C/不良，不含待整理）；维修退货只在「不良品」里选（送修件本身不良） */
 function qualityOptionsFor(_row?: any) {
   const list = isRepair.value
     ? [ProductQualityType.DEFECT]

@@ -3,11 +3,11 @@
 # 背景（2026-09-14 定位）：
 #   1) seed6_aftersale.ps1 调用的 /outsource/after-sale/return-defect 端点**后端已不存在** → 恒定 404 失败；
 #   2) 于是「售后待整理批次(after_sale_pending)」「退货整理单(return_sort)」两个模块始终为空；
-#   3) 更深一层原因：售后仓待整理库存只认 `quality_type='PENDING'（待分类）` 的正库存
+#   3) 更深一层原因：售后仓待整理库存只认 `quality_type='PENDING'（待整理）` 的正库存
 #      （见 ReturnSortServiceImpl.defectStock），而 seed3 的销售退货写的是 qualityType='A'（良品）→ 清单恒空。
 #
 # 本脚本做两件事（都用现行 API）：
-#   ① 对若干**已审核销售单**创建「待分类(PENDING)」销售退货并审核 → 售后仓出现 PENDING 库存 + after_sale_pending 批次；
+#   ① 对若干**已审核销售单**创建「待整理(PENDING)」销售退货并审核 → 售后仓出现 PENDING 库存 + after_sale_pending 批次；
 #   ② 尝试创建销售换货单并审核（换货同样会写 after_sale_pending，源类型 SALE_EXCHANGE）——失败不致命，仅打印原因。
 #   随后由既有的 seed3c.ps1 读取 defect-stock → 建退货整理单 → 审核（职责分离，故本脚本只造"原料"）。
 #
@@ -81,7 +81,7 @@ foreach ($so in $cand) {
   $it0 = @($items)[0]
   if (-not $det -or -not $it0) { continue }
   $qty = [math]::Max(1, [math]::Floor([decimal]$it0.quantity / 4))
-  # 关键：qualityType = PENDING（待分类）—— 售后仓待整理库存只认这个品质
+  # 关键：qualityType = PENDING（待整理）—— 售后仓待整理库存只认这个品质
   $body = @{
     saleOrderId = [int]$so.id; saleOrderCode = $so.code; customerId = [int]$det.customerId
     warehouseId = $whAfs; returnDate = (Get-Date -Format 'yyyy-MM-dd'); status = 'DRAFT'

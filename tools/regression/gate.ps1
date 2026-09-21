@@ -81,7 +81,11 @@ $inv = @(
   # 仓库类型必须存**枚举 code**（AUXILIARY/FINISHED/DEFECT/AFTER_SALE）。存中文 label 会让
   # SaleReturnServiceImpl 的售后仓校验、换货的 AFTER_SALE 校验静默失败（2026-09-14 造数时发现，
   # 起因是 seed0_master.ps1 把 label 当 code 写入）。
-  @{ n = '仓库类型越界(须为枚举code)'; q = "SELECT COUNT(*) FROM warehouse WHERE warehouse_type NOT IN ('AUXILIARY','FINISHED','DEFECT','AFTER_SALE')" }
+  @{ n = '仓库类型越界(须为枚举code)'; q = "SELECT COUNT(*) FROM warehouse WHERE warehouse_type NOT IN ('AUXILIARY','FINISHED','DEFECT','AFTER_SALE')" },
+  # 2026-09-21（配合口径同步「待分类」→「待整理」）：品质必须存**枚举 code**（A/B/C/DEFECT/PENDING），
+  # 不能把 label 当 code 写库 —— 否则售后仓/退货整理的待整理库存校验、销售单可售品质护栏会**静默失效**
+  # （与仓库类型那条同理，2026-09-14 造数时就踩过 label-as-code）。
+  @{ n = '品质类型越界(须为枚举code)'; q = "SELECT (SELECT COUNT(*) FROM warehouse_stock WHERE quality_type IS NOT NULL AND quality_type NOT IN ('A','B','C','DEFECT','PENDING')) + (SELECT COUNT(*) FROM sale_order_item WHERE quality_type IS NOT NULL AND quality_type NOT IN ('A','B','C','DEFECT','PENDING')) + (SELECT COUNT(*) FROM sale_return_item WHERE quality_type IS NOT NULL AND quality_type NOT IN ('A','B','C','DEFECT','PENDING')) + (SELECT COUNT(*) FROM sale_exchange_item WHERE quality_type IS NOT NULL AND quality_type NOT IN ('A','B','C','DEFECT','PENDING'))" }
 )
 
 foreach ($i in $inv) {

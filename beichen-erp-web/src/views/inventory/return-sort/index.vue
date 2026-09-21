@@ -83,7 +83,7 @@ async function handleAudit(row: any) {
   // `catch { /* 取消 */ }` 会把**接口报错也当成"用户取消"静默吞掉**；审核/反审核/删除都是**不可逆库存动作**，
   // 失败却无任何提示（用户以为是自己点了取消）。同单据 `detail.vue:78-98` 已是正确范式，此处对齐。
   try {
-    await ElMessageBox.confirm(`确认审核单号「${row.code}」？审核后将从成品仓扣减待分类品并分品质入库（A/B/C/不良 均入成品仓，按品质区分）。`, '审核确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确认审核单号「${row.code}」？审核后将从成品仓扣减待整理品并分品质入库（A/B/C/不良 均入成品仓，按品质区分）。`, '审核确认', { type: 'warning' })
   } catch { return }
   try {
     await auditReturnSort(row.id)
@@ -329,7 +329,7 @@ onActivated(() => {
           </div>
 
           <el-alert v-if="!hasAnyGroup" type="success" :closable="false" show-icon
-            title="暂无待整理批次：自有成品仓的待分类库存已全部整理。"
+            title="暂无待整理批次：自有成品仓的待整理库存已全部整理。"
             description="如需查看历史批次（已整理完），打开上面的「显示已整理完」开关。" />
           <el-alert v-else-if="filteredEmpty" type="info" :closable="false" show-icon
             title="没有超期的待整理批次（已按「只看超期」过滤）。" />

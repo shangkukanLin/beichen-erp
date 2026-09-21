@@ -27,7 +27,7 @@ public interface SaleExchangeService {
     /** 修改（仅草稿） */
     SaleExchange update(SaleExchange exchange, List<Map<String, Object>> itemMaps);
 
-    /** 审核：退回入售后仓(待分类) + 换出从成品仓扣减 */
+    /** 审核：退回入售后仓(待整理) + 换出从成品仓扣减 */
     void audit(Long id);
 
     /** 反审核：对称回滚，状态回到草稿 */

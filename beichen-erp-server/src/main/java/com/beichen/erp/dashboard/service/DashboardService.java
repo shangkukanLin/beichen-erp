@@ -247,7 +247,7 @@ public class DashboardService {
                     "  ) AS first_in " +
                     "  FROM warehouse_stock ws JOIN warehouse w ON w.id = ws.warehouse_id " +
                     // 2026-09-16 方案 A：仓型收敛为「成品仓/辅料仓」，不再有"售后仓" →
-                    // 待整理=压在**自有仓**里的待分类品质库存（PENDING 只会出现在成品行，故天然排除辅料仓）
+                    // 待整理=压在**自有仓**里的待整理品质库存（PENDING 只会出现在成品行，故天然排除辅料仓）
                     "  WHERE w.warehouse_category = '" + WarehouseCategory.INVENTORY.getCode() + "' AND ws.quality_type = 'PENDING' " +
                     "    AND ws.quantity > 0 AND ws.product_id IS NOT NULL");
             List<Object> args = new ArrayList<>();

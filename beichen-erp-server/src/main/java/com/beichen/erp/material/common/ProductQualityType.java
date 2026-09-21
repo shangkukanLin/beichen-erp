@@ -3,8 +3,8 @@ package com.beichen.erp.material.common;
 import lombok.Getter;
 
 /**
- * 产品等级类型：A规/B规/C规/不良品/待分类
- * DB存储枚举name(A/B/C/DEFECT/PENDING)，前端展示label(A规/B规/C规/不良品/待分类)
+ * 产品等级类型：A规/B规/C规/不良品/待整理
+ * DB存储枚举name(A/B/C/DEFECT/PENDING)，前端展示label(A规/B规/C规/不良品/待整理)
  */
 @Getter
 public enum ProductQualityType {
@@ -21,8 +21,8 @@ public enum ProductQualityType {
     /** 不良品：无法使用的缺陷品 */
     DEFECT("不良品"),
 
-    /** 待分类：售后退回，品质待定，待退货整理重新分类 */
-    PENDING("待分类");
+    /** 待整理：售后退回，品质待定，待退货整理重新分类 */
+    PENDING("待整理");
 
     private final String label;
 

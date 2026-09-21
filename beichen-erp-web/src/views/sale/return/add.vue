@@ -15,7 +15,7 @@
           <el-col :span="8">
             <el-form-item label="退货仓库" prop="warehouseId">
               <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择仓库" style="width: 100%" />
-              <div style="font-size: var(--app-font-xs); color: #909399; margin-top: 4px; line-height: 1.4;">提示：销售退货只能退到自有成品仓（退回品按「待分类」品质入库，后续用退货整理单分流）</div>
+              <div style="font-size: var(--app-font-xs); color: #909399; margin-top: 4px; line-height: 1.4;">提示：销售退货只能退到自有成品仓（退回品按「待整理」品质入库，后续用退货整理单分流）</div>
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -73,7 +73,7 @@
           </el-table-column>
           <el-table-column label="品质等级" width="88" align="center">
             <template #default="{ row }">
-              <el-tag :type="ProductQualityTypeTag[row.qualityType] || 'info'">{{ ProductQualityTypeLabel[row.qualityType] || '待分类' }}</el-tag>
+              <el-tag :type="ProductQualityTypeTag[row.qualityType] || 'info'">{{ ProductQualityTypeLabel[row.qualityType] || '待整理' }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="可退数量" width="80" align="center">
@@ -163,7 +163,7 @@ const isEdit = ref(false)
 
 // Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
-// 退货入库仓：自有**成品仓**（2026-09-16 方案 A：原"售后仓"取消，退回品直接入成品仓、品质 PENDING 待分类）
+// 退货入库仓：自有**成品仓**（2026-09-16 方案 A：原"售后仓"取消，退回品直接入成品仓、品质 PENDING 待整理）
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseType: WarehouseType.FINISHED } })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 500, keyword: kw } })
 // 2026-09-20（F7-145）：原写法声明了 kw 却完全没用 ⇒ "关联销售单"下拉**看起来可搜索、实际搜索无效**

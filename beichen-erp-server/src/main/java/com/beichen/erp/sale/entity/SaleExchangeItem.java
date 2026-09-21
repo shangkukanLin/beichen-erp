@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
  * <p>只支持<b>同品换货</b>：换出产品固定为退回产品（{@code productId}），
  * 换出品质 {@code outQualityType} 与换出数量 {@code outQuantity} 可不同（如退 2 换 1、A 规换 B 规）。
  * 可换量校验只约束<b>退回数量</b>（锚点 {@code saleOrderItemId}），换出属正常出库不受限。
- * 退回侧统一以 PENDING(待分类) 入售后仓，后续走退货整理。</p>
+ * 退回侧统一以 PENDING(待整理) 入售后仓，后续走退货整理。</p>
  */
 @Data
 @TableName("sale_exchange_item")

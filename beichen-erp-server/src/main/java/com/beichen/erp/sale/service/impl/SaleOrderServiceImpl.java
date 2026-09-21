@@ -253,14 +253,14 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     }
 
     /**
-     * 2026-09-21（用户口径）：**销售单明细的品质不能是不良品(DEFECT)和待分类(PENDING)** ——
+     * 2026-09-21（用户口径）：**销售单明细的品质不能是不良品(DEFECT)和待整理(PENDING)** ——
      * 销售单只能卖 **A规/B规/C规** 良品。
      *
      * <p>为什么必须在服务层拦（前端下拉过滤只是体验，直调接口 / 编辑历史草稿都能绕过）：</p>
      * <ol>
      *   <li><b>库存口径</b>：审核出库按明细品质逐行扣减（{@code changeStock(..., it.getQualityType())}），
      *       卖不良品就是扣不良品库存 —— 与"不良品只应走退货/维修"的业务线冲突，且报表按品质分类会失真；</li>
-     *   <li><b>业务语义</b>：待分类(PENDING)是售后退回后**尚未整理**的暂存态（退货整理单才把它归到 A/B/C，
+     *   <li><b>业务语义</b>：待整理(PENDING)是售后退回后**尚未整理**的暂存态（退货整理单才把它归到 A/B/C，
      *       见 {@code AfterSaleSort}），未整理的东西不该再被卖出去；</li>
      *   <li>与 {@link #assertItemsForDraft} 同一口径：保存草稿与审核都拦，避免"能存不能审"的迷惑体验。</li>
      * </ol>
@@ -273,7 +273,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         if (quality == null) throw new BusinessException("非法的品质等级：" + qt);
         if (quality == ProductQualityType.DEFECT || quality == ProductQualityType.PENDING)
             throw new BusinessException("销售明细产品「" + itemProductDesc(it) + "」的品质是「" + quality.getLabel()
-                    + "」：销售单只能销售 A规/B规/C规 良品，不能是不良品或待分类");
+                    + "」：销售单只能销售 A规/B规/C规 良品，不能是不良品或待整理");
     }
 
     /** 明细报错用的产品描述：优先产品名（前端随明细一起传），否则退化为产品ID */
@@ -392,7 +392,7 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         for (SaleOrderItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
                 throw new BusinessException("销售数量必须大于 0（明细行ID=" + it.getId() + "）");
-            // 2026-09-21（用户口径）：审核再兜一道 —— 品质不能是不良品/待分类（与保存草稿同一口径）
+            // 2026-09-21（用户口径）：审核再兜一道 —— 品质不能是不良品/待整理（与保存草稿同一口径）
             assertItemQualitySellable(it);
         }
         // P2-33：客户与产品必须存在（原先会生成"客户不存在/空名"的应收台账，产品不存在则静默通过）

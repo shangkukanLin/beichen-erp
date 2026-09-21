@@ -53,7 +53,7 @@
         </el-table-column>
         <el-table-column label="品质等级" width="88" align="center">
           <template #default="{ row }">
-            <el-tag :type="ProductQualityTypeTag[row.qualityType] || 'info'">{{ ProductQualityTypeLabel[row.qualityType] || '待分类' }}</el-tag>
+            <el-tag :type="ProductQualityTypeTag[row.qualityType] || 'info'">{{ ProductQualityTypeLabel[row.qualityType] || '待整理' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="quantity" label="退货数量" width="74" align="right" />
@@ -197,7 +197,7 @@ function goSaleOrder(id?: number) { if (id) router.push(`/inventory/sale/detail/
 function goProduct(id?: number) { if (id) router.push(`/product/detail/${id}`) }
 
 async function doAudit() {
-  await ElMessageBox.confirm('确认审核？审核后客户退回的待分类品将入库成品仓增加库存。', '提示', { type: 'warning' })
+  await ElMessageBox.confirm('确认审核？审核后客户退回的待整理品将入库成品仓增加库存。', '提示', { type: 'warning' })
   acting.value = true
   try {
     await auditSaleReturn(Number(route.params.id))
@@ -208,7 +208,7 @@ async function doAudit() {
   }
 }
 async function doUnAudit() {
-  await ElMessageBox.confirm('确认反审核？将扣减已入库的待分类品库存。', '提示', { type: 'warning' })
+  await ElMessageBox.confirm('确认反审核？将扣减已入库的待整理品库存。', '提示', { type: 'warning' })
   acting.value = true
   try {
     await unAuditSaleReturn(Number(route.params.id))

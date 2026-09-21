@@ -43,7 +43,7 @@ $steps = @(
   @{ s = 'seed3b2_outbound.ps1';      d = '销售出库修正（/inventory/outbound）' },
   # seed6_aftersale.ps1 已失效（2026-09-14 实测）：其调用的 /outsource/after-sale/return-defect 端点后端已不存在
   # （脚本已标注 OBSOLETE，保留作历史参考）。其"造出售后待整理原料"的原意由 seed8 用现行 API 重写实现：
-  # 对已审核销售单建「待分类(PENDING)」销售退货并审核 → 售后仓出现 PENDING 库存 + after_sale_pending 批次。
+  # 对已审核销售单建「待整理(PENDING)」销售退货并审核 → 售后仓出现 PENDING 库存 + after_sale_pending 批次。
   @{ s = 'seed8_aftersale.ps1';       d = '售后待整理原料：PENDING 销售退货 + 换货（供 seed3c 建退货整理单）' },
   @{ s = 'seed3b3_fix.ps1';           d = '补审销售换货单 + 按待分拣缺陷建退货分拣单' },
   @{ s = 'seed3c.ps1';                d = '退货分拣（带 targetWarehouse* 字段）' },

@@ -71,9 +71,9 @@
             <span v-else style="color:#999">0</span>
           </template>
         </el-table-column>
-        <el-table-column label="待分类" width="100" align="right">
+        <el-table-column label="待整理" width="100" align="right">
           <template #default="{ row }">
-            <el-tag v-if="row.qtyPending > 0" type="info" size="small" title="压在成品仓、等待退货整理的库存（品质待分类 PENDING）">{{ fmt(row.qtyPending) }}</el-tag>
+            <el-tag v-if="row.qtyPending > 0" type="info" size="small" title="压在成品仓、等待退货整理的库存（品质待整理 PENDING）">{{ fmt(row.qtyPending) }}</el-tag>
             <span v-else style="color:#999">0</span>
           </template>
         </el-table-column>
@@ -146,7 +146,7 @@ function sumBy(key: string) {
 
 /**
  * 表格底部合计行：按列索引取值（品质列用自定义插槽，没有 prop，只能按固定列序映射）
- * 列序：0 仓库 / 1 A规 / 2 B规 / 3 C规 / 4 不良 / 5 待分类 / 6 小计 / 7 占比
+ * 列序：0 仓库 / 1 A规 / 2 B规 / 3 C规 / 4 不良 / 5 待整理 / 6 小计 / 7 占比
  */
 function summaries({ columns }: any) {
   const keys = ['qtyA', 'qtyB', 'qtyC', 'qtyDefect', 'qtyPending']
@@ -188,7 +188,7 @@ async function loadRows() {
 function exportDetail() {
   const data: any[] = rows.value || []
   const s = summary.value || {}
-  const cols = ['仓库', 'A规', 'B规', 'C规', '不良', '待分类', '小计', '占比(%)']
+  const cols = ['仓库', 'A规', 'B规', 'C规', '不良', '待整理', '小计', '占比(%)']
   const aoa: (string | number)[][] = [
     [`产品库存分布 - ${s.sku || ''} ${s.productName || ''}（导出时间：${new Date().toLocaleString('zh-CN')}，共 ${data.length} 个仓库）`],
     [`品牌：${s.brandName || '—'}　单位：${s.unit || '—'}　总库存：${totalOf(s)}　安全库存：${s.safetyStock ? s.safetyStock : '未设置'}`],

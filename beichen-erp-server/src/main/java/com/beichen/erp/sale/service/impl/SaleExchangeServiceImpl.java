@@ -67,7 +67,7 @@ import java.util.stream.Collectors;
  * <p>
  * 审核时双向联动库存：
  * <ol>
- *   <li>退回：入「换入仓」（售后仓），品质记 {@code PENDING}(待分类)，后续走退货整理流程；</li>
+ *   <li>退回：入「换入仓」（售后仓），品质记 {@code PENDING}(待整理)，后续走退货整理流程；</li>
  *   <li>换出：从「换出仓」（成品仓）按明细 {@code qualityType} 扣减。</li>
  * </ol>
  * 可换数量 = 已售 − 已退 − 已换，支持同一销售明细多次部分换货。
@@ -391,7 +391,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
     /**
      * F7-27（2026-09-19）：换出品质只允许 A / B / C。
      *
-     * <p>"换给客户的新品"不应是不良品或待分类；原先用 {@link ProductQualityType#isValid} 收全集
+     * <p>"换给客户的新品"不应是不良品或待整理；原先用 {@link ProductQualityType#isValid} 收全集
      * （A/B/C/DEFECT/PENDING），与前端品质下拉（仅 A/B/C）出现"前端不可选、后端可收"的宽窄不一致。</p>
      */
     private void assertOutQuality(String qt) {
@@ -422,7 +422,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         List<SaleExchangeItem> items = getItems(id);
         if (items.isEmpty()) throw new BusinessException("换货单明细不能为空");
         // 换入/换出仓（2026-09-16 方案 A）：仓型收敛后**两者都必须是自有成品仓**；
-        // 换入=退回品（品质 PENDING 待分类）、换出=良品（A 等），同一仓内按品质分行 → **允许同仓**（用户确认）
+        // 换入=退回品（品质 PENDING 待整理）、换出=良品（A 等），同一仓内按品质分行 → **允许同仓**（用户确认）
         assertWarehouseType(e.getWarehouseInId(), WarehouseType.FINISHED, "换入仓");
         assertWarehouseType(e.getWarehouseOutId(), WarehouseType.FINISHED, "换出仓");
         validateQuantity(e, items);
@@ -431,7 +431,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
 
         for (SaleExchangeItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            // ① 退回：入售后仓，品质待分类（后续走退货整理）
+            // ① 退回：入售后仓，品质待整理（后续走退货整理）
             stockService.changeStock(e.getWarehouseInId(), it.getProductId(), it.getQuantity(),
                     StockChangeType.EXCHANGE_IN, e.getCode(), RelatedBillType.SALE_EXCHANGE,
                     "", e.getId(), ProductQualityType.PENDING.getCode());
@@ -444,7 +444,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
                     StockChangeType.EXCHANGE_OUT, e.getCode(), RelatedBillType.SALE_EXCHANGE,
                     "", e.getId(), qt);
         }
-        // 追溯联动：退回的待分类品登记到统一待整理池，供退货整理单消费（与销售退单同一入口）
+        // 追溯联动：退回的待整理品登记到统一待整理池，供退货整理单消费（与销售退单同一入口）
         createPendingBatches(e, items, pMap);
         // 财务联动：选择收费时生成一条独立正向应收（单号 -FEE 后缀，与换货单本体区分）
         saveChargeReceivable(e);
@@ -464,13 +464,13 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         if (!DocStatusGuard.claim(exchangeMapper, SaleExchange::getId, id, SaleExchange::getStatus,
                 DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
             throw new BusinessException("只有已审核状态可反审核");
-        // 已被退货整理的货物不允许反审核：整理单会把售后仓待分类库存转走，反审核将扣不动或造成跨单据不一致
+        // 已被退货整理的货物不允许反审核：整理单会把售后仓待整理库存转走，反审核将扣不动或造成跨单据不一致
         assertNotSorted(AfterSaleSourceType.SALE_EXCHANGE, id, "销售换货单");
         List<SaleExchangeItem> items = getItems(id);
         Map<Long, Product> pMap = productMap(items);
         for (SaleExchangeItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            // 回滚：售后仓扣回退回的待分类品
+            // 回滚：售后仓扣回退回的待整理品
             stockService.changeStock(e.getWarehouseInId(), it.getProductId(), it.getQuantity().negate(),
                     StockChangeType.EXCHANGE_UN_AUDIT, e.getCode(), RelatedBillType.SALE_EXCHANGE,
                     "", e.getId(), ProductQualityType.PENDING.getCode());
@@ -637,7 +637,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
     // ==================== 售后待整理批次（与销售退单共用统一追溯池） ====================
 
     /**
-     * 登记售后待整理批次：换货退回的待分类品进入统一待整理池，供退货整理单消费。
+     * 登记售后待整理批次：换货退回的待整理品进入统一待整理池，供退货整理单消费。
      * <p>先按 (source_type, source_item_id) 清掉残留再插入，保证「反审核 → 重新审核」不重复登记。</p>
      */
     private void createPendingBatches(SaleExchange e, List<SaleExchangeItem> items, Map<Long, Product> pMap) {

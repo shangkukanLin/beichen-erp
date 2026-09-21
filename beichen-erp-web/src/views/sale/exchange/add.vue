@@ -78,8 +78,8 @@
            ③ 新增「收费」列（金额 + 类型，**逐产品**；金额 0 = 不收费）
            ④ 列宽合计 914px < 内容区 948px ⇒ 一行显示完、不左右滑动（有守卫断言） -->
       <el-table :data="items" border size="small" max-height="380">
-        <!-- ===== 退回侧：客户退回，入成品仓（品质待分类 PENDING）待整理 ===== -->
-        <el-table-column label="退回（客户退回，入成品仓待分类）" align="center">
+        <!-- ===== 退回侧：客户退回，入成品仓（品质待整理 PENDING）待整理 ===== -->
+        <el-table-column label="退回（客户退回，入成品仓待整理）" align="center">
           <el-table-column label="退回产品" width="140" show-overflow-tooltip>
             <template #default="{ row }">{{ row.sku ? row.sku + ' | ' + row.productName : row.productName }}</template>
           </el-table-column>

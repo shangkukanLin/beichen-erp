@@ -163,7 +163,7 @@ function goCustomer(id?: number) {
 }
 
 function doAudit(row: any) {
-  ElMessageBox.confirm(`确认审核销售退单 ${row.code}？审核后客户退回的待分类品将入库成品仓增加库存。`, '提示', {
+  ElMessageBox.confirm(`确认审核销售退单 ${row.code}？审核后客户退回的待整理品将入库成品仓增加库存。`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',
@@ -177,7 +177,7 @@ function doAudit(row: any) {
 }
 
 function doUnAudit(row: any) {
-  ElMessageBox.confirm(`确认反审核销售退单 ${row.code}？将扣减已入库的待分类品库存。`, '提示', {
+  ElMessageBox.confirm(`确认反审核销售退单 ${row.code}？将扣减已入库的待整理品库存。`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning',

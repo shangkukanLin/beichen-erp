@@ -1,5 +1,5 @@
-# 销售单明细品质护栏（用户口径 2026-09-21：「销售单，产品明细的品质，不能有不良品和待分类」）的耐久 API 用例。
-#   口径：销售单明细品质只允许 A规/B规/C规；DEFECT（不良品）与 PENDING（待分类）一律拒绝，
+# 销售单明细品质护栏（用户口径 2026-09-21：「销售单，产品明细的品质，不能有不良品和待整理」）的耐久 API 用例。
+#   口径：销售单明细品质只允许 A规/B规/C规；DEFECT（不良品）与 PENDING（待整理）一律拒绝，
 #         且**保存草稿**与**审核**两处同一口径（assertItemQualitySellable）。
 #   覆盖：①DEFECT 建单被拒（中文提示 + 不落库）②PENDING 建单被拒 ③非法品质值被拒
 #         ④A 级可建（正例）⑤库内不变量：不存在任何 DEFECT/PENDING 的销售明细
@@ -55,7 +55,7 @@ if ($cust -gt 0 -and $wh -gt 0 -and $prod -gt 0) {
   Ok ($msg -match 'DEFECT' -or $msg.Contains([char]0x4E0D + [string][char]0x826F)) 'the refusal names the offending quality (bad item)'
   Ok ((D (SqlOne "SELECT COUNT(*) FROM sale_order")) -eq $ordersBefore) 'nothing was persisted for the refused order'
 
-  # ---- B) PENDING (待分类) must be refused
+  # ---- B) PENDING (待整理) must be refused
   Write-Host '--- B) qualityType=PENDING must be refused'
   $r2 = TryCreate 'PENDING' 'pending'
   $msg2 = MsgOf $r2

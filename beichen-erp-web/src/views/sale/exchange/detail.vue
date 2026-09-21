@@ -49,8 +49,8 @@
            ③ 新增「收费」列（逐产品向客户收取的金额 + 类型）
            ④ 合计 928px < 内容区 948px ⇒ 一行显示完、不左右滑动 -->
       <el-table :data="items" border>
-        <!-- ===== 退回侧：客户退回，入成品仓（品质待分类 PENDING）待整理 ===== -->
-        <el-table-column label="退回（客户退回，入成品仓待分类）" align="center">
+        <!-- ===== 退回侧：客户退回，入成品仓（品质待整理 PENDING）待整理 ===== -->
+        <el-table-column label="退回（客户退回，入成品仓待整理）" align="center">
           <el-table-column label="退回产品" width="146" show-overflow-tooltip>
             <template #default="{ row }">
               <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ productText(row) }}</el-button>
@@ -224,7 +224,7 @@ async function doAudit() {
   const chargeTip = charged
     ? `\n并生成一条向客户收取的费用应收 ${formatMoney(head.chargeAmount)} 元（台账单号 ${head.code}-FEE）。`
     : ''
-  await ElMessageBox.confirm(`确认审核「${head.code}」？审核后退回货品入成品仓(待分类)，换出货品从成品仓扣减。${chargeTip}`, '审核确认', { type: 'warning' })
+  await ElMessageBox.confirm(`确认审核「${head.code}」？审核后退回货品入成品仓(待整理)，换出货品从成品仓扣减。${chargeTip}`, '审核确认', { type: 'warning' })
   acting.value = true
   try {
     await auditSaleExchange(Number(route.params.id))

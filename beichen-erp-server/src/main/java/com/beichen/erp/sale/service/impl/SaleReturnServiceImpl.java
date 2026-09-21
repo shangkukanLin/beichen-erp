@@ -56,7 +56,7 @@ import java.util.stream.Collectors;
 
 /**
  * 销售退单业务实现
- * <p>客户退回待分类品（品质默认待分类），审核时按 (warehouseId, productId, qualityType) 入库增加库存，并写库存流水，
+ * <p>客户退回待整理品（品质默认待整理），审核时按 (warehouseId, productId, qualityType) 入库增加库存，并写库存流水，
  * 同时登记售后待整理批次（after_sale_pending），由退货整理单统一消费并分选入成品仓/不良仓。</p>
  */
 @Service
@@ -316,7 +316,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
     // ==================== 售后待整理批次（统一追溯池） ====================
 
     /**
-     * 登记售后待整理批次：退单审核后退回的待分类品进入统一待整理池，供退货整理单消费。
+     * 登记售后待整理批次：退单审核后退回的待整理品进入统一待整理池，供退货整理单消费。
      * <p>先按 (source_type, source_item_id) 清掉残留再插入，保证「反审核 → 重新审核」不重复登记。</p>
      */
     private void createPendingBatches(SaleReturn order, List<SaleReturnItem> items, Map<Long, Product> pMap) {
@@ -472,7 +472,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
                 throw new BusinessException("退货数量必须大于 0（明细行ID=" + it.getId() + "）");
         }
         // 落仓校验（2026-09-16 方案 A：仓型收敛为「成品仓/辅料仓」，原"售后仓"已取消）——
-        // 退回的待分类品入**自有成品仓**（品质仍为 PENDING），后续由退货整理单按品质分流；
+        // 退回的待整理品入**自有成品仓**（品质仍为 PENDING），后续由退货整理单按品质分流；
         // 前端下拉已过滤，此处防接口绕过。
         Warehouse wh = warehouseMapper.selectById(order.getWarehouseId());
         if (wh == null) throw new BusinessException("退货仓库不存在");
@@ -480,7 +480,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
                 || !WarehouseType.FINISHED.getCode().equals(wh.getWarehouseType()))
             throw new BusinessException("销售退货只能选自有成品仓，当前仓库类别=" + wh.getWarehouseCategory()
                     + "，仓型=" + wh.getWarehouseType());
-        // 库存联动：客户退回待分类品（品质默认待分类），入库增加库存
+        // 库存联动：客户退回待整理品（品质默认待整理），入库增加库存
         // 批量取产品，避免循环内逐条查库（N+1）
         Map<Long, Product> pMap = productMap(items);
         // F7-111（2026-09-20，宽松版）：产品必须"**曾售出**" —— 本公司范围内该产品有销售/换货出库流水即可。
@@ -553,10 +553,10 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         if (!DocStatusGuard.claim(returnMapper, SaleReturn::getId, id, SaleReturn::getStatus,
                 DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
             throw new BusinessException("只有已审核的销售退单可反审核");
-        // 对称回滚：扣减已入库的待分类品库存
+        // 对称回滚：扣减已入库的待整理品库存
         List<SaleReturnItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<SaleReturnItem>().eq(SaleReturnItem::getReturnId, id));
-        // 已被退货整理的货物不允许反审核：整理单会把售后仓待分类库存转走，反审核将扣不动或造成跨单据不一致
+        // 已被退货整理的货物不允许反审核：整理单会把售后仓待整理库存转走，反审核将扣不动或造成跨单据不一致
         assertNotSorted(AfterSaleSourceType.SALE_RETURN, id, "销售退单");
         // 批量取产品，避免循环内逐条查库（N+1）
         Map<Long, Product> pMap = productMap(items);
@@ -755,7 +755,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             it.setChargeAmount(chargeAmt);
             it.setChargeReason(chargeAmt.compareTo(BigDecimal.ZERO) > 0 ? chargeReason : null);
             if (map.get("remark") != null) it.setRemark(map.get("remark").toString());
-            // 销售退货品质默认"待分类"，若前端传入则优先使用（售后待重新分类）
+            // 销售退货品质默认"待整理"，若前端传入则优先使用（售后待重新分类）
             String qt = map.get("qualityType") != null && !map.get("qualityType").toString().isBlank()
                     ? map.get("qualityType").toString() : ProductQualityType.PENDING.getCode();
             // 品质等级必须合法：非法值会导致该批库存无法被退货整理带出，形成孤儿库存

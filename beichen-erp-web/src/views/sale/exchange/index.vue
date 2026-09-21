@@ -56,7 +56,7 @@ async function handleAudit(row: any) {
   // 2026-09-20（F7-144）：confirm 必须单独 try/catch —— 用户点「取消」时 confirm 会 reject，
   // 原先三个动作都没有 catch ⇒ 每次取消都产生未处理的 Promise rejection（同模块 order/return 两页都已防护）。
   try {
-    await ElMessageBox.confirm(`确认审核「${row.code}」？审核后退回货品入成品仓(待分类)，换出货品从成品仓扣减。${chargeTip}`, '审核确认', { type: 'warning' })
+    await ElMessageBox.confirm(`确认审核「${row.code}」？审核后退回货品入成品仓(待整理)，换出货品从成品仓扣减。${chargeTip}`, '审核确认', { type: 'warning' })
   } catch { return }
   await auditSaleExchange(row.id)
   ElMessage.success('已审核'); sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1'); loadData()
