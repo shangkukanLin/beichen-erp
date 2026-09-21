@@ -697,7 +697,10 @@ CREATE TABLE IF NOT EXISTS dev_project (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '项目ID',
     code VARCHAR(50) NOT NULL COMMENT '项目编号',
     name VARCHAR(100) NOT NULL COMMENT '项目名称',
-    assembly_name VARCHAR(100) COMMENT '总成名称',
+    -- 2026-09-21：列 assembly_name 已改名为 product_name（用户：「总成名称修改成产品名称，更贴切业务」+「连 DB 列名一起改」）
+    product_name VARCHAR(100) COMMENT '产品名称(原「总成名称」；研发立项时用它自动建产品并回写 product_id)',
+    -- 2026-09-21 新增：立项「规格」——与 product.spec_type 联动；原配时前端隐藏方案与改配信息
+    spec_type VARCHAR(20) COMMENT '规格: MATCHED原配/MODIFIED改配（立项必填；原配时隐藏显示方案/触摸方案/改配信息）',
     product_id BIGINT DEFAULT NULL COMMENT '关联产品ID(product.id)，与产品表双向关联',
     brand_id BIGINT DEFAULT NULL COMMENT '品牌ID(brand.id)',
     display_supplier_name VARCHAR(100) COMMENT '显示方案供应商',

@@ -47,7 +47,13 @@ public class ProductController {
      * 前端在产品页切换「供货商」时会重新调用本接口刷新预填值。</p>
      */
     @GetMapping("/next-sku")
-    public R<String> nextSku(@RequestParam(required = false) Long supplierId) {
+    public R<String> nextSku(@RequestParam(required = false) Long supplierId,
+                             @RequestParam(required = false) String prefix) {
+        // 2026-09-21（立项「产品SKU」）：显式前缀优先 —— 立项页用它预填 NS- 打头的 SKU。
+        // 前缀非法时回落到默认 SKU-（只影响预览值；真正落库仍由 save 的唯一校验 + 唯一索引兜底）。
+        if (prefix != null && !prefix.isBlank()) {
+            return R.ok(service.peekNextSkuByPrefix(prefix));
+        }
         return R.ok(service.peekNextSku(supplierId));
     }
 
@@ -78,7 +84,8 @@ public class ProductController {
         if (product.getName() != null) {
             Product old = service.getById(id);
             if (old != null && (old.getName() == null || !old.getName().equals(product.getName()))) {
-                projectProductSyncService.syncAssemblyNameFromProduct(id, product.getName());
+                // 2026-09-21：方法随「总成名称 → 产品名称」改名（原 syncAssemblyNameFromProduct）
+                projectProductSyncService.syncProductNameToProject(id, product.getName());
             }
         }
         service.updateById(product);

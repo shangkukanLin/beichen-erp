@@ -4,7 +4,7 @@ defineOptions({ name: 'DevProjectEdit' })
 import { reactive, ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { PhaseStatus, PhaseStatusLabel, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DevMaterialTypeLabel, DevMaterialStatusLabel, DevDrawingDocType, DevDrawingDocTypeLabel, DEV_PROJECT_DIRTY_KEY } from '@/api/enums'
+import { PhaseStatus, PhaseStatusLabel, SeverityType, SeverityTypeLabel, BugTypeEnum, BugTypeEnumLabel, BugStatus, BugStatusLabel, BugStatusTag, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DevMaterialTypeLabel, DevMaterialStatusLabel, DevDrawingDocType, DevDrawingDocTypeLabel, DEV_PROJECT_DIRTY_KEY, ProductSpec, ProductSpecLabel } from '@/api/enums'
 import {
   getProject, updateProject,
   getProjectBom, saveProjectBom, getProjectBomSnapshots,
@@ -26,7 +26,11 @@ const activeTab = ref((route.query.tab as string) || 'project')
 // ===================== 项目基础信息 =====================
 const form = reactive<ProjectDTO>({
   name: '', displaySupplierName: '', touchSupplierName: '',
-  assemblyName: '',
+  // 2026-09-21：assemblyName 更名为 productName（连 DB 列名一起改）
+  productName: '',
+  // 2026-09-21 新增：规格（原配/改配，与关联产品联动）+ 产品SKU（详情接口回填关联产品的当前 SKU，可改）
+  specType: '',
+  productSku: '',
   adaptModel: '', originalSize: '', originalResolution: '',
   originalDriveIc: '', originalTouchIc: '',
   glassSize: '', glassResolution: '',
@@ -35,6 +39,25 @@ const form = reactive<ProjectDTO>({
   sampleFactoryId: undefined, outsourceFactoryId: undefined,
   brandId: undefined
 })
+
+/** 关联产品ID（2026-09-21）：未关联产品 ⇒ 没有 SKU 可改（新增态才建产品） */
+const productId = ref<number | undefined>(undefined)
+/** 进页面时产品的 SKU：用于判断"用户是否改过"，改过才二次确认并提交同步 */
+const skuOnLoad = ref('')
+
+/**
+ * 需求 3：规格下拉只给「原配 / 改配」（与立项新增页同一口径）；改动会同步到关联产品。
+ */
+const SPEC_OPTIONS = [
+  { value: ProductSpec.MATCHED, label: ProductSpecLabel[ProductSpec.MATCHED] },
+  { value: ProductSpec.MODIFIED, label: ProductSpecLabel[ProductSpec.MODIFIED] }
+]
+
+/**
+ * 需求 4：项目是「原配」时隐藏「显示方案 / 触摸方案 / 改配信息」。
+ * <p>判定用 **`=== 原配`**：规格为空（历史项目）时保持显示，避免老项目字段凭空消失。</p>
+ */
+const isOriginalSpec = computed(() => form.specType === ProductSpec.MATCHED)
 // 显示方案/触摸方案：可自由输入，选项取自方案商列表
 const solutionSupplierOptions = ref<{ id: number; name: string }[]>([])
 const allSuppliers = ref<any[]>([])
@@ -63,7 +86,9 @@ async function loadProject() {
   const p = await getProject(projectId)
   Object.assign(form, {
     id: p.id, name: p.name, code: p.code,
-    assemblyName: p.assemblyName,
+    productName: p.productName,
+    specType: p.specType,
+    productSku: p.productSku || '',
     displaySupplierName: p.displaySupplierName, touchSupplierName: p.touchSupplierName,
     adaptModel: p.adaptModel, originalSize: p.originalSize, originalResolution: p.originalResolution,
     originalDriveIc: p.originalDriveIc, originalTouchIc: p.originalTouchIc,
@@ -75,6 +100,9 @@ async function loadProject() {
     // F7-89：不回填 status —— 它是阶段推导的派生字段，本页不提交（后端已改为白名单字段更新）
     remark: p.remark
   })
+  // 2026-09-21（需求 1）：记录"是否已关联产品"与"进页面时的 SKU"，供产品SKU 的可编辑性与二次确认判断
+  productId.value = p.productId
+  skuOnLoad.value = p.productSku || ''
   await loadConfigNames()
 }
 
@@ -95,7 +123,26 @@ async function loadConfigNames() {
 
 async function handleSave() {
   if (!form.name.trim()) { ElMessage.warning('请输入项目名称'); return }
-  if (!form.assemblyName || !form.assemblyName.trim()) { ElMessage.warning('请输入总成名称'); return }
+  if (!form.productName || !form.productName.trim()) { ElMessage.warning('请输入产品名称'); return }
+  // 2026-09-21 新增：规格必填（原配/改配）；改动会同步到关联产品
+  if (!form.specType) { ElMessage.warning('请选择规格（原配/改配）'); return }
+  // 2026-09-21（需求 1）：立项详细页也允许改「产品SKU」，但 SKU 是既有编码、历史单据里存的是快照
+  // ⇒ 确有变化时才二次确认（未改过则不打扰用户）
+  const newSku = form.productSku ? form.productSku.trim() : ''
+  if (productId.value && newSku && newSku !== skuOnLoad.value) {
+    try {
+      await ElMessageBox.confirm(
+        `产品SKU 将从「${skuOnLoad.value || '（空）'}」改为「${newSku}」。` +
+        '已生成的单据里保存的是当时的 SKU 快照，不会随本次修改回改。确认修改？',
+        '修改产品SKU确认',
+        { confirmButtonText: '确认修改', cancelButtonText: '取消', type: 'warning' }
+      )
+    } catch {
+      // 取消 ⇒ 回滚输入框并结束本次保存
+      await loadProject()
+      return
+    }
+  }
   saving.value = true
   try {
     await updateProject(form as any)
@@ -502,8 +549,8 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
 
 
 function onNameBlur() {
-  if (!form.assemblyName || !form.assemblyName.trim()) {
-    form.assemblyName = form.name
+  if (!form.productName || !form.productName.trim()) {
+    form.productName = form.name
   }
 }
 </script>
@@ -520,7 +567,20 @@ function onNameBlur() {
             <el-row :gutter="16">
               <el-col :span="8"><el-form-item label="项目编码"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
               <el-col :span="8"><el-form-item required label="项目名称"><el-input v-model="form.name" @blur="onNameBlur" /></el-form-item></el-col>
-              <el-col :span="8"><el-form-item label="总成名称" prop="assemblyName" :rules="[{ required: true, message: '请输入总成名称', trigger: 'blur' }]"><el-input v-model="form.assemblyName" /></el-form-item></el-col>
+              <!-- 需求 1：产品SKU（关联产品后才可改；改动需二次确认）／需求 2：原「总成名称」更名为「产品名称」 -->
+              <el-col :span="8"><el-form-item label="产品SKU" prop="productSku" :rules="[{ required: !!productId, message: '请输入产品SKU', trigger: 'blur' }]">
+                <el-input v-model="form.productSku" maxlength="64" :disabled="!productId" placeholder="自动生成，可修改" />
+                <div v-if="!productId" style="font-size:var(--app-font-xs);color:var(--app-text-secondary);line-height:1.4">
+                  该项目未关联产品，无 SKU 可改
+                </div>
+              </el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="产品名称" prop="productName" :rules="[{ required: true, message: '请输入产品名称', trigger: 'blur' }]"><el-input v-model="form.productName" /></el-form-item></el-col>
+              <!-- 需求 3：规格（原配/改配）——改动会同步到关联产品 -->
+              <el-col :span="8"><el-form-item label="规格" prop="specType" :rules="[{ required: true, message: '请选择规格', trigger: 'change' }]">
+                <el-select v-model="form.specType" placeholder="请选择（原配/改配）" style="width:100%">
+                  <el-option v-for="o in SPEC_OPTIONS" :key="o.value" :label="o.label" :value="o.value" />
+                </el-select>
+              </el-form-item></el-col>
 
               <el-col :span="8"><el-form-item label="立项日期"><el-input v-model="form.startDate" type="date" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="预计完成"><el-input v-model="form.expectedEndDate" type="date" /></el-form-item></el-col>
@@ -529,8 +589,9 @@ function onNameBlur() {
               </el-form-item></el-col>
 
               <el-col :span="8"><el-form-item label="适配机型"><el-input v-model="form.adaptModel" /></el-form-item></el-col>
-              <el-col :span="8"><el-form-item label="显示方案"><el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%" @change="(v: string) => { if (v === ADD_MARKER) { form.displaySupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSupplierOptions" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
-              <el-col :span="8"><el-form-item label="触摸方案"><el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%" @change="(v: string) => { if (v === ADD_MARKER) { form.touchSupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSupplierOptions" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+              <!-- 需求 4：规格=原配 ⇒ 隐藏「显示方案 / 触摸方案」 -->
+              <el-col v-if="!isOriginalSpec" :span="8"><el-form-item label="显示方案"><el-select v-model="form.displaySupplierName" filterable allow-create style="width:100%" @change="(v: string) => { if (v === ADD_MARKER) { form.displaySupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSupplierOptions" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
+              <el-col v-if="!isOriginalSpec" :span="8"><el-form-item label="触摸方案"><el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%" @change="(v: string) => { if (v === ADD_MARKER) { form.touchSupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSupplierOptions" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item></el-col>
 
               <el-col :span="8"><el-form-item label="打样工厂">
                 <div style="display:flex;gap:4px;align-items:center">
@@ -560,9 +621,9 @@ function onNameBlur() {
               <el-col :span="8"><el-form-item label="触摸IC"><el-input v-model="form.originalTouchIc" placeholder="原机触摸IC型号" /></el-form-item></el-col>
             </el-row>
 
-            <!-- 改配信息 -->
-            <el-divider content-position="left">改配信息</el-divider>
-            <el-row :gutter="16">
+            <!-- 改配信息（需求 4：规格=原配 ⇒ 整块隐藏） -->
+            <el-divider v-if="!isOriginalSpec" content-position="left">改配信息</el-divider>
+            <el-row v-if="!isOriginalSpec" :gutter="16">
               <el-col :span="8"><el-form-item label="玻璃尺寸"><el-input v-model="form.glassSize" placeholder="如 6.1寸" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="玻璃分辨率"><el-input v-model="form.glassResolution" placeholder="如 1080×2400" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="驱动IC">

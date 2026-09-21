@@ -25,7 +25,7 @@ public class ProjectProductSyncServiceImpl implements ProjectProductSyncService 
 
     @Override
     @Transactional
-    public void syncProduct(Long projectId, Long linkExistingProductId) {
+    public void syncProduct(Long projectId, Long linkExistingProductId, String productSku) {
         // F7-139（2026-09-20）：**项目行锁**。下面第 2 段的"幂等查重"是"按 projectId 查产品 → 查不到就新建"
         // （典型先查后写）：并发（双击/重试）时两个请求都查不到 ⇒ **同一项目挂出两条产品**，
         // 且 `project.product_id` 后写者胜。在项目行上串行即可闭合（带租户条件，不绕过租户过滤）。
@@ -55,10 +55,10 @@ public class ProjectProductSyncServiceImpl implements ProjectProductSyncService 
             return;
         }
 
-        // 2. 未传关联产品 → 根据总成名称新建产品
-        String assemblyName = project.getAssemblyName();
-        if (assemblyName == null || assemblyName.isBlank()) {
-            log.info("项目无总成名称，不创建产品: projectId={}", projectId);
+        // 2. 未传关联产品 → 根据项目「产品名称」新建产品
+        String productName = project.getProductName();
+        if (productName == null || productName.isBlank()) {
+            log.info("项目无产品名称，不创建产品: projectId={}", projectId);
             return;
         }
 
@@ -71,12 +71,21 @@ public class ProjectProductSyncServiceImpl implements ProjectProductSyncService 
         }
 
         Product product = new Product();
-        product.setName(assemblyName);
+        product.setName(productName);
         product.setProjectId(projectId);
         product.setStatus(ProductStatus.DEVELOPING);
         product.setUnit("pcs");
         product.setSafetyStock(java.math.BigDecimal.ZERO);
-        // 走 ProductService.save：SKU 由服务层统一生成（ProductMapper.insert 会绕过该逻辑导致 SKU 为空）
+        // 2026-09-21（立项规格，需求「规格要和产品的规格联动」）：立项选的原配/改配直接落到产品上。
+        // 产品管理的"规格必填"校验只在 ProductController 入口，走 Service 不会冲突；
+        // 项目规格为空（老项目）时产品规格也保持为空，与既有行为一致。
+        product.setSpecType(project.getSpecType());
+        // 2026-09-21（产品SKU，需求「默认自动生成可修改，以 NS 打头」）：立项页可指定 SKU。
+        // 传空 ⇒ 交给 ProductService.save 按前缀自动生成；传值 ⇒ 由其校验唯一性后采用。
+        if (productSku != null && !productSku.isBlank()) {
+            product.setSku(productSku.trim());
+        }
+        // 走 ProductService.save：SKU 统一由服务层处理（ProductMapper.insert 会绕过该逻辑导致 SKU 为空）
         productService.save(product);
 
         // 回写项目 product_id
@@ -88,35 +97,77 @@ public class ProjectProductSyncServiceImpl implements ProjectProductSyncService 
 
     @Override
     @Transactional
-    public void syncProductNameFromProject(Long projectId, String newAssemblyName) {
+    public void syncProductNameFromProject(Long projectId, String newProductName) {
         if (projectId == null) return;
         Project project = projectMapper.selectById(projectId);
         if (project == null || project.getProductId() == null) return;
         Product product = productMapper.selectById(project.getProductId());
         if (product == null) return;
-        if (newAssemblyName != null && !newAssemblyName.equals(product.getName())) {
-            product.setName(newAssemblyName);
+        if (newProductName != null && !newProductName.equals(product.getName())) {
+            product.setName(newProductName);
             // 走 Service：历史产品 SKU 缺失时 updateById 会兜底补生成
             productService.updateById(product);
-            log.info("项目总成名称变更同步更新产品名称: projectId={}, productId={}, newName={}",
-                    projectId, product.getId(), newAssemblyName);
+            log.info("项目产品名称变更同步更新产品名称: projectId={}, productId={}, newName={}",
+                    projectId, product.getId(), newProductName);
         }
     }
 
     @Override
     @Transactional
-    public void syncAssemblyNameFromProduct(Long productId, String newName) {
+    public void syncProductNameToProject(Long productId, String newName) {
         if (productId == null) return;
         Product product = productMapper.selectById(productId);
         if (product == null || product.getProjectId() == null) return;
         Project project = projectMapper.selectById(product.getProjectId());
         if (project == null) return;
-        if (newName != null && !newName.equals(project.getAssemblyName())) {
-            project.setAssemblyName(newName);
+        if (newName != null && !newName.equals(project.getProductName())) {
+            project.setProductName(newName);
             projectMapper.updateById(project);
-            log.info("产品名称变更同步更新项目总成名称: productId={}, projectId={}, newAssemblyName={}",
+            log.info("产品名称变更同步更新项目产品名称: productId={}, projectId={}, newName={}",
                     productId, project.getId(), newName);
         }
+    }
+
+    /**
+     * 同步项目「规格」到关联产品（2026-09-21 需求："这个字段要和产品的规格联动"）。
+     * <p>项目规格为空（历史项目 / 立项前的旧数据）时**不动产品**，避免把产品上已填好的规格清掉。</p>
+     */
+    @Override
+    @Transactional
+    public void syncProductSpecFromProject(Long projectId) {
+        if (projectId == null) return;
+        Project project = projectMapper.selectById(projectId);
+        if (project == null || project.getProductId() == null) return;
+        String specType = project.getSpecType();
+        if (specType == null || specType.isBlank()) return;
+        Product product = productMapper.selectById(project.getProductId());
+        if (product == null || specType.equals(product.getSpecType())) return;
+        product.setSpecType(specType);
+        // 走 Service：历史产品 SKU 缺失时 updateById 会兜底补生成
+        productService.updateById(product);
+        log.info("项目规格变更同步更新产品规格: projectId={}, productId={}, specType={}",
+                projectId, product.getId(), specType);
+    }
+
+    /**
+     * 同步立项详细页填写的「产品SKU」到关联产品（2026-09-21 需求 1）。
+     * <p>刻意的保守口径：**未关联产品、或传入为空 ⇒ 什么都不做**（不清空产品 SKU），
+     * 避免列表页/其它调用方不带该字段时把产品的 SKU 抹掉。</p>
+     */
+    @Override
+    @Transactional
+    public void syncProductSkuFromProject(Long projectId, String productSku) {
+        if (projectId == null || productSku == null || productSku.isBlank()) return;
+        Project project = projectMapper.selectById(projectId);
+        if (project == null || project.getProductId() == null) return;
+        Product product = productMapper.selectById(project.getProductId());
+        if (product == null) return;
+        String target = productSku.trim();
+        if (target.equals(product.getSku())) return;
+        product.setSku(target);
+        // 走 Service：内部做公司内唯一校验（重复明确报错），并在历史 SKU 缺失时兜底生成
+        productService.updateById(product);
+        log.info("项目页修改产品SKU: projectId={}, productId={}, sku={}", projectId, product.getId(), target);
     }
 
     @Override

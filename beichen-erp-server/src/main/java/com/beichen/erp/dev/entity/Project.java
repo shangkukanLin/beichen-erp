@@ -20,9 +20,28 @@ public class Project {
     private Long id;
     private String code;
     private String name;
-    private String assemblyName;
+    /**
+     * 产品名称（2026-09-21 由「总成名称」更名，用户要求"更贴切业务"）：
+     * 实体字段 {@code assemblyName → productName}、DB 列 {@code assembly_name → product_name} 一并改名。
+     * <p>立项时用它自动创建产品（同名则询问是否关联已有产品）并回写 {@code productId}，
+     * 之后与产品名双向同步。</p>
+     */
+    private String productName;
+    /**
+     * 规格（2026-09-21 新增）：{@code MATCHED} 原配 / {@code MODIFIED} 改配（枚举
+     * {@link com.beichen.erp.material.common.ProductSpec}）。立项页必填，且**与关联产品的
+     * {@code product.spec_type} 联动**。
+     * <p>选「原配」时立项页隐藏「显示方案 / 触摸方案 / 改配信息」（原配即不改配，这些字段无意义）。</p>
+     */
+    private String specType;
     /** 关联产品ID(product.id)，与产品表双向关联；产品管理里新建的产品此字段为空 */
     private Long productId;
+    /**
+     * 立项页填写的产品SKU（2026-09-21 用户需求）——**不落库**，只作建产品时的入参：
+     * 前端默认预填 {@code NS-xxxxxx} 且允许修改，为空则交由 {@code ProductService} 自动生成。
+     */
+    @TableField(exist = false)
+    private String productSku;
     /** 品牌ID(brand.id) */
     private Long brandId;
     private String originalSize;

@@ -46,8 +46,8 @@ function Call([string]$method, [string]$uri, $body) {
     return @{ code = -1; msg = ('HTTP error: ' + $_.Exception.Message) }
   }
 }
-# Probe projects are created WITHOUT assemblyName on purpose: syncProduct only creates a product when the
-# assembly name is present, so no product master data is polluted. The probes end up CLOSED (terminal
+# Probe projects are created WITHOUT productName on purpose: syncProduct only creates a product when the
+# product name is present, so no product master data is polluted. The probes end up CLOSED (terminal
 # state of the lifecycle) and are named PROBE-PHASE-* so they stay identifiable.
 function NewProbe([string]$suffix) {
   return Call 'Post' "$apiBase/dev/project" @{ name = ('PROBE-PHASE-' + $suffix); remark = 'probe for the complete-all verification; safe to cancel' }

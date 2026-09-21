@@ -149,8 +149,8 @@ function onProjectSelect(idx: number, pid: number) {
   const proj = projectOptions.value.find((v:any) => v.id === pid)
   if (proj) {
     products.value[idx].projectId = pid
-    // 产品名称取项目总成名称(assemblyName)，与产品主数据一致；无总成名称时回退项目名
-    products.value[idx].productName = proj.assemblyName || proj.name || ''
+    // 产品名称取项目的「产品名称」(productName，2026-09-21 由「总成名称」更名)，与产品主数据一致；为空时回退项目名
+    products.value[idx].productName = proj.productName || proj.name || ''
     loadBomMaterials(idx, pid)
   }
 }
@@ -301,7 +301,7 @@ onActivated(async () => { await loadOptions(); await loadData() })
         <template #header><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-weight:600">加工产品 #{{ pi + 1 }}</span><el-button type="danger" size="small" text @click="removeProduct(pi)" v-if="products.length>1 && form.status===OutsourceOrderStatus.PENDING">删除产品</el-button></div></template>
         <el-form :model="p" label-width="90px" size="small">
           <el-row :gutter="12">
-            <el-col :span="12"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.assemblyName || row.name" filterable clearable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="(v:any)=>onProjectSelect(pi,v)" /></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.productName || row.name" filterable clearable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="(v:any)=>onProjectSelect(pi,v)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="数量"><el-input-number v-model="p.quantity" :controls="false" :precision="0" :step="1" style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item :label="form.supplyMode==='FACTORY' ? '包工包料单价' : '单价'"><el-input v-model="p.unitPrice" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>

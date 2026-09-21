@@ -76,6 +76,11 @@ public final class BillPrefix {
     public static final String SALE_EXCHANGE = "HH-";
     /** 产品 SKU（产品级唯一编码，新增产品时自动生成：SKU-000001） */
     public static final String PRODUCT_SKU = "SKU-";
+    /**
+     * 研发立项自动建产品时使用的 SKU 前缀（2026-09-21 用户需求：「默认自动生成可修改，以 NS 打头」）。
+     * <p>与 {@link #PRODUCT_SKU} **各自独立取号**（{@code NS-000001} 与 {@code SKU-000001} 可并存）。</p>
+     */
+    public static final String PRODUCT_SKU_NS = "NS-";
     /** 库存盘点单（每月每仓一次，周期 yyyy-MM） */
     public static final String STOCK_TAKE = "PD-";
     /** 应付转应收单（负数应付在无货款可抵时转为向供应商收款） */

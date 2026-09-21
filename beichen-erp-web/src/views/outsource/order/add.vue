@@ -93,8 +93,8 @@ function onProjectSelect(idx: number, pid: number) {
   const proj = projectOptions.value.find((v:any) => v.id === pid)
   if (proj) {
     products.value[idx].projectId = pid
-    // 产品名称取项目总成名称(assemblyName)，与产品主数据一致；无总成名称时回退项目名
-    products.value[idx].productName = proj.assemblyName || proj.name || ''
+    // 产品名称取项目的「产品名称」(productName，2026-09-21 由「总成名称」更名)，与产品主数据一致；为空时回退项目名
+    products.value[idx].productName = proj.productName || proj.name || ''
     loadBomMaterials(idx, pid)
   }
 }
@@ -172,7 +172,7 @@ async function handleSubmit() {
     // 提交时映射 productName 为项目总成名称(与产品主数据一致)，并携带产品主数据ID(用于交货/库存落账)
     const submitProducts = products.value.map((p:any) => {
       const proj = projectOptions.value.find((pr:any) => pr.id === p.projectId)
-      return { ...p, productName: proj?.assemblyName || proj?.name || '', productId: proj?.productId || null }
+      return { ...p, productName: proj?.productName || proj?.name || '', productId: proj?.productId || null }
     })
     await request.post('/outsource/order', { ...cleanForm, products: submitProducts })
     ElMessage.success('加工单创建成功')
@@ -299,7 +299,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       </template>
       <el-form :model="p" label-width="90px" size="small">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.assemblyName || row.name" placeholder="选择产品" @update:modelValue="(v:any)=>onProjectSelectProxy(pi, v)"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.productName || row.name" placeholder="选择产品" @update:modelValue="(v:any)=>onProjectSelectProxy(pi, v)"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
           <el-col :span="5"><el-form-item label="数量"><el-input-number v-model="p.quantity" :controls="false" :precision="0" :step="1" style="width:100%" @change="onQuantityChange(pi)" /></el-form-item></el-col>
           <el-col :span="5"><el-form-item :label="form.supplyMode==='FACTORY' ? '包工包料单价' : '加工单价'"><el-input v-model="p.unitPrice" type="number" @change="calcAmount(pi)" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>

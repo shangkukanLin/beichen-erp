@@ -454,5 +454,22 @@
   "btn_complete_all": "一键完成",
   "tab_project_phase": "项目阶段",
   "phase_confirm_keyword": "自动结项",
-  "msg_project_cancelled": "项目已取消"
+  "msg_project_cancelled": "项目已取消",
+  "pj_lbl_project_name": "项目名称",
+  "pj_lbl_product_sku": "产品SKU",
+  "pj_lbl_product_name": "产品名称",
+  "pj_lbl_spec": "规格",
+  "pj_lbl_display_plan": "显示方案",
+  "pj_lbl_touch_plan": "触摸方案",
+  "pj_lbl_config_info": "改配信息",
+  "pj_lbl_orig_size": "原机尺寸",
+  "pj_lbl_orig_res": "原分辨率",
+  "pj_lbl_orig_drive": "驱动IC",
+  "pj_lbl_orig_touch": "触摸IC",
+  "pj_lbl_glass_size": "玻璃尺寸",
+  "pj_opt_spec_matched": "原配",
+  "pj_opt_spec_modified": "改配",
+  "pj_btn_create": "创建项目",
+  "pj_ph_project_name": "请输入项目名称",
+  "pj_ph_product_name": "请输入产品名称"
 }

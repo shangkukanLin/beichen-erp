@@ -328,7 +328,14 @@ export function saveSupplierProducts(id: number | string, products: SupplierProd
 
 export interface ProjectVO {
   id?: number | string; code: string; name: string
-  assemblyName?: string
+  /** 产品名称（2026-09-21 由「总成名称」更名；DB 列 assembly_name → product_name） */
+  productName?: string
+  /** 规格：MATCHED原配 / MODIFIED改配（立项必填；与关联产品的 spec_type 联动） */
+  specType?: string
+  /** 立项页填写的产品SKU：新增时是"待创建产品的 SKU"，详情接口则回填**关联产品的当前 SKU**（不入库） */
+  productSku?: string
+  /** 关联产品ID（2026-09-21 补类型）：详情接口返回，用于判断产品SKU 是否可改 */
+  productId?: number
   brandId?: number; brandName?: string
   displaySupplierName?: string; touchSupplierName?: string
   adaptModel?: string
@@ -344,7 +351,12 @@ export interface ProjectVO {
 
 export interface ProjectDTO {
   id?: number | string; code?: string; name: string
-  assemblyName?: string
+  /** 产品名称（2026-09-21 由「总成名称」更名，用户："这样更贴切业务"） */
+  productName?: string
+  /** 规格：MATCHED原配 / MODIFIED改配（立项必填）。选原配时页面隐藏显示方案/触摸方案/改配信息 */
+  specType?: string
+  /** 产品SKU（2026-09-21 新增，需求 1）：默认 NS- 打头自动生成、允许修改；仅立项新增时生效 */
+  productSku?: string
   brandId?: number; brandName?: string
   displaySupplierName?: string; touchSupplierName?: string
   adaptModel?: string
@@ -390,7 +402,8 @@ export function getProjectPage(params: ProjectQueryParams) {
 }
 export function getProject(id: number | string) { return request.get<ProjectVO>(`/dev/project/${id}`) }
 export function addProject(data: ProjectDTO, linkExistingProductId?: number | string) { return request.post<void>('/dev/project', data, { params: linkExistingProductId ? { linkExistingProductId } : {} }) }
-export function checkProjectAssembly(name: string) { return request.get<{ exists: boolean; productId?: number; productName?: string }>('/dev/project/check-assembly', { params: { name } }) }
+/** 产品名称查重（2026-09-21：端点随「总成名称 → 产品名称」改名 /check-assembly → /check-product-name） */
+export function checkProjectProductName(name: string) { return request.get<{ exists: boolean; productId?: number; productName?: string }>('/dev/project/check-product-name', { params: { name } }) }
 export function updateProject(data: ProjectDTO) { return request.put<void>('/dev/project', data) }
 export function deleteProject(id: number | string) { return request.delete<void>(`/dev/project/${id}`) }
 export function updateProjectStatus(id: number | string, status: string) { return request.put<void>(`/dev/project/${id}/status?status=${status}`) }

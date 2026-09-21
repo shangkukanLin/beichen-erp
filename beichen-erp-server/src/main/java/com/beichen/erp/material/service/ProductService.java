@@ -151,6 +151,24 @@ public class ProductService extends ServiceImpl<ProductMapper, Product> {
     }
 
     /**
+     * 按**显式前缀**预览下一个可用 SKU（2026-09-21 立项「产品SKU」用：预填 {@code NS-} 打头）。
+     * <p>接受 {@code NS} / {@code NS-} 两种写法，统一规整为「主体 + '-'」；主体限
+     * {@code ^[A-Z0-9-]{1,23}$} 并统一转大写（与供货商「供货SKU」同口径，拼上 6 位流水后 ≤30，
+     * 远小于 {@code product.sku VARCHAR(64)}）。不合法则回落默认 {@code SKU-}。</p>
+     * <p>这**只是预览值**：前端可改，最终由 {@link #assertSkuAvailable} 与唯一键
+     * {@code uk_company_sku} 兜底。</p>
+     */
+    public String peekNextSkuByPrefix(String prefix) {
+        String body = prefix == null ? "" : prefix.trim().toUpperCase();
+        // 去掉调用方可能自带的尾部短横线，统一成"主体 + '-'"
+        while (body.endsWith("-")) body = body.substring(0, body.length() - 1);
+        if (body.isEmpty() || !body.matches("^[A-Z0-9-]{1,23}$")) {
+            return nextSku(BillPrefix.PRODUCT_SKU);
+        }
+        return nextSku(body + "-");
+    }
+
+    /**
      * 解析 SKU 前缀（2026-09-21 供货SKU）：供货商配了「供货SKU」⇒ {@code 供货SKU + "-"}；
      * 未选供货商、供货商不存在、或未配「供货SKU」⇒ 默认前缀 {@code SKU-}。
      */

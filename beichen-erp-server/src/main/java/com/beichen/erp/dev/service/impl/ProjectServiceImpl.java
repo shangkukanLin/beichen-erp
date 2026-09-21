@@ -81,7 +81,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         if (keyword != null && !keyword.isBlank()) {
             w.and(wr -> wr.like(Project::getName, keyword)
                     .or().like(Project::getCode, keyword)
-                    .or().like(Project::getAssemblyName, keyword));
+                    .or().like(Project::getProductName, keyword));
         }
         if (status != null && !status.isBlank()) {
             w.eq(Project::getStatus, status);
@@ -143,8 +143,9 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         // 创建项目阶段，第一个阶段自动激活（复用 ProjectPhaseService 统一初始化逻辑）
         projectPhaseService.initPhase(project.getId());
 
-        // 根据总成名称生成/关联产品（若项目配置了总成名称）
-        projectProductSyncService.syncProduct(project.getId(), linkExistingProductId);
+        // 根据项目「产品名称」生成/关联产品（若项目配置了产品名称）；
+        // 2026-09-21：立项页指定的 productSku（默认 NS- 打头、可改）一并传入，作为新建产品的 SKU。
+        projectProductSyncService.syncProduct(project.getId(), linkExistingProductId, project.getProductSku());
 
         // 改配信息（驱动IC/触摸IC/码片IC）联动写入项目 BOM
         syncConfigToBom(project);
@@ -525,7 +526,12 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         patch.setId(project.getId());
         // ↓ 只允许这些字段被编辑（需与前端 edit.vue 的表单字段保持一致）
         patch.setName(project.getName());
-        patch.setAssemblyName(project.getAssemblyName());
+        // 2026-09-21：assemblyName 已更名为 productName（DB 列 assembly_name → product_name）
+        patch.setProductName(project.getProductName());
+        // 2026-09-21 新增：立项「规格」（原配/改配），与关联产品联动；空白视为"未提交"以免覆盖成空串
+        if (project.getSpecType() != null && !project.getSpecType().isBlank()) {
+            patch.setSpecType(project.getSpecType().trim());
+        }
         patch.setBrandId(project.getBrandId());
         patch.setDisplaySupplierName(project.getDisplaySupplierName());
         patch.setTouchSupplierName(project.getTouchSupplierName());
@@ -549,12 +555,17 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
 
         // 改配信息（驱动IC/触摸IC/码片IC）同步写回项目 BOM 对应独立行
         syncConfigToBom(project);
-        // 总成名称变更时，同步改名关联产品，确保两处名称一致
-        if (old.getAssemblyName() != null
-                && !old.getAssemblyName().equals(project.getAssemblyName())) {
+        // 产品名称变更时，同步改名关联产品，确保两处名称一致
+        if (old.getProductName() != null
+                && !old.getProductName().equals(project.getProductName())) {
             projectProductSyncService.syncProductNameFromProject(
-                    project.getId(), project.getAssemblyName());
+                    project.getId(), project.getProductName());
         }
+        // 2026-09-21（需求「规格要和产品的规格联动」）：立项详细页改规格时同步到关联产品。
+        // 项目规格为空时**不动产品**（syncProductSpecFromProject 内部已兜底），避免误清产品已有规格。
+        projectProductSyncService.syncProductSpecFromProject(project.getId());
+        // 2026-09-21（需求 1）：立项详细页也允许改「产品SKU」（前端已二次确认）。只在确有变化时写。
+        projectProductSyncService.syncProductSkuFromProject(project.getId(), project.getProductSku());
     }
 
     @Override

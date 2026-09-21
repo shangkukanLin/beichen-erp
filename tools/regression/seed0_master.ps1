@@ -97,7 +97,7 @@ Write-Output ('materials=' + $matIds.Count + ' parents=' + $parentIds.Count + ' 
 # 6) dev projects (3)
 $projOk = 0
 for ($i = 1; $i -le 3; $i++) {
-    $r = Post '/dev/project' @{ name = 'PRJ-' + $i; assemblyName = 'ASSY-' + $i; brandId = $brandIds[($i - 1) % $brandIds.Count]; startDate = '2026-08-01'; expectedEndDate = '2026-10-01'; remark = 'seed project' }
+    $r = Post '/dev/project' @{ name = 'PRJ-' + $i; productName = 'ASSY-' + $i; specType = 'MATCHED'; brandId = $brandIds[($i - 1) % $brandIds.Count]; startDate = '2026-08-01'; expectedEndDate = '2026-10-01'; remark = 'seed project' }
     if ($r) { $projOk++ }
 }
 Write-Output ('projects created=' + $projOk)
