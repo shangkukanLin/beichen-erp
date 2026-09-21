@@ -73,9 +73,9 @@ onActivated(loadData)
            列宽合计 ≈942px（**留 20px 余量**）＜ 内容区，保证「一行显示完、不横向滑动」。
            注意：内容区宽度不是固定的 —— 本页行数多、页面变高时会出现**纵向滚动条**，
            内容区会再少约 15px（实测 963 → 948），所以不能贴着 963 排满。
-           2026-09-17：①按用户要求「下单/已交/剩余」+40（114→154）、「收货进度」+20（80→100），
+           2026-09-17：①按用户要求「下单/已收/剩余」+40（114→154）、「收货进度」+20（80→100），
            由弹性列「产品」min-width 等量减回（100→77）；②新增行内「退货」按钮（良品退回加工厂 →
-           加工退货单），操作列 84→138，由「加工单号 −12、下单/已交/剩余 −10、收货进度 −8、
+           加工退货单），操作列 84→138，由「加工单号 −12、下单/已收/剩余 −10、收货进度 −8、
            最近收货 −8、计划完成 −8、状态 −8」抵平。 -->
       <el-table :data="tableData" border stripe v-loading="loading" style="width:100%" @row-click="goDetail">
         <el-table-column label="加工单号" width="140" show-overflow-tooltip>
@@ -83,7 +83,7 @@ onActivated(loadData)
         </el-table-column>
         <el-table-column prop="factoryName" label="加工厂" min-width="90" show-overflow-tooltip />
         <el-table-column prop="productNames" label="产品" min-width="70" show-overflow-tooltip />
-        <el-table-column label="下单/已交/剩余" width="144" align="center">
+        <el-table-column label="下单/已收/剩余" width="144" align="center">
           <template #default="{ row }">
             <span>{{ row.totalQuantity }}</span>
             <span style="color:var(--app-text-placeholder)"> / </span>

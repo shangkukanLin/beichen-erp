@@ -1072,7 +1072,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
             BigDecimal done = returned.getOrDefault(pid, BigDecimal.ZERO);
             if (done.add(e.getValue()).compareTo(base) > 0) {
                 throw new BusinessException("退货数量超过该产品已收货量（产品["
-                        + nameMap.getOrDefault(pid, "#" + pid) + "]已交 " + fmt(base)
+                        + nameMap.getOrDefault(pid, "#" + pid) + "]已收 " + fmt(base)
                         + "、已退 " + fmt(done) + "、本次 " + fmt(e.getValue()) + "）");
             }
         }

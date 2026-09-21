@@ -93,9 +93,9 @@ if ($d3) {
 # ④ 关闭弹窗后：汇总卡 / 收货记录 / 返回列表
 EvalJs "(()=>{const d=[...document.querySelectorAll('.el-dialog')].find(x=>x.offsetParent!==null);if(d){const btns=[...d.querySelectorAll('button')];for(const b of btns){if(b.innerText.trim()==='取消'){b.click();return 'cancel'}}}return 'none'})()" | Out-Null
 agent-browser wait 1600
-$d4 = ReadJson "(()=>{const t=document.body.innerText;return JSON.stringify({sum:t.includes('订单总量')&&t.includes('已交数量')&&t.includes('剩余数量'),rec:t.includes('收货记录'),back:t.includes('返回列表')});})()" '收货详细页'
+$d4 = ReadJson "(()=>{const t=document.body.innerText;return JSON.stringify({sum:t.includes('订单总量')&&t.includes('已收数量')&&t.includes('剩余数量'),rec:t.includes('收货记录'),back:t.includes('返回列表')});})()" '收货详细页'
 if ($d4) {
-  if ($d4.sum) { Ok '收货详细页有汇总卡（订单总量/已交数量/剩余数量）' } else { Bad '收货详细页缺少汇总卡' }
+  if ($d4.sum) { Ok '收货详细页有汇总卡（订单总量/已收数量/剩余数量）' } else { Bad '收货详细页缺少汇总卡' }
   if ($d4.rec) { Ok '收货详细页有「收货记录」区块' } else { Bad '收货详细页缺少「收货记录」区块' }
   if ($d4.back) { Ok '收货详细页有「返回列表」按钮' } else { Bad '收货详细页缺少「返回列表」按钮' }
 }

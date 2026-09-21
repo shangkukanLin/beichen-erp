@@ -476,7 +476,7 @@ public class OutsourceOrderDeliveryServiceImpl
                 .map(d -> d.getQuantity() != null && d.getQuantity().signum() < 0 ? d.getQuantity().abs() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (returnedQty.add(defectQty).compareTo(deliveredQty) > 0)
-            throw new BusinessException("累计退不良数量(" + returnedQty.add(defectQty) + ")不能超过已交数量(" + deliveredQty + ")");
+            throw new BusinessException("累计退不良数量(" + returnedQty.add(defectQty) + ")不能超过已收数量(" + deliveredQty + ")");
 
         // 校验该规格仓库成品库存（按产品主数据ID+规格定位）
         WarehouseStock stock = stockMapper.selectOne(
@@ -763,7 +763,7 @@ public class OutsourceOrderDeliveryServiceImpl
             String pn = matched.getProductName() != null ? matched.getProductName() : ("#" + matched.getId());
             throw new BusinessException("收货数量超过该产品剩余待收量（产品[" + pn + "]计划 "
                     + planned.stripTrailingZeros().toPlainString()
-                    + "、已交 " + delivered.stripTrailingZeros().toPlainString()
+                    + "、已收 " + delivered.stripTrailingZeros().toPlainString()
                     + "、本次 " + thisQty.stripTrailingZeros().toPlainString() + "）");
         }
     }

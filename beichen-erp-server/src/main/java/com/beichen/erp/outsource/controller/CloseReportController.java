@@ -220,7 +220,7 @@ public class CloseReportController {
             rowIdx++;
             Row totalRow = sheet.createRow(rowIdx++);
             Cell t0 = totalRow.createCell(0); t0.setCellValue("合计"); t0.setCellStyle(headerStyle);
-            Cell t1 = totalRow.createCell(1); t1.setCellValue("实际已交：" + normalTotal.subtract(defectTotal).stripTrailingZeros().toPlainString()); t1.setCellStyle(textStyle);
+            Cell t1 = totalRow.createCell(1); t1.setCellValue("实际已收：" + normalTotal.subtract(defectTotal).stripTrailingZeros().toPlainString()); t1.setCellStyle(textStyle);
             Cell t3 = totalRow.createCell(3); t3.setCellValue("退不良：" + defectTotal.stripTrailingZeros().toPlainString()); t3.setCellStyle(textStyle);
         }
 

@@ -107,7 +107,7 @@ onMounted(() => {
         <el-table-column label="最近收货" width="120">
           <template #default="{row}">{{ row.latestDeliveryDate || '-' }}</template>
         </el-table-column>
-        <!-- 是否缺料（2026-09-17）：口径 = 剩余待交量对应的物料需求 > 该加工厂委外仓库存（与收货时的缺料拦截一致）；
+        <!-- 是否缺料（2026-09-17）：口径 = 剩余待收量对应的物料需求 > 该加工厂委外仓库存（与收货时的缺料拦截一致）；
              仅进行中（待审核/生产中）计算，已结单/已作废显示 — -->
         <el-table-column label="是否缺料" width="90" align="center">
           <template #default="{row}">

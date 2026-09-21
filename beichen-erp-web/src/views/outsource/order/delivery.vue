@@ -212,10 +212,10 @@ async function handleUnaudit(row: any) {
 }
 
 /**
- * 退货（2026-09-17）：把已交到我方成品仓的**良品**退回加工厂 —— 走**加工退货单**（独立单据：
+ * 退货（2026-09-17）：把已收到我方成品仓的**良品**退回加工厂 —— 走**加工退货单**（独立单据：
  * 成品出库 + BOM 料还回工厂委外仓 + 冲减应付，可选收费），与「退不良」（不良品换料/退款，
- * 写在收货记录里并影响"已交/剩余"）是两件事。
- * 传记录时后端会算出该记录各规格的「已交 − 已退 = 可退」并预填。
+ * 写在收货记录里并影响"已收/剩余"）是两件事。
+ * 传记录时后端会算出该记录各规格的「已收 − 已退 = 可退」并预填。
  */
 function goReturn(row?: any) {
   if (row?.id) router.push(`/outsource/return-order/add?sourceDeliveryId=${row.id}`)
@@ -307,7 +307,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
 
     <el-row :gutter="12" style="margin-bottom:12px">
       <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">订单总量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0">{{ summary.totalQuantity || 0 }}</p></el-card></el-col>
-      <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">已交数量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-success)">{{ summary.deliveredQuantity || 0 }}</p></el-card></el-col>
+      <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">已收数量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-success)">{{ summary.deliveredQuantity || 0 }}</p></el-card></el-col>
       <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">剩余数量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-warning)">{{ summary.remainingQuantity || 0 }}</p></el-card></el-col>
       <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">收货进度</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-primary)">{{ progress }}%</p></el-card></el-col>
     </el-row>
@@ -322,7 +322,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         <el-table-column prop="sku" label="SKU" width="130" />
         <el-table-column prop="productName" label="产品名称" min-width="150" />
         <el-table-column prop="totalQuantity" label="订单数量" width="100" />
-        <el-table-column label="已交数量" width="100"><template #default="{ row }"><span style="color:var(--app-color-success);font-weight:500">{{ row.deliveredQuantity }}</span></template></el-table-column>
+        <el-table-column label="已收数量" width="100"><template #default="{ row }"><span style="color:var(--app-color-success);font-weight:500">{{ row.deliveredQuantity }}</span></template></el-table-column>
         <el-table-column label="剩余数量" width="100"><template #default="{ row }"><span :style="{ color: Number(row.remainingQuantity) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-warning)', fontWeight: '500' }">{{ row.remainingQuantity }}</span></template></el-table-column>
         <el-table-column label="进度" width="180"><template #default="{ row }"><el-progress :percentage="Number(row.totalQuantity) === 0 ? 0 : Math.min(100, Math.round(Number(row.deliveredQuantity) / Number(row.totalQuantity) * 100))" :stroke-width="12" :color="Number(row.remainingQuantity) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-primary)'" /></template></el-table-column>
       </el-table>

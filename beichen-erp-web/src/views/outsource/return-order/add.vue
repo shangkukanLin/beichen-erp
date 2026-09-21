@@ -15,7 +15,7 @@ const tabStore = useTabStore()
 const editId = Number(route.params.id) || 0
 /**
  * 来源参数（2026-09-17）：从「成品收货」发起退货时带出。
- * <p>?sourceDeliveryId= 按某条收货记录退（带出各规格「已交 − 已退 = 可退」）；
+ * <p>?sourceDeliveryId= 按某条收货记录退（带出各规格「已收 − 已退 = 可退」）；
  * ?orderId=&factoryId= 按加工单退（列表行入口，数量留空）。</p>
  */
 const prefillDeliveryId = Number(route.query.sourceDeliveryId) || 0
@@ -323,7 +323,7 @@ function refreshMerged() {
 
 /**
  * 从「成品收货」带来源参数进入时预填（2026-09-17）：
- * 工厂/成品出库仓/产品与 BOM 版本来源(该加工单)/退回规格/退回数量（默认 = 已交 − 已退，可改）。
+ * 工厂/成品出库仓/产品与 BOM 版本来源(该加工单)/退回规格/退回数量（默认 = 已收 − 已退，可改）。
  */
 async function loadFromQuery() {
   // 维修退货：不关联加工单/收货记录，没有来源可带（货从库存选），保持空表单
