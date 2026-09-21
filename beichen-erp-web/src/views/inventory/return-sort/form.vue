@@ -38,10 +38,6 @@ const form = reactive({
   id: undefined as any,
   warehouseId: undefined as any,
   sortDate: localDate(),
-  targetWarehouseA: undefined as any,
-  targetWarehouseB: undefined as any,
-  targetWarehouseC: undefined as any,
-  targetWarehouseDefect: undefined as any,
   remark: ''
 })
 const items = ref<any[]>([])
@@ -51,8 +47,8 @@ const STAY_ALERT_DAYS = 3
 
 // 源仓库：自有**成品仓**（2026-09-16 方案 A：原"售后仓"取消，退回品直接压在成品仓、品质 PENDING 待整理）
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.FINISHED } })
-// 目标入库仓（A/B/C/不良）：一律自有**成品仓** —— 不良品改用**品质 DEFECT** 区分，不再需要独立"不良仓"
-const fetchFinishedWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.FINISHED } })
+// 2026-09-22 用户口径：分选后**默认回到源仓库** ⇒ 不再收集 A/B/C/不良 4 个目标入库仓
+// （服务端 create/update 时把空的目标仓回填成源仓库；不良品仍靠品质 DEFECT 区分，不需要独立不良仓）
 
 const warehouseOptions = ref<any[]>([])
 
@@ -65,15 +61,6 @@ function resetForm() {
     remark: ''
   })
   items.value = []
-}
-
-// 默认目标仓库：A/B/C/不良 都取第一个成品仓（2026-09-16 方案 A：不良品靠品质 DEFECT 区分，无独立不良仓）
-function applyTargetDefaults() {
-  const fin = warehouseOptions.value.find((w: any) => w.warehouseType === WarehouseType.FINISHED)
-  form.targetWarehouseA = fin?.id
-  form.targetWarehouseB = fin?.id
-  form.targetWarehouseC = fin?.id
-  form.targetWarehouseDefect = fin?.id
 }
 
 /** 嵌入模式要带出的来源批次（来自「待整理」总览）；为空 = 整仓待整理库存 */
@@ -137,13 +124,12 @@ async function init() {
   code.value = ''
   await loadWarehouses()
   if (props.embedded) {
-    // 源仓库与要整理的来源批次由「待整理」总览带过来；A/B/C/不良 目标仓仍取默认成品仓
+    // 源仓库与要整理的来源批次由「待整理」总览带过来；分选后按品质回到该源仓库（不再选目标仓）
     form.warehouseId = props.presetWarehouseId ?? undefined
-    applyTargetDefaults()
     if (form.warehouseId) await loadDefectStock()
     return
   }
-  if (id.value == null) { applyTargetDefaults(); return }
+  if (id.value == null) return
 
   loading.value = true
   try {
@@ -151,8 +137,6 @@ async function init() {
     code.value = io.code || ''
     Object.assign(form, {
       id: io.id, warehouseId: io.warehouseId, sortDate: io.sortDate,
-      targetWarehouseA: io.targetWarehouseA, targetWarehouseB: io.targetWarehouseB,
-      targetWarehouseC: io.targetWarehouseC, targetWarehouseDefect: io.targetWarehouseDefect,
       remark: io.remark
     })
     const its = await getReturnSortItems(id.value)
@@ -197,9 +181,6 @@ async function loadWarehouses() {
 
 async function handleSave() {
   if (!form.warehouseId) { ElMessage.warning('请选择源仓库(成品仓)'); return }
-  if (!form.targetWarehouseA || !form.targetWarehouseB || !form.targetWarehouseC || !form.targetWarehouseDefect) {
-    ElMessage.warning('请选择 A规/B规/C规/不良 的目标入库仓库'); return
-  }
   if (items.value.length === 0) { ElMessage.warning('请先加载成品仓待整理库存并录入分选数量'); return }
   for (const it of items.value) {
     if (!it.totalQuantity || it.totalQuantity <= 0) { ElMessage.warning(`产品「${it.productName || it.productId}」待整理数量必须大于0`); return }
@@ -262,24 +243,12 @@ watch(() => route.fullPath, () => { init() })
           <el-col :span="8">
             <el-form-item label="备注"><el-input v-model="form.remark" placeholder="备注" /></el-form-item>
           </el-col>
-          <el-col :span="6">
-            <el-form-item label="A规入库仓" required>
-              <RemoteSelect v-model="form.targetWarehouseA" :fetch="fetchFinishedWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择成品仓" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="B规入库仓" required>
-              <RemoteSelect v-model="form.targetWarehouseB" :fetch="fetchFinishedWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择成品仓" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="C规入库仓" required>
-              <RemoteSelect v-model="form.targetWarehouseC" :fetch="fetchFinishedWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择成品仓" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="不良入库仓" required>
-              <RemoteSelect v-model="form.targetWarehouseDefect" :fetch="fetchFinishedWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择成品仓" style="width:100%" />
+          <!-- 2026-09-22 用户口径：分选后**默认回到源仓库** ⇒ 不再让用户逐个选 A/B/C/不良 入库仓 -->
+          <el-col :span="24">
+            <el-form-item label="入库仓库">
+              <span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">
+                分选后按品质回到<b>源仓库</b>（A/B/C/不良 均入源仓，以品质区分），无需逐个选择
+              </span>
             </el-form-item>
           </el-col>
         </el-row>

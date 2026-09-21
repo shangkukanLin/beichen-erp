@@ -198,44 +198,25 @@ const batchSaving = ref(false)
 const batchForm = reactive({
   defaultQuality: ProductQualityType.A as string,
   sortDate: localDate(),
-  targetWarehouseA: undefined as any,
-  targetWarehouseB: undefined as any,
-  targetWarehouseC: undefined as any,
-  targetWarehouseDefect: undefined as any,
   remark: '',
 })
-const fetchFinishedWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.FINISHED } })
+// 2026-09-22 用户口径：分选后**默认回到源仓库** ⇒ 批量生成草稿时不再需要选/预填 A/B/C/不良 目标仓
+// （服务端按每张草稿自己的源仓库回填，一张草稿只对应一个仓库/客户）
 
 async function openBatch() {
   if (selectedIds.value.length === 0) { ElMessage.warning('请先勾选需要整理的来源批次'); return }
   batchForm.sortDate = localDate()
   batchForm.defaultQuality = ProductQualityType.A
-  // 目标仓默认取第一个成品仓（与表单页 applyTargetDefaults 同口径）
-  try {
-    const res: any = await request.get('/warehouse/page', { params: { pageSize: 200, warehouseCategory: 'INVENTORY', warehouseType: WarehouseType.FINISHED } })
-    const fin = (res?.records || [])[0]
-    batchForm.targetWarehouseA = fin?.id
-    batchForm.targetWarehouseB = fin?.id
-    batchForm.targetWarehouseC = fin?.id
-    batchForm.targetWarehouseDefect = fin?.id
-  } catch { /* 交由用户手选 */ }
   batchVisible.value = true
 }
 
 async function submitBatch() {
-  if (!batchForm.targetWarehouseA || !batchForm.targetWarehouseB || !batchForm.targetWarehouseC || !batchForm.targetWarehouseDefect) {
-    ElMessage.warning('请选择 A规/B规/C规/不良 的目标入库仓库'); return
-  }
   batchSaving.value = true
   try {
     const data = {
       pendingIds: selectedIds.value,
       defaultQuality: batchForm.defaultQuality,
       sortDate: batchForm.sortDate,
-      targetWarehouseA: batchForm.targetWarehouseA,
-      targetWarehouseB: batchForm.targetWarehouseB,
-      targetWarehouseC: batchForm.targetWarehouseC,
-      targetWarehouseDefect: batchForm.targetWarehouseDefect,
       remark: batchForm.remark,
     }
     const res: any = await batchCreateReturnSortDrafts(data)
@@ -496,24 +477,13 @@ onActivated(() => {
           <el-col :span="8">
             <el-form-item label="备注"><el-input v-model="batchForm.remark" placeholder="选填" /></el-form-item>
           </el-col>
-          <el-col :span="6">
-            <el-form-item label="A规入库仓" required>
-              <RemoteSelect v-model="batchForm.targetWarehouseA" :fetch="fetchFinishedWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="成品仓" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="B规入库仓" required>
-              <RemoteSelect v-model="batchForm.targetWarehouseB" :fetch="fetchFinishedWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="成品仓" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="C规入库仓" required>
-              <RemoteSelect v-model="batchForm.targetWarehouseC" :fetch="fetchFinishedWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="成品仓" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="不良入库仓" required>
-              <RemoteSelect v-model="batchForm.targetWarehouseDefect" :fetch="fetchFinishedWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="成品仓" style="width:100%" />
+          <!-- 2026-09-22 用户口径：分选后**默认回到源仓库** ⇒ 不再让用户逐个选 A/B/C/不良 入库仓，
+               服务端按每张草稿自己的源仓库回填（不良品用品质 DEFECT 区分，不需要独立不良仓） -->
+          <el-col :span="24">
+            <el-form-item label="入库仓库">
+              <span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">
+                分选后按品质回到<b>各批次自己的源仓库</b>（A/B/C/不良 均入源仓，以品质区分），无需逐个选择
+              </span>
             </el-form-item>
           </el-col>
         </el-row>

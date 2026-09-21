@@ -510,6 +510,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void create(ReturnSort s, List<ReturnSortItem> items) {
+        defaultTargetsToSource(s);   // 2026-09-22：未指定入库仓 ⇒ 分选后回源仓库
         validate(s, items);
         s.setCode(gen(BillPrefix.RETURN_SORT));
         s.setStatus(DocStatus.DRAFT.getCode());
@@ -530,6 +531,7 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         ReturnSort old = rsMapper.selectById(s.getId());
         if (old == null) throw new BusinessException("退货整理单不存在");
         if (DocStatus.AUDITED.getCode().equals(old.getStatus())) throw new BusinessException("已审核的单据不可编辑");
+        defaultTargetsToSource(s);   // 同 create：缺省回源仓库（历史单原值保留）
         validate(s, items);
 
         s.setCode(old.getCode()); s.setStatus(DocStatus.DRAFT.getCode());
@@ -556,9 +558,16 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         if (!DocStatusGuard.claim(rsMapper, ReturnSort::getId, id, ReturnSort::getStatus,
                 DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
             throw new BusinessException("只有草稿状态可审核");
-        if (s.getTargetWarehouseA() == null || s.getTargetWarehouseB() == null
-                || s.getTargetWarehouseC() == null || s.getTargetWarehouseDefect() == null)
-            throw new BusinessException("请选择 A/B/C/不良 的目标入库仓库");
+        // 目标仓缺省回源仓库（2026-09-22）。历史单/异常空值在这里兜底**并落库** —— 否则反审核时取不到仓库，
+        // 会出现"入到源仓、冲回时找不到仓"的不一致。
+        if (defaultTargetsToSource(s)) {
+            rsMapper.update(null, new LambdaUpdateWrapper<ReturnSort>()
+                    .eq(ReturnSort::getId, s.getId())
+                    .set(ReturnSort::getTargetWarehouseA, s.getTargetWarehouseA())
+                    .set(ReturnSort::getTargetWarehouseB, s.getTargetWarehouseB())
+                    .set(ReturnSort::getTargetWarehouseC, s.getTargetWarehouseC())
+                    .set(ReturnSort::getTargetWarehouseDefect, s.getTargetWarehouseDefect()));
+        }
         List<ReturnSortItem> items = getItems(id);
         if (items.isEmpty()) throw new BusinessException("退货整理明细不能为空");
         // 源仓库必须为售后仓：防止创建后仓库被改成非售后仓再审核
@@ -797,12 +806,31 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         } catch (Exception e) { return null; }
     }
 
+    /**
+     * 目标入库仓缺省回填 = 源仓库（2026-09-22 用户口径：「默认回到源仓库」——
+     * A规/B规/C规/不良 4 个入库仓前端不再选择，分选后按品质回到该批次的源仓）。
+     *
+     * <p>⚠️ 只填空值：**已显式填过的历史单保持原值**。反审核按原目标仓冲回、再审核必须落回同一个仓，
+     * 若无条件改成源仓，历史单反审核后再审核会"货凭空搬家"。</p>
+     *
+     * @return true 表示有改动（调用方需要落库）
+     */
+    private boolean defaultTargetsToSource(ReturnSort s) {
+        Long src = s.getWarehouseId();
+        if (src == null) return false;
+        boolean changed = false;
+        if (s.getTargetWarehouseA() == null) { s.setTargetWarehouseA(src); changed = true; }
+        if (s.getTargetWarehouseB() == null) { s.setTargetWarehouseB(src); changed = true; }
+        if (s.getTargetWarehouseC() == null) { s.setTargetWarehouseC(src); changed = true; }
+        if (s.getTargetWarehouseDefect() == null) { s.setTargetWarehouseDefect(src); changed = true; }
+        return changed;
+    }
+
     private void validate(ReturnSort s, List<ReturnSortItem> items) {
         if (s.getWarehouseId() == null) throw new BusinessException("源仓库(售后仓)不能为空");
         assertSourceWarehouse(s.getWarehouseId());
-        if (s.getTargetWarehouseA() == null || s.getTargetWarehouseB() == null
-                || s.getTargetWarehouseC() == null || s.getTargetWarehouseDefect() == null)
-            throw new BusinessException("请选择 A/B/C/不良 的目标入库仓库");
+        // 2026-09-22 用户口径：**默认回到源仓库** ⇒ 前端不再收集 A/B/C/不良 4 个入库仓，
+        // 原来的非空校验随之删除；空值由 create/update/audit 里的 defaultTargetsToSource 回填成源仓库。
         if (items == null || items.isEmpty()) throw new BusinessException("退货整理明细不能为空");
         if (s.getLossAmount() != null && s.getLossAmount().compareTo(BigDecimal.ZERO) < 0)
             throw new BusinessException("折损收款金额不能为负数");

@@ -42,6 +42,17 @@ function warehouseName(wid?: number) {
 const isDraft = computed(() => String(head.status) === DocStatus.DRAFT)
 const isAudited = computed(() => String(head.status) === DocStatus.AUDITED)
 
+/**
+ * 是否"分选后回到源仓库"（2026-09-22 用户口径：默认回源仓，不再单独选/展示 4 个目标仓）。
+ * - 新单：目标仓由服务端回填 = 源仓库（或前端未传 ⇒ 空值，审核时同样回填源仓）⇒ true
+ * - 历史单：曾显式指定过与源仓不同的目标仓 ⇒ false，此时逐一列出，避免信息失真
+ */
+const targetsAllSource = computed(() => {
+  const src = head.warehouseId
+  const list = [head.targetWarehouseA, head.targetWarehouseB, head.targetWarehouseC, head.targetWarehouseDefect]
+  return list.every((t) => t == null || t === src)
+})
+
 async function loadWarehouses() {
   try { const res: any = await request.get('/warehouse/page', { params: { pageSize: 500, warehouseCategory: 'INVENTORY' } }); warehouseOptions.value = res?.records || [] } catch { warehouseOptions.value = [] }
 }
@@ -123,21 +134,21 @@ onActivated(() => { loadDetail() })
           <span v-if="head.sortUserName" style="font-weight:600">{{ head.sortUserName }}</span>
           <span v-else style="color:#999">—（历史单据未记录）</span>
         </el-descriptions-item>
-        <el-descriptions-item label="A规入库仓">
-          <el-button v-if="head.targetWarehouseA" type="primary" link @click="goWarehouse(head.targetWarehouseA)">{{ warehouseName(head.targetWarehouseA) }}</el-button>
-          <span v-else>—</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="B规入库仓">
-          <el-button v-if="head.targetWarehouseB" type="primary" link @click="goWarehouse(head.targetWarehouseB)">{{ warehouseName(head.targetWarehouseB) }}</el-button>
-          <span v-else>—</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="C规入库仓">
-          <el-button v-if="head.targetWarehouseC" type="primary" link @click="goWarehouse(head.targetWarehouseC)">{{ warehouseName(head.targetWarehouseC) }}</el-button>
-          <span v-else>—</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="不良入库仓">
-          <el-button v-if="head.targetWarehouseDefect" type="primary" link @click="goWarehouse(head.targetWarehouseDefect)">{{ warehouseName(head.targetWarehouseDefect) }}</el-button>
-          <span v-else>—</span>
+        <!-- 入库仓（2026-09-22 用户口径：默认回到源仓库 ⇒ 不再展示 A/B/C/不良 4 个目标仓）。
+             只有历史单（曾显式指定过与源仓不同的目标仓）才逐一列出，避免信息失真。 -->
+        <el-descriptions-item label="分选后入库仓" :span="2">
+          <template v-if="targetsAllSource">
+            <el-button v-if="head.warehouseId" type="primary" link @click="goWarehouse(head.warehouseId)">{{ warehouseName(head.warehouseId) }}</el-button>
+            <span v-else>—</span>
+            <span style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">= 源仓库（A/B/C/不良 均回源仓、按品质区分）</span>
+          </template>
+          <template v-else>
+            <span style="font-size:var(--app-font-xs)">
+              A {{ warehouseName(head.targetWarehouseA) }} · B {{ warehouseName(head.targetWarehouseB) }} ·
+              C {{ warehouseName(head.targetWarehouseC) }} · 不良 {{ warehouseName(head.targetWarehouseDefect) }}
+            </span>
+            <span style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">（历史单的显式目标仓）</span>
+          </template>
         </el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ head.createTime || '—' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ head.remark || '—' }}</el-descriptions-item>
