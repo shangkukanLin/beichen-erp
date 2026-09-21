@@ -36,8 +36,11 @@ import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
 import com.beichen.erp.outsource.service.OutsourceMaterialPricingService;
 import com.beichen.erp.outsource.service.OutsourceOrderDeliveryService;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
+import com.beichen.erp.supplier.common.SupplierTypeEnum;
 import com.beichen.erp.supplier.entity.Supplier;
+import com.beichen.erp.supplier.entity.SupplierTypeRef;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
+import com.beichen.erp.supplier.mapper.SupplierTypeRefMapper;
 import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
@@ -86,6 +89,8 @@ public class OutsourceOrderDeliveryServiceImpl
     private final WarehouseMapper warehouseMapper;
     private final PayableHelper payableHelper;
     private final SupplierMapper supplierMapper;
+    /** 2026-09-21（用户口径）：加工退货对象只能是加工厂/供应商，不能是供货商（成品商）⇒ 需要读类型关联 */
+    private final SupplierTypeRefMapper supplierTypeRefMapper;
     private final ProductService productService;
     private final com.beichen.erp.warehouse.service.CostService costService;
     /** 不关联加工单的加工退货：还料依据取该产品的 BOM 快照（与独立退货单同口径） */
@@ -573,6 +578,19 @@ public class OutsourceOrderDeliveryServiceImpl
         Long masterId = body.get("productMasterId") != null ? Long.valueOf(body.get("productMasterId").toString()) : null;
         Object qtyObj = body.get("quantity");
         if (factoryId == null) throw new BusinessException("请选择加工厂");
+        // 2026-09-21（用户口径）：加工退货的对象**只能**是「加工厂或供应商」（= /supplier/manage 里的
+        //   加工厂/辅料商/方案商），**不能是供货商（成品商 product）** —— 供货商是成品采购的往来单位，
+        //   推给它会让「还料 + 冲减应付」的对象错位。前端下拉已按 excludeSupplierType=product 过滤，
+        //   这里再兜一道，防止直接调 API 绕过（前端筛选只是体验，业务规则必须在服务层成立）。
+        Supplier returnTarget = supplierMapper.selectById(factoryId);
+        if (returnTarget == null) throw new BusinessException("加工厂不存在");
+        boolean targetIsVendor = supplierTypeRefMapper.selectList(
+                        new LambdaQueryWrapper<SupplierTypeRef>().eq(SupplierTypeRef::getSupplierId, factoryId))
+                .stream()
+                .anyMatch(r -> SupplierTypeEnum.PRODUCT.getCode().equals(r.getTypeCode()));
+        if (targetIsVendor)
+            throw new BusinessException("「" + returnTarget.getName()
+                    + "」是供货商（成品商）：加工退货只能退给加工厂或供应商");
         if (warehouseId == null) throw new BusinessException("请选择加工退货仓库");
         if (masterId == null) throw new BusinessException("请选择产品");
         if (qtyObj == null || qtyObj.toString().isBlank()) throw new BusinessException("加工退货数量不能为空");

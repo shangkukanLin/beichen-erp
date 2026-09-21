@@ -120,8 +120,14 @@ const noOrderForm = reactive({
   factoryId: undefined as any, warehouseId: undefined as any, productMasterId: undefined as any,
   qualityType: 'A' as string, quantity: '' as any, remark: ''
 })
-/** 加工厂（= 还料与应付对象，无单时靠它定位工厂委外仓） */
-const fetchFactories = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
+/**
+ * 退货对象（= 还料与应付对象，无单时靠它定位工厂委外仓）。
+ * <p>2026-09-21（用户口径）：**加工退货只能退给加工厂或供应商，不能退给供货商** ⇒
+ * `excludeSupplierType: 'product'`（供货商=成品商 product；其余 加工厂/辅料商/方案商 都放行）。
+ * 后端 `returnDefectNoOrder` 有同一口径的兜底校验 ✓。</p>
+ */
+const fetchFactories = (kw: string) =>
+  request.get('/supplier/page', { params: { pageSize: 500, name: kw, excludeSupplierType: 'product' } })
 /** 扣减的成品仓（我方自有成品仓） */
 const fetchFinishedWarehouses = (kw: string) =>
   request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: 'FINISHED' } })

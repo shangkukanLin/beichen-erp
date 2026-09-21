@@ -36,8 +36,11 @@ $snapId = [int]$cells[3]
 $snapQty = [int]$cells[2]
 Write-Host ("FIXTURE: finished wh=$whId master=$masterId A-stock=$snapQty snapshot=$snapId")
 
-# factory: the one that owns an OUTSOURCE warehouse AND has the product's snapshot -> use ANY factory with an outsource wh
-$fx = (SqlRaw "SELECT w.factory_id, w.id, s.name FROM warehouse w JOIN supplier s ON s.id = w.factory_id WHERE w.warehouse_category='OUTSOURCE' ORDER BY w.id LIMIT 1") -split "`n"
+# factory: the one that owns an OUTSOURCE warehouse AND has the product's snapshot -> use ANY factory with an
+# outsource wh. 2026-09-21 (user rule "a processing return may only go to a factory or a supplier, never to a
+# vendor"): every supplier gets a default OUTSOURCE warehouse at creation, so the old ORDER BY w.id LIMIT 1
+# could land on a VENDOR (type=product) -> now explicitly exclude that type.
+$fx = (SqlRaw "SELECT w.factory_id, w.id, s.name FROM warehouse w JOIN supplier s ON s.id = w.factory_id WHERE w.warehouse_category='OUTSOURCE' AND NOT EXISTS (SELECT 1 FROM supplier_type_ref r WHERE r.supplier_id = w.factory_id AND r.type_code='product') ORDER BY w.id LIMIT 1") -split "`n"
 $fc = @((($fx[1]) -split "`t") | ForEach-Object { "$_".Trim() })
 $factoryId = [int]$fc[0]
 $factoryWh = [int]$fc[1]
@@ -123,5 +126,22 @@ $rb = Invoke-RestMethod -Uri 'http://localhost:8080/api/outsource/return-order' 
 Write-Host ('DEFECT-DOC: code=' + $rb.code + ' msg=' + $rb.msg)
 Ok ($rb.code -ne 200) 'creating a DEFECT return document is rejected'
 Ok (($rb.msg -ne $null) -and ("$($rb.msg)" -match '[\u4e00-\u9fa5]')) 'the rejection explains where to go instead'
+
+# =====================================================================
+# 2026-09-21 (user rule): the return target may only be a FACTORY or a SUPPLIER -- never a VENDOR
+# (type=product). Enforced in the business layer (the page's dropdown merely filters), so here we call the
+# API with a vendor id and expect a refusal plus NO row written.
+Step 'a VENDOR (type=product) must be rejected as the return target'
+$vendorId = [int](SqlOne "SELECT s.id FROM supplier s JOIN supplier_type_ref r ON r.supplier_id = s.id AND r.type_code = 'product' ORDER BY s.id LIMIT 1")
+Write-Host ('VENDOR supplier=' + $vendorId)
+Ok ($vendorId -gt 0) 'found a vendor (type=product) to test with'
+if ($vendorId -gt 0) {
+  $vb = @{ factoryId = $vendorId; warehouseId = $whId; productMasterId = $masterId; qualityType = 'A'; quantity = 1; remark = 'negative: vendor target' } | ConvertTo-Json -Depth 5
+  $rv = Invoke-RestMethod -Uri 'http://localhost:8080/api/outsource/order-delivery/return-defect-no-order' -Method Post -Headers $h -ContentType 'application/json' -Body $vb
+  Write-Host ('VENDOR-TARGET: code=' + $rv.code + ' msg=' + $rv.msg)
+  Ok ($rv.code -ne 200) 'a vendor cannot be the target of a processing return'
+  Ok (($rv.msg -ne $null) -and ("$($rv.msg)" -match '[\u4e00-\u9fa5]')) 'the rejection is explained in words'
+  Ok ((SqlOne "SELECT COUNT(*) FROM outsource_order_delivery WHERE factory_id=$vendorId AND delivery_type='DEFECT_RETURN'") -eq '0') 'the rejected request wrote nothing'
+}
 
 if ($fail -eq 0) { Write-Host 'RESULT PASS no-order return' } else { Write-Host ('RESULT FAIL count=' + $fail); exit 1 }
