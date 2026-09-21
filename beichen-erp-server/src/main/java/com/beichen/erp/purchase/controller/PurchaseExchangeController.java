@@ -141,6 +141,15 @@ public class PurchaseExchangeController {
             e.setTotalReturnAmount(new BigDecimal(b.get("totalReturnAmount").toString()));
         if (b.get("totalInAmount") != null && !b.get("totalInAmount").toString().isBlank())
             e.setTotalInAmount(new BigDecimal(b.get("totalInAmount").toString()));
+        // 是否付费（2026-09-21）：⚠️ 方向 = 我们向供货商付费 ⇒ chargeFlag=1 时审核额外生成一条正向应付。
+        // 本方法为**手写逐字段映射**（不是 @RequestBody 直接绑实体）⇒ 新增字段必须在此登记，
+        // 否则前端传了也进不了实体（实测漏登记时：付费校验不触发、charge_flag 永远 0）。
+        if (b.get("chargeFlag") != null && !b.get("chargeFlag").toString().isBlank())
+            e.setChargeFlag(Integer.valueOf(b.get("chargeFlag").toString().trim()));
+        if (b.get("chargeType") != null) e.setChargeType(b.get("chargeType").toString());
+        if (b.get("chargeAmount") != null && !b.get("chargeAmount").toString().isBlank())
+            e.setChargeAmount(new BigDecimal(b.get("chargeAmount").toString()));
+        if (b.get("chargeReason") != null) e.setChargeReason(b.get("chargeReason").toString());
         if (b.get("remark") != null) e.setRemark(b.get("remark").toString());
         return e;
     }

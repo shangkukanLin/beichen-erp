@@ -67,6 +67,7 @@ public class DataInitializer implements ApplicationRunner {
         initRoleMenus();
         migrateDashboardTabs();
         migrateUserMenuMode();
+        migratePurchaseExchangeCharge();
         initSuperAdmin();
         initMaterialTypes();
         initPhaseTemplates();
@@ -793,6 +794,34 @@ public class DataInitializer implements ApplicationRunner {
             log.info("已为 sys_user 增加 menu_mode 列（用户级页面权限模式）");
         } catch (Exception e) {
             log.debug("menu_mode 列已存在，跳过：{}", e.getMessage());
+        }
+    }
+
+    /**
+     * 存量库幂等迁移（2026-09-21）：purchase_exchange 增加「是否付费」4 列。
+     * <p>用户口径：采购换货单需要有「是否付费」，且方向是 <b>我们向供货商付费</b>
+     * （charge_flag=1 ⇒ 审核额外生成一条正向应付，source_bill_type=PURCHASE_EXCHANGE_CHARGE）。
+     * 新库由 schema.sql 直接建列；老库必须 ALTER —— MySQL 不支持 ADD COLUMN IF NOT EXISTS，
+     * 故逐列 try/catch，忽略「列已存在」错误，保证重复启动无副作用。</p>
+     */
+    private void migratePurchaseExchangeCharge() {
+        addColumnIfMissing("purchase_exchange",
+                "charge_flag TINYINT DEFAULT 0 COMMENT '是否付费: 0否 1是（我们向供货商付费）'");
+        addColumnIfMissing("purchase_exchange",
+                "charge_type VARCHAR(30) DEFAULT NULL COMMENT '付费类型: SERVICE/DIFF/FULL/OTHER'");
+        addColumnIfMissing("purchase_exchange",
+                "charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '付费金额（我方付给供货商）'");
+        addColumnIfMissing("purchase_exchange",
+                "charge_reason VARCHAR(255) DEFAULT NULL COMMENT '付费说明'");
+    }
+
+    /** 幂等补列：列已存在时 MySQL 报错，捕获忽略即可（不依赖 MySQL 版本特性） */
+    private void addColumnIfMissing(String table, String columnDdl) {
+        try {
+            jdbcTemplate.execute("ALTER TABLE " + table + " ADD COLUMN " + columnDdl);
+            log.info("已为 {} 增加列：{}", table, columnDdl);
+        } catch (Exception e) {
+            log.debug("{}.{} 已存在，跳过：{}", table, columnDdl, e.getMessage());
         }
     }
 

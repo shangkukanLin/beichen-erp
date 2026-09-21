@@ -22,6 +22,7 @@ import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.material.service.ProductService;
+import com.beichen.erp.purchase.common.ExchangePayType;
 import com.beichen.erp.purchase.entity.PurchaseExchange;
 import com.beichen.erp.purchase.entity.PurchaseExchangeItem;
 import com.beichen.erp.purchase.entity.PurchaseOrder;
@@ -152,6 +153,11 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
             m.put("status", e.getStatus());
             m.put("totalReturnAmount", e.getTotalReturnAmount());
             m.put("totalInAmount", e.getTotalInAmount());
+            // 2026-09-21：是否付费（方向：我们向供货商付费）随列表返回，供列表/详情展示
+            m.put("chargeFlag", e.getChargeFlag() == null ? 0 : e.getChargeFlag());
+            m.put("chargeType", e.getChargeType());
+            m.put("chargeAmount", e.getChargeAmount());
+            m.put("chargeReason", e.getChargeReason());
             // 换货概况：产品名 退N(DEFECT) → 换M(A)，多条明细用「；」连接
             List<PurchaseExchangeItem> exItems = finalItemsMap.getOrDefault(e.getId(), Collections.emptyList());
             String summary = exItems.stream()
@@ -359,11 +365,17 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
     /**
      * 回填来源采购单信息（单号、供货商、默认仓）。
      *
-     * <p>F1-3（2026-09-18 审核修复）：**供货商一律以来源采购单为准** —— 直调接口可传一个与采购单无关的
-     * 供应商 id，会把两条应付台账挂到错误主体上；此处校验一致后强制写回采购单的供应商。</p>
+     * <p>F1-3（2026-09-18 审核修复）：**选了采购单时，供货商一律以来源采购单为准** —— 直调接口可传一个
+     * 与采购单无关的供应商 id，会把应付台账挂到错误主体上；此处校验一致后强制写回采购单的供应商。</p>
+     *
+     * <p>2026-09-21（用户口径「可以不强关联采购单」）：{@code purchaseOrderId} 为空 = **无单换货**，
+     * 直接返回（不填采购单号；供货商由用户手选，必填校验在 {@link #validate} 里）。</p>
      */
     private void fillPurchaseOrderInfo(PurchaseExchange e) {
-        if (e.getPurchaseOrderId() == null) throw new BusinessException("换货单必须选择来源采购单");
+        if (e.getPurchaseOrderId() == null) {
+            e.setPurchaseOrderCode(null);
+            return;
+        }
         PurchaseOrder po = purchaseOrderMapper.selectById(e.getPurchaseOrderId());
         if (po == null) throw new BusinessException("来源采购单不存在");
         assertSupplierConsistent(e, po);
@@ -435,7 +447,9 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
         // 若不排除，`alreadyExchangedBatch` 会把本单的退回量算进"已换"，等价于"退回量 > 余量一半即被拒"
         // （实测：已购100/已退10/既有已换14，退回 50 时误报"已换 64、可换 26"）。
         // F1-3（2026-09-18 审核修复）：审核前再兜一层"供货商与来源采购单一致"（防历史/直改库数据把应付挂错主体）
-        assertSupplierConsistent(e, purchaseOrderMapper.selectById(e.getPurchaseOrderId()));
+        // 无单换货（没有来源采购单）时跳过"供货商一致性"检查：没有采购单可对齐，以本单手选供货商为准
+        if (e.getPurchaseOrderId() != null)
+            assertSupplierConsistent(e, purchaseOrderMapper.selectById(e.getPurchaseOrderId()));
         checkCanExchange(e, items);
         // 退回出库前**一次性列清**库存缺口（changeStock 只会报"产品ID=xx"，用户看不出差多少）
         assertReturnStockEnough(e, items);
@@ -461,6 +475,8 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
                 totalReturn.negate(), "采购换货退回（冲减应付）：" + e.getCode());
         savePayable(e, SourceBillType.PURCHASE_EXCHANGE_IN,
                 totalIn, "采购换货入库（新增应付）：" + e.getCode());
+        // 3.1) 付费台账（2026-09-21 用户口径）：是否付费=是 ⇒ 额外一条**正向应付**（我们向供货商付费）
+        saveChargePayable(e);
         // 4) 更新状态与审核人（状态已由 DocStatusGuard 抢占置为 AUDITED）
         PurchaseExchange u = new PurchaseExchange();
         u.setId(id);
@@ -479,9 +495,11 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
         if (!DocStatusGuard.claim(exchangeMapper, PurchaseExchange::getId, id, PurchaseExchange::getStatus,
                 DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
             throw new BusinessException("只有已审核状态可反审核");
-        // 1) 应付护栏：已核销（有付款/已结清）或已转应收的两条台账都不允许作废（reversePayable 内部抛错）
+        // 1) 应付护栏：已核销（有付款/已结清）或已转应收的台账都不允许作废（reversePayable 内部抛错）。
+        //    2026-09-21：加入「采购换货付费」台账 —— 仅"是否付费=是"的单据才有，未付费时不存在、自然跳过
         payableHelper.reversePayable(id,
-                SourceBillType.PURCHASE_EXCHANGE_RETURN.getCode(), SourceBillType.PURCHASE_EXCHANGE_IN.getCode());
+                SourceBillType.PURCHASE_EXCHANGE_RETURN.getCode(), SourceBillType.PURCHASE_EXCHANGE_IN.getCode(),
+                SourceBillType.PURCHASE_EXCHANGE_CHARGE.getCode());
         List<PurchaseExchangeItem> items = getItems(id);
         // 2) 换入的良品可能已被后续单据（销售/委外）消耗 ⇒ 先列清缺口，
         //    否则 changeStock 只会报"库存不足，无法出库：产品ID=xx"，用户无法定位
@@ -527,10 +545,12 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
 
     // ==================== 校验 ====================
 
-    /** 主表校验：必关联采购单与供货商、仓库必填且为成品仓、明细非空、可换量不超 */
+    /** 主表校验：供货商/仓库必填且为成品仓、明细非空、可换量不超（有采购单时）；并归一化付费字段 */
     private void validate(PurchaseExchange e, List<Map<String, Object>> itemMaps) {
-        if (e.getPurchaseOrderId() == null) throw new BusinessException("换货单必须选择来源采购单");
-        if (e.getSupplierId() == null) throw new BusinessException("请选择供货商（可由采购单带出）");
+        // 2026-09-21（用户口径「可以不强关联采购单」）：采购单**可选** ——
+        // 不选时（无单换货）供货商必须手选，明细逐行手工录、不传可换量锚点，
+        // 退回能否出库只由**审核时的库存校验**把关（与采购退货的无单模式同一套口径）。
+        if (e.getSupplierId() == null) throw new BusinessException("请选择供货商（关联采购单时可由采购单带出）");
         if (e.getWarehouseOutId() == null) throw new BusinessException("退回出库仓不能为空");
         if (e.getWarehouseInId() == null) throw new BusinessException("换入入库仓不能为空");
         assertWarehouseType(e.getWarehouseOutId(), "退回出库仓");
@@ -555,15 +575,21 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
             if (!ProductQualityType.isValid(inQt)) throw new BusinessException("非法的换入品质等级：" + inQt);
 
             Object poiObj = m.get("purchaseOrderItemId");
-            // 换货单**强关联采购单**：每行必须带采购单明细锚点，否则可换量校验会被静默跳过（超量换货漏网）
-            if (poiObj == null || poiObj.toString().isBlank())
-                throw new BusinessException("明细缺少关联采购单明细（purchaseOrderItemId），无法校验可换数量");
+            // 关联采购单时：每行必须带采购单明细锚点，否则可换量校验会被静默跳过（超量换货漏网）；
+            // 无单换货：没有锚点可校验，跳过（退回数量由审核时的库存校验把关）
+            if (poiObj == null || poiObj.toString().isBlank()) {
+                if (e.getPurchaseOrderId() != null)
+                    throw new BusinessException("明细缺少关联采购单明细（purchaseOrderItemId），无法校验可换数量");
+                continue;
+            }
             Long poiId = Long.valueOf(poiObj.toString());
             qtyMap.merge(poiId, qty, BigDecimal::add);
             if (m.get("productName") != null) nameMap.put(poiId, m.get("productName").toString());
         }
+        // 付费字段归一化（2026-09-21）：是否付费=否 ⇒ 类型/金额/说明一律清空；=是 ⇒ 类型合法且金额 > 0
+        normalizeCharge(e);
         // 编辑草稿时以自身 id 作排除项（草稿不计入"已换"，此处仅为口径统一）；
-        // 锚点归属按本单来源采购单校验（F1-2）
+        // 锚点归属按本单来源采购单校验（F1-2）；无单换货时 qtyMap 为空、直接返回
         checkCanExchangeMap(qtyMap, nameMap, e.getId(), e.getPurchaseOrderId());
     }
 
@@ -717,6 +743,47 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
                     + "。请先反审核占用该库存的单据（如销售单/委外单）");
     }
 
+    /**
+     * 付费字段归一化（2026-09-21 用户口径「需要有是否付费」）。
+     *
+     * <p>不付费：类型/说明清空、金额归零（避免"关掉开关还留着上次的金额"被误写入台账）；
+     * 付费：类型必须合法、金额必须 &gt; 0。</p>
+     *
+     * <p>⚠️ <b>方向：我们向供货商付费</b> ⇒ 审核生成的正向应付是"我方欠供货商的钱变多"，
+     * 与销售换货 {@code sale.common.ExchangeChargeType}（向客户收费 ⇒ 应收）方向相反。</p>
+     */
+    private void normalizeCharge(PurchaseExchange e) {
+        boolean charged = e.getChargeFlag() != null && e.getChargeFlag() == 1;
+        if (!charged) {
+            e.setChargeFlag(0);
+            e.setChargeType(null);
+            e.setChargeAmount(BigDecimal.ZERO);
+            e.setChargeReason(null);
+            return;
+        }
+        if (e.getChargeType() == null || e.getChargeType().isBlank())
+            throw new BusinessException("已选择付费，请选择付费类型");
+        if (!ExchangePayType.isValid(e.getChargeType()))
+            throw new BusinessException("非法的付费类型：" + e.getChargeType());
+        if (nz(e.getChargeAmount()).compareTo(BigDecimal.ZERO) <= 0)
+            throw new BusinessException("已选择付费，付费金额必须大于 0");
+    }
+
+    /**
+     * 审核时生成付费应付：**我们向供货商付费** ⇒ 一条正向应付（与退回/换入两条台账分开记账，便于对账与冲销）。
+     * <p>未付费（chargeFlag≠1 或金额≤0）时什么都不写 —— 反审核不用特殊处理，reversePayable 找不到行即跳过。</p>
+     */
+    private void saveChargePayable(PurchaseExchange e) {
+        boolean charged = e.getChargeFlag() != null && e.getChargeFlag() == 1;
+        if (!charged || nz(e.getChargeAmount()).compareTo(BigDecimal.ZERO) <= 0) return;
+        String reason = e.getChargeReason();
+        savePayable(e, SourceBillType.PURCHASE_EXCHANGE_CHARGE, e.getChargeAmount(),
+                "采购换货付费（我方付给供货商）：" + e.getCode()
+                        + (e.getChargeType() != null && !e.getChargeType().isBlank()
+                        ? "（" + e.getChargeType() + "）" : "")
+                        + (reason != null && !reason.isBlank() ? "：" + reason : ""));
+    }
+
     /** 应付台账入库（D1 口径：台账号一律 YF- 流水号；来源单号写 source_bill_no 便于按来源检索） */
     private void savePayable(PurchaseExchange e, SourceBillType type,
                              BigDecimal amount, String remark) {
@@ -785,7 +852,11 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
      * 就会把两条台账挂到错误主体（对账时才发现）。create / update / audit 三处都调用。</p>
      */
     private void assertSupplierConsistent(PurchaseExchange e, PurchaseOrder po) {
-        if (po == null) throw new BusinessException("来源采购单不存在");
+        // 无单换货（purchase_order_id 为空）：没有采购单可对齐，供货商以本单手选为准（仍必填）
+        if (po == null) {
+            if (e.getPurchaseOrderId() == null) return;
+            throw new BusinessException("来源采购单不存在");
+        }
         if (e.getSupplierId() != null && po.getSupplierId() != null && !e.getSupplierId().equals(po.getSupplierId()))
             throw new BusinessException("供货商与来源采购单不一致（本单供货商ID=" + e.getSupplierId()
                     + "，采购单 " + po.getCode() + " 的供货商ID=" + po.getSupplierId() + "），请重新选择来源采购单");

@@ -1022,22 +1022,31 @@ CREATE TABLE IF NOT EXISTS purchase_return_item (
 
 -- ==================== 采购换货单（进货业务：向供货商退回换新，2026-09-18 新增） ====================
 -- 业务：把向供货商采购的成品退回供货商，同时换回（同品）良品，一张单管住"出一进"。
+--       2026-09-21：来源采购单改为**可选**（无单换货 = 明细手工录，无可换量上限，退回靠审核时库存校验把关）。
 -- 库存：退回侧从我方仓按品质出库（默认不良品 DEFECT）；换入侧入我方仓按品质入库（默认 A 规）。
 -- 财务：退回侧生成负向应付（冲减，source_bill_type=PURCHASE_EXCHANGE_RETURN，-RET）
 --       换入侧生成正向应付（source_bill_type=PURCHASE_EXCHANGE_IN，-IN）⇒ 两行净额即差价。
+--       2026-09-21：「是否付费=是」再额外生成一条正向应付（source_bill_type=PURCHASE_EXCHANGE_CHARGE）
+--       ⚠️ 方向：**我们向供货商付费**（服务费/补差价）。
+-- 存量库（本表已存在，CREATE TABLE IF NOT EXISTS 不会改）由 DataInitializer#migratePurchaseExchangeCharge 幂等补列：
+--   ALTER TABLE purchase_exchange ADD COLUMN charge_flag TINYINT DEFAULT 0;  -- + charge_type / charge_amount / charge_reason
 
 CREATE TABLE IF NOT EXISTS purchase_exchange (
     id              BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
     code            VARCHAR(50) NOT NULL               COMMENT '换货单号（CH-yyyyMMddNNN）',
     supplier_id     BIGINT                            COMMENT '供货商ID',
-    purchase_order_id   BIGINT                        COMMENT '关联采购单ID（强关联）',
-    purchase_order_code VARCHAR(30)                   COMMENT '关联采购单号（冗余）',
+    purchase_order_id   BIGINT                        COMMENT '关联采购单ID（可选：为空=无单换货）',
+    purchase_order_code VARCHAR(30)                   COMMENT '关联采购单号（冗余；无单换货为空）',
     warehouse_out_id BIGINT                           COMMENT '退回出库仓ID（我方成品仓，退给供货商）',
     warehouse_in_id  BIGINT                           COMMENT '换入入库仓ID（我方成品仓，可同仓）',
     exchange_date   DATE                              COMMENT '换货日期',
     status          VARCHAR(20) DEFAULT 'DRAFT'       COMMENT '状态: DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废',
     total_return_amount DECIMAL(18,2) DEFAULT 0        COMMENT '退回侧总金额（负向应付冲减）',
     total_in_amount DECIMAL(18,2) DEFAULT 0            COMMENT '换入侧总金额（正向应付）',
+    charge_flag     TINYINT DEFAULT 0                 COMMENT '是否付费: 0否 1是（我们向供货商付费）',
+    charge_type     VARCHAR(30) DEFAULT NULL          COMMENT '付费类型: SERVICE服务费/DIFF品质差价/FULL全额货值/OTHER其他',
+    charge_amount   DECIMAL(18,2) DEFAULT 0           COMMENT '付费金额（我方付给供货商，审核生成正向应付）',
+    charge_reason   VARCHAR(255) DEFAULT NULL         COMMENT '付费说明',
     remark          VARCHAR(500)                      COMMENT '备注',
     auditor_id      BIGINT                            COMMENT '审核人ID',
     auditor_name    VARCHAR(50)                       COMMENT '审核人姓名',

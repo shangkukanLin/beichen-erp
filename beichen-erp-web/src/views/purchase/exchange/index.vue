@@ -52,20 +52,24 @@ function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/de
 async function handleAudit(row: any) {
   const ret = Number(row.totalReturnAmount || 0)
   const inn = Number(row.totalInAmount || 0)
+  // 是否付费：方向是"我方付给供货商" ⇒ 审核额外生成一条正向应付
+  const fee = Number(row.chargeFlag) === 1 ? Number(row.chargeAmount || 0) : 0
+  const feeText = fee > 0 ? `；另生成付费应付 ${fee.toFixed(2)}（我方付给供货商）` : ''
   // 2026-09-20（F7-154）：confirm 单独 try/catch —— 点「取消」时 confirm 会 reject，
   // 原先三处都没有 catch ⇒ 每次都产生未处理 rejection（同模块 purchase/order、purchase/return 两页都已防护）。
   try {
     await ElMessageBox.confirm(
       `确认审核「${row.code}」？审核后退回货品从我方仓扣减（退给供货商）、换入良品入库；`
-      + `并生成两条应付台账（退回冲减 ${ret.toFixed(2)} / 换入新增 ${inn.toFixed(2)}），净额 ${(inn - ret).toFixed(2)}。`,
+      + `并生成两条应付台账（退回冲减 ${ret.toFixed(2)} / 换入新增 ${inn.toFixed(2)}），净额 ${(inn - ret).toFixed(2)}${feeText}。`,
       '审核确认', { type: 'warning' })
   } catch { return }
   await auditPurchaseExchange(row.id)
   ElMessage.success('已审核'); sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1'); loadData()
 }
 async function handleUnAudit(row: any) {
+  const feeText = Number(row.chargeFlag) === 1 ? '（含付费台账）' : ''
   try {
-    await ElMessageBox.confirm(`确认反审核「${row.code}」？将回滚退回与换入的库存，并作废两条应付台账。`, '提示', { type: 'warning' })
+    await ElMessageBox.confirm(`确认反审核「${row.code}」？将回滚退回与换入的库存，并作废应付台账${feeText}。`, '提示', { type: 'warning' })
   } catch { return }
   await unAuditPurchaseExchange(row.id)
   ElMessage.success('已反审核'); sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1'); loadData()
@@ -104,9 +108,14 @@ async function handleCancel(row: any) {
         <!-- 列宽全部用 min-width（合计 ~915px）以「一屏一行显示」：来源采购单 / 应付净额 只在详情页展示 -->
         <el-table-column prop="exchangeDate" label="换货日期" min-width="95" />
         <el-table-column prop="code" label="换货单号" min-width="140" />
-        <!-- 换货概况：退回侧 → 换入侧 -->
+        <!-- 换货概况：退回侧 → 换入侧；「付费」标签（2026-09-21）标出"要向供货商付费"的单据。
+             放在 min-width 弹性列内 ⇒ 不新增列、不改变列宽合计（本页面有"一行显示完、不横向滚动"的守卫断言）。 -->
         <el-table-column label="换货概况" min-width="150" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.exchangeSummary || '—' }}</template>
+          <template #default="{ row }">
+            <el-tag v-if="Number(row.chargeFlag) === 1" type="warning" size="small" style="margin-right:4px"
+              :title="'我方付给供货商 ' + Number(row.chargeAmount || 0).toFixed(2)">付费</el-tag>
+            {{ row.exchangeSummary || '—' }}
+          </template>
         </el-table-column>
         <el-table-column prop="supplierName" label="供货商" min-width="100" show-overflow-tooltip />
         <el-table-column label="退回出库仓" min-width="100" show-overflow-tooltip>
@@ -128,14 +137,17 @@ async function handleCancel(row: any) {
             </el-tag>
           </template>
         </el-table-column>
+        <!-- 2026-09-21 修复：表格有 @row-click="goDetail"，操作列按钮原先**没有 .stop** ⇒ 点「编辑」会被行点击
+             抢走到详情页（点「审核」也会先跳详情、确认框飘在详情页上）。与项目其它页面（如物料收货列表的
+             @click.stop）保持一致，全部加 .stop。 -->
         <el-table-column label="操作" min-width="155" align="center">
           <template #default="{ row }">
-            <el-button type="primary" link @click="goDetail(row)">详情</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click="goEdit(row)">编辑</el-button>
+            <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click.stop="goEdit(row)">编辑</el-button>
             <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发，无码则后端也会 403 -->
-            <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'purchase:exchange:audit'" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" v-perm="'purchase:exchange:unaudit'" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'purchase:exchange:cancel'" type="danger" link @click="handleCancel(row)">作废</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'purchase:exchange:audit'" type="success" link @click.stop="handleAudit(row)">审核</el-button>
+            <el-button v-if="row.status === DocStatus.AUDITED" v-perm="'purchase:exchange:unaudit'" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'purchase:exchange:cancel'" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

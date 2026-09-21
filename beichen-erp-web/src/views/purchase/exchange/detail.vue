@@ -13,7 +13,8 @@
         <el-descriptions-item label="供货商">{{ head.supplierName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="来源采购单">
           <el-button v-if="head.purchaseOrderId" type="primary" link @click="goPurchaseOrder(head.purchaseOrderId)">{{ head.purchaseOrderCode || '—' }}</el-button>
-          <span v-else>{{ head.purchaseOrderCode || '—' }}</span>
+          <!-- 无单换货（2026-09-21 起允许不关联采购单）：明细为手工录入，无可换量上限 -->
+          <span v-else>未关联（无单换货，明细手工录入）</span>
         </el-descriptions-item>
         <el-descriptions-item label="退回出库仓">
           <el-button v-if="head.warehouseOutId" type="primary" link @click="goWarehouse(head.warehouseOutId)">{{ warehouseOutName }}</el-button>
@@ -33,6 +34,21 @@
         <el-descriptions-item label="应付净额（差价）">
           <span style="font-weight:600">{{ formatMoney(Number(head.totalInAmount || 0) - Number(head.totalReturnAmount || 0)) }}</span>
         </el-descriptions-item>
+        <!-- 是否付费（2026-09-21）：⚠️ 方向 = 我方付给供货商 ⇒ 审核额外生成一条正向应付 -->
+        <el-descriptions-item label="是否付费">
+          <template v-if="Number(head.chargeFlag) === 1">
+            <el-tag type="warning" size="small">付费</el-tag>
+            <span v-if="head.chargeType" style="margin-left:6px">
+              {{ ExchangePayTypeLabel[String(head.chargeType)] || head.chargeType }}
+            </span>
+          </template>
+          <span v-else>不付费</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="付费金额（我方付给供货商）">
+          <span v-if="Number(head.chargeFlag) === 1" style="color:#e6a23c;font-weight:600">{{ formatMoney(head.chargeAmount) }}</span>
+          <span v-else>—</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="付费说明">{{ head.chargeReason || '—' }}</el-descriptions-item>
         <el-descriptions-item label="审核人">{{ head.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="审核时间">{{ head.auditTime || '—' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ head.createTime || '—' }}</el-descriptions-item>
@@ -101,7 +117,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import {
-  DocStatus, DocStatusLabel, ProductQualityTypeLabel, PURCHASE_EXCHANGE_DIRTY_KEY,
+  DocStatus, DocStatusLabel, ProductQualityTypeLabel, ExchangePayTypeLabel, PURCHASE_EXCHANGE_DIRTY_KEY,
 } from '@/api/enums'
 import {
   getPurchaseExchange, auditPurchaseExchange, unAuditPurchaseExchange, cancelPurchaseExchange,
@@ -122,6 +138,11 @@ const head = reactive({
   status: DocStatus.DRAFT as string,
   totalReturnAmount: 0,
   totalInAmount: 0,
+  // 是否付费（2026-09-21）：方向 = 我方付给供货商
+  chargeFlag: 0,
+  chargeType: '',
+  chargeAmount: 0,
+  chargeReason: '',
   auditorName: '',
   auditTime: '',
   createTime: '',
@@ -171,6 +192,10 @@ async function loadDetail(id: number) {
     status: h.status || DocStatus.DRAFT,
     totalReturnAmount: Number(h.totalReturnAmount || 0),
     totalInAmount: Number(h.totalInAmount || 0),
+    chargeFlag: Number(h.chargeFlag || 0),
+    chargeType: h.chargeType || '',
+    chargeAmount: Number(h.chargeAmount || 0),
+    chargeReason: h.chargeReason || '',
     auditorName: h.auditorName || '',
     auditTime: h.auditTime || '',
     createTime: h.createTime || '',
@@ -188,11 +213,14 @@ function goEdit() { router.push(`/inventory/purchase-exchange/add?id=${route.par
 
 async function doAudit() {
   const net = Number(head.totalInAmount || 0) - Number(head.totalReturnAmount || 0)
+  // 是否付费：方向是"我方付给供货商" ⇒ 审核额外生成一条正向应付
+  const feeText = Number(head.chargeFlag) === 1 && Number(head.chargeAmount || 0) > 0
+    ? `；另生成付费应付 ${formatMoney(head.chargeAmount)}（我方付给供货商）` : ''
   // 2026-09-20（F7-154）：confirm 单独 try/catch（点「取消」会 reject，原先 confirm 在 try 之外 ⇒ 未处理 rejection）
   try {
     await ElMessageBox.confirm(
       `确认审核「${head.code}」？退回货品从我方仓扣减（退给供货商）、换入良品入库；`
-      + `并生成两条应付台账：退回冲减 ${formatMoney(head.totalReturnAmount)} / 换入新增 ${formatMoney(head.totalInAmount)}，净额 ${formatMoney(net)}。`,
+      + `并生成两条应付台账：退回冲减 ${formatMoney(head.totalReturnAmount)} / 换入新增 ${formatMoney(head.totalInAmount)}，净额 ${formatMoney(net)}${feeText}。`,
       '审核确认', { type: 'warning' })
   } catch { return }
   acting.value = true
@@ -204,8 +232,9 @@ async function doAudit() {
   } finally { acting.value = false }
 }
 async function doUnAudit() {
+  const feeText = Number(head.chargeFlag) === 1 ? '（含付费台账）' : ''
   try {
-    await ElMessageBox.confirm(`确认反审核「${head.code}」？将回滚退回与换入的库存，并作废两条应付台账。`, '提示', { type: 'warning' })
+    await ElMessageBox.confirm(`确认反审核「${head.code}」？将回滚退回与换入的库存，并作废应付台账${feeText}。`, '提示', { type: 'warning' })
   } catch { return }
   acting.value = true
   try {

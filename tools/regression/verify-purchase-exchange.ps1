@@ -79,7 +79,11 @@ Write-Host ('  totals: return=' + $c1.data.totalReturnAmount + ' in=' + $c1.data
 Ok (($xid -gt 0)) ('purchase exchange created (id=' + $xid + ')')
 Ok ($xcode.StartsWith('CH-')) ('bill no uses the CH- prefix (' + $xcode + ')')
 Ok (([string]$c1.data.status -eq 'DRAFT')) 'new document starts as DRAFT'
-Ok ((D $c1.data.totalReturnAmount -eq ($QTY * $PRICE)) -and (D $c1.data.totalInAmount -eq ($QTY * $PRICE))) ('both sides totalled from details (ret=' + $c1.data.totalReturnAmount + ' in=' + $c1.data.totalInAmount + ')')
+# NOTE (2026-09-21): 原先写成 (D $x -eq $y) —— PowerShell 会把 "-eq $y" 当成 D 的额外参数，
+# 于是比较从未发生、只校验了"结果非 0"（恒真的假绿）。改为先赋值再比较。
+$totRet = D $c1.data.totalReturnAmount
+$totIn = D $c1.data.totalInAmount
+Ok (($totRet -eq ($QTY * $PRICE)) -and ($totIn -eq ($QTY * $PRICE))) ('both sides totalled from details (ret=' + $c1.data.totalReturnAmount + ' in=' + $c1.data.totalInAmount + ')')
 
 Write-Host '--- 3) audit -> return OUT + exchange IN + two payable ledgers'
 $a1 = Invoke-RestMethod -Uri "$base/inventory/purchase-exchange/$xid/audit" -Method Put -Headers $h
@@ -147,6 +151,132 @@ $inPay2 = D (SqlOne ("SELECT amount FROM finance_payable WHERE source_bill_type=
 Ok (($retPay2 -eq (0 - ($QTY * $PRICE))) -and ($inPay2 -eq ($QTY * $PRICE))) ('active ledgers regenerated (ret=' + $retPay2 + ' in=' + $inPay2 + ')')
 $defFinal = D (SqlOne ("SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$OUT_WH AND product_id=$PROD AND quality_type='DEFECT'"))
 Ok (($defFinal -eq ($defBefore - $QTY))) ('stock re-applied after re-audit (DEFECT=' + $defFinal + ')')
+
+Write-Host '--- 6.5) 2026-09-21: no purchase order (free-form exchange) + paid flag (we pay the supplier)'
+$NQTY = 1
+$FEE = 50
+$defN0 = D (SqlOne ("SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$OUT_WH AND product_id=$PROD AND quality_type='DEFECT'"))
+$aN0 = D (SqlOne ("SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$OUT_WH AND product_id=$PROD AND quality_type='A'"))
+Write-Host ('  stock before: DEFECT=' + $defN0 + ' A=' + $aN0)
+Ok (($defN0 -ge $NQTY)) ('DEFECT stock available for the free-form exchange (DEFECT=' + $defN0 + ')')
+$kwSup = [string]([char]0x4F9B + [char]0x8D27 + [char]0x5546)                     # supplier
+$kwFeeAmt = [string]([char]0x4ED8 + [char]0x8D39 + [char]0x91D1 + [char]0x989D)    # paid amount
+$kwFeeType = [string]([char]0x4ED8 + [char]0x8D39 + [char]0x7C7B + [char]0x578B)   # paid type
+$kwPo = [string]([char]0x91C7 + [char]0x8D2D + [char]0x5355)                       # purchase order
+
+# (a) guard: the supplier stays mandatory even without a purchase order
+$noSupBody = @{
+  warehouseOutId = $OUT_WH; warehouseInId = $IN_WH; exchangeDate = (Get-Date -Format 'yyyy-MM-dd')
+  items = @(@{ productId = $PROD; qualityType = 'DEFECT'; quantity = $NQTY; unitPrice = $PRICE; inQuantity = $NQTY; inQualityType = 'A'; inUnitPrice = $PRICE })
+} | ConvertTo-Json -Depth 6
+$noSupMsg = ''
+try {
+  $ns = Invoke-RestMethod -Uri "$base/inventory/purchase-exchange" -Method Post -Headers $h -ContentType 'application/json' -Body $noSupBody
+  $noSupMsg = [string]$ns.msg
+} catch { $noSupMsg = [string]$_.ErrorDetails.Message }
+Write-Host ('  no-supplier replied: ' + $noSupMsg)
+Ok ($noSupMsg -like ('*' + $kwSup + '*')) 'a supplier is still required on a free-form exchange'
+
+# (b) guard: paid=on must carry a valid type and an amount > 0
+$feeZeroBody = @{
+  supplierId = 26; warehouseOutId = $OUT_WH; warehouseInId = $IN_WH; exchangeDate = (Get-Date -Format 'yyyy-MM-dd')
+  chargeFlag = 1; chargeType = 'DIFF'; chargeAmount = 0
+  items = @(@{ productId = $PROD; qualityType = 'DEFECT'; quantity = $NQTY; unitPrice = $PRICE; inQuantity = $NQTY; inQualityType = 'A'; inUnitPrice = $PRICE })
+} | ConvertTo-Json -Depth 6
+$feeZeroMsg = ''
+try {
+  $fz = Invoke-RestMethod -Uri "$base/inventory/purchase-exchange" -Method Post -Headers $h -ContentType 'application/json' -Body $feeZeroBody
+  $feeZeroMsg = [string]$fz.msg
+} catch { $feeZeroMsg = [string]$_.ErrorDetails.Message }
+Write-Host ('  zero-fee replied: ' + $feeZeroMsg)
+Ok ($feeZeroMsg -like ('*' + $kwFeeAmt + '*')) 'paid=on with amount 0 is refused'
+$feeBadTypeBody = @{
+  supplierId = 26; warehouseOutId = $OUT_WH; warehouseInId = $IN_WH; exchangeDate = (Get-Date -Format 'yyyy-MM-dd')
+  chargeFlag = 1; chargeType = 'NOT_A_TYPE'; chargeAmount = $FEE
+  items = @(@{ productId = $PROD; qualityType = 'DEFECT'; quantity = $NQTY; unitPrice = $PRICE; inQuantity = $NQTY; inQualityType = 'A'; inUnitPrice = $PRICE })
+} | ConvertTo-Json -Depth 6
+$feeBadMsg = ''
+try {
+  $fb = Invoke-RestMethod -Uri "$base/inventory/purchase-exchange" -Method Post -Headers $h -ContentType 'application/json' -Body $feeBadTypeBody
+  $feeBadMsg = [string]$fb.msg
+} catch { $feeBadMsg = [string]$_.ErrorDetails.Message }
+Write-Host ('  bad-fee-type replied: ' + $feeBadMsg)
+Ok ($feeBadMsg -like ('*' + $kwFeeType + '*')) 'an illegal paid type is refused'
+
+# (c) create a free-form PAID document (no purchase order, no item anchor)
+$freeBody = @{
+  supplierId = 26; warehouseOutId = $OUT_WH; warehouseInId = $IN_WH
+  exchangeDate = (Get-Date -Format 'yyyy-MM-dd')
+  remark = 'verify-purchase-exchange: free-form + paid'
+  chargeFlag = 1; chargeType = 'DIFF'; chargeAmount = $FEE; chargeReason = 'free-form paid exchange (verify)'
+  items = @(@{ productId = $PROD; qualityType = 'DEFECT'; quantity = $NQTY; unitPrice = $PRICE; inQuantity = $NQTY; inQualityType = 'A'; inUnitPrice = $PRICE })
+} | ConvertTo-Json -Depth 6
+$c2 = Invoke-RestMethod -Uri "$base/inventory/purchase-exchange" -Method Post -Headers $h -ContentType 'application/json' -Body $freeBody
+$fid = [int]$c2.data.id
+$fcode = [string]$c2.data.code
+Write-Host ('  free-form create: code=' + $c2.code + ' id=' + $fid + ' doc=' + $fcode + ' po=' + $c2.data.purchaseOrderId + ' charge=' + $c2.data.chargeFlag)
+Ok (($c2.code -eq 200) -or ($c2.code -eq 0)) ('free-form exchange created without a purchase order (' + $fcode + ')')
+# NOTE: always assign D(...) to a variable BEFORE comparing -- `(D (SqlOne ...) -eq 0)` makes PowerShell
+#       treat "-eq 0" as extra ARGUMENTS of D (the comparison never happens and a truthy decimal would
+#       look like a pass). Same trap exists in the older lines of this file.
+$poOfFree = D (SqlOne ("SELECT IFNULL(purchase_order_id,0) FROM purchase_exchange WHERE id=$fid"))
+$cfOfFree = D (SqlOne ("SELECT IFNULL(charge_flag,0) FROM purchase_exchange WHERE id=$fid"))
+$caOfFree = D (SqlOne ("SELECT IFNULL(charge_amount,0) FROM purchase_exchange WHERE id=$fid"))
+$ctOfFree = SqlOne ("SELECT charge_type FROM purchase_exchange WHERE id=$fid")
+Write-Host ('  persisted: po_id=' + $poOfFree + ' charge_flag=' + $cfOfFree + ' type=' + $ctOfFree + ' amount=' + $caOfFree)
+Ok (($poOfFree -eq 0)) 'DB confirms the document has NO purchase order link'
+Ok (($cfOfFree -eq 1)) 'charge_flag=1 persisted'
+Ok (($caOfFree -eq $FEE)) ('paid amount persisted (' + $FEE + ')')
+Ok (($ctOfFree -eq 'DIFF')) 'paid type persisted (DIFF)'
+
+Write-Host '--- 6.6) audit the free-form paid document -> stock + THREE ledgers (return / in / PAID)'
+$a3 = Invoke-RestMethod -Uri "$base/inventory/purchase-exchange/$fid/audit" -Method Put -Headers $h
+Start-Sleep -Milliseconds 900
+Ok (($a3.code -eq 200) -or ($a3.code -eq 0)) ('free-form audit accepted (code=' + $a3.code + ' msg=' + $a3.msg + ')')
+Ok ((SqlOne ("SELECT status FROM purchase_exchange WHERE id=$fid")) -eq 'AUDITED') 'free-form document is AUDITED'
+$defN1 = D (SqlOne ("SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$OUT_WH AND product_id=$PROD AND quality_type='DEFECT'"))
+$aN1 = D (SqlOne ("SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$OUT_WH AND product_id=$PROD AND quality_type='A'"))
+Write-Host ("  stock after: DEFECT=" + $defN1 + " A=" + $aN1)
+Ok (($defN1 -eq ($defN0 - $NQTY))) 'free-form return side deducted from our warehouse'
+Ok (($aN1 -eq ($aN0 + $NQTY))) 'free-form exchange side added to our warehouse'
+$feePay = D (SqlOne ("SELECT amount FROM finance_payable WHERE source_bill_type='PURCHASE_EXCHANGE_CHARGE' AND source_bill_no='$fcode' AND status<>'CANCELLED'"))
+$retPayF = D (SqlOne ("SELECT amount FROM finance_payable WHERE source_bill_type='PURCHASE_EXCHANGE_RETURN' AND source_bill_no='$fcode' AND status<>'CANCELLED'"))
+$inPayF = D (SqlOne ("SELECT amount FROM finance_payable WHERE source_bill_type='PURCHASE_EXCHANGE_IN' AND source_bill_no='$fcode' AND status<>'CANCELLED'"))
+Write-Host ('  ledgers: return=' + $retPayF + ' in=' + $inPayF + ' paid=' + $feePay + ' (paid expects +' + $FEE + ': WE pay the supplier)')
+Ok (($feePay -eq $FEE)) 'paid flag created a POSITIVE payable (we owe the supplier more)'
+Ok (($retPayF -eq (0 - ($NQTY * $PRICE)))) 'free-form return ledger is negative'
+Ok (($inPayF -eq ($NQTY * $PRICE))) 'free-form exchange-in ledger is positive'
+$activeF = D (SqlOne ("SELECT COUNT(*) FROM finance_payable WHERE source_bill_no='$fcode' AND status<>'CANCELLED'"))
+Ok (($activeF -eq 3)) 'three active ledgers (return + exchange-in + paid)'
+
+Write-Host '--- 6.7) un-audit the free-form document -> stock rolled back, all THREE ledgers voided'
+$u3 = Invoke-RestMethod -Uri "$base/inventory/purchase-exchange/$fid/un-audit" -Method Put -Headers $h
+Start-Sleep -Milliseconds 900
+Ok (($u3.code -eq 200) -or ($u3.code -eq 0)) ('free-form un-audit accepted (code=' + $u3.code + ' msg=' + $u3.msg + ')')
+Ok ((SqlOne ("SELECT status FROM purchase_exchange WHERE id=$fid")) -eq 'DRAFT') 'free-form document back to DRAFT'
+$defN2 = D (SqlOne ("SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$OUT_WH AND product_id=$PROD AND quality_type='DEFECT'"))
+$aN2 = D (SqlOne ("SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$OUT_WH AND product_id=$PROD AND quality_type='A'"))
+Ok (($defN2 -eq $defN0) -and ($aN2 -eq $aN0)) ('stock fully rolled back (DEFECT=' + $defN2 + ' A=' + $aN2 + ')')
+$voidF = D (SqlOne ("SELECT COUNT(*) FROM finance_payable WHERE source_bill_no='$fcode' AND status='CANCELLED'"))
+$activeF2 = D (SqlOne ("SELECT COUNT(*) FROM finance_payable WHERE source_bill_no='$fcode' AND status<>'CANCELLED'"))
+$paidVoidMoney = D (SqlOne ("SELECT COUNT(*) FROM finance_payable WHERE source_bill_type='PURCHASE_EXCHANGE_CHARGE' AND source_bill_no='$fcode' AND status='CANCELLED' AND (IFNULL(amount,0)<>0 OR IFNULL(unpaid_amount,0)<>0)"))
+Write-Host ('  after un-audit: voided=' + $voidF + ' active=' + $activeF2 + ' voidedPaidWithMoney=' + $paidVoidMoney)
+Ok (($voidF -eq 3)) 'all three ledgers voided (trace kept)'
+Ok (($activeF2 -eq 0)) 'no active ledger left after un-audit'
+Ok (($paidVoidMoney -eq 0)) 'voided paid ledger carries no money'
+
+Write-Host '--- 6.8) re-audit the free-form document -> paid ledger regenerated (D1: new YF- bill_no)'
+$a4 = Invoke-RestMethod -Uri "$base/inventory/purchase-exchange/$fid/audit" -Method Put -Headers $h
+Start-Sleep -Milliseconds 900
+Ok (($a4.code -eq 200) -or ($a4.code -eq 0)) ('free-form re-audit accepted (code=' + $a4.code + ' msg=' + $a4.msg + ')')
+$feePay2 = D (SqlOne ("SELECT amount FROM finance_payable WHERE source_bill_type='PURCHASE_EXCHANGE_CHARGE' AND source_bill_no='$fcode' AND status<>'CANCELLED'"))
+$feeBillNo = SqlOne ("SELECT bill_no FROM finance_payable WHERE source_bill_type='PURCHASE_EXCHANGE_CHARGE' AND source_bill_no='$fcode' AND status<>'CANCELLED'")
+$activeF3 = D (SqlOne ("SELECT COUNT(*) FROM finance_payable WHERE source_bill_no='$fcode' AND status<>'CANCELLED'"))
+Write-Host ('  after re-audit: paid=' + $feePay2 + ' bill_no=' + $feeBillNo + ' active=' + $activeF3)
+Ok (($feePay2 -eq $FEE)) 'paid ledger regenerated on re-audit'
+Ok ($feeBillNo.StartsWith('YF-')) 'paid ledger uses the YF- numbering (D1 convention)'
+Ok (($activeF3 -eq 3)) 'three active ledgers after re-audit'
+Write-Host ('[DB] free-form doc: id=' + $fid + ' code=' + $fcode + ' po_id=' + (SqlOne ("SELECT IFNULL(purchase_order_id,0) FROM purchase_exchange WHERE id=$fid")))
 
 Write-Host '--- 7) final invariants (whole ledger tables, incl. CANCELLED)'
 $badPay = D (SqlOne "SELECT COUNT(*) FROM finance_payable WHERE IFNULL(amount,0) <> IFNULL(paid_amount,0) + IFNULL(unpaid_amount,0)")

@@ -8,9 +8,17 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 采购换货单（进货业务，2026-09-18 新增；**同品换货**，强关联采购单）
+ * 采购换货单（进货业务，2026-09-18 新增；**同品换货**）
  * <p>
  * 业务：把向供货商采购的成品退回供货商，同时换回（同款）良品，一张单管住"出一进"。
+ * </p>
+ * <p>
+ * <b>来源采购单可选</b>（2026-09-21 用户口径「可以不强关联采购单」）：
+ * <ul>
+ *   <li>选了采购单：明细由采购单带出，可换量 = 采购明细数量 − 已退(TH-) − 已换(CH-)，只约束退回数量；</li>
+ *   <li>不选采购单（无单换货）：供货商手工选，明细手工逐行录（产品/品质/数量/单价），
+ *       不再有可换量上限 —— 退回能否出库由**审核时的库存校验**把关。</li>
+ * </ul>
  * </p>
  * <p>
  * 审核双向联动库存：
@@ -21,7 +29,11 @@ import java.time.LocalDateTime;
  * 财务联动：退回侧生成**负向**应付（冲减我们欠供货商的钱），换入侧生成**正向**应付，
  * 两行净额即差价（等价换货净额 0；加价换新则净额为正）。
  * </p>
- * <p>可换量 = 采购单明细数量 − 已退货量(TH-) − 已换退回量(CH-)，只约束**退回数量**。</p>
+ * <p>
+ * <b>是否付费</b>（2026-09-21 用户口径）：{@code chargeFlag}=1 时审核**额外**生成一条正向应付
+ * （source_bill_type=PURCHASE_EXCHANGE_CHARGE），金额手工填写。
+ * ⚠️ <b>方向：我们向供货商付费</b>（如换货服务费、补差价），与销售换货「向客户收费」恰好相反。
+ * </p>
  */
 @Data
 @TableName("purchase_exchange")
@@ -40,10 +52,10 @@ public class PurchaseExchange {
     @TableField(exist = false)
     private String supplierName;
 
-    /** 关联采购单ID（强关联，必填） */
+    /** 关联采购单ID（**可选**：2026-09-21 起允许"无单换货"，为空则明细手工录入、无可换量上限） */
     private Long purchaseOrderId;
 
-    /** 关联采购单号（冗余，便于列表展示与检索） */
+    /** 关联采购单号（冗余，便于列表展示与检索；无单换货时为空） */
     private String purchaseOrderCode;
 
     /** 退回出库仓ID：退回货品从此仓扣减（我方成品仓，货退给供货商） */
@@ -62,6 +74,18 @@ public class PurchaseExchange {
 
     /** 换入侧总金额（明细 inQuantity × inUnitPrice 汇总，生成正向应付） */
     private BigDecimal totalInAmount;
+
+    /** 是否付费：0否 1是（2026-09-21 新增）。⚠️ 方向：**我们向供货商付费** */
+    private Integer chargeFlag;
+
+    /** 付费类型：SERVICE服务费 / DIFF品质差价 / FULL全额货值 / OTHER其他（见 {@code ExchangePayType}） */
+    private String chargeType;
+
+    /** 付费金额（手工填写）：我方付给供货商的金额，审核后生成一条正向应付 */
+    private BigDecimal chargeAmount;
+
+    /** 付费说明（原因备注） */
+    private String chargeReason;
 
     private String remark;
 

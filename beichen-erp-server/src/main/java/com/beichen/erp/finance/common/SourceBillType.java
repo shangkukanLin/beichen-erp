@@ -23,6 +23,11 @@ public enum SourceBillType {
     PURCHASE_EXCHANGE_RETURN("采购换货退回"),
     /** 采购换货-换入侧：供货商换回的良品生成**正向**应付，台账号后缀 -IN ⇒ 与退回侧两行净额即差价 */
     PURCHASE_EXCHANGE_IN("采购换货入库"),
+    /**
+     * 采购换货-付费（2026-09-21 新增）：换货单「是否付费=是」时生成的正向应付。
+     * <p>⚠️ 方向：**我们向供货商付费**（换货服务费 / 补差价等），与销售换货的 SALE_EXCHANGE_CHARGE（向客户收费）相反。</p>
+     */
+    PURCHASE_EXCHANGE_CHARGE("采购换货付费"),
     /** 销售退货 */
     SALE_RETURN("销售退货"),
     /** 委外加工单交货（成品报工入库产生应付） */
