@@ -1,4 +1,7 @@
-# Temp test 8: finance chain (account / expense / receipt / invoice / bill / payable-transfer)
+# Manual dump 8 -- NOT a test case: this script only drives the finance pages and PRINTS what it sees
+# (it contains no Ok assertions at all, see the ending). Kept for hand exploration; the real finance
+# assertions live in verify-finance-kpi.ps1 (KPI reconciliation) and the per-module verify-*.ps1 cases.
+# Original purpose: finance chain (account / expense / receipt / invoice / bill / payable-transfer).
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 EnsureLogin
 WatchErrors
@@ -124,4 +127,6 @@ $r = Rows 0
 Write-Host ('payment rows=' + $r.n + ' head=' + ($r.head -join '|'))
 if ($r.n -gt 0) { Write-Host ('row0=' + ($r.rows[0] -join ' | ')) }
 Write-Host ('errs-final=' + (Errs))
-Summary 'finance chain'
+# 2026-09-21: deliberately NOT calling Summary here -- this script has zero assertions, and Summary now
+# refuses to report PASS for a run with no assertions (it would otherwise be a fake green).
+Write-Host 'DUMP DONE finance chain (manual exploration script, not a test case)'

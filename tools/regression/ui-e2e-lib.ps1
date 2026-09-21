@@ -288,5 +288,13 @@ function Ok([bool]$cond, [string]$msg) {
   if ($cond) { $script:PASS++; Write-Host ("PASS " + $msg) } else { $script:FAIL++; Write-Host ("FAIL " + $msg) }
 }
 function Summary([string]$title) {
+  # 2026-09-21: 防"哑用例假绿" —— 一条断言都没跑时绝不算 PASS。
+  # 触发实例：ui-e2e-8-finance 原为纯人工 dump 脚本（没有任何 Ok 断言），却输出 RESULT PASS (PASS=0 FAIL=0)，
+  # 被当成"财务链已验证"。这类脚本要么补真断言（见 verify-finance-kpi.ps1），要么别调用 Summary。
+  $total = [int]$script:PASS + [int]$script:FAIL
+  if ($total -eq 0) {
+    Write-Host "RESULT FAIL $title  (PASS=0 FAIL=0 -- NO assertions were executed: this script asserts nothing, so it must not report PASS)"
+    return
+  }
   Write-Host ("RESULT " + $(if ($script:FAIL -eq 0) { 'PASS' } else { 'FAIL' }) + " $title  (PASS=$($script:PASS) FAIL=$($script:FAIL))")
 }
