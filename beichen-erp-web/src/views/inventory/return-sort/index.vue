@@ -15,15 +15,14 @@ import {
   getReturnSortPage, auditReturnSort, cancelReturnSort, deleteReturnSort,
   getReturnSortPendingOverview, batchCreateReturnSortDrafts, type ReturnSortPendingRow,
 } from '@/api/inventory'
-import ReturnSortForm from './form.vue'
-
 const route = useRoute()
 const router = useRouter()
 
 // ==================== 页签（2026-09-19 退货整理页优化） ====================
 /**
  * ① 待整理（默认）：跨**自有成品仓**看"哪些仓还有什么要整理"——三态 可整理/实物不足（账实不符）/
- *    已整理完（默认隐藏）。可勾选多个批次**批量生成整理草稿**；点行「整理」在抽屉里直接开单（复用 form.vue）。
+ *    已整理完（默认隐藏）。可勾选多个批次**批量生成整理草稿**；点行「整理」/「整理本仓」跳到独立开单页
+ *    （/inventory/return-sort/add + query 预设，2026-09-22 由抽屉改为页面，与「编辑退货整理」共用 form.vue）。
  * ② 整理单：原有的整理单列表（查询 + 审核/反审核/删除）。
  * 页签同步到 URL（?tab=bills），可直接落到列表（回归脚本长期依赖列表页）。
  */
@@ -237,27 +236,17 @@ async function submitBatch() {
   } finally { batchSaving.value = false }
 }
 
-// ==================== 抽屉开单（复用表单页） ====================
-const drawerVisible = ref(false)
-const drawerKey = ref(0)
-const preset = reactive<{ warehouseId: number | null; pendingIds: number[] | null }>({ warehouseId: null, pendingIds: null })
-const drawerTitle = computed(() => `${warehouseName(preset.warehouseId as number) || '成品仓'} · 退货整理开单`)
-
-/** 打开抽屉：带出该仓整仓待整理（row 为空）或该行来源批次（row 非空） */
-function openDrawer(whId: number, row?: ReturnSortPendingRow) {
-  preset.warehouseId = whId
-  preset.pendingIds = row && row.pendingId ? [Number(row.pendingId)] : null
-  drawerKey.value++
-  drawerVisible.value = true
+// ==================== 开单入口（2026-09-22 用户要求：不再用抽屉，改为跳「新增退货整理」页面） ====================
+/**
+ * 跳新增页并带预设：整仓整理（row 为空）或单个来源批次（row 非空）。
+ * <p>页面（form.vue）从 route.query 读 warehouseId / pendingIds；保存后回列表，
+ * 靠 DIRTY 标志让「待整理总览 + 整理单列表」各刷新一次（见 onActivated）。</p>
+ */
+function gotoSortForm(whId: number, row?: ReturnSortPendingRow) {
+  const query: Record<string, string> = { warehouseId: String(whId) }
+  if (row && row.pendingId) query.pendingIds = String(row.pendingId)
+  router.push({ path: '/inventory/return-sort/add', query })
 }
-
-async function onFormSaved() {
-  drawerVisible.value = false
-  ElMessage.success('已保存整理草稿，可到「整理单」页签审核')
-  await loadOverview()
-  await loadData()
-}
-async function onFormCancel() { drawerVisible.value = false }
 
 onMounted(async () => {
   await loadData()
@@ -327,7 +316,7 @@ onActivated(() => {
               </template>
 
               <div v-if="g.sortableCount > 0" style="margin-bottom:8px">
-                <el-button type="primary" link :icon="'Edit'" @click="openDrawer(g.warehouseId)">整理本仓（带出 {{ g.sortableCount }} 批可整理）</el-button>
+                <el-button type="primary" link :icon="'Edit'" @click="gotoSortForm(g.warehouseId)">整理本仓（带出 {{ g.sortableCount }} 批可整理）</el-button>
               </div>
 
               <el-table :key="`${g.warehouseId}-${selVersion}`" :data="g.rows" border size="small" row-key="pendingId"
@@ -382,7 +371,7 @@ onActivated(() => {
                 </el-table-column>
                 <el-table-column label="操作" width="60" align="center" fixed="right">
                   <template #default="{ row }">
-                    <el-button v-if="row.status === 'SORTABLE'" type="primary" link @click="openDrawer(g.warehouseId, row)">整理</el-button>
+                    <el-button v-if="row.status === 'SORTABLE'" type="primary" link @click="gotoSortForm(g.warehouseId, row)">整理</el-button>
                     <span v-else style="color:#909399">—</span>
                   </template>
                 </el-table-column>
@@ -494,14 +483,9 @@ onActivated(() => {
       </template>
     </el-dialog>
 
-    <!-- 抽屉开单：**与「编辑退货整理」是同一个页面**（复用 form.vue 的嵌入模式），保存后刷新总览与整理单列表。
-         宽度 82% → 96%（2026-09-22）：明细表 14 列在 82% 时可用宽只有 933px，必然左右滑动；
-         放宽到 96% 配合列宽预算（见 form.vue 里表格上方注释）后一行显示完。 -->
-    <el-drawer v-model="drawerVisible" :title="drawerTitle" size="96%" destroy-on-close>
-      <ReturnSortForm v-if="drawerVisible" :key="drawerKey" embedded
-        :preset-warehouse-id="preset.warehouseId" :preset-pending-ids="preset.pendingIds"
-        @saved="onFormSaved" @cancel="onFormCancel" />
-    </el-drawer>
+    <!-- 2026-09-22 用户要求：原「整理待整理品」抽屉已去掉，改为跳「新增退货整理」页面
+         （/inventory/return-sort/add + warehouseId/pendingIds 预设）—— 与「编辑退货整理」共用 form.vue，
+         两个入口行为完全一致（保存后回列表，靠 DIRTY 标志刷新总览与整理单列表）。 -->
   </div>
 </template>
 

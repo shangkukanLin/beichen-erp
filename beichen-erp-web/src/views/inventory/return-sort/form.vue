@@ -14,20 +14,25 @@ import {
 const route = useRoute(); const router = useRouter()
 
 /**
- * 嵌入模式（2026-09-19 退货整理页优化）：「待整理」总览点行「整理」时在抽屉里复用本表单。
- * presetWarehouseId = 源仓库（由来源批次决定），presetPendingIds = 要整理的来源批次（空 = 整仓）。
- * 保存后 emit 'saved'（父页刷新总览与整理单列表），不再跳路由。
+ * 新增（/inventory/return-sort/add）与编辑（/edit/:id）共用本页。
+ *
+ * <p>2026-09-22 用户要求：列表页的「整理待整理品」**不再用抽屉**，改为直接跳本页，预设参数走 **query**：
+ * {@code warehouseId} = 源仓库（由来源批次决定）、{@code pendingIds} = 要整理的来源批次（逗号分隔，缺省 = 整仓）。</p>
+ *
+ * <p>保存后回列表：列表页在 DIRTY 标志下会同时重拉「待整理总览 + 整理单列表」（见 index.vue 的 onActivated）。</p>
  */
-const props = defineProps<{
-  embedded?: boolean
-  presetWarehouseId?: number | null
-  presetPendingIds?: number[] | null
-}>()
-const emit = defineEmits<{ (e: 'saved', id?: number): void; (e: 'cancel'): void }>()
 
 /** 新增（/inventory/return-sort/add）与编辑（/inventory/return-sort/edit/:id）共用本页 */
 const id = computed(() => (route.params.id != null && route.params.id !== '' ? Number(route.params.id) : undefined))
 const isNew = computed(() => id.value == null)
+
+/** query 带来的源仓库（列表页「整理本仓 / 整理」跳过来时才有） */
+const presetWarehouseId = computed<number | undefined>(() => {
+  const raw = String(route.query.warehouseId ?? '').trim()
+  if (!raw) return undefined
+  const n = Number(raw)
+  return Number.isNaN(n) ? undefined : n
+})
 
 const loading = ref(false)
 const saving = ref(false)
@@ -63,9 +68,15 @@ function resetForm() {
   items.value = []
 }
 
-/** 嵌入模式要带出的来源批次（来自「待整理」总览）；为空 = 整仓待整理库存 */
+/** query 带来的要整理的来源批次（列表页点某一行「整理」时只有一个）；为空 = 整仓待整理库存 */
+const presetPendingIds = computed<number[] | null>(() => {
+  const raw = String(route.query.pendingIds ?? '').trim()
+  if (!raw) return null
+  const ids = raw.split(',').map((v) => Number(v)).filter((v) => !Number.isNaN(v))
+  return ids.length > 0 ? ids : null
+})
 const presetPendingIdSet = computed(() => {
-  const ids = props.presetPendingIds || []
+  const ids = presetPendingIds.value || []
   return ids.length > 0 ? new Set(ids.map((v) => Number(v))) : null
 })
 
@@ -74,7 +85,7 @@ async function loadDefectStock() {
   if (!form.warehouseId) { ElMessage.warning('请先选择源仓库(成品仓)'); return }
   try {
     const all: any[] = await getReturnSortDefectStock(form.warehouseId)
-    // 嵌入模式（总览点行「整理」）：只带出该来源批次，避免把整仓都铺进抽屉。
+    // 从列表页点某一行「整理」过来（query.pendingIds）：只带出该来源批次，避免把整仓都铺进页面。
     // 口径与「待整理」总览完全一致（后端同一套 FIFO 分配），这里只做筛选。
     const only = presetPendingIdSet.value
     const rows: any[] = only ? all.filter((r) => only.has(Number(r.pendingId))) : all
@@ -113,23 +124,24 @@ function isItemValid(it: any) { return it.totalQuantity > 0 && itemSum(it) === N
 const loadedKey = ref('')
 
 async function init() {
-  // 嵌入模式（抽屉）与路由页面共用一个组件：key 带上预填参数，换批次时重新带出明细
+  // key 带上 query 预设参数：从列表页换一个批次跳过来时也要重新带出明细
   const key = id.value != null
     ? `edit-${id.value}`
-    : (props.embedded ? `embed-${props.presetWarehouseId ?? ''}-${(props.presetPendingIds || []).join(',')}` : 'add')
+    : `add-${presetWarehouseId.value ?? ''}-${(presetPendingIds.value || []).join(',')}`
   if (loadedKey.value === key) return
   loadedKey.value = key
 
   resetForm()
   code.value = ''
   await loadWarehouses()
-  if (props.embedded) {
-    // 源仓库与要整理的来源批次由「待整理」总览带过来；分选后按品质回到该源仓库（不再选目标仓）
-    form.warehouseId = props.presetWarehouseId ?? undefined
-    if (form.warehouseId) await loadDefectStock()
+  if (id.value == null) {
+    // 新增：源仓库与要整理的来源批次由列表页用 query 带过来；分选后按品质回到该源仓库（不再选目标仓）
+    if (presetWarehouseId.value) {
+      form.warehouseId = presetWarehouseId.value
+      await loadDefectStock()
+    }
     return
   }
-  if (id.value == null) return
 
   loading.value = true
   try {
@@ -198,16 +210,14 @@ async function handleSave() {
     const data = { ...form, items: items.value }
     if (form.id) { await updateReturnSort(form.id, data); ElMessage.success('修改成功') }
     else { await createReturnSort(data); ElMessage.success('新增成功') }
-    // 嵌入模式（抽屉）：不跳路由，交由父页刷新「待整理」总览与整理单列表
-    if (props.embedded) { emit('saved', form.id); return }
-    // 2026-09-20（F7-174）：独立页模式置脏标志，列表页 onActivated 时重新拉取（keep-alive 复用下 onMounted 不触发）
+    // 置脏标志：列表页 onActivated 会重拉「待整理总览 + 整理单列表」（keep-alive 复用下 onMounted 不触发）
     sessionStorage.setItem(INVENTORY_RETURN_SORT_DIRTY_KEY, '1')
     router.push('/inventory/return-sort')
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
 
-function handleCancel() { if (props.embedded) { emit('cancel'); return } router.push('/inventory/return-sort') }
-function handleBack() { if (props.embedded) { emit('cancel'); return } router.back() }
+function handleCancel() { router.push('/inventory/return-sort') }
+function handleBack() { router.back() }
 
 onMounted(() => { init() })
 // keep-alive 缓存下再次进入会复用组件；新增/编辑路由切换也需重新加载
@@ -216,11 +226,11 @@ watch(() => route.fullPath, () => { init() })
 </script>
 
 <template>
-  <div :class="props.embedded ? 'embedded-form' : 'app-container'">
+  <div class="app-container">
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>{{ isNew ? (props.embedded ? '整理待整理品（抽屉开单）' : '新增退货整理') : `编辑退货整理 — ${code}` }}</span>
+          <span>{{ isNew ? (presetWarehouseId ? '整理待整理品' : '新增退货整理') : `编辑退货整理 — ${code}` }}</span>
           <div>
             <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
             <el-button @click="handleCancel">取消</el-button>
@@ -260,16 +270,14 @@ watch(() => route.fullPath, () => { init() })
       </div>
       <el-table :data="items" border>
         <!--
-          列宽预算（2026-09-22 用户要求：抽屉开单 / 编辑页的明细列表一行显示完，不要左右滑动）：
-          Σ(列宽) = 104+96+100+46+76+80+76+60×4+80+48 = 946px
-          ≤ 独立编辑页容器 963px，也 ≤ 抽屉容器（抽屉已放宽到 96%，约 1105px）⇒ 两处都不横向滚动。
-          原来 Σ = 1620px（抽屉溢 687px、独立页溢 657px）⇒ 必然左右滑动。
-          做法：①删掉冗余的「来源日期」列（来源单号自带 yyyyMMdd，如 XTH-20260921019）
-               ②A/B/C/不良 改用 size=small + :controls=false（去掉上下箭头，省 24px/列，与采购退货新增页同款）
-               ③其余列收紧并保留 show-overflow-tooltip（省略的内容鼠标停上去可看全）
+          列宽预算（2026-09-22 用户要求：明细列表一行显示完，不要左右滑动）：
+          Σ(列宽) = 150+140+76+80+76+60×4+80+48 = 890px ≤ 本页容器 963px ⇒ 不横向滚动。
+          历史：原先 Σ=1620px（溢 657px）；同日先删掉冗余的「来源日期」列（来源单号自带 yyyyMMdd）并把
+          A/B/C/不良 改成 size=small + :controls=false，后又按用户要求**去掉 SKU 与单位两列**，
+          腾出的宽度分给「来源单据」和「产品」以免单号/品名被截断。
           **改这个表的列宽前请先加总**，别把滚动条引回来。
         -->
-        <el-table-column label="来源单据" width="104" show-overflow-tooltip>
+        <el-table-column label="来源单据" width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.sourceType === AfterSaleSourceType.SALE_EXCHANGE ? 'warning' : 'info'" style="margin-right:4px">
               {{ AfterSaleSourceTypeLabel[row.sourceType] || '-' }}
@@ -277,9 +285,7 @@ watch(() => route.fullPath, () => { init() })
             {{ row.sourceCode || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="sku" label="SKU" width="96" show-overflow-tooltip />
-        <el-table-column prop="productName" label="产品" min-width="100" show-overflow-tooltip />
-        <el-table-column prop="unit" label="单位" width="46" />
+        <el-table-column prop="productName" label="产品" min-width="140" show-overflow-tooltip />
         <el-table-column prop="totalQuantity" label="待整理数量" width="76" align="center">
           <template #default="{ row }"><b>{{ row.totalQuantity }}</b></template>
         </el-table-column>
@@ -328,6 +334,5 @@ watch(() => route.fullPath, () => { init() })
 
 <style scoped>
 .card-header { display: flex; align-items: center; justify-content: space-between; }
-/* 嵌入抽屉（「待整理」总览点行「整理」）时去掉页面级留白 */
-.embedded-form { padding: 0 4px 24px; }
+
 </style>
