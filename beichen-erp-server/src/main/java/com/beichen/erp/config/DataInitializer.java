@@ -355,12 +355,14 @@ public class DataInitializer implements ApplicationRunner {
             // 「712 成品库存情况」按产品维度覆盖）⇒ 与 409/602/503 同范式：不再 upsert，
             // 下方统一置 visible=0（保留行与角色授权，便于回滚）；其历史 sort_order 已在下方挪到 99，
             // 不再占用 1~9，避免与 707 并列（将来若回滚启用也不会产生顺序歧义）。
-            // 财务管理子菜单顺序（2026-09-18 用户定稿重排）：
-            // 账单生成 → 收款管理 → 付款管理 → 费用管理 → 应收管理 → 应付管理 → 资金流水 → 账户管理 → 发票管理 → 应付转应收
+            // 财务管理子菜单顺序（2026-09-18 用户定稿重排；2026-09-22 用户要求把「账单生成」挪到「付款管理」下面）：
+            // 收款管理 → 付款管理 → 账单生成 → 费用管理 → 应收管理 → 应付管理 → 资金流水 → 账户管理 → 发票管理 → 应付转应收
             // sort_order 即左侧栏显示顺序（MenuMapper.selectAllEnabled 按 sort_order 排序）；下方书写顺序与实际显示顺序一致，便于维护。
-            {803L, 8L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 1},
-            {805L, 8L, "收款管理", "menu", "/finance/receipt", "FinanceReceipt", "Money", 2},
-            {806L, 8L, "付款管理", "menu", "/finance/payment", "FinancePayment", "Sell", 3},
+            {805L, 8L, "收款管理", "menu", "/finance/receipt", "FinanceReceipt", "Money", 1},
+            {806L, 8L, "付款管理", "menu", "/finance/payment", "FinancePayment", "Sell", 2},
+            // 账单生成（2026-09-22 用户要求）：由首位挪到「付款管理」下面 ⇒ 只改 sort_order，id / 路由 / 授权均不变
+            // （所以不涉及前端白名单与跳转；菜单顺序缓存在前端 localStorage，改完要让用例先清缓存再看）
+            {803L, 8L, "账单生成", "menu", "/finance/bill", "FinanceBill", "Postcard", 3},
             // 费用登记：审核扣减账户并生成「费用支出」流水，供财务分析利润表取数
             {809L, 8L, "费用管理", "menu", "/finance/expense", "FinanceExpense", "Tickets", 4},
             {801L, 8L, "应收管理", "menu", "/finance/receivable", "FinanceReceivable", "Wallet", 5},
