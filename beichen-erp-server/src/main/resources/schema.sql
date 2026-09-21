@@ -278,8 +278,12 @@ CREATE TABLE IF NOT EXISTS bom_snapshot_item (
 
 CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
-    -- 收费售后(source_type=AFTER_SALE)不关联加工单，order_id 可为空；仅普通交货/委外退货来源必填
+    -- 收费售后(source_type=AFTER_SALE)与「不关联加工单的加工退货」(source_type=RETURN_DEFECT) 均不关联加工单，
+    -- order_id 可为空；仅普通交货必填
     order_id BIGINT DEFAULT NULL COMMENT '订单ID',
+    -- 2026-09-21 新增：不关联加工单的加工退货（source_type=RETURN_DEFECT）用 —— 无单时靠它定位
+    -- 「工厂委外仓」（BOM 料还回目标）与「应付对象」；其余行一律为空
+    factory_id BIGINT DEFAULT NULL COMMENT '工厂ID（仅不关联加工单的加工退货使用）',
     warehouse_id BIGINT DEFAULT NULL COMMENT '收货仓库ID',
     delivery_date DATE COMMENT '发货日期',
     product_id BIGINT COMMENT '产品ID(关联outsource_order_product)',

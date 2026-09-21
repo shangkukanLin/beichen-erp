@@ -89,6 +89,23 @@ public class OrderDeliveryController {
     }
 
     /**
+     * **不关联加工单的加工退货**（2026-09-21 用户口径：该入口的本意就是"可以不关联加工单"，
+     * 其余业务与有单红冲完全一致）—— 成品收货列表页「无单加工退货」区块的新增入口。
+     * <p>草稿仍存本表，审核/反审核/删除沿用通用端点 {@code /{id}/audit}·{@code /{id}/un-audit}·{@code DELETE /{id}}。</p>
+     */
+    @PostMapping("/return-defect-no-order")
+    public R<Void> returnDefectNoOrder(@RequestBody Map<String, Object> body) {
+        deliveryService.returnDefectNoOrder(body);
+        return R.ok();
+    }
+
+    /** 无单加工退货列表（成品收货列表页「无单加工退货」区块） */
+    @GetMapping("/return-defect-no-order/list")
+    public R<List<Map<String, Object>>> listNoOrderReturns() {
+        return R.ok(deliveryService.listNoOrderReturns());
+    }
+
+    /**
      * F7-128（2026-09-20）：**白名单解析请求体**。
      *
      * <p>原实现用 `@RequestBody OutsourceOrderDelivery` **整实体直绑** ⇒ 前端可顺带提交

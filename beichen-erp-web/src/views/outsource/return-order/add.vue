@@ -25,7 +25,10 @@ const prefillReturnType = String(route.query.returnType || '')
 
 const form = reactive({
   // 退货类型（2026-09-17）：DEFECT 不良退货 / REPAIR 维修退货 —— 规则差异见 onTypeChange 与提交校验
-  returnType: (prefillReturnType === OutsourceReturnType.REPAIR ? OutsourceReturnType.REPAIR : OutsourceReturnType.DEFECT) as string,
+  // 2026-09-21（用户口径）：不良退货已统一到「成品收货」办理（有单走该单的加工退货、无单走成品收货列表的
+  // 「无单加工退货」）⇒ 本页（独立退货单）**默认维修退货**；显式带 ?returnType=DEFECT 仍按 DEFECT 渲染
+  // （存量不良退货草稿编辑时保持原类型，后端会拒绝把它改成维修退货或新建不良退货）。
+  returnType: (prefillReturnType === OutsourceReturnType.DEFECT ? OutsourceReturnType.DEFECT : OutsourceReturnType.REPAIR) as string,
   factoryId: undefined as any, warehouseId: undefined as any,
   returnDate: localDate(), remark: '',
   // 工厂收费：**加工厂向我方收取**（我方付加工厂），审核后生成一条正向应付

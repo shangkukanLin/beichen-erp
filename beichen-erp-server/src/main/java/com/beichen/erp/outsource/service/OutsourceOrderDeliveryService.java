@@ -62,4 +62,19 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
 
     /** 退不良：校验后存草稿记录（isReverse=true），落账在审核时执行 */
     void returnDefect(Long orderId, Map<String, Object> body);
+
+    /**
+     * **不关联加工单的加工退货**（2026-09-21 用户口径）：与 {@link #returnDefect} 是**同一个动作**，
+     * 只是不挂加工单 —— 同样往本表写一条负数记录（`delivery_type=DEFECT_RETURN`、`is_reverse=1`），
+     * 同样由 {@link #audit(Long)} 落账（扣成品 + BOM 料还回工厂委外仓 + 冲减应付），
+     * 同样由 {@link #unaudit(Long)} 回滚、{@link #deleteDelivery(Long)} 删草稿。
+     * <p>无单时：`order_id`/`product_id` 留空，改由 `factory_id` 定位工厂委外仓与应付对象；
+     * 还料依据 = 该产品的**最新 BOM 快照**（无快照回退 dev_bom）；冲减金额 = **还回物料的 FIFO 价值**。</p>
+     *
+     * @param body factoryId / warehouseId / productMasterId / qualityType / quantity / remark
+     */
+    void returnDefectNoOrder(Map<String, Object> body);
+
+    /** 无单加工退货列表（成品收货列表页「无单加工退货」区块，按ID倒序） */
+    List<Map<String, Object>> listNoOrderReturns();
 }

@@ -248,6 +248,13 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     public void create(ReturnOrder order, Map<String, Object> body) {
         // 退货类型（2026-09-17）：空值按「不良退货」（与建表默认值一致，兼容存量调用）
         String type = OutsourceReturnType.normalize(order.getReturnType());
+        // 2026-09-21 用户口径：**不良退货不再是本页的职责** —— 该动作本意是"可以不关联加工单"的
+        // 红冲收货，已统一到成品收货页（有单 → 该加工单的「加工退货」；无单 → 成品收货列表的
+        // 「无单加工退货」区块），两者都往 outsource_order_delivery 写负数记录、走同一套审核。
+        // 本页只保留维修退货（送修/收费/维修返回/结案确实不是一回事）。存量不良退货单不受影响，仍可审核/作废。
+        if (!OutsourceReturnType.isRepair(type))
+            throw new BusinessException("不良退货请在「成品收货」办理（有加工单 → 该单的「加工退货」；"
+                    + "没有加工单 → 成品收货列表的「无单加工退货」）；本页只处理维修退货");
         order.setReturnType(type);
         // 收费字段先规范化（不收费归零；收费则类型合法且金额 > 0），再做类型专属校验
         normalizeCharge(order, body);
@@ -316,6 +323,10 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         }
         // 退货类型：不传保持原值（草稿可改类型，改后校验按新类型走）
         String type = OutsourceReturnType.normalize(order.getReturnType() == null ? exist.getReturnType() : order.getReturnType());
+        // 2026-09-21：不良退货已统一到成品收货页 ⇒ 不允许把维修退货改成不良退货
+        // （存量不良退货草稿保持原类型仍可编辑，故只拦"改类型"这一种）
+        if (!OutsourceReturnType.isRepair(type) && OutsourceReturnType.isRepair(exist.getReturnType()))
+            throw new BusinessException("不良退货已统一到「成品收货」办理（有单走该单的加工退货、无单走成品收货列表的「无单加工退货」），不能再把维修退货改成不良退货");
         order.setReturnType(type);
         // 收费字段先规范化，再做类型专属校验
         normalizeCharge(order, body);

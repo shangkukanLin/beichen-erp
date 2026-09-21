@@ -3,6 +3,15 @@
 #   audit -> assert: finished stock out (OUTSOURCE_RETURN_OUT), BOM materials back into the factory warehouse,
 #                    negative payable generated.
 # ALL DATA KEPT; rerunnable (skips creation when 2 defect returns already exist). ASCII ONLY.
+#
+# !! OBSOLETE BY DESIGN (2026-09-21, user decision): a DEFECT return DOCUMENT can no longer be created
+#    from this page - the button is gone and the backend rejects it ("go to 成品收货"). The action was
+#    unified onto the receipt table: with a work order -> that order's 加工退货 red-reversal; without one
+#    -> 无单加工退货 on the receipt list. Replacement coverage (API level, data-driven, repeatable):
+#      verify-no-order-return.ps1   (create/audit/un-audit/delete + the DEFECT document being rejected)
+#      verify-fix-f7-64-74.ps1      (on-order red-reversal symmetry)
+#      verify-delivery-menu.ps1 §②/§④/⑨ (the UI entries)
+#    Refresh this file only if you deliberately re-open the independent-document path.
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 EnsureLogin
 WatchErrors

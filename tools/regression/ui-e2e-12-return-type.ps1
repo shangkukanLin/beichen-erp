@@ -1,9 +1,10 @@
 ﻿# Browser E2E: the outsourcing RETURN order carries two types (DEFECT / REPAIR).
 #
-#   S1 DEFECT return LINKED to a work order: create it from the return-order page (the old entry
-#      "click the return button on the finished-goods receipt page" was removed by user decision on
-#      2026-09-21 - that page returns goods only as a negative DEFECT_RETURN receipt row now), assert
-#      the linked order + BOM snapshot are persisted and that audit moves stock/payable, then roll back.
+#   S1 **DISABLED 2026-09-21**: it used to create a DEFECT return DOCUMENT from this page. Per the user
+#      decision that path was unified into the finished-goods receipt (with a work order -> that order's
+#      加工退货 red-reversal; without one -> 无单加工退货 on the receipt list). The block is kept but
+#      wrapped in `if ($false)`; durable coverage now lives in verify-no-order-return.ps1,
+#      verify-delivery-menu.ps1 (sections 2/4/9) and verify-fix-f7-64-74.ps1.
 #   S2 the two types differ on the FORM: REPAIR must hide/lock the work-order link, hide the BOM
 #      column, turn the work-order field off and REQUIRE a factory charge; DEFECT forbids the charge.
 #
@@ -142,7 +143,14 @@ WatchErrors
 ClearErrs
 
 # =====================================================================
-Step 'S1 DEFECT return linked to a work order -> create / assert / audit / un-audit / cancel'
+# S1 DISABLED 2026-09-21（用户口径）：不良退货不再由「独立退货单」承担 —— 该入口已从
+# /outsource/return-order 页面移除，且后端会拒绝新建 DEFECT 单据（提示去成品收货办理）。
+# 替代覆盖：
+#   ① 有加工单 → 成品收货页的「加工退货」（红冲）—— verify-delivery-menu §④ + verify-fix-f7-64-74
+#   ② 无加工单 → 成品收货列表的「无单加工退货」—— verify-no-order-return.ps1 + verify-delivery-menu §⑨
+# 保留原文用 if ($false) 包住仅供对照（**不要再打开它**）。
+Write-Host 'S1 SKIPPED: the DEFECT return-DOCUMENT entry was removed on 2026-09-21 (see the header)'
+if ($false) {
 $bOut   = StockQty $outWh 'product_id' $masterId 'A'
 $bPay   = PaySum $factoryId
 $m25 = [int]((($matsDesc -split ',')[0]) -split ':')[0]
@@ -255,10 +263,13 @@ Ok ((ClickBtn 'btn_cancel_doc') -match 'OK') 'S1 clicked CANCEL (frees the retur
 ConfirmBox 1500 | Out-Null
 Start-Sleep -Milliseconds 2200
 Ok ((SqlOne "SELECT status FROM outsource_return_order WHERE id=$rid") -eq 'CANCELLED') 'S1 return order cancelled'
+}   # end of the DISABLED S1 block (2026-09-21)
 
 # =====================================================================
 Step 'S2 the two types differ on the FORM'
-Open '/outsource/return-order/add' 3000
+# 显式指定类型：本页默认已改为**维修退货**（不良退货已统一到成品收货），但 ?returnType=DEFECT
+# 仍会按 DEFECT 渲染表单（存量不良退货草稿编辑用）—— 这里就是要对照两种类型的表单差异。
+Open '/outsource/return-order/add?returnType=DEFECT' 3000
 Ok ((HasLabel (ZH 'lbl_rel_order')) -eq 'true') 'S2 DEFECT: the work-order link field exists'
 Ok ((HasCol 'BOM') -eq 'true') 'S2 DEFECT: the BOM column exists'
 Ok ((HasLabel (ZH 'lbl_factory_charge')) -eq 'true') 'S2 DEFECT: the factory-charge field is offered (but is disabled)'
@@ -283,11 +294,12 @@ Start-Sleep -Milliseconds 1600
 # charged" rule itself is what rejects the form (not the amount rule)
 Ok ((ClickChargeSwitch) -match 'OK') 'S2 turned the factory charge off'
 Start-Sleep -Milliseconds 800
+$prevMax = [int](MaxId 'outsource_return_order')
 Ok ((ClickBtn 'btn_save') -match 'OK') 'S2 clicked SAVE without a charge'
 Start-Sleep -Milliseconds 2200
 $msg = Txt '.el-message'
 Ok ($msg -match (ZH 'msg_repair_need_charge')) ('S2 REPAIR is rejected without a charge, msg=' + $msg)
-Ok ((SqlOne "SELECT COUNT(*) FROM outsource_return_order WHERE return_type='REPAIR' AND status='DRAFT' AND id > $rid") -eq '0') 'S2 nothing was persisted (the form was rejected)'
+Ok (([int](MaxId 'outsource_return_order') -le $prevMax)) 'S2 nothing was persisted (the form was rejected)'
 
 # =====================================================================
 Step 'S3 no page errors'

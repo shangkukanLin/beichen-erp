@@ -225,7 +225,9 @@ CREATE TABLE IF NOT EXISTS outsource_order_material (
 
 CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
-    order_id BIGINT NOT NULL COMMENT '订单ID',
+    -- 2026-09-21：不关联加工单的加工退货(source_type=RETURN_DEFECT) 与收费售后(AFTER_SALE) 均可无单
+    order_id BIGINT DEFAULT NULL COMMENT '订单ID',
+    factory_id BIGINT DEFAULT NULL COMMENT '工厂ID（仅不关联加工单的加工退货使用）',
     delivery_date DATE COMMENT '发货日期',
     product_name VARCHAR(100) COMMENT '产品名称',
     quantity DECIMAL(18,0) DEFAULT 0 COMMENT '数量',

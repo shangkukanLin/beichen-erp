@@ -32,7 +32,14 @@ public class OutsourceOrderDelivery {
     private Long id;
     /** 关联加工单ID */
     private Long orderId;
-    /** 关联加工单产品ID(outsource_order_product.id) */
+    /**
+     * 工厂ID：**仅「不关联加工单的加工退货」使用**（`source_type=RETURN_DEFECT` 且 `order_id` 为空）——
+     * 无单时靠它定位「工厂委外仓」（BOM 料还回目标）与「应付对象」；其余行一律为空。
+     * <p>2026-09-21 用户口径：该入口的**本意就是"可以不关联加工单"**，其余业务与成品收货页的
+     * 「加工退货」（红冲收货）**完全一致**，故仍复用本表、仍走同一套审核（不建新表）。</p>
+     */
+    private Long factoryId;
+    /** 关联加工单产品ID(outsource_order_product.id)。⚠️ 无单加工退货**必须留空**（财务分析按它 join 取加工单价） */
     private Long productId;
 
     /** SKU（展示用，非表字段；明细接口按 productId 批量回填） */

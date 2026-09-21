@@ -76,7 +76,9 @@ onMounted(() => { loadData() })
 <template>
   <div style="display:flex;flex-direction:column;gap:12px">
     <el-card shadow="never">
-      <el-button type="primary" :icon="'Plus'" @click="handleAdd(OutsourceReturnType.DEFECT)">新增不良退货</el-button>
+      <!-- 2026-09-21（用户口径）：**不良退货已统一到「成品收货」办理** —— 有加工单：该单收货详细页的「加工退货」；
+           没有加工单：成品收货列表的「无单加工退货」区块（同一动作、同一张表、同一套审核）。
+           本页不再提供不良退货入口；存量不良退货单仍可正常审核/反审核/作废。 -->
       <el-button type="warning" :icon="'Plus'" @click="handleAdd(OutsourceReturnType.REPAIR)">新增维修退货</el-button>
       <!-- 返回进度（2026-09-17，仅维修退货）：跟踪"工厂还有多少没送回来" -->
       <el-select v-if="activeType === OutsourceReturnType.REPAIR" v-model="progress" placeholder="返回进度" clearable
