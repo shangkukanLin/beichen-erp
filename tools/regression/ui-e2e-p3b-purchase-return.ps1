@@ -116,7 +116,10 @@ $retLogs = D (SqlOne ("SELECT COUNT(*) FROM warehouse_stock_log WHERE product_id
 # (measured: -10 plus a +5 rollback => net 5).
 $retLogQty = D (SqlOne ("SELECT COALESCE(SUM(-change_quantity),0) FROM warehouse_stock_log WHERE product_id=" + $ordProd + " AND change_type IN ('RETURN_OUT','RETURN_UN_AUDIT')"))
 Write-Host ("[DB] returns=$cnt2 audited=$aud items=$items stockBefore=$stockBefore stockAfter=$stockAfter returnedQty=$retQty returnLogs=$retLogs returnLogQty=$retLogQty")
-Ok ($aud -eq $cnt2) ('all returns audited (' + $aud + '/' + $cnt2 + ')')
+# 2026-09-21（口径修正）：原来是 AUDITED 数与**全表总数**比 ⇒ 任何 CANCELLED 单据（作废是正常业务动作，
+# 其它回归脚本建的探针单据也会作废）都会把这条带红（实测 5/11，其中 6 张是 CANCELLED）。改为只比"有效单据"。
+$live = D (SqlOne "SELECT COUNT(*) FROM purchase_return WHERE status<>'CANCELLED'")
+Ok ($aud -eq $live) ('all live returns audited (' + $aud + '/' + $live + ', cancelled excluded)')
 Ok ($items -ge 2) ('return items >= 2 (got ' + $items + ')')
 # rerun-safe invariant: stock == PURCHASE_IN qty - RETURN_OUT qty (same product, from the stock log)
 $inQty = D (SqlOne ("SELECT COALESCE(SUM(change_quantity),0) FROM warehouse_stock_log WHERE product_id=" + $ordProd + " AND change_type='PURCHASE_IN'"))
