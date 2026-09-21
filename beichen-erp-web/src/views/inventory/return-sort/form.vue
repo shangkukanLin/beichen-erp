@@ -259,7 +259,17 @@ watch(() => route.fullPath, () => { init() })
         <el-button type="primary" :icon="'Download'" :disabled="!form.warehouseId" @click="loadDefectStock">加载成品仓待整理库存</el-button>
       </div>
       <el-table :data="items" border>
-        <el-table-column label="来源单据" width="190" show-overflow-tooltip>
+        <!--
+          列宽预算（2026-09-22 用户要求：抽屉开单 / 编辑页的明细列表一行显示完，不要左右滑动）：
+          Σ(列宽) = 104+96+100+46+76+80+76+60×4+80+48 = 946px
+          ≤ 独立编辑页容器 963px，也 ≤ 抽屉容器（抽屉已放宽到 96%，约 1105px）⇒ 两处都不横向滚动。
+          原来 Σ = 1620px（抽屉溢 687px、独立页溢 657px）⇒ 必然左右滑动。
+          做法：①删掉冗余的「来源日期」列（来源单号自带 yyyyMMdd，如 XTH-20260921019）
+               ②A/B/C/不良 改用 size=small + :controls=false（去掉上下箭头，省 24px/列，与采购退货新增页同款）
+               ③其余列收紧并保留 show-overflow-tooltip（省略的内容鼠标停上去可看全）
+          **改这个表的列宽前请先加总**，别把滚动条引回来。
+        -->
+        <el-table-column label="来源单据" width="104" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag size="small" :type="row.sourceType === AfterSaleSourceType.SALE_EXCHANGE ? 'warning' : 'info'" style="margin-right:4px">
               {{ AfterSaleSourceTypeLabel[row.sourceType] || '-' }}
@@ -267,22 +277,19 @@ watch(() => route.fullPath, () => { init() })
             {{ row.sourceCode || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="来源日期" width="110">
-          <template #default="{ row }">{{ row.sourceDate || '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="sku" label="SKU" width="130" />
-        <el-table-column prop="productName" label="产品" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="unit" label="单位" width="70" />
-        <el-table-column prop="totalQuantity" label="待整理数量" width="110" align="center">
+        <el-table-column prop="sku" label="SKU" width="96" show-overflow-tooltip />
+        <el-table-column prop="productName" label="产品" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="unit" label="单位" width="46" />
+        <el-table-column prop="totalQuantity" label="待整理数量" width="76" align="center">
           <template #default="{ row }"><b>{{ row.totalQuantity }}</b></template>
         </el-table-column>
-        <el-table-column label="批次量/已整理" width="120" align="center">
+        <el-table-column label="批次量/已整理" width="80" align="center">
           <template #default="{ row }">
             <span v-if="row.pendingId">{{ row.batchQuantity ?? 0 }} / {{ row.sortedQuantity ?? 0 }}</span>
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="停留天数" width="100" align="center">
+        <el-table-column label="停留天数" width="76" align="center">
           <template #default="{ row }">
             <span :style="row.stayDays > STAY_ALERT_DAYS ? 'color:#f56c6c;font-weight:bold' : ''">
               {{ row.stayDays ?? '-' }}
@@ -290,24 +297,24 @@ watch(() => route.fullPath, () => { init() })
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="A数量" width="110">
-          <template #default="{ row }"><el-input-number v-model="row.qtyA" :min="0" :precision="0" controls-position="right" style="width:100%" /></template>
+        <el-table-column label="A数量" width="60">
+          <template #default="{ row }"><el-input-number v-model="row.qtyA" :min="0" :precision="0" size="small" :controls="false" style="width:100%" /></template>
         </el-table-column>
-        <el-table-column label="B数量" width="110">
-          <template #default="{ row }"><el-input-number v-model="row.qtyB" :min="0" :precision="0" controls-position="right" style="width:100%" /></template>
+        <el-table-column label="B数量" width="60">
+          <template #default="{ row }"><el-input-number v-model="row.qtyB" :min="0" :precision="0" size="small" :controls="false" style="width:100%" /></template>
         </el-table-column>
-        <el-table-column label="C数量" width="110">
-          <template #default="{ row }"><el-input-number v-model="row.qtyC" :min="0" :precision="0" controls-position="right" style="width:100%" /></template>
+        <el-table-column label="C数量" width="60">
+          <template #default="{ row }"><el-input-number v-model="row.qtyC" :min="0" :precision="0" size="small" :controls="false" style="width:100%" /></template>
         </el-table-column>
-        <el-table-column label="不良数量" width="110">
-          <template #default="{ row }"><el-input-number v-model="row.qtyDefect" :min="0" :precision="0" controls-position="right" style="width:100%" /></template>
+        <el-table-column label="不良数量" width="60">
+          <template #default="{ row }"><el-input-number v-model="row.qtyDefect" :min="0" :precision="0" size="small" :controls="false" style="width:100%" /></template>
         </el-table-column>
-        <el-table-column label="校验" width="120" align="center">
+        <el-table-column label="校验" width="80" align="center">
           <template #default="{ row }">
             <el-tag :type="isItemValid(row) ? 'success' : 'danger'" size="small">{{ isItemValid(row) ? '✓ 相等' : `合计${itemSum(row)}` }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="70" align="center">
+        <el-table-column label="操作" width="48" align="center">
           <template #default="{ $index }"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template>
         </el-table-column>
       </el-table>

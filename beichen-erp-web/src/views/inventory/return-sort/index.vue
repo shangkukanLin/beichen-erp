@@ -494,8 +494,10 @@ onActivated(() => {
       </template>
     </el-dialog>
 
-    <!-- 抽屉开单：复用表单页（嵌入模式），保存后刷新总览与整理单列表 -->
-    <el-drawer v-model="drawerVisible" :title="drawerTitle" size="82%" destroy-on-close>
+    <!-- 抽屉开单：**与「编辑退货整理」是同一个页面**（复用 form.vue 的嵌入模式），保存后刷新总览与整理单列表。
+         宽度 82% → 96%（2026-09-22）：明细表 14 列在 82% 时可用宽只有 933px，必然左右滑动；
+         放宽到 96% 配合列宽预算（见 form.vue 里表格上方注释）后一行显示完。 -->
+    <el-drawer v-model="drawerVisible" :title="drawerTitle" size="96%" destroy-on-close>
       <ReturnSortForm v-if="drawerVisible" :key="drawerKey" embedded
         :preset-warehouse-id="preset.warehouseId" :preset-pending-ids="preset.pendingIds"
         @saved="onFormSaved" @cancel="onFormCancel" />
