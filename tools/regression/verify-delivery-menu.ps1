@@ -72,7 +72,7 @@ OpenFresh "$base/outsource/order/delivery"
 $p2 = EvalJs "location.pathname"
 if ($p2 -match '/login' -or $p2 -match '403') { Bad ('/outsource/order/delivery 未正常进入，落在 ' + $p2) }
 else { Ok '/outsource/order/delivery 直达正常（非 403）' }
-$d2 = ReadJson "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({n:rows.length,prod:t.includes('生产中')==true,pending:t.includes('待审核')==true,prog:t.includes('收货进度')==true,btn:t.includes('收货')==true,ret:b.some(x=>x==='退货')});})()" '成品收货列表'
+$d2 = ReadJson "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({n:rows.length,prod:t.includes('生产中')==true,pending:t.includes('待审核')==true,prog:t.includes('收货进度')==true,btn:t.includes('收货')==true,ret:b.some(x=>x==='退货'),cls:b.some(x=>x==='结单')});})()" '成品收货列表'
 if ($d2) {
   Write-Output ('成品收货列表行数 = ' + $d2.n)
   if ($d2.n -ge 1) { Ok ('列表有数据（' + $d2.n + ' 行）') } else { Bad '列表无数据（库中应有 1 张 PRODUCING 加工单）' }
@@ -81,6 +81,8 @@ if ($d2) {
   # 2026-09-21（用户口径「成品收货只留退不良、退回走红冲收货」）：列表页**不得**再有「退货」入口。
   # 断言按**按钮**取值而不是 body 文本 —— 侧栏还有「委外加工退货」菜单，用文本判定必然假通过。
   if (-not $d2.ret) { Ok '列表页已无「退货」入口（退回走红冲收货）' } else { Bad '列表页仍出现「退货」按钮（应已移除）' }
+  # 2026-09-21（用户口径「结单按钮放到成品收货里」）：列表行内必须有「结单」入口（仅生产中的单才在列表里）
+  if ($d2.cls) { Ok '列表行内有「结单」入口（结单按钮已从加工单详情搬到成品收货）' } else { Bad '列表行内缺少「结单」入口' }
 }
 
 # ③ 行内「收货」→ 自动弹出新增收货弹窗（一步收货）
@@ -97,7 +99,7 @@ if ($d3) {
 # ④ 关闭弹窗后：汇总卡 / 收货记录 / 返回列表
 EvalJs "(()=>{const d=[...document.querySelectorAll('.el-dialog')].find(x=>x.offsetParent!==null);if(d){const btns=[...d.querySelectorAll('button')];for(const b of btns){if(b.innerText.trim()==='取消'){b.click();return 'cancel'}}}return 'none'})()" | Out-Null
 agent-browser wait 1600
-$d4 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({sum:t.includes('订单总量')&&t.includes('已收数量')&&t.includes('剩余数量'),rec:t.includes('收货记录'),back:t.includes('返回列表'),ret:b.some(x=>x==='退货'),mfg:b.some(x=>x==='加工退货'),old:b.some(x=>x==='退不良')||b.some(x=>x==='不良退货')});})()" '收货详细页'
+$d4 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({sum:t.includes('订单总量')&&t.includes('已收数量')&&t.includes('剩余数量'),rec:t.includes('收货记录'),back:t.includes('返回列表'),ret:b.some(x=>x==='退货'),mfg:b.some(x=>x==='加工退货'),old:b.some(x=>x==='退不良')||b.some(x=>x==='不良退货'),cls:b.some(x=>x==='结单')});})()" '收货详细页'
 if ($d4) {
   if ($d4.sum) { Ok '收货详细页有汇总卡（订单总量/已收数量/剩余数量）' } else { Bad '收货详细页缺少汇总卡' }
   if ($d4.rec) { Ok '收货详细页有「收货记录」区块' } else { Bad '收货详细页缺少「收货记录」区块' }
@@ -108,6 +110,8 @@ if ($d4) {
   if (-not $d4.ret) { Ok '收货详细页已无「退货」入口' } else { Bad '收货详细页仍出现「退货」按钮（应已移除）' }
   if ($d4.mfg) { Ok '收货详细页有「加工退货」入口（红冲收货）' } else { Bad '收货详细页缺少「加工退货」按钮' }
   if (-not $d4.old) { Ok '收货详细页已无「退不良/不良退货」字样（全链统一为加工退货）' } else { Bad '收货详细页仍出现「退不良」或「不良退货」按钮' }
+  # 2026-09-21（用户口径「结单按钮放到成品收货里」）：本页（成品收货的"收货详细"）必须有「结单」入口
+  if ($d4.cls) { Ok '收货详细页有「结单」入口（跳结单报表页）' } else { Bad '收货详细页缺少「结单」入口' }
 }
 
 # ⑤ 加工单详情：页签已无「交货管理」，且**不再有**「成品收货」跳转按钮
@@ -116,12 +120,14 @@ if ($d4) {
 $oid = if ($d3 -and $d3.p -match '(\d+)$') { $Matches[1] } else { '' }
 if ($oid) {
   OpenFresh "$base/outsource/order/detail/$oid"
-  $d5 = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim());const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:t,hasRecv:(b.includes('成品收货')==true),hasDefect:(b.includes('退不良')==true),hasMfg:(b.includes('加工退货')==true||b.includes('不良退货')==true)});})()" '加工单详情'
+  $d5 = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim());const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:t,hasRecv:(b.includes('成品收货')==true),hasDefect:(b.includes('退不良')==true),hasMfg:(b.includes('加工退货')==true||b.includes('不良退货')==true),cls:b.some(x=>x==='结单')});})()" '加工单详情'
   if ($d5) {
     Write-Output ('加工单详情 页签 = ' + ($d5.tabs -join ' | '))
     if (($d5.tabs -join ',') -match '交货管理') { Bad '加工单详情仍有「交货管理」页签（应已移出）' } else { Ok '加工单详情已无「交货管理」页签' }
     if ($d5.hasRecv) { Bad '加工单详情仍有「成品收货」跳转按钮（2026-09-21 用户口径应已移除）' } else { Ok '加工单详情已无「成品收货」跳转按钮（收货统一从菜单进）' }
     if (-not $d5.hasDefect -and -not $d5.hasMfg) { Ok '加工单详情已无「退不良/加工退货」按钮（随交货管理移出）' } else { Bad ('加工单详情仍有退回按钮：defect=' + $d5.hasDefect + ' mfg=' + $d5.hasMfg) }
+    # 2026-09-21（用户口径「结单按钮放到成品收货里」）：本页的「结单」按钮必须已撤掉
+    if (-not $d5.cls) { Ok '加工单详情已无「结单」按钮（结单入口已搬到成品收货）' } else { Bad '加工单详情仍有「结单」按钮（应已移除）' }
     # 已无按钮可点：只确认本页直达正常、没有被重定向走（防"移除按钮时顺手改坏了路由"）
     $p5 = (EvalJs "location.pathname").Trim('"')
     if ($p5 -like "/outsource/order/detail/*") { Ok ('加工单详情直达正常（' + $p5 + '）') } else { Bad ('加工单详情路径异常：' + $p5) }

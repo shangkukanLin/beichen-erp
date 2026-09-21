@@ -290,10 +290,13 @@ onActivated(async () => { await loadOptions(); await loadData() })
           <div style="display:flex;gap:8px;margin-top:12px">
             <el-button v-if="form.status===OutsourceOrderStatus.PENDING" type="success" size="small" @click="handleAudit">审核</el-button>
             <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="danger" size="small" @click="handleUnaudit">反审核</el-button>
-            <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="warning" size="small" @click="router.push(`/outsource/order/close/${form.id}`)">结单</el-button>
             <!-- 2026-09-21（用户口径：「委外加工单详情页面里面的成品收货按钮不要了。在成品收货里面收货就行」）：
                  收货统一从左侧「委外加工 → 成品收货」菜单进（列表行内「收货」直达一步收货、行内「详情」看记录），
-                 本页不再保留跳转按钮（原先那个是 2026-09-16「交货管理」页签移出时留下的入口）。 -->
+                 本页不再保留跳转按钮（原先那个是 2026-09-16「交货管理」页签移出时留下的入口）。
+                 2026-09-21（用户口径「**结单按钮放到成品收货里**」）：本页的「结单」按钮**已撤掉** ⇒
+                 到「成品收货」点「结单」（列表行内 或 该单收货详细页），跳的还是同一个结单报表页；
+                 结单后本页的「结单详情」页签仍可回看报表（含"查看完整结单报表"，反结单也在那里）。 -->
+            <!-- 原「结单」按钮（跳 /outsource/order/close/:id）已按上述口径移除 -->
             <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="form.status===OutsourceOrderStatus.CANCELLED">保存</el-button>
           </div>
         </el-form>

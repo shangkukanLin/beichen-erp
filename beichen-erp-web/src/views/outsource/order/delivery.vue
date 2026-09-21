@@ -286,6 +286,24 @@ async function handleDefectReturn() {
 }
 
 /**
+ * 结单（2026-09-21 用户口径「委外加工单详情页面的结单按钮放到成品收货里」）：
+ * 本页只是**入口** —— 跳结单报表页（`/outsource/order/close/:id`），结单本身要在那里
+ * "保存草稿 → 确认结单"（后端要求先保存报表），本页不做任何落账。
+ * <p>⚠️ 剩余未收 > 0 时先二次确认：后端**不拦**"未收满就结单"，而结单后加工单变"已完成"、
+ * 本页就不能再收货了（要改回来得先反结单）。</p>
+ */
+async function goClose() {
+  const remaining = Number(summary.value?.remainingQuantity || 0)
+  if (remaining > 0) {
+    try {
+      await ElMessageBox.confirm(
+        `该单还有 ${remaining} 件未收；结单后不能再收货（需先反结单）。确定进入结单报表？`, '结单前确认', { type: 'warning' })
+    } catch { return }
+  }
+  router.push(`/outsource/order/close/${orderId}`)
+}
+
+/**
  * 从「成品收货」列表带参（?add=1 / ?defect=1）进入时自动打开对应弹窗，一步完成收货。
  * <p>幂等标记按 **route.fullPath** 记录（2026-09-17 修复）：layout 的 keep-alive key 是
  * `fullPath + '-' + tabSeq[path]`，同一 path 会复用实例 —— 若只用一个布尔标记，
@@ -347,6 +365,9 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
           <template v-if="canDeliver">
             <el-button type="primary" size="small" @click="openAdd">新增收货</el-button>
             <el-button type="danger" size="small" @click="openDefectReturn">加工退货</el-button>
+            <!-- 2026-09-21（用户口径「加工单详情页面的结单按钮放到成品收货里」）：结单入口（跳结单报表页）；
+                 未收满时二次确认（后端不拦未收满即结单，而结单后本页就不能再收货） -->
+            <el-button type="warning" size="small" @click="goClose">结单</el-button>
           </template>
           <!-- 2026-09-21（用户口径「统一命名」）：本页退回一律走「加工退货」红冲收货（原名「退不良」→「加工退货」→ 定稿「加工退货」，
                与「加工退货」页的「加工退货」页签同一个词）⇒ 原「退货」按钮已移除 -->

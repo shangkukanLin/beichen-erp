@@ -7,10 +7,13 @@
  * 有加工单的退回到该单收货详细页用「加工退货」，无单的退回到「加工退货」菜单页的「加工退货」页签
  * 用「新增无单加工退货」；两者最终都汇总到那张台账里（用「关联加工单」列区分）。
  * （原先挂在本页下方的「无单加工退货」区块已按该口径迁走。）</p>
+ * <p>2026-09-21（用户口径「加工单详情页面的结单按钮放到成品收货里」）：行内新增「**结单**」入口
+ * （跳结单报表页 `/outsource/order/close/:id`；结单本身要在那里"保存草稿 → 确认结单"）。
+ * 剩余未收 > 0 时先二次确认 —— 后端不拦"未收满就结单"，而结单后本单变"已完成"、不能再收货（要改回得反结单）。</p>
  */
 import { reactive, ref, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/enums'
 
@@ -51,6 +54,24 @@ function progressOf(row: any) {
 function goDelivery(row: any) { router.push(`/outsource/order/delivery/${row.id}?add=1&_t=${Date.now()}`) }
 function goDetail(row: any) { router.push(`/outsource/order/delivery/${row.id}`) }
 
+/**
+ * 结单（2026-09-21 用户口径「加工单详情页面的结单按钮放到成品收货里」）：
+ * 本页只是**入口** —— 跳结单报表页（`/outsource/order/close/:id`），结单本身要在那里
+ * "保存草稿 → 确认结单"（后端要求先保存报表）。
+ * <p>⚠️ 剩余未收 > 0 时先二次确认：后端**不拦**"未收满就结单"，而结单后本单变"已完成"，
+ * 就不能再收货了（要改回来得先反结单）。</p>
+ */
+async function goClose(row: any) {
+  const remaining = Number(row.remainingQuantity || 0)
+  if (remaining > 0) {
+    try {
+      await ElMessageBox.confirm(
+        `该单还有 ${remaining} 件未收；结单后不能再收货（需先反结单）。确定进入结单报表？`, '结单前确认', { type: 'warning' })
+    } catch { return }
+  }
+  router.push(`/outsource/order/close/${row.id}`)
+}
+
 onActivated(() => { loadData() })
 </script>
 
@@ -74,7 +95,9 @@ onActivated(() => { loadData() })
            加工退货单），操作列 84→138，由「加工单号 −12、下单/已收/剩余 −10、收货进度 −8、
            最近收货 −8、计划完成 −8、状态 −8」抵平。
            2026-09-21（用户口径「成品收货页只留加工退货、退回走红冲收货」）：**移除**行内「退货」按钮 ⇒
-           操作列 124→84；腾出的 40px **自动归弹性列「产品」**（无需手工抵平，合计仍 ≤ 容器 ⇒ 依旧不横向滑动）。 -->
+           操作列 124→84；腾出的 40px **自动归弹性列「产品」**（无需手工抵平，合计仍 ≤ 容器 ⇒ 依旧不横向滑动）。
+           2026-09-21（用户口径「结单按钮放到成品收货里」）：行内**新增「结单」** ⇒ 操作列 84→124（收货 + 结单），
+           正好用回上一轮腾出的 40px（固定列合计 778 + 两个 min-width 160 = 938 ≤ 948 兜底 ⇒ 仍不横向滑动）。 -->
       <el-table :data="tableData" border stripe v-loading="loading" style="width:100%" @row-click="goDetail">
         <el-table-column label="加工单号" width="140" show-overflow-tooltip>
           <template #default="{ row }"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button></template>
@@ -102,9 +125,11 @@ onActivated(() => { loadData() })
         <el-table-column label="状态" width="82" align="center">
           <template #default="{ row }"><el-tag :type="OutsourceOrderStatusTag[row.status] || 'info'" size="small">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="84" align="center" fixed="right">
+        <el-table-column label="操作" width="124" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDelivery(row)">收货</el-button>
+            <!-- 2026-09-21（用户口径「结单按钮放到成品收货里」）：结单入口（跳结单报表页）；未收满时二次确认 -->
+            <el-button type="warning" link @click.stop="goClose(row)">结单</el-button>
             <!-- 2026-09-21（用户口径）：退回进详情页做「加工退货」红冲收货，原「退货」按钮已移除 -->
           </template>
         </el-table-column>
