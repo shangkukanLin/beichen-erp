@@ -450,5 +450,9 @@
   "col_owner_project": "所属项目",
   "col_stock_total": "库存总量",
   "col_undelivered": "未交数量",
-  "col_material_type": "物料类型"
+  "col_material_type": "物料类型",
+  "btn_complete_all": "一键完成",
+  "tab_project_phase": "项目阶段",
+  "phase_confirm_keyword": "自动结项",
+  "msg_project_cancelled": "项目已取消"
 }

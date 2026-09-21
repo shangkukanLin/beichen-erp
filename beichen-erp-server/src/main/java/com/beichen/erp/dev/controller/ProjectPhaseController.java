@@ -46,6 +46,18 @@ public class ProjectPhaseController {
         return R.ok();
     }
 
+    /**
+     * 一键完成：把本项目**所有未完成阶段**（未开始 / 进行中）一次性标记为已完成。
+     * <p>2026-09-21 新增（用户需求）：项目有 14 个阶段，原先只能逐个点「完成」。
+     * 在同一事务内批量推进，终态与逐个点击一致 —— 全部完成后**项目自动结项**。</p>
+     *
+     * @return 本次实际完成的阶段数（0 表示本来就都完成了）
+     */
+    @PutMapping("/{projectId}/phase/complete-all")
+    public R<Integer> completeAll(@PathVariable Long projectId) {
+        return R.ok(projectPhaseService.completeAllPhases(projectId));
+    }
+
     /** 跳过阶段 */
     @PutMapping("/phase/{id}/skip")
     public R<Void> skip(@PathVariable Long id) {

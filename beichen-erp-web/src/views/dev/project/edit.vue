@@ -191,6 +191,37 @@ async function revertPhase(phaseId: number) {
   }
 }
 
+/**
+ * 一键完成（2026-09-21 新增）：把本项目所有未完成阶段一次标为完成。
+ * <p>后端在同一事务内批量推进，**终态与逐个点「完成」完全一致** —— 全部完成后项目会自动结项，
+ * 若关联产品处于"研发中"其状态会同步为"正常"。故此处**必须二次确认**，把这两个后果写清楚。</p>
+ */
+const phaseCompletingAll = ref(false)
+async function completeAllPhases() {
+  const pending = phaseList.value.filter(
+    t => t.status !== PhaseStatus.FINISHED && t.status !== PhaseStatus.SKIPPED).length
+  if (pending === 0) { ElMessage.info('所有阶段均已完成'); return }
+  try {
+    await ElMessageBox.confirm(
+      `将把本项目全部未完成阶段一次性标记为完成（共 ${pending} 个），并自动结项；` +
+      '若关联产品处于"研发中"，其状态将同步为"正常"。如需回退，需在下方列表逐个「撤销」。确认继续？',
+      '一键完成确认',
+      { confirmButtonText: '确认完成', cancelButtonText: '取消', type: 'warning' }
+    )
+  } catch { return }
+  phaseCompletingAll.value = true
+  try {
+    const n: any = await request.put(`/dev/project/${projectId}/phase/complete-all`)
+    ElMessage.success(n ? `已完成 ${n} 个阶段` : '所有阶段均已完成')
+    sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    await loadPhase()
+    // 必须同时刷新项目：全完成后后端已自动结项，基础信息页签顶部的状态要跟着变
+    await loadProject()
+  } catch (e: any) {
+    ElMessage.error('操作失败: ' + (e?.message || ''))
+  } finally { phaseCompletingAll.value = false }
+}
+
 /** 级联重算计划日期 */
 async function recalcPlannedEnds() {
   try {
@@ -563,6 +594,9 @@ function onNameBlur() {
               </el-progress>
             </div>
             <el-tag v-if="phaseProgress.inProgress > 0" type="warning" size="small">{{ phaseProgress.inProgress }} 个进行中</el-tag>
+            <!-- 2026-09-21：一键完成（主操作靠前）；会连带自动结项，故点击后二次确认 -->
+            <el-button type="success" size="small" :loading="phaseCompletingAll"
+              :disabled="phaseProgress.total === 0" @click="completeAllPhases">一键完成</el-button>
             <el-button type="primary" size="small" plain @click="recalcPlannedEnds">重算计划日期</el-button>
           </div>
 

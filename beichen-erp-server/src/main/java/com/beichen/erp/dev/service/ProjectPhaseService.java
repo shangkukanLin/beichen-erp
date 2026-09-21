@@ -17,6 +17,15 @@ public interface ProjectPhaseService extends IService<ProjectPhase> {
     /** 完成阶段：自动填actualEnd，下一阶段变为"进行中"，最后阶段则自动结项 */
     void completePhase(Long projectId, Long phaseId);
 
+    /**
+     * 一键完成（2026-09-21 新增）：把本项目**所有未完成阶段**（未开始 / 进行中）一次性标记为已完成。
+     * <p>项目有 14 个阶段（见阶段模板），原先只能逐个点「完成」。本方法在同一事务内批量推进，
+     * 最终触发与逐个点击**完全一致**的结果（全完成 ⇒ 项目自动结项）。幂等：已完成/已跳过阶段原样不动。</p>
+     *
+     * @return 本次实际完成的阶段数（0 表示本来就都完成了）
+     */
+    int completeAllPhases(Long projectId);
+
     /** 跳过阶段：标记SKIPPED，激活下一阶段 */
     void skipPhase(Long projectId, Long phaseId);
 

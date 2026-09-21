@@ -107,6 +107,70 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
         syncProjectStatus(projectId);
     }
 
+    /**
+     * 一键完成（2026-09-21 新增，用户需求）：把本项目所有未完成阶段一次性标记为已完成。
+     *
+     * <p>与逐个调用 {@link #completePhase} 相比，**结果完全一致、只有过程不同**：</p>
+     * <ul>
+     *   <li>同一事务内批量完成 ⇒ 不产生 14 次请求与 14 段中间态（"下一个进行中"）；</li>
+     *   <li>产品状态同步**最多调一次**（逐个调用会按每个阶段的模板各判一次、可能重复同步）；</li>
+     *   <li>**刻意不调用 `activateNextPhase`** —— 一推到底不需要中间"进行中"态，
+     *       否则会把后续阶段改成进行中又被立即完成，纯属多余写库；</li>
+     *   <li>最后调一次 {@link #syncProjectStatus}：全完成后 ⇒ **项目自动结项 + 同步产品状态**，
+     *       该方法是全量重算，故与逐个点击的终态相同。</li>
+     * </ul>
+     *
+     * <p><b>口径</b>（与 {@link #completePhase} 保持一致）：{@code actualEnd} 已有值保留、为空才补今天；
+     * {@code plannedEnd} **一律不改**（计划是历史快照，改动会污染"计划 vs 实际"统计）。
+     * 已取消项目抛错；已完成/已跳过阶段不动 ⇒ **幂等**，重复点击无副作用。</p>
+     */
+    @Override
+    @Transactional
+    public int completeAllPhases(Long projectId) {
+        lockProject(projectId);
+        if (isProjectCancelled(projectId)) {
+            log.warn("项目已取消，禁止一键完成阶段: projectId={}", projectId);
+            throw new BusinessException("项目已取消，无法推进阶段；请先重新激活项目");
+        }
+        List<ProjectPhase> all = listByProject(projectId);
+        if (all.isEmpty()) {
+            // 不静默成功：否则前端会提示"完成 0 个"让人误以为已处理
+            throw new BusinessException("该项目没有阶段记录，无法一键完成");
+        }
+
+        LocalDate today = LocalDate.now();
+        int done = 0;
+        boolean needProductSync = false;
+        for (ProjectPhase p : all) {
+            String st = p.getStatus();
+            // 已完成 / 已跳过：原样不动（幂等的关键，也保住它原有的 actualEnd）
+            if (PhaseStatus.FINISHED.getCode().equals(st) || PhaseStatus.SKIPPED.getCode().equals(st)) {
+                continue;
+            }
+            p.setStatus(PhaseStatus.FINISHED.getCode());
+            if (p.getActualEnd() == null) {
+                p.setActualEnd(today);
+            }
+            projectPhaseMapper.updateById(p);
+            done++;
+            // 逐个调用时每个阶段都会判一次；这里只记录"是否需要同步"，循环结束后统一同步一次
+            if (needsProductStatusSync(p.getPhaseName(), projectId)) {
+                needProductSync = true;
+            }
+        }
+        if (done == 0) {
+            log.info("一键完成：所有阶段本就已完成，无操作 projectId={}", projectId);
+            return 0;
+        }
+        if (needProductSync) {
+            projectProductSyncService.syncProductStatus(projectId);
+        }
+        // 全完成后自动结项（内部在结项时还会同步一次产品状态，与逐个点击的调用序列一致）
+        syncProjectStatus(projectId);
+        log.info("一键完成：projectId={} 本次完成 {} 个阶段", projectId, done);
+        return done;
+    }
+
     @Override
     @Transactional
     public void skipPhase(Long projectId, Long phaseId) {
@@ -377,6 +441,17 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
     }
 
     private void checkProductStatusSync(String phaseName, Long projectId) {
+        if (needsProductStatusSync(phaseName, projectId)) {
+            projectProductSyncService.syncProductStatus(projectId);
+        }
+    }
+
+    /**
+     * 该阶段（按名称匹配模板）完成/跳过时**是否需要**同步产品状态。
+     * <p>2026-09-21 从 {@link #checkProductStatusSync} 抽出 —— 一键完成需要"先判断、最后只同步一次"，
+     * 若沿用原方法会在循环里同步 N 次。判断逻辑与日志口径与原方法逐字保持一致。</p>
+     */
+    private boolean needsProductStatusSync(String phaseName, Long projectId) {
         // F7-93（2026-09-19）：原用 selectOne(eq(name)) —— 一旦同名模板存在两条（历史脏数据，或
         // 未加唯一索引前建出来），MyBatis-Plus 会抛 TooManyResultsException ⇒ 完成/跳过/保存
         // 阶段全部 500（研发主线被脏数据打断）。改为按 id 升序取第一条兜底，入口侧另加了重名校验。
@@ -390,11 +465,9 @@ public class ProjectPhaseServiceImpl extends ServiceImpl<ProjectPhaseMapper, Pro
             // 同步（阶段名是建项目时复制进 dev_project_phase 的快照，模板改名不会回溯），
             // 且没有任何提示，只能靠"产品状态一直停在研发中"来间接发现
             log.warn("未找到阶段模板[{}]，跳过产品状态同步: projectId={}", phaseName, projectId);
-            return;
+            return false;
         }
-        if (PhaseTemplate.SYNC_PRODUCT_STATUS == valueOf(tpl.getProductStatusSync())) {
-            projectProductSyncService.syncProductStatus(projectId);
-        }
+        return PhaseTemplate.SYNC_PRODUCT_STATUS == valueOf(tpl.getProductStatusSync());
     }
 
     /** 将可能为 null 的 Integer 规整为语义值，避免 null 拆箱与魔法值比较 */
