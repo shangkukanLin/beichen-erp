@@ -1505,17 +1505,17 @@ CREATE TABLE IF NOT EXISTS return_sort_item (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='退货整理明细表';
 
--- 售后待整理批次（销售退单/销售换货单统一入口）
+-- 售后待整理批次（销售退货单/销售换货单统一入口）
 -- 设计说明：售后仓的待整理(PENDING)库存按 (仓库,产品,品质) 聚合，本身不记录来源，无法追溯。
--- 退单与换货单审核时各写入一条待整理批次，退货整理单消费本表并回写 sorted_quantity，
+-- 退货单与换货单审核时各写入一条待整理批次，退货整理单消费本表并回写 sorted_quantity，
 -- 从而统一追溯「这批待整理品来自哪张单据、是否已整理完」。新增售后单据类型只需扩展 source_type。
 CREATE TABLE IF NOT EXISTS after_sale_pending (
     id                    BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '待整理批次ID',
-    source_type           VARCHAR(20) NOT NULL              COMMENT '来源单据类型: SALE_RETURN(销售退单)/SALE_EXCHANGE(销售换货单)',
+    source_type           VARCHAR(20) NOT NULL              COMMENT '来源单据类型: SALE_RETURN(销售退货单)/SALE_EXCHANGE(销售换货单)',
     source_id             BIGINT NOT NULL                   COMMENT '来源单据ID(sale_return.id / sale_exchange.id)',
     source_item_id        BIGINT NOT NULL                   COMMENT '来源单据明细ID(sale_return_item.id / sale_exchange_item.id)',
     source_code           VARCHAR(64)                       COMMENT '来源单号(冗余，便于列表展示与检索)',
-    source_date           DATE                              COMMENT '来源单据业务日期(退单的退货日期/换货的换货日期，冗余展示)',
+    source_date           DATE                              COMMENT '来源单据业务日期(退货单的退货日期/换货的换货日期，冗余展示)',
     warehouse_id          BIGINT NOT NULL                   COMMENT '售后仓ID(待整理品所在仓)',
     customer_id           BIGINT DEFAULT NULL               COMMENT '客户ID(冗余，整理后生成折损应收用)',
     product_id            BIGINT NOT NULL                   COMMENT '产品ID',
@@ -1531,7 +1531,7 @@ CREATE TABLE IF NOT EXISTS after_sale_pending (
     INDEX idx_warehouse_product (warehouse_id, product_id),
     INDEX idx_source (source_type, source_id),
     INDEX idx_company_id (company_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='售后待整理批次表(退单/换货统一入口)';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='售后待整理批次表(退货单/换货统一入口)';
 
 -- 销售换货单（只支持同品换货，强关联销售单：审核时退回入售后仓 + 换出从成品仓扣减）
 CREATE TABLE IF NOT EXISTS sale_exchange (
