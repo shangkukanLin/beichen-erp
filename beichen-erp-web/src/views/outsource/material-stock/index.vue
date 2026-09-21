@@ -77,6 +77,8 @@ import { WarehouseCategory, WarehouseType } from '@/api/enums'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+// 导出的拼装逻辑抽在 ./export.ts（纯函数、无 XLSX/Vue 依赖）⇒ 可被 node 用例直测
+import { buildMaterialSheets } from './export'
 
 const router = useRouter()
 
@@ -104,43 +106,36 @@ const loading = ref(false)
 const rows = ref<any[]>([])
 
 /**
- * 导出 Excel（**全量**）：按当前筛选条件重新请求全部匹配物料（pageNum=1、pageSize=9999），
- * 不受列表分页限制；列与页面一致，数量按数值写入（整数不带小数）。
- * 请求失败时退回当前页已加载数据，保证导出始终可用。
+ * 导出 Excel（**全量**，两个视角 / 两个 sheet）：
+ * ①「物料库存汇总」——按物料跨仓汇总，与列表页列一致（保持原有形态，不破坏看数习惯）
+ * ②「按仓库明细」——按仓库分块：每个仓库下有哪些物料、各多少（用户 2026-09-22 要求）
+ *
+ * <p>关键点：</p>
+ * - 只请求**一次** `/material-stock/page`（本来就是「仓库×物料」粒度、pageSize=9999 全量），
+ *   再由纯函数 {@link buildMaterialSheets} 派生出两个 sheet ⇒ 两个视角是**同一快照**，数字必然对得上；
+ * - **跟随页面筛选**（所在仓库 / 物料类型 / 物料）：勾了哪些仓就导哪些；
+ * - 0 库存隐藏、**负库存保留并逐行备注**（委外仓「缺料强制出库」会产生负库存，是业务事实不是账错）；
+ * - 请求失败时退回当前页已加载的汇总数据（此时只有汇总 sheet），保证导出始终可用。
  */
 async function exportMaterialStock() {
-  let data: any[] = rows.value || []
+  let data: any[] | null = null
   try {
     const params: any = { pageNum: 1, pageSize: 9999 }
     // 多选用逗号分隔：与列表查询一致（axios 默认序列化成 warehouseIds[]=1，后端 @RequestParam List 收不到）
     if (query.warehouseIds?.length) params.warehouseIds = query.warehouseIds.join(',')
     if (query.materialTypeId) params.materialTypeId = query.materialTypeId
     if (query.materialName) params.materialName = query.materialName
-    const res = await request.get<any, any>('/warehouse/stock/material-summary/page', { params })
+    const res = await request.get<any, any>('/warehouse/stock/material-stock/page', { params })
     if (Array.isArray(res?.records)) data = res.records
   } catch { /* 拉取失败：退回当前页数据 */ }
-  const cols = ['物料类型', '物料名称', '单位', '良品', '不良', '总库存', '分布仓库']
-  const aoa: (string | number)[][] = [
-    [`物料库存汇总（导出时间：${new Date().toLocaleString('zh-CN')}，共 ${data.length} 行）`],
-    [],
-    cols,
-  ]
-  data.forEach((r: any) => {
-    aoa.push([
-      r.materialTypeName || '—',
-      r.materialName || '',
-      r.unit || '—',
-      Number(r.qtyGood ?? 0),
-      Number(r.qtyDefect ?? 0),
-      Number(totalQty(r) ?? 0),
-      Number(r.warehouseCount ?? 0),
-    ])
-  })
-  const ws = XLSX.utils.aoa_to_sheet(aoa)
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: cols.length - 1 } }]
-  ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }]
+  const specs = buildMaterialSheets(data ?? rows.value ?? [], { hideZero: true })
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, '物料库存汇总')
+  for (const s of specs) {
+    const ws = XLSX.utils.aoa_to_sheet(s.aoa)
+    ws['!merges'] = s.merges as any
+    ws['!cols'] = s.cols as any
+    XLSX.utils.book_append_sheet(wb, ws, s.name)
+  }
   XLSX.writeFile(wb, `物料库存汇总_${localDate()}.xlsx`)
 }
 
