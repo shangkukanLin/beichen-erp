@@ -1,10 +1,12 @@
-# 退货整理页表格宽度验证（2026-09-22 用户要求：列表一行显示完，不要左右滑动）
-#   覆盖两个页签：①待整理（跨仓总览，12 列）②整理单（6 列）
+# 退货整理页表格宽度验证（2026-09-22 用户要求：列表/明细一行显示完，不要左右滑动）
+#   覆盖 4 处容器：①待整理（跨仓总览，12 列）②整理单（6 列）
+#                ③ 从列表跳入的开单页（form.vue：明细 11 列，2026-09-22 由抽屉改为独立页面）
+#                ④ 编辑退货整理页（同一 form.vue，明细 11 列）
 #   断言 ① 每张表的横向溢出 = 0（量真正的滚动容器 .el-table__body-wrapper .el-scrollbar__wrap，
 #           注意 Element Plus 2.x 外层 body-wrapper 的 scrollWidth 恒等于 clientWidth ⇒ 量它会得到假阴性）
 #        ② 列宽合计 <= 容器宽（结构上就不可能溢出）
-#        ③ 列数没有被"为了不滚动而删列"：待整理 12 列、整理单 6 列
-#        ④ 无 JS 运行时错误
+#        ③ 列数没被"为了不滚动而乱删列"：待整理 12 / 整理单 6 / 明细 11（来源日期+SKU+单位 是用户要求去掉的）
+#        ④ 开单入口已从抽屉改为独立页面（URL 带 warehouseId/pendingIds 预设）
 #   ASCII ONLY：中文一律经 ui-e2e-zh.json 注入。
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
@@ -89,41 +91,34 @@ if ($t2.Count -ge 1) {
   else { Bad ('expected 6 columns, got ' + $b.nCols) }
 } else { Bad ('cannot measure the bills table: ' + $raw2) }
 
-# ---- 明细表（抽屉开单 / 编辑页是**同一个 form.vue**，2026-09-22 用户要求两处都要一行显示完）----
-Write-Output '--- 3) DRAWER form: the item table (form.vue, embedded) fits one line'
-# 点待整理表第一行的操作按钮打开抽屉（有该按钮的行就是 SORTABLE 行，避免依赖中文文案）
+# ---- 明细表（「整理待整理品」2026-09-22 由抽屉改为**独立页面**；与编辑页共用 form.vue）----
+Write-Output '--- 3) SORT FORM page (opened from the pending tab): item table fits one line'
+# 点待整理表第一行的操作按钮（有该按钮的行就是 SORTABLE 行，避免依赖中文文案）⇒ 应跳到独立新增页并带 query 预设
 agent-browser open "$base/inventory/return-sort" | Out-Null
 agent-browser wait 3400
 $clickRow = "(()=>{const vis=e=>e.getClientRects().length>0;const b=[...document.querySelectorAll('.el-table__body td:last-child button')].filter(vis);if(!b.length)return 'NOBTN';b[0].click();return 'CLICKED';})()"
-Write-Output ('  open drawer: ' + (EvalJs2 $clickRow))
-agent-browser wait 3000
-# 只量抽屉内的表格（抽屉盖在列表上，外层那张表还在 DOM 里，量它没意义）
-$measureDrawer = @'
-(()=>{
-  const vis=e=>e.getClientRects().length>0;
-  const root=document.querySelector('.el-drawer')||document;
-  return JSON.stringify([...root.querySelectorAll('.el-table')].filter(vis).map(t=>{
-    const wrap=t.querySelector('.el-table__body-wrapper .el-scrollbar__wrap')||t.querySelector('.el-table__body-wrapper');
-    const cols=[...t.querySelectorAll('.el-table__header col')].map(c=>Number(c.getAttribute('width')||0));
-    return { over: wrap?Math.round(wrap.scrollWidth-wrap.clientWidth):-1, wrapW: wrap?Math.round(wrap.clientWidth):0,
-             sumCols: cols.reduce((a,b)=>a+b,0), nCols: cols.length, drawerW: Math.round(root.getBoundingClientRect().width) };
-  }));
-})()
-'@
-$rawD = (EvalJs2 $measureDrawer).Replace('\"', '"')
+Write-Output ('  row action: ' + (EvalJs2 $clickRow))
+agent-browser wait 3200
+$p = EvalJs2 'String(location.pathname + location.search)'
+Write-Output ('  path=' + $p)
+if ($p -match '/inventory/return-sort/add\?warehouseId=') { Ok 'the sort action opens the standalone form page with its preset query (drawer removed)' }
+else { Bad ('the sort action did not open the form page: ' + $p) }
+$rawD = (EvalJs2 $measure).Replace('\"', '"')
 $mD = [regex]::Match($rawD, '\[.*\]')
 $tD = @()
 if ($mD.Success) { $tD = @($mD.Value | ConvertFrom-Json) }
-Write-Output ('  drawer tables=' + $tD.Count + ' first=' + ($tD[0] | ConvertTo-Json -Compress))
+Write-Output ('  form tables=' + $tD.Count + ' first=' + ($tD[0] | ConvertTo-Json -Compress))
 if ($tD.Count -ge 1) {
   $d = $tD[0]
-  if ([int]$d.over -le 2) { Ok ('drawer item table does not scroll horizontally (overflow=' + $d.over + 'px, drawer=' + $d.drawerW + ')') }
-  else { Bad ('drawer item table overflows by ' + $d.over + 'px') }
-  if ([int]$d.sumCols -le [int]$d.wrapW + 2) { Ok ('drawer item columns fit the container (' + $d.sumCols + ' <= ' + $d.wrapW + ')') }
-  else { Bad ('drawer item columns wider than the container: ' + $d.sumCols + ' > ' + $d.wrapW) }
-  if ([int]$d.nCols -eq 13) { Ok 'all 13 item columns are still present (the redundant source-date column was the one dropped)' }
-  else { Bad ('expected 13 item columns, got ' + $d.nCols) }
-} else { Bad ('cannot measure the drawer item table: ' + $rawD) }
+  if ([int]$d.over -le 2) { Ok ('sort form item table does not scroll horizontally (overflow=' + $d.over + 'px)') }
+  else { Bad ('sort form item table overflows by ' + $d.over + 'px') }
+  if ([int]$d.sumCols -le [int]$d.wrapW + 2) { Ok ('sort form item columns fit the container (' + $d.sumCols + ' <= ' + $d.wrapW + ')') }
+  else { Bad ('sort form item columns wider than the container: ' + $d.sumCols + ' > ' + $d.wrapW) }
+  # 11 列：来源单据/产品/待整理数量/批次量已整理/停留天数/A/B/C/不良/校验/操作
+  # （来源日期 + SKU + 单位 已按用户要求相继去掉）
+  if ([int]$d.nCols -eq 11) { Ok 'all 11 item columns are present (source-date, SKU and unit were dropped on request)' }
+  else { Bad ('expected 11 item columns, got ' + $d.nCols) }
+} else { Bad ('cannot measure the sort form item table: ' + $rawD) }
 
 Write-Output '--- 4) EDIT page (same form.vue) also fits one line'
 $draftId = SqlOne "SELECT id FROM return_sort WHERE status='DRAFT' ORDER BY id DESC LIMIT 1"
@@ -145,4 +140,4 @@ if ([int]$draftId -gt 0) {
   } else { Bad ('cannot measure the edit page table: ' + $rawE) }
 } else { Bad 'no DRAFT return-sort row to open the edit page with' }
 
-if ($fail -eq 0) { Write-Output 'RESULT PASS return-sort tables fit one line (2 list tabs + drawer + edit page, no horizontal scroll)' } else { Write-Output ('RESULT FAIL count ' + $fail); exit 1 }
+if ($fail -eq 0) { Write-Output 'RESULT PASS return-sort tables fit one line (2 list tabs + sort-form page + edit page, no horizontal scroll)' } else { Write-Output ('RESULT FAIL count ' + $fail); exit 1 }
