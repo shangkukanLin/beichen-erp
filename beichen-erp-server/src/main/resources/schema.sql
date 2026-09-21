@@ -359,10 +359,11 @@ CREATE TABLE IF NOT EXISTS outsource_material (
     cost_price DECIMAL(18,4) DEFAULT NULL COMMENT '移动加权平均成本价(委外仓入库自动更新)',
     cost_manual TINYINT DEFAULT 0 COMMENT '成本价是否手工锁定 0否 1是',
     last_in_price DECIMAL(18,4) DEFAULT NULL COMMENT '最近入库单价',
-    warehouse_id BIGINT COMMENT '仓库ID',
+    -- 2026-09-21：删除两处历史漂移 —— warehouse_id 与 spec 两列（+ idx_warehouse_id 索引）在**现库与实体中都不存在**
+    -- （spec 已于 F7-125 随"规格全站下线"移除；warehouse_id 全仓无任何 SQL 引用，grep 命中的都是别的表），
+    -- 但本文件一直保留着 ⇒ 用本文件建**新库**会多出 2 根死列 + 1 个死索引，与老库不一致。
     material_name VARCHAR(100) NOT NULL COMMENT '物料名称',
     material_type_id BIGINT DEFAULT NULL COMMENT '物料类型ID(关联material_type.id)',
-    spec VARCHAR(100) COMMENT '规格型号',
     unit VARCHAR(20) COMMENT '单位',
     status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',
     price DECIMAL(18,2) DEFAULT 0 COMMENT '单价',
@@ -370,7 +371,6 @@ CREATE TABLE IF NOT EXISTS outsource_material (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_company_id (company_id),
     INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协物料表';
@@ -679,9 +679,10 @@ CREATE TABLE IF NOT EXISTS outsource_contract_template (
     status TINYINT DEFAULT 1 COMMENT '1启用 0禁用',
     is_default TINYINT DEFAULT 0 COMMENT '0非默认 1默认模板',
     template_type VARCHAR(20) DEFAULT 'PROCESSING' COMMENT '模板类型：加工合同/采购合同',
-    party_a_address VARCHAR(255) COMMENT '甲方地址',
-    party_a_contact VARCHAR(50) COMMENT '甲方联系人',
-    party_a_phone VARCHAR(20) COMMENT '甲方联系电话',
+    -- 2026-09-21：删除 F7-124 已批准并在现库执行过的 3 根死列（party_a_address/contact/phone）。
+    -- 甲方信息实际从 Company 读取（ContractTemplateController），实体无对应字段，现网 2 行全 NULL。
+    -- 当时只在现库 DROP、本文件漏同步 ⇒ 建新库会多出 3 根死列。备份见
+    -- tools/db-archive/before-f7-124-125-126-drop-columns.sql。
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -1975,7 +1976,8 @@ CREATE TABLE IF NOT EXISTS outsource_stock_loss_item (
     material_type_id    BIGINT                 COMMENT '物料类型ID(关联material_type.id)',
     material_type_name  VARCHAR(50)            COMMENT '物料类型名称(冗余)',
     quality_type   VARCHAR(10) DEFAULT 'GOOD' COMMENT '品质: GOOD=良品 DEFECT=不良品',
-    spec           VARCHAR(100)           COMMENT '规格(冗余)',
+    -- 2026-09-21：删除 F7-125 已批准并在现库执行过的死列 spec（产品规格 2026-09-15 全站下线；
+    -- 现网全 NULL、实体无字段）。当时只在现库 DROP、本文件漏同步。
     unit           VARCHAR(20)            COMMENT '单位(冗余)',
     quantity       DECIMAL(18,0) DEFAULT 0 COMMENT '报损数量',
     unit_price     DECIMAL(18,4) DEFAULT 0 COMMENT '报损单价(带出物料最近进价,可改)',
