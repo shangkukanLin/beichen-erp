@@ -1220,7 +1220,7 @@ CREATE TABLE IF NOT EXISTS sale_return_item (
     return_id BIGINT COMMENT '退货单ID',
     sale_order_item_id BIGINT COMMENT '关联销售单明细ID',
     product_id BIGINT COMMENT '产品ID',
-    quality_type VARCHAR(10) DEFAULT 'PENDING' COMMENT '品质等级: A/B/C/DEFECT/PENDING，销售退货默认PENDING(待分类)',
+    quality_type VARCHAR(10) DEFAULT 'PENDING' COMMENT '品质等级: A/B/C/DEFECT/PENDING，销售退货默认PENDING(待整理)',
     quantity DECIMAL(18,0) DEFAULT 0 COMMENT '退货数量',
     sorted_quantity DECIMAL(18,0) DEFAULT 0 COMMENT '已整理数量(退货整理单审核后累加、反审核扣回)',
     unit_price DECIMAL(18,4) DEFAULT 0 COMMENT '单价',
@@ -1506,9 +1506,9 @@ CREATE TABLE IF NOT EXISTS return_sort_item (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='退货整理明细表';
 
 -- 售后待整理批次（销售退单/销售换货单统一入口）
--- 设计说明：售后仓的待分类(PENDING)库存按 (仓库,产品,品质) 聚合，本身不记录来源，无法追溯。
+-- 设计说明：售后仓的待整理(PENDING)库存按 (仓库,产品,品质) 聚合，本身不记录来源，无法追溯。
 -- 退单与换货单审核时各写入一条待整理批次，退货整理单消费本表并回写 sorted_quantity，
--- 从而统一追溯「这批待分类品来自哪张单据、是否已整理完」。新增售后单据类型只需扩展 source_type。
+-- 从而统一追溯「这批待整理品来自哪张单据、是否已整理完」。新增售后单据类型只需扩展 source_type。
 CREATE TABLE IF NOT EXISTS after_sale_pending (
     id                    BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '待整理批次ID',
     source_type           VARCHAR(20) NOT NULL              COMMENT '来源单据类型: SALE_RETURN(销售退单)/SALE_EXCHANGE(销售换货单)',
@@ -1516,7 +1516,7 @@ CREATE TABLE IF NOT EXISTS after_sale_pending (
     source_item_id        BIGINT NOT NULL                   COMMENT '来源单据明细ID(sale_return_item.id / sale_exchange_item.id)',
     source_code           VARCHAR(64)                       COMMENT '来源单号(冗余，便于列表展示与检索)',
     source_date           DATE                              COMMENT '来源单据业务日期(退单的退货日期/换货的换货日期，冗余展示)',
-    warehouse_id          BIGINT NOT NULL                   COMMENT '售后仓ID(待分类品所在仓)',
+    warehouse_id          BIGINT NOT NULL                   COMMENT '售后仓ID(待整理品所在仓)',
     customer_id           BIGINT DEFAULT NULL               COMMENT '客户ID(冗余，整理后生成折损应收用)',
     product_id            BIGINT NOT NULL                   COMMENT '产品ID',
     product_name          VARCHAR(200)                      COMMENT '产品名称(冗余)',
@@ -1577,7 +1577,7 @@ CREATE TABLE IF NOT EXISTS sale_exchange_item (
     out_quantity          DECIMAL(18,0) DEFAULT 0           COMMENT '换出数量(可与退回数量不等，如退2换1)',
     out_unit_price        DECIMAL(18,4) DEFAULT 0           COMMENT '换出单价(默认取原销售单价，可手工改，仅用于展示与差价参考)',
     out_amount            DECIMAL(18,2) DEFAULT 0           COMMENT '换出金额(换出数量×换出单价，仅展示)',
-    out_quality_type      VARCHAR(10) DEFAULT 'A'           COMMENT '换出品质: A/B/C/DEFECT(退回统一记 PENDING 待分类)',
+    out_quality_type      VARCHAR(10) DEFAULT 'A'           COMMENT '换出品质: A/B/C/DEFECT(退回统一记 PENDING 待整理)',
     -- 逐产品收费（2026-09-21 用户口径：收费要精确到产品）——单据级 charge_* 变为 Σ(本表)
     charge_flag           TINYINT DEFAULT 0                 COMMENT '是否收费: 0否 1是(逐产品)',
     charge_type           VARCHAR(20) DEFAULT NULL          COMMENT '收费类型: SERVICE服务费/DIFF品质差价/FULL全额货值/OTHER其他',
