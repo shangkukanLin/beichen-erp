@@ -351,8 +351,15 @@ onActivated(() => {
 
               <el-table :key="`${g.warehouseId}-${selVersion}`" :data="g.rows" border size="small" row-key="pendingId"
                 @selection-change="(rows: any) => onSelChange(g.warehouseId, rows)">
-                <el-table-column type="selection" width="44" :selectable="(row: any) => row.status === 'SORTABLE'" />
-                <el-table-column label="状态" width="110">
+                <!--
+                  列宽预算（2026-09-22 用户要求：列表一行显示完、不要左右滑动）：
+                  Σ(本表列宽) = 36+80+116+84+88+100+110+48+94+58+66+60 = 940px
+                  ≤ 实测容器 1005px（本页签表格），也 ≤ 更窄容器 948px（另一个页签的表格宽度）⇒ 都不会出现横向滚动。
+                  原来 Σ = 1309px，比容器宽 304px ⇒ 必然左右滑动。**改列宽前请先加总**，别再把滚动条引回来。
+                  列不删不加：来源单据/客户/SKU/产品 都用 show-overflow-tooltip 省略，靠 tooltip 看全。
+                -->
+                <el-table-column type="selection" width="36" :selectable="(row: any) => row.status === 'SORTABLE'" />
+                <el-table-column label="状态" width="80">
                   <template #default="{ row }">
                     <el-tag :type="statusMeta(row.status).type" size="small">{{ statusMeta(row.status).label }}</el-tag>
                     <el-tooltip v-if="row.partial" content="实物少于批次剩余量，只能先整理可整理部分" placement="top">
@@ -360,7 +367,7 @@ onActivated(() => {
                     </el-tooltip>
                   </template>
                 </el-table-column>
-                <el-table-column label="来源单据" width="190" show-overflow-tooltip>
+                <el-table-column label="来源单据" width="116" show-overflow-tooltip>
                   <template #default="{ row }">
                     <el-tag size="small" :type="row.sourceType === AfterSaleSourceType.SALE_EXCHANGE ? 'warning' : 'info'" style="margin-right:4px">
                       {{ AfterSaleSourceTypeLabel[row.sourceType] || '-' }}
@@ -368,31 +375,31 @@ onActivated(() => {
                     {{ row.sourceCode || '-' }}
                   </template>
                 </el-table-column>
-                <el-table-column label="来源日期" width="105">
+                <el-table-column label="来源日期" width="84">
                   <template #default="{ row }">{{ row.sourceDate || '-' }}</template>
                 </el-table-column>
-                <el-table-column label="客户" width="130" show-overflow-tooltip>
+                <el-table-column label="客户" width="88" show-overflow-tooltip>
                   <template #default="{ row }">{{ row.customerName || '-' }}</template>
                 </el-table-column>
-                <el-table-column prop="sku" label="SKU" width="130" show-overflow-tooltip />
-                <el-table-column prop="productName" label="产品" min-width="150" show-overflow-tooltip />
-                <el-table-column prop="unit" label="单位" width="65" />
-                <el-table-column label="待整理/已整理" width="120" align="center">
+                <el-table-column prop="sku" label="SKU" width="100" show-overflow-tooltip />
+                <el-table-column prop="productName" label="产品" min-width="110" show-overflow-tooltip />
+                <el-table-column prop="unit" label="单位" width="48" />
+                <el-table-column label="待整理/已整理" width="94" align="center">
                   <template #default="{ row }">{{ row.remainQuantity ?? 0 }} / {{ row.sortedQuantity ?? 0 }}</template>
                 </el-table-column>
-                <el-table-column label="可整理" width="85" align="center">
+                <el-table-column label="可整理" width="58" align="center">
                   <template #default="{ row }">
                     <b :style="row.status === 'SHORTAGE' ? 'color:#f56c6c' : ''">{{ row.quantity ?? 0 }}</b>
                   </template>
                 </el-table-column>
-                <el-table-column label="停留天数" width="100" align="center">
+                <el-table-column label="停留天数" width="66" align="center">
                   <template #default="{ row }">
                     <span :style="row.overdue ? 'color:#f56c6c;font-weight:bold' : ''">
                       {{ row.stayDays ?? '-' }}<span v-if="row.overdue"> 超期</span>
                     </span>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="80" align="center" fixed="right">
+                <el-table-column label="操作" width="60" align="center" fixed="right">
                   <template #default="{ row }">
                     <el-button v-if="row.status === 'SORTABLE'" type="primary" link @click="openDrawer(g.warehouseId, row)">整理</el-button>
                     <span v-else style="color:#909399">—</span>
