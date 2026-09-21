@@ -1,8 +1,13 @@
 <script setup lang="ts">
 /**
  * 物料收货 — 收货详细（委外加工 → 物料收货 → 点单号进入）
- * <p>2026-09-16：原「物料订单详情 → 交货管理」页签整块迁出至此（收料 RECEIVE + 退不良 DEFECT_RETURN、
+ * <p>2026-09-16：原「物料订单详情 → 交货管理」页签整块迁出至此（收货记录 RECEIVE + 退不良 DEFECT_RETURN、
  * 记录审核/反审核），详情页只保留一个跳转按钮。列表页带 ?add=1 / ?defect=1 进入时自动打开对应弹窗。</p>
+ * <p>2026-09-21（用户口径「操作文案从收料/退料改成收货/退货」）：本页新增弹窗早已叫「收货」；
+ * 「退不良」弹窗里的「退料仓库 / 退料数量 / 确认退料」一并改为「**退货仓库 / 退货数量 / 确认退货**」，
+ * 提示语同样。⚠️「退不良」是**独立动作**（维修返还/折现退款，写在本表的 DEFECT_RETURN 记录），
+ * 与本页工具栏那个「退货」（走委外物料退货单 `outsource_material_return`）不是同一条路；
+ * 枚举 label（`RECEIVE`=收料、`DEFECT_RETURN`=退不良）被**库存流水等页面共用**，故未动。</p>
  */
 import { reactive, ref, computed, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -54,7 +59,7 @@ async function loadAll() {
 
 function markOrderDirty() { sessionStorage.setItem(OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY, '1') }
 
-// ===== 收料弹窗 =====
+// ===== 收货弹窗 =====
 const recVisible = ref(false); const recSaving = ref(false)
 const recWarehouseId = ref<number>()
 const recItems = ref<any[]>([])
@@ -132,7 +137,7 @@ function isMaterialDelivery(row: any) {
 /**
  * 退货（2026-09-17）：把已收的物料退回**物料商** —— 走**委外物料退货单**（独立单据：源仓扣减 + 冲减应付），
  * 与「退不良」（不良品维修返还/折现退款，写在本页收货记录里并影响净已收）是两件事。
- * 传收料记录时后端会按该单「已收 − 已退」算可退数量并预填供应商/源仓/物料。
+ * 传收货记录时后端会按该单「已收 − 已退」算可退数量并预填供应商/源仓/物料。
  */
 function goReturn(row?: any) {
   if (row?.id) router.push(`/outsource/material-return/add?sourceDeliveryId=${row.id}`)
@@ -182,8 +187,8 @@ function openDefectReturn() {
 }
 async function handleDefectReturn() {
   const data = defectItems.value.filter((r: any) => r.quantity && Number(r.quantity) > 0)
-  if (data.length === 0) { ElMessage.warning('请输入退料数量'); return }
-  if (!defectWarehouseId.value) { ElMessage.warning('请选择退料仓库'); return }
+  if (data.length === 0) { ElMessage.warning('请输入退货数量'); return }
+  if (!defectWarehouseId.value) { ElMessage.warning('请选择退货仓库'); return }
   defectSaving.value = true
   try {
     const res = await request.post<any, any>(`/outsource/material-order/${id}/return-defect`, { handleType: defectHandleType.value, warehouseId: defectWarehouseId.value, items: data })
@@ -194,11 +199,11 @@ async function handleDefectReturn() {
       catch (err: any) { ElMessage.warning('草稿已保存但审核失败：' + (err?.message || '')) }
     }
     ElMessage.success('退不良完成'); defectVisible.value = false; await loadAll(); markOrderDirty()
-  } catch (e: any) { ElMessage.error(e?.message || '退料失败') } finally { defectSaving.value = false }
+  } catch (e: any) { ElMessage.error(e?.message || '退货失败') } finally { defectSaving.value = false }
 }
 
 /**
- * 从「物料收货」列表带参（?add=1 / ?defect=1）进入时自动打开对应弹窗，一步完成收料。
+ * 从「物料收货」列表带参（?add=1 / ?defect=1）进入时自动打开对应弹窗，一步完成收货。
  * <p>幂等标记按 **route.fullPath** 记录（2026-09-17 修复）：layout 的 keep-alive key 是
  * `fullPath + '-' + tabSeq[path]`，同一 path 会复用实例 —— 若只用一个布尔标记，
  * 第二次带参进入就不会再弹（实测）。列表点击已带 `_t=<时间戳>`，故每次都是新 fullPath。</p>
@@ -321,15 +326,15 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         <span style="font-size:var(--app-font-base)">处理方式：</span>
         <el-radio-group v-model="defectHandleType" size="small" @change="defectWarehouseId = undefined"><el-radio :value="DefectHandleType.REPAIR_RETURN">维修返还</el-radio><el-radio :value="DefectHandleType.CASH_REFUND">折现退款</el-radio></el-radio-group>
       </div>
-      <div style="margin-bottom:8px"><el-select v-model="defectWarehouseId" filterable style="width:100%" placeholder="选择退料仓库" @change="onDefectWhChange"><el-option v-for="w in defectWarehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></div>
-      <div v-if="defectHandleType === DefectHandleType.CASH_REFUND" style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid var(--app-color-warning);font-size:var(--app-font-xs);color:var(--app-color-warning)">折现退款将扣减退料仓库库存，并按退料金额自动冲减供应商应付。</div>
+      <div style="margin-bottom:8px"><el-select v-model="defectWarehouseId" filterable style="width:100%" placeholder="选择退货仓库" @change="onDefectWhChange"><el-option v-for="w in defectWarehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></div>
+      <div v-if="defectHandleType === DefectHandleType.CASH_REFUND" style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid var(--app-color-warning);font-size:var(--app-font-xs);color:var(--app-color-warning)">折现退款将扣减退货仓库库存，并按退货金额自动冲减供应商应付。</div>
       <el-table :data="defectItems" border size="small">
         <el-table-column prop="materialName" label="物料" min-width="140" />
         <el-table-column prop="available" label="可退" width="70" />
         <el-table-column label="仓库库存" width="90" align="right"><template #default="{ row }"><span v-if="row.stockLoading">加载中...</span><span v-else-if="row.warehouseStock === undefined" style="color:var(--app-text-placeholder)">—</span><span v-else :style="{ color: row.warehouseStock < row.quantity ? 'var(--app-color-danger)' : 'var(--app-color-success)' }">{{ row.warehouseStock }}</span></template></el-table-column>
-        <el-table-column label="退料数量" width="140"><template #default="{ row }"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" :max="row.available" style="width:100%" placeholder="数量" /></template></el-table-column>
+        <el-table-column label="退货数量" width="140"><template #default="{ row }"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" :max="row.available" style="width:100%" placeholder="数量" /></template></el-table-column>
       </el-table>
-      <template #footer><el-button @click="defectVisible = false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认退料</el-button></template>
+      <template #footer><el-button @click="defectVisible = false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认退货</el-button></template>
     </el-dialog>
   </div>
 </template>

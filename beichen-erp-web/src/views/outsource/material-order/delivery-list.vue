@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
  * 物料收货（委外加工 → 物料收货）
- * <p>只看**收货中**（RECEIVING）的物料订单 —— 与后端「只有收货中的订单可收料/退不良」口径一致。
- * 行内「收料」直接进入该单收货详细页并自动弹出收货弹窗；「收货详细」只看记录。</p>
+ * <p>只看**收货中**（RECEIVING）的物料订单 —— 与后端「只有收货中的订单可收货/退不良」口径一致。
+ * 行内「收货」直接进入该单收货详细页并自动弹出收货弹窗；「收货详细」只看记录。
+ * <p>2026-09-21（用户口径「操作文案从收料/退料改成收货/退货」）：行内按钮「收料」→「**收货**」。</p>
  */
 import { reactive, ref, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
@@ -42,7 +43,7 @@ function progressOf(row: any) {
   return total === 0 ? 0 : Math.min(100, Math.round(receivedOf(row) / total * 100))
 }
 /**
- * 进入收货详细页：带 add=1 时自动打开收货弹窗，一步完成收料。
+ * 进入收货详细页：带 add=1 时自动打开收货弹窗，一步完成收货。
  * 追加时间戳是为了让每次点击都是「新的 fullPath」——layout 的 keep-alive 以 fullPath 为 key，
  * 否则复用缓存实例会导致弹窗不再自动弹出。
  */
@@ -78,7 +79,8 @@ onActivated(loadData)
            为此：①「订单类型」并入订单号单元格第二行小字；②「下单总数/已收/剩余」合并为一列；
            ③订单号做成链接（点它进收货详细）。
            2026-09-17：按用户要求新增行内「退货」按钮（物料退回物料商 → 委外物料退货单）：
-           操作列 84→134，由「订单号 −6、最近收货 −4、交期 −4」抵平。 -->
+           操作列 84→134，由「订单号 −6、最近收货 −4、交期 −4」抵平。
+           2026-09-21（用户口径）：行内第一个按钮「收料」→「收货」⇒ 操作列 = 收货 | 退货（与成品侧的收货/退货同词）。 -->
       <el-table :data="tableData" border stripe v-loading="loading" style="width:100%" @row-click="goDetail">
         <el-table-column label="订单号" width="144" show-overflow-tooltip>
           <template #default="{ row }">
@@ -102,7 +104,7 @@ onActivated(loadData)
         <el-table-column label="状态" width="84" align="center"><template #default="{ row }"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="134" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click.stop="goReceive(row)">收料</el-button>
+            <el-button type="primary" link @click.stop="goReceive(row)">收货</el-button>
             <!-- 退货：把已收物料退回物料商（委外物料退货单），与「退不良」区分 -->
             <el-button type="warning" link @click.stop="goReturn(row)">退货</el-button>
           </template>

@@ -7,7 +7,8 @@
 #       ④ 收货详细页有 汇总卡 / 收货记录区块 / 返回列表
 #       ⑤ 加工单详情页签已无「交货管理」，且**不再有**「成品收货」跳转按钮
 #          （2026-09-21 用户口径：收货统一从「成品收货」菜单进）
-#       ⑥ /outsource/material-order/delivery 直达不 403（当前库中收货中订单 0 条属正常，只验渲染与不报错）
+#       ⑥ /outsource/material-order/delivery 直达不 403（收货中订单可能为 0 行 ⇒ 只验渲染/不报错，
+#          并**负向守卫**：行内操作文案不得再出现「收料」—— 2026-09-21 用户口径已改为「收货」）
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $global:fail = 0
@@ -139,11 +140,15 @@ OpenFresh "$base/outsource/material-order/delivery"
 $p6 = EvalJs "location.pathname"
 if ($p6 -match '/login' -or $p6 -match '403') { Bad ('/outsource/material-order/delivery 未正常进入，落在 ' + $p6) }
 else { Ok '/outsource/material-order/delivery 直达正常（非 403）' }
-$d6 = ReadJson "(()=>{const t=document.body.innerText;return JSON.stringify({title:(t.includes('物料收货（收货中的物料订单）')==true),err:(t.includes('加载待收货订单失败')==true),rows:document.querySelectorAll('.el-table__body tbody tr').length});})()" '物料收货列表'
+$d6 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({title:(t.includes('物料收货（收货中的物料订单）')==true),err:(t.includes('加载待收货订单失败')==true),rows:document.querySelectorAll('.el-table__body tbody tr').length,oldrecv:(t.includes('收料')==true),btn:b.some(x=>x==='收料')});})()" '物料收货列表'
 if ($d6) {
   if ($d6.title) { Ok '物料收货页标题渲染正常' } else { Bad '物料收货页标题未渲染（页面可能报错）' }
   if (-not $d6.err) { Ok '物料收货页无加载错误提示' } else { Bad '物料收货页出现「加载待收货订单失败」' }
-  Write-Output ('物料收货列表行数 = ' + $d6.rows + '（当前库中无 RECEIVING 订单，0 属正常）')
+  Write-Output ('物料收货列表行数 = ' + $d6.rows + '（库中可能 0 行"收货中"订单 ⇒ 0 行属正常）')
+  # 2026-09-21（用户口径「操作文案从收料/退料改成收货/退货」）：行内按钮「收料」必须已改为「收货」。
+  # ⚠️ 库里可能没有"收货中"的物料订单（0 行 ⇒ 按钮不渲染）⇒ 这条是**负向守卫**（防改回去），0 行时天然通过。
+  if (-not $d6.oldrecv -and -not $d6.btn) { Ok '物料收货列表页已无「收料」（行内按钮已改为「收货」）' }
+  else { Bad ('物料收货列表页仍出现「收料」：文本=' + $d6.oldrecv + ' 按钮=' + $d6.btn) }
 }
 
 # ⑦ 首页「委外加工」TAB 快捷入口含 成品收货 / 物料收货
