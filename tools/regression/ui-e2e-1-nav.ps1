@@ -53,6 +53,14 @@ $script:bcBad = 0
 $script:dupBad = 0
 $script:qBad = 0
 $script:memBad = 0
+$script:locBad = 0
+
+# 2026-09-21 locale guard: Element Plus built-in texts MUST be Chinese (main.ts: app.use(ElementPlus, { locale: zhCn })).
+# Regression class: the app shipped WITHOUT a locale, so confirm boxes read Cancel / OK, pagination read "Total 5 10/page",
+# tables read "No Data" and the date panel read English months. Checked on every page of this sweep.
+# NOTE: this file is ASCII-only on purpose (PS 5.1 mangles UTF-8 without BOM) => expectations are built with [char].
+$CH_GONG = [string][char]0x5171                                            # "gong" (total label)
+$locJs = "(()=>{const p=document.querySelector('.el-pagination');const t=p?(p.innerText||'').replace(/\s+/g,' ').trim():'';const e=[...document.querySelectorAll('.el-table__empty-text')].map(x=>(x.innerText||'').trim()).filter(x=>x);return JSON.stringify({pg:t,empty:e.slice(0,3)});})()"
 
 # breadcrumb items + tab labels of the layout top bar
 $navJs = "(()=>{const vis=e=>e.getClientRects().length>0;const bc=document.querySelector('.el-breadcrumb');const parts=bc?[...bc.querySelectorAll('.el-breadcrumb__item')].map(e=>(e.innerText||'').trim()):[];const tb=[...document.querySelectorAll('.tab-bar .tab-item .tab-label')].filter(vis).map(e=>(e.innerText||'').trim());return JSON.stringify({bc:parts,tabs:tb})})()"
@@ -76,6 +84,15 @@ foreach ($r in $routes) {
   $dup = DupTabs $snap
   $bcOk = $bcN -ge 2
   $dupOk = $dup.Count -eq 0
+
+  # locale guard (see the note above $locJs)
+  $locRaw = EvalJs $locJs
+  $loc = $null; try { $loc = $locRaw | ConvertFrom-Json } catch { }
+  if ($loc) {
+    if ($loc.pg -and ($loc.pg -notmatch [regex]::Escape($CH_GONG))) { $script:locBad++; Write-Host ('BAD ' + $r + ' locale: pagination is not Chinese -> ' + $loc.pg) }
+    if ($loc.pg -match 'Total') { $script:locBad++; Write-Host ('BAD ' + $r + ' locale: pagination still shows Total -> ' + $loc.pg) }
+    foreach ($etxt in @($loc.empty)) { if ($etxt -eq 'No Data' -or $etxt -eq 'No data') { $script:locBad++; Write-Host ('BAD ' + $r + ' locale: table empty state is still English') } }
+  }
 
   # regression class: the same page with a query string must keep the identical breadcrumb
   Open ($r + '?__probe=1') 1400
@@ -147,4 +164,4 @@ $hookType = EvalJs "String(typeof window.__errs)"
 $st = ErrHookSelfTest
 $selfOk = ($st -match 'HTTP[45]|APICODE[45]')
 Write-Host ('[SELFTEST] typeof=' + $hookType + ' detector=' + $(if ($selfOk) { 'LIVE' } else { 'DEAD' }) + ' errs=' + $st)
-Write-Host ("NAV DONE bad=" + $script:bad + " total=" + $routes.Count + " selftest=" + $(if ($selfOk) { 'PASS' } else { 'FAIL' }) + " bcBad=" + $script:bcBad + " dupTabBad=" + $script:dupBad + " queryVariantBad=" + $script:qBad + " deepLinks=" + $deepLinks.Count + " tabMemoryBad=" + $script:memBad)
+Write-Host ("NAV DONE bad=" + $script:bad + " total=" + $routes.Count + " selftest=" + $(if ($selfOk) { 'PASS' } else { 'FAIL' }) + " bcBad=" + $script:bcBad + " dupTabBad=" + $script:dupBad + " queryVariantBad=" + $script:qBad + " deepLinks=" + $deepLinks.Count + " tabMemoryBad=" + $script:memBad + " localeBad=" + $script:locBad)
