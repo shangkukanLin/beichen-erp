@@ -154,20 +154,19 @@ onActivated(() => { loadData() })
 .stat-card{background:var(--el-fill-color-light);border-radius:8px;padding:16px}
 .stat-label{font-size:var(--app-font-xs);color:var(--el-text-color-secondary);margin-top:4px}
 .stat-value.sm{font-size:var(--app-font-num-sm);font-weight:600}
-/* 排序标记（2026-09-22，含一次二次修正）
-   ① 用户口径「表头要能完整显示」：Element Plus 的 .caret-wrapper 默认约 24px 宽，会挤掉窄列
-      （占比/订单数 这类）的表头文字 ⇒ 本页把标记收窄。
-   ② 二次修正（用户："你那两个小三角怎么对着放？"）：Element Plus 默认在 24×34 的 .caret-wrapper 里
-      放**两个**三角（上=升序、下=倒序，底边相对）；外框收窄到 14px 后，它给下三角的 bottom:7px
-      （按 34px 高算）会把下三角顶到框外 ⇒ 两三角挤在一起/重叠（实测 up dy=6..14、down dy=-1..7 ✗）。
-      现改为**单三角翻转**：默认只显示向上的灰三角（提示可点）；点击后升序（向上、高亮）；
-      再点翻向下（倒序）。状态类 ascending/descending 由 Element Plus 挂在 th 上（实测确认）。
+/* 排序标记（2026-09-22，用户口径最终定稿）
+   ① 表头要能完整显示：Element Plus 的 .caret-wrapper 默认 24px 宽，会挤掉窄列（占比/订单数 这类）的文字
+      ⇒ 本页把外框收窄到 14px。
+   ② 两个三角**上下竖排**：上=向上升序三角、下=向下倒序三角（Element Plus 原本就是这个含义：
+      ascending 用 border-bottom 画成尖朝上、descending 用 border-top 画成尖朝下）。
+      状态类 ascending/descending 挂在 th 上（实测确认），当前生效的那个三角由 Element Plus 自动变主题色高亮。
+   ⚠️ 关键：EP 默认外框是 24×**34**，下三角用 bottom:7px 定位；把外框缩到 14px 宽后**必须同时改高度并重摆两个
+      三角**，否则下三角会顶出框外、与上三角重叠（"两个三角挤在一起" ✗，实测 up dy=6..14、down dy=-1..7）。
+      这里外框 14×20：上三角 top:1px（占 1..9），下三角 bottom:1px（占 11..19）⇒ 各 8×8、间隔 2px、都在框内。
    配套：上方列宽已重排（把「客户/最近成交/操作」的余量让给带标记的列）。
-   ⚠️ 守卫 verify-customer-sort.ps1 会断言「所有表头 scrollWidth ≤ clientWidth」+「标记不越出外框且一次只显示一个」。 */
-:deep(.el-table__header .caret-wrapper){ width:14px; height:14px; }
-:deep(.el-table__header .sort-caret.ascending){ left:3px; top:3px; bottom:auto; border-width:4px; }
-:deep(.el-table__header .sort-caret.descending){ left:3px; top:3px; bottom:auto; border-width:4px; }
-:deep(.el-table__header th:not(.descending) .sort-caret.descending){ display:none; }
-:deep(.el-table__header th.descending .sort-caret.ascending){ display:none; }
-:deep(.el-table__header th.descending .sort-caret.descending){ display:block; }
+   ⚠️ 守卫 verify-customer-sort.ps1 会断言：所有表头不被裁 · 每个表头**两个**三角都可见 · 都不越出外框 ·
+      上三角在下三角上方且不重叠。 */
+:deep(.el-table__header .caret-wrapper){ width:14px; height:20px; }
+:deep(.el-table__header .sort-caret.ascending){ left:3px; top:1px; bottom:auto; border-width:4px; }
+:deep(.el-table__header .sort-caret.descending){ left:3px; top:auto; bottom:1px; border-width:4px; }
 </style>
