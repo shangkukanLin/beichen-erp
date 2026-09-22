@@ -141,6 +141,7 @@
   "lbl_material_type": "物料类型",
   "lbl_material_name": "物料名称",
   "menu_material_stock": "物料库存详情",
+  "menu_material_stock_log": "物料库存流水",
   "lbl_total_stock": "总库存",
   "lbl_wh_dist": "分布仓库",
   "lbl_good": "良品",

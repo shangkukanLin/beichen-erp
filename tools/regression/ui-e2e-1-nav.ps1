@@ -35,7 +35,7 @@ $routes = @(
   '/finance/receipt', '/finance/payment', '/finance/expense', '/finance/invoice', '/finance/payable-transfer',
   '/system/smart', '/system/user', '/system/settings', '/system/data-manage', '/system/role', '/system/menu', '/system/clear-data',
   '/analysis/overview', '/analysis/sale', '/analysis/customer', '/analysis/purchase', '/analysis/tax', '/analysis/cash',
-  '/outsource/warehouse', '/outsource/material-warehouse', '/outsource/material-stock', '/outsource/material-stock-take', '/outsource/stock-loss',
+  '/outsource/warehouse', '/outsource/material-warehouse', '/outsource/material-stock', '/outsource/material-stock-log', '/outsource/material-stock-take', '/outsource/stock-loss',
   '/outsource/other-io', '/outsource/delivery'
 )
 

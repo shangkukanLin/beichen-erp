@@ -590,6 +590,8 @@ public class WarehouseStockController {
             @RequestParam(defaultValue = "10") int pageSize,
             @RequestParam(required = false) Long warehouseId,
             @RequestParam(required = false) Long productId,
+            // 2026-09-22：物料流水列表页需要按物料精确筛选，原先只有 productId（物料行只能整表翻）
+            @RequestParam(required = false) Long materialId,
             @RequestParam(required = false) String changeType,
             @RequestParam(required = false) String relatedBillNo,
             @RequestParam(required = false) String startDate,
@@ -600,6 +602,7 @@ public class WarehouseStockController {
         LambdaQueryWrapper<WarehouseStockLog> baseWrapper = new LambdaQueryWrapper<WarehouseStockLog>()
                 .eq(warehouseId != null, WarehouseStockLog::getWarehouseId, warehouseId)
                 .eq(productId != null, WarehouseStockLog::getProductId, productId)
+                .eq(materialId != null, WarehouseStockLog::getMaterialId, materialId)
                 .eq(changeType != null && !changeType.isBlank(), WarehouseStockLog::getChangeType, changeType)
                 .like(relatedBillNo != null && !relatedBillNo.isBlank(), WarehouseStockLog::getRelatedBillNo, relatedBillNo)
                 .ge(startDate != null && !startDate.isBlank(), WarehouseStockLog::getCreateTime, startDate)
