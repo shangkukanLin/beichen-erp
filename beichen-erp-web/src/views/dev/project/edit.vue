@@ -855,7 +855,7 @@ function onNameBlur() {
             <el-button type="primary" size="small" @click="handleAddDevMaterial">+ 新增项目用料</el-button>
           </div>
           <el-table :data="devMaterialList" border stripe size="small">
-            <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
+            <el-table-column prop="name" label="物料名称" min-width="140" show-overflow-tooltip />
             <el-table-column label="类型" width="120"><template #default="{ row }">{{ DevMaterialTypeLabel[row.type] || row.type }}</template></el-table-column>
             <el-table-column prop="quantity" label="数量" width="90" align="center" />
             <el-table-column prop="amount" label="金额" width="110" align="right">

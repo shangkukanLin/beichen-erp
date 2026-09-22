@@ -229,7 +229,7 @@ watch(() => route.fullPath, () => { init() })
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="名称" prop="name">
+            <el-form-item label="产品名称" prop="name">
               <el-input v-model="form.name" placeholder="请输入产品名称" />
             </el-form-item>
           </el-col>

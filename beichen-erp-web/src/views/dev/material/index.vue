@@ -92,7 +92,7 @@ onMounted(() => { loadProjectOptions(); loadList() })
     <el-card shadow="never" style="margin-top:12px">
       <el-table :data="list" v-loading="loading" border stripe @row-click="handleDetail">
         <el-table-column label="类型" width="120"><template #default="{ row }">{{ DevMaterialTypeLabel[row.type] || row.type }}</template></el-table-column>
-        <el-table-column prop="name" label="名称" min-width="140" />
+        <el-table-column prop="name" label="物料名称" min-width="140" />
         <el-table-column prop="quantity" label="数量" width="90" />
         <el-table-column label="存放位置" width="160">
           <template #default="{ row }">{{ row.warehouseName || '-' }}</template>

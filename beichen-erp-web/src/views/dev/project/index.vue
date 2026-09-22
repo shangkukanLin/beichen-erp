@@ -120,7 +120,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
-        <el-form-item label="名称"><el-input v-model="query.name" placeholder="项目名称" clearable @keyup.enter="handleQuery" /></el-form-item>
+        <el-form-item label="项目名称"><el-input v-model="query.name" placeholder="项目名称" clearable @keyup.enter="handleQuery" /></el-form-item>
         <el-form-item label="品牌"><el-select v-model="query.brandId" filterable clearable placeholder="全部" style="width:150px" @change="handleQuery"><el-option v-for="b in brandOptions" :key="b.id" :label="b.brandName" :value="b.id" /></el-select></el-form-item>
       </el-form>
       <div class="toolbar">
@@ -142,7 +142,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
       <!-- 全部 -->
       <!-- 2026-09-16 用户要求「一行显示完、不要左右滑动」：列宽整体收紧（原合计 ≈1270px → ≈1015px） -->
       <el-table v-if="activeTab==='all'" :data="allProjects" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleEdit">
-        <el-table-column prop="code" label="编号" width="132" show-overflow-tooltip />
+        <el-table-column prop="code" label="项目编码" width="132" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
@@ -173,7 +173,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 进行中 -->
       <el-table v-if="activeTab==='active'" :data="activeProjects" border stripe v-loading="tableLoading" style="width:100%" :height="undefined" @row-click="handleEdit">
-        <el-table-column prop="code" label="编号" width="132" show-overflow-tooltip />
+        <el-table-column prop="code" label="项目编码" width="132" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
@@ -204,7 +204,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 已结项 -->
       <el-table v-if="activeTab==='finished'" :data="finishedProjects" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleEdit">
-        <el-table-column prop="code" label="编号" width="132" show-overflow-tooltip />
+        <el-table-column prop="code" label="项目编码" width="132" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
@@ -222,7 +222,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 已取消 -->
       <el-table v-if="activeTab==='cancelled'" :data="cancelledProjects" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleEdit">
-        <el-table-column prop="code" label="编号" width="132" show-overflow-tooltip />
+        <el-table-column prop="code" label="项目编码" width="132" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />

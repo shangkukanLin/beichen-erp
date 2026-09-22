@@ -184,7 +184,7 @@ onMounted(() => {
         <!-- 2026-09-21：新增「规格」列，并整体压缩列宽以保持"一行显示完、不横向滚动"
              （固定列合计 636 + min 列 250 = 886 ≤ 内容区 ~900） -->
         <el-table-column prop="sku" label="SKU" width="120" />
-        <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="name" label="产品名称" min-width="150" show-overflow-tooltip />
         <el-table-column label="品牌" min-width="100">
           <template #default="{ row }">{{ getBrandName(row.brandId) }}</template>
         </el-table-column>

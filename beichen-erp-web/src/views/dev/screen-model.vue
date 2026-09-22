@@ -216,7 +216,7 @@ onActivated(() => { loadData() })
         <el-table-column prop="subSize" label="副屏尺寸" width="90" align="center">
           <template #default="{ row }">{{ row.subSize || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="fingerprint" label="指纹" width="120" align="center" show-overflow-tooltip />
+        <el-table-column prop="fingerprint" label="指纹识别" width="120" align="center" show-overflow-tooltip />
         <el-table-column prop="panelSupplier" label="屏幕供应商" min-width="130" show-overflow-tooltip />
         <el-table-column prop="releaseDate" label="发布时间" width="90" align="center" />
         <el-table-column label="操作" width="120" align="center" fixed="right">

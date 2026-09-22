@@ -188,7 +188,7 @@ function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMa
       <template #header><span style="font-weight:600">基础信息</span></template>
       <el-form :model="material" label-width="90px" size="default">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item label="名称"><el-input v-model="material.name" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="物料名称"><el-input v-model="material.name" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="类型">
             <el-select v-model="material.type" style="width:100%" placeholder="请选择类型">
               <el-option v-for="t in materialTypeOptions" :key="t.code" :label="t.label" :value="t.code" />
