@@ -71,20 +71,39 @@ function CheckPage([string]$path, [string]$pageName, $charts) {
   Ok ($errs -eq '[]') ($pageName + ' recorded no JS/API errors')
 }
 
+# 2026-09-22 (user request): the pies must sit TWO PER ROW (left/right) on the analysis pages.
+# This can NOT be inferred from the clipping probe above (a single-column grid never clips either),
+# so the layout itself needs its own assertion -- otherwise a silent revert to 1 column would keep
+# every existing assertion green while dropping the requested layout.
+# Probe: number of grid tracks + whether the cards actually share a row (same top, different left).
+$jsLayout = "(()=>{const g=document.querySelector('.pie-grid');if(!g)return 'no-grid';const cs=getComputedStyle(g);const tracks=cs.gridTemplateColumns.split(' ').filter(Boolean).length;const cards=[...g.querySelectorAll('.pie-card')];if(cards.length<2)return 'lt2-cards:'+cards.length;const a=cards[0].getBoundingClientRect(),b=cards[1].getBoundingClientRect();const sameRow=Math.abs(a.top-b.top)<=2;const apart=b.left-a.left;return tracks+'|'+cards.length+'|'+(sameRow?'row':'stacked')+'|'+Math.round(a.width)+'|'+Math.round(apart)})()"
+function CheckTwoPerRow([string]$path, [string]$pageName) {
+  $r = (EvalJs $jsLayout).Trim([char]34)
+  Write-Host ('  ' + $pageName + ' layout(tracks|cards|arrangement|cardW|gapToNext) = ' + $r)
+  $p = @($r -split '\|')
+  if ($p.Count -lt 5) { Ok $false ($pageName + ' layout probe failed: ' + $r); return }
+  $tracks = [int]$p[0]; $arrangement = $p[2]; $cardW = [int]$p[3]
+  Ok ($tracks -eq 2) ($pageName + ' pie grid has 2 tracks (left/right) -- got ' + $tracks)
+  Ok ($arrangement -eq 'row') ($pageName + ' the first two pie cards share one row (left/right) -- got ' + $arrangement)
+  Ok ($cardW -ge 420) ($pageName + ' each pie card is wide enough for outside labels (' + $cardW + 'px)')
+}
+
 if ($Part -eq 0 -or $Part -eq 1) {
   EnsureLogin | Out-Null
   CheckPage '/analysis/sale' 'sales analysis (6 pies)' @(
-    @('pieProductQty', 0.62), @('pieProductProfit', 0.62), @('pieCustomerQty', 0.62),
-    @('pieCustomerProfit', 0.62), @('pieReturn', 0.62), @('pieExchange', 0.62)
+    @('pieProductQty', 0.50), @('pieProductProfit', 0.50), @('pieCustomerQty', 0.50),
+    @('pieCustomerProfit', 0.50), @('pieReturn', 0.50), @('pieExchange', 0.50)
   )
+  CheckTwoPerRow '/analysis/sale' 'sales analysis'
   Summary 'pie outside label - sale'
 }
 
 if ($Part -eq 0 -or $Part -eq 2) {
   EnsureLogin | Out-Null
   CheckPage '/analysis/purchase' 'purchase analysis (2 pies)' @(
-    @('pieDirectPurchase', 0.62), @('pieOutsourceIn', 0.62)
+    @('pieDirectPurchase', 0.50), @('pieOutsourceIn', 0.50)
   )
+  CheckTwoPerRow '/analysis/purchase' 'purchase analysis'
   Summary 'pie outside label - purchase'
 }
 

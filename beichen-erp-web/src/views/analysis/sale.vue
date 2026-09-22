@@ -155,10 +155,12 @@ function renderPies() {
       tooltip: { trigger: 'item', formatter: pieTooltip(def.unit) },
       legend: { show: false },
       series: [{
-        type: 'pie', radius: ['38%', '62%'], center: ['50%', '50%'], avoidLabelOverlap: true,
+        // 2026-09-22：饼半径收小（62%→50%）+ 引出线缩短（12/14→8/10）—— 因为 .pie-grid 改成了左右两列，
+        // 单卡宽度约减半（约 460px），不收小的话外侧两行标签会被画布左右裁切（2026-09-20 正是因此改成 1 列）。
+        type: 'pie', radius: ['28%', '50%'], center: ['50%', '50%'], avoidLabelOverlap: true,
         // 外侧标签（两行）：名称 / 数值 单位（占比%）—— 不再需要悬停
         label: { show: true, position: 'outside', formatter: pieOutsideLabel(def.unit), fontSize: 11, lineHeight: 14 },
-        labelLine: { show: true, length: 12, length2: 14 },
+        labelLine: { show: true, length: 8, length2: 10 },
         data: items,
       }],
     }, true)
@@ -334,9 +336,15 @@ onUnmounted(() => {
 .stat-card{background:var(--el-fill-color-light);border-radius:8px;padding:16px}
 .stat-label{font-size:var(--app-font-xs);color:var(--el-text-color-secondary);margin-top:4px}
 .stat-value.sm{font-size:var(--app-font-num-sm);font-weight:600}
-/* 6 个饼图：2026-09-15 由柱状图/数字卡替换而来；2026-09-20 由「2 列 × 3 行」改「整行 1 列 × 6 行」
-   —— 外侧要直接显示「数值 + 占比」，半行卡片宽度（约 420px）放不下外侧标签，会被画布裁切 */
-.pie-grid{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:12px}
+/* 6 个饼图：2026-09-15 由柱状图/数字卡替换而来。
+   2026-09-20 曾由「2 列 × 3 行」改「整行 1 列 × 6 行」—— 当时半行卡（约 420px）放不下外侧标签会被裁切。
+   2026-09-22（用户要求）：改回**左右两列**（3 行 × 2 列）—— 但**必须同时收小饼半径与引出线**，
+   否则外侧两行标签（名称 / 数值（占比%））在约 460px 宽的卡里又会被画布裁切 ✗
+   ⇒ 半径 ['38%','62%'] → ['28%','50%']、引出线 12/14 → 8/10（与已跑通的 profile.vue 同做法）。
+   ⚠️ 由 verify-pie-outside-label.ps1 的 clipped=0 守着：只改列数不改半径必然假红。
+   窄屏（内容区 < 约 900px ⇒ 单卡 < 460px）回退成整行 1 列，避免标签被切。 */
+.pie-grid{display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px;margin-bottom:12px}
+@media (max-width: 1200px){ .pie-grid{grid-template-columns:1fr} }
 .pie-card{padding:12px 16px}
 /* min-height 固定表头高度：后两张卡多了「金额/件数」switch，不固定会比前 4 张高几像素（2026-09-15 卡片等高要求） */
 .pie-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;min-height:26px}
@@ -350,5 +358,5 @@ onUnmounted(() => {
 .pie-body{position:relative;height:300px;margin-top:4px}
 .pie-chart{width:100%;height:100%}
 .pie-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
-/* 2026-09-20：.pie-grid 已恒为整行 1 列，原先的窄屏断点（窄屏改 1 列）已冗余，随之移除 */
+/* 2026-09-22：.pie-grid 恢复两列（见上方注释），窄屏断点随之恢复（≤1200px 回退整行 1 列） */
 </style>

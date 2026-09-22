@@ -201,10 +201,12 @@ function renderPies() {
       tooltip: { trigger: 'item', formatter: pieTooltip(def.isQty ? '件' : '元') },
       legend: { show: false },
       series: [{
-        type: 'pie', radius: ['38%', '62%'], center: ['50%', '50%'], avoidLabelOverlap: true,
+        // 2026-09-22：饼半径收小（62%→50%）+ 引出线缩短（12/14→8/10）—— .pie-grid 改成左右两列后
+        // 单卡宽度约减半（约 460px），不收小则外侧两行标签会被画布左右裁切（2026-09-20 正是因此改成 1 列）
+        type: 'pie', radius: ['28%', '50%'], center: ['50%', '50%'], avoidLabelOverlap: true,
         // 外侧标签（两行）：名称 / 数值 单位（占比%）—— 不再需要悬停；单位随「金额/件数」开关整体重绘而切换
         label: { show: true, position: 'outside', formatter: pieOutsideLabel(def.isQty ? '件' : '元'), fontSize: 11, lineHeight: 14 },
-        labelLine: { show: true, length: 12, length2: 14 },
+        labelLine: { show: true, length: 8, length2: 10 },
         data: items,
       }],
     }, true)
@@ -339,9 +341,12 @@ onUnmounted(() => {
 .chart{width:100%;height:200px;margin:8px 0 12px}
 /* 两个饼图（2026-09-15）：与销售分析同款「卡片等高 + 空态叠加」实现
    —— 空态与有数据态都是定高 .pie-body，卡片高度不会变
-   2026-09-20：由「2 列」改「整行 1 列」—— 外侧要直接显示「数值 + 占比」，
-   半行卡片宽度（约 420px）放不下外侧标签，会被画布裁切 */
-.pie-grid{display:grid;grid-template-columns:1fr;gap:12px;margin:4px 0 12px}
+   2026-09-20 曾由「2 列」改「整行 1 列」—— 外侧要直接显示「数值 + 占比」，半行卡（约 420px）放不下会被裁切。
+   2026-09-22（用户要求）：改回**左右两列**；同时把饼半径与引出线收小（见 renderPies），
+   否则外侧两行标签在约 460px 的卡里仍会被画布裁切 ✗（与 profile.vue 同做法）。
+   ⚠️ verify-pie-outside-label.ps1 用像素级 clipped 守着这一点。 */
+.pie-grid{display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px;margin:4px 0 12px}
+@media (max-width: 1200px){ .pie-grid{grid-template-columns:1fr} }
 .pie-card{padding:12px 16px}
 .pie-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;min-height:26px}
 .pie-head-right{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap}
