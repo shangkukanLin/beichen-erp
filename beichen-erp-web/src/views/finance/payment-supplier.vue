@@ -66,12 +66,11 @@ const dItems = ref<FinancePaymentItem[]>([])
 const unpaid = ref<any[]>([])
 const uploadFile = ref<File | null>(null)
 
+/** 2026-09-23 用户要求：新增付款由 800px 弹框改为独立页（无未结清应付时仍先在列表拦住） */
 async function openAddPayment() {
-  Object.assign(dForm, { accountId: undefined, paymentDate: localDate(), remark: '', attachUrl: '' })
-  dItems.value = []; uploadFile.value = null
   try { unpaid.value = await getPaymentUnpaidPayables(supplierId) || [] } catch { unpaid.value = [] }
   if (unpaid.value.length === 0) { ElMessage.info('该供应商没有未结清应付'); return }
-  dVisible.value = true
+  router.push({ path: '/finance/payment/supplier/add', query: { supplierId } })
 }
 function addItem() { dItems.value.push({ payableId: undefined, payableBillNo: '', thisAmount: 0, remark: '' }) }
 function removeItem(i: number) { dItems.value.splice(i, 1) }
@@ -161,35 +160,6 @@ onMounted(() => loadAll())
       <el-empty v-if="payments.length===0" description="暂无付款记录" :image-size="60" />
     </el-card>
 
-    <!-- 新增付款弹窗 -->
-    <el-dialog v-model="dVisible" title="新增付款" width="800px" :close-on-click-modal="false">
-      <el-form :model="dForm" label-width="90px">
-        <el-row :gutter="16">
-          <el-col :span="12"><el-form-item label="供应商"><el-input :model-value="supplier.name" readonly /></el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="付款账户" required><el-select v-model="dForm.accountId" filterable style="width:100%"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id"/></el-select></el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="付款日期"><el-date-picker v-model="dForm.paymentDate" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="付款凭证">
-            <div style="display:flex;align-items:center;gap:8px">
-              <!-- 2026-09-20（F7-169）：原写法靠 `parentElement.parentElement`（两层）碰巧包住 input，
-                   DOM 结构一调即静默失效；改为从按钮向上 find 最近的容器再取 input。 -->
-              <el-button size="small" @click="pickUploadFile($event)">选择图片</el-button>
-              <span style="font-size:var(--app-font-xs);color:var(--app-text-secondary)">{{ uploadFile?.name || '未选择' }}</span>
-              <input type="file" accept="image/*" style="display:none" @change="handleFileSelect" />
-            </div>
-          </el-form-item></el-col>
-          <el-col :span="24"><el-form-item label="备注"><el-input v-model="dForm.remark" type="textarea" :rows="2"/></el-form-item></el-col>
-        </el-row>
-        <el-divider>核销明细（未结清应付）</el-divider>
-        <div style="margin-bottom:8px"><el-button type="primary" size="small" @click="addItem">添加核销项</el-button></div>
-        <el-table :data="dItems" border>
-          <el-table-column label="应付单据" min-width="240"><template #default="{row}"><el-select v-model="row.payableId" filterable style="width:100%" @change="(v:number)=>onPayableChange(v,row)"><el-option v-for="u in unpaid" :key="u.id" :label="`${u.billNo} (未付:${u.unpaidAmount}, 到期:${$fmtDate(u.dueDate)})`" :value="u.id"/></el-select></template></el-table-column>
-          <el-table-column label="核销金额" width="140"><template #default="{row}"><el-input-number v-model="row.thisAmount" :min="0" :precision="2" controls-position="right" style="width:100%"/></template></el-table-column>
-          <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>
-        </el-table>
-        <div style="margin-top:8px;text-align:right;font-weight:600">本次付款合计：¥ {{ fmt(totalThisAmount) }}</div>
-      </el-form>
-      <template #footer><el-button @click="dVisible=false">取消</el-button><el-button type="primary" :loading="dLoading" @click="handleSubmitPayment">确定</el-button></template>
-    </el-dialog>
   </div>
 </template>
 

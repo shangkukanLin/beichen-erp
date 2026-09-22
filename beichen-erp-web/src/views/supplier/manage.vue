@@ -63,23 +63,12 @@ function resetForm() {
 function goDetail(id: number) { router.push(isVendor ? `/outsource/supplier/detail/${id}` : `/supplier/detail/${id}`) }
 
 function handleAdd() {
-  resetForm(); isEdit.value = false; dialogTitle.value = isVendor ? '新增供货商' : '新增供应商'
-  if (isVendor) form.checkedTypes = ['product']
-  else if (activeType.value !== 'all') form.checkedTypes = [activeType.value]
-  dialogVisible.value = true
+  // 2026-09-23 用户要求：新增/编辑由 640px 弹框改为独立页（模式随路径前缀带过去）
+  router.push(isVendor ? '/outsource/supplier/manage/add' : '/supplier/manage/add')
 }
 
 function handleEdit(row: any) {
-  resetForm()
-  Object.assign(form, {
-    id: row.id, code: row.code || '', name: row.name || '', supplySku: row.supplySku || '', contact: row.contact || '', phone: row.phone || '',
-    address: row.address || '', remark: row.remark || '',
-    checkedTypes: row.typeCodes || [],
-    status: row.status ?? 1,
-    creditPeriodMonths: row.creditPeriodMonths, creditPeriod: row.creditPeriod
-  })
-  isEdit.value = true; dialogTitle.value = isVendor ? '编辑供货商' : '编辑供应商'
-  dialogVisible.value = true
+  router.push((isVendor ? '/outsource/supplier/manage/edit/' : '/supplier/manage/edit/') + row.id)
 }
 
 async function handleSubmit() {
@@ -182,42 +171,6 @@ onMounted(loadData)
       <div class="pagination"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleQuery" /></div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="640px" :close-on-click-modal="false">
-      <el-form :model="form" label-width="90px" size="small">
-        <el-form-item label="类型" required>
-          <el-checkbox-group v-model="form.checkedTypes">
-            <el-checkbox v-for="t in TYPE_OPTIONS_CUSTOM" :key="t.name" :label="t.name" :value="t.name">{{ t.label }}</el-checkbox>
-          </el-checkbox-group>
-        </el-form-item>
-        <el-form-item label="编码">
-          <!-- 唯一编码由系统按类型前缀自动生成（如 GYS-20260831-001），不可修改 -->
-          <el-input v-model="form.code" disabled :placeholder="isEdit ? '' : '保存后自动生成'" />
-        </el-form-item>
-        <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
-        <!-- 2026-09-21：供货SKU —— **只属于「供货商」（类型=成品商）**：该供货商的产品 SKU 用它打头。
-             供应商（方案商/加工厂/辅料商）不显示该字段，后端也会忽略该类型传来的值 -->
-        <el-form-item v-if="isVendor" label="供货SKU">
-          <el-input v-model="form.supplySku" maxlength="24" clearable placeholder="如 ABC（留空则产品走默认 SKU-）" />
-          <div style="font-size:var(--app-font-xs);color:var(--app-text-secondary);line-height:1.4">
-            该供货商的产品 SKU 以此打头（ABC → ABC-000001）；1-24 位字母/数字/短横线，保存时自动转大写
-          </div>
-        </el-form-item>
-        <el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item>
-        <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
-        <el-form-item label="地址"><el-input v-model="form.address" type="textarea" :rows="2" /></el-form-item>
-
-        <el-form-item label="状态"><el-select v-model="form.status" style="width:100%"><el-option label="合作中" :value="1" /><el-option label="已停用" :value="0" /></el-select></el-form-item>
-        <el-form-item label="账期">
-          <div style="display:flex;align-items:center;gap:6px">
-            <el-input-number v-model="form.creditPeriodMonths" :min="0" :max="24" placeholder="月" controls-position="right" style="width:90px" /><span>个月</span>
-            <el-input-number v-model="form.creditPeriod" :min="0" :max="31" placeholder="天" controls-position="right" style="width:90px" /><span>天</span>
-            <span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">（收货/交货后多少天付款，默认当天）</span>
-          </div>
-        </el-form-item>
-        <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
-      </el-form>
-      <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" :loading="saving" @click="handleSubmit">确定</el-button></template>
-    </el-dialog>
   </div>
 </template>
 

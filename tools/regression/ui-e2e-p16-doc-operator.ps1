@@ -134,5 +134,27 @@ if ([string]::IsNullOrWhiteSpace($projId)) { Write-Host 'SKIP bom-snapshot: no r
   Ok2 ((Errs) -eq '[]') ('bom-snapshot #' + $projId + ' loads with no JS/API errors')
 }
 
+Step '6) UI: form dialogs converted to standalone pages are reachable'
+# 2026-09-23: the "new/edit" form dialogs listed as worth converting (supplier x2, purchase order add/edit,
+# receipt add, supplier payment add, defect-return split) became standalone pages.
+$orderId = SqlOne 'SELECT id FROM outsource_order ORDER BY id DESC LIMIT 1'
+$supId = SqlOne 'SELECT id FROM supplier ORDER BY id DESC LIMIT 1'
+$formPages = @(
+  '/supplier/manage/add',
+  '/outsource/supplier/manage/add',
+  '/supplier/form/add?type=solution',
+  '/inventory/purchase/add',
+  '/finance/receipt/add',
+  ('/finance/payment/supplier/add?supplierId=' + $supId),
+  ('/outsource/order/delivery/return-defect/' + $orderId)
+)
+foreach ($p in $formPages) {
+  if ($p -match 'return-defect/(\s*)$') { Write-Host ('SKIP ' + $p + ': no order'); continue }
+  Open $p 3500
+  ClearErrs | Out-Null
+  Start-Sleep -Milliseconds 1500
+  Ok2 ((Errs) -eq '[]') ($p + ' loads with no JS/API errors')
+}
+
 if ($script:fail -eq 0) { Write-Host 'RESULT PASS document operator (createByName / auditorName) end-to-end' }
 else { Write-Host ('RESULT FAIL count ' + $script:fail); exit 1 }

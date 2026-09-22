@@ -84,12 +84,8 @@ const rules: FormRules = {
 }
 
 function handleAdd() {
-  Object.assign(form, defaultForm())
-  form.typeCodes = [currentType.value]
-  isEdit.value = false
-  dialogTitle.value = '新增' + pageTitle.value
-  dialogVisible.value = true
-  formRef.value?.clearValidate()
+  // 2026-09-23 用户要求：新增由 700px 弹框改为独立页（类型随 query 带过去，刷新/直链都不丢）
+  router.push({ path: '/supplier/form/add', query: { type: currentType.value } })
 }
 
 function handleDetail(row: SupplierVO) {
@@ -248,64 +244,6 @@ onMounted(() => { loadData() })
       </div>
     </el-card>
 
-    <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="700px" :close-on-click-modal="false">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="编码">
-              <el-input v-if="isEdit" v-model="form.code" disabled placeholder="自动生成" />
-              <el-input v-else disabled placeholder="保存后自动生成" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="名称" prop="name">
-              <el-input v-model="form.name" placeholder="供应商名称" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="联系人">
-              <el-input v-model="form.contact" placeholder="联系人" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="手机号">
-              <el-input v-model="form.phone" placeholder="手机号" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="状态">
-              <el-select v-model="form.status" style="width:100%">
-                <el-option label="合作中" :value="1" />
-                <el-option label="已停用" :value="0" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="24">
-            <el-form-item label="地址">
-              <el-input v-model="form.address" placeholder="地址" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="24">
-            <el-form-item label="账期">
-              <div style="display:flex;align-items:center;gap:6px">
-                <el-input-number v-model="form.creditPeriodMonths" :min="0" :max="24" placeholder="月" controls-position="right" style="width:90px" /><span>个月</span>
-                <el-input-number v-model="form.creditPeriod" :min="0" :max="31" placeholder="天" controls-position="right" style="width:90px" /><span>天</span>
-                <span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">（收货/交货后多少天付款，默认当天）</span>
-              </div>
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-form-item label="备注">
-          <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="备注" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible=false">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
-      </template>
-    </el-dialog>
 
     <!-- 供应产品弹窗 -->
     <el-dialog v-model="productDialogVisible" title="供应产品" width="700px">

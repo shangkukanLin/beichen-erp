@@ -109,16 +109,9 @@ function handleAdd() {
   router.push('/inventory/purchase/add')
 }
 
+/** 2026-09-23 用户要求：编辑由 900px 弹框改为独立页（新增本就指向独立页 /inventory/purchase/add） */
 async function handleEdit(row: PurchaseOrder) {
-  resetForm()
-  Object.assign(form, row)
-  dialogTitle.value = '编辑成品采购单'
-  dialogVisible.value = true
-  formRef.value?.clearValidate()
-  try {
-    const res = await getPurchaseOrderItems(row.id as number)
-    items.value = res || []
-  } catch { items.value = [] }
+  router.push(`/inventory/purchase/edit/${row.id}`)
 }
 
 function addItem() {
@@ -314,91 +307,6 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
       </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="900px" :close-on-click-modal="false" @open="loadMaterials()">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="供货商" prop="supplierId">
-              <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/outsource/supplier/manage'); return } }">
-                <el-option label="+ 新增" :value="ADD_MARKER" />
-              </RemoteSelect>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="入库仓库" prop="warehouseId">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
-                <el-option label="+ 新增" :value="ADD_MARKER" />
-              </RemoteSelect>
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="订单日期">
-              <el-date-picker v-model="form.orderDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="含税">
-              <el-switch :model-value="form.taxIncluded === 1" @change="onTaxSwitch" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="6">
-            <el-form-item label="税率(%)">
-              <el-input-number v-model="form.taxRate" :min="0" :max="100" :precision="2" :disabled="form.taxIncluded !== 1" controls-position="right" style="width:100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="24">
-            <el-form-item label="备注">
-              <el-input v-model="form.remark" type="textarea" :rows="2" placeholder="请输入备注" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-
-        <el-divider content-position="left">明细</el-divider>
-        <div style="margin-bottom:8px">
-          <el-button type="primary" :icon="'Plus'" @click="addItem">添加明细</el-button>
-        </div>
-        <el-table :data="items" border>
-          <el-table-column label="产品" min-width="180">
-            <template #default="{ row, $index }">
-              <RemoteSelect v-model="row.productId" :fetch="fetchMaterials" :label-key="productLabel" placeholder="选择物料（可输SKU）" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } onMaterialChange(v, row) }">
-                <el-option label="+ 新增" :value="ADD_MARKER" />
-              </RemoteSelect>
-            </template>
-          </el-table-column>
-          <el-table-column prop="unit" label="单位" width="70" />
-          <el-table-column label="品质" width="90">
-            <template #default="{ row }">
-              <el-select v-model="row.qualityType" size="small" style="width:100%">
-                <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column label="数量" width="120">
-            <template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :step="1" :precision="0" controls-position="right" style="width:100%" /></template>
-          </el-table-column>
-          <el-table-column label="单价" width="120">
-            <template #default="{ row }"><el-input-number v-model="row.unitPrice" :min="0" :precision="2" controls-position="right" style="width:100%" /></template>
-          </el-table-column>
-          <el-table-column label="金额" width="110" align="right">
-            <template #default="{ row }">{{ itemAmount(row) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="70" align="center">
-            <template #default="{ $index }"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template>
-          </el-table-column>
-        </el-table>
-        <div class="sum-bar">
-          <span>应付总额（含税）：<b>{{ goodsTotal.toFixed(2) }}</b></span>
-          <template v-if="form.taxIncluded === 1">
-            <span>税额（{{ form.taxRate }}%）： <b class="tax-num">{{ taxAmount.toFixed(2) }}</b></span>
-            <span>不含税金额： <b>{{ noTaxAmount.toFixed(2) }}</b></span>
-          </template>
-        </div>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 

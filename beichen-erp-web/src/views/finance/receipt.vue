@@ -68,7 +68,8 @@ const unpaid = ref<FinanceReceivable[]>([])
 const dLoading = ref(false)
 
 function resetD() { Object.assign(dForm, { id: undefined, customerId: undefined, supplierId: undefined, subjectType: SubjectType.CUSTOMER as string, accountId: undefined, receiptDate: '', remark: '' }); dItems.value = []; unpaid.value = [] }
-function handleAdd() { resetD(); dTitle.value = '新增收款单'; dVisible.value = true }
+/** 2026-09-23 用户要求：新增收款由 850px 弹框改为独立页 */
+function handleAdd() { router.push('/finance/receipt/add') }
 /** 弹窗内切换主体类型：清空往来单位与已选核销明细 */
 function onSubjectTypeChange() {
   dForm.customerId = undefined
@@ -167,33 +168,6 @@ function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/
       </el-table>
       <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
     </el-card>
-    <el-dialog v-model="dVisible" :title="dTitle" width="850px" :close-on-click-modal="false">
-      <el-form :model="dForm" label-width="90px">
-        <el-row :gutter="16">
-          <el-col :span="12"><el-form-item label="主体类型" required>
-            <el-radio-group v-model="dForm.subjectType" @change="onSubjectTypeChange">
-              <el-radio-button :value="SubjectType.CUSTOMER">客户收款</el-radio-button>
-              <el-radio-button :value="SubjectType.SUPPLIER">供应商收款</el-radio-button>
-            </el-radio-group>
-          </el-form-item></el-col>
-          <el-col :span="12"><el-form-item :label="dForm.subjectType === SubjectType.SUPPLIER ? '供应商' : '客户'" required>
-            <RemoteSelect v-if="dForm.subjectType === SubjectType.SUPPLIER" v-model="dForm.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => loadUnpaid()" />
-            <RemoteSelect v-else v-model="dForm.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { dForm.customerId = undefined; router.push('/inventory/customer'); return } loadUnpaid() }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
-          </el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="收款账户" required><el-select v-model="dForm.accountId" placeholder="请选择" filterable style="width:100%"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id"/></el-select></el-form-item></el-col>
-          <el-col :span="12"><el-form-item label="收款日期"><el-date-picker v-model="dForm.receiptDate" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item></el-col>
-          <el-col :span="24"><el-form-item label="备注"><el-input v-model="dForm.remark" type="textarea" :rows="2"/></el-form-item></el-col>
-        </el-row>
-        <el-divider>{{ dForm.subjectType === SubjectType.SUPPLIER ? '核销明细（从供应商未结清应收选择，如应付转应收单）' : '核销明细（从客户未结清应收选择）' }}</el-divider>
-        <div style="margin-bottom:8px"><el-button type="primary" @click="addItem">添加核销项</el-button></div>
-        <el-table :data="dItems" border>
-          <el-table-column label="应收单据" min-width="220"><template #default="{row}"><el-select v-model="row.receivableId" placeholder="选择应收单据" filterable style="width:100%" @change="(v:number)=>onReceivableChange(v,row)"><el-option v-for="u in unpaid" :key="u.id" :label="`${u.billNo} (未收:${u.unpaidAmount},到期:${u.dueDate})`" :value="u.id ?? ''"/></el-select></template></el-table-column>
-          <el-table-column label="核销金额" width="140"><template #default="{row}"><el-input-number v-model="row.thisAmount" :min="0" :precision="2" controls-position="right" style="width:100%"/></template></el-table-column>
-          <el-table-column label="操作" width="70" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>
-        </el-table>
-      </el-form>
-      <template #footer><el-button @click="dVisible=false">取消</el-button><el-button type="primary" :loading="dLoading" @click="handleSubmit">确定</el-button></template>
-    </el-dialog>
 
   </div>
 </template>

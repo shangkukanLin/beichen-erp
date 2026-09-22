@@ -239,14 +239,9 @@ const defectVisible = ref(false); const defectSaving = ref(false)
 const defectItems = ref<any[]>([])
 const defectWarehouseId = ref<number>()
 const emptyDefectStock = () => ({ a: 0, b: 0, c: 0, defect: 0 })
+/** 2026-09-23 用户要求：加工退货（拆分还料）由 780px 弹框改为独立页 */
 function openDefectReturn() {
-  defectItems.value = (products.value || []).map((p: any) => ({
-    productId: p.id, productName: p.productName, masterId: p.productId,
-    aQty: undefined as any, bQty: undefined as any, cQty: undefined as any, defectQty: undefined as any,
-    stocks: emptyDefectStock()
-  }))
-  defectWarehouseId.value = undefined
-  defectVisible.value = true
+  router.push(`/outsource/order/delivery/return-defect/${orderId}`)
 }
 function onDefectWhChange(whId: number) {
   defectWarehouseId.value = whId
@@ -448,18 +443,6 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
       <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="handleSubmit()">保存</el-button></template>
     </el-dialog>
 
-    <!-- 加工退货弹窗（原名「退不良（拆分还料）」→「加工退货（拆分还料）」，2026-09-21 统一命名为「加工退货」） -->
-    <el-dialog v-model="defectVisible" title="加工退货（拆分还料）" width="780px" :close-on-click-modal="false">
-      <el-form-item label="加工退货仓库" style="margin-bottom:12px"><RemoteSelect v-model="defectWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择扣减的成品仓库" @change="onDefectWhChange" /></el-form-item>
-      <el-table :data="defectItems" border size="small">
-        <el-table-column prop="productName" label="产品" min-width="160" />
-        <el-table-column label="A规" width="130"><template #default="{ row }"><div style="font-size:var(--app-font-xs);color:var(--app-text-regular)">库存 {{ row.stocks?.a ?? 0 }}</div><el-input-number v-model="row.aQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" /></template></el-table-column>
-        <el-table-column label="B规" width="130"><template #default="{ row }"><div style="font-size:var(--app-font-xs);color:var(--app-text-regular)">库存 {{ row.stocks?.b ?? 0 }}</div><el-input-number v-model="row.bQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" /></template></el-table-column>
-        <el-table-column label="C规" width="130"><template #default="{ row }"><div style="font-size:var(--app-font-xs);color:var(--app-text-regular)">库存 {{ row.stocks?.c ?? 0 }}</div><el-input-number v-model="row.cQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" /></template></el-table-column>
-        <el-table-column label="不良" width="130"><template #default="{ row }"><div style="font-size:var(--app-font-xs);color:var(--app-text-regular)">库存 {{ row.stocks?.defect ?? 0 }}</div><el-input-number v-model="row.defectQty" size="small" :controls="false" :precision="0" :step="1" style="width:100%" /></template></el-table-column>
-      </el-table>
-      <template #footer><el-button @click="defectVisible = false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认加工退货</el-button></template>
-    </el-dialog>
 
 
   </div>

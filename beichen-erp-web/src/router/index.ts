@@ -355,6 +355,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'finance/receivable/detail/:id', name: 'FinanceReceivableDetail', component: () => import('@/views/finance/receivable/detail.vue'), meta: { title: '应收详情', requiresAuth: true, operate: true } },
       { path: 'finance/payable/detail/:id', name: 'FinancePayableDetail', component: () => import('@/views/finance/payable/detail.vue'), meta: { title: '应付详情', requiresAuth: true, operate: true } },
       { path: 'finance/receipt/detail/:id', name: 'FinanceReceiptDetail', component: () => import('@/views/finance/receipt/detail.vue'), meta: { title: '收款单详情', requiresAuth: true, operate: true } },
+      // 新增收款独立成页（2026-09-23 原为 850px 弹框，含核销明细）
+      { path: 'finance/receipt/add', name: 'FinanceReceiptAdd', component: () => import('@/views/finance/receipt-add.vue'), meta: { title: '新增收款单', requiresAuth: true, operate: true } },
       { path: 'finance/payment/detail/:id', name: 'FinancePaymentDetail', component: () => import('@/views/finance/payment/detail.vue'), meta: { title: '付款单详情', requiresAuth: true, operate: true } },
       // 加工退货记录详情独立成页（2026-09-23 原为 580px 抽屉）；注意与「维修退货」的
       // outsource/return-order/detail/:id 区分，故另起 defect-return 路径
@@ -362,6 +364,21 @@ const routes: RouteRecordRaw[] = [
       // 成品收货「收货记录」详情独立成页（2026-09-23 原为 60% 抽屉）；
       // ⚠️ 不能叫 outsource/order/delivery/detail/:id —— 该前缀已被「收货单页」占用（outsource/order/delivery/:id）
       { path: 'outsource/order/delivery/record/:id', name: 'OutsourceOrderDeliveryRecord', component: () => import('@/views/outsource/order/delivery-record.vue'), meta: { title: '收货记录详情', requiresAuth: true, operate: true } },
+      // 加工退货（拆分还料）独立成页（2026-09-23 原为 780px 弹框）；orderId 走路径
+      { path: 'outsource/order/delivery/return-defect/:orderId', name: 'OutsourceOrderReturnDefect', component: () => import('@/views/outsource/order/return-defect.vue'), meta: { title: '加工退货（拆分还料）', requiresAuth: true, operate: true } },
+      // 往来单位新增/编辑独立成页（2026-09-23 原为 640px 弹框）：供货商与供应商两种模式共用组件，
+      // 模式由路径前缀判定（与列表页 supplier/manage.vue 同一口径）
+      { path: 'supplier/manage/add', name: 'SupplierManageAdd', component: () => import('@/views/supplier/manage-form.vue'), meta: { title: '新增供应商', requiresAuth: true, operate: true } },
+      { path: 'supplier/manage/edit/:id', name: 'SupplierManageEdit', component: () => import('@/views/supplier/manage-form.vue'), meta: { title: '编辑供应商', requiresAuth: true, operate: true } },
+      { path: 'outsource/supplier/manage/add', name: 'VendorManageAdd', component: () => import('@/views/supplier/manage-form.vue'), meta: { title: '新增供货商', requiresAuth: true, operate: true } },
+      { path: 'outsource/supplier/manage/edit/:id', name: 'VendorManageEdit', component: () => import('@/views/supplier/manage-form.vue'), meta: { title: '编辑供货商', requiresAuth: true, operate: true } },
+      // 供应商（分类型页）新增/编辑独立成页（2026-09-23 原为 700px 弹框）：类型随 `?type=` 带过去
+      { path: 'supplier/form/add', name: 'SupplierFormAdd', component: () => import('@/views/supplier/form.vue'), meta: { title: '新增供应商', requiresAuth: true, operate: true } },
+      { path: 'supplier/form/edit/:id', name: 'SupplierFormEdit', component: () => import('@/views/supplier/form.vue'), meta: { title: '编辑供应商', requiresAuth: true, operate: true } },
+      // 成品采购单 新增/编辑独立成页（2026-09-23 原为 900px 弹框）。⚠️ 列表 `handleAdd()` 早就在
+      // push `/inventory/purchase/add` 但该路由一直不存在（点新增白屏）—— 本次一并补上，顺带修掉该 bug。
+      { path: 'inventory/purchase/add', name: 'InventoryPurchaseAdd', component: () => import('@/views/purchase/order/form.vue'), meta: { title: '新增成品采购单', requiresAuth: true, operate: true } },
+      { path: 'inventory/purchase/edit/:id', name: 'InventoryPurchaseEdit', component: () => import('@/views/purchase/order/form.vue'), meta: { title: '编辑成品采购单', requiresAuth: true, operate: true } },
       // 盘点明细（2026-09-23 原为 900px 弹框；表头走 query：scope/status/warehouseName/takeNo）；成品与物料盘点共用
       { path: 'inventory/stock-take/detail/:id', name: 'InventoryStockTakeDetail', component: () => import('@/views/stock-take/detail.vue'), meta: { title: '盘点明细', requiresAuth: true, operate: true } },
       // BOM 历史快照（2026-09-23 原为 900px 弹框，只读）
@@ -382,6 +399,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'finance/payable-transfer/add', name: 'FinancePayableTransferAdd', component: () => import('@/views/finance/payable-transfer/add.vue'), meta: { title: '新增转应收单', requiresAuth: true, operate: true } },
       { path: 'finance/payable-transfer/edit/:id', name: 'FinancePayableTransferEdit', component: () => import('@/views/finance/payable-transfer/add.vue'), meta: { title: '编辑转应收单', requiresAuth: true, operate: true } },
       { path: 'finance/payable-transfer/detail/:id', name: 'FinancePayableTransferDetail', component: () => import('@/views/finance/payable-transfer/detail.vue'), meta: { title: '转应收单详情', requiresAuth: true, operate: true } },
+      // 新增付款独立成页（2026-09-23 原为 800px 弹框）；须放在 :id 之前以免 'add' 被当作 id
+      { path: 'finance/payment/supplier/add', name: 'FinancePaymentSupplierAdd', component: () => import('@/views/finance/payment-supplier-add.vue'), meta: { title: '新增付款', requiresAuth: true, operate: true } },
       { path: 'finance/payment/supplier/:id', name: 'FinancePaymentSupplier', component: () => import('@/views/finance/payment-supplier.vue'), meta: { title: '供应商应付详情', requiresAuth: true, operate: true } },
       { path: 'finance/supplier-settlement/:id', name: 'SupplierSettlement', component: () => import('@/views/finance/supplier-settlement.vue'), meta: { title: '清算看板', requiresAuth: true, operate: true } },
       // 占位路由：匹配菜单中有但尚未开发的路由
