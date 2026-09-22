@@ -439,7 +439,7 @@
   "menu_sale_return": "销售退货单",
   "menu_sale_exchange": "销售换货单",
   "menu_sale_sort": "退货整理",
-  "menu_stock_move": "成品移仓单",
+  "menu_stock_move": "移仓单",
   "menu_stock_log": "成品库存流水",
   "menu_stock_take": "库存盘点",
   "menu_stock_loss": "成品报损",

@@ -278,7 +278,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/return-sort/edit/:id', name: 'InventoryReturnSortEdit', component: () => import('@/views/inventory/return-sort/form.vue'), meta: { title: '编辑退货整理', requiresAuth: true, operate: true } },
       { path: 'inventory/return-sort/detail/:id', name: 'InventoryReturnSortDetail', component: () => import('@/views/inventory/return-sort/detail.vue'), meta: { title: '退货整理详情', requiresAuth: true, operate: true } },
       { path: 'inventory/stock-take', name: 'InventoryStockTake', component: () => import('@/views/inventory/stock-take/index.vue'), meta: { title: '库存盘点', requiresAuth: true } },
-      { path: 'inventory/warehouse-move', name: 'InventoryWarehouseMove', component: () => import('@/views/inventory/warehouse-move/index.vue'), meta: { title: '成品移仓单', requiresAuth: true } },
+      { path: 'inventory/warehouse-move', name: 'InventoryWarehouseMove', component: () => import('@/views/inventory/warehouse-move/index.vue'), meta: { title: '移仓单', requiresAuth: true } },
       { path: 'inventory/warehouse-move/add', name: 'InventoryWarehouseMoveAdd', component: () => import('@/views/inventory/warehouse-move/add.vue'), meta: { title: '新增移仓单', requiresAuth: true, operate: true } },
       // 移仓单详情独立成页（与成品其他出入库一致，草稿态直接可编辑，列表不再有「编辑」）
       { path: 'inventory/warehouse-move/detail/:id', name: 'InventoryWarehouseMoveDetail', component: () => import('@/views/inventory/warehouse-move/detail.vue'), meta: { title: '移仓单详细', requiresAuth: true, operate: true } },

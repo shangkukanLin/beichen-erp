@@ -333,9 +333,10 @@ public class DataInitializer implements ApplicationRunner {
             {603L, 6L, "销售退货单", "menu", "/sale/return", "SaleReturn", "Refund", 2},
             {605L, 6L, "销售换货单", "menu", "/sale/exchange", "SaleExchange", "Refresh", 3},
             // 成品库存子菜单顺序（2026-09-18 用户定稿重排）：
-            // 成品移仓单 → 退货整理 → 成品库存情况 → 成品库存流水 → 库存盘点 → 成品报损 → 成品其他出入库 → 成品品质重分类 → 成品仓库管理
+            // 移仓单 → 退货整理 → 成品库存情况 → 成品库存流水 → 库存盘点 → 成品报损 → 成品其他出入库 → 成品品质重分类 → 成品仓库管理
+            // （2026-09-22 用户口径：706「成品移仓单」只改展示名为「移仓单」，id/perms/路由一律不动）
             // sort_order 即左侧栏显示顺序（MenuMapper.selectAllEnabled 按 sort_order 排序）；下方书写顺序与实际显示顺序一致，便于维护。
-            {706L, 7L, "成品移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 1},
+            {706L, 7L, "移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 1},
             // 退货整理（2026-09-18 用户要求：从「销售业务」移到「成品库存」—— 它本质是退回品的成品分选入库）
             // ID 仍保留 707（存量角色授权按 ID 关联，换 ID 会导致历史授权失效），仅迁移 parent_id 6 → 7；
             // 同日用户重排本组顺序，退货整理由第 10 位改排**第 2 位**（紧跟成品移仓单）。
@@ -458,6 +459,19 @@ public class DataInitializer implements ApplicationRunner {
             if (renamed > 0) log.info("已重命名菜单 603：销售退单 -> 销售退货单");
         } catch (Exception e) {
             log.warn("重命名菜单 603 异常: {}", e.getMessage());
+        }
+
+        // 2026-09-22（用户口径）：子菜单「成品移仓单」改名「移仓单」—— 与「新增移仓单」「移仓单详细」
+        // 及库存流水里的「移仓单」单据类型统一术语。只改**展示名**：菜单 id 706 / perms(stock:warehouse-move) /
+        // 路由 path/route_name 一律不动（不动就等于不迁权限、不动前端白名单）。
+        // 幂等：仅当值仍是旧名时才更新，重复启动零写入；新库/其它环境由上面的 upsert（同一 id=706 已用新名）写入，
+        // 这里兜住"库里还是旧名"的存量库（与 603 销售退单→销售退货单 同范式）。
+        try {
+            int renamedMove = jdbcTemplate.update(
+                    "UPDATE sys_menu SET menu_name = '移仓单' WHERE id = 706 AND menu_name = '成品移仓单'");
+            if (renamedMove > 0) log.info("已重命名菜单 706：成品移仓单 -> 移仓单");
+        } catch (Exception e) {
+            log.warn("重命名菜单 706 异常: {}", e.getMessage());
         }
 
         // F3-3（2026-09-18 接口级权限专项）：写页面级接口权限码（幂等）

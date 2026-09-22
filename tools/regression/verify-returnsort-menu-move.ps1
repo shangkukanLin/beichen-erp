@@ -69,7 +69,7 @@ if ($s707 -eq '2') { Ok '707 is the 2nd item of that catalog (sort_order=2)' } e
 if ($v707 -eq '1') { Ok '707 still visible' } else { Bad ('707 visible = ' + $v707) }
 if (($r707 -eq '/inventory/return-sort') -and ($n707 -eq 'InventoryReturnSort')) { Ok '707 route/route_name unchanged (/inventory/return-sort)' } else { Bad ('707 route unexpected: ' + $r707 + '/' + $n707) }
 # DB-level order check by ID (ASCII only, encoding-proof):
-# 706 成品移仓单 > 707 退货整理 > 712 成品库存情况 > 703 成品库存流水 > 711 库存盘点 >
+# 706 移仓单 > 707 退货整理 > 712 成品库存情况 > 703 成品库存流水 > 711 库存盘点 >
 # 713 成品报损 > 704 成品其他出入库 > 705 成品品质重分类 > 702 成品仓库管理
 $dbIds = ((SqlLines 'SELECT id FROM sys_menu WHERE parent_id=7 AND visible=1 ORDER BY sort_order, id') -join ',')
 Write-Output ('  visible group ids in order = ' + $dbIds)
