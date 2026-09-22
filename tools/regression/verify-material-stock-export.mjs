@@ -1,5 +1,5 @@
 /**
- * 物料库存情况 —— 导出拼装用例（2026-09-22，node 直跑）
+ * 物料库存详情 —— 导出拼装用例（2026-09-22，node 直跑）
  *
  * 为什么是 .mjs 而不是 .ps1：导出逻辑已抽成纯 TS 函数
  * （beichen-erp-web/src/views/outsource/material-stock/export.ts，不依赖 XLSX/Vue），

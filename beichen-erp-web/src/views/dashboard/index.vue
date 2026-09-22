@@ -386,9 +386,9 @@
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
           <!-- 顺序 = 使用频率：库存情况/仓库（日常查询）→ 流水/出入库/移仓/盘点/报损（作业）→ 重分类/产品（低频）；
-               注：①「成品库存」查询页 2026-09-18 按用户要求下线（并入「成品库存情况」），快捷按钮一并移除
+               注：①「成品库存」查询页 2026-09-18 按用户要求下线（并入「成品库存详情」），快捷按钮一并移除
                    ②退货整理自 2026-09-18 起归「成品库存」菜单（其 707 原属销售业务） -->
-          <el-button v-if="hasMenu['InventoryProductStock']" type="primary" size="small" text @click="$router.push('/inventory/product-stock')">成品库存情况</el-button>
+          <el-button v-if="hasMenu['InventoryProductStock']" type="primary" size="small" text @click="$router.push('/inventory/product-stock')">成品库存详情</el-button>
           <!-- 成品仓库管理：改用**路由路径**判权限（与「委外仓库」共用 route_name "Warehouse" 会串号） -->
           <el-button v-if="hasPath['/inventory/warehouse']" type="primary" size="small" text @click="$router.push('/inventory/warehouse')">成品仓库管理</el-button>
           <el-button v-if="hasMenu['WarehouseStockLog']" type="primary" size="small" text @click="$router.push('/inventory/stock-log')">库存流水</el-button>

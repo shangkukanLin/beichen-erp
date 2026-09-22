@@ -239,10 +239,10 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/delivery-info', redirect: '/outsource/order' },
       // 物料库存盘点（物料仓库，2026-09-16 新增）：与成品「库存盘点」共用面板，scope=MATERIAL 只盘物料仓
       { path: 'outsource/material-stock-take', name: 'OutsourceMaterialStockTake', component: () => import('@/views/outsource/material-stock-take/index.vue'), meta: { title: '物料库存盘点', requiresAuth: true } },
-      // 物料库存情况（物料仓库，2026-09-21 新增，镜像「成品库存情况」）：
+      // 物料库存详情（物料仓库，2026-09-21 新增，镜像成品侧「成品库存详情」；2026-09-22 由「物料库存情况」改名）：
       // 列表按物料汇总跨仓库库存（良品/不良两档），点行进详情看该物料在各仓库的分布。
       // ⚠️ 物料品质走 outsource.common.QualityType（GOOD/DEFECT），没有成品的 A/B/C/待整理；物料也没有安全库存。
-      { path: 'outsource/material-stock', name: 'OutsourceMaterialStock', component: () => import('@/views/outsource/material-stock/index.vue'), meta: { title: '物料库存情况', requiresAuth: true } },
+      { path: 'outsource/material-stock', name: 'OutsourceMaterialStock', component: () => import('@/views/outsource/material-stock/index.vue'), meta: { title: '物料库存详情', requiresAuth: true } },
       // 物料库存分布详情：operate=true ⇒ 不走菜单白名单（任何登录用户点击都不会被拦到 403），与成品侧一致
       { path: 'outsource/material-stock/detail/:id', name: 'OutsourceMaterialStockDetail', component: () => import('@/views/outsource/material-stock/detail.vue'), meta: { title: '物料库存分布详情', requiresAuth: true, operate: true } },
       // 加工合同模板已并入「基础数据 → 模版管理」（2026-09-15）；旧地址重定向到该页的「加工合同模板」页签
@@ -258,8 +258,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/other-io/detail/:id', name: 'OutsourceOtherIoDetail', component: () => import('@/views/outsource/other-io/detail.vue'), meta: { title: '物料其他出入库详细', requiresAuth: true, operate: true } },
       { path: 'outsource/other-io/edit/:id', name: 'OutsourceOtherIoEdit', component: () => import('@/views/outsource/other-io/edit.vue'), meta: { title: '编辑物料其他出入库', requiresAuth: true, operate: true } },
       // 进销存
-      // 成品库存情况：列表按产品汇总跨仓库库存，点行进详情看该产品在各仓库的分布
-      { path: 'inventory/product-stock', name: 'InventoryProductStock', component: () => import('@/views/inventory/product-stock/index.vue'), meta: { title: '成品库存情况', requiresAuth: true } },
+      // 成品库存详情（2026-09-22 由「成品库存情况」改名）：列表按产品汇总跨仓库库存，点行进详情看该产品在各仓库的分布
+      { path: 'inventory/product-stock', name: 'InventoryProductStock', component: () => import('@/views/inventory/product-stock/index.vue'), meta: { title: '成品库存详情', requiresAuth: true } },
       { path: 'inventory/product-stock/detail/:id', name: 'InventoryProductStockDetail', component: () => import('@/views/inventory/product-stock/detail.vue'), meta: { title: '产品库存分布详情', requiresAuth: true, operate: true } },
       { path: 'inventory/warehouse', name: 'InventoryWarehouse', component: () => import('@/views/inventory/warehouse.vue'), meta: { title: '成品仓库管理', requiresAuth: true } },
       { path: 'inventory/warehouse/detail/:id', name: 'InventoryWarehouseDetail', component: () => import('@/views/inventory/warehouse-detail.vue'), meta: { title: '仓库详情', requiresAuth: true, operate: true } },
@@ -312,7 +312,7 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/purchase/exchange/add.vue'),
         meta: { title: '新增采购换货单', requiresAuth: true, operate: true } },
       { path: 'inventory/purchase-exchange/detail/:id', name: 'InventoryPurchaseExchangeDetail', component: () => import('@/views/purchase/exchange/detail.vue'), meta: { title: '采购换货单详情', requiresAuth: true, operate: true } },
-      // 成品库存查询页 2026-09-18 按用户要求下线（页面文件已删）：按产品维度的库存查看改用「成品库存情况」。
+      // 成品库存查询页 2026-09-18 按用户要求下线（页面文件已删）：按产品维度的库存查看改用「成品库存详情」。
       // 旧地址保留为重定向（与 dev/bom、dev/drawing、outsource/delivery-info 同范式）——菜单下线＝收走前端
       // 白名单，不做重定向会让老书签/首页历史链接直接吃 403。
       { path: 'inventory/stock', redirect: '/inventory/product-stock' },

@@ -300,10 +300,11 @@ public class DataInitializer implements ApplicationRunner {
             // 405「加工合同模板」已并入 108「模版管理」（基础数据，2026-09-15），不再在此 upsert
             // 物料仓库（11，2026-09-16 新增；同日按用户要求重排为「仓库 → 盘点 → 单据」）：
             {404L, 11L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 1},
-            // 物料库存情况（2026-09-21 用户要求）：镜像「成品库存情况」（712），只是统计物料而非成品 ——
+            // 物料库存详情（2026-09-21 新增；2026-09-22 由「物料库存情况」改名，仅展示名）：
+            // 镜像成品侧「成品库存详情」（712），只是统计物料而非成品 ——
             // 列表按物料跨仓汇总（良品/不良两档，物料走 QualityType，没有成品的 A/B/C/待整理/安全库存），
             // 点行进详情看该物料在各仓库的分布。sorts 顺移：查询类在前（委外仓库 1 → 本页 2 → 自有物料仓 3 → 盘点 4 → 报损 5 → 其他出入库 6 → 收发单 7）
-            {416L, 11L, "物料库存情况", "menu", "/outsource/material-stock", "OutsourceMaterialStock", "Box", 2},
+            {416L, 11L, "物料库存详情", "menu", "/outsource/material-stock", "OutsourceMaterialStock", "Box", 2},
             {410L, 11L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 3},
             // 物料库存盘点（2026-09-16 用户要求）：与成品「库存盘点」按仓库类别彻底分开 ——
             // 本页只盘物料仓（委外仓 + 自有物料仓），成品页只盘成品类仓库；
@@ -333,8 +334,9 @@ public class DataInitializer implements ApplicationRunner {
             {603L, 6L, "销售退货单", "menu", "/sale/return", "SaleReturn", "Refund", 2},
             {605L, 6L, "销售换货单", "menu", "/sale/exchange", "SaleExchange", "Refresh", 3},
             // 成品库存子菜单顺序（2026-09-18 用户定稿重排）：
-            // 移仓单 → 退货整理 → 成品库存情况 → 成品库存流水 → 库存盘点 → 成品报损 → 成品其他出入库 → 成品品质重分类 → 成品仓库管理
-            // （2026-09-22 用户口径：706「成品移仓单」只改展示名为「移仓单」，id/perms/路由一律不动）
+            // 移仓单 → 退货整理 → 成品库存详情 → 成品库存流水 → 库存盘点 → 成品报损 → 成品其他出入库 → 成品品质重分类 → 成品仓库管理
+            // （2026-09-22 用户口径：706「成品移仓单」改展示名为「移仓单」、712「成品库存情况」改「成品库存详情」，
+            //   id/perms/路由一律不动）
             // sort_order 即左侧栏显示顺序（MenuMapper.selectAllEnabled 按 sort_order 排序）；下方书写顺序与实际显示顺序一致，便于维护。
             {706L, 7L, "移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 1},
             // 退货整理（2026-09-18 用户要求：从「销售业务」移到「成品库存」—— 它本质是退回品的成品分选入库）
@@ -343,8 +345,9 @@ public class DataInitializer implements ApplicationRunner {
             // ⚠️ 父目录 7 必须同时授权，否则菜单树 buildTree 会把 707 整组丢弃
             // （下方幂等补授块给其它持有 707 的角色兜底）。
             {707L, 7L, "退货整理", "menu", "/inventory/return-sort", "InventoryReturnSort", "RefreshRight", 2},
-            // 成品库存情况：按产品维度看跨仓库库存汇总；点行进详情看该产品在各仓库的分布
-            {712L, 7L, "成品库存情况", "menu", "/inventory/product-stock", "InventoryProductStock", "Box", 3},
+            // 成品库存详情（2026-09-22 由「成品库存情况」改名，仅展示名）：按产品维度看跨仓库库存汇总；
+            // 点行进详情看该产品在各仓库的分布
+            {712L, 7L, "成品库存详情", "menu", "/inventory/product-stock", "InventoryProductStock", "Box", 3},
             {703L, 7L, "成品库存流水", "menu", "/inventory/stock-log", "WarehouseStockLog", "TrendCharts", 4},
             // 库存盘点：每月每仓一次，仓库列表与盘点页显示待盘点/超期提醒
             {711L, 7L, "库存盘点", "menu", "/inventory/stock-take", "InventoryStockTake", "Files", 5},
@@ -472,6 +475,20 @@ public class DataInitializer implements ApplicationRunner {
             if (renamedMove > 0) log.info("已重命名菜单 706：成品移仓单 -> 移仓单");
         } catch (Exception e) {
             log.warn("重命名菜单 706 异常: {}", e.getMessage());
+        }
+
+        // 2026-09-22（用户口径）：两处「库存情况」统一改名「库存详情」—— 712 成品侧、416 物料侧。
+        // 同上只改**展示名**：id / perms(stock:product-stock、outsource:material-stock) / 路由一律不动。
+        // 幂等：仅当值仍是旧名时才更新，重复启动零写入（新库由上面的 upsert 直接写新名）。
+        try {
+            int renamedProd = jdbcTemplate.update(
+                    "UPDATE sys_menu SET menu_name = '成品库存详情' WHERE id = 712 AND menu_name = '成品库存情况'");
+            if (renamedProd > 0) log.info("已重命名菜单 712：成品库存情况 -> 成品库存详情");
+            int renamedMat = jdbcTemplate.update(
+                    "UPDATE sys_menu SET menu_name = '物料库存详情' WHERE id = 416 AND menu_name = '物料库存情况'");
+            if (renamedMat > 0) log.info("已重命名菜单 416：物料库存情况 -> 物料库存详情");
+        } catch (Exception e) {
+            log.warn("重命名菜单 712/416 异常: {}", e.getMessage());
         }
 
         // F3-3（2026-09-18 接口级权限专项）：写页面级接口权限码（幂等）

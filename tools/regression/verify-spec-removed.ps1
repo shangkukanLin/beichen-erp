@@ -12,7 +12,7 @@ $pages = @(
   @{ n = '品质转换(列表)';        u = '/inventory/reclassify';    expect = 'no' },
   @{ n = '退货整理(列表)';        u = '/inventory/return-sort';   expect = 'no' },
   @{ n = '其他出入库(列表)';      u = '/inventory/other-io';      expect = 'no' },
-  @{ n = '成品库存情况(列表)';    u = '/inventory/product-stock'; expect = 'no' },
+  @{ n = '成品库存详情(列表)';    u = '/inventory/product-stock'; expect = 'no' },
   @{ n = '移仓单新增(产品口径)'; u = '/inventory/warehouse-move/add'; expect = 'no' }
 )
 function EvalJs($js) { return (((agent-browser eval $js) -join "`n").Trim()) }

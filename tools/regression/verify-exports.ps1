@@ -6,7 +6,7 @@ New-Item -ItemType Directory -Force -Path $dl | Out-Null
 $pages = @(
   @{ n = '成品库存查询';        u = 'http://localhost:5173/inventory/product-stock' },
   @{ n = '成品库存流水';        u = 'http://localhost:5173/inventory/stock-log' },
-  @{ n = '成品库存情况';        u = 'http://localhost:5173/inventory/product-stock' },
+  @{ n = '成品库存详情';        u = 'http://localhost:5173/inventory/product-stock' },
   @{ n = '产品库存分布';        u = 'http://localhost:5173/inventory/product-stock/detail/2' },
   @{ n = '自有仓库明细';        u = 'http://localhost:5173/inventory/warehouse/detail/1' },
   @{ n = '委外仓库明细';        u = 'http://localhost:5173/outsource/warehouse/detail/2' },
