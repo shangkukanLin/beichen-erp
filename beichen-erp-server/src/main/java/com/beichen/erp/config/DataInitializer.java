@@ -339,11 +339,12 @@ public class DataInitializer implements ApplicationRunner {
             // 售后：销售退货单 → 销售换货单（换货可选择性收费）；「退货整理」已于 2026-09-18 移到「成品库存」
             {603L, 6L, "销售退货单", "menu", "/sale/return", "SaleReturn", "Refund", 2},
             {605L, 6L, "销售换货单", "menu", "/sale/exchange", "SaleExchange", "Refresh", 3},
-            // 成品库存子菜单顺序（2026-09-18 用户定稿重排；2026-09-22 用户要求把 705 挪到第 3 位）：
-            // 移仓单 → 退货整理 → 规格调整 → 成品库存详情 → 成品库存流水 → 库存盘点 → 成品报损 → 成品其他出入库
+            // 成品库存子菜单顺序（2026-09-18 用户定稿重排；2026-09-22 用户要求把 705 挪到第 3 位、704 提到 713 上面）：
+            // 移仓单 → 退货整理 → 规格调整 → 成品库存详情 → 成品库存流水 → 库存盘点 → 成品其他出入库 → 成品报损
             // （2026-09-22：706「成品移仓单」改展示名为「移仓单」、712「成品库存情况」改「成品库存详情」、
             //  705「成品品质重分类」改「规格调整」并由第 8 位挪到第 3 位（只改展示名与 sort_order，id/perms/路由不动）；
-            //  同日末位 702「成品仓库管理」按用户要求迁入「基础数据」⇒ 本组由 9 项变 8 项）
+            //  同日 704「成品其他出入库」与 713「成品报损」对调（其他出入库排到报损上面）；
+            //  末位 702「成品仓库管理」按用户要求迁入「基础数据」⇒ 本组由 9 项变 8 项）
             // sort_order 即左侧栏显示顺序（MenuMapper.selectAllEnabled 按 sort_order 排序）；下方书写顺序与实际显示顺序一致，便于维护。
             {706L, 7L, "移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 1},
             // 退货整理（2026-09-18 用户要求：从「销售业务」移到「成品库存」—— 它本质是退回品的成品分选入库）
@@ -363,9 +364,10 @@ public class DataInitializer implements ApplicationRunner {
             {703L, 7L, "成品库存流水", "menu", "/inventory/stock-log", "WarehouseStockLog", "TrendCharts", 5},
             // 库存盘点：每月每仓一次，仓库列表与盘点页显示待盘点/超期提醒
             {711L, 7L, "库存盘点", "menu", "/inventory/stock-take", "InventoryStockTake", "Files", 6},
+            // 成品其他出入库（2026-09-22 用户要求：与成品报损对调，排到报损上面 ⇒ 只改 sort_order）
+            {704L, 7L, "成品其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 7},
             // 成品报损：草稿→审核扣减成品库存（LOSS_OUT 流水），可反审核回滚
-            {713L, 7L, "成品报损", "menu", "/inventory/stock-loss", "InventoryStockLoss", "DeleteFilled", 7},
-            {704L, 7L, "成品其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 8},
+            {713L, 7L, "成品报损", "menu", "/inventory/stock-loss", "InventoryStockLoss", "DeleteFilled", 8},
             // 701「成品库存」（/inventory/stock）已于 2026-09-18 按用户要求下线（页面代码已删，功能由
             // 「712 成品库存情况」按产品维度覆盖）⇒ 与 409/602/503 同范式：不再 upsert，
             // 下方统一置 visible=0（保留行与角色授权，便于回滚）；其历史 sort_order 已在下方挪到 99，
