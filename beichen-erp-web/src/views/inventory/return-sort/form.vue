@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import { WarehouseType, AfterSaleSourceType, AfterSaleSourceTypeLabel, INVENTORY_RETURN_SORT_DIRTY_KEY } from '@/api/enums'
+import { WarehouseType, INVENTORY_RETURN_SORT_DIRTY_KEY } from '@/api/enums'
 import {
   getReturnSort, getReturnSortItems, getReturnSortDefectStock,
   createReturnSort, updateReturnSort
@@ -272,6 +272,7 @@ watch(() => route.fullPath, () => { init() })
         <!--
           列宽预算（2026-09-22 用户要求：明细列表一行显示完、且**表头不能被截断**）：
           Σ(min-width + width) = 150+80+98+118+84+64×3+84+80+56 = 942px ≤ 本页容器 963px ⇒ 不横向滚动；
+          「来源单据」2026-09-22 起**只显示单据号**（去掉退货/换货类型标签）⇒ 150px 下单号完整可见；
           「产品」是 min-width 列 ⇒ 富余宽度全给它（实测约 101px），品名不至于被截。
           每条列宽都按**实测表头需要宽**定（探针：th .cell 的 scrollWidth 必须 ≤ clientWidth），
           曾被裁的表头与修前值：待整理数量 76→98 · 批次量/已整理 80→118 · 停留天数 76→84 ·
@@ -280,13 +281,10 @@ watch(() => route.fullPath, () => { init() })
           size=small + :controls=false，后又按用户要求去掉 SKU 与单位两列。
           **改这个表的列宽前请先加总，并确认表头没被裁**（跑 verify-returnsort-list-fit.ps1）。
         -->
+        <!-- 来源单据（2026-09-22 用户要求）：**只显示单据号**，不再带「退货/换货」类型标签
+             （类型标签占 ~40px，去掉后 150px 宽能完整显示单号，不再被截断；详情页也是只显示单号） -->
         <el-table-column label="来源单据" width="150" show-overflow-tooltip>
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.sourceType === AfterSaleSourceType.SALE_EXCHANGE ? 'warning' : 'info'" style="margin-right:4px">
-              {{ AfterSaleSourceTypeLabel[row.sourceType] || '-' }}
-            </el-tag>
-            {{ row.sourceCode || '-' }}
-          </template>
+          <template #default="{ row }">{{ row.sourceCode || '-' }}</template>
         </el-table-column>
         <el-table-column prop="productName" label="产品" min-width="80" show-overflow-tooltip />
         <el-table-column prop="totalQuantity" label="待整理数量" width="98" align="center">
