@@ -76,7 +76,7 @@ onMounted(() => { loadData(); loadTakeStatus() })
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query">
-        <el-form-item label="名称"><el-input v-model="query.warehouseName" placeholder="仓库名称" clearable @keyup.enter="handleQuery" /></el-form-item>
+        <el-form-item label="仓库名称"><el-input v-model="query.warehouseName" placeholder="仓库名称" clearable @keyup.enter="handleQuery" /></el-form-item>
         <el-form-item label="仓型"><el-select v-model="query.warehouseType" placeholder="全部" clearable style="width:120px"><el-option v-for="(lb, code) in WARHOUSE_TYPES" :key="code" :label="lb" :value="code" /></el-select></el-form-item>
         </el-form>
         <div class="toolbar">
@@ -94,8 +94,8 @@ onMounted(() => { loadData(); loadTakeStatus() })
       </el-tabs>
 
       <el-table v-if="activeTab==='active'" :data="activeData" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleDetail">
-        <el-table-column prop="code" label="编码" width="160" />
-        <el-table-column prop="warehouseName" label="名称" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="code" label="仓库编码" width="160" />
+        <el-table-column prop="warehouseName" label="仓库名称" min-width="140" show-overflow-tooltip />
         <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
         <el-table-column label="本月盘点" width="120" align="center">
           <template #default="{row}">
@@ -111,19 +111,19 @@ onMounted(() => { loadData(); loadTakeStatus() })
         </el-table-column>
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="manager" label="负责人" width="80" />
-        <el-table-column prop="phone" label="电话" width="120" />
+        <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="操作" width="155" align="center">
           <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button type="primary" link @click.stop="handleEdit(row)">编辑</el-button><el-button type="warning" link @click.stop="handleToggleStatus(row)">停用</el-button></template>
         </el-table-column>
       </el-table>
 
       <el-table v-if="activeTab==='stopped'" :data="stoppedData" border stripe style="width:100%" @row-click="handleDetail">
-        <el-table-column prop="code" label="编码" width="160" />
-        <el-table-column prop="warehouseName" label="名称" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="code" label="仓库编码" width="160" />
+        <el-table-column prop="warehouseName" label="仓库名称" min-width="140" show-overflow-tooltip />
         <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="manager" label="负责人" width="80" />
-        <el-table-column prop="phone" label="电话" width="120" />
+        <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="操作" width="155" align="center">
           <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button type="primary" link @click.stop="handleEdit(row)">编辑</el-button><el-button type="success" link @click.stop="handleToggleStatus(row)">启用</el-button></template>
         </el-table-column>
@@ -132,7 +132,7 @@ onMounted(() => { loadData(); loadTakeStatus() })
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
       <el-form :model="form" label-width="80px">
-        <el-form-item label="名称" required><el-input v-model="form.warehouseName" /></el-form-item>
+        <el-form-item label="仓库名称" required><el-input v-model="form.warehouseName" /></el-form-item>
         <el-form-item label="仓型" required>
           <el-select v-model="form.warehouseType" placeholder="请选择仓型" style="width:100%"><el-option v-for="(lb, code) in WARHOUSE_TYPES" :key="code" :label="lb" :value="code" /></el-select>
           <!-- I5 提示文案（2026-09-18）：本页只管成品仓，辅料仓在另一处菜单，避免按字面误建 -->
@@ -140,7 +140,7 @@ onMounted(() => { loadData(); loadTakeStatus() })
         </el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
         <el-form-item label="负责人"><el-input v-model="form.manager" /></el-form-item>
-        <el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item>
+        <el-form-item label="联系电话"><el-input v-model="form.phone" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button></template>

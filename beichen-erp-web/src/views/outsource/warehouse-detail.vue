@@ -123,7 +123,7 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
         <el-descriptions-item label="状态"><el-tag :type="warehouse.status===1?'success':'info'" size="small">{{ warehouse.status===1?'启用':'停用' }}</el-tag></el-descriptions-item>
         <el-descriptions-item label="地址" :span="2">{{ warehouse.address || '-' }}</el-descriptions-item>
         <el-descriptions-item label="联系人">{{ warehouse.contact || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="电话">{{ warehouse.phone || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="联系电话">{{ warehouse.phone || '-' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ warehouse.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-card>

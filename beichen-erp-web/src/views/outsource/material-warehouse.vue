@@ -64,7 +64,7 @@ onMounted(() => loadData())
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query">
-        <el-form-item label="名称"><el-input v-model="query.warehouseName" placeholder="仓库名称" clearable @keyup.enter="handleQuery" /></el-form-item>
+        <el-form-item label="仓库名称"><el-input v-model="query.warehouseName" placeholder="仓库名称" clearable @keyup.enter="handleQuery" /></el-form-item>
       </el-form>
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
@@ -81,24 +81,24 @@ onMounted(() => loadData())
       </el-tabs>
 
       <el-table v-if="activeTab==='active'" :data="activeData" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleDetail">
-        <el-table-column prop="code" label="编码" width="160" />
-        <el-table-column prop="warehouseName" label="名称" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="code" label="仓库编码" width="160" />
+        <el-table-column prop="warehouseName" label="仓库名称" min-width="140" show-overflow-tooltip />
         <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="manager" label="负责人" width="80" />
-        <el-table-column prop="phone" label="电话" width="120" />
+        <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="操作" width="155" align="center">
           <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button type="primary" link @click.stop="handleEdit(row)">编辑</el-button><el-button type="warning" link @click.stop="handleToggleStatus(row)">停用</el-button></template>
         </el-table-column>
       </el-table>
 
       <el-table v-if="activeTab==='stopped'" :data="stoppedData" border stripe style="width:100%" @row-click="handleDetail">
-        <el-table-column prop="code" label="编码" width="160" />
-        <el-table-column prop="warehouseName" label="名称" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="code" label="仓库编码" width="160" />
+        <el-table-column prop="warehouseName" label="仓库名称" min-width="140" show-overflow-tooltip />
         <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="manager" label="负责人" width="80" />
-        <el-table-column prop="phone" label="电话" width="120" />
+        <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="操作" width="155" align="center">
           <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button type="primary" link @click.stop="handleEdit(row)">编辑</el-button><el-button type="success" link @click.stop="handleToggleStatus(row)">启用</el-button></template>
         </el-table-column>
@@ -107,12 +107,12 @@ onMounted(() => loadData())
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
       <el-form :model="form" label-width="80px">
-        <el-form-item label="名称" required><el-input v-model="form.warehouseName" /></el-form-item>
+        <el-form-item label="仓库名称" required><el-input v-model="form.warehouseName" /></el-form-item>
         <!-- 仓型：本页只管理自有物料仓（辅料仓），值=code、显示=中文 label（原写法把 code 当 label，界面显示 "AUXILIARY"） -->
         <el-form-item label="仓型"><el-select v-model="form.warehouseType" style="width:100%"><el-option :label="WarehouseTypeLabel[WAREHOUSE_TYPE]" :value="WAREHOUSE_TYPE" /></el-select></el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
         <el-form-item label="负责人"><el-input v-model="form.manager" /></el-form-item>
-        <el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item>
+        <el-form-item label="联系电话"><el-input v-model="form.phone" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button></template>

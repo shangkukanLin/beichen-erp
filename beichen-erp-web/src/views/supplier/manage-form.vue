@@ -94,11 +94,11 @@ onMounted(load)
             <el-checkbox v-for="t in TYPE_OPTIONS_CUSTOM" :key="t.name" :label="t.name" :value="t.name">{{ t.label }}</el-checkbox>
           </el-checkbox-group>
         </el-form-item>
-        <el-form-item label="编码">
+        <el-form-item :label="pageTitle + '编码'">
           <!-- 唯一编码由系统按类型前缀自动生成（如 GYS-20260831-001），不可修改 -->
           <el-input v-model="form.code" disabled :placeholder="isEdit ? '' : '保存后自动生成'" />
         </el-form-item>
-        <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="pageTitle + '名称'" required><el-input v-model="form.name" /></el-form-item>
         <!-- 供货SKU —— 只属于「供货商」（类型=成品商）；供应商不显示，后端也会忽略该类型传来的值 -->
         <el-form-item v-if="isVendor" label="供货SKU">
           <el-input v-model="form.supplySku" maxlength="24" clearable placeholder="如 ABC（留空则产品走默认 SKU-）" />
@@ -107,7 +107,7 @@ onMounted(load)
           </div>
         </el-form-item>
         <el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item>
-        <el-form-item label="手机号"><el-input v-model="form.phone" /></el-form-item>
+        <el-form-item label="联系电话"><el-input v-model="form.phone" /></el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" type="textarea" :rows="2" /></el-form-item>
         <el-form-item label="状态"><el-select v-model="form.status" style="width:100%"><el-option label="合作中" :value="1" /><el-option label="已停用" :value="0" /></el-select></el-form-item>
         <el-form-item label="账期">

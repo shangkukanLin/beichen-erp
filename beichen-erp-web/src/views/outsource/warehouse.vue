@@ -86,7 +86,7 @@ onMounted(() => { loadFactories(); loadData() })
         <el-table-column prop="warehouseName" label="仓库名称" min-width="140" />
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="80" />
-        <el-table-column prop="phone" label="电话" width="120" />
+        <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="操作" width="180" align="center">
           <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button type="success" link @click.stop="handleEdit(row)">编辑</el-button><el-button type="warning" link @click.stop="handleToggleStatus(row)">停用</el-button></template>
         </el-table-column>
@@ -97,7 +97,7 @@ onMounted(() => { loadFactories(); loadData() })
         <el-table-column prop="warehouseName" label="仓库名称" min-width="140" />
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="80" />
-        <el-table-column prop="phone" label="电话" width="120" />
+        <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="操作" width="180" align="center">
           <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button type="success" link @click.stop="handleEdit(row)">编辑</el-button><el-button type="success" link @click.stop="handleToggleStatus(row)">启用</el-button></template>
         </el-table-column>
@@ -110,7 +110,7 @@ onMounted(() => { loadFactories(); loadData() })
         <el-form-item required label="仓库名称"><el-input v-model="form.warehouseName" /></el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
         <el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item>
-        <el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item>
+        <el-form-item label="联系电话"><el-input v-model="form.phone" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="dialogVisible=false">取消</el-button><el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button></template>
