@@ -14,8 +14,6 @@ const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinanceReceivable[]>([])
 const customersOptions = ref<any[]>([])
-const detailVisible = ref(false)
-const detail = ref<FinanceReceivable>({})
 
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
@@ -59,6 +57,8 @@ function subjectName(row: any) {
 function goSubject(row: any) {
   if (row.subjectType === SubjectType.SUPPLIER && row.supplierId) router.push(`/supplier/detail/${row.supplierId}`)
 }
+/** 详情改独立页（2026-09-23）：点整行 / 行内「详情」都跳详情页，不再开抽屉 */
+function goDetail(row: any) { if (row?.id != null) router.push(`/finance/receivable/detail/${row.id}`) }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === SettlementStatus.UNSETTLED) return 'danger'; if (s === SettlementStatus.PARTIAL) return 'warning'; if (s === SettlementStatus.SETTLED) return 'success'; if (s === SettlementStatus.CANCELLED) return 'info'; return undefined }
 </script>
@@ -84,7 +84,8 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
       </div>
     </el-card>
     <el-card shadow="never">
-      <el-table v-loading="loading" :data="data" border stripe @row-click="(row: any) => { detail = row; detailVisible = true }">
+      <!-- 2026-09-23：详情改独立页 ⇒ 点整行 / 行内「详情」都跳转（与账单页现状一致） -->
+      <el-table v-loading="loading" :data="data" border stripe @row-click="(row: any) => goDetail(row)">
         <el-table-column prop="billNo" label="单据号" min-width="150"/>
         <el-table-column label="往来单位" min-width="140">
           <template #default="{row}">
@@ -98,25 +99,11 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-table-column prop="unpaidAmount" label="未收" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column prop="dueDate" label="到期日" width="120" align="center"/>
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{ SettlementStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="80" align="center"><template #default="{row}"><el-button type="primary" link @click.stop="detail=row;detailVisible=true">详情</el-button></template></el-table-column>
+        <el-table-column label="操作" width="80" align="center"><template #default="{row}"><el-button type="primary" link @click.stop="goDetail(row)">详情</el-button></template></el-table-column>
       </el-table>
       <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="load" @current-change="load"/></div>
     </el-card>
-    <el-drawer v-model="detailVisible" title="应收详情" size="50%">
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="单据号">{{ detail.billNo }}</el-descriptions-item>
-        <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ SettlementStatusLabel[String(detail.status)] || detail.status }}</el-tag></el-descriptions-item>
-        <el-descriptions-item :label="detail.subjectType === SubjectType.SUPPLIER ? '供应商' : '客户'">{{ subjectName(detail) }}</el-descriptions-item>
-        <el-descriptions-item label="来源类型">{{ sourceBillTypeLabel(detail.sourceBillType) }}</el-descriptions-item>
-        <el-descriptions-item label="来源单号">{{ detail.sourceBillNo }}</el-descriptions-item>
-        <el-descriptions-item label="到期日">{{ detail.dueDate }}</el-descriptions-item>
-        <el-descriptions-item label="应收金额">{{ fmt(detail.amount) }}</el-descriptions-item>
-        <el-descriptions-item label="已收金额">{{ fmt(detail.paidAmount) }}</el-descriptions-item>
-        <el-descriptions-item label="未收金额"><span style="color:var(--app-color-danger)">{{ fmt(detail.unpaidAmount) }}</span></el-descriptions-item>
-        <!-- 制单人（2026-09-23 用户口径）：台账是按单自动生成的 ⇒ **只显示制单人，不显示审核人**（无审核流程） -->
-        <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
-      </el-descriptions>
-    </el-drawer>
+
   </div>
 </template>
 <style scoped>.p{display:flex;flex-direction:column;gap:12px}.qf{display:flex;flex-wrap:wrap}.pg{margin-top:16px;display:flex;justify-content:flex-end}</style>

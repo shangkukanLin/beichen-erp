@@ -351,6 +351,8 @@ const routes: RouteRecordRaw[] = [
       // 财务管理
       { path: 'finance/receivable', name: 'FinanceReceivable', component: () => import('@/views/finance/receivable.vue'), meta: { title: '应收管理', requiresAuth: true } },
       { path: 'finance/payable', name: 'FinancePayable', component: () => import('@/views/finance/payable.vue'), meta: { title: '应付管理', requiresAuth: true } },
+      // 应收/应付详情独立成页（2026-09-23 用户要求：全站抽屉详情改独立界面，原为 50% 抽屉）
+      { path: 'finance/receivable/detail/:id', name: 'FinanceReceivableDetail', component: () => import('@/views/finance/receivable/detail.vue'), meta: { title: '应收详情', requiresAuth: true, operate: true } },
       { path: 'finance/bill', name: 'FinanceBill', component: () => import('@/views/finance/bill.vue'), meta: { title: '账单生成', requiresAuth: true } },
       // 账单详情独立成页（原为抽屉）
       { path: 'finance/bill/detail/:id', name: 'FinanceBillDetail', component: () => import('@/views/finance/bill/detail.vue'), meta: { title: '账单详细', requiresAuth: true, operate: true } },
