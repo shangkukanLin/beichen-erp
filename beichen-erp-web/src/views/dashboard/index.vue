@@ -396,7 +396,7 @@
           <el-button v-if="hasMenu['InventoryWarehouseMove']" type="primary" size="small" text @click="$router.push('/inventory/warehouse-move')">移仓单</el-button>
           <el-button v-if="hasMenu['InventoryStockTake']" type="primary" size="small" text @click="$router.push('/inventory/stock-take')">库存盘点</el-button>
           <el-button v-if="hasMenu['InventoryStockLoss']" type="primary" size="small" text @click="$router.push('/inventory/stock-loss')">成品报损</el-button>
-          <el-button v-if="hasMenu['InventoryReclassify']" type="primary" size="small" text @click="$router.push('/inventory/reclassify')">品质重分类</el-button>
+          <el-button v-if="hasMenu['InventoryReclassify']" type="primary" size="small" text @click="$router.push('/inventory/reclassify')">规格调整</el-button>
           <el-button v-if="hasMenu['ProductManage']" type="primary" size="small" text @click="$router.push('/product')">产品管理</el-button>
         </div>
       </el-tab-pane>

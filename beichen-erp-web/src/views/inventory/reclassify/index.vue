@@ -118,7 +118,7 @@ onActivated(() => {
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
-          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增品质重分类</el-button>
+          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增规格调整</el-button>
         </div>
       </div>
     </el-card>

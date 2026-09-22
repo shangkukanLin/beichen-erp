@@ -9,7 +9,7 @@ $pages = @(
   @{ n = '销售单(列表)';          u = '/inventory/sale';          expect = 'no' },
   @{ n = '采购单(列表)';          u = '/inventory/purchase';      expect = 'no' },
   @{ n = '成品报损(列表)';        u = '/inventory/stock-loss';    expect = 'no' },
-  @{ n = '品质转换(列表)';        u = '/inventory/reclassify';    expect = 'no' },
+  @{ n = '规格调整(列表)';        u = '/inventory/reclassify';    expect = 'no' },
   @{ n = '退货整理(列表)';        u = '/inventory/return-sort';   expect = 'no' },
   @{ n = '其他出入库(列表)';      u = '/inventory/other-io';      expect = 'no' },
   @{ n = '成品库存详情(列表)';    u = '/inventory/product-stock'; expect = 'no' },

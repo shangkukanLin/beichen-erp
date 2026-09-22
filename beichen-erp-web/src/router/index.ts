@@ -268,10 +268,12 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/other-io', name: 'InventoryOtherIo', component: () => import('@/views/inventory/other-io/index.vue'), meta: { title: '成品其他出入库', requiresAuth: true } },
       { path: 'inventory/other-io/add', name: 'InventoryOtherIoAdd', component: () => import('@/views/inventory/other-io/add.vue'), meta: { title: '新增成品其他出入库', requiresAuth: true, operate: true } },
       { path: 'inventory/other-io/detail/:id', name: 'InventoryOtherIoDetail', component: () => import('@/views/inventory/other-io/detail.vue'), meta: { title: '成品其他出入库详细', requiresAuth: true, operate: true } },
-      { path: 'inventory/reclassify', name: 'InventoryReclassify', component: () => import('@/views/inventory/reclassify/index.vue'), meta: { title: '成品品质重分类', requiresAuth: true } },
-      // 品质重分类：新增与详情拆成独立页面（与成品其他出入库一致，详情草稿态直接可编辑）
-      { path: 'inventory/reclassify/add', name: 'InventoryReclassifyAdd', component: () => import('@/views/inventory/reclassify/add.vue'), meta: { title: '新增品质重分类', requiresAuth: true, operate: true } },
-      { path: 'inventory/reclassify/detail/:id', name: 'InventoryReclassifyDetail', component: () => import('@/views/inventory/reclassify/detail.vue'), meta: { title: '品质重分类详细', requiresAuth: true, operate: true } },
+      // 规格调整（2026-09-22 用户要求：菜单名由「成品品质重分类」改为「规格调整」，并由第 8 位挪到第 3 位；
+      // 路由 path/route_name 与 perms 均不变）
+      { path: 'inventory/reclassify', name: 'InventoryReclassify', component: () => import('@/views/inventory/reclassify/index.vue'), meta: { title: '规格调整', requiresAuth: true } },
+      // 规格调整：新增与详情拆成独立页面（与成品其他出入库一致，详情草稿态直接可编辑）
+      { path: 'inventory/reclassify/add', name: 'InventoryReclassifyAdd', component: () => import('@/views/inventory/reclassify/add.vue'), meta: { title: '新增规格调整', requiresAuth: true, operate: true } },
+      { path: 'inventory/reclassify/detail/:id', name: 'InventoryReclassifyDetail', component: () => import('@/views/inventory/reclassify/detail.vue'), meta: { title: '规格调整详细', requiresAuth: true, operate: true } },
       { path: 'inventory/return-sort', name: 'InventoryReturnSort', component: () => import('@/views/inventory/return-sort/index.vue'), meta: { title: '退货整理', requiresAuth: true } },
       // 退货整理：新增/编辑/详情独立页面（草稿可编辑，title 各不相同）
       { path: 'inventory/return-sort/add', name: 'InventoryReturnSortAdd', component: () => import('@/views/inventory/return-sort/form.vue'), meta: { title: '新增退货整理', requiresAuth: true, operate: true } },

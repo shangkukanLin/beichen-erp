@@ -69,12 +69,12 @@ if ($s707 -eq '2') { Ok '707 is the 2nd item of that catalog (sort_order=2)' } e
 if ($v707 -eq '1') { Ok '707 still visible' } else { Bad ('707 visible = ' + $v707) }
 if (($r707 -eq '/inventory/return-sort') -and ($n707 -eq 'InventoryReturnSort')) { Ok '707 route/route_name unchanged (/inventory/return-sort)' } else { Bad ('707 route unexpected: ' + $r707 + '/' + $n707) }
 # DB-level order check by ID (ASCII only, encoding-proof):
-# 706 移仓单 > 707 退货整理 > 712 成品库存详情 > 703 成品库存流水 > 711 库存盘点 >
-# 713 成品报损 > 704 成品其他出入库 > 705 成品品质重分类
-# （2026-09-22：702 成品仓库管理已迁入「基础数据」目录 ⇒ 本组 9 项变 8 项）
+# 706 移仓单 > 707 退货整理 > 705 规格调整 > 712 成品库存详情 > 703 成品库存流水 >
+# 711 库存盘点 > 713 成品报损 > 704 成品其他出入库
+# （2026-09-22：702 成品仓库管理迁入「基础数据」目录（9→8 项）；705「成品品质重分类」改名「规格调整」并挪到第 3 位）
 $dbIds = ((SqlLines 'SELECT id FROM sys_menu WHERE parent_id=7 AND visible=1 ORDER BY sort_order, id') -join ',')
 Write-Output ('  visible group ids in order = ' + $dbIds)
-if ($dbIds -eq '706,707,712,703,711,713,704,705') { Ok 'DB sort_order sequence exactly as user ordered' }
+if ($dbIds -eq '706,707,705,712,703,711,713,704') { Ok 'DB sort_order sequence exactly as user ordered' }
 else { Bad ('DB sequence mismatch: ' + $dbIds) }
 $s701 = SqlOne 'SELECT sort_order FROM sys_menu WHERE id=701'
 if ($s701 -eq '99') { Ok '701 (retired row) moved to sort_order=99 so it cannot tie with 707' } else { Bad ('701 sort_order = ' + $s701 + ' (expected 99)') }
@@ -118,7 +118,7 @@ if ($m.Success) {
   if ($idx -ge 0) { Ok ('return-sort now under the finished-goods catalog (index ' + $idx + ')') } else { Bad 'return-sort missing under the finished-goods catalog' }
   # 2026-09-18 user-defined order (8 items since 2026-09-22: 702 成品仓库管理 moved to the 基础数据 catalog,
   # see DataInitializer seed + docs); Chinese literals go through ui-e2e-zh.json
-  $expectStock = @((ZH 'menu_stock_move'), (ZH 'menu_sale_sort'), (ZH 'txt_prod_stock'), (ZH 'menu_stock_log'), (ZH 'menu_stock_take'), (ZH 'menu_stock_loss'), (ZH 'menu_stock_io'), (ZH 'menu_stock_reclass'))
+  $expectStock = @((ZH 'menu_stock_move'), (ZH 'menu_sale_sort'), (ZH 'menu_stock_reclass'), (ZH 'txt_prod_stock'), (ZH 'menu_stock_log'), (ZH 'menu_stock_take'), (ZH 'menu_stock_loss'), (ZH 'menu_stock_io'))
   if (($stock -join '|') -eq ($expectStock -join '|')) { Ok ('finished-goods catalog order exactly as user ordered (' + ($stock -join ' -> ') + ')') }
   else { Bad ('finished-goods catalog order mismatch; expect ' + ($expectStock -join '|') + ' got ' + ($stock -join '|')) }
   if ($idx -eq 1) { Ok 'return-sort is the 2nd item as ordered' } else { Bad ('return-sort index = ' + $idx + ' (expected 1, i.e. 2nd)') }

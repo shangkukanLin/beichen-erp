@@ -1,5 +1,5 @@
 ﻿# P7 (2026-09-18 full-flow E2E): finished-goods inventory documents, all through the frontend.
-#   1) 其他出入库 3 x IN + 3 x OUT      2) 移仓 3        3) 品质重分类 3
+#   1) 其他出入库 3 x IN + 3 x OUT      2) 移仓 3        3) 规格调整 3
 #   4) 成品报损 3                        5) 成品盘点 2 (also re-checks I18: the finished-goods take page was empty)
 # ALL DATA KEPT; rerunnable (creates only up to the target count). ASCII ONLY.
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
@@ -203,7 +203,16 @@ $rcQty = D (SqlOne 'SELECT COALESCE(SUM(quantity),0) FROM product_reclassify_ite
 Write-Host ("[DB] reclass audited=$rcAud totalQty=$rcQty A=$aBefore->$aAfter B=$bBefore->$bAfter")
 Ok (($rcAud -ge 3)) ('reclass audited >= 3 (got ' + $rcAud + ')')
 Ok ((($aBefore - $aAfter) -eq ($bAfter - $bBefore))) ('A decreased == B increased (' + ($aBefore - $aAfter) + ' vs ' + ($bAfter - $bBefore) + ')')
-Ok (($bAfter -ge 6)) ('quality B stock (cumulative) >= 6 (got ' + $bAfter + ')')
+# 2026-09-22 fix: the previous assertion was cumulative for the (product, warehouse) pair picked by
+# "the row with the largest stock" -- but the creation loop above is skipped once 3 docs exist
+# ($rcNeed = 0), and that pair changes between runs => on a long-lived DB the pair has no B at all
+# and the assertion was a permanent false red (unrelated to any code change).
+# Now we assert what THIS RUN actually did (the delta), and state the skipped case explicitly.
+if ($rcNeed -gt 0) {
+  Ok (($bAfter - $bBefore) -ge 6) ('this run moved >= 6 into quality B (delta=' + ($bAfter - $bBefore) + ')')
+} else {
+  Write-Host ('  INFO reclass creation skipped (already ' + $rcBase + ' docs) -> cumulative B check not applicable; B delta this run = ' + ($bAfter - $bBefore))
+}
 
 # =====================================================================
 Step '4) finished-goods stock loss x3 (reason=branken)'

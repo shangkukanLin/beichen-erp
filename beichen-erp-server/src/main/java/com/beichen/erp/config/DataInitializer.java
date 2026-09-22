@@ -339,28 +339,33 @@ public class DataInitializer implements ApplicationRunner {
             // 售后：销售退货单 → 销售换货单（换货可选择性收费）；「退货整理」已于 2026-09-18 移到「成品库存」
             {603L, 6L, "销售退货单", "menu", "/sale/return", "SaleReturn", "Refund", 2},
             {605L, 6L, "销售换货单", "menu", "/sale/exchange", "SaleExchange", "Refresh", 3},
-            // 成品库存子菜单顺序（2026-09-18 用户定稿重排）：
-            // 移仓单 → 退货整理 → 成品库存详情 → 成品库存流水 → 库存盘点 → 成品报损 → 成品其他出入库 → 成品品质重分类
-            // （2026-09-22：706「成品移仓单」改展示名为「移仓单」、712「成品库存情况」改「成品库存详情」，id/perms/路由不动；
-            //  同日末位 702「成品仓库管理」按用户要求**迁入「基础数据」（parent_id 7 → 2）** ⇒ 本组由 9 项变 8 项）
+            // 成品库存子菜单顺序（2026-09-18 用户定稿重排；2026-09-22 用户要求把 705 挪到第 3 位）：
+            // 移仓单 → 退货整理 → 规格调整 → 成品库存详情 → 成品库存流水 → 库存盘点 → 成品报损 → 成品其他出入库
+            // （2026-09-22：706「成品移仓单」改展示名为「移仓单」、712「成品库存情况」改「成品库存详情」、
+            //  705「成品品质重分类」改「规格调整」并由第 8 位挪到第 3 位（只改展示名与 sort_order，id/perms/路由不动）；
+            //  同日末位 702「成品仓库管理」按用户要求迁入「基础数据」⇒ 本组由 9 项变 8 项）
             // sort_order 即左侧栏显示顺序（MenuMapper.selectAllEnabled 按 sort_order 排序）；下方书写顺序与实际显示顺序一致，便于维护。
             {706L, 7L, "移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 1},
             // 退货整理（2026-09-18 用户要求：从「销售业务」移到「成品库存」—— 它本质是退回品的成品分选入库）
             // ID 仍保留 707（存量角色授权按 ID 关联，换 ID 会导致历史授权失效），仅迁移 parent_id 6 → 7；
-            // 同日用户重排本组顺序，退货整理由第 10 位改排**第 2 位**（紧跟成品移仓单）。
+            // 同日用户重排本组顺序，退货整理由第 10 位改排**第 2 位**（紧跟移仓单）。
             // ⚠️ 父目录 7 必须同时授权，否则菜单树 buildTree 会把 707 整组丢弃
             // （下方幂等补授块给其它持有 707 的角色兜底）。
             {707L, 7L, "退货整理", "menu", "/inventory/return-sort", "InventoryReturnSort", "RefreshRight", 2},
+            // 规格调整（2026-09-22 用户要求：由「成品品质重分类」改展示名、并由第 8 位挪到**第 3 位**）：
+            // 同一仓库内产品在不同品质等级之间转换（如 A规 降级为 B规）。
+            // id 705 / perms(stock:reclassify) / 路由(/inventory/reclassify) 一律不动
+            // ⇒ 不迁权限、不动前端白名单（排序由本行 upsert 的 sort_order 覆盖）。
+            {705L, 7L, "规格调整", "menu", "/inventory/reclassify", "InventoryReclassify", "Refresh", 3},
             // 成品库存详情（2026-09-22 由「成品库存情况」改名，仅展示名）：按产品维度看跨仓库库存汇总；
             // 点行进详情看该产品在各仓库的分布
-            {712L, 7L, "成品库存详情", "menu", "/inventory/product-stock", "InventoryProductStock", "Box", 3},
-            {703L, 7L, "成品库存流水", "menu", "/inventory/stock-log", "WarehouseStockLog", "TrendCharts", 4},
+            {712L, 7L, "成品库存详情", "menu", "/inventory/product-stock", "InventoryProductStock", "Box", 4},
+            {703L, 7L, "成品库存流水", "menu", "/inventory/stock-log", "WarehouseStockLog", "TrendCharts", 5},
             // 库存盘点：每月每仓一次，仓库列表与盘点页显示待盘点/超期提醒
-            {711L, 7L, "库存盘点", "menu", "/inventory/stock-take", "InventoryStockTake", "Files", 5},
+            {711L, 7L, "库存盘点", "menu", "/inventory/stock-take", "InventoryStockTake", "Files", 6},
             // 成品报损：草稿→审核扣减成品库存（LOSS_OUT 流水），可反审核回滚
-            {713L, 7L, "成品报损", "menu", "/inventory/stock-loss", "InventoryStockLoss", "DeleteFilled", 6},
-            {704L, 7L, "成品其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 7},
-            {705L, 7L, "成品品质重分类", "menu", "/inventory/reclassify", "InventoryReclassify", "Refresh", 8},
+            {713L, 7L, "成品报损", "menu", "/inventory/stock-loss", "InventoryStockLoss", "DeleteFilled", 7},
+            {704L, 7L, "成品其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 8},
             // 701「成品库存」（/inventory/stock）已于 2026-09-18 按用户要求下线（页面代码已删，功能由
             // 「712 成品库存情况」按产品维度覆盖）⇒ 与 409/602/503 同范式：不再 upsert，
             // 下方统一置 visible=0（保留行与角色授权，便于回滚）；其历史 sort_order 已在下方挪到 99，
@@ -494,6 +499,17 @@ public class DataInitializer implements ApplicationRunner {
             if (renamedMat > 0) log.info("已重命名菜单 416：物料库存情况 -> 物料库存详情");
         } catch (Exception e) {
             log.warn("重命名菜单 712/416 异常: {}", e.getMessage());
+        }
+
+        // 2026-09-22（用户口径）：705「成品品质重分类」改名「规格调整」（同时挪到成品库存第 3 位，
+        // 排序由种子 upsert 的 sort_order 覆盖）。同上只改**展示名**：
+        // id / perms(stock:reclassify) / 路由(/inventory/reclassify) 一律不动。
+        try {
+            int renamedReclass = jdbcTemplate.update(
+                    "UPDATE sys_menu SET menu_name = '规格调整' WHERE id = 705 AND menu_name = '成品品质重分类'");
+            if (renamedReclass > 0) log.info("已重命名菜单 705：成品品质重分类 -> 规格调整");
+        } catch (Exception e) {
+            log.warn("重命名菜单 705 异常: {}", e.getMessage());
         }
 
         // F3-3（2026-09-18 接口级权限专项）：写页面级接口权限码（幂等）

@@ -116,7 +116,7 @@ onActivated(() => { resetPage() })
 
 <template>
   <div style="display:flex;flex-direction:column;gap:12px">
-    <div><span style="font-size:var(--app-font-xl);font-weight:600">新增品质重分类</span></div>
+    <div><span style="font-size:var(--app-font-xl);font-weight:600">新增规格调整</span></div>
 
     <el-card shadow="never">
       <el-form :model="form" label-width="80px" size="small">
