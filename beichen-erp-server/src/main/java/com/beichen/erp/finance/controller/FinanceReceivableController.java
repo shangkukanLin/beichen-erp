@@ -57,6 +57,8 @@ public class FinanceReceivableController {
             m.put("unpaidAmount", r.getUnpaidAmount()); m.put("dueDate", r.getDueDate());
             m.put("status", r.getStatus()); m.put("remark", r.getRemark());
             m.put("createTime", r.getCreateTime());
+            // 制单人（2026-09-23 用户口径：应收详情抽屉要显示制单人；本接口返回 Map 投影，不显式带上就永远为空）
+            m.put("createByName", r.getCreateByName());
             return m;
         }).toList());
         return R.ok(res);

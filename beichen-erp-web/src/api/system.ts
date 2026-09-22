@@ -351,6 +351,8 @@ export interface ProjectVO {
 
 export interface ProjectDTO {
   id?: number | string; code?: string; name: string
+  /** 制单人（2026-09-23 用户口径：研发立项显示制单人；无审核流程 ⇒ 无审核人） */
+  createByName?: string
   /** 产品名称（2026-09-21 由「总成名称」更名，用户："这样更贴切业务"） */
   productName?: string
   /** 规格：MATCHED原配 / MODIFIED改配（立项必填）。选原配时页面隐藏显示方案/触摸方案/改配信息 */

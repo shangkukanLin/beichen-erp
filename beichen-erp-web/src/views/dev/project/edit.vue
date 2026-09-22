@@ -600,6 +600,8 @@ function onNameBlur() {
 
               <el-col :span="8"><el-form-item label="立项日期"><el-input v-model="form.startDate" type="date" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="预计完成"><el-input v-model="form.expectedEndDate" type="date" /></el-form-item></el-col>
+              <!-- 制单人（2026-09-23 用户口径：研发立项也显示制单人；**无审核流程 ⇒ 不显示审核人**） -->
+              <el-col :span="8"><el-form-item label="制单人"><el-input :model-value="form.createByName || '—'" readonly /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="当前阶段">
                 <el-tag type="warning" size="default">{{ currentPhaseName }}</el-tag>
               </el-form-item></el-col>

@@ -1,5 +1,6 @@
 package com.beichen.erp.dev.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -15,6 +16,18 @@ import java.time.LocalDateTime;
 @Data
 @TableName("dev_project")
 public class Project {
+
+    /**
+     * 制单人（ID + 姓名快照，表 dev_project）—— 2026-09-23 用户口径：研发立项也要显示制单人
+     * （由 MetaObjectHandler 自动填充）。本表**无审核流程** ⇒ 按口径不加 auditor
+     * （DB 里那两列会一并建出但始终为空，页面也不显示审核人）。
+     */
+    @TableField(fill = FieldFill.INSERT)
+    private Long createBy;
+
+    @TableField(fill = FieldFill.INSERT)
+    private String createByName;
+
 
     @TableId(type = IdType.AUTO)
     private Long id;

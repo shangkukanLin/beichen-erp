@@ -139,6 +139,8 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-descriptions-item label="应付金额">{{ fmt(detail.amount) }}</el-descriptions-item>
         <el-descriptions-item label="已付金额">{{ fmt(detail.paidAmount) }}</el-descriptions-item>
         <el-descriptions-item label="未付金额"><span style="color:var(--app-color-danger)">{{ fmt(detail.unpaidAmount) }}</span></el-descriptions-item>
+        <!-- 制单人（2026-09-23 用户口径）：台账是按单自动生成的 ⇒ **只显示制单人，不显示审核人**（无审核流程） -->
+        <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
       </el-descriptions>
     </el-drawer>
   </div>

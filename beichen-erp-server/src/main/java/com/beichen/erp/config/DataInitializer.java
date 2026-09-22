@@ -570,6 +570,9 @@ public class DataInitializer implements ApplicationRunner {
                 "outsource_return_order_repair", "outsource_material_return_repair",
                 // 结单报表（2026-09-23 排查补漏）：结单 = 该单的"审核"动作（confirmClose）⇒ 也要有制单人/审核人
                 "outsource_order_close_report",
+                // 研发立项（2026-09-23 用户要求纳入）：属项目主数据、**无审核流程** ⇒ 只填「制单人」；
+                // auditor_id/auditor_name 两列会一并建出但按口径始终留空（页面也不显示审核人）
+                "dev_project",
                 // 财务（台账 finance_receivable/payable 也记，便于追溯由哪张单触发）
                 "finance_receipt", "finance_payment", "finance_bill", "finance_expense",
                 "finance_invoice", "finance_payable_transfer",
