@@ -1,6 +1,8 @@
 package com.beichen.erp.sale.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldFill;
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -66,9 +68,22 @@ public class ReturnSort {
 
     private String remark;
 
+    /** 制单人（ID + 姓名快照）—— 2026-09-23 全站单据口径：详情页显示「制单人」，由 MetaObjectHandler 自动填充
+     *  （本单的"整理人" sortUserName 是业务语义上的操作人，制单人字段仍统一落，便于全站一致） */
+    @TableField(fill = FieldFill.INSERT)
+    private Long createBy;
+
+    @TableField(fill = FieldFill.INSERT)
+    private String createByName;
+
     private Long companyId;
 
     private LocalDateTime createTime;
+
+    /** 审核人（ID + 姓名快照）—— 2026-09-23 全站单据口径：详情页显示「审核人」，审核时盖章 */
+    private Long auditorId;
+
+    private String auditorName;
 
     private LocalDateTime updateTime;
 }

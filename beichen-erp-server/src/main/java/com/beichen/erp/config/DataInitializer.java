@@ -67,6 +67,7 @@ public class DataInitializer implements ApplicationRunner {
         initRoleMenus();
         migrateDashboardTabs();
         migrateUserMenuMode();
+        initDocOperatorColumns();
         migratePurchaseExchangeCharge();
         migratePurchaseChargePerProduct();
         migrateSaleItemCharge();
@@ -542,6 +543,67 @@ public class DataInitializer implements ApplicationRunner {
      * <p>注意：**已下线菜单**（104/302/303/405/409/503/602/701，visible=0）不在此表 —— 权限码只授给
      * 在用页面；其页面若仍被复用（如 301 研发立项复用 BomController），注解取**复用页**的码。</p>
      */
+    /**
+     * 全站单据「制单人 / 审核人」列（2026-09-23 用户口径：所有单据生成的详情都要显示这两项）。
+     *
+     * <p>做法：所有单据主表幂等补列 —— {@code create_by}/{@code create_by_name}（制单人，由
+     * {@code MybatisPlusConfig} 的 MetaObjectHandler 自动填充，业务代码零改动）+ {@code auditor_id}/
+     * {@code auditor_name}（审核人，审核时盖章；无审核流程的单据留空）。</p>
+     *
+     * <p>MySQL 8 没有 {@code ADD COLUMN IF NOT EXISTS} ⇒ 先查 {@code information_schema} 判断列是否存在，
+     * 缺哪列补哪列 ⇒ 重复启动零写入。（启动阶段没有请求上下文 ⇒ companyId 为空 ⇒ 多租户插件不介入。）</p>
+     */
+    private void initDocOperatorColumns() {
+        String[] docTables = {
+                // 采购
+                "purchase_order", "purchase_return", "purchase_exchange",
+                // 销售
+                "sale_order", "sale_return", "sale_exchange",
+                // 成品库存
+                "inventory_warehouse_move", "return_sort", "inventory_stock_take",
+                "inventory_stock_loss", "inventory_other_io", "product_reclassify",
+                // 物料仓库
+                "outsource_delivery", "outsource_stock_loss", "outsource_other_io",
+                // 委外
+                "outsource_order", "outsource_material_order", "outsource_return_order",
+                "outsource_material_return", "outsource_order_delivery",
+                "outsource_return_order_repair", "outsource_material_return_repair",
+                // 财务（台账 finance_receivable/payable 也记，便于追溯由哪张单触发）
+                "finance_receipt", "finance_payment", "finance_bill", "finance_expense",
+                "finance_invoice", "finance_payable_transfer",
+                "finance_receivable", "finance_payable",
+        };
+        int added = 0;
+        for (String t : docTables) {
+            try {
+                if (!columnExists(t, "create_by")) {
+                    jdbcTemplate.execute("ALTER TABLE " + t
+                            + " ADD COLUMN create_by BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',"
+                            + " ADD COLUMN create_by_name VARCHAR(50) NULL COMMENT '制单人姓名快照'");
+                    added++;
+                }
+                if (!columnExists(t, "auditor_id")) {
+                    jdbcTemplate.execute("ALTER TABLE " + t
+                            + " ADD COLUMN auditor_id BIGINT NULL COMMENT '审核人ID（审核时盖章）',"
+                            + " ADD COLUMN auditor_name VARCHAR(50) NULL COMMENT '审核人姓名快照'");
+                    added++;
+                }
+            } catch (Exception e) {
+                log.warn("补列失败 {}: {}", t, e.getMessage());
+            }
+        }
+        if (added > 0) log.info("已为 {} 处单据表补「制单人/审核人」列", added);
+    }
+
+    /** 判断某表是否已有某列（幂等 DDL 用；启动阶段无租户上下文，多租户插件不会改写本查询） */
+    private boolean columnExists(String table, String column) {
+        Integer n = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                        + "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+                Integer.class, table, column);
+        return n != null && n > 0;
+    }
+
     private void initMenuPerms() {
         Object[][] perms = {
                 // ===== 首页 =====
