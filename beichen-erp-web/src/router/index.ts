@@ -336,8 +336,10 @@ const routes: RouteRecordRaw[] = [
       // 销售分析钻取：某产品/仓库在区间的销售单明细（operate 页，不入菜单）
       { path: 'analysis/sale/detail', name: 'AnalysisSaleDetail', component: () => import('@/views/analysis/sale/detail.vue'), meta: { title: '销售单明细', requiresAuth: true, operate: true } },
       { path: 'analysis/customer', name: 'AnalysisCustomer', component: () => import('@/views/analysis/customer.vue'), meta: { title: '客户分析', requiresAuth: true } },
-      // 进货分析（2026-09-15 新增）：区间采购 KPI + 趋势 + 单据明细（点单号进对应单据详情）
+      // 进货分析（2026-09-15 新增；2026-09-22 起第 ④ 块为「供货商分析」列表）：区间采购 KPI + 趋势 + 两个饼图 + 供货商分析
       { path: 'analysis/purchase', name: 'AnalysisPurchase', component: () => import('@/views/analysis/purchase.vue'), meta: { title: '进货分析', requiresAuth: true } },
+      // 单供货商分析（2026-09-22 用户要求）：进货分析列表点供货商名进入（operate 页，不入菜单）
+      { path: 'analysis/purchase/supplier/:id', name: 'AnalysisPurchaseSupplier', component: () => import('@/views/analysis/purchase/supplier.vue'), meta: { title: '单供货商分析', requiresAuth: true, operate: true } },
       // 单客户分析：客户分析页点客户名进入（档案 + 图表 + 拿货/品牌/退货明细）
       { path: 'analysis/customer/:id', name: 'AnalysisCustomerProfile', component: () => import('@/views/analysis/customer/profile.vue'), meta: { title: '单客户分析', requiresAuth: true, operate: true } },
       // 客户分析钻取：某客户在区间的销售单明细

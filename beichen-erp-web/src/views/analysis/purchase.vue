@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onActivated, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { SourceBillDetailRoute } from '@/api/enums'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
 import StatRange from '@/components/StatRange.vue'
@@ -10,21 +9,25 @@ import { PURCHASE_ANALYSIS_FORMULA } from '@/utils/kpiFormula'
 import { pieOutsideLabel, pieTooltip } from '@/utils/pieLabel'
 
 /**
- * 进货分析（经营分析，2026-09-15 新增）：**所选区间**的采购 KPI + 趋势图 + **两个饼图** + 单据明细（可下钻进详情）。
+ * 进货分析（经营分析，2026-09-15 新增）：**所选区间**的采购 KPI + 趋势图 + **两个饼图** + **供货商分析列表**
+ * （2026-09-22 用户要求：点供货商名进入「单供货商分析」下钻页）。
  * 数据源 `/finance/analysis/purchase-analysis`（与首页「经营总览」/「经营概览」的采购口径同源）。
  * 口径（2026-09-15 全站统一**建单日**归期）：采购金额 = 已审核采购单（create_time）；采购退货 = 已审核采购退货（create_time）；
  *      净采购额 = 采购金额 − 采购退货；采购单数 = 已审核采购单笔数。
  * 2026-09-15（第二轮）：新增两个饼图（**采购成品** / **委外加工**，分开两张、各按产品分片），
- *      放在「采购单据明细」上方；每张卡各有「金额 / 件数」switch。
+ *      放在明细/供货商卡上方；每张卡各有「金额 / 件数」switch。
  * 2026-09-21（仅文案）：卡标题 直接采购成品→采购成品、委外加工成品入库→委外加工；
  *      明细卡标题 采购单据明细（下钻）→采购单据明细。口径/取数/接口零改动。
+ * 2026-09-22（用户要求）：**第 ④ 块由「采购单据明细」表改为「供货商分析」列表**
+ *      （供货商 / 采购金额 / 采购退货 / 净采购额 / 采购单数 / 占比，抬头保留"合计=净采购额"对账），
+ *      点供货商名下钻到「单供货商分析」；后端同一接口新增 `suppliers[]`（与 KPI 同源 ⇒ 各行净额合计 = 净采购额）。
  * 注：采购入库属资产、不计入损益，本页只做采购视角统计，不参与利润/成本。
  */
 const router = useRouter()
 const loading = ref(false)
 const preset = ref('month')
 const range = ref<[string, string] | null>(null)
-const data = ref<any>({ range: {}, kpi: {}, series: {}, details: [] })
+const data = ref<any>({ range: {}, kpi: {}, series: {}, suppliers: [] })
 const chartEmpty = ref(false)
 let chart: echarts.ECharts | null = null
 
@@ -63,20 +66,32 @@ const kpiCards = computed(() => {
   ]
 })
 
-const details = computed<any[]>(() => data.value.details || [])
+/**
+ * 供货商分析列表（2026-09-22 用户要求：**替代原「采购单据明细」表**）：
+ * 按供货商聚合所选区间的采购/退货/净额/单数，点供货商名进入「单供货商分析」。
+ * 后端与上方 KPI 同源 ⇒ 各行净额合计必然等于 KPI 净采购额（列表抬头把这条对账关系写出来）。
+ */
+const suppliers = computed<any[]>(() => data.value.suppliers || [])
 const page = ref(1)
 const pageSize = 20
-const pagedDetails = computed(() => details.value.slice((page.value - 1) * pageSize, page.value * pageSize))
-const detailTotal = computed(() => details.value.length)
-/** 明细合计：采购 − 采购退货（与上方净采购额对账用） */
-const detailSum = computed(() => {
-  let a = 0, r = 0
-  details.value.forEach((x: any) => {
-    const v = Number(x.amount) || 0
-    if (x.billType === 'PURCHASE_RETURN') r += v; else a += v
+const pagedSuppliers = computed(() => suppliers.value.slice((page.value - 1) * pageSize, page.value * pageSize))
+const supplierTotal = computed(() => suppliers.value.length)
+/** 供货商合计（与上方净采购额对账用） */
+const supplierSum = computed(() => {
+  let a = 0, r = 0, c = 0
+  suppliers.value.forEach((x: any) => {
+    a += Number(x.purchaseAmount) || 0
+    r += Number(x.returnAmount) || 0
+    c += Number(x.orderCount) || 0
   })
-  return { purchase: a, ret: r, net: a - r }
+  return { purchase: a, ret: r, net: a - r, count: c }
 })
+/** 采购金额占比（该供货商采购额 / 全区间采购额） */
+function shareOf(row: any) {
+  const total = supplierSum.value.purchase
+  if (!total) return '0.0%'
+  return ((Number(row.purchaseAmount) || 0) / total * 100).toFixed(1) + '%'
+}
 
 /** 趋势图：采购金额/采购退货（柱）+ 净采购额（线），随统计区间联动（粒度由后端决定） */
 function renderChart() {
@@ -115,9 +130,9 @@ async function loadData() {
       params.start = range.value[0]; params.end = range.value[1]
     }
     data.value = await request.get<any, any>('/finance/analysis/purchase-analysis', { params })
-      || { range: {}, kpi: {}, series: {}, details: [] }
+      || { range: {}, kpi: {}, series: {}, suppliers: [] }
   } catch {
-    data.value = { range: {}, kpi: {}, series: {}, details: [] }
+    data.value = { range: {}, kpi: {}, series: {}, suppliers: [] }
   } finally { loading.value = false }
   page.value = 1
   await nextTick()
@@ -199,13 +214,19 @@ function renderPies() {
 /** 口径开关切换 → 只重绘饼图（数据已在本地，不重新请求接口） */
 watch([dpMetric, osMetric], async () => { await nextTick(); setTimeout(renderPies, 30) })
 
-/** 明细行 → 对应单据详情页（采购单 / 采购退货单） */
-function goBill(row: any) {
-  if (!row?.billId) return
-  // 2026-09-20（F7-189）：改用集中映射 SourceBillDetailRoute（含 PURCHASE_RETURN 键），
-  // 不再内联拼路由 —— 与 payment-supplier.vue 等处口径一致；路由一旦调整只需改 @/api/enums 一处。
-  const base = SourceBillDetailRoute[row.billType] || SourceBillDetailRoute.PURCHASE_ORDER
-  router.push(`${base}/${row.billId}`)
+/**
+ * 供货商行 → 单供货商分析页（2026-09-22 用户要求）。
+ * **带上当前统计区间**（preset/start/end）⇒ 下钻页与列表页看的是同一段数据（与客户分析下钻同做法）。
+ */
+function goSupplier(row: any) {
+  if (row?.supplierId == null) return
+  const query: Record<string, string> = {}
+  if (preset.value === 'custom' && range.value?.length === 2) {
+    query.start = range.value[0]; query.end = range.value[1]
+  } else {
+    query.preset = preset.value
+  }
+  router.push({ path: `/analysis/purchase/supplier/${row.supplierId}`, query })
 }
 
 onMounted(() => { loadData() })
@@ -264,41 +285,42 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
-    <!-- ④ 单据明细（下钻：点单号进采购单/采购退货单详情） -->
+    <!-- ④ 供货商分析（2026-09-22 用户要求：把原「采购单据明细」表换成供货商视角，点供货商名进入单个供货商分析） -->
     <el-card shadow="never" class="section-card">
       <template #header>
         <div class="card-head">
-          <span class="card-title">采购单据明细</span>
+          <span class="card-title">供货商分析</span>
           <span class="dim">
-            合计：采购 {{ fmtN(detailSum.purchase) }} ｜ 退货 {{ fmtN(detailSum.ret) }} ｜
-            净采购 <b>{{ fmtN(detailSum.net) }}</b>（应与上方「净采购额」一致）
+            合计：采购 {{ fmtN(supplierSum.purchase) }} ｜ 退货 {{ fmtN(supplierSum.ret) }} ｜
+            净采购 <b>{{ fmtN(supplierSum.net) }}</b>（应与上方「净采购额」一致）｜
+            共 {{ supplierSum.count }} 单 ｜ 点供货商名进入该供货商的分析
           </span>
         </div>
       </template>
-      <el-table :data="pagedDetails" border stripe empty-text="该区间无采购单据">
-        <el-table-column label="类型" width="110" align="center">
-          <template #default="{ row }">
-            <el-tag :type="row.billType === 'PURCHASE_RETURN' ? 'danger' : 'warning'" size="small">
-              {{ row.billType === 'PURCHASE_RETURN' ? '采购退货' : '采购单' }}
-            </el-tag>
-          </template>
+      <el-table :data="pagedSuppliers" border stripe empty-text="该区间无采购单据">
+        <el-table-column label="供货商" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }"><span class="bill-link" @click="goSupplier(row)">{{ row.supplier }}</span></template>
         </el-table-column>
-        <el-table-column label="单号" min-width="170">
-          <template #default="{ row }"><span class="bill-link" @click="goBill(row)">{{ row.code }}</span></template>
+        <el-table-column label="采购金额" width="150" align="right">
+          <template #default="{ row }"><span style="color:var(--app-color-warning)">{{ fmtN(row.purchaseAmount) }}</span></template>
         </el-table-column>
-        <el-table-column prop="date" label="日期" width="110"/>
-        <el-table-column prop="supplier" label="供应商" min-width="170" show-overflow-tooltip/>
-        <el-table-column label="金额" width="150" align="right">
+        <el-table-column label="采购退货" width="130" align="right">
           <template #default="{ row }">
-            <span :style="{ color: row.billType === 'PURCHASE_RETURN' ? 'var(--app-color-danger)' : 'var(--app-color-warning)' }">
-              {{ row.billType === 'PURCHASE_RETURN' ? '-' : '+' }}{{ fmtN(row.amount) }}
+            <span :style="{ color: Number(row.returnAmount) ? 'var(--app-color-danger)' : 'var(--el-text-color-secondary)' }">
+              {{ fmtN(row.returnAmount) }}
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip/>
+        <el-table-column label="净采购额" width="150" align="right">
+          <template #default="{ row }"><b>{{ fmtN(row.netPurchase) }}</b></template>
+        </el-table-column>
+        <el-table-column prop="orderCount" label="采购单数" width="100" align="center"/>
+        <el-table-column label="占比" width="90" align="right">
+          <template #default="{ row }">{{ shareOf(row) }}</template>
+        </el-table-column>
       </el-table>
-      <div class="pager" v-if="detailTotal > pageSize">
-        <el-pagination background layout="total, prev, pager, next" :total="detailTotal"
+      <div class="pager" v-if="supplierTotal > pageSize">
+        <el-pagination background layout="total, prev, pager, next" :total="supplierTotal"
           :page-size="pageSize" v-model:current-page="page"/>
       </div>
     </el-card>

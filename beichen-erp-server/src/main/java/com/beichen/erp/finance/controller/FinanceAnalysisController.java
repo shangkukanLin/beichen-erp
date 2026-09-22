@@ -5,6 +5,7 @@ import com.beichen.erp.finance.service.FinanceAnalysisService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -75,6 +76,25 @@ public class FinanceAnalysisController {
             return R.fail("日期格式无效，应为 yyyy-MM-dd");
         }
         return R.ok(service.purchaseAnalysis(preset, start, end));
+    }
+
+    /**
+     * 单供货商分析（2026-09-22 新增，供「进货分析」列表点供货商行进入）：
+     * 供货商档案 + 同区间 KPI + 月度趋势 + 采购产品 TOP + 该供货商的单据明细。
+     * <p>与「进货分析」同源同口径；本前缀已在 ApiPermGuard 只读聚合白名单内，无需额外权限码。</p>
+     */
+    @GetMapping("/purchase-supplier/{supplierId}")
+    public R<Map<String, Object>> purchaseSupplier(@PathVariable Long supplierId,
+            @RequestParam(defaultValue = "year") String preset,
+            @RequestParam(required = false) String start,
+            @RequestParam(required = false) String end) {
+        try {
+            if (start != null && !start.isBlank()) LocalDate.parse(start);
+            if (end != null && !end.isBlank()) LocalDate.parse(end);
+        } catch (Exception ex) {
+            return R.fail("日期格式无效，应为 yyyy-MM-dd");
+        }
+        return R.ok(service.purchaseSupplier(supplierId, preset, start, end));
     }
 
     /**

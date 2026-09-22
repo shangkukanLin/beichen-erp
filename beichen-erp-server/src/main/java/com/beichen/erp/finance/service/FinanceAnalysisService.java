@@ -50,6 +50,16 @@ public interface FinanceAnalysisService {
     Map<String, Object> purchaseAnalysis(String preset, String start, String end);
 
     /**
+     * 单供货商分析（2026-09-22 新增，供「进货分析」列表点供货商行进入）：
+     * 供货商档案 + 同区间 KPI（采购金额/采购退货/净采购额/采购单数）+ 月度趋势 + 采购产品 TOP + 该供货商的单据明细。
+     * <p>口径与 {@link #purchaseAnalysis} **完全同源**（同一 mapper 查询、同一区间解析），
+     * 保证下钻页与列表页/上方的净采购额能逐项对账。</p>
+     *
+     * @param supplierId 供货商 ID；传 0 表示「未指定供货商」桶（单据 supplier_id 为空）
+     */
+    Map<String, Object> purchaseSupplier(Long supplierId, String preset, String start, String end);
+
+    /**
      * 主体往来统计：供应商应付（按主体类型）、供应商应收未收（应付转应收）、报损损失。
      * 数据源：应付/应收台账 + 两张报损单（只读聚合，不改业务数据）。
      */

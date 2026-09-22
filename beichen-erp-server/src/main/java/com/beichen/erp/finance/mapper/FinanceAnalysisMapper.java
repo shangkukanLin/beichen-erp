@@ -83,12 +83,12 @@ public interface FinanceAnalysisMapper {
     @Select("SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS amt FROM purchase_order WHERE status = 'AUDITED' GROUP BY d")
     List<Map<String, Object>> purchaseCountByDay();
 
-    /** 采购单明细（下钻用：d=**建单日**、partner=供应商名称） */
-    @Select("SELECT o.id, o.code, DATE_FORMAT(o.create_time, '%Y-%m-%d') AS d, s.name AS partner, o.total_amount, o.remark FROM purchase_order o LEFT JOIN supplier s ON s.id = o.supplier_id WHERE o.status = 'AUDITED'")
+    /** 采购单明细（下钻/供货商聚合用：d=**建单日**、partner=供货商名称、supplier_id=供货商ID） */
+    @Select("SELECT o.id, o.code, o.supplier_id, DATE_FORMAT(o.create_time, '%Y-%m-%d') AS d, s.name AS partner, o.total_amount, o.remark FROM purchase_order o LEFT JOIN supplier s ON s.id = o.supplier_id WHERE o.status = 'AUDITED'")
     List<Map<String, Object>> purchaseOrderRecords();
 
-    /** 采购退货单明细（下钻用：d=建单日、partner=供应商名称） */
-    @Select("SELECT o.id, o.code, DATE_FORMAT(o.create_time, '%Y-%m-%d') AS d, s.name AS partner, o.total_amount, o.remark FROM purchase_return o LEFT JOIN supplier s ON s.id = o.supplier_id WHERE o.status = 'AUDITED'")
+    /** 采购退货单明细（下钻/供货商聚合用：d=建单日、partner=供货商名称、supplier_id=供货商ID） */
+    @Select("SELECT o.id, o.code, o.supplier_id, DATE_FORMAT(o.create_time, '%Y-%m-%d') AS d, s.name AS partner, o.total_amount, o.remark FROM purchase_return o LEFT JOIN supplier s ON s.id = o.supplier_id WHERE o.status = 'AUDITED'")
     List<Map<String, Object>> purchaseReturnRecords();
 
     // ==================== 进货分析的 2 个饼图（2026-09-15 新增） ====================
@@ -117,6 +117,27 @@ public interface FinanceAnalysisMapper {
             "WHERE r.status = 'AUDITED' " +
             "GROUP BY i.product_id, p.name, d")
     List<Map<String, Object>> purchaseReturnItemByProduct();
+
+    // ==================== 单供货商分析（2026-09-22 新增，供「进货分析 → 点供货商进入」） ====================
+    // 与上面「按产品」的两个查询**完全同源**（同表、同归期=建单日、同过滤），只是多带 supplier_id 便于按供货商切片。
+
+    /** **单供货商**采购明细按「供货商 × 产品 × 建单日」（金额/件数） */
+    @Select("SELECT o.supplier_id, i.product_id, p.name AS product_name, DATE_FORMAT(o.create_time, '%Y-%m-%d') AS d, " +
+            "IFNULL(SUM(i.amount), 0) AS amt, IFNULL(SUM(i.quantity), 0) AS qty " +
+            "FROM purchase_order o JOIN purchase_order_item i ON i.order_id = o.id " +
+            "LEFT JOIN product p ON p.id = i.product_id " +
+            "WHERE o.status = 'AUDITED' " +
+            "GROUP BY o.supplier_id, i.product_id, p.name, d")
+    List<Map<String, Object>> purchaseItemBySupplierProduct();
+
+    /** 同上，**采购退货**侧（作为净额的冲减项） */
+    @Select("SELECT r.supplier_id, i.product_id, p.name AS product_name, DATE_FORMAT(r.create_time, '%Y-%m-%d') AS d, " +
+            "IFNULL(SUM(i.amount), 0) AS amt, IFNULL(SUM(i.quantity), 0) AS qty " +
+            "FROM purchase_return r JOIN purchase_return_item i ON i.return_id = r.id " +
+            "LEFT JOIN product p ON p.id = i.product_id " +
+            "WHERE r.status = 'AUDITED' " +
+            "GROUP BY r.supplier_id, i.product_id, p.name, d")
+    List<Map<String, Object>> purchaseReturnItemBySupplierProduct();
 
     /**
      * **委外加工成品入库**按「成品产品 × 交货日期」（饼图用）：已审核交货记录（审核后成品入库 + 生成应付）。

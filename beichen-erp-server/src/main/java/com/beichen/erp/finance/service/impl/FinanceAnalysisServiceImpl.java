@@ -12,6 +12,8 @@ import com.beichen.erp.inventory.entity.InventoryStockLoss;
 import com.beichen.erp.inventory.mapper.InventoryStockLossMapper;
 import com.beichen.erp.outsource.entity.OutsourceStockLoss;
 import com.beichen.erp.outsource.mapper.OutsourceStockLossMapper;
+import com.beichen.erp.supplier.entity.Supplier;
+import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -40,6 +42,12 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
     private final FinanceReceivableMapper receivableMapper;
     private final InventoryStockLossMapper inventoryLossMapper;
     private final OutsourceStockLossMapper outsourceLossMapper;
+    /** 单供货商分析的档案（供货商已删除时退化为单据里带的名称） */
+    private final SupplierMapper supplierMapper;
+
+    /** 「未指定供货商」桶：单据 supplier_id 为空时归入 id=0（与 F7-43#4「不静默丢弃」同口径） */
+    private static final Long NO_SUPPLIER_ID = 0L;
+    private static final String NO_SUPPLIER_NAME = "（未指定供货商）";
 
     private static final BigDecimal HUNDRED = new BigDecimal("100");
     private static final BigDecimal ZERO = BigDecimal.ZERO;
@@ -350,6 +358,8 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
         // 两个饼图（2026-09-15 用户要求）：直接采购成品 / 委外加工成品入库，放在「采购单据明细（下钻）」上方
         fillPurchasePies(res, s, e);
         res.put("details", purchaseDetails(s, e));
+        // 供货商分析列表（2026-09-22 用户要求：进货分析页把「采购单据明细」换成供货商视角）
+        res.put("suppliers", purchaseSuppliers(s, e));
         return res;
     }
 
@@ -526,6 +536,191 @@ public class FinanceAnalysisServiceImpl implements FinanceAnalysisService {
 
     /** 空安全的 toString（金额/文本字段取值） */
     private String txt(Object v) { return v == null ? "" : v.toString(); }
+
+    // ==================== 供货商分析（2026-09-22 用户要求） ====================
+
+    /**
+     * 按**供货商**聚合（进货分析页的「供货商分析」列表，替代原「采购单据明细」表）。
+     * <p>与上方 KPI **同源同区间**（都用 purchaseOrderRecords / purchaseReturnRecords 按建单日过滤），
+     * 故「各行净采购额合计 = KPI 净采购额」必然对账。</p>
+     * <p>排序：净采购额降序 → 供货商名（稳定）。supplier_id 为空的单据归入 id=0 的「（未指定供货商）」桶，
+     * 不静默丢弃（与 F7-43#4 同口径）。</p>
+     */
+    private List<Map<String, Object>> purchaseSuppliers(LocalDate s, LocalDate e) {
+        String from = s.toString(), to = e.toString();
+        Map<Long, Map<String, Object>> agg = new LinkedHashMap<>();
+        for (Map<String, Object> r : analysisMapper.purchaseOrderRecords()) {
+            String d = txt(r.get("d"));
+            if (d.isEmpty() || d.compareTo(from) < 0 || d.compareTo(to) > 0) continue;
+            Map<String, Object> row = supplierAggRow(agg, r);
+            row.put("purchaseAmount", ((BigDecimal) row.get("purchaseAmount")).add(toBd(r.get("total_amount"))));
+            row.put("orderCount", ((Integer) row.get("orderCount")) + 1);
+        }
+        for (Map<String, Object> r : analysisMapper.purchaseReturnRecords()) {
+            String d = txt(r.get("d"));
+            if (d.isEmpty() || d.compareTo(from) < 0 || d.compareTo(to) > 0) continue;
+            Map<String, Object> row = supplierAggRow(agg, r);
+            row.put("returnAmount", ((BigDecimal) row.get("returnAmount")).add(toBd(r.get("total_amount"))));
+        }
+        List<Map<String, Object>> list = new ArrayList<>(agg.values());
+        for (Map<String, Object> row : list) {
+            BigDecimal a = (BigDecimal) row.get("purchaseAmount");
+            BigDecimal b = (BigDecimal) row.get("returnAmount");
+            row.put("netPurchase", a.subtract(b));
+        }
+        list.sort(Comparator.comparing((Map<String, Object> r) -> (BigDecimal) r.get("netPurchase")).reversed()
+                .thenComparing(r -> String.valueOf(r.get("supplier"))));
+        return list;
+    }
+
+    /** 取（或建）某供货商的聚合行 —— 名称优先用单据里带的 partner（供货商被删也显示得出来） */
+    private Map<String, Object> supplierAggRow(Map<Long, Map<String, Object>> agg, Map<String, Object> r) {
+        Long sid = r.get("supplier_id") == null ? NO_SUPPLIER_ID : toBd(r.get("supplier_id")).longValue();
+        return agg.computeIfAbsent(sid, k -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            String name = txt(r.get("partner"));
+            m.put("supplierId", k);
+            m.put("supplier", !name.isEmpty() ? name
+                    : (NO_SUPPLIER_ID.equals(k) ? NO_SUPPLIER_NAME : "（供货商已删除）"));
+            m.put("purchaseAmount", ZERO);
+            m.put("returnAmount", ZERO);
+            m.put("orderCount", 0);
+            return m;
+        });
+    }
+
+    /**
+     * 单供货商分析（进货分析页点供货商行进入）：档案 + 同区间 KPI + 月度趋势 + 采购产品 TOP + 该供货商单据明细。
+     * <p>口径与 {@link #purchaseAnalysis} **完全同源**（同 mapper 查询 + 同区间解析 + 同防滥用截断），
+     * 保证下钻页的净采购额与列表页、以及上方 KPI 逐项对账。</p>
+     */
+    @Override
+    public Map<String, Object> purchaseSupplier(Long supplierId, String preset, String start, String end) {
+        LocalDate s, e;
+        boolean custom = start != null && !start.isBlank() && end != null && !end.isBlank();
+        if (custom) {
+            s = LocalDate.parse(start); e = LocalDate.parse(end);
+            if (s.isAfter(e)) { LocalDate t = s; s = e; e = t; }
+        } else {
+            LocalDate[] r = resolvePresetRange(preset);
+            s = r[0]; e = r[1];
+        }
+        boolean truncated = s.plusDays(MAX_RANGE_DAYS).isBefore(e);
+        if (truncated) s = e.minusDays(MAX_RANGE_DAYS - 1);
+        String from = s.toString(), to = e.toString();
+        Long sid = supplierId == null ? NO_SUPPLIER_ID : supplierId;
+
+        BigDecimal amount = ZERO, retAmount = ZERO;
+        int cnt = 0;
+        Map<String, BigDecimal> mAmt = new LinkedHashMap<>(), mRet = new LinkedHashMap<>();
+        List<Map<String, Object>> bills = new ArrayList<>();
+        for (Map<String, Object> r : analysisMapper.purchaseOrderRecords()) {
+            if (!belongsToSupplier(r, sid)) continue;
+            String d = txt(r.get("d"));
+            if (d.isEmpty() || d.compareTo(from) < 0 || d.compareTo(to) > 0) continue;
+            BigDecimal v = toBd(r.get("total_amount"));
+            amount = amount.add(v);
+            cnt++;
+            mAmt.merge(monthOf(d), v, BigDecimal::add);
+            bills.add(purchaseDetailRow("PURCHASE", r, d));
+        }
+        for (Map<String, Object> r : analysisMapper.purchaseReturnRecords()) {
+            if (!belongsToSupplier(r, sid)) continue;
+            String d = txt(r.get("d"));
+            if (d.isEmpty() || d.compareTo(from) < 0 || d.compareTo(to) > 0) continue;
+            BigDecimal v = toBd(r.get("total_amount"));
+            retAmount = retAmount.add(v);
+            mRet.merge(monthOf(d), v, BigDecimal::add);
+            bills.add(purchaseDetailRow("PURCHASE_RETURN", r, d));
+        }
+        bills.sort(Comparator.comparing((Map<String, Object> m) -> String.valueOf(m.get("date"))).reversed()
+                .thenComparing(m -> String.valueOf(m.get("code"))));
+
+        // 采购产品 TOP（该供货商；净额 = 采购 − 采购退货，与两个饼图同源同法）
+        Map<Long, BigDecimal> pAmt = new HashMap<>(), pQty = new HashMap<>();
+        Map<Long, String> pName = new HashMap<>();
+        for (Map<String, Object> r : analysisMapper.purchaseItemBySupplierProduct()) {
+            if (!belongsToSupplier(r, sid) || !inRange(txt(r.get("d")), from, to)) continue;
+            Long pid = r.get("product_id") == null ? OTHER_PID : toBd(r.get("product_id")).longValue();
+            pName.putIfAbsent(pid, OTHER_PID.equals(pid) ? OTHER_NAME : txt(r.get("product_name")));
+            pAmt.merge(pid, toBd(r.get("amt")), BigDecimal::add);
+            pQty.merge(pid, toBd(r.get("qty")), BigDecimal::add);
+        }
+        for (Map<String, Object> r : analysisMapper.purchaseReturnItemBySupplierProduct()) {
+            if (!belongsToSupplier(r, sid) || !inRange(txt(r.get("d")), from, to)) continue;
+            Long pid = r.get("product_id") == null ? OTHER_PID : toBd(r.get("product_id")).longValue();
+            pName.putIfAbsent(pid, OTHER_PID.equals(pid) ? OTHER_NAME : txt(r.get("product_name")));
+            pAmt.merge(pid, toBd(r.get("amt")).negate(), BigDecimal::add);
+            pQty.merge(pid, toBd(r.get("qty")).negate(), BigDecimal::add);
+        }
+        List<Map<String, Object>> byProduct = new ArrayList<>();
+        for (Map.Entry<Long, BigDecimal> en : pAmt.entrySet()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("productId", en.getKey());
+            m.put("productName", pName.getOrDefault(en.getKey(), OTHER_NAME));
+            m.put("amount", en.getValue());
+            m.put("quantity", pQty.getOrDefault(en.getKey(), ZERO));
+            byProduct.add(m);
+        }
+        byProduct.sort(Comparator.comparing((Map<String, Object> m) -> (BigDecimal) m.get("amount")).reversed()
+                .thenComparing(m -> String.valueOf(m.get("productName"))));
+
+        List<String> months = monthRange(s, e);
+        List<BigDecimal> monthAmounts = new ArrayList<>(), monthReturns = new ArrayList<>();
+        for (String mm : months) {
+            monthAmounts.add(mAmt.getOrDefault(mm, ZERO));
+            monthReturns.add(mRet.getOrDefault(mm, ZERO));
+        }
+
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("purchaseAmount", amount);
+        summary.put("returnAmount", retAmount);
+        summary.put("netPurchase", amount.subtract(retAmount));
+        summary.put("orderCount", cnt);
+        summary.put("avgAmount", cnt > 0 ? amount.divide(new BigDecimal(cnt), 2, RoundingMode.HALF_UP) : ZERO);
+
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("start", from);
+        res.put("end", to);
+        res.put("truncated", truncated);
+        res.put("maxDays", MAX_RANGE_DAYS);
+        res.put("supplier", supplierProfile(sid, bills));
+        res.put("summary", summary);
+        res.put("months", months);
+        res.put("monthAmounts", monthAmounts);
+        res.put("monthReturns", monthReturns);
+        res.put("byProduct", byProduct);
+        res.put("details", bills);
+        return res;
+    }
+
+    /** 该单据行是否属于目标供货商（supplier_id 为空一律视为 id=0 的「未指定供货商」桶） */
+    private boolean belongsToSupplier(Map<String, Object> r, Long sid) {
+        Long rowSid = r.get("supplier_id") == null ? NO_SUPPLIER_ID : toBd(r.get("supplier_id")).longValue();
+        return rowSid.equals(sid);
+    }
+
+    /** yyyy-MM-dd → yyyy-MM（趋势按月汇总用，与 monthRange 的键一致） */
+    private String monthOf(String d) { return d.length() >= 7 ? d.substring(0, 7) : d; }
+
+    /**
+     * 供货商档案（下钻页顶部）：name / code / supplySku / contact / phone / address。
+     * 供货商可能已被删除 ⇒ 退化为单据里带的名称（bills 非空时必有 partner）。
+     */
+    private Map<String, Object> supplierProfile(Long supplierId, List<Map<String, Object>> bills) {
+        Supplier sup = supplierId == null || NO_SUPPLIER_ID.equals(supplierId) ? null : supplierMapper.selectById(supplierId);
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", supplierId);
+        m.put("name", sup != null ? sup.getName()
+                : (NO_SUPPLIER_ID.equals(supplierId) ? NO_SUPPLIER_NAME
+                        : (bills.isEmpty() ? "（供货商已删除）" : String.valueOf(bills.get(0).get("supplier")))));
+        m.put("code", sup != null ? sup.getCode() : "");
+        m.put("supplySku", sup != null ? sup.getSupplySku() : "");
+        m.put("contact", sup != null ? sup.getContact() : "");
+        m.put("phone", sup != null ? sup.getPhone() : "");
+        m.put("address", sup != null ? sup.getAddress() : "");
+        return m;
+    }
 
     @Override
     public Map<String, Object> profit(int months, LocalDate start, LocalDate end) {

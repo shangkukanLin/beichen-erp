@@ -1,4 +1,4 @@
-﻿# 进货分析两个饼图 UI 校验：卡片等高 / 有无数据同高 / 位置在明细卡上方 / 金额·件数 switch（2026-09-15）
+﻿# 进货分析两个饼图 UI 校验：卡片等高 / 有无数据同高 / 位置在列表卡（供货商分析，2026-09-22 前为采购单据明细）上方 / 金额·件数 switch（2026-09-15）
 # 用法：powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-purchase-pie-ui.ps1
 $ErrorActionPreference = 'Continue'
 $url = 'http://localhost:5173/analysis/purchase'
@@ -41,11 +41,11 @@ $diff = [Math]::Abs([int]$c1[0].h - [int]$c1[1].h)
 if ($diff -le 1) { Write-Output ("PASS 两卡等高（{0}px）：有数据 vs 空态 高度一致" -f $c1[0].h) } else { Write-Output ("FAIL 两卡不等高 {0} vs {1}px" -f $c1[0].h, $c1[1].h); $fail++ }
 if ($c1[0].empty -ne $c1[1].empty) { Write-Output 'PASS 本月为混合态（一张有数据 / 一张空态）→ 等高成立' } else { Write-Output 'INFO 本月两卡同为有数据或同为空的态' }
 
-# ② 位置：饼图在「采购单据明细（下钻）」卡上方
+# ② 位置：饼图在列表卡（供货商分析 / 2026-09-22 前为「采购单据明细（下钻）」）上方
 $pos = EvalJs $jsPos
 if ($pos -match '"?(\d+)\|(\d+)"?') {
-  if ([int]$Matches[1] -lt [int]$Matches[2]) { Write-Output ("PASS 饼图在明细卡上方（top {0} < {1}）" -f $Matches[1], $Matches[2]) }
-  else { Write-Output ("FAIL 饼图不在明细卡上方（top {0} >= {1}）" -f $Matches[1], $Matches[2]); $fail++ }
+  if ([int]$Matches[1] -lt [int]$Matches[2]) { Write-Output ("PASS 饼图在列表卡上方（top {0} < {1}）" -f $Matches[1], $Matches[2]) }
+  else { Write-Output ("FAIL 饼图不在列表卡上方（top {0} >= {1}）" -f $Matches[1], $Matches[2]); $fail++ }
 } else { Write-Output ('WARN 位置读取失败：' + $pos) }
 
 # ③ switch：直接采购卡「金额 ↔ 件数」，且不影响另一卡
