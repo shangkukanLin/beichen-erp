@@ -94,10 +94,14 @@ Write-Output ("[DB] 我方物料仓=$auxWhId($auxWhName) 委外仓=$outWhId($out
 OpenFresh "$base/outsource/delivery"
 $tabs = Clean (EvalJs "[...document.querySelectorAll('.table-card .el-tabs__item')].map(x=>x.innerText.trim()).join('|')")
 Write-Host ("列表页签 = $tabs")
-foreach ($t in @('全部', '发料', '调拨', '收料（自动）', '退不良（自动）', '退料（已下线）')) {
+foreach ($t in @('全部', '发料', '调拨')) {
   if ($tabs -match [regex]::Escape($t)) { Ok "页签含 $t" } else { Bad "页签缺 $t" }
 }
-if ($tabs -match '自动' -and $tabs -match '已下线') { Ok '页签已区分「自动单据」与「已下线」' } else { Bad '页签未区分自动/已下线' }
+# 2026-09-22（用户口径）：收料/退不良为系统自动生成、退料已下线 ⇒ **不再单列页签**（只留手工单据的 发料/调拨）；
+# 自动与历史单据仍能在「全部」里查到。此处负向守卫，防止以后又被加回来。
+foreach ($t in @('收料', '退不良', '退料')) {
+  if ($tabs -match [regex]::Escape($t)) { Bad "页签仍含 $t（非手工类型不应单列页签）" } else { Ok "页签已无 $t" }
+}
 
 # 2 新增页类型下拉
 OpenFresh "$base/outsource/delivery/add"

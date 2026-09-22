@@ -85,8 +85,11 @@ onMounted(() => { loadWarehouseOptions(); loadData() })
 
     <el-card shadow="never" class="table-card">
       <el-tabs v-model="activeTab" @tab-change="onTabChange">
-        <!-- 2026-09-16 流程重构：手工单据只有 发料/调拨；收料/退不良为物料订单自动生成、退料已下线（页签保留以便查历史） -->
-        <el-tab-pane label="全部" name="" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :name="DeliveryType.DELIVERY" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.TRANSFER]" :name="DeliveryType.TRANSFER" /><el-tab-pane :label="`${DeliveryTypeLabel[DeliveryType.RECEIVE]}（自动）`" :name="DeliveryType.RECEIVE" /><el-tab-pane :label="`${DeliveryTypeLabel[DeliveryType.DEFECT_RETURN]}（自动）`" :name="DeliveryType.DEFECT_RETURN" /><el-tab-pane :label="`${DeliveryTypeLabel[DeliveryType.RETURN]}（已下线）`" :name="DeliveryType.RETURN" />
+        <!-- 手工单据只有 发料 / 调拨（2026-09-16 流程重构）。
+             2026-09-22（用户口径）：收料（自动）/ 退不良（自动）/ 退料（已下线）**不再单列页签** —— 它们不是人工能开的单据，
+             摆在手工页面里纯属噪音；自动生成与历史单据仍可在「全部」里查到、点行进详情会标注"系统自动生成 / 已下线"。
+             ⚠️ 后端仍支持 deliveryType 过滤（页签只是入口）⇒ 将来要恢复某类页签，加回一行即可，无需改接口。 -->
+        <el-tab-pane label="全部" name="" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :name="DeliveryType.DELIVERY" /><el-tab-pane :label="DeliveryTypeLabel[DeliveryType.TRANSFER]" :name="DeliveryType.TRANSFER" />
       </el-tabs>
 
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%" @row-click="(row: any) => router.push(`/outsource/delivery/detail/${row.id}`)">
