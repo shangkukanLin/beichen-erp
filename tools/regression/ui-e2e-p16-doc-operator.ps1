@@ -77,5 +77,22 @@ foreach ($r in $reps) {
   Ok2 ((Errs) -eq '[]') ($tbl + ' #' + $id + ' page recorded no JS/API errors')
 }
 
+Step '3) UI: a DRAFT sale order (editable-form branch) shows both labels too'
+# The sale order detail page renders an editable form while DRAFT and only switches to the read-only
+# info block after auditing -- so this state needs its own check (it is filled via a whitelist
+# Object.assign, where a forgotten field silently renders as a dash).
+$draft = SqlOne "SELECT id FROM sale_order WHERE status='DRAFT' ORDER BY id DESC LIMIT 1"
+if ([string]::IsNullOrWhiteSpace($draft)) {
+  Write-Host 'SKIP no draft sale order to check'
+} else {
+  Open ('/inventory/sale/detail/' + $draft) 3500
+  ClearErrs | Out-Null
+  Start-Sleep -Milliseconds 1600
+  $body = EvalJs "document.body.innerText"
+  Ok2 ($body -match [regex]::Escape($CREATOR)) ('draft sale_order #' + $draft + ' shows the creator label')
+  Ok2 ($body -match [regex]::Escape($AUDITOR)) ('draft sale_order #' + $draft + ' shows the auditor label')
+  Ok2 ((Errs) -eq '[]') ('draft sale_order #' + $draft + ' page recorded no JS/API errors')
+}
+
 if ($script:fail -eq 0) { Write-Host 'RESULT PASS document operator (createByName / auditorName) end-to-end' }
 else { Write-Host ('RESULT FAIL count ' + $script:fail); exit 1 }

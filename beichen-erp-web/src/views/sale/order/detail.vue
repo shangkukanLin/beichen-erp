@@ -230,7 +230,10 @@ async function loadData() {
       id: head.value.id, customerId: head.value.customerId, warehouseId: head.value.warehouseId,
       orderDate: head.value.orderDate, taxIncluded: head.value.taxIncluded, taxRate: head.value.taxRate, remark: head.value.remark,
       // 结算方式（2026-09-18）：草稿编辑需带上，否则提交会把现金单静默改回账期
-      settleType: head.value.settleType || SettleType.CREDIT, settleAccountId: head.value.settleAccountId ?? undefined
+      settleType: head.value.settleType || SettleType.CREDIT, settleAccountId: head.value.settleAccountId ?? undefined,
+      // 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项，草稿态也要显示）——
+      // 本处是**白名单式** Object.assign 回填，不加进白名单就会永远渲染「—」（静默失效）
+      createByName: head.value.createByName, auditorName: head.value.auditorName
     })
     // 逐行精确校准库存：单据可能开单已久，全量快照之外再回源查一次
     if (isDraft.value) items.value.forEach(refreshRowStock)
@@ -394,6 +397,18 @@ onActivated(() => { loadData() })
             <el-col :span="6">
               <el-form-item label="税率(%)">
                 <el-input-number v-model="form.taxRate" :min="0" :max="100" :precision="2" :disabled="form.taxIncluded !== 1" controls-position="right" style="width:100%" />
+              </el-form-item>
+            </el-col>
+            <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项，**草稿态也要显示**；
+                 本页草稿态是可编辑表单、审计后才切只读信息块，故两处都有；历史单据无记录显示 —） -->
+            <el-col :span="6">
+              <el-form-item label="制单人">
+                <el-input :model-value="form.createByName || '—'" readonly />
+              </el-form-item>
+            </el-col>
+            <el-col :span="6">
+              <el-form-item label="审核人">
+                <el-input :model-value="form.auditorName || '—'" readonly />
               </el-form-item>
             </el-col>
             <el-col :span="24">
