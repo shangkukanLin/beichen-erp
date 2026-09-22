@@ -140,7 +140,7 @@ watch(() => route.fullPath, () => { init() })
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px" size="small">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="编码">
+            <el-form-item label="客户编码">
               <!-- 编码由系统自动生成，不可修改 -->
               <el-input v-model="form.code" disabled :placeholder="form.id ? '' : '保存后自动生成'" />
             </el-form-item>

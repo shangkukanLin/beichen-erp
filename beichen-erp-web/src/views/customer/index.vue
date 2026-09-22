@@ -122,7 +122,7 @@ onActivated(() => { loadData() })
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
         <el-form :inline="true" :model="query" class="query-form">
-          <el-form-item label="编码">
+          <el-form-item label="客户编码">
             <el-input v-model="query.code" placeholder="请输入客户编码" clearable @keyup.enter="handleQuery" />
           </el-form-item>
           <el-form-item label="客户名称">
@@ -144,7 +144,7 @@ onActivated(() => { loadData() })
 
     <el-card shadow="never" class="table-card">
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="(row: any) => goDetail(row.id)">
-        <el-table-column prop="code" label="编码" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="code" label="客户编码" min-width="120" show-overflow-tooltip />
         <el-table-column prop="name" label="客户名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="100" />
         <el-table-column prop="phone" label="联系电话" width="130" />
