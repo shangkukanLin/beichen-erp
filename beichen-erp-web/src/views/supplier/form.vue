@@ -80,19 +80,19 @@ onMounted(load)
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" style="max-width:720px">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="编码">
+            <el-form-item label="供应商编码">
               <el-input v-if="isEdit" v-model="form.code" disabled placeholder="自动生成" />
               <el-input v-else disabled placeholder="保存后自动生成" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="名称" prop="name"><el-input v-model="form.name" placeholder="供应商名称" /></el-form-item>
+            <el-form-item label="供应商名称" prop="name"><el-input v-model="form.name" placeholder="供应商名称" /></el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="联系人"><el-input v-model="form.contact" placeholder="联系人" /></el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="手机号"><el-input v-model="form.phone" placeholder="手机号" /></el-form-item>
+            <el-form-item label="联系电话"><el-input v-model="form.phone" placeholder="手机号" /></el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="状态">

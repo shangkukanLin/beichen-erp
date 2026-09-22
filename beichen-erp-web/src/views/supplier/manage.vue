@@ -10,6 +10,11 @@ import { TYPE_TABS, TYPE_OPTIONS, TYPE_MAP, TYPE_TAG } from '@/constants/supplie
 
 // 双模式：/supplier/manage=供应商（方案商/加工厂/辅料商）；/outsource/supplier/manage=供货商（成品商）
 const isVendor = route.path === '/outsource/supplier/manage'
+/**
+ * 本页双模式（供应商 / 供货商）共用一套模板 ⇒ 名称/编码这类带主体前缀的标签必须**动态**，
+ * 否则供货商页面会显示成「供应商名称」（2026-09-23 字段口径统一时踩到的点）。
+ */
+const entityLabel = computed(() => (isVendor ? '供货商' : '供应商'))
 const activeType = ref(isVendor ? 'product' : 'all')
 const TYPE_TABS_CUSTOM = isVendor
   ? [{ name: 'product', label: TYPE_MAP.product }]
@@ -135,8 +140,8 @@ onMounted(loadData)
       </el-tabs>
       <div class="query-bar">
       <el-form :inline="true" :model="query">
-        <el-form-item label="名称"><el-input v-model="query.name" :placeholder="isVendor ? '供货商名称' : '供应商名称'" clearable @keyup.enter="handleQuery" /></el-form-item>
-        <el-form-item label="手机号"><el-input v-model="query.phone" placeholder="手机号" clearable @keyup.enter="handleQuery" /></el-form-item>
+        <el-form-item :label="entityLabel + '名称'"><el-input v-model="query.name" :placeholder="isVendor ? '供货商名称' : '供应商名称'" clearable @keyup.enter="handleQuery" /></el-form-item>
+        <el-form-item label="联系电话"><el-input v-model="query.phone" placeholder="手机号" clearable @keyup.enter="handleQuery" /></el-form-item>
         <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:100px"><el-option label="合作中" :value="1" /><el-option label="已停用" :value="0" /></el-select></el-form-item>
         </el-form>
         <div class="toolbar">
@@ -149,7 +154,7 @@ onMounted(loadData)
 
     <el-card shadow="never" class="table-card">
       <el-table :data="tableData" border stripe v-loading="loading" @row-click="(row: any) => goDetail(row.id)">
-        <el-table-column prop="code" label="编码" width="150" />
+        <el-table-column prop="code" :label="entityLabel + '编码'" width="150" />
         <el-table-column label="类型" width="180">
           <template #default="{ row }">
             <el-tag v-for="t in (row.typeCodes||[])" :key="t" size="small" style="margin-right:4px"
@@ -157,9 +162,9 @@ onMounted(loadData)
             >{{ TYPE_MAP[t] || t }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="name" label="名称" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="name" :label="entityLabel + '名称'" min-width="180" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="120" />
-        <el-table-column prop="phone" label="电话" width="130" />
+        <el-table-column prop="phone" label="联系电话" width="130" />
         <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag size="small" :type="row.status===1?'success':'danger'">{{ row.status===1?'启用':'停用' }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="120" align="center" fixed="right">
           <template #default="{row}">

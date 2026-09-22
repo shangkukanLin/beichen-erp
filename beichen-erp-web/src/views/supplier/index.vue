@@ -183,10 +183,10 @@ onMounted(() => { loadData() })
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
-        <el-form-item label="名称">
+        <el-form-item label="供应商名称">
           <el-input v-model="query.name" placeholder="供应商名称" clearable @keyup.enter="handleQuery" />
         </el-form-item>
-        <el-form-item label="手机号">
+        <el-form-item label="联系电话">
           <el-input v-model="query.phone" placeholder="手机号" clearable @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item v-if="currentType!=='factory'" label="状态">
@@ -213,10 +213,10 @@ onMounted(() => { loadData() })
       </el-tabs>
 
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="(row: any) => handleDetail(row)">
-        <el-table-column prop="code" label="编码" min-width="130" show-overflow-tooltip />
-        <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="code" label="供应商编码" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="name" label="供应商名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="100" />
-        <el-table-column prop="phone" label="手机号" width="120" />
+        <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="row.status===1?'success':'info'">{{ row.status===1?'合作中':'已停用' }}</el-tag>

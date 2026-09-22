@@ -22,6 +22,8 @@ import { TYPE_OPTIONS, TYPE_MAP } from '@/constants/supplier'
 // 供货商(仅product) / 供应商(方案商·加工厂·辅料商)：先按入口路径判定，加载后再按实际类型校正
 // 供货商只供应产品，无「供应物料」页签
 const isVendor = ref(route.query.mode === 'vendor' || route.path.startsWith('/outsource/supplier'))
+/** 双模式共用模板 ⇒ 带主体前缀的标签必须动态（供货商详情不能显示成「供应商名称」） */
+const entityLabel = computed(() => (isVendor.value ? '供货商' : '供应商'))
 const TYPE_OPTIONS_CUSTOM = computed(() => isVendor.value
   ? [{ name: 'product', label: TYPE_MAP.product }]
   : TYPE_OPTIONS.filter(t => t.name !== 'product'))
@@ -306,8 +308,8 @@ onActivated(loadData)
           <template #header><span style="font-weight:600">基础信息</span></template>
           <el-form :model="form" label-width="80px" size="small">
             <el-row :gutter="12">
-              <el-col :span="8"><el-form-item required label="名称"><el-input v-model="form.name" /></el-form-item></el-col>
-              <el-col :span="8"><el-form-item label="编码"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item required :label="entityLabel + '名称'"><el-input v-model="form.name" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item :label="entityLabel + '编码'"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
               <!-- 2026-09-21：供货SKU —— **只属于「供货商」（类型=成品商）**：该供货商的产品 SKU 用它打头。
                    供应商不显示该字段（isVendor 在本页既按入口路径判定、也在加载后按实际类型校正） -->
               <el-col v-if="isVendor" :span="8">
@@ -325,7 +327,7 @@ onActivated(loadData)
                 </el-select>
               </el-form-item></el-col>
               <el-col :span="8"><el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item></el-col>
-              <el-col :span="8"><el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item></el-col>
+              <el-col :span="8"><el-form-item label="联系电话"><el-input v-model="form.phone" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item label="地址"><el-input v-model="form.address" /></el-form-item></el-col>
               <el-col :span="24">
                 <el-form-item label="类型" required>
