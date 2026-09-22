@@ -1,5 +1,7 @@
 package com.beichen.erp.inventory.service.impl;
 
+import com.beichen.erp.config.UserContext;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
@@ -189,6 +191,12 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
             costService.fillProductCostIfEmpty(it.getProductId());
         }
         // 状态已由 DocStatusGuard 在该方法开头原子置为 AUDITED，此处无需再更新
+        // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：补写审核人（原先审核后不留任何审核信息）
+        InventoryWarehouseMove u = new InventoryWarehouseMove();
+        u.setId(id);
+        u.setAuditorId(UserContext.getId());
+        u.setAuditorName(UserContext.getName());
+        moveMapper.updateById(u);
     }
 
     @Override

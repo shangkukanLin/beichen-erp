@@ -1,5 +1,7 @@
 package com.beichen.erp.outsource.controller;
 
+import com.beichen.erp.config.UserContext;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
@@ -181,7 +183,12 @@ public class OutsourceOtherIoController {
                 costService.fillMaterialCostIfEmpty(it.getMaterialId());
             }
         }
-        OutsourceOtherIo u = new OutsourceOtherIo(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
+        // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：补写审核人
+        OutsourceOtherIo u = new OutsourceOtherIo();
+        u.setId(id);
+        u.setStatus(DocStatus.AUDITED.getCode());
+        u.setAuditorId(UserContext.getId());
+        u.setAuditorName(UserContext.getName());
         ioMapper.updateById(u);
         return R.ok();
     }

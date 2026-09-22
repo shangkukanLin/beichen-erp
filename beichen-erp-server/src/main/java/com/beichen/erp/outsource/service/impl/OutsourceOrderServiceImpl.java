@@ -1,5 +1,7 @@
 package com.beichen.erp.outsource.service.impl;
 
+import com.beichen.erp.config.UserContext;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.config.CompanyContext;
@@ -448,6 +450,9 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
         update.setId(id);
         update.setStatus(OutsourceOrderStatus.PRODUCING.getCode());
         update.setActualStartDate(LocalDate.now());
+        // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：加工单审核（待审核→生产中）补记录审核人
+        update.setAuditorId(UserContext.getId());
+        update.setAuditorName(UserContext.getName());
         orderMapper.updateById(update);
     }
 

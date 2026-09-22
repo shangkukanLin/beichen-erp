@@ -10,6 +10,12 @@ import java.util.List;
 @Data
 @TableName("outsource_material_order")
 public class MaterialOrder {
+
+    /** 审核人（ID + 姓名快照）—— 2026-09-23 全站单据口径：详情页显示「审核人」，审核时盖章 */
+    private Long auditorId;
+
+    private String auditorName;
+
     @TableId(type = IdType.AUTO)
     private Long id;
     private String code;

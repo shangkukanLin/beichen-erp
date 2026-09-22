@@ -1,5 +1,7 @@
 package com.beichen.erp.outsource.service.impl;
 
+import com.beichen.erp.config.UserContext;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
@@ -186,7 +188,12 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         if (!DocStatusGuard.claim(orderMapper, MaterialOrder::getId, id,
                 MaterialOrder::getStatus, MaterialOrderStatus.PENDING.getCode(), MaterialOrderStatus.RECEIVING.getCode()))
             throw new BusinessException("只有待审核状态可审核");
-        MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.RECEIVING.getCode());
+        // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：物料订单审核（待审核→收货中）补记录审核人
+        MaterialOrder upd = new MaterialOrder();
+        upd.setId(id);
+        upd.setStatus(MaterialOrderStatus.RECEIVING.getCode());
+        upd.setAuditorId(UserContext.getId());
+        upd.setAuditorName(UserContext.getName());
         orderMapper.updateById(upd);
     }
 

@@ -1,5 +1,7 @@
 package com.beichen.erp.inventory.service.impl;
 
+import com.beichen.erp.config.UserContext;
+
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -253,6 +255,10 @@ public class StockTakeServiceImpl implements StockTakeService {
         u.setId(id);
         u.setStatus(DocStatus.AUDITED.getCode());
         u.setAuditTime(LocalDateTime.now());
+        // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：补记录审核人
+        // （原先只记 audit_time；而 unAudit 会清空审核人 ⇒ 审计信息一直缺失，属既有瑕疵）
+        u.setAuditorId(UserContext.getId());
+        u.setAuditorName(UserContext.getName());
         takeMapper.updateById(u);
     }
 

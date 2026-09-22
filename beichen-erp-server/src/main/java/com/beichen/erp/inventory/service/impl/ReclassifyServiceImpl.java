@@ -1,5 +1,7 @@
 package com.beichen.erp.inventory.service.impl;
 
+import com.beichen.erp.config.UserContext;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -188,7 +190,13 @@ public class ReclassifyServiceImpl implements ReclassifyService {
                     RelatedBillType.PRODUCT_RECLASSIFY, it.getProductId(),
                     "", rc.getId(), it.getToQuality());
         }
-        InventoryProductReclassify u = new InventoryProductReclassify(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
+        // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：补记录审核人（原先审核后不留审核信息；
+        // 本表无 audit_time 列，故不写审核时间）
+        InventoryProductReclassify u = new InventoryProductReclassify();
+        u.setId(id);
+        u.setStatus(DocStatus.AUDITED.getCode());
+        u.setAuditorId(UserContext.getId());
+        u.setAuditorName(UserContext.getName());
         rcMapper.updateById(u);
     }
 

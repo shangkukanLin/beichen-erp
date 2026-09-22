@@ -1,5 +1,7 @@
 package com.beichen.erp.outsource.service.impl;
 
+import com.beichen.erp.config.UserContext;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -141,6 +143,9 @@ public class DeliveryServiceImpl implements DeliveryService {
         OutsourceDelivery update = new OutsourceDelivery();
         update.setId(id);
         update.setStatus(DocStatus.AUDITED.getCode());
+        // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：补记录审核人
+        update.setAuditorId(UserContext.getId());
+        update.setAuditorName(UserContext.getName());
         deliveryMapper.updateById(update);
     }
 
@@ -290,6 +295,9 @@ public class DeliveryServiceImpl implements DeliveryService {
         OutsourceDelivery up = new OutsourceDelivery();
         up.setId(id);
         up.setStatus(DocStatus.AUDITED.getCode());
+        // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：收货/退不良单审核补记录审核人
+        up.setAuditorId(UserContext.getId());
+        up.setAuditorName(UserContext.getName());
         deliveryMapper.updateById(up);
     }
 

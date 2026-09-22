@@ -1,5 +1,7 @@
 package com.beichen.erp.sale.service.impl;
 
+import com.beichen.erp.config.UserContext;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -457,9 +459,12 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         if (SettleType.isCash(order.getSettleType())) createCashReceipt(order, fr);
 
         // 4) 更新订单状态为"已完成"（审核即出库）；记录审核时间供财务分析按月归集收入
+        // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：补记录审核人（原先只记时间）
         SaleOrder u = new SaleOrder();
         u.setId(id);
         u.setStatus(DocStatus.AUDITED.getCode());
+        u.setAuditorId(UserContext.getId());
+        u.setAuditorName(UserContext.getName());
         u.setAuditTime(LocalDateTime.now());
         orderMapper.updateById(u);
     }
