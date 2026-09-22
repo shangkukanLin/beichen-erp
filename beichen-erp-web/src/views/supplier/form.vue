@@ -78,7 +78,7 @@ onMounted(load)
       </template>
 
       <!-- label-width 110px：标签带模块前缀（供应商名称/供应商编码 5 字）+ 必填星号，100px 会压成两行 -->
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px" style="max-width:720px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="供应商编码">
@@ -119,7 +119,7 @@ onMounted(load)
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" placeholder="备注" /></el-form-item>
       </el-form>
 
-      <div style="display:flex;gap:8px;justify-content:flex-end;max-width:720px">
+      <div style="display:flex;gap:8px;justify-content:flex-end">
         <el-button @click="router.push(listPath)">取消</el-button>
         <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
       </div>

@@ -92,7 +92,7 @@ onMounted(load)
            短字段两两同行；列宽：编码|名称、联系人|联系电话、状态|账期。 -->
       <!-- label-width 110px：标签已带模块前缀（供货商名称/供应商编码 各 5 字）+ 必填星号，
            90px 会把标签压成两行（2026-09-23 字段口径统一后出现的回归） -->
-      <el-form :model="form" label-width="110px" size="small" style="max-width:900px">
+      <el-form :model="form" label-width="110px" size="small">
         <el-row :gutter="16">
           <el-col :span="24">
             <el-form-item label="类型" required>
@@ -146,7 +146,7 @@ onMounted(load)
         </el-row>
       </el-form>
 
-      <div style="display:flex;gap:8px;justify-content:flex-end;max-width:900px">
+      <div style="display:flex;gap:8px;justify-content:flex-end">
         <el-button @click="router.push(listPath)">取消</el-button>
         <el-button type="primary" :loading="saving" @click="handleSubmit">确定</el-button>
       </div>
