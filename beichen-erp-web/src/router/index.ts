@@ -353,6 +353,15 @@ const routes: RouteRecordRaw[] = [
       { path: 'finance/payable', name: 'FinancePayable', component: () => import('@/views/finance/payable.vue'), meta: { title: '应付管理', requiresAuth: true } },
       // 应收/应付详情独立成页（2026-09-23 用户要求：全站抽屉详情改独立界面，原为 50% 抽屉）
       { path: 'finance/receivable/detail/:id', name: 'FinanceReceivableDetail', component: () => import('@/views/finance/receivable/detail.vue'), meta: { title: '应收详情', requiresAuth: true, operate: true } },
+      { path: 'finance/payable/detail/:id', name: 'FinancePayableDetail', component: () => import('@/views/finance/payable/detail.vue'), meta: { title: '应付详情', requiresAuth: true, operate: true } },
+      { path: 'finance/receipt/detail/:id', name: 'FinanceReceiptDetail', component: () => import('@/views/finance/receipt/detail.vue'), meta: { title: '收款单详情', requiresAuth: true, operate: true } },
+      { path: 'finance/payment/detail/:id', name: 'FinancePaymentDetail', component: () => import('@/views/finance/payment/detail.vue'), meta: { title: '付款单详情', requiresAuth: true, operate: true } },
+      // 加工退货记录详情独立成页（2026-09-23 原为 580px 抽屉）；注意与「维修退货」的
+      // outsource/return-order/detail/:id 区分，故另起 defect-return 路径
+      { path: 'outsource/defect-return/detail/:id', name: 'OutsourceDefectReturnDetail', component: () => import('@/views/outsource/defect-return/detail.vue'), meta: { title: '加工退货详情', requiresAuth: true, operate: true } },
+      // 成品收货「收货记录」详情独立成页（2026-09-23 原为 60% 抽屉）；
+      // ⚠️ 不能叫 outsource/order/delivery/detail/:id —— 该前缀已被「收货单页」占用（outsource/order/delivery/:id）
+      { path: 'outsource/order/delivery/record/:id', name: 'OutsourceOrderDeliveryRecord', component: () => import('@/views/outsource/order/delivery-record.vue'), meta: { title: '收货记录详情', requiresAuth: true, operate: true } },
       { path: 'finance/bill', name: 'FinanceBill', component: () => import('@/views/finance/bill.vue'), meta: { title: '账单生成', requiresAuth: true } },
       // 账单详情独立成页（原为抽屉）
       { path: 'finance/bill/detail/:id', name: 'FinanceBillDetail', component: () => import('@/views/finance/bill/detail.vue'), meta: { title: '账单详细', requiresAuth: true, operate: true } },

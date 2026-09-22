@@ -130,6 +130,15 @@ public class OrderDeliveryController {
     }
 
     /**
+     * 单条收货记录（2026-09-23 用户要求：详情由抽屉改独立页 ⇒ 页面必须能按 id 回源，
+     * 原先只有列表接口，抽屉是拿列表已加载的行渲染的）。
+     */
+    @GetMapping("/{id}")
+    public R<OutsourceOrderDelivery> getById(@PathVariable Long id) {
+        return R.ok(deliveryService.getById(id));
+    }
+
+    /**
      * F7-128（2026-09-20）：**白名单解析请求体**。
      *
      * <p>原实现用 `@RequestBody OutsourceOrderDelivery` **整实体直绑** ⇒ 前端可顺带提交

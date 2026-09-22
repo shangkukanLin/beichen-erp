@@ -118,12 +118,8 @@ async function handleUnAudit(row: FinanceReceipt) {
   try { await ElMessageBox.confirm(`确认反审核收款单「${row.code}」？将冲销核销与账户余额`, '提示', { type: 'warning' })
     await unAuditReceipt(row.id as number); ElMessage.success('已反审核'); loadData() } catch {}
 }
-const detailVisible = ref(false)
-const detail = ref<FinanceReceipt>({})
-const detailItems = ref<FinanceReceiptItem[]>([])
-async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
-  try { detailItems.value = await getReceiptItems(row.id as number) || [] } catch { detailItems.value = [] }
-  detailVisible.value = true }
+/** 详情改独立页（2026-09-23 用户要求：抽屉改独立界面）：点整行 / 行内「详情」都跳详情页 */
+function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/finance/receipt/detail/${row.id}`) }
 </script>
 <template>
   <div class="p">
@@ -198,22 +194,7 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
       </el-form>
       <template #footer><el-button @click="dVisible=false">取消</el-button><el-button type="primary" :loading="dLoading" @click="handleSubmit">确定</el-button></template>
     </el-dialog>
-    <el-drawer v-model="detailVisible" title="收款单详情" size="50%">
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="单号">{{ detail.code }}</el-descriptions-item>
-        <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ DocStatusLabel[String(detail.status)] || detail.status }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="主体类型">{{ SubjectTypeLabel[detail.subjectType || ''] || '客户' }}</el-descriptions-item>
-        <el-descriptions-item label="往来单位">{{ subjectLabel(detail) }}</el-descriptions-item>
-        <el-descriptions-item label="账户">{{ aName(detail.accountId) }}</el-descriptions-item>
-        <el-descriptions-item label="日期">{{ detail.receiptDate }}</el-descriptions-item>
-        <el-descriptions-item label="金额">{{ fmt(detail.amount) }}</el-descriptions-item>
-        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；收款单无审核流程 ⇒ 审核人显示 —） -->
-        <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="审核人">{{ detail.auditorName || '—' }}</el-descriptions-item>
-      </el-descriptions>
-      <el-divider>核销明细</el-divider>
-      <el-table :data="detailItems" border><el-table-column prop="receivableBillNo" label="应收单据" min-width="150"/><el-table-column prop="thisAmount" label="核销金额" width="130" align="right"><template #default="{row}">{{ fmt(row.thisAmount) }}</template></el-table-column></el-table>
-    </el-drawer>
+
   </div>
 </template>
 <style scoped>.p{display:flex;flex-direction:column;gap:12px}.qf{display:flex;flex-wrap:wrap}.pg{margin-top:16px;display:flex;justify-content:flex-end}</style>

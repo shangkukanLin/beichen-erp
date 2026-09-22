@@ -83,8 +83,7 @@ const attachSaving = ref(false)
 
 async function handleDetail(row: FinancePayment) {
   detail.value = { ...row }
-  try { detailItems.value = await getPaymentItems(row.id as number) || [] } catch {}
-  detailVisible.value = true
+  router.push(`/finance/payment/detail/${row.id}`)
 }
 async function handleUploadAttach(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -177,34 +176,7 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
     </template>
 
     <!-- 付款单详情 -->
-    <el-drawer v-model="detailVisible" title="付款单详情" size="50%">
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="单号">{{ detail.code }}</el-descriptions-item>
-        <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ DocStatusLabel[detail.status ?? 0] || detail.status }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="供应商">{{ sName(detail.supplierId) }}</el-descriptions-item>
-        <el-descriptions-item label="账户">{{ aName(detail.accountId) }}</el-descriptions-item>
-        <el-descriptions-item label="日期">{{ detail.paymentDate }}</el-descriptions-item>
-        <el-descriptions-item label="金额">{{ fmt(detail.amount) }}</el-descriptions-item>
-        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；付款单无审核流程 ⇒ 审核人显示 —） -->
-        <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="审核人">{{ detail.auditorName || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="付款凭证" :span="2">
-          <div style="display:flex;align-items:center;gap:12px">
-            <template v-if="detail.attachUrl">
-              <el-image :src="detail.attachUrl" :preview-src-list="[detail.attachUrl]" fit="contain" style="width:80px;height:80px;border:1px solid #dcdfe6;border-radius:4px" preview-teleported />
-              <el-link type="primary" @click="openAttach(detail.attachUrl)">查看原图</el-link>
-            </template>
-            <span v-else style="color:var(--app-text-secondary)">未上传</span>
-            <label class="upload-btn">
-              <input type="file" accept="image/*" style="display:none" @change="handleUploadAttach" />
-              <el-button size="small" :loading="attachSaving" @click="($event.currentTarget as HTMLElement).parentElement?.querySelector('input')?.click()">{{ detail.attachUrl ? '更换凭证' : '上传凭证' }}</el-button>
-            </label>
-          </div>
-        </el-descriptions-item>
-      </el-descriptions>
-      <el-divider>核销明细</el-divider>
-      <el-table :data="detailItems" border><el-table-column prop="payableBillNo" label="应付单据" min-width="150"/><el-table-column prop="thisAmount" label="核销金额" width="130" align="right"><template #default="{row}">{{ fmt(row.thisAmount) }}</template></el-table-column></el-table>
-    </el-drawer>
+
   </div>
 </template>
 

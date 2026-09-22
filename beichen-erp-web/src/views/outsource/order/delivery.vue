@@ -68,9 +68,9 @@ function openAttach(url: string) { window.open(url + '?inline=true') }
  * 「收货仓库 / 物流单号 / 备注 / 附件」全部移入本抽屉；并顺带补上原先**任何界面都看不到**的字段：
  * SKU、加工退货规格、记录ID、创建时间。
  */
-const detailVisible = ref(false)
-const detailRow = ref<any>(null)
-function openDetail(row: any) { detailRow.value = row; detailVisible.value = true }
+
+/** 详情改独立页（2026-09-23 用户要求：抽屉改独立界面）：点整行 / 行内「详情」都跳详情页 */
+function openDetail(row: any) { if (row?.id != null) router.push(`/outsource/order/delivery/record/${row.id}`) }
 
 /**
  * 该记录对应的加工单产品行。**列表与详情共用同一套匹配口径**：
@@ -379,10 +379,11 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         列表瘦身为 **7 列**（合计约 686px，容器约 963px）：富余的 ~277px 全部补给两个 min-width 列
         （产品名称/等级分布）⇒ 基本不再出现省略号；
         「收货仓库 / 物流单号 / 备注 / 附件」+ SKU / 加工退货规格 / 记录ID / 创建时间
-        **一律移入行内「详情」抽屉**（见下方 el-drawer）。
+        **一律移入「详情页」**（2026-09-23 起由抽屉改为独立页 outsource/order/delivery-record.vue）。
         ⚠️ 日后加列前先算总宽：容器 ≈ window.innerWidth − 299（1262px 窗口 → 963px），别又撑出横向滚动。
       -->
-      <el-table :data="deliveries" border stripe size="small" :row-class-name="deliveryRowClass">
+      <!-- 2026-09-23：详情改独立页 ⇒ 点整行也跳转（行内「详情」按钮保留为显式入口） -->
+      <el-table :data="deliveries" border stripe size="small" :row-class-name="deliveryRowClass" @row-click="openDetail">
         <el-table-column label="收货日期" width="92"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column label="产品名称" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ productNameOf(row) }}</template>
@@ -405,7 +406,8 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         <el-table-column label="状态" width="60"><template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="160" align="center" fixed="right">
           <template #default="{ row }">
-            <!-- 详情：仓库/物流单号/备注/附件/SKU/等级明细/创建时间等明细字段都在抽屉里看 -->
+            <!-- 详情：仓库/物流单号/备注/附件/SKU/等级明细/创建时间等明细字段都在**详情页**看
+                 （2026-09-23 由抽屉改为独立页 /outsource/order/delivery/record/:id） -->
             <el-button type="primary" link size="small" @click="openDetail(row)">详情</el-button>
             <el-button type="success" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
             <el-button type="warning" link size="small" v-if="row.status === DocStatus.AUDITED" @click="handleUnaudit(row)">反审核</el-button>
@@ -459,40 +461,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
       <template #footer><el-button @click="defectVisible = false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认加工退货</el-button></template>
     </el-dialog>
 
-    <!--
-      收货记录「详情」抽屉（2026-09-21 用户建议）：列表已瘦身为 7 列，明细字段都在这里看。
-      沿用本项目既有抽屉惯例（sale/outbound、finance 系列：el-drawer + el-descriptions :column="2" border）。
-      抽屉**只读** —— 审核/退货/编辑/删除等动作仍留在列表的「操作」列，避免两处入口不一致。
-    -->
-    <el-drawer v-model="detailVisible" title="收货记录详情" size="60%">
-      <el-descriptions v-if="detailRow" :column="2" border>
-        <el-descriptions-item label="记录ID">{{ detailRow.id }}</el-descriptions-item>
-        <el-descriptions-item label="状态"><el-tag :type="DocStatusTag[detailRow.status] || 'info'" size="small">{{ DocStatusLabel[detailRow.status] || detailRow.status }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="收货日期">{{ $fmtDate(detailRow.deliveryDate) }}</el-descriptions-item>
-        <!-- 登记时间：原先任何界面都看不到，详情里补上（后端 create_time） -->
-        <el-descriptions-item label="登记时间">{{ detailRow.createTime ? String(detailRow.createTime).replace('T', ' ') : '-' }}</el-descriptions-item>
-        <el-descriptions-item label="产品名称">{{ productNameOf(detailRow) }}</el-descriptions-item>
-        <!-- SKU：原先任何界面都看不到 -->
-        <el-descriptions-item label="SKU">{{ skuOf(detailRow) }}</el-descriptions-item>
-        <el-descriptions-item label="类型">{{ typeTextOf(detailRow) }}</el-descriptions-item>
-        <el-descriptions-item label="加工退货规格">{{ qualityTextOf(detailRow) }}</el-descriptions-item>
-        <el-descriptions-item label="收货仓库">{{ warehouseNameOf(detailRow) }}</el-descriptions-item>
-        <el-descriptions-item label="物流单号">{{ detailRow.trackingNo || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="A规数量">{{ detailRow.aQty || 0 }}</el-descriptions-item>
-        <el-descriptions-item label="B规数量">{{ detailRow.bQty || 0 }}</el-descriptions-item>
-        <el-descriptions-item label="C规数量">{{ detailRow.cQty || 0 }}</el-descriptions-item>
-        <el-descriptions-item label="不良数量">{{ detailRow.defectQty || 0 }}</el-descriptions-item>
-        <el-descriptions-item label="总数量"><span :style="{ color: Number(detailRow.quantity) < 0 ? 'var(--app-color-danger)' : '', fontWeight: '600' }">{{ detailRow.quantity }}</span></el-descriptions-item>
-        <el-descriptions-item label="收货图片">
-          <el-button v-if="detailRow.attachUrl" type="primary" link size="small" @click="openAttach(detailRow.attachUrl)">查看图片</el-button>
-          <span v-else style="color:var(--app-text-placeholder)">—</span>
-        </el-descriptions-item>
-        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；本条即 outsource_order_delivery 行） -->
-        <el-descriptions-item label="制单人">{{ detailRow.createByName || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="审核人">{{ detailRow.auditorName || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ detailRow.remark || '-' }}</el-descriptions-item>
-      </el-descriptions>
-    </el-drawer>
+
   </div>
 </template>
 

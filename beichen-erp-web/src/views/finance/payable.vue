@@ -18,8 +18,6 @@ const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinancePayable[]>([])
 const suppliersOptions = ref<any[]>([])
-const detailVisible = ref(false)
-const detail = ref<FinancePayable>({})
 
 const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
 async function loadSuppliersOptions() {
@@ -65,6 +63,8 @@ function canTransfer(row: any) {
 function goTransfer(row: any) {
   router.push(`/finance/payable-transfer/add?payableId=${row.id}`)
 }
+/** 详情改独立页（2026-09-23）：点整行 / 行内「详情」都跳详情页，不再开抽屉 */
+function goDetail(row: any) { if (row?.id != null) router.push(`/finance/payable/detail/${row.id}`) }
 // 结算状态 code -> 中文
 const STATUS_LABEL: Record<string, string> = SettlementStatusLabel
 function statusLabel(code?: string) { return code ? (STATUS_LABEL[code] || code) : '' }
@@ -95,7 +95,8 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
       </div>
     </el-card>
     <el-card shadow="never">
-      <el-table v-loading="loading" :data="data" border stripe @row-click="(row: any) => { detail = row; detailVisible = true }">
+      <!-- 2026-09-23：详情改独立页 ⇒ 点整行 / 行内「详情」都跳转（与应收/账单页现状一致） -->
+      <el-table v-loading="loading" :data="data" border stripe @row-click="(row: any) => goDetail(row)">
         <el-table-column prop="billNo" label="单据号" min-width="150"/>
         <el-table-column label="供应商" min-width="140"><template #default="{row}">{{ row.supplierName || sName(row.supplierId) || '—' }}</template></el-table-column>
         <el-table-column label="主体类型" width="100" align="center">
@@ -120,7 +121,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{statusLabel(row.status)}}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="150" align="center">
           <template #default="{row}">
-            <el-button type="primary" link @click.stop="detail=row;detailVisible=true">详情</el-button>
+            <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
             <!-- 无货款可抵时，把这笔扣款/退货转为向对方收款 -->
             <el-button v-if="canTransfer(row)" type="warning" link @click.stop="goTransfer(row)">转应收</el-button>
           </template>
@@ -128,21 +129,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
       </el-table>
       <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="load" @current-change="load"/></div>
     </el-card>
-    <el-drawer v-model="detailVisible" title="应付详情" size="50%">
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="单据号">{{ detail.billNo }}</el-descriptions-item>
-        <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ statusLabel(detail.status) }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="供应商">{{ sName(detail.supplierId) }}</el-descriptions-item>
-        <el-descriptions-item label="来源类型">{{ sourceBillTypeLabel(detail.sourceBillType) }}</el-descriptions-item>
-        <el-descriptions-item label="来源单号">{{ detail.sourceBillNo }}</el-descriptions-item>
-        <el-descriptions-item label="到期日">{{ detail.dueDate }}</el-descriptions-item>
-        <el-descriptions-item label="应付金额">{{ fmt(detail.amount) }}</el-descriptions-item>
-        <el-descriptions-item label="已付金额">{{ fmt(detail.paidAmount) }}</el-descriptions-item>
-        <el-descriptions-item label="未付金额"><span style="color:var(--app-color-danger)">{{ fmt(detail.unpaidAmount) }}</span></el-descriptions-item>
-        <!-- 制单人（2026-09-23 用户口径）：台账是按单自动生成的 ⇒ **只显示制单人，不显示审核人**（无审核流程） -->
-        <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
-      </el-descriptions>
-    </el-drawer>
+
   </div>
 </template>
 <style scoped>.p{display:flex;flex-direction:column;gap:12px}.qf{display:flex;flex-wrap:wrap}.pg{margin-top:16px;display:flex;justify-content:flex-end}</style>
