@@ -13,6 +13,10 @@ import {
 } from '@/api/enums'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import SectionCard from '@/components/SectionCard.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 import {
   getSaleOrder, getSaleOrderItems, createSaleOrder, updateSaleOrder, checkSaleOrderStock, SALE_ORDER_DIRTY_KEY,
   type SaleOrder, type SaleOrderItem
@@ -20,6 +24,8 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const tabStore = useTabStore()
+
 /** 地址栏带 id 时为编辑态，否则为新增态 */
 const editId = computed(() => {
   const id = route.query.id
@@ -40,6 +46,15 @@ const form = reactive<SaleOrder>({
   settleType: SettleType.CREDIT, settleAccountId: undefined
 })
 const items = ref<SaleOrderItem[]>([])
+
+/**
+ * 统一「返回」的未保存拦截（2026-09-23 次级页面统一模板）：
+ * - 基线在数据加载完成后建立（见 onMounted 末尾）⇒ 只有"用户改过"才算脏；
+ * - 保存成功后 markClean() ⇒ 提交后跳列表不会被拦；
+ * - 覆盖页内返回 / 页签 × / 侧栏切换 / 浏览器后退+刷新（useUnsavedGuard）。
+ * ⚠️ 必须放在 form / items **之后**：watch 注册时会立即求值一次快照，放到前面会因 TDZ 静默失效。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 
 // 库存不足确认弹窗
 const stockCheckResult = ref<{ productName: string; unit: string; required: number; available: number; shortage: number; sufficient: boolean }[]>([])
@@ -244,13 +259,15 @@ async function doSubmit() {
     if (editId.value !== null) { await updateSaleOrder(editId.value, payload); ElMessage.success('修改成功') }
     else { await createSaleOrder(payload); ElMessage.success('新增成功') }
     sessionStorage.setItem(SALE_ORDER_DIRTY_KEY, '1')
-    goBack()
+    // 保存成功 ⇒ 先清脏标记（否则离开时会被未保存确认拦住），再关掉本次录入的页签并回列表
+    markClean()
+    tabStore.closeTabAndBack(route.path)
+    router.push('/inventory/sale')
   } catch { } finally { submitLoading.value = false }
 }
 
 function confirmStockProceed() { stockCheckVisible.value = false; doSubmit() }
 function confirmStockCancel() { stockCheckVisible.value = false }
-function goBack() { router.push('/inventory/sale') }
 
 /**
  * 品质下拉（2026-09-21 用户口径）：**销售单明细的品质不能有不良品和待整理** ⇒
@@ -268,20 +285,16 @@ onMounted(async () => {
   loadAccounts()
   if (editId.value !== null) await loadEdit(editId.value)
   else addItem()
+  // 数据加载完成 ⇒ 建立"未保存"基线（必须在加载之后，否则会把回填误判成用户修改）
+  takeBaseline()
 })
 </script>
 
 <template>
-  <div class="page" v-loading="pageLoading">
-    <el-card shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span>{{ isEdit ? '编辑销售单' : '新增销售单' }}</span>
-          <el-button link @click="goBack">返回列表</el-button>
-        </div>
-      </template>
-
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+  <!-- 统一骨架（2026-09-23）：页头标题 + 右上「← 返回」由 PageShell 提供；内容分块用 SectionCard -->
+  <PageShell :title="isEdit ? '编辑销售单' : '新增销售单'" :loading="pageLoading" back-fallback="/inventory/sale">
+    <SectionCard title="基本信息">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="var(--app-label-width)">
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="客户" prop="customerId">
@@ -337,9 +350,12 @@ onMounted(async () => {
             </el-form-item>
           </el-col>
         </el-row>
+      </el-form>
+    </SectionCard>
 
-        <el-divider content-position="left">产品明细</el-divider>
-        <div style="margin-bottom:8px; display:flex; gap:8px; align-items:center">
+    <SectionCard title="产品明细">
+      <template #extra>
+        <div style="display:flex; gap:8px; align-items:center">
           <el-button type="primary" :icon="'Plus'" @click="addItem">添加产品</el-button>
           <!-- 注意：必须写 loadWarehouseStock()，不带括号会把 MouseEvent 当作 silent 参数传入导致静默 -->
           <el-button :icon="'Refresh'" :loading="stockLoading" :disabled="!form.warehouseId" @click="loadWarehouseStock()">
@@ -347,7 +363,8 @@ onMounted(async () => {
           </el-button>
           <span v-if="!form.warehouseId" style="color:#909399; font-size:var(--app-font-xs)">请先选择出库仓库，再刷新库存</span>
         </div>
-        <el-table :data="items" border>
+      </template>
+      <el-table :data="items" border>
           <el-table-column label="SKU" width="130">
             <template #default="{ row }">
               <span v-if="row.sku">{{ row.sku }}</span>
@@ -416,16 +433,15 @@ onMounted(async () => {
             </div>
           </template>
         </div>
-      </el-form>
+    </SectionCard>
 
-      <div class="footer">
-        <el-button @click="goBack">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
-      </div>
-    </el-card>
+    <!-- 底部操作条：统一右对齐，主按钮（保存）在最右；原「取消」已并入页头右上「返回」 -->
+    <template #footer>
+      <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
+    </template>
 
     <!-- 库存不足确认弹窗 -->
-    <el-dialog v-model="stockCheckVisible" title="库存不足提醒" width="650px" :close-on-click-modal="false">
+    <el-dialog v-model="stockCheckVisible" title="库存不足提醒" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <el-alert type="warning" :closable="false" show-icon style="margin-bottom:16px">
         <template #title>以下产品的订单数量超过当前库存量，确认仍要继续保存订单吗？</template>
       </el-alert>
@@ -447,12 +463,12 @@ onMounted(async () => {
         <el-button type="primary" :loading="submitLoading" @click="confirmStockProceed">仍然保存订单</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.card-header { display: flex; align-items: center; justify-content: space-between; }
-.footer { margin-top: 16px; display: flex; justify-content: flex-end; gap: 12px; }
+/* 页头 / 卡片头 / 底部操作条已统一到全局骨架（styles/page.css + PageShell + SectionCard），
+   本页不再自写 .card-header / .footer —— 这正是"统一模板"要消除的重复。 */
 /* 金额汇总：标签在上、数值在下，块间竖线分隔，避免多项挤在一行 */
 .sum-bar {
   margin-top: 16px;

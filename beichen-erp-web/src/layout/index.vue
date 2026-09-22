@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Fold, Expand, User, ArrowDown, Refresh } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useTabStore } from '@/stores/tabs'
+import { usePageGuardStore } from '@/stores/pageGuard'
 import { logout as logoutApi } from '@/api/auth'
 import request from '@/utils/request'
 import SideMenu from './SideMenu.vue'
@@ -13,6 +14,7 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const tabStore = useTabStore()
+const guardStore = usePageGuardStore()
 
 const isCollapse = ref(false)
 const isMobile = ref(typeof window !== 'undefined' ? window.innerWidth <= 768 : false)
@@ -106,21 +108,26 @@ function switchTab(path: string) {
   router.push(tabTarget(path))
 }
 
-function closeTab(path: string, e: MouseEvent) {
+/**
+ * 页签 ×（2026-09-23）：若该页有未保存内容先确认 —— 与页面内「返回」、侧栏切换**共用同一处判定与文案**
+ * （stores/pageGuard.ts），避免三个拦截点各写一套导致重复弹框或漏拦。
+ */
+async function closeTab(path: string, e: MouseEvent) {
   e.preventDefault()
   e.stopPropagation()
   const isCurrent = route.path === path
-  tabStore.removeTab(path)
-  if (isCurrent) {
-    const next = tabStore.tabs.length > 0 ? tabStore.activePath || '/dashboard' : '/dashboard'
-    router.push(tabTarget(next))
-  }
+  if (guardStore.isDirty(path) && !(await guardStore.confirmLeave())) return
+  guardStore.markClean(path)
+  // 关页签 + 取回退目标只有一处实现（stores/tabs.ts#closeTabAndBack）
+  const next = tabStore.closeTabAndBack(path)
+  if (isCurrent) router.push(next)
 }
 
-function handleClosePage() {
-  tabStore.removeTab(route.path)
-  const next = tabStore.tabs.length > 0 ? tabStore.activePath || '/dashboard' : '/dashboard'
-  router.push(tabTarget(next))
+/** 页签栏「关闭当前页」：与次级页面里的「返回」完全同义（同一个 action） */
+async function handleClosePage() {
+  if (guardStore.isDirty(route.path) && !(await guardStore.confirmLeave())) return
+  guardStore.markClean(route.path)
+  router.push(tabStore.closeTabAndBack(route.path))
 }
 
 function handleTabMouseDown(path: string, e: MouseEvent) {

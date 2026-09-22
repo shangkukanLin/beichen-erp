@@ -1,0 +1,104 @@
+/* ==========================================================================
+   次级页面统一骨架样式（2026-09-23）
+   —— 配合 components/PageShell.vue、components/SectionCard.vue 使用。
+   改造前：根容器 class 有 40+ 种、底部操作区 class 有 footer/actions/内联三种、对齐方式三种。
+   现在：骨架类只有这一份定义，页面不再自写 .page / .footer / .card-header。
+   所有取值走 tokens.css 的 --app-* 令牌（字号守卫禁止硬编码字号）。
+   ========================================================================== */
+
+/* ---------- 页面骨架 ---------- */
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-base);
+}
+
+/* 页头：左标题 + #sub，右 #actions + 固定最右的「← 返回」 */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-base);
+  min-height: 48px;
+  padding: var(--app-space-sm) var(--app-space-base);
+  background: var(--app-bg-container);
+  border-radius: var(--app-radius-md);
+}
+
+.page-header__left {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-sm);
+  min-width: 0;
+}
+
+.page-header__title {
+  font-size: var(--app-font-md);
+  font-weight: 600;
+  color: var(--app-text-primary);
+  white-space: nowrap;
+}
+
+.page-header__ops {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-sm);
+  flex-shrink: 0;
+}
+
+.page-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-base);
+}
+
+/* 底部操作条：统一右对齐，主按钮（保存/提交/审核）放最右 */
+.page-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--app-space-sm);
+  padding: var(--app-space-sm) var(--app-space-base);
+  background: var(--app-bg-container);
+  border-radius: var(--app-radius-md);
+}
+
+/* ---------- 分块卡片 ---------- */
+.section-card .el-card__header {
+  padding: 10px var(--app-space-base);
+}
+
+.section-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-sm);
+}
+
+.section-card__title {
+  font-size: var(--app-font-md);
+  font-weight: 500;
+  color: var(--app-text-primary);
+}
+
+/* ---------- 表单 / 详情统一取值 ---------- */
+/* 表单 label 宽度统一（改造前 80/84/85/90/100/104/110/120 八种并存） */
+.page-shell .el-form-item__label {
+  width: var(--app-label-width);
+}
+
+/* 详情区统一 3 列（改造前 2/3/4 混用）：由各页 el-descriptions 显式写 :column="3" 落实，
+   这里不做强制（避免影响个别确实需要 2/4 列的特殊页面）。 */
+
+/* ---------- 移动端：内容区内边距收窄（与 index.css 的 layout-main 保持一致） ---------- */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-header__ops {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

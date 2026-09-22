@@ -115,6 +115,21 @@ export const useTabStore = defineStore('tabs', {
       }
       saveTabs(this.$state)
     },
+    /**
+     * 统一「返回」的关页签动作（2026-09-23）：关闭指定页签（默认当前活跃页签），
+     * 并把 activePath 指向回退目标，返回**回退目标的完整地址**（含 query，供 router.push 恢复页内状态）。
+     *
+     * 为什么放 store：页内「返回」按钮（usePageBack）与页签栏 × / 「关闭当前页」（layout）必须同源，
+     * 否则三处各写一遍 → 早晚不一致（改造前 `router.back()` 与「写死列表路径」并存就是这个原因）。
+     * 调用方负责真正导航 ⇒ 关页签与导航只此一处实现。
+     */
+    closeTabAndBack(path?: string): string {
+      const key = normalizeTabPath(path ?? this.activePath)
+      if (key) this.removeTab(key)
+      const next = this.tabs.length > 0 ? (this.activePath || '/dashboard') : '/dashboard'
+      return this.tabs.find(t => t.path === next)?.fullPath || next
+    },
+
     setActive(path: string) {
       const key = normalizeTabPath(path)
       if (this.activePath && this.activePath !== key) {

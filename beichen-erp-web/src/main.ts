@@ -11,6 +11,8 @@ import router from './router'
 import { setupPermDirective } from './directives/perm'
 import './styles/tokens.css'
 import './styles/index.css'
+// 次级页面统一骨架样式（PageShell / SectionCard；2026-09-23 统一模板专项）
+import './styles/page.css'
 
 const app = createApp(App)
 
