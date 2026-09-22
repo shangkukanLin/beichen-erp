@@ -250,8 +250,9 @@ public class DataInitializer implements ApplicationRunner {
             {7L, 0L, "成品库存", "catalog", "", "", "Odometer", 9},
             {8L, 0L, "财务管理", "catalog", "", "", "Money", 10},
             {9L, 0L, "设置", "catalog", "", "", "Tools", 11},
-            // 基础数据子菜单顺序（2026-09-15 用户定稿，2026-09-16 追加「物料信息管理」）：sort_order 即左侧栏显示顺序：
-            // 客户管理 → 产品管理 → 品牌管理 → 供货商管理 → 供应商管理 → 物料类型管理 → 物料信息管理 → 模版管理
+            // 基础数据子菜单顺序（2026-09-15 用户定稿，2026-09-16 追加「物料信息管理」，2026-09-22 追加「成品仓库管理」）：
+            // sort_order 即左侧栏显示顺序：
+            // 客户管理 → 产品管理 → 品牌管理 → 供货商管理 → 供应商管理 → 物料类型管理 → 物料信息管理 → 模版管理 → 成品仓库管理
             {105L, 2L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "UserFilled", 1},
             {101L, 2L, "产品管理", "menu", "/product", "ProductManage", "TakeawayBox", 2},
             {102L, 2L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 3},
@@ -265,6 +266,11 @@ public class DataInitializer implements ApplicationRunner {
             // 模版管理：把原「阶段模板管理」（104，基础数据下）与「加工合同模板」（405，委外加工下）
             // 合并为一个页面，页内用 TAB 区分（2026-09-15 用户要求）。旧地址保留为重定向。
             {108L, 2L, "模版管理", "menu", "/template", "TemplateManage", "Timer", 8},
+            // 成品仓库管理（702）：2026-09-22 按用户要求自「成品库存」迁入「基础数据」（仓库属主数据）。
+            // **路由 /inventory/warehouse 与 perms stock:warehouse 均不变** ⇒ 不涉前端菜单白名单/重定向/接口权限
+            // （与 403 物料信息管理 2026-09-16 迁入同范式）；sort 9 = 排在基础数据末位。
+            // ⚠️ 与 707 迁组同坑：父目录未授权会把子菜单整组丢弃 ⇒ 下方有"给持有 702 的角色补授目录 2"的幂等块。
+            {702L, 2L, "成品仓库管理", "menu", "/inventory/warehouse", "Warehouse", "Odometer", 9},
             // 301 菜单名（2026-09-16 用户要求）：「研发项目」→「研发立项」（仅显示文案，id/route_path/route_name/授权均不变）
             {301L, 3L, "研发立项", "menu", "/dev/project", "DevProject", "Notebook", 1},
             // 302「BOM管理」/ 303「图纸文档」已于 2026-09-16 按用户要求下线（不再 upsert，下方统一置 visible=0）。
@@ -334,9 +340,9 @@ public class DataInitializer implements ApplicationRunner {
             {603L, 6L, "销售退货单", "menu", "/sale/return", "SaleReturn", "Refund", 2},
             {605L, 6L, "销售换货单", "menu", "/sale/exchange", "SaleExchange", "Refresh", 3},
             // 成品库存子菜单顺序（2026-09-18 用户定稿重排）：
-            // 移仓单 → 退货整理 → 成品库存详情 → 成品库存流水 → 库存盘点 → 成品报损 → 成品其他出入库 → 成品品质重分类 → 成品仓库管理
-            // （2026-09-22 用户口径：706「成品移仓单」改展示名为「移仓单」、712「成品库存情况」改「成品库存详情」，
-            //   id/perms/路由一律不动）
+            // 移仓单 → 退货整理 → 成品库存详情 → 成品库存流水 → 库存盘点 → 成品报损 → 成品其他出入库 → 成品品质重分类
+            // （2026-09-22：706「成品移仓单」改展示名为「移仓单」、712「成品库存情况」改「成品库存详情」，id/perms/路由不动；
+            //  同日末位 702「成品仓库管理」按用户要求**迁入「基础数据」（parent_id 7 → 2）** ⇒ 本组由 9 项变 8 项）
             // sort_order 即左侧栏显示顺序（MenuMapper.selectAllEnabled 按 sort_order 排序）；下方书写顺序与实际显示顺序一致，便于维护。
             {706L, 7L, "移仓单", "menu", "/inventory/warehouse-move", "InventoryWarehouseMove", "Rank", 1},
             // 退货整理（2026-09-18 用户要求：从「销售业务」移到「成品库存」—— 它本质是退回品的成品分选入库）
@@ -355,7 +361,6 @@ public class DataInitializer implements ApplicationRunner {
             {713L, 7L, "成品报损", "menu", "/inventory/stock-loss", "InventoryStockLoss", "DeleteFilled", 6},
             {704L, 7L, "成品其他出入库", "menu", "/inventory/other-io", "InventoryOtherIo", "Upload", 7},
             {705L, 7L, "成品品质重分类", "menu", "/inventory/reclassify", "InventoryReclassify", "Refresh", 8},
-            {702L, 7L, "成品仓库管理", "menu", "/inventory/warehouse", "Warehouse", "Odometer", 9},
             // 701「成品库存」（/inventory/stock）已于 2026-09-18 按用户要求下线（页面代码已删，功能由
             // 「712 成品库存情况」按产品维度覆盖）⇒ 与 409/602/503 同范式：不再 upsert，
             // 下方统一置 visible=0（保留行与角色授权，便于回滚）；其历史 sort_order 已在下方挪到 99，
@@ -519,6 +524,9 @@ public class DataInitializer implements ApplicationRunner {
                 {107L, "outsource:supplier"},
                 {108L, "base:template"},
                 {403L, "outsource:material-info"},
+                // 702 成品仓库管理：2026-09-22 随菜单自「成品库存」迁入「基础数据」；
+                // **perms 值仍是 stock:warehouse**（接口级权限码，改了会让仓库接口被拦）—— 迁移只动 parent_id/sort_order
+                {702L, "stock:warehouse"},
                 // ===== 研发管理（目录 3）=====
                 {301L, "dev:project"},
                 {304L, "dev:material"},
@@ -539,7 +547,6 @@ public class DataInitializer implements ApplicationRunner {
                 {603L, "sale:return"},
                 {605L, "sale:exchange"},
                 // ===== 成品库存（目录 7）=====
-                {702L, "stock:warehouse"},
                 {703L, "stock:log"},
                 {704L, "stock:other-io"},
                 {705L, "stock:reclassify"},
@@ -829,6 +836,19 @@ public class DataInitializer implements ApplicationRunner {
             if (granted > 0) log.info("已补授 707「退货整理」给 {} 个角色（仓管员/跟单专员）", granted);
         } catch (Exception e) {
             log.warn("补授退货整理菜单异常: {}", e.getMessage());
+        }
+
+        // 存量库幂等补授（2026-09-22）：702「成品仓库管理」**由成品库存（parent 7）迁入基础数据（parent 2）**。
+        // 与 707 迁组同坑：菜单树以「已授权菜单」为输入，**父目录未授权会把其子菜单整组丢弃** ⇒
+        // 给持有 702 的角色补授目录 2（当前 admin/warehouse/merchandiser 本就有 2，这里兜住自定义角色）。
+        // （parent_id 本身由上面的种子 upsert 覆盖：ON DUPLICATE KEY UPDATE parent_id=VALUES(parent_id)）
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT DISTINCT rm.role_id, 2 FROM sys_role_menu rm WHERE rm.menu_id = 702");
+            if (granted > 0) log.info("已为持有 702「成品仓库管理」的角色补授父目录 2「基础数据」，共 {} 条", granted);
+        } catch (Exception e) {
+            log.warn("补授基础数据目录异常: {}", e.getMessage());
         }
     }
 

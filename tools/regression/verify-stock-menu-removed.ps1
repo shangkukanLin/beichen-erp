@@ -1,7 +1,8 @@
 ﻿# 下线验证（2026-09-18 用户要求）：成品库存的子菜单「成品库存」不要了，相关代码删除
 #   背景：701「成品库存」（/inventory/stock）下线 —— 前端页面 stock.vue 已删、路由改为重定向到
 #         「成品库存情况」（/inventory/product-stock），菜单 701 置 visible=0（保留行与授权便于回滚）。
-#   断言：① DB：701 visible=0 且行仍在（可回滚）② 侧栏「成品库存」组里不再有「成品库存」这一项（9 项）
+#   断言：① DB：701 visible=0 且行仍在（可回滚）② 侧栏「成品库存」组里不再有「成品库存」这一项（8 项；
+#        2026-09-22 起 702 成品仓库管理已按用户要求迁入「基础数据」，本组由 9 项变 8 项）
 #         ③ 旧地址 /inventory/stock 重定向到 /inventory/product-stock（老书签不吃 403/404）
 #         ④ 首页「成品库存」TAB 快捷入口不再有「成品库存」按钮、仍有「成品库存情况」
 # 注意：①先清 localStorage 菜单缓存 ②本文件必须 **纯 ASCII**。
@@ -64,7 +65,7 @@ if ($m.Success) {
   if ($idx -lt 0) { Ok 'the removed item is no longer in the group' } else { Bad ('item still present at index ' + $idx) }
   $kept = ZH 'txt_prod_stock'
   if ($kids -contains $kept) { Ok ('the surviving product-dimension page is still there (' + $kept + ')') } else { Bad ($kept + ' missing from the group') }
-  if ($kids.Count -eq 9) { Ok ('group now has 9 items (was 10)') } else { Bad ('group item count = ' + $kids.Count + ' (expected 9)') }
+  if ($kids.Count -eq 8) { Ok ('group now has 8 items (was 10; 702 moved to 基础数据 on 2026-09-22)') } else { Bad ('group item count = ' + $kids.Count + ' (expected 8)') }
 } else { Bad ('cannot read sidebar: ' + $raw) }
 
 Write-Output '--- 3) UI: old address /inventory/stock redirects to the surviving page'
