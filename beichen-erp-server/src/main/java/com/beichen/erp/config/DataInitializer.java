@@ -251,34 +251,34 @@ public class DataInitializer implements ApplicationRunner {
             {8L, 0L, "财务管理", "catalog", "", "", "Money", 10},
             {9L, 0L, "设置", "catalog", "", "", "Tools", 11},
             // 基础数据子菜单顺序（2026-09-15 用户定稿，2026-09-16 追加「物料信息管理」，2026-09-22 追加
-            // 「成品仓库管理」+「委外仓库 / 自有物料仓」）：
+            // 「成品仓库管理」+「委外仓库 / 自有物料仓」；2026-09-22 用户选定**方案 A 重新拍序**——
+            // 按"主数据对象"分组、组内按使用频率、配置类收尾）：
+            // 产品（被所有单据引用，最底层）→ 往来主体（客户/供应商/供货商，正好对应 销售/委外/进货 三条业务线）
+            // → 产品附属（品牌）→ 物料（类型 → 明细）→ 仓库（成品 → 委外 → 自有）→ 配置（模版管理收尾）
             // sort_order 即左侧栏显示顺序：
-            // 客户管理 → 产品管理 → 品牌管理 → 供货商管理 → 供应商管理 → 物料类型管理 → 物料信息管理 → 模版管理
-            // → 成品仓库管理 → 委外仓库 → 自有物料仓（后三个都是"仓库"主数据，2026-09-22 起聚在末尾）
-            {105L, 2L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "UserFilled", 1},
-            {101L, 2L, "产品管理", "menu", "/product", "ProductManage", "TakeawayBox", 2},
-            {102L, 2L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 3},
+            // 产品管理 → 客户管理 → 供应商管理 → 供货商管理 → 品牌管理 → 物料类型管理 → 物料信息管理
+            // → 成品仓库管理 → 委外仓库 → 自有物料仓 → 模版管理
+            // ⚠️ 本次只改 sort_order：id / perms / 路由 / 授权一律不动（不迁权限、不动白名单）；
+            //    verify-material-type.ps1 里"第 6 项 = 物料类型管理"的硬编码断言已同步改为**按库取基准**。
+            {101L, 2L, "产品管理", "menu", "/product", "ProductManage", "TakeawayBox", 1},
+            {105L, 2L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "UserFilled", 2},
+            {106L, 2L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "OfficeBuilding", 3},
             {107L, 2L, "供货商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "Van", 4},
-            {106L, 2L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "OfficeBuilding", 5},
+            {102L, 2L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 5},
             {103L, 2L, "物料类型管理", "menu", "/dev/material-type", "MaterialType", "Tickets", 6},
             // 物料信息管理（403）：2026-09-16 用户要求自「委外加工」迁入「基础数据」，紧跟「物料类型管理」；
             // 同日按用户要求菜单名由「物料信息」改为「物料信息管理」（与页面标题一致）
             // （物料主数据属基础数据；路由路径 /outsource/material-info 保持不变，故不涉及菜单白名单/重定向）
             {403L, 2L, "物料信息管理", "menu", "/outsource/material-info", "OutsourceMaterialInfo", "Switch", 7},
-            // 模版管理：把原「阶段模板管理」（104，基础数据下）与「加工合同模板」（405，委外加工下）
+            // 仓库块（2026-09-22 起三个"仓库"主数据相邻）：成品仓库管理自「成品库存」迁入、
+            // 委外仓库 / 自有物料仓自「物料仓库」迁入；**路由与 perms 均不变** ⇒ 不涉前端菜单白名单/重定向/接口权限。
+            // ⚠️ 与 707 迁组同坑：父目录未授权会把子菜单整组丢弃 ⇒ 下方各有"补授目录 2"的幂等块（702 / 404+410）。
+            {702L, 2L, "成品仓库管理", "menu", "/inventory/warehouse", "Warehouse", "Odometer", 8},
+            {404L, 2L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 9},
+            {410L, 2L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 10},
+            // 模版管理（配置/模板类，低频收尾）：把原「阶段模板管理」（104，基础数据下）与「加工合同模板」（405，委外加工下）
             // 合并为一个页面，页内用 TAB 区分（2026-09-15 用户要求）。旧地址保留为重定向。
-            {108L, 2L, "模版管理", "menu", "/template", "TemplateManage", "Timer", 8},
-            // 成品仓库管理（702）：2026-09-22 按用户要求自「成品库存」迁入「基础数据」（仓库属主数据）。
-            // **路由 /inventory/warehouse 与 perms stock:warehouse 均不变** ⇒ 不涉前端菜单白名单/重定向/接口权限
-            // （与 403 物料信息管理 2026-09-16 迁入同范式）；sort 9 = 排在基础数据末位。
-            // ⚠️ 与 707 迁组同坑：父目录未授权会把子菜单整组丢弃 ⇒ 下方有"给持有 702 的角色补授目录 2"的幂等块。
-            {702L, 2L, "成品仓库管理", "menu", "/inventory/warehouse", "Warehouse", "Odometer", 9},
-            // 委外仓库（404）/ 自有物料仓（410）：2026-09-22 按用户要求自「物料仓库」(11) 迁入「基础数据」（仓库属主数据）。
-            // **路由（/outsource/warehouse、/outsource/material-warehouse）与 perms（outsource:warehouse、
-            // outsource:material-warehouse）均不变** ⇒ 不涉前端菜单白名单/重定向/接口权限；sort 10/11 紧跟「成品仓库管理」。
-            // ⚠️ 同 702/707 迁组坑：父目录未授权会把子菜单整组丢弃 ⇒ 下方有"给持有 404/410 的角色补授目录 2"的幂等块。
-            {404L, 2L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 10},
-            {410L, 2L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 11},
+            {108L, 2L, "模版管理", "menu", "/template", "TemplateManage", "Timer", 11},
             // 301 菜单名（2026-09-16 用户要求）：「研发项目」→「研发立项」（仅显示文案，id/route_path/route_name/授权均不变）
             {301L, 3L, "研发立项", "menu", "/dev/project", "DevProject", "Notebook", 1},
             // 302「BOM管理」/ 303「图纸文档」已于 2026-09-16 按用户要求下线（不再 upsert，下方统一置 visible=0）。

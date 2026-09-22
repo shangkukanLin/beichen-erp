@@ -48,15 +48,21 @@ $p = EvalJs "location.pathname"
 # 注意：agent-browser eval 的返回值是「带引号的 JSON 字符串」，比较用 -match 而不是 -eq
 if ($p -match '/dev/material-type') { Ok '/dev/bom-type 已重定向到 /dev/material-type' } else { Bad ('旧地址重定向异常：' + $p) }
 
-# ③ 侧栏：基础数据顺序（第 6 项应为「物料类型管理」）
+# ③ 侧栏：基础数据顺序 —— **按库取基准**
+# 2026-09-22：原断言"第 6 项 = 物料类型管理"写死了位置，用户重排基础数据（方案 A）后必然失效；
+# 改为与 sys_menu(parent_id=2) 的顺序逐项比对 —— 菜单怎么调，本脚本都不用再改。
+$MYSQL = 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe'
+$rawDb = & $MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -e "SELECT menu_name FROM sys_menu WHERE parent_id=2 AND visible=1 AND status=1 ORDER BY sort_order" 2>$null
+$expBase = @((@($rawDb) | Select-Object -Skip 1) | ForEach-Object { ("$_").Trim() } | Where-Object { $_ -ne '' })
 OpenFresh "$base/dashboard"
 $jsMenu = "(()=>{const s=[...document.querySelectorAll('.el-menu .el-sub-menu')].find(x=>(x.querySelector('.el-sub-menu__title')?.innerText||'').includes('基础数据'));return JSON.stringify({c:s?[...s.querySelectorAll(':scope > .el-menu > li')].map(li=>li.innerText.trim()):[]});})()"
 $rawM = (EvalJs $jsMenu).Replace('\"', '"')
 $mM = [regex]::Match($rawM, '\{.*\}')
 if ($mM.Success) {
   $dm = $mM.Value | ConvertFrom-Json
-  Write-Output ('基础数据 = ' + ($dm.c -join ' | '))
-  if ($dm.c[5] -eq '物料类型管理') { Ok '基础数据第 6 项 = 物料类型管理' } else { Bad ('第 6 项为 ' + $dm.c[5]) }
+  Write-Output ('基础数据（侧栏） = ' + ($dm.c -join ' | '))
+  Write-Output ('基础数据（库）   = ' + ($expBase -join ' | '))
+  if (($dm.c -join '|') -eq ($expBase -join '|')) { Ok ('基础数据顺序与库一致：' + ($dm.c -join ' → ')) } else { Bad ('基础数据顺序与库不一致：库=' + ($expBase -join '|') + ' 实际=' + ($dm.c -join '|')) }
   if (($dm.c -join ',') -notmatch 'BOM表类型') { Ok '侧栏已无 BOM表类型管理' } else { Bad '侧栏仍有旧菜单名' }
 }
 $jsBtn = "(()=>{const b=[...document.querySelectorAll('button')].filter(x=>x.innerText.trim().includes('物料类型'));return JSON.stringify(b.map(x=>x.innerText.trim()));})()"
