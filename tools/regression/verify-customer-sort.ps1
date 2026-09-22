@@ -47,12 +47,13 @@ function Monotonic([double[]]$v, [bool]$asc) {
   return $true
 }
 
-Step '1) the detail table renders and the numeric headers carry sort carets'
+Step '1) the detail table renders; every header shows in full; the 9 numeric headers carry carets'
 Open '/analysis/customer' 4200
 ClearErrs | Out-Null
 Start-Sleep -Milliseconds 2500
 
-$jsHeads = TableJs "JSON.stringify({heads:[...t.querySelectorAll('.el-table__header th')].filter(vis).map(th=>({t:(th.innerText||'').trim().replace(/\s+/g,' '),carets:th.querySelectorAll('.caret-wrapper').length,clipped:th.scrollWidth>th.clientWidth+1})),rows:[...t.querySelectorAll('.el-table__body tbody tr')].filter(vis).length})"
+# 'clipped' is measured on the header cell's inner .cell (Element Plus ellipsises there).
+$jsHeads = TableJs "JSON.stringify({heads:[...t.querySelectorAll('.el-table__header th')].filter(vis).map(th=>{const c=th.querySelector('.cell');return {t:(th.innerText||'').trim().replace(/\s+/g,' '),carets:th.querySelectorAll('.caret-wrapper').length,clipped:!!c&&(c.scrollWidth>c.clientWidth+1)}}),rows:[...t.querySelectorAll('.el-table__body tbody tr')].filter(vis).length})"
 $raw = (EvalJs $jsHeads).Replace('\"', '"')
 $m = [regex]::Match($raw, '\{.*\}')
 if (-not $m.Success) { Write-Host ('FAIL cannot read table headers: ' + $raw); exit 1 }
@@ -62,19 +63,36 @@ $sortables = @($t.heads | Where-Object { $_.carets -gt 0 })
 Write-Host ('  headers = ' + (($t.heads | ForEach-Object { $_.t }) -join ' | '))
 Write-Host ('  sortable headers (caret) = ' + $sortables.Count + ' -> ' + (($sortables | ForEach-Object { $_.t }) -join ' | '))
 Ok2 ($sortables.Count -eq 9) ('exactly the 9 numeric columns are sortable -- got ' + $sortables.Count)
-$clipped = @($sortables | Where-Object { $_.clipped })
-Ok2 ($clipped.Count -eq 0) ('no sortable header is clipped by its caret -- offending: ' + (($clipped | ForEach-Object { $_.t }) -join ','))
+# 2026-09-22 (user request): the 客户编码 column was dropped because narrow columns clipped some headers.
+# Therefore EVERY header -- sortable or not -- must render its label in full.
+$clipped = @($t.heads | Where-Object { $_.clipped })
+Ok2 ($clipped.Count -eq 0) ('no header label is clipped (all shown in full) -- offending: ' + (($clipped | ForEach-Object { $_.t }) -join ' , '))
+# The 客户编码 column must be gone (asserted by column count + the fact that the first column is 客户).
+Ok2 ($t.heads.Count -eq 12) ('the table has 12 columns after dropping the code column -- got ' + $t.heads.Count)
+# Removing a column / widening others must not introduce horizontal scrolling (the page's own
+# invariant, stated in its comment): total header width must fit the scroll container.
+$jsFit = TableJs "(()=>{const w=[...t.querySelectorAll('.el-table__header colgroup col')].reduce((s,c)=>s+(parseFloat(c.getAttribute('width'))||0),0);const box=t.querySelector('.el-scrollbar__wrap')||t;return Math.round(w)+'|'+Math.round(box.clientWidth)})()"
+$fit = (EvalJs $jsFit).Trim([char]34) -split '\|'
+Write-Host ('  header total width = ' + $fit[0] + 'px, container = ' + $fit[1] + 'px')
+Ok2 ($fit.Count -ge 2 -and [int]$fit[0] -le ([int]$fit[1] + 2)) ('columns still fit the container (no horizontal scroll): ' + $fit[0] + ' <= ' + $fit[1])
+
+# Column indices are DERIVED from the caret positions so this test survives column add/remove
+# (sortable order is: amount, returnAmount, netAmount, cost, profit, profitRate, share, orderCount, unpaid).
+$colsWithCaret = @()
+for ($i = 0; $i -lt $t.heads.Count; $i++) { if ($t.heads[$i].carets -gt 0) { $colsWithCaret += $i } }
+$AMT = $colsWithCaret[0]
+$RATE = $colsWithCaret[5]
+Write-Host ('  column indices from carets: amount=' + $AMT + ' profitRate=' + $RATE + ' (of ' + $colsWithCaret.Count + ' sortable)')
 
 Step '2) clicking the amount header sorts by VALUE (not lexicographically)'
-# column index inside the first visible table: 0 customerCode, 1 customer, 2 amount, ... 7 profitRate, 9 orderCount, 10 unpaid
-$base = ToNums (ReadColAt 2)
+$base = ToNums (ReadColAt $AMT)
 Write-Host ('  base order sample = ' + (($base | Select-Object -First 5) -join ', '))
 $mx = ($base | Measure-Object -Maximum).Maximum
 $mn = ($base | Measure-Object -Minimum).Minimum
 
-ClickColAt 2
+ClickColAt $AMT
 Start-Sleep -Milliseconds 700
-$v1 = ToNums (ReadColAt 2)
+$v1 = ToNums (ReadColAt $AMT)
 Write-Host ('  after 1st click   = ' + (($v1 | Select-Object -First 5) -join ', '))
 Ok2 ((Monotonic $v1 $true) -or (Monotonic $v1 $false)) 'first click yields an ordered sequence'
 Ok2 (Monotonic $v1 $true) ('first click is ascending (smallest first: ' + $v1[0] + ' vs min ' + $mn + ')')
@@ -82,19 +100,19 @@ Ok2 ([Math]::Abs($v1[0] - $mn) -lt 1e-9) 'the minimum value sits at the top afte
 Ok2 ([Math]::Abs($v1[$v1.Count - 1] - $mx) -lt 1e-9) 'the maximum value sits at the bottom after ascending sort'
 
 Step '3) clicking the same header again flips to descending'
-ClickColAt 2
+ClickColAt $AMT
 Start-Sleep -Milliseconds 700
-$v2 = ToNums (ReadColAt 2)
+$v2 = ToNums (ReadColAt $AMT)
 Write-Host ('  after 2nd click   = ' + (($v2 | Select-Object -First 5) -join ', '))
 Ok2 (Monotonic $v2 $false) 'second click yields a descending sequence'
 Ok2 ([Math]::Abs($v2[0] - $mx) -lt 1e-9) 'the maximum value now sits at the top (triangle toggled)'
 
-Step '4) a DECIMAL column (profitRate, index 7) proves numeric ordering'
-$rates0 = ReadColAt 7
+Step '4) a DECIMAL column (profitRate) proves numeric ordering'
+$rates0 = ReadColAt $RATE
 Write-Host ('  rate values (page order) = ' + ($rates0 -join ', '))
-ClickColAt 7
+ClickColAt $RATE
 Start-Sleep -Milliseconds 700
-$rates = ToNums (ReadColAt 7)
+$rates = ToNums (ReadColAt $RATE)
 Write-Host ('  rate order sample = ' + (($rates | Select-Object -First 5) -join ', '))
 $rmax = ($rates | Measure-Object -Maximum).Maximum
 $rmin = ($rates | Measure-Object -Minimum).Minimum
