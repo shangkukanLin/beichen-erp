@@ -77,7 +77,8 @@ onMounted(load)
         </div>
       </template>
 
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" style="max-width:720px">
+      <!-- label-width 110px：标签带模块前缀（供应商名称/供应商编码 5 字）+ 必填星号，100px 会压成两行 -->
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px" style="max-width:720px">
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="供应商编码">

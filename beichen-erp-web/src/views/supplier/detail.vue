@@ -306,7 +306,8 @@ onActivated(loadData)
       <el-tab-pane label="基础信息" name="info">
         <el-card shadow="never">
           <template #header><span style="font-weight:600">基础信息</span></template>
-          <el-form :model="form" label-width="80px" size="small">
+          <!-- label-width 110px：标签带模块前缀（供货商名称/供应商编码 5 字）+ 必填星号，80px 会把标签压成两行 -->
+          <el-form :model="form" label-width="110px" size="small">
             <el-row :gutter="12">
               <el-col :span="8"><el-form-item required :label="entityLabel + '名称'"><el-input v-model="form.name" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item :label="entityLabel + '编码'"><el-input :model-value="form.code" disabled /></el-form-item></el-col>

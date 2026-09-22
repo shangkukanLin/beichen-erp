@@ -90,7 +90,9 @@ onMounted(load)
 
       <!-- 2026-09-23 用户要求：表单**左右两列**摆放（原先是一行一行往下排）。通栏放"类型/供货SKU/地址/备注"，
            短字段两两同行；列宽：编码|名称、联系人|联系电话、状态|账期。 -->
-      <el-form :model="form" label-width="90px" size="small" style="max-width:900px">
+      <!-- label-width 110px：标签已带模块前缀（供货商名称/供应商编码 各 5 字）+ 必填星号，
+           90px 会把标签压成两行（2026-09-23 字段口径统一后出现的回归） -->
+      <el-form :model="form" label-width="110px" size="small" style="max-width:900px">
         <el-row :gutter="16">
           <el-col :span="24">
             <el-form-item label="类型" required>
