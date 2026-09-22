@@ -88,39 +88,63 @@ onMounted(load)
         </div>
       </template>
 
-      <el-form :model="form" label-width="90px" size="small" style="max-width:720px">
-        <el-form-item label="类型" required>
-          <el-checkbox-group v-model="form.checkedTypes">
-            <el-checkbox v-for="t in TYPE_OPTIONS_CUSTOM" :key="t.name" :label="t.name" :value="t.name">{{ t.label }}</el-checkbox>
-          </el-checkbox-group>
-        </el-form-item>
-        <el-form-item :label="pageTitle + '编码'">
-          <!-- 唯一编码由系统按类型前缀自动生成（如 GYS-20260831-001），不可修改 -->
-          <el-input v-model="form.code" disabled :placeholder="isEdit ? '' : '保存后自动生成'" />
-        </el-form-item>
-        <el-form-item :label="pageTitle + '名称'" required><el-input v-model="form.name" /></el-form-item>
-        <!-- 供货SKU —— 只属于「供货商」（类型=成品商）；供应商不显示，后端也会忽略该类型传来的值 -->
-        <el-form-item v-if="isVendor" label="供货SKU">
-          <el-input v-model="form.supplySku" maxlength="24" clearable placeholder="如 ABC（留空则产品走默认 SKU-）" />
-          <div style="font-size:var(--app-font-xs);color:var(--app-text-secondary);line-height:1.4">
-            该供货商的产品 SKU 以此打头（ABC → ABC-000001）；1-24 位字母/数字/短横线，保存时自动转大写
-          </div>
-        </el-form-item>
-        <el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item>
-        <el-form-item label="联系电话"><el-input v-model="form.phone" /></el-form-item>
-        <el-form-item label="地址"><el-input v-model="form.address" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item label="状态"><el-select v-model="form.status" style="width:100%"><el-option label="合作中" :value="1" /><el-option label="已停用" :value="0" /></el-select></el-form-item>
-        <el-form-item label="账期">
-          <div style="display:flex;align-items:center;gap:6px">
-            <el-input-number v-model="form.creditPeriodMonths" :min="0" :max="24" placeholder="月" controls-position="right" style="width:90px" /><span>个月</span>
-            <el-input-number v-model="form.creditPeriod" :min="0" :max="31" placeholder="天" controls-position="right" style="width:90px" /><span>天</span>
-            <span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">（收货/交货后多少天付款，默认当天）</span>
-          </div>
-        </el-form-item>
-        <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
+      <!-- 2026-09-23 用户要求：表单**左右两列**摆放（原先是一行一行往下排）。通栏放"类型/供货SKU/地址/备注"，
+           短字段两两同行；列宽：编码|名称、联系人|联系电话、状态|账期。 -->
+      <el-form :model="form" label-width="90px" size="small" style="max-width:900px">
+        <el-row :gutter="16">
+          <el-col :span="24">
+            <el-form-item label="类型" required>
+              <el-checkbox-group v-model="form.checkedTypes">
+                <el-checkbox v-for="t in TYPE_OPTIONS_CUSTOM" :key="t.name" :label="t.name" :value="t.name">{{ t.label }}</el-checkbox>
+              </el-checkbox-group>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item :label="pageTitle + '编码'">
+              <!-- 唯一编码由系统按类型前缀自动生成（如 GYS-20260831-001），不可修改 -->
+              <el-input v-model="form.code" disabled :placeholder="isEdit ? '' : '保存后自动生成'" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item :label="pageTitle + '名称'" required><el-input v-model="form.name" /></el-form-item>
+          </el-col>
+          <!-- 供货SKU —— 只属于「供货商」（类型=成品商）；供应商不显示，后端也会忽略该类型传来的值 -->
+          <el-col v-if="isVendor" :span="24">
+            <el-form-item label="供货SKU">
+              <el-input v-model="form.supplySku" maxlength="24" clearable placeholder="如 ABC（留空则产品走默认 SKU-）" />
+              <div style="font-size:var(--app-font-xs);color:var(--app-text-secondary);line-height:1.4">
+                该供货商的产品 SKU 以此打头（ABC → ABC-000001）；1-24 位字母/数字/短横线，保存时自动转大写
+              </div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="联系电话"><el-input v-model="form.phone" /></el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="地址"><el-input v-model="form.address" type="textarea" :rows="2" /></el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="状态"><el-select v-model="form.status" style="width:100%"><el-option label="合作中" :value="1" /><el-option label="已停用" :value="0" /></el-select></el-form-item>
+          </el-col>
+          <el-col :span="16">
+            <el-form-item label="账期">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <el-input-number v-model="form.creditPeriodMonths" :min="0" :max="24" placeholder="月" controls-position="right" style="width:90px" /><span>个月</span>
+                <el-input-number v-model="form.creditPeriod" :min="0" :max="31" placeholder="天" controls-position="right" style="width:90px" /><span>天</span>
+                <span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">（收货/交货后多少天付款，默认当天）</span>
+              </div>
+            </el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
 
-      <div style="display:flex;gap:8px;justify-content:flex-end;max-width:720px">
+      <div style="display:flex;gap:8px;justify-content:flex-end;max-width:900px">
         <el-button @click="router.push(listPath)">取消</el-button>
         <el-button type="primary" :loading="saving" @click="handleSubmit">确定</el-button>
       </div>
