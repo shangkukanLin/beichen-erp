@@ -237,9 +237,10 @@
           <el-button v-if="hasMenu['OutsourceStockLoss']" type="primary" size="small" text @click="$router.push('/outsource/stock-loss')">物料报损</el-button>
           <el-button v-if="hasMenu['OutsourceOtherIo']" type="primary" size="small" text @click="$router.push('/outsource/other-io')">物料其他出入库</el-button>
           <el-button v-if="hasMenu['OutsourceDelivery']" type="primary" size="small" text @click="$router.push('/outsource/delivery')">物料收发单</el-button>
-          <!-- 委外仓库：按**路由路径**判权限（与「成品仓库管理」共用 route_name "Warehouse" 会串号） -->
-          <el-button v-if="hasPath['/outsource/warehouse']" type="primary" size="small" text @click="$router.push('/outsource/warehouse')">委外仓库</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialWarehouse']" type="primary" size="small" text @click="$router.push('/outsource/material-warehouse')">自有物料仓</el-button>
+          <!-- 委外仓库管理：按**路由路径**判权限（与「成品仓库管理」共用 route_name "Warehouse" 会串号） -->
+          <!-- 文案与侧栏「基础数据」子菜单一致（2026-09-23 改名：委外仓库→委外仓库管理、自有物料仓→自有物料仓管理） -->
+          <el-button v-if="hasPath['/outsource/warehouse']" type="primary" size="small" text @click="$router.push('/outsource/warehouse')">委外仓库管理</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialWarehouse']" type="primary" size="small" text @click="$router.push('/outsource/material-warehouse')">自有物料仓管理</el-button>
         </div>
       </el-tab-pane>
 

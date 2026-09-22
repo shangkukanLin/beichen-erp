@@ -22,6 +22,11 @@ function MenuRoutes([int]$parentId) {
   $o = & $script:MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -e "SELECT route_path FROM sys_menu WHERE parent_id=$parentId AND visible=1 AND status=1 AND menu_type='menu' ORDER BY sort_order" 2>$null
   return @((@($o) | Select-Object -Skip 1) | ForEach-Object { ("$_").Trim() } | Where-Object { $_ -ne '' })
 }
+# 按 id 读菜单名（**不写死中文**：菜单只改展示名时本脚本不该变红）
+function MenuNameById([int]$id) {
+  $o = & $script:MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -e "SELECT menu_name FROM sys_menu WHERE id=$id" 2>$null
+  return (@($o) | Select-Object -Skip 1 | Select-Object -First 1 | ForEach-Object { ("$_").Trim() })
+}
 function EvalJs($js) { return (((agent-browser eval $js) -join "`n").Trim()) }
 function Ok($m) { Write-Output ("PASS " + $m) }
 function Bad($m) { Write-Output ("FAIL " + $m); $global:fail = $global:fail + 1 }
@@ -81,10 +86,14 @@ Write-Output ('物料仓库 DB 期望 = ' + ($expWh -join ' | '))
 if (($wh -join '|') -eq ($expWh -join '|')) { Ok ('物料仓库顺序与库一致：' + ($wh -join ' → ')) } else { Bad ('物料仓库应为 ' + ($expWh -join '|') + '，实际 ' + ($wh -join '|')) }
 
 # ⑤ 2026-09-22：委外仓库(404) / 自有物料仓(410) 由「物料仓库」迁入「基础数据」，两边都要验（防只改一半）
+#    2026-09-23 改名为「委外仓库管理 / 自有物料仓管理」⇒ 断言不写死中文：名字按 id 从库取、归属按 route_path 判
 $expBase = MenuNames 2
+$expWhRoutes = MenuRoutes 11
+$n404 = MenuNameById 404
+$n410 = MenuNameById 410
 Write-Output ('基础数据 DB 期望 = ' + ($expBase -join ' | '))
-if (($expBase -contains '委外仓库') -and ($expBase -contains '自有物料仓')) { Ok '基础数据 已含 委外仓库 / 自有物料仓' } else { Bad ('基础数据 缺少 委外仓库/自有物料仓：' + ($expBase -join '|')) }
-if ((-not ($expWh -contains '委外仓库')) -and (-not ($expWh -contains '自有物料仓'))) { Ok '物料仓库 已不再含 委外仓库 / 自有物料仓' } else { Bad '物料仓库 仍含 委外仓库/自有物料仓：' + ($expWh -join '|') }
+if (($expBase -contains $n404) -and ($expBase -contains $n410)) { Ok ('基础数据 已含 ' + $n404 + ' / ' + $n410) } else { Bad ('基础数据 缺少 ' + $n404 + '/' + $n410 + '：' + ($expBase -join '|')) }
+if ((-not ($expWhRoutes -contains '/outsource/warehouse')) -and (-not ($expWhRoutes -contains '/outsource/material-warehouse'))) { Ok ('物料仓库 已不再含 ' + $n404 + ' / ' + $n410 + '（按 route_path）') } else { Bad '物料仓库 仍含 委外仓库/自有物料仓：' + ($expWh -join '|') }
 
 # ③ 委外加工子菜单（期望值取自 sys_menu：parent_id=4；2026-09-17 新顺序，供应商管理已下线）
 $ws = SubMenu '委外加工'
