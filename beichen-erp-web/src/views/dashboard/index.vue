@@ -217,17 +217,23 @@
       </el-tab-pane>
 
       <!-- 物料仓库（2026-09-16 新增 TAB，对应新的一级菜单「物料仓库」）：快捷入口自「委外加工」TAB 迁入，
-           顺序与左侧栏菜单一致；本模块暂无汇总统计卡片（如需物料仓库存量/待处理收发单等统计，另行补充） -->
+           顺序≈使用频率（查询在首位；侧栏本组顺序为 物料库存详情 → 物料库存盘点 → 物料报损 → 物料其他出入库 → 物料收发单）；
+           本模块暂无汇总统计卡片（如需物料仓库存量/待处理收发单等统计，另行补充）。
+           注：「委外仓库 / 自有物料仓」2026-09-22 起在侧栏归「基础数据」（仓库主数据），
+           但首页无「基础数据」TAB（主数据按使用场景分散在各 TAB），故这两颗按钮仍留在本 TAB -->
       <el-tab-pane v-if="hasModule['materialWarehouse']" label="物料仓库" name="materialWarehouse">
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <el-button v-if="hasMenu['OutsourceDelivery']" type="primary" size="small" text @click="$router.push('/outsource/delivery')">物料收发单</el-button>
-          <el-button v-if="hasMenu['OutsourceOtherIo']" type="primary" size="small" text @click="$router.push('/outsource/other-io')">物料其他出入库</el-button>
+          <!-- 物料库存详情（2026-09-22 补）：416 是 2026-09-21 新增的查询页，当时漏了这颗快捷入口，
+               导致 verify-material-warehouse-menu 的「物料仓库 TAB 快捷入口齐全」一直红 -->
+          <el-button v-if="hasMenu['OutsourceMaterialStock']" type="primary" size="small" text @click="$router.push('/outsource/material-stock')">物料库存详情</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialStockTake']" type="primary" size="small" text @click="$router.push('/outsource/material-stock-take')">物料库存盘点</el-button>
           <el-button v-if="hasMenu['OutsourceStockLoss']" type="primary" size="small" text @click="$router.push('/outsource/stock-loss')">物料报损</el-button>
+          <el-button v-if="hasMenu['OutsourceOtherIo']" type="primary" size="small" text @click="$router.push('/outsource/other-io')">物料其他出入库</el-button>
+          <el-button v-if="hasMenu['OutsourceDelivery']" type="primary" size="small" text @click="$router.push('/outsource/delivery')">物料收发单</el-button>
           <!-- 委外仓库：按**路由路径**判权限（与「成品仓库管理」共用 route_name "Warehouse" 会串号） -->
           <el-button v-if="hasPath['/outsource/warehouse']" type="primary" size="small" text @click="$router.push('/outsource/warehouse')">委外仓库</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialWarehouse']" type="primary" size="small" text @click="$router.push('/outsource/material-warehouse')">自有物料仓</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialStockTake']" type="primary" size="small" text @click="$router.push('/outsource/material-stock-take')">物料库存盘点</el-button>
         </div>
       </el-tab-pane>
 
@@ -856,7 +862,7 @@ function checkUserMenus() {
   // 快捷入口可见性（route_name 与 sys_menu 一致）
   // 2026-09-14 按最新 sys_menu 重设：补齐缺失的 route_name（DevScreenModel / OutsourceStockLoss /
   // InventoryProductStock / InventoryStockLoss / FinancePayableTransfer / AnalysisOverview），并移除**已不存在**的 FinanceAnalysis
-  const menuNames = ['Dashboard','DevProject','DevMaterial','DevScreenModel','MaterialType','TemplateManage','ProductManage','InventoryBrand','InventoryCustomer','SupplierManage','OutsourceSupplierManage','OutsourceOrder','OutsourceOrderDelivery','OutsourceMaterialOrder','OutsourceMaterialOrderDelivery','OutsourceMaterialInfo','OutsourceDelivery','OutsourceOtherIo','OutsourceReturnOrder','OutsourceMaterialReturn','OutsourceStockLoss','Warehouse','OutsourceMaterialWarehouse','OutsourceMaterialStockTake','InventoryPurchase','InventoryPurchaseReturn','InventorySale','SaleReturn','SaleExchange','InventoryProductStock','WarehouseStockLog','InventoryOtherIo','InventoryReclassify','InventoryWarehouseMove','InventoryStockTake','InventoryReturnSort','InventoryStockLoss','FinanceReceivable','FinancePayable','FinanceBill','FinanceCashflow','FinanceAccount','FinanceReceipt','FinancePayment','FinanceExpense','FinanceInvoice','FinancePayableTransfer','AnalysisOverview','SystemSmart','SystemUser','SystemSettings','SystemDataManage','SystemRole','SystemMenu','SystemClearData']
+  const menuNames = ['Dashboard','DevProject','DevMaterial','DevScreenModel','MaterialType','TemplateManage','ProductManage','InventoryBrand','InventoryCustomer','SupplierManage','OutsourceSupplierManage','OutsourceOrder','OutsourceOrderDelivery','OutsourceMaterialOrder','OutsourceMaterialOrderDelivery','OutsourceMaterialInfo','OutsourceDelivery','OutsourceOtherIo','OutsourceReturnOrder','OutsourceMaterialReturn','OutsourceStockLoss','Warehouse','OutsourceMaterialWarehouse','OutsourceMaterialStock','OutsourceMaterialStockTake','InventoryPurchase','InventoryPurchaseReturn','InventorySale','SaleReturn','SaleExchange','InventoryProductStock','WarehouseStockLog','InventoryOtherIo','InventoryReclassify','InventoryWarehouseMove','InventoryStockTake','InventoryReturnSort','InventoryStockLoss','FinanceReceivable','FinancePayable','FinanceBill','FinanceCashflow','FinanceAccount','FinanceReceipt','FinancePayment','FinanceExpense','FinanceInvoice','FinancePayableTransfer','AnalysisOverview','SystemSmart','SystemUser','SystemSettings','SystemDataManage','SystemRole','SystemMenu','SystemClearData']
   menuNames.forEach(n => { hasMenu.value[n] = names.has(n) })
   // 默认激活「备忘录」（2026-09-15 用户要求，原为「经营总览」；财务区块仍按 AnalysisOverview 权限显隐）
   activeTab.value = 'memo'

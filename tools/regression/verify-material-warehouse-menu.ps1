@@ -1,9 +1,11 @@
 ﻿# 「物料仓库」新目录 + 子菜单搬迁 校验（2026-09-16 建立，2026-09-17 改为**从 DB 取基准**，可复跑）
 # 断言：① 一级菜单含「物料仓库」且位置在「成品库存」之前
-#       ② 物料仓库子菜单 = sys_menu(parent_id=11, visible=1) 按 sort_order（仓库 → 盘点 → 单据）
+#       ② 物料仓库子菜单 = sys_menu(parent_id=11, visible=1) 按 sort_order（查询 + 作业单据）
+#          （2026-09-22 用户要求：委外仓库 / 自有物料仓 迁入「基础数据」⇒ 本组 7 项变 5 项）
 #       ③ 委外加工子菜单 = sys_menu(parent_id=4, visible=1) 按 sort_order
 #          （2026-09-17 用户定稿：加工订单 → 成品收货 → 加工退货 → 物料订单 → 物料收货 → 物料退货；供应商管理下线）
 #       ④ 5 个页面直达不 403（路由路径未变 → 白名单不受影响）
+#       ⑤ 委外仓库 / 自有物料仓 已归「基础数据」（2026-09-22 新增）
 # 说明：②③ 的期望值不再写死中文，而是**以库为准**与侧栏渲染比对 —— 菜单调整后本脚本无需再改。
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
@@ -77,6 +79,12 @@ Write-Output ('物料仓库 子菜单 = ' + ($wh -join ' | '))
 Write-Output ('物料仓库 DB 期望 = ' + ($expWh -join ' | '))
 if (($wh -join '|') -eq ($expWh -join '|')) { Ok ('物料仓库顺序与库一致：' + ($wh -join ' → ')) } else { Bad ('物料仓库应为 ' + ($expWh -join '|') + '，实际 ' + ($wh -join '|')) }
 
+# ⑤ 2026-09-22：委外仓库(404) / 自有物料仓(410) 由「物料仓库」迁入「基础数据」，两边都要验（防只改一半）
+$expBase = MenuNames 2
+Write-Output ('基础数据 DB 期望 = ' + ($expBase -join ' | '))
+if (($expBase -contains '委外仓库') -and ($expBase -contains '自有物料仓')) { Ok '基础数据 已含 委外仓库 / 自有物料仓' } else { Bad ('基础数据 缺少 委外仓库/自有物料仓：' + ($expBase -join '|')) }
+if ((-not ($expWh -contains '委外仓库')) -and (-not ($expWh -contains '自有物料仓'))) { Ok '物料仓库 已不再含 委外仓库 / 自有物料仓' } else { Bad '物料仓库 仍含 委外仓库/自有物料仓：' + ($expWh -join '|') }
+
 # ③ 委外加工子菜单（期望值取自 sys_menu：parent_id=4；2026-09-17 新顺序，供应商管理已下线）
 $ws = SubMenu '委外加工'
 $expWs = MenuNames 4
@@ -114,10 +122,11 @@ if ($d5json) {
   $exp5 = $expWh   # 期望值 = 库里的物料仓库菜单（不再写死）
   $miss5 = @($exp5 | Where-Object { $btns -notmatch [regex]::Escape($_) })
   if ($miss5.Count -eq 0) { Ok ('物料仓库 TAB 快捷入口齐全（' + $exp5.Count + ' 项）') } else { Bad ('物料仓库 TAB 缺：' + ($miss5 -join '、')) }
-  # 切回「委外加工」TAB，确认这 5 项已不在该 pane 内
+  # 切回「委外加工」TAB，确认「物料仓库」的项已不在该 pane 内（名单取库，不写死）
   EvalJs "(()=>{const h=[...document.querySelectorAll('.el-tabs__item')].find(x=>x.innerText.trim()==='委外加工');if(h)h.click();return 'ok';})()" | Out-Null
   agent-browser wait 2200
-  $btns2 = (EvalJs "[...document.querySelectorAll('#pane-outsource button')].map(x=>x.innerText.trim()).filter(t=>['物料收发单','物料其他出入库','物料报损','委外仓库','自有物料仓'].includes(t)).join('|')") -replace '"', ''
+  $whNamesJs = ($expWh | ForEach-Object { "'" + $_ + "'" }) -join ','
+  $btns2 = (EvalJs ("[...document.querySelectorAll('#pane-outsource button')].map(x=>x.innerText.trim()).filter(t=>[" + $whNamesJs + "].includes(t)).join('|')")) -replace '"', ''
   $btns2 = $btns2.Trim()
   Write-Output ('委外加工 TAB 同名列按钮 = [' + $btns2 + ']')
   if ([string]::IsNullOrWhiteSpace($btns2)) { Ok '委外加工 TAB 已无这 5 个快捷入口' } else { Bad ('委外加工 TAB 仍残留：' + $btns2) }

@@ -3,7 +3,7 @@
 #        warehouses meant to be 辅料仓(AUXILIARY) were created as 成品仓.
 # Fix (no deletion, UI only):
 #   1) rename them to 成品三号仓 / 成品四号仓 (they ARE valid finished warehouses)
-#   2) create the two real AUX warehouses on the correct page: 物料仓库 -> 自有物料仓
+#   2) create the two real AUX warehouses on the correct page: 基础数据 -> 自有物料仓 (was 物料仓库 until 2026-09-22)
 # ASCII ONLY (Chinese comes from zh.json keys).
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 EnsureLogin
