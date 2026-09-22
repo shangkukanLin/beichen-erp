@@ -94,5 +94,27 @@ if ([string]::IsNullOrWhiteSpace($draft)) {
   Ok2 ((Errs) -eq '[]') ('draft sale_order #' + $draft + ' page recorded no JS/API errors')
 }
 
+Step '4) UI: every converted drawer-detail page is reachable by id and renders the creator label'
+# 2026-09-23: the 7 read-only detail drawers became standalone pages -- guard that each new page
+# really loads THE RECORD BY ITS ID (a drawer used to render the already-loaded list row) and renders.
+$converted = @(
+  @('finance_receivable',       '/finance/receivable/detail/'),
+  @('finance_payable',          '/finance/payable/detail/'),
+  @('finance_receipt',          '/finance/receipt/detail/'),
+  @('finance_payment',          '/finance/payment/detail/'),
+  @('outsource_order_delivery', '/outsource/order/delivery/record/'),
+  @('outsource_order_delivery', '/outsource/defect-return/detail/')
+)
+foreach ($c in $converted) {
+  $id = SqlOne ('SELECT id FROM ' + $c[0] + ' ORDER BY id DESC LIMIT 1')
+  if ([string]::IsNullOrWhiteSpace($id)) { Write-Host ('SKIP ' + $c[0] + ': no rows'); continue }
+  Open ($c[1] + $id) 3500
+  ClearErrs | Out-Null
+  Start-Sleep -Milliseconds 1500
+  $body = EvalJs "document.body.innerText"
+  Ok2 ((Errs) -eq '[]') ($c[1] + $id + ' loads with no JS/API errors')
+  Ok2 ($body -match [regex]::Escape($CREATOR)) ($c[1] + $id + ' shows the creator label')
+}
+
 if ($script:fail -eq 0) { Write-Host 'RESULT PASS document operator (createByName / auditorName) end-to-end' }
 else { Write-Host ('RESULT FAIL count ' + $script:fail); exit 1 }
