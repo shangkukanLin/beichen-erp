@@ -362,6 +362,10 @@ const routes: RouteRecordRaw[] = [
       // 成品收货「收货记录」详情独立成页（2026-09-23 原为 60% 抽屉）；
       // ⚠️ 不能叫 outsource/order/delivery/detail/:id —— 该前缀已被「收货单页」占用（outsource/order/delivery/:id）
       { path: 'outsource/order/delivery/record/:id', name: 'OutsourceOrderDeliveryRecord', component: () => import('@/views/outsource/order/delivery-record.vue'), meta: { title: '收货记录详情', requiresAuth: true, operate: true } },
+      // 盘点明细（2026-09-23 原为 900px 弹框；表头走 query：scope/status/warehouseName/takeNo）；成品与物料盘点共用
+      { path: 'inventory/stock-take/detail/:id', name: 'InventoryStockTakeDetail', component: () => import('@/views/stock-take/detail.vue'), meta: { title: '盘点明细', requiresAuth: true, operate: true } },
+      // BOM 历史快照（2026-09-23 原为 900px 弹框，只读）
+      { path: 'dev/bom-snapshot/:projectId', name: 'DevBomSnapshot', component: () => import('@/views/dev/bom-snapshot.vue'), meta: { title: 'BOM 历史快照', requiresAuth: true, operate: true } },
       { path: 'finance/bill', name: 'FinanceBill', component: () => import('@/views/finance/bill.vue'), meta: { title: '账单生成', requiresAuth: true } },
       // 账单详情独立成页（原为抽屉）
       { path: 'finance/bill/detail/:id', name: 'FinanceBillDetail', component: () => import('@/views/finance/bill/detail.vue'), meta: { title: '账单详细', requiresAuth: true, operate: true } },

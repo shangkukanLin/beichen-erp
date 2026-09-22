@@ -22,7 +22,10 @@ import {
   type StockTake, type StockTakeItem,
 } from '@/api/inventory'
 import request from '@/utils/request'
+// 2026-09-23：明细由 900px 弹框改为独立页 ⇒ 行内「录入实盘/查看明细」改为路由跳转
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const props = defineProps<{ scope: 'PRODUCT' | 'MATERIAL' }>()
 const isMaterial = computed(() => props.scope === 'MATERIAL')
 /** 页面标题：用于表头提示当前盘的是哪一类仓库 */
@@ -89,10 +92,22 @@ const itemDialog = ref(false)
 const itemLoading = ref(false)
 const items = ref<StockTakeItem[]>([])
 const curTake = ref<StockTake>({})
+/**
+ * 明细改独立页（2026-09-23 用户要求：弹框改独立界面）。
+ * 表头字段（范围/状态/仓库名/单号）随 query 带过去 —— 盘点单没有单条查询接口，
+ * 而这些字段只用于展示与"是否可编辑"判定，放 URL 里刷新/直链都不会丢。
+ */
 function openItems(row: StockTake) {
   curTake.value = row
-  itemDialog.value = true
-  loadItems(row.id!)
+  router.push({
+    path: `/inventory/stock-take/detail/${row.id}`,
+    query: {
+      scope: props.scope,
+      status: row.status,
+      warehouseName: row.warehouseName,
+      takeNo: row.takeNo,
+    },
+  })
 }
 async function loadItems(id: number) {
   itemLoading.value = true
@@ -215,37 +230,6 @@ onActivated(() => { loadData() })
       <template #footer><el-button @click="createDialog=false">取消</el-button><el-button type="primary" @click="submitCreate">确定</el-button></template>
     </el-dialog>
 
-    <!-- 明细：录入实盘数量 -->
-    <el-dialog v-model="itemDialog" :title="`盘点明细 - ${curTake.warehouseName}（${curTake.takeNo}）`" width="900px" :close-on-click-modal="false">
-      <div style="margin-bottom:8px;font-size:var(--app-font-base)">
-        账面数量来自建单时快照；修改实盘数量后自动算差异。当前差异行：<b :style="{color: diffRows.length ? 'var(--app-color-danger)' : ''}">{{ diffRows.length }}</b>
-      </div>
-      <el-table v-loading="itemLoading" :data="items" border stripe size="small" max-height="420">
-        <!-- SKU 仅成品有；品质仅成品区分（物料库存不分品质，恒为良品） -->
-        <el-table-column v-if="!isMaterial" prop="sku" label="SKU" width="130" />
-        <el-table-column :label="isMaterial ? '物料' : '名称'" min-width="160" show-overflow-tooltip><template #default="{row}">{{ nameOf(row) }}</template></el-table-column>
-        <el-table-column v-if="!isMaterial" prop="qualityType" label="品质" width="80" align="center" />
-        <el-table-column prop="unit" label="单位" width="70" align="center" />
-        <el-table-column prop="bookQuantity" label="账面数量" width="100" align="right" />
-        <el-table-column label="实盘数量" width="140" align="right">
-          <template #default="{row}">
-            <el-input-number v-model="row.actualQuantity" :min="0" :precision="0" :step="1" controls-position="right" size="small" style="width:100%" :disabled="curTake.status!=='DRAFT'" />
-          </template>
-        </el-table-column>
-        <el-table-column label="差异" width="100" align="right">
-          <template #default="{row}">
-            <span :style="{ color: diffOf(row) ? 'var(--app-color-danger)' : '', fontWeight: diffOf(row) ? 'bold' : '' }">{{ diffOf(row) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="备注" min-width="120">
-          <template #default="{row}"><el-input v-model="row.remark" size="small" :disabled="curTake.status!=='DRAFT'" /></template>
-        </el-table-column>
-      </el-table>
-      <template #footer>
-        <el-button @click="itemDialog=false">关闭</el-button>
-        <el-button v-if="curTake.status==='DRAFT'" type="primary" @click="saveItems">保存实盘</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 

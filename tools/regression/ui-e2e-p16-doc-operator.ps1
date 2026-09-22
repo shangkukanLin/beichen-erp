@@ -116,5 +116,23 @@ foreach ($c in $converted) {
   Ok2 ($body -match [regex]::Escape($CREATOR)) ($c[1] + $id + ' shows the creator label')
 }
 
+Step '5) UI: the two converted large-content dialogs are reachable as standalone pages'
+# 2026-09-23: the two 900px content dialogs became standalone pages too (stock-take items editor,
+# read-only BOM snapshot). Those pages do not carry the operator labels, so only load-ability is checked.
+$takeId = SqlOne 'SELECT id FROM inventory_stock_take ORDER BY id DESC LIMIT 1'
+if ([string]::IsNullOrWhiteSpace($takeId)) { Write-Host 'SKIP stock-take detail: no rows' } else {
+  Open ('/inventory/stock-take/detail/' + $takeId + '?scope=PRODUCT&status=DRAFT') 3500
+  ClearErrs | Out-Null
+  Start-Sleep -Milliseconds 1500
+  Ok2 ((Errs) -eq '[]') ('stock-take detail #' + $takeId + ' loads with no JS/API errors')
+}
+$projId = SqlOne 'SELECT id FROM dev_project ORDER BY id DESC LIMIT 1'
+if ([string]::IsNullOrWhiteSpace($projId)) { Write-Host 'SKIP bom-snapshot: no rows' } else {
+  Open ('/dev/bom-snapshot/' + $projId) 3500
+  ClearErrs | Out-Null
+  Start-Sleep -Milliseconds 1500
+  Ok2 ((Errs) -eq '[]') ('bom-snapshot #' + $projId + ' loads with no JS/API errors')
+}
+
 if ($script:fail -eq 0) { Write-Host 'RESULT PASS document operator (createByName / auditorName) end-to-end' }
 else { Write-Host ('RESULT FAIL count ' + $script:fail); exit 1 }
