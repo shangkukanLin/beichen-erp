@@ -1,5 +1,7 @@
 package com.beichen.erp.outsource.service.impl;
 
+import com.beichen.erp.config.UserContext;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.common.BillPrefix;
@@ -181,6 +183,9 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
             result.put("reportStatus", existing.getStatus());
             result.put("reportRemark", existing.getRemark());
             result.put("closeDate", existing.getCloseDate());
+            // 制单人 / 结单人（2026-09-23 用户口径：单据详情显示操作人；本视图未走实体序列化，需显式带上）
+            result.put("createByName", existing.getCreateByName());
+            result.put("auditorName", existing.getAuditorName());
             List<CloseReportItem> savedItems = itemMapper.selectList(
                 new LambdaQueryWrapper<CloseReportItem>().eq(CloseReportItem::getReportId, existing.getId()));
             // 将保存的编辑值合并到物料行
@@ -654,6 +659,9 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         // 更新报表状态
         report.setStatus(CloseReportStatus.FINISHED.getCode());
         report.setCloseDate(LocalDate.now());
+        // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：结单 = 本表的"审核"动作 ⇒ 盖章结单人
+        report.setAuditorId(UserContext.getId());
+        report.setAuditorName(UserContext.getName());
         reportMapper.updateById(report);
 
         log.info("加工单(ID={}) 已结单，生成退料{}项", orderId, returnItems.size());
@@ -760,7 +768,10 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         reportMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<CloseReport>()
                 .eq(CloseReport::getId, report.getId())
                 .set(CloseReport::getStatus, CloseReportStatus.DRAFT.getCode())
-                .set(CloseReport::getCloseDate, null));
+                .set(CloseReport::getCloseDate, null)
+                // 反结单同口径清空结单人（与其它模块 unAudit 置 null 的做法一致，避免"已回草稿却仍显示结单人"）
+                .set(CloseReport::getAuditorId, null)
+                .set(CloseReport::getAuditorName, null));
 
         log.info("加工单(ID={}) 已反结单，退回生产中", orderId);
     }

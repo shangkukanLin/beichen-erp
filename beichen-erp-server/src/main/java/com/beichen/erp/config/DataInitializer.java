@@ -568,6 +568,8 @@ public class DataInitializer implements ApplicationRunner {
                 "outsource_order", "outsource_material_order", "outsource_return_order",
                 "outsource_material_return", "outsource_order_delivery",
                 "outsource_return_order_repair", "outsource_material_return_repair",
+                // 结单报表（2026-09-23 排查补漏）：结单 = 该单的"审核"动作（confirmClose）⇒ 也要有制单人/审核人
+                "outsource_order_close_report",
                 // 财务（台账 finance_receivable/payable 也记，便于追溯由哪张单触发）
                 "finance_receipt", "finance_payment", "finance_bill", "finance_expense",
                 "finance_invoice", "finance_payable_transfer",

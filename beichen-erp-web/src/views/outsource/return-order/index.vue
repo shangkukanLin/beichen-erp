@@ -449,6 +449,9 @@ onMounted(() => { loadLedger() })
             <span style="color:var(--app-color-danger);font-weight:500">{{ Math.abs(Number(detail.quantity || 0)) }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="扣减仓库">{{ detail.warehouseName || '-' }}</el-descriptions-item>
+          <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；本抽屉是台账行的“查看详情”） -->
+          <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="审核人">{{ detail.auditorName || '—' }}</el-descriptions-item>
           <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
           <el-descriptions-item label="建单时间">{{ detail.createTime ? String(detail.createTime).replace('T', ' ').slice(0, 19) : '-' }}</el-descriptions-item>
         </el-descriptions>

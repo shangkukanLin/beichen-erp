@@ -14,7 +14,9 @@ const loading = ref(true)
 const report = reactive({
   orderId: 0, orderCode: '', factoryName: '', products: [] as any[],
   deliveries: [] as any[],
-  reportId: 0, reportStatus: '', reportRemark: '', closeDate: ''
+  reportId: 0, reportStatus: '', reportRemark: '', closeDate: '',
+  // 制单人 / 结单人（2026-09-23 用户口径：单据详情显示操作人）
+  createByName: '', auditorName: ''
 })
 const items = ref<any[]>([])
 const remark = ref('')
@@ -179,6 +181,9 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
           {{ report.products?.map((p:any) => `${p.productName}×${p.quantity}`).join(' / ') || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="结单日期">{{ report.closeDate || '-' }}</el-descriptions-item>
+        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；本表"审核"= 确认结单） -->
+        <el-descriptions-item label="制单人">{{ report.createByName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="结单人">{{ report.auditorName || '—' }}</el-descriptions-item>
       </el-descriptions>
       <div style="margin-top:8px">
         <span style="font-weight:500;font-size:var(--app-font-base)">备注：</span>

@@ -487,6 +487,9 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
           <el-button v-if="detailRow.attachUrl" type="primary" link size="small" @click="openAttach(detailRow.attachUrl)">查看图片</el-button>
           <span v-else style="color:var(--app-text-placeholder)">—</span>
         </el-descriptions-item>
+        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；本条即 outsource_order_delivery 行） -->
+        <el-descriptions-item label="制单人">{{ detailRow.createByName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{ detailRow.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ detailRow.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-drawer>
