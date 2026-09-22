@@ -125,7 +125,7 @@ onActivated(() => { loadData() })
           <el-form-item label="编码">
             <el-input v-model="query.code" placeholder="请输入客户编码" clearable @keyup.enter="handleQuery" />
           </el-form-item>
-          <el-form-item label="名称">
+          <el-form-item label="客户名称">
             <el-input v-model="query.name" placeholder="请输入客户名称" clearable @keyup.enter="handleQuery" />
           </el-form-item>
           <el-form-item label="状态">
@@ -145,9 +145,9 @@ onActivated(() => { loadData() })
     <el-card shadow="never" class="table-card">
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="(row: any) => goDetail(row.id)">
         <el-table-column prop="code" label="编码" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="name" label="客户名称" min-width="140" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="100" />
-        <el-table-column prop="phone" label="电话" width="130" />
+        <el-table-column prop="phone" label="联系电话" width="130" />
         <el-table-column prop="creditPeriodMonths" label="账期(月)" width="90" align="center" />
         <el-table-column prop="creditPeriod" label="账期(天)" width="90" align="center" />
         <el-table-column prop="creditLimit" label="信用额度" width="120" align="right">
