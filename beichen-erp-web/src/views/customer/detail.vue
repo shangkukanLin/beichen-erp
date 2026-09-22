@@ -146,7 +146,7 @@ watch(() => route.fullPath, () => { init() })
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="名称" prop="name">
+            <el-form-item label="客户名称" prop="name">
               <el-input v-model="form.name" placeholder="请输入客户名称" />
             </el-form-item>
           </el-col>
@@ -156,8 +156,8 @@ watch(() => route.fullPath, () => { init() })
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="电话">
-              <el-input v-model="form.phone" placeholder="电话" />
+            <el-form-item label="联系电话">
+              <el-input v-model="form.phone" placeholder="联系电话" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
