@@ -84,6 +84,22 @@ $AMT = $colsWithCaret[0]
 $RATE = $colsWithCaret[5]
 Write-Host ('  column indices from carets: amount=' + $AMT + ' profitRate=' + $RATE + ' (of ' + $colsWithCaret.Count + ' sortable)')
 
+# The sort indicator must be ONE caret that stays inside its wrapper (2026-09-22 second fix):
+#   the default Element Plus markup keeps two carets in a 24x34 wrapper; shrinking the wrapper made
+#   the lower one poke outside and overlap the upper one ("two triangles facing each other").
+$jsCaret = TableJs "JSON.stringify([...t.querySelectorAll('.el-table__header th')].filter(vis).filter(th=>th.querySelector('.caret-wrapper')).map(th=>{const w=th.querySelector('.caret-wrapper'),wr=w.getBoundingClientRect();const c=[...w.querySelectorAll('.sort-caret')].filter(x=>x.getClientRects().length>0);let inside=true;c.forEach(x=>{const r=x.getBoundingClientRect();if(r.top<wr.top-1||r.bottom>wr.bottom+1||r.left<wr.left-1||r.right>wr.right+1)inside=false});return {n:c.length,inside:inside,cls:th.className.trim()}}))"
+$rawC = (EvalJs $jsCaret).Replace('\"', '"')
+$mc = [regex]::Match($rawC, '\[.*\]')
+if (-not $mc.Success) { Write-Host ('FAIL cannot read carets: ' + $rawC); exit 1 }
+$cares = @($mc.Value | ConvertFrom-Json)
+$multi = @($cares | Where-Object { $_.n -gt 1 })
+$outBox = @($cares | Where-Object { -not $_.inside })
+Write-Host ('  carets visible per header: ' + (($cares | ForEach-Object { $_.n }) -join ','))
+# NOTE: the number of caret wrappers is already asserted above via $sortables.Count (they are derived
+# from the same headers), so this step only checks the shape of the indicator itself.
+Ok2 ($multi.Count -eq 0) ('only ONE caret is shown per header (single flipping triangle) -- offenders: ' + $multi.Count)
+Ok2 ($outBox.Count -eq 0) ('no caret pokes outside its wrapper (no overlap) -- offenders: ' + $outBox.Count)
+
 Step '2) clicking the amount header sorts by VALUE (not lexicographically)'
 $base = ToNums (ReadColAt $AMT)
 Write-Host ('  base order sample = ' + (($base | Select-Object -First 5) -join ', '))

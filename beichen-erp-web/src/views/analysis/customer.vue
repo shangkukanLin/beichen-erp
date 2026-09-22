@@ -154,12 +154,20 @@ onActivated(() => { loadData() })
 .stat-card{background:var(--el-fill-color-light);border-radius:8px;padding:16px}
 .stat-label{font-size:var(--app-font-xs);color:var(--el-text-color-secondary);margin-top:4px}
 .stat-value.sm{font-size:var(--app-font-num-sm);font-weight:600}
-/* 2026-09-22（用户口径：表头要能完整显示）：本表 9 列带排序三角，而 Element Plus 的
-   .caret-wrapper 默认约 24px 宽，会挤掉窄列（占比/订单数 这类）的表头文字。
-   这里只为本页表格把三角收窄到 14px（上下两个小三角仍清晰可见，只是更紧凑）。
-   配套：上方列宽已重排（把「客户/最近成交/操作」的余量让给带三角的列）。
-   ⚠️ 两者必须一起改 —— 守卫 verify-customer-sort.ps1 会断言「所有表头 scrollWidth ≤ clientWidth」。 */
-:deep(.el-table__header .caret-wrapper){ width:14px; right:2px; }
-:deep(.el-table__header .sort-caret.ascending){ left:2px; top:6px; border-width:4px; }
-:deep(.el-table__header .sort-caret.descending){ left:2px; bottom:7px; border-width:4px; }
+/* 排序标记（2026-09-22，含一次二次修正）
+   ① 用户口径「表头要能完整显示」：Element Plus 的 .caret-wrapper 默认约 24px 宽，会挤掉窄列
+      （占比/订单数 这类）的表头文字 ⇒ 本页把标记收窄。
+   ② 二次修正（用户："你那两个小三角怎么对着放？"）：Element Plus 默认在 24×34 的 .caret-wrapper 里
+      放**两个**三角（上=升序、下=倒序，底边相对）；外框收窄到 14px 后，它给下三角的 bottom:7px
+      （按 34px 高算）会把下三角顶到框外 ⇒ 两三角挤在一起/重叠（实测 up dy=6..14、down dy=-1..7 ✗）。
+      现改为**单三角翻转**：默认只显示向上的灰三角（提示可点）；点击后升序（向上、高亮）；
+      再点翻向下（倒序）。状态类 ascending/descending 由 Element Plus 挂在 th 上（实测确认）。
+   配套：上方列宽已重排（把「客户/最近成交/操作」的余量让给带标记的列）。
+   ⚠️ 守卫 verify-customer-sort.ps1 会断言「所有表头 scrollWidth ≤ clientWidth」+「标记不越出外框且一次只显示一个」。 */
+:deep(.el-table__header .caret-wrapper){ width:14px; height:14px; }
+:deep(.el-table__header .sort-caret.ascending){ left:3px; top:3px; bottom:auto; border-width:4px; }
+:deep(.el-table__header .sort-caret.descending){ left:3px; top:3px; bottom:auto; border-width:4px; }
+:deep(.el-table__header th:not(.descending) .sort-caret.descending){ display:none; }
+:deep(.el-table__header th.descending .sort-caret.ascending){ display:none; }
+:deep(.el-table__header th.descending .sort-caret.descending){ display:block; }
 </style>
