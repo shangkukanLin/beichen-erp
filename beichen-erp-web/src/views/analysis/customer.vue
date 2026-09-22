@@ -27,6 +27,21 @@ function pct(part: number, total: number) {
 
 const summary = computed(() => data.value.summary || {})
 
+/**
+ * 数值排序器（2026-09-22 用户要求：客户明细的数值列可点表头正/倒序）。
+ * 用法：`sortable :sort-method="sortNum('amount')"`。数据一次性全量加载（无分页）⇒ 客户端排序即可，不动接口。
+ * ⚠️ 必须自己按**数值**比较：本页金额/比率来自后端字符串（页面里到处 `Number(row.x)`），
+ * 用默认排序会走字典序 ⇒ "9" 会排到 "10" 后面 ✗（本页多处直接 Number(...)，不能只依赖默认行为）。
+ * 空值/异常值统一当 0；顺带容忍千分位（正常 raw 数据没有，防御性处理）。
+ */
+function sortNum(key: string) {
+  const num = (v: any) => {
+    const n = Number(String(v ?? 0).replace(/,/g, ''))
+    return Number.isFinite(n) ? n : 0
+  }
+  return (a: any, b: any) => num(a?.[key]) - num(b?.[key])
+}
+
 async function loadData() {
   if (preset.value === 'custom' && !(range.value?.length === 2)) return
   loading.value = true
@@ -99,24 +114,25 @@ onActivated(() => { loadData() })
             <el-link type="primary" underline="never" @click="router.push(`/analysis/customer/${row.customerId}`)">{{ row.customerName }}</el-link>
           </template>
         </el-table-column>
-        <el-table-column label="销售额" min-width="75" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.amount) }}</span></template></el-table-column>
-        <el-table-column label="退货额" min-width="71" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.returnAmount) }}</span></template></el-table-column>
-        <el-table-column label="净额" min-width="75" align="right"><template #default="{row}">{{ fmt(row.netAmount) }}</template></el-table-column>
+        <el-table-column label="销售额" min-width="75" align="right" sortable :sort-method="sortNum('amount')"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.amount) }}</span></template></el-table-column>
+        <el-table-column label="退货额" min-width="71" align="right" sortable :sort-method="sortNum('returnAmount')"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.returnAmount) }}</span></template></el-table-column>
+        <el-table-column label="净额" min-width="75" align="right" sortable :sort-method="sortNum('netAmount')"><template #default="{row}">{{ fmt(row.netAmount) }}</template></el-table-column>
         <!-- 成本按产品移动加权成本价估算（采购无法按客户归集），毛利=净额−成本 -->
-        <el-table-column label="成本" min-width="71" align="right"><template #default="{row}"><span style="color:var(--app-color-warning)">{{ fmt(row.cost) }}</span></template></el-table-column>
-        <el-table-column label="利润" min-width="75" align="right">
+        <el-table-column label="成本" min-width="71" align="right" sortable :sort-method="sortNum('cost')"><template #default="{row}"><span style="color:var(--app-color-warning)">{{ fmt(row.cost) }}</span></template></el-table-column>
+        <el-table-column label="利润" min-width="75" align="right" sortable :sort-method="sortNum('profit')">
           <template #default="{row}">
             <span :style="{color: Number(row.profit)>=0?'var(--app-color-success)':'var(--app-color-danger)', fontWeight:'600'}">{{ fmt(row.profit) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="利润率" min-width="61" align="right">
+        <el-table-column label="利润率" min-width="61" align="right" sortable :sort-method="sortNum('profitRate')">
           <template #default="{row}">
             <span :style="{color: Number(row.profitRate)>=0?'var(--app-color-success)':'var(--app-color-danger)'}">{{ fmt(row.profitRate) }}%</span>
           </template>
         </el-table-column>
-        <el-table-column label="占比" min-width="51" align="right"><template #default="{row}">{{ pct(Number(row.amount), Number(summary.totalAmount)) }}%</template></el-table-column>
-        <el-table-column label="订单数" min-width="51" align="center"><template #default="{row}">{{ row.orderCount }}</template></el-table-column>
-        <el-table-column label="应收余额" min-width="75" align="right"><template #default="{row}"><span :style="{color: Number(row.unpaid)>0?'var(--app-color-warning)':'inherit'}">{{ fmt(row.unpaid) }}</span></template></el-table-column>
+        <!-- 占比列排序 = 按 amount 排（展示口径就是「该客户销售额 / 合计销售额」，两者同序） -->
+        <el-table-column label="占比" min-width="51" align="right" sortable :sort-method="sortNum('amount')"><template #default="{row}">{{ pct(Number(row.amount), Number(summary.totalAmount)) }}%</template></el-table-column>
+        <el-table-column label="订单数" min-width="51" align="center" sortable :sort-method="sortNum('orderCount')"><template #default="{row}">{{ row.orderCount }}</template></el-table-column>
+        <el-table-column label="应收余额" min-width="75" align="right" sortable :sort-method="sortNum('unpaid')"><template #default="{row}"><span :style="{color: Number(row.unpaid)>0?'var(--app-color-warning)':'inherit'}">{{ fmt(row.unpaid) }}</span></template></el-table-column>
         <el-table-column prop="lastDate" label="最近成交" min-width="80" align="center"/>
         <el-table-column label="操作" min-width="62" align="center">
           <template #default="{row}">
