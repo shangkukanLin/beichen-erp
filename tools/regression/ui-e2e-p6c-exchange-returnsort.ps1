@@ -234,6 +234,29 @@ Write-Host ('  add form items=' + (EvalJs $fi))
 $ab = "(()=>{const vis=e=>e.getClientRects().length>0;return JSON.stringify([...document.querySelectorAll('button')].filter(vis).map(b=>(b.innerText||'').trim()).filter(t=>t))})()"
 Write-Host ('  add buttons=' + (EvalJs $ab))
 
+Step 'sort form: the source-bill number opens its source document'
+# pick a sort whose items still trace back to a source batch (pending_id NOT NULL) -- draft first, audited as fallback
+$sid = [int](SqlOne "SELECT i.sort_id FROM return_sort_item i JOIN return_sort s ON s.id=i.sort_id WHERE i.pending_id IS NOT NULL AND s.status IN ('DRAFT','AUDITED') ORDER BY (s.status='AUDITED'), i.sort_id DESC LIMIT 1")
+Write-Host ('  using return sort id=' + $sid)
+Ok ($sid -gt 0) ('resolved a return sort with source-traceable items (id=' + $sid + ')')
+Open ('/inventory/return-sort/edit/' + $sid) 3400
+ClearErrs | Out-Null
+Start-Sleep -Milliseconds 1400
+# doc-number shape (XTH-20260921... for sale returns, HH-20260918... for exchanges)
+$codeRe = '[A-Z]{2,4}-\d{5,}'
+$srcProbe = "(function(){const vis=e=>e.getClientRects().length>0;const re=/$codeRe/;const ts=[...document.querySelectorAll('.el-table')].filter(vis);const codes=[];for(const t of ts){for(const tr of t.querySelectorAll('.el-table__body tbody tr')){for(const b of [...tr.querySelectorAll('button')].filter(vis)){const tx=(b.innerText||'').trim();if(re.test(tx))codes.push(tx)}}}return codes.length+'|'+(codes[0]||'')})()"
+$q1 = @((EvalJs $srcProbe) -split '\|')
+Write-Host ('  codeLinks=' + $q1[0] + ' first=' + $q1[1])
+Ok ([int]$q1[0] -gt 0) ('the sort form shows the source doc number as a clickable link (' + $q1[0] + ')')
+$clickJs = "(function(){const vis=e=>e.getClientRects().length>0;const re=/$codeRe/;const ts=[...document.querySelectorAll('.el-table')].filter(vis);for(const t of ts){for(const b of [...t.querySelectorAll('.el-table__body button')].filter(vis)){const tx=(b.innerText||'').trim();if(re.test(tx)){b.click();return tx}}}return 'NOCODE'})()"
+$clicked = EvalJs $clickJs
+Write-Host ('  clicked=' + $clicked)
+Start-Sleep -Milliseconds 1800
+$sp = EvalJs 'String(location.pathname)'
+Write-Host ('  source detail path = ' + $sp)
+Ok ($clicked -ne 'NOCODE') 'a source-doc number was clicked on the sort form'
+Ok ($sp -match '/(sale/return|sale/exchange)/detail/[0-9]+') ('clicking it opens the source document (' + $sp + ')')
+
 Step 'DB cross-check'
 $ex = D (SqlOne 'SELECT COUNT(*) FROM sale_exchange')
 $exAud = D (SqlOne "SELECT COUNT(*) FROM sale_exchange WHERE status='AUDITED'")

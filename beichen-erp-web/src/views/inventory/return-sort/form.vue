@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import { WarehouseType, INVENTORY_RETURN_SORT_DIRTY_KEY } from '@/api/enums'
+import { WarehouseType, AfterSaleSourceType, INVENTORY_RETURN_SORT_DIRTY_KEY } from '@/api/enums'
 import {
   getReturnSort, getReturnSortItems, getReturnSortDefectStock,
   createReturnSort, updateReturnSort
@@ -99,6 +99,8 @@ async function loadDefectStock() {
       else {
         items.value.push({
           pendingId: r.pendingId,
+          // sourceId 必须带上：来源单据列可点击跳转全靠它（后端 pendingRows/defectStock 已返回）
+          sourceId: r.sourceId,
           sourceType: r.sourceType, sourceCode: r.sourceCode, sourceDate: r.sourceDate,
           sku: r.sku || '',
           productId: r.productId, productName: r.productName, unit: r.unit,
@@ -117,6 +119,16 @@ async function loadDefectStock() {
 }
 
 function removeItem(index: number) { items.value.splice(index, 1) }
+/**
+ * 来源单据跳转（2026-09-22）：明细行「来源单据」单号点击 → 对应来源单据详情。
+ * 换货单 → /sale/exchange/detail/{id}；销售退货单 → /sale/return/detail/{id}。
+ * ⚠️ 与「待整理总览」(index.vue)、退货整理详情页 (detail.vue) 三处同口径，改一处记得改另两处。
+ */
+function goSource(row: any) {
+  if (!row.sourceId) return
+  if (row.sourceType === AfterSaleSourceType.SALE_EXCHANGE) router.push(`/sale/exchange/detail/${row.sourceId}`)
+  else router.push(`/sale/return/detail/${row.sourceId}`)
+}
 function itemSum(it: any) { return Number(it.qtyA || 0) + Number(it.qtyB || 0) + Number(it.qtyC || 0) + Number(it.qtyDefect || 0) }
 function isItemValid(it: any) { return it.totalQuantity > 0 && itemSum(it) === Number(it.totalQuantity) }
 
@@ -154,6 +166,8 @@ async function init() {
     const its = await getReturnSortItems(id.value)
     items.value = (its || []).map((it: any) => ({
       pendingId: it.pendingId,
+      // 编辑态同样要带 sourceId（后端 ReturnSortServiceImpl.enrichItems 已从来源批次回填）
+      sourceId: it.sourceId,
       sourceType: it.sourceType, sourceCode: it.sourceCode, sourceDate: it.sourceDate,
       productId: it.productId, productName: it.productName, unit: it.unit,
       sku: it.sku || '',
@@ -281,10 +295,14 @@ watch(() => route.fullPath, () => { init() })
           size=small + :controls=false，后又按用户要求去掉 SKU 与单位两列。
           **改这个表的列宽前请先加总，并确认表头没被裁**（跑 verify-returnsort-list-fit.ps1）。
         -->
-        <!-- 来源单据（2026-09-22 用户要求）：**只显示单据号**，不再带「退货/换货」类型标签
-             （类型标签占 ~40px，去掉后 150px 宽能完整显示单号，不再被截断；详情页也是只显示单号） -->
+        <!-- 来源单据（2026-09-22 用户要求）：**只显示单据号**，且单号可点击进来源单据详情
+             （与「待整理总览」「退货整理详情页」统一口径，三处都用 goSource；
+              类型标签占 ~40px，去掉后 150px 宽能完整显示单号） -->
         <el-table-column label="来源单据" width="150" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.sourceCode || '-' }}</template>
+          <template #default="{ row }">
+            <el-button v-if="row.sourceId" type="primary" link @click="goSource(row)">{{ row.sourceCode || '-' }}</el-button>
+            <span v-else>{{ row.sourceCode || '-' }}</span>
+          </template>
         </el-table-column>
         <el-table-column prop="productName" label="产品" min-width="80" show-overflow-tooltip />
         <el-table-column prop="totalQuantity" label="待整理数量" width="98" align="center">
