@@ -90,6 +90,9 @@ onActivated(() => { loadDetail() })
         <el-descriptions-item label="未收付">
           <span style="color:var(--app-color-danger)">{{ fmt(detail.unpaidAmount) }}</span>
         </el-descriptions-item>
+        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；账单无审核流程 ⇒ 审核人通常为 —） -->
+        <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{ detail.auditorName || '—' }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
 

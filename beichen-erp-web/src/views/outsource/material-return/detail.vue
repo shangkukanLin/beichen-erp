@@ -167,6 +167,9 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
           已结案<el-tag type="success" size="small" style="margin-left:6px">{{ detail.closedBy || '' }}</el-tag>
           <span style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ $fmtDate(detail.closedTime) }}</span>
         </el-descriptions-item>
+        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；历史单据无记录显示 —） -->
+        <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{ detail.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-card>

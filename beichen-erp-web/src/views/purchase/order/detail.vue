@@ -90,6 +90,9 @@ onActivated(() => { loadData() })
         <el-descriptions-item label="订单日期">{{ order.orderDate }}</el-descriptions-item>
         <el-descriptions-item label="税额">{{ fmt(order.taxAmount) }}</el-descriptions-item>
         <el-descriptions-item label="总金额">{{ fmt(order.totalAmount) }}</el-descriptions-item>
+        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；历史单据无记录显示 —） -->
+        <el-descriptions-item label="制单人">{{ order.createByName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{ order.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ order.remark || '—' }}</el-descriptions-item>
       </el-descriptions>
 

@@ -128,6 +128,9 @@ onActivated(() => { loadDetail() })
         <el-descriptions-item label="状态">
           <el-tag :type="statusTag(detail.status)" size="small">{{ statusLabel(detail.status) }}</el-tag>
         </el-descriptions-item>
+        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；历史单据无记录显示 —） -->
+        <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{ detail.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="备注">{{ detail.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-card>

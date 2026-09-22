@@ -70,7 +70,9 @@ const form = reactive({
   actualStartDate: '', actualEndDate: '',
   taxIncluded: 0, taxRate: '', taxAmount: '',
   totalAmount: '', remark: '',
-  attachUrl: '', logisticsCompany: '', logisticsNo: ''
+  attachUrl: '', logisticsCompany: '', logisticsNo: '',
+  // 制单人 / 审核人（2026-09-23 单据详情口径：详情页显示这两项）
+  createByName: '', auditorName: ''
 })
 // 供料模式：OURS来料加工 / FACTORY包工包料
 const SUPPLY_MODE_OPTIONS = [{ label: '来料加工', value: 'OURS' }, { label: '包工包料', value: 'FACTORY' }]
@@ -280,6 +282,9 @@ onActivated(async () => { await loadOptions(); await loadData() })
             <el-col :span="8"><el-form-item label="计划开始"><el-input v-model="form.planStartDate" type="date" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="计划完成"><el-input v-model="form.planEndDate" type="date" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="实际开始"><el-input :model-value="form.actualStartDate" readonly /></el-form-item></el-col>
+            <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；历史单据无记录显示 —） -->
+            <el-col :span="8"><el-form-item label="制单人"><el-input :model-value="form.createByName || '—'" readonly /></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="审核人"><el-input :model-value="form.auditorName || '—'" readonly /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="实际完成"><el-input :model-value="form.actualEndDate" readonly /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="总金额"><el-input :model-value="Number(form.totalAmount||0).toFixed(2)" readonly /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="含税"><el-switch v-model="form.taxIncluded" :active-value="1" :inactive-value="0" disabled /></el-form-item></el-col>

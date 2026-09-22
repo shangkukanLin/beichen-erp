@@ -15,7 +15,9 @@ export interface FinancePayment { id?: number; code?: string; supplierId?: numbe
   /** 制单人 / 审核人（2026-09-23 单据详情口径；付款单无审核流程 ⇒ 审核人通常为空） */
   createByName?: string; auditorName?: string }
 export interface FinancePaymentItem { id?: number; paymentId?: number; payableId?: number; payableBillNo?: string; thisAmount?: number; remark?: string }
-export interface FinanceBill { id?: number; billNo?: string; billType?: string; partnerId?: number; partnerName?: string; periodStart?: string; periodEnd?: string; totalAmount?: number; paidAmount?: number; unpaidAmount?: number; status?: string }
+export interface FinanceBill { id?: number; billNo?: string; billType?: string; partnerId?: number; partnerName?: string; periodStart?: string; periodEnd?: string; totalAmount?: number; paidAmount?: number; unpaidAmount?: number; status?: string
+  /** 制单人 / 审核人（2026-09-23 单据详情口径；账单无审核流程 ⇒ 审核人通常为空） */
+  createByName?: string; auditorName?: string }
 export interface FinanceBillItem { id?: number; sourceBillType?: string; sourceBillNo?: string; amount?: number; paidAmount?: number; unpaidAmount?: number; dueDate?: string }
 
 export function getAccountPage(params?: any) { return request.get<PageResult<FinanceAccount>>('/finance/account/page', { params }) }

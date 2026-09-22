@@ -11,7 +11,7 @@ const route = useRoute(); const router = useRouter()
 const loading = ref(true); const saving = ref(false)
 const uploadFile = ref<File | null>(null)
 
-const form = reactive({ id: undefined as any, code: '', deliveryType: DeliveryType.DELIVERY as string, factoryId: undefined as any, factoryName: '', supplierId: undefined as any, supplierName: '', fromWarehouseId: undefined as any, toWarehouseId: undefined as any, fromWarehouseName: '', toWarehouseName: '', supplierDirect: 0, allowNegative: 0, logisticsCompany: '', logisticsNo: '', deliveryDate: '', contact: '', phone: '', remark: '', attachUrl: '', status: '' })
+const form = reactive({ id: undefined as any, code: '', deliveryType: DeliveryType.DELIVERY as string, factoryId: undefined as any, factoryName: '', supplierId: undefined as any, supplierName: '', fromWarehouseId: undefined as any, toWarehouseId: undefined as any, fromWarehouseName: '', toWarehouseName: '', supplierDirect: 0, allowNegative: 0, logisticsCompany: '', logisticsNo: '', deliveryDate: '', contact: '', phone: '', remark: '', attachUrl: '', status: '', createByName: '', auditorName: '' })
 /** 手工单据（发料/调拨）才允许编辑字段；收料/退不良为自动单据、退料已下线（仅历史查看） */
 const isManualType = computed(() => form.deliveryType === DeliveryType.DELIVERY || form.deliveryType === DeliveryType.TRANSFER)
 const items = ref<any[]>([])
@@ -141,6 +141,9 @@ onActivated(()=>{ loadData() })
           <!-- 自动/历史单据：仓库只读展示 -->
           <el-col :span="16" v-if="!isManualType"><el-form-item label="仓库"><span>{{ form.fromWarehouseName || '-' }} → {{ form.toWarehouseName || '-' }}</span></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item></el-col>
+          <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；历史单据无记录显示 —） -->
+          <el-col :span="8"><el-form-item label="制单人"><el-input :model-value="form.createByName || '—'" readonly /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="审核人"><el-input :model-value="form.auditorName || '—'" readonly /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="电话"><el-input v-model="form.phone" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item></el-col>
         </el-row>

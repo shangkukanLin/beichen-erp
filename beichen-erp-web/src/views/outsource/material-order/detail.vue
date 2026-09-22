@@ -12,7 +12,7 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
 const loading = ref(true)
-const order = reactive({ id: 0, code: '', status: '', orderType: OrderType.PURCHASE as string, supplierId: undefined as any, supplierName: '', deliveryDate: '', finishTime: '', remark: '', attachUrl: '', targetWarehouseId: undefined as any })
+const order = reactive({ id: 0, code: '', status: '', orderType: OrderType.PURCHASE as string, supplierId: undefined as any, supplierName: '', deliveryDate: '', finishTime: '', remark: '', attachUrl: '', targetWarehouseId: undefined as any, createByName: '', auditorName: '' })
 const items = ref<any[]>([])
 const activeTab = ref('detail')
 const saving = ref(false)
@@ -167,6 +167,9 @@ onActivated(() => { loadAll() })
               <RemoteSelect v-model="order.supplierId" :fetch="fetchSuppliers" style="width:100%" :disabled="order.status!==MaterialOrderStatus.PENDING" placeholder="选择供应商" />
             </el-form-item></el-col>
             <el-col :span="8"><el-form-item label="交期"><el-input v-model="order.deliveryDate" type="date" :disabled="order.status!==MaterialOrderStatus.PENDING" /></el-form-item></el-col>
+            <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；历史单据无记录显示 —） -->
+            <el-col :span="8"><el-form-item label="制单人"><el-input :model-value="order.createByName || '—'" readonly class="readonly-input" /></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="审核人"><el-input :model-value="order.auditorName || '—'" readonly class="readonly-input" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="订单完成时间"><el-input :model-value="$fmtDate(order.finishTime) || '-'" readonly class="readonly-input" /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="备注"><el-input v-model="order.remark" type="textarea" :rows="2" :disabled="order.status!==MaterialOrderStatus.PENDING" /></el-form-item></el-col>
           </el-row>

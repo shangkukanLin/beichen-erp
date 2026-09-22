@@ -16,6 +16,9 @@ export interface SaleOrderItem {
 }
 
 export interface SaleOrder {
+  /** 制单人 / 审核人（2026-09-23 单据详情口径：详情页显示这两项） */
+  createByName?: string
+  auditorName?: string
   id?: number
   code?: string
   customerId?: number

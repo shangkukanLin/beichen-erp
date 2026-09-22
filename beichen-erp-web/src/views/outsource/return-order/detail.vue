@@ -178,6 +178,9 @@ onActivated(loadData)
           <span v-else style="color:#c0c4cc">不收费</span>
         </el-descriptions-item>
         <el-descriptions-item label="收费说明" :span="3">{{ detail.chargeReason || '-' }}</el-descriptions-item>
+        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；历史单据无记录显示 —） -->
+        <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{ detail.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ detail.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
