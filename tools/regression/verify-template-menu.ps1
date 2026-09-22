@@ -43,10 +43,12 @@ if ($m.Success) {
     Write-Output ('基础数据 子菜单 = ' + ($base1.c -join ' | '))
     if ($base1.c -contains '模版管理') { Ok '侧栏「基础数据 → 模版管理」存在' } else { Bad '侧栏缺少「模版管理」' }
     if ($base1.c -contains '阶段模板管理') { Bad '基础数据下仍残留旧入口「阶段模板管理」' } else { Ok '基础数据下旧入口「阶段模板管理」已下线' }
-    # 顺序断言（2026-09-15 用户定稿；2026-09-16 追加「物料信息管理」于物料类型管理之后）
-    $expect = @('客户管理', '产品管理', '品牌管理', '供货商管理', '供应商管理', '物料类型管理', '物料信息管理', '模版管理')
-    if ((@($base1.c) -join '|') -eq ($expect -join '|')) { Ok ('基础数据顺序正确：' + ($base1.c -join ' → ')) }
-    else { Bad ('基础数据顺序不符；期望 ' + ($expect -join '|') + '，实际 ' + ($base1.c -join '|')) }
+    # 顺序断言（2026-09-22 改为**按库取基准**）：原先写死 8 项，用户方案 A 重排（11 项）+ 702/404/410 迁入后必然假红；
+    # 改为读 sys_menu(parent_id=2) 的顺序与侧栏逐项比对 —— 菜单怎么调本脚本都不用再改。
+    $rawDb = & 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe' --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -e "SELECT menu_name FROM sys_menu WHERE parent_id=2 AND visible=1 AND status=1 ORDER BY sort_order" 2>$null
+    $expect = @((@($rawDb) | Select-Object -Skip 1) | ForEach-Object { ("$_").Trim() } | Where-Object { $_ -ne '' })
+    if ((@($base1.c) -join '|') -eq ($expect -join '|')) { Ok ('基础数据顺序与库一致：' + ($base1.c -join ' → ')) }
+    else { Bad ('基础数据顺序与库不一致；库 ' + ($expect -join '|') + '，实际 ' + ($base1.c -join '|')) }
     if (($base1.c -join ',') -match '物料信息管理') { Ok '「物料信息管理」已在基础数据（紧跟物料类型管理）' } else { Bad '基础数据下缺少「物料信息管理」' }
   } else { Bad '侧栏找不到「基础数据」分组' }
   $os = ($d.groups | Where-Object { $_.t -like '*委外加工*' } | Select-Object -First 1)

@@ -105,13 +105,15 @@
 
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序 = 使用频率（2026-09-14 按最新菜单重排：研发项目/BOM/物料/图纸/知识库 高频，模板类低频收尾） -->
+          <!-- 顺序（2026-09-22 用户要求：**以当前子菜单排序为准**）：先「研发管理」本目录项（按目录序），
+               再跨目录项（本 TAB 两项都属「基础数据」⇒ 按基础数据序：6 物料类型管理 → 11 模版管理） -->
           <el-button v-if="hasMenu['DevProject']" type="primary" size="small" text @click="$router.push('/dev/project')">研发立项</el-button>
           <el-button v-if="hasMenu['DevMaterial']" type="primary" size="small" text @click="$router.push('/dev/material')">研发物料</el-button>
           <el-button v-if="hasMenu['DevScreenModel']" type="primary" size="small" text @click="$router.push('/dev/screen-model')">屏幕资料</el-button>
+          <!-- 按钮名与左侧菜单一致（「基础数据 → 物料类型管理」，2026-09-22 起随子菜单名对齐） -->
+          <el-button v-if="hasMenu['MaterialType']" type="primary" size="small" text @click="$router.push('/dev/material-type')">物料类型管理</el-button>
           <!-- 阶段模板已并入「基础数据 → 模版管理」（2026-09-15）：按钮保留、深链到该页的「阶段模板管理」页签 -->
           <el-button v-if="hasMenu['TemplateManage']" type="primary" size="small" text @click="$router.push('/template?tab=phase')">阶段模板</el-button>
-          <el-button v-if="hasMenu['MaterialType']" type="primary" size="small" text @click="$router.push('/dev/material-type')">物料类型</el-button>
         </div>
       </el-tab-pane>
 
@@ -199,18 +201,20 @@
 
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序 = 使用频率（2026-09-14）：加工/收货/物料订单（跟单）→ 物料信息 → 退货（售后）→ 供货商/合同模板（配置）
+          <!-- 顺序（2026-09-22 用户要求：**以当前子菜单排序为准**）：先「委外加工」本目录 6 项（按目录序：
+               加工订单 → 成品收货 → 加工退货 → 物料订单 → 物料收货 → 物料退货），再跨目录项（都属「基础数据」，
+               按基础数据序：4 供货商管理 → 7 物料信息管理 → 11 加工合同模板）
                注：2026-09-16 「物料收发单 / 物料其他出入库 / 物料报损 / 委外仓库 / 自有物料仓」5 项
                已随新一级菜单「物料仓库」迁到独立的「物料仓库」TAB -->
           <el-button v-if="hasMenu['OutsourceOrder']" type="primary" size="small" text @click="$router.push('/outsource/order')">加工订单</el-button>
           <!-- 成品收货 / 物料收货：2026-09-16 由订单详情页签移出成独立菜单页（顺序与左侧栏一致） -->
           <el-button v-if="hasMenu['OutsourceOrderDelivery']" type="primary" size="small" text @click="$router.push('/outsource/order/delivery')">成品收货</el-button>
+          <el-button v-if="hasMenu['OutsourceReturnOrder']" type="primary" size="small" text @click="$router.push('/outsource/return-order')">加工退货</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialOrder']" type="primary" size="small" text @click="$router.push('/outsource/material-order')">物料订单</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialOrderDelivery']" type="primary" size="small" text @click="$router.push('/outsource/material-order/delivery')">物料收货</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialInfo']" type="primary" size="small" text @click="$router.push('/outsource/material-info')">物料信息管理</el-button>
-          <el-button v-if="hasMenu['OutsourceReturnOrder']" type="primary" size="small" text @click="$router.push('/outsource/return-order')">加工退货</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialReturn']" type="primary" size="small" text @click="$router.push('/outsource/material-return')">物料退货</el-button>
           <el-button v-if="hasMenu['OutsourceSupplierManage']" type="primary" size="small" text @click="$router.push('/outsource/supplier/manage')">供货商管理</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialInfo']" type="primary" size="small" text @click="$router.push('/outsource/material-info')">物料信息管理</el-button>
           <!-- 加工合同模板已并入「基础数据 → 模版管理」（2026-09-15）：按钮保留、深链到该页的「加工合同模板」页签 -->
           <el-button v-if="hasMenu['TemplateManage']" type="primary" size="small" text @click="$router.push('/template?tab=contract')">加工合同模板</el-button>
         </div>
@@ -294,8 +298,13 @@
         </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
+          <!-- 顺序（2026-09-22 用户要求：**以当前子菜单排序为准**）：先「进货业务」本目录 3 项
+               （成品采购单 → 采购退货单 → 采购换货单），再跨目录项（都属「基础数据」：3 供应商管理 → 4 供货商管理） -->
           <el-button v-if="hasMenu['InventoryPurchase']" type="primary" size="small" text @click="$router.push('/inventory/purchase')">成品采购单</el-button>
           <el-button v-if="hasMenu['InventoryPurchaseReturn']" type="primary" size="small" text @click="$router.push('/inventory/purchase-return')">采购退货单</el-button>
+          <!-- 采购换货单（504，2026-09-18 新增菜单）：以前漏了这颗快捷入口，2026-09-22 按子菜单补齐；
+               其 route_name 必须同时进下方 menuNames 白名单，否则 hasMenu 恒为 false、按钮永不渲染 -->
+          <el-button v-if="hasMenu['InventoryPurchaseExchange']" type="primary" size="small" text @click="$router.push('/inventory/purchase-exchange')">采购换货单</el-button>
           <el-button v-if="hasMenu['SupplierManage']" type="primary" size="small" text @click="$router.push('/supplier/manage')">供应商管理</el-button>
           <el-button v-if="hasMenu['OutsourceSupplierManage']" type="primary" size="small" text @click="$router.push('/outsource/supplier/manage')">供货商管理</el-button>
         </div>
@@ -329,12 +338,13 @@
         </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序 = 使用频率（2026-09-15 用户要求改为：销售单 → 销售换货单 → 销售退货单 → 退货整理 → 客户管理） -->
+          <!-- 顺序（2026-09-22 用户要求：**以当前子菜单排序为准**）：先「销售业务」本目录 3 项
+               （销售单 → 销售退货单 → 销售换货单），再跨目录项（客户管理=基础数据 2；退货整理已归「成品库存」第 2 位） -->
           <el-button v-if="hasMenu['InventorySale']" type="primary" size="small" text @click="$router.push('/inventory/sale')">销售单</el-button>
-          <el-button v-if="hasMenu['SaleExchange']" type="primary" size="small" text @click="$router.push('/sale/exchange')">销售换货单</el-button>
           <el-button v-if="hasMenu['SaleReturn']" type="primary" size="small" text @click="$router.push('/sale/return')">销售退货单</el-button>
-          <el-button v-if="hasMenu['InventoryReturnSort']" type="primary" size="small" text @click="$router.push('/inventory/return-sort')">退货整理</el-button>
+          <el-button v-if="hasMenu['SaleExchange']" type="primary" size="small" text @click="$router.push('/sale/exchange')">销售换货单</el-button>
           <el-button v-if="hasMenu['InventoryCustomer']" type="primary" size="small" text @click="$router.push('/inventory/customer')">客户管理</el-button>
+          <el-button v-if="hasMenu['InventoryReturnSort']" type="primary" size="small" text @click="$router.push('/inventory/return-sort')">退货整理</el-button>
         </div>
       </el-tab-pane>
 
@@ -391,19 +401,24 @@
         </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序 = 使用频率：库存情况/仓库（日常查询）→ 流水/出入库/移仓/盘点/报损（作业）→ 重分类/产品（低频）；
-               注：①「成品库存」查询页 2026-09-18 按用户要求下线（并入「成品库存详情」），快捷按钮一并移除
-                   ②退货整理自 2026-09-18 起归「成品库存」菜单（其 707 原属销售业务） -->
-          <el-button v-if="hasMenu['InventoryProductStock']" type="primary" size="small" text @click="$router.push('/inventory/product-stock')">成品库存详情</el-button>
-          <!-- 成品仓库管理：改用**路由路径**判权限（与「委外仓库」共用 route_name "Warehouse" 会串号） -->
-          <el-button v-if="hasPath['/inventory/warehouse']" type="primary" size="small" text @click="$router.push('/inventory/warehouse')">成品仓库管理</el-button>
-          <el-button v-if="hasMenu['WarehouseStockLog']" type="primary" size="small" text @click="$router.push('/inventory/stock-log')">库存流水</el-button>
-          <el-button v-if="hasMenu['InventoryOtherIo']" type="primary" size="small" text @click="$router.push('/inventory/other-io')">其他出入库</el-button>
+          <!-- 顺序（2026-09-22 用户要求：**以当前子菜单排序为准**）：先「成品库存」本目录 8 项，严格按左侧栏顺序
+               （移仓单 → 退货整理 → 规格调整 → 成品库存详情 → 成品库存流水 → 库存盘点 → 成品其他出入库 → 成品报损），
+               再跨目录项（都属「基础数据」⇒ 按基础数据序：1 产品管理 → 8 成品仓库管理）。
+               按钮名与菜单一致（「成品库存流水」「成品其他出入库」，2026-09-22 起对齐）；
+               注：①「成品库存」查询页 2026-09-18 下线（并入「成品库存详情」），快捷按钮一并移除
+                   ②退货整理自 2026-09-18 起归「成品库存」菜单（其 707 原属销售业务），2026-09-22 起排第 2 位 -->
           <el-button v-if="hasMenu['InventoryWarehouseMove']" type="primary" size="small" text @click="$router.push('/inventory/warehouse-move')">移仓单</el-button>
-          <el-button v-if="hasMenu['InventoryStockTake']" type="primary" size="small" text @click="$router.push('/inventory/stock-take')">库存盘点</el-button>
-          <el-button v-if="hasMenu['InventoryStockLoss']" type="primary" size="small" text @click="$router.push('/inventory/stock-loss')">成品报损</el-button>
+          <el-button v-if="hasMenu['InventoryReturnSort']" type="primary" size="small" text @click="$router.push('/inventory/return-sort')">退货整理</el-button>
           <el-button v-if="hasMenu['InventoryReclassify']" type="primary" size="small" text @click="$router.push('/inventory/reclassify')">规格调整</el-button>
+          <el-button v-if="hasMenu['InventoryProductStock']" type="primary" size="small" text @click="$router.push('/inventory/product-stock')">成品库存详情</el-button>
+          <el-button v-if="hasMenu['WarehouseStockLog']" type="primary" size="small" text @click="$router.push('/inventory/stock-log')">成品库存流水</el-button>
+          <el-button v-if="hasMenu['InventoryStockTake']" type="primary" size="small" text @click="$router.push('/inventory/stock-take')">库存盘点</el-button>
+          <el-button v-if="hasMenu['InventoryOtherIo']" type="primary" size="small" text @click="$router.push('/inventory/other-io')">成品其他出入库</el-button>
+          <el-button v-if="hasMenu['InventoryStockLoss']" type="primary" size="small" text @click="$router.push('/inventory/stock-loss')">成品报损</el-button>
           <el-button v-if="hasMenu['ProductManage']" type="primary" size="small" text @click="$router.push('/product')">产品管理</el-button>
+          <!-- 成品仓库管理：改用**路由路径**判权限（与「委外仓库」共用 route_name "Warehouse" 会串号）；
+               2026-09-22 侧栏已把它归入「基础数据」，但首页无「基础数据」TAB ⇒ 按钮仍留在本 TAB -->
+          <el-button v-if="hasPath['/inventory/warehouse']" type="primary" size="small" text @click="$router.push('/inventory/warehouse')">成品仓库管理</el-button>
         </div>
       </el-tab-pane>
 
@@ -445,17 +460,18 @@
         </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序 = 使用频率（2026-09-14）：应收/应付/收付款（每天核销）→ 账单/流水/费用/发票 → 账户/应付转应收（配置与偶发）；
+          <!-- 顺序（2026-09-22 用户要求：**以当前子菜单排序为准**）：与左侧栏「财务管理」10 项逐项一致
+               （收款管理 → 付款管理 → 账单生成 → 费用管理 → 应收管理 → 应付管理 → 资金流水 → 账户管理 → 发票管理 → 应付转应收）；
                注：原「财务分析」按钮已删（其 route_name "FinanceAnalysis" 在最新菜单里不存在，是死键；经营分析在左侧菜单） -->
-          <el-button v-if="hasMenu['FinanceReceivable']" type="primary" size="small" text @click="$router.push('/finance/receivable')">应收管理</el-button>
-          <el-button v-if="hasMenu['FinancePayable']" type="primary" size="small" text @click="$router.push('/finance/payable')">应付管理</el-button>
           <el-button v-if="hasMenu['FinanceReceipt']" type="primary" size="small" text @click="$router.push('/finance/receipt')">收款管理</el-button>
           <el-button v-if="hasMenu['FinancePayment']" type="primary" size="small" text @click="$router.push('/finance/payment')">付款管理</el-button>
           <el-button v-if="hasMenu['FinanceBill']" type="primary" size="small" text @click="$router.push('/finance/bill')">账单生成</el-button>
-          <el-button v-if="hasMenu['FinanceCashflow']" type="primary" size="small" text @click="$router.push('/finance/cashflow')">资金流水</el-button>
           <el-button v-if="hasMenu['FinanceExpense']" type="primary" size="small" text @click="$router.push('/finance/expense')">费用管理</el-button>
-          <el-button v-if="hasMenu['FinanceInvoice']" type="primary" size="small" text @click="$router.push('/finance/invoice')">发票管理</el-button>
+          <el-button v-if="hasMenu['FinanceReceivable']" type="primary" size="small" text @click="$router.push('/finance/receivable')">应收管理</el-button>
+          <el-button v-if="hasMenu['FinancePayable']" type="primary" size="small" text @click="$router.push('/finance/payable')">应付管理</el-button>
+          <el-button v-if="hasMenu['FinanceCashflow']" type="primary" size="small" text @click="$router.push('/finance/cashflow')">资金流水</el-button>
           <el-button v-if="hasMenu['FinanceAccount']" type="primary" size="small" text @click="$router.push('/finance/account')">账户管理</el-button>
+          <el-button v-if="hasMenu['FinanceInvoice']" type="primary" size="small" text @click="$router.push('/finance/invoice')">发票管理</el-button>
           <el-button v-if="hasMenu['FinancePayableTransfer']" type="primary" size="small" text @click="$router.push('/finance/payable-transfer')">应付转应收</el-button>
         </div>
       </el-tab-pane>
@@ -862,7 +878,7 @@ function checkUserMenus() {
   // 快捷入口可见性（route_name 与 sys_menu 一致）
   // 2026-09-14 按最新 sys_menu 重设：补齐缺失的 route_name（DevScreenModel / OutsourceStockLoss /
   // InventoryProductStock / InventoryStockLoss / FinancePayableTransfer / AnalysisOverview），并移除**已不存在**的 FinanceAnalysis
-  const menuNames = ['Dashboard','DevProject','DevMaterial','DevScreenModel','MaterialType','TemplateManage','ProductManage','InventoryBrand','InventoryCustomer','SupplierManage','OutsourceSupplierManage','OutsourceOrder','OutsourceOrderDelivery','OutsourceMaterialOrder','OutsourceMaterialOrderDelivery','OutsourceMaterialInfo','OutsourceDelivery','OutsourceOtherIo','OutsourceReturnOrder','OutsourceMaterialReturn','OutsourceStockLoss','Warehouse','OutsourceMaterialWarehouse','OutsourceMaterialStock','OutsourceMaterialStockTake','InventoryPurchase','InventoryPurchaseReturn','InventorySale','SaleReturn','SaleExchange','InventoryProductStock','WarehouseStockLog','InventoryOtherIo','InventoryReclassify','InventoryWarehouseMove','InventoryStockTake','InventoryReturnSort','InventoryStockLoss','FinanceReceivable','FinancePayable','FinanceBill','FinanceCashflow','FinanceAccount','FinanceReceipt','FinancePayment','FinanceExpense','FinanceInvoice','FinancePayableTransfer','AnalysisOverview','SystemSmart','SystemUser','SystemSettings','SystemDataManage','SystemRole','SystemMenu','SystemClearData']
+  const menuNames = ['Dashboard','DevProject','DevMaterial','DevScreenModel','MaterialType','TemplateManage','ProductManage','InventoryBrand','InventoryCustomer','SupplierManage','OutsourceSupplierManage','OutsourceOrder','OutsourceOrderDelivery','OutsourceMaterialOrder','OutsourceMaterialOrderDelivery','OutsourceMaterialInfo','OutsourceDelivery','OutsourceOtherIo','OutsourceReturnOrder','OutsourceMaterialReturn','OutsourceStockLoss','Warehouse','OutsourceMaterialWarehouse','OutsourceMaterialStock','OutsourceMaterialStockTake','InventoryPurchase','InventoryPurchaseReturn','InventoryPurchaseExchange','InventorySale','SaleReturn','SaleExchange','InventoryProductStock','WarehouseStockLog','InventoryOtherIo','InventoryReclassify','InventoryWarehouseMove','InventoryStockTake','InventoryReturnSort','InventoryStockLoss','FinanceReceivable','FinancePayable','FinanceBill','FinanceCashflow','FinanceAccount','FinanceReceipt','FinancePayment','FinanceExpense','FinanceInvoice','FinancePayableTransfer','AnalysisOverview','SystemSmart','SystemUser','SystemSettings','SystemDataManage','SystemRole','SystemMenu','SystemClearData']
   menuNames.forEach(n => { hasMenu.value[n] = names.has(n) })
   // 默认激活「备忘录」（2026-09-15 用户要求，原为「经营总览」；财务区块仍按 AnalysisOverview 权限显隐）
   activeTab.value = 'memo'
