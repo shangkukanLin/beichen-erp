@@ -207,6 +207,9 @@ async function handleDetail(row: FinanceReceipt) { detail.value = { ...row }
         <el-descriptions-item label="账户">{{ aName(detail.accountId) }}</el-descriptions-item>
         <el-descriptions-item label="日期">{{ detail.receiptDate }}</el-descriptions-item>
         <el-descriptions-item label="金额">{{ fmt(detail.amount) }}</el-descriptions-item>
+        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；收款单无审核流程 ⇒ 审核人显示 —） -->
+        <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{ detail.auditorName || '—' }}</el-descriptions-item>
       </el-descriptions>
       <el-divider>核销明细</el-divider>
       <el-table :data="detailItems" border><el-table-column prop="receivableBillNo" label="应收单据" min-width="150"/><el-table-column prop="thisAmount" label="核销金额" width="130" align="right"><template #default="{row}">{{ fmt(row.thisAmount) }}</template></el-table-column></el-table>

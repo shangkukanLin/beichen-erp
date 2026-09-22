@@ -185,6 +185,9 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
         <el-descriptions-item label="账户">{{ aName(detail.accountId) }}</el-descriptions-item>
         <el-descriptions-item label="日期">{{ detail.paymentDate }}</el-descriptions-item>
         <el-descriptions-item label="金额">{{ fmt(detail.amount) }}</el-descriptions-item>
+        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；付款单无审核流程 ⇒ 审核人显示 —） -->
+        <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{ detail.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="付款凭证" :span="2">
           <div style="display:flex;align-items:center;gap:12px">
             <template v-if="detail.attachUrl">

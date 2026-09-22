@@ -221,8 +221,10 @@ onActivated(() => { loadDetail() })
         <el-descriptions-item label="单号">{{ detail.code || '-' }}</el-descriptions-item>
         <el-descriptions-item label="仓库">{{ warehouseDisplayName }}</el-descriptions-item>
         <el-descriptions-item label="日期">{{ detail.reclassifyDate ? $fmtDate(detail.reclassifyDate) : '-' }}</el-descriptions-item>
-        <!-- 整理人=建单时登录的账户（历史单据无记录显示 —） -->
+        <!-- 整理人=建单时登录的账户（历史单据无记录显示 —）；本单的"整理人"即制单人 -->
         <el-descriptions-item label="整理人">{{ detail.createByName || '-' }}</el-descriptions-item>
+        <!-- 审核人（2026-09-23 用户口径：单据详情显示「制单人 + 审核人」） -->
+        <el-descriptions-item label="审核人">{{ detail.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ detail.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-card>

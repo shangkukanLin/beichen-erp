@@ -82,6 +82,8 @@ onMounted(load)
           <span v-else>—</span>
         </el-descriptions-item>
         <el-descriptions-item label="转出金额"><strong>{{ fmt(d.amount) }}</strong></el-descriptions-item>
+        <!-- 制单人（2026-09-23 用户口径：单据详情显示「制单人 + 审核人」） -->
+        <el-descriptions-item label="制单人">{{ d.createByName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="审核人">{{ d.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="审核时间">{{ d.auditTime || '—' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ d.createTime || '—' }}</el-descriptions-item>

@@ -23,6 +23,8 @@
         </el-descriptions-item>
         <el-descriptions-item label="退货日期">{{ head.returnDate }}</el-descriptions-item>
         <el-descriptions-item label="退货金额">{{ formatMoney(head.totalAmount) }}</el-descriptions-item>
+        <!-- 制单人（2026-09-23 用户口径：单据详情显示「制单人 + 审核人」） -->
+        <el-descriptions-item label="制单人">{{ head.createByName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="审核人">{{ head.auditorName || '—' }}</el-descriptions-item>
         <!-- 收费（2026-09-21 逐产品）：单据级金额 = Σ明细行收费；chargeType 为空表示各收款行类型不一致 ⇒ 显示"多类型" -->
         <el-descriptions-item label="收费（逐产品合计）" :span="2">
@@ -135,6 +137,7 @@ const head = reactive({
   chargeType: '',
   chargeAmount: 0,
   chargeReason: '',
+  createByName: '',
   auditorName: '',
   remark: '',
   status: SaleReturnStatus.DRAFT,
@@ -177,6 +180,7 @@ async function loadDetail(id: number) {
     chargeType: h.chargeType || '',
     chargeAmount: Number(h.chargeAmount || 0),
     chargeReason: h.chargeReason || '',
+    createByName: h.createByName || '',
     auditorName: h.auditorName,
     remark: h.remark,
     status: h.status,

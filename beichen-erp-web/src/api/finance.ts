@@ -7,9 +7,13 @@ export interface FinanceReceivable { id?: number; billNo?: string; customerId?: 
 export interface FinancePayable { id?: number; billNo?: string; supplierId?: number; supplierName?: string; supplierType?: string; sourceBillType?: string; sourceBillNo?: string; amount?: number; paidAmount?: number; unpaidAmount?: number; dueDate?: string; status?: string; transferredToReceivable?: number }
 export interface FinanceCashflow { id?: number; flowNo?: string; accountId?: number; accountName?: string; flowType?: string; relatedBillNo?: string; income?: number; expense?: number; balance?: number; createTime?: string }
 
-export interface FinanceReceipt { id?: number; code?: string; customerId?: number; customerName?: string; subjectType?: string; supplierId?: number; supplierName?: string; accountId?: number; accountName?: string; receiptDate?: string; amount?: number; status?: string; remark?: string }
+export interface FinanceReceipt { id?: number; code?: string; customerId?: number; customerName?: string; subjectType?: string; supplierId?: number; supplierName?: string; accountId?: number; accountName?: string; receiptDate?: string; amount?: number; status?: string; remark?: string
+  /** 制单人 / 审核人（2026-09-23 单据详情口径；收款单无审核流程 ⇒ 审核人通常为空） */
+  createByName?: string; auditorName?: string }
 export interface FinanceReceiptItem { id?: number; receiptId?: number; receivableId?: number; receivableBillNo?: string; thisAmount?: number; remark?: string }
-export interface FinancePayment { id?: number; code?: string; supplierId?: number; supplierName?: string; accountId?: number; accountName?: string; paymentDate?: string; amount?: number; status?: string; remark?: string; attachUrl?: string }
+export interface FinancePayment { id?: number; code?: string; supplierId?: number; supplierName?: string; accountId?: number; accountName?: string; paymentDate?: string; amount?: number; status?: string; remark?: string; attachUrl?: string
+  /** 制单人 / 审核人（2026-09-23 单据详情口径；付款单无审核流程 ⇒ 审核人通常为空） */
+  createByName?: string; auditorName?: string }
 export interface FinancePaymentItem { id?: number; paymentId?: number; payableId?: number; payableBillNo?: string; thisAmount?: number; remark?: string }
 export interface FinanceBill { id?: number; billNo?: string; billType?: string; partnerId?: number; partnerName?: string; periodStart?: string; periodEnd?: string; totalAmount?: number; paidAmount?: number; unpaidAmount?: number; status?: string }
 export interface FinanceBillItem { id?: number; sourceBillType?: string; sourceBillNo?: string; amount?: number; paidAmount?: number; unpaidAmount?: number; dueDate?: string }

@@ -29,7 +29,10 @@ const head = reactive({
   status: DocStatus.DRAFT as string,
   // 整理人：谁操作的就是谁整理的（服务端按登录用户写入，前端只读展示）
   sortUserName: '',
-  createTime: ''
+  createTime: '',
+  // 制单人 / 审核人（2026-09-23 单据详情口径；历史单据无记录显示 —）
+  createByName: '',
+  auditorName: ''
 })
 
 const items = ref<ReturnSortItem[]>([])
@@ -66,7 +69,8 @@ async function loadDetail() {
       targetWarehouseA: io.targetWarehouseA, targetWarehouseB: io.targetWarehouseB,
       targetWarehouseC: io.targetWarehouseC, targetWarehouseDefect: io.targetWarehouseDefect,
       remark: io.remark, status: io.status, createTime: io.createTime,
-      sortUserName: io.sortUserName || ''
+      sortUserName: io.sortUserName || '',
+      createByName: io.createByName || '', auditorName: io.auditorName || ''
     })
     items.value = await getReturnSortItems(id) || []
   } finally { loading.value = false }
@@ -150,6 +154,9 @@ onActivated(() => { loadDetail() })
             <span style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">（历史单的显式目标仓）</span>
           </template>
         </el-descriptions-item>
+        <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；历史单据无记录显示 —） -->
+        <el-descriptions-item label="制单人">{{ head.createByName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{ head.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ head.createTime || '—' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="3">{{ head.remark || '—' }}</el-descriptions-item>
       </el-descriptions>

@@ -46,6 +46,8 @@
           <span v-else>不付费</span>
         </el-descriptions-item>
         <el-descriptions-item label="付费说明（整单）">{{ head.chargeReason || '—' }}</el-descriptions-item>
+        <!-- 制单人（2026-09-23 用户口径：单据详情显示「制单人 + 审核人」） -->
+        <el-descriptions-item label="制单人">{{ head.createByName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="审核人">{{ head.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="审核时间">{{ head.auditTime || '—' }}</el-descriptions-item>
         <el-descriptions-item label="创建时间">{{ head.createTime || '—' }}</el-descriptions-item>
@@ -150,6 +152,7 @@ const head = reactive({
   chargeType: '',
   chargeAmount: 0,
   chargeReason: '',
+  createByName: '',
   auditorName: '',
   auditTime: '',
   createTime: '',
@@ -208,6 +211,7 @@ async function loadDetail(id: number) {
     chargeType: h.chargeType || '',
     chargeAmount: Number(h.chargeAmount || 0),
     chargeReason: h.chargeReason || '',
+    createByName: h.createByName || '',
     auditorName: h.auditorName || '',
     auditTime: h.auditTime || '',
     createTime: h.createTime || '',

@@ -175,6 +175,8 @@ export interface SaleReturn {
   auditorName?: string
   auditTime?: string
   createTime?: string
+  /** 制单人（2026-09-23 单据详情口径：显示「制单人 + 审核人」） */
+  createByName?: string
   items?: SaleReturnItem[]
 }
 

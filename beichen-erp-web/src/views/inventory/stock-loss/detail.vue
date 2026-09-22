@@ -23,6 +23,8 @@
         <el-descriptions-item label="报损金额">
           <strong>{{ money(info?.totalAmount) }}</strong>
         </el-descriptions-item>
+        <!-- 制单人（2026-09-23 用户口径：单据详情显示「制单人 + 审核人」） -->
+        <el-descriptions-item label="制单人">{{ info?.createByName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="审核人">{{ info?.auditorName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="审核时间">{{ info?.auditTime || '—' }}</el-descriptions-item>
         <el-descriptions-item label="备注" :span="4">{{ info?.remark || '—' }}</el-descriptions-item>
