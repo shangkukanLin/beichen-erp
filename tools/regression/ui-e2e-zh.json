@@ -138,6 +138,8 @@
   "lbl_brand_name": "品牌名称",
   "lbl_type_name": "类型名称",
   "lbl_sorter": "整理人",
+  "lbl_creator": "制单人",
+  "lbl_auditor": "审核人",
   "lbl_material_type": "物料类型",
   "lbl_material_name": "物料名称",
   "menu_material_stock": "物料库存详情",
