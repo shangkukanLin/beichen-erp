@@ -275,8 +275,8 @@ public class DataInitializer implements ApplicationRunner {
             // 委外仓库 / 自有物料仓自「物料仓库」迁入；**路由与 perms 均不变** ⇒ 不涉前端菜单白名单/重定向/接口权限。
             // ⚠️ 与 707 迁组同坑：父目录未授权会把子菜单整组丢弃 ⇒ 下方各有"补授目录 2"的幂等块（702 / 404+410）。
             {702L, 2L, "成品仓库管理", "menu", "/inventory/warehouse", "Warehouse", "Odometer", 8},
-            {404L, 2L, "委外仓库", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 9},
-            {410L, 2L, "自有物料仓", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 10},
+            {404L, 2L, "委外仓库管理", "menu", "/outsource/warehouse", "Warehouse", "Odometer", 9},
+            {410L, 2L, "自有物料仓管理", "menu", "/outsource/material-warehouse", "OutsourceMaterialWarehouse", "Box", 10},
             // 模版管理（配置/模板类，低频收尾）：把原「阶段模板管理」（104，基础数据下）与「加工合同模板」（405，委外加工下）
             // 合并为一个页面，页内用 TAB 区分（2026-09-15 用户要求）。旧地址保留为重定向。
             {108L, 2L, "模版管理", "menu", "/template", "TemplateManage", "Timer", 11},
@@ -526,6 +526,20 @@ public class DataInitializer implements ApplicationRunner {
             if (renamedReclass > 0) log.info("已重命名菜单 705：成品品质重分类 -> 规格调整");
         } catch (Exception e) {
             log.warn("重命名菜单 705 异常: {}", e.getMessage());
+        }
+
+        // 404「委外仓库」/ 410「自有物料仓」（2026-09-23 用户要求）：**只改展示名**，与 702 成品仓库管理 对齐；
+        // id / perms(outsource:warehouse、outsource:material-warehouse) / route_name / 路由 一律不动。
+        // 幂等：仅当值仍是旧名时才更新，重复启动零写入（新库由上面的种子 upsert 直接写新名）。
+        try {
+            int renamedWh = jdbcTemplate.update(
+                    "UPDATE sys_menu SET menu_name = '委外仓库管理' WHERE id = 404 AND menu_name = '委外仓库'");
+            if (renamedWh > 0) log.info("已重命名菜单 404：委外仓库 -> 委外仓库管理");
+            int renamedMatWh = jdbcTemplate.update(
+                    "UPDATE sys_menu SET menu_name = '自有物料仓管理' WHERE id = 410 AND menu_name = '自有物料仓'");
+            if (renamedMatWh > 0) log.info("已重命名菜单 410：自有物料仓 -> 自有物料仓管理");
+        } catch (Exception e) {
+            log.warn("重命名菜单 404/410 异常: {}", e.getMessage());
         }
 
         // F3-3（2026-09-18 接口级权限专项）：写页面级接口权限码（幂等）

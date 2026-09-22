@@ -172,7 +172,7 @@ const routes: RouteRecordRaw[] = [
         path: 'outsource/warehouse',
         name: 'OutsourceWarehouse',
         component: () => import('@/views/outsource/warehouse.vue'),
-        meta: { title: '委外仓库', requiresAuth: true }
+        meta: { title: '委外仓库管理', requiresAuth: true }
       },
       {
         path: 'outsource/warehouse/detail/:id',
@@ -257,7 +257,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/stock-loss/add', name: 'OutsourceStockLossAdd', component: () => import('@/views/outsource/stock-loss/add.vue'), meta: { title: '新增物料报损单', requiresAuth: true, operate: true } },
       { path: 'outsource/stock-loss/edit/:id', name: 'OutsourceStockLossEdit', component: () => import('@/views/outsource/stock-loss/add.vue'), meta: { title: '编辑物料报损单', requiresAuth: true, operate: true } },
       { path: 'outsource/stock-loss/detail/:id', name: 'OutsourceStockLossDetail', component: () => import('@/views/outsource/stock-loss/detail.vue'), meta: { title: '物料报损单详情', requiresAuth: true, operate: true } },
-      { path: 'outsource/material-warehouse', name: 'OutsourceMaterialWarehouse', component: () => import('@/views/outsource/material-warehouse.vue'), meta: { title: '自有物料仓', requiresAuth: true } },
+      { path: 'outsource/material-warehouse', name: 'OutsourceMaterialWarehouse', component: () => import('@/views/outsource/material-warehouse.vue'), meta: { title: '自有物料仓管理', requiresAuth: true } },
       { path: 'outsource/other-io/add', name: 'OutsourceOtherIoAdd', component: () => import('@/views/outsource/other-io/add.vue'), meta: { title: '新增物料其他出入库', requiresAuth: true, operate: true } },
       { path: 'outsource/other-io/detail/:id', name: 'OutsourceOtherIoDetail', component: () => import('@/views/outsource/other-io/detail.vue'), meta: { title: '物料其他出入库详细', requiresAuth: true, operate: true } },
       { path: 'outsource/other-io/edit/:id', name: 'OutsourceOtherIoEdit', component: () => import('@/views/outsource/other-io/edit.vue'), meta: { title: '编辑物料其他出入库', requiresAuth: true, operate: true } },
