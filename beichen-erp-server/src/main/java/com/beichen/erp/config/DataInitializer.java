@@ -254,18 +254,19 @@ public class DataInitializer implements ApplicationRunner {
             // 基础数据子菜单顺序（2026-09-15 用户定稿，2026-09-16 追加「物料信息管理」，2026-09-22 追加
             // 「成品仓库管理」+「委外仓库 / 自有物料仓」；2026-09-22 用户选定**方案 A 重新拍序**——
             // 按"主数据对象"分组、组内按使用频率、配置类收尾）：
-            // 产品（被所有单据引用，最底层）→ 往来主体（客户/供应商/供货商，正好对应 销售/委外/进货 三条业务线）
-            // → 产品附属（品牌）→ 物料（类型 → 明细）→ 仓库（成品 → 委外 → 自有）→ 配置（模版管理收尾）
+            // 2026-09-23 用户要求：**品牌管理提到本组第 1 位**（品牌是产品/物料的共用主数据，先建品牌再建产品）
+            // 品牌 → 产品（被所有单据引用）→ 往来主体（客户/供应商/供货商，对应 销售/委外/进货 三条业务线）
+            // → 物料（类型 → 明细）→ 仓库（成品 → 委外 → 自有）→ 配置（模版管理收尾）
             // sort_order 即左侧栏显示顺序：
-            // 产品管理 → 客户管理 → 供应商管理 → 供货商管理 → 品牌管理 → 物料类型管理 → 物料信息管理
-            // → 成品仓库管理 → 委外仓库 → 自有物料仓 → 模版管理
+            // 品牌管理 → 产品管理 → 客户管理 → 供应商管理 → 供货商管理 → 物料类型管理 → 物料信息管理
+            // → 成品仓库管理 → 委外仓库管理 → 自有物料仓管理 → 模版管理
             // ⚠️ 本次只改 sort_order：id / perms / 路由 / 授权一律不动（不迁权限、不动白名单）；
             //    verify-material-type.ps1 里"第 6 项 = 物料类型管理"的硬编码断言已同步改为**按库取基准**。
-            {101L, 2L, "产品管理", "menu", "/product", "ProductManage", "TakeawayBox", 1},
-            {105L, 2L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "UserFilled", 2},
-            {106L, 2L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "OfficeBuilding", 3},
-            {107L, 2L, "供货商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "Van", 4},
-            {102L, 2L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 5},
+            {102L, 2L, "品牌管理", "menu", "/inventory/brand", "InventoryBrand", "CollectionTag", 1},
+            {101L, 2L, "产品管理", "menu", "/product", "ProductManage", "TakeawayBox", 2},
+            {105L, 2L, "客户管理", "menu", "/inventory/customer", "InventoryCustomer", "UserFilled", 3},
+            {106L, 2L, "供应商管理", "menu", "/supplier/manage", "SupplierManage", "OfficeBuilding", 4},
+            {107L, 2L, "供货商管理", "menu", "/outsource/supplier/manage", "OutsourceSupplierManage", "Van", 5},
             {103L, 2L, "物料类型管理", "menu", "/dev/material-type", "MaterialType", "Tickets", 6},
             // 物料信息管理（403）：2026-09-16 用户要求自「委外加工」迁入「基础数据」，紧跟「物料类型管理」；
             // 同日按用户要求菜单名由「物料信息」改为「物料信息管理」（与页面标题一致）
