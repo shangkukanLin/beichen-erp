@@ -191,6 +191,8 @@ export interface ReturnSortPendingRow {
   sourceTypeLabel?: string
   sourceCode?: string
   sourceDate?: string
+  /** 来源单据ID（sale_return.id / sale_exchange.id）—— 供总览「来源单据」单号点击跳来源详情 */
+  sourceId?: number
   customerId?: number
   customerName?: string
   productId?: number

@@ -8,7 +8,7 @@ import { localDate } from '@/utils/date'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import {
   WarehouseType, ProductQualityType, ProductQualityTypeLabel,
-  AfterSaleSourceType, AfterSaleSourceTypeLabel,
+  AfterSaleSourceType,
   INVENTORY_RETURN_SORT_DIRTY_KEY,
 } from '@/api/enums'
 import {
@@ -70,6 +70,16 @@ function goAdd() { router.push('/inventory/return-sort/add') }
 function goEdit(row: any) { router.push(`/inventory/return-sort/edit/${row.id}`) }
 function goDetail(row: any) { router.push(`/inventory/return-sort/detail/${row.id}`) }
 function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
+/**
+ * 来源单据跳转（2026-09-22）：总览行「来源单据」单号点击 → 对应来源单据详情。
+ * 换货单 → /sale/exchange/detail/{id}；销售退货单 → /sale/return/detail/{id}。
+ * 与退货整理详情页 goSource 完全同口径（两处必须一致，改一处记得改另一处）。
+ */
+function goSource(row: any) {
+  if (!row.sourceId) return
+  if (row.sourceType === AfterSaleSourceType.SALE_EXCHANGE) router.push(`/sale/exchange/detail/${row.sourceId}`)
+  else router.push(`/sale/return/detail/${row.sourceId}`)
+}
 
 /** 行点击/详情按状态分流：草稿进编辑页（可直接改），其余进只读详情 */
 function openRow(row: any) {
@@ -323,7 +333,7 @@ onActivated(() => {
                 @selection-change="(rows: any) => onSelChange(g.warehouseId, rows)">
                 <!--
                   列宽预算（2026-09-22 用户要求：列表一行显示完、不要左右滑动，且**表头不能被截断**）：
-                  Σ = 34+78+112+82+84+94+110+46+110+56+76+58 = 940px ≤ 容器 1005px ⇒ 不横向滚动。
+                  Σ = 34+78+150+82+84+94+110+46+110+60+76+58 = 982px ≤ 容器 1005px ⇒ 不横向滚动。
                   「产品」是 min-width 列，富余宽度全给它（实测约 175px）。
                   每条列宽按**实测表头需要宽**定（探针：th .cell 的 scrollWidth ≤ clientWidth）；
                   曾被裁的表头与修前值：待整理/已整理 94→110 · 停留天数 66→76。
@@ -339,12 +349,14 @@ onActivated(() => {
                     </el-tooltip>
                   </template>
                 </el-table-column>
-                <el-table-column label="来源单据" width="116" show-overflow-tooltip>
+                <!-- 来源单据（2026-09-22 用户要求，与新增/编辑页、详情页统一口径）：
+                     ① 只显示单据号（去掉「销售退货单/销售换货单」类型标签）；
+                     ② 单号可点击 → 进来源单据详情（换货单去换货详情、销售退货单去退货单详情，同详情页 goSource）。
+                     列宽 116→150 让单号完整显示（去掉标签后仍有富余，不再被省略号截断）。 -->
+                <el-table-column label="来源单据" width="150" show-overflow-tooltip>
                   <template #default="{ row }">
-                    <el-tag size="small" :type="row.sourceType === AfterSaleSourceType.SALE_EXCHANGE ? 'warning' : 'info'" style="margin-right:4px">
-                      {{ AfterSaleSourceTypeLabel[row.sourceType] || '-' }}
-                    </el-tag>
-                    {{ row.sourceCode || '-' }}
+                    <el-button v-if="row.sourceId" type="primary" link @click="goSource(row)">{{ row.sourceCode || '-' }}</el-button>
+                    <span v-else>{{ row.sourceCode || '-' }}</span>
                   </template>
                 </el-table-column>
                 <el-table-column label="来源日期" width="82">

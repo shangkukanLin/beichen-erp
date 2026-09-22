@@ -76,5 +76,31 @@ Start-Sleep -Milliseconds 1400
 $path = EvalJs 'String(location.pathname)'
 Ok ($path -match '/inventory/return-sort/add') ('新增退货整理 opens its own page (' + $path + ')')
 
+Step 'source-bill column: doc number only (no source-type tag) and the number opens the source document'
+Open '/inventory/return-sort' 3200
+Start-Sleep -Milliseconds 1200
+# show cleared batches too -- every pending row keeps its source bill, so the probe always has rows to inspect
+$sw2 = EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const ss=[...document.querySelectorAll('.el-switch')].filter(vis);if(!ss.length)return 'NOSW';ss[0].click();return 'OK'})()"
+Write-Host ('  toggle first switch = ' + $sw2)
+Start-Sleep -Milliseconds 1800
+# labels of the dropped type tag (AfterSaleSourceTypeLabel) + doc-number shape (XTH-20260921... / HH-20260918...)
+$zRet = B64 (ZH 'opt_sale_in')
+$zExc = B64 (ZH 'opt_sale_ex')
+$codeRe = '[A-Z]{2,4}-\d{5,}'
+$probeJs = "(function(){const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const vis=e=>e.getClientRects().length>0;const R=T('$zRet'),X=T('$zExc');const re=/$codeRe/;const ts=[...document.querySelectorAll('.el-table')].filter(vis);let tagged=0;const codes=[];for(const t of ts){for(const tr of t.querySelectorAll('.el-table__body tbody tr')){const txt=(tr.innerText||'');if(txt.indexOf(R)>=0||txt.indexOf(X)>=0)tagged++;for(const b of [...tr.querySelectorAll('button')].filter(vis)){const tx=(b.innerText||'').trim();if(re.test(tx))codes.push(tx)}}}return tagged+'|'+codes.length+'|'+(codes[0]||'')})()"
+$p = @((EvalJs $probeJs) -split '\|')
+Write-Host ('  typeTags=' + $p[0] + ' codeLinks=' + $p[1] + ' first=' + $p[2])
+Ok ($p.Count -ge 3) 'source-bill probe returned (tag count / link count / first number)'
+Ok ([int]$p[0] -eq 0) ('no source-type tag in the pending rows any more (got ' + $p[0] + ')')
+Ok ([int]$p[1] -gt 0) ('the source doc number is a clickable link (' + $p[1] + ' rows)')
+$clickJs = "(function(){const vis=e=>e.getClientRects().length>0;const re=/$codeRe/;const ts=[...document.querySelectorAll('.el-table')].filter(vis);for(const t of ts){for(const b of [...t.querySelectorAll('.el-table__body button')].filter(vis)){const tx=(b.innerText||'').trim();if(re.test(tx)){b.click();return tx}}}return 'NOCODE'})()"
+$clicked = EvalJs $clickJs
+Write-Host ('  clicked = ' + $clicked)
+Start-Sleep -Milliseconds 1800
+$sp = EvalJs 'String(location.pathname)'
+Write-Host ('  source detail path = ' + $sp)
+Ok ($clicked -ne 'NOCODE') 'a source-doc number was clicked'
+Ok ($sp -match '/(sale/return|sale/exchange)/detail/[0-9]+') ('clicking the number opens that source document (' + $sp + ')')
+
 Write-Host ('errs=' + (Errs))
 Summary 'return-sort overview tab'
