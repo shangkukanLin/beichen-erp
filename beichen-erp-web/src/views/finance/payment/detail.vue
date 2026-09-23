@@ -62,7 +62,7 @@ onMounted(load)
           <span style="font-weight:600">付款单详情 — {{ detail.code || '' }}</span>
         </div>
       </template>
-      <el-descriptions :column="2" border>
+      <el-descriptions :column="3" border>
         <el-descriptions-item label="单号">{{ detail.code }}</el-descriptions-item>
         <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ DocStatusLabel[detail.status ?? 0] || detail.status }}</el-tag></el-descriptions-item>
         <el-descriptions-item label="供应商">{{ detail.supplierName || '—' }}</el-descriptions-item>

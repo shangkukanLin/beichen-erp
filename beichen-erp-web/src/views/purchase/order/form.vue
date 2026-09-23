@@ -118,7 +118,7 @@ onMounted(async () => { await load(); takeBaseline() })
   <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（确定） -->
   <PageShell :title="isEdit ? '编辑成品采购单' : '新增成品采购单'" :loading="loading" back-fallback="/inventory/purchase">
     <template #actions>
-      <el-button type="primary" :loading="submitLoading" @click="submit">确定</el-button>
+      <el-button type="primary" :loading="submitLoading" @click="submit">保存</el-button>
     </template>
 
     <el-card shadow="never">

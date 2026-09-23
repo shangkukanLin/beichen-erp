@@ -1,5 +1,5 @@
 ﻿# 新增研发立项：原机配置/改配信息必填校验（2026-09-16，可复跑）
-# 断言：① 9 个字段都渲染出红色 *（is-required）② 未填时点「创建项目」会被拦截并提示，且不跳转
+# 断言：① 9 个字段都渲染出红色 *（is-required）② 未填时点「保存」（2026-09-23 统一模板：原「创建项目」）会被拦截并提示，且不跳转
 # 2026-09-21 适配：立项页改版 —— 「总成名称」→「产品名称」（占位符随之变化）、
 #   新增必填「规格」（原配/改配）与「产品SKU」。规格=原配时页面会隐藏改配信息 5 项，
 #   故本脚本先选「改配」，再校验原有 9 项必填与提交拦截。
@@ -55,7 +55,7 @@ $setJs = "(()=>{const set=(ph,v)=>{const el=[...document.querySelectorAll('input
 $setRaw = (EvalJs $setJs).Replace('\"', '"')
 Write-Output ('填入项目名称/产品名称 = ' + $setRaw)
 agent-browser wait 600
-EvalJs "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.innerText.trim()==='创建项目');if(b){b.click();return 'ok'}return 'no'})()" | Out-Null
+EvalJs "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.innerText.trim()==='保存');if(b){b.click();return 'ok'}return 'no'})()" | Out-Null
 agent-browser wait 1200
 $msg = EvalJs "(()=>{const ms=[...document.querySelectorAll('.el-message')].map(x=>x.innerText.trim());return JSON.stringify(ms)})()"
 $path = EvalJs "location.pathname"

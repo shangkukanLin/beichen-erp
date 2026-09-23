@@ -44,7 +44,7 @@ onMounted(load)
         </div>
       </template>
 
-      <el-descriptions :column="2" border size="small">
+      <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="记录ID">{{ detail.id ?? '-' }}</el-descriptions-item>
         <el-descriptions-item label="退货日期">{{ detail.deliveryDate || '-' }}</el-descriptions-item>
         <el-descriptions-item label="状态">

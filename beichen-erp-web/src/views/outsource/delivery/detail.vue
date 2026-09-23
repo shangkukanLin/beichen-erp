@@ -129,7 +129,7 @@ onActivated(async ()=>{ await loadData(); takeBaseline() })
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（保存并同步库存） -->
   <PageShell :loading="loading" back-fallback="/outsource/delivery">
     <template #actions>
-      <el-button type="primary" :loading="saving" :disabled="readonly" @click="handleSave">保存并同步库存</el-button>
+      <el-button type="primary" :loading="saving" :disabled="readonly" @click="handleSave">保存</el-button>
     </template>
 
     <el-card shadow="never">

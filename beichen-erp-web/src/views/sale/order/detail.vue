@@ -503,7 +503,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
 
       <!-- 非草稿：只读 -->
       <template v-else>
-        <el-descriptions :column="2" border style="margin-top:16px">
+        <el-descriptions :column="3" border style="margin-top:16px">
           <el-descriptions-item label="单号">{{ head.code }}</el-descriptions-item>
           <el-descriptions-item label="客户">
             <el-button v-if="head.customerId" type="primary" link @click="goCustomer(head.customerId)">{{ customerName(head.customerId) }}</el-button>

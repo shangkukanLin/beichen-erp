@@ -66,7 +66,7 @@ onMounted(load)
           <span style="font-weight:600">收货记录详情 — #{{ row.id ?? '' }}</span>
         </div>
       </template>
-      <el-descriptions :column="2" border>
+      <el-descriptions :column="3" border>
         <el-descriptions-item label="记录ID">{{ row.id }}</el-descriptions-item>
         <el-descriptions-item label="状态"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></el-descriptions-item>
         <el-descriptions-item label="收货日期">{{ row.deliveryDate || '-' }}</el-descriptions-item>

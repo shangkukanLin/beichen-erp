@@ -10,7 +10,7 @@
     <el-card shadow="never">
       <!-- 卡片页头（标题 + 旧「返回」按钮）已删除：标题交骨架、返回交骨架 -->
 
-      <el-descriptions v-loading="loading" :column="4" border>
+      <el-descriptions v-loading="loading" :column="3" border>
         <el-descriptions-item label="报损单号">{{ info?.code || '—' }}</el-descriptions-item>
         <el-descriptions-item label="仓库">{{ info?.warehouseName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="报损日期">{{ info?.lossDate || '—' }}</el-descriptions-item>

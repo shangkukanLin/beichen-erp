@@ -66,7 +66,7 @@ onMounted(load)
 
     <el-card shadow="never">
 
-      <el-descriptions :column="2" border>
+      <el-descriptions :column="3" border>
         <el-descriptions-item label="转应收单号">{{ d.code || '—' }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="DocStatusTag[d.status] || 'info'" size="small">{{ DocStatusLabel[d.status] || d.status }}</el-tag>

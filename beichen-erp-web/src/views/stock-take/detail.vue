@@ -55,7 +55,7 @@ onMounted(async () => { await loadItems(); takeBaseline() })
   <PageShell :loading="loading" :title="`盘点明细 - ${warehouseName}`" back-fallback="/inventory/stock-take">
     <template #sub><span v-if="takeNo" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">（{{ takeNo }}）</span></template>
     <template #actions>
-      <el-button v-if="editable" type="primary" @click="saveItems">保存实盘</el-button>
+      <el-button v-if="editable" type="primary" @click="saveItems">保存</el-button>
     </template>
 
     <el-card shadow="never">

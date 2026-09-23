@@ -179,7 +179,7 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作 -->
   <PageShell :loading="loading" back-fallback="/outsource/order">
     <template #actions>
-      <el-button type="primary" :disabled="report.reportStatus===CloseReportStatus.FINISHED" @click="handleSave">保存草稿</el-button>
+      <el-button type="primary" :disabled="report.reportStatus===CloseReportStatus.FINISHED" @click="handleSave">保存</el-button>
       <el-button type="success" :disabled="!canConfirm" @click="handleConfirm">确认结单</el-button>
       <el-button v-if="report.reportStatus===CloseReportStatus.FINISHED" type="warning" @click="handleReopen">反结单</el-button>
       <el-button type="info" @click="handleExport">导出Excel</el-button>
@@ -187,7 +187,7 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
 
     <!-- 表头 -->
     <el-card shadow="never" style="margin-bottom:12px">
-      <el-descriptions :column="4" border size="small">
+      <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="状态">
           <el-tag v-if="report.reportStatus === CloseReportStatus.FINISHED" type="success">{{ CloseReportStatusLabel[CloseReportStatus.FINISHED] }}</el-tag>
           <el-tag v-else-if="report.reportStatus === CloseReportStatus.DRAFT" type="warning">{{ CloseReportStatusLabel[CloseReportStatus.DRAFT] }}</el-tag>

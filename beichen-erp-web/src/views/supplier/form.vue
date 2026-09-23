@@ -83,7 +83,7 @@ onMounted(async () => { await load(); takeBaseline() })
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题 → 右端操作（确定） -->
   <PageShell :title="(isEdit ? '编辑' : '新增') + pageTitle" :back-fallback="listPath" :loading="loading">
     <template #actions>
-      <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
+      <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
     </template>
 
     <el-card shadow="never">

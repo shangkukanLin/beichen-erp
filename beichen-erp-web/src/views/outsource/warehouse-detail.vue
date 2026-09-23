@@ -119,7 +119,7 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
     <!-- 仓库基础信息 -->
     <el-card shadow="never">
       <template #header><span style="font-weight:600">仓库信息</span></template>
-      <el-descriptions v-if="warehouse" :column="2" border size="small">
+      <el-descriptions v-if="warehouse" :column="3" border size="small">
         <el-descriptions-item label="仓库名称" :span="2">{{ warehouse.warehouseName }}</el-descriptions-item>
         <el-descriptions-item label="所属加工厂">{{ warehouse.factoryName }}</el-descriptions-item>
         <el-descriptions-item label="状态"><el-tag :type="warehouse.status===1?'success':'info'" size="small">{{ warehouse.status===1?'启用':'停用' }}</el-tag></el-descriptions-item>

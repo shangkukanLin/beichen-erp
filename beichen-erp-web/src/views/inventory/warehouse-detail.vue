@@ -149,7 +149,7 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
       <el-tabs v-model="activeTab">
         <!-- 仓库信息 Tab -->
         <el-tab-pane label="仓库信息" name="info">
-          <el-descriptions v-if="warehouse" :column="2" border size="small">
+          <el-descriptions v-if="warehouse" :column="3" border size="small">
             <el-descriptions-item label="仓库名称" :span="2">{{ warehouse.warehouseName }}</el-descriptions-item>
             <el-descriptions-item label="仓库编码">{{ warehouse.code }}</el-descriptions-item>
             <el-descriptions-item label="类型"><el-tag :type="warehouse.warehouseType==='FINISHED'?'success':'info'" size="small">{{ WarehouseTypeLabel[warehouse.warehouseType] || warehouse.warehouseType }}</el-tag></el-descriptions-item>

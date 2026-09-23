@@ -3,7 +3,7 @@
   <PageShell back-fallback="/outsource/material-stock">
     <el-card shadow="never">
 
-      <el-descriptions v-loading="loading" :column="4" border class="info">
+      <el-descriptions v-loading="loading" :column="3" border class="info">
         <el-descriptions-item label="物料名称">{{ summary?.materialName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="物料类型">{{ summary?.materialTypeName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="单位">{{ summary?.unit || '—' }}</el-descriptions-item>

@@ -214,7 +214,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（创建项目） -->
   <PageShell back-fallback="/dev/project">
     <template #actions>
-      <el-button type="primary" :loading="saving" @click="handleSubmit">创建项目</el-button>
+      <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
     </template>
 
     <!-- 基础信息 -->

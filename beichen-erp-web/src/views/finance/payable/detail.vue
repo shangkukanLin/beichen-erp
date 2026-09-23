@@ -46,7 +46,7 @@ onMounted(load)
           <span style="font-weight:600">应付详情 — {{ detail.billNo || '' }}</span>
         </div>
       </template>
-      <el-descriptions :column="2" border>
+      <el-descriptions :column="3" border>
         <el-descriptions-item label="单据号">{{ detail.billNo }}</el-descriptions-item>
         <el-descriptions-item label="状态"><el-tag :type="stType(detail.status)">{{ statusLabel(detail.status) }}</el-tag></el-descriptions-item>
         <el-descriptions-item label="供应商">{{ detail.supplierName || '—' }}</el-descriptions-item>

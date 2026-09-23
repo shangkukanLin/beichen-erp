@@ -2,7 +2,7 @@
   <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（提交） -->
   <PageShell title="新增成品采购单" back-fallback="/inventory/purchase">
     <template #actions>
-      <el-button type="primary" :loading="submitLoading" @click="handleSubmit">提交</el-button>
+      <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
     </template>
 
     <el-card shadow="never">

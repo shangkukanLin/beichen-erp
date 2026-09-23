@@ -117,7 +117,7 @@ onMounted(async () => {
 
       <el-card v-if="picked" shadow="never" class="preview">
         <template #header><span class="title">转出信息（审核后按此生成应收）</span></template>
-        <el-descriptions :column="2" border>
+        <el-descriptions :column="3" border>
           <el-descriptions-item label="来源应付单号">{{ picked.billNo }}</el-descriptions-item>
           <el-descriptions-item label="业务场景">{{ sourceBillTypeLabel(picked.sourceBillType) || '—' }}</el-descriptions-item>
           <el-descriptions-item label="来源单据号">{{ picked.sourceBillNo || '—' }}</el-descriptions-item>
