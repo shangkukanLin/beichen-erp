@@ -259,7 +259,7 @@ onMounted(() => { loadLedger() })
         <el-button type="primary" @click="ledgerSearch">查询</el-button>
         <el-button @click="ledgerQuery.linked = ''; ledgerQuery.status = ''; ledgerSearch()">重置</el-button>
         <div style="margin-left:auto">
-          <el-button type="danger" :icon="'Plus'" @click="openNoOrder">新增无单加工退货</el-button>
+          <el-button type="success" :icon="'Plus'" @click="openNoOrder">新增</el-button>
         </div>
       </div>
       <div v-else style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
@@ -271,7 +271,7 @@ onMounted(() => { loadLedger() })
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
         <div style="margin-left:auto">
-          <el-button type="warning" :icon="'Plus'" @click="handleAdd(OutsourceReturnType.REPAIR)">新增维修退货</el-button>
+          <el-button type="success" :icon="'Plus'" @click="handleAdd(OutsourceReturnType.REPAIR)">新增</el-button>
         </div>
       </div>
 

@@ -162,8 +162,8 @@ onMounted(loadData)
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
         <div style="margin-left:auto;display:flex;gap:8px">
-          <el-button v-if="!isRepairTab()" type="primary" :icon="'Plus'" @click="handleAdd(MaterialReturnType.REFUND)">新增物料退货</el-button>
-          <el-button v-else type="warning" :icon="'Plus'" @click="handleAdd(MaterialReturnType.REPAIR)">新增维修退货</el-button>
+          <el-button v-if="!isRepairTab()" type="success" :icon="'Plus'" @click="handleAdd(MaterialReturnType.REFUND)">新增</el-button>
+          <el-button v-else type="success" :icon="'Plus'" @click="handleAdd(MaterialReturnType.REPAIR)">新增</el-button>
         </div>
       </div>
 
