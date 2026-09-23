@@ -1,7 +1,12 @@
 <template>
-  <div class="purchase-add">
-    <el-card shadow="never" style="margin-top:16px">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（保存） -->
+  <PageShell :title="isEdit ? '编辑成品采购退货单' : '新增成品采购退货单'" back-fallback="/inventory/purchase-return">
+    <template #actions>
+      <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
+    </template>
+
+    <el-card shadow="never">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="var(--app-label-width)">
         <el-alert v-if="form.purchaseOrderCode" type="success" :closable="false" style="margin-bottom:12px"
           :title="`来源采购单：${form.purchaseOrderCode}（已自动带入采购明细，可修改）`" />
         <el-row :gutter="16">
@@ -114,12 +119,8 @@
         </div>
       </el-form>
 
-      <div style="text-align:center;margin-top:24px">
-        <el-button @click="handleCancel">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
-      </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -128,6 +129,8 @@ defineOptions({ name: 'PurchaseReturnAdd' })
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { PURCHASE_RETURN_DIRTY_KEY, WarehouseCategory, WarehouseType, PurchaseChargeType, PurchaseChargeTypeLabel } from '@/api/enums'
 import { useRouter, useRoute } from 'vue-router'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
 import request from '@/utils/request'
@@ -194,6 +197,11 @@ const form = reactive({
   returnDate: localDate() as string,
   remark: '' as string,
 })
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 
 /** 从采购单带入明细（含可退数量），退货仓库默认取采购单入库仓库 */
 async function loadFromPurchaseOrder(orderId?: number) {
@@ -376,7 +384,9 @@ async function handleSubmit() {
         await createPurchaseReturn(body)
       }
       ElMessage.success(isEdit ? '更新成功' : '新增成功'); sessionStorage.setItem(PURCHASE_RETURN_DIRTY_KEY, '1')
-      tabStore.removeTab(route.fullPath)
+      // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
+      markClean()
+      tabStore.closeTabAndBack(route.path)
       router.push('/inventory/purchase-return')
     } catch (e: any) { ElMessage.error(e?.message || (isEdit ? '更新失败' : '新增失败')) }
     finally { submitLoading.value = false }
@@ -384,7 +394,9 @@ async function handleSubmit() {
 }
 
 function handleCancel() {
-  tabStore.removeTab(route.fullPath)
+  // 取消返回：先清脏标记（否则离开会被未保存确认拦住），再关掉本页签
+  markClean()
+  tabStore.closeTabAndBack(route.path)
   router.push('/inventory/purchase-return')
 }
 
@@ -392,19 +404,21 @@ async function loadQualityTypes() { try { qualityOptions.value = await getQualit
 
 // 顶栏"刷新数据"：重新加载品质下拉
 async function handleRefreshData() { await loadQualityTypes() }
-onMounted(() => {
+onMounted(async () => {
   loadProducts()
   loadQualityTypes()
   if (fromOrder) {
     tabStore.updateTabTitle(route.fullPath, '从采购单开退货单')
     document.title = '从采购单开退货单 - 北辰ERP管理系统'
-    loadFromPurchaseOrder(fromOrder)
+    await loadFromPurchaseOrder(fromOrder)
   } else if (isEdit) {
     tabStore.updateTabTitle(route.fullPath, '编辑采购退货单')
     document.title = '编辑采购退货单 - 北辰ERP管理系统'
-    loadReturnData()
+    await loadReturnData()
   }
   window.addEventListener('refresh:dropdown-data', handleRefreshData)
+  // 初始化/回填完成 ⇒ 建立"未保存"基线（必须在加载之后，否则会把回填误判成用户修改）
+  takeBaseline()
 })
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 </script>

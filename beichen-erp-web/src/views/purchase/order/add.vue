@@ -1,7 +1,12 @@
 <template>
-  <div class="purchase-add">
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（提交） -->
+  <PageShell title="新增成品采购单" back-fallback="/inventory/purchase">
+    <template #actions>
+      <el-button type="primary" :loading="submitLoading" @click="handleSubmit">提交</el-button>
+    </template>
+
     <el-card shadow="never">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="var(--app-label-width)">
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="供货商" prop="supplierId">
@@ -114,12 +119,8 @@
         </div>
       </el-form>
 
-      <div style="text-align:center;margin-top:24px">
-        <el-button @click="$router.back()">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">提交</el-button>
-      </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -127,7 +128,10 @@ import { localDate } from '@/utils/date'
 import { WarehouseCategory, WarehouseType, PURCHASE_ORDER_DIRTY_KEY } from '@/api/enums'
 defineOptions({ name: 'PurchaseAdd' })
 import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
@@ -150,6 +154,8 @@ interface ItemRow {
 }
 
 const router = useRouter()
+const route = useRoute()
+const tabStore = useTabStore()
 const formRef = ref<FormInstance>()
 const submitLoading = ref(false)
 const suppliers = ref<any[]>([])
@@ -164,6 +170,11 @@ const form = reactive<PurchaseOrder>({
   taxRate: 0,
   remark: ''
 })
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 
 const rules: FormRules = {
   supplierId: [{ required: true, message: '请选择供货商', trigger: 'change' }],
@@ -288,7 +299,10 @@ async function handleSubmit() {
       }
       await createPurchaseOrder(body)
       ElMessage.success('新增成功'); sessionStorage.setItem(PURCHASE_ORDER_DIRTY_KEY, '1')
-      router.back()
+      // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
+      markClean()
+      tabStore.closeTabAndBack(route.path)
+      router.push('/inventory/purchase')
     } catch (e: any) { ElMessage.error(e?.message || '新增失败') }
     finally { submitLoading.value = false }
   })
@@ -334,6 +348,8 @@ onMounted(async () => {
   await loadSuppliers()
   loadMaterials()
   initFromQuery()
+  // 初始化/预填完成 ⇒ 建立"未保存"基线（必须在加载之后，否则会把回填误判成用户修改）
+  takeBaseline()
 })
 </script>
 

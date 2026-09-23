@@ -5,6 +5,9 @@
 import { localDate } from '@/utils/date'
 import { reactive, ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 import { WarehouseCategory, WarehouseType } from '@/api/enums'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
@@ -18,6 +21,7 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const tabStore = useTabStore()
 const isEdit = computed(() => route.path.includes('/edit/'))
 const listPath = '/inventory/purchase'
 
@@ -28,6 +32,11 @@ const form = reactive<PurchaseOrder>({
   supplierId: undefined, warehouseId: undefined, orderDate: localDate(), taxIncluded: 0, taxRate: 0, remark: ''
 })
 const items = ref<PurchaseOrderItem[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 const qualityOptions = ref<QualityOption[]>([])
 const materialOptions = ref<OutsourceMaterialOption[]>([])
 
@@ -95,24 +104,25 @@ async function submit() {
       const payload = { order: { ...form }, items: items.value }
       if (form.id) { await updatePurchaseOrder(form.id as number, payload); ElMessage.success('修改成功') }
       else { await createPurchaseOrder(payload); ElMessage.success('新增成功') }
+      // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
+      markClean()
+      tabStore.closeTabAndBack(route.path)
       router.push(listPath)
     } catch { /* 拦截器已提示 */ } finally { submitLoading.value = false }
   })
 }
-onMounted(load)
+onMounted(async () => { await load(); takeBaseline() })
 </script>
 
 <template>
-  <div class="p" v-loading="loading">
-    <el-card shadow="never">
-      <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">{{ isEdit ? '编辑成品采购单' : '新增成品采购单' }}</span>
-          <el-button @click="router.push(listPath)">返回</el-button>
-        </div>
-      </template>
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（确定） -->
+  <PageShell :title="isEdit ? '编辑成品采购单' : '新增成品采购单'" :loading="loading" back-fallback="/inventory/purchase">
+    <template #actions>
+      <el-button type="primary" :loading="submitLoading" @click="submit">确定</el-button>
+    </template>
 
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+    <el-card shadow="never">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="var(--app-label-width)">
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="供货商" prop="supplierId">
@@ -178,16 +188,12 @@ onMounted(load)
         </div>
       </el-form>
 
-      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-        <el-button @click="router.push(listPath)">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="submit">确定</el-button>
-      </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.p { display: flex; flex-direction: column; gap: 12px; }
+/* 页头/底部操作条已统一到全局骨架（PageShell + styles/page.css） */
 .sum-bar { margin-top: 12px; display: flex; justify-content: flex-end; gap: 24px; font-size: var(--app-font-base); color: var(--app-text-secondary); }
 .sum-bar b { color: var(--app-text-primary); font-size: var(--app-font-num-sm); }
 .tax-num { color: var(--app-color-danger); }

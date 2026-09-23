@@ -5,10 +5,20 @@ import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { getPurchaseOrderItems, type PurchaseOrder, type PurchaseOrderItem, PurchaseStatus, PurchaseStatusLabel } from '@/api/purchase'
 
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
+
 const route = useRoute(); const router = useRouter()
+const tabStore = useTabStore()
 const orderId = Number(route.params.id)
 const order = ref<PurchaseOrder>({})
 const items = ref<PurchaseOrderItem[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 order / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({ order: order.value, items: items.value }))
 const returns = ref<any[]>([])
 const loading = ref(false)
 const supplierName = ref('')
@@ -53,6 +63,8 @@ async function loadData() {
     // 原先跨页读 /inventory/purchase-return/by-order，需 purchase:return ⇒ 只有采购单权限的用户会 403）
     returns.value = (res as any)?.returns || []
   } finally { loading.value = false }
+  // 数据加载完成 ⇒ 重建"未保存"基线（本页只读，基线用于避免详情刷新后误报）
+  takeBaseline()
 }
 
 function goSupplier(id?: number) { if (id) router.push(`/supplier/detail/${id}`) }
@@ -66,15 +78,14 @@ onActivated(() => { loadData() })
 </script>
 
 <template>
-  <div class="detail-page" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（发起退货） -->
+  <PageShell :title="`采购单详情${order.code ? ' — ' + order.code : ''}`" :loading="loading" back-fallback="/inventory/purchase">
+    <template #actions>
+      <el-button type="primary" :icon="'Plus'" @click="addReturn">发起退货</el-button>
+    </template>
+
     <el-card shadow="never">
-      <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">采购单详情 — {{ order.code }}</span>
-          <el-button type="primary" :icon="'Plus'" @click="addReturn">发起退货</el-button>
-        </div>
-      </template>
-      <el-descriptions :column="2" border size="small">
+      <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="单号">{{ order.code }}</el-descriptions-item>
         <el-descriptions-item label="状态">
           <el-tag :type="statusType(order.status)">{{ statusLabel(order.status) }}</el-tag>
@@ -131,13 +142,9 @@ onActivated(() => { loadData() })
       </el-table>
       <el-empty v-else description="暂无退货记录" :image-size="60" />
     </el-card>
-
-    <div style="text-align:center;margin-top:20px">
-      <el-button @click="$router.back()">返回</el-button>
-    </div>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.detail-page { display: flex; flex-direction: column; gap: 12px; }
+/* 页头/底部返回条已统一到全局骨架（PageShell + styles/page.css） */
 </style>

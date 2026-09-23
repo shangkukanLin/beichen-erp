@@ -7,12 +7,20 @@ import request from '@/utils/request'
 import { getPurchaseReturn, getPurchaseReturnItems, getPurchaseReturnPurchaseOrderItems, auditPurchaseReturn, cancelPurchaseReturn, unAuditPurchaseReturn, updatePurchaseReturn, ReturnStatus, ReturnStatusLabel, type PurchaseReturn, type PurchaseReturnItem } from '@/api/purchase'
 import { PURCHASE_RETURN_DIRTY_KEY, PurchaseChargeType, PurchaseChargeTypeLabel } from '@/api/enums'
 
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
 const loading = ref(false)
 const saving = ref(false)
 const detail = ref<Partial<PurchaseReturn>>({})
 const items = ref<any[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页草稿态可直接改明细并保存 ⇒ 属"能改数据"，同样接守卫。
+ * ⚠️ 必须写在 detail / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({ detail: detail.value, items: items.value }))
 /** 逐产品付费（2026-09-21）：详情页草稿态可改明细行付费，类型下拉用这里的选项 */
 const chargeTypeOptions = Object.values(PurchaseChargeType).map((v) => ({ value: v, label: PurchaseChargeTypeLabel[v] || v }))
 // 2026-09-20（F7-177）：详情只需显示**一个**仓库名 ⇒ 改为按 id 单取（原先是 pageSize=500 全量拉回再前端 find）
@@ -58,6 +66,8 @@ async function loadData() {
     items.value = await getPurchaseReturnItems(id) || []
     await loadWarehouseName()
   } finally { loading.value = false }
+  // 数据加载完成 ⇒ 重建"未保存"基线（保存后本函数会重跑 ⇒ 自动重置，不误报）
+  takeBaseline()
 }
 
 async function handleAudit() {
@@ -187,23 +197,21 @@ onActivated(() => { loadData() })
 </script>
 
 <template>
-  <div class="detail-page" v-loading="loading">
-    <el-card shadow="never">
-      <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">采购退货单详情 — {{ detail.code }}</span>
-          <div>
-            <template v-if="isDraft()">
-              <el-button type="primary" size="small" :loading="saving" @click="handleSave">保存</el-button>
-              <el-button size="small" @click="loadData">取消</el-button>
-              <el-button v-perm="'purchase:return:audit'" type="success" size="small" @click="handleAudit">审核</el-button>
-              <el-button v-perm="'purchase:return:cancel'" type="danger" size="small" @click="handleCancel">作废</el-button>
-            </template>
-            <el-button v-if="isAudited()" v-perm="'purchase:return:unaudit'" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
-          </div>
-        </div>
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作 -->
+  <PageShell :title="`采购退货单详情${detail.code ? ' — ' + detail.code : ''}`" :loading="loading" back-fallback="/inventory/purchase-return">
+    <template #actions>
+      <template v-if="isDraft()">
+        <el-button type="primary" size="small" :loading="saving" @click="handleSave">保存</el-button>
+        <!-- 行内「取消」= 撤销未保存的明细改动（重新加载），非页面返回 ⇒ 保持原样不动 -->
+        <el-button size="small" @click="loadData">取消</el-button>
+        <el-button v-perm="'purchase:return:audit'" type="success" size="small" @click="handleAudit">审核</el-button>
+        <el-button v-perm="'purchase:return:cancel'" type="danger" size="small" @click="handleCancel">作废</el-button>
       </template>
-      <el-descriptions :column="2" border size="small">
+      <el-button v-if="isAudited()" v-perm="'purchase:return:unaudit'" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
+    </template>
+
+    <el-card shadow="never">
+      <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="退货单号">{{ detail.code }}</el-descriptions-item>
         <el-descriptions-item label="状态"><el-tag :type="statusType(detail.status)">{{ statusLabel(detail.status) }}</el-tag></el-descriptions-item>
         <el-descriptions-item label="供货商">
@@ -305,10 +313,6 @@ onActivated(() => { loadData() })
       </div>
     </el-card>
 
-    <div style="text-align:center;margin-top:20px">
-      <el-button @click="router.back()">返回</el-button>
-    </div>
-
     <!-- 添加行：从关联采购单明细选择 -->
     <el-dialog v-model="poDialogVisible" title="从采购单明细添加退货行" width="760px">
       <el-table
@@ -333,9 +337,9 @@ onActivated(() => { loadData() })
         <el-button type="primary" @click="confirmAddRows">加入明细</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.detail-page { display: flex; flex-direction: column; gap: 12px; }
+/* 页头/底部返回条已统一到全局骨架（PageShell + styles/page.css） */
 </style>
