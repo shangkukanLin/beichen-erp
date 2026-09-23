@@ -293,9 +293,8 @@ onMounted(async () => {
 <template>
   <!-- 统一骨架（2026-09-23）：页头标题 + 右上「← 返回」由 PageShell 提供；内容分块用 SectionCard -->
   <PageShell :title="isEdit ? '编辑销售单' : '新增销售单'" :loading="pageLoading" back-fallback="/inventory/sale">
-    <!-- 主操作「保存」放页头右侧操作区（2026-09-23 用户口径：与左侧「返回」左右对调）；
-         原底部「取消」已并入「返回」 -->
-    <template #actions>
+    <!-- 主操作「保存」放页头标题左边（2026-09-23 用户口径）；原底部「取消」已并入页头右上「返回」 -->
+    <template #leading>
       <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
     </template>
 

@@ -59,19 +59,19 @@ Open $PILOT 3200
 ClearErrs | Out-Null
 $title = Txt '.page-header__title'
 Ok2 ($title -ne 'NOEL' -and $title.Length -gt 0) ('page header shows a title: ' + $title)
-Write-Host ('back buttons left = ' + (CountBtnIn $BACK '.page-header__left') + ' / save buttons right = ' + (CountBtnIn $SAVE '.page-header__ops'))
-Ok2 ((CountBtnIn $BACK '.page-header__left') -eq '1') 'the back button sits in the header, left of the title'
-# and it really IS left of the title (DOM order inside the header left area)
-$order = EvalJs "(()=>{const l=document.querySelector('.page-header__left');if(!l)return 'NOLEFT';return [...l.querySelectorAll('button,.page-header__title')].map(e=>e.classList.contains('page-header__title')?'title':'btn').join('>')})()"
-Ok2 ($order -eq 'btn>title') ('back comes before the title on the left (' + $order + ')')
-Ok2 ((CountBtnIn $SAVE '.page-header__ops') -eq '1') 'the primary action (save) sits in the header action area (right)'
+Write-Host ('back buttons in header = ' + (CountBtnIn $BACK '.page-header__ops') + ' / header ops exists = ' + (EvalJs "String(!!document.querySelector('.page-header__ops'))"))
+Ok2 ((CountBtnIn $BACK '.page-header__ops') -eq '1') 'exactly one back button, inside the header action area'
+Ok2 ((CountBtnIn $SAVE '.page-header__leading') -eq '1') 'the primary action (save) sits in the header, left of the title'
+# and it really IS left of the title (DOM order inside the header)
+$order = EvalJs "(()=>{const h=document.querySelector('.page-header');if(!h)return 'NOHDR';return [...h.querySelectorAll('.page-header__leading,.page-header__title')].map(e=>(e.className||'').indexOf('leading')>=0?'leading':'title').join('>')})()"
+Ok2 ($order -eq 'leading>title') ('the save block comes before the title in the header (' + $order + ')')
 Ok2 ((BodyHas $BACK_LIST) -eq 'False') 'the old "back to list" wording is gone'
 
 Step '2) CLEAN page: back closes the current tab and returns to the list'
 Open $LIST 2600
 Open $PILOT 3200
 Write-Host ('tabs before = ' + ((TabLabels) -join ' | '))
-ClickBtn 'btn_back' '.page-header__left' | Out-Null
+ClickBtn 'btn_back' '.page-header__ops' | Out-Null
 Start-Sleep -Milliseconds 1800
 Ok2 ((PathNow) -eq $LIST) ('back landed on the list (' + (PathNow) + ')')
 Ok2 (((TabLabels) -notcontains $ADD_TITLE)) 'the pilot tab was closed (no leftover tab)'
@@ -79,13 +79,13 @@ Ok2 (((TabLabels) -notcontains $ADD_TITLE)) 'the pilot tab was closed (no leftov
 Step '3) DIRTY page: back asks first, "keep editing" stays, "confirm" leaves'
 Open $PILOT 3200
 Write-Host ('make dirty: ' + (MakeDirty))
-ClickBtn 'btn_back' '.page-header__left' | Out-Null
+ClickBtn 'btn_back' '.page-header__ops' | Out-Null
 Start-Sleep -Milliseconds 1200
 Ok2 ((BodyHas $MSG) -eq 'True') 'back on a dirty page shows the unsaved-changes prompt'
 ClickDialogBtn 'btn_leave_stay' 1200 | Out-Null
 Start-Sleep -Milliseconds 1000
 Ok2 ((PathNow) -eq $PILOT) ('"keep editing" stays on the page (' + (PathNow) + ')')
-ClickBtn 'btn_back' '.page-header__left' | Out-Null
+ClickBtn 'btn_back' '.page-header__ops' | Out-Null
 Start-Sleep -Milliseconds 1200
 ClickDialogBtn 'btn_leave_ok' 1400 | Out-Null
 Start-Sleep -Milliseconds 1800
