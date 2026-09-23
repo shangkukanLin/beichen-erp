@@ -6,6 +6,8 @@ import request from '@/utils/request'
 import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel, WarehouseCategory, WarehouseType, OUTSOURCE_DELIVERY_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 const route = useRoute(); const router = useRouter()
 const loading = ref(true); const saving = ref(false)
@@ -15,6 +17,11 @@ const form = reactive({ id: undefined as any, code: '', deliveryType: DeliveryTy
 /** 手工单据（发料/调拨）才允许编辑字段；收料/退不良为自动单据、退料已下线（仅历史查看） */
 const isManualType = computed(() => form.deliveryType === DeliveryType.DELIVERY || form.deliveryType === DeliveryType.TRANSFER)
 const items = ref<any[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({ form, items: items.value }))
 
 // Odoo 风格：工厂 / 供应商实时查库
 const fetchFactories = (kw: string) => request.get('/supplier/page', { params: { supplierType: 'factory', pageSize: 500, name: kw } })
@@ -89,7 +96,7 @@ async function handleSave() {
     if (uploadFile.value) { const fd = new FormData(); fd.append('file', uploadFile.value); const res = await request.post<any,string>('/dev/file/upload', fd); form.attachUrl = res as unknown as string }
     const body = { ...form, items: items.value }
     await request.put(`/outsource/delivery/${form.id}`, body)
-    ElMessage.success('保存成功，库存已同步'); loadData(); sessionStorage.setItem(OUTSOURCE_DELIVERY_DIRTY_KEY, '1')
+    ElMessage.success('保存成功，库存已同步'); await loadData(); takeBaseline(); sessionStorage.setItem(OUTSOURCE_DELIVERY_DIRTY_KEY, '1')
   } finally { saving.value = false }
 }
 
@@ -115,13 +122,18 @@ async function handleDeleteAttach() {
 // 字典类只需加载一次
 onMounted(()=>{ loadOptions() })
 // 单据数据每次进入都重新拉取：keep-alive 缓存下再次进入会复用组件、onMounted 不再触发
-onActivated(()=>{ loadData() })
+onActivated(async ()=>{ await loadData(); takeBaseline() })
 </script>
 
 <template>
-  <div class="detail-page">
-    <el-card shadow="never" v-loading="loading">
-      <el-form :model="form" label-width="90px" size="small" :disabled="readonly">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（保存并同步库存） -->
+  <PageShell :loading="loading" back-fallback="/outsource/delivery">
+    <template #actions>
+      <el-button type="primary" :loading="saving" :disabled="readonly" @click="handleSave">保存并同步库存</el-button>
+    </template>
+
+    <el-card shadow="never">
+      <el-form :model="form" label-width="var(--app-label-width)" size="small" :disabled="readonly">
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item label="状态"><el-tag :type="DocStatusTag[form.status] || 'info'">{{ DocStatusLabel[form.status] || form.status }}</el-tag></el-form-item></el-col>
           <!-- 类型只读：2026-09-16 流程重构后手工只支持 发料/调拨；收料/退不良为系统自动单、退料已下线（历史可查） -->
@@ -168,7 +180,7 @@ onActivated(()=>{ loadData() })
     <!-- 物流信息 & 附件 -->
     <el-card shadow="never" style="margin-top:12px">
       <template #header><span style="font-weight:600">物流信息 & 附件</span></template>
-      <el-form :model="form" label-width="90px" size="small" :disabled="readonly">
+      <el-form :model="form" label-width="var(--app-label-width)" size="small" :disabled="readonly">
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item label="物流公司"><el-input v-model="form.logisticsCompany" placeholder="如顺丰" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="物流单号"><el-input v-model="form.logisticsNo" /></el-form-item></el-col>
@@ -182,12 +194,11 @@ onActivated(()=>{ loadData() })
       </div>
     </el-card>
 
-    <div style="margin-top:16px;display:flex;justify-content:flex-end"><el-button type="primary" size="large" :loading="saving" :disabled="readonly" @click="handleSave">保存并同步库存</el-button></div>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.detail-page { display:flex; flex-direction:column; gap:12px; }
+/* 页头/底部操作条已统一到全局骨架（PageShell + styles/page.css）；原 .detail-page 局部样式已删除 */
 
 .drop-zone { position:relative; border:2px dashed var(--app-border-color); border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
 .drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }

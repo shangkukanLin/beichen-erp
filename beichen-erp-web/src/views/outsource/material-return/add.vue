@@ -9,6 +9,8 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 const router = useRouter()
 const route = useRoute()
@@ -168,7 +170,9 @@ async function handleSubmit() {
       ElMessage.success('退货单草稿已保存，请在列表中审核生效')
     }
     sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
-    tabStore.removeTab(window.location.hash.replace('#', ''))
+    // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回列表
+    markClean()
+    tabStore.closeTabAndBack(window.location.hash.replace('#', ''))
     router.replace('/outsource/material-return')
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { submitting.value = false }
 }
@@ -228,18 +232,31 @@ async function loadForEdit(id: number) {
 
 // 顶栏"刷新数据"：重新加载出库源仓下拉
 async function handleRefreshData() { await loadOptions() }
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页明细由来源单带入、只读 ⇒ 脏状态就是 form 本身。
+ * ⚠️ 必须写在 form / editing 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form }))
+
 onMounted(async () => {
   await loadOptions()      // 先备好仓库下拉，再按来源预填源仓（否则下拉只显示 ID）
   if (editId) await loadForEdit(editId)
   else await loadFromQuery()
   window.addEventListener('refresh:dropdown-data', handleRefreshData)
+  // 初始化完成（含编辑回填 / 来源预填）⇒ 建立"未保存"基线
+  takeBaseline()
 })
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（保存/保存草稿） -->
+  <PageShell back-fallback="/outsource/material-return">
+    <template #actions>
+      <el-button type="primary" :loading="submitting" @click="handleSubmit">{{ editing ? '保存' : '保存草稿' }}</el-button>
+    </template>
+
     <el-card shadow="never">
       <template #header><span style="font-weight:600">{{ editing ? (isRepair ? '编辑维修退货' : '编辑物料退货') : (isRepair ? '维修退货信息' : '退货信息') }}</span></template>
       <!-- 类型说明整行展示（2026-09-17）：两类型的库存/应付/后续动作不同，写在字段区里会把同行字段挤窄 -->
@@ -252,7 +269,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
           </span>
         </template>
       </el-alert>
-      <el-form :model="form" label-width="100px" size="small">
+      <el-form :model="form" label-width="var(--app-label-width)" size="small">
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item required label="退货类型">
@@ -300,7 +317,6 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
           <template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" placeholder="自动" /></template>
         </el-table-column>
       </el-table>
-      <div style="margin-top:12px;text-align:right"><el-button type="primary" :loading="submitting" @click="handleSubmit">{{ editing ? '保存' : '保存草稿' }}</el-button></div>
     </el-card>
-  </div>
+  </PageShell>
 </template>

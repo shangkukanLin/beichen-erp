@@ -10,6 +10,8 @@ import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { DeliveryType, DeliveryTypeLabel, QualityType, QualityTypeLabel, WarehouseCategory, WarehouseType } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 const router = useRouter()
 const route = useRoute()
@@ -137,7 +139,9 @@ async function handleSubmit() {
     if (uploadFile.value) { const fd = new FormData(); fd.append('file', uploadFile.value); const res = await request.post<any, string>('/dev/file/upload', fd); form.attachUrl = res as unknown as string }
     await request.post('/outsource/delivery', { ...form, items: items.value })
     ElMessage.success('收发单已确认，库存已更新')
-    tabStore.removeTab(route.path)
+    // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回列表
+    markClean()
+    tabStore.closeTabAndBack(route.path)
     router.replace('/outsource/delivery')
   } finally { saving.value = false }
 }
@@ -146,18 +150,31 @@ async function handleSubmit() {
 async function handleRefreshData() {
   await Promise.all([loadInventoryWarehouses(), loadAllWarehouses(), loadMaterials(), loadMaterialTypes()])
 }
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
+
 onMounted(() => {
   loadInventoryWarehouses(); loadAllWarehouses(); loadMaterials(); loadMaterialTypes()
   window.addEventListener('refresh:dropdown-data', handleRefreshData)
+  // 下拉是"只读字典"、不写回表单 ⇒ 立刻建基线（本页表单初值为空，无预填被误判的问题）
+  takeBaseline()
 })
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 </script>
 
 <template>
-  <div class="add-page">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（提交并确认） -->
+  <PageShell back-fallback="/outsource/delivery">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="handleSubmit">提交并确认</el-button>
+    </template>
+
     <el-card shadow="never">
       <template #header><span style="font-weight:600">基础信息</span></template>
-      <el-form :model="form" label-width="100px">
+      <el-form :model="form" label-width="var(--app-label-width)">
         <el-row :gutter="16">
           <!-- 2026-09-16 流程重构：手工单据只有 发料 / 调拨（收料/退不良由物料订单自动生成、退料已下线） -->
           <el-col :span="6"><el-form-item label="类型"><el-select v-model="form.deliveryType" style="width:100%" @change="onTypeChange"><el-option :label="DeliveryTypeLabel[DeliveryType.DELIVERY]" :value="DeliveryType.DELIVERY"/><el-option :label="DeliveryTypeLabel[DeliveryType.TRANSFER]" :value="DeliveryType.TRANSFER"/></el-select></el-form-item></el-col>
@@ -197,7 +214,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
 
     <el-card shadow="never" style="margin-top:12px">
       <template #header><span style="font-weight:600">物流 & 附件</span></template>
-      <el-form :model="form" label-width="90px">
+      <el-form :model="form" label-width="var(--app-label-width)">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="物流公司"><el-input v-model="form.logisticsCompany" placeholder="如顺丰" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="物流单号"><el-input v-model="form.logisticsNo" /></el-form-item></el-col>
@@ -210,12 +227,11 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       </div>
     </el-card>
 
-    <div style="margin-top:16px"><el-button type="primary" size="large" :loading="saving" @click="handleSubmit">提交并确认</el-button><el-button size="large" @click="router.push('/outsource/delivery')">取消</el-button></div>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.add-page { display:flex; flex-direction:column; gap:12px; }
+/* 页头/底部操作条已统一到全局骨架（PageShell + styles/page.css） */
 
 .drop-zone { position:relative; border:2px dashed var(--app-border-color); border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
 .drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }

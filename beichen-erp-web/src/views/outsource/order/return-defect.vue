@@ -7,9 +7,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 
 const route = useRoute()
 const router = useRouter()
+const tabStore = useTabStore()
 const orderId = Number(route.params.orderId)
 
 const loading = ref(false)
@@ -34,7 +38,15 @@ async function loadProducts() {
       stocks: emptyStock()
     }))
   } catch { items.value = [] } finally { loading.value = false }
+  // 数据加载完成 ⇒ 建立"未保存"基线（必须在加载之后，否则会把回填误判成用户修改）
+  takeBaseline()
 }
+
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页逐规格填退货数量 ⇒ 属"能改数据"，接守卫。
+ * ⚠️ 必须写在 items / warehouseId 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ items: items.value, warehouseId: warehouseId.value }))
 
 /** 换仓：按产品主数据ID查该仓各规格库存（productName 是快照名，不能用名称匹配） */
 function onWhChange(whId: number) {
@@ -69,6 +81,9 @@ async function submit() {
       await request.post(`/outsource/order-delivery/return-defect/${orderId}`, { productId: r.productId, qualityType: r.qualityType, quantity: r.quantity, warehouseId: warehouseId.value })
     }
     ElMessage.success('加工退货草稿已保存，请在收货记录中审核')
+    // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签并回原页
+    markClean()
+    tabStore.closeTabAndBack(route.path)
     router.push(backPath())
   } catch (e: any) { ElMessage.error(e?.message || '加工退货失败') } finally { saving.value = false }
 }
@@ -76,13 +91,15 @@ onMounted(loadProducts)
 </script>
 
 <template>
-  <div class="p" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（确认加工退货） -->
+  <PageShell :loading="loading" back-fallback="/outsource/order/delivery">
+    <template #actions>
+      <el-button type="warning" :loading="saving" @click="submit">确认加工退货</el-button>
+    </template>
+
     <el-card shadow="never">
       <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">加工退货（拆分还料）</span>
-          <el-button @click="router.push(backPath())">返回</el-button>
-        </div>
+        <span style="font-weight:600">加工退货（拆分还料）</span>
       </template>
 
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px"
@@ -101,11 +118,9 @@ onMounted(loadProducts)
       </el-table>
 
       <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-        <el-button @click="router.push(backPath())">取消</el-button>
-        <el-button type="warning" :loading="saving" @click="submit">确认加工退货</el-button>
       </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
-<style scoped>.p{display:flex;flex-direction:column;gap:12px}</style>
+<style scoped>/* 页头已统一到全局骨架（PageShell）；原 .p 局部样式已删除 */</style>
