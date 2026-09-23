@@ -1,10 +1,12 @@
 <template>
-  <div class="app-container">
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（保存） -->
+  <PageShell :title="isEdit ? '编辑销售退货单' : '新增销售退货单'" back-fallback="/sale/return">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
+    </template>
+
     <el-card shadow="never">
-      <template #header>
-        <span>{{ isEdit ? '编辑销售退货单' : '新增销售退货单' }}</span>
-      </template>
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="100px">
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="var(--app-label-width)">
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="客户" prop="customerId">
@@ -126,12 +128,8 @@
           <span style="margin-left: 16px">合计金额：<b>{{ totalAmount }}</b></span>
         </div>
       </el-form>
-      <div class="footer">
-        <el-button @click="goBack">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
-      </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -142,6 +140,9 @@ import { ElMessage } from 'element-plus'
 import { Plus, Download } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 import { ProductQualityTypeLabel, ProductQualityTypeTag, WarehouseType, SALE_RETURN_DIRTY_KEY,
   ExchangeChargeType, ExchangeChargeTypeLabel } from '@/api/enums'
 import { productLabel } from '@/api/product'
@@ -157,6 +158,7 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const tabStore = useTabStore()
 const formRef = ref()
 const saving = ref(false)
 const isEdit = ref(false)
@@ -367,6 +369,12 @@ function buildPayload() {
   }
 }
 
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页明细挂在 form.items 上，故快照只需 form。
+ * ⚠️ 必须写在 form 等响应式状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form }))
+
 async function submit() {
   // 2026-09-20（F7-147）：Element Plus 的 validate() **不传回调时校验失败会 reject**，原先未包 try/catch
   // ⇒ 每次"表单不完整就点保存"都会产生未处理的 Promise rejection（校验提示其实已标在表单上，这里只需静默返回）。
@@ -404,15 +412,19 @@ async function submit() {
       await createSaleReturn(payload)
       ElMessage.success('新增成功'); sessionStorage.setItem(SALE_RETURN_DIRTY_KEY, '1')
     }
+    // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
+    markClean()
+    tabStore.closeTabAndBack(route.path)
     router.push('/sale/return')
-  } catch (e: any) {
-    ElMessage.error(e?.msg || e?.message || '保存失败')
   } finally {
     saving.value = false
   }
 }
 
 function goBack() {
+  // 取消返回：先清脏标记（否则离开会被未保存确认拦住），再关掉本页签
+  markClean()
+  tabStore.closeTabAndBack(route.path)
   router.push('/sale/return')
 }
 
@@ -423,6 +435,7 @@ onMounted(async () => {
   if (id) {
     isEdit.value = true
     await loadEdit(Number(id))
+    takeBaseline()
     return
   }
   form.returnDate = localDate()
@@ -432,9 +445,11 @@ onMounted(async () => {
     await initFromSaleOrder(Number(soId))
   }
   if (!form.items.length) addItem()
+  // 初始化/预填完成 ⇒ 建立"未保存"基线（必须在加载之后，否则会把回填误判成用户修改）
+  takeBaseline()
 })
 </script>
 
 <style scoped>
-.footer { margin-top: 20px; text-align: right; }
+/* 页头/底部操作条已统一到全局骨架（PageShell + styles/page.css） */
 </style>

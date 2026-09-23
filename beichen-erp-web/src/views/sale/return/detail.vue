@@ -1,12 +1,19 @@
 <template>
-  <div class="app-container">
-    <el-card shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span>销售退货单详情</span>
-          <el-tag :type="statusTagType(header.status)">{{ statusLabel(header.status) }}</el-tag>
-        </div>
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作 -->
+  <PageShell title="销售退货单详情" back-fallback="/sale/return">
+    <template #sub>
+      <el-tag :type="statusTagType(header.status)">{{ statusLabel(header.status) }}</el-tag>
+    </template>
+    <template #actions>
+      <template v-if="head.status === SaleReturnStatus.DRAFT">
+        <el-button type="primary" @click="goEdit">编辑</el-button>
+        <el-button v-perm="'sale:return:audit'" type="success" :loading="acting" @click="doAudit">审核</el-button>
+        <el-button v-perm="'sale:return:cancel'" type="danger" :loading="acting" @click="doCancel">作废</el-button>
       </template>
+      <el-button v-if="String(head.status) === String(SaleReturnStatus.AUDITED)" v-perm="'sale:return:unaudit'" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
+    </template>
+
+    <el-card shadow="never">
       <el-descriptions :column="3" border>
         <el-descriptions-item label="退货单号">{{ header.code }}</el-descriptions-item>
         <el-descriptions-item label="客户">
@@ -77,17 +84,8 @@
         <el-table-column prop="remark" label="备注" min-width="92" />
       </el-table>
 
-      <div class="footer">
-        <el-button @click="goBack">返回</el-button>
-        <template v-if="head.status === SaleReturnStatus.DRAFT">
-          <el-button type="primary" @click="goEdit">编辑</el-button>
-          <el-button v-perm="'sale:return:audit'" type="success" :loading="acting" @click="doAudit">审核</el-button>
-          <el-button v-perm="'sale:return:cancel'" type="danger" :loading="acting" @click="doCancel">作废</el-button>
-        </template>
-        <el-button v-if="String(head.status) === String(SaleReturnStatus.AUDITED)" v-perm="'sale:return:unaudit'" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
-      </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -96,6 +94,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { ProductQualityTypeLabel, ProductQualityTypeTag, ExchangeChargeTypeLabel } from '@/api/enums'
+import PageShell from '@/components/PageShell.vue'
 import {
   getSaleReturn,
   getSaleReturnItems,
@@ -243,6 +242,5 @@ onActivated(() => { loadDetail(Number(route.params.id)) })
 </script>
 
 <style scoped>
-.card-header { display: flex; align-items: center; justify-content: space-between; }
-.footer { margin-top: 20px; text-align: right; }
+/* 页头/操作区已统一到全局骨架（PageShell + styles/page.css） */
 </style>

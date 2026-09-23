@@ -1,13 +1,19 @@
 <template>
-  <div class="app-container">
-    <el-card shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span>销售换货单详情</span>
-          <el-tag :type="statusTagType(head.status)">{{ statusLabel(head.status) }}</el-tag>
-        </div>
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作 -->
+  <PageShell title="销售换货单详情" back-fallback="/sale/exchange">
+    <template #sub>
+      <el-tag :type="statusTagType(head.status)">{{ statusLabel(head.status) }}</el-tag>
+    </template>
+    <template #actions>
+      <template v-if="head.status === DocStatus.DRAFT">
+        <el-button type="primary" @click="goEdit">编辑</el-button>
+        <el-button type="success" :loading="acting" @click="doAudit">审核</el-button>
+        <el-button type="danger" :loading="acting" @click="doCancel">作废</el-button>
       </template>
+      <el-button v-if="head.status === DocStatus.AUDITED" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
+    </template>
 
+    <el-card shadow="never">
       <el-descriptions :column="3" border>
         <el-descriptions-item label="换货单号">{{ head.code }}</el-descriptions-item>
         <el-descriptions-item label="客户">{{ customerName }}</el-descriptions-item>
@@ -95,17 +101,8 @@
         </el-table-column>
       </el-table>
 
-      <div class="footer">
-        <el-button @click="goBack">返回</el-button>
-        <template v-if="head.status === DocStatus.DRAFT">
-          <el-button type="primary" @click="goEdit">编辑</el-button>
-          <el-button type="success" :loading="acting" @click="doAudit">审核</el-button>
-          <el-button type="danger" :loading="acting" @click="doCancel">作废</el-button>
-        </template>
-        <el-button v-if="head.status === DocStatus.AUDITED" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
-      </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -119,6 +116,7 @@ import {
   ProductQualityTypeLabel,
 } from '@/api/enums'
 import { SALE_EXCHANGE_DIRTY_KEY } from '@/api/enums'
+import PageShell from '@/components/PageShell.vue'
 import {
   getSaleExchange, auditSaleExchange, unAuditSaleExchange, cancelSaleExchange,
 } from '@/api/sale'
@@ -268,6 +266,5 @@ onActivated(() => { loadDetail(Number(route.params.id)) })
 </script>
 
 <style scoped>
-.card-header { display: flex; align-items: center; justify-content: space-between; }
-.footer { margin-top: 20px; text-align: right; }
+/* 页头/操作区已统一到全局骨架（PageShell + styles/page.css） */
 </style>

@@ -10,6 +10,9 @@ import { AccountType, AccountTypeLabel, SettleType, SettleTypeLabel, SettleTypeT
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 import {
   getSaleOrder, getSaleOrderItems, updateSaleOrder, auditSaleOrder, cancelSaleOrder, unAuditSaleOrder, checkSaleOrderStock, SALE_ORDER_DIRTY_KEY,
   SaleReturnStatus, SaleReturnStatusLabel,
@@ -17,6 +20,7 @@ import {
 } from '@/api/sale'
 const route = useRoute()
 const router = useRouter()
+const tabStore = useTabStore()
 const orderId = Number(route.params.id)
 const qualityOptions = ref<QualityOption[]>([])
 
@@ -65,6 +69,12 @@ const rules: FormRules = {
   warehouseId: [{ required: true, message: '请选择出库仓库', trigger: 'change' }]
 }
 const submitLoading = ref(false)
+
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页草稿态可直接编辑并保存 ⇒ 属"能改数据"，同样接守卫。
+ * ⚠️ 必须写在 head / items / form 等响应式状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ head: head.value, items: items.value, form }))
 
 // 库存检查相关
 const stockCheckResult = ref<{ productName: string; unit: string; required: number; available: number; shortage: number; sufficient: boolean }[]>([])
@@ -244,6 +254,8 @@ async function loadData() {
     linkedReceipts.value = h?.receipts || []
     await loadWarehouseName()
   } catch { } finally { loading.value = false }
+  // 数据加载完成 ⇒ 重建"未保存"基线（保存/审核/作废后都会重跑本函数 ⇒ 自动重置，不误报）
+  takeBaseline()
 }
 
 async function handleSubmit() {
@@ -328,27 +340,25 @@ onMounted(() => { loadCustomers(); ensureProducts(); loadQualityTypes(); loadAcc
  * `onActivated` 将**不再触发** ⇒ 页面永久空白且无任何报错线索。
  * 届时必须**同时**补一个 `onMounted(() => loadData())`。</p>
  */
-onActivated(() => { loadData() })
+onActivated(async () => { await loadData(); takeBaseline() })
 </script>
 
 <template>
-  <div class="page" v-loading="loading">
+  <PageShell title="销售单详情" :loading="loading" back-fallback="/inventory/sale">
+    <template #sub>
+      <el-tag :type="statusType(head.status)" effect="plain">{{ DocStatusLabel[String(head.status)] || head.status }}</el-tag>
+    </template>
+    <template #actions>
+      <el-button v-if="head.status === DocStatus.DRAFT" type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
+      <!-- 售后：仅已审核销售单可发起（后端 saleOrders 只返回已审核单据，售后锚定销售明细） -->
+      <el-button v-if="head.status === DocStatus.AUDITED" type="warning" @click="goReturn">退货</el-button>
+      <el-button v-if="head.status === DocStatus.AUDITED" type="warning" plain @click="goExchange">换货</el-button>
+      <el-button v-if="head.status === DocStatus.DRAFT" v-perm="'sale:order:audit'" type="success" @click="handleAudit">审核</el-button>
+      <el-button v-if="head.status === DocStatus.AUDITED" v-perm="'sale:order:unaudit'" type="warning" @click="handleUnAudit">反审核</el-button>
+      <el-button v-if="head.status === DocStatus.DRAFT" v-perm="'sale:order:cancel'" type="danger" @click="handleCancel">作废</el-button>
+    </template>
+
     <el-card shadow="never">
-      <div class="head-bar">
-        <div class="title">
-          <span class="title-text">销售单详情</span>
-          <el-tag :type="statusType(head.status)" effect="plain">{{ DocStatusLabel[String(head.status)] || head.status }}</el-tag>
-        </div>
-        <div class="ops">
-          <el-button @click="goBack">返回</el-button>
-          <!-- 售后：仅已审核销售单可发起（后端 saleOrders 只返回已审核单据，售后锚定销售明细） -->
-          <el-button v-if="head.status === DocStatus.AUDITED" type="warning" @click="goReturn">退货</el-button>
-          <el-button v-if="head.status === DocStatus.AUDITED" type="warning" plain @click="goExchange">换货</el-button>
-          <el-button v-if="head.status === DocStatus.DRAFT" v-perm="'sale:order:audit'" type="success" @click="handleAudit">审核</el-button>
-          <el-button v-if="head.status === DocStatus.AUDITED" v-perm="'sale:order:unaudit'" type="warning" @click="handleUnAudit">反审核</el-button>
-          <el-button v-if="head.status === DocStatus.DRAFT" v-perm="'sale:order:cancel'" type="danger" @click="handleCancel">作废</el-button>
-        </div>
-      </div>
 
       <!-- 草稿：可编辑 -->
       <template v-if="isDraft">
@@ -489,10 +499,6 @@ onActivated(() => { loadData() })
             </template>
           </div>
         </el-form>
-        <div class="footer">
-          <el-button @click="goBack">取消</el-button>
-          <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
-        </div>
       </template>
 
       <!-- 非草稿：只读 -->
@@ -653,14 +659,11 @@ onActivated(() => { loadData() })
         <el-button type="primary" @click="auditBlockVisible = false">关闭</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.page { padding: 0; }
-.head-bar { display: flex; align-items: center; justify-content: space-between; }
-.title { display: flex; align-items: center; gap: 8px; }
-.title-text { font-size: var(--app-font-md); font-weight: 600; }
+/* 页头已统一到全局骨架（PageShell + styles/page.css） */
 .footer { margin-top: 16px; display: flex; justify-content: flex-end; gap: 12px; }
 /* 金额汇总：标签在上、数值在下，块间竖线分隔，避免多项挤在一行 */
 .sum-bar {
