@@ -6,6 +6,9 @@ import { reactive, ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { getSupplier, addSupplier, updateSupplier, type SupplierDTO } from '@/api/system'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 
 const route = useRoute()
 const router = useRouter()
@@ -34,6 +37,12 @@ const form = reactive<SupplierDTO>({
   creditPeriodMonths: undefined, creditPeriod: undefined
 })
 const rules: FormRules = { name: [{ required: true, message: '请输入供应商名称', trigger: 'blur' }] }
+const tabStore = useTabStore()
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form }))
 
 async function load() {
   if (!isEdit.value) return
@@ -60,25 +69,32 @@ async function handleSubmit() {
       if (!isEdit.value) form.typeCodes = [typeCode.value]
       if (isEdit.value && form.id) await updateSupplier(form)
       else { await addSupplier(form); ElMessage.success('已添加') }
+      // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签并回列表
+      markClean()
+      tabStore.closeTabAndBack(route.path)
       router.push(listPath.value)
     } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { submitLoading.value = false }
   })
 }
-onMounted(load)
+onMounted(async () => { await load(); takeBaseline() })
 </script>
 
 <template>
-  <div class="p" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题 → 右端操作（确定） -->
+  <PageShell :title="(isEdit ? '编辑' : '新增') + pageTitle" :back-fallback="listPath" :loading="loading">
+    <template #actions>
+      <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
+    </template>
+
     <el-card shadow="never">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">{{ (isEdit ? '编辑' : '新增') + pageTitle }}</span>
-          <el-button @click="router.push(listPath)">返回</el-button>
+          <!-- 页内标题不再重复：由骨架统一显示（PageShell 取 title） -->
         </div>
       </template>
 
       <!-- label-width 110px：标签带模块前缀（供应商名称/供应商编码 5 字）+ 必填星号，100px 会压成两行 -->
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="110px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="var(--app-label-width)">
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="供应商编码">
@@ -119,12 +135,8 @@ onMounted(load)
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" placeholder="备注" /></el-form-item>
       </el-form>
 
-      <div style="display:flex;gap:8px;justify-content:flex-end">
-        <el-button @click="router.push(listPath)">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="handleSubmit">确定</el-button>
-      </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
-<style scoped>.p{display:flex;flex-direction:column;gap:12px}</style>
+<style scoped>/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .p 局部样式已删除 */</style>

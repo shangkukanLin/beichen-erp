@@ -5,6 +5,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute(); const router = useRouter()
 const warehouseId = Number(route.params.id)
@@ -139,8 +140,9 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
 </script>
 
 <template>
-  <div class="detail-page">
-    <el-card shadow="never" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta)；本页只读（导出留在卡内工具栏） -->
+  <PageShell :loading="loading" back-fallback="/inventory/warehouse">
+    <el-card shadow="never">
       <div class="toolbar">
         <el-button :icon="'Download'" @click="exportExcel">导出当前页签</el-button>
       </div>
@@ -221,11 +223,11 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
         </el-tab-pane>
       </el-tabs>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.detail-page { display:flex; flex-direction:column; gap:12px; }
+/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .detail-page 局部样式已删除 */
 
 .toolbar { display:flex; justify-content:flex-end; margin-bottom:8px; }
 
