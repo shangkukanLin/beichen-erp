@@ -11,6 +11,8 @@ import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { getProjectBom } from '@/api/system'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 const router = useRouter()
 const route = useRoute()
@@ -29,6 +31,11 @@ const form = reactive({
 })
 
 const products = ref<any[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / products 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, products: products.value }))
 
 const factoryOptions = ref<any[]>([])
 const projectOptions = ref<any[]>([])
@@ -181,7 +188,9 @@ async function handleSubmit() {
     Object.assign(form, { factoryId: undefined, supplyMode: 'OURS', planStartDate: '', planEndDate: '', taxIncluded: 0, taxRate: '', remark: '', attachUrl: '', logisticsCompany: '', logisticsNo: '' })
     products.value = []
     uploadFile.value = null
-    tabStore.removeTab(route.path)
+    // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回列表
+    markClean()
+    tabStore.closeTabAndBack(route.path)
     router.replace('/outsource/order')
   } catch (e: any) {
     ElMessage.error(e?.message || '创建加工单失败')
@@ -263,20 +272,27 @@ async function initPage() {
 }
 // 顶栏"刷新数据"：重新加载工厂/项目/物料/类型下拉
 async function handleRefreshData() { await loadOptions(); await loadMaterialTypes() }
-onMounted(() => {
-  initPage()
+onMounted(async () => {
+  await initPage()
   window.addEventListener('refresh:dropdown-data', handleRefreshData)
+  // 初始化完成 ⇒ 建立"未保存"基线（必须在初始化之后，否则会把预填误判成用户修改）
+  takeBaseline()
 })
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 
 </script>
 
 <template>
-  <div class="add-page">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（提交并确认） -->
+  <PageShell back-fallback="/outsource/order">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="handleSubmit">提交并确认</el-button>
+    </template>
+
     <!-- 基础信息 -->
     <el-card shadow="never">
       <template #header><span style="font-weight:600">基础信息</span></template>
-      <el-form :model="form" label-width="90px" size="small">
+      <el-form :model="form" label-width="var(--app-label-width)" size="small">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item required label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" placeholder="请选择" @update:modelValue="onFactoryChangeProxy"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="供料模式"><el-select v-model="form.supplyMode" style="width:100%" @change="onSupplyModeChange"><el-option v-for="m in SUPPLY_MODE_OPTIONS" :key="m.value" :label="m.label" :value="m.value" /></el-select></el-form-item></el-col>
@@ -297,7 +313,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
           <el-button type="danger" size="small" text @click="removeProduct(pi)" v-if="products.length>1">删除产品</el-button>
         </div>
       </template>
-      <el-form :model="p" label-width="90px" size="small">
+      <el-form :model="p" label-width="var(--app-label-width)" size="small">
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.productName || row.name" placeholder="选择产品" @update:modelValue="(v:any)=>onProjectSelectProxy(pi, v)"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
           <el-col :span="5"><el-form-item label="数量"><el-input-number v-model="p.quantity" :controls="false" :precision="0" :step="1" style="width:100%" @change="onQuantityChange(pi)" /></el-form-item></el-col>
@@ -346,12 +362,11 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       </div>
     </el-card>
 
-    <div style="margin-top:16px"><el-button type="primary" size="large" :loading="saving" @click="handleSubmit">提交并确认</el-button><el-button size="large" @click="router.push('/outsource/order')">取消</el-button></div>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.add-page { display:flex; flex-direction:column; gap:0; }
+/* 页头/底部操作条已统一到全局骨架（PageShell + styles/page.css） */
 
 .drop-zone { position:relative; border:2px dashed var(--app-border-color); border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
 .drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }

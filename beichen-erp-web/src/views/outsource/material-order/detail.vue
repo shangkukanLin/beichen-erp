@@ -8,6 +8,8 @@ import { exportMaterialOrderPdf } from '@/api/contract-template'
 // 随「交货管理」页签移出到独立菜单页「物料收货」（views/outsource/material-order/delivery.vue），本页不再使用
 import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, OrderType, OrderTypeLabel, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
@@ -81,6 +83,8 @@ async function loadAll() {
     items.value = o?.items || []
     loadOptions()
   } finally { loading.value = false }
+  // 数据加载完成 ⇒ 重建"未保存"基线（保存/审核/结单后都会重跑本函数 ⇒ 自动重置，不误报）
+  takeBaseline()
 }
 
 function markOrderDirty() { sessionStorage.setItem(OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY, '1') }
@@ -145,10 +149,28 @@ onMounted(() => { loadMaterialTypes() })
  * loadAll 内部会自行调用 loadOptions 补齐物料字典，故此处无需额外 await loadOptions。
  */
 onActivated(() => { loadAll() })
+
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页待审核态可直接编辑并保存 ⇒ 属"能改数据"，接守卫。
+ * ⚠️ 必须写在 order / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
 </script>
 
 <template>
-  <div class="detail-page" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作 -->
+  <PageShell :loading="loading" back-fallback="/outsource/material-order">
+    <template #actions>
+      <!-- F7-127（2026-09-20）：与后端白名单一致 —— 非待审核不可保存（原仅禁 CANCELLED） -->
+      <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="order.status!==MaterialOrderStatus.PENDING">保存</el-button>
+      <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">审核</el-button>
+      <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
+      <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleFinish">结单</el-button>
+      <!-- 收料/退不良 2026-09-16 移出为独立菜单页「物料收货」，此处只留跳转入口 -->
+      <el-button type="warning" size="small" @click="router.push(`/outsource/material-order/delivery/${id}`)">物料收货</el-button>
+      <el-button v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">作废</el-button>
+    </template>
+
     <el-tabs v-model="activeTab" style="margin-bottom:12px">
       <el-tab-pane label="订单详情" name="detail" />
       <!-- 「交货管理」页签已于 2026-09-16 移出为独立菜单页「物料收货」（下方按钮跳转） -->
@@ -244,13 +266,12 @@ onActivated(() => { loadAll() })
         </div>
       </el-card>
     </template>
-
-      </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.detail-page { padding:16px; }
-.page-header { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+/* 页头已统一到全局骨架（PageShell + styles/page.css）；
+   原 .detail-page / .page-header 局部样式已删除 —— .page-header 与全局类同名，留着会双重生效 */
 
 .drop-zone { position:relative; border:2px dashed var(--app-border-color); border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
 .drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }

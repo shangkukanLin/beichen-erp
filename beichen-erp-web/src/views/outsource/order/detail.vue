@@ -12,6 +12,8 @@ import { exportContractPdf } from '@/api/contract-template'
 // 独立菜单页「成品收货」（views/outsource/order/delivery.vue），本页不再使用
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, OrderType, OUTSOURCE_ORDER_DIRTY_KEY } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 const route = useRoute(); const router = useRouter()
 const loading = ref(true); const saving = ref(false)
@@ -143,7 +145,15 @@ async function loadData() {
     await loadMaterialStock()
     if (form.status === OutsourceOrderStatus.FINISHED || form.status === OutsourceOrderStatus.CANCELLED) loadCloseReport()
   } finally { loading.value = false }
+  // 数据加载完成 ⇒ 重建"未保存"基线（保存/审核后都会重跑本函数 ⇒ 自动重置，不误报）
+  takeBaseline()
 }
+
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页待审核态可直接编辑并保存 ⇒ 属"能改数据"，接守卫。
+ * ⚠️ 必须写在 form / products 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({ form, products: products.value }))
 
 function addProduct() { products.value.push({ _key: Date.now(), projectId: undefined, productName: '', quantity: 1, unitPrice: 0, amount: 0, remark: '', materials: [] }) }
 function removeProduct(idx: number) { products.value.splice(idx, 1) }
@@ -261,7 +271,14 @@ onActivated(async () => { await loadOptions(); await loadData() })
 </script>
 
 <template>
-  <div class="detail-page" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（审核/反审核/保存） -->
+  <PageShell :loading="loading" back-fallback="/outsource/order">
+    <template #actions>
+      <el-button v-if="form.status===OutsourceOrderStatus.PENDING" type="success" size="small" @click="handleAudit">审核</el-button>
+      <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="danger" size="small" @click="handleUnaudit">反审核</el-button>
+      <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="form.status===OutsourceOrderStatus.CANCELLED">保存</el-button>
+    </template>
+
     <el-tabs v-model="activeTab" style="margin-bottom:12px" @tab-change="(t:any)=>{if(t==='close')loadCloseReport()}">
       <el-tab-pane label="加工详情" name="detail" />
       <!-- 「交货管理」页签已于 2026-09-16 移出为独立菜单页「成品收货」；页签移出时留下的「跳转按钮」
@@ -292,9 +309,7 @@ onActivated(async () => { await loadOptions(); await loadData() })
             <el-col :span="8" v-if="form.taxIncluded"><el-form-item label="税额"><el-input :model-value="form.taxAmount" disabled /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
           </el-row>
-          <div style="display:flex;gap:8px;margin-top:12px">
-            <el-button v-if="form.status===OutsourceOrderStatus.PENDING" type="success" size="small" @click="handleAudit">审核</el-button>
-            <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="danger" size="small" @click="handleUnaudit">反审核</el-button>
+          <!-- 审核 / 反审核 / 保存 已统一上移到页头右侧操作区（PageShell #actions）；以下为用户口径的历史说明： -->
             <!-- 2026-09-21（用户口径：「委外加工单详情页面里面的成品收货按钮不要了。在成品收货里面收货就行」）：
                  收货统一从左侧「委外加工 → 成品收货」菜单进（列表行内「收货」直达一步收货、行内「详情」看记录），
                  本页不再保留跳转按钮（原先那个是 2026-09-16「交货管理」页签移出时留下的入口）。
@@ -302,8 +317,6 @@ onActivated(async () => { await loadOptions(); await loadData() })
                  到「成品收货」点「结单」（列表行内 或 该单收货详细页），跳的还是同一个结单报表页；
                  结单后本页的「结单详情」页签仍可回看报表（含"查看完整结单报表"，反结单也在那里）。 -->
             <!-- 原「结单」按钮（跳 /outsource/order/close/:id）已按上述口径移除 -->
-            <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="form.status===OutsourceOrderStatus.CANCELLED">保存</el-button>
-          </div>
         </el-form>
       </el-card>
 
@@ -392,13 +405,12 @@ onActivated(async () => { await loadOptions(); await loadData() })
         <div v-else style="color:var(--app-text-secondary);text-align:center;padding:20px">暂无结单数据</div>
       </el-card>
     </template>
-
-      </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.detail-page { display:flex; flex-direction:column; gap:0; }
-.page-header { display:flex; align-items:center; gap:12px; padding-bottom:8px; flex-wrap:wrap; }
+/* 页头已统一到全局骨架（PageShell + styles/page.css）；
+   原 .detail-page / .page-header 局部样式已删除 —— .page-header 与全局类同名，留着会双重生效 */
 
 .drop-zone { position:relative; border:2px dashed var(--app-border-color); border-radius:8px; padding:20px; text-align:center; transition:all .3s; cursor:pointer; margin-top:8px }
 .drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }
