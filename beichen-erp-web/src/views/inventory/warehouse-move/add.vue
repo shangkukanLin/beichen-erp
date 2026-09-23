@@ -1,6 +1,11 @@
 <template>
-  <div class="page">
-    <el-card shadow="never" style="margin-top:16px">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头最左=主操作（保存）→ 标题 → 右侧=返回 -->
+  <PageShell :title="isEdit ? '编辑移仓单' : '新增移仓单'" back-fallback="/inventory/warehouse-move">
+    <template #leading>
+      <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
+    </template>
+
+    <el-card shadow="never">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="12">
@@ -63,13 +68,9 @@
           </el-table-column>
         </el-table>
 
-        <div style="text-align:center;margin-top:24px">
-          <el-button @click="handleCancel">取消</el-button>
-          <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
-        </div>
       </el-form>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -81,6 +82,8 @@ import { reactive, ref, watch, onMounted, onUnmounted, onBeforeUnmount } from 'v
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 import request from '@/utils/request'
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
 import RemoteSelect from '@/components/RemoteSelect.vue'
@@ -112,6 +115,11 @@ const form = reactive({
   remark: '' as string,
 })
 const items = ref<MoveItem[]>([])
+/**
+ * 统一「返回」的未保存拦截（2026-09-23 次级页面统一模板）：
+ * ⚠️ 必须写在 form / items **之后** —— watch 注册时会立即求值一次快照，放前面会因 TDZ 静默失效。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 const rules: FormRules = {
   fromWarehouseId: [{ required: true, message: '请选择移出仓库', trigger: 'change' }],
   toWarehouseId: [{ required: true, message: '请选择移入仓库', trigger: 'change' }]
@@ -227,29 +235,27 @@ async function handleSubmit() {
       else await request.post('/inventory/warehouse-move', payload)
       ElMessage.success('保存成功'); sessionStorage.setItem(INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY, '1')
       resetForm()
-      tabStore.removeTab(route.fullPath)
+      // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
+      markClean()
+      tabStore.closeTabAndBack(route.path)
       router.push('/inventory/warehouse-move')
     } catch (e: any) { ElMessage.error(e?.message || '保存失败') }
     finally { submitLoading.value = false }
   })
 }
 
-function handleCancel() {
-  resetForm()
-  tabStore.removeTab(route.fullPath)
-  router.push('/inventory/warehouse-move')
-}
-
 // 顶栏"刷新数据"：重新加载品质下拉
 async function handleRefreshData() { await loadQualityTypes() }
-onMounted(() => {
+onMounted(async () => {
   loadQualityTypes()
   if (isEdit.value) {
     tabStore.updateTabTitle(route.fullPath, '编辑移仓单')
     document.title = '编辑移仓单 - 北辰ERP管理系统'
-    loadMoveData()
+    await loadMoveData()
   }
   window.addEventListener('refresh:dropdown-data', handleRefreshData)
+  // 数据加载完成 ⇒ 建立"未保存"基线（必须在加载之后，否则会把回填误判成用户修改）
+  takeBaseline()
 })
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 
@@ -261,5 +267,5 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.page { padding: 0; }
+/* 页头/底部操作条已统一到全局骨架（PageShell + styles/page.css），本页不再自写 .page */
 </style>

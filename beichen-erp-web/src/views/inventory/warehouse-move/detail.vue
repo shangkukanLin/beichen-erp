@@ -7,8 +7,10 @@ import { WarehouseCategory, INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY } from '@/api/enu
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
-const route = useRoute(); const router = useRouter()
+const route = useRoute()
 // 用 computed 取路由参数：keep-alive 会复用组件，从单据 A 跳到 B 时 route.params.id 会变
 const id = computed(() => Number(route.params.id) || 0)
 const loading = ref(false)
@@ -32,6 +34,14 @@ const editForm = reactive({
   remark: ''
 })
 const editItems = ref<any[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页草稿态**可直接编辑并保存**，属"能改数据"，
+ * 故同样接入守卫（避免改了一半点返回静默丢失）。
+ * ⚠️ 必须写在 detail / editForm / editItems **之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({
+  detail: detail.value, items: items.value, editForm, editItems: editItems.value
+}))
 const fetchWarehouses = (kw: string) =>
   request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 100, keyword: kw } })
@@ -131,6 +141,9 @@ async function loadDetail() {
     if (isDraft.value) fillEditForm()
     await loadWarehouseNames()
   } finally { loading.value = false }
+  // 数据加载完成 ⇒ 建立"未保存"基线（必须在加载之后，否则会把回填误判成用户修改；
+  // 审核/保存后本函数会重跑 ⇒ 基线自动重置，不会误报）
+  takeBaseline()
 }
 
 async function handleSave() {
@@ -193,16 +206,23 @@ onActivated(() => { loadDetail() })
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
-    <el-card shadow="never" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头最左=主操作（保存）→ 标题 → 右侧=次要动作+返回 -->
+  <PageShell :loading="loading" back-fallback="/inventory/warehouse-move">
+    <template #leading>
+      <el-button v-if="isDraft" type="primary" :loading="saving" @click="handleSave">保存</el-button>
+    </template>
+    <template #actions>
+      <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
+      <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
+      <el-button type="danger" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
+    </template>
+
+    <el-card shadow="never">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:600">单据信息</span>
           <div style="display:flex;align-items:center;gap:8px">
             <el-tag :type="statusTag(detail.status)" size="small">{{ statusLabel(detail.status) }}</el-tag>
-            <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
-            <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
-            <el-button type="danger" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
           </div>
         </div>
       </template>
@@ -305,9 +325,5 @@ onActivated(() => { loadDetail() })
       </el-table>
     </el-card>
 
-    <div style="display:flex;gap:12px;justify-content:center">
-      <el-button v-if="isDraft" type="primary" :loading="saving" @click="handleSave">保存</el-button>
-      <el-button @click="router.push('/inventory/warehouse-move')">返回列表</el-button>
-    </div>
-  </div>
+  </PageShell>
 </template>
