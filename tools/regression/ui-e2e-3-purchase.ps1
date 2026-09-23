@@ -1,4 +1,4 @@
-# Temp test 3: purchase chain through the UI (purchase order -> audit -> stock/payable -> un-audit -> audit -> purchase return -> audit)
+﻿# Temp test 3: purchase chain through the UI (purchase order -> audit -> stock/payable -> un-audit -> audit -> purchase return -> audit)
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 EnsureLogin
 WatchErrors
@@ -25,7 +25,11 @@ Write-Host ('qty A: ' + (SetRowInput 0 1 '10'))
 Write-Host ('price A: ' + (SetRowInput 0 2 '100'))
 Start-Sleep -Milliseconds 400
 Write-Host ('total: ' + (Txt '.el-form-item'))
-Write-Host ('submit: ' + (ClickBtn 'btn_submit'))
+# 2026-09-23: /inventory/purchase/add now serves purchase/order/form.vue (added the same day), whose
+# primary action is labelled 确定 -- try the 提交 label first, then fall back to 确定.
+$subRes = ClickBtn 'btn_submit'
+if ($subRes -match 'NOBTN') { $subRes = ClickBtn 'btn_ok' }
+Write-Host ('submit: ' + $subRes)
 Start-Sleep -Milliseconds 2600
 Write-Host ('msg=' + (Txt '.el-message') + ' path=' + (EvalJs 'String(location.pathname)') + ' errs=' + (Errs))
 Open '/inventory/purchase' 2400
