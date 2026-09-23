@@ -5,6 +5,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 import { WarehouseType, AfterSaleSourceType, INVENTORY_RETURN_SORT_DIRTY_KEY } from '@/api/enums'
 import {
   getReturnSort, getReturnSortItems, getReturnSortDefectStock,
@@ -12,6 +15,7 @@ import {
 } from '@/api/inventory'
 
 const route = useRoute(); const router = useRouter()
+const tabStore = useTabStore()
 
 /**
  * 新增（/inventory/return-sort/add）与编辑（/edit/:id）共用本页。
@@ -46,6 +50,11 @@ const form = reactive({
   remark: ''
 })
 const items = ref<any[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items **之后**：watch 注册时会立即求值一次快照，放前面会因 TDZ 静默失效。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 
 /** 待整理库存超期预警阈值（天）：停留超过该天数则标红提示 */
 const STAY_ALERT_DAYS = 3
@@ -226,31 +235,27 @@ async function handleSave() {
     else { await createReturnSort(data); ElMessage.success('新增成功') }
     // 置脏标志：列表页 onActivated 会重拉「待整理总览 + 整理单列表」（keep-alive 复用下 onMounted 不触发）
     sessionStorage.setItem(INVENTORY_RETURN_SORT_DIRTY_KEY, '1')
+    // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
+    markClean()
+    tabStore.closeTabAndBack(route.path)
     router.push('/inventory/return-sort')
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
 
-function handleCancel() { router.push('/inventory/return-sort') }
-function handleBack() { router.back() }
-
-onMounted(() => { init() })
+onMounted(async () => { await init(); takeBaseline() })
 // keep-alive 缓存下再次进入会复用组件；新增/编辑路由切换也需重新加载
-onActivated(() => { init() })
-watch(() => route.fullPath, () => { init() })
+onActivated(async () => { await init(); takeBaseline() })
+watch(() => route.fullPath, async () => { await init(); takeBaseline() })
 </script>
 
 <template>
-  <div class="app-container">
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（保存） -->
+  <PageShell :title="isNew ? (presetWarehouseId ? '整理待整理品' : '新增退货整理') : `编辑退货整理 — ${code}`" back-fallback="/inventory/return-sort">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+    </template>
+
     <el-card shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span>{{ isNew ? (presetWarehouseId ? '整理待整理品' : '新增退货整理') : `编辑退货整理 — ${code}` }}</span>
-          <div>
-            <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
-            <el-button @click="handleCancel">取消</el-button>
-          </div>
-        </div>
-      </template>
 
       <el-form :model="form" label-width="100px">
         <el-row :gutter="12">
@@ -344,14 +349,9 @@ watch(() => route.fullPath, () => { init() })
         </el-table-column>
       </el-table>
     </el-card>
-
-    <div style="text-align:center;margin-top:20px">
-      <el-button @click="handleBack">返回</el-button>
-    </div>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.card-header { display: flex; align-items: center; justify-content: space-between; }
-
+/* 页头已统一到全局骨架（PageShell + styles/page.css） */
 </style>

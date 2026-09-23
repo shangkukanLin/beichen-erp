@@ -1,14 +1,12 @@
 <template>
-  <div class="page">
-    <el-card shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span class="title">产品库存分布</span>
-          <el-button :icon="'ArrowLeft'" @click="$router.back()">返回</el-button>
-        </div>
-      </template>
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（导出） -->
+  <PageShell title="产品库存分布" :loading="loading" back-fallback="/inventory/product-stock">
+    <template #actions>
+      <el-button :icon="'Download'" size="small" @click="exportDetail">导出 Excel</el-button>
+    </template>
 
-      <el-descriptions v-loading="loading" :column="4" border class="info">
+    <el-card shadow="never">
+      <el-descriptions :column="3" border class="info">
         <el-descriptions-item label="SKU">{{ summary?.sku || '—' }}</el-descriptions-item>
         <el-descriptions-item label="产品名称">{{ summary?.productName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="单位">{{ summary?.unit || '—' }}</el-descriptions-item>
@@ -33,7 +31,6 @@
           <span class="title">各仓库库存明细</span>
           <span class="right">
             <span class="hint">品质数量为该产品在该仓库下各品质档位的库存</span>
-            <el-button :icon="'Download'" size="small" @click="exportDetail">导出 Excel</el-button>
           </span>
         </div>
       </template>
@@ -94,7 +91,7 @@
 
       <el-empty v-if="!tableLoading && rows.length === 0" description="该产品在成品仓暂无库存" />
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -103,6 +100,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -222,10 +220,7 @@ onMounted(() => { loadSummary(); loadRows() })
 </script>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 12px; }
-.card-header { display: flex; align-items: center; justify-content: space-between; }
-.right { display: flex; align-items: center; gap: 12px; }
-.title { font-weight: 600; }
+/* 页头/卡片头已统一到全局骨架（PageShell + styles/page.css） */
 .hint { font-size: var(--app-font-xs); color: #909399; }
 .low-tip { font-size: var(--app-font-xs); }
 /* 占比列：进度条后面的百分比文字（插槽自定义，避开组件按 stroke-width 算出的 16px 内联字号） */

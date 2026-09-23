@@ -1,14 +1,17 @@
 <template>
-  <div class="page">
-    <el-card shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span class="title">成品报损单详情</span>
-          <el-button :icon="'ArrowLeft'" @click="$router.back()">返回</el-button>
-        </div>
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（编辑/审核/反审核/作废） -->
+  <PageShell title="成品报损单详情" :loading="loading" back-fallback="/inventory/stock-loss">
+    <template #actions>
+      <template v-if="info">
+        <el-button v-if="info.status === DocStatus.DRAFT" type="primary" @click="goEdit">编辑</el-button>
+        <el-button v-if="info.status === DocStatus.DRAFT" type="success" @click="onAudit">审核</el-button>
+        <el-button v-if="info.status === DocStatus.AUDITED" type="warning" @click="onUnAudit">反审核</el-button>
+        <el-button v-if="info.status === DocStatus.DRAFT" type="danger" @click="onCancel">作废</el-button>
       </template>
+    </template>
 
-      <el-descriptions v-loading="loading" :column="4" border>
+    <el-card shadow="never">
+      <el-descriptions :column="3" border>
         <el-descriptions-item label="报损单号">{{ info?.code || '—' }}</el-descriptions-item>
         <el-descriptions-item label="仓库">{{ info?.warehouseName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="报损日期">{{ info?.lossDate || '—' }}</el-descriptions-item>
@@ -61,13 +64,7 @@
       </el-table>
     </el-card>
 
-    <div class="actions" v-if="info">
-      <el-button v-if="info.status === DocStatus.DRAFT" type="primary" @click="goEdit">编辑</el-button>
-      <el-button v-if="info.status === DocStatus.DRAFT" type="success" @click="onAudit">审核</el-button>
-      <el-button v-if="info.status === DocStatus.AUDITED" type="warning" @click="onUnAudit">反审核</el-button>
-      <el-button v-if="info.status === DocStatus.DRAFT" type="danger" @click="onCancel">作废</el-button>
-    </div>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -76,6 +73,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag, LossReasonLabel, ProductQualityTypeLabel } from '@/api/enums'
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -156,9 +154,7 @@ onMounted(load)
 </script>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 12px; }
-.card-header { display: flex; align-items: center; justify-content: space-between; }
-.title { font-weight: 600; }
+/* 页头/操作区已统一到全局骨架（PageShell + styles/page.css） */
 .actions { display: flex; gap: 8px; }
 :deep(.el-card__body) { padding: 16px; }
 </style>

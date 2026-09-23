@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { AfterSaleSourceType } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import PageShell from '@/components/PageShell.vue'
 import {
   getReturnSort, getReturnSortItems, auditReturnSort, cancelReturnSort,
   type ReturnSortItem
@@ -117,14 +118,17 @@ onActivated(() => { loadDetail() })
 </script>
 
 <template>
-  <div class="app-container" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（审核/反审核） -->
+  <PageShell :title="`退货整理详情${head.code ? ' — ' + head.code : ''}`" :loading="loading" back-fallback="/inventory/return-sort">
+    <template #sub>
+      <el-tag :type="DocStatusTag[String(head.status)] || 'info'">{{ DocStatusLabel[String(head.status)] || head.status }}</el-tag>
+    </template>
+    <template #actions>
+      <el-button v-if="isDraft" type="success" :loading="acting" @click="doAudit">审核</el-button>
+      <el-button v-if="isAudited" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
+    </template>
+
     <el-card shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span>退货整理详情 — {{ head.code }}</span>
-          <el-tag :type="DocStatusTag[String(head.status)] || 'info'">{{ DocStatusLabel[String(head.status)] || head.status }}</el-tag>
-        </div>
-      </template>
 
       <el-descriptions :column="3" border>
         <el-descriptions-item label="单号">{{ head.code }}</el-descriptions-item>
@@ -200,16 +204,10 @@ onActivated(() => { loadDetail() })
         </el-table-column>
       </el-table>
 
-      <div class="footer">
-        <el-button @click="router.back()">返回</el-button>
-        <el-button v-if="isDraft" type="success" :loading="acting" @click="doAudit">审核</el-button>
-        <el-button v-if="isAudited" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
-      </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.card-header { display: flex; align-items: center; justify-content: space-between; }
-.footer { margin-top: 20px; text-align: right; }
+/* 页头/操作区已统一到全局骨架（PageShell + styles/page.css） */
 </style>

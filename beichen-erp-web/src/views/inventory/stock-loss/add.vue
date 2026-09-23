@@ -1,14 +1,12 @@
 <template>
-  <div class="page">
-    <el-card shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span class="title">{{ isEdit ? '编辑成品报损单' : '新增成品报损单' }}</span>
-          <el-button :icon="'ArrowLeft'" @click="goBack">返回</el-button>
-        </div>
-      </template>
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（保存） -->
+  <PageShell :title="isEdit ? '编辑成品报损单' : '新增成品报损单'" back-fallback="/inventory/stock-loss">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
+    </template>
 
-      <el-form :model="form" label-width="90px" class="head-form">
+    <el-card shadow="never">
+      <el-form :model="form" label-width="var(--app-label-width)" class="head-form">
         <el-form-item label="仓库" required>
           <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses"
             :label-key="(row:any)=>row.warehouseName" placeholder="选择报损仓库" style="width:240px"
@@ -93,13 +91,9 @@
 
       <div class="footer">
         <div class="total">合计报损金额：<strong>{{ money(totalAmount) }}</strong></div>
-        <div class="actions">
-          <el-button @click="goBack">取消</el-button>
-          <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
-        </div>
       </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -109,11 +103,15 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 import { getQualityTypes, type QualityOption } from '@/api/product'
 import { WarehouseCategory, WarehouseType, ProductQualityType, LossReasonLabel, codeLabelOptions, INVENTORY_STOCK_LOSS_DIRTY_KEY } from '@/api/enums'
 
 const route = useRoute()
 const router = useRouter()
+const tabStore = useTabStore()
 const editId = computed(() => Number(route.params.id) || 0)
 const isEdit = computed(() => editId.value > 0)
 
@@ -136,6 +134,11 @@ const form = reactive({
   remark: ''
 })
 const items = ref<any[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items **之后**：watch 注册时会立即求值一次快照，放前面会因 TDZ 静默失效。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 
 // 数量一律整数（2026-09-16）
 function fmtQty(v?: number) { return v == null ? '0' : String(Math.round(Number(v))) }
@@ -240,26 +243,34 @@ async function handleSubmit() {
     ElMessage.success('保存成功')
     // 2026-09-20（F7-174）：置脏标志，列表页 onActivated 时才重新拉取（否则 keep-alive 复用会让列表停在旧数据）
     sessionStorage.setItem(INVENTORY_STOCK_LOSS_DIRTY_KEY, '1')
+    // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
+    markClean()
+    tabStore.closeTabAndBack(route.path)
     router.push('/inventory/stock-loss')
   } catch (e: any) {
     ElMessage.error(e?.message || '保存失败')
   } finally { saving.value = false }
 }
 
-function goBack() { router.push('/inventory/stock-loss') }
+function goBack() {
+  // 取消返回：先清脏标记（否则离开会被未保存确认拦住），再关掉本页签
+  markClean()
+  tabStore.closeTabAndBack(route.path)
+  router.push('/inventory/stock-loss')
+}
 
 onMounted(async () => {
   try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] }
   lossReasons.value = codeLabelOptions(LossReasonLabel) // 2026-09-14：前端枚举映射（后端接口已只回 code）
-  if (isEdit.value) loadDetail()
+  if (isEdit.value) await loadDetail()
   else items.value = [newItem()]
+  // 数据加载完成 ⇒ 建立"未保存"基线（必须在加载之后，否则会把回填误判成用户修改）
+  takeBaseline()
 })
 </script>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 12px; }
-.card-header { display: flex; align-items: center; justify-content: space-between; }
-.title { font-weight: 600; }
+/* 页头已统一到全局骨架（PageShell + styles/page.css） */
 .head-form { display: flex; flex-wrap: wrap; }
 .head-form :deep(.el-form-item) { margin-bottom: 8px; }
 .warn { color: #f56c6c; font-size: var(--app-font-xs); line-height: 16px; }
