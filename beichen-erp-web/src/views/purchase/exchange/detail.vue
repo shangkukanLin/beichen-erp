@@ -1,13 +1,19 @@
 <template>
-  <div class="app-container">
-    <el-card shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span>采购换货单详情</span>
-          <el-tag :type="statusTagType(head.status)">{{ statusLabel(head.status) }}</el-tag>
-        </div>
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作 -->
+  <PageShell title="采购换货单详情" back-fallback="/inventory/purchase-exchange">
+    <template #sub>
+      <el-tag :type="statusTagType(head.status)">{{ statusLabel(head.status) }}</el-tag>
+    </template>
+    <template #actions>
+      <template v-if="head.status === DocStatus.DRAFT">
+        <el-button type="primary" @click="goEdit">编辑</el-button>
+        <el-button v-perm="'purchase:exchange:audit'" type="success" :loading="acting" @click="doAudit">审核</el-button>
+        <el-button v-perm="'purchase:exchange:cancel'" type="danger" :loading="acting" @click="doCancel">作废</el-button>
       </template>
+      <el-button v-if="head.status === DocStatus.AUDITED" v-perm="'purchase:exchange:unaudit'" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
+    </template>
 
+    <el-card shadow="never">
       <el-descriptions :column="3" border>
         <el-descriptions-item label="换货单号">{{ head.code }}</el-descriptions-item>
         <el-descriptions-item label="供货商">{{ head.supplierName || '—' }}</el-descriptions-item>
@@ -107,17 +113,8 @@
         </el-table-column>
       </el-table>
 
-      <div class="footer">
-        <el-button @click="goBack">返回</el-button>
-        <template v-if="head.status === DocStatus.DRAFT">
-          <el-button type="primary" @click="goEdit">编辑</el-button>
-          <el-button v-perm="'purchase:exchange:audit'" type="success" :loading="acting" @click="doAudit">审核</el-button>
-          <el-button v-perm="'purchase:exchange:cancel'" type="danger" :loading="acting" @click="doCancel">作废</el-button>
-        </template>
-        <el-button v-if="head.status === DocStatus.AUDITED" v-perm="'purchase:exchange:unaudit'" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
-      </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -131,6 +128,8 @@ import {
 import {
   getPurchaseExchange, auditPurchaseExchange, unAuditPurchaseExchange, cancelPurchaseExchange,
 } from '@/api/purchase'
+
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -280,6 +279,5 @@ onActivated(() => { loadDetail(Number(route.params.id)) })
 </script>
 
 <style scoped>
-.card-header { display: flex; align-items: center; justify-content: space-between; }
-.footer { margin-top: 20px; text-align: right; }
+/* 页头/操作区已统一到全局骨架（PageShell + styles/page.css） */
 </style>

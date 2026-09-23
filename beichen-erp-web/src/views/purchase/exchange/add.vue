@@ -1,10 +1,12 @@
 <template>
-  <div class="app-container">
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（保存） -->
+  <PageShell :title="isEdit ? '编辑采购换货单' : '新增采购换货单'" back-fallback="/inventory/purchase-exchange">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
+    </template>
+
     <el-card shadow="never">
-      <template #header>
-        <span>{{ isEdit ? '编辑采购换货单' : '新增采购换货单' }}</span>
-      </template>
-      <el-form :model="form" label-width="110px" ref="formRef">
+      <el-form :model="form" label-width="var(--app-label-width)" ref="formRef">
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="供货商" required>
@@ -177,12 +179,8 @@
         付费方向：<b>我方付给供货商</b> ⇒ 审核后额外生成一条正向应付（我方欠供货商 +{{ chargeTotal.toFixed(2) }}）
       </div>
 
-      <div class="footer">
-        <el-button @click="goBack">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
-      </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -192,6 +190,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 import {
   ProductQualityType, ProductQualityTypeLabel,
   WarehouseType, WarehouseCategory, PurchaseChargeType, PurchaseChargeTypeLabel,
@@ -207,6 +208,7 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const tabStore = useTabStore()
 const formRef = ref()
 const saving = ref(false)
 const isEdit = ref(false)
@@ -228,6 +230,11 @@ const form = reactive({
   remark: '',
 })
 const items = ref<any[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 /** 无单换货手工加行时的产品候选（远程搜） */
 const productOptions = ref<any[]>([])
 
@@ -469,11 +476,16 @@ async function submit() {
       await updatePurchaseExchange(form.id!, body)
       ElMessage.success('保存成功')
       sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1')
+      // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签
+      markClean()
+      tabStore.closeTabAndBack(route.path)
       router.push(`/inventory/purchase-exchange/detail/${form.id}`)
     } else {
       await createPurchaseExchange(body)
       ElMessage.success('新增成功')
       sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1')
+      markClean()
+      tabStore.closeTabAndBack(route.path)
       router.push('/inventory/purchase-exchange')
     }
   } catch (e: any) {
@@ -484,6 +496,9 @@ async function submit() {
 }
 
 function goBack() {
+  // 取消返回：先清脏标记（否则离开会被未保存确认拦住），再关掉本页签
+  markClean()
+  tabStore.closeTabAndBack(route.path)
   if (isEdit.value) router.push(`/inventory/purchase-exchange/detail/${form.id}`)
   else router.push('/inventory/purchase-exchange')
 }
@@ -493,15 +508,18 @@ onMounted(async () => {
   if (id !== undefined && id !== '') {
     isEdit.value = true
     await loadEdit(Number(id))
+    takeBaseline()
     return
   }
   const poId = route.query.fromOrder
   if (poId !== undefined && poId !== '') {
     await initFromPurchaseOrder(Number(poId))
   }
+  // 初始化/预填完成 ⇒ 建立"未保存"基线（必须在加载之后，否则会把回填误判成用户修改）
+  takeBaseline()
 })
 </script>
 
 <style scoped>
-.footer { margin-top: 20px; text-align: right; }
+/* 页头/底部操作条已统一到全局骨架（PageShell + styles/page.css） */
 </style>
