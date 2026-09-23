@@ -1,5 +1,5 @@
 <template>
-  <div class="page">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
@@ -247,7 +247,7 @@ onMounted(async () => { await loadWarehouses(); loadData() })
 
 <style scoped>
 .page { display: flex; flex-direction: column; gap: 12px; }
-.query-card :deep(.el-card__body), .table-card :deep(.el-card__body) { padding: 16px; }
+/* 卡片内边距已统一到全局（styles/page.css 的 .table-card .el-card__body） */
 .query-form { align-items: center; }
-.pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
+/* 分页样式已统一到全局（styles/page.css 的 .pagination） */
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <div class="page">
+  <div class="page-list">
     <!-- 查询区用 4 列固定栅格（与物料收货页一致）：行距 16 / 列距 24，控件填满格子，不随窗口流式换行 -->
     <el-card shadow="never" class="query-card">
       <el-form :inline="true" :model="query" label-width="84px" class="query-form">
@@ -27,7 +27,7 @@
         <div class="query-actions">
           <el-button type="primary" :icon="'Search'" @click="doQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="resetQuery">重置</el-button>
-          <el-button type="primary" :icon="'Plus'" @click="goAdd">新增报损单</el-button>
+          <el-button type="success" :icon="'Plus'" @click="goAdd">新增</el-button>
         </div>
       </el-form>
     </el-card>
@@ -195,8 +195,8 @@ onActivated(() => {
 
 <style scoped>
 .page { display: flex; flex-direction: column; gap: 12px; }
-.query-card :deep(.el-card__body), .table-card :deep(.el-card__body) { padding: 16px; }
-.pagination { margin-top: 16px; display: flex; justify-content: flex-end; }
+/* 卡片内边距已统一到全局（styles/page.css 的 .table-card .el-card__body） */
+/* 分页样式已统一到全局（styles/page.css 的 .pagination） */
 
 /* 查询区：4 列 Grid 栅格，列距 24px / 行距 16px 固定 */
 .query-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 24px; }

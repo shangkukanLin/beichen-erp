@@ -90,6 +90,32 @@
 /* 详情区统一 3 列（改造前 2/3/4 混用）：由各页 el-descriptions 显式写 :column="3" 落实，
    这里不做强制（避免影响个别确实需要 2/4 列的特殊页面）。 */
 
+/* ==========================================================================
+   列表页统一骨架（2026-09-23 第二轮）
+   —— **复用** index.css 里已有的全局筛选卡约定（.query-card > .query-bar > .query-form + .toolbar，
+      用 grid 保证"表单靠左 / 按钮组靠右"同一行），不另起一套。
+   —— 这里只补改造前"每个列表页各写各的"三件事：根容器、表格卡内边距、分页右对齐。
+      统一结构：.page-list > 「.query-card（筛选） + .table-card（表格+分页）」
+   ========================================================================== */
+
+.page-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-base);
+}
+
+/* 表格卡内边距（替代各页自写的 :deep(.el-card__body) { padding:16px }） */
+.table-card .el-card__body {
+  padding: var(--app-space-base);
+}
+
+/* 分页统一右下对齐 + 上间距（替代各页自写的 .pagination） */
+.pagination {
+  margin-top: var(--app-space-base);
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* ---------- 移动端：内容区内边距收窄（与 index.css 的 layout-main 保持一致） ---------- */
 @media (max-width: 768px) {
   .page-header {

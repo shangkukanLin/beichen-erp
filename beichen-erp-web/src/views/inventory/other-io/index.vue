@@ -67,7 +67,7 @@ onMounted(async ()=>{ await loadWarehouses(); loadData() })
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query">
@@ -105,7 +105,12 @@ onMounted(async ()=>{ await loadWarehouses(); loadData() })
           </template>
         </el-table-column>
       </el-table>
-      <div style="margin-top:16px;display:flex;justify-content:flex-end"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleQuery"/></div>
+      <div class="pagination">
+        <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper" background
+          @size-change="handleQuery" @current-change="loadData" />
+      </div>
     </el-card>
   </div>
 </template>

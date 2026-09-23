@@ -109,7 +109,9 @@ onActivated(() => {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page-list">
+    <!-- 列表页统一骨架（2026-09-23 第二轮）：筛选卡(.query-card) + 表格卡(.table-card)，
+         筛选行沿用 index.css 的全局约定，页面不再自写样式 -->
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
         <el-form :inline="true" :model="query" class="query-form">
@@ -188,5 +190,6 @@ onActivated(() => {
 </template>
 
 <style scoped>
-.pagination { margin-top: 12px; display: flex; justify-content: flex-end; }
+/* 列表页样式已统一到全局（styles/page.css 的 .page-list/.table-card/.pagination
+   + index.css 的 .query-card/.query-bar/.query-form/.toolbar），本页不再自写 */
 </style>
