@@ -84,7 +84,7 @@ async function handleCancel(row: any) {
 </script>
 
 <template>
-  <div>
+  <div class="page-list">
     <el-card shadow="never">
       <el-form :inline="true" @submit.prevent>
         <el-form-item label="单号">
@@ -100,7 +100,7 @@ async function handleCancel(row: any) {
         <el-form-item>
           <el-button type="primary" @click="handleQuery">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="goAdd">新增采购换货单</el-button>
+          <el-button type="success" :icon="'Plus'" @click="goAdd">新增</el-button>
         </el-form-item>
       </el-form>
 
@@ -154,9 +154,12 @@ async function handleCancel(row: any) {
         </el-table-column>
       </el-table>
 
-      <el-pagination style="margin-top:12px;justify-content:flex-end" layout="total, sizes, prev, pager, next"
-        :total="pagination.total" v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
-        @size-change="handleSizeChange" @current-change="handleCurrentChange" />
+      <div class="pagination">
+        <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper" background
+          @size-change="handleSizeChange" @current-change="handleCurrentChange" />
+      </div>
     </el-card>
   </div>
 </template>

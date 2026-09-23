@@ -236,7 +236,7 @@ onMounted(() => { loadLedger() })
 
 <template>
   <!-- 一页一张卡片（家规）：页签 → 筛选行（含新增按钮）→ 业务提示 → 表格 → 分页 -->
-  <div>
+  <div class="page-list">
     <el-card shadow="never">
       <!-- 页签：加工退货 = 红冲收货台账（有单+无单一张表）；维修退货 = 售后送修（送修/返回/结案）。
            ⚠️ 上一代独立加工退货单不再单独列页签（用户口径「不要了」）⇒ 存量单据走详情页 URL 直达。 -->
@@ -322,8 +322,11 @@ onMounted(() => { loadLedger() })
             </template>
           </el-table-column>
         </el-table>
-        <div style="margin-top:16px;display:flex;justify-content:flex-end">
-          <el-pagination v-model:current-page="ledgerPage.pageNum" v-model:page-size="ledgerPage.pageSize" :total="ledgerPage.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadLedger" @size-change="ledgerSearch" />
+        <div class="pagination">
+          <el-pagination v-model:current-page="ledgerPage.pageNum" v-model:page-size="ledgerPage.pageSize"
+            :page-sizes="[10, 20, 50, 100]" :total="ledgerPage.total"
+            layout="total, sizes, prev, pager, next, jumper" background
+            @size-change="ledgerSearch" @current-change="loadLedger" />
         </div>
       </template>
 
@@ -384,8 +387,11 @@ onMounted(() => { loadLedger() })
             </template>
           </el-table-column>
         </el-table>
-        <div style="margin-top:16px;display:flex;justify-content:flex-end">
-          <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleSearch" />
+        <div class="pagination">
+          <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+            :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+            layout="total, sizes, prev, pager, next, jumper" background
+            @size-change="handleSearch" @current-change="loadData" />
         </div>
       </template>
     </el-card>

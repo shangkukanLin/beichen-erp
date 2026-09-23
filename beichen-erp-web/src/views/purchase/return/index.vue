@@ -1,6 +1,6 @@
 <template>
-  <div class="page">
-    <el-card class="query-card">
+  <div class="page-list">
+    <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" class="query-form">
         <el-form-item label="单号">
@@ -23,7 +23,7 @@
       </div>
     </el-card>
 
-    <el-card style="margin-top:16px">
+    <el-card shadow="never" class="table-card">
       <el-table :data="list" border stripe v-loading="loading" row-key="id" @row-click="handleDetail">
         <el-table-column prop="returnDate" label="退货日期" width="100" align="center" />
         <el-table-column prop="code" label="退货单号" width="150" />
@@ -50,16 +50,12 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-pagination
-        style="margin-top:16px;justify-content:flex-end"
-        v-model:current-page="pagination.pageNum"
-        v-model:page-size="pagination.pageSize"
-        :page-sizes="[10,20,50]"
-        :total="pagination.total"
-        layout="total,sizes,prev,pager,next"
-        @size-change="loadData"
-        @current-change="loadData"
-      />
+      <div class="pagination">
+        <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper" background
+          @size-change="loadData" @current-change="loadData" />
+      </div>
     </el-card>
   </div>
 </template>
@@ -174,7 +170,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page { padding: 16px; }
+/* 根容器已统一到全局（styles/page.css 的 .page-list） */
 .query-form { align-items: center; }
-.query-actions { display: flex; justify-content: center; align-items: center; margin-top: 12px; }
+/* .query-actions 已删除：模板中无人引用（按钮组用的是全局 .toolbar） */
 </style>
