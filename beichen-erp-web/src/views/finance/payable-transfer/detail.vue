@@ -6,6 +6,7 @@ import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag, sourceBillTypeLabel } from '@/api/enums'
 import { TYPE_MAP, TYPE_TAG } from '@/constants/supplier'
 import { PAYABLE_TRANSFER_DIRTY_KEY } from '@/api/enums'
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -54,20 +55,16 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p">
-    <el-card v-loading="loading" shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span class="title">转应收单详情</span>
-          <div>
-            <el-button :icon="'ArrowLeft'" @click="router.push('/finance/payable-transfer')">返回</el-button>
-            <el-button v-if="d.status === DocStatus.DRAFT" type="primary" @click="router.push(`/finance/payable-transfer/edit/${id}`)">编辑</el-button>
-            <el-button v-if="d.status === DocStatus.DRAFT" type="success" @click="onAudit">审核</el-button>
-            <el-button v-if="d.status === DocStatus.AUDITED" type="warning" @click="onUnAudit">反审核</el-button>
-            <el-button v-if="d.status === DocStatus.DRAFT" type="danger" @click="onCancel">作废</el-button>
-          </div>
-        </div>
-      </template>
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作 -->
+  <PageShell :loading="loading" back-fallback="/finance/payable-transfer">
+    <template #actions>
+      <el-button v-if="d.status === DocStatus.DRAFT" type="primary" @click="router.push(`/finance/payable-transfer/edit/${id}`)">编辑</el-button>
+      <el-button v-if="d.status === DocStatus.DRAFT" type="success" @click="onAudit">审核</el-button>
+      <el-button v-if="d.status === DocStatus.AUDITED" type="warning" @click="onUnAudit">反审核</el-button>
+      <el-button v-if="d.status === DocStatus.DRAFT" type="danger" @click="onCancel">作废</el-button>
+    </template>
+
+    <el-card shadow="never">
 
       <el-descriptions :column="2" border>
         <el-descriptions-item label="转应收单号">{{ d.code || '—' }}</el-descriptions-item>
@@ -90,11 +87,9 @@ onMounted(load)
         <el-descriptions-item label="备注">{{ d.remark || '—' }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.p { display: flex; flex-direction: column; gap: 12px; }
-.card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.title { font-weight: 600; }
+/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .p / .card-header / .title 已删除 */
 </style>

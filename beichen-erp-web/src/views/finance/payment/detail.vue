@@ -7,6 +7,7 @@ import { DocStatus, DocStatusLabel } from '@/api/enums'
 import { TYPE_MAP, TYPE_TAG } from '@/constants/supplier'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -53,12 +54,12 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：返回交骨架（原「返回」按钮已删）；上传凭证按钮留在卡内 -->
+  <PageShell :loading="loading" back-fallback="/finance/payment">
     <el-card shadow="never">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:600">付款单详情 — {{ detail.code || '' }}</span>
-          <el-button @click="router.back()">返回</el-button>
         </div>
       </template>
       <el-descriptions :column="2" border>
@@ -98,7 +99,7 @@ onMounted(load)
         <el-table-column prop="thisAmount" label="核销金额" width="130" align="right"><template #default="{row}">{{ fmt(row.thisAmount) }}</template></el-table-column>
       </el-table>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
-<style scoped>.p{display:flex;flex-direction:column;gap:12px}.upload-btn{display:inline-flex}</style>
+<style scoped>/* 根容器已统一到全局骨架（PageShell）；原 .p 局部样式已删除（.upload-btn 仍在用，保留） */.upload-btn{display:inline-flex}</style>

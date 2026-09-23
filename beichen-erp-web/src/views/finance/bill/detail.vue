@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBill, getBillItems, auditBill, unAuditBill, cancelBill, type FinanceBill, type FinanceBillItem } from '@/api/finance'
 import { BillType, BillTypeLabel, sourceBillTypeLabel, FINANCE_BILL_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute(); const router = useRouter()
 // 用 computed 取路由参数：keep-alive 会复用组件，从账单 A 跳到 B 时 route.params.id 会变
@@ -60,18 +61,18 @@ onActivated(() => { loadDetail() })
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
-    <el-card shadow="never" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作 -->
+  <PageShell :loading="loading" back-fallback="/finance/bill">
+    <template #actions>
+      <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
+      <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
+      <el-button type="danger" size="small" v-if="detail.status!==DocStatus.CANCELLED" @click="handleCancel">作废</el-button>
+    </template>
+
+    <el-card shadow="never">
       <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">账单信息</span>
-          <div style="display:flex;align-items:center;gap:8px">
-            <el-tag :type="statusTag(detail.status)" size="small">{{ statusLabel(detail.status) }}</el-tag>
-            <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
-            <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
-            <el-button type="danger" size="small" v-if="detail.status!==DocStatus.CANCELLED" @click="handleCancel">作废</el-button>
-          </div>
-        </div>
+        <span style="font-weight:600">账单信息</span>
+        <el-tag :type="statusTag(detail.status)" size="small" style="margin-left:8px">{{ statusLabel(detail.status) }}</el-tag>
       </template>
 
       <el-descriptions :column="3" border>
@@ -116,8 +117,6 @@ onActivated(() => { loadDetail() })
       </el-table>
     </el-card>
 
-    <div style="display:flex;gap:12px;justify-content:center">
-      <el-button @click="router.push('/finance/bill')">返回列表</el-button>
-    </div>
-  </div>
+    <!-- 原「返回列表」按钮已删除：返回统一由骨架提供 -->
+  </PageShell>
 </template>

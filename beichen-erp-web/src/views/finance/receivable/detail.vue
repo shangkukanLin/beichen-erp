@@ -5,6 +5,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { SettlementStatus, SettlementStatusLabel, sourceBillTypeLabel, SubjectType } from '@/api/enums'
 import request from '@/utils/request'
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,12 +36,12 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：返回交骨架（原「返回」按钮已删）；本页只读无操作 -->
+  <PageShell :loading="loading" back-fallback="/finance/receivable">
     <el-card shadow="never">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:600">应收详情 — {{ detail.billNo || '' }}</span>
-          <el-button @click="router.back()">返回</el-button>
         </div>
       </template>
       <el-descriptions :column="2" border>
@@ -57,5 +58,5 @@ onMounted(load)
         <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
-  </div>
+  </PageShell>
 </template>
