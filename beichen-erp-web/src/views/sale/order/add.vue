@@ -293,6 +293,11 @@ onMounted(async () => {
 <template>
   <!-- 统一骨架（2026-09-23）：页头标题 + 右上「← 返回」由 PageShell 提供；内容分块用 SectionCard -->
   <PageShell :title="isEdit ? '编辑销售单' : '新增销售单'" :loading="pageLoading" back-fallback="/inventory/sale">
+    <!-- 主操作「保存」放页头标题左边（2026-09-23 用户口径）；原底部「取消」已并入页头右上「返回」 -->
+    <template #leading>
+      <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
+    </template>
+
     <SectionCard title="基本信息">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="var(--app-label-width)">
         <el-row :gutter="16">
@@ -434,11 +439,6 @@ onMounted(async () => {
           </template>
         </div>
     </SectionCard>
-
-    <!-- 底部操作条：统一右对齐，主按钮（保存）在最右；原「取消」已并入页头右上「返回」 -->
-    <template #footer>
-      <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
-    </template>
 
     <!-- 库存不足确认弹窗 -->
     <el-dialog v-model="stockCheckVisible" title="库存不足提醒" width="var(--app-dialog-md)" :close-on-click-modal="false">

@@ -61,7 +61,10 @@ $title = Txt '.page-header__title'
 Ok2 ($title -ne 'NOEL' -and $title.Length -gt 0) ('page header shows a title: ' + $title)
 Write-Host ('back buttons in header = ' + (CountBtnIn $BACK '.page-header__ops') + ' / header ops exists = ' + (EvalJs "String(!!document.querySelector('.page-header__ops'))"))
 Ok2 ((CountBtnIn $BACK '.page-header__ops') -eq '1') 'exactly one back button, inside the header action area'
-Ok2 ((CountBtnIn $SAVE '.page-footer') -eq '1') 'the primary action (save) sits in the unified footer bar'
+Ok2 ((CountBtnIn $SAVE '.page-header__leading') -eq '1') 'the primary action (save) sits in the header, left of the title'
+# and it really IS left of the title (DOM order inside the header)
+$order = EvalJs "(()=>{const h=document.querySelector('.page-header');if(!h)return 'NOHDR';return [...h.querySelectorAll('.page-header__leading,.page-header__title')].map(e=>(e.className||'').indexOf('leading')>=0?'leading':'title').join('>')})()"
+Ok2 ($order -eq 'leading>title') ('the save block comes before the title in the header (' + $order + ')')
 Ok2 ((BodyHas $BACK_LIST) -eq 'False') 'the old "back to list" wording is gone'
 
 Step '2) CLEAN page: back closes the current tab and returns to the list'

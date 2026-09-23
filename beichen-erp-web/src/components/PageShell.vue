@@ -6,9 +6,11 @@ import { usePageBack } from '@/composables/usePageBack'
 /**
  * 次级页面统一骨架（2026-09-23 用户口径：统一模板，不只是统一返回按钮）。
  *
- * 骨架 = 页头（左：页面标题 + #sub 副信息；右：#actions 业务动作 + 固定最右的「← 返回」）
+ * 骨架 = 页头（左：#leading 主操作（**标题左边**，如「保存」）+ 页面标题 + #sub 副信息；
+ *                  右：#actions 业务动作 + 固定最右的「← 返回」）
  *        + 内容区（默认插槽，一般放若干 <SectionCard>）
- *        + 底部操作条（#footer 有内容才渲染，右对齐，主按钮放最右）
+ *        + 底部操作条（#footer，可选，右对齐；按 2026-09-23 用户口径主操作默认放页头左侧，
+ *          仅个别页面需要底部条时使用）
  *
  * 改造前的问题：69 个次级页面根容器 class 有 40+ 种、页头一半页面没有、返回按钮位置/文案各写各的。
  * 现在统一走本组件；页内内容布局不动，仅换外壳 ⇒ 可逐页增量改造、可回退。
@@ -39,6 +41,10 @@ const pageTitle = computed(() => props.title || (route.meta.title as string) || 
   <div class="page-shell" v-loading="loading">
     <div class="page-header">
       <div class="page-header__left">
+        <!-- 主操作（保存/提交）固定放标题左边（2026-09-23 用户口径） -->
+        <div v-if="$slots.leading" class="page-header__leading">
+          <slot name="leading" />
+        </div>
         <span class="page-header__title">{{ pageTitle }}</span>
         <slot name="sub" />
       </div>

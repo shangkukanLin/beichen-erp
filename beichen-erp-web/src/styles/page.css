@@ -32,6 +32,14 @@
   min-width: 0;
 }
 
+/* 标题左侧的主操作区（保存/提交） */
+.page-header__leading {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-sm);
+  flex-shrink: 0;
+}
+
 .page-header__title {
   font-size: var(--app-font-md);
   font-weight: 600;
