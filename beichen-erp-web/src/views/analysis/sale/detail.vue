@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
+import PageShell from '@/components/PageShell.vue'
 
 /**
  * 销售分析钻取：某产品 / 仓库在统计区间内的销售单明细。
@@ -40,12 +41,10 @@ onMounted(() => { loadData() })
 onActivated(() => { loadData() })
 </script>
 <template>
-  <div class="p">
-    <div class="toolbar">
-      <el-button :icon="'Back'" size="small" @click="router.push('/analysis/sale')">返回</el-button>
-      <span class="title">{{ dimName || '销售' }}单据明细</span>
-      <span class="dim">{{ data.start }} ~ {{ data.end }}｜共 {{ data.records?.length || 0 }} 单</span>
-    </div>
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：标题与区间信息移入骨架页头；返回交骨架；本页只读 -->
+  <PageShell :title="`${dimName || '销售'}单据明细`" back-fallback="/analysis/sale">
+    <template #sub><span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ data.start }} ~ {{ data.end }}｜共 {{ data.records?.length || 0 }} 单</span></template>
+
     <el-table v-loading="loading" :data="data.records" border stripe size="small" show-summary :summary-method="summaries">
       <el-table-column label="单号" min-width="150">
         <template #default="{ row }">
@@ -66,11 +65,8 @@ onActivated(() => { loadData() })
         <template #default="{ row }">{{ row.remark || '—' }}</template>
       </el-table-column>
     </el-table>
-  </div>
+  </PageShell>
 </template>
 <style scoped>
-.p{display:flex;flex-direction:column}
-.toolbar{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-.title{font-weight:600;font-size:var(--app-font-md)}
-.dim{font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
+/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .p/.toolbar/.title/.dim 已删除 */
 </style>

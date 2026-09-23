@@ -10,6 +10,8 @@ import { addProject, checkProjectProductName, type ProjectDTO } from '@/api/syst
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import request from '@/utils/request'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 const router = useRouter()
 const route = useRoute()
@@ -91,6 +93,11 @@ function fetchMaterialsByType(kw: string, materialTypeId?: number) {
   return request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw, materialTypeId: materialTypeId || undefined } })
 }
 const form = reactive<ProjectDTO>(defForm())
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form }))
 
 function resetForm() {
   Object.assign(form, defForm())
@@ -174,7 +181,9 @@ async function handleSubmit() {
     await addProject(form as any, linkExistingProductId)
     ElMessage.success('项目创建成功'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
     resetForm()
-    tabStore.removeTab(route.path)
+    // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回列表
+    markClean()
+    tabStore.closeTabAndBack(route.path)
     router.replace('/dev/project')
   } catch (e: any) { ElMessage.error('项目创建失败: ' + (e?.message || '未知错误')) }
   saving.value = false
@@ -190,22 +199,28 @@ function onNameBlur() {
 
 // 顶栏"刷新数据"：重新加载方案供应商与物料类型
 async function handleRefreshData() { await Promise.all([loadData(), loadMaterialTypeIds()]) }
-onMounted(() => {
+onMounted(async () => {
   loadData()
   loadMaterialTypeIds()
   // 需求 1：进入立项页即预填一个 NS- 打头的产品SKU（可修改）
-  prefillProductSku()
+  await prefillProductSku()   // 必须等预填完成再建基线，否则预填的 SKU 会被误判成用户修改
   window.addEventListener('refresh:dropdown-data', handleRefreshData)
+  takeBaseline()
 })
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 </script>
 
 <template>
-  <div class="add-page">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（创建项目） -->
+  <PageShell back-fallback="/dev/project">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="handleSubmit">创建项目</el-button>
+    </template>
+
     <!-- 基础信息 -->
     <el-card shadow="never">
       <template #header><span style="font-weight:600">基础信息</span></template>
-      <el-form :model="form" label-width="100px">
+      <el-form :model="form" label-width="var(--app-label-width)">
         <!-- 2026-09-21 布局：行1 项目名称|产品SKU|产品名称、行2 规格|适配机型|品牌、
              行3 显示方案|触摸方案|打样工厂（前两个在"原配"时隐藏）、行4 委外工厂 -->
         <el-row :gutter="16">
@@ -273,7 +288,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
     <!-- 时间节点 -->
     <el-card shadow="never" style="margin-top:12px">
       <template #header><span style="font-weight:600">时间节点</span></template>
-      <el-form :model="form" label-width="100px">
+      <el-form :model="form" label-width="var(--app-label-width)">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="立项日期"><el-input v-model="form.startDate" type="date" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="预计完成"><el-input v-model="form.expectedEndDate" type="date" /></el-form-item></el-col>
@@ -282,14 +297,10 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       </el-form>
     </el-card>
 
-    <div style="margin-top:16px">
-      <el-button type="primary" size="large" :loading="saving" @click="handleSubmit">创建项目</el-button>
-      <el-button size="large" @click="goBack">取消</el-button>
-    </div>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.add-page { display:flex; flex-direction:column; gap:12px; }
+/* 页头/底部操作条已统一到全局骨架（PageShell + styles/page.css）；原 .add-page 局部样式已删除 */
 
 </style>

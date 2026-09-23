@@ -2,11 +2,11 @@
 // BOM 历史快照（2026-09-23 用户要求：原 900px「BOM 历史快照」弹框改为独立页面）
 // —— 下加工单时按「产品 + 研发BOM版本 + 明细内容」生成/复用快照，本页回看历史与流向（只读）。
 import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
+import PageShell from '@/components/PageShell.vue'
 import { getProjectBomSnapshots } from '@/api/system'
 
 const route = useRoute()
-const router = useRouter()
 const loading = ref(false)
 const list = ref<any[]>([])
 
@@ -26,14 +26,11 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：标题交骨架（meta.title = BOM 历史快照）、返回交骨架；本页只读 -->
+  <PageShell :loading="loading" back-fallback="/dev/project">
     <el-card shadow="never">
-      <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">BOM 历史快照</span>
-          <el-button @click="router.back()">返回</el-button>
-        </div>
-      </template>
+      <!-- 卡片页头已删除：标题与旧「返回」都交骨架统一处理 -->
+
 
       <div style="margin-bottom:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
         下加工单时按「产品 + 研发BOM版本 + 明细内容」生成：研发BOM没变就沿用上一份快照（多张加工单共享），有变化才新增。
@@ -66,7 +63,7 @@ onMounted(load)
         </el-table-column>
       </el-table>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
-<style scoped>.p{display:flex;flex-direction:column;gap:12px}</style>
+<style scoped>/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .p 局部样式已删除 */</style>

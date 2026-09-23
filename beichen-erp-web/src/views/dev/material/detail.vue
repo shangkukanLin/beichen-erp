@@ -5,6 +5,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { WarehouseCategory, WarehouseCategoryLabel, MaterialPlaceType, MaterialPlaceTypeLabel, DevMaterialStatus, DevMaterialStatusLabel, DevMaterialTypeLabel, codeLabelOptions, DEV_MATERIAL_DIRTY_KEY } from '@/api/enums'
 import request from '@/utils/request'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 const route = useRoute()
 const materialId = Number(route.params.id)
@@ -17,6 +19,12 @@ const material = reactive<any>({
 const materialTypeOptions = ref<{ code: string; label: string }[]>([])
 const materialStatusOptions = Object.entries(DevMaterialStatusLabel).map(([value, label]) => ({ value, label }))
 const saving = ref(false)
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页可就地改物料基础信息并保存 ⇒ 属"能改数据"，接守卫。
+ * 位置流水的新增/编辑走弹窗（模态），无需纳入。
+ * ⚠️ 必须写在 material 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({ material }))
 
 async function loadMaterialDetail() {
   try {
@@ -24,6 +32,8 @@ async function loadMaterialDetail() {
     if (res) Object.assign(material, res)
     else ElMessage.warning('未找到该物料')
   } catch (e: any) { ElMessage.error('加载物料失败: ' + (e?.message || '')) }
+  // 数据加载完成 ⇒ 重建"未保存"基线（每次进入都会重跑本函数 ⇒ 自动重置，不误报）
+  takeBaseline()
 }
 
 async function handleSaveMaterial() {
@@ -38,6 +48,7 @@ async function handleSaveMaterial() {
     }
     await request.put(`/dev/purchase-item/${material.id}`, payload)
     ElMessage.success('已保存'); sessionStorage.setItem(DEV_MATERIAL_DIRTY_KEY, '1')
+    takeBaseline()   // 保存成功 ⇒ 重建基线（本页保存不重跑 loadMaterialDetail），避免离开时误报"未保存"
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '')) } finally { saving.value = false }
 }
 
@@ -182,11 +193,15 @@ function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMa
 </script>
 
 <template>
-  <div class="material-detail-page">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（保存） -->
+  <PageShell back-fallback="/dev/material">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="handleSaveMaterial">保存</el-button>
+    </template>
     <!-- 物料基础信息 -->
     <el-card shadow="never">
       <template #header><span style="font-weight:600">基础信息</span></template>
-      <el-form :model="material" label-width="90px" size="default">
+      <el-form :model="material" label-width="var(--app-label-width)" size="default">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="物料名称"><el-input v-model="material.name" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="类型">
@@ -213,7 +228,6 @@ function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMa
           </el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="material.remark" type="textarea" :rows="2" /></el-form-item></el-col>
         </el-row>
-        <el-button type="primary" :loading="saving" @click="handleSaveMaterial">保存</el-button>
       </el-form>
     </el-card>
 
@@ -258,7 +272,7 @@ function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMa
 
     <!-- 新增/编辑流转记录弹窗 -->
     <el-dialog v-model="flowDialogVisible" :title="isFlowEdit ? '编辑流转记录' : '新增流转记录'" width="560px">
-      <el-form :model="flowForm" label-width="90px">
+      <el-form :model="flowForm" label-width="var(--app-label-width)">
         <el-form-item label="位置类型">
           <el-select v-model="flowForm.placeType" style="width:100%" @change="() => { flowForm.placeId = undefined }">
             <el-option v-for="o in placeTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
@@ -310,11 +324,11 @@ function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMa
         <el-button type="primary" @click="handleFlowSubmit">确定</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.material-detail-page { display:flex; flex-direction:column; gap:12px; }
+/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .material-detail-page 已删除 */
 .flow-item { padding:4px 0; }
 .flow-item-title { display:flex; align-items:center; }
 .flow-item-remark { margin-top:6px; color:var(--app-text-secondary); font-size:var(--app-font-base); }
