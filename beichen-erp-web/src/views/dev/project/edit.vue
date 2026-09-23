@@ -15,6 +15,8 @@ import {
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import request from '@/utils/request'
 import MaterialFormDialog from '@/components/dev/MaterialFormDialog.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 const route = useRoute()
 const router = useRouter()
@@ -88,6 +90,12 @@ async function loadFactories() {
   const r: any = await fetchFactorySuppliers(''); factoryOptions.value = (r?.records || []).map((s: any) => ({ id: s.id, name: s.name }))
 }
 
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页各 Tab 可就地改项目信息/阶段/BOM/BUG/图纸 ⇒ 属"能改数据"，接守卫。
+ * ⚠️ 必须写在 form 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({ form }))
+
 async function loadProject() {
   const p = await getProject(projectId)
   Object.assign(form, {
@@ -111,6 +119,8 @@ async function loadProject() {
   skuOnLoad.value = p.productSku || ''
   specOnLoad.value = p.specType || ''
   await loadConfigNames()
+  // 数据加载完成 ⇒ 重建"未保存"基线（保存成功后也会重跑本函数 ⇒ 自动重置，不误报）
+  takeBaseline()
 }
 
 // 改配信息物料名称回显
@@ -568,14 +578,16 @@ function onNameBlur() {
 </script>
 
 <template>
-  <div class="edit-page">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta)；
+       本页是多 Tab 页，各 Tab 内的保存/完成按钮作用域是该 Tab ⇒ 保留原位置 -->
+  <PageShell back-fallback="/dev/project">
     <el-tabs v-model="activeTab">
       <!-- 项目信息 Tab -->
       <el-tab-pane label="项目信息" name="project">
         <!-- 基础信息 -->
         <el-card shadow="never">
           <template #header><span style="font-weight:600">基础信息</span></template>
-          <el-form :model="form" label-width="100px" size="default">
+          <el-form :model="form" label-width="var(--app-label-width)" size="default">
             <el-row :gutter="16">
               <el-col :span="8"><el-form-item label="项目编码"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
               <el-col :span="8"><el-form-item required label="项目名称"><el-input v-model="form.name" @blur="onNameBlur" /></el-form-item></el-col>
@@ -926,12 +938,12 @@ function onNameBlur() {
 
     <!-- 项目物料弹窗（共用组件，自动锁定当前项目） -->
     <MaterialFormDialog ref="materialDialog" :default-project-id="projectId" @saved="loadDevMaterials" />
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.edit-page { display:flex; flex-direction:column; gap:12px; }
-.page-header { display:flex; align-items:center; gap:16px; padding-bottom:8px; }
+/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .edit-page / .page-header 已删除
+   （.page-header 与全局类同名，留着会双重生效；模板里也早已没有该 class 的节点） */
 
 .drop-zone { position:relative; border:2px dashed #dcdfe6; border-radius:8px; padding:32px; text-align:center; transition:all .3s; cursor:pointer }
 .drop-zone:hover { border-color:var(--app-color-primary); background:#ecf5ff }

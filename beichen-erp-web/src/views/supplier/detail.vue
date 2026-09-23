@@ -19,6 +19,8 @@ const saving = ref(false)
 const activeTab = ref('info')
 
 import { TYPE_OPTIONS, TYPE_MAP } from '@/constants/supplier'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 // 供货商(仅product) / 供应商(方案商·加工厂·辅料商)：先按入口路径判定，加载后再按实际类型校正
 // 供货商只供应产品，无「供应物料」页签
 const isVendor = ref(route.query.mode === 'vendor' || route.path.startsWith('/outsource/supplier'))
@@ -80,6 +82,7 @@ async function saveMaterials() {
     const body = materials.value.map((m: any) => ({ materialId: m.materialId, unitPrice: m.unitPrice, remark: m.remark }))
     await request.put(`/supplier/${id}/materials`, body)
     ElMessage.success('供应物料已保存'); sessionStorage.setItem(SUPPLIER_DIRTY_KEY, '1')
+    takeBaseline()   // 保存成功 ⇒ 重建基线（保存不重跑 loadData），避免离开时误报"未保存"
     loadMaterials()
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) }
 }
@@ -114,6 +117,12 @@ const whLoading = ref(false)
 const orderLoading = ref(false)
 const materialLoading = ref(false)
 const materialSummary = ref<any[]>([])
+
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页各 Tab 可就地改基础信息/产品/物料并保存 ⇒ 属"能改数据"，接守卫。
+ * ⚠️ 必须写在 form 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({ form }))
 
 async function loadData() {
   loading.value = true
@@ -198,6 +207,7 @@ async function handleSave() {
     if (!isVendor.value) body.supplySku = ''
     await request.put('/supplier', body)
     ElMessage.success('保存成功'); sessionStorage.setItem(SUPPLIER_DIRTY_KEY, '1')
+    takeBaseline()   // 保存成功 ⇒ 重建基线（保存不重跑 loadData），避免离开时误报"未保存"
     loadData()
   } finally { saving.value = false }
 }
@@ -209,6 +219,7 @@ async function saveProducts() {
   try {
     await request.put(`/supplier/${id}/products`, products.value)
     ElMessage.success('产品列表已保存'); sessionStorage.setItem(SUPPLIER_DIRTY_KEY, '1')
+    takeBaseline()   // 保存成功 ⇒ 重建基线（保存不重跑 loadData），避免离开时误报"未保存"
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) }
 }
 
@@ -297,17 +308,19 @@ async function markBomFlags() {
 
 // 业务数据放在 onActivated 加载：layout 用 keep-alive 缓存页面，再次进入详情页会复用组件、
 // onMounted 不再触发，只靠 onMounted 会停留在上次缓存的状态
-onActivated(loadData)
+onActivated(async () => { await loadData(); takeBaseline() })
 </script>
 
 <template>
-  <div class="detail-page" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta)；
+       本页是多 Tab 页，各 Tab 内的保存按钮（保存/保存产品/保存物料）作用域是当前 Tab ⇒ 保留原位置 -->
+  <PageShell :loading="loading" :back-fallback="isVendor ? '/outsource/supplier/manage' : '/supplier/manage'">
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
       <el-tab-pane label="基础信息" name="info">
         <el-card shadow="never">
           <template #header><span style="font-weight:600">基础信息</span></template>
           <!-- label-width 110px：标签带模块前缀（供货商名称/供应商编码 5 字）+ 必填星号，80px 会把标签压成两行 -->
-          <el-form :model="form" label-width="110px" size="small">
+          <el-form :model="form" label-width="var(--app-label-width)" size="small">
             <el-row :gutter="12">
               <el-col :span="8"><el-form-item required :label="entityLabel + '名称'"><el-input v-model="form.name" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item :label="entityLabel + '编码'"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
@@ -526,12 +539,13 @@ onActivated(loadData)
         </el-card>
       </el-tab-pane>
     </el-tabs>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.detail-page { padding:16px; }
-.detail-page :deep(.el-tabs__header) { margin-bottom:0; }
+/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .detail-page 已删除。
+   原「.detail-page :deep(.el-tabs__header) { margin-bottom:0 }」改挂到骨架类，视觉不变。 */
+.page-shell :deep(.el-tabs__header) { margin-bottom:0; }
 
 .order-table-card :deep(.el-card__body) { padding:16px; }
 .order-table-card { margin-top:4px; }
