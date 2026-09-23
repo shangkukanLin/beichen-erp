@@ -206,12 +206,10 @@ onActivated(() => { loadDetail() })
 </script>
 
 <template>
-  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头最左=主操作（保存）→ 标题 → 右侧=次要动作+返回 -->
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（保存/审核/反审核/作废） -->
   <PageShell :loading="loading" back-fallback="/inventory/warehouse-move">
-    <template #leading>
-      <el-button v-if="isDraft" type="primary" :loading="saving" @click="handleSave">保存</el-button>
-    </template>
     <template #actions>
+      <el-button v-if="isDraft" type="primary" :loading="saving" @click="handleSave">保存</el-button>
       <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
       <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
       <el-button type="danger" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>

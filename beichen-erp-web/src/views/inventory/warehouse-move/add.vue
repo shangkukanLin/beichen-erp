@@ -1,7 +1,7 @@
 <template>
-  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头最左=主操作（保存）→ 标题 → 右侧=返回 -->
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（保存） -->
   <PageShell :title="isEdit ? '编辑移仓单' : '新增移仓单'" back-fallback="/inventory/warehouse-move">
-    <template #leading>
+    <template #actions>
       <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
     </template>
 
