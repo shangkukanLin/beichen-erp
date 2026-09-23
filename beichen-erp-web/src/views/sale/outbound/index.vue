@@ -265,7 +265,7 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
     </el-dialog>
 
     <el-drawer v-model="detailVisible" title="销售出库详情" size="60%">
-      <el-descriptions :column="2" border>
+      <el-descriptions :column="3" border>
         <el-descriptions-item label="单号">{{ detailData.code }}</el-descriptions-item>
         <el-descriptions-item label="状态"><el-tag :type="statusType(detailData.status)">{{ detailData.status }}</el-tag></el-descriptions-item>
         <el-descriptions-item label="客户">{{ customerName(detailData.customerId) }}</el-descriptions-item>

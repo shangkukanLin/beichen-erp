@@ -183,7 +183,7 @@ onUnmounted(() => {
     </div>
 
     <!-- ① 客户档案 -->
-    <el-descriptions :column="6" border size="small" class="desc">
+    <el-descriptions :column="3" border size="small" class="desc">
       <el-descriptions-item label="客户编码">{{ cust.customerCode || '—' }}</el-descriptions-item>
       <el-descriptions-item label="客户名称">{{ cust.customerName || '—' }}</el-descriptions-item>
       <el-descriptions-item label="联系人">{{ cust.contact || '—' }}</el-descriptions-item>

@@ -30,7 +30,7 @@
           </div>
           <!-- 第二步：预览并确认（表数口径 + 失败/清空风险 + 二次确认） -->
           <div v-else-if="importStep === 'preview' && importPreview" style="text-align:left">
-            <el-descriptions :column="2" border size="small">
+            <el-descriptions :column="3" border size="small">
               <el-descriptions-item label="备份时间">{{ importPreview.exportTime }}</el-descriptions-item>
               <el-descriptions-item label="备份表数">
                 {{ importPreview.backupTables }} 张
