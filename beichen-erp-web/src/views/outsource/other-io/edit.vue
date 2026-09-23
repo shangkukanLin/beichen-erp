@@ -8,6 +8,9 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { IoType, IoTypeLabel, WarehouseCategory, OUTSOURCE_OTHER_IO_DIRTY_KEY } from '@/api/enums'
 import { DocStatus } from '@/api/common'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 
 const route = useRoute(); const router = useRouter()
 const editId = Number(route.params.id) || 0
@@ -18,6 +21,12 @@ const saving = ref(false)
 const loading = ref(false)
 const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN, ioDate: localDate(), remark: '' })
 const items = ref<any[]>([])
+const tabStore = useTabStore()
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 
 async function loadWarehouses() {
   try { const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } }); warehouses.value = (r?.records || []).map((w: any) => ({ ...w, _type: w.warehouseCategory === WarehouseCategory.INVENTORY ? '我方仓' : '委外仓' })) } catch { warehouses.value = [] }
@@ -75,20 +84,33 @@ async function handleSubmit() {
     const body: any = { ...form, items: validItems }
     await request.put(`/outsource/other-io/${editId}`, body)
     ElMessage.success('已更新'); sessionStorage.setItem(OUTSOURCE_OTHER_IO_DIRTY_KEY, '1')
+    // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签并回列表
+    markClean()
+    tabStore.closeTabAndBack(route.path)
     router.push('/outsource/other-io')
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
 
 // 顶栏"刷新数据"：重新加载仓库/物料/类型下拉
 async function handleRefreshData() { await Promise.all([loadWarehouses(), loadMaterials(), loadMaterialTypes()]) }
-onMounted(() => { loadWarehouses(); loadMaterials(); loadMaterialTypes(); loadDetail(); window.addEventListener('refresh:dropdown-data', handleRefreshData) })
+onMounted(async () => {
+  loadWarehouses(); loadMaterials(); loadMaterialTypes()
+  await loadDetail()      // 编辑态必须等回填完成再建基线，否则会把回填误判成用户修改
+  window.addEventListener('refresh:dropdown-data', handleRefreshData)
+  takeBaseline()
+})
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
-    <el-card shadow="never" v-loading="loading">
-      <el-form :model="form" label-width="80px">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（保存） -->
+  <PageShell :loading="loading" back-fallback="/outsource/other-io">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
+    </template>
+
+    <el-card shadow="never">
+      <el-form :model="form" label-width="var(--app-label-width)">
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item required label="仓库"><el-select v-model="form.warehouseId" filterable style="width:100%"><el-option v-for="w in warehouses" :key="w.id+'@'+w._type" :label="`${w.warehouseName}（${w._type}）`" :value="w.id"/></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="类型"><el-select v-model="form.ioType" style="width:100%"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item></el-col>
@@ -109,6 +131,5 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
         <el-table-column label="操作" width="70" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>
       </el-table>
     </el-card>
-    <div style="display:flex;gap:12px;justify-content:center"><el-button @click="router.push('/outsource/other-io')">取消</el-button><el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button></div>
-  </div>
+  </PageShell>
 </template>

@@ -7,6 +7,8 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 const router = useRouter()
 const route = useRoute()
@@ -96,6 +98,11 @@ function onLinkedOrderChange() {
 }
 const productList = ref<any[]>([]) // 该工厂所有产品汇总
 const rows = ref<any[]>([createEmptyRow()])
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / rows 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, rows: rows.value }))
 const mergedItems = ref<any[]>([])
 const materialTypes = ref<any[]>([])
 const loading = ref(false)
@@ -438,7 +445,9 @@ async function handleSubmit() {
     else { await request.post('/outsource/return-order', payload); ElMessage.success('退货单草稿已保存，请在列表中审核生效') }
     sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
     resetForm()
-    tabStore.removeTab(window.location.hash.replace('#', ''))
+    // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回列表
+    markClean()
+    tabStore.closeTabAndBack(window.location.hash.replace('#', ''))
     router.replace('/outsource/return-order')
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { submitting.value = false }
 }
@@ -499,6 +508,8 @@ onMounted(async () => {
   await loadFactories(); loadMaterialTypes()
   if (editId) await loadForEdit(editId)
   else await loadFromQuery()
+  // 初始化完成（含编辑回填 / 来源预填）⇒ 建立"未保存"基线
+  takeBaseline()
 })
 async function loadMaterialTypes() {
   try { const r = await request.get<any, any>('/dev/material-type/enabled'); materialTypes.value = r || [] } catch { materialTypes.value = [] }
@@ -507,7 +518,12 @@ async function loadMaterialTypes() {
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（保存） -->
+  <PageShell back-fallback="/outsource/return-order">
+    <template #actions>
+      <el-button type="primary" :loading="submitting" @click="handleSubmit">保存</el-button>
+    </template>
+
     <el-card shadow="never">
       <template #header><span style="font-weight:600">退货信息</span></template>
       <!-- 类型说明单独整行展示（2026-09-17：原先塞在"退货类型"格子里，会把右侧字段挤窄、标签换行） -->
@@ -520,7 +536,7 @@ async function loadMaterialTypes() {
           </span>
         </template>
       </el-alert>
-      <el-form :model="form" label-width="104px" size="small">
+      <el-form :model="form" label-width="var(--app-label-width)" size="small">
         <el-row :gutter="16">
           <!-- 每行 3 个字段（span=8）：标签一律 4~5 字，label-width 给足 104px 不换行 -->
           <el-col :span="8">
@@ -651,7 +667,6 @@ async function loadMaterialTypes() {
       </el-table>
     </el-card>
 
-    <!-- 保存按钮独立成卡：维修退货没有物料明细，原先放在明细卡里的按钮会消失（2026-09-17 修正） -->
-    <div style="text-align:right"><el-button type="primary" :loading="submitting" @click="handleSubmit">保存</el-button></div>
-  </div>
+    <!-- 保存按钮已统一上移到页头右侧操作区（PageShell #actions）；原「独立成卡」的底部保存条移除 -->
+  </PageShell>
 </template>

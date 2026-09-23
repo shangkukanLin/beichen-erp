@@ -6,6 +6,7 @@ import { localDate } from '@/utils/date'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeTypeLabel, OutsourceReturnType, OutsourceReturnTypeLabel, OutsourceReturnTypeTag, ProductQualityType, ProductQualityTypeLabel } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -121,23 +122,22 @@ onActivated(loadData)
 </script>
 
 <template>
-  <div class="app-container" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作 -->
+  <PageShell :loading="loading" back-fallback="/outsource/return-order">
+    <template #actions>
+      <el-button type="success" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
+      <el-button type="warning" v-if="detail.status===DocStatus.AUDITED && detail.closedFlag!==1" @click="handleUnAudit">反审核</el-button>
+      <el-button type="danger" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
+      <!-- 维修返回：维修退货单审核（已送修）后登记工厂修好送回的成品入库；已结案则关闭入口 -->
+      <el-button type="primary" v-if="isRepair && detail.status===DocStatus.AUDITED && detail.closedFlag!==1" @click="openRepairReturn">登记维修返回</el-button>
+      <!-- 结案 / 撤销结案（仅维修退货，2026-09-17）：工厂把送修成品全部送回（未返回=0）后收尾 -->
+      <el-button type="success" v-if="isRepair && detail.status===DocStatus.AUDITED && detail.closedFlag!==1 && Number(detail.unreturnedQty)===0" @click="handleClose">结案</el-button>
+      <el-button type="warning" v-if="isRepair && detail.closedFlag===1" @click="handleReOpen">撤销结案</el-button>
+    </template>
+
     <el-card shadow="never">
       <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">委外加工退货详情</span>
-          <div>
-            <el-button type="success" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
-            <el-button type="warning" v-if="detail.status===DocStatus.AUDITED && detail.closedFlag!==1" @click="handleUnAudit">反审核</el-button>
-            <el-button type="danger" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
-            <!-- 维修返回：维修退货单审核（已送修）后登记工厂修好送回的成品入库；已结案则关闭入口 -->
-            <el-button type="primary" v-if="isRepair && detail.status===DocStatus.AUDITED && detail.closedFlag!==1" @click="openRepairReturn">登记维修返回</el-button>
-            <!-- 结案 / 撤销结案（仅维修退货，2026-09-17）：工厂把送修成品全部送回（未返回=0）后收尾 -->
-            <el-button type="success" v-if="isRepair && detail.status===DocStatus.AUDITED && detail.closedFlag!==1 && Number(detail.unreturnedQty)===0" @click="handleClose">结案</el-button>
-            <el-button type="warning" v-if="isRepair && detail.closedFlag===1" @click="handleReOpen">撤销结案</el-button>
-            <el-button @click="router.back()">返回</el-button>
-          </div>
-        </div>
+        <span style="font-weight:600">委外加工退货详情</span>
       </template>
       <el-descriptions :column="3" border size="small">
         <el-descriptions-item label="退货单号">{{ detail.code }}</el-descriptions-item>
@@ -276,5 +276,5 @@ onActivated(loadData)
         <el-button type="primary" :loading="repairSaving" @click="submitRepairReturn">确认登记（成品入库）</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>

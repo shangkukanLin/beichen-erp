@@ -1,12 +1,7 @@
 <template>
-  <div class="page">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：返回交骨架（原页头「返回」按钮已删）；本页只读无操作 -->
+  <PageShell back-fallback="/outsource/material-stock">
     <el-card shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span class="title">物料库存分布</span>
-          <el-button :icon="'ArrowLeft'" @click="$router.back()">返回</el-button>
-        </div>
-      </template>
 
       <el-descriptions v-loading="loading" :column="4" border class="info">
         <el-descriptions-item label="物料名称">{{ summary?.materialName || '—' }}</el-descriptions-item>
@@ -66,7 +61,7 @@
 
       <el-empty v-if="!tableLoading && rows.length === 0" description="该物料在物料仓暂无库存" />
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -75,6 +70,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -191,8 +187,7 @@ onMounted(() => { loadSummary(); loadRows() })
 </script>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 12px; }
-.card-header { display: flex; align-items: center; justify-content: space-between; }
+/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .page / .card-header 局部样式已删除 */
 .right { display: flex; align-items: center; gap: 12px; }
 .title { font-weight: 600; }
 .hint { font-size: var(--app-font-xs); color: #909399; }

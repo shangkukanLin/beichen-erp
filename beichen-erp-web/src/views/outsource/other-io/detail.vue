@@ -5,6 +5,8 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { IoType, IoTypeLabel, WarehouseCategory, OUTSOURCE_OTHER_IO_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id) || 0
@@ -29,6 +31,12 @@ async function loadMaterialTypes() {
 
 // 编辑态表单（主单字段）
 const form = ref<any>({ warehouseId: undefined, ioType: IoType.IN, ioDate: '', remark: '' })
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页草稿可切到编辑态就地改表头+明细 ⇒ 属"能改数据"，接守卫。
+ * 注意：快照**不含 editing** —— 只点「编辑」不改内容不算脏（返回时不弹确认），符合直觉。
+ * ⚠️ 必须写在 form / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({ form: form.value, items: items.value }))
 
 function getWhName(wid: number) {
   return warehouses.value.find((w: any) => w.id === wid)?.warehouseName || '-'
@@ -88,6 +96,8 @@ async function loadDetail() {
       ? its.map((i: any) => ({ materialId: i.materialId, materialTypeId: i.materialTypeId, unit: i.unit, unit_price: i.unitPrice ?? '', quantity: i.quantity, remark: i.remark || '' }))
       : []
   } finally { loading.value = false }
+  // 数据加载完成 ⇒ 重建"未保存"基线（loadDetail 也被 cancelEdit / 保存成功后复用 ⇒ 自动重置，不误报）
+  takeBaseline()
 }
 
 function startEdit() { editing.value = true }
@@ -117,9 +127,20 @@ onActivated(() => { loadDetail() })
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（编辑/保存） -->
+  <PageShell :loading="loading" back-fallback="/outsource/other-io">
+    <template #actions>
+      <template v-if="detail.status===DocStatus.DRAFT && !editing">
+        <el-button type="primary" @click="startEdit">编辑</el-button>
+      </template>
+      <template v-else-if="editing">
+        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
+        <el-button @click="cancelEdit">取消编辑</el-button>
+      </template>
+    </template>
+
     <!-- 信息卡片：只读展示 -->
-    <el-card shadow="never" v-loading="loading" v-if="!editing">
+    <el-card shadow="never" v-if="!editing">
       <el-descriptions :column="3" border>
         <el-descriptions-item label="单号">{{ detail.code || '-' }}</el-descriptions-item>
         <el-descriptions-item label="仓库">{{ getWhName(detail.warehouseId) }}</el-descriptions-item>
@@ -224,16 +245,7 @@ onActivated(() => { loadDetail() })
       </el-table>
     </el-card>
 
-    <!-- 底部按钮 -->
-    <div style="display:flex;gap:12px;justify-content:center">
-      <template v-if="detail.status===DocStatus.DRAFT && !editing">
-        <el-button type="primary" @click="startEdit">编辑</el-button>
-      </template>
-      <template v-else-if="editing">
-        <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
-        <el-button @click="cancelEdit">取消</el-button>
-      </template>
-      <el-button @click="router.push('/outsource/other-io')">返回列表</el-button>
-    </div>
-  </div>
+    <!-- 操作按钮（编辑 / 保存 / 取消编辑）已统一上移到页头右侧（PageShell #actions）；
+         原「返回列表」按钮已删除 —— 返回统一由骨架提供。原「取消」= 放弃本次编辑，文案改为「取消编辑」以区分于返回。 -->
+  </PageShell>
 </template>
