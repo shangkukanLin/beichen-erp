@@ -10,6 +10,7 @@ import { localDate } from '@/utils/date'
 import { reactive, ref, computed, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import PageShell from '@/components/PageShell.vue'
 import request from '@/utils/request'
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, DeliveryType, DeliveryTypeLabel } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
@@ -318,10 +319,10 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
 </script>
 
 <template>
-  <div v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：返回交骨架（原「← 返回列表」按钮已删） -->
+  <PageShell :loading="loading" back-fallback="/outsource/order/delivery">
     <el-card shadow="never" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <el-button size="small" @click="router.push('/outsource/order/delivery')">← 返回列表</el-button>
         <span style="font-size:var(--app-font-md)">加工单号：<b>{{ order.code || '-' }}</b></span>
         <span>加工厂：<b>{{ order.factoryName || '-' }}</b></span>
         <span>状态：<el-tag :type="OutsourceOrderStatusTag[order.status] || 'info'" size="small">{{ OutsourceOrderStatusLabel[order.status] || order.status }}</el-tag></span>
@@ -445,7 +446,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
 
 
 
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>

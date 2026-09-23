@@ -3,12 +3,12 @@
 // —— 按 id 回源 `/outsource/order-delivery/{id}`（后端本轮回补的单条查询），
 //    再用该记录所属加工单的产品行 + 成品仓列表解析名称（与列表页同一套匹配口径）。
 import { ref, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { DocStatusLabel, DocStatusTag } from '@/api/enums'
 import request from '@/utils/request'
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
-const router = useRouter()
 const loading = ref(false)
 const row = ref<any>({})
 const products = ref<any[]>([])
@@ -58,12 +58,12 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="p" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：返回交骨架，本页只读无操作按钮 -->
+  <PageShell :loading="loading" back-fallback="/outsource/order/delivery">
     <el-card shadow="never">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:600">收货记录详情 — #{{ row.id ?? '' }}</span>
-          <el-button @click="router.back()">返回</el-button>
         </div>
       </template>
       <el-descriptions :column="2" border>
@@ -94,7 +94,7 @@ onMounted(load)
         <el-descriptions-item label="备注" :span="2">{{ row.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
-<style scoped>.p{display:flex;flex-direction:column;gap:12px}</style>
+<style scoped>/* 页头已统一到全局骨架（PageShell）；原 .p 局部样式已删除 */</style>

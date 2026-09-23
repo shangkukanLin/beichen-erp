@@ -5,6 +5,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { DeliveryType, CloseReportStatus, CloseReportStatusLabel } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 defineOptions({ name: 'OrderClose' })
 const route = useRoute(); const router = useRouter()
@@ -94,6 +96,8 @@ async function loadReport() {
   } catch (e: any) {
     ElMessage.error('加载失败: ' + (e?.message || '未知错误'))
   } finally { loading.value = false }
+  // 数据加载完成 ⇒ 重建"未保存"基线（保存草稿/确认结单后都会重跑本函数 ⇒ 自动重置，不误报）
+  takeBaseline()
 }
 
 // 只有草稿可确认结单（未生成/已结单都不可）
@@ -162,11 +166,25 @@ function fmt(v: any) { return v !== undefined && v !== null ? Number(v).toFixed(
 /** 数量列展示：整数（2026-09-16 数量一律为整数；金额/单价/良率仍用 fmt） */
 function fmtQty(v: any) { return v !== undefined && v !== null ? String(Math.round(Number(v))) : '0' }
 
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页可改结单数量/备注（保存草稿、确认结单）⇒ 属"能改数据"，接守卫。
+ * ⚠️ 必须写在 report / items / canConfirm 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({ report, items: items.value, remark: remark.value }))
+
 onMounted(() => { loadMaterialTypes(); loadReport() })
 </script>
 
 <template>
-  <div class="close-page" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作 -->
+  <PageShell :loading="loading" back-fallback="/outsource/order">
+    <template #actions>
+      <el-button type="primary" :disabled="report.reportStatus===CloseReportStatus.FINISHED" @click="handleSave">保存草稿</el-button>
+      <el-button type="success" :disabled="!canConfirm" @click="handleConfirm">确认结单</el-button>
+      <el-button v-if="report.reportStatus===CloseReportStatus.FINISHED" type="warning" @click="handleReopen">反结单</el-button>
+      <el-button type="info" @click="handleExport">导出Excel</el-button>
+    </template>
+
     <!-- 表头 -->
     <el-card shadow="never" style="margin-bottom:12px">
       <el-descriptions :column="4" border size="small">
@@ -276,13 +294,7 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
       </el-table>
     </el-card>
 
-    <!-- 操作 -->
-    <div style="display:flex;gap:12px;align-items:center">
-      <el-button type="primary" :disabled="report.reportStatus===CloseReportStatus.FINISHED" @click="handleSave">保存草稿</el-button>
-      <el-button type="success" :disabled="!canConfirm" @click="handleConfirm">确认结单</el-button>
-      <el-button v-if="report.reportStatus===CloseReportStatus.FINISHED" type="warning" @click="handleReopen">反结单</el-button>
-      <el-button type="info" @click="handleExport">导出Excel</el-button>
-    </div>
+    <!-- 操作按钮（保存草稿/确认结单/反结单/导出Excel）已统一上移到页头右侧操作区（PageShell #actions） -->
 
     <!-- 强制退料确认（2026-09-16 问题①）：账面库存不足时的显式旁路 -->
     <el-dialog v-model="showForceDialog" title="存在退料超出工厂仓账面库存的物料" width="640px">
@@ -309,11 +321,11 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
         <el-button type="danger" :disabled="!forceReturn" @click="doConfirm(true)">确认结单（强制退料）</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.close-page { padding: 16px; }
-.page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+/* 页头已统一到全局骨架（PageShell + styles/page.css）；
+   原 .close-page / .page-header 局部样式已删除 —— .page-header 与全局类同名，留着会双重生效 */
 
 </style>

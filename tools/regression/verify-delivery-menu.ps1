@@ -97,14 +97,16 @@ if ($d3) {
   if ($d3.title -match '新增收货记录') { Ok '进入即自动弹出「新增收货记录」弹窗' } else { Bad ('未自动弹出新增收货弹窗，标题=' + $d3.title) }
 }
 
-# ④ 关闭弹窗后：汇总卡 / 收货记录 / 返回列表
+# ④ 关闭弹窗后：汇总卡 / 收货记录 / 统一「返回」按钮
 EvalJs "(()=>{const d=[...document.querySelectorAll('.el-dialog')].find(x=>x.offsetParent!==null);if(d){const btns=[...d.querySelectorAll('button')];for(const b of btns){if(b.innerText.trim()==='取消'){b.click();return 'cancel'}}}return 'none'})()" | Out-Null
 agent-browser wait 1600
-$d4 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({sum:t.includes('订单总量')&&t.includes('已收数量')&&t.includes('剩余数量'),rec:t.includes('收货记录'),back:t.includes('返回列表'),ret:b.some(x=>x==='退货'),mfg:b.some(x=>x==='加工退货'),old:b.some(x=>x==='退不良')||b.some(x=>x==='不良退货'),cls:b.some(x=>x==='结单')});})()" '收货详细页'
+# ⚠️ 2026-09-23 次级页面统一模板：本页原「← 返回列表」按钮已并入统一骨架 PageShell 的页头「← 返回」
+#    ⇒ 断言改为「有 .page-shell 页头里的返回按钮」且「不再出现『返回列表』」（保留旧断言会误红）。
+$d4 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());const pb=[...document.querySelectorAll('.page-header__left button')].map(x=>x.innerText.trim());return JSON.stringify({sum:t.includes('订单总量')&&t.includes('已收数量')&&t.includes('剩余数量'),rec:t.includes('收货记录'),back:pb.includes('返回'),backList:t.includes('返回列表'),shell:!!document.querySelector('.page-shell'),ret:b.some(x=>x==='退货'),mfg:b.some(x=>x==='加工退货'),old:b.some(x=>x==='退不良')||b.some(x=>x==='不良退货'),cls:b.some(x=>x==='结单')});})()" '收货详细页'
 if ($d4) {
   if ($d4.sum) { Ok '收货详细页有汇总卡（订单总量/已收数量/剩余数量）' } else { Bad '收货详细页缺少汇总卡' }
   if ($d4.rec) { Ok '收货详细页有「收货记录」区块' } else { Bad '收货详细页缺少「收货记录」区块' }
-  if ($d4.back) { Ok '收货详细页有「返回列表」按钮' } else { Bad '收货详细页缺少「返回列表」按钮' }
+  if ($d4.shell -and $d4.back -and (-not $d4.backList)) { Ok '收货详细页有统一骨架（.page-shell）与页头「← 返回」，且旧「返回列表」已移除' } else { Bad ('收货详细页统一返回校验失败：shell=' + $d4.shell + ' hasBack=' + $d4.back + ' backList=' + $d4.backList) }
   # 2026-09-21（用户口径「文案改成加工退货」）：本页**只保留「加工退货」**（红冲收货，记录挂在这张委外加工单上）：
   # 「退货」入口（跳独立加工退货单）已整体移除；按钮文案沿革 退不良 → 加工退货 → 不良退货 → **定稿加工退货**
   # （实现不变，仍是负数红冲）。三条断言一起锁住，防止被加回来或改回去。

@@ -2,6 +2,8 @@
 // 2026-09-20（F7-159）：显式声明组件名（便于 DevTools 辨认与将来按名 exclude）
 defineOptions({ name: 'OutsourceMaterialOrderAdd' })
 import { reactive, ref, onMounted, onUnmounted, computed } from 'vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -18,6 +20,11 @@ const saving = ref(false)
 
 const form = reactive({ orderType: OrderType.PURCHASE as string, supplierId: undefined as any, targetWarehouseId: undefined as any, deliveryDate: '', remark: '' })
 const items = ref<any[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 const supplierOptions = ref<any[]>([])
 const materialOptions = ref<any[]>([])
 const materialTypes = ref<any[]>([])
@@ -87,8 +94,10 @@ async function handleSubmit() {
       items.value = []
       onOrderTypeChange()
     }
-    tabStore.removeTab(route.fullPath)
     sessionStorage.setItem(OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY, '1')
+    // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回原处
+    markClean()
+    tabStore.closeTabAndBack(route.fullPath)
     if (isEdit.value) { router.replace(`/outsource/material-order/detail/${editId}`) }
     else { router.replace('/outsource/material-order') }
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
@@ -160,15 +169,22 @@ onMounted(async () => {
     if (items.value.length === 0) addItem()
   }
   window.addEventListener('refresh:dropdown-data', handleRefreshData)
+  // 初始化完成（含 query 预填 / 编辑回填）⇒ 建立"未保存"基线
+  takeBaseline()
 })
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 </script>
 
 <template>
-  <div class="add-page">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（保存） -->
+  <PageShell back-fallback="/outsource/material-order">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
+    </template>
+
     <el-card shadow="never">
       <template #header><span style="font-weight:600">订单信息</span></template>
-      <el-form :model="form" label-width="90px" size="small">
+      <el-form :model="form" label-width="var(--app-label-width)" size="small">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="订单类型">
             <el-radio-group v-model="form.orderType" @change="onOrderTypeChange">
@@ -215,11 +231,10 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       </el-table>
     </el-card>
 
-    <div style="margin-top:16px"><el-button type="primary" size="large" :loading="saving" @click="handleSubmit">保存</el-button><el-button size="large" @click="handleCancel">取消</el-button></div>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.add-page { display:flex; flex-direction:column; gap:12px; }
+/* 页头/底部操作条已统一到全局骨架（PageShell + styles/page.css） */
 
 </style>

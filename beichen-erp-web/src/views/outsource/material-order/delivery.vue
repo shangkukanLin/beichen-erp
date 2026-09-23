@@ -10,6 +10,7 @@
  * 枚举 label（`RECEIVE`=收料、`DEFECT_RETURN`=退不良）被**库存流水等页面共用**，故未动。</p>
  */
 import { reactive, ref, computed, onActivated } from 'vue'
+import PageShell from '@/components/PageShell.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -222,10 +223,10 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
 </script>
 
 <template>
-  <div v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：返回交骨架（原「← 返回列表」按钮已删） -->
+  <PageShell :loading="loading" back-fallback="/outsource/material-order/delivery">
     <el-card shadow="never" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <el-button size="small" @click="router.push('/outsource/material-order/delivery')">← 返回列表</el-button>
         <span style="font-size:var(--app-font-md)">订单号：<b>{{ order.code || '-' }}</b></span>
         <span>类型：{{ OrderTypeLabel[order.orderType] || order.orderType }}</span>
         <span>{{ order.orderType === OrderType.OUTSOURCE ? '加工厂' : '供应商' }}：<b>{{ order.supplierName || '-' }}</b></span>
@@ -336,7 +337,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
       </el-table>
       <template #footer><el-button @click="defectVisible = false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认退货</el-button></template>
     </el-dialog>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
