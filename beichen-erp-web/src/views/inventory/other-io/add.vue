@@ -10,14 +10,21 @@ import request from '@/utils/request'
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
 import { IoType, IoTypeLabel, WarehouseCategory, INVENTORY_OTHER_IO_DIRTY_KEY } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 
 const route = useRoute(); const router = useRouter()
+const tabStore = useTabStore()
 // 用 computed 取路由参数：keep-alive 会复用组件，再次进入时 route.query 会变。
 // 若在 setup 阶段固化成常量，编辑完再点新增会沿用上次的 id，保存时变成修改上一条单据。
 const editId = computed(() => Number(route.query.id) || 0)
 /** 从详情页进入编辑时带 from=detail，保存/取消都回到详情页；否则回列表 */
 const fromDetail = computed(() => route.query.from === 'detail')
 function goBack() {
+  // 保存成功 / 取消返回：先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入页签
+  markClean()
+  tabStore.closeTabAndBack(route.path)
   if (editId.value && fromDetail.value) router.push(`/inventory/other-io/detail/${editId.value}`)
   else router.push('/inventory/other-io')
 }
@@ -30,6 +37,11 @@ const form = reactive({ warehouseId: undefined as any, ioType: IoType.IN as stri
 // 出库单才需要看库存：入库不消耗库存，不展示也不校验
 const isOut = computed(() => form.ioType === IoType.OUT)
 const items = ref<any[]>([{ productId: undefined, productName: '', unit: '', qualityType: 'A', quantity: undefined, remark: '', stockQty: undefined }])
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items **之后**：watch 注册时会立即求值一次快照，放前面会因 TDZ 静默失效。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 100, keyword: kw } })
@@ -114,7 +126,7 @@ async function handleSubmit() {
  * keep-alive 会复用组件，再次进入时 onMounted 不再触发，
  * 只靠 onMounted 会停留在上次的数据（新增时还带着上一条单据的内容）。
  */
-function initPage() {
+async function initPage() {
   Object.assign(form, {
     warehouseId: undefined,
     ioType: IoType.IN,
@@ -122,19 +134,24 @@ function initPage() {
     remark: ''
   })
   items.value = [{ productId: undefined, productName: '', unit: '', qualityType: 'A', quantity: undefined, remark: '', stockQty: undefined }]
-  if (editId.value) loadDetail()
+  if (editId.value) await loadDetail()
+  // 初始化/回填完成 ⇒ 建立"未保存"基线（必须在加载之后，否则会把回填误判成用户修改）
+  takeBaseline()
 }
 
 // 顶栏"刷新数据"：重新加载品质下拉
 async function handleRefreshData() { await loadQualityTypes() }
-onMounted(()=>{ loadQualityTypes(); initPage(); window.addEventListener('refresh:dropdown-data', handleRefreshData) })
-onActivated(()=>{ initPage() })
+onMounted(async () => { loadQualityTypes(); await initPage(); window.addEventListener('refresh:dropdown-data', handleRefreshData) })
+onActivated(async () => { await initPage() })
 onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefreshData))
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
-    <div><span style="font-size:var(--app-font-xl);font-weight:600">{{ editId?'编辑':'新增' }}其他出入库</span></div>
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（保存） -->
+  <PageShell :title="editId ? '编辑其他出入库' : '新增其他出入库'" back-fallback="/inventory/other-io">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
+    </template>
     <el-card shadow="never">
       <el-form :model="form" label-width="80px">
         <el-row :gutter="12">
@@ -167,6 +184,5 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
         <el-table-column label="操作" width="60" align="center"><template #default="{$index}"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template></el-table-column>
       </el-table>
     </el-card>
-    <div style="display:flex;gap:12px;justify-content:center"><el-button @click="goBack">取消</el-button><el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button></div>
-  </div>
+  </PageShell>
 </template>

@@ -7,12 +7,19 @@ import { getQualityTypes, productLabel, type QualityOption } from '@/api/product
 import { IoType, IoTypeLabel, WarehouseCategory, INVENTORY_OTHER_IO_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
-const route = useRoute(); const router = useRouter()
+const route = useRoute()
 const id = Number(route.params.id) || 0
 const loading = ref(false)
 const detail = ref<any>({})
 const items = ref<any[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页草稿态可直接编辑保存 ⇒ 属"能改数据"，同样接守卫。
+ * ⚠️ 必须写在 detail / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({ detail: detail.value, items: items.value }))
 const warehouses = ref<any[]>([])
 const products = ref<any[]>([])
 const qualityOptions = ref<QualityOption[]>([])
@@ -135,6 +142,8 @@ async function loadDetail() {
     if (products.value.length === 0) await loadProducts()
     if (isDraft.value) fillEditForm()
   } finally { loading.value = false }
+  // 数据加载完成 ⇒ 重建"未保存"基线（审核/保存后会重跑本函数 ⇒ 自动重置，不误报）
+  takeBaseline()
 }
 
 async function handleSave() {
@@ -202,18 +211,22 @@ onActivated(() => { loadDetail() })
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（保存/审核/反审核/作废） -->
+  <PageShell :loading="loading" back-fallback="/inventory/other-io">
+    <template #actions>
+      <el-button v-if="isDraft" type="primary" :loading="saving" @click="handleSave">保存</el-button>
+      <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
+      <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
+      <el-button type="danger" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
+    </template>
 
     <!-- 草稿：直接可编辑的表单；已审核/已作废：只读信息 -->
-    <el-card shadow="never" v-loading="loading">
+    <el-card shadow="never">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:600">单据信息</span>
           <div style="display:flex;align-items:center;gap:8px">
             <el-tag :type="statusTag(detail.status)" size="small">{{ statusLabel(detail.status) }}</el-tag>
-            <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
-            <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
-            <el-button type="danger" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
           </div>
         </div>
       </template>
@@ -302,9 +315,5 @@ onActivated(() => { loadDetail() })
       </el-table>
     </el-card>
 
-    <div style="display:flex;gap:12px;justify-content:center">
-      <el-button v-if="isDraft" type="primary" :loading="saving" @click="handleSave">保存</el-button>
-      <el-button @click="router.push('/inventory/other-io')">返回列表</el-button>
-    </div>
-  </div>
+  </PageShell>
 </template>
