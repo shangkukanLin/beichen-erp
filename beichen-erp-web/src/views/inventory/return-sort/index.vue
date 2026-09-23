@@ -276,7 +276,7 @@ onActivated(() => {
 </script>
 
 <template>
-  <div>
+  <div class="page-list">
     <el-tabs v-model="activeTab">
       <!-- ==================== ① 待整理（跨仓总览） ==================== -->
       <el-tab-pane name="pending">
@@ -415,12 +415,12 @@ onActivated(() => {
             <div class="toolbar">
               <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
               <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
-              <el-button type="success" :icon="'Plus'" @click="goAdd">新增退货整理</el-button>
+              <el-button type="success" :icon="'Plus'" @click="goAdd">新增</el-button>
             </div>
           </div>
         </el-card>
 
-        <el-card style="margin-top:12px">
+        <el-card shadow="never" class="table-card" style="margin-top:12px">
           <el-table :data="tableData" border v-loading="tableLoading" row-key="id" @row-click="openRow">
             <el-table-column prop="sortDate" label="整理日期" width="110" />
             <el-table-column prop="code" label="单号" width="170" />
@@ -448,10 +448,12 @@ onActivated(() => {
               </template>
             </el-table-column>
           </el-table>
-          <div style="margin-top:12px;display:flex;justify-content:flex-end">
+          <div class="pagination">
             <!-- 2026-09-20（F7-181）：改每页条数时必须回到第 1 页（原先 @change 直接 loadData） -->
-            <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total"
-              :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" @size-change="onSizeChange" @current-change="loadData" />
+            <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+              :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+              layout="total, sizes, prev, pager, next, jumper" background
+              @size-change="onSizeChange" @current-change="loadData" />
           </div>
         </el-card>
       </el-tab-pane>

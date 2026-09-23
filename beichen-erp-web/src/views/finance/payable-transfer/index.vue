@@ -94,7 +94,7 @@ onActivated(() => {
 </script>
 
 <template>
-  <div class="p">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
         <el-form :inline="true" :model="query" class="query-form">
@@ -122,12 +122,12 @@ onActivated(() => {
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="doQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="resetQuery">重置</el-button>
-          <el-button type="primary" :icon="'Plus'" @click="goAdd">新增转应收单</el-button>
+          <el-button type="success" :icon="'Plus'" @click="goAdd">新增</el-button>
         </div>
       </div>
     </el-card>
 
-    <el-card shadow="never">
+    <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="rows" border stripe @row-click="goDetail">
         <el-table-column prop="code" label="转应收单号" min-width="150" />
         <el-table-column label="来源应付单号" min-width="150">
@@ -164,7 +164,7 @@ onActivated(() => {
           </template>
         </el-table-column>
       </el-table>
-      <div class="pg">
+      <div class="pagination">
         <el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize"
           :page-sizes="[10, 20, 50, 100]" :total="page.total" layout="total, sizes, prev, pager, next, jumper"
           background @size-change="onSizeChange" @current-change="load" />
@@ -174,9 +174,8 @@ onActivated(() => {
 </template>
 
 <style scoped>
-.p { display: flex; flex-direction: column; gap: 12px; }
-.query-card :deep(.el-card__body) { padding: 16px; }
+/* 根容器/卡片内边距已统一到全局（styles/page.css 的 .page-list / .table-card .el-card__body） */
 .query-form { align-items: center; }
-.pg { margin-top: 16px; display: flex; justify-content: flex-end; }
+/* 分页样式已统一到全局（styles/page.css 的 .pagination） */
 :deep(.el-table__row) { cursor: pointer; }
 </style>

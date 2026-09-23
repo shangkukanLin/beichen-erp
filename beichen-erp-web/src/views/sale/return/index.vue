@@ -1,8 +1,8 @@
 <template>
-  <div class="app-container">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
-      <el-form :inline="true" :model="query" class="search-form">
+      <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="退货单号">
           <el-input v-model="query.code" placeholder="请输入单号" clearable style="width: 180px" />
         </el-form-item>
@@ -19,7 +19,7 @@
         <div class="toolbar">
           <el-button type="primary" :icon="Search" @click="load(1)">查询</el-button>
           <el-button :icon="Refresh" @click="resetQuery">重置</el-button>
-          <el-button type="primary" :icon="Plus" @click="goAdd">新增销售退货单</el-button>
+          <el-button type="success" :icon="Plus" @click="goAdd">新增</el-button>
         </div>
       </div>
       <el-table :data="list" v-loading="loading" border stripe @row-click="goDetail">
@@ -63,15 +63,12 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-pagination
-        class="pager"
-        background
-        layout="total, prev, pager, next"
-        :total="total"
-        :current-page="query.pageNum"
-        :page-size="query.pageSize"
-        @current-change="(p: number) => load(p)"
-      />
+      <div class="pagination">
+        <el-pagination v-model:current-page="query.pageNum" v-model:page-size="query.pageSize"
+          :page-sizes="[10, 20, 50, 100]" :total="total"
+          layout="total, sizes, prev, pager, next, jumper" background
+          @size-change="() => load(1)" @current-change="(p: number) => load(p)" />
+      </div>
     </el-card>
   </div>
 </template>
@@ -219,6 +216,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.toolbar { margin-bottom: 12px; }
-.pager { margin-top: 12px; justify-content: flex-end; }
+/* .toolbar / .pager 已删除：按钮组用全局 .toolbar，分页统一为全局 .pagination */
+
 </style>
