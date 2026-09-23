@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted, onActivated } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { WarehouseCategory, INVENTORY_RECLASSIFY_DIRTY_KEY } from '@/api/enums'
@@ -8,8 +8,10 @@ import { getQualityTypes, productLabel, type QualityOption } from '@/api/product
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { getReclassify, getReclassifyItems, updateReclassify, auditReclassify, unAuditReclassify, cancelReclassify } from '@/api/inventory'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
-const route = useRoute(); const router = useRouter()
+const route = useRoute()
 // 用 computed 取路由参数：keep-alive 会复用组件，从单据 A 跳到单据 B 时 route.params.id 会变，
 // 若在 setup 阶段固化成常量，会一直显示第一次进入的那张单据
 const id = computed(() => Number(route.params.id) || 0)
@@ -28,6 +30,13 @@ const isDraft = computed(() => detail.value.status === DocStatus.DRAFT)
 // ===== 草稿态编辑表单 =====
 const editForm = reactive({ warehouseId: undefined as any, reclassifyDate: '', remark: '' })
 const editItems = ref<any[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页草稿态可直接编辑保存 ⇒ 属"能改数据"，同样接守卫。
+ * ⚠️ 必须写在 detail / items / editForm / editItems **之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({
+  detail: detail.value, items: items.value, editForm, editItems: editItems.value
+}))
 const fetchWarehouses = (kw: string) =>
   request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 50, keyword: kw } })
@@ -123,6 +132,8 @@ async function loadDetail() {
     if (isDraft.value) fillEditForm()
     await loadWarehouseName()
   } finally { loading.value = false }
+  // 数据加载完成 ⇒ 重建"未保存"基线（审核/保存后会重跑本函数 ⇒ 自动重置，不误报）
+  takeBaseline()
 }
 
 async function handleSave() {
@@ -191,16 +202,21 @@ onActivated(() => { loadDetail() })
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
-    <el-card shadow="never" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（保存/审核/反审核/作废） -->
+  <PageShell :loading="loading" back-fallback="/inventory/reclassify">
+    <template #actions>
+      <el-button v-if="isDraft" type="primary" :loading="saving" @click="handleSave">保存</el-button>
+      <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
+      <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
+      <el-button type="info" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
+    </template>
+
+    <el-card shadow="never">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:600">单据信息</span>
           <div style="display:flex;align-items:center;gap:8px">
             <el-tag :type="statusTag(detail.status)" size="small">{{ statusLabel(detail.status) }}</el-tag>
-            <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
-            <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
-            <el-button type="info" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
           </div>
         </div>
       </template>
@@ -299,9 +315,5 @@ onActivated(() => { loadDetail() })
       </el-table>
     </el-card>
 
-    <div style="display:flex;gap:12px;justify-content:center">
-      <el-button v-if="isDraft" type="primary" :loading="saving" @click="handleSave">保存</el-button>
-      <el-button @click="router.push('/inventory/reclassify')">返回列表</el-button>
-    </div>
-  </div>
+  </PageShell>
 </template>

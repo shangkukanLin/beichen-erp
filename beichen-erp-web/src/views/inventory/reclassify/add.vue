@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted, onActivated } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { WarehouseCategory, INVENTORY_RECLASSIFY_DIRTY_KEY } from '@/api/enums'
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
 import { createReclassify, type ReclassifyItem } from '@/api/inventory'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 
-const router = useRouter()
+const route = useRoute(); const router = useRouter()
+const tabStore = useTabStore()
 const saving = ref(false)
 const qualityOptions = ref<QualityOption[]>([])
 
@@ -19,6 +23,11 @@ const form = reactive({
   remark: ''
 })
 const items = ref<any[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items **之后**：watch 注册时会立即求值一次快照，放前面会因 TDZ 静默失效。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 
 const fetchWarehouses = (kw: string) =>
   request.get('/warehouse/page', { params: { pageSize: 200, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY } })
@@ -87,6 +96,9 @@ async function handleSubmit() {
     })
     ElMessage.success('已保存（待审核）')
     sessionStorage.setItem(INVENTORY_RECLASSIFY_DIRTY_KEY, '1')
+    // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
+    markClean()
+    tabStore.closeTabAndBack(route.path)
     router.push('/inventory/reclassify')
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
@@ -110,13 +122,16 @@ function resetPage() {
   addItem()
 }
 
-onMounted(() => { loadQualityTypes(); resetPage() })
-onActivated(() => { resetPage() })
+onMounted(() => { loadQualityTypes(); resetPage(); takeBaseline() })
+onActivated(() => { resetPage(); takeBaseline() })
 </script>
 
 <template>
-  <div style="display:flex;flex-direction:column;gap:12px">
-    <div><span style="font-size:var(--app-font-xl);font-weight:600">新增规格调整</span></div>
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（保存） -->
+  <PageShell back-fallback="/inventory/reclassify">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
+    </template>
 
     <el-card shadow="never">
       <el-form :model="form" label-width="80px" size="small">
@@ -183,9 +198,5 @@ onActivated(() => { resetPage() })
       </el-table>
     </el-card>
 
-    <div style="display:flex;gap:12px;justify-content:center">
-      <el-button @click="router.push('/inventory/reclassify')">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
-    </div>
-  </div>
+  </PageShell>
 </template>
