@@ -62,7 +62,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="order-page">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query">
@@ -72,7 +72,7 @@ onMounted(() => {
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
         <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
-        <el-button type="success" :icon="'Plus'" @click="router.push('/outsource/order/add')">新增加工单</el-button>
+        <el-button type="success" :icon="'Plus'" @click="router.push('/outsource/order/add')">新增</el-button>
       </div>
       </div>
     </el-card>
@@ -128,12 +128,16 @@ onMounted(() => {
           </template>
         </el-table-column>
       </el-table>
-      <div class="pagination"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleQuery" /></div>
+      <div class="pagination">
+        <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper" background
+          @size-change="handleQuery" @current-change="loadData" />
+      </div>
     </el-card>
   </div>
 </template>
 
 <style scoped>
-.order-page { display:flex; flex-direction:column; gap:12px; }
-.query-card :deep(.el-card__body), .table-card :deep(.el-card__body) { padding:16px; }
+/* 根容器/卡片内边距已统一到全局（styles/page.css 的 .page-list / .table-card .el-card__body） */
 </style>

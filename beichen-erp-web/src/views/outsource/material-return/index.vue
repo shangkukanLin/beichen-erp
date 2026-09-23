@@ -137,7 +137,7 @@ onMounted(loadData)
 
 <template>
   <!-- 一页一张卡片（家规）：页签 → 筛选行 → 表格 → 分页 -->
-  <div>
+  <div class="page-list">
     <el-card shadow="never">
       <!-- 页签：①物料退货（退回并冲减应付）②维修退货（送修 → 登记返回 → 结案） -->
       <el-tabs v-model="activeType" style="margin-bottom:8px" @tab-change="handleTabChange">
@@ -216,8 +216,11 @@ onMounted(loadData)
           </template>
         </el-table-column>
       </el-table>
-      <div style="margin-top:16px;display:flex;justify-content:flex-end">
-        <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleSearch" />
+      <div class="pagination">
+        <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper" background
+          @size-change="handleSearch" @current-change="loadData" />
       </div>
     </el-card>
   </div>

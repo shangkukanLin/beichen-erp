@@ -73,7 +73,7 @@ onActivated(() => {
 </script>
 
 <template>
-  <div class="mo-page">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query">
@@ -133,15 +133,20 @@ onActivated(() => {
           </template>
         </el-table-column>
       </el-table>
-      <div class="pagination"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleQuery" /></div>
+      <div class="pagination">
+        <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper" background
+          @size-change="handleQuery" @current-change="loadData" />
+      </div>
     </el-card>
   </div>
 </template>
 
 <style scoped>
 .mo-page { display:flex; flex-direction:column; gap:12px; }
-.query-card :deep(.el-card__body), .table-card :deep(.el-card__body) { padding:16px; }
-.pagination { margin-top:16px; display:flex; justify-content:flex-end; }
+/* 卡片内边距已统一到全局（styles/page.css 的 .table-card .el-card__body） */
+/* 分页样式已统一到全局（styles/page.css 的 .pagination） */
 .status-tabs { background: #fff; padding: 0 16px; border-radius: 4px; }
 .status-tabs :deep(.el-tabs__header) { margin: 0; }
 .tab-label { font-weight: 500; }
