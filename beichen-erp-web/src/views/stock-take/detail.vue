@@ -6,11 +6,18 @@ import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getStockTakeItems, saveStockTakeItems, type StockTakeItem } from '@/api/inventory'
 import { ElMessage } from 'element-plus'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const items = ref<StockTakeItem[]>([])
+/**
+ * 未保存拦截（2026-09-23 统一模板）：盘点行可就地填实盘数量/备注 ⇒ 属"能改数据"，接守卫。
+ * ⚠️ 必须写在 items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline } = useUnsavedGuard(() => ({ items: items.value }))
 
 const id = Number(route.params.id)
 const isMaterial = computed(() => route.query.scope === 'MATERIAL')
@@ -36,21 +43,23 @@ async function saveItems() {
   try {
     await saveStockTakeItems(id, items.value)
     ElMessage.success('实盘数量已保存')
+    takeBaseline()   // 保存成功 ⇒ 重建基线，避免离开时误报"未保存"
     await loadItems()
   } catch { /* 失败提示由 request 拦截器统一给出 */ }
 }
-onMounted(loadItems)
+onMounted(async () => { await loadItems(); takeBaseline() })
 </script>
 
 <template>
-  <div class="p" v-loading="loading">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：标题/单号交骨架、返回交骨架、保存实盘上移页头 -->
+  <PageShell :loading="loading" :title="`盘点明细 - ${warehouseName}`" back-fallback="/inventory/stock-take">
+    <template #sub><span v-if="takeNo" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">（{{ takeNo }}）</span></template>
+    <template #actions>
+      <el-button v-if="editable" type="primary" @click="saveItems">保存实盘</el-button>
+    </template>
+
     <el-card shadow="never">
-      <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">盘点明细 - {{ warehouseName }}<template v-if="takeNo">（{{ takeNo }}）</template></span>
-          <el-button @click="router.back()">返回</el-button>
-        </div>
-      </template>
+      <!-- 卡片页头已删除：标题与单号交骨架，保存实盘上移 #actions -->
 
       <div style="margin-bottom:8px;font-size:var(--app-font-base)">
         账面数量来自建单时快照；修改实盘数量后自动算差异。当前差异行：<b :style="{color: diffRows.length ? 'var(--app-color-danger)' : ''}">{{ diffRows.length }}</b>
@@ -79,12 +88,8 @@ onMounted(loadItems)
         </el-table-column>
       </el-table>
 
-      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
-        <el-button @click="router.back()">返回</el-button>
-        <el-button v-if="editable" type="primary" @click="saveItems">保存实盘</el-button>
-      </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
-<style scoped>.p{display:flex;flex-direction:column;gap:12px}</style>
+<style scoped>/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .p 局部样式已删除 */</style>

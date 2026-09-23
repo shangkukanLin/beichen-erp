@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { StockChangeTypeLabel, stockChangeTypeTag } from '@/api/enums'
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute(); const router = useRouter()
 const warehouseId = Number(route.params.wid)
@@ -48,7 +49,8 @@ onMounted(() => loadData())
 </script>
 
 <template>
-  <div class="history-page">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：返回去「该物料的库存分布详情」（本页由那里进入）；只读 -->
+  <PageShell :back-fallback="`/outsource/material-stock/detail/${route.params.wid}`">
     <el-card shadow="never">
       <el-table :data="records" border stripe v-loading="loading">
         <el-table-column label="时间" width="110"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
@@ -71,11 +73,11 @@ onMounted(() => loadData())
       </el-table>
       <div class="pagination"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="handlePageChange" @size-change="handleSizeChange" /></div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.history-page { display:flex; flex-direction:column; gap:12px; }
+/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .history-page 已删除（.pagination 保留） */
 
 .pagination { margin-top:16px; display:flex; justify-content:flex-end; }
 </style>

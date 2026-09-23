@@ -6,6 +6,9 @@ import request from '@/utils/request'
 import { addProduct, updateProduct, ProductStatus, ProductStatusLabel, type Product } from '@/api/product'
 // 2026-09-21：规格枚举（原「分类」自由文本替换而来）
 import { ProductSpec, ProductSpecLabel } from '@/api/enums'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 
 const route = useRoute(); const router = useRouter()
@@ -45,6 +48,12 @@ const defaultForm = (): Product => ({
 } as Product)
 
 const form = reactive<Product>(defaultForm())
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页新增/编辑共用，可就地改产品信息并保存 ⇒ 属"能改数据"，接守卫。
+ * ⚠️ 必须写在 form 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form }))
+const tabStore = useTabStore()
 
 /** 编辑态进入时的原始 SKU：改 SKU 前需二次确认（历史单据的 SKU 是快照，不会一并更新） */
 const originalSku = ref('')
@@ -189,6 +198,9 @@ async function handleSave() {
         await addProduct(form)
         ElMessage.success('新增成功')
       }
+      // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签并回列表
+      markClean()
+      tabStore.closeTabAndBack(route.path)
       router.push('/product')
     } catch {
       // 错误已在拦截器中提示
@@ -200,26 +212,24 @@ function handleCancel() { router.push('/product') }
 function goProject(pid?: number) { if (pid) router.push(`/dev/project/edit/${pid}`) }
 function goStockLog(row: any) { router.push(`/inventory/warehouse/product-history/${row.warehouseId}/${id.value}`) }
 
-onMounted(() => { loadBrands(); loadSuppliers(); init() })
+onMounted(async () => { loadBrands(); loadSuppliers(); await init(); takeBaseline() })
 // keep-alive 缓存下再次进入会复用组件，onMounted 不再触发；路由参数变化（切换产品/新增）也需重新加载
-onActivated(() => { init() })
-watch(() => route.fullPath, () => { init() })
+onActivated(async () => { await init(); takeBaseline() })
+watch(() => route.fullPath, async () => { await init(); takeBaseline() })
 </script>
 
 <template>
-  <div class="detail-page" v-loading="loading">
-    <el-card shadow="never">
-      <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">{{ isNew ? '新增产品' : `产品详情 — ${form.name}` }}</span>
-          <div>
-            <el-button type="primary" size="small" :loading="saving" @click="handleSave">保存</el-button>
-            <el-button size="small" @click="handleCancel">取消</el-button>
-          </div>
-        </div>
-      </template>
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：标题交骨架（新增/详情动态）、返回交骨架、保存上移页头 -->
+  <PageShell :loading="loading" :title="isNew ? '新增产品' : `产品详情 — ${form.name}`" back-fallback="/product">
+    <template #actions>
+      <el-button type="primary" size="small" :loading="saving" @click="handleSave">保存</el-button>
+    </template>
 
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
+    <el-card shadow="never">
+      <!-- 卡片页头已删除：标题交骨架；保存上移 #actions；原「取消」= 放弃并回列表，已并入骨架返回 -->
+
+
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="var(--app-label-width)">
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="SKU">
@@ -340,12 +350,9 @@ watch(() => route.fullPath, () => { init() })
       <div v-if="!stockRows.length" style="padding:12px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">暂无库存记录</div>
     </el-card>
 
-    <div style="text-align:center;margin-top:20px">
-      <el-button @click="router.back()">返回</el-button>
-    </div>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.detail-page { display: flex; flex-direction: column; gap: 12px; }
+/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .detail-page 局部样式已删除 */
 </style>

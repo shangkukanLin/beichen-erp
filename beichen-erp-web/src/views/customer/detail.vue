@@ -6,6 +6,9 @@ import request from '@/utils/request'
 import { DocStatusLabel, DocStatusTag } from '@/api/common'
 import { type SaleOrder } from '@/api/sale'
 import { getCustomer, createCustomer, updateCustomer, getCustomerSaleOrders, type Customer } from '@/api/customer'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 
 const route = useRoute(); const router = useRouter()
 
@@ -32,6 +35,12 @@ const defaultForm = (): Customer => ({
 })
 
 const form = reactive<Customer>(defaultForm())
+/**
+ * 未保存拦截（2026-09-23 统一模板）：本页新增/详情编辑共用，可就地改客户信息并保存 ⇒ 属"能改数据"，接守卫。
+ * ⚠️ 必须写在 form 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form }))
+const tabStore = useTabStore()
 
 const rules: FormRules = {
   name: [{ required: true, message: '请输入客户名称', trigger: 'blur' }],
@@ -108,6 +117,9 @@ async function handleSave() {
         await createCustomer({ ...form })
         ElMessage.success('新增成功')
       }
+      // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签并回列表
+      markClean()
+      tabStore.closeTabAndBack(route.path)
       router.push('/inventory/customer')
     } catch (e: any) {
       ElMessage.error(e?.message || '保存失败')
@@ -118,26 +130,24 @@ async function handleSave() {
 function handleCancel() { router.push('/inventory/customer') }
 function goOrderDetail(row: SaleOrder) { router.push('/inventory/sale/detail/' + row.id) }
 
-onMounted(() => { loadWarehouses(); init() })
+onMounted(async () => { loadWarehouses(); await init(); takeBaseline() })
 // keep-alive 缓存下再次进入会复用组件；新增/详情路由切换也需重新加载
-onActivated(() => { init() })
-watch(() => route.fullPath, () => { init() })
+onActivated(async () => { await init(); takeBaseline() })
+watch(() => route.fullPath, async () => { await init(); takeBaseline() })
 </script>
 
 <template>
-  <div class="detail-page" v-loading="loading">
-    <el-card shadow="never">
-      <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">{{ isNew ? '新增客户' : `客户详情 — ${form.name}` }}</span>
-          <div>
-            <el-button type="primary" size="small" :loading="saving" @click="handleSave">保存</el-button>
-            <el-button size="small" @click="handleCancel">取消</el-button>
-          </div>
-        </div>
-      </template>
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：标题交骨架（新增/详情动态）、返回交骨架、保存上移页头 -->
+  <PageShell :loading="loading" :title="isNew ? '新增客户' : `客户详情 — ${form.name}`" back-fallback="/inventory/customer">
+    <template #actions>
+      <el-button type="primary" size="small" :loading="saving" @click="handleSave">保存</el-button>
+    </template>
 
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px" size="small">
+    <el-card shadow="never">
+      <!-- 卡片页头已删除：标题交骨架；保存上移 #actions；原「取消」= 放弃并回列表，已并入骨架返回 -->
+
+
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="var(--app-label-width)" size="small">
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="客户编码">
@@ -229,12 +239,9 @@ watch(() => route.fullPath, () => { init() })
       </div>
     </el-card>
 
-    <div style="text-align:center;margin-top:20px">
-      <el-button @click="router.back()">返回</el-button>
-    </div>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.detail-page { display: flex; flex-direction: column; gap: 12px; }
+/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .detail-page 局部样式已删除 */
 </style>
