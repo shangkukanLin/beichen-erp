@@ -1,14 +1,12 @@
 <template>
-  <div class="page">
-    <el-card shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span class="title">{{ isEdit ? '编辑物料报损单' : '新增物料报损单' }}</span>
-          <el-button :icon="'ArrowLeft'" @click="goBack">返回</el-button>
-        </div>
-      </template>
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题 → 右端操作（保存） -->
+  <PageShell :title="isEdit ? '编辑物料报损单' : '新增物料报损单'" back-fallback="/outsource/stock-loss">
+    <template #actions>
+      <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
+    </template>
 
-      <el-form :model="form" label-width="90px" class="head-form">
+    <el-card shadow="never">
+      <el-form :model="form" label-width="var(--app-label-width)" class="head-form">
         <el-form-item label="仓库" required>
           <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses"
             :label-key="(row:any)=>row.warehouseName" placeholder="选择报损仓库" style="width:240px"
@@ -89,13 +87,10 @@
 
       <div class="footer">
         <div class="total">合计报损金额：<strong>{{ money(totalAmount) }}</strong></div>
-        <div class="actions">
-          <el-button @click="goBack">取消</el-button>
-          <el-button type="primary" :loading="saving" @click="handleSubmit">保存</el-button>
-        </div>
+        <!-- 操作按钮已收口：取消并入骨架返回、保存上移到页头（PageShell #actions） -->
       </div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <script setup lang="ts">
@@ -105,6 +100,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import PageShell from '@/components/PageShell.vue'
+import { useUnsavedGuard } from '@/composables/usePageBack'
+import { useTabStore } from '@/stores/tabs'
 import { codeLabelOptions, LossReasonLabel } from '@/api/enums'
 
 const route = useRoute()
@@ -134,6 +132,12 @@ const form = reactive({
   remark: ''
 })
 const items = ref<any[]>([])
+const tabStore = useTabStore()
+/**
+ * 未保存拦截（2026-09-23 统一模板）
+ * ⚠️ 必须写在 form / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
+ */
+const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
 
 // 数量一律整数（2026-09-16）
 function fmtQty(v?: number) { return v == null ? '0' : String(Math.round(Number(v))) }
@@ -233,6 +237,9 @@ async function handleSubmit() {
     if (isEdit.value) await request.put(`/outsource/stock-loss/${editId.value}`, payload)
     else await request.post('/outsource/stock-loss', payload)
     ElMessage.success('保存成功')
+    // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签并回列表
+    markClean()
+    tabStore.closeTabAndBack(route.path)
     router.push('/outsource/stock-loss')
   } catch (e: any) {
     ElMessage.error(e?.message || '保存失败')
@@ -244,14 +251,15 @@ function goBack() { router.push('/outsource/stock-loss') }
 onMounted(async () => {
   lossReasons.value = codeLabelOptions(LossReasonLabel) // 2026-09-14：前端枚举映射（后端接口已只回 code）
   try { materialTypes.value = await request.get<any, any>('/dev/material-type/page', { params: { pageSize: 200 } }).then((r: any) => r?.records || []) } catch { materialTypes.value = [] }
-  if (isEdit.value) loadDetail()
+  if (isEdit.value) await loadDetail()   // 编辑态必须等回填完成再建基线，否则会把回填误判成用户修改
   else items.value = [newItem()]
+  takeBaseline()
 })
 </script>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 12px; }
-.card-header { display: flex; align-items: center; justify-content: space-between; }
+/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .page / .card-header 局部样式已删除
+   （.footer / .total 保留：底部"合计报损金额"仍在用） */
 .title { font-weight: 600; }
 .head-form { display: flex; flex-wrap: wrap; }
 .head-form :deep(.el-form-item) { margin-bottom: 8px; }

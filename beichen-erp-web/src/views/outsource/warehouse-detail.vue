@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
 import { QualityType, QualityTypeLabel } from '@/api/enums'
+import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -113,9 +114,10 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
 </script>
 
 <template>
-  <div class="detail-page">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta)；本页只读（导出按钮留在卡内） -->
+  <PageShell :loading="loading" back-fallback="/outsource/warehouse">
     <!-- 仓库基础信息 -->
-    <el-card shadow="never" v-loading="loading">
+    <el-card shadow="never">
       <template #header><span style="font-weight:600">仓库信息</span></template>
       <el-descriptions v-if="warehouse" :column="2" border size="small">
         <el-descriptions-item label="仓库名称" :span="2">{{ warehouse.warehouseName }}</el-descriptions-item>
@@ -163,10 +165,10 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
       </el-table>
       <div v-if="sortedMaterials.length===0" style="text-align:center;color:var(--app-text-secondary);padding:24px">暂无关联物料</div>
     </el-card>
-  </div>
+  </PageShell>
 </template>
 
 <style scoped>
-.detail-page { display:flex; flex-direction:column; gap:12px; }
+/* 页头/根容器已统一到全局骨架（PageShell + styles/page.css）；原 .detail-page 局部样式已删除 */
 
 </style>
