@@ -121,7 +121,8 @@ async function handleCancel(row: any) {
 /** 新增时带上类型（物料退货 / 维修退货），进新增页后表单按类型切换 */
 function handleAdd(type?: string) { router.push(`/outsource/material-return/add?returnType=${type || MaterialReturnType.REFUND}`) }
 /** 编辑草稿（D 档 2026-09-21）：复用新增页（后端 PUT /{id} 仅允许草稿） */
-function handleEdit(row: any) { router.push(`/outsource/material-return/edit/${row.id}`) }
+/* 2026-09-24（用户口径）：列表不再提供「编辑」 —— 草稿态统一在详情页内联改+存（handleEdit 已移除）；
+   新增仍走 /outsource/material-return/add（可带 fromDelivery 等预填）。 */
 function goDetail(row: any) { router.push(`/outsource/material-return/detail/${row.id}`) }
 
 onActivated(() => {
@@ -202,12 +203,11 @@ onMounted(loadData)
             <el-tag v-else :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <!-- 动作集与顺序统一（与加工侧一致）：详情 → 编辑 → 审核 → 反审核 → 作废 → 结案 → 撤销结案 -->
-        <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 174→168（草稿/维修分支最多 4 个按钮）。 -->
-        <el-table-column label="操作" width="176" align="center" fixed="right">
+        <!-- 动作集与顺序统一（与加工侧一致）：详情 → 审核 → 反审核 → 作废 → 结案 → 撤销结案 -->
+        <!-- 2026-09-24（用户口径）：反审核与编辑都收进详情页（详情草稿态可就地改+存）⇒ 操作列 176→132。 -->
+        <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
-            <el-button type="warning" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleEdit(row)">编辑</el-button>
             <el-button type="success" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleAudit(row)">审核</el-button>
             <el-button type="danger" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleCancel(row)">作废</el-button>
             <!-- 结案（仅维修退货）：未返回=0 时才出现，代表跟踪终点 -->

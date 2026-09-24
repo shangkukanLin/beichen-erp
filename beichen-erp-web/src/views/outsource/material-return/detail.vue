@@ -1,20 +1,66 @@
 <script setup lang="ts">
-import { ref, computed, onActivated } from 'vue'
+import { ref, reactive, computed, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageShell from '@/components/PageShell.vue'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { localDate } from '@/utils/date'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, MaterialReturnType, MaterialReturnTypeLabel, MaterialReturnTypeTag, MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag } from '@/api/enums'
 
+/**
+ * 委外物料退货详情（2026-09-24 用户口径：草稿态就地可编辑，列表不再给「编辑」）
+ *
+ * 结构对齐其它单据详情：`head` = 只读快照，`form`/`items` = 可编辑副本（仅草稿态）。
+ * 草稿分支的字段、校验、payload 与 add.vue **完全一致**（类型 / 供应商 / 出库源仓 / 日期 / 备注 / 关联物料订单 + 明细数量·单价）。
+ *
+ * ⚠️ 关键差异（比 add.vue 更保守，故意的）：add.vue 的编辑态是"按**源仓当前库存**重建明细行再回填"，
+ * 它的注释已明确警告「源仓当前库存里已没有该物料的（例如被别的单占掉）也要带上，否则一保存就会把这行**静默删掉**」。
+ * 本页**不重建明细**：直接拿本单自己的 items 改数量/单价 ⇒ 天然不会丢行；只有用户自己把某行数量改成 0 才会不再退回，
+ * 且这种情况会**先弹确认**（杜绝静默删除）。
+ */
 const route = useRoute()
 const router = useRouter()
 const id = route.params.id as string
 const detail = ref<any>({})
 const loading = ref(false)
+const saving = ref(false)
 
 /** 维修退货（2026-09-17）：审核=送修出库（不冲应付）；供应商修好后「登记维修返回」把物料入回来 */
-const isRepair = computed(() => (detail.value.returnType || MaterialReturnType.REFUND) === MaterialReturnType.REPAIR)
+const isRepair = computed(() => (isDraft.value ? form.returnType : (detail.value.returnType || MaterialReturnType.REFUND)) === MaterialReturnType.REPAIR)
+const isDraft = computed(() => detail.value.status === DocStatus.DRAFT)
+
+// ===== 草稿态可编辑副本（白名单：单号/状态/来源收料单/制单人 不回传） =====
+const form = reactive({
+  returnType: MaterialReturnType.REFUND as string,
+  supplierId: undefined as any,
+  fromWarehouseId: undefined as any,
+  returnDate: localDate(),
+  remark: '',
+  /** 关联物料订单（维修退货闭环）：可清空；不选=不关联（靠本单「送修/已返回」跟踪） */
+  materialOrderId: undefined as any
+})
+
+/**
+ * 退回对象 / 维修供应商 实时查库（Odoo 风格）。
+ * <p>2026-09-21（用户口径）：**物料退货只允许退给辅料商 + 供应商，不能退给供货商** ⇒
+ * `excludeSupplierType: 'product'`（供货商=成品商 product；其余 辅料商/方案商/加工厂 都放行）。
+ */
+const fetchSuppliers = (kw: string) =>
+  request.get('/supplier/page', { params: { pageSize: 500, name: kw, excludeSupplierType: 'product' } })
+/** 该物料商的物料订单（收货中/已完成）：收货中的单审核会扣减收料数，已完成的靠本单跟踪 */
+const fetchMaterialOrders = (kw: string) => request.get('/outsource/material-return/material-orders', {
+  params: {
+    pageSize: 500, code: kw || undefined,
+    supplierId: form.supplierId || undefined,
+    statuses: `${MaterialOrderStatus.RECEIVING},${MaterialOrderStatus.FINISHED}`
+  }
+})
+/** 状态可能缺失（preset 回填项只带 id/code）→ 缺状态时只显示单号，避免出现"（undefined）" */
+function materialOrderLabel(o: any) {
+  const st = o && o.status ? (MaterialOrderStatusLabel[o.status] || o.status) : ''
+  return st ? `${o.code}（${st}）` : `${o.code}`
+}
 
 // ===== 维修返回（对齐加工退货的维修返回实现）=====
 const warehouseOptions = ref<any[]>([])
@@ -25,7 +71,8 @@ const repairDate = ref(localDate())
 const repairRows = ref<any[]>([])
 
 async function loadWarehouseOptions() {
-  try { const r = await request.get<any, any>('/outsource/material-return/warehouse-options'); warehouseOptions.value = r || [] } catch { warehouseOptions.value = [] }
+  // F7-129（2026-09-20）：加载失败不再静默 —— 留痕，避免"空下拉"被误认为"没有数据"
+  try { const r = await request.get<any, any>('/outsource/material-return/warehouse-options'); warehouseOptions.value = r || [] } catch (e: any) { console.warn('加载仓库选项失败', e?.message || e) }
 }
 
 /** 打开「登记维修返回」：按送修**物料**生成行，数量默认 = 送修 − 已返回（物料库存只有良品一档） */
@@ -80,6 +127,70 @@ async function cancelRepairReturn(row: any) {
 async function loadData() {
   loading.value = true
   try { detail.value = (await request.get<any, any>(`/outsource/material-return/${id}`)) || {} } finally { loading.value = false }
+  if (isDraft.value) resetForm()
+}
+
+/** 草稿：用本单自己的明细填充可编辑副本（**不重建**，见文件头注释） */
+function resetForm() {
+  const d = detail.value
+  form.returnType = d.returnType || MaterialReturnType.REFUND
+  form.supplierId = d.supplierId ?? undefined
+  form.fromWarehouseId = d.fromWarehouseId ?? undefined
+  form.returnDate = d.returnDate ? String(d.returnDate).slice(0, 10) : localDate()
+  form.remark = d.remark || ''
+  form.materialOrderId = d.materialOrderId ?? undefined
+  editableItems.value = (d.items || []).map((it: any) => ({
+    ...it,
+    returnQuantity: Number(it.quantity || 0),
+    // 后端 unitPrice 为空 = 由后端按 FIFO 自动计价（add.vue 也保留空串），不要强行补 0
+    unitPrice: it.unitPrice === null || it.unitPrice === undefined ? '' : it.unitPrice
+  }))
+}
+const editableItems = ref<any[]>([])
+
+function formatMoney(v: any) {
+  const n = Number(v || 0)
+  return n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+/** 行金额（参考值）：单价留空 = 由后端 FIFO 计价，此处按 0 显示为「自动」 */
+function lineAmount(row: any) {
+  const up = row.unitPrice
+  if (up === '' || up === null || up === undefined) return null
+  return (Number(row.returnQuantity) || 0) * (Number(up) || 0)
+}
+
+/** 保存（与 add.vue 同一套校验与 payload；后端 PUT 自带「只有草稿可编辑」守卫） */
+async function doSave() {
+  if (!form.supplierId) { ElMessage.warning(isRepair.value ? '请选择维修供应商' : '请选择退回对象（物料商）'); return }
+  if (!form.fromWarehouseId) { ElMessage.warning('请选择出库源仓'); return }
+  const keep = editableItems.value.filter((m: any) => Number(m.returnQuantity) > 0)
+  if (keep.length === 0) { ElMessage.warning(isRepair.value ? '请输入送修数量' : '请输入退货数量'); return }
+  const dropped = editableItems.value.length - keep.length
+  if (dropped > 0) {
+    try {
+      await ElMessageBox.confirm(`有 ${dropped} 行数量为 0，保存后这些物料将不再${isRepair.value ? '送修' : '退回'}，确认保存？`, '提示', { type: 'warning' })
+    } catch { return }
+  }
+  saving.value = true
+  try {
+    await request.put(`/outsource/material-return/${id}`, {
+      supplierId: form.supplierId, fromWarehouseId: form.fromWarehouseId,
+      returnDate: form.returnDate, remark: form.remark,
+      // 类型（2026-09-17）：REFUND 退货退款 / REPAIR 维修退货
+      returnType: form.returnType,
+      items: keep.map((m: any) => ({
+        materialId: m.materialId, materialTypeId: m.materialTypeId, unit: m.unit,
+        quantity: Number(m.returnQuantity), unitPrice: m.unitPrice || '', remark: m.remark || ''
+      })),
+      // 来源收料单：原值保留（编辑不改变来源，用于按记录算可退数量并追溯）
+      sourceDeliveryId: detail.value.sourceDeliveryId ?? null,
+      // 关联物料订单（维修退货闭环）：非维修退货一律清空
+      materialOrderId: isRepair.value ? (form.materialOrderId || null) : null
+    })
+    ElMessage.success('已保存')
+    sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
+    await loadData()
+  } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
 
 async function handleAudit() {
@@ -122,6 +233,8 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作 -->
   <PageShell :loading="loading" back-fallback="/outsource/material-return">
     <template #actions>
+      <!-- 草稿：保存(主) + 审核 + 作废（2026-09-24 用户口径：草稿态就地编辑，不再跳独立编辑页） -->
+      <el-button type="primary" v-if="isDraft" :loading="saving" @click="doSave">保存</el-button>
       <el-button type="success" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
       <el-button type="warning" v-if="detail.status===DocStatus.AUDITED && detail.closedFlag!==1" @click="handleUnAudit">反审核</el-button>
       <el-button type="danger" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
@@ -134,7 +247,53 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
       <template #header>
         <span style="font-weight:600">委外物料退货详情</span>
       </template>
-      <el-descriptions :column="3" border size="small">
+
+      <!-- ============ 草稿：可编辑（字段/校验/payload 与 add.vue 一致） ============ -->
+      <el-form v-if="isDraft" :model="form" label-width="var(--app-label-width)">
+        <el-row :gutter="16">
+          <el-col :span="8"><el-form-item label="退货单号">{{ detail.code }}</el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="状态"><el-tag :type="DocStatusTag[detail.status] || 'info'" size="small">{{ DocStatusLabel[detail.status] || detail.status }}</el-tag></el-form-item></el-col>
+          <!-- 来源收料单：从「物料收货」按记录发起退货时才有（2026-09-17） -->
+          <el-col :span="8"><el-form-item label="来源收料单">{{ detail.sourceDeliveryCode || (detail.sourceDeliveryId ? ('#' + detail.sourceDeliveryId) : '-') }}</el-form-item></el-col>
+          <el-col :span="8">
+            <el-form-item required label="退货类型">
+              <el-select v-model="form.returnType" style="width:100%">
+                <el-option :label="MaterialReturnTypeLabel[MaterialReturnType.REFUND]" :value="MaterialReturnType.REFUND" />
+                <el-option :label="MaterialReturnTypeLabel[MaterialReturnType.REPAIR]" :value="MaterialReturnType.REPAIR" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item required :label="isRepair ? '维修供应商' : '退回对象'">
+              <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" label-key="name"
+                placeholder="实时查库（只允许辅料商 / 供应商）" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item required label="出库源仓">
+              <el-select v-model="form.fromWarehouseId" filterable clearable style="width:100%" placeholder="物料出库的来源仓">
+                <el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item :label="isRepair ? '送修日期' : '退货日期'">
+              <el-input v-model="form.returnDate" type="date" />
+            </el-form-item>
+          </el-col>
+          <!-- 关联物料订单（维修退货闭环，2026-09-17）：可不选（靠本单「送修/已返回」跟踪） -->
+          <el-col :span="8" v-if="isRepair">
+            <el-form-item label="关联物料订单">
+              <RemoteSelect v-model="form.materialOrderId" :fetch="fetchMaterialOrders" :label-key="materialOrderLabel"
+                :disabled="!form.supplierId" placeholder="可不选（不关联则靠本单跟踪）" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
+        </el-row>
+      </el-form>
+
+      <!-- ============ 已审核 / 已作废：只读（原口径原样保留） ============ -->
+      <el-descriptions v-else :column="3" border size="small">
         <el-descriptions-item label="退货单号">{{ detail.code }}</el-descriptions-item>
         <!-- 两类型（2026-09-17）：退货退款 = 冲减应付；维修退货 = 送修，修好登记维修返回入库 -->
         <el-descriptions-item label="类型">
@@ -175,8 +334,35 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
     </el-card>
 
     <el-card shadow="never" style="margin-top:12px">
-      <template #header><span style="font-weight:600">{{ isRepair ? '送修物料明细' : '退货物料明细' }}</span></template>
-      <el-table :data="detail.items || []" border size="small">
+      <template #header>
+        <span style="font-weight:600">{{ isRepair ? '送修物料明细' : '退货物料明细' }}</span>
+        <span v-if="isDraft" style="font-weight:normal;color:#909399;margin-left:8px">
+          数量/单价可直接改（单价留空 = 由后端按 FIFO 自动计价）；把某行改成 0 表示本次不再{{ isRepair ? '送修' : '退回' }}该物料
+        </span>
+      </template>
+
+      <!-- 草稿：可编辑（物料集合固定 —— 不重建明细，避免 add.vue 注释里"静默删行"的坑） -->
+      <el-table v-if="isDraft" :data="editableItems" border size="small">
+        <el-table-column prop="materialName" label="物料名称" min-width="160" />
+        <el-table-column prop="materialTypeName" label="物料类型" width="100" />
+        <el-table-column prop="unit" label="单位" width="70" />
+        <el-table-column :label="isRepair ? '送修数量' : '退货数量'" width="110">
+          <template #default="{ row }">
+            <el-input-number v-model="row.returnQuantity" size="small" :min="0" :controls="false" :precision="0" :step="1" style="width:100%" />
+          </template>
+        </el-table-column>
+        <el-table-column label="单价（留空自动FIFO）" width="150">
+          <template #default="{ row }"><el-input v-model="row.unitPrice" size="small" type="number" placeholder="自动" /></template>
+        </el-table-column>
+        <el-table-column label="金额（参考）" width="110" align="right">
+          <template #default="{ row }">
+            <span v-if="lineAmount(row) === null" style="color:#c0c4cc">自动</span>
+            <span v-else>{{ formatMoney(lineAmount(row)) }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <el-table v-else :data="detail.items || []" border size="small">
         <el-table-column prop="materialName" label="物料名称" min-width="160" />
         <el-table-column prop="materialTypeName" label="物料类型" width="100" />
         <el-table-column prop="unit" label="单位" width="70" />
