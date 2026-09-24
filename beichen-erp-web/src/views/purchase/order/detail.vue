@@ -1,9 +1,14 @@
 <script setup lang="ts">
 defineOptions({ name: 'PurchaseDetail' })
-import { ref, onMounted, onActivated } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { getPurchaseOrderItems, type PurchaseOrder, type PurchaseOrderItem, PurchaseStatus, PurchaseStatusLabel } from '@/api/purchase'
+import {
+  getPurchaseOrderItems, type PurchaseOrder, type PurchaseOrderItem, PurchaseStatus, PurchaseStatusLabel,
+  // 2026-09-24（用户口径 B：采购单详情对齐销售单详情）：审核/反审核/作废 三个动作
+  auditPurchaseOrder, unAuditPurchaseOrder, cancelPurchaseOrder,
+} from '@/api/purchase'
 
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
@@ -39,6 +44,13 @@ function qualityLabel(qt?: string) {
   return qt ? (map[qt] || qt) : '—'
 }
 
+/**
+ * 状态判断（2026-09-24）：后端返回的 order.status 是 **number**，而 PurchaseStatus 常量是**字符串**
+ * ⇒ 模板里直接比较会触发 TS2367（类型不重叠）⇒ 统一用 computed + String() 归一化后比较。
+ */
+const isDraft = computed(() => String(order.value.status ?? '') === String(PurchaseStatus.DRAFT))
+const isAudited = computed(() => String(order.value.status ?? '') === String(PurchaseStatus.AUDITED))
+
 async function loadData() {
   loading.value = true
   try {
@@ -71,6 +83,33 @@ function goSupplier(id?: number) { if (id) router.push(`/supplier/detail/${id}`)
 function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 function addReturn() { router.push({ path: '/inventory/purchase-return/add', query: { fromOrder: orderId } }) }
 function goReturnDetail(id: number) { router.push(`/inventory/purchase-return/detail/${id}`) }
+/**
+ * 2026-09-24（用户口径 B）：采购单详情对齐销售单详情 —— 退货 / 换货 / 反审核（+ 草稿态 审核 / 作废）。
+ * 后端 PurchaseOrderServiceImpl 的 audit / unAudit / cancel **已实现全套账务**（入库 PURCHASE_IN + 应付账款，
+ * 反审核冲回）⇒ 前端只需暴露入口，无需改后端。
+ */
+function goExchange() { router.push({ path: '/inventory/purchase-exchange/add', query: { purchaseOrderId: orderId } }) }
+async function handleAudit() {
+  try {
+    await ElMessageBox.confirm(`确认审核采购单「${order.value.code}」？审核后入库并生成应付账款。`, '确认审核',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    await auditPurchaseOrder(orderId); ElMessage.success('已审核'); await loadData()
+  } catch { /* 取消或失败 */ }
+}
+async function handleUnAudit() {
+  try {
+    await ElMessageBox.confirm(`确认反审核采购单「${order.value.code}」？将冲回入库与应付账款。`, '确认反审核',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    await unAuditPurchaseOrder(orderId); ElMessage.success('已反审核'); await loadData()
+  } catch { /* 取消或失败 */ }
+}
+async function handleCancel() {
+  try {
+    await ElMessageBox.confirm(`确认作废采购单「${order.value.code}」？`, '确认作废',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
+    await cancelPurchaseOrder(orderId); ElMessage.success('已作废'); await loadData()
+  } catch { /* 取消或失败 */ }
+}
 
 // 本页的供货商名/仓库名是在 loadData 内按需查询填充的（字典与业务耦合），故整体放到 onActivated：
 // keep-alive 缓存下再次进入会复用组件、onMounted 不再触发，只靠 onMounted 会停留在上次缓存的状态
@@ -81,7 +120,12 @@ onActivated(() => { loadData() })
   <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（发起退货） -->
   <PageShell :title="`采购单详情${order.code ? ' — ' + order.code : ''}`" :loading="loading" back-fallback="/inventory/purchase">
     <template #actions>
-      <el-button type="primary" :icon="'Plus'" @click="addReturn">发起退货</el-button>
+      <!-- 2026-09-24（用户口径 B：对齐销售单详情）：草稿 → 审核/作废；已审核 → 退货/换货/反审核 -->
+      <el-button v-if="isDraft" v-perm="'purchase:order:audit'" type="success" @click="handleAudit">审核</el-button>
+      <el-button v-if="isDraft" v-perm="'purchase:order:cancel'" type="danger" @click="handleCancel">作废</el-button>
+      <el-button v-if="isAudited" type="warning" @click="addReturn">退货</el-button>
+      <el-button v-if="isAudited" type="warning" plain @click="goExchange">换货</el-button>
+      <el-button v-if="isAudited" v-perm="'purchase:order:unaudit'" type="warning" @click="handleUnAudit">反审核</el-button>
     </template>
 
     <el-card shadow="never">
