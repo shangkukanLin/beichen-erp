@@ -203,7 +203,7 @@ onActivated(() => { loadData() })
       <template v-if="isDraft()">
         <el-button type="primary" size="small" :loading="saving" @click="handleSave">保存</el-button>
         <!-- 行内「取消」= 撤销未保存的明细改动（重新加载），非页面返回 ⇒ 保持原样不动 -->
-        <el-button size="small" @click="loadData">取消</el-button>
+        <el-button size="small" @click="loadData">撤销改动</el-button>
         <el-button v-perm="'purchase:return:audit'" type="success" size="small" @click="handleAudit">审核</el-button>
         <el-button v-perm="'purchase:return:cancel'" type="danger" size="small" @click="handleCancel">作废</el-button>
       </template>

@@ -166,7 +166,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
         <el-table-column label="操作" width="100" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="success" link size="small" @click.stop="handleEdit(row)">详情</el-button>
-            <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click.stop="handleCancel(row)">取消</el-button>
+            <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click.stop="handleCancel(row)">取消立项</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -197,7 +197,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
         <el-table-column label="操作" width="100" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="success" link size="small" @click.stop="handleEdit(row)">详情</el-button>
-            <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click.stop="handleCancel(row)">取消</el-button>
+            <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click.stop="handleCancel(row)">取消立项</el-button>
           </template>
         </el-table-column>
       </el-table>

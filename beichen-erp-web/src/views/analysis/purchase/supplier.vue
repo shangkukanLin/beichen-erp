@@ -173,7 +173,7 @@ onUnmounted(() => { trendChart?.dispose(); trendChart = null })
           <span class="dim">净额口径（采购 − 采购退货），与两个饼图同源</span>
         </div>
       </template>
-      <el-table :data="byProduct" border stripe size="small" max-height="320" empty-text="该区间无采购明细">
+      <el-table :data="byProduct" border stripe size="small" max-height="320" empty-text="该区间暂无采购明细">
         <el-table-column prop="productName" label="产品" min-width="180" show-overflow-tooltip/>
         <el-table-column label="数量" width="120" align="right">
           <template #default="{ row }">{{ fmtQty(row.quantity) }}</template>
@@ -195,7 +195,7 @@ onUnmounted(() => { trendChart?.dispose(); trendChart = null })
           <span class="dim">共 {{ details.length }} 单；点单号进入单据详情</span>
         </div>
       </template>
-      <el-table :data="details" border stripe size="small" max-height="420" empty-text="该区间无单据">
+      <el-table :data="details" border stripe size="small" max-height="420" empty-text="该区间暂无单据">
         <el-table-column label="类型" width="110" align="center">
           <template #default="{ row }">
             <el-tag :type="row.billType === 'PURCHASE_RETURN' ? 'danger' : 'warning'" size="small">

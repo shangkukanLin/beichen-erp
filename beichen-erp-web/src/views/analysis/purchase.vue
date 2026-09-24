@@ -299,7 +299,7 @@ onUnmounted(() => {
           </span>
         </div>
       </template>
-      <el-table :data="pagedSuppliers" border stripe empty-text="该区间无采购单据">
+      <el-table :data="pagedSuppliers" border stripe empty-text="该区间暂无采购单据">
         <el-table-column label="供货商" min-width="200" show-overflow-tooltip>
           <template #default="{ row }"><span class="bill-link" @click="goSupplier(row)">{{ row.supplier }}</span></template>
         </el-table-column>

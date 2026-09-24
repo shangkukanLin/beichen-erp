@@ -147,7 +147,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
           <el-table-column label="操作" width="90" align="center"><template #default="{row}"><el-button type="primary" link size="small" @click.stop="router.push(`/outsource/material-order/detail/${row.id}`)">去处理</el-button></template></el-table-column>
         </el-table>
       </template>
-      <el-empty v-if="(data.activeOrders||[]).length===0 && (data.activeMaterialOrders||[]).length===0" description="无未完成订单" :image-size="50" />
+      <el-empty v-if="(data.activeOrders||[]).length===0 && (data.activeMaterialOrders||[]).length===0" description="暂无未完成订单" :image-size="50" />
     </el-card>
 
     <!-- ③ 委外仓物料 -->
@@ -166,7 +166,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
         <el-table-column prop="qualityType" label="质量" width="80" align="center" />
         <el-table-column prop="quantity" label="数量" width="100" align="right" />
       </el-table>
-      <el-empty v-if="(data.stocks||[]).length===0" description="委外仓无物料" :image-size="50" />
+      <el-empty v-if="(data.stocks||[]).length===0" description="委外仓暂无物料" :image-size="50" />
     </el-card>
 
     <!-- ④ 清算校验 -->

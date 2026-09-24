@@ -29,7 +29,7 @@ Step '1) open the project edit page and inspect the BOM tab'
 Open '/dev/project' 3000
 $idx = [int](FindRow $projCode)
 if ($idx -lt 0) { $idx = 0 }
-# the project list has 详细/取消 only (no 编辑) -> the tabs live on the DETAIL page
+# the project list has 详情/取消立项 only (no 编辑) -> the tabs live on the DETAIL page
 Write-Host ('  detail: ' + (ClickRowBtnContains $idx (ZH 'btn_open_detail')))
 Start-Sleep -Milliseconds 3000
 Write-Host ('  path=' + (EvalJs 'String(location.pathname)'))

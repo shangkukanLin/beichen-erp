@@ -143,7 +143,7 @@ onMounted(() => loadAll())
         <el-table-column label="到期日" width="100" align="center"><template #default="{row}">{{ $fmtDate(row.dueDate) }}</template></el-table-column>
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag></template></el-table-column>
       </el-table>
-      <el-empty v-if="payables.length===0" description="暂无应付" :image-size="60" />
+      <el-empty v-if="payables.length===0" description="暂无应付数据" :image-size="60" />
     </el-card>
 
     <el-card shadow="never">
