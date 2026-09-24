@@ -47,6 +47,13 @@
         <el-table-column label="单位" width="80" align="center">
           <template #default="{ row }">{{ unitOf(row.materialId) }}</template>
         </el-table-column>
+        <el-table-column label="品质" width="120">
+          <template #default="{ row }">
+            <el-select v-model="row.qualityType" size="small" style="width:100%">
+              <el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value" />
+            </el-select>
+          </template>
+        </el-table-column>
         <el-table-column label="移出仓可用库存" width="140" align="center">
           <template #default="{ row }"><span :style="row.stock !== '' && Number(row.stock) < Number(row.quantity) ? 'color:var(--el-color-danger)' : ''">{{ row.stock === '' ? '—' : row.stock }}</span></template>
         </el-table-column>
@@ -105,6 +112,14 @@ function whLabel(w: any) {
 const materialOptions = ref<any[]>([])
 function unitOf(id?: number) { const m = materialOptions.value.find((x: any) => x.id === id); return m ? (m.unit || '—') : '—' }
 
+/** 品质分级（与成品移仓同口径 A/B/C/DEFECT；仅单据留痕，不参与库存写入） */
+const qualityOptions = [
+  { value: 'A', label: 'A（良品）' },
+  { value: 'B', label: 'B' },
+  { value: 'C', label: 'C' },
+  { value: 'DEFECT', label: '不良品' }
+]
+
 async function loadWarehouses() {
   try {
     const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500, warehouseName: '' } })
@@ -118,7 +133,7 @@ async function loadMaterials() {
   } catch { materialOptions.value = [] }
 }
 
-function addRow() { items.value.push({ materialId: undefined, quantity: '', remark: '', stock: '' }) }
+function addRow() { items.value.push({ materialId: undefined, qualityType: 'A', quantity: '', remark: '', stock: '' }) }
 function onMaterialChange(idx: number) { items.value[idx].quantity = items.value[idx].quantity || ''; loadStock(idx) }
 /** 查询该物料在移出仓的可用库存，帮助用户判断够不够（与成品移仓同口径，只做提示不做拦截） */
 async function loadStock(idx: number) {
@@ -143,7 +158,7 @@ async function loadForEdit() {
   form.moveDate = r.moveDate
   form.remark = r.remark
   const its = await request.get<any, any>(`/inventory/material-move/${editId.value}/items`)
-  items.value = (its || []).map((it: any) => ({ materialId: it.materialId, quantity: it.quantity, remark: it.remark, stock: '' }))
+  items.value = (its || []).map((it: any) => ({ materialId: it.materialId, qualityType: it.qualityType || 'A', quantity: it.quantity, remark: it.remark, stock: '' }))
   for (let i = 0; i < items.value.length; i++) await loadStock(i)
 }
 
@@ -179,7 +194,7 @@ async function handleSubmit() {
   try {
     const payload = {
       move: { ...form },
-      items: items.value.map((it: any) => ({ materialId: it.materialId, quantity: Number(it.quantity), remark: it.remark }))
+      items: items.value.map((it: any) => ({ materialId: it.materialId, qualityType: it.qualityType, quantity: Number(it.quantity), remark: it.remark }))
     }
     if (isEdit.value) await request.put(`/inventory/material-move/${editId.value}`, payload)
     else await request.post('/inventory/material-move', payload)

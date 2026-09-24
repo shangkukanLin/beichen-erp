@@ -72,6 +72,7 @@ public class DataInitializer implements ApplicationRunner {
         migratePurchaseChargePerProduct();
         migrateSaleItemCharge();
         migrateReturnSortSorter();
+        migrateMaterialMoveQuality();
         initSuperAdmin();
         initMaterialTypes();
         initPhaseTemplates();
@@ -1053,6 +1054,23 @@ public class DataInitializer implements ApplicationRunner {
      * 新库由 schema.sql 直接建列；老库必须 ALTER —— MySQL 不支持 ADD COLUMN IF NOT EXISTS，
      * 故逐列 try/catch，忽略「列已存在」错误，保证重复启动无副作用。</p>
      */
+    /**
+     * 存量库幂等迁移（2026-09-24）：inventory_material_move_item 增加「品质分级」列。
+     *
+     * <p>用户口径：物料移仓明细要与成品移仓单一样带品质（A/B/C/DEFECT）。</p>
+     *
+     * <p><b>⚠️ 该字段只落单据、不参与库存</b>：物料库存（warehouse_stock 的物料维度）没有品质列，
+     * 物料侧一贯"不区分品质、按良品扣减" ⇒ 审核写入 changeMaterialStock 时不带品质。
+     * 本列用于"这单搬的是哪一档物料"的业务留痕与展示，不等于按品质分账。</p>
+     *
+     * <p>新库由 schema.sql 直接建列；老库必须 ALTER —— MySQL 不支持 ADD COLUMN IF NOT EXISTS，
+     * 故走 {@link #addColumnIfMissing} 逐列 try/catch。</p>
+     */
+    private void migrateMaterialMoveQuality() {
+        addColumnIfMissing("inventory_material_move_item",
+                "quality_type VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT（单据留痕，不参与库存）'");
+    }
+
     private void migratePurchaseExchangeCharge() {
         addColumnIfMissing("purchase_exchange",
                 "charge_flag TINYINT DEFAULT 0 COMMENT '是否付费: 0否 1是（我们向供货商付费）'");

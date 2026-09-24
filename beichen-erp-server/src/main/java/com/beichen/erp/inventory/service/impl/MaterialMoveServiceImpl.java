@@ -47,6 +47,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MaterialMoveServiceImpl implements MaterialMoveService {
 
+    /** 明细品质分级白名单（与成品移仓单一致） */
+    private static final List<String> QUALITY_TYPES = List.of("A", "B", "C", "DEFECT");
+
     private final InventoryMaterialMoveMapper moveMapper;
     private final InventoryMaterialMoveItemMapper itemMapper;
     private final WarehouseStockService stockService;
@@ -261,6 +264,13 @@ public class MaterialMoveServiceImpl implements MaterialMoveService {
                 throw new BusinessException("第 " + (i + 1) + " 行未选择物料");
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
                 throw new BusinessException("第 " + (i + 1) + " 行数量必须大于 0");
+            // 品质分级（2026-09-24 用户要求）：空值兜底 A，只接受 A/B/C/DEFECT（与成品移仓同口径）。
+            // ⚠️ 仅落单据留痕，不参与库存写入（物料库存没有品质维度）。
+            if (it.getQualityType() == null || it.getQualityType().isBlank()) {
+                it.setQualityType("A");
+            } else if (!QUALITY_TYPES.contains(it.getQualityType())) {
+                throw new BusinessException("第 " + (i + 1) + " 行品质不合法（A/B/C/DEFECT）：" + it.getQualityType());
+            }
         }
     }
 

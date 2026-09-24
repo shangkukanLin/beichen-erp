@@ -99,6 +99,8 @@ public class MaterialMoveController {
                     if (map.get("quantity") != null && !map.get("quantity").toString().isBlank())
                         it.setQuantity(new BigDecimal(map.get("quantity").toString()));
                     it.setRemark((String) map.get("remark"));
+                    // 品质分级（2026-09-24）：与成品移仓同口径；空值由服务层兜底为 A
+                    it.setQualityType((String) map.get("qualityType"));
                     list.add(it);
                 }
             }

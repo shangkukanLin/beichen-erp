@@ -63,6 +63,21 @@ Ok ([int]$bad2.code -ne 200) ('empty items rejected (code=' + $bad2.code + ')')
 $bad3 = Api 'Post' '/inventory/material-move' @{ moveDate = $today; fromWarehouseId = [long]$fromWh; toWarehouseId = [long]$toWh; items = @(@{ materialId = [long]$mat; quantity = -3 }) } $H
 Ok ([int]$bad3.code -ne 200) ('negative qty rejected (code=' + $bad3.code + ')')
 
+# ---------------- 1b) quality grade (2026-09-24): recorded on the doc, NOT part of stock ----------------
+$cq = Api 'Post' '/inventory/material-move' @{ moveDate = $today; fromWarehouseId = [long]$fromWh; toWarehouseId = [long]$toWh; remark = 'verify-material-move-quality'; items = @(@{ materialId = [long]$mat; qualityType = 'DEFECT'; quantity = 2 }) } $H
+Ok ([int]$cq.code -eq 200) ('create draft with qualityType=DEFECT (code=' + $cq.code + ')')
+$qid = SqlOne "SELECT id FROM inventory_material_move ORDER BY id DESC LIMIT 1"
+Ok ((SqlOne "SELECT IFNULL(quality_type,'') FROM inventory_material_move_item WHERE move_id=$qid ORDER BY id LIMIT 1") -eq 'DEFECT') 'qualityType persisted on the item'
+$cqBad = Api 'Post' '/inventory/material-move' @{ moveDate = $today; fromWarehouseId = [long]$fromWh; toWarehouseId = [long]$toWh; items = @(@{ materialId = [long]$mat; qualityType = 'X'; quantity = 1 }) } $H
+Ok ([int]$cqBad.code -ne 200) ('invalid quality rejected (code=' + $cqBad.code + ')')
+$stockRows = SqlOne "SELECT COUNT(*) FROM warehouse_stock WHERE material_id=$mat"
+$aQ = Api 'Put' "/inventory/material-move/$qid/audit" @{} $H
+$stockRowsAfter = SqlOne "SELECT COUNT(*) FROM warehouse_stock WHERE material_id=$mat"
+Ok (([int]$aQ.code -eq 200) -and ([int]$stockRowsAfter -eq [int]$stockRows)) ('quality is doc-level only: material stock rows unchanged (' + $stockRows + ' -> ' + $stockRowsAfter + ')')
+Api 'Put' "/inventory/material-move/$qid/un-audit" @{} $H | Out-Null
+Api 'Put' "/inventory/material-move/$qid/cancel" @{} $H | Out-Null
+Ok ((SqlOne "SELECT status FROM inventory_material_move WHERE id=$qid") -eq 'CANCELLED') 'cleanup: quality draft cancelled'
+
 # ---------------- 2) draft does not touch stock; cancel works ----------------
 $before = Num "SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$fromWh AND material_id=$mat"
 $toBefore = Num "SELECT IFNULL(quantity,0) FROM warehouse_stock WHERE warehouse_id=$toWh AND material_id=$mat"

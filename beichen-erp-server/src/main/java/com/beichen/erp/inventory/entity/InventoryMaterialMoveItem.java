@@ -37,6 +37,16 @@ public class InventoryMaterialMoveItem {
 
     private BigDecimal quantity;
 
+    /**
+     * 品质分级 A/B/C/DEFECT（2026-09-24 用户要求：与成品移仓单同口径，明细分品质）。
+     *
+     * <p><b>⚠️ 只落在单据上，不参与库存</b>：物料库存（{@code warehouse_stock} 的物料维度）本身没有
+     * 品质列，物料侧库存一贯"不区分品质、按良品扣减"（见 413 物料报损的口径）。因此审核时
+     * {@code changeMaterialStock} 不带品质参数 —— 本字段用于"这单搬的是哪一档物料"的业务留痕与展示，
+     * 不等于按品质分账。若将来要让物料库存也分品质，是数据模型级变更，需另行评估。</p>
+     */
+    private String qualityType;
+
     private String remark;
 
     @TableField(fill = FieldFill.INSERT)

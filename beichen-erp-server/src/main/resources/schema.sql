@@ -1348,6 +1348,7 @@ CREATE TABLE IF NOT EXISTS inventory_material_move_item (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY  COMMENT '主键ID',
     move_id     BIGINT NOT NULL                    COMMENT '移仓单ID(关联主表)',
     material_id BIGINT                             COMMENT '委外物料ID(关联 outsource_material)',
+    quality_type VARCHAR(10) DEFAULT 'A'           COMMENT '品质等级: A/B/C/DEFECT(单据留痕，不参与库存)',
     quantity    DECIMAL(18,0) DEFAULT 0            COMMENT '移仓数量',
     remark      VARCHAR(255)                       COMMENT '备注',
     company_id  BIGINT DEFAULT NULL                COMMENT '公司ID',
