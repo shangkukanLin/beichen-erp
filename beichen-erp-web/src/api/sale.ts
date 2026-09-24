@@ -111,6 +111,10 @@ export function checkSaleOrderStock(data: { warehouseId?: number; items: SaleOrd
   )
 }
 
+// 2026-09-24：补单取（后端 GET /inventory/outbound/{id} 早已存在，前端此前没包）—— 销售出库详情页要用
+export function getSaleOutbound(id: number) {
+  return request.get<SaleOutbound>(`/inventory/outbound/${id}`)
+}
 export function getSaleOutboundPage(params: any) {
   return request.get<PageResult<SaleOutbound>>('/inventory/outbound/page', { params })
 }

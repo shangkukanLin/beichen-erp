@@ -12,7 +12,7 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 const router = useRouter()
 const qualityOptions = ref<QualityOption[]>([])
 import {
-  getSaleOutboundPage, getSaleOutboundItems, createSaleOutbound, updateSaleOutbound, auditSaleOutbound, cancelSaleOutbound, unAuditSaleOutbound,
+  getSaleOutboundPage, createSaleOutbound, auditSaleOutbound, cancelSaleOutbound,
   type SaleOutbound, type SaleOutboundItem
 } from '@/api/sale'
 
@@ -47,9 +47,7 @@ const formRef = ref<FormInstance>()
 const form = reactive<SaleOutbound>({ orderId: undefined, customerId: undefined, warehouseId: undefined, outboundDate: '', remark: '' })
 const items = ref<SaleOutboundItem[]>([])
 
-const detailVisible = ref(false)
-const detailData = ref<SaleOutbound>({})
-const detailItems = ref<SaleOutboundItem[]>([])
+/* 2026-09-24：原只读详情抽屉（detailVisible/detailData/detailItems）已升级为独立路由页 /sale/outbound/detail/:id */
 
 const rules: FormRules = {
   customerId: [{ required: true, message: '请选择客户', trigger: 'change' }],
@@ -74,10 +72,8 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.customerId = ''; query.status = ''; pagination.pageNum = 1; loadData() }
 function resetForm() { Object.assign(form, { id: undefined, orderId: undefined, customerId: undefined, warehouseId: undefined, outboundDate: '', remark: '' }); items.value = [] }
 function handleAdd() { resetForm(); dialogTitle.value = '新增销售出库'; dialogVisible.value = true; formRef.value?.clearValidate() }
-async function handleEdit(row: SaleOutbound) {
-  resetForm(); Object.assign(form, row); dialogTitle.value = '编辑销售出库'; dialogVisible.value = true; formRef.value?.clearValidate()
-  try { const res = await getSaleOutboundItems(row.id as number); items.value = res || [] } catch { items.value = [] }
-}
+/* 2026-09-24（用户口径）：列表弹窗只保留「新增」；草稿编辑与撤销类的反审核都已收进详情页
+   （/sale/outbound/detail/:id），故 handleEdit / handleUnAudit 一并删除。 */
 function addItem() { items.value.push({ materialId: undefined, qualityType: 'A', materialName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' }) }
 function removeItem(index: number) { items.value.splice(index, 1) }
 function onMaterialChange(val: number, row: SaleOutboundItem) {
@@ -94,8 +90,8 @@ async function handleSubmit() {
     submitLoading.value = true
     try {
       const payload = { outbound: { ...form }, items: items.value }
-      if (form.id) { await updateSaleOutbound(form.id as number, payload); ElMessage.success('已更新') }
-      else { await createSaleOutbound(payload); ElMessage.success('已新增') }
+      // 2026-09-24：列表弹窗只保留「新增」（草稿编辑已收进详情页）⇒ update 分支删除
+      await createSaleOutbound(payload); ElMessage.success('已新增')
       dialogVisible.value = false; loadData()
     } catch { } finally { submitLoading.value = false }
   })
@@ -112,17 +108,8 @@ async function handleCancel(row: SaleOutbound) {
     await cancelSaleOutbound(row.id as number); ElMessage.success('已作废'); loadData()
   } catch { }
 }
-async function handleUnAudit(row: SaleOutbound) {
-  try {
-    await ElMessageBox.confirm(`确认反审核销售出库「${row.code}」？仅回退状态，不涉及库存。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
-    await unAuditSaleOutbound(row.id as number); ElMessage.success('已反审核'); loadData()
-  } catch { }
-}
-async function handleDetail(row: SaleOutbound) {
-  detailData.value = { ...row }
-  try { const res = await getSaleOutboundItems(row.id as number); detailItems.value = res || [] } catch { detailItems.value = [] }
-  detailVisible.value = true
-}
+/** 详情（2026-09-24 由只读弹窗升级为独立页）：草稿态在详情页就地改+存，反审核也在那里 */
+function goDetail(row: SaleOutbound) { router.push(`/sale/outbound/detail/${row.id}`) }
 function handleSizeChange(val: number) { pagination.pageSize = val; pagination.pageNum = 1; loadData() }
 function handleCurrentChange(val: number) { pagination.pageNum = val; loadData() }
 function statusType(s?: string) { return DocStatusTag[s || ''] || '' }
@@ -162,7 +149,7 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
     </el-card>
 
     <el-card shadow="never" class="table-card">
-      <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="handleDetail">
+      <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="goDetail">
         <el-table-column prop="code" label="单号" min-width="150" />
         <el-table-column label="客户" min-width="140">
           <template #default="{ row }">{{ customerName(row.customerId) }}</template>
@@ -177,12 +164,11 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="280" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：详情升级为独立页（草稿态可就地改+存）、编辑与反审核都收进详情 ⇒ 操作列 280→132。 -->
+        <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
+            <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="warning" link @click.stop="handleEdit(row)">编辑</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
@@ -264,26 +250,6 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
       </template>
     </el-dialog>
 
-    <el-drawer v-model="detailVisible" title="销售出库详情" size="60%">
-      <el-descriptions :column="3" border>
-        <el-descriptions-item label="单号">{{ detailData.code }}</el-descriptions-item>
-        <el-descriptions-item label="状态"><el-tag :type="statusType(detailData.status)">{{ detailData.status }}</el-tag></el-descriptions-item>
-        <el-descriptions-item label="客户">{{ customerName(detailData.customerId) }}</el-descriptions-item>
-        <el-descriptions-item label="出库仓库">{{ warehouseName(detailData.warehouseId) }}</el-descriptions-item>
-        <el-descriptions-item label="出库日期">{{ detailData.outboundDate }}</el-descriptions-item>
-        <el-descriptions-item label="总金额">{{ fmt(detailData.totalAmount) }}</el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ detailData.remark }}</el-descriptions-item>
-      </el-descriptions>
-      <el-divider content-position="left">明细</el-divider>
-      <el-table :data="detailItems" border>
-        <el-table-column prop="materialName" label="物料" min-width="140" />
-        <el-table-column prop="spec" label="规格" width="100" />
-        <el-table-column prop="unit" label="单位" width="70" />
-        <el-table-column prop="quantity" label="数量" width="90" align="right" />
-        <el-table-column prop="unitPrice" label="单价" width="90" align="right" />
-        <el-table-column prop="amount" label="金额" width="100" align="right" />
-      </el-table>
-    </el-drawer>
   </div>
 </template>
 
