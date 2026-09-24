@@ -455,6 +455,7 @@ CREATE TABLE IF NOT EXISTS warehouse_stock (
     warehouse_id BIGINT NOT NULL COMMENT '仓库ID',
     product_id BIGINT DEFAULT NULL COMMENT '产品ID(关联product表，自有仓成品库存)',
     material_id BIGINT DEFAULT NULL COMMENT '物料ID(关联outsource_material表，委外仓物料库存)',
+    stock_form VARCHAR(20) NOT NULL DEFAULT 'MATERIAL' COMMENT '库存形态：MATERIAL=物料；PRODUCT_DEFECT=成品(加工退货)；PRODUCT_REPAIR=成品(维修退货)。2026-09-25 新增：委外仓也要能放退回的成品',
     quality_type VARCHAR(20) DEFAULT 'A' COMMENT '品质等级：成品(product_id非空)用 A/B/C/DEFECT/PENDING；委外物料(material_id非空)用 GOOD/DEFECT。两体系互斥，GOOD 仅用于物料',
     quantity DECIMAL(18,0) DEFAULT 0 COMMENT '库存数量',
     available_quantity DECIMAL(18,0) DEFAULT 0 COMMENT '可用数量(预留,目前等于quantity)',
@@ -464,8 +465,9 @@ CREATE TABLE IF NOT EXISTS warehouse_stock (
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_product_id (product_id),
     INDEX idx_material_id (material_id),
-    UNIQUE KEY uk_wh_prod_quality_company (warehouse_id, product_id, quality_type, company_id),
-    UNIQUE KEY uk_wh_material_company (warehouse_id, material_id, company_id)
+    UNIQUE KEY uk_wh_prod_quality_company (warehouse_id, product_id, quality_type, stock_form, company_id),
+    UNIQUE KEY uk_wh_material_company (warehouse_id, material_id, stock_form, company_id),
+    INDEX idx_stock_form (stock_form)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='统一库存表';
 
 CREATE TABLE IF NOT EXISTS warehouse_stock_log (
@@ -473,6 +475,7 @@ CREATE TABLE IF NOT EXISTS warehouse_stock_log (
     warehouse_id BIGINT NOT NULL COMMENT '仓库ID',
     product_id BIGINT DEFAULT NULL COMMENT '产品ID(自有仓成品流水)',
     material_id BIGINT DEFAULT NULL COMMENT '物料ID(委外仓物料流水)',
+    stock_form VARCHAR(20) NOT NULL DEFAULT 'MATERIAL' COMMENT '库存形态：同 warehouse_stock.stock_form（2026-09-25 新增，保证流水可还原形态）',
     material_name VARCHAR(100) COMMENT '物料名称',
     quality_type VARCHAR(20) COMMENT '品质等级：成品(product_id非空)用 A/B/C/DEFECT/PENDING；委外物料(material_id非空)用 GOOD/DEFECT。两体系互斥，GOOD 仅用于物料',
     change_type VARCHAR(50) NOT NULL COMMENT '变动类型',
