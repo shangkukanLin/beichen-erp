@@ -329,7 +329,7 @@ onActivated(() => {
                 <el-button type="primary" link :icon="'Edit'" @click="gotoSortForm(g.warehouseId)">整理本仓（带出 {{ g.sortableCount }} 批可整理）</el-button>
               </div>
 
-              <el-table :key="`${g.warehouseId}-${selVersion}`" :data="g.rows" border size="small" row-key="pendingId"
+              <el-table :key="`${g.warehouseId}-${selVersion}`" :data="g.rows" border size="small" row-key="pendingId" stripe
                 @selection-change="(rows: any) => onSelChange(g.warehouseId, rows)">
                 <!--
                   列宽预算（2026-09-22 用户要求：列表一行显示完、不要左右滑动，且**表头不能被截断**）：
@@ -421,7 +421,7 @@ onActivated(() => {
         </el-card>
 
         <el-card shadow="never" class="table-card" style="margin-top:12px">
-          <el-table :data="tableData" border v-loading="tableLoading" row-key="id" @row-click="openRow">
+          <el-table :data="tableData" border v-loading="tableLoading" row-key="id" @row-click="openRow" stripe>
             <el-table-column prop="sortDate" label="整理日期" width="110" />
             <el-table-column prop="code" label="单号" width="170" />
             <el-table-column label="源仓库" width="130">

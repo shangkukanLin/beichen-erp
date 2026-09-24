@@ -124,7 +124,7 @@ onActivated(() => {
     </el-card>
 
     <el-card style="margin-top:12px">
-      <el-table :data="tableData" border v-loading="tableLoading" row-key="id" @row-click="handleDetail">
+      <el-table :data="tableData" border v-loading="tableLoading" row-key="id" @row-click="handleDetail" stripe>
         <el-table-column label="日期" width="110">
           <template #default="{ row }">{{ row.reclassifyDate ? $fmtDate(row.reclassifyDate) : '-' }}</template>
         </el-table-column>
