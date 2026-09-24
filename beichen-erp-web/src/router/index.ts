@@ -409,7 +409,7 @@ const routes: RouteRecordRaw[] = [
       // 应付转应收：负数应付（退货/超损扣款）无货款可抵时转为向供应商收款，与报损单同套审核流程
       { path: 'finance/payable-transfer', name: 'FinancePayableTransfer', component: () => import('@/views/finance/payable-transfer/index.vue'), meta: { title: '应付转应收', requiresAuth: true } },
       { path: 'finance/payable-transfer/add', name: 'FinancePayableTransferAdd', component: () => import('@/views/finance/payable-transfer/add.vue'), meta: { title: '新增转应收单', requiresAuth: true, operate: true } },
-      { path: 'finance/payable-transfer/edit/:id', name: 'FinancePayableTransferEdit', component: () => import('@/views/finance/payable-transfer/add.vue'), meta: { title: '编辑转应收单', requiresAuth: true, operate: true } },
+      // 2026-09-24（用户口径）：`finance/payable-transfer/edit/:id` 已移除 —— 草稿态编辑统一在**详情页**内联完成。
       { path: 'finance/payable-transfer/detail/:id', name: 'FinancePayableTransferDetail', component: () => import('@/views/finance/payable-transfer/detail.vue'), meta: { title: '转应收单详情', requiresAuth: true, operate: true } },
       // 新增付款独立成页（2026-09-23 原为 800px 弹框）；须放在 :id 之前以免 'add' 被当作 id
       { path: 'finance/payment/supplier/add', name: 'FinancePaymentSupplierAdd', component: () => import('@/views/finance/payment-supplier-add.vue'), meta: { title: '新增付款', requiresAuth: true, operate: true } },
