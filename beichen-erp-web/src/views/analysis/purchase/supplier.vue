@@ -173,7 +173,7 @@ onUnmounted(() => { trendChart?.dispose(); trendChart = null })
           <span class="dim">净额口径（采购 − 采购退货），与两个饼图同源</span>
         </div>
       </template>
-      <el-table :data="byProduct" border stripe size="small" max-height="320" empty-text="该区间暂无采购明细">
+      <el-table :data="byProduct" border stripe size="small" max-height="320" empty-text="该区间暂无采购产品">
         <el-table-column prop="productName" label="产品" min-width="180" show-overflow-tooltip/>
         <el-table-column label="数量" width="120" align="right">
           <template #default="{ row }">{{ fmtQty(row.quantity) }}</template>
