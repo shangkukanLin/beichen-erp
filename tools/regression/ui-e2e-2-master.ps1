@@ -1,4 +1,8 @@
 ﻿# Temp test 2: master data through the UI (brand / customer / product / vendor / supplier / material / template phase)
+# 2026-09-24 修复假红：客户/产品/供货商/供应商 4 页的「新增」已由弹框改为**独立页**
+# （/inventory/customer/add、/product/add、/outsource/supplier/manage/add、/supplier/manage/add），
+# 原脚本仍按弹框操作（ClickDialogBtn/ClickDialogText + 弹框里的 label）⇒ 建单静默失败、末尾 body 断言才挂。
+# 现按各页真实文案与按钮改造（本文件里的 Step 只做输出，断言仍是末尾的 BodyHas）。
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 EnsureLogin
 WatchErrors
@@ -25,9 +29,10 @@ Open '/inventory/customer' 2000
 ClearErrs | Out-Null
 Write-Host ('click new: ' + (ClickBtn 'btn_new'))
 Start-Sleep -Milliseconds 1800
-Write-Host ('fill name: ' + (FillLabel 'lbl_name' (V 'val_customer')))
+Write-Host ('url=' + (EvalJs 'String(location.pathname)'))
+Write-Host ('fill name: ' + (FillLabel 'lbl_cust_name' (V 'val_customer')))
 Write-Host ('fill contact: ' + (FillLabel 'lbl_contact' 'auto'))
-Write-Host ('fill phone: ' + (FillLabel 'lbl_phone' '13800000000'))
+Write-Host ('fill phone: ' + (FillLabel 'lbl_phone2' '13800000000'))
 Write-Host ('select status: ' + (SelectLabelText 'lbl_status' (ZH 'opt_ing')))
 Write-Host ('click save: ' + (ClickBtn 'btn_save'))
 Start-Sleep -Milliseconds 2200
@@ -37,13 +42,17 @@ Ok ((BodyHas (V 'val_customer')) -match 'true') ('customer created and listed ' 
 Write-Host ('errs=' + (Errs))
 
 # ---------- 3. product ----------
+# product/add 走 material/detail.vue，必填项 = 产品名称 / 规格 / 状态（缺一保存被校验拦下）
 Step 'product'
 Open '/product' 2000
 ClearErrs | Out-Null
 Write-Host ('click new: ' + (ClickBtn 'btn_new'))
 Start-Sleep -Milliseconds 1800
-Write-Host ('fill name: ' + (FillLabel 'lbl_name' (V 'val_product')))
+Write-Host ('fill name: ' + (FillLabel 'lbl_prod_name' (V 'val_product')))
 Write-Host ('select brand: ' + (SelectLabelText 'lbl_brand' (V 'val_brand')))
+Start-Sleep -Milliseconds 600
+Write-Host ('select spec: ' + (OpenSelect 'lbl_spec') + ' -> ' + (PickFirstOption 900))
+Write-Host ('select status: ' + (OpenSelect 'lbl_status') + ' -> ' + (PickFirstOption 900))
 Write-Host ('click save: ' + (ClickBtn 'btn_save'))
 Start-Sleep -Milliseconds 2400
 Write-Host ('msg=' + (Txt '.el-message'))
@@ -54,32 +63,35 @@ Ok ((BodyHas (V 'val_product')) -match 'true') ('product created and listed ' + 
 Write-Host ('errs=' + (Errs))
 
 # ---------- 4. vendor (供货商) ----------
+# 类型在供货商侧是**预勾选**的（manage-form: checkedTypes=['product']）；该页保存按钮是页脚「确定」
 Step 'vendor'
 Open '/outsource/supplier/manage' 2200
 ClearErrs | Out-Null
 Write-Host ('click new: ' + (ClickBtn 'btn_new'))
-Start-Sleep -Milliseconds 1200
-Write-Host ('fill name: ' + (FillLabel 'lbl_name' (V 'val_vendor')))
-Write-Host ('ok: ' + (ClickDialogBtn 'btn_ok'))
 Start-Sleep -Milliseconds 1800
+Write-Host ('fill name: ' + (FillLabel 'lbl_vendor_name' (V 'val_vendor')))
+Write-Host ('click save: ' + (ClickBtn 'btn_ok'))
+Start-Sleep -Milliseconds 2200
 Write-Host ('msg=' + (Txt '.el-message'))
 Open '/outsource/supplier/manage' 1900
 Ok ((BodyHas (V 'val_vendor')) -match 'true') ('vendor created and listed ' + (V 'val_vendor'))
 Write-Host ('errs=' + (Errs))
 
 # ---------- 5. supplier (加工厂) ----------
+# 供应商侧类型默认为空且**必填**；列表默认「全部」页签会排除成品商 ⇒ 勾「加工厂」
+# （与原意图 supplier(factory) 一致，且不会被页签过滤掉 ⇒ 建完能在列表里断言到）
 Step 'supplier'
 Open '/supplier/manage' 2200
 ClearErrs | Out-Null
 Write-Host ('click new: ' + (ClickBtn 'btn_new'))
-Start-Sleep -Milliseconds 1200
-Write-Host ('boxes before: ' + (CheckedBoxes))
-Write-Host ('check factory: ' + (ClickDialogText 'opt_role_factory'))
-Start-Sleep -Milliseconds 400
-Write-Host ('boxes after: ' + (CheckedBoxes))
-Write-Host ('fill name: ' + (FillLabel 'lbl_name' (V 'val_factory')))
-Write-Host ('ok: ' + (ClickDialogBtn 'btn_ok'))
 Start-Sleep -Milliseconds 1800
+Write-Host ('boxes before: ' + (CheckedBoxes))
+Write-Host ('check factory: ' + (ClickText (ZH 'opt_role_factory')))
+Start-Sleep -Milliseconds 500
+Write-Host ('boxes after: ' + (CheckedBoxes))
+Write-Host ('fill name: ' + (FillLabel 'lbl_supplier_name' (V 'val_factory')))
+Write-Host ('click save: ' + (ClickBtn 'btn_ok'))
+Start-Sleep -Milliseconds 2200
 Write-Host ('msg=' + (Txt '.el-message'))
 Open '/supplier/manage' 1900
 Ok ((BodyHas (V 'val_factory')) -match 'true') ('supplier(factory) created and listed ' + (V 'val_factory'))

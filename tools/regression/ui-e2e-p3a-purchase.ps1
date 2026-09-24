@@ -38,7 +38,7 @@ ClickBtn 'btn_add_detail' | Out-Null
 Start-Sleep -Milliseconds 900
 SetRowInput 0 1 '10' | Out-Null
 SetRowInput 0 2 '12' | Out-Null
-ClickBtn 'btn_submit' | Out-Null
+ClickBtn 'btn_save' | Out-Null
 Start-Sleep -Milliseconds 2000
 $onAdd = ((EvalJs 'String(location.pathname)') -match 'add')
 Ok ($onAdd) 'N1 no-supplier submit blocked (still on add page)'
@@ -70,7 +70,7 @@ for ($i = 1; $i -le $N; $i++) {
   }
   $dump = "(()=>{const vis=e=>e.getClientRects().length>0;const t=[...document.querySelectorAll('.el-table')].filter(vis)[0];return JSON.stringify([...t.querySelectorAll('.el-table__body tbody tr')].map(r=>[...r.querySelectorAll('td')].map(td=>(td.innerText||'').replace(/\s+/g,' ').trim())))})()"
   Write-Host ('rows=' + (EvalJs $dump))
-  ClickBtn 'btn_submit' | Out-Null
+  ClickBtn 'btn_save' | Out-Null
   Start-Sleep -Milliseconds 2600
   $msg = Txt '.el-message'
   Write-Host ('submit msg=' + $msg)
@@ -138,7 +138,10 @@ $logs = D (SqlOne "SELECT COUNT(*) FROM warehouse_stock_log WHERE change_type='P
 $payable = D (SqlOne 'SELECT COUNT(*) FROM finance_payable')
 Write-Host ("[DB] po=$po audited=$poAud items=$items productStockSum=$stock purchaseInLogs=$logs payable=$payable")
 Ok (($po -eq ($poBefore + $N))) ('purchase orders = ' + $po)
-Ok (($poAud -eq $po)) 'all purchase orders audited'
+# 2026-09-24 修复假红：原先断言「全表所有采购单都已审核」⇒ 只要库里存在任何草稿/作废单
+# （历史测试残留、其它用例造过又作废的）就必然 FAIL。改为只校验**本批新建的 N 张**（列表最新在前）。
+$newAud = D (SqlOne ("SELECT COUNT(*) FROM (SELECT status FROM purchase_order ORDER BY id DESC LIMIT " + $N + ") t WHERE t.status='AUDITED'"))
+Ok (($newAud -eq $N)) ('the ' + $N + ' orders created here are all audited (got ' + $newAud + ')')
 Ok (($items -ge (2 * $N))) ('purchase items >= ' + (2 * $N) + ' (got ' + $items + ')')
 Ok (($stock -gt 0)) ('product stock created by purchase-in (sum=' + $stock + ')')
 Ok (($logs -ge $N)) ('PURCHASE_IN stock logs >= ' + $N + ' (got ' + $logs + ')')

@@ -25,10 +25,12 @@ Write-Host ('qty A: ' + (SetRowInput 0 1 '10'))
 Write-Host ('price A: ' + (SetRowInput 0 2 '100'))
 Start-Sleep -Milliseconds 400
 Write-Host ('total: ' + (Txt '.el-form-item'))
-# 2026-09-23: /inventory/purchase/add now serves purchase/order/form.vue (added the same day), whose
-# primary action is labelled 确定 -- try the 提交 label first, then fall back to 确定.
-$subRes = ClickBtn 'btn_submit'
+# 2026-09-24: /inventory/purchase/add serves purchase/order/form.vue whose primary action is labelled
+# **保存**. The 提交 / 确定 labels tried on 2026-09-23 are both stale (the page never shows them) =>
+# try 保存 first, then fall back to the older labels in case the wording changes back.
+$subRes = ClickBtn 'btn_save'
 if ($subRes -match 'NOBTN') { $subRes = ClickBtn 'btn_ok' }
+if ($subRes -match 'NOBTN') { $subRes = ClickBtn 'btn_submit' }
 Write-Host ('submit: ' + $subRes)
 Start-Sleep -Milliseconds 2600
 Write-Host ('msg=' + (Txt '.el-message') + ' path=' + (EvalJs 'String(location.pathname)') + ' errs=' + (Errs))
