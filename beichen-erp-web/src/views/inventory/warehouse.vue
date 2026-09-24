@@ -130,7 +130,7 @@ onMounted(() => { loadData(); loadTakeStatus() })
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="var(--app-dialog-sm)">
       <el-form :model="form" label-width="80px">
         <el-form-item label="仓库名称" required><el-input v-model="form.warehouseName" /></el-form-item>
         <el-form-item label="仓型" required>

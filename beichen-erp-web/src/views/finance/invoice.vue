@@ -143,7 +143,7 @@ onMounted(() => { loadData() })
       </el-table>
       <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
     </el-card>
-    <el-dialog v-model="dialog" :title="dialogTitle" width="560px" :close-on-click-modal="false">
+    <el-dialog v-model="dialog" :title="dialogTitle" width="var(--app-dialog-sm)" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px">
         <el-form-item label="方向">
           <el-radio-group v-model="form.direction" :disabled="!!form.id">

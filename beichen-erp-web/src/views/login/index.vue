@@ -174,7 +174,7 @@ async function handleAdminVerify() {
     </div>
 
     <!-- 超级管理员验证弹框 -->
-    <el-dialog v-model="adminDialogVisible" title="管理公司 — 超级管理员验证" width="380px" :close-on-click-modal="false">
+    <el-dialog v-model="adminDialogVisible" title="管理公司 — 超级管理员验证" width="var(--app-dialog-sm)" :close-on-click-modal="false">
       <el-form :model="adminForm" label-width="0" size="large" @keyup.enter="handleAdminVerify">
         <el-form-item><el-input v-model="adminForm.username" placeholder="超级管理员账号" :prefix-icon="User" /></el-form-item>
         <el-form-item><el-input v-model="adminForm.password" type="password" placeholder="超级管理员密码" :prefix-icon="Lock" show-password /></el-form-item>

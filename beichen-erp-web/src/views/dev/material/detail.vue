@@ -271,7 +271,7 @@ function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMa
     </el-card>
 
     <!-- 新增/编辑流转记录弹窗 -->
-    <el-dialog v-model="flowDialogVisible" :title="isFlowEdit ? '编辑流转记录' : '新增流转记录'" width="560px">
+    <el-dialog v-model="flowDialogVisible" :title="isFlowEdit ? '编辑流转记录' : '新增流转记录'" width="var(--app-dialog-sm)">
       <el-form :model="flowForm" label-width="var(--app-label-width)">
         <el-form-item label="位置类型">
           <el-select v-model="flowForm.placeType" style="width:100%" @change="() => { flowForm.placeId = undefined }">

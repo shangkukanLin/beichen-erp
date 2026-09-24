@@ -896,7 +896,7 @@ function onNameBlur() {
 
 
     <!-- BUG 弹窗 -->
-    <el-dialog v-model="bugDialogVisible" :title="isBugEdit?'编辑BUG':'新增BUG'" width="500px">
+    <el-dialog v-model="bugDialogVisible" :title="isBugEdit?'编辑BUG':'新增BUG'" width="var(--app-dialog-sm)">
       <el-form :model="bugForm" label-width="80px">
         <el-form-item label="标题"><el-input v-model="bugForm.title" /></el-form-item>
         <el-form-item label="严重程度"><el-select v-model="bugForm.severity" style="width:100%">
@@ -914,7 +914,7 @@ function onNameBlur() {
     </el-dialog>
 
     <!-- 图纸上传弹窗 -->
-    <el-dialog v-model="drawingVisible" title="上传图纸" width="520px">
+    <el-dialog v-model="drawingVisible" title="上传图纸" width="var(--app-dialog-sm)">
       <!-- 拖拽上传区域 -->
       <div class="drop-zone" 
         @dragover="handleDragOver" @drop="handleDrop"

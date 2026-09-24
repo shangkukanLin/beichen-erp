@@ -323,7 +323,7 @@ onActivated(() => {
     </el-card>
 
     <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="520px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="var(--app-dialog-sm)" :close-on-click-modal="false">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-form-item label="角色名称" prop="roleName">
           <el-input v-model="form.roleName" placeholder="请输入角色名称" />
@@ -347,7 +347,7 @@ onActivated(() => {
     </el-dialog>
 
     <!-- 权限分配弹窗 -->
-    <el-dialog v-model="permDialogVisible" :title="`分配权限 - ${permRoleName}`" width="460px" :close-on-click-modal="false">
+    <el-dialog v-model="permDialogVisible" :title="`分配权限 - ${permRoleName}`" width="var(--app-dialog-sm)" :close-on-click-modal="false">
       <el-tree
         ref="permTreeRef"
         :data="permMenuTree"

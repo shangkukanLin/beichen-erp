@@ -125,7 +125,7 @@ onMounted(() => loadData())
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="dialogVisible" :title="isEdit?'编辑模板':'新增模板'" width="960px" top="2vh" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="isEdit?'编辑模板':'新增模板'" width="var(--app-dialog-lg)" top="2vh" :close-on-click-modal="false">
       <el-form :model="form" label-width="80px">
         <el-form-item required label="模板名称"><el-input v-model="form.templateName" placeholder="请输入模板名称" /></el-form-item>
         <el-form-item label="状态">

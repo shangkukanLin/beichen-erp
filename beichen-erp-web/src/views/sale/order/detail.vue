@@ -614,7 +614,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
     </el-card>
 
     <!-- 库存不足确认弹窗 -->
-    <el-dialog v-model="stockCheckVisible" title="库存不足提醒" width="650px" :close-on-click-modal="false">
+    <el-dialog v-model="stockCheckVisible" title="库存不足提醒" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <el-alert type="warning" :closable="false" show-icon style="margin-bottom:16px">
         <template #title>以下产品的订单数量超过当前库存量，确认仍要继续保存订单吗？</template>
       </el-alert>
@@ -638,7 +638,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
     </el-dialog>
 
     <!-- 审核阻断：库存不足不允许审核 -->
-    <el-dialog v-model="auditBlockVisible" title="库存不足，无法审核" width="650px" :close-on-click-modal="false">
+    <el-dialog v-model="auditBlockVisible" title="库存不足，无法审核" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <el-alert type="error" :closable="false" show-icon style="margin-bottom:16px">
         <template #title>以下产品的订单数量超过当前库存，请先补货或调整数量后再审核。</template>
       </el-alert>

@@ -184,7 +184,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
     </el-card>
 
     <!-- 一键退料弹窗 -->
-    <el-dialog v-model="returnVisible" title="一键退料" width="480px" :close-on-click-modal="false">
+    <el-dialog v-model="returnVisible" title="一键退料" width="var(--app-dialog-sm)" :close-on-click-modal="false">
       <el-alert type="warning" :closable="false" style="margin-bottom:12px">
         将该供应商所有委外仓的物料（{{ (data.stocks||[]).length }} 项）全部退回我方仓库，并生成退料单。
       </el-alert>

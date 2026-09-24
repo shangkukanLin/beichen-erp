@@ -234,7 +234,7 @@ onActivated(() => { loadData() })
     </el-card>
 
     <!-- 新增 / 编辑 -->
-    <el-dialog v-model="dialog" :title="dialogTitle" width="760px" :close-on-click-modal="false">
+    <el-dialog v-model="dialog" :title="dialogTitle" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px" size="small">
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item label="类别">

@@ -114,7 +114,7 @@ onMounted(loadData)
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="dialogVisible" :title="isEdit?'编辑阶段':'新增阶段'" width="500px">
+    <el-dialog v-model="dialogVisible" :title="isEdit?'编辑阶段':'新增阶段'" width="var(--app-dialog-sm)">
       <el-form :model="form" label-width="90px">
         <el-form-item required label="阶段名称"><el-input v-model="form.name" /></el-form-item>
         <el-form-item required label="适用规格">

@@ -93,7 +93,7 @@ onMounted(() => { if (props.visible) open() })
 </script>
 
 <template>
-  <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑项目物料' : '新增项目物料'" width="520px" @close="handleClose">
+  <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑项目物料' : '新增项目物料'" width="var(--app-dialog-sm)" @close="handleClose">
     <el-form :model="form" label-width="80px">
       <el-row :gutter="12">
         <el-col :span="14"><el-form-item required label="物料名称"><el-input v-model="form.name" /></el-form-item></el-col>

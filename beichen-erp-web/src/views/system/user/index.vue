@@ -550,7 +550,7 @@ onActivated(() => {
     </el-card>
 
     <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="560px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="var(--app-dialog-sm)" :close-on-click-modal="false">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="12">
@@ -613,7 +613,7 @@ onActivated(() => {
     <el-dialog
       v-model="permDialogVisible"
       :title="`页面权限 - ${permUsername}`"
-      width="560px"
+      width="var(--app-dialog-sm)"
       :close-on-click-modal="false"
     >
       <el-form label-width="90px">
@@ -657,7 +657,7 @@ onActivated(() => {
     </el-dialog>
 
     <!-- 重置密码弹窗 -->
-    <el-dialog v-model="resetDialogVisible" title="重置密码" width="440px" :close-on-click-modal="false">
+    <el-dialog v-model="resetDialogVisible" title="重置密码" width="var(--app-dialog-sm)" :close-on-click-modal="false">
       <el-form ref="resetFormRef" :model="resetForm" :rules="resetRules" label-width="90px">
         <el-form-item label="用户名">
           <el-input :model-value="resetForm.username" disabled />

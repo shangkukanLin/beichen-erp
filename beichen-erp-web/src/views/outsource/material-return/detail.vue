@@ -216,7 +216,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
     </el-card>
 
     <!-- 登记维修返回弹窗 -->
-    <el-dialog v-model="repairVisible" title="登记维修返回" width="700px" :close-on-click-modal="false">
+    <el-dialog v-model="repairVisible" title="登记维修返回" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <el-form label-width="90px" size="small">
         <el-row :gutter="16">
           <el-col :span="12">

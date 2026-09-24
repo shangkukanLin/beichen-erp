@@ -216,7 +216,7 @@ onActivated(() => { loadData() })
     </el-card>
 
     <!-- 新建盘点单 -->
-    <el-dialog v-model="createDialog" :title="`新建盘点${scopeHint}`" width="480px" :close-on-click-modal="false">
+    <el-dialog v-model="createDialog" :title="`新建盘点${scopeHint}`" width="var(--app-dialog-sm)" :close-on-click-modal="false">
       <el-form :model="createForm" label-width="90px">
         <el-form-item label="盘点仓库" required>
           <el-select v-model="createForm.warehouseId" placeholder="请选择" style="width:100%">

@@ -248,7 +248,7 @@ onActivated(loadData)
     </el-card>
 
     <!-- 登记维修返回弹窗 -->
-    <el-dialog v-model="repairVisible" title="登记维修返回" width="720px" :close-on-click-modal="false">
+    <el-dialog v-model="repairVisible" title="登记维修返回" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <el-form label-width="90px" size="small">
         <el-row :gutter="16">
           <el-col :span="12"><el-form-item required label="入库仓库"><RemoteSelect v-model="repairWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择返回入库的我方成品仓" style="width:100%" /></el-form-item></el-col>

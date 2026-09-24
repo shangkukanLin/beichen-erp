@@ -195,7 +195,7 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
       </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="900px" :close-on-click-modal="false" @open="loadMaterials()">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="var(--app-dialog-lg)" :close-on-click-modal="false" @open="loadMaterials()">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="12">

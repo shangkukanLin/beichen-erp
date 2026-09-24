@@ -314,7 +314,7 @@ onActivated(() => { loadData() })
     </el-card>
 
     <!-- 添加行：从关联采购单明细选择 -->
-    <el-dialog v-model="poDialogVisible" title="从采购单明细添加退货行" width="760px">
+    <el-dialog v-model="poDialogVisible" title="从采购单明细添加退货行" width="var(--app-dialog-md)">
       <el-table
         :data="poItems"
         border

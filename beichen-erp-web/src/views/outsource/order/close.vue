@@ -297,7 +297,7 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
     <!-- 操作按钮（保存草稿/确认结单/反结单/导出Excel）已统一上移到页头右侧操作区（PageShell #actions） -->
 
     <!-- 强制退料确认（2026-09-16 问题①）：账面库存不足时的显式旁路 -->
-    <el-dialog v-model="showForceDialog" title="存在退料超出工厂仓账面库存的物料" width="640px">
+    <el-dialog v-model="showForceDialog" title="存在退料超出工厂仓账面库存的物料" width="var(--app-dialog-md)">
       <el-alert type="warning" :closable="false" show-icon
         title="以下物料的退料数量超过工厂委外仓账面库存"
         description="委外收货领料走「允许负」口径，工厂仓账面常为负或没有库存行，此时严格口径会阻止结单。如需按实际情况退料，请勾选下方「强制退料」；否则请先补入库单或下调退料数量。" />

@@ -460,7 +460,7 @@ onActivated(() => {
     </el-tabs>
 
     <!-- 批量生成整理草稿：按 (仓库, 客户) 各生成一张草稿；分选数量先按所选品质整批预置 -->
-    <el-dialog v-model="batchVisible" title="批量生成整理草稿" width="720px">
+    <el-dialog v-model="batchVisible" title="批量生成整理草稿" width="var(--app-dialog-md)">
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px"
         :title="`已勾选 ${selectedIds.length} 个来源批次 / ${selectedQty} 件`"
         description="服务端按 (仓库, 客户) 各生成一张草稿（一张整理单只对应一个客户）；分选数量先按所选品质整批预置，之后可到「整理单」里按单调整。" />

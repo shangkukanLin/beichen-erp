@@ -415,7 +415,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
     </el-card>
 
     <!-- 新增/编辑收货弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑收货记录' : '新增收货记录'" width="600px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑收货记录' : '新增收货记录'" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <el-form :model="form" label-width="85px" size="small">
         <el-form-item required label="产品名称"><el-select v-model="form.productId" filterable style="width:100%" placeholder="选择订单产品"><el-option v-for="p in products" :key="p.id" :label="p.productName" :value="p.id" /></el-select></el-form-item>
         <el-form-item label="总数量"><el-input :model-value="totalGrade" readonly placeholder="由等级数量自动合计" /></el-form-item>

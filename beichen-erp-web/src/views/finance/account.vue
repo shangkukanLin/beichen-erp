@@ -57,7 +57,7 @@ onMounted(() => { loadAccounts() })
       </el-table>
     </el-card>
 
-    <el-dialog v-model="aDialog" title="账户管理" width="500px">
+    <el-dialog v-model="aDialog" title="账户管理" width="var(--app-dialog-sm)">
       <el-form ref="aRef" :model="aForm" label-width="80px">
         <el-form-item label="名称"><el-input v-model="aForm.accountName"/></el-form-item>
         <el-form-item label="类型"><el-select v-model="aForm.accountType" style="width:100%"><el-option v-for="(lb, code) in AccountTypeLabel" :key="code" :label="lb" :value="code"/></el-select></el-form-item>

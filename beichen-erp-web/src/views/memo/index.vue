@@ -243,7 +243,7 @@ onMounted(() => loadMemoList())
     </div>
 
     <!-- 新增/编辑备忘录弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="420px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="var(--app-dialog-sm)">
       <el-form :model="form" label-width="60px">
         <el-form-item label="标题" required>
           <el-input v-model="form.title" placeholder="备忘录标题" />
@@ -256,7 +256,7 @@ onMounted(() => loadMemoList())
     </el-dialog>
 
     <!-- 编辑进度弹窗 -->
-    <el-dialog v-model="editProgressVisible" title="编辑进度" width="460px">
+    <el-dialog v-model="editProgressVisible" title="编辑进度" width="var(--app-dialog-sm)">
       <el-input v-model="editProgressForm.content" type="textarea" :rows="3" placeholder="进度内容" />
       <template #footer>
         <el-button @click="editProgressVisible = false">取消</el-button>

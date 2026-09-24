@@ -104,7 +104,7 @@ onMounted(() => { loadFactories(); loadData() })
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="var(--app-dialog-sm)" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px">
         <el-form-item label="供应商" required><RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" style="width:100%" /></el-form-item>
         <el-form-item required label="仓库名称"><el-input v-model="form.warehouseName" /></el-form-item>

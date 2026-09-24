@@ -240,7 +240,7 @@ onMounted(() => { loadData() })
 
 
     <!-- 供应产品弹窗 -->
-    <el-dialog v-model="productDialogVisible" title="供应产品" width="700px">
+    <el-dialog v-model="productDialogVisible" title="供应产品" width="var(--app-dialog-md)">
       <el-button type="primary" size="small" @click="addProductRow" style="margin-bottom:12px">+ 添加产品</el-button>
       <el-table :data="productList" border>
         <el-table-column label="产品" min-width="220">

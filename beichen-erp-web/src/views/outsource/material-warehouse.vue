@@ -105,7 +105,7 @@ onMounted(() => loadData())
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500px">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="var(--app-dialog-sm)">
       <el-form :model="form" label-width="80px">
         <el-form-item label="仓库名称" required><el-input v-model="form.warehouseName" /></el-form-item>
         <!-- 仓型：本页只管理自有物料仓（辅料仓），值=code、显示=中文 label（原写法把 code 当 label，界面显示 "AUXILIARY"） -->

@@ -113,7 +113,7 @@ onMounted(() => loadData())
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="isEdit?'编辑公司':'新增公司'" width="420px" :close-on-click-modal="false">
+    <el-dialog v-model="dialogVisible" :title="isEdit?'编辑公司':'新增公司'" width="var(--app-dialog-sm)" :close-on-click-modal="false">
       <el-form :model="form" label-width="80px">
         <el-form-item required label="公司名称"><el-input v-model="form.companyName" placeholder="请输入公司名称" /></el-form-item>
         <!-- 2026-09-20（F7-186）：补「状态」编辑（后端 PUT /company/{id} 走 updateById，status 可写） -->

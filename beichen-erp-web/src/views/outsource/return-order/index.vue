@@ -397,7 +397,7 @@ onMounted(() => { loadLedger() })
     </el-card>
 
     <!-- 新增无单加工退货弹窗：不关联加工单，靠"加工厂 + 产品 + 规格 + 数量"定位（后端按产品 BOM 快照还料） -->
-    <el-dialog v-model="noOrderVisible" title="新增无单加工退货" width="560px" :close-on-click-modal="false">
+    <el-dialog v-model="noOrderVisible" title="新增无单加工退货" width="var(--app-dialog-sm)" :close-on-click-modal="false">
       <el-form :model="noOrderForm" label-width="120px" size="small">
         <el-form-item required label="加工厂">
           <RemoteSelect v-model="noOrderForm.factoryId" :fetch="fetchFactories" :label-key="(row:any)=>row.name" style="width:100%" placeholder="加工厂（还料/应付对象）" />

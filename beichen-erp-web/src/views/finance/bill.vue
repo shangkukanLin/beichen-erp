@@ -148,7 +148,7 @@ async function handleCancel(row: FinanceBill) {
       <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
     </el-card>
 
-    <el-dialog v-model="genDialog" title="生成账单" width="550px">
+    <el-dialog v-model="genDialog" title="生成账单" width="var(--app-dialog-sm)">
       <el-form :model="genForm" label-width="90px">
         <el-form-item label="类型"><el-select v-model="genForm.billType" style="width:100%" @change="onBillTypeChange"><el-option :label="BillTypeLabel[BillType.RECEIVABLE]" :value="BillType.RECEIVABLE"/><el-option :label="BillTypeLabel[BillType.PAYABLE]" :value="BillType.PAYABLE"/></el-select></el-form-item>
         <el-form-item label="往来单位"><RemoteSelect v-model="genForm.partnerId" :fetch="fetchPartner" placeholder="请选择" style="width:100%" @pick="onPartnerPick" /></el-form-item>

@@ -53,7 +53,7 @@ onMounted(() => loadData())
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="isEdit?'编辑类型':'新增类型'" width="400px">
+    <el-dialog v-model="dialogVisible" :title="isEdit?'编辑类型':'新增类型'" width="var(--app-dialog-sm)">
       <el-form :model="form" label-width="80px">
         <el-form-item required label="类型名称"><el-input v-model="form.typeName" placeholder="如：偏光片" /></el-form-item>
         <el-form-item label="排序"><el-input-number v-model="form.sortOrder" :min="0" /></el-form-item>

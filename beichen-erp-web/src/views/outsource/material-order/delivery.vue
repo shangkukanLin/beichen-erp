@@ -291,7 +291,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
     </el-card>
 
     <!-- 收货弹窗 -->
-    <el-dialog v-model="recVisible" title="新增收货" width="700px" :close-on-click-modal="false">
+    <el-dialog v-model="recVisible" title="新增收货" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <div style="margin-bottom:8px;display:flex;align-items:center;gap:16px">
         <span style="font-size:var(--app-font-base);color:var(--app-text-regular)">供应商：<b>{{ order.supplierName || '-' }}</b></span>
         <span style="font-size:var(--app-font-base)">收货仓库：</span>
@@ -321,7 +321,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
     </el-dialog>
 
     <!-- 退不良弹窗 -->
-    <el-dialog v-model="defectVisible" title="退不良品" width="650px" :close-on-click-modal="false">
+    <el-dialog v-model="defectVisible" title="退不良品" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <div style="margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <span style="font-size:var(--app-font-base);color:var(--app-text-regular)">供应商：<b>{{ order.supplierName || '-' }}</b></span>
         <span style="font-size:var(--app-font-base)">处理方式：</span>
