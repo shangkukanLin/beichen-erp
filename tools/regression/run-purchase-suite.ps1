@@ -50,6 +50,9 @@ if (-not $SkipUi) {
   $steps += @{ name = 'ui:p11b-exchange-free-paid'; kind = 'file'; file = 'ui-e2e-p11b-purchase-exchange-free-paid.ps1' }
   $steps += @{ name = 'ui:p11c-return-per-product-paid'; kind = 'file'; file = 'ui-e2e-p11c-purchase-return-per-product-paid.ps1' }
   $steps += @{ name = 'ui:p3b-return-basics'; kind = 'file'; file = 'ui-e2e-p3b-purchase-return.ps1' }
+  # B (2026-09-24): purchase order detail is editable while DRAFT -- this step seeds its own draft
+  # through the API, edits + saves it in the browser, then cancels it (self-cleaning).
+  $steps += @{ name = 'ui:draft-edit'; kind = 'file'; file = 'verify-purchase-draft-edit.ps1' }
 }
 if ($Only -ne '') { $steps = @($steps | Where-Object { $_.name -match $Only }) }
 if ($steps.Count -eq 0) { Write-Output ('FAIL no step matched -Only ' + $Only); exit 2 }

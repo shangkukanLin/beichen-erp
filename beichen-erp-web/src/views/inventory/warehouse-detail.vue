@@ -170,8 +170,8 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
             <el-table-column label="数量" width="120" align="right">
               <template #default="{row}"><span style="font-weight:600">{{ fmt(row.quantity) }}</span></template>
             </el-table-column>
-            <el-table-column label="操作" width="80" align="center">
-              <template #default="{row}"><el-button type="primary" link size="small" @click="goMaterialLog(row)">流水</el-button></template>
+            <el-table-column label="操作" width="100" align="center">
+              <template #default="{row}"><el-button type="primary" link size="small" @click="goMaterialLog(row)">库存流水</el-button></template>
             </el-table-column>
           </el-table>
           <div v-if="materials.length===0" style="text-align:center;color:var(--app-text-secondary);padding:24px">暂无库存物料</div>
@@ -215,8 +215,8 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
         <el-table-column label="总库存" width="100" align="right">
           <template #default="{row}"><span style="font-weight:600">{{ fmt(totalQty(row)) }}</span></template>
         </el-table-column>
-            <el-table-column label="操作" width="80" align="center">
-              <template #default="{row}"><el-button type="primary" link size="small" @click="goLog(row)">流水</el-button></template>
+            <el-table-column label="操作" width="100" align="center">
+              <template #default="{row}"><el-button type="primary" link size="small" @click="goLog(row)">库存流水</el-button></template>
             </el-table-column>
           </el-table>
           <div v-if="products.length===0" style="text-align:center;color:var(--app-text-secondary);padding:24px">暂无库存产品</div>
