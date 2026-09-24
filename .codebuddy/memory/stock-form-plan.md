@@ -14,8 +14,13 @@
   委外仓 29 行/9129、自有仓 49 行/5443；委外仓成品行 0（符合预期）。
 - ⚠️ 环境注意：mysql 客户端用 `-uroot -proot`（`MYSQL_PWD` 实测**不生效**，会 Access denied）；脚本里 **不要**设
   `$ErrorActionPreference='Stop'`（mysql 的密码告警走 stderr，会被当成致命错误中断）。
-- ⚠️ **Java 侧还没接形态维度**：实体 `WarehouseStock` 无该字段，三个 `change*` 咽喉方法未传参，40+ 调用点未逐个确认。
-  迁移本身安全（新列有 DEFAULT、存量全 MATERIAL ⇒ 现有 UPSERT 的 WHERE 不会误配），但**P0-2 未完成**，P0-3 及之后都别开始。
+- ✅ **① 实体已接（2026-09-25）**：`warehouse/entity/WarehouseStock.java` 加 `private String stockForm = "MATERIAL";`（字段**不参与**本条唯一键之外的逻辑 ⇒ 行为等价；后端 `mvn compile` PASS）。
+- ⏳ **Java 侧剩下的（②③④，P0-2 未完，别开 P0-3）**：
+  - `warehouse/mapper/WarehouseStockMapper.java`：`updateQuantity`（:15-30）与 `updateMaterialQuantity`（:33-45）两条 UPDATE 的 WHERE 需加 `AND stock_form = #{stockForm}`，方法签名同步加参；
+  - `warehouse/service/WarehouseStockService.java`（22.8KB）：`changeStock`(:71)、`changeMaterialStock`(:120/:133)、`changeMaterialStockAllowNegative`(:148) 三个咽喉加 `stockForm` 形参（**保留默认 MATERIAL 的重载**，先不动调用点也能跑），并同步 `selectExist`(:341)/`selectMaterialExist`(:349)/`insertStock`(:356)/`insertMaterialStock`(:367) 与 `WarehouseStockLog` 写入（流水也要带形态）；
+  - 然后逐个给 40+ 调用点显式传值（现有调用一律 `MATERIAL` ⇒ 与今天等价），逐个确认 + 回归；
+  - 前端 `api/enums.ts` 加形态 code→中文 映射。
+- 迁移本身安全（新列有 DEFAULT、存量全 MATERIAL ⇒ 现有 UPSERT 的 WHERE 不会误配），但**P0-2 未完成**，P0-3 及之后都别开始。
 
 ## 0. 已确认的业务口径（用户 2026-09-25）
 - **加工退货（DEFECT）**

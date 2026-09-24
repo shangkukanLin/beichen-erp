@@ -30,6 +30,21 @@ public class WarehouseStock {
     private Long materialId;
 
     /**
+     * 库存形态（2026-09-25 P0-2 新增，DB 列已迁移）—— 委外仓既能放物料，也能放退回的成品：
+     * <ul>
+     *   <li>{@code MATERIAL}（默认）—— 物料（现状；存量行全部落在这一档）</li>
+     *   <li>{@code PRODUCT_DEFECT} —— 成品（加工退货）：工厂交货后发现不良退回工厂，**工厂责任**</li>
+     *   <li>{@code PRODUCT_REPAIR} —— 成品（维修退货）：客户退回的售后品推给工厂维修，**我方责任**</li>
+     * </ul>
+     * 与 {@link #qualityType} 是**正交**的两件事：qualityType 是规格(A/B/C/DEFECT/GOOD)，
+     * 本列是"这条库存到底算料还是算某类退回成品"。已纳入两条唯一键
+     * （uk_wh_prod_quality_company / uk_wh_material_company）⇒ 不同形态**不会**互相累加。
+     * <p>⚠️ 默认值只为"存量与既有调用不受影响"：任何新增的成品形态写入都必须**显式**赋值，
+     * 否则会被记成 MATERIAL（参见 .codebuddy/memory/stock-form-plan.md 第 6 节风险清单）。</p>
+     */
+    private String stockForm = "MATERIAL";
+
+    /**
      * 品质等级（成品与委外物料共用本列，取值随记录类型而定，两者互斥不会串）：
      * <ul>
      *   <li>成品记录（product_id 非空、material_id 为空）：取 {@link com.beichen.erp.material.common.ProductQualityType}
