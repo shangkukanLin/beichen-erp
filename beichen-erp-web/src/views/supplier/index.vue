@@ -2,13 +2,18 @@
 import { reactive, ref, onMounted, onActivated, computed, watch } from 'vue'
 import { SUPPLIER_DIRTY_KEY } from '@/api/enums'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { productLabel } from '@/api/product'
+// 2026-09-24：新增/编辑弹框在 2026-09-23 已改为独立页（/supplier/form/add | /edit/:id）⇒ 清掉随之
+// 失效的弹框状态与提交逻辑（dialogVisible / dialogTitle / submitLoading / formRef / defaultForm /
+// form / isEdit / rules / handleSubmit）以及只被它们用到的导入（addSupplier / updateSupplier /
+// SupplierDTO / FormInstance / FormRules / SupplierProductVO）。
+// ⚠️ F7-153（编辑时不得用当前页签类型覆盖 typeCodes）的保护与解释都在 form.vue:67-69，未丢失。
 import {
-  getSupplierPage, addSupplier, updateSupplier, toggleSupplierStatus,
+  getSupplierPage, toggleSupplierStatus,
   getSupplierProducts, saveSupplierProducts,
-  type SupplierVO, type SupplierDTO, type SupplierProductVO, type SupplierProductDTO
+  type SupplierVO, type SupplierProductDTO
 } from '@/api/system'
 
 const route = useRoute()
@@ -22,7 +27,7 @@ const typeMap: Record<string, { title: string; type: string }> = {
   '/supplier/material-supplier': { title: '辅料商', type: 'material' }
 }
 const currentType = computed(() => typeMap[route.path]?.type || 'solution')
-const pageTitle = computed(() => typeMap[route.path]?.title || '供应商')
+// 2026-09-24：原 pageTitle 已无任何引用（页面标题由路由 meta.title 渲染）⇒ 删除
 
 // 监听路由变化重新加载
 watch(() => route.path, () => { pagination.pageNum = 1; activeTab.value = 'active'; loadData() })
@@ -65,24 +70,7 @@ async function loadData() {
 function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.name = ''; query.phone = ''; query.status = undefined; activeTab.value = 'active'; pagination.pageNum = 1; loadData() }
 
-// ---------- 表单 ----------
-const dialogVisible = ref(false)
-const dialogTitle = ref('新增')
-const submitLoading = ref(false)
-const formRef = ref<FormInstance>()
-const defaultForm = (): SupplierDTO => ({
-  code: '', name: '', supplierType: '', typeCodes: [currentType.value], status: 1,
-  contact: '', phone: '', address: '', remark: '',
-  relatedSupplierId: undefined,
-  creditPeriodMonths: undefined, creditPeriod: undefined
-})
-const form = reactive<SupplierDTO>(defaultForm())
-const isEdit = ref(false)
-
-const rules: FormRules = {
-  name: [{ required: true, message: '请输入供应商名称', trigger: 'blur' }]
-}
-
+// ---------- 新增 / 详情（都是跳独立页，本页不再有表单弹框）----------
 function handleAdd() {
   // 2026-09-23 用户要求：新增由 700px 弹框改为独立页（类型随 query 带过去，刷新/直链都不丢）
   router.push({ path: '/supplier/form/add', query: { type: currentType.value } })
@@ -90,29 +78,6 @@ function handleAdd() {
 
 function handleDetail(row: SupplierVO) {
   router.push(`/supplier/detail/${row.id}`)
-}
-
-async function handleSubmit() {
-  if (!formRef.value) return
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return
-    submitLoading.value = true
-    try {
-      // 2026-09-20（F7-153）：编辑时**不再**用当前页签类型覆盖 typeCodes ——
-      // 原先无条件 `form.typeCodes = [currentType.value]`，会把"多类型"供应商静默改成单一类型。
-      // 新增时仍按当前页签预置（弹窗里用户还能自行调整）。
-      if (!isEdit.value) form.typeCodes = [currentType.value]
-      if (isEdit.value && form.id) {
-        await updateSupplier(form)
-        ElMessage.success('已更新')
-      } else {
-        await addSupplier(form)
-        ElMessage.success('已新增')
-      }
-      dialogVisible.value = false
-      loadData()
-    } catch { /* 拦截器已提示 */ } finally { submitLoading.value = false }
-  })
 }
 
 async function handleToggleStatus(row: SupplierVO) {
