@@ -88,7 +88,7 @@ function goReturnDetail(id: number) { router.push(`/inventory/purchase-return/de
  * 后端 PurchaseOrderServiceImpl 的 audit / unAudit / cancel **已实现全套账务**（入库 PURCHASE_IN + 应付账款，
  * 反审核冲回）⇒ 前端只需暴露入口，无需改后端。
  */
-function goExchange() { router.push({ path: '/inventory/purchase-exchange/add', query: { purchaseOrderId: orderId } }) }
+function goExchange() { router.push({ path: '/inventory/purchase-exchange/add', query: { fromOrder: orderId } }) }
 async function handleAudit() {
   try {
     await ElMessageBox.confirm(`确认审核采购单「${order.value.code}」？审核后入库并生成应付账款。`, '确认审核',
