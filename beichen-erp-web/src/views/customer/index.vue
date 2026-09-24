@@ -80,7 +80,8 @@ async function handleToggleStatus(row: Customer) {
       type: 'warning'
     })
     await updateCustomerStatus(row.id as number, target)
-    ElMessage.success('操作成功')
+    // 2026-09-24：原「操作成功」语义含糊 ⇒ 按「已X」口径带上具体动作（tip 为 停用/启用）
+  ElMessage.success(`已${tip}`)
     loadData()
   } catch {
     // 用户取消或错误
