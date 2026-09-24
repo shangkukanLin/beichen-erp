@@ -65,9 +65,9 @@ function handleQuery() { pagination.pageNum = 1; loadData() }
 function onSizeChange(v: number) { pagination.pageSize = v; pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.status = ''; query.warehouseId = ''; pagination.pageNum = 1; loadData() }
 
-// 新增/编辑/详情统一走独立页面（title 各不相同）
+// 新增走独立页面；详情统一一个入口
+// 2026-09-24（用户口径）：草稿态在**详情页**就地编辑 ⇒ 独立编辑页 `/inventory/return-sort/edit/:id` 已删除
 function goAdd() { router.push('/inventory/return-sort/add') }
-function goEdit(row: any) { router.push(`/inventory/return-sort/edit/${row.id}`) }
 function goDetail(row: any) { router.push(`/inventory/return-sort/detail/${row.id}`) }
 function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 /**
@@ -81,10 +81,9 @@ function goSource(row: any) {
   else router.push(`/sale/return/detail/${row.sourceId}`)
 }
 
-/** 行点击/详情按状态分流：草稿进编辑页（可直接改），其余进只读详情 */
+/** 行点击/详情：统一进详情页（2026-09-24 —— 草稿态在详情页就地改+存，不再分流到独立编辑页） */
 function openRow(row: any) {
-  if (row.status === DocStatus.DRAFT) goEdit(row)
-  else goDetail(row)
+  goDetail(row)
 }
 
 async function handleAudit(row: any) {
@@ -128,7 +127,7 @@ async function loadWarehouses() {
 }
 function warehouseName(id?: number) { const w = warehouseOptions.value.find((x: any) => x.id === id); return w ? w.warehouseName : '' }
 
-// 从库存流水点击关联单号跳转：草稿打开编辑页，其余进详情
+// 从库存流水点击关联单号跳转：统一进详情页（草稿态在详情页就地编辑）
 function openFromStockLog() {
   const billId = route.query.billId
   if (!billId) return

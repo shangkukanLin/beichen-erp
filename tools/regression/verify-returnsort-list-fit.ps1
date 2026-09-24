@@ -144,7 +144,8 @@ Write-Output '--- 4) EDIT page (same form.vue) also fits one line'
 $draftId = SqlOne "SELECT id FROM return_sort WHERE status='DRAFT' ORDER BY id DESC LIMIT 1"
 Write-Output ('  draft id = ' + $draftId)
 if ([int]$draftId -gt 0) {
-  agent-browser open "$base/inventory/return-sort/edit/$draftId" | Out-Null
+  # 2026-09-24（用户口径）：独立编辑页已删除（草稿态编辑并入详情页）⇒ 改开详情页做同样的宽度检查
+agent-browser open "$base/inventory/return-sort/detail/$draftId" | Out-Null
   agent-browser wait 3400
   $rawE = (EvalJs2 $measure).Replace('\"', '"')
   $mE = [regex]::Match($rawE, '\[.*\]')

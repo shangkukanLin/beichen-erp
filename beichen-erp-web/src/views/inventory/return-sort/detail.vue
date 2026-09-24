@@ -3,19 +3,28 @@ import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { AfterSaleSourceType } from '@/api/enums'
+import { AfterSaleSourceType, INVENTORY_RETURN_SORT_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import PageShell from '@/components/PageShell.vue'
 import {
-  getReturnSort, getReturnSortItems, auditReturnSort, cancelReturnSort,
+  getReturnSort, getReturnSortItems, auditReturnSort, cancelReturnSort, updateReturnSort,
   type ReturnSortItem
 } from '@/api/inventory'
 
+/**
+ * 退货整理详情（2026-09-24 用户口径：草稿态就地可编辑）
+ *
+ * 结构对齐其它单据详情：`head` = 只读快照，`form`/`items` = 可编辑副本（草稿态才建）。
+ * 草稿态可改：**整理日期 / 备注 / 每行的 A·B·C·不良 数量**（待整理数量是来源批次的既定值，不可改），
+ * 校验与 payload 与 form.vue 一致（每行 Σ(A,B,C,不良) 必须等于待整理数量；后端 update 只允许草稿）。
+ * 已审核/已作废分支保留原只读展示。
+ */
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
 
 const loading = ref(false)
 const acting = ref(false)
+const saving = ref(false)
 const warehouseOptions = ref<any[]>([])
 
 const head = reactive({
@@ -35,6 +44,8 @@ const head = reactive({
   createByName: '',
   auditorName: ''
 })
+/** 可编辑副本（白名单：单号/源仓库/整理人/审核人 不回传，由后端按主键取） */
+const form = reactive({ sortDate: '', remark: '' })
 
 const items = ref<ReturnSortItem[]>([])
 
@@ -73,11 +84,64 @@ async function loadDetail() {
       sortUserName: io.sortUserName || '',
       createByName: io.createByName || '', auditorName: io.auditorName || ''
     })
-    items.value = await getReturnSortItems(id) || []
+    const its = await getReturnSortItems(id) || []
+    items.value = its
+    if (String(head.status) === DocStatus.DRAFT) {
+      // 草稿：建可编辑副本（数量显式转 Number，避免输入框拿到字符串）
+      form.sortDate = head.sortDate || ''
+      form.remark = head.remark || ''
+      items.value = (its as any[]).map((it: any) => ({
+        ...it,
+        totalQuantity: Number(it.totalQuantity),
+        qtyA: Number(it.qtyA || 0), qtyB: Number(it.qtyB || 0),
+        qtyC: Number(it.qtyC || 0), qtyDefect: Number(it.qtyDefect || 0),
+      })) as ReturnSortItem[]
+    }
   } finally { loading.value = false }
 }
 
 function itemSum(it: any) { return Number(it.qtyA || 0) + Number(it.qtyB || 0) + Number(it.qtyC || 0) + Number(it.qtyDefect || 0) }
+
+/** 保存（校验与 payload 与 form.vue 一致；后端 update 自带「只有草稿可编辑」守卫） */
+async function doSave() {
+  if (items.value.length === 0) { ElMessage.warning('本单没有明细，无法保存'); return }
+  for (const it of items.value as any[]) {
+    if (!it.totalQuantity || Number(it.totalQuantity) <= 0) {
+      ElMessage.warning(`产品「${it.productName || it.productId}」待整理数量必须大于0`); return
+    }
+    if (itemSum(it) !== Number(it.totalQuantity)) {
+      ElMessage.warning(`产品「${it.productName || it.productId}」分选数量之和(${itemSum(it)})必须等于待整理数量(${it.totalQuantity})`)
+      return
+    }
+  }
+  saving.value = true
+  try {
+    await updateReturnSort(id, {
+      id,
+      warehouseId: head.warehouseId,
+      sortDate: form.sortDate,
+      remark: form.remark,
+      items: (items.value as any[]).map((it: any) => ({
+        pendingId: it.pendingId,
+        sourceId: it.sourceId,
+        sourceType: it.sourceType,
+        productId: it.productId,
+        productName: it.productName,
+        sku: it.sku,
+        totalQuantity: Number(it.totalQuantity),
+        qtyA: Number(it.qtyA || 0),
+        qtyB: Number(it.qtyB || 0),
+        qtyC: Number(it.qtyC || 0),
+        qtyDefect: Number(it.qtyDefect || 0),
+      }))
+    })
+    ElMessage.success('已保存')
+    sessionStorage.setItem(INVENTORY_RETURN_SORT_DIRTY_KEY, '1')
+    await loadDetail()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '保存失败')
+  } finally { saving.value = false }
+}
 
 function goWarehouse(id?: number | null) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 function goProduct(id?: number) { if (id) router.push(`/product/detail/${id}`) }
@@ -96,6 +160,7 @@ async function doAudit() {
   try {
     await auditReturnSort(id)
     ElMessage.success('已审核')
+    sessionStorage.setItem(INVENTORY_RETURN_SORT_DIRTY_KEY, '1')
     loadDetail()
   } finally { acting.value = false }
 }
@@ -108,6 +173,7 @@ async function doUnAudit() {
   try {
     await cancelReturnSort(id)
     ElMessage.success('已反审核')
+    sessionStorage.setItem(INVENTORY_RETURN_SORT_DIRTY_KEY, '1')
     loadDetail()
   } finally { acting.value = false }
 }
@@ -118,19 +184,60 @@ onActivated(() => { loadDetail() })
 </script>
 
 <template>
-  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作（审核/反审核） -->
+  <!-- 统一骨架（2026-09-23 全站最终口径）：页头左端=返回 → 标题 → 右端=操作 -->
   <PageShell :title="`退货整理详情${head.code ? ' — ' + head.code : ''}`" :loading="loading" back-fallback="/inventory/return-sort">
     <template #sub>
       <el-tag :type="DocStatusTag[String(head.status)] || 'info'">{{ DocStatusLabel[String(head.status)] || head.status }}</el-tag>
     </template>
     <template #actions>
+      <!-- 草稿：保存(主) + 审核（2026-09-24：草稿态就地编辑，不再跳独立编辑页） -->
+      <el-button v-if="isDraft" type="primary" :loading="saving" @click="doSave">保存</el-button>
       <el-button v-if="isDraft" type="success" :loading="acting" @click="doAudit">审核</el-button>
       <el-button v-if="isAudited" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
     </template>
 
     <el-card shadow="never">
 
-      <el-descriptions :column="3" border>
+      <!-- ============ 草稿：可编辑（整理日期/备注 + 每行 A/B/C/不良 数量） ============ -->
+      <el-form v-if="isDraft" :model="form" label-width="var(--app-label-width)" class="head-form">
+        <el-row :gutter="16">
+          <el-col :span="8">
+            <el-form-item label="单号">{{ head.code }}</el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="源仓库">
+              <el-button v-if="head.warehouseId" type="primary" link @click="goWarehouse(head.warehouseId)">{{ warehouseName(head.warehouseId) }}</el-button>
+              <span v-else>—</span>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="整理日期">
+              <el-date-picker v-model="form.sortDate" type="date" value-format="YYYY-MM-DD" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <!-- 整理人由服务端按登录用户写入 ⇒ 只读 -->
+            <el-form-item label="整理人">
+              <span v-if="head.sortUserName" style="font-weight:600">{{ head.sortUserName }}</span>
+              <span v-else style="color:#999">—（历史单据未记录）</span>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="分选后入库仓">
+              <span>{{ warehouseName(head.warehouseId) }}</span>
+              <span style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">= 源仓库（A/B/C/不良 均回源仓、按品质区分）</span>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="制单人">{{ head.createByName || '—' }}</el-form-item>
+          </el-col>
+          <el-col :span="24">
+            <el-form-item label="备注"><el-input v-model="form.remark" placeholder="选填" /></el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+
+      <el-descriptions v-else :column="3" border>
         <el-descriptions-item label="单号">{{ head.code }}</el-descriptions-item>
         <el-descriptions-item label="源仓库">
           <el-button v-if="head.warehouseId" type="primary" link @click="goWarehouse(head.warehouseId)">{{ warehouseName(head.warehouseId) }}</el-button>
@@ -183,17 +290,30 @@ onActivated(() => { loadDetail() })
         <el-table-column prop="totalQuantity" label="待整理数量" width="110" align="center">
           <template #default="{ row }"><b>{{ row.totalQuantity }}</b></template>
         </el-table-column>
+        <!-- 草稿：四列数量可就地修改（数字列 size=small、:controls=false ⇒ 窄而稳定） -->
         <el-table-column label="A数量" width="100" align="right">
-          <template #default="{ row }">{{ row.qtyA }}</template>
+          <template #default="{ row }">
+            <el-input-number v-if="isDraft" v-model="row.qtyA" :min="0" :precision="0" size="small" :controls="false" style="width:100%" />
+            <span v-else>{{ row.qtyA }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="B数量" width="100" align="right">
-          <template #default="{ row }">{{ row.qtyB }}</template>
+          <template #default="{ row }">
+            <el-input-number v-if="isDraft" v-model="row.qtyB" :min="0" :precision="0" size="small" :controls="false" style="width:100%" />
+            <span v-else>{{ row.qtyB }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="C数量" width="100" align="right">
-          <template #default="{ row }">{{ row.qtyC }}</template>
+          <template #default="{ row }">
+            <el-input-number v-if="isDraft" v-model="row.qtyC" :min="0" :precision="0" size="small" :controls="false" style="width:100%" />
+            <span v-else>{{ row.qtyC }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="不良数量" width="100" align="right">
-          <template #default="{ row }">{{ row.qtyDefect }}</template>
+          <template #default="{ row }">
+            <el-input-number v-if="isDraft" v-model="row.qtyDefect" :min="0" :precision="0" size="small" :controls="false" style="width:100%" />
+            <span v-else>{{ row.qtyDefect }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="校验" width="110" align="center">
           <template #default="{ row }">
@@ -210,4 +330,5 @@ onActivated(() => { loadDetail() })
 
 <style scoped>
 /* 页头/操作区已统一到全局骨架（PageShell + styles/page.css） */
+.head-form :deep(.el-form-item) { margin-bottom: 8px; }
 </style>

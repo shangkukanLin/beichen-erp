@@ -287,9 +287,9 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/reclassify/add', name: 'InventoryReclassifyAdd', component: () => import('@/views/inventory/reclassify/add.vue'), meta: { title: '新增规格调整', requiresAuth: true, operate: true } },
       { path: 'inventory/reclassify/detail/:id', name: 'InventoryReclassifyDetail', component: () => import('@/views/inventory/reclassify/detail.vue'), meta: { title: '规格调整详情', requiresAuth: true, operate: true } },
       { path: 'inventory/return-sort', name: 'InventoryReturnSort', component: () => import('@/views/inventory/return-sort/index.vue'), meta: { title: '退货整理', requiresAuth: true } },
-      // 退货整理：新增/编辑/详情独立页面（草稿可编辑，title 各不相同）
+      // 退货整理：新增走独立页面；**详情页即草稿编辑面**（2026-09-24 用户口径 ⇒ 已删 `edit/:id` 路由，
+      // 原 form.vue 的编辑分支不再可达、仅新增使用）
       { path: 'inventory/return-sort/add', name: 'InventoryReturnSortAdd', component: () => import('@/views/inventory/return-sort/form.vue'), meta: { title: '新增退货整理', requiresAuth: true, operate: true } },
-      { path: 'inventory/return-sort/edit/:id', name: 'InventoryReturnSortEdit', component: () => import('@/views/inventory/return-sort/form.vue'), meta: { title: '编辑退货整理', requiresAuth: true, operate: true } },
       { path: 'inventory/return-sort/detail/:id', name: 'InventoryReturnSortDetail', component: () => import('@/views/inventory/return-sort/detail.vue'), meta: { title: '退货整理详情', requiresAuth: true, operate: true } },
       { path: 'inventory/stock-take', name: 'InventoryStockTake', component: () => import('@/views/inventory/stock-take/index.vue'), meta: { title: '库存盘点', requiresAuth: true } },
       { path: 'inventory/warehouse-move', name: 'InventoryWarehouseMove', component: () => import('@/views/inventory/warehouse-move/index.vue'), meta: { title: '移仓单', requiresAuth: true } },

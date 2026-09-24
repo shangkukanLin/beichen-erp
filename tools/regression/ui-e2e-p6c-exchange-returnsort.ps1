@@ -239,7 +239,8 @@ Step 'sort form: the source-bill number opens its source document'
 $sid = [int](SqlOne "SELECT i.sort_id FROM return_sort_item i JOIN return_sort s ON s.id=i.sort_id WHERE i.pending_id IS NOT NULL AND s.status IN ('DRAFT','AUDITED') ORDER BY (s.status='AUDITED'), i.sort_id DESC LIMIT 1")
 Write-Host ('  using return sort id=' + $sid)
 Ok ($sid -gt 0) ('resolved a return sort with source-traceable items (id=' + $sid + ')')
-Open ('/inventory/return-sort/edit/' + $sid) 3400
+# 2026-09-24（用户口径）：草稿态编辑并入详情页 ⇒ 独立编辑页已删除，改开详情页（来源单据链接同样在明细里）
+Open ('/inventory/return-sort/detail/' + $sid) 3400
 ClearErrs | Out-Null
 Start-Sleep -Milliseconds 1400
 # doc-number shape (XTH-20260921... for sale returns, HH-20260918... for exchanges)
