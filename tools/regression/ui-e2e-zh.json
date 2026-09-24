@@ -384,7 +384,7 @@
   "opt_mt_touch": "触摸IC",
   "opt_mt_code": "码片IC",
   "lbl_pay_account2": "付款账户",
-  "btn_launch_return2": "发起退货",
+  "btn_launch_return2": "退货",
   "tab_pay_records": "付款记录",
   "tab_pay_supplier": "供应商汇总",
   "btn_add_payment": "新增付款",

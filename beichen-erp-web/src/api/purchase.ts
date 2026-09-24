@@ -21,6 +21,12 @@ export interface PurchaseOrderItem {
   id?: number
   orderId?: number
   productId?: number
+  /**
+   * 展示字段（2026-09-24 补声明）：后端 PurchaseOrderItem 的 sku / productName 是
+   * `@TableField(exist = false)`，由明细接口按 productId 批量回填 ⇒ 不参与提交，仅用于显示。
+   */
+  sku?: string
+  productName?: string
   materialCode?: string
   materialName?: string
   spec?: string
