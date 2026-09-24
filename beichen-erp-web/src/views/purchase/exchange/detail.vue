@@ -64,42 +64,50 @@
       <!-- 2026-09-21（UI 优化）：原来 12 列、合计 1420px ⇒ 横向滚动 472px。现：①SKU 不单列，产品格显示
            「SKU | 名称」（SKU 仍可点击进产品详情）②「换入产品」列去掉 —— **同品换货**下它与退回产品必然相同
            （异型号是后端预留能力、当前 UI 不开放；真出现时换入侧的数量/品质/单价仍在表内）
-           ③按内容重新配宽 ⇒ 合计 888px < 内容区 948px ⇒ 一行显示完、不左右滑动 -->
+           2026-09-24（用户要求「宽度要充满页面」）：Element 用 table-layout:fixed + width:100%
+           ⇒ **列宽之和大于容器时不是横向滚动，而是把右侧列裁掉**（实测列和 1056 / 容器 948 ⇒ 末列超出 108px）。
+           故"撑满"必须同时满足两条：
+             ① 列宽之和 ≤ 容器：叶子表头去掉与分组表头重复的「退回/换入」前缀（分组头已写明，
+                4 字标题在 72px 内被截断成「退回…」），数字列收到 数量 62 / 品质 60 / 单价 72 / 金额 76、
+                付费 140→128 ⇒ 合计 ≈ 888px（回到原设计目标，窄屏不再被裁）
+             ② 至少一列用 min-width：Element 只有存在 min-width 列时才会把容器余量分给它 ⇒
+                「产品」132 与「备注」88 用 min-width，宽屏下自动吃满余量（原先全固定宽 ⇒ 右侧留白）
+             数字列仍用固定 width，列宽稳定、不随窗口抖动。 -->
       <el-table :data="items" border>
         <!-- ===== 退回侧：退给供货商，从我方仓扣减 ===== -->
         <el-table-column label="退回（退给供货商）" align="center">
-          <el-table-column label="退回产品" width="132" show-overflow-tooltip>
+          <el-table-column label="产品" min-width="132" show-overflow-tooltip>
             <template #default="{ row }">
               <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ productText(row) }}</el-button>
               <span v-else>{{ productText(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="quantity" label="退回数量" width="74" align="right" />
-          <el-table-column label="退回品质" width="72" align="center">
+          <el-table-column prop="quantity" label="数量" width="62" align="right" />
+          <el-table-column label="品质" width="60" align="center">
             <template #default="{ row }">{{ ProductQualityTypeLabel[String(row.qualityType)] || row.qualityType || '-' }}</template>
           </el-table-column>
-          <el-table-column label="退回单价" width="82" align="right">
+          <el-table-column label="单价" width="72" align="right">
             <template #default="{ row }">{{ formatMoney(row.unitPrice) }}</template>
           </el-table-column>
-          <el-table-column label="退回金额" width="90" align="right">
+          <el-table-column label="金额" width="76" align="right">
             <template #default="{ row }">{{ formatMoney(row.amount) }}</template>
           </el-table-column>
         </el-table-column>
         <!-- ===== 换入侧：供货商换回，入我方仓 ===== -->
         <el-table-column label="换入（供货商换回）" align="center">
-          <el-table-column prop="inQuantity" label="换入数量" width="74" align="right" />
-          <el-table-column label="换入品质" width="72" align="center">
+          <el-table-column prop="inQuantity" label="数量" width="62" align="right" />
+          <el-table-column label="品质" width="60" align="center">
             <template #default="{ row }">{{ ProductQualityTypeLabel[String(row.inQualityType)] || row.inQualityType || '-' }}</template>
           </el-table-column>
-          <el-table-column label="换入单价" width="82" align="right">
+          <el-table-column label="单价" width="72" align="right">
             <template #default="{ row }">{{ formatMoney(row.inUnitPrice) }}</template>
           </el-table-column>
-          <el-table-column label="换入金额" width="90" align="right">
+          <el-table-column label="金额" width="76" align="right">
             <template #default="{ row }">{{ formatMoney(row.inAmount) }}</template>
           </el-table-column>
         </el-table-column>
         <!-- 逐产品付费（2026-09-21）：本行产品付给供货商的金额 + 类型（金额 0 = 该产品不付费） -->
-        <el-table-column label="付费" width="140" align="center" show-overflow-tooltip>
+        <el-table-column label="付费" width="128" align="center" show-overflow-tooltip>
           <template #default="{ row }">
             <template v-if="Number(row.chargeAmount) > 0">
               <span style="color:#e6a23c;font-weight:600">{{ formatMoney(row.chargeAmount) }}</span>
@@ -108,7 +116,7 @@
             <span v-else style="color:#c0c4cc">—</span>
           </template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" width="72" show-overflow-tooltip>
+        <el-table-column prop="remark" label="备注" min-width="88" show-overflow-tooltip>
           <template #default="{ row }">{{ row.remark || '-' }}</template>
         </el-table-column>
       </el-table>
