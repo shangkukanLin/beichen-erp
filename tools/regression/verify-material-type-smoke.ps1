@@ -7,7 +7,7 @@ function EvalJs($js) { return (((agent-browser eval $js) -join "`n").Trim()) }
 $pages = @(
   '/outsource/order/add',
   '/outsource/material-order/add',
-  '/outsource/delivery/add',
+  '/inventory/material-move/add',
   '/outsource/stock-loss/add',
   '/outsource/other-io/add',
   '/outsource/return-order/add',

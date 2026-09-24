@@ -180,9 +180,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/outsource/warehouse-detail.vue'),
         meta: { title: '委外仓库详情', requiresAuth: true, operate: true }
       },
-      // 物料收发
-      { path: 'outsource/delivery', name: 'OutsourceDelivery', component: () => import('@/views/outsource/delivery/index.vue'), meta: { title: '物料收发单', requiresAuth: true } },
-      { path: 'outsource/delivery/add', name: 'OutsourceDeliveryAdd', component: () => import('@/views/outsource/delivery/add.vue'), meta: { title: '新增物料收发单', requiresAuth: true, operate: true } },
+      // 物料收发单（2026-09-24 用户口径「不要了，改用物料移仓代替」）：
+      //   列表/新增页已删除，旧地址保留**重定向**到替代页（避免老书签吃 403，与 dev/bom、inventory/stock 同范式）；
+      //   **详情页保留**：库存流水（成品/物料）与物料收货都用 /outsource/delivery/detail/:id 跳转，
+      //   且该页面同时承载自动生成的收料/退不良单据（历史查询）。
+      { path: 'outsource/delivery', redirect: '/inventory/material-move' },
+      { path: 'outsource/delivery/add', redirect: '/inventory/material-move' },
       { path: 'outsource/delivery/detail/:id', name: 'OutsourceDeliveryDetail', component: () => import('@/views/outsource/delivery/detail.vue'), meta: { title: '物料收发单详情', requiresAuth: true, operate: true } },
       { path: 'outsource/material-history/:wid/:mid', name: 'OutsourceMaterialHistory', component: () => import('@/views/outsource/warehouse-material-history.vue'), meta: { title: '物料库存流水详细', requiresAuth: true, operate: true } },
       // 委外加工退货

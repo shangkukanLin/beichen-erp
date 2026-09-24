@@ -236,7 +236,7 @@
           <el-button v-if="hasMenu['OutsourceMaterialStockTake']" type="primary" size="small" text @click="$router.push('/outsource/material-stock-take')">物料库存盘点</el-button>
           <el-button v-if="hasMenu['OutsourceStockLoss']" type="primary" size="small" text @click="$router.push('/outsource/stock-loss')">物料报损</el-button>
           <el-button v-if="hasMenu['OutsourceOtherIo']" type="primary" size="small" text @click="$router.push('/outsource/other-io')">物料其他出入库</el-button>
-          <el-button v-if="hasMenu['OutsourceDelivery']" type="primary" size="small" text @click="$router.push('/outsource/delivery')">物料收发单</el-button>
+          <el-button v-if="hasMenu['InventoryMaterialMove']" type="primary" size="small" text @click="$router.push('/inventory/material-move')">物料移仓</el-button>
           <!-- 委外仓库管理：按**路由路径**判权限（与「成品仓库管理」共用 route_name "Warehouse" 会串号） -->
           <!-- 文案与侧栏「基础数据」子菜单一致（2026-09-23 改名：委外仓库→委外仓库管理、自有物料仓→自有物料仓管理） -->
           <el-button v-if="hasPath['/outsource/warehouse']" type="primary" size="small" text @click="$router.push('/outsource/warehouse')">委外仓库管理</el-button>
@@ -874,14 +874,14 @@ function checkUserMenus() {
   hasModule.stock = (names.has('InventoryProductStock') || names.has('Warehouse') || names.has('ProductManage')) && tabAllowed('stock')
   hasModule.finance = (names.has('FinanceReceivable') || names.has('FinancePayable')) && tabAllowed('finance')
   // 物料仓库（2026-09-16 新增 TAB，对应新的一级菜单「物料仓库」）：菜单含任一物料收发/仓储/报损页面即视为可见
-  hasModule.materialWarehouse = (names.has('OutsourceDelivery') || names.has('OutsourceOtherIo')
+  hasModule.materialWarehouse = (names.has('InventoryMaterialMove') || names.has('OutsourceOtherIo')
     || names.has('OutsourceStockLoss') || names.has('OutsourceMaterialWarehouse')
     || hasPath.value['/outsource/warehouse']) && tabAllowed('materialWarehouse')
 
   // 快捷入口可见性（route_name 与 sys_menu 一致）
   // 2026-09-14 按最新 sys_menu 重设：补齐缺失的 route_name（DevScreenModel / OutsourceStockLoss /
   // InventoryProductStock / InventoryStockLoss / FinancePayableTransfer / AnalysisOverview），并移除**已不存在**的 FinanceAnalysis
-  const menuNames = ['Dashboard','DevProject','DevMaterial','DevScreenModel','MaterialType','TemplateManage','ProductManage','InventoryBrand','InventoryCustomer','SupplierManage','OutsourceSupplierManage','OutsourceOrder','OutsourceOrderDelivery','OutsourceMaterialOrder','OutsourceMaterialOrderDelivery','OutsourceMaterialInfo','OutsourceDelivery','OutsourceOtherIo','OutsourceReturnOrder','OutsourceMaterialReturn','OutsourceStockLoss','Warehouse','OutsourceMaterialWarehouse','OutsourceMaterialStock','OutsourceMaterialStockLog','OutsourceMaterialStockTake','InventoryPurchase','InventoryPurchaseReturn','InventoryPurchaseExchange','InventorySale','SaleReturn','SaleExchange','InventoryProductStock','WarehouseStockLog','InventoryOtherIo','InventoryReclassify','InventoryWarehouseMove','InventoryStockTake','InventoryReturnSort','InventoryStockLoss','FinanceReceivable','FinancePayable','FinanceBill','FinanceCashflow','FinanceAccount','FinanceReceipt','FinancePayment','FinanceExpense','FinanceInvoice','FinancePayableTransfer','AnalysisOverview','SystemSmart','SystemUser','SystemSettings','SystemDataManage','SystemRole','SystemMenu','SystemClearData']
+  const menuNames = ['Dashboard','DevProject','DevMaterial','DevScreenModel','MaterialType','TemplateManage','ProductManage','InventoryBrand','InventoryCustomer','SupplierManage','OutsourceSupplierManage','OutsourceOrder','OutsourceOrderDelivery','OutsourceMaterialOrder','OutsourceMaterialOrderDelivery','OutsourceMaterialInfo','OutsourceDelivery','OutsourceOtherIo','OutsourceReturnOrder','OutsourceMaterialReturn','OutsourceStockLoss','Warehouse','OutsourceMaterialWarehouse','OutsourceMaterialStock','OutsourceMaterialStockLog','OutsourceMaterialStockTake','InventoryPurchase','InventoryPurchaseReturn','InventoryPurchaseExchange','InventorySale','SaleReturn','SaleExchange','InventoryProductStock','WarehouseStockLog','InventoryOtherIo','InventoryReclassify','InventoryWarehouseMove','InventoryMaterialMove','InventoryStockTake','InventoryReturnSort','InventoryStockLoss','FinanceReceivable','FinancePayable','FinanceBill','FinanceCashflow','FinanceAccount','FinanceReceipt','FinancePayment','FinanceExpense','FinanceInvoice','FinancePayableTransfer','AnalysisOverview','SystemSmart','SystemUser','SystemSettings','SystemDataManage','SystemRole','SystemMenu','SystemClearData']
   menuNames.forEach(n => { hasMenu.value[n] = names.has(n) })
   // 默认激活「备忘录」（2026-09-15 用户要求，原为「经营总览」；财务区块仍按 AnalysisOverview 权限显隐）
   activeTab.value = 'memo'

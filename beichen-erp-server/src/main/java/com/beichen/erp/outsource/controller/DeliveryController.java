@@ -158,19 +158,19 @@ public class DeliveryController {
 
     @PostMapping
     public R<Void> create(@RequestBody Map<String, Object> body) {
-        OutsourceDelivery delivery = parseDelivery(body);
-        List<OutsourceDeliveryItem> items = parseItems(body);
-        deliveryService.create(delivery, items);
-        return R.ok();
+        // 2026-09-24（用户口径「物料收发单不要了，改用物料移仓代替」）：手工入口整体下线。
+        // 收料/退不良不经过本端点 —— 它们由物料订单收货流程直接 deliveryMapper.insert
+        // （MaterialOrderServiceImpl / CloseReportServiceImpl / SupplierSettlementServiceImpl），
+        // 因此这里无条件拒绝是安全的（不存在"自动链路被误伤"）。
+        throw new BusinessException("「物料收发单」手工入口已下线（2026-09-24）：发料/调拨请改用「物料移仓」"
+                + "（/inventory/material-move）；收料/退不良仍在「物料收货」流程内办理");
     }
 
     @PutMapping("/{id}")
     public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
-        OutsourceDelivery delivery = parseDelivery(body);
-        delivery.setId(id);
-        List<OutsourceDeliveryItem> items = parseItems(body);
-        deliveryService.update(delivery, items);
-        return R.ok();
+        // 同上：手工编辑入口一并下线（自动生成的收料/退不良单据本就不允许手工编辑，见 DeliveryServiceImpl 的类型守卫）
+        throw new BusinessException("「物料收发单」手工入口已下线（2026-09-24）：发料/调拨请改用「物料移仓」"
+                + "（/inventory/material-move）");
     }
 
     @DeleteMapping("/{id}/attach")

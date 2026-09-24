@@ -334,7 +334,10 @@ public class DataInitializer implements ApplicationRunner {
             // 物料报损：与成品报损独立成表（主体为 outsource_material，物料库存不区分品质，固定按良品扣减）
             {413L, 11L, "物料报损", "menu", "/outsource/stock-loss", "OutsourceStockLoss", "DeleteFilled", 4},
             {407L, 11L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 5},
-            {406L, 11L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6},
+            // 406「物料收发单」已于 2026-09-24 按用户要求下线（「不要了，改用物料移仓代替」）：
+            //   与 104/302/303/405/409/503/602/701 同范式 —— 不再 upsert（upsert 会把 visible 强制刷回 1），
+            //   改为在下方统一置 visible=0；**保留行与角色授权**，故 outsource:delivery 权限码仍授予原三角色，
+            //   库存流水/物料收货跳转的 /outsource/delivery/detail/:id 仍可正常读（详见 ApiPermGuard 的说明）。
             // 物料移仓（2026-09-24 新增）：用户口径「物料收发单不要了，改用物料移仓代替」——
             // 按成品移仓单（706「移仓单」）同构复刻，承接原手工收发单的 发料（我方物料仓 → 委外仓）
             // 与 调拨（物料相关仓之间互转）；收料/退不良仍走物料收货流程，与本页无关。
@@ -469,8 +472,8 @@ public class DataInitializer implements ApplicationRunner {
         try {
             // 注意：412 不在此列表 —— 2026-09-16 该 id 已被复用为「成品收货」菜单，
             // 若仍置 visible=0，会在上面的 upsert 之后把新菜单立刻隐藏（upsert 在前、置 0 在后）
-            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701) AND visible = 1");
-            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 409 委外加工-供应商管理 / 602 销售业务-客户管理 / 503 进货业务-供货商管理 / 701 成品库存查询）", hidden);
+            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701, 406) AND visible = 1");
+            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 409 委外加工-供应商管理 / 602 销售业务-客户管理 / 503 进货业务-供货商管理 / 701 成品库存查询 / 406 物料收发单）", hidden);
         } catch (Exception e) {
             log.warn("下线老菜单异常: {}", e.getMessage());
         }

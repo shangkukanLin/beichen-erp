@@ -172,7 +172,12 @@ public class ApiPermGuard {
         // 2026-09-19 期 3：这是"一控制器多页"的显式登记（不再靠共享只读白名单兜底）。
         rule("/api/outsource/material-order", "outsource:material-order", "outsource:material-delivery");
         rule("/api/outsource/order", "outsource:order");
-        rule("/api/outsource/delivery", "outsource:delivery");
+        // 手工物料收发单 2026-09-24 下线（菜单 406 已 visible=0）⇒ outsource:delivery 不再由侧栏派生
+        // （StpInterfaceImpl 的权限列表与侧栏同源），故这里放宽为「任一已授码即可」：
+        //   outsource:material-delivery（物料收货页 415 的码，跟单专员持有）
+        //   stock:material-move（物料移仓页 418 的码，admin/仓管员/跟单专员持有）
+        // 该前缀下**手工写入口已在 DeliveryController 内整体拒绝**，这里只服务只读的历史详情/列表与流水跳转。
+        rule("/api/outsource/delivery", "outsource:delivery", "outsource:material-delivery", "stock:material-move");
         rule("/api/outsource/material-return", "outsource:material-return");
         rule("/api/outsource/return-order", "outsource:return-order");
         rule("/api/outsource/material-info", "outsource:material-info");
