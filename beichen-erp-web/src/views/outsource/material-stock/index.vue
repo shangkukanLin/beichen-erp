@@ -24,22 +24,30 @@
 
     <el-card shadow="never" class="table-card">
       <!--
-        物料库存情况（2026-09-21 新增，镜像「成品库存情况」）。
+        物料库存详情（2026-09-21 新增，镜像「成品库存详情」）。
+        ⚠️ 2026-09-24（用户口径「不需要做聚合数据了」）：**本页不再做跨仓汇总** ——
+           行粒度改为「仓库 × 物料」（同一物料在多仓有量就出现多行），数据来自
+           /warehouse/stock/material-stock/page（与本页导出同源）。
+           原先的汇总口径（每物料一行 + 分布仓库列 + 点行进「物料库存分布详情」）已取消；
+           子页面 /outsource/material-stock/detail/:id 按用户要求**保留**（可直达，只是列表不再有入口）。
         与成品页的口径差异（务必保持）：
           ① 品质只有**两档**——物料走 outsource.common.QualityType（GOOD 良品 / DEFECT 不良品），
              没有成品的 A/B/C/待整理；
           ② 物料**没有安全库存字段** ⇒ 不显示安全库存列、也没有"仅看低于安全库存"筛选；
           ③ 物料没有 SKU ⇒ 不显示 SKU 列（物料名称即主标识），多一列「物料类型」。
-        每行一个物料：数量为跨仓库汇总值，点击行进入详情看该物料在各仓库的分布。
         所有列统一用 min-width：Element Plus 按比例分摊剩余空间，窄屏刚好放下、宽屏自动铺满。
       -->
-      <el-table v-loading="loading" :data="rows" border stripe @row-click="goDetail">
+      <el-table v-loading="loading" :data="rows" border stripe>
         <el-table-column prop="materialTypeName" label="物料类型" min-width="104" show-overflow-tooltip>
           <template #default="{ row }">{{ row.materialTypeName || '—' }}</template>
         </el-table-column>
         <el-table-column prop="materialName" label="物料名称" min-width="150" show-overflow-tooltip />
         <el-table-column prop="unit" label="单位" min-width="70" align="center">
           <template #default="{ row }">{{ row.unit || '—' }}</template>
+        </el-table-column>
+        <!-- 2026-09-24（用户口径：不再做聚合数据）：行粒度改为「仓库 × 物料」⇒ 必须有仓库列 -->
+        <el-table-column label="所在仓库" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.warehouseName || '—' }}</template>
         </el-table-column>
         <!-- 品质数量用紧凑数字（非 tag）：两档 + 汇总列要在一屏内放得下，避免横向滚动 -->
         <el-table-column label="良品" min-width="86" align="right">
@@ -50,14 +58,6 @@
         </el-table-column>
         <el-table-column label="总库存" min-width="86" align="right">
           <template #default="{ row }"><strong>{{ fmt(totalQty(row)) }}</strong></template>
-        </el-table-column>
-        <el-table-column label="分布仓库" min-width="88" align="center">
-          <template #default="{ row }">{{ row.warehouseCount ?? 0 }}</template>
-        </el-table-column>
-        <el-table-column label="操作" min-width="96" align="center" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click.stop="goDetail(row)">仓库分布</el-button>
-          </template>
         </el-table-column>
       </el-table>
       <div class="pagination">
@@ -72,15 +72,12 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { WarehouseCategory, WarehouseType } from '@/api/enums'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 // 导出的拼装逻辑抽在 ./export.ts（纯函数、无 XLSX/Vue 依赖）⇒ 可被 node 用例直测
 import { buildMaterialSheets } from './export'
-
-const router = useRouter()
 
 /**
  * 仓库下拉：只列**物料仓** —— 委外仓（category=OUTSOURCE）+ 自有物料仓（type=AUXILIARY）。
@@ -160,7 +157,8 @@ async function load() {
     if (query.warehouseIds?.length) params.warehouseIds = query.warehouseIds.join(',')
     if (query.materialTypeId) params.materialTypeId = query.materialTypeId
     if (query.materialName) params.materialName = query.materialName
-    const res = await request.get<any, any>('/warehouse/stock/material-summary/page', { params })
+    // 2026-09-24（用户口径）：不再聚合 ⇒ 直接取「仓库 × 物料」明细（与本页导出同源，数字必然一致）
+    const res = await request.get<any, any>('/warehouse/stock/material-stock/page', { params })
     rows.value = res?.records || []
     page.total = res?.total || 0
   } catch {
@@ -177,18 +175,14 @@ function resetQuery() {
   load()
 }
 function onSizeChange(v: number) { page.pageSize = v; page.pageNum = 1; load() }
-function goDetail(row: any) { router.push(`/outsource/material-stock/detail/${row.materialId}`) }
 
 onMounted(load)
 </script>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 12px; }
 /* 卡片内边距已统一到全局（styles/page.css 的 .table-card .el-card__body） */
 .query-form { align-items: center; }
 /* 分页样式已统一到全局（styles/page.css 的 .pagination） */
-/* 整行可点：给出手型光标，操作列按钮不再额外高亮 */
-:deep(.el-table__row) { cursor: pointer; }
 /* 品质数量紧凑着色（对应 qtyClass）：替代 el-tag，省出横向空间 */
 .qty-good { color: #67c23a; font-weight: 600; }
 .qty-defect { color: #f56c6c; font-weight: 600; }

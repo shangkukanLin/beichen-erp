@@ -152,6 +152,7 @@
   "menu_material_stock_log": "物料库存流水",
   "lbl_total_stock": "总库存",
   "lbl_wh_dist": "分布仓库",
+  "lbl_wh_name": "所在仓库",
   "lbl_good": "良品",
   "lbl_defect": "不良",
   "btn_wh_dist": "仓库分布",

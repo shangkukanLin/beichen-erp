@@ -1,4 +1,4 @@
-# P12 (2026-09-21 user request): the material-warehouse catalog gets a "material stock overview" page,
+﻿# P12 (2026-09-21 user request): the material-warehouse catalog gets a "material stock overview" page,
 #   mirroring the finished-goods one (/inventory/product-stock) but for MATERIALS.
 #   This case CREATES NOTHING (rerun-safe): it only reads the DB and drives the UI.
 #   Asserts: menu 416 is registered / granted / ordered right; the list matches the DB (one row per
@@ -59,33 +59,40 @@ Ok ((BodyHas (ZH 'lbl_unit')) -eq 'True') 'column header C: unit'
 Ok ((BodyHas (ZH 'lbl_good')) -eq 'True') 'column header D: good (material has only GOOD/DEFECT)'
 Ok ((BodyHas (ZH 'lbl_defect')) -eq 'True') 'column header E: defect'
 Ok ((BodyHas (ZH 'lbl_total_stock')) -eq 'True') 'column header F: total stock'
-Ok ((BodyHas (ZH 'lbl_wh_dist')) -eq 'True') 'column header G: warehouses holding it'
+# 2026-09-24 (user decision: no cross-warehouse aggregation any more) -> column G becomes the row's own warehouse
+Ok ((BodyHas (ZH 'lbl_wh_name')) -eq 'True') 'column header G: the warehouse of this row (per-warehouse granularity)'
 Ok ((BodyHas (ZH 'btn_export_excel_ws')) -eq 'True') 'the export button is offered (mirrors the finished-goods page)'
 Ok ((BodyHas (ZH 'opt_q_pending')) -eq 'False') 'the finished-goods-only pending column is absent'
 
-Step '2) the list matches the DB (one row per material, good qty of the biggest one is shown)'
+Step '2) the list matches the DB (one row per (warehouse x material) — no cross-warehouse aggregation any more)'
 $tb = Rows 0
 Write-Host ('  list rows=' + $tb.n + ' (db materials=' + $matCount + ')  head=' + ($tb.head -join '|'))
-Ok (([int]$tb.n -eq [int]$matCount)) 'the list shows exactly one row per material'
+# 2026-09-24 (aggregation removed): rows are per (warehouse x material) -> a material with stock in N
+#   warehouses yields N rows, so the row count no longer equals the material count (it may exceed it).
+Ok (([int]$tb.n -ge 1)) ('the list renders rows in the per-(warehouse x material) granularity (rows=' + [int]$tb.n + ', materials in db=' + [int]$matCount + ')')
 $allRows = [string](($tb.rows | ForEach-Object { "$_" }) -join '~')
 Write-Host ('  allRows=[' + $allRows + ']')
 Write-Host ('  topName=[' + $topName + '] len=' + $topName.Length + ' good=' + [int]$topGood)
 Ok ($allRows -like ('*' + $topName + '*')) ('the biggest-stock material is listed (' + $topName + ')')
-Ok ($allRows -like ('*' + [string][int]$topGood + '*')) ('the biggest-stock material shows its good qty (' + [int]$topGood + ')')
+# 2026-09-24: the cross-warehouse sum (topGood) is no longer a single cell -> the per-warehouse qty is shown instead
+Write-Host ('  (aggregation removed) cross-warehouse good of ' + $topName + ' = ' + [int]$topGood + ' is no longer shown as one cell')
 $ov = TableOver 0
 Write-Host ('  list overflow=' + $ov + 'px')
 Ok ([int]$ov -le 2) ('the list table fits on one line (overflow=' + $ov + 'px)')
 
-Step '3) row -> distribution detail: every warehouse holding it + the cross-warehouse total'
+Step '3) aggregation is gone from the list + the distribution detail stays reachable by URL'
 $idx = [int](FindRow $topName)
 Ok ($idx -ge 0) ('the material row is found on the list (idx=' + $idx + ')')
 if ($idx -ge 0) {
   $clk = ClickRowBtnContains $idx (ZH 'btn_wh_dist')
-  Write-Host ('  click the distribution button: ' + $clk)
+  Write-Host ('  click the removed distribution entry: ' + $clk)
   Start-Sleep -Milliseconds 2600
   $p = EvalJs 'String(location.pathname)'
   Write-Host ('  path=' + $p)
-  Ok ($p -match ('/outsource/material-stock/detail/' + [int]$topId)) 'the row opens the distribution detail of that material'
+  Ok ($clk -notmatch 'OK') 'the distribution entry is gone from the list (no aggregation entry any more)'
+  Ok ($p -match '/outsource/material-stock$') ('the row click does not navigate away (' + $p + ')')
+  # sub page kept on purpose -> open by URL and check it still renders
+  Open ('/outsource/material-stock/detail/' + [int]$topId) 2600
   Ok ((BodyHas $topName) -eq 'True') ('detail shows the material name (' + $topName + ')')
   Ok ((BodyHas (ZH 'lbl_total_stock')) -eq 'True') 'detail shows the total-stock label'
   Ok ((BodyHas ([string][int]$topTotal)) -eq 'True') ('detail shows the cross-warehouse total (' + [int]$topTotal + ')')
