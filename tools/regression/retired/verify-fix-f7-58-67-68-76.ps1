@@ -1,4 +1,10 @@
-﻿# verify-fix-f7-58-67-68-76.ps1
+# RETIRED 2026-09-24 -- manual material-delivery doc (outsource/delivery) was removed.
+# The list/add pages were deleted and POST/PUT create+update endpoints now always reject;
+# the replacement is the material warehouse-move doc: /inventory/material-move (backend
+# /api/inventory/material-move), covered by verify-material-move.ps1. This script targets the
+# removed entry, so it is kept for history only and must NOT be re-added to any suite.
+
+# verify-fix-f7-58-67-68-76.ps1
 #
 # Regression for the A batch of the 2026-09-20 outsource fix (report section 43.1):
 #   F7-58  create/update of an outsource delivery must apply the SAME payload validation

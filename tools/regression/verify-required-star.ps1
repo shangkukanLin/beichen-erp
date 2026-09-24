@@ -62,7 +62,7 @@ CheckDialog "$base/outsource/warehouse" '新增' '仓库名称'
 
 Write-Output '=== 页面内联表单 ==='
 CheckPage "$base/dev/project/add" '项目名称'
-CheckPage "$base/outsource/delivery/add" '工厂'
+CheckPage "$base/inventory/material-move/add" '移仓日期'
 CheckPage "$base/outsource/material-return/add" '退回对象'
 
 if ($fail -eq 0) { Write-Output 'RESULT PASS 必填项 * 已按业务校验补齐' } else { Write-Output ('RESULT FAIL 项数 ' + $fail); exit 1 }

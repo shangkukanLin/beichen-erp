@@ -1,4 +1,10 @@
-﻿# Seed 4/6: outsource chain (ASCII only; Chinese via char codes)
+# RETIRED 2026-09-24 -- manual material-delivery doc (outsource/delivery) was removed.
+# The list/add pages were deleted and POST/PUT create+update endpoints now always reject;
+# the replacement is the material warehouse-move doc: /inventory/material-move (backend
+# /api/inventory/material-move), covered by verify-material-move.ps1. This script targets the
+# removed entry, so it is kept for history only and must NOT be re-added to any suite.
+
+# Seed 4/6: outsource chain (ASCII only; Chinese via char codes)
 # NOTE: delivery/other-io items use unit_price (underscore); audit verbs differ per module
 $ErrorActionPreference = 'Continue'
 $ids = Get-Content 'c:\Users\75629\CodeBuddy\20260710123705\seed_ids.json' -Raw -Encoding UTF8 | ConvertFrom-Json

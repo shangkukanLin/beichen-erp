@@ -1,4 +1,10 @@
-﻿# Seed 4d: fix outsource order product names (map PROD-<id> -> real name), then deliveries (ASCII only)
+# RETIRED 2026-09-24 -- manual material-delivery doc (outsource/delivery) was removed.
+# The list/add pages were deleted and POST/PUT create+update endpoints now always reject;
+# the replacement is the material warehouse-move doc: /inventory/material-move (backend
+# /api/inventory/material-move), covered by verify-material-move.ps1. This script targets the
+# removed entry, so it is kept for history only and must NOT be re-added to any suite.
+
+# Seed 4d: fix outsource order product names (map PROD-<id> -> real name), then deliveries (ASCII only)
 $ErrorActionPreference = 'Continue'
 $B = 'http://localhost:8080/api'
 $loginBody = @{ username = 'lin'; password = '123'; companyId = 1 } | ConvertTo-Json

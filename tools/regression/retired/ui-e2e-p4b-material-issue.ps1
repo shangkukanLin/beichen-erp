@@ -1,4 +1,10 @@
-﻿# P4b (2026-09-18 full-flow E2E): prepare the BOM line material, then issue materials to the factories.
+# RETIRED 2026-09-24 -- manual material-delivery doc (outsource/delivery) was removed.
+# The list/add pages were deleted and POST/PUT create+update endpoints now always reject;
+# the replacement is the material warehouse-move doc: /inventory/material-move (backend
+# /api/inventory/material-move), covered by verify-material-move.ps1. This script targets the
+# removed entry, so it is kept for history only and must NOT be re-added to any suite.
+
+# P4b (2026-09-18 full-flow E2E): prepare the BOM line material, then issue materials to the factories.
 #   step 0: the project BOMs use an auto-created 排线 material (排线-MFTESTE2E1/2) that has no stock yet ->
 #           buy + receive it via 物料订单 so that issuing never has to go negative.
 #   step 1: 8 material-issue docs (物料收发单-发料): 自有物料一号仓 -> <factory>委外仓库, 4 docs per factory.

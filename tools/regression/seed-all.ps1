@@ -35,9 +35,10 @@ $steps = @(
   @{ s = 'seed1_master.ps1';          d = '汇总主数据 ID 到 seed_ids.json（覆盖为完整版）' },
   @{ s = 'seed2_purchase.ps1';        d = '采购：采购单+审核、采购退货、仓间调拨、其他出入库' },
   @{ s = 'seed3_sale.ps1';            d = '销售：销售单+审核、销售出库、销售退货' },
-  @{ s = 'seed4_outsource.ps1';       d = '委外：加工单+审核、料件送货、成品入仓、物料采购、其他io' },
-  @{ s = 'seed4b.ps1';               d = '补 AUX 仓库存并完成料件送货 / 成品入仓（修正 4 的缺料）' },
-  @{ s = 'seed4d_fix.ps1';            d = '修正委外单产品名 + 送货 + 成品入仓' },
+  # RETIRED 2026-09-24：seed4_outsource / seed4b / seed4d_fix 依赖已下线的「手工物料收发单」
+  #   （POST /api/outsource/delivery 发料/调拨），已移入 tools/regression/retired/ 不再参与套件。
+  #   替代：物料移仓（/api/inventory/material-move）；若后续发现下游缺"发料形态"的库存数据，
+  #   再补一个 seed4-material-move.ps1（TODO）。
   @{ s = 'seed4e_deliveries.ps1';     d = '成品入仓单去重并审核' },
   @{ s = 'seed2b_return.ps1';         d = '采购退货（/items 端点变体）' },
   @{ s = 'seed3b2_outbound.ps1';      d = '销售出库修正（/inventory/outbound）' },

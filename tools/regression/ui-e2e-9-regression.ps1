@@ -20,7 +20,7 @@ function StockA($tag) {
 Step 'D1 baseline: material total + find receive doc row'
 $before = [double](MaterialTotal $MAT)
 Write-Host ('material total before=' + $before + ' (列=库存总量)')
-Open '/outsource/delivery' 3000
+Open '/inventory/material-move' 3000
 ClearErrs | Out-Null
 $idx = [int](FindRowByCol 3 $OWH 'st_audited')
 Write-Host ('audited receive row=' + $idx + ' => ' + $(if ($idx -ge 0) { CellText $idx 1 } else { '-' }))
@@ -36,7 +36,7 @@ Write-Host ('material total after un-audit=' + $afterUn)
 Ok ($afterUn -eq ($before - 20)) 'D1 un-audit from list reversed 20 (stock)'
 
 Step 'D1 audit the SAME doc from list -> stock + payable must come back'
-Open '/outsource/delivery' 3000
+Open '/inventory/material-move' 3000
 $idx = [int](FindRowByCol 3 $OWH 'st_draft')
 Write-Host ('draft receive row=' + $idx + ' => ' + $(if ($idx -ge 0) { CellText $idx 1 } else { '-' }))
 Write-Host ('audit: ' + (ClickRowBtnContains $idx (ZH 'btn_audit')))
@@ -46,7 +46,7 @@ Write-Host ('msg=' + (Txt '.el-message') + ' errs=' + (Errs))
 $afterAudit = [double](MaterialTotal $MAT)
 Write-Host ('material total after list audit=' + $afterAudit)
 Ok ($afterAudit -eq $before) 'D1 audit from list wrote stock back (+20)'
-Open '/outsource/delivery' 3000
+Open '/inventory/material-move' 3000
 $idx = [int](FindRowByCol 3 $OWH 'st_audited')
 Write-Host ('row after audit=' + $(if ($idx -ge 0) { CellText $idx 1 } else { '-' }))
 Ok ($idx -ge 0) 'D1 doc is AUDITED after list audit'

@@ -1,4 +1,10 @@
-﻿# 物料收发单流程重构(v2) 校验（2026-09-16 建立，2026-09-17 改为**从 DB 取仓库/物料**，可复跑）
+# RETIRED 2026-09-24 -- manual material-delivery doc (outsource/delivery) was removed.
+# The list/add pages were deleted and POST/PUT create+update endpoints now always reject;
+# the replacement is the material warehouse-move doc: /inventory/material-move (backend
+# /api/inventory/material-move), covered by verify-material-move.ps1. This script targets the
+# removed entry, so it is kept for history only and must NOT be re-added to any suite.
+
+# 物料收发单流程重构(v2) 校验（2026-09-16 建立，2026-09-17 改为**从 DB 取仓库/物料**，可复跑）
 #  1 列表页签 = 全部 | 发料 | 调拨 | 收料(自动) | 退不良(自动) | 退料(已下线)
 #  2 新增页类型下拉只有 发料 / 调拨（无退料/收料）
 #  3 发料：发出仓库下拉 = 只我方物料仓（辅料仓）
