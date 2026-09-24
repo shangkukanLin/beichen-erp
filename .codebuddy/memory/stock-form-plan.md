@@ -22,6 +22,23 @@
   - 前端 `api/enums.ts` 加形态 code→中文 映射。
 - 迁移本身安全（新列有 DEFAULT、存量全 MATERIAL ⇒ 现有 UPSERT 的 WHERE 不会误配），但**P0-2 未完成**，P0-3 及之后都别开始。
 
+### P0-2 ②③ 精确改法（照此执行；目标是"**行为等价 + 可编译**"：既有方法保留为委托重载，先不动 40+ 调用点）
+> 文件均在 `beichen-erp-server/src/main/java/com/beichen/erp/` 下。
+
+1. **`warehouse/entity/WarehouseStockLog.java`**：加 `private String stockForm;`（流水表已迁列，不补则"库存有形态、流水无形态"）。
+2. **`warehouse/mapper/WarehouseStockMapper.java`**
+   - `updateQuantity`（:15-30）：WHERE 加 `AND stock_form = #{stockForm}`，签名末位加 `@Param("stockForm") String stockForm`。
+   - `updateMaterialQuantity`（:33-45）：同上。
+   - ⚠️ 另有"允许负数"分支走 **setSql 裸加**（`changeMaterialStockInternal` 内，约 :197）：那条 SQL 也要带 `stock_form` 条件（或另加一个带形式的 mapper 方法），否则负库存路径会跨形态累加。
+3. **`warehouse/service/WarehouseStockService.java`**
+   - `changeStock`（:71-114，9 参）：**保留原签名**，改为委托新增的 10 参重载并传 `MATERIAL`；新重载体内把 :81/:91 `updateQuantity`、:83/:97 `selectExist`、:89 `insertStock` 全部带上 stockForm；:101-113 的 log 补 `setStockForm(stockForm)`。
+   - 物料侧：`changeMaterialStock`（:120/:133）、`changeMaterialStockAllowNegative`（:148）保留为委托重载（MATERIAL），新增带 stockForm 的重载 → `changeMaterialStockInternal(..., stockForm)`；log（:228-250）与 `insertMaterialStock`（:369-374）补 stockForm。
+   - `selectExist`（:341）/ `selectMaterialExist`（:349）的 WHERE 也必须带 stockForm（否则会读到别的形态的行）。
+   - :77/:189 现在写死的 `ProductQualityType.A` / `QualityType.GOOD` 与形态是**正交**的，别混用（形态是物料侧唯一区分维度）。
+4. **建议**：新增枚举 `warehouse/common/StockForm.java`（`MATERIAL` / `PRODUCT_DEFECT` / `PRODUCT_REPAIR`），避免满项目写字符串。
+5. **每步验证**：`mvn -o compile` → 启动后端 → 四守卫 → 关键路径回归（采购入库/销售出库/调拨/盘点/报损/委外收发/加工退货红冲/维修返回）→ 抽查 `warehouse_stock_log.stock_form` 全为 `MATERIAL`（证明零回归）。
+6. **④（最后一步）**：逐个把 40+ 调用点改为显式传形态（现有调用一律 `MATERIAL`），逐个确认；前端 `api/enums.ts` 加 code→中文映射。
+
 ## 0. 已确认的业务口径（用户 2026-09-25）
 - **加工退货（DEFECT）**
   - 关联加工单：红冲该单出货/收货数据 + BOM 分解成物料到「加工厂委外仓」+ 冲减应付（＝**现状，保持**）。
