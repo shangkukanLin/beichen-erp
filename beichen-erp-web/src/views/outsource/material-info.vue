@@ -226,7 +226,7 @@ onMounted(async () => {
         <el-table-column label="备注" min-width="120">
           <template #default="{ row }"><el-input v-model="row.remark" placeholder="备注" size="small" /></template>
         </el-table-column>
-        <el-table-column label="操作" width="70" align="center">
+        <el-table-column label="操作" width="70" align="center" fixed="right">
           <template #default="{ $index }"><el-button type="danger" link size="small" @click="removeBomRow($index)">删除</el-button></template>
         </el-table-column>
       </el-table>

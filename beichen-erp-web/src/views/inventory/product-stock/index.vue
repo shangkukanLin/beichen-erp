@@ -72,7 +72,7 @@
         <el-table-column label="分布仓库" min-width="80" align="center">
           <template #default="{ row }">{{ row.warehouseCount ?? 0 }}</template>
         </el-table-column>
-        <el-table-column label="操作" min-width="88" align="center">
+        <el-table-column label="操作" min-width="88" align="center" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="goDetail(row)">仓库分布</el-button>
           </template>

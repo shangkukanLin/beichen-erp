@@ -253,7 +253,7 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
           <el-table-column label="金额" width="110" align="right">
             <template #default="{ row }">{{ itemAmount(row) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="70" align="center">
+          <el-table-column label="操作" width="70" align="center" fixed="right">
             <template #default="{ $index }"><el-button type="danger" link @click="removeItem($index)">删除</el-button></template>
           </el-table-column>
         </el-table>

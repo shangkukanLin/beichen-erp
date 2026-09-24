@@ -138,7 +138,7 @@ async function handleCancel(row: FinanceBill) {
         <el-table-column prop="paidAmount" label="已收付" width="120" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
         <el-table-column prop="unpaidAmount" label="未收付" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="StatusTag[row.status] || 'info'" size="small">{{ StatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="200" align="center"><template #default="{row}">
+        <el-table-column label="操作" width="200" align="center" fixed="right"><template #default="{row}">
           <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
           <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
           <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>

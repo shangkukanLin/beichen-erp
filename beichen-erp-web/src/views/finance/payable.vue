@@ -119,7 +119,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-table-column prop="unpaidAmount" label="未付" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column prop="dueDate" label="到期日" width="120" align="center"/>
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{statusLabel(row.status)}}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="150" align="center">
+        <el-table-column label="操作" width="150" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
             <!-- 无货款可抵时，把这笔扣款/退货转为向对方收款 -->

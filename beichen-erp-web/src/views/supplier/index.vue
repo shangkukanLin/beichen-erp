@@ -255,7 +255,7 @@ onMounted(() => { loadData() })
             <el-input v-model="row.unitPrice" placeholder="单价" size="small" />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="70" align="center">
+        <el-table-column label="操作" width="70" align="center" fixed="right">
           <template #default="{ $index }">
             <el-button type="danger" link @click="removeProductRow($index)">删除</el-button>
           </template>

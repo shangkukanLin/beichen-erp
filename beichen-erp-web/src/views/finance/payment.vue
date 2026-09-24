@@ -124,7 +124,7 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
         <el-table-column label="已付" width="130" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.paidAmount) }}</span></template></el-table-column>
         <el-table-column label="未付" width="130" align="right"><template #default="{row}"><span style="color:var(--app-color-warning);font-weight:600">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column label="逾期金额" width="130" align="right"><template #default="{row}"><span :style="{color: Number(row.overdueAmount)>0?'var(--app-color-danger)':'var(--app-text-secondary)', fontWeight: Number(row.overdueAmount)>0?600:400}">{{ fmt(row.overdueAmount) }}</span></template></el-table-column>
-        <el-table-column label="操作" width="100" align="center">
+        <el-table-column label="操作" width="100" align="center" fixed="right">
           <template #default="{row}"><el-button type="primary" link @click.stop="goSupplierDetail(row)">详情</el-button></template>
         </el-table-column>
       </el-table>

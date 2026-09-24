@@ -99,7 +99,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-table-column prop="unpaidAmount" label="未收" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column prop="dueDate" label="到期日" width="120" align="center"/>
         <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{ SettlementStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="80" align="center"><template #default="{row}"><el-button type="primary" link @click.stop="goDetail(row)">详情</el-button></template></el-table-column>
+        <el-table-column label="操作" width="80" align="center" fixed="right"><template #default="{row}"><el-button type="primary" link @click.stop="goDetail(row)">详情</el-button></template></el-table-column>
       </el-table>
       <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="load" @current-change="load"/></div>
     </el-card>

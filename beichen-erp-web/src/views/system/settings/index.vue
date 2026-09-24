@@ -96,7 +96,7 @@ onMounted(() => { loadCompany(); loadParams() })
           <el-table-column prop="id" label="ID" width="60" />
           <el-table-column prop="username" label="用户" width="80" />
           <el-table-column prop="module" label="模块" width="80" />
-          <el-table-column prop="operation" label="操作" width="80" />
+          <el-table-column prop="operation" label="操作" width="80"  fixed="right" />
           <el-table-column prop="target" label="对象" min-width="120" show-overflow-tooltip />
           <el-table-column prop="detail" label="详情" min-width="150" show-overflow-tooltip />
           <el-table-column prop="createTime" label="时间" width="160" :formatter="(r:any,c:any,v:any)=>$fmtDate(v)" />

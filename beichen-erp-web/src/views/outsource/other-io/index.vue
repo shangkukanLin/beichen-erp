@@ -103,7 +103,7 @@ onMounted(()=>{ loadWarehouses(); loadData() })
             <el-tag v-else type="warning" size="small">{{row.status}}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" align="center">
+        <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{row}">
             <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleApprove(row)">审核</el-button>
             <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnapprove(row)">反审核</el-button>
