@@ -70,7 +70,7 @@ onActivated(() => { loadData() })
 </script>
 
 <template>
-  <div>
+  <div class="page-list">
     <el-card shadow="never">
       <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">成品收货（正在加工的加工单）</span></div></template>
       <el-form :inline="true" :model="query" style="margin-bottom:12px">
@@ -130,7 +130,12 @@ onActivated(() => { loadData() })
         </el-table-column>
       </el-table>
       <div style="margin-top:16px;display:flex;justify-content:flex-end">
-        <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleQuery" />
+        <div class="pagination">
+          <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+            :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+            layout="total, sizes, prev, pager, next, jumper" background
+            @size-change="handleQuery" @current-change="loadData" />
+        </div>
       </div>
     </el-card>
 

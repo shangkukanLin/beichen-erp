@@ -154,7 +154,7 @@ onActivated(() => { loadData() })
 </script>
 
 <template>
-  <div class="p">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
         <el-form :inline="true" :model="query" class="qf">
@@ -212,7 +212,7 @@ onActivated(() => { loadData() })
         </el-table-column>
       </el-table>
       <!-- 2026-09-20（F7-191③）：改每页条数必须复位到第 1 页，否则停在越界页显示空列表 -->
-      <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="page.pageNum=1;loadData()" @current-change="loadData" /></div>
+      <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="page.pageNum=1;loadData()" @current-change="loadData" /></div>
     </el-card>
 
     <!-- 新建盘点单 -->
@@ -234,7 +234,6 @@ onActivated(() => { loadData() })
 </template>
 
 <style scoped>
-.p { display: flex; flex-direction: column; gap: 12px; }
+/* 根容器/分页样式已统一到全局（styles/page.css 的 .page-list / .pagination） */
 .qf { display: flex; flex-wrap: wrap; }
-.pg { margin-top: 16px; display: flex; justify-content: flex-end; }
 </style>

@@ -153,7 +153,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="mat-page">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query">
@@ -186,7 +186,12 @@ onMounted(async () => {
           <template #default="{row}"><el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button><el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button></template>
         </el-table-column>
       </el-table>
-      <div class="pagination"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleQuery" /></div>
+      <div class="pagination">
+        <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper" background
+          @size-change="handleQuery" @current-change="loadData" />
+      </div>
     </el-card>
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="720px" :close-on-click-modal="false">
@@ -232,7 +237,5 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.mat-page { display:flex; flex-direction:column; gap:12px; }
-.query-card :deep(.el-card__body), .table-card :deep(.el-card__body) { padding:16px; }
-.pagination { margin-top:16px; display:flex; justify-content:flex-end; }
+/* 根容器/卡片内边距/分页样式已统一到全局（styles/page.css 的 .page-list / .table-card .el-card__body / .pagination） */
 </style>

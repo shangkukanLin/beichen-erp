@@ -160,10 +160,12 @@ onActivated(() => {
       </el-table>
       <div style="margin-top:12px;display:flex;justify-content:flex-end">
         <!-- 2026-09-20（F7-181）：改每页条数时必须回到第 1 页（原先 @change 直接 loadData ⇒ 会停在旧页码，出现空白页） -->
-        <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
-          :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
-          layout="total, sizes, prev, pager, next, jumper" background
-          @size-change="onSizeChange" @current-change="loadData" />
+        <div class="pagination">
+          <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+            :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+            layout="total, sizes, prev, pager, next, jumper" background
+            @size-change="onSizeChange" @current-change="loadData" />
+        </div>
       </div>
     </el-card>
   </div>

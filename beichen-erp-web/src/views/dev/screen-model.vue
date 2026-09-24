@@ -152,7 +152,7 @@ onActivated(() => { loadData() })
 </script>
 
 <template>
-  <div class="p">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <!-- 筛选区：品牌 / 尺寸 / 分辨率 / 类型 / 关键词 + 即时查询操作 -->
       <div class="query-bar">
@@ -226,9 +226,9 @@ onActivated(() => { loadData() })
           </template>
         </el-table-column>
       </el-table>
-      <div class="pg">
+      <div class="pagination">
         <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
-          :page-sizes="[20, 50, 100, 200]" :total="pagination.total" layout="total, sizes, prev, pager, next, jumper"
+          :page-sizes="[10, 20, 50, 100, 200]" :total="pagination.total" layout="total, sizes, prev, pager, next, jumper"
           background @size-change="loadData" @current-change="loadData" />
       </div>
     </el-card>
@@ -289,8 +289,7 @@ onActivated(() => { loadData() })
   </div>
 </template>
 <style scoped>
-.p{display:flex;flex-direction:column;gap:12px}
-.pg{margin-top:12px;display:flex;justify-content:flex-end}
+/* 根容器/分页样式已统一到全局（styles/page.css 的 .page-list / .pagination） */
 
 /* ===== 顶部搜索卡片 ===== */
 .query-card{border-radius:10px;border:1px solid var(--el-border-color-lighter)}

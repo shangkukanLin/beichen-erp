@@ -123,7 +123,12 @@ onMounted(() => loadData())
           <template #default="{row}"><span :style="{color: Number(row.afterQuantity)<0?'var(--app-color-danger)':'',fontWeight:600}">{{ row.afterQuantity }}</span></template>
         </el-table-column>
       </el-table>
-      <div class="pagination"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="handlePageChange" @size-change="handleSizeChange" /></div>
+      <div class="pagination">
+        <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper" background
+          @size-change="handleSizeChange" @current-change="handlePageChange" />
+      </div>
     </el-card>
   </PageShell>
 </template>
@@ -133,5 +138,5 @@ onMounted(() => loadData())
 
 .toolbar { display:flex; justify-content:flex-end; margin-bottom:8px; }
 
-.pagination { margin-top:16px; display:flex; justify-content:flex-end; }
+/* 分页样式已统一到全局（styles/page.css 的 .pagination） */
 </style>

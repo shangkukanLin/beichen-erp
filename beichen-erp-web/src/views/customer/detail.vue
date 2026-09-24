@@ -233,7 +233,7 @@ watch(() => route.fullPath, async () => { await init(); takeBaseline() })
       </el-table>
       <div style="display:flex;justify-content:flex-end;margin-top:12px">
         <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
-          :page-sizes="[10, 20, 50]" :total="pagination.total"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
           layout="total, sizes, prev, pager, next, jumper" background
           @size-change="handleSizeChange" @current-change="handleCurrentChange" />
       </div>
