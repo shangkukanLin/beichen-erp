@@ -1,7 +1,21 @@
 # 委外退回成品 → 委外仓库存形态（`stock_form`）改造方案 + 全库读写点清单
 
 > 来源：2026-09-25 用户口径（已确认）+ 全库只读盘点（68 次检索）。
-> 状态：**P0-1 盘点完成**；P0-2 起未动代码。**动手前请按本文档逐项核对，勿只改咽喉方法**。
+> 状态：**P0-1 盘点完成；P0-2 的数据库迁移已执行完成（2026-09-25）**；**Java/前端传参改造尚未开始**。
+> **动手前请按本文档逐项核对，勿只改咽喉方法**。
+
+## 0.1 P0-2 数据库迁移：已执行 ✅（2026-09-25）
+- 迁移脚本：`beichen-erp-server/sql/migration-stock-form.sql`（幂等）；基准 DDL 已同步进 `beichen-erp-server/src/main/resources/schema.sql`。
+- 已执行内容：`warehouse_stock` 与 `warehouse_stock_log` 各加 `stock_form VARCHAR(20) NOT NULL DEFAULT 'MATERIAL'`；
+  `uk_wh_prod_quality_company` → `(warehouse_id, product_id, quality_type, stock_form, company_id)`；
+  `uk_wh_material_company` → `(warehouse_id, material_id, stock_form, company_id)`；新增 `idx_stock_form`。
+- 改造前归档：`tools/db-archive/before-stock-form.sql`（含两张表的 SHOW CREATE TABLE + 计数）。
+- **前后对照（完全一致 ⇒ 无损）**：`warehouse_stock` 78 行 / 数量 14572（形态全部 MATERIAL）；`warehouse_stock_log` 2128 行（全 MATERIAL）；
+  委外仓 29 行/9129、自有仓 49 行/5443；委外仓成品行 0（符合预期）。
+- ⚠️ 环境注意：mysql 客户端用 `-uroot -proot`（`MYSQL_PWD` 实测**不生效**，会 Access denied）；脚本里 **不要**设
+  `$ErrorActionPreference='Stop'`（mysql 的密码告警走 stderr，会被当成致命错误中断）。
+- ⚠️ **Java 侧还没接形态维度**：实体 `WarehouseStock` 无该字段，三个 `change*` 咽喉方法未传参，40+ 调用点未逐个确认。
+  迁移本身安全（新列有 DEFAULT、存量全 MATERIAL ⇒ 现有 UPSERT 的 WHERE 不会误配），但**P0-2 未完成**，P0-3 及之后都别开始。
 
 ## 0. 已确认的业务口径（用户 2026-09-25）
 - **加工退货（DEFECT）**
