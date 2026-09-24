@@ -71,7 +71,7 @@ function statusLabel(code?: string) { return code ? (STATUS_LABEL[code] || code)
 function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { if (s === SettlementStatus.UNSETTLED) return 'danger'; if (s === SettlementStatus.PARTIAL) return 'warning'; if (s === SettlementStatus.SETTLED) return 'success'; if (s === SettlementStatus.CANCELLED) return 'info'; return undefined }
 </script>
 <template>
-  <div class="p">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <!-- 页签：按主体类型查看应付（全部/供货商/加工厂/辅料商/方案商），与供应商管理页交互一致 -->
       <el-tabs v-model="activeType">
@@ -94,7 +94,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
       </div>
       </div>
     </el-card>
-    <el-card shadow="never">
+    <el-card shadow="never" class="table-card">
       <!-- 2026-09-23：详情改独立页 ⇒ 点整行 / 行内「详情」都跳转（与应收/账单页现状一致） -->
       <el-table v-loading="loading" :data="data" border stripe @row-click="(row: any) => goDetail(row)">
         <el-table-column prop="billNo" label="单据号" min-width="150"/>
@@ -127,7 +127,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
           </template>
         </el-table-column>
       </el-table>
-      <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="load" @current-change="load"/></div>
+      <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="load" @current-change="load"/></div>
     </el-card>
 
   </div>

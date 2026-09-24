@@ -36,7 +36,7 @@ onMounted(() => { loadFlow(); loadAccounts() })
 
 </script>
 <template>
-  <div class="p">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="fquery" class="qf">
@@ -61,7 +61,7 @@ onMounted(() => { loadFlow(); loadAccounts() })
         <el-table-column prop="balance" label="余额" width="130" align="right"><template #default="{row}">{{fmt(row.balance)}}</template></el-table-column>
         <el-table-column prop="relatedBillNo" label="关联单据" min-width="150"/>
       </el-table>
-      <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadFlow" @current-change="loadFlow"/></div>
+      <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadFlow" @current-change="loadFlow"/></div>
     </el-card>
   </div>
 </template>

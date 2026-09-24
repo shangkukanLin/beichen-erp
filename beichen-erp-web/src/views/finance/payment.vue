@@ -104,7 +104,7 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
 </script>
 
 <template>
-  <div class="p">
+  <div class="page-list">
     <el-tabs v-model="activeTab">
       <el-tab-pane label="供应商汇总" name="supplier" />
       <el-tab-pane label="付款记录" name="records" />
@@ -152,7 +152,7 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
         </div>
         </div>
       </el-card>
-      <el-card shadow="never">
+      <el-card shadow="never" class="table-card">
         <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
           <el-table-column prop="code" label="单号" min-width="150"/>
           <el-table-column label="供应商" min-width="140"><template #default="{row}">{{ row.supplierName || sName(row.supplierId) || '—' }}</template></el-table-column>
@@ -171,7 +171,7 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
             <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button></template>
           </el-table-column>
         </el-table>
-        <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
+        <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
       </el-card>
     </template>
 
@@ -181,8 +181,8 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
 </template>
 
 <style scoped>
-.p{display:flex;flex-direction:column;gap:12px}
+/* 根容器已统一到全局（styles/page.css 的 .page-list） */
 .qf{display:flex;flex-wrap:wrap}
-.pg{margin-top:16px;display:flex;justify-content:flex-end}
+/* 分页样式已统一到全局（styles/page.css 的 .pagination） */
 .upload-btn{display:inline-block}
 </style>

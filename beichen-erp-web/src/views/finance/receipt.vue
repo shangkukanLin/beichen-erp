@@ -123,7 +123,7 @@ async function handleUnAudit(row: FinanceReceipt) {
 function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/finance/receipt/detail/${row.id}`) }
 </script>
 <template>
-  <div class="p">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
@@ -138,11 +138,11 @@ function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="query_">查询</el-button>
         <el-button :icon="'Refresh'" @click="reset_">重置</el-button>
-        <el-button type="success" :icon="'Plus'" @click="handleAdd">新增收款</el-button>
+        <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
       </div>
       </div>
     </el-card>
-    <el-card shadow="never">
+    <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
         <el-table-column prop="code" label="单号" min-width="150"/>
         <!-- 来源单据（2026-09-18）：现金销售单由系统自动收款（立刻到账、已审核）时显示销售单号 -->
@@ -166,7 +166,7 @@ function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/
           <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button></template>
         </el-table-column>
       </el-table>
-      <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
+      <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
     </el-card>
 
   </div>

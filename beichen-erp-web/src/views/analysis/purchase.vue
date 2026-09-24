@@ -242,7 +242,7 @@ onUnmounted(() => {
 })
 </script>
 <template>
-  <div class="p" v-loading="loading">
+  <div class="page-list" v-loading="loading">
     <!-- 统计区间：统一组件 StatRange（KPI / 趋势 / 明细 均跟随所选区间） -->
     <div class="toolbar">
       <StatRange v-model:preset="preset" v-model:range="range" @change="loadData"/>
@@ -321,15 +321,15 @@ onUnmounted(() => {
           <template #default="{ row }">{{ shareOf(row) }}</template>
         </el-table-column>
       </el-table>
-      <div class="pager" v-if="supplierTotal > pageSize">
-        <el-pagination background layout="total, prev, pager, next" :total="supplierTotal"
+      <div class="pagination" v-if="supplierTotal > pageSize">
+        <el-pagination background layout="total, prev, pager, next, jumper" :total="supplierTotal"
           :page-size="pageSize" v-model:current-page="page"/>
       </div>
     </el-card>
   </div>
 </template>
 <style scoped>
-.p{display:flex;flex-direction:column}
+/* 根容器已统一到全局（styles/page.css 的 .page-list） */
 .toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .range-text{font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
 .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
@@ -360,7 +360,7 @@ onUnmounted(() => {
 .card-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
 .card-title{font-weight:600}
 .dim{font-size:var(--app-font-xs);color:var(--el-text-color-secondary)}
-.pager{display:flex;justify-content:flex-end;margin-top:10px}
+/* 分页样式已统一到全局（styles/page.css 的 .pagination） */
 /* 窄屏：4 卡降为 2 列 */
 @media (max-width: 1000px){ .stat-grid{grid-template-columns:repeat(2,1fr)} }
 </style>

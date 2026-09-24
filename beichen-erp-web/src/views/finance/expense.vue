@@ -52,7 +52,7 @@ function fmtDate(v?: string) { return v ? String(v).slice(0, 10) : '' }
 onMounted(() => { loadData(); loadAccounts() })
 </script>
 <template>
-  <div class="p">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
         <el-form :inline="true" :model="query" class="qf">
@@ -70,7 +70,7 @@ onMounted(() => { loadData(); loadAccounts() })
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="page.pageNum=1;loadData()">查询</el-button>
           <el-button :icon="'Refresh'" @click="query.expenseType='';query.status='';page.pageNum=1;loadData()">重置</el-button>
-          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增费用</el-button>
+          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
         </div>
       </div>
     </el-card>
@@ -92,7 +92,7 @@ onMounted(() => { loadData(); loadAccounts() })
           </template>
         </el-table-column>
       </el-table>
-      <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
+      <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
     </el-card>
     <el-dialog v-model="dialog" :title="dialogTitle" width="520px" :close-on-click-modal="false">
       <el-form :model="form" label-width="80px">

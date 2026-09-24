@@ -113,7 +113,7 @@ async function handleCancel(row: FinanceBill) {
 }
 </script>
 <template>
-  <div class="p">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
@@ -127,7 +127,7 @@ async function handleCancel(row: FinanceBill) {
       </div>
       </div>
     </el-card>
-    <el-card shadow="never">
+    <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
         <el-table-column prop="billNo" label="账单号" min-width="140"/>
         <el-table-column label="类型" width="70" align="center"><template #default="{row}"><el-tag :type="row.billType===BillType.RECEIVABLE?undefined:'warning'">{{ BillTypeLabel[row.billType] || row.billType }}</el-tag></template></el-table-column>
@@ -145,7 +145,7 @@ async function handleCancel(row: FinanceBill) {
           <el-button v-if="row.status!==DocStatus.CANCELLED" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
         </template></el-table-column>
       </el-table>
-      <div class="pg"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
+      <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
     </el-card>
 
     <el-dialog v-model="genDialog" title="生成账单" width="550px">
