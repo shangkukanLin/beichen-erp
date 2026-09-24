@@ -13,6 +13,17 @@ import java.time.LocalDateTime;
 @TableName("warehouse_stock")
 public class WarehouseStock {
 
+    /**
+     * 库存形态常量（2026-09-25 P0-2）：委外仓既能放物料，也能放退回的成品（区分责任方）。
+     * <p>与 {@link #qualityType}（规格 A/B/C/DEFECT/GOOD）**正交**；已纳入两条唯一键
+     * （uk_wh_prod_quality_company / uk_wh_material_company）⇒ 不同形态**不会**互相累加。</p>
+     */
+    public static final String FORM_MATERIAL = "MATERIAL";
+    /** 成品（加工退货）：工厂交货后发现不良退回工厂 —— **工厂责任**（返回单要生成赔料应收） */
+    public static final String FORM_PRODUCT_DEFECT = "PRODUCT_DEFECT";
+    /** 成品（维修退货）：客户退回的售后品推给工厂维修 —— **我方责任**（不赔料；工厂可收维修费） */
+    public static final String FORM_PRODUCT_REPAIR = "PRODUCT_REPAIR";
+
     @TableId(type = IdType.AUTO)
     private Long id;
 

@@ -45,6 +45,13 @@ public class WarehouseStockLog {
      */
     private String qualityType;
 
+    /**
+     * 库存形态（2026-09-25 P0-2 新增，DB 列已迁移）：取值见
+     * {@link WarehouseStock#FORM_MATERIAL} / {@link WarehouseStock#FORM_PRODUCT_DEFECT} / {@link WarehouseStock#FORM_PRODUCT_REPAIR}。
+     * <p>与 {@link #qualityType} 正交；流水必须与库存同行形态，否则冲红/反审核时无法按形态还原（见 stock-form-plan.md 风险 6）。</p>
+     */
+    private String stockForm = WarehouseStock.FORM_MATERIAL;
+
     /** 变动类型（枚举名，如 PURCHASE_IN） */
     private String changeType;
 
