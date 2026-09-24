@@ -168,7 +168,7 @@ onMounted(() => loadMemoList())
       </el-form>
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="loadMemoList">查询</el-button>
-        <el-button type="success" :icon="'Plus'" @click="openAdd">新增备忘录</el-button>
+        <el-button type="success" :icon="'Plus'" @click="openAdd">新增</el-button>
       </div>
       </div>
     </el-card>

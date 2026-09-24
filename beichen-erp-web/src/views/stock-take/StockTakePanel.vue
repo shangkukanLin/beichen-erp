@@ -175,7 +175,7 @@ onActivated(() => { loadData() })
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="page.pageNum=1;loadData()">查询</el-button>
           <el-button :icon="'Refresh'" @click="query.warehouseId=undefined;query.period='';query.status='';page.pageNum=1;loadData()">重置</el-button>
-          <el-button type="success" :icon="'Plus'" @click="openCreate">新建盘点</el-button>
+          <el-button type="success" :icon="'Plus'" @click="openCreate">新增</el-button>
         </div>
       </div>
     </el-card>

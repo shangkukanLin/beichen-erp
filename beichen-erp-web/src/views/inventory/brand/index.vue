@@ -49,7 +49,7 @@ onMounted(() => loadData())
 
 <template>
   <el-card shadow="never">
-    <div style="margin-bottom:12px"><el-button type="primary" :icon="'Plus'" @click="handleAdd">新增品牌</el-button></div>
+    <div style="margin-bottom:12px"><el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button></div>
     <el-table :data="tableData" border stripe v-loading="loading">
       <el-table-column prop="brandName" label="品牌名称" min-width="200" />
       <el-table-column label="状态" width="100" align="center">

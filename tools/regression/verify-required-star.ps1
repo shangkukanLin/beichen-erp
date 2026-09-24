@@ -55,9 +55,9 @@ function CheckPage($url, $expectLabel) {
 }
 
 Write-Output '=== 弹窗表单 ==='
-CheckDialog "$base/dev/material-type" '新增类型' '类型名称'
-CheckDialog "$base/template?tab=phase" '新增阶段' '阶段名称'
-CheckDialog "$base/inventory/brand" '新增品牌' '品牌名称'
+CheckDialog "$base/dev/material-type" '新增' '类型名称'
+CheckDialog "$base/template?tab=phase" '新增' '阶段名称'
+CheckDialog "$base/inventory/brand" '新增' '品牌名称'
 CheckDialog "$base/outsource/warehouse" '新增' '仓库名称'
 
 Write-Output '=== 页面内联表单 ==='

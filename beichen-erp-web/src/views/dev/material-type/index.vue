@@ -36,7 +36,7 @@ onMounted(() => loadData())
   <div class="material-type-page">
     <el-card shadow="never">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-        <el-button type="primary" :icon="'Plus'" @click="handleAdd">新增类型</el-button>
+        <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
         <el-tag type="info">类型数据被 BOM 物料清单共用</el-tag>
       </div>
       <el-table :data="tableData" border stripe>

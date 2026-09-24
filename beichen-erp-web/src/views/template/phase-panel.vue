@@ -98,7 +98,7 @@ onMounted(loadData)
           「同步产品状态」的阶段完成/跳过后会把关联产品置为「正常」。
         </span>
       </div>
-      <el-button type="primary" :icon="'Plus'" @click="openAdd">新增阶段</el-button>
+      <el-button type="success" :icon="'Plus'" @click="openAdd">新增</el-button>
     </div>
 
     <el-table :data="list" border stripe v-loading="loading">

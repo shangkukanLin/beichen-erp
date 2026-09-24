@@ -192,7 +192,7 @@ onActivated(() => { loadData() })
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
           <el-divider direction="vertical" />
-          <el-button type="success" :icon="'Plus'" @click="openAdd">新增机型</el-button>
+          <el-button type="success" :icon="'Plus'" @click="openAdd">新增</el-button>
           <el-button :icon="'Upload'" @click="pickFile">导入 Excel</el-button>
           <el-button type="primary" plain :icon="'Download'" @click="exportExcel">导出 Excel</el-button>
           <input ref="fileRef" type="file" accept=".xlsx,.xls" style="display:none" @change="onFileChange" />

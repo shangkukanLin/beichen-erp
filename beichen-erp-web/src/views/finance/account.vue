@@ -46,7 +46,7 @@ onMounted(() => { loadAccounts() })
 <template>
   <div class="p">
     <el-card shadow="never" class="table-card">
-      <div style="margin-bottom:12px"><el-button type="success" :icon="'Plus'" @click="addAccount">新增账户</el-button></div>
+      <div style="margin-bottom:12px"><el-button type="success" :icon="'Plus'" @click="addAccount">新增</el-button></div>
       <el-table v-loading="loading" :data="accounts" border stripe>
         <el-table-column prop="accountName" label="账户名称" min-width="140"/>
         <el-table-column label="类型" width="80" align="center"><template #default="{row}"><el-tag>{{ accountTypeLabel(row.accountType) }}</el-tag></template></el-table-column>

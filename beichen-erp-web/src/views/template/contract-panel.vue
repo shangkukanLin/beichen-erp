@@ -101,7 +101,7 @@ onMounted(() => loadData())
 
     <div class="panel-toolbar">
       <span class="panel-tip">导出合同时，标题、甲乙双方信息、明细表格、签名区由系统自动生成，这里只需维护以下「条款」内容；每种类型可设一份「使用中」模板。</span>
-      <el-button type="primary" :icon="'Plus'" @click="openAdd">新增模板</el-button>
+      <el-button type="success" :icon="'Plus'" @click="openAdd">新增</el-button>
     </div>
 
     <el-table :data="list" border stripe v-loading="loading">
