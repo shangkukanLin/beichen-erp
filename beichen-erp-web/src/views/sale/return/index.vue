@@ -54,12 +54,13 @@
             <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <!-- 2026-09-24（用户口径）：反审核移入详情页（后端还有"已被退货整理"等护栏，列表里说不清原因）。
+             ⇒ 操作列 150→132。 -->
+        <el-table-column label="操作" width="132" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="goDetail(row)">详情</el-button>
             <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发 -->
             <el-button v-if="row.status === SaleReturnStatus.DRAFT" v-perm="'sale:return:audit'" link type="success" @click.stop="doAudit(row)">审核</el-button>
-            <el-button v-if="row.status === SaleReturnStatus.AUDITED" v-perm="'sale:return:unaudit'" link type="warning" @click.stop="doUnAudit(row)">反审核</el-button>
             <!-- 销售退货单不提供删除：单据需留痕，只能作废（后端 delete 语义也等同作废） -->
             <el-button v-if="row.status === SaleReturnStatus.DRAFT" v-perm="'sale:return:cancel'" link type="danger" @click.stop="doCancel(row)">作废</el-button>
           </template>

@@ -167,7 +167,9 @@ onActivated(() => {
         <el-table-column label="状态" width="78" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[String(row.status)] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="190" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：反审核移入详情页（撤销已生效单据 + 冲回应收/回退余额，风险高、
+             失败原因只在详情看得见）；列表保留高频的审核。⇒ 操作列 190→168。 -->
+        <el-table-column label="操作" width="176" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
             <!-- 售后快捷入口（2026-09-21 用户口径）：仅已审核单据可发起，带 saleOrderId 跳转 ⇒ 新增页自动预填来源销售单与明细 -->
@@ -176,7 +178,6 @@ onActivated(() => {
             <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click.stop="goEdit(row)">编辑</el-button>
             <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发 -->
             <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'sale:order:audit'" type="success" link @click.stop="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" v-perm="'sale:order:unaudit'" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'sale:order:cancel'" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>

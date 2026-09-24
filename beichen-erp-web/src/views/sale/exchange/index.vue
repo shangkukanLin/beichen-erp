@@ -140,7 +140,7 @@ async function handleCancel(row: any) {
             <el-button type="primary" link @click="goDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click="goEdit(row)">编辑</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link @click="handleUnAudit(row)">反审核</el-button>
+            <!-- 2026-09-24（用户口径）：反审核移入详情页。本列宽度不变 —— 草稿分支的 4 个按钮仍需 174px。 -->
             <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>

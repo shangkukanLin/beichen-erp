@@ -27,7 +27,10 @@ Write-Host ('audited receive row=' + $idx + ' => ' + $(if ($idx -ge 0) { CellTex
 if ($idx -lt 0) { Ok $false 'D1 audited receive doc not found'; Summary 'regression D1D2D3'; exit 1 }
 
 Step 'D1 un-audit receive doc from list (target warehouse must drop by 20)'
-Write-Host ('un-audit: ' + (ClickRowBtnContains $idx (ZH 'btn_unaudit')))
+# 2026-09-24（用户口径）：反审核已从列表行内移入详情页 ⇒ 先点「详情」，再在详情页头点「反审核」。
+Write-Host ('open detail: ' + (ClickRowBtnContains $idx (ZH 'btn_detail')))
+Start-Sleep -Milliseconds 2200
+Write-Host ('un-audit: ' + (ClickBtn 'btn_unaudit'))
 Write-Host ('confirm: ' + (ConfirmBox 1300))
 Start-Sleep -Milliseconds 2800
 Write-Host ('msg=' + (Txt '.el-message'))
@@ -107,7 +110,10 @@ Step 'D2 un-audit sale order (stock restored)'
 Open '/inventory/sale' 2600
 $idx = [int](FindRow (ZH 'st_audited'))
 Write-Host ('audited idx=' + $idx)
-Write-Host ('un-audit: ' + (ClickRowBtnContains $idx (ZH 'btn_unaudit')))
+# 2026-09-24（用户口径）：反审核已从列表行内移入详情页 ⇒ 先点「详情」，再在详情页头点「反审核」。
+Write-Host ('open detail: ' + (ClickRowBtnContains $idx (ZH 'btn_detail')))
+Start-Sleep -Milliseconds 2200
+Write-Host ('un-audit: ' + (ClickBtn 'btn_unaudit'))
 Start-Sleep -Milliseconds 1000
 Write-Host ('confirm: ' + (ConfirmBox 1300))
 Start-Sleep -Milliseconds 3000

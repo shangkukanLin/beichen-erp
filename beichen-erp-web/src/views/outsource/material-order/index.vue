@@ -127,12 +127,12 @@ onActivated(() => {
         <el-table-column label="最近收货" width="76" align="center" show-overflow-tooltip><template #default="{row}">{{ $fmtDate(row.lastDeliveryTime) || '-' }}</template></el-table-column>
         <el-table-column label="交期" width="80" align="center"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column label="状态" width="68" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status]||'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="206" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 206→200。 -->
+        <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click.stop="router.push(`/outsource/material-order/detail/${row.id}`)">详情</el-button>
             <el-button type="success" link size="small" @click.stop="handleDownloadContract(row)">下载合同</el-button>
             <el-button v-if="row.status===MaterialOrderStatus.PENDING" type="success" link size="small" @click.stop="handleConfirm(row)">审核</el-button>
-            <el-button v-if="row.status===MaterialOrderStatus.RECEIVING" type="warning" link size="small" @click.stop="handleUnAudit(row)">反审核</el-button>
             <el-button v-if="row.status!==MaterialOrderStatus.FINISHED && row.status!==MaterialOrderStatus.CANCELLED" type="danger" link size="small" @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>

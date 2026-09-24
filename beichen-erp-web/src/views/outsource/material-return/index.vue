@@ -203,12 +203,12 @@ onMounted(loadData)
           </template>
         </el-table-column>
         <!-- 动作集与顺序统一（与加工侧一致）：详情 → 编辑 → 审核 → 反审核 → 作废 → 结案 → 撤销结案 -->
-        <el-table-column label="操作" width="174" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 174→168（草稿/维修分支最多 4 个按钮）。 -->
+        <el-table-column label="操作" width="176" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
             <el-button type="warning" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleEdit(row)">编辑</el-button>
             <el-button type="success" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleAudit(row)">审核</el-button>
-            <el-button type="warning" link v-if="row.status===DocStatus.AUDITED && row.closedFlag!==1" @click.stop="handleUnAudit(row)">反审核</el-button>
             <el-button type="danger" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleCancel(row)">作废</el-button>
             <!-- 结案（仅维修退货）：未返回=0 时才出现，代表跟踪终点 -->
             <el-button type="success" link v-if="isRepairTab() && row.status===DocStatus.AUDITED && row.closedFlag!==1 && Number(row.unreturnedQty)===0" @click.stop="handleClose(row)">结案</el-button>

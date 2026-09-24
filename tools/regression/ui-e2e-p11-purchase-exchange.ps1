@@ -204,12 +204,16 @@ Ok (($pIn -eq ($QTY * $PRICE))) 'positive payable for the exchange-in (+32)'
 $logs = D (SqlOne ("SELECT COUNT(*) FROM warehouse_stock_log WHERE related_bill_no='$xcode'"))
 Ok (($logs -ge 2)) ('two stock logs written (' + $logs + ')')
 
-Write-Host '--- 5) un-audit from the list row (UI) -> symmetric rollback'
+Write-Host '--- 5) un-audit from the DETAIL page (UI) -> symmetric rollback'
+# 2026-09-24（用户口径）：反审核已从列表行内移入详情页 ⇒ 点「详情」进详情页，再点页头「反审核」。
 Open '/inventory/purchase-exchange' 2600
 $ri2 = FindRow $xcode
 Write-Host ('  row for un-audit=' + $ri2)
-$uc = ClickRowBtn ([int]$ri2) 'btn_unaudit'
-Ok ($uc -match 'OK') ('un-audit button clicked (' + $uc + ')')
+$dc = ClickRowBtn ([int]$ri2) 'btn_detail'
+Ok ($dc -match 'OK') ('detail button clicked (' + $dc + ')')
+Start-Sleep -Milliseconds 2200
+$uc = ClickBtn 'btn_unaudit'
+Ok ($uc -match 'OK') ('un-audit clicked on the detail page (' + $uc + ')')
 ConfirmBox 1200 | Out-Null
 start-sleep -Milliseconds 2200
 $stU = SqlOne ("SELECT status FROM purchase_exchange WHERE id=$xid")

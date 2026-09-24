@@ -142,13 +142,13 @@ async function handleCancel(row: any) {
         <!-- 2026-09-21 修复：表格有 @row-click="goDetail"，操作列按钮原先**没有 .stop** ⇒ 点「编辑」会被行点击
              抢走到详情页（点「审核」也会先跳详情、确认框飘在详情页上）。与项目其它页面（如物料收货列表的
              @click.stop）保持一致，全部加 .stop。 -->
-        <el-table-column label="操作" min-width="155" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 min-width 155→168（草稿分支 4 个按钮）。 -->
+        <el-table-column label="操作" min-width="176" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click.stop="goEdit(row)">编辑</el-button>
             <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发，无码则后端也会 403 -->
             <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'purchase:exchange:audit'" type="success" link @click.stop="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" v-perm="'purchase:exchange:unaudit'" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" v-perm="'purchase:exchange:cancel'" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>

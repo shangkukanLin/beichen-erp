@@ -400,13 +400,13 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         </el-table-column>
         <el-table-column label="数量" width="64" align="right"><template #default="{ row }"><span :style="{ color: Number(row.quantity) < 0 ? 'var(--app-color-danger)' : '' }">{{ row.quantity }}</span></template></el-table-column>
         <el-table-column label="状态" width="60"><template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="160" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 160→168（草稿分支 4 个按钮）。 -->
+        <el-table-column label="操作" width="176" align="center" fixed="right">
           <template #default="{ row }">
             <!-- 详情：仓库/物流单号/备注/附件/SKU/等级明细/创建时间等明细字段都在**详情页**看
                  （2026-09-23 由抽屉改为独立页 /outsource/order/delivery/record/:id） -->
             <el-button type="primary" link size="small" @click="openDetail(row)">详情</el-button>
             <el-button type="success" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
-            <el-button type="warning" link size="small" v-if="row.status === DocStatus.AUDITED" @click="handleUnaudit(row)">反审核</el-button>
             <el-button type="primary" link size="small" v-if="row.status === DocStatus.DRAFT" @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleDelete(row)">删除</el-button>
           </template>

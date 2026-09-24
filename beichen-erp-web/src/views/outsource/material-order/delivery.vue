@@ -276,11 +276,11 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         <el-table-column label="数量" width="80" align="right"><template #default="{ row }">{{ (row.items || []).reduce((s:number,i:any)=>s+(i.quantity||0),0) }}</template></el-table-column>
         <el-table-column prop="warehouseName" label="仓库" width="120" show-overflow-tooltip />
         <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
-        <el-table-column label="操作" width="150" fixed="right">
+        <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 150→96（该列只剩 审核/退货 各 1 个按钮）。 -->
+        <el-table-column label="操作" width="96" fixed="right">
           <template #default="{ row }">
             <template v-if="isMaterialDelivery(row)">
               <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link size="small" @click="auditDelivery(row)">审核</el-button>
-              <el-button v-if="row.status === DocStatus.AUDITED" type="warning" link size="small" @click="unauditDelivery(row)">反审核</el-button>
               <!-- 退货：仅对已审核的**收料单**开放（退不良记录不再退货） -->
               <el-button v-if="row.status === DocStatus.AUDITED && row.deliveryType === DeliveryType.RECEIVE" type="warning" link size="small" @click="goReturn(row)">退货</el-button>
             </template>

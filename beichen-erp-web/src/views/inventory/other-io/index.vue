@@ -96,11 +96,11 @@ onMounted(async ()=>{ await loadWarehouses(); loadData() })
         <el-table-column label="其他出入库概况" min-width="200" show-overflow-tooltip>
           <template #default="{row}">{{ row.itemSummary || '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="220" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 220→132（详情/审核/作废 3 个按钮）。 -->
+        <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
             <el-button type="success" link @click.stop="handleAudit(row)" v-if="row.status===DocStatus.DRAFT">审核</el-button>
-            <el-button type="warning" link @click.stop="handleUnAudit(row)" v-if="row.status===DocStatus.AUDITED">反审核</el-button>
             <el-button type="danger" link @click.stop="handleCancel(row)" v-if="row.status===DocStatus.DRAFT">作废</el-button>
           </template>
         </el-table-column>

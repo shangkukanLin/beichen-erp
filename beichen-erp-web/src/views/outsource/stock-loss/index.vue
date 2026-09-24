@@ -63,7 +63,7 @@
             <el-button link type="primary" @click="goDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" link type="primary" @click="goEdit(row)">编辑</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" link type="success" @click="onAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.AUDITED" link type="warning" @click="onUnAudit(row)">反审核</el-button>
+            <!-- 2026-09-24（用户口径）：反审核移入详情页。本列宽度不变（草稿分支 4 个按钮仍需 174px）。 -->
             <el-button v-if="row.status === DocStatus.DRAFT" link type="danger" @click="onCancel(row)">作废</el-button>
           </template>
         </el-table-column>

@@ -72,11 +72,14 @@ Ok $found 'payable ledger generated with amount 1000'
 Write-Host ('errs=' + (Errs))
 
 # ---------- 4. un-audit -> rollback ----------
+# 2026-09-24（用户口径）：反审核已从列表行内移入详情页 ⇒ 先点「详情」，再在详情页头点「反审核」。
 Step 'un-audit rollback'
 Open '/inventory/purchase' 2400
 $r = Rows 0
 $rowIdx = FindRow $S
-Write-Host ('click un-audit: ' + (ClickRowBtnContains ([int]$rowIdx) (ZH 'btn_unaudit')))
+Write-Host ('open detail: ' + (ClickRowBtnContains ([int]$rowIdx) (ZH 'btn_detail')))
+Start-Sleep -Milliseconds 2200
+Write-Host ('click un-audit: ' + (ClickBtn 'btn_unaudit'))
 Write-Host ('confirm: ' + (ConfirmBox 1200))
 Start-Sleep -Milliseconds 2600
 Write-Host ('msg=' + (Txt '.el-message') + ' errs=' + (Errs))

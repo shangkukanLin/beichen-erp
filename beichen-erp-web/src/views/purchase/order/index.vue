@@ -289,14 +289,16 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
         <el-table-column label="状态" width="78" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="190" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：反审核移入详情页 —— 它是"撤销已生效单据"（回滚库存/冲销应付），
+             风险高且失败原因（已被退货/换货/消耗等）只在详情上下文里看得见；列表保留高频的审核。
+             ⇒ 操作列 190→168（剩余最多 4 个按钮：详情/审核/编辑/作废）。 -->
+        <el-table-column label="操作" width="176" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
             <!-- 售后快捷入口（2026-09-21 用户口径）：仅已审核采购单可发起，带 fromOrder 跳转 ⇒ 新增页自动带出供货商与可退/可换明细 -->
             <el-button v-if="row.status === PurchaseStatus.AUDITED" type="warning" link @click.stop="handleReturn(row)">退货</el-button>
             <el-button v-if="row.status === PurchaseStatus.AUDITED" type="warning" link @click.stop="handleExchange(row)">换货</el-button>
             <el-button v-if="row.status === PurchaseStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === PurchaseStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>
             <el-button v-if="row.status === PurchaseStatus.DRAFT" type="warning" link @click.stop="handleEdit(row)">编辑</el-button>
             <el-button v-if="row.status === PurchaseStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
