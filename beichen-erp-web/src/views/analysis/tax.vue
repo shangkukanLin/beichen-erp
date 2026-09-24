@@ -153,25 +153,29 @@ onUnmounted(() => { taxChart?.dispose(); taxChart = null })
       <el-button type="primary" plain size="small" @click="exportTax">导出 Excel</el-button>
     </div>
     <div id="taxChart" class="chart"/>
-    <el-table :data="tax.rows" border stripe style="margin-top:12px">
-      <el-table-column prop="month" label="月份" width="95" align="center" fixed="left"/>
+    <!-- 2026-09-24（用户规则：列表一行显示完、不左右滑动）：全表 13 列原合计 1295px > 内容区
+         ⇒ 被 Element 静默裁掉 305px。改法：size="small" 压缩单元格内边距（每列省 ~8px）+ 按内容收窄
+         + 每组重复的「已税占比」简化为「占比」（分组表头已写明 销售/采购/委外，不会歧义；页顶 tip 也有说明）
+         ⇒ 合计 979px + 13px 边框 < 990px 内容区，一行显示完。 -->
+    <el-table :data="tax.rows" border stripe size="small" style="margin-top:12px">
+      <el-table-column prop="month" label="月份" width="66" align="center" fixed="left"/>
       <el-table-column label="销售（销项）" align="center">
-        <el-table-column label="已税" width="105" align="right"><template #default="{row}">{{ fmt(row.saleTaxed) }}</template></el-table-column>
-        <el-table-column label="销项税额" width="105" align="right"><template #default="{row}">{{ fmt(row.saleTaxedTax) }}</template></el-table-column>
-        <el-table-column label="未税" width="105" align="right"><template #default="{row}">{{ fmt(row.saleUntaxed) }}</template></el-table-column>
-        <el-table-column label="已税占比" width="85" align="right"><template #default="{row}">{{ fmt(row.saleRate) }}%</template></el-table-column>
+        <el-table-column label="已税" width="78" align="right"><template #default="{row}">{{ fmt(row.saleTaxed) }}</template></el-table-column>
+        <el-table-column label="销项税额" width="84" align="right"><template #default="{row}">{{ fmt(row.saleTaxedTax) }}</template></el-table-column>
+        <el-table-column label="未税" width="78" align="right"><template #default="{row}">{{ fmt(row.saleUntaxed) }}</template></el-table-column>
+        <el-table-column label="占比" width="58" align="right"><template #default="{row}">{{ fmt(row.saleRate) }}%</template></el-table-column>
       </el-table-column>
       <el-table-column label="采购（进项）" align="center">
-        <el-table-column label="已税" width="105" align="right"><template #default="{row}">{{ fmt(row.purchaseTaxed) }}</template></el-table-column>
-        <el-table-column label="进项税额" width="105" align="right"><template #default="{row}">{{ fmt(row.purchaseTaxedTax) }}</template></el-table-column>
-        <el-table-column label="未税" width="105" align="right"><template #default="{row}">{{ fmt(row.purchaseUntaxed) }}</template></el-table-column>
-        <el-table-column label="已税占比" width="85" align="right"><template #default="{row}">{{ fmt(row.purchaseRate) }}%</template></el-table-column>
+        <el-table-column label="已税" width="78" align="right"><template #default="{row}">{{ fmt(row.purchaseTaxed) }}</template></el-table-column>
+        <el-table-column label="进项税额" width="84" align="right"><template #default="{row}">{{ fmt(row.purchaseTaxedTax) }}</template></el-table-column>
+        <el-table-column label="未税" width="78" align="right"><template #default="{row}">{{ fmt(row.purchaseUntaxed) }}</template></el-table-column>
+        <el-table-column label="占比" width="58" align="right"><template #default="{row}">{{ fmt(row.purchaseRate) }}%</template></el-table-column>
       </el-table-column>
       <el-table-column label="委外加工" align="center">
-        <el-table-column label="已税" width="105" align="right"><template #default="{row}">{{ fmt(row.outsourceTaxed) }}</template></el-table-column>
-        <el-table-column label="税额" width="105" align="right"><template #default="{row}">{{ fmt(row.outsourceTaxedTax) }}</template></el-table-column>
-        <el-table-column label="未税" width="105" align="right"><template #default="{row}">{{ fmt(row.outsourceUntaxed) }}</template></el-table-column>
-        <el-table-column label="已税占比" width="85" align="right"><template #default="{row}">{{ fmt(row.outsourceRate) }}%</template></el-table-column>
+        <el-table-column label="已税" width="78" align="right"><template #default="{row}">{{ fmt(row.outsourceTaxed) }}</template></el-table-column>
+        <el-table-column label="税额" width="84" align="right"><template #default="{row}">{{ fmt(row.outsourceTaxedTax) }}</template></el-table-column>
+        <el-table-column label="未税" width="78" align="right"><template #default="{row}">{{ fmt(row.outsourceUntaxed) }}</template></el-table-column>
+        <el-table-column label="占比" width="58" align="right"><template #default="{row}">{{ fmt(row.outsourceRate) }}%</template></el-table-column>
       </el-table-column>
     </el-table>
   </div>

@@ -94,10 +94,10 @@ onMounted(() => { loadData(); loadTakeStatus() })
       </el-tabs>
 
       <el-table v-if="activeTab==='active'" :data="activeData" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleDetail">
-        <el-table-column prop="code" label="仓库编码" width="160" />
-        <el-table-column prop="warehouseName" label="仓库名称" min-width="140" show-overflow-tooltip />
-        <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
-        <el-table-column label="本月盘点" width="120" align="center">
+        <el-table-column prop="code" label="仓库编码" width="120" />
+        <el-table-column prop="warehouseName" label="仓库名称" min-width="110" show-overflow-tooltip />
+        <el-table-column label="仓型" width="80"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
+        <el-table-column label="本月盘点" width="100" align="center">
           <template #default="{row}">
             <el-tag v-if="takeMap[row.id]?.taken" type="success" size="small">已盘点</el-tag>
             <el-tag v-else-if="(takeMap[row.id]?.overdueDays || 0) > 0" type="danger" size="small">
@@ -106,25 +106,25 @@ onMounted(() => { loadData(); loadTakeStatus() })
             <el-tag v-else type="warning" size="small">待盘点</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="上次盘点" width="110" align="center">
+        <el-table-column label="上次盘点" width="100" align="center">
           <template #default="{row}">{{ takeMap[row.id]?.lastTakeDate ? String(takeMap[row.id].lastTakeDate).slice(0,10) : '—' }}</template>
         </el-table-column>
-        <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="manager" label="负责人" width="80" />
-        <el-table-column prop="phone" label="联系电话" width="120" />
-        <el-table-column label="操作" width="155" align="center">
+        <el-table-column prop="address" label="地址" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="manager" label="负责人" width="70" />
+        <el-table-column prop="phone" label="联系电话" width="110" />
+        <el-table-column label="操作" width="130" align="center">
           <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button type="primary" link @click.stop="handleEdit(row)">编辑</el-button><el-button type="warning" link @click.stop="handleToggleStatus(row)">停用</el-button></template>
         </el-table-column>
       </el-table>
 
       <el-table v-if="activeTab==='stopped'" :data="stoppedData" border stripe style="width:100%" @row-click="handleDetail">
-        <el-table-column prop="code" label="仓库编码" width="160" />
-        <el-table-column prop="warehouseName" label="仓库名称" min-width="140" show-overflow-tooltip />
-        <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
-        <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="manager" label="负责人" width="80" />
-        <el-table-column prop="phone" label="联系电话" width="120" />
-        <el-table-column label="操作" width="155" align="center">
+        <el-table-column prop="code" label="仓库编码" width="120" />
+        <el-table-column prop="warehouseName" label="仓库名称" min-width="110" show-overflow-tooltip />
+        <el-table-column label="仓型" width="80"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
+        <el-table-column prop="address" label="地址" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="manager" label="负责人" width="70" />
+        <el-table-column prop="phone" label="联系电话" width="110" />
+        <el-table-column label="操作" width="130" align="center">
           <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button type="primary" link @click.stop="handleEdit(row)">编辑</el-button><el-button type="success" link @click.stop="handleToggleStatus(row)">启用</el-button></template>
         </el-table-column>
       </el-table>

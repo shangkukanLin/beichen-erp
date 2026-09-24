@@ -25,13 +25,13 @@
 
     <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="tableData" border stripe max-height="calc(100vh - 260px)">
-        <el-table-column prop="createTime" label="时间" width="160">
+        <el-table-column prop="createTime" label="时间" width="140">
           <template #default="{ row }">{{ $fmtDate(row.createTime) }}</template>
         </el-table-column>
-        <el-table-column prop="changeType" label="变动类型" width="130" align="center">
+        <el-table-column prop="changeType" label="变动类型" width="110" align="center">
           <template #default="{ row }"><el-tag :type="logTagType(row.changeType)" size="small">{{ StockChangeTypeLabel[row.changeType] || row.changeType }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="关联单号" width="150">
+        <el-table-column label="关联单号" width="130">
           <template #default="{ row }">
             <el-link v-if="billLink(row.relatedBillType, row.relatedBillId)" type="primary" underline="never"
               @click="handleBillClick(row)">
@@ -40,10 +40,10 @@
             <span v-else>{{ row.relatedBillNo }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="产品名称" min-width="140">
+        <el-table-column label="产品名称" min-width="130">
           <template #default="{ row }">{{ productName(row.productId) }}</template>
         </el-table-column>
-        <el-table-column label="仓库" width="120">
+        <el-table-column label="仓库" width="110">
           <template #default="{ row }">
             <el-button v-if="row.warehouseId" type="primary" link @click.stop="router.push(`/inventory/warehouse/detail/${row.warehouseId}`)">
               {{ warehouseName(row.warehouseId) }}
@@ -51,13 +51,13 @@
             <span v-else>{{ warehouseName(row.warehouseId) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="changeQuantity" label="变动数量" width="110" align="right">
+        <el-table-column prop="changeQuantity" label="变动数量" width="96" align="right">
           <template #default="{ row }">{{ fmt(row.changeQuantity) }}</template>
         </el-table-column>
-        <el-table-column prop="beforeQuantity" label="变动前库存" width="120" align="right">
+        <el-table-column prop="beforeQuantity" label="变动前库存" width="104" align="right">
           <template #default="{ row }">{{ fmt(row.beforeQuantity) }}</template>
         </el-table-column>
-        <el-table-column prop="afterQuantity" label="变动后库存" width="120" align="right">
+        <el-table-column prop="afterQuantity" label="变动后库存" width="104" align="right">
           <template #default="{ row }">{{ fmt(row.afterQuantity) }}</template>
         </el-table-column>
       </el-table>

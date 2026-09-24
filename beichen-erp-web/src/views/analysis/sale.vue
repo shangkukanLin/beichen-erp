@@ -286,12 +286,15 @@ onUnmounted(() => {
         <el-card shadow="never">
           <template #header>产品销售额排行（点「明细」看该产品的销售单）</template>
           <el-table :data="data.byProduct" border stripe max-height="360" show-summary :summary-method="productSummary">
-            <el-table-column prop="sku" label="SKU" width="120" show-overflow-tooltip/>
+            <!-- 2026-09-24（用户规则：列表一行显示完、不左右滑动）：本表在左右分栏的窄卡片里（内容区仅
+                 ~530px，且 max-height 触发纵向滚动条再占 ~8px），原列宽合计 610px 被静默裁掉 80px。
+                 收窄 SKU/金额/数量/占比/操作 ⇒ 合计 512px，一行显示完。 -->
+            <el-table-column prop="sku" label="SKU" width="96" show-overflow-tooltip/>
             <el-table-column prop="productName" label="产品" min-width="120" show-overflow-tooltip/>
-            <el-table-column label="数量" width="90" align="right"><template #default="{row}">{{ fmt(row.quantity) }}</template></el-table-column>
-            <el-table-column label="金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
-            <el-table-column label="占比" width="80" align="right"><template #default="{row}">{{ pct(Number(row.amount), Number(summary.amount)) }}%</template></el-table-column>
-            <el-table-column label="操作" width="80" align="center">
+            <el-table-column label="数量" width="70" align="right"><template #default="{row}">{{ fmt(row.quantity) }}</template></el-table-column>
+            <el-table-column label="金额" width="96" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
+            <el-table-column label="占比" width="60" align="right"><template #default="{row}">{{ pct(Number(row.amount), Number(summary.amount)) }}%</template></el-table-column>
+            <el-table-column label="操作" width="70" align="center">
               <template #default="{row}">
                 <el-button link type="primary" @click="drill({ productId: row.productId, productName: row.productName })">明细</el-button>
               </template>
