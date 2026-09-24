@@ -1,0 +1,91 @@
+# 委外退回成品 → 委外仓库存形态（`stock_form`）改造方案 + 全库读写点清单
+
+> 来源：2026-09-25 用户口径（已确认）+ 全库只读盘点（68 次检索）。
+> 状态：**P0-1 盘点完成**；P0-2 起未动代码。**动手前请按本文档逐项核对，勿只改咽喉方法**。
+
+## 0. 已确认的业务口径（用户 2026-09-25）
+- **加工退货（DEFECT）**
+  - 关联加工单：红冲该单出货/收货数据 + BOM 分解成物料到「加工厂委外仓」+ 冲减应付（＝**现状，保持**）。
+  - 不关联：**不红冲、不分解料、不动应付**；退回成品以「**成品（加工退货）**」进「加工厂委外仓」。
+    - 修好送回时填**返回单**：核销在厂成品 + 按**实际用料**从委外仓扣物料 + **料款生成对加工厂的应收（工厂赔料）**。
+  - 成本：**退回那一刻不产生成本/应付**；成本只在**返回单按实际用料 FIFO 结转**。
+- **维修退货（REPAIR）**
+  - 退回成品以「**成品（维修退货）**」进加工厂委外仓（**必须与加工退货的成品区分**）。
+  - 返回单：核销在厂成品 + 扣实际用料；**不产生赔料应收**（我方责任）；加工厂**可能**向我方收维修费（现有单据级 `charge*` 字段/审核生成应付，保持）。
+- **返回单用料**：允许多物料多行，且**数量可超 BOM 标准用量**。
+- 库存承载：**方案 B** —— `warehouse_stock` 加一列 `stock_form`（`MATERIAL` 默认 / `PRODUCT_DEFECT` / `PRODUCT_REPAIR`），工厂那边的成品存量**要能按仓查询与盘点**。
+
+## 1. 现在的事实（盘点结论，勿再重复探索）
+- 库存表 `warehouse_stock`：`warehouse_id, product_id, material_id, quality_type, quantity, available_quantity, company_id`。
+- **唯一键**（`schema.sql:467-468`）：
+  - 成品 `uk_wh_prod_quality_company` = `(warehouse_id, product_id, quality_type, company_id)`
+  - 物料 `uk_wh_material_company` = `(warehouse_id, material_id, company_id)`（**物料侧 `quality_type` 恒写 `GOOD`**，见 `WarehouseStockService.java:189/:234/:371`）
+- 委外仓实测：`warehouse_category='OUTSOURCE'`、`warehouse_type` 为 NULL、按 `factory_id` 关联加工厂；**当前委外仓 0 行成品**（只有物料）。
+- 写库模式：全部走 UPSERT「先 UPDATE，0 行再 INSERT（捕获 DuplicateKey 重试）」——`WarehouseStockService.java:81-94`、`:202-213`。
+
+## 2. 咽喉方法（改造必须从这里下手，再往下传参）
+| 位置 | 方法 | 说明 |
+|---|---|---|
+| `WarehouseStockService.java:71` | `changeStock(wh, productId, qty, StockChangeType, relatedBillNo, RelatedBillType, spec, relatedBillId, qualityType)` | **成品唯一写入口（40+ 调用点）** |
+| `WarehouseStockService.java:120 / :133` | `changeMaterialStock(...)` | 物料严格口径（不足抛错） |
+| `WarehouseStockService.java:148` | `changeMaterialStockAllowNegative(...)` | 物料允许负库存（委外领料/还料/红冲/清算） |
+| `WarehouseStockService.java:179-251` | `changeMaterialStockInternal` | 物料统一实现（`:189` 固化 `qt=GOOD`） |
+| `WarehouseStockService.java:254 / :266 / :280` | `getQuantity` / `getMaterialQuantity` / `getMaterialQuantities` | 库存量读（反审核前置校验） |
+| `WarehouseStockService.java:341 / :349 / :356 / :367` | `selectExist` / `selectMaterialExist` / `insertStock` / `insertMaterialStock` | 定位行 / 建行 |
+| `WarehouseStockMapper.java:26 / :42` | `updateQuantity` / `updateMaterialQuantity` | 原子加减（带 `>=0` 护栏），仅本 service 调用 |
+
+## 3. 写入点清单（按模块；格式 `绝对路径:行号`，路径省略前缀 `beichen-erp-server/src/main/java/com/beichen/erp/`）
+**采购**：`purchase/service/impl/PurchaseOrderServiceImpl.java:284`(审核+)/`:341`(反审核−)；`PurchaseReturnServiceImpl.java:221`(−)/`:323`(+)；`PurchaseExchangeServiceImpl.java:471/474`(换出−/换入+)/`:522/525`(回滚)。
+**销售**：`sale/.../SaleOrderServiceImpl.java:427`(−)/`:488`(+)；`SaleReturnServiceImpl.java:504`(+)/`:566`(−)；`SaleExchangeServiceImpl.java:435/443`/`:474/481`。
+**退货整理**：`inventory/.../ReturnSortServiceImpl.java:591`(扣 PENDING)/`:598-610`(A/B/C/DEFECT 入)/`:646-665`(回滚)。
+**库存单据**：`WarehouseMoveServiceImpl.java:186/188`（出/入）、`:225/227`；`StockTakeServiceImpl.java:459`(成品盘点差异)/`:465`(物料)；`ReclassifyServiceImpl.java:183/188`、`:291/296`；`OtherIoServiceImpl.java:288/305`；`MaterialMoveServiceImpl.java:206/210`、`:242/245`；`InventoryStockLossServiceImpl.java:254/267`。
+**委外**：
+- `outsource/.../OutsourceOrderDeliveryServiceImpl.java:1421`(收货+)/`:1439`(−)；`:1368`(BOM 领料−允许负)/`:1400`(+)；
+  **加工退货（`is_reverse=1`）**：`:888`、`:1016`（扣成品−）/`:928`、`:1051`（反审核+）；`:899`、`:1035`（BOM 料还回委外仓+允许负）/`:938`、`:1068`（回滚−）。
+- `OutsourceReturnOrderServiceImpl.java:482`(退货审核：成品从我方仓−)/`:574`(反审核+)；`:467`(退货物料入工厂委外仓+)/`:561`(−)；`:1133` `updateOutsourceStock` 私有咽喉；`:669`(维修返回成品入库+)/`:706`(撤销−)。
+- `OutsourceMaterialReturnServiceImpl.java:349`/`:510`(物料维修返回 登记/撤销)；`:725`(−)/`:879`(+)。
+- `OutsourceOtherIoController.java:244/258`（**Controller 层写库存**，允许负）。
+- `outsource/.../DeliveryServiceImpl.java:681` 私有 `updateStock`；`:717`(子件耗用−)/`:742`(回滚+)。
+- `CloseReportServiceImpl.java:584/588/593/705/709/750/793/797`（结单清算各仓物料归集/冲销）。
+- `SupplierSettlementServiceImpl.java:216/232`（供应商清算：委外仓清零 + 入我方物料仓）。
+- 说明：`SaleOutboundServiceImpl.java:43` 注释明确"本单不再变动库存"；`MaterialOrderServiceImpl` 不直接写库存。
+
+## 4. 读取/聚合点（改造后要按形态区分的地方）
+- `WarehouseStockController.java:61` `/page`；`:91-116` `/product-stock/page`（按品质 5 档）；`:205-231` `/product-summary/page`；`:330-355` `/material-stock/page`；`:431-456` `/material-summary/page`；`:587-677` `/log` 流水；`:682-759` `/by-warehouse/{id}`（**委外仓库存展示**）；`:764` `/material-history`。
+- `StockTakeServiceImpl.java:177`（开单快照全仓库存行）/`:225 currentBook`（对账反查）—— **风险最高**。
+- `SaleOrderServiceImpl.java:543` `check-stock` 可用量；`ReturnSortServiceImpl.java:495`（PENDING 停留天数按 (wh,product,quality) 做键）。
+- `MaterialOrderServiceImpl.java:469/528/823`；`OutsourceOrderController.java:250`；`OutsourceMaterialReturnServiceImpl.java:940`；`SupplierSettlementServiceImpl.java:120/186/208`。
+- **原生 SQL 硬编码**（不会自动按形态拆分）：`SupplierMaterialSummaryServiceImpl.java:96`、`OutsourceOrderServiceImpl.java:220`、`DashboardService.java:244`、`CostService.java:178 sumStock`（按 product/material 全品质求和做加权）。
+- 前置校验类：`WarehouseController.java:218/222`、`OutsourceMaterialServiceImpl.java:77`、`SupplierServiceImpl.java:417`、`ClearController.java:103/106`。
+
+## 5. 前端
+- 委外仓库存展示：`views/outsource/warehouse-detail.vue:106` → `/warehouse/stock/by-warehouse/{id}`（**P0-3 的落点**）。
+- 其他展示：`views/inventory/product-stock/*`、`views/outsource/material-stock/*`、`views/inventory/stock-log.vue`、`views/outsource/material-stock-log.vue`、`views/outsource/warehouse-material-history.vue`。
+- 可用量展示/校验：`views/sale/order/{add,detail}.vue`、`views/purchase/return/add.vue`、`views/outsource/stock-loss/*`、`views/outsource/return-order/add.vue:265`。
+- code→中文映射（后端只回 code）：`api/enums.ts` 的 `StockChangeTypeLabel` 等，需同步新增 `stock_form` 映射与筛选列。
+
+## 6. 风险提示（新增 `stock_form` 最易漏改处，按危险度排序）
+1. **唯一键/定位键**：两条唯一索引不含 `stock_form` ⇒ 不同形态若落同一 `(wh,product,quality)` 会被 `updateQuantity/updateMaterialQuantity` **跨形态累加**、`selectExist/selectMaterialExist` **串行读取**。必须同步改：两条唯一索引、两条 UPDATE 的 WHERE、INSERT 分支。
+2. **咽喉参数面**：三个 `change*(9 参)` 方法需加 `stockForm`，**40+ 调用点**要逐个确认；物料侧现在恒写 `quality_type=GOOD`，形态是物料侧**唯一**的区分维度，不能照抄。
+3. **两套 quality 枚举且 DEFECT 重名**：成品 `A/B/C/DEFECT/PENDING`、物料 `GOOD/DEFECT`；`WarehouseStockController.java:144-150/:258-264/:379-383/:479-483` 的归类 switch **显式不允许 else 兜底** ⇒ 新增形态必须同步加分支，否则静默漏算。
+4. **原生聚合 SQL 硬编码**（见 §4）会混算多形态 ⇒ 逐个补 `stock_form` 过滤。
+5. **盘点对账**：`StockTakeServiceImpl:177/:225` 若不区分形态，会把同 (product,quality) 的两形态行并成一行、差异写回错形态 ⇒ 账实不符。
+6. **流水表** `warehouse_stock_log`（`schema.sql:471`）**无 `stock_form` 列** ⇒ 必须补列，否则"库存有形态、流水无形态"，反审核/追溯无法还原。
+7. **成对性**：所有 ± 成对（审核/反审核、登记/撤销、归集/回滚）。`stock_form` 必须两条腿同值；**加工退货红冲**（`OutsourceOrderDeliveryServiceImpl:888/928`、`:1016/1051`）与**维修返回**（`OutsourceReturnOrderServiceImpl:669/706`）尤其危险——一侧默认 `MATERIAL`、另一侧写 `PRODUCT_*` 会冲错行/冲成负。
+8. **仓与形态的业务约束**：`OutsourceReturnOrderServiceImpl.java:637`、`:491` 现按仓类别分流 ⇒ 需明确"哪些形态只能落委外仓"。
+9. **实体与前端枚举**：`WarehouseStock.java` 加字段；前端 `api/enums.ts` 同步映射与筛选。
+
+## 7. 分期（P0-3 起按此顺序）
+```
+P0-2 库存表 + 流水表加 stock_form；两条唯一索引改造；WarehouseStockService/Mapper 咽喉方法传参；40+ 调用点逐个确认
+P0-3 委外仓只读展示（物料 / 成品（加工退货）/ 成品（维修退货）分开，可查询可盘点）
+P1-1 加工退货·无单：改成"成品转移进加工厂委外仓"（不红冲/不分解料/不动应付）
+P1-2 返回单（新）：核销在厂成品 + 实际用料多行（可超 BOM）+ 赔料应收 + FIFO 成本结转
+P2-1 维修退货：送修=成品（维修退货）转移进委外仓；返回单扣料但无赔料应收
+P3-1 复核有单加工退货 + 端到端实证（**重点断言"同一笔只冲一次"**）
+```
+
+## 8. 验收铁律（每期都要做）
+- 端到端实证：建单 → 审核 → 查 `warehouse_stock`（按形态分行）/ 流水 / 应付应收 / 成本；反审核后**逐行回到原值**。
+- **同一笔业务只能冲一次**：把「有单加工退货」「无单加工退货」「独立 DEFECT 单」三条路径的账务结果对齐比对，防止重复冲账。
+- 盘点回归：改造后跑一次盘点开单/对账，确认形态不并表。
