@@ -761,6 +761,11 @@ public class DataInitializer implements ApplicationRunner {
                 {9101L, 504L, "审核", "purchase:exchange:audit"},
                 {9102L, 504L, "反审核", "purchase:exchange:unaudit"},
                 {9103L, 504L, "作废", "purchase:exchange:cancel"},
+                // 2026-09-24（用户口径 B：采购单详情对齐销售单）：采购单此前**只有页级码**（501 purchase:order），
+                // 没有按钮级码 ⇒ 新增 审核/反审核/作废 三条，供详情页 v-perm 使用
+                {9151L, 501L, "审核", "purchase:order:audit"},
+                {9152L, 501L, "反审核", "purchase:order:unaudit"},
+                {9153L, 501L, "作废", "purchase:order:cancel"},
                 {9111L, 502L, "审核", "purchase:return:audit"},
                 {9112L, 502L, "反审核", "purchase:return:unaudit"},
                 {9113L, 502L, "作废", "purchase:return:cancel"},
