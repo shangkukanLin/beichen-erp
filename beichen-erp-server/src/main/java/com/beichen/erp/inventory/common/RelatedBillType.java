@@ -29,6 +29,11 @@ public enum RelatedBillType {
     /** 移仓单反审核：移仓反审核触发 */
     WAREHOUSE_MOVE_UN_AUDIT("移仓单(反审核)"),
 
+    /** 物料移仓单：物料移仓审核触发（2026-09-24） */
+    MATERIAL_MOVE("物料移仓"),
+    /** 物料移仓单反审核：物料移仓反审核触发（2026-09-24） */
+    MATERIAL_MOVE_UN_AUDIT("物料移仓(反审核)"),
+
     /** 其他出入库：其他出入库触发 */
     OTHER_IO("其他出入库"),
 

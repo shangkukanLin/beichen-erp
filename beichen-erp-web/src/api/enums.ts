@@ -944,6 +944,8 @@ export const LossReasonLabel: Record<string, string> = {
 /* 2026-09-15：BizType / BizTypeLabel 已随「经营分析 → 利润表」下线一并删除（仅该页明细钻取使用） */
 
 export const INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY = 'inventoryWarehouseMoveListDirty'
+/** 物料移仓单列表脏标志（2026-09-24 新增，与成品移仓各自独立） */
+export const INVENTORY_MATERIAL_MOVE_DIRTY_KEY = 'inventoryMaterialMoveListDirty'
 export const INVENTORY_RECLASSIFY_DIRTY_KEY = 'inventoryReclassifyListDirty'
 // 2026-09-20（F7-174/F7-184）补齐：以下列表原先只有 onMounted、不带脏标志，
 // 从新增/详情返回（keep-alive 复用组件）时不会重新拉取，列表会停留在旧数据。

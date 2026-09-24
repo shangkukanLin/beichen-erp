@@ -54,6 +54,8 @@ public final class BillPrefix {
     public static final String OUTSOURCE_OTHER_IO = "OWO-";
     /** 移仓单 */
     public static final String WAREHOUSE_MOVE = "YC-";
+    /** 物料移仓单（2026-09-24 新增，替代已下线的手工物料收发单；与成品移仓 YC- 各自独立取号） */
+    public static final String MATERIAL_MOVE = "MYC-";
     /** 品质重分类单 */
     public static final String RECLASSIFY = "PC-";
     /** 进销存其他出入库单 */

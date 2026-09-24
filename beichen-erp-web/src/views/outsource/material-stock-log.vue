@@ -224,6 +224,9 @@ const billDetailRouteMap: Record<string, string> = {
   // 委外物料类独立详情页
   OUTSOURCE_DELIVERY: '/outsource/delivery/detail',
   MATERIAL_IO: '/outsource/delivery/detail',
+  // 物料移仓单（2026-09-24 新增）：审核与反审核两套 related_bill_type 都指向同一详情页
+  MATERIAL_MOVE: '/inventory/material-move/detail',
+  MATERIAL_MOVE_UN_AUDIT: '/inventory/material-move/detail',
   OUTSOURCE_ORDER: '/outsource/order/detail',
   OUTSOURCE_DEFECT: '/outsource/order/detail',
   OUTSOURCE_RETURN: '/outsource/return-order/detail',

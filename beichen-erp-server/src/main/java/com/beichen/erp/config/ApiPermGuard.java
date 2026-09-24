@@ -162,6 +162,8 @@ public class ApiPermGuard {
         rule("/api/inventory/stock-take", "stock:stock-take");
         rule("/api/inventory/stock-loss", "stock:stock-loss");
         rule("/api/inventory/warehouse-move", "stock:warehouse-move");
+        // 物料移仓单（2026-09-24 新增，替代已下线的手工物料收发单）
+        rule("/api/inventory/material-move", "stock:material-move");
         // ===== 委外加工 =====
         // 401 加工订单页的「交货」页签会写交货记录 ⇒ 与 412 成品收货页共用同一控制器，两码任一即可
         rule("/api/outsource/order-delivery", "outsource:order-delivery", "outsource:order");

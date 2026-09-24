@@ -288,6 +288,10 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/warehouse-move/add', name: 'InventoryWarehouseMoveAdd', component: () => import('@/views/inventory/warehouse-move/add.vue'), meta: { title: '新增移仓单', requiresAuth: true, operate: true } },
       // 移仓单详情独立成页（与成品其他出入库一致，草稿态直接可编辑，列表不再有「编辑」）
       { path: 'inventory/warehouse-move/detail/:id', name: 'InventoryWarehouseMoveDetail', component: () => import('@/views/inventory/warehouse-move/detail.vue'), meta: { title: '移仓单详细', requiresAuth: true, operate: true } },
+      // 物料移仓单（2026-09-24 新增）：按成品移仓单同构复刻，用于替代原「物料收发单」的手工发料/调拨
+      { path: 'inventory/material-move', name: 'InventoryMaterialMove', component: () => import('@/views/inventory/material-move/index.vue'), meta: { title: '物料移仓', requiresAuth: true } },
+      { path: 'inventory/material-move/add', name: 'InventoryMaterialMoveAdd', component: () => import('@/views/inventory/material-move/add.vue'), meta: { title: '新增物料移仓单', requiresAuth: true, operate: true } },
+      { path: 'inventory/material-move/detail/:id', name: 'InventoryMaterialMoveDetail', component: () => import('@/views/inventory/material-move/detail.vue'), meta: { title: '物料移仓详细', requiresAuth: true, operate: true } },
       { path: 'inventory/material', redirect: '/product' },
       { path: 'inventory/customer', name: 'InventoryCustomer', component: () => import('@/views/customer/index.vue'), meta: { title: '客户管理', requiresAuth: true } },
       // 客户新增与详情共用同一表单页（详情内可直接编辑保存），title 区分

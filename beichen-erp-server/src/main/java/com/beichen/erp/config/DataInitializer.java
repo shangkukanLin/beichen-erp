@@ -335,6 +335,10 @@ public class DataInitializer implements ApplicationRunner {
             {413L, 11L, "物料报损", "menu", "/outsource/stock-loss", "OutsourceStockLoss", "DeleteFilled", 4},
             {407L, 11L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 5},
             {406L, 11L, "物料收发单", "menu", "/outsource/delivery", "OutsourceDelivery", "Tickets", 6},
+            // 物料移仓（2026-09-24 新增）：用户口径「物料收发单不要了，改用物料移仓代替」——
+            // 按成品移仓单（706「移仓单」）同构复刻，承接原手工收发单的 发料（我方物料仓 → 委外仓）
+            // 与 调拨（物料相关仓之间互转）；收料/退不良仍走物料收货流程，与本页无关。
+            {418L, 11L, "物料移仓", "menu", "/inventory/material-move", "InventoryMaterialMove", "Rank", 7},
             {501L, 5L, "成品采购单", "menu", "/inventory/purchase", "InventoryPurchase", "ShoppingCart", 1},
             {502L, 5L, "采购退货单", "menu", "/inventory/purchase-return", "InventoryPurchaseReturn", "Refrigerator", 2},
             // 采购换货单（2026-09-18 用户要求）：向供货商采购的成品也可换货 —— 把不良品退回供货商 + 换回良品，
@@ -668,6 +672,7 @@ public class DataInitializer implements ApplicationRunner {
                 {704L, "stock:other-io"},
                 {705L, "stock:reclassify"},
                 {706L, "stock:warehouse-move"},
+                {418L, "stock:material-move"},
                 {707L, "stock:return-sort"},
                 {711L, "stock:stock-take"},
                 {712L, "stock:product-stock"},
@@ -800,6 +805,7 @@ public class DataInitializer implements ApplicationRunner {
                 501L, 502L, 503L, 504L,
                 601L, 602L, 603L, 605L,
                 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L,
+                418L,
                 801L, 802L, 803L, 804L, 805L, 806L, 807L, 809L, 810L, 811L,
                 1001L, 1003L, 1004L, 1005L, 1006L, 1007L,
                 901L, 902L, 903L, 904L, 905L, 906L, 907L, 908L));
@@ -819,7 +825,7 @@ public class DataInitializer implements ApplicationRunner {
         // 707「退货整理」（成品库存）：2026-09-18 用户要求补授 —— 它是**成品分选入库的操作页**，仓管员日常在用
         assignRoleMenus("warehouse", Arrays.asList(
                 1L, 2L, 5L, 6L, 7L, 11L, 501L, 502L, 504L, 603L, 702L, 703L, 704L, 705L, 706L, 707L, 711L, 712L, 713L,
-                404L, 406L, 407L, 410L, 413L, 101L));
+                404L, 406L, 407L, 410L, 413L, 418L, 101L));
         // 跟单专员：委外加工全部 + 相关基础数据/进货/销售/成品库存页面 + 物料仓库整组（含 414 物料库存盘点）
         // （原 405 加工合同模板 → 108 模版管理，权限等价迁移）
         // 412 成品收货 / 415 物料收货（2026-09-16）：原详情页签移出成菜单，权限沿用委外加工原范围
@@ -828,7 +834,7 @@ public class DataInitializer implements ApplicationRunner {
         // 707「退货整理」（成品库存）：2026-09-18 用户要求补授 —— 售后分选入库链路跟单专员也参与
         assignRoleMenus("merchandiser", Arrays.asList(
                 1L, 2L, 4L, 5L, 6L, 7L, 11L,
-                401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 412L, 413L, 414L, 415L,
+                401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 412L, 413L, 414L, 415L, 418L,
                 101L, 105L, 107L, 108L, 502L, 504L, 602L, 702L, 705L, 707L));
         // 财务：财务管理（2 基础数据 = 101 产品管理的父目录）
         // 注：经营分析自 2026-09-15 起**仅管理者可见**，故不再授予 finance
@@ -870,6 +876,18 @@ public class DataInitializer implements ApplicationRunner {
             if (granted > 0) log.info("已补授「物料仓库」整组给仓管员，共 {} 条", granted);
         } catch (Exception e) {
             log.warn("补授仓管员物料仓库权限异常: {}", e.getMessage());
+        }
+
+        // 存量库幂等补授（2026-09-24）：418「物料移仓」是新增菜单 —— assignRoleMenus 只在角色
+        // 「尚无任何菜单」时才写入 ⇒ 存量库必须单独补授，否则已有角色看不到它。
+        // 授权范围与 406「物料收发单」原本的三个角色保持一致：admin / 仓管员 / 跟单专员。
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, 418 FROM sys_role r WHERE r.role_code IN ('admin','warehouse','merchandiser')");
+            if (granted > 0) log.info("已补授 418「物料移仓」菜单给 {} 个角色", granted);
+        } catch (Exception e) {
+            log.warn("补授物料移仓菜单异常: {}", e.getMessage());
         }
 
         // 存量库幂等补授（2026-09-21）：416「物料库存情况」是新增菜单 —— assignRoleMenus 只在角色

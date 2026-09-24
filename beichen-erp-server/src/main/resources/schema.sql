@@ -1318,6 +1318,45 @@ CREATE TABLE IF NOT EXISTS inventory_warehouse_move_item (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品移仓单明细表';
 
+-- ==================== 物料移仓单主表（2026-09-24 新增）====================
+-- 复刻成品移仓单结构，明细对象改为委外物料、仓库范围为我方物料仓 + 委外仓。
+-- 用途：替代已下线的手工「物料收发单」（发料 / 调拨）；收料/退不良仍走物料收货流程，与本表无关。
+CREATE TABLE IF NOT EXISTS inventory_material_move (
+    id                BIGINT AUTO_INCREMENT PRIMARY KEY  COMMENT '主键ID',
+    code              VARCHAR(50) NOT NULL               COMMENT '物料移仓单号(MYC-yyyyMMddNNN)',
+    from_warehouse_id BIGINT                            COMMENT '移出仓库ID',
+    to_warehouse_id   BIGINT                            COMMENT '移入仓库ID',
+    move_date         DATE                              COMMENT '移仓日期',
+    status            VARCHAR(20) DEFAULT 'DRAFT'         COMMENT '状态: 草稿/已审核/已作废',
+    remark            VARCHAR(500)                      COMMENT '备注',
+    auditor_id        BIGINT                            COMMENT '审核人ID',
+    auditor_name      VARCHAR(50)                       COMMENT '审核人姓名(快照)',
+    create_by         BIGINT                            COMMENT '制单人ID',
+    create_by_name    VARCHAR(50)                       COMMENT '制单人姓名(快照)',
+    company_id        BIGINT DEFAULT NULL               COMMENT '公司ID',
+    create_time       DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_code (code),
+    INDEX idx_from_warehouse_id (from_warehouse_id),
+    INDEX idx_to_warehouse_id (to_warehouse_id),
+    INDEX idx_status (status),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='物料移仓单主表';
+
+-- ==================== 物料移仓单明细表 ====================
+CREATE TABLE IF NOT EXISTS inventory_material_move_item (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY  COMMENT '主键ID',
+    move_id     BIGINT NOT NULL                    COMMENT '移仓单ID(关联主表)',
+    material_id BIGINT                             COMMENT '委外物料ID(关联 outsource_material)',
+    quantity    DECIMAL(18,0) DEFAULT 0            COMMENT '移仓数量',
+    remark      VARCHAR(255)                       COMMENT '备注',
+    company_id  BIGINT DEFAULT NULL                COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_move_id (move_id),
+    INDEX idx_material_id (material_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='物料移仓单明细表';
+
 -- ==================== 品质重分类单主表 ====================
 CREATE TABLE IF NOT EXISTS inventory_stock_reclass (
     id                BIGINT AUTO_INCREMENT PRIMARY KEY  COMMENT '主键ID',
