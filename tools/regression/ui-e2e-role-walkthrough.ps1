@@ -1,4 +1,4 @@
-# Role-scoped UI walkthrough (2026-09-19) - closes the static-audit blind spot.
+﻿# Role-scoped UI walkthrough (2026-09-19) - closes the static-audit blind spot.
 #
 # The static audit (audit-frontend-api-crosspage.ps1) only sees literal URLs. A page that builds a URL at
 # runtime could still read another module's API and get 403. This script logs in as REAL restricted users and
