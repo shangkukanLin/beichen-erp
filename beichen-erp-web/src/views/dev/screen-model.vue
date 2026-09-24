@@ -21,7 +21,7 @@ const screenTypeOptions = ref<string[]>([])
 const screenSizeOptions = ref<string[]>([])
 const resolutionOptions = ref<string[]>([])
 const dialog = ref(false)
-const dialogTitle = ref('新增')
+const dialogTitle = ref('新增机型')
 const form = ref<any>({})
 
 const CATEGORY_LABEL: Record<string, string> = { FOLD: '折叠屏', AMOLED: '直板AMOLED' }

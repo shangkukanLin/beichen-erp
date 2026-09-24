@@ -40,7 +40,7 @@ const defForm = () => ({ id: undefined as any, factoryId: undefined as any, ware
 const form = reactive(defForm()); const isEdit = ref(false)
 
 function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dialogTitle.value = '新增委外仓库'; dialogVisible.value = true }
-function handleEdit(row: any) { Object.assign(form, defForm(), row); isEdit.value = true; dialogTitle.value = '编辑仓库'; dialogVisible.value = true }
+function handleEdit(row: any) { Object.assign(form, defForm(), row); isEdit.value = true; dialogTitle.value = '编辑委外仓库'; dialogVisible.value = true }
 
 async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('请输入仓库名称'); return }; submitLoading.value = true
   try { if (isEdit.value) { await request.put('/warehouse', form); ElMessage.success('已更新') } else { await request.post('/warehouse', form); ElMessage.success('已新增') }
