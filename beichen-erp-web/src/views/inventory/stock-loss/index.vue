@@ -58,12 +58,11 @@
         <el-table-column label="审核人" width="80" show-overflow-tooltip>
           <template #default="{ row }">{{ row.auditorName || '—' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="170" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：草稿态在**详情页**改+存（含明细增删）⇒ 列表去掉「编辑」入口；操作列 170→132。 -->
+        <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="goDetail(row)">详情</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" link type="primary" @click="goEdit(row)">编辑</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" link type="success" @click="onAudit(row)">审核</el-button>
-            <!-- 2026-09-24（用户口径）：反审核移入详情页。本列宽度不变（草稿分支 4 个按钮仍需 170px）。 -->
             <el-button v-if="row.status === DocStatus.DRAFT" link type="danger" @click="onCancel(row)">作废</el-button>
           </template>
         </el-table-column>
@@ -149,7 +148,7 @@ function onSizeChange(v: number) { page.pageSize = v; page.pageNum = 1; load() }
 
 function goAdd() { router.push('/inventory/stock-loss/add') }
 function goDetail(row: any) { router.push(`/inventory/stock-loss/detail/${row.id}`) }
-function goEdit(row: any) { router.push(`/inventory/stock-loss/edit/${row.id}`) }
+/* 2026-09-24（用户口径）：goEdit 已移除 —— 草稿态编辑统一在详情页内联完成（含明细增删），列表不再提供编辑入口。 */
 
 async function onAudit(row: any) {
   try {

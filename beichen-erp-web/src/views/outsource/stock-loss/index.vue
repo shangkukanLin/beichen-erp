@@ -58,12 +58,11 @@
         <el-table-column label="审核人" width="80" show-overflow-tooltip>
           <template #default="{ row }">{{ row.auditorName || '—' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="174" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：草稿态在**详情页**改+存（含明细增删）⇒ 列表去掉「编辑」入口；操作列 174→132。 -->
+        <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="goDetail(row)">详情</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" link type="primary" @click="goEdit(row)">编辑</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" link type="success" @click="onAudit(row)">审核</el-button>
-            <!-- 2026-09-24（用户口径）：反审核移入详情页。本列宽度不变（草稿分支 4 个按钮仍需 174px）。 -->
             <el-button v-if="row.status === DocStatus.DRAFT" link type="danger" @click="onCancel(row)">作废</el-button>
           </template>
         </el-table-column>
@@ -78,12 +77,12 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import { DocStatus, DocStatusLabel, DocStatusTag, LossReasonLabel, codeLabelOptions } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag, LossReasonLabel, codeLabelOptions, OUTSOURCE_STOCK_LOSS_DIRTY_KEY } from '@/api/enums'
 
 const router = useRouter()
 
@@ -150,7 +149,7 @@ function onSizeChange(v: number) { page.pageSize = v; page.pageNum = 1; load() }
 
 function goAdd() { router.push('/outsource/stock-loss/add') }
 function goDetail(row: any) { router.push(`/outsource/stock-loss/detail/${row.id}`) }
-function goEdit(row: any) { router.push(`/outsource/stock-loss/edit/${row.id}`) }
+/* 2026-09-24（用户口径）：goEdit 已移除 —— 草稿态编辑统一在详情页内联完成（含明细增删），列表不再提供编辑入口。 */
 
 async function onAudit(row: any) {
   try {
@@ -186,6 +185,14 @@ async function onCancel(row: any) {
 }
 
 onMounted(() => { loadReasons(); load() })
+// 2026-09-24：本路由在 keep-alive 内 ⇒ 从详情页（草稿就地编辑）/新增页返回时 onMounted 不再触发、列表会停在旧数据。
+// 保存/审核/反审核/作废成功后置脏标志，回到列表才拉一次（保留查询条件与分页现场）。此前只有成品报损有此机制。
+onActivated(() => {
+  if (sessionStorage.getItem(OUTSOURCE_STOCK_LOSS_DIRTY_KEY) === '1') {
+    sessionStorage.removeItem(OUTSOURCE_STOCK_LOSS_DIRTY_KEY)
+    load()
+  }
+})
 </script>
 
 <style scoped>

@@ -951,6 +951,11 @@ export const INVENTORY_RECLASSIFY_DIRTY_KEY = 'inventoryReclassifyListDirty'
 // 从新增/详情返回（keep-alive 复用组件）时不会重新拉取，列表会停留在旧数据。
 export const INVENTORY_RETURN_SORT_DIRTY_KEY = 'inventoryReturnSortListDirty'
 export const INVENTORY_STOCK_LOSS_DIRTY_KEY = 'inventoryStockLossListDirty'
+
+/** 物料报损（委外仓/辅料仓）：详情页保存/审核后回列表时的脏标志。
+ *  2026-09-24 补：此前只有成品报损有脏标志，物料报损列表在 keep-alive 内返回时不会刷新（保存后看到旧数据）。
+ *  现在详情页（草稿就地编辑）与新增页统一置该标志，列表 onActivated 按需重拉。 */
+export const OUTSOURCE_STOCK_LOSS_DIRTY_KEY = 'outsourceStockLossListDirty'
 export const SYSTEM_MENU_DIRTY_KEY = 'systemMenuListDirty'
 export const SYSTEM_ROLE_DIRTY_KEY = 'systemRoleListDirty'
 export const SYSTEM_USER_DIRTY_KEY = 'systemUserListDirty'

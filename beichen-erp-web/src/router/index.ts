@@ -262,7 +262,7 @@ const routes: RouteRecordRaw[] = [
       // 物料报损：委外物料的报损单（与成品报损独立成表，库存按 仓库+物料 扣减）
       { path: 'outsource/stock-loss', name: 'OutsourceStockLoss', component: () => import('@/views/outsource/stock-loss/index.vue'), meta: { title: '物料报损', requiresAuth: true } },
       { path: 'outsource/stock-loss/add', name: 'OutsourceStockLossAdd', component: () => import('@/views/outsource/stock-loss/add.vue'), meta: { title: '新增物料报损单', requiresAuth: true, operate: true } },
-      { path: 'outsource/stock-loss/edit/:id', name: 'OutsourceStockLossEdit', component: () => import('@/views/outsource/stock-loss/add.vue'), meta: { title: '编辑物料报损单', requiresAuth: true, operate: true } },
+      // 2026-09-24（用户口径）：`outsource/stock-loss/edit/:id` 已移除 —— 草稿态编辑统一在**详情页**内联完成。
       { path: 'outsource/stock-loss/detail/:id', name: 'OutsourceStockLossDetail', component: () => import('@/views/outsource/stock-loss/detail.vue'), meta: { title: '物料报损单详情', requiresAuth: true, operate: true } },
       { path: 'outsource/material-warehouse', name: 'OutsourceMaterialWarehouse', component: () => import('@/views/outsource/material-warehouse.vue'), meta: { title: '自有物料仓管理', requiresAuth: true } },
       { path: 'outsource/other-io/add', name: 'OutsourceOtherIoAdd', component: () => import('@/views/outsource/other-io/add.vue'), meta: { title: '新增物料其他出入库', requiresAuth: true, operate: true } },
@@ -336,7 +336,7 @@ const routes: RouteRecordRaw[] = [
       // 成品报损：列表 / 新增 / 编辑（与新增同页）/ 详情
       { path: 'inventory/stock-loss', name: 'InventoryStockLoss', component: () => import('@/views/inventory/stock-loss/index.vue'), meta: { title: '成品报损', requiresAuth: true } },
       { path: 'inventory/stock-loss/add', name: 'InventoryStockLossAdd', component: () => import('@/views/inventory/stock-loss/add.vue'), meta: { title: '新增成品报损单', requiresAuth: true, operate: true } },
-      { path: 'inventory/stock-loss/edit/:id', name: 'InventoryStockLossEdit', component: () => import('@/views/inventory/stock-loss/add.vue'), meta: { title: '编辑成品报损单', requiresAuth: true, operate: true } },
+      // 2026-09-24（用户口径）：`inventory/stock-loss/edit/:id` 已移除 —— 草稿态编辑统一在**详情页**内联完成。
       { path: 'inventory/stock-loss/detail/:id', name: 'InventoryStockLossDetail', component: () => import('@/views/inventory/stock-loss/detail.vue'), meta: { title: '成品报损单详情', requiresAuth: true, operate: true } },
       { path: 'inventory/stock-log', name: 'InventoryStockLog', component: () => import('@/views/inventory/stock-log.vue'), meta: { title: '成品库存流水', requiresAuth: true } },
       { path: 'inventory/sale', name: 'InventorySale', component: () => import('@/views/sale/order/index.vue'), meta: { title: '销售单', requiresAuth: true } },
