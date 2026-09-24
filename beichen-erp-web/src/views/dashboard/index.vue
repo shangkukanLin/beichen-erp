@@ -228,15 +228,15 @@
       <el-tab-pane v-if="hasModule['materialWarehouse']" label="物料仓库" name="materialWarehouse">
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 物料库存详情（2026-09-22 补）：416 是 2026-09-21 新增的查询页，当时漏了这颗快捷入口，
-               导致 verify-material-warehouse-menu 的「物料仓库 TAB 快捷入口齐全」一直红 -->
+          <!-- 2026-09-24（用户口径）：物料仓库子菜单重排为
+               物料移仓 → 物料库存详情 → 物料库存流水 → 物料库存盘点 → 物料报损 → 物料其他出入库；
+               本 TAB 快捷入口**与侧栏严格同序**（与委外加工 TAB 同一口径） -->
+          <el-button v-if="hasMenu['InventoryMaterialMove']" type="primary" size="small" text @click="$router.push('/inventory/material-move')">物料移仓</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialStock']" type="primary" size="small" text @click="$router.push('/outsource/material-stock')">物料库存详情</el-button>
-          <!-- 物料库存流水（2026-09-22 新增菜单 417）：与侧栏同序，紧跟「物料库存详情」 -->
           <el-button v-if="hasMenu['OutsourceMaterialStockLog']" type="primary" size="small" text @click="$router.push('/outsource/material-stock-log')">物料库存流水</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialStockTake']" type="primary" size="small" text @click="$router.push('/outsource/material-stock-take')">物料库存盘点</el-button>
           <el-button v-if="hasMenu['OutsourceStockLoss']" type="primary" size="small" text @click="$router.push('/outsource/stock-loss')">物料报损</el-button>
           <el-button v-if="hasMenu['OutsourceOtherIo']" type="primary" size="small" text @click="$router.push('/outsource/other-io')">物料其他出入库</el-button>
-          <el-button v-if="hasMenu['InventoryMaterialMove']" type="primary" size="small" text @click="$router.push('/inventory/material-move')">物料移仓</el-button>
           <!-- 委外仓库管理：按**路由路径**判权限（与「成品仓库管理」共用 route_name "Warehouse" 会串号） -->
           <!-- 文案与侧栏「基础数据」子菜单一致（2026-09-23 改名：委外仓库→委外仓库管理、自有物料仓→自有物料仓管理） -->
           <el-button v-if="hasPath['/outsource/warehouse']" type="primary" size="small" text @click="$router.push('/outsource/warehouse')">委外仓库管理</el-button>
