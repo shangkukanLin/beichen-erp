@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 @Mapper
 public interface WarehouseStockMapper extends BaseMapper<WarehouseStock> {
 
-    /** 原子库存加减（成品库存，按 product_id） */
+    /** 原子库存加减（成品库存，按 product_id）—— 2026-09-25 P0-2：WHERE 增 stock_form（形态），避免跨形态累加 */
     @Update("""
             UPDATE warehouse_stock
             SET quantity = quantity + #{delta},
@@ -20,12 +20,14 @@ public interface WarehouseStockMapper extends BaseMapper<WarehouseStock> {
             WHERE warehouse_id = #{warehouseId}
               AND product_id = #{productId}
               AND quality_type = #{qualityType}
+              AND stock_form = #{stockForm}
               AND company_id = #{companyId}
               AND quantity + #{delta} >= 0
             """)
     int updateQuantity(@Param("warehouseId") Long warehouseId,
                        @Param("productId") Long productId,
                        @Param("qualityType") String qualityType,
+                       @Param("stockForm") String stockForm,
                        @Param("companyId") Long companyId,
                        @Param("delta") BigDecimal delta);
 

@@ -78,23 +78,26 @@ public class WarehouseStockService {
         Long companyId = CompanyContext.get();
         if (companyId != null && companyId <= 0) companyId = null;
 
-        int rows = warehouseStockMapper.updateQuantity(warehouseId, productId, qualityType, companyId, quantity);
+        // 2026-09-25 P0-2：形态暂由本方法固定为 MATERIAL（既有 40+ 调用点行为不变）；
+        // 待 P1/P2 需要写「成品（加工退货/维修退货）」时，再加一个带 stockForm 的重载并由该重载调进来。
+        final String stockForm = WarehouseStock.FORM_MATERIAL;
+        int rows = warehouseStockMapper.updateQuantity(warehouseId, productId, qualityType, stockForm, companyId, quantity);
         if (rows == 0) {
-            WarehouseStock exist = selectExist(warehouseId, productId, qualityType, companyId);
+            WarehouseStock exist = selectExist(warehouseId, productId, qualityType, stockForm, companyId);
             if (exist != null || quantity.compareTo(BigDecimal.ZERO) < 0) {
                 BigDecimal available = exist != null && exist.getQuantity() != null ? exist.getQuantity() : BigDecimal.ZERO;
                 throw productShortage(warehouseId, productId, qualityType, available, quantity);
             }
             try {
-                insertStock(warehouseId, productId, qualityType, companyId, quantity);
+                insertStock(warehouseId, productId, qualityType, stockForm, companyId, quantity);
             } catch (org.springframework.dao.DuplicateKeyException e) {
-                int retry = warehouseStockMapper.updateQuantity(warehouseId, productId, qualityType, companyId, quantity);
+                int retry = warehouseStockMapper.updateQuantity(warehouseId, productId, qualityType, stockForm, companyId, quantity);
                 if (retry == 0) throw new BusinessException("库存不足，无法出库：产品ID=" + productId);
             }
         }
 
         // 写库存流水
-        WarehouseStock latest = selectExist(warehouseId, productId, qualityType, companyId);
+        WarehouseStock latest = selectExist(warehouseId, productId, qualityType, stockForm, companyId);
         BigDecimal after = latest != null && latest.getQuantity() != null ? latest.getQuantity() : quantity;
         BigDecimal before = after.subtract(quantity);
 
@@ -102,6 +105,7 @@ public class WarehouseStockService {
         log.setWarehouseId(warehouseId);
         log.setProductId(productId);
         log.setQualityType(qualityType);
+        log.setStockForm(stockForm);   // 2026-09-25 P0-2：流水与库存同行形态
         log.setChangeType(type.getCode());
         log.setChangeQuantity(quantity);
         log.setBeforeQuantity(before);
@@ -255,7 +259,9 @@ public class WarehouseStockService {
         if (qualityType == null) qualityType = ProductQualityType.A.getCode();
         Long companyId = CompanyContext.get();
         if (companyId != null && companyId <= 0) companyId = null;
-        WarehouseStock exist = selectExist(warehouseId, productId, qualityType, companyId);
+        // 2026-09-25 P0-2：形态先固定 MATERIAL（既有调用语义不变）；P1/P2 若需读「成品（加工退货/维修退货）」
+        // 的库存量，再加带 stockForm 的重载，勿直接改本方法签名（调用点很多）。
+        WarehouseStock exist = selectExist(warehouseId, productId, qualityType, WarehouseStock.FORM_MATERIAL, companyId);
         return exist != null && exist.getQuantity() != null ? exist.getQuantity() : BigDecimal.ZERO;
     }
 
@@ -338,11 +344,12 @@ public class WarehouseStockService {
         return mat != null ? mat.getMaterialName() : null;
     }
 
-    private WarehouseStock selectExist(Long warehouseId, Long productId, String qualityType, Long companyId) {
+    private WarehouseStock selectExist(Long warehouseId, Long productId, String qualityType, String stockForm, Long companyId) {
         return warehouseStockMapper.selectOne(new LambdaQueryWrapper<WarehouseStock>()
                 .eq(WarehouseStock::getWarehouseId, warehouseId)
                 .eq(WarehouseStock::getProductId, productId)
                 .eq(WarehouseStock::getQualityType, qualityType)
+                .eq(WarehouseStock::getStockForm, stockForm)   // 2026-09-25 P0-2：形态是定位键的一部分
                 .eq(companyId != null, WarehouseStock::getCompanyId, companyId));
     }
 
@@ -353,11 +360,12 @@ public class WarehouseStockService {
                 .eq(companyId != null, WarehouseStock::getCompanyId, companyId));
     }
 
-    private void insertStock(Long warehouseId, Long productId, String qualityType, Long companyId, BigDecimal quantity) {
+    private void insertStock(Long warehouseId, Long productId, String qualityType, String stockForm, Long companyId, BigDecimal quantity) {
         WarehouseStock s = new WarehouseStock();
         s.setWarehouseId(warehouseId);
         s.setProductId(productId);
         s.setQualityType(qualityType);
+        s.setStockForm(stockForm);   // 2026-09-25 P0-2：显式落形态（默认值仅为兼容存量，不能依赖）
         s.setQuantity(quantity);
         s.setAvailableQuantity(quantity);
         if (companyId != null) s.setCompanyId(companyId);
