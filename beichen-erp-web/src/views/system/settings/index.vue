@@ -54,6 +54,8 @@ async function loadLogs() {
   finally { logLoading.value = false }
 }
 function handleLogPageChange(p: number) { logPage.pageNum = p; loadLogs() }
+// 2026-09-24（列表页统一·家规 F7-181）：改每页条数必须回到第 1 页（原先分页没有 sizes，故缺这条）
+function handleLogSizeChange(s: number) { logPage.pageSize = s; logPage.pageNum = 1; loadLogs() }
 
 onMounted(() => { loadCompany(); loadParams() })
 </script>
@@ -99,10 +101,12 @@ onMounted(() => { loadCompany(); loadParams() })
           <el-table-column prop="detail" label="详情" min-width="150" show-overflow-tooltip />
           <el-table-column prop="createTime" label="时间" width="160" :formatter="(r:any,c:any,v:any)=>$fmtDate(v)" />
         </el-table>
-        <el-pagination
-          v-model:current-page="logPage.pageNum" :page-size="logPage.pageSize" :total="logPage.total"
-          layout="total, prev, pager, next" background small style="margin-top:12px;justify-content:flex-end"
-          @current-change="handleLogPageChange" />
+        <div class="pagination">
+          <el-pagination v-model:current-page="logPage.pageNum" v-model:page-size="logPage.pageSize"
+            :page-sizes="[10, 20, 50, 100]" :total="logPage.total"
+            layout="total, sizes, prev, pager, next, jumper" background
+            @size-change="handleLogSizeChange" @current-change="handleLogPageChange" />
+        </div>
       </el-tab-pane>
     </el-tabs>
 </template>
