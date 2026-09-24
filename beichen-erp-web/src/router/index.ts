@@ -389,7 +389,8 @@ const routes: RouteRecordRaw[] = [
       // 成品采购单 新增/编辑独立成页（2026-09-23 原为 900px 弹框）。⚠️ 列表 `handleAdd()` 早就在
       // push `/inventory/purchase/add` 但该路由一直不存在（点新增白屏）—— 本次一并补上，顺带修掉该 bug。
       { path: 'inventory/purchase/add', name: 'InventoryPurchaseAdd', component: () => import('@/views/purchase/order/form.vue'), meta: { title: '新增成品采购单', requiresAuth: true, operate: true } },
-      { path: 'inventory/purchase/edit/:id', name: 'InventoryPurchaseEdit', component: () => import('@/views/purchase/order/form.vue'), meta: { title: '编辑成品采购单', requiresAuth: true, operate: true } },
+      // 2026-09-24（用户口径）：`inventory/purchase/edit/:id` 已移除 —— 草稿态编辑统一在**采购单详情页**
+      // 内联完成（详情页 = 头部只读快照 + 可编辑表单 + 保存），列表不再提供编辑入口，避免两套入口。
       // 盘点明细（2026-09-23 原为 900px 弹框；表头走 query：scope/status/warehouseName/takeNo）；成品与物料盘点共用
       { path: 'inventory/stock-take/detail/:id', name: 'InventoryStockTakeDetail', component: () => import('@/views/stock-take/detail.vue'), meta: { title: '盘点明细', requiresAuth: true, operate: true } },
       // BOM 历史快照（2026-09-23 原为 900px 弹框，只读）

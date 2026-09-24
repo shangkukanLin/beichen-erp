@@ -109,11 +109,8 @@ function handleAdd() {
   router.push('/inventory/purchase/add')
 }
 
-/** 2026-09-23 用户要求：编辑由 900px 弹框改为独立页（新增本就指向独立页 /inventory/purchase/add） */
-async function handleEdit(row: PurchaseOrder) {
-  router.push(`/inventory/purchase/edit/${row.id}`)
-}
-
+/** 2026-09-24（用户口径）：列表不再提供「编辑」——草稿态直接在详情页改+存（采购单详情已表单化），
+ *  故 handleEdit 与 /inventory/purchase/edit/:id 路由一并移除，只剩新增指向 /inventory/purchase/add。 */
 function addItem() {
   items.value.push({ productId: undefined, qualityType: 'A', materialName: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' })
 }
@@ -292,14 +289,15 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
         <!-- 2026-09-24（用户口径）：反审核移入详情页 —— 它是"撤销已生效单据"（回滚库存/冲销应付），
              风险高且失败原因（已被退货/换货/消耗等）只在详情上下文里看得见；列表保留高频的审核。
              ⇒ 操作列 190→168（剩余最多 4 个按钮：详情/审核/编辑/作废）。 -->
-        <el-table-column label="操作" width="176" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：列表不再给「编辑」——草稿态直接在详情页改+存（详情页已支持），
+             避免同一动作两套入口。⇒ 操作列 176→132（最多 3 个按钮：详情/退货/换货 或 详情/审核/作废）。 -->
+        <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
             <!-- 售后快捷入口（2026-09-21 用户口径）：仅已审核采购单可发起，带 fromOrder 跳转 ⇒ 新增页自动带出供货商与可退/可换明细 -->
             <el-button v-if="row.status === PurchaseStatus.AUDITED" type="warning" link @click.stop="handleReturn(row)">退货</el-button>
             <el-button v-if="row.status === PurchaseStatus.AUDITED" type="warning" link @click.stop="handleExchange(row)">换货</el-button>
             <el-button v-if="row.status === PurchaseStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === PurchaseStatus.DRAFT" type="warning" link @click.stop="handleEdit(row)">编辑</el-button>
             <el-button v-if="row.status === PurchaseStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
