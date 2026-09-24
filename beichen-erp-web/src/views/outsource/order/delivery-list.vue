@@ -13,7 +13,7 @@
  */
 import { reactive, ref, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/enums'
 
@@ -55,22 +55,16 @@ function goDelivery(row: any) { router.push(`/outsource/order/delivery/${row.id}
 function goDetail(row: any) { router.push(`/outsource/order/delivery/${row.id}`) }
 
 /**
- * 结单（2026-09-21 用户口径「加工单详情页面的结单按钮放到成品收货里」）：
- * 本页只是**入口** —— 跳结单报表页（`/outsource/order/close/:id`），结单本身要在那里
- * "保存草稿 → 确认结单"（后端要求先保存报表）。
- * <p>⚠️ 剩余未收 > 0 时先二次确认：后端**不拦**"未收满就结单"，而结单后本单变"已完成"，
- * 就不能再收货了（要改回来得先反结单）。</p>
+ * 退货（2026-09-24 用户口径）：成品收货**列表**的行内操作是「收货 + 退货」，
+ * 与「物料收货」列表（material-order/delivery-list.vue）口径一致。
+ *
+ * <p>成品侧的退货 = 走「加工退货（拆分还料）」页
+ * （`/outsource/order/delivery/return-defect/:orderId`）：按本加工单还料 / 红冲收货，
+ * 与订单详情页的「加工退货」按钮是同一条路。</p>
+ *
+ * <p>⚠️ 「结单」不再出现在列表里 —— 它仍保留在成品收货**详情页**的「结单」按钮上。</p>
  */
-async function goClose(row: any) {
-  const remaining = Number(row.remainingQuantity || 0)
-  if (remaining > 0) {
-    try {
-      await ElMessageBox.confirm(
-        `该单还有 ${remaining} 件未收；结单后不能再收货（需先反结单）。确定进入结单报表？`, '结单前确认', { type: 'warning' })
-    } catch { return }
-  }
-  router.push(`/outsource/order/close/${row.id}`)
-}
+function goReturn(row: any) { router.push(`/outsource/order/delivery/return-defect/${row.id}`) }
 
 onActivated(() => { loadData() })
 </script>
@@ -128,9 +122,10 @@ onActivated(() => { loadData() })
         <el-table-column label="操作" width="124" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDelivery(row)">收货</el-button>
-            <!-- 2026-09-21（用户口径「结单按钮放到成品收货里」）：结单入口（跳结单报表页）；未收满时二次确认 -->
-            <el-button type="warning" link @click.stop="goClose(row)">结单</el-button>
-            <!-- 2026-09-21（用户口径）：退回进详情页做「加工退货」红冲收货，原「退货」按钮已移除 -->
+            <!-- 2026-09-24（用户口径）：行内操作 = 收货 + 退货。
+                 退货跳「加工退货（拆分还料）」页（按本加工单还料/红冲收货）；
+                 结单入口不在列表里，它仍在成品收货详情页（原 2026-09-21「结单放列表」的口径已按本次要求撤销）。 -->
+            <el-button type="warning" link @click.stop="goReturn(row)">退货</el-button>
           </template>
         </el-table-column>
       </el-table>

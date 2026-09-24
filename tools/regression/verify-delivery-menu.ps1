@@ -79,11 +79,11 @@ if ($d2) {
   if ($d2.n -ge 1) { Ok ('列表有数据（' + $d2.n + ' 行）') } else { Bad '列表无数据（库中应有 1 张 PRODUCING 加工单）' }
   if ($d2.prog -and $d2.btn) { Ok '列表含 收货进度 列与 收货 按钮' } else { Bad '列表缺少 收货进度 列或 收货 按钮' }
   if ($d2.prod -and -not $d2.pending) { Ok '列表只含正在加工（生产中）的加工单' } else { Bad ('列表含非生产中订单：prod=' + $d2.prod + ' pending=' + $d2.pending) }
-  # 2026-09-21（用户口径「成品收货只留退不良、退回走红冲收货」）：列表页**不得**再有「退货」入口。
-  # 断言按**按钮**取值而不是 body 文本 —— 侧栏还有「委外加工退货」菜单，用文本判定必然假通过。
-  if (-not $d2.ret) { Ok '列表页已无「退货」入口（退回走红冲收货）' } else { Bad '列表页仍出现「退货」按钮（应已移除）' }
-  # 2026-09-21（用户口径「结单按钮放到成品收货里」）：列表行内必须有「结单」入口（仅生产中的单才在列表里）
-  if ($d2.cls) { Ok '列表行内有「结单」入口（结单按钮已从加工单详情搬到成品收货）' } else { Bad '列表行内缺少「结单」入口' }
+  # 2026-09-24（用户口径）：成品收货**列表**的行内操作是「收货 + 退货」，与物料收货列表口径一致；
+  # 「退货」跳「加工退货（拆分还料）」页（按本加工单还料/红冲收货），「结单」不在列表里（保留在详情页）。
+  # ⚠️ 断言按**按钮**取值而不是 body 文本 —— 侧栏还有「委外加工退货」菜单，用文本判定必然假通过。
+  if ($d2.ret) { Ok '列表页有「退货」入口（跳加工退货·拆分还料页）' } else { Bad '列表页缺少「退货」按钮' }
+  if (-not $d2.cls) { Ok '列表行内已无「结单」入口（结单保留在成品收货详情页）' } else { Bad '列表行内仍出现「结单」按钮（应已移除）' }
 }
 
 # ③ 行内「收货」→ 自动弹出新增收货弹窗（一步收货）
@@ -211,11 +211,14 @@ if ($d8c -and $d8c.ok) {
 #    原先挂在本页下方的「无单加工退货」区块已迁到「加工退货」页 ⇒ 本页不得再出现该区块/退货按钮。
 #    ⚠️ 断言一律按**按钮文本**取值：侧栏有「加工退货」菜单，用 body 文本判定必然假通过。
 OpenFresh "$base/outsource/order/delivery"
-$d9 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({title:t.includes('无单加工退货'),btn:b.includes('新增无单加工退货'),ret:b.some(x=>x==='退货')});})()" '成品收货列表页'
+$d9 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({title:t.includes('无单加工退货'),btn:b.includes('新增无单加工退货'),ret:b.some(x=>x==='退货'),recv:b.some(x=>x==='收货'),fin:b.some(x=>x==='结单')});})()" '成品收货列表页'
 if ($d9) {
   if (-not $d9.title) { Ok '成品收货列表页已无「无单加工退货」区块（退回统一到加工退货页）' } else { Bad '成品收货列表页仍有「无单加工退货」区块（应已迁走）' }
   if (-not $d9.btn) { Ok '成品收货列表页已无「新增无单加工退货」按钮' } else { Bad '成品收货列表页仍有「新增无单加工退货」按钮' }
-  if (-not $d9.ret) { Ok '成品收货列表页已无「退货」入口' } else { Bad '成品收货列表页仍出现「退货」按钮' }
+  # 2026-09-24（用户口径）：成品收货**列表**的行内操作是「收货 + 退货」（与物料收货列表一致）；
+  #   「结单」不再出现在列表里（它仍在成品收货详情页）⇒ 断言由「不得有退货」反转为「必须有收货+退货、不得有结单」
+  if ($d9.recv -and $d9.ret -and (-not $d9.fin)) { Ok '成品收货列表页行内操作 = 「收货」+「退货」，且已无「结单」' }
+  else { Bad ('成品收货列表页操作不符（期望 收货+退货、无结单）：recv=' + $d9.recv + ' ret=' + $d9.ret + ' fin=' + $d9.fin) }
 }
 
 # ⑨b 加工退货页「加工退货」页签 = **有单 + 无单一张台账表**（2026-09-21 用户口径）：
