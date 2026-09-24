@@ -287,7 +287,7 @@ async function doSubmit() {
   try {
     const payload = { order: { ...form }, items: items.value }
     await updateSaleOrder(orderId, payload)
-    ElMessage.success('保存成功')
+    ElMessage.success('已保存')
     sessionStorage.setItem(SALE_ORDER_DIRTY_KEY, '1')
     await loadData()
   } catch { } finally { submitLoading.value = false }
@@ -307,7 +307,7 @@ async function handleAudit() {
       }
     }
     await ElMessageBox.confirm(`确认审核销售单「${head.value.code}」？审核后将直接出库并生成应收。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
-    await auditSaleOrder(orderId); ElMessage.success('审核成功'); sessionStorage.setItem(SALE_ORDER_DIRTY_KEY, '1'); loadData()
+    await auditSaleOrder(orderId); ElMessage.success('已审核'); sessionStorage.setItem(SALE_ORDER_DIRTY_KEY, '1'); loadData()
   } catch { }
 }
 async function handleCancel() {

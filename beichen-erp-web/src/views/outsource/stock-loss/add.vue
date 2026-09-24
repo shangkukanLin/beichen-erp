@@ -236,7 +236,7 @@ async function handleSubmit() {
     }
     if (isEdit.value) await request.put(`/outsource/stock-loss/${editId.value}`, payload)
     else await request.post('/outsource/stock-loss', payload)
-    ElMessage.success('保存成功')
+    ElMessage.success('已保存')
     // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签并回列表
     markClean()
     tabStore.closeTabAndBack(route.path)

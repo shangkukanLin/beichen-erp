@@ -95,7 +95,7 @@ async function doAudit() {
   acting.value = true
   try {
     await auditReturnSort(id)
-    ElMessage.success('审核成功')
+    ElMessage.success('已审核')
     loadDetail()
   } finally { acting.value = false }
 }

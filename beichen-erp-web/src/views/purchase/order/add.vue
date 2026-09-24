@@ -298,7 +298,7 @@ async function handleSubmit() {
         items: flatItems,
       }
       await createPurchaseOrder(body)
-      ElMessage.success('新增成功'); sessionStorage.setItem(PURCHASE_ORDER_DIRTY_KEY, '1')
+      ElMessage.success('已新增'); sessionStorage.setItem(PURCHASE_ORDER_DIRTY_KEY, '1')
       // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
       markClean()
       tabStore.closeTabAndBack(route.path)

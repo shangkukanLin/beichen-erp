@@ -179,7 +179,7 @@ async function handleSubmit() {
   saving.value = true
   try {
     await addProject(form as any, linkExistingProductId)
-    ElMessage.success('项目创建成功'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    ElMessage.success('项目已新增'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
     resetForm()
     // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回列表
     markClean()

@@ -94,8 +94,8 @@ async function handleSubmit() {
     submitLoading.value = true
     try {
       const payload = { outbound: { ...form }, items: items.value }
-      if (form.id) { await updateSaleOutbound(form.id as number, payload); ElMessage.success('修改成功') }
-      else { await createSaleOutbound(payload); ElMessage.success('新增成功') }
+      if (form.id) { await updateSaleOutbound(form.id as number, payload); ElMessage.success('已更新') }
+      else { await createSaleOutbound(payload); ElMessage.success('已新增') }
       dialogVisible.value = false; loadData()
     } catch { } finally { submitLoading.value = false }
   })
@@ -103,7 +103,7 @@ async function handleSubmit() {
 async function handleAudit(row: SaleOutbound) {
   try {
     await ElMessageBox.confirm(`确认审核销售出库「${row.code}」？本单仅为出库凭证：不扣减库存（库存已在销售单审核时扣减）、不生成应收。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
-    await auditSaleOutbound(row.id as number); ElMessage.success('审核成功（出库凭证，不涉及库存）'); loadData()
+    await auditSaleOutbound(row.id as number); ElMessage.success('已审核（出库凭证，不涉及库存）'); loadData()
   } catch { }
 }
 async function handleCancel(row: SaleOutbound) {

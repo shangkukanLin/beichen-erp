@@ -256,8 +256,8 @@ async function doSubmit() {
   submitLoading.value = true
   try {
     const payload = { order: { ...form }, items: items.value }
-    if (editId.value !== null) { await updateSaleOrder(editId.value, payload); ElMessage.success('修改成功') }
-    else { await createSaleOrder(payload); ElMessage.success('新增成功') }
+    if (editId.value !== null) { await updateSaleOrder(editId.value, payload); ElMessage.success('已更新') }
+    else { await createSaleOrder(payload); ElMessage.success('已新增') }
     sessionStorage.setItem(SALE_ORDER_DIRTY_KEY, '1')
     // 保存成功 ⇒ 先清脏标记（否则离开时会被未保存确认拦住），再关掉本次录入的页签并回列表
     markClean()

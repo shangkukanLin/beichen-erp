@@ -74,7 +74,7 @@ async function handleSubmit() {
   if (!form.specType) { ElMessage.warning('请选择适用规格'); return }
   try {
     if (isEdit.value) { await request.put('/dev/phase-template', form); ElMessage.success('已更新') }
-    else { await request.post('/dev/phase-template', form); ElMessage.success('已创建') }
+    else { await request.post('/dev/phase-template', form); ElMessage.success('已新增') }
     dialogVisible.value = false
     // 若这次改/加的是"另一套"，切过去让结果可见
     if (form.specType !== specType.value) specType.value = form.specType

@@ -112,10 +112,10 @@ async function handleSave() {
     try {
       if (form.id) {
         await updateCustomer({ ...form })
-        ElMessage.success('保存成功')
+        ElMessage.success('已保存')
       } else {
         await createCustomer({ ...form })
-        ElMessage.success('新增成功')
+        ElMessage.success('已新增')
       }
       // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签并回列表
       markClean()

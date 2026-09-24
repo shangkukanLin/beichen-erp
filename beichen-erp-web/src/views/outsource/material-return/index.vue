@@ -101,7 +101,7 @@ async function handleAudit(row: any) {
     ? ('确认审核该维修退货单？审核后物料出源仓送供应商维修（不冲减应付）' + (row.materialOrderCode ? `；关联订单 ${row.materialOrderCode} 若未完成，将同时扣减其收料数` : ''))
     : '确认审核该退货单？审核后物料出源仓并冲减应付'
   try { await ElMessageBox.confirm(tip, '确认审核', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-return/${row.id}/audit`); ElMessage.success('审核成功'); loadData() } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
+  try { await request.put(`/outsource/material-return/${row.id}/audit`); ElMessage.success('已审核'); loadData() } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 
 async function handleUnAudit(row: any) {

@@ -103,13 +103,13 @@ async function handleSubmit() {
   dLoading.value = true
   try {
     const payload = { receipt: { ...dForm }, items: dItems.value }
-    await createReceipt(payload); ElMessage.success('保存成功')
+    await createReceipt(payload); ElMessage.success('已保存')
     dVisible.value = false; loadData()
   } catch {} finally { dLoading.value = false }
 }
 async function handleAudit(row: FinanceReceipt) {
   try { await ElMessageBox.confirm(`确认审核收款单「${row.code}」？将核销应收并更新账户余额`, '提示', { type: 'warning' })
-    await auditReceipt(row.id as number); ElMessage.success('审核成功，已核销应收并更新资金'); loadData() } catch {}
+    await auditReceipt(row.id as number); ElMessage.success('已审核，已核销应收并更新资金'); loadData() } catch {}
 }
 async function handleCancel(row: FinanceReceipt) {
   try { await ElMessageBox.confirm(`确认作废收款单「${row.code}」？`, '提示', { type: 'warning' })

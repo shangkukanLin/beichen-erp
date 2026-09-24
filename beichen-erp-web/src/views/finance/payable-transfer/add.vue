@@ -58,7 +58,7 @@ async function onSubmit() {
     if (editId.value) { payload.id = editId.value; await request.put('/finance/payable-transfer', payload) }
     else await request.post('/finance/payable-transfer', payload)
     sessionStorage.setItem(PAYABLE_TRANSFER_DIRTY_KEY, '1')
-    ElMessage.success('保存成功')
+    ElMessage.success('已保存')
     // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回列表
     markClean()
     tabStore.closeTabAndBack(route.path)

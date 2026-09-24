@@ -240,7 +240,7 @@ async function handleSubmit() {
     }
     if (isEdit.value) await request.put(`/inventory/stock-loss/${editId.value}`, payload)
     else await request.post('/inventory/stock-loss', payload)
-    ElMessage.success('保存成功')
+    ElMessage.success('已保存')
     // 2026-09-20（F7-174）：置脏标志，列表页 onActivated 时才重新拉取（否则 keep-alive 复用会让列表停在旧数据）
     sessionStorage.setItem(INVENTORY_STOCK_LOSS_DIRTY_KEY, '1')
     // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表

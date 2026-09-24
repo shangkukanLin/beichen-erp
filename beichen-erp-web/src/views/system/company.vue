@@ -38,10 +38,10 @@ async function handleSubmit() {
   try {
     if (isEdit.value && editId.value) {
       await updateCompany(editId.value, form.value as Company)
-      ElMessage.success('修改成功')
+      ElMessage.success('已更新')
     } else {
       await createCompany(form.value as Company)
-      ElMessage.success('新增成功')
+      ElMessage.success('已新增')
     }
     dialogVisible.value = false
     loadData()

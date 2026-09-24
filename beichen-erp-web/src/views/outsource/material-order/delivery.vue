@@ -121,13 +121,13 @@ async function handleReceive(force?: boolean) {
 /** 收货/退不良草稿单审核 */
 async function auditDelivery(row: any) {
   try { await ElMessageBox.confirm('审核后将扣减库存并生成应付，是否继续？', '审核收货单', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-order/delivery/${row.id}/audit`); ElMessage.success('审核成功'); await loadAll(); markOrderDirty() }
+  try { await request.put(`/outsource/material-order/delivery/${row.id}/audit`); ElMessage.success('已审核'); await loadAll(); markOrderDirty() }
   catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 /** 收货/退不良已审核单反审核（逆向回滚库存与应付） */
 async function unauditDelivery(row: any) {
   try { await ElMessageBox.confirm('反审核将回滚库存并冲回应付，是否继续？', '反审核收货单', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-order/delivery/${row.id}/un-audit`); ElMessage.success('反审核成功'); await loadAll(); markOrderDirty() }
+  try { await request.put(`/outsource/material-order/delivery/${row.id}/un-audit`); ElMessage.success('已反审核'); await loadAll(); markOrderDirty() }
   catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 /** 是否为可审核/反审核的物料订单收发明细（收货/退不良） */

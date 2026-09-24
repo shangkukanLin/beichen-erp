@@ -53,7 +53,7 @@ async function submit() {
   saving.value = true
   try {
     await createReceipt({ receipt: { ...form }, items: items.value })
-    ElMessage.success('保存成功')
+    ElMessage.success('已保存')
     router.push('/finance/receipt')
   } catch { /* 提示由拦截器统一给出 */ } finally { saving.value = false }
 }

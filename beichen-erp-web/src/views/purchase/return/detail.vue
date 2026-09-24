@@ -74,7 +74,7 @@ async function handleAudit() {
   try {
     await ElMessageBox.confirm(`确认审核退货单「${detail.value.code}」？审核后出库减库存并冲减应付账款。`, '确认审核', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
     await auditPurchaseReturn(id)
-    ElMessage.success('审核成功')
+    ElMessage.success('已审核')
     sessionStorage.setItem(PURCHASE_RETURN_DIRTY_KEY, '1')
     loadData()
   } catch { /* */ }
@@ -84,7 +84,7 @@ async function handleUnAudit() {
   try {
     await ElMessageBox.confirm(`确认反审核退货单「${detail.value.code}」？反审核后恢复库存、清除应付台账，回到草稿状态。`, '确认反审核', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
     await unAuditPurchaseReturn(id)
-    ElMessage.success('反审核成功')
+    ElMessage.success('已反审核')
     sessionStorage.setItem(PURCHASE_RETURN_DIRTY_KEY, '1')
     loadData()
   } catch { /* */ }

@@ -33,15 +33,15 @@ async function save() {
   if (!form.expenseType) { ElMessage.warning('请选择费用类型'); return }
   if (!form.amount || form.amount <= 0) { ElMessage.warning('费用金额必须大于 0'); return }
   if (!form.accountId) { ElMessage.warning('请选择支出账户'); return }
-  try { if (form.id) { await updateExpense(form); ElMessage.success('修改成功') } else { await createExpense(form); ElMessage.success('新增成功') }; dialog.value = false; loadData() } catch {}
+  try { if (form.id) { await updateExpense(form); ElMessage.success('已更新') } else { await createExpense(form); ElMessage.success('已新增') }; dialog.value = false; loadData() } catch {}
 }
 async function audit(row: any) {
   try { await ElMessageBox.confirm(`确认审核费用单 ${row.expenseNo}？审核后将从「${row.accountName}」扣款 ${row.amount} 元`, '审核确认', { type: 'warning' }) } catch { return }
-  try { await auditExpense(row.id); ElMessage.success('审核成功'); loadData() } catch {}
+  try { await auditExpense(row.id); ElMessage.success('已审核'); loadData() } catch {}
 }
 async function unAudit(row: any) {
   try { await ElMessageBox.confirm('反审核将生成「费用冲正」流水把钱冲回账户，确认继续？', '反审核确认', { type: 'warning' }) } catch { return }
-  try { await unAuditExpense(row.id); ElMessage.success('反审核成功'); loadData() } catch {}
+  try { await unAuditExpense(row.id); ElMessage.success('已反审核'); loadData() } catch {}
 }
 async function cancel(row: any) {
   try { await ElMessageBox.confirm('确认作废该费用单？', '作废确认', { type: 'warning' }) } catch { return }

@@ -135,10 +135,10 @@ async function handleSubmit() {
     try {
       if (isEdit.value) {
         await updateRole(form)
-        ElMessage.success('修改成功')
+        ElMessage.success('已更新')
       } else {
         await addRole(form)
-        ElMessage.success('新增成功')
+        ElMessage.success('已新增')
       }
       dialogVisible.value = false
       // 2026-09-20（F7-184）：置脏标志，配合列表页 onActivated 按需刷新
@@ -164,7 +164,7 @@ async function handleDelete(row: Role) {
   } catch { return }
   try {
     await deleteRole(row.id as number | string)
-    ElMessage.success('删除成功')
+    ElMessage.success('已删除')
     if (tableData.value.length === 1 && pagination.pageNum > 1) {
       pagination.pageNum--
     }
@@ -237,7 +237,7 @@ async function handleSavePerm() {
   permLoading.value = true
   try {
     await saveRoleMenus(permRoleId.value, allKeys)
-    ElMessage.success('权限分配成功')
+    ElMessage.success('已分配权限')
     // 2026-09-20（F7-184）：权限变化会反映到列表（如后续展示菜单数），置脏让切回本页时刷新一次
     sessionStorage.setItem(SYSTEM_ROLE_DIRTY_KEY, '1')
     permDialogVisible.value = false

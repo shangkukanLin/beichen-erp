@@ -64,7 +64,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
 
 async function handleAudit(row: FinancePayment) {
   try { await ElMessageBox.confirm(`确认审核付款单「${row.code}」？将核销应付并扣减账户余额`, '提示', { type: 'warning' })
-    await auditPayment(row.id as number); ElMessage.success('审核成功，已核销应付并更新资金'); loadData(); loadSummary() } catch {}
+    await auditPayment(row.id as number); ElMessage.success('已审核，已核销应付并更新资金'); loadData(); loadSummary() } catch {}
 }
 async function handleCancel(row: FinancePayment) {
   try { await ElMessageBox.confirm(`确认作废付款单「${row.code}」？`, '提示', { type: 'warning' })

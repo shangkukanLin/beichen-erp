@@ -266,7 +266,7 @@ async function handleSave() {
       items: items.value.map((it: any) => ({ materialId: it.materialId, qualityType: it.qualityType, quantity: Number(it.quantity), remark: it.remark }))
     }
     await request.put(`/inventory/material-move/${id.value}`, payload)
-    ElMessage.success('保存成功')
+    ElMessage.success('已保存')
     sessionStorage.setItem(INVENTORY_MATERIAL_MOVE_DIRTY_KEY, '1')
     markClean()
     await loadAll()
@@ -289,7 +289,7 @@ async function handleAudit() {
     }
     await request.put(`/inventory/material-move/${id.value}`, payload)
     await request.put(`/inventory/material-move/${id.value}/audit`)
-    ElMessage.success('审核成功')
+    ElMessage.success('已审核')
     sessionStorage.setItem(INVENTORY_MATERIAL_MOVE_DIRTY_KEY, '1')
     markClean()
     await loadAll()
@@ -302,7 +302,7 @@ async function handleUnAudit() {
   } catch { return }
   try {
     await request.put(`/inventory/material-move/${id.value}/un-audit`)
-    ElMessage.success('反审核成功')
+    ElMessage.success('已反审核')
     sessionStorage.setItem(INVENTORY_MATERIAL_MOVE_DIRTY_KEY, '1')
     await loadAll()
   } catch { /* 已由 request 拦截器提示 */ }

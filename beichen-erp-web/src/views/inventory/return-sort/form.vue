@@ -231,8 +231,8 @@ async function handleSave() {
   saving.value = true
   try {
     const data = { ...form, items: items.value }
-    if (form.id) { await updateReturnSort(form.id, data); ElMessage.success('修改成功') }
-    else { await createReturnSort(data); ElMessage.success('新增成功') }
+    if (form.id) { await updateReturnSort(form.id, data); ElMessage.success('已更新') }
+    else { await createReturnSort(data); ElMessage.success('已新增') }
     // 置脏标志：列表页 onActivated 会重拉「待整理总览 + 整理单列表」（keep-alive 复用下 onMounted 不触发）
     sessionStorage.setItem(INVENTORY_RETURN_SORT_DIRTY_KEY, '1')
     // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表

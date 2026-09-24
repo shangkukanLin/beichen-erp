@@ -152,10 +152,10 @@ async function handleSubmit() {
       const payload = { order: { ...form }, items: items.value }
       if (form.id) {
         await updatePurchaseOrder(form.id as number, payload)
-        ElMessage.success('修改成功')
+        ElMessage.success('已更新')
       } else {
         await createPurchaseOrder(payload)
-        ElMessage.success('新增成功')
+        ElMessage.success('已新增')
       }
       dialogVisible.value = false
       loadData()
@@ -167,7 +167,7 @@ async function handleAudit(row: PurchaseOrder) {
   try {
     await ElMessageBox.confirm(`确认审核采购单「${row.code}」？审核后将直接入库并生成应付。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
     await auditPurchaseOrder(row.id as number)
-    ElMessage.success('审核成功')
+    ElMessage.success('已审核')
     loadData()
   } catch { /* 取消 */ }
 }
@@ -183,7 +183,7 @@ async function handleUnAudit(row: PurchaseOrder) {
   try {
     await ElMessageBox.confirm(`确认反审核采购单「${row.code}」？反审核后将冲回库存、清除应付台账，单据回到草稿状态。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
     await unAuditPurchaseOrder(row.id as number)
-    ElMessage.success('反审核成功，已回到草稿状态')
+    ElMessage.success('已反审核，已回到草稿状态')
     loadData()
   } catch { /* 取消 */ }
 }

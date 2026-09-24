@@ -115,7 +115,7 @@ async function handleSubmit() {
   const body = { ...form, supplierIds: sIds }
   submitLoading.value = true
   try {
-    if (isEdit.value) { await request.put('/outsource/material', body); ElMessage.success('修改成功') }
+    if (isEdit.value) { await request.put('/outsource/material', body); ElMessage.success('已更新') }
     else { const res = await request.post('/outsource/material', body) as any; form.id = res }
     // F7-130（2026-09-20）：**仅当组件已成功加载（或新增）时才提交** —— 后端是全量替换，
     // 若加载失败仍提交空数组会把已有 BOM 清空（原实现即此缺陷）。

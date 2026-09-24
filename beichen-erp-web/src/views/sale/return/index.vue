@@ -167,7 +167,7 @@ function doAudit(row: any) {
   })
     .then(async () => {
       await auditSaleReturn(row.id)
-      ElMessage.success('审核成功')
+      ElMessage.success('已审核')
       load()
     })
     .catch(() => {})
@@ -181,7 +181,7 @@ function doUnAudit(row: any) {
   })
     .then(async () => {
       await unAuditSaleReturn(row.id)
-      ElMessage.success('反审核成功')
+      ElMessage.success('已反审核')
       load()
     })
     .catch(() => {})
@@ -195,7 +195,7 @@ function doCancel(row: any) {
   })
     .then(async () => {
       await cancelSaleReturn(row.id)
-      ElMessage.success('作废成功')
+      ElMessage.success('已作废')
       load()
     })
     .catch(() => {})

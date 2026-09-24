@@ -88,7 +88,7 @@ async function handleSubmit() {
   try {
     if (isEdit.value) { await request.put(`/outsource/material-order/${editId}`, { ...form, items: items.value }); ElMessage.success('已更新') }
     else {
-      await request.post('/outsource/material-order', { ...form, items: items.value }); ElMessage.success('已创建')
+      await request.post('/outsource/material-order', { ...form, items: items.value }); ElMessage.success('已新增')
       // 重置表单，避免 keep-alive 缓存残留数据
       Object.assign(form, { orderType: OrderType.PURCHASE, supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '' })
       items.value = []

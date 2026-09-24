@@ -43,7 +43,7 @@ function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dia
 function handleEdit(row: any) { Object.assign(form, defForm(), row); isEdit.value = true; dialogTitle.value = '编辑仓库'; dialogVisible.value = true }
 
 async function handleSubmit() { if (!form.warehouseName) { ElMessage.warning('请输入仓库名称'); return }; submitLoading.value = true
-  try { if (isEdit.value) { await request.put('/warehouse', form); ElMessage.success('修改成功') } else { await request.post('/warehouse', form); ElMessage.success('新增成功') }
+  try { if (isEdit.value) { await request.put('/warehouse', form); ElMessage.success('已更新') } else { await request.post('/warehouse', form); ElMessage.success('已新增') }
     dialogVisible.value = false; loadData() } finally { submitLoading.value = false } }
 
 async function handleToggleStatus(row: any) {

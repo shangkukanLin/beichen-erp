@@ -102,8 +102,8 @@ async function submit() {
     submitLoading.value = true
     try {
       const payload = { order: { ...form }, items: items.value }
-      if (form.id) { await updatePurchaseOrder(form.id as number, payload); ElMessage.success('修改成功') }
-      else { await createPurchaseOrder(payload); ElMessage.success('新增成功') }
+      if (form.id) { await updatePurchaseOrder(form.id as number, payload); ElMessage.success('已更新') }
+      else { await createPurchaseOrder(payload); ElMessage.success('已新增') }
       // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
       markClean()
       tabStore.closeTabAndBack(route.path)

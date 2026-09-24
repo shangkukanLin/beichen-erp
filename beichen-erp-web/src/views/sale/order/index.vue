@@ -58,7 +58,7 @@ function handleReset() { query.code = ''; query.customerId = ''; query.status = 
 async function handleAudit(row: SaleOrder) {
   try {
     await ElMessageBox.confirm(`确认审核销售单「${row.code}」？审核后将直接出库并生成应收。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
-    await auditSaleOrder(row.id as number); ElMessage.success('审核成功'); loadData()
+    await auditSaleOrder(row.id as number); ElMessage.success('已审核'); loadData()
   } catch { }
 }
 async function handleCancel(row: SaleOrder) {

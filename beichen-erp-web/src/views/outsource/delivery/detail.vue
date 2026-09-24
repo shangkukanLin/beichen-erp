@@ -96,7 +96,7 @@ async function handleSave() {
     if (uploadFile.value) { const fd = new FormData(); fd.append('file', uploadFile.value); const res = await request.post<any,string>('/dev/file/upload', fd); form.attachUrl = res as unknown as string }
     const body = { ...form, items: items.value }
     await request.put(`/outsource/delivery/${form.id}`, body)
-    ElMessage.success('保存成功，库存已同步'); await loadData(); takeBaseline(); sessionStorage.setItem(OUTSOURCE_DELIVERY_DIRTY_KEY, '1')
+    ElMessage.success('已保存，库存已同步'); await loadData(); takeBaseline(); sessionStorage.setItem(OUTSOURCE_DELIVERY_DIRTY_KEY, '1')
   } finally { saving.value = false }
 }
 

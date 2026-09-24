@@ -74,8 +74,8 @@ async function save() {
   if (inputMode.value === 'total') payload.amount = undefined
   else payload.totalAmount = undefined
   try {
-    if (form.id) { await updateInvoice(payload); ElMessage.success('修改成功') }
-    else { await createInvoice(payload); ElMessage.success('登记成功') }
+    if (form.id) { await updateInvoice(payload); ElMessage.success('已更新') }
+    else { await createInvoice(payload); ElMessage.success('已登记') }
     dialog.value = false; loadData()
   } catch {}
 }

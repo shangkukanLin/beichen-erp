@@ -233,7 +233,7 @@ async function handleSubmit() {
       const payload = { move: { ...form }, items: items.value }
       if (isEdit.value) await request.put(`/inventory/warehouse-move/${editId.value}`, payload)
       else await request.post('/inventory/warehouse-move', payload)
-      ElMessage.success('保存成功'); sessionStorage.setItem(INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY, '1')
+      ElMessage.success('已保存'); sessionStorage.setItem(INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY, '1')
       resetForm()
       // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
       markClean()

@@ -166,7 +166,7 @@ async function handleSave() {
   saving.value = true
   try {
     await updateProject(form as any)
-    ElMessage.success('保存成功'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    ElMessage.success('已保存'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
     if (specChanged) {
       ElMessage.info('规格已变更：已有阶段不会重算（阶段进度是历史快照），仅之后新建的项目按新规格套用阶段模板')
     }

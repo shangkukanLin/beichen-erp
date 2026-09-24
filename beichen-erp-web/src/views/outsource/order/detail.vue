@@ -214,7 +214,7 @@ async function handleSave() {
   saving.value = true
   try {
     if (uploadFile.value) { const fd = new FormData(); fd.append('file', uploadFile.value); const res = await request.post<any,string>('/dev/file/upload', fd); form.attachUrl = res as unknown as string }
-    await request.put(`/outsource/order/${form.id}`, { ...form, products: products.value }); ElMessage.success('保存成功'); await loadData(); sessionStorage.setItem(OUTSOURCE_ORDER_DIRTY_KEY, '1')
+    await request.put(`/outsource/order/${form.id}`, { ...form, products: products.value }); ElMessage.success('已保存'); await loadData(); sessionStorage.setItem(OUTSOURCE_ORDER_DIRTY_KEY, '1')
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) } finally { saving.value = false }
 }
 async function handleAudit() {

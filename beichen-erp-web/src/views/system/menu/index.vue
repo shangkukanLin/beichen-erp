@@ -147,10 +147,10 @@ async function handleSubmit() {
     try {
       if (isEdit.value) {
         await updateMenu(form)
-        ElMessage.success('修改成功')
+        ElMessage.success('已更新')
       } else {
         await addMenu(form)
-        ElMessage.success('新增成功')
+        ElMessage.success('已新增')
       }
       dialogVisible.value = false
       // 2026-09-20（F7-184）：置脏标志，配合列表页 onActivated 按需刷新
@@ -177,7 +177,7 @@ async function handleDelete(row: FlatMenu) {
   } catch { return }
   try {
     await deleteMenu(row.id as number | string)
-    ElMessage.success('删除成功')
+    ElMessage.success('已删除')
     sessionStorage.setItem(SYSTEM_MENU_DIRTY_KEY, '1')
     loadData()
     userStore.fetchMenus()

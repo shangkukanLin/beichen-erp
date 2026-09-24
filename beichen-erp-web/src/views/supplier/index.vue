@@ -104,10 +104,10 @@ async function handleSubmit() {
       if (!isEdit.value) form.typeCodes = [currentType.value]
       if (isEdit.value && form.id) {
         await updateSupplier(form)
-        ElMessage.success('修改成功')
+        ElMessage.success('已更新')
       } else {
         await addSupplier(form)
-        ElMessage.success('新增成功')
+        ElMessage.success('已新增')
       }
       dialogVisible.value = false
       loadData()
@@ -162,7 +162,7 @@ function removeProductRow(index: number) {
 async function saveProducts() {
   if (!productSupplierId.value) return
   await saveSupplierProducts(productSupplierId.value, productList.value)
-  ElMessage.success('供应产品保存成功')
+  ElMessage.success('供应产品已保存')
   productDialogVisible.value = false
 }
 

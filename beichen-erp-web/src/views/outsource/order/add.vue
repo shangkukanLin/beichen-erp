@@ -182,7 +182,7 @@ async function handleSubmit() {
       return { ...p, productName: proj?.productName || proj?.name || '', productId: proj?.productId || null }
     })
     await request.post('/outsource/order', { ...cleanForm, products: submitProducts })
-    ElMessage.success('加工单创建成功')
+    ElMessage.success('加工单已新增')
     sessionStorage.setItem(OUTSOURCE_ORDER_DIRTY_KEY, '1')
     // 重置表单，避免 keep-alive 缓存残留数据
     Object.assign(form, { factoryId: undefined, supplyMode: 'OURS', planStartDate: '', planEndDate: '', taxIncluded: 0, taxRate: '', remark: '', attachUrl: '', logisticsCompany: '', logisticsNo: '' })

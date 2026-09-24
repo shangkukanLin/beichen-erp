@@ -46,7 +46,7 @@ async function handleAudit(row: any) {
   } catch { return }
   try {
     await auditReclassify(row.id)
-    ElMessage.success('审核成功')
+    ElMessage.success('已审核')
     loadData()
   } catch { /* 已由 request 拦截器提示 */ }
 }

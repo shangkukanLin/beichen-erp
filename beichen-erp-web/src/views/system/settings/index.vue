@@ -14,7 +14,7 @@ async function loadCompany() {
 async function saveCompany() {
   companySaving.value = true
   // 2026-09-20（F7-185）：原先只有 try/finally ⇒ 保存失败既不提示又产生未处理 rejection（同文件 loadCompany 有 catch）
-  try { await request.put('/settings/company', companyForm); ElMessage.success('保存成功') }
+  try { await request.put('/settings/company', companyForm); ElMessage.success('已保存') }
   catch (e: any) { ElMessage.error(e?.message || '保存失败') }
   finally { companySaving.value = false }
 }
@@ -35,7 +35,7 @@ function initDefaultParams() {
 async function saveParams() {
   paramsSaving.value = true
   // 同上（F7-185）：补 catch，失败必须给用户提示
-  try { await request.put('/settings/params', params.value); ElMessage.success('保存成功') }
+  try { await request.put('/settings/params', params.value); ElMessage.success('已保存') }
   catch (e: any) { ElMessage.error(e?.message || '保存失败') }
   finally { paramsSaving.value = false }
 }

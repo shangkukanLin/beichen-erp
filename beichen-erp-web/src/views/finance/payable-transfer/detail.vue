@@ -27,7 +27,7 @@ async function onAudit() {
   try { await ElMessageBox.confirm(`确认审核「${d.value.code}」？将生成 ${fmt(d.value.amount)} 元应收。`, '审核确认', { type: 'warning' }) } catch { return }
   try {
     await request.put(`/finance/payable-transfer/${id}/audit`)
-    ElMessage.success('审核成功，已生成应收')
+    ElMessage.success('已审核，已生成应收')
     sessionStorage.setItem(PAYABLE_TRANSFER_DIRTY_KEY, '1')
     load()
   } catch (e: any) { ElMessage.error(e?.message || '审核失败') }

@@ -371,7 +371,7 @@ async function submit() {
     }
     if (isEdit.value) {
       await updateSaleExchange(form.id!, body)
-      ElMessage.success('保存成功')
+      ElMessage.success('已保存')
       sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1')
       // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签
       markClean()
@@ -379,7 +379,7 @@ async function submit() {
       router.push(`/sale/exchange/detail/${form.id}`)
     } else {
       const res: any = await createSaleExchange(body)
-      ElMessage.success('新增成功')
+      ElMessage.success('已新增')
       sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1')
       markClean()
       tabStore.closeTabAndBack(route.path)

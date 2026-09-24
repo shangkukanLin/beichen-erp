@@ -103,7 +103,7 @@ async function handleSave() {
   saving.value = true
   try {
     await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, items: items.value })
-    ElMessage.success('保存成功')
+    ElMessage.success('已保存')
     await loadAll(); markOrderDirty()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }

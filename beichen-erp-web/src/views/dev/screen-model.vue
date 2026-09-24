@@ -70,7 +70,7 @@ async function save() {
   try {
     if (form.value.id) await request.put(`/dev/screen-model/${form.value.id}`, form.value)
     else await request.post('/dev/screen-model', form.value)
-    ElMessage.success('保存成功')
+    ElMessage.success('已保存')
     dialog.value = false
     loadData()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') }

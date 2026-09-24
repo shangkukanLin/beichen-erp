@@ -132,7 +132,7 @@ async function audit(row: StockTake) {
     ? `该盘点单有 ${row.diffCount} 行差异（合计 ${Number(row.diffSum || 0).toFixed(2)}），审核后将按实盘数量调整库存（盘盈入库、盘亏出库）。确认审核？`
     : `确认审核盘点单 ${row.takeNo}？（无差异，库存不变）`
   try { await ElMessageBox.confirm(tips, '审核确认', { type: 'warning' }) } catch { return }
-  try { await auditStockTake(row.id!); ElMessage.success('审核成功，库存已按实盘调整'); loadData() } catch {}
+  try { await auditStockTake(row.id!); ElMessage.success('已审核，库存已按实盘调整'); loadData() } catch {}
 }
 async function unAudit(row: StockTake) {
   try { await ElMessageBox.confirm('反审核将按差异反向冲回库存，确认继续？', '反审核确认', { type: 'warning' }) } catch { return }

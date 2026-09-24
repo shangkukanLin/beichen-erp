@@ -407,10 +407,10 @@ async function submit() {
     const payload = buildPayload()
     if (isEdit.value) {
       await updateSaleReturn(form.id!, payload)
-      ElMessage.success('保存成功'); sessionStorage.setItem(SALE_RETURN_DIRTY_KEY, '1')
+      ElMessage.success('已保存'); sessionStorage.setItem(SALE_RETURN_DIRTY_KEY, '1')
     } else {
       await createSaleReturn(payload)
-      ElMessage.success('新增成功'); sessionStorage.setItem(SALE_RETURN_DIRTY_KEY, '1')
+      ElMessage.success('已新增'); sessionStorage.setItem(SALE_RETURN_DIRTY_KEY, '1')
     }
     // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
     markClean()

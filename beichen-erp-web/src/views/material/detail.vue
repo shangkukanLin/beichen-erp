@@ -193,10 +193,10 @@ async function handleSave() {
     try {
       if (form.id) {
         await updateProduct(form.id, form)
-        ElMessage.success('修改成功')
+        ElMessage.success('已更新')
       } else {
         await addProduct(form)
-        ElMessage.success('新增成功')
+        ElMessage.success('已新增')
       }
       // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签并回列表
       markClean()

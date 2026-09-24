@@ -96,7 +96,7 @@ async function handleAudit(row: any) {
   } catch { return }
   try {
     await auditReturnSort(row.id)
-    ElMessage.success('审核成功')
+    ElMessage.success('已审核')
     loadData()
     loadOverview()
   } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
@@ -118,7 +118,7 @@ async function handleDelete(row: any) {
   } catch { return }
   try {
     await deleteReturnSort(row.id)
-    ElMessage.success('删除成功')
+    ElMessage.success('已删除')
     loadData()
   } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }

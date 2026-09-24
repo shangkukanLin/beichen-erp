@@ -56,10 +56,10 @@ async function handleSubmit() {
   try {
     if (isEdit.value && editId.value) {
       await updateTemplate(editId.value, form.value)
-      ElMessage.success('保存成功')
+      ElMessage.success('已保存')
     } else {
       await createTemplate(form.value)
-      ElMessage.success('创建成功')
+      ElMessage.success('已新增')
     }
     dialogVisible.value = false
     loadData()

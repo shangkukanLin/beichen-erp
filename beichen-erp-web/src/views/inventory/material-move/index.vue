@@ -141,7 +141,7 @@ async function handleAudit(row: any) {
   } catch { return }
   try {
     await request.put(`/inventory/material-move/${row.id}/audit`)
-    ElMessage.success('审核成功')
+    ElMessage.success('已审核')
     loadData()
   } catch { /* 已由 request 拦截器提示 */ }
 }
@@ -152,7 +152,7 @@ async function handleUnAudit(row: any) {
   } catch { return }
   try {
     await request.put(`/inventory/material-move/${row.id}/un-audit`)
-    ElMessage.success('反审核成功')
+    ElMessage.success('已反审核')
     loadData()
   } catch { /* 已由 request 拦截器提示 */ }
 }

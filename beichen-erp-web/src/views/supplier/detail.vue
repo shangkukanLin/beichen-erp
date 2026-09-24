@@ -206,7 +206,7 @@ async function handleSave() {
     // 避免「供货商改成供应商」后前缀仍残留在库里（后端同样会忽略该类型的值）
     if (!isVendor.value) body.supplySku = ''
     await request.put('/supplier', body)
-    ElMessage.success('保存成功'); sessionStorage.setItem(SUPPLIER_DIRTY_KEY, '1')
+    ElMessage.success('已保存'); sessionStorage.setItem(SUPPLIER_DIRTY_KEY, '1')
     takeBaseline()   // 保存成功 ⇒ 重建基线（保存不重跑 loadData），避免离开时误报"未保存"
     loadData()
   } finally { saving.value = false }

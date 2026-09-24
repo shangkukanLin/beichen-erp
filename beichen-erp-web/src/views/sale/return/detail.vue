@@ -204,7 +204,7 @@ async function doAudit() {
   acting.value = true
   try {
     await auditSaleReturn(Number(route.params.id))
-    ElMessage.success('审核成功')
+    ElMessage.success('已审核')
     loadDetail(Number(route.params.id))
   } finally {
     acting.value = false
@@ -215,7 +215,7 @@ async function doUnAudit() {
   acting.value = true
   try {
     await unAuditSaleReturn(Number(route.params.id))
-    ElMessage.success('反审核成功')
+    ElMessage.success('已反审核')
     loadDetail(Number(route.params.id))
   } finally {
     acting.value = false
@@ -226,7 +226,7 @@ async function doCancel() {
   acting.value = true
   try {
     await cancelSaleReturn(Number(route.params.id))
-    ElMessage.success('作废成功')
+    ElMessage.success('已作废')
     loadDetail(Number(route.params.id))
   } finally {
     acting.value = false

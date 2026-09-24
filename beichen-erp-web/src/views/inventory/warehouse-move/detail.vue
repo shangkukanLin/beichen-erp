@@ -186,12 +186,12 @@ async function afterStatusChange() {
 }
 async function handleAudit() {
   try { await ElMessageBox.confirm('确认审核？将从移出仓扣减库存并增加到移入仓。', '审核确认', { type: 'warning' }) } catch { return }
-  try { await request.put(`/inventory/warehouse-move/${id.value}/audit`); ElMessage.success('审核成功'); await afterStatusChange() }
+  try { await request.put(`/inventory/warehouse-move/${id.value}/audit`); ElMessage.success('已审核'); await afterStatusChange() }
   catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 async function handleUnAudit() {
   try { await ElMessageBox.confirm('确认反审核？将退回移出仓库存并从移入仓扣回。', '反审核确认', { type: 'warning' }) } catch { return }
-  try { await request.put(`/inventory/warehouse-move/${id.value}/un-audit`); ElMessage.success('反审核成功'); await afterStatusChange() }
+  try { await request.put(`/inventory/warehouse-move/${id.value}/un-audit`); ElMessage.success('已反审核'); await afterStatusChange() }
   catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 async function handleCancel() {

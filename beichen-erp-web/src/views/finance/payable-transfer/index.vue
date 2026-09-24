@@ -58,7 +58,7 @@ async function onAudit(row: any) {
   } catch { return }
   try {
     await request.put(`/finance/payable-transfer/${row.id}/audit`)
-    ElMessage.success('审核成功，已生成应收')
+    ElMessage.success('已审核，已生成应收')
     load()
   } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }

@@ -33,8 +33,8 @@ function editAccount(row: FinanceAccount) {
 async function saveAccount() {
   // 2026-09-20（F7-173 同族 · 顺带修复）：原先 catch {} 静默 ⇒ 保存失败无任何提示
   try {
-    if (aForm.id) { await updateAccount(aForm); ElMessage.success('修改成功') }
-    else { await createAccount(aForm); ElMessage.success('新增成功') }
+    if (aForm.id) { await updateAccount(aForm); ElMessage.success('已更新') }
+    else { await createAccount(aForm); ElMessage.success('已新增') }
     aDialog.value = false; loadAccounts()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') }
 }

@@ -187,7 +187,7 @@ async function handleAudit(row: any) {
     ? '确认审核该维修退货单？审核后成品送修出库（不冲减应付）并生成加工厂向我方收取的维修费应付'
     : '确认审核该退货单？审核后物料入工厂仓、成品出库并冲减应付'
   try { await ElMessageBox.confirm(tip, '确认审核', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/return-order/${row.id}/audit`); ElMessage.success('审核成功'); loadData() } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
+  try { await request.put(`/outsource/return-order/${row.id}/audit`); ElMessage.success('已审核'); loadData() } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 
 async function handleUnAudit(row: any) {

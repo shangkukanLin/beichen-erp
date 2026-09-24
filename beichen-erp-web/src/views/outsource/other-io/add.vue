@@ -80,7 +80,7 @@ async function handleSubmit() {
     if (editId) {
       await request.put(`/outsource/other-io/${editId}`, body); ElMessage.success('已更新'); sessionStorage.setItem(OUTSOURCE_OTHER_IO_DIRTY_KEY, '1')
     } else {
-      await request.post('/outsource/other-io', body); ElMessage.success('已创建'); sessionStorage.setItem(OUTSOURCE_OTHER_IO_DIRTY_KEY, '1')
+      await request.post('/outsource/other-io', body); ElMessage.success('已新增'); sessionStorage.setItem(OUTSOURCE_OTHER_IO_DIRTY_KEY, '1')
       Object.assign(form, { warehouseId: undefined, ioType: IoType.IN, ioDate: localDate(), remark: '' })
       items.value = [{ materialId: undefined, materialName: '', materialTypeId: undefined, unit: '', unit_price: '', quantity: undefined, remark: '' }]
     }

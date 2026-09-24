@@ -198,7 +198,7 @@ async function handleSubmit() {
     }
     if (isEdit.value) await request.put(`/inventory/material-move/${editId.value}`, payload)
     else await request.post('/inventory/material-move', payload)
-    ElMessage.success('保存成功')
+    ElMessage.success('已保存')
     sessionStorage.setItem(INVENTORY_MATERIAL_MOVE_DIRTY_KEY, '1')
     markClean()
     tabStore.closeTabAndBack(route.path)

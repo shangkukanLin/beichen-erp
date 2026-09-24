@@ -122,7 +122,7 @@ async function onAudit() {
   } catch { return }
   try {
     await request.put(`/outsource/stock-loss/${id}/audit`)
-    ElMessage.success('审核成功，库存已扣减')
+    ElMessage.success('已审核，库存已扣减')
     load()
   } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
