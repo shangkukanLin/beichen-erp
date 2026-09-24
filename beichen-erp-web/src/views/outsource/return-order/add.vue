@@ -540,11 +540,13 @@ async function loadMaterialTypes() {
         <el-row :gutter="16">
           <!-- 每行 3 个字段（span=8）：标签一律 4~5 字，label-width 给足 104px 不换行 -->
           <el-col :span="8">
+            <!-- 2026-09-25（用户口径）：类型**锁定、不可更改**。本页（独立退货单）后端只接受维修退货
+                 （OutsourceReturnOrderServiceImpl 会抛「本页只处理维修退货；退回加工厂请在「加工退货」页办理」）
+                 ⇒ 旧版让用户能切到「加工退货」是个死路：改完一保存必然报错。加工退货请走「加工退货」页：
+                 有单 → 该加工单的收货详细页；无单 → 该页「新增」的录入弹窗（后端走收货模块 returnDefectNoOrder）。 -->
             <el-form-item required label="退货类型">
-              <el-select v-model="form.returnType" style="width:100%" @change="onTypeChange">
-                <el-option :label="OutsourceReturnTypeLabel[OutsourceReturnType.DEFECT]" :value="OutsourceReturnType.DEFECT" />
-                <el-option :label="OutsourceReturnTypeLabel[OutsourceReturnType.REPAIR]" :value="OutsourceReturnType.REPAIR" />
-              </el-select>
+              <el-tag size="small" style="margin-right:6px">{{ OutsourceReturnTypeLabel[form.returnType] || form.returnType }}</el-tag>
+              <span style="color:#909399;font-size:var(--app-font-xs)">类型固定，不可更改</span>
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item required label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" placeholder="请选择加工厂" @update:modelValue="onFactoryChange" /></el-form-item></el-col>
