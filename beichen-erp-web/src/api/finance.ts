@@ -63,8 +63,11 @@ export function getReceiptUnpaidReceivables(customerId?: number, supplierId?: nu
 
 export function getCashflowPage(params: any) { return request.get<PageResult<FinanceCashflow>>('/finance/cashflow/page', { params }) }
 
-export interface FinanceExpense { id?: number; expenseNo?: string; expenseType?: string; amount?: number; expenseDate?: string; accountId?: number; accountName?: string; status?: string; remark?: string; createTime?: string }
+export interface FinanceExpense { id?: number; expenseNo?: string; expenseType?: string; amount?: number; expenseDate?: string; accountId?: number; accountName?: string; status?: string; remark?: string; createTime?: string; createByName?: string; auditorId?: number; auditorName?: string }
 export function getExpensePage(params?: any) { return request.get<PageResult<FinanceExpense>>('/finance/expense/page', { params }) }
+// 2026-09-24：补单取（后端 FinanceExpenseController#getById 早已存在，前端此前没有包装）——
+// 费用管理详情页要用它加载单据（新增/编辑弹窗原先只走列表数据，不需要）
+export function getExpense(id: number) { return request.get<FinanceExpense>(`/finance/expense/${id}`) }
 export function createExpense(data: any) { return request.post<void>('/finance/expense', data) }
 export function updateExpense(data: any) { return request.put<void>('/finance/expense', data) }
 export function auditExpense(id: number) { return request.put<void>(`/finance/expense/${id}/audit`) }

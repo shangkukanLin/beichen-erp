@@ -1,0 +1,173 @@
+<script setup lang="ts">
+import { computed, reactive, ref, onActivated } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { localDate } from '@/utils/date'
+import PageShell from '@/components/PageShell.vue'
+import {
+  getExpense, updateExpense, auditExpense, unAuditExpense, cancelExpense,
+  getAccountPage, type FinanceExpense, type FinanceAccount,
+} from '@/api/finance'
+import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import { ExpenseTypeLabel as EXPENSE_TYPE_LABELS } from '@/api/enums'
+
+/**
+ * 费用管理详情（2026-09-24 用户口径：草稿态在详情页就地改+存，列表不再给「编辑」/「反审核」）
+ *
+ * 补这个详情页的原因（此前"单据但无详情页"的三个缺口之一）：
+ *  · 列表原来靠**弹窗**新增/编辑，草稿的单据级操作（改/审核/反审核/作废）全挤在列表行内 ⇒ 撤销类操作（反审核）
+ *    会生成「费用冲正」流水把钱冲回账户，风险高且原因（哪张单、哪个账户、多少钱）只在单据上下文里说得清；
+ *  · 结构对齐其它单据详情：`head` 只读快照 + `form` 可编辑副本（仅草稿态）；字段/校验/payload 与列表弹窗一致。
+ */
+const route = useRoute()
+const router = useRouter()
+const id = () => Number(route.params.id)
+const loading = ref(false)
+const acting = ref(false)
+const saving = ref(false)
+
+const head = ref<FinanceExpense>({})
+const isDraft = computed(() => head.value.status === DocStatus.DRAFT)
+const isAudited = computed(() => head.value.status === DocStatus.AUDITED)
+
+/** 可编辑副本（白名单：单号/状态/账户名回显/制单人 不回传；金额与账户由后端复核） */
+const form = reactive({ expenseType: 'OFFICE', amount: undefined as number | undefined, expenseDate: localDate(), accountId: undefined as any, remark: '' })
+
+const accounts = ref<FinanceAccount[]>([])
+async function loadAccounts() {
+  try { const r: any = await getAccountPage({ pageSize: 200 }); accounts.value = (r?.records || []).filter((a: any) => a.status === 1) }
+  catch { accounts.value = [] }
+}
+
+async function loadData() {
+  loading.value = true
+  try {
+    head.value = (await getExpense(id())) || {}
+    form.expenseType = head.value.expenseType || 'OFFICE'
+    form.amount = head.value.amount
+    form.expenseDate = head.value.expenseDate ? String(head.value.expenseDate).slice(0, 10) : localDate()
+    form.accountId = head.value.accountId ?? undefined
+    form.remark = head.value.remark || ''
+  } finally { loading.value = false }
+}
+
+function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
+function fmtDate(v?: string) { return v ? String(v).slice(0, 10) : '' }
+
+/** 保存（与列表弹窗 save() 同一套校验与 payload；后端 update 自带「只有草稿可编辑」守卫） */
+async function doSave() {
+  if (!form.expenseType) { ElMessage.warning('请选择费用类型'); return }
+  if (!form.amount || form.amount <= 0) { ElMessage.warning('费用金额必须大于 0'); return }
+  if (!form.accountId) { ElMessage.warning('请选择支出账户'); return }
+  saving.value = true
+  try {
+    await updateExpense({
+      id: id(), expenseType: form.expenseType, amount: form.amount,
+      expenseDate: form.expenseDate, accountId: form.accountId, remark: form.remark,
+    } as FinanceExpense)
+    ElMessage.success('已保存')
+    await loadData()
+  } catch (e: any) { ElMessage.error(e?.msg || e?.message || '保存失败') } finally { saving.value = false }
+}
+
+async function doAudit() {
+  try {
+    await ElMessageBox.confirm(`确认审核费用单 ${head.value.expenseNo}？审核后将从「${head.value.accountName}」扣款 ${fmt(head.value.amount)} 元`, '审核确认', { type: 'warning' })
+  } catch { return }
+  acting.value = true
+  try { await auditExpense(id()); ElMessage.success('已审核'); await loadData() } finally { acting.value = false }
+}
+
+async function doUnAudit() {
+  try { await ElMessageBox.confirm('反审核将生成「费用冲正」流水把钱冲回账户，确认继续？', '反审核确认', { type: 'warning' }) } catch { return }
+  acting.value = true
+  try { await unAuditExpense(id()); ElMessage.success('已反审核'); await loadData() } finally { acting.value = false }
+}
+
+async function doCancel() {
+  try { await ElMessageBox.confirm('确认作废该费用单？', '作废确认', { type: 'warning' }) } catch { return }
+  acting.value = true
+  try {
+    await cancelExpense(id())
+    ElMessage.success('已作废')
+    router.push('/finance/expense')
+  } finally { acting.value = false }
+}
+
+// 单据数据每次进入都重新拉取（keep-alive 下 onMounted 不会再触发）
+onActivated(() => { loadData(); loadAccounts() })
+</script>
+
+<template>
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作 -->
+  <PageShell :loading="loading" back-fallback="/finance/expense">
+    <template #actions>
+      <!-- 草稿：保存(主) + 审核 + 作废（2026-09-24 用户口径：草稿态就地编辑） -->
+      <el-button type="primary" v-if="isDraft" :loading="saving" @click="doSave">保存</el-button>
+      <el-button type="success" v-if="isDraft" :loading="acting" @click="doAudit">审核</el-button>
+      <el-button type="danger" v-if="isDraft" :loading="acting" @click="doCancel">作废</el-button>
+      <!-- 反审核：生成「费用冲正」流水把钱冲回账户（撤销类操作，2026-09-24 从列表移入详情） -->
+      <el-button type="warning" v-if="isAudited" :loading="acting" @click="doUnAudit">反审核</el-button>
+    </template>
+
+    <el-card shadow="never">
+      <!-- ============ 草稿：可编辑（字段/校验/payload 与列表弹窗一致） ============ -->
+      <el-form v-if="isDraft" :model="form" label-width="var(--app-label-width)">
+        <el-row :gutter="16">
+          <el-col :span="8"><el-form-item label="费用单号">{{ head.expenseNo }}</el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="状态"><el-tag :type="DocStatusTag[head.status || 'DRAFT']" size="small">{{ DocStatusLabel[head.status || 'DRAFT'] || head.status }}</el-tag></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="制单人">{{ head.createByName || '—' }}</el-form-item></el-col>
+          <el-col :span="8">
+            <el-form-item required label="费用类型">
+              <el-select v-model="form.expenseType" style="width:100%">
+                <el-option v-for="(lb, code) in EXPENSE_TYPE_LABELS" :key="code" :label="lb" :value="code" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item required label="金额">
+              <el-input-number v-model="form.amount" :min="0.01" :precision="2" controls-position="right" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="费用日期">
+              <el-date-picker v-model="form.expenseDate" type="date" value-format="YYYY-MM-DD" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item required label="支出账户">
+              <el-select v-model="form.accountId" placeholder="请选择" style="width:100%">
+                <el-option v-for="a in accounts" :key="a.id" :label="`${a.accountName}（余额 ${fmt(a.balance)}）`" :value="a.id ?? ''" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="16"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
+        </el-row>
+        <el-alert type="info" :closable="false" show-icon style="margin-top:4px"
+          title="审核后从所选账户扣款并生成一条「费用支出」流水；反审核会生成「费用冲正」把资金冲回账户。" />
+      </el-form>
+
+      <!-- ============ 已审核 / 已作废：只读 ============ -->
+      <el-descriptions v-else :column="3" border size="small">
+        <el-descriptions-item label="费用单号">{{ head.expenseNo }}</el-descriptions-item>
+        <el-descriptions-item label="费用类型">
+          <el-tag size="small">{{ EXPENSE_TYPE_LABELS[head.expenseType || ''] || head.expenseType }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="金额"><span style="color:var(--app-color-danger);font-weight:600">{{ fmt(head.amount) }}</span></el-descriptions-item>
+        <el-descriptions-item label="费用日期">{{ fmtDate(head.expenseDate) }}</el-descriptions-item>
+        <el-descriptions-item label="支出账户">{{ head.accountName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="DocStatusTag[head.status || '']" size="small">{{ DocStatusLabel[head.status || ''] || head.status }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="制单人">{{ head.createByName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{ head.auditorName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ head.createTime || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="3">{{ head.remark || '-' }}</el-descriptions-item>
+      </el-descriptions>
+    </el-card>
+  </PageShell>
+</template>
+
+<style scoped>
+:deep(.el-card__body) { padding: 16px; }
+</style>

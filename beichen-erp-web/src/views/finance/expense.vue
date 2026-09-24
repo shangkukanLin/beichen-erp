@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getExpensePage, createExpense, updateExpense, auditExpense, unAuditExpense, cancelExpense, getAccountPage, type FinanceExpense, type FinanceAccount } from '@/api/finance'
+import { getExpensePage, createExpense, auditExpense, cancelExpense, getAccountPage, type FinanceExpense, type FinanceAccount } from '@/api/finance'
 import { DocStatusLabel, DocStatusTag } from '@/api/common'
 import { ExpenseTypeLabel as EXPENSE_TYPE_LABELS } from '@/api/enums'
 
 // 费用管理：审核后扣减资金账户并生成「费用支出」流水；反审核冲回（模式与收款单一致）
+const router = useRouter()
 const query = reactive({ expenseType: '', status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
@@ -28,21 +30,22 @@ async function loadData() {
 }
 async function loadAccounts() { try { const r = await getAccountPage({pageSize:200}); accounts.value = (r?.records || []).filter((a:any)=>a.status===1) } catch { accounts.value = [] } }
 function handleAdd() { Object.assign(form, { id: undefined, expenseType: 'OFFICE', amount: undefined, expenseDate: localDate(), accountId: undefined, remark: '' }); dialogTitle.value = '新增费用'; dialog.value = true }
-function handleEdit(row: FinanceExpense) { Object.assign(form, { id: row.id, expenseType: row.expenseType, amount: row.amount, expenseDate: row.expenseDate, accountId: row.accountId, remark: row.remark }); dialogTitle.value = '编辑费用'; dialog.value = true }
+/** 详情（2026-09-24 新增）：草稿态在详情页就地改+存，撤销类的反审核也在那里 */
+function goDetail(row: FinanceExpense) { router.push(`/finance/expense/detail/${row.id}`) }
+/* 2026-09-24（用户口径）：列表弹窗只保留「新增」；草稿编辑已收进详情页 ⇒ handleEdit / updateExpense 分支一并删除
+   （updateExpense 现仅在详情页使用）。 */
 async function save() {
   if (!form.expenseType) { ElMessage.warning('请选择费用类型'); return }
   if (!form.amount || form.amount <= 0) { ElMessage.warning('费用金额必须大于 0'); return }
   if (!form.accountId) { ElMessage.warning('请选择支出账户'); return }
-  try { if (form.id) { await updateExpense(form); ElMessage.success('已更新') } else { await createExpense(form); ElMessage.success('已新增') }; dialog.value = false; loadData() } catch {}
+  try { await createExpense(form); ElMessage.success('已新增'); dialog.value = false; loadData() } catch {}
 }
 async function audit(row: any) {
   try { await ElMessageBox.confirm(`确认审核费用单 ${row.expenseNo}？审核后将从「${row.accountName}」扣款 ${row.amount} 元`, '审核确认', { type: 'warning' }) } catch { return }
   try { await auditExpense(row.id); ElMessage.success('已审核'); loadData() } catch {}
 }
-async function unAudit(row: any) {
-  try { await ElMessageBox.confirm('反审核将生成「费用冲正」流水把钱冲回账户，确认继续？', '反审核确认', { type: 'warning' }) } catch { return }
-  try { await unAuditExpense(row.id); ElMessage.success('已反审核'); loadData() } catch {}
-}
+/* 2026-09-24（用户口径）：反审核已移入详情页 —— 它会生成「费用冲正」流水把资金冲回账户（撤销类操作，
+   风险高、原因只在单据上下文里说得清），列表只保留高频的审核。 */
 async function cancel(row: any) {
   try { await ElMessageBox.confirm('确认作废该费用单？', '作废确认', { type: 'warning' }) } catch { return }
   try { await cancelExpense(row.id); ElMessage.success('已作废'); loadData() } catch {}
@@ -85,11 +88,11 @@ onMounted(() => { loadData(); loadAccounts() })
         <el-table-column prop="accountName" label="支出账户" min-width="110" show-overflow-tooltip/>
         <el-table-column label="状态" width="76" align="center"><template #default="{row}"><el-tag :type="DocStatusTag[row.status]" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column prop="remark" label="备注" min-width="100" show-overflow-tooltip/>
-        <el-table-column label="操作" width="174" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：编辑与反审核都收进详情页（详情草稿态可就地改+存）⇒ 操作列 174→132。 -->
+        <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{row}">
-            <el-button v-if="row.status==='DRAFT'" type="primary" link @click="handleEdit(row)">编辑</el-button>
+            <el-button type="primary" link @click="goDetail(row)">详情</el-button>
             <el-button v-if="row.status==='DRAFT'" type="success" link @click="audit(row)">审核</el-button>
-            <el-button v-if="row.status==='AUDITED'" type="warning" link @click="unAudit(row)">反审核</el-button>
             <el-button v-if="row.status==='DRAFT'" type="danger" link @click="cancel(row)">作废</el-button>
           </template>
         </el-table-column>

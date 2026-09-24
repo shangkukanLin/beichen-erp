@@ -402,6 +402,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'finance/cashflow', name: 'FinanceCashflow', component: () => import('@/views/finance/cashflow.vue'), meta: { title: '资金流水', requiresAuth: true } },
       { path: 'finance/account', name: 'FinanceAccount', component: () => import('@/views/finance/account.vue'), meta: { title: '账户管理', requiresAuth: true } },
       { path: 'finance/expense', name: 'FinanceExpense', component: () => import('@/views/finance/expense.vue'), meta: { title: '费用管理', requiresAuth: true } },
+      // 费用单详情（2026-09-24 新增：草稿态在详情页改+存；列表的原「编辑」弹窗与「反审核」入口随之收进详情）
+      { path: 'finance/expense/detail/:id', name: 'FinanceExpenseDetail', component: () => import('@/views/finance/expense/detail.vue'), meta: { title: '费用单详情', requiresAuth: true, operate: true } },
       { path: 'finance/invoice', name: 'FinanceInvoice', component: () => import('@/views/finance/invoice.vue'), meta: { title: '发票管理', requiresAuth: true } },
       // 旧地址兼容：财务分析已迁入经营分析，保留重定向避免书签失效
       { path: 'finance/analysis', redirect: '/analysis/overview' },
