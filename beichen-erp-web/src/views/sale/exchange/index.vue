@@ -43,7 +43,8 @@ onActivated(() => {
 
 // ============ 跳转 ============
 function goAdd() { router.push('/sale/exchange/add') }
-function goEdit(row: any) { router.push(`/sale/exchange/add?id=${row.id}`) }
+/* 2026-09-24（用户口径）：goEdit 已移除 —— 草稿态编辑统一在详情页内联完成，列表不再提供编辑入口；
+   新增仍走 /sale/exchange/add（可带 saleOrderId 预填）。 */
 function goDetail(row: any) { router.push(`/sale/exchange/detail/${row.id}`) }
 function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 
@@ -135,12 +136,11 @@ async function handleCancel(row: any) {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="174" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：反审核与编辑都收进详情页（详情草稿态可就地改）⇒ 操作列 174→132。 -->
+        <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="goDetail(row)">详情</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click="goEdit(row)">编辑</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>
-            <!-- 2026-09-24（用户口径）：反审核移入详情页。本列宽度不变 —— 草稿分支的 4 个按钮仍需 174px。 -->
             <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
