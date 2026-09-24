@@ -25,6 +25,9 @@ public class PurchaseOrderController {
     private final PurchaseOrderService service;
     // 期 2（2026-09-19 读隔离）：详情页的「本单退货情况」下沉到本页接口
     private final PurchaseReturnService purchaseReturnService;
+    // 2026-09-24（用户口径：采购单详情补「换货情况」，与销售单详情一致）：同 returns，**随详情接口一并返回**，
+    // 避免前端跨页去查换货列表（那需要 purchase:exchange ⇒ 只有 purchase:order 的用户会 403）
+    private final com.beichen.erp.purchase.service.PurchaseExchangeService purchaseExchangeService;
     /** Spring 容器里的 ObjectMapper（含 JavaTimeModule，见 SystemController 的说明） */
     private final ObjectMapper objectMapper;
 
@@ -51,6 +54,8 @@ public class PurchaseOrderController {
         if (o == null) return R.ok(Map.of());
         Map<String, Object> m = objectMapper.convertValue(o, new TypeReference<Map<String, Object>>() {});
         m.put("returns", purchaseReturnService.byOrder(id));
+        // 2026-09-24：本单的换货情况（与销售单详情同款：page 按 purchaseOrderId 过滤后取 records）
+        m.put("exchanges", purchaseExchangeService.page(1, 100, Map.of("purchaseOrderId", id)).getRecords());
         return R.ok(m);
     }
 

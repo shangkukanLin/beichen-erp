@@ -10,6 +10,7 @@ import {
   auditPurchaseOrder, unAuditPurchaseOrder, cancelPurchaseOrder,
 } from '@/api/purchase'
 
+import { DocStatusLabel } from '@/api/enums'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useTabStore } from '@/stores/tabs'
@@ -25,6 +26,9 @@ const items = ref<PurchaseOrderItem[]>([])
  */
 const { takeBaseline } = useUnsavedGuard(() => ({ order: order.value, items: items.value }))
 const returns = ref<any[]>([])
+// 2026-09-24（用户口径）：换货情况（与销售单详情一致，随详情接口一并返回）
+const exchanges = ref<any[]>([])
+const afterSaleTab = ref('return')
 const loading = ref(false)
 const supplierName = ref('')
 const warehouseName = ref('')
@@ -74,6 +78,7 @@ async function loadData() {
     // 该采购单的退货情况（期 2·2026-09-19 读隔离：随详情接口一并返回，
     // 原先跨页读 /inventory/purchase-return/by-order，需 purchase:return ⇒ 只有采购单权限的用户会 403）
     returns.value = (res as any)?.returns || []
+    exchanges.value = (res as any)?.exchanges || []
   } finally { loading.value = false }
   // 数据加载完成 ⇒ 重建"未保存"基线（本页只读，基线用于避免详情刷新后误报）
   takeBaseline()
@@ -83,6 +88,7 @@ function goSupplier(id?: number) { if (id) router.push(`/supplier/detail/${id}`)
 function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 function addReturn() { router.push({ path: '/inventory/purchase-return/add', query: { fromOrder: orderId } }) }
 function goReturnDetail(id: number) { router.push(`/inventory/purchase-return/detail/${id}`) }
+function goExchangeDetail(id: number) { router.push(`/inventory/purchase-exchange/detail/${id}`) }
 /**
  * 2026-09-24（用户口径 B）：采购单详情对齐销售单详情 —— 退货 / 换货 / 反审核（+ 草稿态 审核 / 作废）。
  * 后端 PurchaseOrderServiceImpl 的 audit / unAudit / cancel **已实现全套账务**（入库 PURCHASE_IN + 应付账款，
@@ -166,25 +172,50 @@ onActivated(() => { loadData() })
     </el-card>
 
     <el-card shadow="never">
-      <template #header><span style="font-weight:600">退货情况</span></template>
-      <el-table v-if="returns.length" :data="returns" border stripe size="small">
-        <el-table-column prop="code" label="退货单号" width="180" />
-        <el-table-column prop="returnDate" label="退货日期" width="120" />
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="退货金额" width="120" align="right">
-          <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="90" align="center">
-          <template #default="{ row }">
-            <el-button type="primary" link @click="goReturnDetail(row.id)">详情</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-else description="暂无退货记录" :image-size="60" />
+      <!-- 售后记录（2026-09-24 用户口径：与销售单详情一致 —— 退货 / 换货 两个页签） -->
+      <el-tabs v-model="afterSaleTab">
+        <el-tab-pane :label="`采购退货单 (${returns.length})`" name="return">
+          <el-table :data="returns" border stripe size="small" empty-text="暂无退货记录">
+            <el-table-column prop="code" label="退货单号" width="170" />
+            <el-table-column prop="returnDate" label="退货日期" width="110" />
+            <el-table-column label="状态" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="退货金额" width="120" align="right">
+              <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="80" align="center">
+              <template #default="{ row }">
+                <el-button type="primary" link @click="goReturnDetail(row.id)">详情</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+
+        <el-tab-pane :label="`采购换货单 (${exchanges.length})`" name="exchange">
+          <el-table :data="exchanges" border stripe size="small" empty-text="暂无换货记录">
+            <el-table-column prop="code" label="换货单号" width="170" />
+            <el-table-column prop="exchangeDate" label="换货日期" width="110" />
+            <el-table-column label="状态" width="100" align="center">
+              <template #default="{ row }">
+                <el-tag size="small" :type="row.status === 'AUDITED' ? 'success' : (row.status === 'CANCELLED' ? 'info' : 'warning')">
+                  {{ DocStatusLabel[String(row.status)] || row.status }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="收费" width="120" align="right">
+              <template #default="{ row }">{{ fmt(row.chargeAmount) }}</template>
+            </el-table-column>
+            <el-table-column label="操作" width="80" align="center">
+              <template #default="{ row }">
+                <el-button type="primary" link @click="goExchangeDetail(row.id)">详情</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+      </el-tabs>
     </el-card>
   </PageShell>
 </template>
