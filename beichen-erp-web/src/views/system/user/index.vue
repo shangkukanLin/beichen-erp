@@ -432,7 +432,7 @@ onActivated(() => {
 </script>
 
 <template>
-  <div class="user-page">
+  <div class="page-list">
     <!-- 查询栏 -->
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
@@ -675,16 +675,7 @@ onActivated(() => {
 </template>
 
 <style scoped>
-.user-page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.query-card :deep(.el-card__body),
-.table-card :deep(.el-card__body) {
-  padding: 16px;
-}
+/* 根容器/卡片内边距已统一到全局（styles/page.css 的 .page-list / .table-card .el-card__body） */
 
 .query-form {
   display: flex;
@@ -697,11 +688,7 @@ onActivated(() => {
   margin-bottom: 2px;
 }
 
-.pagination {
-  margin-top: 16px;
-  display: flex;
-  justify-content: flex-end;
-}
+/* 分页样式已统一到全局（styles/page.css 的 .pagination） */
 
 /* 页面权限弹窗 */
 .perm-tree {

@@ -133,7 +133,7 @@ onMounted(loadData)
 </script>
 
 <template>
-  <div class="sup-page">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <el-tabs v-if="!isVendor" v-model="activeType">
         <el-tab-pane v-for="t in TYPE_TABS_CUSTOM" :key="t.name" :label="t.label" :name="t.name" />
@@ -173,14 +173,18 @@ onMounted(loadData)
           </template>
         </el-table-column>
       </el-table>
-      <div class="pagination"><el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize" :total="pagination.total" :page-sizes="[10,20,50]" layout="total,sizes,prev,pager,next" background @current-change="loadData" @size-change="handleQuery" /></div>
+      <div class="pagination">
+        <el-pagination v-model:current-page="pagination.pageNum" v-model:page-size="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]" :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper" background
+          @size-change="handleQuery" @current-change="loadData" />
+      </div>
     </el-card>
 
   </div>
 </template>
 
 <style scoped>
-.sup-page { display:flex; flex-direction:column; gap:12px; }
-.query-card :deep(.el-card__body), .table-card :deep(.el-card__body) { padding:16px; }
-.pagination { margin-top:16px; display:flex; justify-content:flex-end; }
+/* 根容器/卡片内边距已统一到全局（styles/page.css 的 .page-list / .table-card .el-card__body） */
+/* 分页样式已统一到全局（styles/page.css 的 .pagination） */
 </style>

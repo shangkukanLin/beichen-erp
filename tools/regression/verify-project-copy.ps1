@@ -37,7 +37,7 @@ if ($tip -match '新建研发立项') { Ok ('阶段模板提示 = ' + $tip) } el
 # 研发物料弹窗 placeholder
 agent-browser open "$base/dev/material" | Out-Null
 agent-browser wait 2800
-$clicked = EvalJs "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.innerText.trim()==='新增研发物料');if(!b)return 'no';b.click();return 'ok';})()"
+$clicked = EvalJs "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.innerText.trim()==='新增');if(!b)return 'no';b.click();return 'ok';})()"
 agent-browser wait 2000
 # el-select 的 placeholder 渲染在 span 里（不是 input 属性），所以断言整个弹窗文本
 $dlg = EvalJs "(document.querySelector('.el-dialog')?.innerText||'').replace(/\n+/g,' ')"

@@ -118,7 +118,7 @@ onActivated(() => { loadData() })
 </script>
 
 <template>
-  <div class="customer-page">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
         <el-form :inline="true" :model="query" class="query-form">
@@ -187,16 +187,7 @@ onActivated(() => { loadData() })
 </template>
 
 <style scoped>
-.customer-page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.query-card :deep(.el-card__body),
-.table-card :deep(.el-card__body) {
-  padding: 16px;
-}
+/* 根容器/卡片内边距已统一到全局（styles/page.css 的 .page-list / .table-card .el-card__body） */
 
 .query-form {
   display: flex;
@@ -204,9 +195,5 @@ onActivated(() => { loadData() })
   gap: 0;
 }
 
-.pagination {
-  margin-top: 16px;
-  display: flex;
-  justify-content: flex-end;
-}
+/* 分页样式已统一到全局（styles/page.css 的 .pagination） */
 </style>

@@ -65,7 +65,7 @@ onMounted(() => { loadProjectOptions(); loadList() })
 </script>
 
 <template>
-  <div class="material-page">
+  <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" @submit.prevent>
@@ -84,12 +84,12 @@ onMounted(() => { loadProjectOptions(); loadList() })
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="handleSearch">查询</el-button>
         <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
-        <el-button type="primary" :icon="'Plus'" @click="handleAdd">新增研发物料</el-button>
+        <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
       </div>
       </div>
     </el-card>
 
-    <el-card shadow="never" style="margin-top:12px">
+    <el-card shadow="never" class="table-card">
       <el-table :data="list" v-loading="loading" border stripe @row-click="handleDetail">
         <el-table-column label="类型" width="120"><template #default="{ row }">{{ DevMaterialTypeLabel[row.type] || row.type }}</template></el-table-column>
         <el-table-column prop="name" label="物料名称" min-width="140" />
@@ -115,11 +115,12 @@ onMounted(() => { loadProjectOptions(); loadList() })
           </template>
         </el-table-column>
       </el-table>
-      <el-pagination
-        style="margin-top:12px;justify-content:flex-end"
-        background layout="total, sizes, prev, pager, next"
-        :total="total" :current-page="pageNum" :page-size="pageSize"
-        :page-sizes="[10,20,50]" @current-change="handlePageChange" @size-change="handleSizeChange" />
+      <div class="pagination">
+        <el-pagination v-model:current-page="pageNum" v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]" :total="total"
+          layout="total, sizes, prev, pager, next, jumper" background
+          @size-change="handleSizeChange" @current-change="handlePageChange" />
+      </div>
     </el-card>
 
     <MaterialFormDialog ref="materialDialog" @saved="loadList" />
