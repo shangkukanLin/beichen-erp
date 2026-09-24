@@ -14,7 +14,14 @@
   委外仓 29 行/9129、自有仓 49 行/5443；委外仓成品行 0（符合预期）。
 - ⚠️ 环境注意：mysql 客户端用 `-uroot -proot`（`MYSQL_PWD` 实测**不生效**，会 Access denied）；脚本里 **不要**设
   `$ErrorActionPreference='Stop'`（mysql 的密码告警走 stderr，会被当成致命错误中断）。
-- ✅ **① 实体已接（2026-09-25）**：`warehouse/entity/WarehouseStock.java` 加 `private String stockForm = "MATERIAL";`（字段**不参与**本条唯一键之外的逻辑 ⇒ 行为等价；后端 `mvn compile` PASS）。
+- ✅ **① 实体已接（2026-09-25）**：`warehouse/entity/WarehouseStock.java` 加 `stockForm`（默认 MATERIAL）+ 三个形态常量
+  `FORM_MATERIAL/FORM_PRODUCT_DEFECT/FORM_PRODUCT_REPAIR`；`WarehouseStockLog.java` 同步加字段（提交 `1410dd2`/`b3df104`）。
+- ✅ **② 成品侧 + 物料侧都已接（2026-09-25，提交 `34df021` + 本轮）**：
+  - `WarehouseStockMapper.updateQuantity` / `updateMaterialQuantity`：WHERE 均增 `AND stock_form = #{stockForm}`，签名加参；
+  - `selectExist` / `selectMaterialExist` / `insertStock` / `insertMaterialStock`：均带形态（定位键 + 建行显式落形态）；
+  - `changeStock` 与 `changeMaterialStockInternal`：所有定位/建行/流水点都带形态；
+  - 形态**暂固定 `FORM_MATERIAL`** ⇒ 既有 40+ 调用点一行未改、行为不变；`mvn compile` PASS（编译器点名并修掉了唯一漏点 `getQuantity` 内的 selectExist 调用）。
+  - 「允许负库存」分支按**行 ID** 更新（`eq(WarehouseStock::getId, exist.getId())`）⇒ 天然不跨形态累加，SQL 无需改。
 - ⏳ **Java 侧剩下的（②③④，P0-2 未完，别开 P0-3）**：
   - `warehouse/mapper/WarehouseStockMapper.java`：`updateQuantity`（:15-30）与 `updateMaterialQuantity`（:33-45）两条 UPDATE 的 WHERE 需加 `AND stock_form = #{stockForm}`，方法签名同步加参；
   - `warehouse/service/WarehouseStockService.java`（22.8KB）：`changeStock`(:71)、`changeMaterialStock`(:120/:133)、`changeMaterialStockAllowNegative`(:148) 三个咽喉加 `stockForm` 形参（**保留默认 MATERIAL 的重载**，先不动调用点也能跑），并同步 `selectExist`(:341)/`selectMaterialExist`(:349)/`insertStock`(:356)/`insertMaterialStock`(:367) 与 `WarehouseStockLog` 写入（流水也要带形态）；
