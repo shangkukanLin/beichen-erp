@@ -32,10 +32,10 @@ async function loadData() {
   } finally { loading.value = false }
 }
 function handleAdd() { router.push('/outsource/other-io/add') }
+/** 2026-09-24（用户口径）：一律进**详情页** —— 草稿态在详情页就地改+存，列表不再跳独立编辑页。
+ *  函数名保留 handleEdit（行点击 @row-click 也用它），语义已等同于"打开详情"。 */
 function handleEdit(row: any) {
-  // 草稿跳编辑页，已审核/已取消跳详情页
-  if (row.status === DocStatus.DRAFT) router.push(`/outsource/other-io/edit/${row.id}`)
-  else router.push(`/outsource/other-io/detail/${row.id}`)
+  router.push(`/outsource/other-io/detail/${row.id}`)
 }
 async function handleApprove(row: any) {
   try { await ElMessageBox.confirm('确认审核？审核后库存生效', '确认',{type:'warning'}) } catch { return }
@@ -105,11 +105,13 @@ onMounted(()=>{ loadWarehouses(); loadData() })
             <el-tag v-else type="warning" size="small">{{row.status}}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：草稿态在详情页改+存 ⇒ 列表不再给「编辑」（那个动态按钮原先草稿态跳独立编辑页）；
+             一律进详情。操作列 200→140。 -->
+        <el-table-column label="操作" width="148" align="center" fixed="right">
           <template #default="{row}">
             <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleApprove(row)">审核</el-button>
             <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnapprove(row)">反审核</el-button>
-            <el-button type="primary" link @click.stop="handleEdit(row)">{{ row.status===DocStatus.DRAFT ? '编辑' : '详细' }}</el-button>
+            <el-button type="primary" link @click.stop="handleEdit(row)">详情</el-button>
             <el-button type="danger" link @click.stop="handleCancel(row)" :disabled="row.status===DocStatus.CANCELLED || row.status===DocStatus.AUDITED">作废</el-button>
           </template>
         </el-table-column>

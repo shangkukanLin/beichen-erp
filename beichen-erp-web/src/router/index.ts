@@ -267,7 +267,8 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/material-warehouse', name: 'OutsourceMaterialWarehouse', component: () => import('@/views/outsource/material-warehouse.vue'), meta: { title: '自有物料仓管理', requiresAuth: true } },
       { path: 'outsource/other-io/add', name: 'OutsourceOtherIoAdd', component: () => import('@/views/outsource/other-io/add.vue'), meta: { title: '新增物料其他出入库', requiresAuth: true, operate: true } },
       { path: 'outsource/other-io/detail/:id', name: 'OutsourceOtherIoDetail', component: () => import('@/views/outsource/other-io/detail.vue'), meta: { title: '物料其他出入库详情', requiresAuth: true, operate: true } },
-      { path: 'outsource/other-io/edit/:id', name: 'OutsourceOtherIoEdit', component: () => import('@/views/outsource/other-io/edit.vue'), meta: { title: '编辑物料其他出入库', requiresAuth: true, operate: true } },
+      // 2026-09-24（用户口径）：`outsource/other-io/edit/:id` 已移除 —— 草稿态编辑统一在**详情页**内联完成
+      // （列表那个"编辑/详细"动态按钮也统一成「详情」，组件 other-io/edit.vue 一并删除）。
       // 进销存
       // 成品库存详情（2026-09-22 由「成品库存情况」改名）：列表按产品汇总跨仓库库存，点行进详情看该产品在各仓库的分布
       { path: 'inventory/product-stock', name: 'InventoryProductStock', component: () => import('@/views/inventory/product-stock/index.vue'), meta: { title: '成品库存详情', requiresAuth: true } },

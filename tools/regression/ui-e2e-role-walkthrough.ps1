@@ -206,7 +206,7 @@ if ($isIsolated) {
     @{ n = 'outsource/return-order/add (factory + linked order picker)'; m = '/outsource/return-order'; u = '/outsource/return-order/add'; a = @('factory', 'relOrder') },
     @{ n = 'outsource/material-return/add (material-order picker)'; m = '/outsource/material-return'; u = '/outsource/material-return/add'; a = @('returnTarget', 'mrOrder') },
     @{ n = 'outsource/other-io/add (material line)'; m = '/outsource/other-io'; u = '/outsource/other-io/add'; a = @('addLine') },
-    @{ n = 'outsource/other-io/edit'; m = '/outsource/other-io'; u = "/outsource/other-io/edit/$oioId"; a = @() },
+    # 2026-09-24：`outsource/other-io/edit/:id` 路由已移除（草稿态编辑并入详情页）⇒ 本项删除；详情页在下一行已覆盖。
     @{ n = 'outsource/other-io/detail'; m = '/outsource/other-io'; u = "/outsource/other-io/detail/$oioId"; a = @() },
     @{ n = 'outsource/material-order/delivery (receiving list)'; m = '/outsource/material-order/delivery'; u = '/outsource/material-order/delivery'; a = @() },
     @{ n = 'inventory/warehouse (stock-take column)'; m = '/inventory/warehouse'; u = '/inventory/warehouse'; a = @() },
