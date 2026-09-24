@@ -443,7 +443,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
             </el-table-column>
             <el-table-column label="操作" width="100" align="center">
               <template #default="{row}">
-                <el-button type="primary" link size="small" @click="router.push(`/outsource/warehouse/detail/${row.id}`)">查看</el-button>
+                <el-button type="primary" link size="small" @click="router.push(`/outsource/warehouse/detail/${row.id}`)">详情</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -494,7 +494,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
             </el-table-column>
             <el-table-column label="操作" width="70" align="center" fixed="right">
               <template #default="{row}">
-                <el-button type="primary" link @click="router.push(row._route)">查看</el-button>
+                <el-button type="primary" link @click="router.push(row._route)">详情</el-button>
               </template>
             </el-table-column>
           </el-table>

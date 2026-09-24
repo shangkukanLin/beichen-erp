@@ -160,7 +160,7 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
           </template>
         </el-table-column>
         <el-table-column label="操作" width="80" align="center">
-          <template #default="{row}"><el-button type="primary" link size="small" @click="router.push(`/outsource/material-history/${warehouseId}/${row.materialId}`)">详细</el-button></template>
+          <template #default="{row}"><el-button type="primary" link size="small" @click="router.push(`/outsource/material-history/${warehouseId}/${row.materialId}`)">详情</el-button></template>
         </el-table-column>
       </el-table>
       <div v-if="sortedMaterials.length===0" style="text-align:center;color:var(--app-text-secondary);padding:24px">暂无关联物料</div>

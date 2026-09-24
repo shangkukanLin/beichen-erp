@@ -224,8 +224,8 @@ onMounted(() => { loadData() })
         </el-table-column>
         <el-table-column label="操作" width="280" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click.stop="handleDetail(row as SupplierVO)">详细</el-button>
-            <el-button type="warning" link @click.stop="openProducts(row as SupplierVO)">产品</el-button>
+            <el-button type="primary" link @click.stop="handleDetail(row as SupplierVO)">详情</el-button>
+            <el-button type="warning" link @click.stop="openProducts(row as SupplierVO)">供应产品</el-button>
             <el-button type="success" link @click.stop="handleToggleStatus(row as SupplierVO)">{{ row.status===1?'停用':'启用' }}</el-button>
           </template>
         </el-table-column>
