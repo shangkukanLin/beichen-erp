@@ -128,17 +128,19 @@ async function handleCancel(row: FinanceBill) {
       </div>
     </el-card>
     <el-card shadow="never" class="table-card">
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1240px > 内容区 971px
+           ⇒ 横向滚动 269px。收窄为合计 962px（账单号/往来单位保持 min-width，宽屏自动吃余量）。 -->
       <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
-        <el-table-column prop="billNo" label="账单号" min-width="140"/>
-        <el-table-column label="类型" width="70" align="center"><template #default="{row}"><el-tag :type="row.billType===BillType.RECEIVABLE?undefined:'warning'">{{ BillTypeLabel[row.billType] || row.billType }}</el-tag></template></el-table-column>
-        <el-table-column prop="partnerName" label="往来单位" min-width="140"/>
-        <el-table-column prop="periodStart" label="账期起" width="120" align="center"/>
-        <el-table-column prop="periodEnd" label="账期止" width="120" align="center"/>
-        <el-table-column prop="totalAmount" label="总额" width="120" align="right"><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
-        <el-table-column prop="paidAmount" label="已收付" width="120" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
-        <el-table-column prop="unpaidAmount" label="未收付" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
-        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="StatusTag[row.status] || 'info'" size="small">{{ StatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="200" align="center" fixed="right"><template #default="{row}">
+        <el-table-column prop="billNo" label="账单号" min-width="100" show-overflow-tooltip/>
+        <el-table-column label="类型" width="60" align="center"><template #default="{row}"><el-tag :type="row.billType===BillType.RECEIVABLE?undefined:'warning'">{{ BillTypeLabel[row.billType] || row.billType }}</el-tag></template></el-table-column>
+        <el-table-column prop="partnerName" label="往来单位" min-width="100" show-overflow-tooltip/>
+        <el-table-column prop="periodStart" label="账期起" width="90" align="center"/>
+        <el-table-column prop="periodEnd" label="账期止" width="90" align="center"/>
+        <el-table-column prop="totalAmount" label="总额" width="92" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
+        <el-table-column prop="paidAmount" label="已收付" width="92" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
+        <el-table-column prop="unpaidAmount" label="未收付" width="92" align="right" show-overflow-tooltip><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
+        <el-table-column label="状态" width="76" align="center"><template #default="{row}"><el-tag :type="StatusTag[row.status] || 'info'" size="small">{{ StatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="170" align="center" fixed="right"><template #default="{row}">
           <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
           <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
           <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button>

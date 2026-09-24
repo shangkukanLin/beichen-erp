@@ -266,27 +266,30 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
     </el-card>
 
     <el-card shadow="never" class="table-card">
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1240px > 内容区 956px
+           ⇒ 横向滚动 284px。收窄为合计 930px：单号/供货商/仓库/采购明细 改小 min-width（宽屏仍自动吃余量），
+           日期/金额/状态 收窄，操作列 300→174（4 个 link 按钮实际只需 ~164px）。 -->
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="handleDetail">
-        <el-table-column prop="code" label="单号" min-width="150" />
-        <el-table-column label="供货商" min-width="140">
+        <el-table-column prop="code" label="单号" min-width="120" show-overflow-tooltip />
+        <el-table-column label="供货商" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleSupplierClick(row.supplierId)">{{ supplierName(row.supplierId) }}</el-button>
           </template>
         </el-table-column>
-        <el-table-column label="入库仓库" min-width="120">
+        <el-table-column label="入库仓库" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleWarehouseClick(row.warehouseId)">{{ warehouseName(row.warehouseId) }}</el-button>
           </template>
         </el-table-column>
-        <el-table-column prop="orderDate" label="订单日期" width="120" align="center" />
-        <el-table-column prop="itemsSummary" label="采购明细" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="totalAmount" label="总金额" width="120" align="right">
+        <el-table-column prop="orderDate" label="订单日期" width="100" align="center" />
+        <el-table-column prop="itemsSummary" label="采购明细" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="totalAmount" label="总金额" width="108" align="right">
           <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="90" align="center">
+        <el-table-column label="状态" width="78" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="300" align="center" fixed="right">
+        <el-table-column label="操作" width="190" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
             <!-- 售后快捷入口（2026-09-21 用户口径）：仅已审核采购单可发起，带 fromOrder 跳转 ⇒ 新增页自动带出供货商与可退/可换明细 -->

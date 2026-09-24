@@ -136,36 +136,38 @@ onActivated(() => {
     </el-card>
 
     <el-card shadow="never" class="table-card">
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1156px > 内容区 956px
+           ⇒ 横向滚动 200px。收窄为合计 890px（单号/客户/仓库保持 min-width，宽屏自动吃余量）。 -->
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="goDetail">
-        <el-table-column prop="orderDate" label="订单日期" width="120" align="center" />
-        <el-table-column prop="code" label="单号" min-width="150" />
-        <el-table-column label="客户" min-width="140">
+        <el-table-column prop="orderDate" label="订单日期" width="100" align="center" />
+        <el-table-column prop="code" label="单号" min-width="120" show-overflow-tooltip />
+        <el-table-column label="客户" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.customerId" type="primary" link @click.stop="goCustomer(row.customerId)">{{ customerName(row.customerId) }}</el-button>
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="出库仓库" min-width="120">
+        <el-table-column label="出库仓库" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseId" type="primary" link @click.stop="goWarehouse(row.warehouseId)">{{ warehouseName(row.warehouseId) }}</el-button>
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column prop="totalAmount" label="总金额" width="120" align="right">
+        <el-table-column prop="totalAmount" label="总金额" width="108" align="right">
           <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
         </el-table-column>
         <!-- 结算方式（2026-09-18 按单记）：现金 = **立刻到账**（审核销售单时系统自动收款/核销） -->
-        <el-table-column label="结算方式" width="96" align="center">
+        <el-table-column label="结算方式" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="SettleTypeTag[String(row.settleType || 'CREDIT')] || 'info'" size="small">
               {{ SettleTypeLabel[String(row.settleType || 'CREDIT')] || '账期' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90" align="center">
+        <el-table-column label="状态" width="78" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[String(row.status)] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="320" align="center" fixed="right">
+        <el-table-column label="操作" width="190" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
             <!-- 售后快捷入口（2026-09-21 用户口径）：仅已审核单据可发起，带 saleOrderId 跳转 ⇒ 新增页自动预填来源销售单与明细 -->

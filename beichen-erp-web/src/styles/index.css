@@ -98,6 +98,14 @@ ol {
   padding-left: 0;
   padding-right: 0;
 }
+/* 单元格左右内边距 12px→8px（2026-09-24 用户规则：所有列表必须一行显示完、不左右滑动）：
+   每列省 8px，8~12 列的列表页合计省 64~96px，表头也少挤一点 ⇒ 与 el-table size="small" 的
+   密度一致，但无需逐页加 size、全站统一生效。选择器用 th/td 前缀提高优先级，避免被 EP 覆盖。 */
+.el-table th.el-table__cell > .cell,
+.el-table td.el-table__cell > .cell {
+  padding-left: 8px;
+  padding-right: 8px;
+}
 
 /* ===================== 移动端适配 ===================== */
 /* 断点：宽度 <= 768px 视为手机/小平板 */

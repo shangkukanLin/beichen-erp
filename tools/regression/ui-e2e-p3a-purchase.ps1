@@ -120,14 +120,17 @@ if ($si -ge 0) {
 }
 
 Step 'purchase list table fits (operation column widened to fit 4 buttons)'
-# 操作列 240→300 才能容下「详情 退货 换货 反审核」4 个 link 按钮 ⇒ 顺手守住"一行显示完、不左右滑动"。
-# 量的是 .el-table__body-wrapper（Element Plus 2.x 里真正滚动的容器；量 .el-table__body 会得到恒等的假通过）。
+# 操作列按 4 个 link 按钮的实际宽度给值 ⇒ 顺手守住"一行显示完、不左右滑动"。
+# 2026-09-24 修正判据：原来量 .el-table__body-wrapper 的 scrollWidth-clientWidth —— 本表操作列
+# fixed="right"（sticky）时 Element 走 el-scrollbar，外层 body-wrapper 恒为 0 ⇒ 该断言长期假通过
+# （用户 2026-09-24 报「成品采购单还是能左右滑」正是它漏检的）。改为与 DOM 实现无关的判据：
+# 各列渲染宽之和 与 表格可用宽 之差（>2px 即列放不下：横向滚动或被裁）。
 Open '/inventory/purchase' 2600
-$ovRaw = EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const ts=[...document.querySelectorAll('.el-table')].filter(vis);const t=ts[0];if(!t)return 'NOTABLE';const w=t.querySelector('.el-table__body-wrapper');if(!w)return 'NOWRAP';return String(w.scrollWidth-w.clientWidth)})()"
+$ovRaw = EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const ts=[...document.querySelectorAll('.el-table')].filter(vis);const t=ts[0];if(!t)return 'NOTABLE';const hr=t.querySelector('.el-table__header tr:last-child');const ths=hr?[...hr.querySelectorAll('th')]:[];let sum=0;ths.forEach(th=>{sum+=th.getBoundingClientRect().width});const avail=t.clientWidth;return String(Math.round(sum-avail))})()"
 $ovNum = 0
 [void][int]::TryParse([string]$ovRaw, [ref]$ovNum)
-Write-Host ('  list overflow raw=' + $ovRaw)
-Ok ($ovNum -le 2) ('purchase order list fits on one line (overflow=' + $ovRaw + 'px)')
+Write-Host ('  list colSum-avail raw=' + $ovRaw)
+Ok ($ovNum -le 2) ('purchase order list fits on one line (colSum-avail=' + $ovRaw + 'px)')
 
 Step 'DB cross-check'
 $po = D (SqlOne 'SELECT COUNT(*) FROM purchase_order')

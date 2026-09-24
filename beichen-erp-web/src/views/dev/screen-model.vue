@@ -206,20 +206,23 @@ onActivated(() => { loadData() })
         <el-tab-pane label="折叠屏" name="FOLD" />
         <el-tab-pane label="直板AMOLED" name="AMOLED" />
       </el-tabs>
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：11 列、原列宽合计 1234px > 内容区 956px
+           ⇒ 横向滚动 278px（且本表 max-height 触发纵向滚动条，再占约 8px）⇒ 收窄为合计 940px；
+           品牌/型号/分辨率/屏幕类型/屏幕供应商 保持 min-width，宽屏自动吃余量。 -->
       <el-table v-loading="loading" :data="rows" border stripe max-height="620">
-        <el-table-column prop="brand" label="品牌" min-width="90" show-overflow-tooltip />
-        <el-table-column prop="model" label="型号" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="screenSize" label="主屏尺寸" width="90" align="center" />
-        <el-table-column prop="resolution" label="分辨率" min-width="142" show-overflow-tooltip />
-        <el-table-column prop="screenType" label="屏幕类型" min-width="142" show-overflow-tooltip />
-        <el-table-column prop="refreshRate" label="刷新率" width="80" align="center" />
-        <el-table-column prop="subSize" label="副屏尺寸" width="90" align="center">
+        <el-table-column prop="brand" label="品牌" min-width="72" show-overflow-tooltip />
+        <el-table-column prop="model" label="型号" min-width="110" show-overflow-tooltip />
+        <el-table-column prop="screenSize" label="主屏尺寸" width="72" align="center" />
+        <el-table-column prop="resolution" label="分辨率" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="screenType" label="屏幕类型" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="refreshRate" label="刷新率" width="64" align="center" />
+        <el-table-column prop="subSize" label="副屏尺寸" width="72" align="center">
           <template #default="{ row }">{{ row.subSize || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="fingerprint" label="指纹识别" width="120" align="center" show-overflow-tooltip />
-        <el-table-column prop="panelSupplier" label="屏幕供应商" min-width="130" show-overflow-tooltip />
-        <el-table-column prop="releaseDate" label="发布时间" width="90" align="center" />
-        <el-table-column label="操作" width="120" align="center" fixed="right">
+        <el-table-column prop="fingerprint" label="指纹识别" width="84" align="center" show-overflow-tooltip />
+        <el-table-column prop="panelSupplier" label="屏幕供应商" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="releaseDate" label="发布时间" width="76" align="center" />
+        <el-table-column label="操作" width="92" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>

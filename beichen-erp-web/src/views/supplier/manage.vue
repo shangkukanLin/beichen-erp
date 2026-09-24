@@ -153,9 +153,11 @@ onMounted(loadData)
     </el-card>
 
     <el-card shadow="never" class="table-card">
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 960px > 内容区 956px
+           ⇒ 刚好越界 4px（横向滚动）。收窄为合计 818px（名称保持 min-width，宽屏自动吃余量）。 -->
       <el-table :data="tableData" border stripe v-loading="loading" @row-click="(row: any) => goDetail(row.id)">
-        <el-table-column prop="code" :label="entityLabel + '编码'" width="150" />
-        <el-table-column label="类型" width="180">
+        <el-table-column prop="code" :label="entityLabel + '编码'" width="120" />
+        <el-table-column label="类型" width="150">
           <template #default="{ row }">
             <el-tag v-for="t in (row.typeCodes||[])" :key="t" size="small" style="margin-right:4px"
               :type="(TYPE_TAG[t]||'info') as any"

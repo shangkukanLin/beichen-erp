@@ -85,21 +85,23 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
     </el-card>
     <el-card shadow="never" class="table-card">
       <!-- 2026-09-23：详情改独立页 ⇒ 点整行 / 行内「详情」都跳转（与账单页现状一致） -->
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1050px > 内容区 956px
+           ⇒ 横向滚动 94px。收窄为合计 858px（单据号/往来单位保持 min-width，宽屏自动吃余量）。 -->
       <el-table v-loading="loading" :data="data" border stripe @row-click="(row: any) => goDetail(row)">
-        <el-table-column prop="billNo" label="单据号" min-width="150"/>
-        <el-table-column label="往来单位" min-width="140">
+        <el-table-column prop="billNo" label="单据号" min-width="112" show-overflow-tooltip/>
+        <el-table-column label="往来单位" min-width="110" show-overflow-tooltip>
           <template #default="{row}">
             <el-link v-if="row.subjectType === SubjectType.SUPPLIER && row.supplierId" type="primary" underline="never" @click.stop="goSubject(row)">{{ subjectName(row) }}</el-link>
             <span v-else>{{ subjectName(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="来源" width="110"><template #default="{row}">{{ sourceBillTypeLabel(row.sourceBillType) }}</template></el-table-column>
-        <el-table-column prop="amount" label="应收金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
-        <el-table-column prop="paidAmount" label="已收" width="120" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
-        <el-table-column prop="unpaidAmount" label="未收" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
-        <el-table-column prop="dueDate" label="到期日" width="120" align="center"/>
-        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{ SettlementStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="80" align="center" fixed="right"><template #default="{row}"><el-button type="primary" link @click.stop="goDetail(row)">详情</el-button></template></el-table-column>
+        <el-table-column label="来源" width="96" show-overflow-tooltip><template #default="{row}">{{ sourceBillTypeLabel(row.sourceBillType) }}</template></el-table-column>
+        <el-table-column prop="amount" label="应收金额" width="100" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
+        <el-table-column prop="paidAmount" label="已收" width="96" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
+        <el-table-column prop="unpaidAmount" label="未收" width="96" align="right" show-overflow-tooltip><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
+        <el-table-column prop="dueDate" label="到期日" width="96" align="center"/>
+        <el-table-column label="状态" width="76" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{ SettlementStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="76" align="center" fixed="right"><template #default="{row}"><el-button type="primary" link @click.stop="goDetail(row)">详情</el-button></template></el-table-column>
       </el-table>
       <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="load" @current-change="load"/></div>
     </el-card>

@@ -144,23 +144,25 @@ onActivated(() => { loadData() })
     </el-card>
 
     <el-card shadow="never" class="table-card">
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1030px > 内容区 956px ⇒ 横向滚动 74px。
+           收窄为合计 882px（编码/名称保持 min-width，宽屏自动吃余量）。 -->
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="(row: any) => goDetail(row.id)">
-        <el-table-column prop="code" label="客户编码" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="name" label="客户名称" min-width="140" show-overflow-tooltip />
-        <el-table-column prop="contact" label="联系人" width="100" />
-        <el-table-column prop="phone" label="联系电话" width="130" />
-        <el-table-column prop="creditPeriodMonths" label="账期(月)" width="90" align="center" />
-        <el-table-column prop="creditPeriod" label="账期(天)" width="90" align="center" />
-        <el-table-column prop="creditLimit" label="信用额度" width="120" align="right">
+        <el-table-column prop="code" label="客户编码" min-width="110" show-overflow-tooltip />
+        <el-table-column prop="name" label="客户名称" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="contact" label="联系人" width="90" />
+        <el-table-column prop="phone" label="联系电话" width="110" />
+        <el-table-column prop="creditPeriodMonths" label="账期(月)" width="80" align="center" />
+        <el-table-column prop="creditPeriod" label="账期(天)" width="80" align="center" />
+        <el-table-column prop="creditLimit" label="信用额度" width="110" align="right">
           <template #default="{ row }">{{ fmtMoney(row.creditLimit) }}</template>
         </el-table-column>
         <!-- 2026-09-15 用户要求：删除「应收余额」列（余额在客户详情页仍可查看） -->
-        <el-table-column label="状态" width="90" align="center">
+        <el-table-column label="状态" width="78" align="center">
           <template #default="{ row }">
             <el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" align="center" fixed="right">
+        <el-table-column label="操作" width="104" align="center" fixed="right">
           <template #default="{ row }">
             <!-- 编辑在详情页内完成，列表只保留详情与停启用；行点击已进详情，按钮须阻止冒泡 -->
             <el-button type="primary" link @click.stop="goDetail((row as Customer).id)">详情</el-button>

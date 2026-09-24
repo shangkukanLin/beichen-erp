@@ -29,22 +29,24 @@
     </el-card>
 
     <el-card shadow="never" class="table-card">
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1100px > 内容区 956px
+           ⇒ 横向滚动 144px。收窄为合计 832px（单号/移出移入仓库/物料明细保持 min-width，宽屏自动吃余量）。 -->
       <el-table v-loading="loading" :data="tableData" border stripe @row-click="handleDetail">
-        <el-table-column prop="code" label="单号" min-width="150" />
-        <el-table-column label="移出仓库" min-width="170">
+        <el-table-column prop="code" label="单号" min-width="120" show-overflow-tooltip />
+        <el-table-column label="移出仓库" min-width="110" show-overflow-tooltip>
           <template #default="{ row }">{{ warehouseName(row.fromWarehouseId) }}</template>
         </el-table-column>
-        <el-table-column label="移入仓库" min-width="170">
+        <el-table-column label="移入仓库" min-width="110" show-overflow-tooltip>
           <template #default="{ row }">{{ warehouseName(row.toWarehouseId) }}</template>
         </el-table-column>
-        <el-table-column prop="itemsSummary" label="物料明细" min-width="220" show-overflow-tooltip />
-        <el-table-column label="移仓日期" width="120" align="center">
+        <el-table-column prop="itemsSummary" label="物料明细" min-width="140" show-overflow-tooltip />
+        <el-table-column label="移仓日期" width="100" align="center">
           <template #default="{ row }">{{ $fmtDate(row.moveDate) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="90" align="center">
+        <el-table-column label="状态" width="78" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="180" align="center" fixed="right">
+        <el-table-column label="操作" width="174" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>

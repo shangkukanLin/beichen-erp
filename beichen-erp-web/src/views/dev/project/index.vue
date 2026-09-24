@@ -142,7 +142,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
       <!-- 全部 -->
       <!-- 2026-09-16 用户要求「一行显示完、不要左右滑动」：列宽整体收紧（原合计 ≈1270px → ≈1015px） -->
       <el-table v-if="activeTab==='all'" :data="allProjects" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleEdit">
-        <el-table-column prop="code" label="项目编码" width="132" show-overflow-tooltip />
+        <el-table-column prop="code" label="项目编码" width="120" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
@@ -163,7 +163,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
             <span v-else style="color:var(--app-text-placeholder)">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" align="center" fixed="right">
+        <el-table-column label="操作" width="112" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="success" link size="small" @click.stop="handleEdit(row)">详情</el-button>
             <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click.stop="handleCancel(row)">取消立项</el-button>
@@ -173,7 +173,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 进行中 -->
       <el-table v-if="activeTab==='active'" :data="activeProjects" border stripe v-loading="tableLoading" style="width:100%" :height="undefined" @row-click="handleEdit">
-        <el-table-column prop="code" label="项目编码" width="132" show-overflow-tooltip />
+        <el-table-column prop="code" label="项目编码" width="120" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
@@ -194,7 +194,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
             <span v-else style="color:var(--app-text-placeholder)">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" align="center" fixed="right">
+        <el-table-column label="操作" width="112" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="success" link size="small" @click.stop="handleEdit(row)">详情</el-button>
             <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click.stop="handleCancel(row)">取消立项</el-button>
@@ -204,7 +204,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 已结项 -->
       <el-table v-if="activeTab==='finished'" :data="finishedProjects" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleEdit">
-        <el-table-column prop="code" label="项目编码" width="132" show-overflow-tooltip />
+        <el-table-column prop="code" label="项目编码" width="120" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
@@ -222,7 +222,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 已取消 -->
       <el-table v-if="activeTab==='cancelled'" :data="cancelledProjects" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleEdit">
-        <el-table-column prop="code" label="项目编码" width="132" show-overflow-tooltip />
+        <el-table-column prop="code" label="项目编码" width="120" show-overflow-tooltip />
         <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />

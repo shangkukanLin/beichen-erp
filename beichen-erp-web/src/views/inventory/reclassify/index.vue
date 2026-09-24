@@ -124,12 +124,14 @@ onActivated(() => {
     </el-card>
 
     <el-card style="margin-top:12px">
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1050px > 内容区 948px
+           ⇒ 横向滚动 102px。收窄为合计 848px（仓库/重分类概况保持 min-width，宽屏自动吃余量）。 -->
       <el-table :data="tableData" border v-loading="tableLoading" row-key="id" @row-click="handleDetail" stripe>
-        <el-table-column label="日期" width="110">
+        <el-table-column label="日期" width="100">
           <template #default="{ row }">{{ row.reclassifyDate ? $fmtDate(row.reclassifyDate) : '-' }}</template>
         </el-table-column>
-        <el-table-column prop="code" label="单号" width="160" />
-        <el-table-column label="仓库" width="140">
+        <el-table-column prop="code" label="单号" width="120" show-overflow-tooltip />
+        <el-table-column label="仓库" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseId" type="primary" link @click.stop="router.push(`/inventory/warehouse/detail/${row.warehouseId}`)">
               {{ warehouseName(row.warehouseId) }}
@@ -137,19 +139,19 @@ onActivated(() => {
             <span v-else>{{ warehouseName(row.warehouseId) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="重分类概况" min-width="200" show-overflow-tooltip>
+        <el-table-column label="重分类概况" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ row.itemSummary || '-' }}</template>
         </el-table-column>
         <!-- 整理人=建单时的登录账户；历史单据无此字段显示 — -->
-        <el-table-column label="整理人" width="110" show-overflow-tooltip>
+        <el-table-column label="整理人" width="96" show-overflow-tooltip>
           <template #default="{ row }">{{ row.createByName || '-' }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column label="状态" width="78">
           <template #default="{ row }">
             <el-tag :type="DocStatusTag[row.status]||'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="240" align="center" fixed="right">
+        <el-table-column label="操作" width="174" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>

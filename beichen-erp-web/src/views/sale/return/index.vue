@@ -22,23 +22,25 @@
           <el-button type="success" :icon="Plus" @click="goAdd">新增</el-button>
         </div>
       </div>
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1060px > 内容区 948px
+           ⇒ 横向滚动 112px。收窄为合计 882px（客户/退货概况保持 min-width，宽屏自动吃余量）。 -->
       <el-table :data="list" v-loading="loading" border stripe @row-click="goDetail">
-        <el-table-column prop="returnDate" label="退货日期" width="110" />
-        <el-table-column prop="code" label="退货单号" width="140" />
-        <el-table-column label="客户" min-width="120" show-overflow-tooltip>
+        <el-table-column prop="returnDate" label="退货日期" width="100" />
+        <el-table-column prop="code" label="退货单号" width="120" />
+        <el-table-column label="客户" min-width="110" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.customerId" type="primary" link @click.stop="goCustomer(row.customerId)">{{ row.customerName || '—' }}</el-button>
             <span v-else>{{ row.customerName || '—' }}</span>
           </template>
         </el-table-column>
         <!-- 概况为弹性列：超长自动省略并 tooltip，保证整表尽量不出现横向滚动 -->
-        <el-table-column label="退货概况" min-width="150" show-overflow-tooltip>
+        <el-table-column label="退货概况" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">{{ row.itemsSummary }}</template>
         </el-table-column>
-        <el-table-column prop="totalAmount" label="金额" width="110" align="right">
+        <el-table-column prop="totalAmount" label="金额" width="108" align="right">
           <template #default="{ row }">{{ formatMoney(row.totalAmount) }}</template>
         </el-table-column>
-        <el-table-column label="收费" width="120" align="center">
+        <el-table-column label="收费" width="96" align="center">
           <template #default="{ row }">
             <el-tag v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0" type="warning" size="small"
               :title="ExchangeChargeTypeLabel[row.chargeType] || ''">
@@ -47,12 +49,12 @@
             <span v-else style="color:#c0c4cc">不收费</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90" align="center">
+        <el-table-column label="状态" width="78" align="center">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)">{{ statusLabel(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="goDetail(row)">详情</el-button>
             <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发 -->

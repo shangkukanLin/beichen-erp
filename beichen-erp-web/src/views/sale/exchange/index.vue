@@ -98,26 +98,28 @@ async function handleCancel(row: any) {
         </el-form-item>
       </el-form>
 
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1220px > 内容区 948px
+           ⇒ 横向滚动 272px。收窄为合计 924px（换货概况/换入仓/换出仓保持 min-width，宽屏自动吃余量）。 -->
       <el-table v-loading="loading" :data="list" border stripe @row-click="goDetail">
-        <el-table-column prop="exchangeDate" label="换货日期" width="110" />
-        <el-table-column prop="code" label="换货单号" width="160" />
+        <el-table-column prop="exchangeDate" label="换货日期" width="100" />
+        <el-table-column prop="code" label="换货单号" width="120" show-overflow-tooltip />
         <!-- 换货概况：退回侧 → 换出侧（来源销售单在详情中可见） -->
-        <el-table-column label="换货概况" min-width="200" show-overflow-tooltip>
+        <el-table-column label="换货概况" min-width="130" show-overflow-tooltip>
           <template #default="{ row }">{{ row.exchangeSummary || '—' }}</template>
         </el-table-column>
-        <el-table-column label="换入仓(售后)" min-width="140">
+        <el-table-column label="换入仓(售后)" min-width="110" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseInId" type="primary" link @click.stop="goWarehouse(row.warehouseInId)">{{ row.warehouseInName || '—' }}</el-button>
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="换出仓(成品)" min-width="140">
+        <el-table-column label="换出仓(成品)" min-width="110" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseOutId" type="primary" link @click.stop="goWarehouse(row.warehouseOutId)">{{ row.warehouseOutName || '—' }}</el-button>
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="收费" width="130" align="center">
+        <el-table-column label="收费" width="100" align="center" show-overflow-tooltip>
           <template #default="{ row }">
             <span v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0">
               <el-tag type="warning" size="small">收费 {{ Number(row.chargeAmount).toFixed(2) }}</el-tag>
@@ -126,14 +128,14 @@ async function handleCancel(row: any) {
             <el-tag v-else type="info" size="small">不收费</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100" align="center">
+        <el-table-column prop="status" label="状态" width="80" align="center">
           <template #default="{ row }">
             <el-tag :type="DocStatusTag[row.status] || 'info'" size="small">
               {{ DocStatusLabel[row.status] ?? row.status }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="240" align="center" fixed="right">
+        <el-table-column label="操作" width="174" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="goDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link @click="goEdit(row)">编辑</el-button>

@@ -1,18 +1,29 @@
 # Scan every menu page for tables that do not fit on one line.
 # Rule (2026-09-24, user): 所有列表都要一行显示完毕，不要左右滑动.
 #
-# Why two checks: Element Plus clamps the table to width:100% with table-layout:fixed, so when the
-# configured column widths exceed the container it does NOT add a scrollbar -- it silently CUTS off the
-# right-hand columns. So both modes must be measured:
-#   overflow = .el-table__body-wrapper scrollWidth - clientWidth   (>0 = a real horizontal scrollbar)
-#   clip     = last body cell right edge - table right edge        (>0 = columns cut off, invisible)
-# A page fails when either exceeds 2px on any visible table.
+# 2026-09-24 v2 -- why v1 was WRONG (it reported /inventory/purchase as OK while the user saw scrolling):
+#   v1 measured `.el-table__body-wrapper` scrollWidth-clientWidth and "last cell right - table right".
+#   Both are blind for the way this app renders tables:
+#     (a) Element Plus 2.x scrolls inside `.el-scrollbar__wrap`; the outer `.el-table__body-wrapper`
+#         has overflow:hidden => scrollWidth-clientWidth is 0 even when 284px is cut off.
+#     (b) every list pins its operation column with fixed="right" (sticky) => the last cell always sits
+#         flush with the container's right edge => the "clip" number is always 0.
+#   => v1 only ever caught tables WITHOUT a fixed column. Use a DOM-independent criterion instead:
+#      sum(rendered column widths) vs the table's available width.
 #
-# The headless viewport is ~1080px => content area ~948px, which is NARROWER than the documented
-# 1200px-window target => this guard is stricter than that target (what fits here fits 1200px too).
+# Criterion per visible table:
+#   colSum = sum of the rendered header cell widths
+#   avail  = table clientWidth (what the columns have to fit into)
+#   margin = avail - colSum      (>0 = fits with slack, <0 = columns stick out)
+#   scroll = max over [.el-table__body-wrapper, .el-scrollbar__wrap] of scrollWidth-clientWidth
+#   btnClip= max overflow of a cell that CONTAINS BUTTONS (operation columns) -- text cells ellipsize by
+#            design (show-overflow-tooltip), but an operation column that cannot fit its buttons shows
+#            "..." and the action becomes unreachable => checked separately (2026-09-24: the fixed
+#            purchase list fit the table but its 4th button was cut, revealed by a screenshot).
+#   FAIL when margin < -2, or scroll > 2, or btnClip > 2.
 #
-# Usage:  powershell -File .\scan-table-overflow.ps1                 # all pages (~3 min)
-#         powershell -File .\scan-table-overflow.ps1 -Only finance   # subset (regex on the route)
+# The headless viewport is 1262 wide => content area ~956px (the documented target is a 1200px window,
+# i.e. ~894px content: this guard is stricter than 1280 but slightly looser than 1200).
 # ASCII ONLY (PS 5.1 decodes a non-BOM .ps1 as GBK; param() must be the first statement).
 param([string]$Only = '')
 
@@ -42,8 +53,8 @@ Write-Host ('[SCAN] pages to visit = ' + $routes.Count + $(if ($Only -ne '') { '
 $vw = EvalJs 'String(window.innerWidth)'
 Write-Host ('[SCAN] viewport width = ' + $vw)
 
-# Per visible table: overflow, clip, column count, row count, table width, plus the viewport width.
-$js = "(()=>{const vis=e=>e.getClientRects().length>0;const out=[];const ts=[...document.querySelectorAll('.el-table')].filter(vis);ts.forEach((t,i)=>{const bw=t.querySelector('.el-table__body-wrapper');const trs=[...t.querySelectorAll('.el-table__body tbody tr')].filter(r=>r.getClientRects().length>0);const tds=trs.length?[...trs[0].querySelectorAll('td')]:[];const tr=t.getBoundingClientRect();const last=tds.length?tds[tds.length-1].getBoundingClientRect().right:-1;out.push({i:i,ov:bw?Math.round(bw.scrollWidth-bw.clientWidth):0,clip:tds.length?Math.round(last-tr.right):0,cols:tds.length,rows:trs.length,w:Math.round(tr.width)});});return JSON.stringify({vw:window.innerWidth,tables:out})})()"
+# Per visible table: colSum / avail / margin / scroll + column count and row count.
+$js = "(()=>{const vis=e=>e.getClientRects().length>0;const out=[];const ts=[...document.querySelectorAll('.el-table')].filter(vis);ts.forEach((t,i)=>{const hr=t.querySelector('.el-table__header tr:last-child');const ths=hr?[...hr.querySelectorAll('th')]:[];let sum=0;const cw=[];ths.forEach(th=>{const w=Math.round(th.getBoundingClientRect().width);cw.push(w);sum+=w;});const avail=Math.round(t.clientWidth);const cands=[t.querySelector('.el-table__body-wrapper')];[...t.querySelectorAll('.el-scrollbar__wrap')].forEach(x=>cands.push(x));let sc=0;cands.forEach(x=>{if(!x)return;const d=x.scrollWidth-x.clientWidth;if(d>sc)sc=Math.round(d);});const trs=[...t.querySelectorAll('.el-table__body tbody tr')].filter(r=>r.getClientRects().length>0);let bc=0;trs.forEach(r=>{const tds=r.querySelectorAll('td');if(!tds.length)return;const td=tds[tds.length-1];if(!td.querySelector('.el-button'))return;const c=td.querySelector('.cell');if(!c)return;const d=c.scrollWidth-c.clientWidth;if(d>bc)bc=Math.round(d);});out.push({i:i,cols:cw.length,rows:trs.length,colSum:sum,avail:avail,margin:avail-sum,scroll:sc,btnClip:bc,cw:cw});});return JSON.stringify({vw:window.innerWidth,tables:out})})()"
 
 $bad = @()
 $scanned = 0
@@ -56,25 +67,24 @@ foreach ($p in $routes) {
   $d = $raw | ConvertFrom-Json
   if (@($d.tables).Count -eq 0) { $noTable++; continue }
   $scanned++
-  $worst = ''
+  $summary = ''
   foreach ($t in @($d.tables)) {
-    if ([int]$t.ov -gt 2 -or [int]$t.clip -gt 2) {
-      $tag = $(if ([int]$t.ov -gt 2) { 'SCROLL' } else { 'CLIP' })
-      Write-Host ('    FAIL [' + $tag + '] ' + $p + ' #' + $t.i + ' overflow=' + $t.ov + 'px clip=' + $t.clip + 'px cols=' + $t.cols + ' rows=' + $t.rows + ' tableW=' + $t.w)
-      $bad += [pscustomobject]@{ page = $p; idx = $t.i; ov = $t.ov; clip = $t.clip; cols = $t.cols; rows = $t.rows; w = $t.w }
-    } else {
-      $worst += ('#' + $t.i + '(ov' + $t.ov + ',clip' + $t.clip + ',cols' + $t.cols + ',rows' + $t.rows + ') ')
+    $summary += ('#' + $t.i + '(cols' + $t.cols + ' sum' + $t.colSum + ' avail' + $t.avail + ' margin' + $t.margin + ' scroll' + $t.scroll + ' btnClip' + $t.btnClip + ') ')
+    if ([int]$t.margin -lt -2 -or [int]$t.scroll -gt 2 -or [int]$t.btnClip -gt 2) {
+      $tag = $(if ([int]$t.btnClip -gt 2) { 'BTNCLIP' } elseif ([int]$t.scroll -gt 2) { 'SCROLL' } else { 'OVERWIDE' })
+      Write-Host ('    FAIL [' + $tag + '] ' + $p + ' #' + $t.i + ' colSum=' + $t.colSum + ' avail=' + $t.avail + ' margin=' + $t.margin + ' scroll=' + $t.scroll + ' btnClip=' + $t.btnClip + ' cols=' + $t.cols + ' rows=' + $t.rows)
+      $bad += [pscustomobject]@{ page = $p; idx = $t.i; colSum = [int]$t.colSum; avail = [int]$t.avail; margin = [int]$t.margin; scroll = [int]$t.scroll; btnClip = [int]$t.btnClip; cols = [int]$t.cols; cw = ($t.cw -join ',') }
     }
   }
-  Write-Host ('  ok   ' + $p + '  ' + $worst)
+  Write-Host ('  ok   ' + $p + '  ' + $summary)
 }
 Write-Host ''
-Write-Host ('[SCAN] vw=' + $j.vw + ' pages with a table = ' + $scanned + ' ; without = ' + $noTable + ' ; offenders = ' + $bad.Count)
+Write-Host ('[SCAN] pages with a table = ' + $scanned + ' ; without = ' + $noTable + ' ; offenders = ' + $bad.Count)
 Ok ($bad.Count -eq 0) ('every list fits on one line (offenders: ' + $bad.Count + ')')
 if ($bad.Count -gt 0) {
-  Write-Host '--- offenders (sorted by clip, then overflow) ---'
-  $bad | Sort-Object -Property @{Expression='clip';Descending=$true}, @{Expression='ov';Descending=$true} | ForEach-Object {
-    Write-Host ('  ' + $_.page + ' #' + $_.idx + '  overflow=' + $_.ov + '  clip=' + $_.clip + '  cols=' + $_.cols + '  rows=' + $_.rows + '  tableW=' + $_.w)
+  Write-Host '--- offenders (worst margin first) ---'
+  $bad | Sort-Object margin | ForEach-Object {
+    Write-Host ('  ' + $_.page + ' #' + $_.idx + '  colSum=' + $_.colSum + '  avail=' + $_.avail + '  margin=' + $_.margin + '  scroll=' + $_.scroll + '  btnClip=' + $_.btnClip + '  cols=' + $_.cols + '  widths=' + $_.cw)
   }
 }
 Ok ((Errs) -eq '[]') 'no JS/API errors during the sweep'

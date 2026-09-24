@@ -33,30 +33,32 @@
     </el-card>
 
     <el-card shadow="never" class="table-card">
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1230px > 内容区 956px
+           ⇒ 横向滚动 274px。收窄为合计 942px（报损单号/仓库/报损明细保持 min-width，宽屏自动吃余量）。 -->
       <el-table v-loading="loading" :data="rows" border stripe>
-        <el-table-column prop="code" label="报损单号" min-width="150" />
-        <el-table-column prop="warehouseName" label="仓库" min-width="130">
+        <el-table-column prop="code" label="报损单号" min-width="112" show-overflow-tooltip />
+        <el-table-column prop="warehouseName" label="仓库" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">{{ row.warehouseName || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="lossDate" label="报损日期" width="110" />
-        <el-table-column label="报损原因" width="110">
+        <el-table-column prop="lossDate" label="报损日期" width="96" />
+        <el-table-column label="报损原因" width="88" show-overflow-tooltip>
           <template #default="{ row }">{{ LossReasonLabel[row.lossReason] || row.lossReason || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="itemSummary" label="报损明细" min-width="200" show-overflow-tooltip>
+        <el-table-column prop="itemSummary" label="报损明细" min-width="124" show-overflow-tooltip>
           <template #default="{ row }">{{ row.itemSummary || '—' }}</template>
         </el-table-column>
-        <el-table-column label="报损金额" width="110" align="right">
+        <el-table-column label="报损金额" width="96" align="right">
           <template #default="{ row }">{{ money(row.totalAmount) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="90" align="center">
+        <el-table-column label="状态" width="76" align="center">
           <template #default="{ row }">
             <el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="审核人" width="100">
+        <el-table-column label="审核人" width="80" show-overflow-tooltip>
           <template #default="{ row }">{{ row.auditorName || '—' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="230" align="center" fixed="right">
+        <el-table-column label="操作" width="174" align="center" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="goDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" link type="primary" @click="goEdit(row)">编辑</el-button>

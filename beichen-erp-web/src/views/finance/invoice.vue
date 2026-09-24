@@ -118,21 +118,24 @@ onMounted(() => { loadData() })
       </div>
     </el-card>
     <el-card shadow="never" class="table-card">
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：12 列、原列宽合计 1415px > 内容区 971px
+           ⇒ 横向滚动 444px。全表收窄为合计 946px；金额/类型/单号列补 show-overflow-tooltip ⇒
+           窄列省略号 + 悬浮看全文，长数字不丢。 -->
       <el-table v-loading="loading" :data="data" border stripe>
-        <el-table-column prop="invoiceNo" label="发票号码" width="160"/>
-        <el-table-column label="方向" width="80" align="center">
+        <el-table-column prop="invoiceNo" label="发票号码" width="96" show-overflow-tooltip/>
+        <el-table-column label="方向" width="56" align="center">
           <template #default="{row}"><el-tag :type="row.direction==='SALE'?'success':'warning'" size="small">{{ DIRECTION_LABEL[row.direction] || row.direction }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="发票类型" width="130"><template #default="{row}">{{ INVOICE_KIND_LABELS[row.invoiceKind] || row.invoiceKind }}</template></el-table-column>
-        <el-table-column label="开票日期" width="110"><template #default="{row}">{{ fmtDate(row.invoiceDate) }}</template></el-table-column>
-        <el-table-column prop="partnerName" label="对方单位" min-width="140" show-overflow-tooltip/>
-        <el-table-column prop="amount" label="不含税金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
-        <el-table-column label="税率" width="75" align="right"><template #default="{row}">{{ Number(row.taxRate)||0 }}%</template></el-table-column>
-        <el-table-column label="税额" width="110" align="right"><template #default="{row}"><span style="color:var(--app-color-primary)">{{ fmt(row.taxAmount) }}</span></template></el-table-column>
-        <el-table-column prop="totalAmount" label="价税合计" width="120" align="right"><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
-        <el-table-column prop="sourceBillCode" label="关联单号" width="140" show-overflow-tooltip/>
-        <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="(STATUS_TAG[row.status]||'info') as any" size="small">{{ STATUS_LABEL[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="140" align="center" fixed="right">
+        <el-table-column label="发票类型" width="84" show-overflow-tooltip><template #default="{row}">{{ INVOICE_KIND_LABELS[row.invoiceKind] || row.invoiceKind }}</template></el-table-column>
+        <el-table-column label="开票日期" width="84"><template #default="{row}">{{ fmtDate(row.invoiceDate) }}</template></el-table-column>
+        <el-table-column prop="partnerName" label="对方单位" min-width="84" show-overflow-tooltip/>
+        <el-table-column prop="amount" label="不含税金额" width="82" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
+        <el-table-column label="税率" width="52" align="right"><template #default="{row}">{{ Number(row.taxRate)||0 }}%</template></el-table-column>
+        <el-table-column label="税额" width="80" align="right" show-overflow-tooltip><template #default="{row}"><span style="color:var(--app-color-primary)">{{ fmt(row.taxAmount) }}</span></template></el-table-column>
+        <el-table-column prop="totalAmount" label="价税合计" width="84" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
+        <el-table-column prop="sourceBillCode" label="关联单号" width="84" show-overflow-tooltip/>
+        <el-table-column label="状态" width="64" align="center"><template #default="{row}"><el-tag :type="(STATUS_TAG[row.status]||'info') as any" size="small">{{ STATUS_LABEL[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="96" align="center" fixed="right">
           <template #default="{row}">
             <template v-if="row.status==='REGISTERED'">
               <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>

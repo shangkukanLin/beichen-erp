@@ -464,19 +464,22 @@ onActivated(() => {
 
     <!-- 列表 -->
     <el-card shadow="never" class="table-card">
+      <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1030px > 内容区 971px
+           ⇒ 横向滚动 59px。收窄为合计 888px；操作列按 5 个按钮的实际需要给 236px（权限/编辑/重置密码/禁用/删除
+           ＝12 个汉字 + 4 个 12px 间距 + 单元格内边距）。 -->
       <el-table v-loading="tableLoading" :data="tableData" border stripe>
-        <el-table-column prop="username" label="用户名" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="phone" label="手机号" min-width="120" show-overflow-tooltip>
+        <el-table-column prop="username" label="用户名" min-width="110" show-overflow-tooltip />
+        <el-table-column prop="phone" label="手机号" min-width="110" show-overflow-tooltip>
           <template #default="{ row }">
             {{ (row as UserVO).phone || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="dept" label="部门" min-width="120" show-overflow-tooltip>
+        <el-table-column prop="dept" label="部门" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
             {{ (row as UserVO).dept || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="角色" min-width="180">
+        <el-table-column label="角色" min-width="160">
           <template #default="{ row }">
             <template v-if="(row as UserVO).roles && (row as UserVO).roles!.length">
               <el-tag
