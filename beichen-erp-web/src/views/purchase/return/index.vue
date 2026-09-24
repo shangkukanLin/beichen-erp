@@ -39,13 +39,12 @@
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
         </el-table-column>
-        <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 200→168。 -->
-        <el-table-column label="操作" width="176" align="center" fixed="right">
+        <!-- 2026-09-24（用户口径）：反审核与编辑都收进详情页（详情草稿态本就可就改明细并保存）⇒ 操作列 200→132。 -->
+        <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
             <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发 -->
             <el-button v-if="row.status === ReturnStatus.DRAFT" v-perm="'purchase:return:audit'" type="success" link @click.stop="handleAudit(row)">审核</el-button>
-            <el-button v-if="row.status === ReturnStatus.DRAFT" type="warning" link @click.stop="handleEdit(row)">编辑</el-button>
             <el-button v-if="row.status === ReturnStatus.DRAFT" v-perm="'purchase:return:cancel'" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
@@ -122,7 +121,8 @@ async function loadData() {
 function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.supplierId = ''; query.status = ''; handleQuery() }
 function handleAdd() { router.push('/inventory/purchase-return/add') }
-function handleEdit(row: PurchaseReturn) { router.push({ path: '/inventory/purchase-return/add', query: { id: row.id } }) }
+/* 2026-09-24（用户口径）：handleEdit 已移除 —— 草稿态编辑统一在详情页内联完成（本页详情本就可改明细并保存），
+   列表不再提供编辑入口；新增仍走 /inventory/purchase-return/add。 */
 function handleWarehouseClick(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 
 async function handleDetail(row: PurchaseReturn) {
