@@ -123,7 +123,7 @@ const routes: RouteRecordRaw[] = [
         path: 'dev/project/edit/:id',
         name: 'DevProjectEdit',
         component: () => import('@/views/dev/project/edit.vue'),
-        meta: { title: '研发立项详细', requiresAuth: true, operate: true }
+        meta: { title: '研发立项详情', requiresAuth: true, operate: true }
       },
       // BOM管理 总览页 2026-09-16 按用户要求下线（页面已删）：BOM 仍在「研发立项」编辑页的 BOM 页签内维护
       // 旧地址保留为重定向 —— 菜单下线＝收走前端白名单，不做重定向会让老书签直接吃 403
@@ -187,7 +187,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/delivery', redirect: '/inventory/material-move' },
       { path: 'outsource/delivery/add', redirect: '/inventory/material-move' },
       { path: 'outsource/delivery/detail/:id', name: 'OutsourceDeliveryDetail', component: () => import('@/views/outsource/delivery/detail.vue'), meta: { title: '物料收发单详情', requiresAuth: true, operate: true } },
-      { path: 'outsource/material-history/:wid/:mid', name: 'OutsourceMaterialHistory', component: () => import('@/views/outsource/warehouse-material-history.vue'), meta: { title: '物料库存流水详细', requiresAuth: true, operate: true } },
+      { path: 'outsource/material-history/:wid/:mid', name: 'OutsourceMaterialHistory', component: () => import('@/views/outsource/warehouse-material-history.vue'), meta: { title: '物料库存流水详情', requiresAuth: true, operate: true } },
       // 委外加工退货
       { path: 'outsource/return-order', name: 'OutsourceReturnOrder', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '委外加工退货', requiresAuth: true } },
       { path: 'outsource/return-order/add', name: 'OutsourceReturnOrderAdd', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '新增委外加工退货', requiresAuth: true, operate: true } },
@@ -266,7 +266,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/stock-loss/detail/:id', name: 'OutsourceStockLossDetail', component: () => import('@/views/outsource/stock-loss/detail.vue'), meta: { title: '物料报损单详情', requiresAuth: true, operate: true } },
       { path: 'outsource/material-warehouse', name: 'OutsourceMaterialWarehouse', component: () => import('@/views/outsource/material-warehouse.vue'), meta: { title: '自有物料仓管理', requiresAuth: true } },
       { path: 'outsource/other-io/add', name: 'OutsourceOtherIoAdd', component: () => import('@/views/outsource/other-io/add.vue'), meta: { title: '新增物料其他出入库', requiresAuth: true, operate: true } },
-      { path: 'outsource/other-io/detail/:id', name: 'OutsourceOtherIoDetail', component: () => import('@/views/outsource/other-io/detail.vue'), meta: { title: '物料其他出入库详细', requiresAuth: true, operate: true } },
+      { path: 'outsource/other-io/detail/:id', name: 'OutsourceOtherIoDetail', component: () => import('@/views/outsource/other-io/detail.vue'), meta: { title: '物料其他出入库详情', requiresAuth: true, operate: true } },
       { path: 'outsource/other-io/edit/:id', name: 'OutsourceOtherIoEdit', component: () => import('@/views/outsource/other-io/edit.vue'), meta: { title: '编辑物料其他出入库', requiresAuth: true, operate: true } },
       // 进销存
       // 成品库存详情（2026-09-22 由「成品库存情况」改名）：列表按产品汇总跨仓库库存，点行进详情看该产品在各仓库的分布
@@ -274,17 +274,17 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/product-stock/detail/:id', name: 'InventoryProductStockDetail', component: () => import('@/views/inventory/product-stock/detail.vue'), meta: { title: '产品库存分布详情', requiresAuth: true, operate: true } },
       { path: 'inventory/warehouse', name: 'InventoryWarehouse', component: () => import('@/views/inventory/warehouse.vue'), meta: { title: '成品仓库管理', requiresAuth: true } },
       { path: 'inventory/warehouse/detail/:id', name: 'InventoryWarehouseDetail', component: () => import('@/views/inventory/warehouse-detail.vue'), meta: { title: '仓库详情', requiresAuth: true, operate: true } },
-      { path: 'inventory/warehouse/product-history/:wid/:pid', name: 'InventoryProductHistory', component: () => import('@/views/inventory/warehouse-product-history.vue'), meta: { title: '产品库存流水详细', requiresAuth: true, operate: true } },
-      { path: 'inventory/warehouse/material-history/:wid/:mid', name: 'InventoryMaterialHistory', component: () => import('@/views/inventory/warehouse-material-history.vue'), meta: { title: '物料库存流水详细', requiresAuth: true, operate: true } },
+      { path: 'inventory/warehouse/product-history/:wid/:pid', name: 'InventoryProductHistory', component: () => import('@/views/inventory/warehouse-product-history.vue'), meta: { title: '产品库存流水详情', requiresAuth: true, operate: true } },
+      { path: 'inventory/warehouse/material-history/:wid/:mid', name: 'InventoryMaterialHistory', component: () => import('@/views/inventory/warehouse-material-history.vue'), meta: { title: '物料库存流水详情', requiresAuth: true, operate: true } },
       { path: 'inventory/other-io', name: 'InventoryOtherIo', component: () => import('@/views/inventory/other-io/index.vue'), meta: { title: '成品其他出入库', requiresAuth: true } },
       { path: 'inventory/other-io/add', name: 'InventoryOtherIoAdd', component: () => import('@/views/inventory/other-io/add.vue'), meta: { title: '新增成品其他出入库', requiresAuth: true, operate: true } },
-      { path: 'inventory/other-io/detail/:id', name: 'InventoryOtherIoDetail', component: () => import('@/views/inventory/other-io/detail.vue'), meta: { title: '成品其他出入库详细', requiresAuth: true, operate: true } },
+      { path: 'inventory/other-io/detail/:id', name: 'InventoryOtherIoDetail', component: () => import('@/views/inventory/other-io/detail.vue'), meta: { title: '成品其他出入库详情', requiresAuth: true, operate: true } },
       // 规格调整（2026-09-22 用户要求：菜单名由「成品品质重分类」改为「规格调整」，并由第 8 位挪到第 3 位；
       // 路由 path/route_name 与 perms 均不变）
       { path: 'inventory/reclassify', name: 'InventoryReclassify', component: () => import('@/views/inventory/reclassify/index.vue'), meta: { title: '规格调整', requiresAuth: true } },
       // 规格调整：新增与详情拆成独立页面（与成品其他出入库一致，详情草稿态直接可编辑）
       { path: 'inventory/reclassify/add', name: 'InventoryReclassifyAdd', component: () => import('@/views/inventory/reclassify/add.vue'), meta: { title: '新增规格调整', requiresAuth: true, operate: true } },
-      { path: 'inventory/reclassify/detail/:id', name: 'InventoryReclassifyDetail', component: () => import('@/views/inventory/reclassify/detail.vue'), meta: { title: '规格调整详细', requiresAuth: true, operate: true } },
+      { path: 'inventory/reclassify/detail/:id', name: 'InventoryReclassifyDetail', component: () => import('@/views/inventory/reclassify/detail.vue'), meta: { title: '规格调整详情', requiresAuth: true, operate: true } },
       { path: 'inventory/return-sort', name: 'InventoryReturnSort', component: () => import('@/views/inventory/return-sort/index.vue'), meta: { title: '退货整理', requiresAuth: true } },
       // 退货整理：新增/编辑/详情独立页面（草稿可编辑，title 各不相同）
       { path: 'inventory/return-sort/add', name: 'InventoryReturnSortAdd', component: () => import('@/views/inventory/return-sort/form.vue'), meta: { title: '新增退货整理', requiresAuth: true, operate: true } },
@@ -294,11 +294,11 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/warehouse-move', name: 'InventoryWarehouseMove', component: () => import('@/views/inventory/warehouse-move/index.vue'), meta: { title: '移仓单', requiresAuth: true } },
       { path: 'inventory/warehouse-move/add', name: 'InventoryWarehouseMoveAdd', component: () => import('@/views/inventory/warehouse-move/add.vue'), meta: { title: '新增移仓单', requiresAuth: true, operate: true } },
       // 移仓单详情独立成页（与成品其他出入库一致，草稿态直接可编辑，列表不再有「编辑」）
-      { path: 'inventory/warehouse-move/detail/:id', name: 'InventoryWarehouseMoveDetail', component: () => import('@/views/inventory/warehouse-move/detail.vue'), meta: { title: '移仓单详细', requiresAuth: true, operate: true } },
+      { path: 'inventory/warehouse-move/detail/:id', name: 'InventoryWarehouseMoveDetail', component: () => import('@/views/inventory/warehouse-move/detail.vue'), meta: { title: '移仓单详情', requiresAuth: true, operate: true } },
       // 物料移仓单（2026-09-24 新增）：按成品移仓单同构复刻，用于替代原「物料收发单」的手工发料/调拨
       { path: 'inventory/material-move', name: 'InventoryMaterialMove', component: () => import('@/views/inventory/material-move/index.vue'), meta: { title: '物料移仓', requiresAuth: true } },
       { path: 'inventory/material-move/add', name: 'InventoryMaterialMoveAdd', component: () => import('@/views/inventory/material-move/add.vue'), meta: { title: '新增物料移仓单', requiresAuth: true, operate: true } },
-      { path: 'inventory/material-move/detail/:id', name: 'InventoryMaterialMoveDetail', component: () => import('@/views/inventory/material-move/detail.vue'), meta: { title: '物料移仓详细', requiresAuth: true, operate: true } },
+      { path: 'inventory/material-move/detail/:id', name: 'InventoryMaterialMoveDetail', component: () => import('@/views/inventory/material-move/detail.vue'), meta: { title: '物料移仓详情', requiresAuth: true, operate: true } },
       { path: 'inventory/material', redirect: '/product' },
       { path: 'inventory/customer', name: 'InventoryCustomer', component: () => import('@/views/customer/index.vue'), meta: { title: '客户管理', requiresAuth: true } },
       // 客户新增与详情共用同一表单页（详情内可直接编辑保存），title 区分
@@ -396,7 +396,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'dev/bom-snapshot/:projectId', name: 'DevBomSnapshot', component: () => import('@/views/dev/bom-snapshot.vue'), meta: { title: 'BOM 历史快照', requiresAuth: true, operate: true } },
       { path: 'finance/bill', name: 'FinanceBill', component: () => import('@/views/finance/bill.vue'), meta: { title: '账单生成', requiresAuth: true } },
       // 账单详情独立成页（原为抽屉）
-      { path: 'finance/bill/detail/:id', name: 'FinanceBillDetail', component: () => import('@/views/finance/bill/detail.vue'), meta: { title: '账单详细', requiresAuth: true, operate: true } },
+      { path: 'finance/bill/detail/:id', name: 'FinanceBillDetail', component: () => import('@/views/finance/bill/detail.vue'), meta: { title: '账单详情', requiresAuth: true, operate: true } },
       { path: 'finance/cashflow', name: 'FinanceCashflow', component: () => import('@/views/finance/cashflow.vue'), meta: { title: '资金流水', requiresAuth: true } },
       { path: 'finance/account', name: 'FinanceAccount', component: () => import('@/views/finance/account.vue'), meta: { title: '账户管理', requiresAuth: true } },
       { path: 'finance/expense', name: 'FinanceExpense', component: () => import('@/views/finance/expense.vue'), meta: { title: '费用管理', requiresAuth: true } },

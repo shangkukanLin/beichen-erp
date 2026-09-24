@@ -19,7 +19,7 @@ if ((EvalJs "'p=' + location.pathname") -match '/login') {
   agent-browser wait 3500
 }
 
-foreach ($c in @(@('/dev/project/add', '新增研发立项'), @('/dev/project/edit/5', '研发立项详细'))) {
+foreach ($c in @(@('/dev/project/add', '新增研发立项'), @('/dev/project/edit/5', '研发立项详情'))) {
   agent-browser open ($base + $c[0]) | Out-Null
   agent-browser wait 2800
   $title = EvalJs "document.title"
