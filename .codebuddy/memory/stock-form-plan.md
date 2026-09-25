@@ -64,6 +64,16 @@
 **迁移对旧代码是安全的（已生效的事实，不依赖重启）**：新列有 DEFAULT `'MATERIAL'`，旧代码不写该列也不带该条件
 ⇒ 新流水自动落 MATERIAL、旧 UPSERT 定位不受影响；两条唯一键只是原键的超集 ⇒ 存量定位不变。
 
+### 两条血泪教训（2026-09-25 各踩一次，务必按此做）
+1. **判断"编译是否通过"绝不能把 mvn 串进管道后读 `$LASTEXITCODE`** ✗：`mvn | Select-String ...` 之后
+   `$LASTEXITCODE` 取到的是**管道最后一个命令**（Select-String）的退出码 ⇒ 编译失败也会显示 `exit=0` ✗✗
+   （本轮因此**漏掉一处 `selectMaterialExist` 调用点**、把编译失败的版本提交了，直到重启后端才暴露 ✗）。
+   正确写法：`$out = & mvn.cmd -q -o compile -DskipTests 2>&1 ; $code = $LASTEXITCODE`（赋值不经过管道 ✓）。
+2. **重启后端前先确认 MySQL 在跑** ✓：`backend_diag.log` 里 `java.net.ConnectException: Connection refused`
+   ＝ MySQL(3306) 没起 ✗（`restart-backend.ps1` **不负责起 MySQL** ✗）。正确顺序：
+   `start-mysql.ps1` → `restart-backend.ps1`（→ `web-dev.ps1`）。日志在**仓库根目录** `backend_diag.log`（不在 tools/regression ✗）。
+   另外三件套会一起掉（串跑重脚本被 idle timeout 取消会连带带走进程树 ✗ ⇒ 重脚本一条命令只跑一个 ✓）。
+
 ## 0. 已确认的业务口径（用户 2026-09-25）
 - **加工退货（DEFECT）**
   - 关联加工单：红冲该单出货/收货数据 + BOM 分解成物料到「加工厂委外仓」+ 冲减应付（＝**现状，保持**）。

@@ -276,7 +276,7 @@ public class WarehouseStockService {
     public BigDecimal getMaterialQuantity(Long warehouseId, Long materialId) {
         Long companyId = CompanyContext.get();
         if (companyId != null && companyId <= 0) companyId = null;
-        WarehouseStock exist = selectMaterialExist(warehouseId, materialId, companyId);
+        WarehouseStock exist = selectMaterialExist(warehouseId, materialId, WarehouseStock.FORM_MATERIAL, companyId);
         return exist != null && exist.getQuantity() != null ? exist.getQuantity() : BigDecimal.ZERO;
     }
 
