@@ -326,6 +326,10 @@ public class OutsourceOrderDeliveryServiceImpl
         }
 
         if (Boolean.TRUE.equals(delivery.getIsReverse())) {
+            // P3-1（2026-09-25）：有单红冲**审核期**额度复核 —— 修复并发双草稿窗口（建草稿校验与审核落账
+            // 之间无复核：两人并发建草稿可双双过审造成超退）。对加工单行 FOR UPDATE 串行化后，
+            // 按**建草稿同一口径**（returnDefect :508-520）复核"累计退货 ≤ 已收（净额）"。无单红冲无聚合对象，不适用。
+            if (order != null) assertDefectReturnWithinDelivered(order, delivery);
             // 加工退货审核：扣成品库存 + BOM还料 + 冲减应付（有单按该单口径；无单按「工厂 + 产品快照」口径）
             if (order == null) applyDefectStockNoOrder(delivery);
             else applyDefectStock(order, delivery);
@@ -1138,6 +1142,37 @@ public class OutsourceOrderDeliveryServiceImpl
     }
 
     /** 判断交货记录是否属于某订单产品行（主数据ID优先，行ID兜底） */
+    /**
+     * P3-1（2026-09-25）：有单红冲**审核期**额度复核 —— 修复并发双草稿窗口（建草稿校验与审核落账之间无复核）。
+     * <p>口径：以 <b>AUDITED 落账净额</b>为准（草稿不占额度）：deliveredQty = Σ 已审核普通交货数量，
+     * returnedQty = Σ 已审核 DEFECT_RETURN 负数量绝对值（本单经 DocStatusGuard 抢占后已是 AUDITED，天然含入）。
+     * 与建草稿校验（returnDefect :508-520，含草稿的宽松预检）有意不同：审核期是最终闸门，账面不允许超退。</p>
+     * <p>并发安全：先对加工单行 FOR UPDATE 串行化"并发审核"，聚合读也用锁定读（FOR UPDATE，
+     * 锁定读总是读**最新已提交版本**，绕开 REPEATABLE READ 快照旧读）⇒ 后审者必然看到先审者已提交的红冲量。</p>
+     */
+    private void assertDefectReturnWithinDelivered(OutsourceOrder order, OutsourceOrderDelivery delivery) {
+        orderMapper.selectOne(new LambdaQueryWrapper<OutsourceOrder>()
+                .eq(OutsourceOrder::getId, order.getId()).last("FOR UPDATE"));
+        OutsourceOrderProduct matched = findOrderProduct(orderService.getProducts(order.getId()), delivery);
+        if (matched == null)
+            throw new BusinessException("加工单中未找到该产品（红冲记录 productId=" + delivery.getProductId() + "）");
+        List<OutsourceOrderDelivery> all = baseMapper.selectList(new LambdaQueryWrapper<OutsourceOrderDelivery>()
+                .eq(OutsourceOrderDelivery::getOrderId, order.getId())
+                .eq(OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.getCode())
+                .last("FOR UPDATE"));
+        BigDecimal deliveredQty = all.stream()
+                .filter(d -> belongsToProduct(d, matched) && !Boolean.TRUE.equals(d.getIsReverse()))
+                .map(d -> d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal returnedQty = all.stream()
+                .filter(d -> belongsToProduct(d, matched)
+                        && DeliveryType.DEFECT_RETURN.getCode().equals(d.getDeliveryType()))
+                .map(d -> d.getQuantity() != null && d.getQuantity().signum() < 0 ? d.getQuantity().abs() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (returnedQty.compareTo(deliveredQty) > 0)
+            throw new BusinessException("累计加工退货数量(" + returnedQty + ")不能超过已收数量(" + deliveredQty + ")，请先撤销或调减其他红冲单");
+    }
+
     private boolean belongsToProduct(OutsourceOrderDelivery d, OutsourceOrderProduct p) {
         if (d == null || p == null) return false;
         if (d.getProductMasterId() != null && p.getProductId() != null)
