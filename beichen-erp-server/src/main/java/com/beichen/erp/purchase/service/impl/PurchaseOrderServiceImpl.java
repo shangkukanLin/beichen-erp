@@ -94,18 +94,30 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 m.put("supplierName", s != null ? s.getName() : "");
             }
             // 物品明细摘要：成品A*100，成品B*100
+            // 2026-09-25（用户口径「明细列可点进产品详情」）：同一次遍历里产出逐项 [{id,name,quantity}]
+            // （id = 产品主数据ID，前端 EntityLinks(target=product) 直接用），顺带去掉原来"摘要与逐项各查一次产品"的重复。
             List<PurchaseOrderItem> orderItems = finalItemsMap.getOrDefault(o.getId(), Collections.emptyList());
-            String itemsSummary = orderItems.stream()
-                    .map(it -> {
-                        String name = "";
-                        if (it.getProductId() != null) {
-                            Product prod = productMapper.selectById(it.getProductId());
-                            if (prod != null) name = prod.getName();
-                        }
-                        return name + "*" + (it.getQuantity() != null ? it.getQuantity().stripTrailingZeros().toPlainString() : "0");
-                    })
-                    .collect(Collectors.joining("，"));
-            m.put("itemsSummary", itemsSummary);
+            List<Map<String, Object>> itemList = new ArrayList<>();
+            StringBuilder summarySb = new StringBuilder();
+            for (PurchaseOrderItem it : orderItems) {
+                String name = "";
+                if (it.getProductId() != null) {
+                    Product prod = productMapper.selectById(it.getProductId());
+                    if (prod != null) name = prod.getName();
+                }
+                String qty = it.getQuantity() != null ? it.getQuantity().stripTrailingZeros().toPlainString() : "0";
+                if (summarySb.length() > 0) summarySb.append("，");
+                summarySb.append(name).append("*").append(qty);
+                if (it.getProductId() != null) {
+                    Map<String, Object> im = new HashMap<>();
+                    im.put("id", it.getProductId());
+                    im.put("name", name);
+                    im.put("quantity", it.getQuantity());
+                    itemList.add(im);
+                }
+            }
+            m.put("itemsSummary", summarySb.toString());
+            m.put("items", itemList);
             return m;
         }).toList());
         return res;

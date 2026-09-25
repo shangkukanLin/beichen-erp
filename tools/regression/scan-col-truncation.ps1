@@ -41,7 +41,11 @@ $routes = @(
   '/dev/project',
   '/dev/material',
   # --- 2026-09-25 B2 屏幕资料（列表精简为 7 列，全部完整）---
-  '/dev/screen-model'
+  '/dev/screen-model',
+  # --- 2026-09-25 B3 采购 ---
+  '/inventory/purchase',
+  '/inventory/purchase-return',
+  '/inventory/purchase-exchange'
 )
 if ($Only -ne '') { $routes = @($routes | Where-Object { $_ -match $Only }) }
 

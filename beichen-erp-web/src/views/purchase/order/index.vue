@@ -8,6 +8,7 @@ import request from '@/utils/request'
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import EntityLinks from '@/components/EntityLinks.vue'
 
 const router = useRouter()
 const qualityOptions = ref<QualityOption[]>([])
@@ -264,10 +265,17 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
 
     <el-card shadow="never" class="table-card">
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1240px > 内容区 956px
-           ⇒ 横向滚动 284px。收窄为合计 930px：单号/供货商/仓库/采购明细 改小 min-width（宽屏仍自动吃余量），
-           日期/金额/状态 收窄，操作列 300→174（4 个 link 按钮实际只需 ~164px）。 -->
+           ⇒ 横向滚动 284px。收窄为合计 930px。
+           2026-09-25 B3（用户口径「显示完整 + 单号/明细可点」）：单号 min120→**148 固定**并做成链接进详情；
+           采购明细改 EntityLinks（单值直链产品详情 / 多值弹层逐项可点，内容变短 ⇒ 摘要类截断消失）；
+           订单日期 100→96、总金额 108→100、状态 78→74 抵平。
+           合计 = 148+120+100+96+160+100+74+132 = **930** ✓ -->
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="handleDetail">
-        <el-table-column prop="code" label="单号" min-width="120" show-overflow-tooltip />
+        <el-table-column label="单号" width="148" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button type="primary" link @click.stop="handleDetail(row)">{{ row.code }}</el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="供货商" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleSupplierClick(row.supplierId)">{{ supplierName(row.supplierId) }}</el-button>
@@ -278,12 +286,19 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
             <el-button type="primary" link @click.stop="handleWarehouseClick(row.warehouseId)">{{ warehouseName(row.warehouseId) }}</el-button>
           </template>
         </el-table-column>
-        <el-table-column prop="orderDate" label="订单日期" width="100" align="center" />
-        <el-table-column prop="itemsSummary" label="采购明细" min-width="130" show-overflow-tooltip />
-        <el-table-column prop="totalAmount" label="总金额" width="108" align="right">
+        <el-table-column prop="orderDate" label="订单日期" width="96" align="center" />
+        <!-- 2026-09-25 B3：采购明细 → 产品可点（单值直链 / 多值弹层逐项可点；数量在弹层里显示 ×N） -->
+        <el-table-column label="采购明细" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">
+            <EntityLinks :items="row.items" target="product" qty-key="quantity">
+              <span>{{ row.itemsSummary || '-' }}</span>
+            </EntityLinks>
+          </template>
+        </el-table-column>
+        <el-table-column prop="totalAmount" label="总金额" width="100" align="right">
           <template #default="{ row }">{{ fmt(row.totalAmount) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="78" align="center">
+        <el-table-column label="状态" width="74" align="center">
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
         </el-table-column>
         <!-- 2026-09-24（用户口径）：反审核移入详情页 —— 它是"撤销已生效单据"（回滚库存/冲销应付），

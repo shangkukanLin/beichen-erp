@@ -26,13 +26,24 @@
     <el-card shadow="never" class="table-card">
       <el-table :data="list" border stripe v-loading="loading" row-key="id" @row-click="handleDetail">
         <el-table-column prop="returnDate" label="退货日期" width="100" align="center" />
-        <el-table-column prop="code" label="退货单号" width="150" />
+        <!-- 2026-09-25 B3：退货单号 → 详情；退货明细 → 产品可点（单值直链 / 多值弹层） -->
+        <el-table-column label="退货单号" width="150" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button type="primary" link @click.stop="handleDetail(row)">{{ row.code }}</el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="退货仓库" min-width="100">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleWarehouseClick(row.warehouseId)">{{ warehouseName(row.warehouseId) }}</el-button>
           </template>
         </el-table-column>
-        <el-table-column prop="itemsSummary" label="退货明细" min-width="160" show-overflow-tooltip />
+        <el-table-column label="退货明细" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">
+            <EntityLinks :items="row.items" target="product" qty-key="quantity">
+              <span>{{ row.itemsSummary || '-' }}</span>
+            </EntityLinks>
+          </template>
+        </el-table-column>
         <el-table-column prop="totalAmount" label="退货总金额" width="100" align="right">
           <template #default="{ row }">{{ row.totalAmount ? Number(row.totalAmount).toFixed(2) : '0.00' }}</template>
         </el-table-column>
@@ -72,6 +83,7 @@ import {
 } from '@/api/purchase'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import EntityLinks from '@/components/EntityLinks.vue'
 
 const router = useRouter()
 const list = ref<PurchaseReturn[]>([])

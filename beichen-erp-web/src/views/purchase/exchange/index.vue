@@ -110,17 +110,23 @@ async function handleCancel(row: any) {
              2026-09-21（UI 优化）：原 min-width 合计 915px（1262 窗口下刚好铺满 948、零余量 ⇒ 窗口略窄就横向滚动），
              现收到 **859px**（项目设计线 ≤900），给窗口宽度留出余量；内容不变，「操作」列保持 155 不动。 -->
         <el-table-column prop="exchangeDate" label="换货日期" min-width="88" />
-        <el-table-column prop="code" label="换货单号" min-width="134" />
+        <!-- 2026-09-25 B3：换货单号 → 详情（链接按钮需 ~16px 额外宽度 ⇒ min134→150） -->
+        <el-table-column label="换货单号" min-width="150">
+          <template #default="{ row }">
+            <el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button>
+          </template>
+        </el-table-column>
         <!-- 换货概况：退回侧 → 换入侧；「付费」标签（2026-09-21）标出"要向供货商付费"的单据。
              放在 min-width 弹性列内 ⇒ 不新增列、不改变列宽合计（本页面有"一行显示完、不横向滚动"的守卫断言）。 -->
-        <el-table-column label="换货概况" min-width="138" show-overflow-tooltip>
+        <el-table-column label="换货概况" min-width="175" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag v-if="Number(row.chargeFlag) === 1" type="warning" size="small" style="margin-right:4px"
               :title="'我方付给供货商 ' + Number(row.chargeAmount || 0).toFixed(2)">付费</el-tag>
             {{ row.exchangeSummary || '—' }}
           </template>
         </el-table-column>
-        <el-table-column prop="supplierName" label="供货商" min-width="94" show-overflow-tooltip />
+        <!-- 2026-09-25 B3：供货商 min94→**121**（实测需 121，原 97px 下 20/20 行被截断） -->
+        <el-table-column prop="supplierName" label="供货商" min-width="121" show-overflow-tooltip />
         <el-table-column label="退回出库仓" min-width="90" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseOutId" type="primary" link @click.stop="goWarehouse(row.warehouseOutId)">{{ row.warehouseOutName || '—' }}</el-button>

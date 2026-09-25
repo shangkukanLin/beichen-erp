@@ -185,12 +185,32 @@
 （`6.9 inches` / `1080 x 2560 pixels` / `Foldable AMOLED`）完整显示，编辑弹框字段 15 项齐全
 （含被移出的刷新率/指纹识别/副屏尺寸/发布时间）。
 
+## 5.3 B3 落地记录：采购 3 页（2026-09-25）
+
+**后端只增字段 2 处**（同一口径：列表行附逐项明细 `[{id,name,quantity}]`，`id` = 产品主数据ID）：
+- `PurchaseOrderServiceImpl.page`：顺带去掉"摘要与逐项各查一次产品"的重复（原为逐项 `selectById`）；
+- `PurchaseReturnServiceImpl.page`：复用已有的 `finalProductMap`。
+
+**前端逐页**
+- `/inventory/purchase`：单号 min120→**148 固定**并做成链接（详情）；采购明细 min130→160 改 `EntityLinks(product)`
+  —— 摘要改链接后内容变短（多值只显示「首个 等 N 项」+ 弹层），原先"采购明细需 250px"的截断随之消失；
+  订单日期 100→96、总金额 108→100、状态 78→74 抵平 ⇒ 声明合计 **930**。
+- `/inventory/purchase-return`：退货单号 150 做成链接；退货明细改 `EntityLinks(product)`（实测得 236px，完整）。
+- `/inventory/purchase-exchange`：换货单号 min134→**150** 做成链接；换货概况（"付费 + 退1(DEFECT) → 换1(A)"复合文本，
+  实测需 301px）**不拆链**，min138→175 并登记进白名单（tooltip 看全文）；同时把被挤到 97px 的「供货商」
+  min94→**121**（实测需 121，原先 20/20 行被截断）⇒ 声明合计 916。
+
+**验证**：两个守卫三页 **0 截断 / 0 越界 / btnClip 0**；四守卫 PASS；后端编译 + 重启就绪；
+浏览器逐条点击：采购单单号→`/inventory/purchase/detail/298`、采购明细产品→`/product/detail/130`、
+采购退货单号→`/inventory/purchase-return/detail/35`、退货明细产品→`/product/detail/61`、
+采购换货单号→`/inventory/purchase-exchange/detail/112`。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
 - [x] B1 基础数据 + 研发（2026-09-25）
 - [x] B2 屏幕资料（2026-09-25，列表精简为 7 列、全部完整）
-- [ ] B3 采购
+- [x] B3 采购（2026-09-25，单号/明细可点，明细列改 EntityLinks）
 - [ ] B4 销售
 - [ ] B5 成品库存 + 物料仓库
 - [ ] B6 财务
