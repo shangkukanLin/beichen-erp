@@ -50,7 +50,17 @@ $routes = @(
   '/inventory/sale',
   '/sale/return',
   '/sale/exchange',
-  '/inventory/return-sort'
+  '/inventory/return-sort',
+  # --- 2026-09-26 B5a 成品库存 + 移仓（进销存）---
+  '/inventory/product-stock',
+  '/inventory/warehouse',
+  '/inventory/stock-log',
+  '/inventory/other-io',
+  '/inventory/reclassify',
+  '/inventory/warehouse-move',
+  '/inventory/stock-take',
+  '/inventory/stock-loss',
+  '/inventory/material-move'
 )
 if ($Only -ne '') { $routes = @($routes | Where-Object { $_ -match $Only }) }
 

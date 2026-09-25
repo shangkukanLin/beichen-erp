@@ -27,18 +27,27 @@
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1020px > 内容区 956px
            ⇒ 横向滚动 64px。收窄为合计 832px（单号/移出移入仓库/产品明细保持 min-width，宽屏自动吃余量）。 -->
       <el-table v-loading="loading" :data="tableData" border stripe @row-click="handleDetail">
-        <el-table-column prop="code" label="单号" min-width="120" show-overflow-tooltip />
-        <el-table-column label="移出仓库" min-width="110" show-overflow-tooltip>
+        <!-- 2026-09-26 B5a：单号 min120→**146 固定**并做成链接进详情；产品明细改 EntityLinks（产品可点） -->
+        <el-table-column label="单号" width="146" show-overflow-tooltip>
+          <template #default="{ row }"><el-button type="primary" link @click.stop="handleDetail(row)">{{ row.code }}</el-button></template>
+        </el-table-column>
+        <el-table-column label="移出仓库" min-width="112" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link type="primary" underline="never" @click.stop="$router.push(`/inventory/warehouse/detail/${row.fromWarehouseId}`)">{{ warehouseName(row.fromWarehouseId) }}</el-link>
           </template>
         </el-table-column>
-        <el-table-column label="移入仓库" min-width="110" show-overflow-tooltip>
+        <el-table-column label="移入仓库" min-width="112" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link type="primary" underline="never" @click.stop="$router.push(`/inventory/warehouse/detail/${row.toWarehouseId}`)">{{ warehouseName(row.toWarehouseId) }}</el-link>
           </template>
         </el-table-column>
-        <el-table-column prop="itemsSummary" label="产品明细" min-width="140" show-overflow-tooltip />
+        <el-table-column label="产品明细" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <EntityLinks :items="row.items" target="product" qty-key="quantity">
+              <span>{{ row.itemsSummary || '-' }}</span>
+            </EntityLinks>
+          </template>
+        </el-table-column>
         <el-table-column label="移仓日期" width="100" align="center">
           <template #default="{ row }">{{ $fmtDate(row.moveDate) }}</template>
         </el-table-column>
@@ -72,6 +81,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import EntityLinks from '@/components/EntityLinks.vue'
 
 const router = useRouter()
 const route = useRoute()

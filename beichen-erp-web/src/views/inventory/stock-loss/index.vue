@@ -34,20 +34,30 @@
 
     <el-card shadow="never" class="table-card">
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1230px > 内容区 956px
-           ⇒ 横向滚动 274px。收窄为合计 942px（报损单号/仓库/报损明细保持 min-width，宽屏自动吃余量）。 -->
+           ⇒ 横向滚动 274px。收窄为合计 942px。
+           2026-09-26 B5a（用户口径「数据显示完整 + 单号/仓库可点」）：
+           ①报损单号 min112→**150 固定**并做成链接进详情（BS-+11 位，原先 112px 被截断）；
+           ②仓库 min100→140 并做成链接进仓库详情（成品报损只发生在自有成品仓 ⇒ 固定走 /inventory/warehouse）；
+           ③为抵平：报损日期 96→92、报损原因 88→80、报损明细 min124→110、报损金额 96→88、审核人 80→70。
+           合计 = 150+140+92+80+110+88+76+70+132 = **938** ✓ -->
       <el-table v-loading="loading" :data="rows" border stripe>
-        <el-table-column prop="code" label="报损单号" min-width="112" show-overflow-tooltip />
-        <el-table-column prop="warehouseName" label="仓库" min-width="100" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.warehouseName || '—' }}</template>
+        <el-table-column label="报损单号" width="150" show-overflow-tooltip>
+          <template #default="{ row }"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button></template>
         </el-table-column>
-        <el-table-column prop="lossDate" label="报损日期" width="96" />
-        <el-table-column label="报损原因" width="88" show-overflow-tooltip>
+        <el-table-column label="仓库" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button v-if="row.warehouseId" type="primary" link @click.stop="router.push(`/inventory/warehouse/detail/${row.warehouseId}`)">{{ row.warehouseName || '—' }}</el-button>
+            <span v-else>{{ row.warehouseName || '—' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="lossDate" label="报损日期" width="92" />
+        <el-table-column label="报损原因" width="80" show-overflow-tooltip>
           <template #default="{ row }">{{ LossReasonLabel[row.lossReason] || row.lossReason || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="itemSummary" label="报损明细" min-width="124" show-overflow-tooltip>
+        <el-table-column prop="itemSummary" label="报损明细" min-width="110" show-overflow-tooltip>
           <template #default="{ row }">{{ row.itemSummary || '—' }}</template>
         </el-table-column>
-        <el-table-column label="报损金额" width="96" align="right">
+        <el-table-column label="报损金额" width="88" align="right">
           <template #default="{ row }">{{ money(row.totalAmount) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="76" align="center">
@@ -55,7 +65,7 @@
             <el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="审核人" width="80" show-overflow-tooltip>
+        <el-table-column label="审核人" width="70" show-overflow-tooltip>
           <template #default="{ row }">{{ row.auditorName || '—' }}</template>
         </el-table-column>
         <!-- 2026-09-24（用户口径）：草稿态在**详情页**改+存（含明细增删）⇒ 列表去掉「编辑」入口；操作列 170→132。 -->

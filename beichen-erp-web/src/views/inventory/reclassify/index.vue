@@ -130,7 +130,10 @@ onActivated(() => {
         <el-table-column label="日期" width="100">
           <template #default="{ row }">{{ row.reclassifyDate ? $fmtDate(row.reclassifyDate) : '-' }}</template>
         </el-table-column>
-        <el-table-column prop="code" label="单号" width="120" show-overflow-tooltip />
+        <!-- 2026-09-26 B5a：单号 120→**146**（RC-+11 位 + 链接按钮，实测需 139）并做成链接进详情 -->
+        <el-table-column label="单号" width="146" show-overflow-tooltip>
+          <template #default="{ row }"><el-button type="primary" link @click.stop="handleDetail(row)">{{ row.code }}</el-button></template>
+        </el-table-column>
         <el-table-column label="仓库" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseId" type="primary" link @click.stop="router.push(`/inventory/warehouse/detail/${row.warehouseId}`)">

@@ -25,13 +25,16 @@
 
     <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="tableData" border stripe max-height="calc(100vh - 260px)">
-        <el-table-column prop="createTime" label="时间" width="140">
+        <!-- 2026-09-26 B5a（实测驱动）：时间列显示的是 $fmtDate（只有日期）⇒ 140→**96**（原 140 白占 44px）；
+             变动类型是中文枚举标签（最长「成品加工退货入委外仓」需 180~192px）⇒ 110→150 并登记进
+             「允许省略号」白名单（带 tooltip 看全文）；关联单号 130→**166**（实测需 164，含链接按钮）。 -->
+        <el-table-column prop="createTime" label="时间" width="96">
           <template #default="{ row }">{{ $fmtDate(row.createTime) }}</template>
         </el-table-column>
-        <el-table-column prop="changeType" label="变动类型" width="110" align="center">
+        <el-table-column label="变动类型" width="150" align="center" show-overflow-tooltip>
           <template #default="{ row }"><el-tag :type="logTagType(row.changeType)" size="small">{{ StockChangeTypeLabel[row.changeType] || row.changeType }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="关联单号" width="130">
+        <el-table-column label="关联单号" width="166" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link v-if="billLink(row.relatedBillType, row.relatedBillId)" type="primary" underline="never"
               @click="handleBillClick(row)">
@@ -40,10 +43,15 @@
             <span v-else>{{ row.relatedBillNo }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="产品名称" min-width="130">
-          <template #default="{ row }">{{ productName(row.productId) }}</template>
+        <!-- 2026-09-26 B5a：产品名称做成链接进产品详情（原先纯文本） -->
+        <el-table-column label="产品名称" min-width="110" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button v-if="row.productId" type="primary" link @click.stop="router.push(`/product/detail/${row.productId}`)">{{ productName(row.productId) }}</el-button>
+            <span v-else>{{ productName(row.productId) }}</span>
+          </template>
         </el-table-column>
-        <el-table-column label="仓库" width="110">
+        <!-- 仓库 110→150（委外仓名实测需 189，已登记白名单 + tooltip；可点进仓库详情） -->
+        <el-table-column label="仓库" width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseId" type="primary" link @click.stop="router.push(`/inventory/warehouse/detail/${row.warehouseId}`)">
               {{ warehouseName(row.warehouseId) }}
@@ -51,13 +59,13 @@
             <span v-else>{{ warehouseName(row.warehouseId) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="changeQuantity" label="变动数量" width="96" align="right">
+        <el-table-column prop="changeQuantity" label="变动数量" width="84" align="right">
           <template #default="{ row }">{{ fmt(row.changeQuantity) }}</template>
         </el-table-column>
-        <el-table-column prop="beforeQuantity" label="变动前库存" width="104" align="right">
+        <el-table-column prop="beforeQuantity" label="变动前库存" width="92" align="right">
           <template #default="{ row }">{{ fmt(row.beforeQuantity) }}</template>
         </el-table-column>
-        <el-table-column prop="afterQuantity" label="变动后库存" width="104" align="right">
+        <el-table-column prop="afterQuantity" label="变动后库存" width="92" align="right">
           <template #default="{ row }">{{ fmt(row.afterQuantity) }}</template>
         </el-table-column>
       </el-table>

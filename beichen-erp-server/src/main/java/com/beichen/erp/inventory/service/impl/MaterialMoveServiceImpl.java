@@ -95,16 +95,30 @@ public class MaterialMoveServiceImpl implements MaterialMoveService {
             m.put("fromWarehouseId", o.getFromWarehouseId()); m.put("toWarehouseId", o.getToWarehouseId());
             m.put("moveDate", o.getMoveDate()); m.put("status", o.getStatus()); m.put("remark", o.getRemark());
             m.put("createTime", o.getCreateTime());
+            // 2026-09-26 B5a（用户口径「明细列可点进物料详情」）：同一次遍历产出逐项
+            // [{materialId,materialName,quantity}]，前端 EntityLinks(target=material) 直接用
             List<InventoryMaterialMoveItem> its = itemsMap.getOrDefault(o.getId(), Collections.emptyList());
-            String summary = its.stream().map(it -> {
+            List<Map<String, Object>> itemList = new ArrayList<>();
+            StringBuilder summarySb = new StringBuilder();
+            for (InventoryMaterialMoveItem it : its) {
                 String name = "";
                 if (it.getMaterialId() != null) {
                     OutsourceMaterial mat = materialMap.get(it.getMaterialId());
                     if (mat != null) name = mat.getMaterialName();
                 }
-                return name + "*" + (it.getQuantity() != null ? it.getQuantity().stripTrailingZeros().toPlainString() : "0");
-            }).collect(Collectors.joining("，"));
-            m.put("itemsSummary", summary);
+                String qty = it.getQuantity() != null ? it.getQuantity().stripTrailingZeros().toPlainString() : "0";
+                if (summarySb.length() > 0) summarySb.append("，");
+                summarySb.append(name).append("*").append(qty);
+                if (it.getMaterialId() != null) {
+                    Map<String, Object> im = new HashMap<>();
+                    im.put("materialId", it.getMaterialId());
+                    im.put("materialName", name);
+                    im.put("quantity", it.getQuantity());
+                    itemList.add(im);
+                }
+            }
+            m.put("itemsSummary", summarySb.toString());
+            m.put("items", itemList);
             return m;
         }).toList());
         return res;

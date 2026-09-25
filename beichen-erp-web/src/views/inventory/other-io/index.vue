@@ -83,7 +83,10 @@ onMounted(async ()=>{ await loadWarehouses(); loadData() })
     <el-card shadow="never">
       <el-table :data="list" border stripe v-loading="loading" @row-click="handleDetail">
         <el-table-column label="日期" width="110"><template #default="{row}">{{ $fmtDate(row.ioDate) }}</template></el-table-column>
-        <el-table-column prop="code" label="单号" width="160"/>
+        <!-- 2026-09-26 B5a：单号做成链接进详情（原先只能点整行/操作列） -->
+        <el-table-column label="单号" width="160" show-overflow-tooltip>
+          <template #default="{ row }"><el-button type="primary" link @click.stop="handleDetail(row)">{{ row.code }}</el-button></template>
+        </el-table-column>
         <el-table-column label="仓库" width="140">
           <template #default="{row}">
             <el-button v-if="row.warehouseId" type="primary" link @click.stop="router.push(`/inventory/warehouse/detail/${row.warehouseId}`)">

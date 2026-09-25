@@ -146,6 +146,17 @@ async function cancel(row: StockTake) {
 function fmt(v?: number) { return v == null ? '0' : String(Math.round(Number(v))) }
 function fmtDate(v?: string) { return v ? String(v).slice(0, 10) : '' }
 function nameOf(it: StockTakeItem) { return it.productName || it.materialName || '' }
+/**
+ * 仓库详情分流（2026-09-26 B5a）：本面板被「成品库存盘点(scope=PRODUCT)」与「物料库存盘点(scope=MATERIAL)」
+ * 共用 ⇒ 仓库可能是成品仓、辅助物料仓或委外仓，三种详情页不同。仓库列表已按 scope 加载（含 warehouseCategory），
+ * 直接本地判定，零额外请求。
+ */
+function goWarehouseDetail(id?: number) {
+  if (id == null) return
+  const w = warehouses.value.find((x: any) => x.id === id)
+  if (w?.warehouseCategory === WarehouseCategory.OUTSOURCE) router.push(`/outsource/warehouse/detail/${id}`)
+  else router.push(`/inventory/warehouse/detail/${id}`)
+}
 // 2026-09-20（F7-191②）：仓库列表只需加载一次；单据数据改为每次进入都重拉 ——
 // 本面板被两个路由页包裹在 keep-alive 内（再次进入复用组件、onMounted 不再触发），
 // 原先只挂 onMounted ⇒ 从新增/明细返回列表时不刷新。
@@ -186,19 +197,31 @@ onActivated(() => { loadData() })
         <span style="margin-left:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">盘点范围{{ scopeHint }}</span>
       </template>
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1120px > 内容区 971px
-           ⇒ 横向滚动 149px。收窄为合计 936px（本组件被 成品库存盘点 / 物料库存盘点 两页共用 ⇒ 一处修两页）。 -->
+           ⇒ 横向滚动 149px。收窄为合计 936px（本组件被 成品库存盘点 / 物料库存盘点 两页共用 ⇒ 一处修两页）。
+           2026-09-26 B5a（用户口径「数据显示完整 + 单号/仓库可点」）：
+           ①盘点单号 130→**146** 并做成链接（点开与「查看明细/录入实盘」同一出口，避免两套入口）；
+           ②仓库 min110→130 并做成链接进**对应仓库详情**（按 warehouseCategory 分流委外仓/自有仓）；
+           ③为抵平：盘点月份 90→80、盘点日期 100→96、明细行数 80→70、差异行数 80→70、差异合计 96→88。
+           合计 = 146+130+80+96+70+70+88+76+174 = **930** ✓ -->
       <el-table v-loading="loading" :data="data" border stripe>
-        <el-table-column prop="takeNo" label="盘点单号" width="130" show-overflow-tooltip />
-        <el-table-column prop="warehouseName" label="仓库" min-width="110" show-overflow-tooltip />
-        <el-table-column prop="period" label="盘点月份" width="90" align="center" />
-        <el-table-column label="盘点日期" width="100"><template #default="{row}">{{ fmtDate(row.takeDate) }}</template></el-table-column>
-        <el-table-column prop="itemCount" label="明细行数" width="80" align="right" />
-        <el-table-column label="差异行数" width="80" align="right">
+        <el-table-column label="盘点单号" width="146" show-overflow-tooltip>
+          <template #default="{ row }"><el-button type="primary" link @click.stop="openItems(row)">{{ row.takeNo }}</el-button></template>
+        </el-table-column>
+        <el-table-column label="仓库" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button v-if="row.warehouseId" type="primary" link @click.stop="goWarehouseDetail(row.warehouseId)">{{ row.warehouseName }}</el-button>
+            <span v-else>{{ row.warehouseName }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="period" label="盘点月份" width="80" align="center" />
+        <el-table-column label="盘点日期" width="96"><template #default="{row}">{{ fmtDate(row.takeDate) }}</template></el-table-column>
+        <el-table-column prop="itemCount" label="明细行数" width="70" align="right" />
+        <el-table-column label="差异行数" width="70" align="right">
           <template #default="{row}">
             <span :style="{ color: row.diffCount ? 'var(--app-color-danger)' : '' }">{{ row.diffCount || 0 }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="差异合计" width="96" align="right">
+        <el-table-column label="差异合计" width="88" align="right">
           <template #default="{row}"><span :style="{ color: row.diffSum ? 'var(--app-color-danger)' : '' }">{{ fmt(row.diffSum) }}</span></template>
         </el-table-column>
         <el-table-column label="状态" width="76" align="center">

@@ -29,12 +29,21 @@
       <!--
         每行一个产品：数量为跨仓库汇总值，点击行进入详情看该产品在各仓库的分布。
         所有列统一用 min-width（不用固定 width）：Element Plus 会把剩余空间按 min-width 比例分摊给各列，
-        因此窄屏刚好放下（Σmin-width 约 936，容器约 950）、宽屏自动拉伸铺满整页，不会出现留白或横向滚动。
+        因此窄屏刚好放下、宽屏自动拉伸铺满整页，不会出现留白或横向滚动。
+        2026-09-26 B5a（用户口径「数据显示完整 + 产品可点」，实测驱动）：
+        ①品牌 min78→**108**（实测需 107，原先全部行被截断）；
+        ②产品名称做成链接进产品详情（原先只能点整行/操作列）；
+        ③为抵平把 SKU 95→88、产品名称 min125→116、待整理 74→72、总库存 74→72、安全库存 82→80、分布仓库 80→74
+          ⇒ 声明合计 **938** ✓（容器约 948；全部 min-width ⇒ 宽屏自动铺满）。
       -->
       <el-table v-loading="loading" :data="rows" border stripe @row-click="goDetail">
-        <el-table-column prop="sku" label="SKU" min-width="95" show-overflow-tooltip />
-        <el-table-column prop="productName" label="产品名称" min-width="125" show-overflow-tooltip />
-        <el-table-column prop="brandName" label="品牌" min-width="78" show-overflow-tooltip>
+        <el-table-column prop="sku" label="SKU" min-width="88" show-overflow-tooltip />
+        <el-table-column label="产品名称" min-width="116" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button type="primary" link @click.stop="goProduct(row)">{{ row.productName }}</el-button>
+          </template>
+        </el-table-column>
+        <el-table-column prop="brandName" label="品牌" min-width="108" show-overflow-tooltip>
           <template #default="{ row }">{{ row.brandName || '—' }}</template>
         </el-table-column>
         <!-- 品质数量列用紧凑数字（非 tag）：五档品质 + 汇总列要在一屏内放得下，避免横向滚动 -->
@@ -50,15 +59,15 @@
         <el-table-column label="不良" min-width="60" align="right">
           <template #default="{ row }"><span :class="qtyClass(row.qtyDefect, 'defect')">{{ fmt(row.qtyDefect) }}</span></template>
         </el-table-column>
-        <el-table-column label="待整理" min-width="74" align="right">
+        <el-table-column label="待整理" min-width="72" align="right">
           <template #default="{ row }">
             <span :class="qtyClass(row.qtyPending, 'pending')" title="压在成品仓、等待退货整理的库存（品质待整理 PENDING）">{{ fmt(row.qtyPending) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="总库存" min-width="74" align="right">
+        <el-table-column label="总库存" min-width="72" align="right">
           <template #default="{ row }"><strong>{{ fmt(totalQty(row)) }}</strong></template>
         </el-table-column>
-        <el-table-column label="安全库存" min-width="82" align="right">
+        <el-table-column label="安全库存" min-width="80" align="right">
           <template #default="{ row }">
             <span v-if="row.safetyStock" :style="{ color: row.lowStock ? '#f56c6c' : '#67c23a' }">
               {{ fmt(row.safetyStock) }}
@@ -69,7 +78,7 @@
             <span v-else style="color:#999">未设置</span>
           </template>
         </el-table-column>
-        <el-table-column label="分布仓库" min-width="80" align="center">
+        <el-table-column label="分布仓库" min-width="74" align="center">
           <template #default="{ row }">{{ row.warehouseCount ?? 0 }}</template>
         </el-table-column>
         <el-table-column label="操作" min-width="88" align="center" fixed="right">
@@ -205,6 +214,8 @@ function resetQuery() {
 }
 function onSizeChange(v: number) { page.pageSize = v; page.pageNum = 1; load() }
 function goDetail(row: any) { router.push(`/inventory/product-stock/detail/${row.productId}`) }
+/** 产品名称 → 产品主数据详情（2026-09-26 B5a：本页「产品名称」列由纯文本改为可点） */
+function goProduct(row: any) { if (row.productId) router.push(`/product/detail/${row.productId}`) }
 
 onMounted(load)
 </script>

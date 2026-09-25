@@ -30,16 +30,35 @@
 
     <el-card shadow="never" class="table-card">
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1100px > 内容区 956px
-           ⇒ 横向滚动 144px。收窄为合计 832px（单号/移出移入仓库/物料明细保持 min-width，宽屏自动吃余量）。 -->
+           ⇒ 横向滚动 144px。收窄为合计 832px。
+           2026-09-26 B5a（用户口径「数据显示完整 + 单号/仓库可点」）：
+           ①单号 min120→**146 固定**并做成链接进详情；
+           ②移出/移入仓库做成链接进**对应仓库详情**（委外仓/自有物料仓自动分流，见 goWarehouseDetail）；
+           ③物料明细改 EntityLinks（物料可点，多值弹层逐项）。
+           声明合计 = 146+112+112+140+100+78+132 = **820** ✓ -->
       <el-table v-loading="loading" :data="tableData" border stripe @row-click="handleDetail">
-        <el-table-column prop="code" label="单号" min-width="120" show-overflow-tooltip />
-        <el-table-column label="移出仓库" min-width="110" show-overflow-tooltip>
-          <template #default="{ row }">{{ warehouseName(row.fromWarehouseId) }}</template>
+        <el-table-column label="单号" width="146" show-overflow-tooltip>
+          <template #default="{ row }"><el-button type="primary" link @click.stop="handleDetail(row)">{{ row.code }}</el-button></template>
         </el-table-column>
-        <el-table-column label="移入仓库" min-width="110" show-overflow-tooltip>
-          <template #default="{ row }">{{ warehouseName(row.toWarehouseId) }}</template>
+        <el-table-column label="移出仓库" min-width="112" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button v-if="row.fromWarehouseId" type="primary" link @click.stop="goWarehouseDetail(row.fromWarehouseId)">{{ warehouseName(row.fromWarehouseId) }}</el-button>
+            <span v-else>{{ warehouseName(row.fromWarehouseId) }}</span>
+          </template>
         </el-table-column>
-        <el-table-column prop="itemsSummary" label="物料明细" min-width="140" show-overflow-tooltip />
+        <el-table-column label="移入仓库" min-width="112" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button v-if="row.toWarehouseId" type="primary" link @click.stop="goWarehouseDetail(row.toWarehouseId)">{{ warehouseName(row.toWarehouseId) }}</el-button>
+            <span v-else>{{ warehouseName(row.toWarehouseId) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="物料明细" min-width="140" show-overflow-tooltip>
+          <template #default="{ row }">
+            <EntityLinks :items="row.items" target="material" qty-key="quantity">
+              <span>{{ row.itemsSummary || '-' }}</span>
+            </EntityLinks>
+          </template>
+        </el-table-column>
         <el-table-column label="移仓日期" width="100" align="center">
           <template #default="{ row }">{{ $fmtDate(row.moveDate) }}</template>
         </el-table-column>
@@ -71,6 +90,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
+import EntityLinks from '@/components/EntityLinks.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -113,6 +133,16 @@ async function loadWarehouses() {
 function warehouseName(id?: number) {
   const w = warehouseOptions.value.find((x: any) => x.id === id)
   return w ? w.warehouseName : '-'
+}
+/**
+ * 仓库详情分流（2026-09-26 B5a）：物料移仓的移出/移入仓可能是**委外仓**或**我方物料仓**，
+ * 两者详情页不同（与物料退货页 goWarehouseDetail 同口径）。仓库列表本页已全量加载 ⇒ 零额外请求。
+ */
+function goWarehouseDetail(id?: number) {
+  if (id == null) return
+  const w = warehouseOptions.value.find((x: any) => x.id === id)
+  if (w?.warehouseCategory === WarehouseCategory.OUTSOURCE) router.push(`/outsource/warehouse/detail/${id}`)
+  else router.push(`/inventory/warehouse/detail/${id}`)
 }
 function statusType(s?: string) { return DocStatusTag[s || ''] || '' }
 
