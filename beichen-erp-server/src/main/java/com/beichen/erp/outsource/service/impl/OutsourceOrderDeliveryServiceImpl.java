@@ -326,6 +326,9 @@ public class OutsourceOrderDeliveryServiceImpl
         }
 
         if (Boolean.TRUE.equals(delivery.getIsReverse())) {
+            // P3-1 收敛（2026-09-25）：已结单的加工单禁止审核红冲（防"先建草稿、后结单、再审核"绕过创建拦截）
+            if (order != null && OutsourceOrderStatus.FINISHED.getCode().equals(order.getStatus()))
+                throw new BusinessException("该加工单已结单，账务已清算；如需退货请走「无单加工退货」办理（不关联加工单）");
             // P3-1（2026-09-25）：有单红冲**审核期**额度复核 —— 修复并发双草稿窗口（建草稿校验与审核落账
             // 之间无复核：两人并发建草稿可双双过审造成超退）。对加工单行 FOR UPDATE 串行化后，
             // 按**建草稿同一口径**（returnDefect :508-520）复核"累计退货 ≤ 已收（净额）"。无单红冲无聚合对象，不适用。
@@ -385,6 +388,9 @@ public class OutsourceOrderDeliveryServiceImpl
             throw new BusinessException("收货记录缺少加工单，无法反审核");
 
         if (Boolean.TRUE.equals(delivery.getIsReverse())) {
+            // P3-1 收敛（2026-09-25）：已结单的加工单禁止反审核红冲（回滚会动到结单清算过的账）
+            if (order != null && OutsourceOrderStatus.FINISHED.getCode().equals(order.getStatus()))
+                throw new BusinessException("该加工单已结单，不可反审核红冲");
             if (order == null) revertDefectStockNoOrder(delivery);
             else revertDefectStock(order, delivery);
         } else {
@@ -473,8 +479,12 @@ public class OutsourceOrderDeliveryServiceImpl
         log.info("退不良: orderId={}, body={}", orderId, body);
         OutsourceOrder order = orderService.getById(orderId);
         if (order == null) throw new BusinessException("加工单不存在");
-        if (!OutsourceOrderStatus.PRODUCING.getCode().equals(order.getStatus()) && !OutsourceOrderStatus.FINISHED.getCode().equals(order.getStatus()))
-            throw new BusinessException("只有生产中或已完成的加工单可以做加工退货");
+        // P3-1 收敛（2026-09-25）：已结单（FINISHED）的加工单账务已清算，禁止再发起有单红冲
+        //（结单后再还料/冲应付会破坏清算结果）；结单后退货请走「无单加工退货」（不关联加工单，与清算账解耦）。
+        if (OutsourceOrderStatus.FINISHED.getCode().equals(order.getStatus()))
+            throw new BusinessException("该加工单已结单，账务已清算；如需退货请走「无单加工退货」办理（不关联加工单）");
+        if (!OutsourceOrderStatus.PRODUCING.getCode().equals(order.getStatus()))
+            throw new BusinessException("只有生产中的加工单可以做加工退货");
 
         Long productId = body.get("productId") != null ? Long.valueOf(body.get("productId").toString()) : null;
         if (productId == null) throw new BusinessException("产品ID不能为空");

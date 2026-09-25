@@ -466,6 +466,9 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         }
 
         boolean repair = OutsourceReturnType.isRepair(order.getReturnType());
+        // ⚠️ P3-1 收敛留痕（2026-09-25）：非 repair（DEFECT）分支为**存量历史单专用**（新增入口已封死：
+        // create 只收 REPAIR；存量 DRAFT=0、AUDITED=3 张）。其落账口径（还料+扣成品+负应付、无 PRODUCT_DEFECT
+        // 转移腿）**勿对齐** P1-1 的无单红冲新口径 —— AUDITED 3 张若反审核，必须走与历史审核严格对称的原逆向。
         List<ReturnOrderItem> items = returnOrderItemMapper.selectList(
             new LambdaQueryWrapper<ReturnOrderItem>().eq(ReturnOrderItem::getReturnOrderId, id));
         // 2026-09-17：维修退货不还料（明细必须为空）；加工退货允许无明细（包工包料 / 该产品无 BOM 快照 → 只退成品）
