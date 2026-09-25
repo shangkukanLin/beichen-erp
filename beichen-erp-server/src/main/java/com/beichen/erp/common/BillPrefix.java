@@ -50,6 +50,8 @@ public final class BillPrefix {
     public static final String OUTSOURCE_MATERIAL_RETURN = "MR-";
     /** 委外加工退货单（成品退回；原先 OR- 硬编码在 Service 里，2026-09-12 收进常量表） */
     public static final String OUTSOURCE_RETURN_ORDER = "OR-";
+    /** 委外加工返回单（P1-2 2026-09-25：修好送回——核销在厂成品+实际用料+赔料应收；ORB- 独立取号） */
+    public static final String OUTSOURCE_RETURN_BACK = "ORB-";
     /** 委外其他出入库 */
     public static final String OUTSOURCE_OTHER_IO = "OWO-";
     /** 移仓单 */

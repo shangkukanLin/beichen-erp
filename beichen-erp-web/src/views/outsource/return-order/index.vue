@@ -39,8 +39,8 @@ import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_K
 
 const router = useRouter()
 
-/** 页签：DEFECT=加工退货（红冲收货台账）/ REPAIR=维修退货（独立退货单） */
-type TabKey = 'DEFECT' | 'REPAIR'
+/** 页签：DEFECT=加工退货（红冲收货台账）/ REPAIR=维修退货（独立退货单）/ BACK=加工返回单（P1-2） */
+type TabKey = 'DEFECT' | 'REPAIR' | 'BACK'
 const activeTab = ref<TabKey>('DEFECT')
 /** 维修退货的返回进度筛选（2026-09-17）：PENDING_RETURN 还有未返回 / CLOSED 已结案 */
 const progress = ref<string>('')
@@ -154,6 +154,130 @@ async function submitNoOrder() {
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { noOrderSaving.value = false }
 }
 
+// ==================== ③ 加工返回单（P1-2 2026-09-25：修好送回——核销在厂成品+实际用料+赔料应收） ====================
+const backLoading = ref(false)
+const backList = ref<any[]>([])
+const backPage = reactive({ pageNum: 1, pageSize: 10, total: 0 })
+const backQuery = reactive({ code: '', status: '' })
+
+async function loadBack() {
+  backLoading.value = true
+  try {
+    const r = await request.get<any, any>('/outsource/return-back/page', {
+      params: {
+        pageNum: backPage.pageNum, pageSize: backPage.pageSize,
+        code: backQuery.code || undefined, status: backQuery.status || undefined
+      }
+    })
+    backList.value = r?.records || []
+    backPage.total = Number(r?.total || 0)
+  } catch (e: any) {
+    ElMessage.error('加载加工返回单失败：' + (e?.msg || e?.message || '未知错误'))
+  } finally { backLoading.value = false }
+}
+function backSearch() { backPage.pageNum = 1; loadBack() }
+function backReset() { backQuery.code = ''; backQuery.status = ''; backSearch() }
+
+async function backAudit(row: any) {
+  try {
+    await ElMessageBox.confirm('确定审核该加工返回单吗？将核销委外仓在厂成品、修好成品回仓、按实际用料扣减物料并生成对加工厂的赔料应收。', '审核', { type: 'warning' })
+  } catch { return }
+  try { await request.put(`/outsource/return-back/${row.id}/audit`); ElMessage.success('已审核'); await loadBack() }
+  catch (e: any) { ElMessage.error(e?.message || '审核失败') }
+}
+async function backUnAudit(row: any) {
+  try {
+    await ElMessageBox.confirm('确定反审核吗？将三腿对称回滚（在厂成品/回仓成品/用料）、冲销赔料应收并反结转成本，回到草稿。', '反审核', { type: 'warning' })
+  } catch { return }
+  try { await request.put(`/outsource/return-back/${row.id}/un-audit`); ElMessage.success('已反审核'); await loadBack() }
+  catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
+}
+async function backCancel(row: any) {
+  try { await ElMessageBox.confirm('确定作废该返回单草稿吗？', '作废', { type: 'warning' }) } catch { return }
+  try { await request.post(`/outsource/return-back/${row.id}/cancel`); ElMessage.success('已作废'); await loadBack() }
+  catch (e: any) { ElMessage.error(e?.message || '作废失败') }
+}
+async function backDelete(row: any) {
+  try { await ElMessageBox.confirm('确定删除该返回单草稿吗？', '删除', { type: 'warning' }) } catch { return }
+  try { await request.delete(`/outsource/return-back/${row.id}`); ElMessage.success('已删除'); await loadBack() }
+  catch (e: any) { ElMessage.error(e?.message || '删除失败') }
+}
+
+// ---------- 新增/编辑返回单弹窗（草稿态，明细=实际用料，可超 BOM） ----------
+const backDialog = reactive({ visible: false, saving: false, editId: null as any })
+const backForm = reactive({
+  factoryId: undefined as any, productId: undefined as any, quantity: '' as any,
+  defectQualityType: 'A', returnQualityType: 'A', inWarehouseId: undefined as any,
+  returnDate: '', remark: '',
+  items: [] as Array<{ materialId: any, quantity: any }>
+})
+const fetchMaterials = (kw: string) =>
+  request.get('/outsource/material/page', { params: { pageNum: 1, pageSize: 500, materialName: kw } })
+
+function openBackAdd() {
+  backDialog.editId = null
+  Object.assign(backForm, {
+    factoryId: undefined, productId: undefined, quantity: '', defectQualityType: 'A',
+    returnQualityType: 'A', inWarehouseId: undefined, returnDate: '', remark: '', items: [{ materialId: undefined, quantity: undefined }]
+  })
+  backDialog.visible = true
+}
+function addBackItem() { backForm.items.push({ materialId: undefined, quantity: undefined }) }
+function removeBackItem(i: number) { backForm.items.splice(i, 1) }
+
+async function submitBack() {
+  if (!backForm.factoryId) { ElMessage.warning('请选择加工厂'); return }
+  if (!backForm.productId) { ElMessage.warning('请选择产品'); return }
+  const qty = Math.round(Number(backForm.quantity) || 0)
+  if (!(qty > 0)) { ElMessage.warning('请输入返回数量'); return }
+  if (!backForm.inWarehouseId) { ElMessage.warning('请选择回仓仓库'); return }
+  const items = backForm.items
+    .map(it => ({ materialId: it.materialId, quantity: Math.round(Number(it.quantity) || 0) }))
+    .filter(it => it.materialId && it.quantity > 0)
+  if (!items.length) { ElMessage.warning('请至少填写一行有效用料（物料+数量）'); return }
+  backDialog.saving = true
+  try {
+    const body = {
+      factoryId: backForm.factoryId, productId: backForm.productId, quantity: qty,
+      defectQualityType: backForm.defectQualityType, returnQualityType: backForm.returnQualityType,
+      inWarehouseId: backForm.inWarehouseId, returnDate: backForm.returnDate || undefined,
+      remark: backForm.remark, items
+    }
+    if (backDialog.editId) await request.put(`/outsource/return-back/${backDialog.editId}`, body)
+    else await request.post('/outsource/return-back', body)
+    ElMessage.success('加工返回单草稿已保存，请在列表审核')
+    backDialog.visible = false
+    await loadBack()
+  } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { backDialog.saving = false }
+}
+
+// ---------- 返回单详情弹窗（主表 + 用料明细） ----------
+const backDetail = reactive({ visible: false, loading: false, head: {} as any, items: [] as any[] })
+async function openBackDetail(row: any) {
+  backDetail.visible = true
+  backDetail.loading = true
+  try {
+    const [h, its] = await Promise.all([
+      request.get<any, any>(`/outsource/return-back/${row.id}`),
+      request.get<any, any>(`/outsource/return-back/${row.id}/items`)
+    ])
+    backDetail.head = h || {}
+    backDetail.items = its || []
+  } catch (e: any) { ElMessage.error(e?.message || '加载详情失败') } finally { backDetail.loading = false }
+}
+async function editBack(row: any) {
+  const h = await request.get<any, any>(`/outsource/return-back/${row.id}`)
+  const its = await request.get<any, any>(`/outsource/return-back/${row.id}/items`)
+  backDialog.editId = row.id
+  Object.assign(backForm, {
+    factoryId: h.factoryId, productId: h.productId, quantity: Number(h.quantity),
+    defectQualityType: h.defectQualityType || 'A', returnQualityType: h.returnQualityType || 'A',
+    inWarehouseId: h.inWarehouseId, returnDate: h.returnDate || '', remark: h.remark || '',
+    items: (its || []).map((it: any) => ({ materialId: it.materialId, quantity: Number(it.quantity) }))
+  })
+  backDialog.visible = true
+}
+
 // ==================== ② 独立退货单（维修退货） ====================
 const loading = ref(false)
 const list = ref<any[]>([])
@@ -172,10 +296,11 @@ async function loadData() {
   } finally { loading.value = false }
 }
 
-/** 切页签：加工退货看台账、维修退货看独立退货单；分页与进度筛选各自重置 */
+/** 切页签：加工退货看台账、维修退货看独立退货单、加工返回单看返回列表；分页与进度筛选各自重置 */
 function handleTabChange() {
-  pagination.pageNum = 1; ledgerPage.pageNum = 1; progress.value = ''
+  pagination.pageNum = 1; ledgerPage.pageNum = 1; backPage.pageNum = 1; progress.value = ''
   if (activeTab.value === 'DEFECT') { loadLedger(); return }
+  if (activeTab.value === 'BACK') { loadBack(); return }
   loadData()
 }
 /** 维修退货页签的「查询/重置」（与物料退货页同一套交互；台账页签有各自的即时筛选） */
@@ -221,6 +346,7 @@ function goReturnDetail(row: any) { router.push(`/outsource/return-order/detail/
 
 function reloadCurrent() {
   if (activeTab.value === 'DEFECT') loadLedger()
+  else if (activeTab.value === 'BACK') loadBack()
   else loadData()
 }
 
@@ -244,6 +370,7 @@ onMounted(() => { loadLedger() })
       <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
         <el-tab-pane :label="OutsourceReturnTypeLabel[OutsourceReturnType.DEFECT]" name="DEFECT" />
         <el-tab-pane :label="OutsourceReturnTypeLabel[OutsourceReturnType.REPAIR]" name="REPAIR" />
+        <el-tab-pane label="加工返回单" name="BACK" />
       </el-tabs>
 
       <!-- 筛选行（与物料退货页同一布局）：左侧筛选 + 查询/重置，右侧新增按钮（随页签切换） -->
@@ -261,6 +388,20 @@ onMounted(() => { loadLedger() })
         <el-button @click="ledgerQuery.linked = ''; ledgerQuery.status = ''; ledgerSearch()">重置</el-button>
         <div style="margin-left:auto">
           <el-button type="success" :icon="'Plus'" @click="openNoOrder">新增</el-button>
+        </div>
+      </div>
+      <!-- 加工返回单（P1-2）筛选行 -->
+      <div v-else-if="activeTab === 'BACK'" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <el-input v-model="backQuery.code" placeholder="返回单号" clearable style="width:170px" />
+        <el-select v-model="backQuery.status" placeholder="状态" clearable style="width:130px">
+          <el-option label="草稿" :value="DocStatus.DRAFT" />
+          <el-option label="已审核" :value="DocStatus.AUDITED" />
+          <el-option label="已作废" :value="DocStatus.CANCELLED" />
+        </el-select>
+        <el-button type="primary" @click="backSearch">查询</el-button>
+        <el-button @click="backReset">重置</el-button>
+        <div style="margin-left:auto">
+          <el-button type="success" :icon="'Plus'" @click="openBackAdd">新增</el-button>
         </div>
       </div>
       <div v-else style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
@@ -328,6 +469,41 @@ onMounted(() => { loadLedger() })
             :page-sizes="[10, 20, 50, 100]" :total="ledgerPage.total"
             layout="total, sizes, prev, pager, next, jumper" background
             @size-change="ledgerSearch" @current-change="loadLedger" />
+        </div>
+      </template>
+
+      <!-- ============ ③ 加工返回单（P1-2）：核销在厂成品 + 修好回仓 + 实际用料 + 赔料应收 ============ -->
+      <template v-else-if="activeTab === 'BACK'">
+        <!-- 列宽合计 806px ＜ 内容区，一行显示完（备注等细节在详情弹窗） -->
+        <el-table :data="backList" border stripe v-loading="backLoading" @row-click="openBackDetail">
+          <el-table-column prop="code" label="返回单号" width="132" />
+          <el-table-column prop="factoryName" label="加工厂" width="100" show-overflow-tooltip />
+          <el-table-column prop="productName" label="产品" min-width="110" show-overflow-tooltip />
+          <el-table-column label="规格" width="64" align="center"><template #default="{ row }">{{ specText(row.defectQualityType) }}</template></el-table-column>
+          <el-table-column label="返回数量" width="84" align="right">
+            <template #default="{ row }"><span style="font-weight:500">{{ Number(row.quantity || 0) }}</span></template>
+          </el-table-column>
+          <el-table-column label="料款应收" width="96" align="right">
+            <template #default="{ row }">{{ Number(row.materialAmount || 0).toFixed(2) }}</template>
+          </el-table-column>
+          <el-table-column label="返回日期" width="96" align="center"><template #default="{ row }">{{ $fmtDate(row.returnDate) }}</template></el-table-column>
+          <el-table-column label="状态" width="78" align="center">
+            <template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
+          </el-table-column>
+          <el-table-column label="操作" width="132" align="center" fixed="right">
+            <template #default="{ row }">
+              <el-button type="primary" link @click.stop="openBackDetail(row)">详情</el-button>
+              <el-button type="success" link v-if="row.status === DocStatus.DRAFT" @click.stop="backAudit(row)">审核</el-button>
+              <el-button type="warning" link v-if="row.status === DocStatus.AUDITED" @click.stop="backUnAudit(row)">反审核</el-button>
+              <el-button type="danger" link v-if="row.status === DocStatus.DRAFT" @click.stop="backDelete(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div class="pagination">
+          <el-pagination v-model:current-page="backPage.pageNum" v-model:page-size="backPage.pageSize"
+            :page-sizes="[10, 20, 50, 100]" :total="backPage.total"
+            layout="total, sizes, prev, pager, next, jumper" background
+            @size-change="backSearch" @current-change="loadBack" />
         </div>
       </template>
 
@@ -425,6 +601,91 @@ onMounted(() => { loadLedger() })
         <el-button @click="noOrderVisible = false">取消</el-button>
         <el-button type="primary" :loading="noOrderSaving" @click="submitNoOrder">保存草稿</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 新增/编辑加工返回单弹窗（P1-2）：用料明细 = 实际耗用（可超 BOM），审核时按 FIFO 生成对工厂应收 -->
+    <el-dialog v-model="backDialog.visible" :title="backDialog.editId ? '编辑加工返回单' : '新增加工返回单'"
+      width="var(--app-dialog-md)" :close-on-click-modal="false">
+      <el-form :model="backForm" label-width="120px" size="small">
+        <el-form-item required label="加工厂">
+          <RemoteSelect v-model="backForm.factoryId" :fetch="fetchFactories" :label-key="(row:any)=>row.name" style="width:100%" placeholder="赔料应收对象" />
+        </el-form-item>
+        <el-form-item required label="产品">
+          <RemoteSelect v-model="backForm.productId" :fetch="fetchProducts" :label-key="(row:any)=>row.name" style="width:100%" placeholder="选择产品" />
+        </el-form-item>
+        <el-form-item required label="在厂规格">
+          <el-select v-model="backForm.defectQualityType" style="width:100%">
+            <el-option v-for="o in NO_ORDER_SPECS" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item required label="返回数量">
+          <el-input v-model="backForm.quantity" type="number" placeholder="整数" @change="backForm.quantity = Math.round(Number(backForm.quantity) || 0)" />
+        </el-form-item>
+        <el-form-item required label="回仓仓库">
+          <RemoteSelect v-model="backForm.inWarehouseId" :fetch="fetchFinishedWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="修好成品回仓仓库" />
+        </el-form-item>
+        <el-form-item label="回仓品质">
+          <el-select v-model="backForm.returnQualityType" style="width:100%">
+            <el-option v-for="o in NO_ORDER_SPECS" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item required label="实际用料明细">
+          <div style="width:100%">
+            <div v-for="(it, i) in backForm.items" :key="i" style="display:flex;gap:8px;margin-bottom:8px">
+              <RemoteSelect v-model="it.materialId" :fetch="fetchMaterials" :label-key="(row:any)=>row.materialName" style="flex:1" placeholder="委外物料" />
+              <el-input v-model="it.quantity" type="number" placeholder="用量(可超BOM)" style="width:150px"
+                @change="it.quantity = Math.round(Number(it.quantity) || 0)" />
+              <el-button type="danger" link @click="removeBackItem(i)">删除</el-button>
+            </div>
+            <el-button type="primary" link :icon="'Plus'" @click="addBackItem">添加用料行</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="返回日期">
+          <el-date-picker v-model="backForm.returnDate" type="date" value-format="YYYY-MM-DD" style="width:100%" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="backForm.remark" placeholder="选填" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="backDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="backDialog.saving" @click="submitBack">保存草稿</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 返回单详情弹窗：主表全字段 + 用料明细（含 FIFO 单价/行料款快照） -->
+    <el-dialog v-model="backDetail.visible" title="加工返回单详情" width="var(--app-dialog-md)">
+      <div v-loading="backDetail.loading">
+        <el-descriptions :column="3" border size="small" style="margin-bottom:12px">
+          <el-descriptions-item label="返回单号">{{ backDetail.head.code }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{ DocStatusLabel[backDetail.head.status] || backDetail.head.status }}</el-descriptions-item>
+          <el-descriptions-item label="返回日期">{{ $fmtDate(backDetail.head.returnDate) }}</el-descriptions-item>
+          <el-descriptions-item label="加工厂">{{ backDetail.head.factoryName }}</el-descriptions-item>
+          <el-descriptions-item label="产品">{{ backDetail.head.productName }}</el-descriptions-item>
+          <el-descriptions-item label="返回数量">{{ backDetail.head.quantity }}</el-descriptions-item>
+          <el-descriptions-item label="在厂规格">{{ specText(backDetail.head.defectQualityType) }}</el-descriptions-item>
+          <el-descriptions-item label="回仓品质">{{ specText(backDetail.head.returnQualityType) }}</el-descriptions-item>
+          <el-descriptions-item label="料款应收">{{ Number(backDetail.head.materialAmount || 0).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="制单人">{{ backDetail.head.createByName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="审核人">{{ backDetail.head.auditorName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="备注">{{ backDetail.head.remark || '-' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-table :data="backDetail.items" border stripe size="small">
+          <el-table-column prop="materialName" label="物料" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="unit" label="单位" width="70" align="center" />
+          <el-table-column label="用量" width="90" align="right"><template #default="{ row }">{{ Number(row.quantity || 0) }}</template></el-table-column>
+          <el-table-column label="FIFO单价" width="110" align="right"><template #default="{ row }">{{ row.unitPrice != null ? Number(row.unitPrice).toFixed(4) : '-' }}</template></el-table-column>
+          <el-table-column label="行料款" width="110" align="right"><template #default="{ row }">{{ row.amount != null ? Number(row.amount).toFixed(2) : '-' }}</template></el-table-column>
+        </el-table>
+        <div v-if="backDetail.head.status === DocStatus.DRAFT" style="margin-top:12px;text-align:right">
+          <el-button type="success" @click="backDialog.visible = false; backAudit(backDetail.head)">审核</el-button>
+          <el-button type="warning" @click="backDialog.visible = false; editBack(backDetail.head)">编辑</el-button>
+          <el-button type="danger" @click="backDialog.visible = false; backDelete(backDetail.head)">删除</el-button>
+        </div>
+        <div v-else-if="backDetail.head.status === DocStatus.AUDITED" style="margin-top:12px;text-align:right">
+          <el-button type="warning" @click="backDetail.visible = false; backUnAudit(backDetail.head)">反审核</el-button>
+        </div>
+      </div>
     </el-dialog>
 
 

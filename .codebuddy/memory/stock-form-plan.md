@@ -199,8 +199,8 @@ UN-AUDIT 后 stock total=14572 ✅ 精确回基线 · log=2130
 P0-2 库存表 + 流水表加 stock_form；两条唯一索引改造；WarehouseStockService/Mapper 咽喉方法传参；40+ 调用点逐个确认  ✅
 P0-3 委外仓只读展示（物料 / 成品（加工退货）/ 成品（维修退货）分开，可查询可盘点）+ 盘点不并表  ✅
 P1-1 加工退货·无单：改成"成品转移进加工厂委外仓"（不红冲/不分解料/不动应付）  ✅
-P1-2 返回单（新）：核销在厂成品 + 实际用料多行（可超 BOM）+ 赔料应收 + FIFO 成本结转  ⏳ 下一步
-P2-1 维修退货：送修=成品（维修退货）转移进委外仓；返回单扣料但无赔料应收
+P1-2 返回单（新）：核销在厂成品 + 实际用料多行（可超 BOM）+ 赔料应收 + FIFO 成本结转  ✅
+P2-1 维修退货：送修=成品（维修退货）转移进委外仓；返回单扣料但无赔料应收  ⏳ 下一步
 P3-1 复核有单加工退货 + 端到端实证（**重点断言"同一笔只冲一次"**）
 ```
 
@@ -217,6 +217,23 @@ P3-1 复核有单加工退货 + 端到端实证（**重点断言"同一笔只冲
   全局 `warehouse_stock_log`：MATERIAL 2146 + PRODUCT_DEFECT 2（即 3917/3919 探针对），无杂形态。
   ⚠️ 有单红冲样本 187 反审核被"应付已转应收"守卫挡下（既有正确保护，换样本 177 通过）。
   ⚠️ 探针踩坑：PowerShell `$pid` 是只读自动变量，脚本参数勿用 `$pid`。
+
+### P1-2 落地记录 ✅（2026-09-25）
+- **新单据「加工返回单」**（`outsource_return_back` + `outsource_return_back_item`，迁移脚本 `sql/migration-return-back.sql`，单号 `ORB-`）：
+  - 审核三腿：①核销在厂成品（`changeStock` 带 `FORM_PRODUCT_DEFECT`，code `OUTSOURCE_BACK_CONSUME`）
+    ②修好成品回我方仓（回仓品质可自选，code `OUTSOURCE_BACK_IN`）③实际用料逐行从委外仓扣
+    （`changeMaterialStockAllowNegative` 允许扣负——工厂已实际耗用，code `OUTSOURCE_BACK_MATERIAL`，数量**不做 BOM 比对**）；
+    每腿反审核均有对应 `CANCEL_*` 对称逆回。
+  - 资金：Σ行 `fifoPriceWithFallback` 生成**对加工厂**的应收（`FinanceReceivable` subjectType=SUPPLIER，
+    `SourceBillType.OUTSOURCE_RETURN_BACK`，billNo=单号幂等复用）；反审核 `reverseReceivable`。
+  - 成本：审核在入库后 `costService.applyProduct(Σ料FIFO÷qty)` 提升加权成本；反审核 `reverseByBill` 按单删批次反加权。
+  - 防超核销：Σ已审核返回单 ≤ Σ无单退货送修量（同厂+产品+规格，创建/修改时校验）。
+  - 前端：`return-order/index.vue` 第三页签「加工返回单」（列表/新增编辑弹窗/详情弹窗）；ui-e2e-zh.json 已同步文案；
+    ApiPermGuard 新增 `/api/outsource/return-back` 规则（复用 `outsource:return-order` 码）——**未动 DataInitializer**。
+- **实证**：P1-1 造在厂行 3 件 → 返回单（料 33×5、35×4）审核：在厂行 0、回仓 B 行 3、料 −5/−4、应收 1 行 117.99（FIFO）、
+  四腿流水形态正确；反审核逐行回原值、应收 CANCELLED、成本漂移 0.0005。
+  ⚠️ **成本尾差 = 既有特性**：CostService SCALE=4 加权舍入，反算固有 ≤0.001 尾差（与采购/委外交货入库反审核同源）；
+  ⚠️ reverseGroup 注释明确约定 **"reverse 在库存冲回之后调用"** —— unAudit 顺序勿再"优化"成先反结转（实测不会更准）。
 
 ## 8. 验收铁律（每期都要做）
 - 端到端实证：建单 → 审核 → 查 `warehouse_stock`（按形态分行）/ 流水 / 应付应收 / 成本；反审核后**逐行回到原值**。

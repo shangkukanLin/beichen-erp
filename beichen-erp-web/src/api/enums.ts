@@ -377,6 +377,7 @@ export const SourceBillTypeLabel: Record<string, string> = {
   OUTSOURCE_RETURN_CHARGE: '委外加工退货收费',
   OUTSOURCE_REPAIR_CHARGE: '委外维修收费',
   OUTSOURCE_EXCESS_LOSS: '委外超损',
+  OUTSOURCE_RETURN_BACK: '加工返回单',
   // F7-54（2026-09-19）：补齐 6 个后端已定义但前端漏映射的值 ——
   // 缺映射时 sourceBillTypeLabel() 会走 `|| code` 兜底，列表"来源"列直接显示英文 code。
   // 其中 PURCHASE_EXCHANGE_IN / PURCHASE_EXCHANGE_RETURN 在库中各 60 行（采购换货是主力业务）。
@@ -759,6 +760,10 @@ export const StockChangeType = {
   OUTSOURCE_DEFECT_RETURN_UN_AUDIT: 'OUTSOURCE_DEFECT_RETURN_UN_AUDIT',
   // 无单加工退货（2026-09-25 P1-1）：成品（加工退货）入委外仓 / 反审核核销
   OUTSOURCE_DEFECT_IN: 'OUTSOURCE_DEFECT_IN', CANCEL_OUTSOURCE_DEFECT_IN: 'CANCEL_OUTSOURCE_DEFECT_IN',
+  // 加工返回单（2026-09-25 P1-2）：核销在厂成品 / 修好回仓 / 实际用料出仓（及其反审核）
+  OUTSOURCE_BACK_CONSUME: 'OUTSOURCE_BACK_CONSUME', CANCEL_OUTSOURCE_BACK_CONSUME: 'CANCEL_OUTSOURCE_BACK_CONSUME',
+  OUTSOURCE_BACK_IN: 'OUTSOURCE_BACK_IN', CANCEL_OUTSOURCE_BACK_IN: 'CANCEL_OUTSOURCE_BACK_IN',
+  OUTSOURCE_BACK_MATERIAL: 'OUTSOURCE_BACK_MATERIAL', CANCEL_OUTSOURCE_BACK_MATERIAL: 'CANCEL_OUTSOURCE_BACK_MATERIAL',
   // 委外维修退货（2026-09-17）：送修出库 / 反审核回补 / 维修返回入库 / 撤销返回
   OUTSOURCE_REPAIR_OUT: 'OUTSOURCE_REPAIR_OUT', OUTSOURCE_REPAIR_OUT_UN_AUDIT: 'OUTSOURCE_REPAIR_OUT_UN_AUDIT',
   OUTSOURCE_REPAIR_IN: 'OUTSOURCE_REPAIR_IN', CANCEL_OUTSOURCE_REPAIR_IN: 'CANCEL_OUTSOURCE_REPAIR_IN',
@@ -825,6 +830,12 @@ export const StockChangeTypeLabel: Record<string, string> = {
   [StockChangeType.OUTSOURCE_DEFECT_RETURN_UN_AUDIT]: '委外退不良反审核',
   [StockChangeType.OUTSOURCE_DEFECT_IN]: '成品加工退货入委外仓',
   [StockChangeType.CANCEL_OUTSOURCE_DEFECT_IN]: '核销成品加工退货',
+  [StockChangeType.OUTSOURCE_BACK_CONSUME]: '返回单核销在厂成品',
+  [StockChangeType.CANCEL_OUTSOURCE_BACK_CONSUME]: '返回单恢复在厂成品',
+  [StockChangeType.OUTSOURCE_BACK_IN]: '修好成品回仓',
+  [StockChangeType.CANCEL_OUTSOURCE_BACK_IN]: '修好成品扣回',
+  [StockChangeType.OUTSOURCE_BACK_MATERIAL]: '返回单用料出仓',
+  [StockChangeType.CANCEL_OUTSOURCE_BACK_MATERIAL]: '返回单用料恢复',
   [StockChangeType.OUTSOURCE_REPAIR_OUT]: '委外维修出库',
   [StockChangeType.OUTSOURCE_REPAIR_OUT_UN_AUDIT]: '委外维修出库反审核',
   [StockChangeType.OUTSOURCE_REPAIR_IN]: '委外维修入库',

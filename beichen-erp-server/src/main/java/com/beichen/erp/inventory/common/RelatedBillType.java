@@ -49,6 +49,8 @@ public enum RelatedBillType {
     OUTSOURCE_MATERIAL_RETURN("委外物料退货"),
     /** 委外维修退货：维修退货单送修出库 / 维修返回入库触发（2026-09-17） */
     OUTSOURCE_REPAIR("委外维修退货"),
+    /** 加工返回单：核销在厂成品 / 修好回仓 / 实际用料出仓触发（2026-09-25 P1-2） */
+    OUTSOURCE_RETURN_BACK("加工返回单"),
     /** 委外物料维修：物料退货（维修返还）送修出库 / 维修返回入库触发（2026-09-17） */
     OUTSOURCE_MATERIAL_REPAIR("委外物料维修"),
 

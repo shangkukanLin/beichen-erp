@@ -50,6 +50,8 @@ public enum SourceBillType {
     OUTSOURCE_MATERIAL_RETURN("委外物料退货"),
     /** 委外超损赔偿（结单超损总价生成负应付） */
     OUTSOURCE_EXCESS_LOSS("委外超损"),
+    /** 加工返回单料款（P1-2 2026-09-25）：修好送回按实际用料 FIFO 生成**对加工厂**的应收（工厂赔料），subjectType=SUPPLIER */
+    OUTSOURCE_RETURN_BACK("加工返回单"),
 
     /** 销售换货收费：换货单选择收费时生成的正向应收（单号后缀 -FEE） */
     SALE_EXCHANGE_CHARGE("销售换货收费"),
