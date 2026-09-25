@@ -169,6 +169,22 @@ UN-AUDIT 后 stock total=14572 ✅ 精确回基线 · log=2130
 8. **仓与形态的业务约束**：`OutsourceReturnOrderServiceImpl.java:637`、`:491` 现按仓类别分流 ⇒ 需明确"哪些形态只能落委外仓"。
 9. **实体与前端枚举**：`WarehouseStock.java` 加字段；前端 `api/enums.ts` 同步映射与筛选。
 
+## 7-A. P0-3 精确落点（下一轮照此执行，一次做完）
+1. **后端** `warehouse/controller/WarehouseStockController.java`（43.7KB）：
+   - `/by-warehouse/{id}`（:682-759，**委外仓库存展示接口**）：确认返回行含 `stockForm`（实体已带 ✓）；
+     可选加 `stockForm` 过滤参数（缺省**不过滤**，前端自行分组）。
+   - 四个聚合接口（`:91-116` 成品五档、`:205-231` 产品跨仓、`:330-355` 物料按仓、`:431-456` 物料跨仓）：
+     按 `stock_form` 过滤或分组；⚠️ 归类 switch（`:144-150/:258-264/:379-383/:479-483`）**显式不允许 else 兜底**，
+     新增分支否则静默漏算。
+2. **前端** `views/outsource/warehouse-detail.vue`（:106 调 `/by-warehouse/{id}`）：
+   - 表格按 `stockForm` 分三段展示：**物料 / 成品（加工退货）/ 成品（维修退货）**；
+   - `api/enums.ts` 加 `StockFormLabel`（code→中文）映射 ✅；
+   - 空组也要显示（如"暂无成品（加工退货）库存"✓）⇒ 用户能预见 P1/P2 之后这里会有数据。
+3. **盘点不并表**：`inventory/.../StockTakeServiceImpl.java:177`（开单快照全仓库存行）与 `:225 currentBook`（对账反查）
+   在定位键里加 `stock_form` ✅ —— ⚠️ 盘点是本次改造风险最高处（文档第 5 条 ✓），改完必须做一次盘点开单/对账回归。
+4. **验收标准（当前委外仓 0 行成品 ⇒ 如实写）**：本步只能验"分组渲染正确 + 物料行零回归" ✅；
+   成品（加工退货/维修退货）行要等 P1/P2 落地后才真实出现 ✅ —— 不要在本步宣称"成品形态已验证" ✗。
+
 ## 7. 分期（P0-3 起按此顺序）
 ```
 P0-2 库存表 + 流水表加 stock_form；两条唯一索引改造；WarehouseStockService/Mapper 咽喉方法传参；40+ 调用点逐个确认
