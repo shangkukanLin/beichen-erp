@@ -740,6 +740,9 @@ public class WarehouseStockController {
             // 2026-09-14：品质按 code 原样返回（成品=ProductQualityType A/B/C/DEFECT/PENDING，物料=QualityType GOOD/DEFECT），
             // 中文由前端映射（避免后端回中文后前端无法按 code 归并——见 inventory/warehouse-detail.vue 的按品质归并逻辑）
             m.put("qualityType", s.getQualityType());
+            // 2026-09-25 P0-3：库存形态（MATERIAL / PRODUCT_DEFECT / PRODUCT_REPAIR）随行返回，
+            // 前端委外仓库存页据此把「物料 / 成品（加工退货）/ 成品（维修退货）」分组展示（纯新增字段，向后兼容）。
+            m.put("stockForm", s.getStockForm());
             m.put("quantity", s.getQuantity());
             if (s.getProductId() != null) {
                 m.put("productName", productNameMap.getOrDefault(s.getProductId(), ""));
