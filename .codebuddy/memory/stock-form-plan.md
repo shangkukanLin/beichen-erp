@@ -1,7 +1,7 @@
 # 委外退回成品 → 委外仓库存形态（`stock_form`）改造方案 + 全库读写点清单
 
 > 来源：2026-09-25 用户口径（已确认）+ 全库只读盘点（68 次检索）。
-> 状态：**P0-1 盘点完成；P0-2 的数据库迁移已执行完成（2026-09-25）**；**Java/前端传参改造尚未开始**。
+> 状态：**P0-1 盘点完成；P0-2 的数据库迁移已执行完成（2026-09-25）**；**P0-3（展示 + 盘点不并表）已完成（2026-09-25）**；剩余 = P1 起（见 §7）。
 > **动手前请按本文档逐项核对，勿只改咽喉方法**。
 
 ## 0.1 P0-2 数据库迁移：已执行 ✅（2026-09-25）
@@ -27,7 +27,7 @@
   - `warehouse/service/WarehouseStockService.java`（22.8KB）：`changeStock`(:71)、`changeMaterialStock`(:120/:133)、`changeMaterialStockAllowNegative`(:148) 三个咽喉加 `stockForm` 形参（**保留默认 MATERIAL 的重载**，先不动调用点也能跑），并同步 `selectExist`(:341)/`selectMaterialExist`(:349)/`insertStock`(:356)/`insertMaterialStock`(:367) 与 `WarehouseStockLog` 写入（流水也要带形态）；
   - 然后逐个给 40+ 调用点显式传值（现有调用一律 `MATERIAL` ⇒ 与今天等价），逐个确认 + 回归；
   - 前端 `api/enums.ts` 加形态 code→中文 映射。
-- 迁移本身安全（新列有 DEFAULT、存量全 MATERIAL ⇒ 现有 UPSERT 的 WHERE 不会误配），但**P0-2 未完成**，P0-3 及之后都别开始。
+- 迁移本身安全（新列有 DEFAULT、存量全 MATERIAL ⇒ 现有 UPSERT 的 WHERE 不会误配）。**P0-2/P0-3 均已完成（2026-09-25），下一步 = P1-1**。
 
 ### P0-2 ②③ 精确改法（照此执行；目标是"**行为等价 + 可编译**"：既有方法保留为委托重载，先不动 40+ 调用点）
 > 文件均在 `beichen-erp-server/src/main/java/com/beichen/erp/` 下。
@@ -180,14 +180,17 @@ UN-AUDIT 后 stock total=14572 ✅ 精确回基线 · log=2130
    - 表格按 `stockForm` 分三段展示：**物料 / 成品（加工退货）/ 成品（维修退货）**；
    - `api/enums.ts` 加 `StockFormLabel`（code→中文）映射 ✅；
    - 空组也要显示（如"暂无成品（加工退货）库存"✓）⇒ 用户能预见 P1/P2 之后这里会有数据。
-3. **盘点不并表** —— 2026-09-25 已查清，**有一个前置依赖**：
-   - 快照（`StockTakeServiceImpl.java:177-204`）按**行**遍历生成明细 ⇒ 不同形态自然是独立行 ✅（此处无需改）；
-   - 但 ①`InventoryStockTakeItem` 实体/表**没有 stock_form** ⇒ 仅形态不同的两行库存会生成两条"看起来相同"的明细 ✗；
-     ②`currentBook`（:225 调用）按（仓+产品/物料+quality）定位 ⇒ 只会读到其中一行 ✗；
-     ③**最关键**：`applyDiff`（:459/:465）调 `changeStock/changeMaterialStock`，而咽喉当前把形态**写死 MATERIAL** ✗
-     ⇒ 若现在就让盘点纳入成品形态行，差异会写错行 ✗✗。
-   - ⇒ **前置 = 先给三个咽喉加"带 stockForm 的重载"**（原 ④ 计划提前）✅，然后盘点三处（明细表加列迁移 + currentBook + applyDiff）同批落地，
-     最后跑盘点开单/对账回归 ✅。顺序：重载（行为等价）→ 盘点改造 → 回归。
+3. **盘点不并表** —— ✅ **已完成（2026-09-25，本批落地）**：
+   - **前置（咽喉重载）✅**：`changeStock` 9 参保留为委托 → 新 10 参重载（末位 `stockForm`）；
+     `changeMaterialStock`（9 参）/`changeMaterialStockAllowNegative` 同样保留委托 → 新重载 → `changeMaterialStockInternal` 加末位 `stockForm` 形参；
+     读侧 `getQuantity`/`getMaterialQuantity` 各加带 `stockForm` 重载。老 40+ 调用点零改动、显式 MATERIAL 与原写死常量等价。
+   - **盘点三处 ✅**：① `inventory_stock_take_item` 加 `stock_form` 列（迁移脚本 `sql/migration-stock-take-item-form.sql`，幂等，存量 41 行全 MATERIAL）；
+     ② 开单快照 `it.setStockForm(s.getStockForm())`（仅形态不同的两行库存自然生成两条独立明细）；
+     ③ `currentBook` 按形态读（`formOf(it)` 兜底空值 → MATERIAL）、`applyDiff` 走带形态重载精确写回同形态行。
+   - **回归实证（探针成对验证）✅**：成品仓 73（389→391→389）+ 委外仓 68（2243→2245→2243）均**精确回基线**；
+     快照行非 MATERIAL = 0；新流水 `stock_form=MATERIAL / change_type=STOCK_TAKE_IN / +2`；全局 `warehouse_stock_log` 2136 行全 MATERIAL（零回归）。
+     探针建单期用 2026-10（2026-09 全部有库存的仓已被有效盘点单占用），探针用完即删。
+   - 前端本批**未加"形态"列**（当前 0 行非 MATERIAL，列无信息量且受"列表一行显示完"约束）；明细接口已自然透传 `stockForm`，等 P1/P2 有真实数据再上列。
 4. **验收标准（当前委外仓 0 行成品 ⇒ 如实写）**：本步只能验"分组渲染正确 + 物料行零回归" ✅；
    成品（加工退货/维修退货）行要等 P1/P2 落地后才真实出现 ✅ —— 不要在本步宣称"成品形态已验证" ✗。
 

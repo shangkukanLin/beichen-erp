@@ -182,6 +182,8 @@ public class StockTakeServiceImpl implements StockTakeService {
             it.setProductId(s.getProductId());
             it.setMaterialId(s.getMaterialId());
             it.setQualityType(s.getQualityType());
+            // P0-3 收尾（2026-09-25）：快照带库存形态 —— 仅形态不同的两行库存自然生成两条独立明细（不并表）
+            it.setStockForm(s.getStockForm());
             it.setBookQuantity(s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO);
             it.setActualQuantity(it.getBookQuantity()); // 默认实盘=账面，用户只改有差异的行
             it.setDiffQuantity(BigDecimal.ZERO);
@@ -402,17 +404,24 @@ public class StockTakeServiceImpl implements StockTakeService {
      * 历史流水无法回填新 code，报表反而要同时认两套。</p>
      */
     /**
-     * F6（2026-09-18）：明细行的「当前账面」——产品按 (仓库,产品,品质)、物料按 (仓库,物料) 实时取。
-     * <p>盘点单创建时写入的 {@code book_quantity} 只是**快照**，不能拿它当结算口径（见 §12.107.3-F6）。</p>
+     * F6（2026-09-18）：明细行的「当前账面」——产品按 (仓库,产品,品质,形态)、物料按 (仓库,物料,形态) 实时取。
+     * <p>盘点单创建时写入的 {@code book_quantity} 只是**快照**，不能拿它当结算口径（见 §12.107.3-F6）。
+     * P0-3 收尾（2026-09-25）：定位加入库存形态，防止仅形态不同的两行库存串行读取（不并表）。</p>
      */
     private BigDecimal currentBook(Long warehouseId, InventoryStockTakeItem it) {
         if (it.getProductId() != null) {
-            return nz(stockService.getQuantity(warehouseId, it.getProductId(), it.getQualityType()));
+            return nz(stockService.getQuantity(warehouseId, it.getProductId(), it.getQualityType(), formOf(it)));
         }
         if (it.getMaterialId() != null) {
-            return nz(stockService.getMaterialQuantity(warehouseId, it.getMaterialId()));
+            return nz(stockService.getMaterialQuantity(warehouseId, it.getMaterialId(), formOf(it)));
         }
         return BigDecimal.ZERO;
+    }
+
+    /** 明细行形态兜底：迁移前的存量行可能为空，一律按 MATERIAL 处理（与 DB 默认值一致） */
+    private String formOf(InventoryStockTakeItem it) {
+        return it.getStockForm() == null || it.getStockForm().isBlank()
+                ? WarehouseStock.FORM_MATERIAL : it.getStockForm();
     }
 
     /**
@@ -456,15 +465,16 @@ public class StockTakeServiceImpl implements StockTakeService {
             if (diff.compareTo(BigDecimal.ZERO) == 0) continue;
             BigDecimal delta = reverse ? diff.negate() : diff;
             if (it.getProductId() != null) {
+                // P0-3 收尾：差异写回**同形态**库存行（走带 stockForm 的重载），不同形态互不串行
                 stockService.changeStock(t.getWarehouseId(), it.getProductId(), delta,
                         delta.compareTo(BigDecimal.ZERO) > 0 ? StockChangeType.STOCK_TAKE_IN : StockChangeType.STOCK_TAKE_OUT,
-                        t.getTakeNo(), RelatedBillType.STOCK_TAKE, null, t.getId(), it.getQualityType());
+                        t.getTakeNo(), RelatedBillType.STOCK_TAKE, null, t.getId(), it.getQualityType(), formOf(it));
                 // 盘盈无单价：成本为空时用最近进价兜底，避免"有库存无成本"
                 if (delta.compareTo(BigDecimal.ZERO) > 0) costService.fillProductCostIfEmpty(it.getProductId());
             } else if (it.getMaterialId() != null) {
                 stockService.changeMaterialStock(t.getWarehouseId(), it.getMaterialId(), delta,
                         delta.compareTo(BigDecimal.ZERO) > 0 ? StockChangeType.STOCK_TAKE_IN.getCode() : StockChangeType.STOCK_TAKE_OUT.getCode(),
-                        t.getTakeNo(), RelatedBillType.STOCK_TAKE, null, t.getId(), t.getId());
+                        t.getTakeNo(), RelatedBillType.STOCK_TAKE, null, t.getId(), t.getId(), formOf(it));
                 if (delta.compareTo(BigDecimal.ZERO) > 0) costService.fillMaterialCostIfEmpty(it.getMaterialId());
             }
         }

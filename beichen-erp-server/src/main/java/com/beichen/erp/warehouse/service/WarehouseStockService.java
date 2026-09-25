@@ -71,16 +71,29 @@ public class WarehouseStockService {
     public void changeStock(Long warehouseId, Long productId, BigDecimal quantity,
                             StockChangeType type, String relatedBillNo, RelatedBillType relatedBillType,
                             String spec, Long relatedBillId, String qualityType) {
+        // 2026-09-25 P0-3 收尾：保留原签名（40+ 调用点不动），委托带形态的重载并默认 MATERIAL（行为等价）
+        changeStock(warehouseId, productId, quantity, type, relatedBillNo, relatedBillType,
+                spec, relatedBillId, qualityType, WarehouseStock.FORM_MATERIAL);
+    }
+
+    /**
+     * 带库存形态的通用库存变更（P1/P2 写「成品（加工退货/维修退货）」时调用本重载）。
+     *
+     * @param stockForm 库存形态（{@link WarehouseStock#FORM_MATERIAL} / FORM_PRODUCT_DEFECT / FORM_PRODUCT_REPAIR），
+     *                  定位键/建行/流水全部按该形态走，不同形态互不串行
+     */
+    @Transactional
+    public void changeStock(Long warehouseId, Long productId, BigDecimal quantity,
+                            StockChangeType type, String relatedBillNo, RelatedBillType relatedBillType,
+                            String spec, Long relatedBillId, String qualityType, String stockForm) {
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) == 0) return;
         quantity = intQty(quantity, "成品库存"); // 数量一律为整数（2026-09-16）
         assertRefsExist(warehouseId, productId, null); // P2-33：拒绝往不存在的仓库/产品写库存
         if (qualityType == null) qualityType = ProductQualityType.A.getCode();
+        if (stockForm == null || stockForm.isBlank()) stockForm = WarehouseStock.FORM_MATERIAL;
         Long companyId = CompanyContext.get();
         if (companyId != null && companyId <= 0) companyId = null;
 
-        // 2026-09-25 P0-2：形态暂由本方法固定为 MATERIAL（既有 40+ 调用点行为不变）；
-        // 待 P1/P2 需要写「成品（加工退货/维修退货）」时，再加一个带 stockForm 的重载并由该重载调进来。
-        final String stockForm = WarehouseStock.FORM_MATERIAL;
         int rows = warehouseStockMapper.updateQuantity(warehouseId, productId, qualityType, stockForm, companyId, quantity);
         if (rows == 0) {
             WarehouseStock exist = selectExist(warehouseId, productId, qualityType, stockForm, companyId);
@@ -137,8 +150,23 @@ public class WarehouseStockService {
     public void changeMaterialStock(Long warehouseId, Long materialId, BigDecimal quantity,
                                      String changeType, String relatedCode, RelatedBillType relatedBillType,
                                      Long relatedDeliveryId, Long relatedOrderId, Long relatedBillId) {
+        // 2026-09-25 P0-3 收尾：保留原签名（40+ 调用点不动），委托带形态的重载并默认 MATERIAL（行为等价）
+        changeMaterialStock(warehouseId, materialId, quantity, changeType, relatedCode, relatedBillType,
+                relatedDeliveryId, relatedOrderId, relatedBillId, WarehouseStock.FORM_MATERIAL);
+    }
+
+    /**
+     * 带库存形态的物料库存变更（严格口径：库存不足抛错）。
+     *
+     * @param stockForm 库存形态（物料侧唯一区分维度，quality_type 恒为 GOOD，两者正交勿混）
+     */
+    @Transactional
+    public void changeMaterialStock(Long warehouseId, Long materialId, BigDecimal quantity,
+                                     String changeType, String relatedCode, RelatedBillType relatedBillType,
+                                     Long relatedDeliveryId, Long relatedOrderId, Long relatedBillId,
+                                     String stockForm) {
         changeMaterialStockInternal(warehouseId, materialId, quantity, changeType, relatedCode, relatedBillType,
-                relatedDeliveryId, relatedOrderId, relatedBillId, false);
+                relatedDeliveryId, relatedOrderId, relatedBillId, false, stockForm);
     }
 
     /**
@@ -152,8 +180,19 @@ public class WarehouseStockService {
     public void changeMaterialStockAllowNegative(Long warehouseId, Long materialId, BigDecimal quantity,
                                                  String changeType, String relatedCode, RelatedBillType relatedBillType,
                                                  Long relatedDeliveryId, Long relatedOrderId, Long relatedBillId) {
+        // 2026-09-25 P0-3 收尾：保留原签名，委托带形态的重载并默认 MATERIAL（行为等价）
+        changeMaterialStockAllowNegative(warehouseId, materialId, quantity, changeType, relatedCode, relatedBillType,
+                relatedDeliveryId, relatedOrderId, relatedBillId, WarehouseStock.FORM_MATERIAL);
+    }
+
+    /** 带库存形态的物料库存变更（允许负库存口径：委外强制出库）。 */
+    @Transactional
+    public void changeMaterialStockAllowNegative(Long warehouseId, Long materialId, BigDecimal quantity,
+                                                 String changeType, String relatedCode, RelatedBillType relatedBillType,
+                                                 Long relatedDeliveryId, Long relatedOrderId, Long relatedBillId,
+                                                 String stockForm) {
         changeMaterialStockInternal(warehouseId, materialId, quantity, changeType, relatedCode, relatedBillType,
-                relatedDeliveryId, relatedOrderId, relatedBillId, true);
+                relatedDeliveryId, relatedOrderId, relatedBillId, true, stockForm);
     }
 
     /**
@@ -184,6 +223,20 @@ public class WarehouseStockService {
                                              String changeType, String relatedCode, RelatedBillType relatedBillType,
                                              Long relatedDeliveryId, Long relatedOrderId, Long relatedBillId,
                                              boolean allowNegative) {
+        changeMaterialStockInternal(warehouseId, materialId, quantity, changeType, relatedCode, relatedBillType,
+                relatedDeliveryId, relatedOrderId, relatedBillId, allowNegative, WarehouseStock.FORM_MATERIAL);
+    }
+
+    /**
+     * 物料库存变更统一实现（物料侧唯一写入口）。
+     *
+     * @param allowNegative false=严格口径（库存不足抛错，供报损/退货等单据用）；true=委外强制出库口径（可扣成负数）
+     * @param stockForm     库存形态（P0-3 收尾：由带形态的 public 重载传入；缺省 MATERIAL，行为与改造前等价）
+     */
+    private void changeMaterialStockInternal(Long warehouseId, Long materialId, BigDecimal quantity,
+                                             String changeType, String relatedCode, RelatedBillType relatedBillType,
+                                             Long relatedDeliveryId, Long relatedOrderId, Long relatedBillId,
+                                             boolean allowNegative, String stockForm) {
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) == 0) return;
         quantity = intQty(quantity, "物料库存"); // 数量一律为整数（2026-09-16）
         assertRefsExist(warehouseId, null, materialId); // P2-33：拒绝往不存在的仓库/物料写库存
@@ -191,8 +244,8 @@ public class WarehouseStockService {
 
         // 物料库存用 material_id，qualityType 统一为 GOOD
         String qt = QualityType.GOOD.getCode();
-        // 2026-09-25 P0-2：物料形态恒为 MATERIAL（退回成品是"成品"形态，走成品侧 changeStock，不进本方法）
-        final String stockForm = WarehouseStock.FORM_MATERIAL;
+        // 2026-09-25 P0-3 收尾：形态改为形参（public 重载缺省 MATERIAL）；退回成品是"成品"形态，走成品侧 changeStock，不进本方法
+        if (stockForm == null || stockForm.isBlank()) stockForm = WarehouseStock.FORM_MATERIAL;
         if (allowNegative) {
             WarehouseStock exist = selectMaterialExist(warehouseId, materialId, stockForm, companyId);
             if (exist == null) {
@@ -260,12 +313,16 @@ public class WarehouseStockService {
 
     /** 查询指定仓库+产品+品质等级的当前库存量（用于反审核前校验库存是否被后续单据消耗），无记录返回 0 */
     public BigDecimal getQuantity(Long warehouseId, Long productId, String qualityType) {
+        return getQuantity(warehouseId, productId, qualityType, WarehouseStock.FORM_MATERIAL);
+    }
+
+    /** 带库存形态的读侧重载（P0-3 收尾：盘点按形态对账取账面用），无记录返回 0 */
+    public BigDecimal getQuantity(Long warehouseId, Long productId, String qualityType, String stockForm) {
         if (qualityType == null) qualityType = ProductQualityType.A.getCode();
+        if (stockForm == null || stockForm.isBlank()) stockForm = WarehouseStock.FORM_MATERIAL;
         Long companyId = CompanyContext.get();
         if (companyId != null && companyId <= 0) companyId = null;
-        // 2026-09-25 P0-2：形态先固定 MATERIAL（既有调用语义不变）；P1/P2 若需读「成品（加工退货/维修退货）」
-        // 的库存量，再加带 stockForm 的重载，勿直接改本方法签名（调用点很多）。
-        WarehouseStock exist = selectExist(warehouseId, productId, qualityType, WarehouseStock.FORM_MATERIAL, companyId);
+        WarehouseStock exist = selectExist(warehouseId, productId, qualityType, stockForm, companyId);
         return exist != null && exist.getQuantity() != null ? exist.getQuantity() : BigDecimal.ZERO;
     }
 
@@ -274,9 +331,15 @@ public class WarehouseStockService {
      * 供物料报损等单据在扣减前做「库存是否够」的前置校验。
      */
     public BigDecimal getMaterialQuantity(Long warehouseId, Long materialId) {
+        return getMaterialQuantity(warehouseId, materialId, WarehouseStock.FORM_MATERIAL);
+    }
+
+    /** 带库存形态的读侧重载（P0-3 收尾：盘点按形态对账取账面用），无记录返回 0 */
+    public BigDecimal getMaterialQuantity(Long warehouseId, Long materialId, String stockForm) {
+        if (stockForm == null || stockForm.isBlank()) stockForm = WarehouseStock.FORM_MATERIAL;
         Long companyId = CompanyContext.get();
         if (companyId != null && companyId <= 0) companyId = null;
-        WarehouseStock exist = selectMaterialExist(warehouseId, materialId, WarehouseStock.FORM_MATERIAL, companyId);
+        WarehouseStock exist = selectMaterialExist(warehouseId, materialId, stockForm, companyId);
         return exist != null && exist.getQuantity() != null ? exist.getQuantity() : BigDecimal.ZERO;
     }
 

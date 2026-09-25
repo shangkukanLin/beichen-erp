@@ -1278,6 +1278,7 @@ CREATE TABLE IF NOT EXISTS inventory_stock_take_item (
     material_id BIGINT COMMENT '委外物料ID(委外仓盘点)',
     material_name VARCHAR(100) COMMENT '物料名称(冗余)',
     quality_type VARCHAR(20) COMMENT '品质/等级(成品 A/B/C/DEFECT/PENDING；物料 GOOD/DEFECT)',
+    stock_form VARCHAR(20) NOT NULL DEFAULT 'MATERIAL' COMMENT '库存形态：MATERIAL=物料；PRODUCT_DEFECT=成品(加工退货)；PRODUCT_REPAIR=成品(维修退货)',
     unit VARCHAR(20) COMMENT '单位(冗余)',
     book_quantity DECIMAL(18,0) DEFAULT 0 COMMENT '账面数量(建单时快照)',
     actual_quantity DECIMAL(18,0) DEFAULT 0 COMMENT '实盘数量',

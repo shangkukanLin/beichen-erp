@@ -34,6 +34,9 @@ public class InventoryStockTakeItem {
     /** 品质等级（成品 A/B/C/DEFECT/PENDING；物料 GOOD/DEFECT） */
     private String qualityType;
 
+    /** 库存形态（MATERIAL=物料；PRODUCT_DEFECT=成品(加工退货)；PRODUCT_REPAIR=成品(维修退货)）—— 盘点按形态不并表 */
+    private String stockForm;
+
     private String unit;
 
     /** 账面数量（建单时快照） */
