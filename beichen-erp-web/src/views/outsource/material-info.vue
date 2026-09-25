@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
+import EntityLinks from '@/components/EntityLinks.vue'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 // 2026-09-21：去掉「所属项目」筛选 —— 该字段已整字段下线（用户：这个字段没什么用）
@@ -32,6 +33,18 @@ async function loadOptions() {
   MATERIAL_TYPES.value = bt?.records || bt || []
   supplierOptions.value = sup?.records || sup || []
   allMaterials.value = mat?.records || mat || []
+}
+
+/**
+ * 供应商列可点（2026-09-25 B1）：把逗号串的 supplierIds 转成 EntityLinks 需要的 [{id,name}]。
+ * 名称取本地已加载的 supplierOptions（与 supplierNames 同一数据源），查不到则回退显示 id。
+ */
+function supplierItems(ids: string | undefined) {
+  if (!ids || !ids.trim()) return []
+  return ids.split(',').map(s => s.trim()).filter(Boolean).map(id => {
+    const s = supplierOptions.value.find((x: any) => String(x.id) === id)
+    return { id: Number(id), name: s ? s.name : id }
+  })
 }
 
 // 按供应商ID列表(逗号分隔)查出供应商名称并拼接展示，空安全返回 '-'
@@ -176,9 +189,18 @@ onMounted(async () => {
       <!-- 2026-09-21：列改版 —— 去掉「所属项目」「库存总量」「未交数量」三列（剩 6 列：物料类型/物料名称/供应商/单位/单价/操作） -->
       <el-table :data="tableData" border stripe v-loading="tableLoading">
         <el-table-column prop="materialTypeName" label="物料类型" width="100" />
-        <el-table-column prop="materialName" label="物料名称" min-width="130" show-overflow-tooltip />
+        <!-- 2026-09-25 B1：物料 → 物料库存分布详情（含物料档案摘要）；供应商 → 供应商详情（多选时弹层逐项可点） -->
+        <el-table-column label="物料名称" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button type="primary" link @click.stop="router.push(`/outsource/material-stock/detail/${row.id}`)">{{ row.materialName }}</el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="供应商" width="180" show-overflow-tooltip>
-          <template #default="{ row }">{{ supplierNames(row.supplierIds) }}</template>
+          <template #default="{ row }">
+            <EntityLinks :items="supplierItems(row.supplierIds)" target="supplier">
+              <span>{{ supplierNames(row.supplierIds) }}</span>
+            </EntityLinks>
+          </template>
         </el-table-column>
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column prop="price" label="单价" width="90" />

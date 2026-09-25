@@ -148,7 +148,12 @@ onActivated(() => { loadData() })
            收窄为合计 882px（编码/名称保持 min-width，宽屏自动吃余量）。 -->
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="(row: any) => goDetail(row.id)">
         <el-table-column prop="code" label="客户编码" min-width="110" show-overflow-tooltip />
-        <el-table-column prop="name" label="客户名称" min-width="120" show-overflow-tooltip />
+        <!-- 2026-09-25 B1（用户口径「主体列全站可点」）：客户名称 → 客户详情 -->
+        <el-table-column label="客户名称" min-width="120" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button type="primary" link @click.stop="router.push(`/inventory/customer/detail/${row.id}`)">{{ row.name }}</el-button>
+          </template>
+        </el-table-column>
         <el-table-column prop="contact" label="联系人" width="90" />
         <el-table-column prop="phone" label="联系电话" width="110" />
         <el-table-column prop="creditPeriodMonths" label="账期(月)" width="80" align="center" />

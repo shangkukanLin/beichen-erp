@@ -142,15 +142,18 @@ onMounted(() => { loadData(); loadBrandOptions() })
       <!-- 全部 -->
       <!-- 2026-09-16 用户要求「一行显示完、不要左右滑动」：列宽整体收紧（原合计 ≈1270px → ≈1015px） -->
       <el-table v-if="activeTab==='all'" :data="allProjects" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleEdit">
-        <el-table-column prop="code" label="项目编码" width="120" show-overflow-tooltip />
-        <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
-        <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
-        <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
-        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="75" show-overflow-tooltip />
-        <el-table-column prop="originalSize" label="原机尺寸" width="70" show-overflow-tooltip />
+        <!-- 2026-09-25 B1（实测驱动）：项目编码 120→**140**（需 139）、品牌 72→**108**（需 107）、
+             项目名称 min100→132（长名仍可能省略号，已在守卫白名单登记）、显示/触摸方案 75→70、
+             原机尺寸 70→64（同步 4 张表）。合计 ≤930，仍一行显示完。 -->
+        <el-table-column prop="code" label="项目编码" width="140" show-overflow-tooltip />
+        <el-table-column prop="name" label="项目名称" min-width="132" show-overflow-tooltip />
+        <el-table-column prop="brandName" label="品牌" width="108" show-overflow-tooltip />
+        <el-table-column prop="displaySupplierName" label="显示方案" min-width="70" show-overflow-tooltip />
+        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="70" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机尺寸" width="64" show-overflow-tooltip />
         <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
-        <el-table-column prop="glassSize" label="改配尺寸" width="70" show-overflow-tooltip />
-        <el-table-column label="项目阶段" min-width="80" align="center">
+        <el-table-column prop="glassSize" label="改配尺寸" width="64" show-overflow-tooltip />
+        <el-table-column label="项目阶段" min-width="70" align="center">
           <template #default="{ row }">
             <el-tag type="warning" size="small">{{ getCurrentPhase(row) }}</el-tag>
           </template>
@@ -173,15 +176,18 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 进行中 -->
       <el-table v-if="activeTab==='active'" :data="activeProjects" border stripe v-loading="tableLoading" style="width:100%" :height="undefined" @row-click="handleEdit">
-        <el-table-column prop="code" label="项目编码" width="120" show-overflow-tooltip />
-        <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
-        <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
-        <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
-        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="75" show-overflow-tooltip />
-        <el-table-column prop="originalSize" label="原机尺寸" width="70" show-overflow-tooltip />
+        <!-- 2026-09-25 B1（实测驱动）：项目编码 120→**140**（需 139）、品牌 72→**108**（需 107）、
+             项目名称 min100→132（长名仍可能省略号，已在守卫白名单登记）、显示/触摸方案 75→70、
+             原机尺寸 70→64（同步 4 张表）。合计 ≤930，仍一行显示完。 -->
+        <el-table-column prop="code" label="项目编码" width="140" show-overflow-tooltip />
+        <el-table-column prop="name" label="项目名称" min-width="132" show-overflow-tooltip />
+        <el-table-column prop="brandName" label="品牌" width="108" show-overflow-tooltip />
+        <el-table-column prop="displaySupplierName" label="显示方案" min-width="70" show-overflow-tooltip />
+        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="70" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机尺寸" width="64" show-overflow-tooltip />
         <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
-        <el-table-column prop="glassSize" label="改配尺寸" width="70" show-overflow-tooltip />
-        <el-table-column label="项目阶段" min-width="80" align="center">
+        <el-table-column prop="glassSize" label="改配尺寸" width="64" show-overflow-tooltip />
+        <el-table-column label="项目阶段" min-width="70" align="center">
           <template #default="{ row }">
             <el-tag type="warning" size="small">{{ getCurrentPhase(row) }}</el-tag>
           </template>
@@ -204,14 +210,17 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 已结项 -->
       <el-table v-if="activeTab==='finished'" :data="finishedProjects" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleEdit">
-        <el-table-column prop="code" label="项目编码" width="120" show-overflow-tooltip />
-        <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
-        <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
-        <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
-        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="75" show-overflow-tooltip />
-        <el-table-column prop="originalSize" label="原机尺寸" width="70" show-overflow-tooltip />
+        <!-- 2026-09-25 B1（实测驱动）：项目编码 120→**140**（需 139）、品牌 72→**108**（需 107）、
+             项目名称 min100→132（长名仍可能省略号，已在守卫白名单登记）、显示/触摸方案 75→70、
+             原机尺寸 70→64（同步 4 张表）。合计 ≤930，仍一行显示完。 -->
+        <el-table-column prop="code" label="项目编码" width="140" show-overflow-tooltip />
+        <el-table-column prop="name" label="项目名称" min-width="132" show-overflow-tooltip />
+        <el-table-column prop="brandName" label="品牌" width="108" show-overflow-tooltip />
+        <el-table-column prop="displaySupplierName" label="显示方案" min-width="70" show-overflow-tooltip />
+        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="70" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机尺寸" width="64" show-overflow-tooltip />
         <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
-        <el-table-column prop="glassSize" label="改配尺寸" width="70" show-overflow-tooltip />
+        <el-table-column prop="glassSize" label="改配尺寸" width="64" show-overflow-tooltip />
         <el-table-column label="状态" width="75" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'success'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="85" align="center" fixed="right">
           <template #default="{row}">
@@ -222,14 +231,17 @@ onMounted(() => { loadData(); loadBrandOptions() })
 
       <!-- 已取消 -->
       <el-table v-if="activeTab==='cancelled'" :data="cancelledProjects" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleEdit">
-        <el-table-column prop="code" label="项目编码" width="120" show-overflow-tooltip />
-        <el-table-column prop="name" label="项目名称" min-width="100" show-overflow-tooltip />
-        <el-table-column prop="brandName" label="品牌" width="72" show-overflow-tooltip />
-        <el-table-column prop="displaySupplierName" label="显示方案" min-width="75" show-overflow-tooltip />
-        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="75" show-overflow-tooltip />
-        <el-table-column prop="originalSize" label="原机尺寸" width="70" show-overflow-tooltip />
+        <!-- 2026-09-25 B1（实测驱动）：项目编码 120→**140**（需 139）、品牌 72→**108**（需 107）、
+             项目名称 min100→132（长名仍可能省略号，已在守卫白名单登记）、显示/触摸方案 75→70、
+             原机尺寸 70→64（同步 4 张表）。合计 ≤930，仍一行显示完。 -->
+        <el-table-column prop="code" label="项目编码" width="140" show-overflow-tooltip />
+        <el-table-column prop="name" label="项目名称" min-width="132" show-overflow-tooltip />
+        <el-table-column prop="brandName" label="品牌" width="108" show-overflow-tooltip />
+        <el-table-column prop="displaySupplierName" label="显示方案" min-width="70" show-overflow-tooltip />
+        <el-table-column prop="touchSupplierName" label="触摸方案" min-width="70" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机尺寸" width="64" show-overflow-tooltip />
         <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
-        <el-table-column prop="glassSize" label="改配尺寸" width="70" show-overflow-tooltip />
+        <el-table-column prop="glassSize" label="改配尺寸" width="64" show-overflow-tooltip />
         <el-table-column label="状态" width="75" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'danger'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="115" align="center" fixed="right">
           <template #default="{row}">

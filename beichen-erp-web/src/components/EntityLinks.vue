@@ -19,11 +19,11 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 const props = defineProps<{
-  /** 行上的明细数组：产品 [{id,name,sku}] / 物料 [{materialId,materialName,orderQuantity}] */
+  /** 行上的明细数组：产品 [{id,name,sku}] / 物料 [{materialId,materialName}] / 主体 [{id,name}] */
   items?: Array<Record<string, any>> | null
   /** 跳转目标类型（决定 id 字段名与详情路由） */
-  target: 'product' | 'material'
-  /** 名称字段名（默认 product→name / material→materialName） */
+  target: 'product' | 'material' | 'supplier' | 'vendor' | 'customer'
+  /** 名称字段名（默认 product→name / material→materialName / 其余→name） */
   nameKey?: string
   /** 副标题字段名（如 sku），仅单项时随名称一起显示 */
   subKey?: string
@@ -33,8 +33,20 @@ const props = defineProps<{
 
 const router = useRouter()
 
+/** 目标 → 详情路由前缀（全部为已有路由，无需新建页面） */
+const ROUTE_PREFIX: Record<string, string> = {
+  product: '/product/detail/',                        // 产品主数据详情
+  material: '/outsource/material-stock/detail/',      // 物料库存分布详情（含物料档案摘要）
+  supplier: '/supplier/detail/',                      // 供应商详情
+  vendor: '/outsource/supplier/detail/',              // 供货商（成品商）详情
+  customer: '/inventory/customer/detail/'             // 客户详情
+}
+
 const idKey = computed(() => (props.target === 'material' ? 'materialId' : 'id'))
-const nameKey = computed(() => props.nameKey || (props.target === 'material' ? 'materialName' : 'name'))
+const nameKey = computed(() => {
+  if (props.nameKey) return props.nameKey
+  return props.target === 'material' ? 'materialName' : 'name'
+})
 
 /** 归一化为 [{id,name,sub,qty}]；没有 id 的项直接剔除（不可点 ⇒ 交回默认插槽兜底） */
 const list = computed(() => {
@@ -51,9 +63,7 @@ const list = computed(() => {
 const first = computed(() => list.value[0])
 
 function go(id: any) {
-  router.push(props.target === 'material'
-    ? `/outsource/material-stock/detail/${id}`
-    : `/product/detail/${id}`)
+  router.push((ROUTE_PREFIX[props.target] || ROUTE_PREFIX.product) + id)
 }
 </script>
 

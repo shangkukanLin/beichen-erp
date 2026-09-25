@@ -136,10 +136,44 @@
 3. `web-check.ps1` 四守卫；4. 浏览器逐条点击抽样（单号/对方/仓库/产品/物料各取一条，多值行验 Popover）；
 5. 纯展示层改动 ⇒ 不涉库存/资金/状态机；若补了后端字段，走 `be-build.ps1` + `restart-backend.ps1`。
 
+## 5.1 B1 落地记录（2026-09-25）
+
+**用户已批准的取舍（本计划 §4 全部按推荐执行）**：①备注类入白名单 ②库存流水关联单号按类型分流（B5 做）
+③对方主体全站可点 ④产品/物料明细列统一用 EntityLinks ⑤放不下时允许把最低价值列移入详情 ⑥列宽上限维持 930。
+
+**本批改动**
+- `EntityLinks.vue` 扩展目标：`product / material / supplier / vendor / customer`（路由前缀表 + idKey 默认值），
+  主体类可点全站复用同一组件。
+- 白名单（`ui-e2e-zh.json → col_allow_truncate`）新增 **项目名称 / 备注**（长度无上界，有 tooltip）。
+- 逐页：
+  - `/inventory/customer` 客户名称 → 客户详情；
+  - `/product` 产品名称 → 产品详情；并给名称腾空间（SKU 120→110、规格 84→80、通用型号 96→88、安全库存 86→80、
+    当前库存 120→110、操作 130→124、品牌 min100→90、产品名称 min150→**200**；实测名称需 224，新布局实得 ~252 ⇒ 完整）；
+  - `/supplier/manage` 与 `/outsource/supplier/manage`（同组件双模式）编码 120→**156**（实测 152/155），
+    名称 min180→**220** 并按模式分流跳 `/supplier/detail` 或 `/outsource/supplier/detail`，
+    类型 150→140、联系人 120→96、电话 130→108、状态 80→76、操作 120→116 抵平（实得名称 ~264 ≥ 需 254 ⇒ 完整）；
+  - `/outsource/material-info` 物料名称 → 物料库存分布详情；供应商 → 供应商详情（多选弹层逐项可点，`supplierItems()` 由居间表返回的 ids 拼）；
+  - `/dev/project`（4 张表同步）项目编码 120→**140**、品牌 72→**108**、项目名称 min100→132、显示/触摸方案 75→70、
+    原机尺寸/改配尺寸 70→64、项目阶段 min80→70；
+  - `/dev/material` 物料名称 → `/dev/material/detail/:id`；
+  - `/inventory/brand`、`/dev/material-type`、`/template` 无可点目标（品牌/类型无详情页）：前者列宽已达标，
+    模板页仅把「备注」登记进白名单，未动宽度。
+- 守卫 `$routes` 纳入 B1 十页。
+
+**验证**：`scan-col-truncation.ps1` B1 十页 **0 截断**；`scan-table-overflow.ps1` B1 十页 **0 越界**；四守卫 PASS；
+浏览器逐条点击：客户名称→`/inventory/customer/detail/26`、产品名称→`/product/detail/130`、
+供应商名称→`/supplier/detail/90`、供货商名称→`/outsource/supplier/detail/89`、物料名称→`/outsource/material-stock/detail/188`、
+供应商（临时插一条 `supplier_material` 关联验证后已回滚）→`/supplier/detail/35`、研发物料名称→`/dev/material/detail/1`。
+
+**顺带发现的现网问题（非本次改动引入，已上报用户）**：`supplier_material` 居间表**当前 0 行**
+⇒ 「物料信息管理」的「供应商」列在所有行都显示 “-”（没有数据可点）。列表接口是正常返回 `supplierIds` 的，
+关联一旦录入，本批接的链接即生效。
+（另注：`outsource_material` 表已无 `supplier_ids` 列，早期“物料自带供应商字段”的口径已废弃，改由居间表维护。）
+
 ## 6. 进度
 
-- [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫）
-- [ ] B1 基础数据 + 研发
+- [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
+- [x] B1 基础数据 + 研发（2026-09-25）
 - [ ] B2 屏幕资料
 - [ ] B3 采购
 - [ ] B4 销售

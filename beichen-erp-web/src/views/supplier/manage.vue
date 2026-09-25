@@ -156,19 +156,29 @@ onMounted(loadData)
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 960px > 内容区 956px
            ⇒ 刚好越界 4px（横向滚动）。收窄为合计 818px（名称保持 min-width，宽屏自动吃余量）。 -->
       <el-table :data="tableData" border stripe v-loading="loading" @row-click="(row: any) => goDetail(row.id)">
-        <el-table-column prop="code" :label="entityLabel + '编码'" width="120" />
-        <el-table-column label="类型" width="150">
+        <!-- 2026-09-25 B1（实测驱动）：编码 120→**156**（供应商编码需 152 / 供货商编码需 155，原先都被截断）；
+             名称改链接后需 ~254px（"PROBE-SUPPLY-TYPECHANGE" 实测 254）⇒ 名称 min180→**220**，
+             类型 150→140、联系人 120→96、联系电话 130→108、状态 80→76、操作 120→116 抵平
+             （声明合计 912 ≤ 930；名称是本表唯一 min-width 列 ⇒ 独吞余量，1262 视口下实得 ~256px ⇒ 完整）。 -->
+        <el-table-column prop="code" :label="entityLabel + '编码'" width="156" show-overflow-tooltip />
+        <el-table-column label="类型" width="140">
           <template #default="{ row }">
             <el-tag v-for="t in (row.typeCodes||[])" :key="t" size="small" style="margin-right:4px"
               :type="(TYPE_TAG[t]||'info') as any"
             >{{ TYPE_MAP[t] || t }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="name" :label="entityLabel + '名称'" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="contact" label="联系人" width="120" />
-        <el-table-column prop="phone" label="联系电话" width="130" />
-        <el-table-column label="状态" width="80" align="center"><template #default="{row}"><el-tag size="small" :type="row.status===1?'success':'danger'">{{ row.status===1?'启用':'停用' }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="120" align="center" fixed="right">
+        <!-- 2026-09-25 B1（用户口径「主体列全站可点」）：名称 → 详情（本页双模式：
+             /supplier/manage=供应商 → /supplier/detail；/outsource/supplier/manage=供货商 → /outsource/supplier/detail） -->
+        <el-table-column :label="entityLabel + '名称'" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button type="primary" link @click.stop="router.push(isVendor ? `/outsource/supplier/detail/${row.id}` : `/supplier/detail/${row.id}`)">{{ row.name }}</el-button>
+          </template>
+        </el-table-column>
+        <el-table-column prop="contact" label="联系人" width="96" />
+        <el-table-column prop="phone" label="联系电话" width="108" />
+        <el-table-column label="状态" width="76" align="center"><template #default="{row}"><el-tag size="small" :type="row.status===1?'success':'danger'">{{ row.status===1?'启用':'停用' }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="116" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click.stop="goDetail(row.id)">详情</el-button>
             <el-button type="danger" link size="small" @click.stop="handleDelete(row)">删除</el-button>

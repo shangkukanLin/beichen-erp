@@ -181,20 +181,28 @@ onMounted(() => {
 
       <el-table v-loading="tableLoading" :data="tableData" border stripe :row-class-name="rowClass">
         <!-- 2026-09-14 按用户要求移除「序号」列 -->
-        <!-- 2026-09-21：新增「规格」列，并整体压缩列宽以保持"一行显示完、不横向滚动"
-             （固定列合计 636 + min 列 250 = 886 ≤ 内容区 ~900） -->
-        <el-table-column prop="sku" label="SKU" width="120" />
-        <el-table-column prop="name" label="产品名称" min-width="150" show-overflow-tooltip />
-        <el-table-column label="品牌" min-width="100">
+        <!-- 2026-09-21：新增「规格」列，并整体压缩列宽以保持"一行显示完、不横向滚动"。
+             2026-09-25 B1（实测驱动）：产品名称改链接后需 ~224px（长名 "PROBE-PJNAME-M-093013" 实测 224）⇒
+             把固定列整体微收（SKU 120→110、规格 84→80、通用型号 96→88、安全库存 86→80、当前库存 120→110、
+             操作 130→124）并把「产品名称」min150→**200**、「品牌」min100→90 ⇒ 声明合计 882 ≤ 930，
+             宽屏下产品名称实得 ~247px（完整）。 -->
+        <el-table-column prop="sku" label="SKU" width="110" />
+        <!-- 2026-09-25 B1：产品名称 → 产品详情（与委外列表同一口径） -->
+        <el-table-column label="产品名称" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button type="primary" link @click.stop="router.push(`/product/detail/${row.id}`)">{{ row.name }}</el-button>
+          </template>
+        </el-table-column>
+        <el-table-column label="品牌" min-width="90">
           <template #default="{ row }">{{ getBrandName(row.brandId) }}</template>
         </el-table-column>
-        <el-table-column label="规格" width="84" align="center">
+        <el-table-column label="规格" width="80" align="center">
           <template #default="{ row }">{{ ProductSpecLabel[row.specType] || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="generalModel" label="通用型号" width="96" />
-        <el-table-column prop="safetyStock" label="安全库存" width="86" align="right" />
+        <el-table-column prop="generalModel" label="通用型号" width="88" />
+        <el-table-column prop="safetyStock" label="安全库存" width="80" align="right" />
         <!-- 2026-09-15 用户要求：删除「成本价」列（含「手工」标记）与「最近进价」列 —— 成本属内部信息，不在产品列表展示 -->
-        <el-table-column label="当前库存" width="120" align="right">
+        <el-table-column label="当前库存" width="110" align="right">
           <template #default="{ row }">
             <span :style="{ color: isLowStock(row) ? 'var(--app-color-danger)' : '', fontWeight: isLowStock(row) ? 'bold' : '' }">
               {{ row.currentStock ?? 0 }}
@@ -202,7 +210,7 @@ onMounted(() => {
             <el-tag v-if="isLowStock(row)" type="danger" size="small" style="margin-left:4px">预警</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="130" align="center" fixed="right">
+        <el-table-column label="操作" width="124" align="center" fixed="right">
           <template #default="{ row }">
             <!-- 详情页即编辑页，列表只需一个「编辑」入口 -->
             <el-button type="primary" link @click="handleEdit(row as Product)">编辑</el-button>

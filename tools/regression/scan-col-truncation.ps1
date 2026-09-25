@@ -22,12 +22,24 @@ EnsureLogin
 WatchErrors
 
 $routes = @(
+  # --- 2026-09-25 委外加工（样板批）---
   '/outsource/order',
   '/outsource/order/delivery',
   '/outsource/return-order',
   '/outsource/material-order',
   '/outsource/material-order/delivery',
-  '/outsource/material-return'
+  '/outsource/material-return',
+  # --- 2026-09-25 B1 基础数据 + 研发 ---
+  '/inventory/customer',
+  '/product',
+  '/inventory/brand',
+  '/outsource/supplier/manage',
+  '/supplier/manage',
+  '/dev/material-type',
+  '/outsource/material-info',
+  '/template',
+  '/dev/project',
+  '/dev/material'
 )
 if ($Only -ne '') { $routes = @($routes | Where-Object { $_ -match $Only }) }
 
