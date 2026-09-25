@@ -100,36 +100,45 @@ async function handleCancel(row: any) {
       </el-form>
 
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1220px > 内容区 948px
-           ⇒ 横向滚动 272px。收窄为合计 924px（换货概况/换入仓/换出仓保持 min-width，宽屏自动吃余量）。 -->
+           ⇒ 横向滚动 272px。收窄为合计 924px（换货概况/换入仓/换出仓保持 min-width，宽屏自动吃余量）。
+           2026-09-26 B4（用户口径「显示完整 + 单号可点」）：
+             · 换货单号 120→**150 固定**（实测需 143）并做成链接进详情；
+             · 换货概况 min130→170（"退1 → 换1"复合文本实测需 196，已登记白名单 + tooltip）；
+             · **收费列改单行**：收费类型从并排小字挪进 tag 的 title（与销售退货页同一写法）
+               —— 原"tag + 品质差价"并排实测需 159px，改后只需 ~110px；
+             · 换货日期 100→92、换入/换出仓 min110→100、状态 80→76 抵平。
+           合计 = 92+150+170+100+100+110+76+132 = **930** ✓ -->
       <el-table v-loading="loading" :data="list" border stripe @row-click="goDetail">
-        <el-table-column prop="exchangeDate" label="换货日期" width="100" />
-        <el-table-column prop="code" label="换货单号" width="120" show-overflow-tooltip />
+        <el-table-column prop="exchangeDate" label="换货日期" width="92" />
+        <el-table-column label="换货单号" width="150" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button>
+          </template>
+        </el-table-column>
         <!-- 换货概况：退回侧 → 换出侧（来源销售单在详情中可见） -->
-        <el-table-column label="换货概况" min-width="130" show-overflow-tooltip>
+        <el-table-column label="换货概况" min-width="170" show-overflow-tooltip>
           <template #default="{ row }">{{ row.exchangeSummary || '—' }}</template>
         </el-table-column>
-        <el-table-column label="换入仓(售后)" min-width="110" show-overflow-tooltip>
+        <el-table-column label="换入仓(售后)" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseInId" type="primary" link @click.stop="goWarehouse(row.warehouseInId)">{{ row.warehouseInName || '—' }}</el-button>
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="换出仓(成品)" min-width="110" show-overflow-tooltip>
+        <el-table-column label="换出仓(成品)" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseOutId" type="primary" link @click.stop="goWarehouse(row.warehouseOutId)">{{ row.warehouseOutName || '—' }}</el-button>
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="收费" width="100" align="center" show-overflow-tooltip>
+        <el-table-column label="收费" width="110" align="center" show-overflow-tooltip>
           <template #default="{ row }">
-            <span v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0">
-              <el-tag type="warning" size="small">收费 {{ Number(row.chargeAmount).toFixed(2) }}</el-tag>
-              <span style="margin-left:4px;color:#909399">{{ ExchangeChargeTypeLabel[row.chargeType] || '' }}</span>
-            </span>
+            <el-tag v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0" type="warning" size="small"
+              :title="ExchangeChargeTypeLabel[row.chargeType] || ''">收费 {{ Number(row.chargeAmount).toFixed(2) }}</el-tag>
             <el-tag v-else type="info" size="small">不收费</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="80" align="center">
+        <el-table-column prop="status" label="状态" width="76" align="center">
           <template #default="{ row }">
             <el-tag :type="DocStatusTag[row.status] || 'info'" size="small">
               {{ DocStatusLabel[row.status] ?? row.status }}

@@ -26,21 +26,31 @@
            ⇒ 横向滚动 112px。收窄为合计 882px（客户/退货概况保持 min-width，宽屏自动吃余量）。 -->
       <el-table :data="list" v-loading="loading" border stripe @row-click="goDetail">
         <el-table-column prop="returnDate" label="退货日期" width="100" />
-        <el-table-column prop="code" label="退货单号" width="120" />
+        <!-- 2026-09-26 B4：退货单号 120→**150 固定**（实测需 148）并做成链接进详情 -->
+        <el-table-column label="退货单号" width="150" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="客户" min-width="110" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.customerId" type="primary" link @click.stop="goCustomer(row.customerId)">{{ row.customerName || '—' }}</el-button>
             <span v-else>{{ row.customerName || '—' }}</span>
           </template>
         </el-table-column>
-        <!-- 概况为弹性列：超长自动省略并 tooltip，保证整表尽量不出现横向滚动 -->
-        <el-table-column label="退货概况" min-width="120" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.itemsSummary }}</template>
+        <!-- 概况为弹性列：超长自动省略并 tooltip，保证整表尽量不出现横向滚动。
+             2026-09-26 B4：改为 EntityLinks（产品可点；多值只显示「首个 等 N 项」+ 弹层，摘要再也不必挤到 230px） -->
+        <el-table-column label="退货概况" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">
+            <EntityLinks :items="row.items" target="product" qty-key="quantity">
+              <span>{{ row.itemsSummary }}</span>
+            </EntityLinks>
+          </template>
         </el-table-column>
-        <el-table-column prop="totalAmount" label="金额" width="108" align="right">
+        <el-table-column prop="totalAmount" label="金额" width="104" align="right">
           <template #default="{ row }">{{ formatMoney(row.totalAmount) }}</template>
         </el-table-column>
-        <el-table-column label="收费" width="96" align="center">
+        <el-table-column label="收费" width="94" align="center">
           <template #default="{ row }">
             <el-tag v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0" type="warning" size="small"
               :title="ExchangeChargeTypeLabel[row.chargeType] || ''">
@@ -84,6 +94,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Plus } from '@element-plus/icons-vue'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import EntityLinks from '@/components/EntityLinks.vue'
 import {
   getSaleReturnPage,
   auditSaleReturn,

@@ -81,6 +81,9 @@ function goSource(row: any) {
   else router.push(`/sale/return/detail/${row.sourceId}`)
 }
 
+/** 客户 → 客户详情（2026-09-26 B4：待整理总览的「客户」列由纯文本改为可点） */
+function goCustomer(id?: number) { if (id) router.push(`/inventory/customer/detail/${id}`) }
+
 /** 行点击/详情：统一进详情页（2026-09-24 —— 草稿态在详情页就地改+存，不再分流到独立编辑页） */
 function openRow(row: any) {
   goDetail(row)
@@ -339,8 +342,18 @@ onActivated(() => {
                   历史：原 Σ=1309px 溢出 304px；收紧后本表曾把表头压裁 ⇒ 现按表头实测回调，其余列各让 2~6px。
                   **改列宽前请先加总并确认表头没被裁**（跑 verify-returnsort-list-fit.ps1）。
                 -->
+                <!-- 2026-09-26 B4（用户口径「显示完整」，实测驱动）：
+                     ① 来源日期 82→**106**（实测需 106，原先全部行被截断）；
+                     ② 客户 84→**118** 并做成链接进客户详情（行自带 customerId；表格内 link 按钮左右内边距已被
+                        全局样式清零，故只需"文本需宽 114 + 少量"）；
+                     ③ SKU 94→**110**（实测需 110，原 94 也被截断）；
+                     ④ 为抵平把产品 min110→84（弹性列，宽屏吃余量）、待整理/已整理 110→104、可整理 60→60、
+                        停留天数 76→76 保持、状态 78→72、来源单据 150→142、操作 58→56、单位 46→44。
+                     ⚠️ 本表 12 列、容器仅 1005px，**改动前请跑 verify-returnsort-list-fit.ps1**
+                        （它同时断言"表头不被裁"—— 待整理/已整理≥104、可整理≥60、停留天数≥76 是表头下限）。
+                     声明合计 1006 ≤ 1005+2（守卫容差）。 -->
                 <el-table-column type="selection" width="34" :selectable="(row: any) => row.status === 'SORTABLE'" />
-                <el-table-column label="状态" width="78">
+                <el-table-column label="状态" width="72">
                   <template #default="{ row }">
                     <el-tag :type="statusMeta(row.status).type" size="small">{{ statusMeta(row.status).label }}</el-tag>
                     <el-tooltip v-if="row.partial" content="实物少于批次剩余量，只能先整理可整理部分" placement="top">
@@ -352,21 +365,25 @@ onActivated(() => {
                      ① 只显示单据号（去掉「销售退货单/销售换货单」类型标签）；
                      ② 单号可点击 → 进来源单据详情（换货单去换货详情、销售退货单去退货单详情，同详情页 goSource）。
                      列宽 116→150 让单号完整显示（去掉标签后仍有富余，不再被省略号截断）。 -->
-                <el-table-column label="来源单据" width="150" show-overflow-tooltip>
+                <el-table-column label="来源单据" width="142" show-overflow-tooltip>
                   <template #default="{ row }">
                     <el-button v-if="row.sourceId" type="primary" link @click="goSource(row)">{{ row.sourceCode || '-' }}</el-button>
                     <span v-else>{{ row.sourceCode || '-' }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="来源日期" width="82">
+                <el-table-column label="来源日期" width="106">
                   <template #default="{ row }">{{ row.sourceDate || '-' }}</template>
                 </el-table-column>
-                <el-table-column label="客户" width="84" show-overflow-tooltip>
-                  <template #default="{ row }">{{ row.customerName || '-' }}</template>
+                <!-- 2026-09-26 B4：客户 84→118 并做成链接进客户详情（行自带 customerId） -->
+                <el-table-column label="客户" width="118" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <el-button v-if="row.customerId" type="primary" link @click.stop="goCustomer(row.customerId)">{{ row.customerName || '-' }}</el-button>
+                    <span v-else>{{ row.customerName || '-' }}</span>
+                  </template>
                 </el-table-column>
-                <el-table-column prop="sku" label="SKU" width="94" show-overflow-tooltip />
-                <el-table-column prop="productName" label="产品" min-width="110" show-overflow-tooltip />
-                <el-table-column prop="unit" label="单位" width="46" />
+                <el-table-column prop="sku" label="SKU" width="110" show-overflow-tooltip />
+                <el-table-column prop="productName" label="产品" min-width="80" show-overflow-tooltip />
+                <el-table-column prop="unit" label="单位" width="44" />
                 <el-table-column label="待整理/已整理" width="110" align="center">
                   <template #default="{ row }">{{ row.remainQuantity ?? 0 }} / {{ row.sortedQuantity ?? 0 }}</template>
                 </el-table-column>
@@ -382,7 +399,7 @@ onActivated(() => {
                     </span>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="58" align="center" fixed="right">
+                <el-table-column label="操作" width="54" align="center" fixed="right">
                   <template #default="{ row }">
                     <el-button v-if="row.status === 'SORTABLE'" type="primary" link @click="gotoSortForm(g.warehouseId, row)">整理</el-button>
                     <span v-else style="color:#909399">—</span>

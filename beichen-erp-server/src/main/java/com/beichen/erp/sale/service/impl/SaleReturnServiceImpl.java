@@ -129,15 +129,26 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             m.put("remark", o.getRemark());
             m.put("createTime", o.getCreateTime());
             List<SaleReturnItem> items = finalItemsMap.getOrDefault(o.getId(), Collections.emptyList());
-            String itemsSummary = items.stream()
-                    .map(it -> {
-                        String name = it.getProductId() != null && finalProductMap.containsKey(it.getProductId())
-                                ? finalProductMap.get(it.getProductId()).getName() : "";
-                        String qty = it.getQuantity() != null ? it.getQuantity().stripTrailingZeros().toPlainString() : "0";
-                        return name + "*" + qty;
-                    })
-                    .collect(Collectors.joining("，"));
-            m.put("itemsSummary", itemsSummary);
+            // 2026-09-26 B4（用户口径「明细列可点进产品详情」）：同一次遍历产出逐项 [{id,name,quantity}]
+            // （id = 产品主数据ID，前端 EntityLinks(target=product) 直接用）
+            List<Map<String, Object>> itemList = new ArrayList<>();
+            StringBuilder summarySb = new StringBuilder();
+            for (SaleReturnItem it : items) {
+                String name = it.getProductId() != null && finalProductMap.containsKey(it.getProductId())
+                        ? finalProductMap.get(it.getProductId()).getName() : "";
+                String qty = it.getQuantity() != null ? it.getQuantity().stripTrailingZeros().toPlainString() : "0";
+                if (summarySb.length() > 0) summarySb.append("，");
+                summarySb.append(name).append("*").append(qty);
+                if (it.getProductId() != null) {
+                    Map<String, Object> im = new HashMap<>();
+                    im.put("id", it.getProductId());
+                    im.put("name", name);
+                    im.put("quantity", it.getQuantity());
+                    itemList.add(im);
+                }
+            }
+            m.put("itemsSummary", summarySb.toString());
+            m.put("items", itemList);
             return m;
         }).toList());
         return res;

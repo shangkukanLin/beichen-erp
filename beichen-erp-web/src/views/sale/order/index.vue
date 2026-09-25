@@ -141,7 +141,12 @@ onActivated(() => {
            ⇒ 横向滚动 200px。收窄为合计 890px（单号/客户/仓库保持 min-width，宽屏自动吃余量）。 -->
       <el-table v-loading="tableLoading" :data="tableData" border stripe @row-click="goDetail">
         <el-table-column prop="orderDate" label="订单日期" width="100" align="center" />
-        <el-table-column prop="code" label="单号" min-width="120" show-overflow-tooltip />
+        <!-- 2026-09-26 B4：单号 min120→**148 固定**并做成链接进详情（后端行自带 id） -->
+        <el-table-column label="单号" width="148" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="客户" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.customerId" type="primary" link @click.stop="goCustomer(row.customerId)">{{ customerName(row.customerId) }}</el-button>

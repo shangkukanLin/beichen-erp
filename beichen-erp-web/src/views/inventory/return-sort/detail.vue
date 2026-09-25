@@ -274,48 +274,52 @@ onActivated(() => { loadDetail() })
 
       <el-divider content-position="left">整理明细（待整理数量 = A + B + C + 不良）</el-divider>
       <el-table :data="items" border>
-        <el-table-column label="来源单据" width="170" show-overflow-tooltip>
+        <!-- 2026-09-26 B4 顺带修：本表明细列宽合计 1080px ＞ 容器 963px（专属守卫
+             verify-returnsort-list-fit.ps1 的「详情页」段一直 FAIL，横向溢出 117px）。
+             按"标识列给足、数量列够用"重排：来源单据 170→150、SKU 130→110、产品 min160→130、
+             待整理数量 110→96、A/B/C/不良 各 100→88、校验 110→96 ⇒ 合计 **934 ≤ 963** ✓ -->
+        <el-table-column label="来源单据" width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.sourceId" type="primary" link @click="goSource(row)">{{ row.sourceCode || '-' }}</el-button>
             <span v-else>{{ row.sourceCode || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="SKU" width="130">
+        <el-table-column label="SKU" width="110">
           <template #default="{ row }">
             <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ row.sku || '—' }}</el-button>
             <span v-else>{{ row.sku || '—' }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="productName" label="产品" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="totalQuantity" label="待整理数量" width="110" align="center">
+        <el-table-column prop="productName" label="产品" min-width="130" show-overflow-tooltip />
+        <el-table-column prop="totalQuantity" label="待整理数量" width="96" align="center">
           <template #default="{ row }"><b>{{ row.totalQuantity }}</b></template>
         </el-table-column>
         <!-- 草稿：四列数量可就地修改（数字列 size=small、:controls=false ⇒ 窄而稳定） -->
-        <el-table-column label="A数量" width="100" align="right">
+        <el-table-column label="A数量" width="92" align="right">
           <template #default="{ row }">
             <el-input-number v-if="isDraft" v-model="row.qtyA" :min="0" :precision="0" size="small" :controls="false" style="width:100%" />
             <span v-else>{{ row.qtyA }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="B数量" width="100" align="right">
+        <el-table-column label="B数量" width="92" align="right">
           <template #default="{ row }">
             <el-input-number v-if="isDraft" v-model="row.qtyB" :min="0" :precision="0" size="small" :controls="false" style="width:100%" />
             <span v-else>{{ row.qtyB }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="C数量" width="100" align="right">
+        <el-table-column label="C数量" width="92" align="right">
           <template #default="{ row }">
             <el-input-number v-if="isDraft" v-model="row.qtyC" :min="0" :precision="0" size="small" :controls="false" style="width:100%" />
             <span v-else>{{ row.qtyC }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="不良数量" width="100" align="right">
+        <el-table-column label="不良数量" width="92" align="right">
           <template #default="{ row }">
             <el-input-number v-if="isDraft" v-model="row.qtyDefect" :min="0" :precision="0" size="small" :controls="false" style="width:100%" />
             <span v-else>{{ row.qtyDefect }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="校验" width="110" align="center">
+        <el-table-column label="校验" width="96" align="center">
           <template #default="{ row }">
             <el-tag :type="itemSum(row) === Number(row.totalQuantity) ? 'success' : 'danger'" size="small">
               {{ itemSum(row) === Number(row.totalQuantity) ? '✓ 相等' : `合计${itemSum(row)}` }}

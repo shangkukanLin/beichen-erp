@@ -45,7 +45,12 @@ $routes = @(
   # --- 2026-09-25 B3 采购 ---
   '/inventory/purchase',
   '/inventory/purchase-return',
-  '/inventory/purchase-exchange'
+  '/inventory/purchase-exchange',
+  # --- 2026-09-26 B4 销售（含退货整理）---
+  '/inventory/sale',
+  '/sale/return',
+  '/sale/exchange',
+  '/inventory/return-sort'
 )
 if ($Only -ne '') { $routes = @($routes | Where-Object { $_ -match $Only }) }
 
@@ -73,12 +78,20 @@ $bad = @()
 $reportRows = @()
 $scanned = 0
 $noTable = 0
+# 某些页表格要等接口回来才渲染（退货整理 ~3s）⇒ 首次测不到就加长等待重测一次
+$slowPages = @('/inventory/return-sort')
 foreach ($p in $routes) {
   Open $p 2000
   Start-Sleep -Milliseconds 500
   $raw = EvalJs $js
   if (-not $raw.TrimStart().StartsWith('[')) { Write-Host ('  ?? ' + $p + ' probe failed: ' + $raw); continue }
   $tables = $raw | ConvertFrom-Json
+  if (@($tables).Count -eq 0 -and ($slowPages -contains $p)) {
+    Open $p 3500
+    Start-Sleep -Milliseconds 800
+    $raw = EvalJs $js
+    if ($raw.TrimStart().StartsWith('[')) { $tables = $raw | ConvertFrom-Json }
+  }
   if (@($tables).Count -eq 0) { $noTable++; continue }
   $scanned++
   foreach ($t in @($tables)) {
