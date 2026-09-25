@@ -10,6 +10,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag } from '@/api/enums'
+import EntityLinks from '@/components/EntityLinks.vue'
 
 defineOptions({ name: 'OutsourceMaterialOrderDelivery' })
 
@@ -80,16 +81,32 @@ onActivated(loadData)
            ③订单号做成链接（点它进收货详细）。
            2026-09-17：按用户要求新增行内「退货」按钮（物料退回物料商 → 委外物料退货单）：
            操作列 84→134，由「订单号 −6、最近收货 −4、交期 −4」抵平。
-           2026-09-21（用户口径）：行内第一个按钮「收料」→「收货」⇒ 操作列 = 收货 | 退货（与成品侧的收货/退货同词）。 -->
+           2026-09-21（用户口径）：行内第一个按钮「收料」→「收货」⇒ 操作列 = 收货 | 退货（与成品侧的收货/退货同词）。
+           2026-09-25（用户口径「数据显示完整 + 供应商可点」）：订单号 144→**160**（MWO-+11 位 + 链接按钮，
+           实测需 172，取 160 + tooltip）；供应商/加工厂 min90→100 并做成链接进供应商详情；
+           物料 min100→80（汇总列：弹性吃余量 + tooltip）；下单/已收/剩余 114→**130**（实测需 130，
+           原先 114 被截断）、收货进度 80→64、状态 84→82、操作 134→118（收货|退货 两按钮）。
+           合计 = 160+100+80+130+64+96+96+82+118 = **926** ✓ -->
       <el-table :data="tableData" border stripe v-loading="loading" style="width:100%" @row-click="goDetail">
-        <el-table-column label="订单号" width="144" show-overflow-tooltip>
+        <el-table-column label="订单号" width="160" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button>
           </template>
         </el-table-column>
-        <el-table-column prop="supplierName" label="供应商/加工厂" min-width="90" show-overflow-tooltip />
-        <el-table-column label="物料" min-width="100" show-overflow-tooltip><template #default="{ row }">{{ namesOf(row) }}</template></el-table-column>
-        <el-table-column label="下单/已收/剩余" width="114" align="center">
+        <!-- 2026-09-25（用户口径「数据显示完整 + 供应商可点」）：可点进供应商详情（行数据来自物料订单分页，
+             已带 supplierId，无需改接口） -->
+        <el-table-column label="供应商/加工厂" min-width="100" show-overflow-tooltip>
+          <template #default="{ row }"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName }}</el-button></template>
+        </el-table-column>
+        <!-- 2026-09-25：物料可点进「物料库存分布详情」（单项直链 / 多项 Popover 逐项可点） -->
+        <el-table-column label="物料" min-width="80" show-overflow-tooltip>
+          <template #default="{ row }">
+            <EntityLinks :items="itemsOf(row)" target="material" name-key="materialName" qty-key="orderQuantity">
+              <span>{{ namesOf(row) }}</span>
+            </EntityLinks>
+          </template>
+        </el-table-column>
+        <el-table-column label="下单/已收/剩余" width="130" align="center">
           <template #default="{ row }">
             <span>{{ totalOf(row) }}</span>
             <span style="color:var(--app-text-placeholder)"> / </span>
@@ -98,11 +115,11 @@ onActivated(loadData)
             <span :style="{ color: (totalOf(row) - receivedOf(row)) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-warning)', fontWeight: 500 }">{{ totalOf(row) - receivedOf(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="收货进度" width="80"><template #default="{ row }"><el-progress :percentage="progressOf(row)" :stroke-width="10" :color="progressOf(row) >= 100 ? 'var(--app-color-success)' : 'var(--app-color-primary)'" /></template></el-table-column>
+        <el-table-column label="收货进度" width="64"><template #default="{ row }"><el-progress :percentage="progressOf(row)" :stroke-width="10" :color="progressOf(row) >= 100 ? 'var(--app-color-success)' : 'var(--app-color-primary)'" /></template></el-table-column>
         <el-table-column label="最近收货" width="96"><template #default="{ row }">{{ $fmtDate(row.lastDeliveryTime) }}</template></el-table-column>
         <el-table-column label="交期" width="96"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column label="状态" width="84" align="center"><template #default="{ row }"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="134" align="center" fixed="right">
+        <el-table-column label="状态" width="82" align="center"><template #default="{ row }"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="118" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goReceive(row)">收货</el-button>
             <!-- 退货：把已收物料退回物料商（委外物料退货单），与「退不良」区分 -->

@@ -7,6 +7,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, OUTSOURCE_ORDER_DIRTY_KEY } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import EntityLinks from '@/components/EntityLinks.vue'
 
 const router = useRouter()
 const activeTab = ref('PENDING_PRODUCING')
@@ -85,44 +86,57 @@ onMounted(() => {
       </el-tabs>
 
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1220px > 内容区 956px
-           ⇒ 横向滚动 264px。收窄为合计 944px（单号/加工厂/产品保持 min-width，宽屏自动吃余量）。 -->
+           ⇒ 横向滚动 264px。
+           2026-09-25（用户口径「列表数据显示完整 + 单号可点进详情」，实测驱动，见 tools/regression/scan-col-truncation.ps1）：
+           ①单号 min104→**146 固定**（WO-+11 位定长，实测需 146）+ 做成链接点进详情（原先只能点整行）；
+           ②模式 tag 文案「包工包料/来料加工」→「**包料/来料**」，列宽 80→70（缩短文案后 2 字 tag 只需 ~46）；
+           ③最近收货 96→**100**（并改用 $fmtDate 只显示日期 —— 原样输出 datetime 实测需 106 会截断）、
+             计划完成 96→84、是否缺料 80→62、状态 78→74；
+           ④操作 170→**176**（详情|下载合同|作废 三按钮实测需 176，「下载合同」4 字比家规档 140 宽）；
+           ⑤加工厂 min110→112、产品 min130→**104**（弹性列吃余量 + tooltip：多产品汇总长度无上界）。
+           合计 = 146+70+112+104+84+100+62+74+176 = **928** ✓（家规上限，弹性列在宽屏自动变宽）。 -->
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%" @row-click="(row: any) => router.push(`/outsource/order/detail/${row.id}`)">
-        <el-table-column prop="code" label="单号" min-width="104" show-overflow-tooltip />
-        <el-table-column label="模式" width="80" align="center">
-          <template #default="{row}"><el-tag :type="row.supplyMode==='FACTORY' ? 'warning' : 'info'" size="small">{{ row.supplyMode==='FACTORY' ? '包工包料' : '来料加工' }}</el-tag></template>
+        <el-table-column label="单号" width="146" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/outsource/order/detail/${row.id}`)">{{ row.code }}</el-button></template>
         </el-table-column>
-        <el-table-column label="加工厂" min-width="110" show-overflow-tooltip>
+        <el-table-column label="模式" width="70" align="center">
+          <template #default="{row}"><el-tag :type="row.supplyMode==='FACTORY' ? 'warning' : 'info'" size="small">{{ row.supplyMode==='FACTORY' ? '包料' : '来料' }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="加工厂" min-width="112" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
         </el-table-column>
         <!-- 产品与 SKU 合并为**一行**（2026-09-16 用户要求：列表内容不要换行；多产品时悬浮看全文） -->
-        <el-table-column label="产品" min-width="130" show-overflow-tooltip>
+        <el-table-column label="产品" min-width="104" show-overflow-tooltip>
           <template #default="{row}">
-            <span>{{ row.productNames || (row.productCount || 0) + '项' }}</span>
-            <span v-if="row.productSkus" style="color:var(--app-text-secondary)"> · {{ row.productSkus }}</span>
+            <!-- 2026-09-25：产品可点进产品详情（单项直链 / 多项 Popover；无 id 时回退原文本） -->
+            <EntityLinks :items="row.products" target="product" sub-key="sku">
+              <span>{{ row.productNames || (row.productCount || 0) + '项' }}</span>
+              <span v-if="row.productSkus" style="color:var(--app-text-secondary)"> · {{ row.productSkus }}</span>
+            </EntityLinks>
           </template>
         </el-table-column>
-        <el-table-column label="计划完成" width="96">
+        <el-table-column label="计划完成" width="84">
           <template #default="{row}">
             <span :style="{ color: row.planEndDate && new Date(row.planEndDate) < new Date() && row.status !== OutsourceOrderStatus.FINISHED && row.status !== OutsourceOrderStatus.CANCELLED ? 'red' : '' }">{{ $fmtDate(row.planEndDate) || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="最近收货" width="96" show-overflow-tooltip>
-          <template #default="{row}">{{ row.latestDeliveryDate || '-' }}</template>
+        <el-table-column label="最近收货" width="100" show-overflow-tooltip>
+          <template #default="{row}">{{ $fmtDate(row.latestDeliveryDate) || '-' }}</template>
         </el-table-column>
         <!-- 是否缺料（2026-09-17）：口径 = 剩余待收量对应的物料需求 > 该加工厂委外仓库存（与收货时的缺料拦截一致）；
              仅进行中（待审核/生产中）计算，已结单/已作废显示 — -->
-        <el-table-column label="是否缺料" width="80" align="center">
+        <el-table-column label="是否缺料" width="62" align="center">
           <template #default="{row}">
             <span v-if="row.materialShortage === null || row.materialShortage === undefined">—</span>
             <el-tag v-else :type="row.materialShortage ? 'danger' : 'success'" size="small">{{ row.materialShortage ? '是' : '否' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="78" align="center">
+        <el-table-column prop="status" label="状态" width="74" align="center">
           <template #default="{row}">
             <el-tag :type="OutsourceOrderStatusTag[row.status]||'info'">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="170" align="center" fixed="right">
+        <el-table-column label="操作" width="176" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click.stop="router.push(`/outsource/order/detail/${row.id}`)">详情</el-button>
             <el-button type="success" link @click.stop="handleDownloadContract(row)">下载合同</el-button>

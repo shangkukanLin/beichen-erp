@@ -45,21 +45,34 @@ async function loadProjects() {
  */
 const PRIORITY_SORT_ORDER_MAX = 2
 
-/** 退回成品（加工退货/维修退货）在厂库存（2026-09-25 P0-3 新增展示；当前委外仓尚无此类行，P1/P2 落地后出现） */
+/**
+ * 成品行（productId 非空）= 退回在厂成品，**不进**「库存物料」表。
+ * 2026-09-25 修正：`by-warehouse` 返回的是**整仓全行**（物料行 + 成品行），
+ * 原实现直接把全行喂给「库存物料」表 ⇒ 成品行在表里显示为"材料类型/名称/单位全空"的空行，看着像脏数据。
+ */
+const materialRows = computed(() => (materials.value as any[]).filter((m) => m.materialId != null))
+
+/**
+ * 退回成品（加工退货/维修退货）在厂库存（2026-09-25 P0-3 新增展示）。
+ * 2026-09-25 修正：只列**有数量**的行 —— 审核→反审核成对回滚后库存归零的行仍留在库存表（咽喉扣到 0 不删行），
+ * 数量 0 不是"在厂库存"，列出会让人误以为还有货。
+ */
 const productStocks = computed(() =>
-  (materials.value as any[]).filter((m) => m.productId != null && m.stockForm && m.stockForm !== 'MATERIAL')
+  (materials.value as any[])
+    .filter((m) => m.productId != null && m.stockForm && m.stockForm !== 'MATERIAL' && Number(m.quantity) !== 0)
+    .sort((a: any, b: any) => Number(b.quantity) - Number(a.quantity))
 )
 
 /**
  * 负库存项（2026-09-17 F3）：委外仓允许"缺料强制出库"（收货领料走 force 口径）会形成负库存，
- * 但必须**显式可见**并说明成因，否则容易被误认为账错。
+ * 但必须**显式可见**并说明成因，否则容易被误认为账错。仅物料行（提示文案针对"物料缺料"）。
  */
-const negativeItems = computed(() => materials.value.filter((m: any) => Number(m.quantity) < 0))
+const negativeItems = computed(() => materialRows.value.filter((m: any) => Number(m.quantity) < 0))
 
 // 排序：优先类型（sortOrder ≤ PRIORITY_SORT_ORDER_MAX）> 无归属项目 > 有归属项目；同档内按 sortOrder 稳定排
 const sortedMaterials = computed(() => {
   const soOf = (m: any) => (m.materialTypeSortOrder != null ? Number(m.materialTypeSortOrder) : 999)
-  return [...materials.value].sort((a, b) => {
+  return [...materialRows.value].sort((a, b) => {
     const orderOf = (m: any) => {
       const hasProject = !!(m.projectIds && m.projectIds.trim())
       if (soOf(m) <= PRIORITY_SORT_ORDER_MAX) return 0
@@ -186,8 +199,8 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
       <div v-if="sortedMaterials.length===0" style="text-align:center;color:var(--app-text-secondary);padding:24px">暂无关联物料</div>
     </el-card>
 
-    <!-- 2026-09-25 P0-3：退回成品在厂库存（加工退货 / 维修退货 **分开展示**，两者责任方不同不可混）。
-         当前委外仓只有物料行（成品行 = 0），P1/P2 落地后这里才会出现数据 -->
+    <!-- 2026-09-25 P0-3：退回成品在厂库存（加工退货 / 维修退货 同表以「形态」列区分；两者责任方不同不可混账）。
+         行来源 = 本仓 productId 非空且形态非 MATERIAL 的库存行；数量为 0 的行（成对回滚残留）不展示。 -->
     <el-card v-if="productStocks.length" shadow="never" class="table-card" style="margin-top:12px">
       <template #header><span style="font-weight:600">退回成品（在厂）</span></template>
       <el-table :data="productStocks" border stripe size="small">

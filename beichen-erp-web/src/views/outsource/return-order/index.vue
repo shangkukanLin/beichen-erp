@@ -26,15 +26,18 @@
  *   作废 → 结案 → 撤销结案；「详情」在台账走**抽屉**（该记录没有独立详情页）、在维修退货走**详情页**。</p>
  *
  * <p>📏 列宽预算（家规：合计 ≤ 930；纵向滚动条出现时内容区从 963 缩到约 948，故留余量）：
- * 台账 = 96+100+110+64+84+78+174 = 706 固定 ＋ 产品/备注 min 110+110 = **926** ✓；
- * 维修退货 = 132+100+116+100+96+78+174 = 796 固定 ＋ 内容列 min 136 = **932** ✓
- * （与物料退货页的公共列**同宽**：单号 132、对方 100、内容 min136、日期 96、状态 78、操作 174）。</p>
+ * 台账 = 130+140+160+64+84+78+132 = 788 固定 ＋ 产品 min 130 = **918** ✓
+ * 维修退货 = 150+140+116+100+78+132 = 716 固定 ＋ 内容列 min 136 = **852** ✓
+ * 加工返回单 = 160+140+64+84+96+78+132 = 754 固定 ＋ 产品 min 130 = **884** ✓
+ * （2026-09-25 用户口径：**三个页签「加工厂」统一 140、产品列统一 min130**；台账「关联加工单」110→130；
+ *   三个页签分别去掉「退货日期」（台账 / 维修退货）与「返回日期」（加工返回单）——日期详情页可见，列表不重复占宽）。</p>
  */
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import EntityLinks from '@/components/EntityLinks.vue'
 import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeTypeLabel, OutsourceReturnType, OutsourceReturnTypeLabel } from '@/api/enums'
 
 const router = useRouter()
@@ -430,22 +433,34 @@ onMounted(() => { loadLedger() })
 
       <!-- ============ ① 加工退货台账：有单 + 无单一张表（「关联加工单」列区分） ============ -->
       <template v-if="activeTab === 'DEFECT'">
-        <!-- 列宽合计 936px（**留余量**）＜ 内容区（行数多时纵向滚动条约吃掉 15px：963→948），一行显示完、不横向滑动。
-             2026-09-25：加「退货单号」列（GTH-/GTW-），去掉「备注」列（详情可见）；扣减仓库挂「退货数量」title。 -->
+        <!-- 列宽合计 888px（**留余量**）＜ 内容区（行数多时纵向滚动条约吃掉 15px：963→948），一行显示完、不横向滑动。
+             2026-09-25：加「退货单号」列（GTH-/GTW-），去掉「备注」列（详情可见）；扣减仓库挂「退货数量」title。
+             2026-09-25（用户口径）：①去掉「退货日期」列（日期在详情页可见，列表不用重复占宽）；
+             ②三个页签「加工厂」统一 140、「产品」统一 min130；「关联加工单」+20px（110→130）。
+             2026-09-25（用户口径「数据显示完整 + 单号/加工厂可点」）：「关联加工单」130→**160**（WO- 单号实测需 161）；
+             退货单号做成链接进详情（本页签详情 = 红冲台账独立页）、加工厂做成链接进供应商详情（后端行已带 factoryId）。 -->
         <el-table :data="ledger" border stripe v-loading="ledgerLoading" @row-click="openDetail">
-          <el-table-column label="退货日期" width="96"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-          <el-table-column label="退货单号" width="130">
-            <template #default="{ row }">{{ row.code || ('加工退货#' + row.id) }}</template>
+          <el-table-column label="退货单号" width="130" show-overflow-tooltip>
+            <template #default="{ row }"><el-button type="primary" link @click.stop="openDetail(row)">{{ row.code || ('加工退货#' + row.id) }}</el-button></template>
           </el-table-column>
-          <el-table-column prop="factoryName" label="加工厂" width="100" show-overflow-tooltip />
+          <el-table-column label="加工厂" width="140" show-overflow-tooltip>
+            <template #default="{ row }"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
+          </el-table-column>
           <!-- 「关联加工单」= 本表唯一的"有无单"区分：有单显示可点的加工单号，无单显示"未关联" -->
-          <el-table-column label="关联加工单" width="110" show-overflow-tooltip>
+          <el-table-column label="关联加工单" width="160" show-overflow-tooltip>
             <template #default="{ row }">
               <el-button v-if="row.orderCode" type="primary" link @click.stop="goOrder(row)">{{ row.orderCode }}</el-button>
               <span v-else style="color:var(--app-text-placeholder)">未关联</span>
             </template>
           </el-table-column>
-          <el-table-column prop="productName" label="产品" min-width="110" show-overflow-tooltip />
+          <!-- 2026-09-25：产品可点进产品详情（台账行自带 productMasterId = product.id） -->
+          <el-table-column label="产品" min-width="130" show-overflow-tooltip>
+            <template #default="{ row }">
+              <EntityLinks :items="row.productMasterId ? [{ id: row.productMasterId, name: row.productName, sku: row.sku }] : []" target="product" sub-key="sku">
+                <span>{{ row.productName || '-' }}</span>
+              </EntityLinks>
+            </template>
+          </el-table-column>
           <el-table-column label="规格" width="64" align="center"><template #default="{ row }">{{ specText(row.qualityType) }}</template></el-table-column>
           <el-table-column label="退货数量" width="84" align="right">
             <template #default="{ row }">
@@ -476,11 +491,24 @@ onMounted(() => { loadLedger() })
 
       <!-- ============ ③ 加工返回单（P1-2）：核销在厂成品 + 修好回仓 + 实际用料 + 赔料应收 ============ -->
       <template v-else-if="activeTab === 'BACK'">
-        <!-- 列宽合计 806px ＜ 内容区，一行显示完（备注等细节在详情弹窗） -->
+        <!-- 列宽合计 884px（**留余量**）＜ 内容区（行数多时纵向滚动条约吃掉 15px：963→948），一行显示完、不横向滑动。
+             2026-09-25（用户口径 方案 A）：①去掉「返回日期」列（日期在详情弹窗可见，列表不重复占宽）——
+             本页签为对齐另两个页签把「加工厂」100→140、「产品」min110→min130 后合计曾达 952px（超 930 家规），
+             去掉日期列后回落 856px ✓；②「返回单号」132→160（ORB- 前缀单号 15~16 位，132px 会截断成 ORB-202609250…）；
+             ③其余细节（用料明细等）在详情弹窗。 -->
         <el-table :data="backList" border stripe v-loading="backLoading" @row-click="openBackDetail">
-          <el-table-column prop="code" label="返回单号" width="132" />
-          <el-table-column prop="factoryName" label="加工厂" width="100" show-overflow-tooltip />
-          <el-table-column prop="productName" label="产品" min-width="110" show-overflow-tooltip />
+          <el-table-column label="返回单号" width="160" show-overflow-tooltip>
+            <template #default="{ row }"><el-button type="primary" link @click.stop="openBackDetail(row)">{{ row.code }}</el-button></template>
+          </el-table-column>
+          <el-table-column prop="factoryName" label="加工厂" width="140" show-overflow-tooltip />
+          <!-- 2026-09-25：返回单行的产品可点进产品详情（行自带 productId = product.id） -->
+          <el-table-column label="产品" min-width="130" show-overflow-tooltip>
+            <template #default="{ row }">
+              <EntityLinks :items="row.productId ? [{ id: row.productId, name: row.productName }] : []" target="product">
+                <span>{{ row.productName || '-' }}</span>
+              </EntityLinks>
+            </template>
+          </el-table-column>
           <el-table-column label="规格" width="64" align="center"><template #default="{ row }">{{ specText(row.defectQualityType) }}</template></el-table-column>
           <el-table-column label="返回数量" width="84" align="right">
             <template #default="{ row }"><span style="font-weight:500">{{ Number(row.quantity || 0) }}</span></template>
@@ -488,7 +516,6 @@ onMounted(() => { loadLedger() })
           <el-table-column label="料款应收" width="96" align="right">
             <template #default="{ row }">{{ Number(row.materialAmount || 0).toFixed(2) }}</template>
           </el-table-column>
-          <el-table-column label="返回日期" width="96" align="center"><template #default="{ row }">{{ $fmtDate(row.returnDate) }}</template></el-table-column>
           <el-table-column label="状态" width="78" align="center">
             <template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
           </el-table-column>
@@ -511,12 +538,16 @@ onMounted(() => { loadLedger() })
 
       <!-- ============ ② 独立退货单：维修退货（送修 / 返回 / 结案） ============ -->
       <template v-else>
-        <!-- 列宽合计 932px（**留余量**）＜ 内容区，保证「一行显示完、不横向滑动」。
-             2026-09-21 与物料退货页对齐：单号 132 / 加工厂 100 / 送修已返回 116 / 内容 min136 /
-             工厂收费 100 / 退货日期 96 / 状态 78 / 操作 174（公共列同宽）。 -->
+        <!-- 列宽合计 834px（**留余量**）＜ 内容区，保证「一行显示完、不横向滑动」。
+             2026-09-21 与物料退货页对齐：单号 132 / 送修已返回 116 / 内容 min136 / 工厂收费 100 / 状态 78 / 操作 132。
+             2026-09-25（用户口径）：①去掉「退货日期」列（日期在详情页可见，列表不重复占宽）；
+             ②「加工厂」100→140（三个页签统一）。 -->
         <el-table :data="list" border stripe v-loading="loading" @row-click="goReturnDetail">
-          <el-table-column prop="code" label="退货单号" width="132" />
-          <el-table-column label="加工厂" width="100" show-overflow-tooltip>
+          <!-- 2026-09-25（用户口径）：退货单号 132→150（OR-+11 位 + 链接按钮内边距，实测需 ~150）并做成链接进详情 -->
+          <el-table-column label="退货单号" width="150" show-overflow-tooltip>
+            <template #default="{ row }"><el-button type="primary" link @click.stop="goReturnDetail(row)">{{ row.code }}</el-button></template>
+          </el-table-column>
+          <el-table-column label="加工厂" width="140" show-overflow-tooltip>
             <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
           </el-table-column>
           <!-- 送修 / 已返回（2026-09-17）：橙=工厂还没送完、绿=已全部送回；结案入口见操作列 -->
@@ -529,8 +560,13 @@ onMounted(() => { loadLedger() })
             </template>
           </el-table-column>
           <el-table-column label="退货/送修内容" min-width="136" show-overflow-tooltip>
-            <!-- 维修退货没有物料明细 → 显示"产品×数量"；加工退货显示"退货物料"（BOM 快照） -->
-            <template #default="{ row }">{{ row.itemSummary || row.productSummary || '-' }}</template>
+            <!-- 维修退货没有物料明细 → 显示"产品×数量"；加工退货显示"退货物料"（BOM 快照）。
+                 2026-09-25：本页签按 returnType=REPAIR 查，行里的产品可点进产品详情（后端新增 products[]） -->
+            <template #default="{ row }">
+              <EntityLinks :items="row.products" target="product" qty-key="quantity">
+                <span>{{ row.itemSummary || row.productSummary || '-' }}</span>
+              </EntityLinks>
+            </template>
           </el-table-column>
           <!-- 收费方向：加工厂向我方收取（我方付加工厂，审核后生成正向应付） -->
           <el-table-column label="工厂收费" width="100" align="center">
@@ -541,9 +577,6 @@ onMounted(() => { loadLedger() })
               </el-tag>
               <span v-else style="color:#c0c4cc">不收费</span>
             </template>
-          </el-table-column>
-          <el-table-column label="退货日期" width="96" align="center">
-            <template #default="{ row }">{{ $fmtDate(row.returnDate) }}</template>
           </el-table-column>
           <el-table-column label="状态" width="78" align="center">
             <!-- 维修退货已结案时直接显示「已结案」（替代"已审核"），未结案按原状态（2026-09-17） -->

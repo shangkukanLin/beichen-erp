@@ -139,6 +139,17 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
                     .map(p -> p.getSku() != null ? p.getSku() : "")
                     .filter(s -> !s.isEmpty())
                     .collect(java.util.stream.Collectors.joining(" / ")));
+            // 2026-09-25（用户口径「产品列可点进详情」）：附**逐项** {id,name,sku}，前端按项渲染链接跳 /product/detail/:id。
+            // id = 产品主数据ID（create/update 时由 resolveProductMasterId 回填；已核全库 13 行 product_id 均有效、0 悬挂）
+            List<Map<String, Object>> productList = new ArrayList<>();
+            for (OutsourceOrderProduct p : products) {
+                Map<String, Object> pm = new HashMap<>();
+                pm.put("id", p.getProductId());
+                pm.put("name", p.getProductName());
+                pm.put("sku", p.getSku());
+                productList.add(pm);
+            }
+            m.put("products", productList);
             return m;
         }).toList());
 

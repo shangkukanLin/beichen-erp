@@ -192,6 +192,9 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
             BigDecimal totalQty = BigDecimal.ZERO;
             BigDecimal totalAmount = BigDecimal.ZERO;
             StringBuilder sb = new StringBuilder();
+            // 2026-09-25（用户口径「物料列可点进详情」）：逐项 {materialId,materialName,unit,quantity}，
+            // 前端渲染链接跳 /outsource/material-stock/detail/:materialId（物料档案 + 跨仓库存分布）
+            List<Map<String, Object>> itemList = new ArrayList<>();
             for (OutsourceMaterialReturnItem it : items) {
                 BigDecimal qty = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
                 totalQty = totalQty.add(qty);
@@ -199,10 +202,19 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                 if (sb.length() > 0) sb.append("、");
                 sb.append(it.getMaterialId() != null ? matNameMap.getOrDefault(it.getMaterialId(), "") : "")
                         .append("×").append(qty.stripTrailingZeros().toPlainString());
+                if (it.getMaterialId() != null) {
+                    Map<String, Object> im = new HashMap<>();
+                    im.put("materialId", it.getMaterialId());
+                    im.put("materialName", matNameMap.getOrDefault(it.getMaterialId(), ""));
+                    im.put("unit", it.getUnit());
+                    im.put("quantity", qty);
+                    itemList.add(im);
+                }
             }
             m.put("totalQuantity", totalQty);
             m.put("totalAmount", totalAmount);
             m.put("itemSummary", sb.toString());
+            m.put("items", itemList);
             // 送修 / 已返回（维修退货跟踪用；退货退款也返回，前端只在维修页签展示）
             BigDecimal returnedQty = returnedMap.getOrDefault(o.getId(), BigDecimal.ZERO);
             m.put("sentQty", totalQty);

@@ -154,6 +154,8 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
             // 退货成品摘要：维修退货没有物料明细（itemSummary 为空），列表改看"产品×数量"（2026-09-17）
             StringBuilder psb = new StringBuilder();
             BigDecimal sentQty = BigDecimal.ZERO;
+            // 2026-09-25（用户口径「产品列可点进详情」）：逐项 {id,name,quantity}，前端渲染链接跳 /product/detail/:id
+            List<Map<String, Object>> prodList = new ArrayList<>();
             for (OutsourceReturnOrderProduct p : returnProductMapper.selectList(
                     new LambdaQueryWrapper<OutsourceReturnOrderProduct>().eq(OutsourceReturnOrderProduct::getReturnOrderId, o.getId()))) {
                 if (p.getQuantity() == null || p.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
@@ -161,8 +163,16 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                 if (psb.length() > 0) psb.append("、");
                 psb.append(p.getProductName() != null ? p.getProductName() : ("#" + p.getProductId()))
                    .append("×").append(p.getQuantity().stripTrailingZeros().toPlainString());
+                if (p.getProductId() != null) {
+                    Map<String, Object> pm = new HashMap<>();
+                    pm.put("id", p.getProductId());
+                    pm.put("name", p.getProductName());
+                    pm.put("quantity", p.getQuantity());
+                    prodList.add(pm);
+                }
             }
             m.put("productSummary", psb.toString());
+            m.put("products", prodList);
             // 送修 / 已返回 / 未返回 + 结案（维修退货列表跟踪用，2026-09-17）
             BigDecimal returnedQty = repairReturned.getOrDefault(o.getId(), BigDecimal.ZERO);
             m.put("sentQty", sentQty);

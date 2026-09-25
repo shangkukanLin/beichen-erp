@@ -18,9 +18,11 @@
  *   「编辑」为 D 档新增（复用新增页 `/outsource/material-return/edit/:id`，后端 `PUT /{id}` 早已支持，仅允许草稿）。
  *
  * <p>📏 列宽预算（家规：合计 ≤ 930，纵向滚动条出现时内容区从 963 缩到约 948，故留余量）：
- * 物料退货页签 = 132+100+96+86+96+78+174 = 762 固定 ＋ 内容列 min 136 = **898** ✓；
- * 维修退货页签 = 132+100+86+96+116+78+174 = 782 固定 ＋ 内容列 min 136 = **918** ✓
- * （两页签的公共列**同宽**；维修页签不再单列「出库源仓」——该字段在详情页可查）。</p>
+ * 2026-09-25（用户口径「数据显示完整 + 单号/仓库可点」，实测见 tools/regression/scan-col-truncation.ps1）：
+ * 物料退货页签 = 158+134+150+70+96+74+132 = 814 固定 ＋ 内容列 min 110 = **924** ✓；
+ * 维修退货页签 = 158+134+70+96+116+74+132 = 780 固定 ＋ 内容列 min 110 = **890** ✓
+ * （两页签的公共列**同宽**：单号 158 / 对方 134 / 金额 70 / 日期 96 / 状态 74 / 操作 132；
+ *   维修页签不单列「出库源仓」——该字段在详情页可查）。</p>
  *
  * <p>📌 详情入口规则（与加工侧同一条家规）：**有独立详情页的单据 → 行点击 / 「详情」跳详情页**；
  * 只有「收货台账」那种没有独立页的记录才用抽屉。</p>
@@ -31,6 +33,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, MaterialReturnType, MaterialReturnTypeLabel } from '@/api/enums'
+import EntityLinks from '@/components/EntityLinks.vue'
 
 defineOptions({ name: 'OutsourceMaterialReturn' })
 
@@ -60,6 +63,25 @@ const fetchSuppliers = (kw: string) =>
   request.get('/supplier/page', { params: { pageSize: 500, name: kw, excludeSupplierType: 'product' } })
 
 const isRepairTab = () => activeType.value === MaterialReturnType.REPAIR
+
+/**
+ * 出库源仓可点（2026-09-25 用户口径「仓库之类可以点进详情」）：源仓可能是**委外仓**（物料在工厂处）
+ * 或**自有物料仓**，两者详情页不同 ⇒ 与「物料其他出入库」页同款分流（有 factoryId = 委外仓）。
+ * 挂载时拉一次仓库列表建 id→factoryId 映射（1 次请求），点击零等待；与 other-io/index.vue:55-60 同一范式。
+ */
+const warehouses = ref<any[]>([])
+async function loadWarehouses() {
+  try {
+    const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500 } })
+    warehouses.value = r?.records || []
+  } catch { warehouses.value = [] }
+}
+function goWarehouseDetail(id: any) {
+  if (id == null) return
+  const wh = warehouses.value.find((w: any) => w.id === id)
+  if (wh?.factoryId != null) router.push(`/outsource/warehouse/detail/${id}`)
+  else router.push(`/inventory/warehouse/detail/${id}`)
+}
 
 async function loadData() {
   loading.value = true
@@ -132,7 +154,7 @@ onActivated(() => {
     loadData()
   }
 })
-onMounted(loadData)
+onMounted(() => { loadData(); loadWarehouses() })
 
 </script>
 
@@ -168,20 +190,31 @@ onMounted(loadData)
         </div>
       </div>
 
-      <!-- 列宽合计：物料退货页签 898px / 维修退货页签 918px ＜ 内容区（纵向滚动条下约 948）⇒ 一行显示完、不横向滑动。
+      <!-- 列宽合计：物料退货页签 924px / 维修退货页签 890px ＜ 内容区（纵向滚动条下约 948）⇒ 一行显示完、不横向滑动。
            两页签公共列同宽；维修页签不单列「出库源仓」（详情页可查），
            「送修/已返回」+「返回进度」合并为一列、已结案显示在「状态」列（与加工侧一致）。 -->
       <el-table :data="list" border stripe v-loading="loading" @row-click="goDetail">
-        <el-table-column prop="code" label="退货单号" width="132" />
-        <el-table-column :label="isRepairTab() ? '维修供应商' : '供应商'" width="100" show-overflow-tooltip>
+        <!-- 2026-09-25（用户口径「数据显示完整 + 单号/仓库可点」）：退货单号 132→158（MRW-+11 位，实测需 157）
+             并做成链接进详情；出库源仓 96→140 并做成链接进**对应仓库详情**（委外仓/自有仓自动分流）。 -->
+        <el-table-column label="退货单号" width="158" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button></template>
+        </el-table-column>
+        <el-table-column :label="isRepairTab() ? '维修供应商' : '供应商'" width="134" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName }}</el-button></template>
         </el-table-column>
-        <el-table-column v-if="!isRepairTab()" prop="warehouseName" label="出库源仓" width="96" show-overflow-tooltip />
-        <el-table-column label="退货/送修内容" min-width="136" show-overflow-tooltip>
-          <!-- 物料退货显示"退货物料"、维修退货显示"送修物料"（同一列，明细在详情页） -->
-          <template #default="{ row }">{{ row.itemSummary || '-' }}</template>
+        <el-table-column v-if="!isRepairTab()" label="出库源仓" width="150" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="goWarehouseDetail(row.fromWarehouseId)">{{ row.warehouseName }}</el-button></template>
         </el-table-column>
-        <el-table-column label="退货金额" width="86" align="right">
+        <el-table-column label="退货/送修内容" min-width="110" show-overflow-tooltip>
+          <!-- 物料退货显示"退货物料"、维修退货显示"送修物料"（同一列，明细在详情页）。
+               2026-09-25：物料可点进「物料库存分布详情」（两个页签同源，后端新增 items[]） -->
+          <template #default="{ row }">
+            <EntityLinks :items="row.items" target="material" name-key="materialName" qty-key="quantity">
+              <span>{{ row.itemSummary || '-' }}</span>
+            </EntityLinks>
+          </template>
+        </el-table-column>
+        <el-table-column label="退货金额" width="70" align="right">
           <template #default="{ row }">{{ row.totalAmount != null ? Number(row.totalAmount).toFixed(2) : '-' }}</template>
         </el-table-column>
         <el-table-column label="退货日期" width="96" align="center">
@@ -196,7 +229,7 @@ onMounted(loadData)
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="78" align="center">
+        <el-table-column label="状态" width="74" align="center">
           <!-- 维修退货已结案时显示「已结案」（替代"已审核"），未结案按原状态（与加工侧一致） -->
           <template #default="{ row }">
             <el-tag v-if="row.returnType === MaterialReturnType.REPAIR && row.closedFlag === 1" type="success" size="small">已结案</el-tag>

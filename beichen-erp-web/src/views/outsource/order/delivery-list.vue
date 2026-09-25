@@ -16,6 +16,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/enums'
+import EntityLinks from '@/components/EntityLinks.vue'
 
 defineOptions({ name: 'OutsourceOrderDelivery' })
 
@@ -91,14 +92,29 @@ onActivated(() => { loadData() })
            2026-09-21（用户口径「成品收货页只留加工退货、退回走红冲收货」）：**移除**行内「退货」按钮 ⇒
            操作列 124→84；腾出的 40px **自动归弹性列「产品」**（无需手工抵平，合计仍 ≤ 容器 ⇒ 依旧不横向滑动）。
            2026-09-21（用户口径「结单按钮放到成品收货里」）：行内**新增「结单」** ⇒ 操作列 84→124（收货 + 结单），
-           正好用回上一轮腾出的 40px（固定列合计 778 + 两个 min-width 160 = 938 ≤ 948 兜底 ⇒ 仍不横向滑动）。 -->
+           正好用回上一轮腾出的 40px（固定列合计 778 + 两个 min-width 160 = 938 ≤ 948 兜底 ⇒ 仍不横向滑动）。
+           2026-09-25（用户口径「列表数据显示完整 + 加工厂可点」）：加工厂 min90→120 固定（实测需 121）
+           并做成链接进供应商详情；产品 min70→90（弹性列 + tooltip）；下单/已收/剩余 144→110、收货进度 92→70、
+           状态 82→74、最近收货/计划完成 98→**100**（日期实测需 ~100，否则被截断）。
+           合计 = 140+120+90+110+70+100+100+74+124 = **928** ✓ -->
       <el-table :data="tableData" border stripe v-loading="loading" style="width:100%" @row-click="goDetail">
         <el-table-column label="加工单号" width="140" show-overflow-tooltip>
           <template #default="{ row }"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button></template>
         </el-table-column>
-        <el-table-column prop="factoryName" label="加工厂" min-width="90" show-overflow-tooltip />
-        <el-table-column prop="productNames" label="产品" min-width="70" show-overflow-tooltip />
-        <el-table-column label="下单/已收/剩余" width="144" align="center">
+        <!-- 2026-09-25（用户口径「数据显示完整 + 加工厂可点」）：可点进供应商详情（后端 row 已带 factoryId，
+             pageProducingOrders 一并返回，无需改接口）。 -->
+        <el-table-column label="加工厂" width="120" show-overflow-tooltip>
+          <template #default="{ row }"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
+        </el-table-column>
+        <el-table-column label="产品" min-width="90" show-overflow-tooltip>
+          <!-- 2026-09-25：产品可点进产品详情（单项直链 / 多项 Popover；无 id 时回退文本） -->
+          <template #default="{ row }">
+            <EntityLinks :items="row.products" target="product" sub-key="sku">
+              <span>{{ row.productNames || '-' }}</span>
+            </EntityLinks>
+          </template>
+        </el-table-column>
+        <el-table-column label="下单/已收/剩余" width="110" align="center">
           <template #default="{ row }">
             <span>{{ row.totalQuantity }}</span>
             <span style="color:var(--app-text-placeholder)"> / </span>
@@ -107,16 +123,17 @@ onActivated(() => { loadData() })
             <span :style="{ color: Number(row.remainingQuantity) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-warning)', fontWeight: 500 }">{{ row.remainingQuantity }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="收货进度" width="92">
+        <el-table-column label="收货进度" width="70">
           <template #default="{ row }"><el-progress :percentage="progressOf(row)" :stroke-width="10" :color="progressOf(row) >= 100 ? 'var(--app-color-success)' : 'var(--app-color-primary)'" /></template>
         </el-table-column>
-        <el-table-column label="最近收货" width="98">
+        <!-- 日期列统一 100：实测 "2026-09-25" 在 96px 以下会被截断（日期类不设 size="small"） -->
+        <el-table-column label="最近收货" width="100">
           <template #default="{ row }">{{ $fmtDate(row.latestDeliveryDate) }}</template>
         </el-table-column>
-        <el-table-column label="计划完成" width="98">
+        <el-table-column label="计划完成" width="100">
           <template #default="{ row }">{{ $fmtDate(row.planEndDate) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="82" align="center">
+        <el-table-column label="状态" width="74" align="center">
           <template #default="{ row }"><el-tag :type="OutsourceOrderStatusTag[row.status] || 'info'" size="small">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
         <el-table-column label="操作" width="124" align="center" fixed="right">

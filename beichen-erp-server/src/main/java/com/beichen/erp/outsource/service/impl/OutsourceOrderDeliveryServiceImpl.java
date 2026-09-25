@@ -176,6 +176,8 @@ public class OutsourceOrderDeliveryServiceImpl
         Map<Long, LocalDate> latestMap = new HashMap<>();
         Map<Long, String> nameMap = new HashMap<>();
         Map<Long, String> skuMap = new HashMap<>();
+        // 2026-09-25（用户口径「产品列可点进详情」）：逐项 {id,name,sku}，供前端渲染链接跳 /product/detail/:id
+        Map<Long, List<Map<String, Object>>> productListMap = new HashMap<>();
 
         if (!orderIds.isEmpty()) {
             // 订单量 + 产品名称/SKU 拼串（一次查全部，避免逐单查询）
@@ -188,6 +190,14 @@ public class OutsourceOrderDeliveryServiceImpl
                     nameMap.merge(p.getOrderId(), p.getProductName(), (a, b) -> a + " / " + b);
                 if (p.getSku() != null && !p.getSku().isEmpty())
                     skuMap.merge(p.getOrderId(), p.getSku(), (a, b) -> a + " / " + b);
+                // 逐项产品（含产品主数据ID）：仅当 id 存在才入列，前端无 id 时回退纯文本
+                if (p.getProductId() != null) {
+                    Map<String, Object> pm = new HashMap<>();
+                    pm.put("id", p.getProductId());
+                    pm.put("name", p.getProductName());
+                    pm.put("sku", p.getSku());
+                    productListMap.computeIfAbsent(p.getOrderId(), k -> new ArrayList<>()).add(pm);
+                }
             }
             // 已交数量（仅已审核）+ 最近交货日期（全部记录）
             for (OutsourceOrderDelivery d : baseMapper.selectList(
@@ -224,6 +234,7 @@ public class OutsourceOrderDeliveryServiceImpl
             m.put("factoryName", factoryNameMap.getOrDefault(o.getFactoryId(), ""));
             m.put("productNames", nameMap.getOrDefault(o.getId(), ""));
             m.put("productSkus", skuMap.getOrDefault(o.getId(), ""));
+            m.put("products", productListMap.getOrDefault(o.getId(), List.of()));
             m.put("planEndDate", o.getPlanEndDate());
             m.put("totalAmount", o.getTotalAmount());
             m.put("totalQuantity", total);

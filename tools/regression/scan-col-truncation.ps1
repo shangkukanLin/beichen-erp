@@ -1,0 +1,100 @@
+# Guard: list columns whose cell text is CUT OFF (ellipsized) instead of shown in full.
+# Rule (2026-09-25, user): list data must be shown as completely as possible.
+#   - identifier columns (code / partner / warehouse / date / status) must never be cut;
+#   - multi-value summary columns (product / material / item summary) have unbounded length, so
+#     ellipsis is allowed there -- they must carry a tooltip and the row is clickable into detail.
+#
+# Why this is separate from scan-table-overflow.ps1:
+#   that guard only proves "the table does not scroll horizontally" (colSum <= avail). A table can fit
+#   perfectly and still cut every cell, because Element Plus ellipsizes text cells by design -- which is
+#   exactly what the user reported. This one measures, per column, how many body cells have
+#   .cell.scrollWidth > .cell.clientWidth (i.e. the text is visually cut).
+#
+# FAIL when a non-whitelisted column has clipped cells, or when any cell wraps onto a second line.
+# The whitelist lives in ui-e2e-zh.json -> col_allow_truncate, because this file must stay ASCII
+# (PS 5.1 decodes a non-BOM .ps1 as GBK, so Chinese labels here would be mangled).
+#
+# Scope: the outsource list pages fixed on 2026-09-25. Extend $routes as other pages are done.
+param([string]$Only = '', [string]$Report = "$env:TEMP\col-truncation.json")
+
+. (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
+EnsureLogin
+WatchErrors
+
+$routes = @(
+  '/outsource/order',
+  '/outsource/order/delivery',
+  '/outsource/return-order',
+  '/outsource/material-order',
+  '/outsource/material-order/delivery',
+  '/outsource/material-return'
+)
+if ($Only -ne '') { $routes = @($routes | Where-Object { $_ -match $Only }) }
+
+$allow = @()
+foreach ($t in ([string](ZH 'col_allow_truncate')) -split ',') {
+  $t = $t.Trim(); if ($t -ne '') { $allow += $t }
+}
+Write-Host ('[SCAN] pages = ' + $routes.Count + ' ; whitelisted (allowed to ellipsize) cols = ' + ($allow -join ' | '))
+
+# Per visible table, per column: header label, rendered width, # clipped cells, widest needed px, sample.
+# NOTE: the whitelist is compared INSIDE the browser (labels are Chinese; PowerShell reads our stdout as
+# GBK, so Chinese coming back from the page would never string-match a PS variable).
+$allowB64 = B64 ([string](ZH 'col_allow_truncate'))
+# Labels/samples come back BASE64: PowerShell reads our stdout as GBK, so raw Chinese would be mangled
+# before it reaches the JSON report. btns = # cells in that column already containing a button/link
+# (i.e. "this column is already clickable") -- useful when planning the click-through work.
+$js = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const B=s=>btoa(unescape(encodeURIComponent(s||'')));const AL=T('$allowB64').split(',').map(s=>s.trim()).filter(Boolean);const vis=e=>e.getClientRects().length>0;const out=[];const ts=[...document.querySelectorAll('.el-table')].filter(vis);ts.forEach((t,ti)=>{const hr=t.querySelector('.el-table__header tr:last-child');const ths=hr?[...hr.querySelectorAll('th')]:[];const rows=[...t.querySelectorAll('.el-table__body tbody tr')].filter(r=>r.getClientRects().length>0);const cols=ths.map((th,ci)=>{const lb=((th.querySelector('.cell')||th).innerText||'').trim();let clipped=0,wrap=0,btns=0,sample='',need=0;rows.forEach(r=>{const tds=r.querySelectorAll('td');if(ci>=tds.length)return;const td=tds[ci];const c=td.querySelector('.cell');if(!c)return;if(td.querySelector('.el-button,.el-link'))btns++;const sw=c.scrollWidth,cw=c.clientWidth;const txt=(c.innerText||'').trim();if(sw-cw>1){clipped++;if(sw>need){need=sw;sample=txt}}if(c.getBoundingClientRect().height>26)wrap++;});const w=th?Math.round(th.getBoundingClientRect().width):0;return {label:B(lb),sample:B(sample.slice(0,28)),width:w,clipped:clipped,wrapped:wrap,btns:btns,need:need>0?need+18:0,allowed:AL.indexOf(lb)>=0};});out.push({idx:ti,cols:ths.length,rows:rows.length,detail:cols});});return JSON.stringify(out)})()"
+
+function Dec([string]$b) {
+  if ([string]::IsNullOrEmpty($b)) { return '' }
+  try { return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b)) } catch { return '?' }
+}
+
+$bad = @()
+$reportRows = @()
+$scanned = 0
+$noTable = 0
+foreach ($p in $routes) {
+  Open $p 2000
+  Start-Sleep -Milliseconds 500
+  $raw = EvalJs $js
+  if (-not $raw.TrimStart().StartsWith('[')) { Write-Host ('  ?? ' + $p + ' probe failed: ' + $raw); continue }
+  $tables = $raw | ConvertFrom-Json
+  if (@($tables).Count -eq 0) { $noTable++; continue }
+  $scanned++
+  foreach ($t in @($tables)) {
+    $note = ''
+    foreach ($c in @($t.detail)) {
+      $label = Dec ([string]$c.label)
+      $allowed = [bool]$c.allowed
+      $tag = ''
+      if ([int]$c.wrapped -gt 0) { $tag = 'WRAPPED' }
+      elseif ([int]$c.clipped -gt 0 -and -not $allowed) { $tag = 'CLIPPED' }
+      $reportRows += [pscustomobject]@{
+        page = $p; table = $t.idx; label = $label; width = [int]$c.width
+        clipped = [int]$c.clipped; wrapped = [int]$c.wrapped; need = [int]$c.need
+        allowed = $allowed; btns = [int]$c.btns; sample = (Dec ([string]$c.sample)); rows = [int]$t.rows
+      }
+      if ($tag -ne '') {
+        Write-Host ('    FAIL [' + $tag + '] ' + $p + ' table#' + $t.idx + ' col=' + $label + ' width=' + $c.width + ' clipped=' + $c.clipped + ' need=' + $c.need + ' rows=' + $t.rows)
+        $bad += [pscustomobject]@{ page = $p; table = $t.idx; label = $label; width = [int]$c.width; clipped = [int]$c.clipped; wrapped = [int]$c.wrapped; need = [int]$c.need; sample = [string]$c.sample }
+      }
+      $mark = ''
+      if ([int]$c.clipped -gt 0) { $mark = '!x' + $c.clipped }
+      if ($allowed) { $mark = $mark + '*allow' }
+      $note = $note + $label + '(' + $c.width + $mark + ') '
+    }
+    Write-Host ('  ok   ' + $p + ' #' + $t.idx + ' cols=' + $t.cols + ' rows=' + $t.rows + '  ' + $note)
+  }
+}
+[IO.File]::WriteAllText($Report, ($reportRows | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding($false)))
+Write-Host ''
+Write-Host ('[SCAN] pages with a table = ' + $scanned + ' ; without = ' + $noTable + ' ; offenders = ' + $bad.Count + ' ; report = ' + $Report)
+Ok ($bad.Count -eq 0) ('no cut-off column (offenders: ' + $bad.Count + ')')
+if ($bad.Count -gt 0) {
+  Write-Host '--- offenders ---'
+  $bad | ForEach-Object { Write-Host ('  ' + $_.page + ' #' + $_.table + '  ' + $_.label + '  width=' + $_.width + '  clipped=' + $_.clipped + '  need=' + $_.need + '  sample=' + $_.sample) }
+}
+Ok ((Errs) -eq '[]') 'no JS/API errors during the sweep'
+Summary 'list column truncation sweep'
