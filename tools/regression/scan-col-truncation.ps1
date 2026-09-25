@@ -39,7 +39,9 @@ $routes = @(
   '/outsource/material-info',
   '/template',
   '/dev/project',
-  '/dev/material'
+  '/dev/material',
+  # --- 2026-09-25 B2 屏幕资料（列表精简为 7 列，全部完整）---
+  '/dev/screen-model'
 )
 if ($Only -ne '') { $routes = @($routes | Where-Object { $_ -match $Only }) }
 
