@@ -223,7 +223,7 @@ onActivated(() => {
     <!-- 列表 -->
     <el-card shadow="never" class="table-card">
       <el-table v-loading="tableLoading" :data="tableData" border stripe row-key="id">
-        <el-table-column label="菜单名称" min-width="220" show-overflow-tooltip>
+        <el-table-column label="菜单名称" min-width="190" show-overflow-tooltip>
           <template #default="{ row }">
             <span :style="{ paddingLeft: row.level * 24 + 'px' }">
               <span v-if="row.level > 0" style="color: var(--app-text-placeholder); margin-right: 4px">├</span>
@@ -231,19 +231,21 @@ onActivated(() => {
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="90" align="center">
+        <el-table-column label="类型" width="76" align="center">
           <template #default="{ row }">
             <el-tag :type="row.menuType === MenuType.CATALOG ? 'warning' : 'info'" size="small">
               {{ typeText(row.menuType) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="routePath" label="路由路径" min-width="140" show-overflow-tooltip>
+        <!-- 2026-09-26 B7（实测驱动）：路由路径 min140→**249**（实测需 249：/outsource/material-order/detail 这类长路径
+             原 177 渲染宽下 12/100 行被截断）；「路由路径」「图标」登记进白名单（长度随新增菜单/图标变化，均带 tooltip） -->
+        <el-table-column prop="routePath" label="路由路径" min-width="249" show-overflow-tooltip>
           <template #default="{ row }">
             {{ row.routePath || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="icon" label="图标" width="120" show-overflow-tooltip>
+        <el-table-column prop="icon" label="图标" width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <span>
               <el-icon><component :is="row.icon" /></el-icon>
@@ -251,8 +253,9 @@ onActivated(() => {
             </span>
           </template>
         </el-table-column>
-        <el-table-column prop="sortOrder" label="排序" width="70" align="center" />
-        <el-table-column label="状态" width="80" align="center">
+        <!-- 2026-09-26 B7：类型/排序/状态/操作 按预算收拢（合计 = 190+76+249+150+62+72+136 = 935 ≤ 956） -->
+        <el-table-column prop="sortOrder" label="排序" width="62" align="center" />
+        <el-table-column label="状态" width="72" align="center">
           <template #default="{ row }">
             <el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
           </template>

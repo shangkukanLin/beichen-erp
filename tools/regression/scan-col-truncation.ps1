@@ -79,7 +79,17 @@ $routes = @(
   '/finance/account',
   '/finance/expense',
   '/finance/invoice',
-  '/finance/payable-transfer'
+  '/finance/payable-transfer',
+  # --- 2026-09-26 B7 系统 + 分析 ---
+  '/system/user',
+  '/system/role',
+  '/system/menu',
+  '/analysis/overview',
+  '/analysis/cash',
+  '/analysis/tax',
+  '/analysis/sale',
+  '/analysis/customer',
+  '/analysis/purchase'
 )
 if ($Only -ne '') { $routes = @($routes | Where-Object { $_ -match $Only }) }
 
