@@ -64,6 +64,19 @@
 **迁移对旧代码是安全的（已生效的事实，不依赖重启）**：新列有 DEFAULT `'MATERIAL'`，旧代码不写该列也不带该条件
 ⇒ 新流水自动落 MATERIAL、旧 UPSERT 定位不受影响；两条唯一键只是原键的超集 ⇒ 存量定位不变。
 
+### 批 1 收口实证 ✅（2026-09-25，提交 `e91188a` 之后）
+方法（可复用）：取一张 **DRAFT 销售单** → `PUT /inventory/sale/{id}/audit` → 查库存/流水 → `un-audit` → 期望**精确回原值**。
+实测（id=294）：
+```
+BEFORE      stock total=14572 · log=2128 · maxLogId=3907
+AUDIT 后    stock total=14567(−5) · log=2129 · 新流水 stock_form=MATERIAL / change_type=SALE_OUT
+UN-AUDIT 后 stock total=14572 ✅ 精确回基线 · log=2130
+新流水里非 MATERIAL 行 = 0 ✅
+```
+⇒ **成品侧 chokepoint（`changeStock`）在新代码下端到端正常、成对性完好、零回归** ✅。
+⚠️ 本探针只覆盖**成品侧**；物料侧（`changeMaterialStock*`）已由编译 + 启动验证 ✅，但**尚未用真实委外单据跑过** ✗ ⇒
+进 P0-3 之前建议补一条物料侧成对验证（委外收发/还料任一 ✓）。
+
 ### 两条血泪教训（2026-09-25 各踩一次，务必按此做）
 1. **判断"编译是否通过"绝不能把 mvn 串进管道后读 `$LASTEXITCODE`** ✗：`mvn | Select-String ...` 之后
    `$LASTEXITCODE` 取到的是**管道最后一个命令**（Select-String）的退出码 ⇒ 编译失败也会显示 `exit=0` ✗✗
