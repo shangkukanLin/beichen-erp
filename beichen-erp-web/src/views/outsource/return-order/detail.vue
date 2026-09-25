@@ -137,6 +137,12 @@ const repairSaving = ref(false)
 const repairWarehouseId = ref<number>()
 const repairDate = ref(localDate())
 const repairRows = ref<any[]>([])
+// P2-1（2026-09-25）：实际用料多行（可超 BOM，不做 BOM 比对）——登记时从加工厂委外仓扣减、按 FIFO 结转成本，无赔料应收
+const repairMaterials = ref<Array<{ materialId: any, quantity: any }>>([])
+const fetchMaterialsForRepair = (kw: string) =>
+  request.get('/outsource/material/page', { params: { pageNum: 1, pageSize: 500, materialName: kw } })
+function addRepairMaterial() { repairMaterials.value.push({ materialId: undefined, quantity: undefined }) }
+function removeRepairMaterial(i: number) { repairMaterials.value.splice(i, 1) }
 
 /**
  * 打开「登记维修返回」：按送修**产品**生成行，数量默认 = 送修 − 已返回。
@@ -162,6 +168,7 @@ function openRepairReturn() {
   if (repairRows.value.length === 0) { ElMessage.warning('该单已全部返回，无需再登记'); return }
   repairWarehouseId.value = detail.value.warehouseId || undefined
   repairDate.value = localDate()
+  repairMaterials.value = [{ materialId: undefined, quantity: undefined }]
   repairVisible.value = true
 }
 
@@ -170,9 +177,12 @@ async function submitRepairReturn() {
   const items = repairRows.value.filter((r: any) => Number(r.quantity) > 0)
     .map((r: any) => ({ productId: r.productId, productName: r.productName, qualityType: r.qualityType, quantity: Number(r.quantity) }))
   if (items.length === 0) { ElMessage.warning('请填写维修返回数量'); return }
+  const materials = repairMaterials.value
+    .map((m: any) => ({ materialId: m.materialId, quantity: Math.round(Number(m.quantity) || 0) }))
+    .filter((m: any) => m.materialId && m.quantity > 0)
   repairSaving.value = true
   try {
-    await request.post(`/outsource/return-order/${id}/repair-return`, { warehouseId: repairWarehouseId.value, repairDate: repairDate.value, items })
+    await request.post(`/outsource/return-order/${id}/repair-return`, { warehouseId: repairWarehouseId.value, repairDate: repairDate.value, items, materials })
     ElMessage.success('维修返回已登记（成品已入库）')
     repairVisible.value = false
     await loadData()
@@ -412,7 +422,14 @@ onActivated(loadData)
         <el-table-column label="产品名称" min-width="160"><template #default="{row}">{{ row.productName || ('#' + row.productId) }}</template></el-table-column>
         <el-table-column label="品质" width="90" align="center"><template #default="{row}">{{ ProductQualityTypeLabel[row.qualityType || 'A'] || row.qualityType }}</template></el-table-column>
         <el-table-column label="返回数量" width="110" align="right"><template #default="{row}"><span style="color:var(--app-color-success);font-weight:500">{{ row.quantity }}</span></template></el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
+        <!-- P2-1：实际用料汇总（明细金额 = FIFO 快照合计；旧行无用料显示 —） -->
+        <el-table-column label="实际用料" min-width="150" show-overflow-tooltip>
+          <template #default="{row}">
+            <span v-if="row.materialSummary">{{ row.materialSummary }}<span style="margin-left:6px;color:var(--app-text-secondary)">{{ Number(row.materialAmount || 0).toFixed(2) }}</span></span>
+            <span v-else style="color:var(--app-text-placeholder)">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" min-width="100" show-overflow-tooltip />
         <el-table-column label="操作" width="90" align="center">
           <template #default="{row}"><el-button type="danger" link size="small" v-if="detail.closedFlag!==1" @click="cancelRepairReturn(row)">撤销</el-button></template>
         </el-table-column>
@@ -449,6 +466,14 @@ onActivated(loadData)
           </template>
         </el-table-column>
       </el-table>
+      <!-- P2-1：实际用料（可超 BOM，按实际耗用记账；登记即从加工厂委外仓扣料并按 FIFO 结转成本，无赔料应收） -->
+      <div style="margin-top:12px;font-weight:600;margin-bottom:6px">实际用料 <span style="font-weight:400;font-size:var(--app-font-xs);color:var(--app-text-secondary)">（可超 BOM；从加工厂委外仓扣减，无赔料应收）</span></div>
+      <div v-for="(m, i) in repairMaterials" :key="i" style="display:flex;gap:8px;margin-bottom:8px">
+        <RemoteSelect v-model="m.materialId" :fetch="fetchMaterialsForRepair" :label-key="(row:any)=>row.materialName" style="flex:1" placeholder="委外物料" />
+        <el-input v-model="m.quantity" type="number" placeholder="用量" style="width:150px" @change="m.quantity = Math.round(Number(m.quantity) || 0)" />
+        <el-button type="danger" link @click="removeRepairMaterial(i)">删除</el-button>
+      </div>
+      <el-button type="primary" link :icon="'Plus'" @click="addRepairMaterial">添加用料行</el-button>
       <template #footer>
         <el-button @click="repairVisible = false">取消</el-button>
         <el-button type="primary" :loading="repairSaving" @click="submitRepairReturn">确认登记（成品入库）</el-button>

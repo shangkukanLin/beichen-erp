@@ -200,8 +200,8 @@ P0-2 库存表 + 流水表加 stock_form；两条唯一索引改造；WarehouseS
 P0-3 委外仓只读展示（物料 / 成品（加工退货）/ 成品（维修退货）分开，可查询可盘点）+ 盘点不并表  ✅
 P1-1 加工退货·无单：改成"成品转移进加工厂委外仓"（不红冲/不分解料/不动应付）  ✅
 P1-2 返回单（新）：核销在厂成品 + 实际用料多行（可超 BOM）+ 赔料应收 + FIFO 成本结转  ✅
-P2-1 维修退货：送修=成品（维修退货）转移进委外仓；返回单扣料但无赔料应收  ⏳ 下一步
-P3-1 复核有单加工退货 + 端到端实证（**重点断言"同一笔只冲一次"**）
+P2-1 维修退货：送修=成品（维修退货）转移进委外仓；返回单扣料但无赔料应收  ✅
+P3-1 复核有单加工退货 + 端到端实证（**重点断言"同一笔只冲一次"**）  ⏳ 下一步
 ```
 
 ### P1-1 落地记录 ✅（2026-09-25，提交待填）
@@ -234,6 +234,23 @@ P3-1 复核有单加工退货 + 端到端实证（**重点断言"同一笔只冲
   四腿流水形态正确；反审核逐行回原值、应收 CANCELLED、成本漂移 0.0005。
   ⚠️ **成本尾差 = 既有特性**：CostService SCALE=4 加权舍入，反算固有 ≤0.001 尾差（与采购/委外交货入库反审核同源）；
   ⚠️ reverseGroup 注释明确约定 **"reverse 在库存冲回之后调用"** —— unAudit 顺序勿再"优化"成先反结转（实测不会更准）。
+
+### P2-1 落地记录 ✅（2026-09-25）
+- **送修审核/反审核**（`OutsourceReturnOrderServiceImpl.audit/unAudit` REPAIR 分支）：我方仓扣成品腿保持不动（MATERIAL），
+  新增委外仓转移腿 `changeStock(…, FORM_PRODUCT_REPAIR)`（code `OUTSOURCE_REPAIR_STOCK_IN` / 反审核 `CANCEL_OUTSOURCE_REPAIR_STOCK_IN`）。
+  **存量兼容**：反审核时在厂行不存在（改造前审核的旧单）→ 跳过核销腿 + log.warn（动作对称）；行存在但数量不足 → 硬报错。
+- **维修返回登记/撤销**（`repairReturn`/`cancelRepairReturn`）：
+  - 新增**核销腿**：按产品在厂 PRODUCT_REPAIR 各规格行（id 升序）分配扣减，每笔落 ALLOC 明细（撤销按行规格精确恢复）；
+    旧单无在厂行 → 跳过 + 留痕。code 与送修共用两个（方向由 change_quantity 符号区分）。
+  - 新增**用料腿**：body `materials[]`（可超 BOM、不做 BOM 比对），落子表 `outsource_return_order_repair_item`
+    （迁移 `sql/migration-repair-item.sql`，ALLOC/MATERIAL 两类行；MATERIAL 行含 FIFO 单价/金额快照），
+    `changeMaterialStockAllowNegative` 扣减（允许扣负）。**无赔料应收**；charge* 维修费应付链路零改动。
+  - **成本结转**：Σ用料 FIFO 按行数量占比摊入回仓成品（`applyProduct(OUTSOURCE_REPAIR_IN, recordId)`），
+    撤销 `reverseByBill` 反结转（漂移 ≤0.0004 加权舍入固有）。
+  - detail() 的 repairReturns 改为 Map（带 materials/materialSummary/materialAmount），前端记录卡加「实际用料」列。
+- **实证**：送修 63×2A（收费100）→ 我方仓 268→266、在厂 PRODUCT_REPAIR=2、收费应付 1 行；
+  返回登记（B×2 + 料33×6/35×5）→ 在厂 0、B 行 2、料 −6/−5、明细 3 行、应收 0、成本 50.0643→50.164；
+  撤销 → 逐行回原值；反审核 → 在厂清零/我方仓复原/应付冲销/全库 14572。全局流水形态：MATERIAL 2178 + PRODUCT_DEFECT 14 + PRODUCT_REPAIR 4（全为探针对，无杂形态）。
 
 ## 8. 验收铁律（每期都要做）
 - 端到端实证：建单 → 审核 → 查 `warehouse_stock`（按形态分行）/ 流水 / 应付应收 / 成本；反审核后**逐行回到原值**。

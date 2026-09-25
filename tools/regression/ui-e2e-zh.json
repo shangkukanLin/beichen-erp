@@ -538,6 +538,7 @@
   "msg_repair_need_charge": "维修退货必须填写",
   "tab_return_back": "加工返回单",
   "btn_add_back_item": "添加用料行",
+  "btn_add_repair_material": "添加用料行",
   "dlg_return_back_detail": "加工返回单详情",
   "btn_save_draft_return_back": "保存草稿"
 }

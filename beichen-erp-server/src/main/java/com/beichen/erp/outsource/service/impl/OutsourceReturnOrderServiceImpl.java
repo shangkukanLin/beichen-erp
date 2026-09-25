@@ -26,7 +26,10 @@ import com.beichen.erp.outsource.entity.*;
 import com.beichen.erp.outsource.mapper.*;
 import com.beichen.erp.outsource.service.OutsourceReturnOrderService;
 import com.beichen.erp.warehouse.entity.Warehouse;
+import com.beichen.erp.warehouse.entity.WarehouseStock;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
+import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
+import com.beichen.erp.warehouse.service.CostService;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +64,8 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     private final OutsourceReturnOrderProductMapper returnProductMapper;
     /** 维修返回记录（维修退货单的"回来"腿，2026-09-17） */
     private final OutsourceReturnOrderRepairMapper repairMapper;
+    /** 维修返回明细（P2-1 2026-09-25：在厂核销 ALLOC + 实际用料 MATERIAL） */
+    private final OutsourceReturnOrderRepairItemMapper repairItemMapper;
     private final OutsourceOrderMapper orderMapper;
     private final OutsourceOrderProductMapper orderProductMapper;
     /** BOM 快照（2026-09-17）：退货页「BOM来源」选项按快照列出，物料明细按快照ID取 */
@@ -69,6 +74,8 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     /** 交货记录（成品收货）——「从收货页发起退货」的可退预填用 */
     private final OutsourceOrderDeliveryMapper orderDeliveryMapper;
     private final WarehouseMapper warehouseMapper;
+    /** P2-1（2026-09-25）：读在厂成品 PRODUCT_REPAIR 行（核销按规格行分配） */
+    private final WarehouseStockMapper warehouseStockMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final com.beichen.erp.dev.mapper.MaterialTypeMapper materialTypeMapper;
     private final SupplierMapper supplierMapper;
@@ -80,6 +87,8 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     private final JdbcTemplate jdbcTemplate;
     /** F7-77（2026-09-20）：物料单价统一实现（成本价 → FIFO → 参考价的三级链保持不变） */
     private final com.beichen.erp.outsource.service.OutsourceMaterialPricingService pricingService;
+    /** P2-1（2026-09-25）：维修用料 FIFO 成本结转（登记时 applyProduct / 撤销时 reverseByBill） */
+    private final CostService costService;
 
     @Override
     public Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long factoryId, String returnType, String progress) {
@@ -182,7 +191,44 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         // 维修返回记录（仅维修退货单会有；详情页展示"送修 N / 已返回 M"并可撤销）
         List<OutsourceReturnOrderRepair> repairs = repairMapper.selectList(
             new LambdaQueryWrapper<OutsourceReturnOrderRepair>().eq(OutsourceReturnOrderRepair::getReturnOrderId, id));
-        m.put("repairReturns", repairs);
+        // P2-1（2026-09-25）：每条返回记录附用料明细汇总（前端记录列表显示"用料"列）
+        List<Map<String, Object>> repairMaps = new ArrayList<>();
+        for (OutsourceReturnOrderRepair r : repairs) {
+            Map<String, Object> rm = new LinkedHashMap<>();
+            rm.put("id", r.getId());
+            rm.put("returnOrderId", r.getReturnOrderId());
+            rm.put("repairDate", r.getRepairDate());
+            rm.put("warehouseId", r.getWarehouseId());
+            rm.put("productId", r.getProductId());
+            rm.put("productName", r.getProductName());
+            rm.put("qualityType", r.getQualityType());
+            rm.put("quantity", r.getQuantity());
+            rm.put("remark", r.getRemark());
+            List<Map<String, Object>> mats = new ArrayList<>();
+            BigDecimal matTotal = BigDecimal.ZERO;
+            StringBuilder summary = new StringBuilder();
+            for (OutsourceReturnOrderRepairItem it : repairItemMapper.selectList(new LambdaQueryWrapper<OutsourceReturnOrderRepairItem>()
+                    .eq(OutsourceReturnOrderRepairItem::getRepairRecordId, r.getId())
+                    .eq(OutsourceReturnOrderRepairItem::getItemType, OutsourceReturnOrderRepairItem.TYPE_MATERIAL)
+                    .orderByAsc(OutsourceReturnOrderRepairItem::getId))) {
+                Map<String, Object> im = new LinkedHashMap<>();
+                im.put("materialId", it.getMaterialId());
+                im.put("materialName", it.getMaterialName());
+                im.put("unit", it.getUnit());
+                im.put("quantity", it.getQuantity());
+                im.put("unitPrice", it.getUnitPrice());
+                im.put("amount", it.getAmount());
+                mats.add(im);
+                matTotal = matTotal.add(it.getAmount() == null ? BigDecimal.ZERO : it.getAmount());
+                if (summary.length() > 0) summary.append("、");
+                summary.append(it.getMaterialName()).append("×").append(it.getQuantity());
+            }
+            rm.put("materials", mats);
+            rm.put("materialSummary", summary.toString());
+            rm.put("materialAmount", matTotal);
+            repairMaps.add(rm);
+        }
+        m.put("repairReturns", repairMaps);
         m.put("repairReturnedQty", repairs.stream().map(r -> nz(r.getQuantity())).reduce(BigDecimal.ZERO, BigDecimal::add));
         // 结案信息（仅维修退货用，2026-09-17）
         m.put("closedFlag", o.getClosedFlag() != null ? o.getClosedFlag() : 0);
@@ -479,10 +525,19 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                 if (p.getQuantity() == null || p.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
                 // 产品按主数据ID落账（历史数据存的可能是订单产品行ID，这里兜底解析）；
                 // 规格按明细上的 quality_type 扣减（历史数据为空时按 A 规）
+                Long pid = resolveStockProductId(order, p.getProductId(), null);
+                String qt = normalizeQualityType(p.getQualityType());
                 warehouseStockService.changeStock(invWhId,
-                        resolveStockProductId(order, p.getProductId(), null), p.getQuantity().negate(),
+                        pid, p.getQuantity().negate(),
                         outType, order.getCode(), outBill,
-                        "", order.getId(), normalizeQualityType(p.getQualityType()));   // F7-65①：spec 按约定传 ""（原传 null）
+                        "", order.getId(), qt);   // F7-65①：spec 按约定传 ""（原传 null）
+                // P2-1（2026-09-25）：送修 = 成品（维修退货）**转移**进加工厂委外仓（PRODUCT_REPAIR 形态），
+                // 修好送回前可按仓查询与盘点；核销走维修返回登记（CANCEL_OUTSOURCE_REPAIR_STOCK_IN）
+                if (repair) {
+                    warehouseStockService.changeStock(factoryWhId, pid, p.getQuantity(),
+                            StockChangeType.OUTSOURCE_REPAIR_STOCK_IN, order.getCode(), outBill,
+                            "", order.getId(), qt, WarehouseStock.FORM_PRODUCT_REPAIR);
+                }
             }
         } else {
             // F2-1（2026-09-18 审核修复）：两类退货都**必须**先选仓才能审核 ——
@@ -566,15 +621,42 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                 : StockChangeType.OUTSOURCE_RETURN_OUT_UN_AUDIT;
         RelatedBillType backBill = repair ? RelatedBillType.OUTSOURCE_REPAIR : RelatedBillType.OUTSOURCE_RETURN;
         Long invWhId = order.getWarehouseId();
+        // P2-1（2026-09-25）：送修反审核需核销"成品（维修退货）在厂行"，必须按**委外仓**定位（与审核同口径）
+        Long repairFactoryWhId = null;
+        if (repair && order.getFactoryId() != null) {
+            List<Warehouse> outWhs = warehouseMapper.selectList(new LambdaQueryWrapper<Warehouse>()
+                    .eq(Warehouse::getFactoryId, order.getFactoryId())
+                    .eq(Warehouse::getWarehouseCategory, com.beichen.erp.warehouse.common.WarehouseCategory.OUTSOURCE.getCode())
+                    .orderByAsc(Warehouse::getId));
+            repairFactoryWhId = outWhs.isEmpty() ? null : outWhs.get(0).getId();
+        }
         if (invWhId != null) {
             List<OutsourceReturnOrderProduct> products = returnProductMapper.selectList(
                 new LambdaQueryWrapper<OutsourceReturnOrderProduct>().eq(OutsourceReturnOrderProduct::getReturnOrderId, id));
             for (OutsourceReturnOrderProduct p : products) {
                 if (p.getQuantity() == null || p.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
+                Long pid = resolveStockProductId(order, p.getProductId(), null);
+                String qt = normalizeQualityType(p.getQualityType());
                 warehouseStockService.changeStock(invWhId,
-                        resolveStockProductId(order, p.getProductId(), null), p.getQuantity(),
+                        pid, p.getQuantity(),
                         backType, order.getCode(), backBill,
-                        "", order.getId(), normalizeQualityType(p.getQualityType()));   // F7-65①：spec 按约定传 ""（原传 null）
+                        "", order.getId(), qt);   // F7-65①：spec 按约定传 ""（原传 null）
+                // P2-1：对称核销在厂 PRODUCT_REPAIR 行。⚠️ 存量兼容：改造前审核的旧单**从未入过厂**
+                //（在厂行不存在）⇒ 审核时没做的动作反审核也不做，跳过并留痕；行存在但数量不足 = 真错账 ⇒ 硬报错。
+                if (repair && repairFactoryWhId != null) {
+                    BigDecimal onSite = warehouseStockService.getQuantity(repairFactoryWhId, pid, qt, WarehouseStock.FORM_PRODUCT_REPAIR);
+                    if (onSite.compareTo(BigDecimal.ZERO) > 0) {
+                        if (onSite.compareTo(p.getQuantity()) < 0)
+                            throw new BusinessException("在厂成品（维修退货）不足，无法反审核：规格 " + qt
+                                    + " 当前在厂 " + onSite + "、需核销 " + p.getQuantity());
+                        warehouseStockService.changeStock(repairFactoryWhId, pid, p.getQuantity().negate(),
+                                StockChangeType.CANCEL_OUTSOURCE_REPAIR_STOCK_IN, order.getCode(), backBill,
+                                "", order.getId(), qt, WarehouseStock.FORM_PRODUCT_REPAIR);
+                    } else {
+                        log.warn("送修反审核：旧单（改造前审核）无在厂 PRODUCT_REPAIR 行，跳过核销腿 code={} productId={} qty={}",
+                                order.getCode(), pid, p.getQuantity());
+                    }
+                }
             }
         }
         // 3. 冲销应付：加工退货=退料负向 + 退货收费正向；维修退货=仅维修收费正向
@@ -649,6 +731,17 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         Map<Long, BigDecimal> sent = sentQtyByProduct(id);
         Map<Long, BigDecimal> returned = returnedQtyByProduct(id);
         Long cid = CompanyContext.get();
+        // P2-1（2026-09-25）：加工厂委外仓（在厂核销/用料扣减目标仓）。旧数据 factoryId 为空或未配委外仓 ⇒
+        // 跳过 P2-1 新腿（存量单审核时也没入过厂），保持原两腿行为。
+        Long factoryWhId = null;
+        if (order.getFactoryId() != null) {
+            List<Warehouse> outWhs = warehouseMapper.selectList(new LambdaQueryWrapper<Warehouse>()
+                    .eq(Warehouse::getFactoryId, order.getFactoryId())
+                    .eq(Warehouse::getWarehouseCategory, com.beichen.erp.warehouse.common.WarehouseCategory.OUTSOURCE.getCode())
+                    .orderByAsc(Warehouse::getId));
+            factoryWhId = outWhs.isEmpty() ? null : outWhs.get(0).getId();
+        }
+        List<OutsourceReturnOrderRepair> savedRows = new ArrayList<>();
         int saved = 0;
         for (Map<String, Object> line : lines) {
             BigDecimal qty = toBigDecimal(line.get("quantity"));
@@ -682,9 +775,110 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
             if (cid != null && cid > 0) row.setCompanyId(cid);
             repairMapper.insert(row);
             saved++;
+            savedRows.add(row);
+            // P2-1（2026-09-25）：核销在厂成品（PRODUCT_REPAIR 行，按规格行分配扣减 + 落 ALLOC 明细）
+            if (factoryWhId != null) {
+                allocateOnSiteRepair(order, factoryWhId, productId, row.getProductName(), qty, row, cid);
+            }
             returned.put(productId, already.add(qty)); // 同一请求内多行也要累计，避免叠加超退
         }
         if (saved == 0) throw new BusinessException("请填写维修返回数量");
+
+        // P2-1（2026-09-25）：实际用料多行（**可超 BOM**，不做 BOM 比对）从委外仓扣减（允许扣负——工厂已实际耗用）
+        // + FIFO 计价快照 + 料款成本按行数量比例结转到回仓成品。**无赔料应收**（我方责任；charge* 维修费应付另行保持）。
+        if (factoryWhId != null) {
+            List<Map<String, Object>> mats = asListMap(body.get("materials"));
+            if (!mats.isEmpty()) {
+                BigDecimal totalMat = BigDecimal.ZERO;
+                for (Map<String, Object> mat : mats) {
+                    Long materialId = toLong(mat.get("materialId"));
+                    BigDecimal mq = toBigDecimal(mat.get("quantity"));
+                    if (materialId == null || mq == null || mq.compareTo(BigDecimal.ZERO) <= 0) continue;
+                    stockServiceChangeMaterial(factoryWhId, materialId, mq.negate(), order.getCode(), id);
+                    BigDecimal unit = pricingService.fifoPriceWithFallback(materialId, mq);
+                    BigDecimal amount = unit.multiply(mq).setScale(2, RoundingMode.HALF_UP);
+                    OutsourceReturnOrderRepairItem it = new OutsourceReturnOrderRepairItem();
+                    it.setRepairRecordId(savedRows.get(0).getId());
+                    it.setItemType(OutsourceReturnOrderRepairItem.TYPE_MATERIAL);
+                    it.setMaterialId(materialId);
+                    it.setMaterialName(getMaterialNameById(materialId));
+                    OutsourceMaterial m0 = materialId != null ? outsourceMaterialMapper.selectById(materialId) : null;
+                    it.setUnit(m0 != null ? m0.getUnit() : null);
+                    it.setQuantity(mq);
+                    it.setUnitPrice(unit);
+                    it.setAmount(amount);
+                    if (cid != null && cid > 0) it.setCompanyId(cid);
+                    repairItemMapper.insert(it);
+                    totalMat = totalMat.add(amount);
+                }
+                // 成本结转：Σ用料 FIFO 按各返回行数量占比摊入回仓成品（移动加权；撤销按记录 reverseByBill）
+                if (totalMat.compareTo(BigDecimal.ZERO) > 0 && !savedRows.isEmpty()) {
+                    BigDecimal totalQty = savedRows.stream().map(r -> r.getQuantity() == null ? BigDecimal.ZERO : r.getQuantity())
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    if (totalQty.compareTo(BigDecimal.ZERO) > 0) {
+                        BigDecimal unitCost = totalMat.divide(totalQty, 4, RoundingMode.HALF_UP);
+                        for (OutsourceReturnOrderRepair r : savedRows) {
+                            costService.applyProduct(r.getProductId(), r.getQuantity(), unitCost,
+                                    StockChangeType.OUTSOURCE_REPAIR_IN.getCode(), r.getId(), order.getCode());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * P2-1：核销在厂成品（维修退货）——按该产品在厂 PRODUCT_REPAIR 各规格行（id 升序）分配扣减，
+     * 每笔扣减落一条 ALLOC 明细（撤销时按行规格精确恢复）。
+     * <p>⚠️ 存量兼容：旧单（改造前审核）从未入过厂 ⇒ 在厂行不存在时跳过核销腿并留痕（动作对称）；
+     * 行存在但数量不足 = 真错账 ⇒ 硬报错。</p>
+     */
+    private void allocateOnSiteRepair(ReturnOrder order, Long factoryWhId, Long productId,
+                                      String productName, BigDecimal qty, OutsourceReturnOrderRepair row, Long cid) {
+        List<WarehouseStock> onSiteRows = warehouseStockMapper.selectList(new LambdaQueryWrapper<WarehouseStock>()
+                .eq(WarehouseStock::getWarehouseId, factoryWhId)
+                .eq(WarehouseStock::getProductId, productId)
+                .eq(WarehouseStock::getStockForm, WarehouseStock.FORM_PRODUCT_REPAIR)
+                .gt(WarehouseStock::getQuantity, BigDecimal.ZERO)
+                .orderByAsc(WarehouseStock::getId));
+        BigDecimal onSite = onSiteRows.stream()
+                .map(r -> r.getQuantity() == null ? BigDecimal.ZERO : r.getQuantity())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (onSite.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("维修返回：旧单（改造前审核）无在厂 PRODUCT_REPAIR 行，跳过核销腿 code={} productId={} qty={}",
+                    order.getCode(), productId, qty);
+            return;
+        }
+        if (onSite.compareTo(qty) < 0)
+            throw new BusinessException("在厂成品（维修退货）不足：当前 " + onSite + "、需核销 " + qty);
+        BigDecimal remain = qty;
+        for (WarehouseStock r : onSiteRows) {
+            if (remain.compareTo(BigDecimal.ZERO) <= 0) break;
+            BigDecimal take = r.getQuantity().min(remain);
+            warehouseStockService.changeStock(factoryWhId, productId, take.negate(),
+                    StockChangeType.CANCEL_OUTSOURCE_REPAIR_STOCK_IN, order.getCode(), RelatedBillType.OUTSOURCE_REPAIR,
+                    "", order.getId(), r.getQualityType(), WarehouseStock.FORM_PRODUCT_REPAIR);
+            OutsourceReturnOrderRepairItem it = new OutsourceReturnOrderRepairItem();
+            it.setRepairRecordId(row.getId());
+            it.setItemType(OutsourceReturnOrderRepairItem.TYPE_ALLOC);
+            it.setProductId(productId);
+            it.setProductName(productName);
+            it.setQualityType(r.getQualityType());
+            it.setQuantity(take);
+            if (cid != null && cid > 0) it.setCompanyId(cid);
+            repairItemMapper.insert(it);
+            remain = remain.subtract(take);
+        }
+    }
+
+    /** P2-1：用料增减（changeMaterialStockAllowNegative 带形态重载的统一薄封装：delta<0=扣减 / delta>0=撤销回补） */
+    private void stockServiceChangeMaterial(Long factoryWhId, Long materialId, BigDecimal delta,
+                                            String billNo, Long orderId) {
+        String changeType = delta.compareTo(BigDecimal.ZERO) < 0
+                ? StockChangeType.OUTSOURCE_REPAIR_MATERIAL.getCode()
+                : StockChangeType.CANCEL_OUTSOURCE_REPAIR_MATERIAL.getCode();
+        warehouseStockService.changeMaterialStockAllowNegative(factoryWhId, materialId, delta,
+                changeType, billNo, RelatedBillType.OUTSOURCE_REPAIR, null, null, orderId, WarehouseStock.FORM_MATERIAL);
     }
 
     /** 撤销维修返回：把已入库成品扣回并删除该条记录（不校验单据状态，作废/草稿单也可清理） */
@@ -706,6 +900,36 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
             warehouseStockService.changeStock(row.getWarehouseId(), row.getProductId(), row.getQuantity().negate(),
                     StockChangeType.CANCEL_OUTSOURCE_REPAIR_IN, order.getCode(), RelatedBillType.OUTSOURCE_REPAIR,
                     "", order.getId(), normalizeQualityType(row.getQualityType()));   // F7-65①：spec 按约定传 ""（原传 null）
+        }
+        // P2-1（2026-09-25）：按明细对称逆回 —— ALLOC 行恢复在厂 PRODUCT_REPAIR（同规格）、
+        // MATERIAL 行等量回补委外仓物料；成本反结转（按记录 reverseByBill，与登记时 applyProduct 同单据ID）。
+        List<OutsourceReturnOrderRepairItem> its = repairItemMapper.selectList(new LambdaQueryWrapper<OutsourceReturnOrderRepairItem>()
+                .eq(OutsourceReturnOrderRepairItem::getRepairRecordId, repairRecordId)
+                .orderByAsc(OutsourceReturnOrderRepairItem::getId));
+        if (!its.isEmpty()) {
+            Long factoryWhId = null;
+            if (order.getFactoryId() != null) {
+                List<Warehouse> outWhs = warehouseMapper.selectList(new LambdaQueryWrapper<Warehouse>()
+                        .eq(Warehouse::getFactoryId, order.getFactoryId())
+                        .eq(Warehouse::getWarehouseCategory, com.beichen.erp.warehouse.common.WarehouseCategory.OUTSOURCE.getCode())
+                        .orderByAsc(Warehouse::getId));
+                factoryWhId = outWhs.isEmpty() ? null : outWhs.get(0).getId();
+            }
+            if (factoryWhId == null) throw new BusinessException("该加工厂未配置委外仓库，无法撤销维修返回");
+            for (OutsourceReturnOrderRepairItem it : its) {
+                if (OutsourceReturnOrderRepairItem.TYPE_ALLOC.equals(it.getItemType())) {
+                    warehouseStockService.changeStock(factoryWhId, it.getProductId(), it.getQuantity(),
+                            StockChangeType.OUTSOURCE_REPAIR_STOCK_IN, order.getCode(), RelatedBillType.OUTSOURCE_REPAIR,
+                            "", order.getId(), it.getQualityType(), WarehouseStock.FORM_PRODUCT_REPAIR);
+                } else if (OutsourceReturnOrderRepairItem.TYPE_MATERIAL.equals(it.getItemType())) {
+                    stockServiceChangeMaterial(factoryWhId, it.getMaterialId(), it.getQuantity(),
+                            order.getCode(), order.getId());
+                }
+            }
+            // 成本反结转（删除批次并反加权；必须在删除记录前、以记录ID 定位）
+            costService.reverseByBill(StockChangeType.OUTSOURCE_REPAIR_IN.getCode(), repairRecordId);
+            repairItemMapper.delete(new LambdaQueryWrapper<OutsourceReturnOrderRepairItem>()
+                    .eq(OutsourceReturnOrderRepairItem::getRepairRecordId, repairRecordId));
         }
         // F7-138（2026-09-20）：**条件删除 + 判影响行数**（第二道防线，与上面的行锁互为保险）——
         // 只有真正删掉这一行的那次请求才算撤销成功；del==0 说明已被别处撤销 ⇒ 抛错 ⇒ 整个事务回滚

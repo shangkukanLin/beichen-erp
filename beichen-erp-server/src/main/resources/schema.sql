@@ -611,6 +611,27 @@ CREATE TABLE IF NOT EXISTS outsource_return_order_repair (
     INDEX idx_return_order_id (return_order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外维修返回记录';
 
+-- 2026-09-25 P2-1：维修返回明细（在厂核销 + 实际用料）。
+-- 送修 = 成品（维修退货）转移进加工厂委外仓（stock_form=PRODUCT_REPAIR）；
+-- 返回登记 = 核销在厂行（ALLOC 行）+ 成品回我方仓 + 实际用料多行（可超 BOM，MATERIAL 行，允许扣负）
+-- + 按 FIFO 结转成本；**无赔料应收**（我方责任，charge* 维修费应付保持）。
+CREATE TABLE IF NOT EXISTS outsource_return_order_repair_item (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    repair_record_id BIGINT NOT NULL COMMENT '维修返回记录ID(outsource_return_order_repair.id)',
+    item_type VARCHAR(20) NOT NULL COMMENT '行类型: ALLOC=在厂核销(产品) / MATERIAL=实际用料(物料)',
+    product_id BIGINT COMMENT '核销行-产品主数据ID(item_type=ALLOC)',
+    product_name VARCHAR(100) COMMENT '核销行-产品名称快照',
+    quality_type VARCHAR(20) COMMENT '核销行-在厂规格(核销时的 PRODUCT_REPAIR 行规格)',
+    material_id BIGINT COMMENT '用料行-委外物料ID(item_type=MATERIAL)',
+    material_name VARCHAR(100) COMMENT '用料行-物料名称快照',
+    unit VARCHAR(20) COMMENT '用料行-单位',
+    quantity DECIMAL(18,0) NOT NULL COMMENT '数量(核销量/用料量，可超BOM)',
+    unit_price DECIMAL(18,4) COMMENT '用料行-FIFO单价快照(登记时)',
+    amount DECIMAL(18,2) COMMENT '用料行-金额快照(登记时)',
+    company_id BIGINT COMMENT '公司ID',
+    INDEX idx_repair_record_id (repair_record_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='维修返回明细(在厂核销+实际用料)';
+
 -- 2026-09-25 P1-2：加工返回单（无单加工退货的"回来"腿，与 P1-1 转移进厂构成闭环）。
 -- 业务口径（用户 2026-09-25）：修好送回时——核销在厂成品（委外仓 stock_form=PRODUCT_DEFECT 行）
 -- + 修好成品回我方仓 + 按【实际用料多行（数量可超 BOM）】从委外仓扣物料

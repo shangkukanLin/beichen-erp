@@ -101,6 +101,14 @@ public enum StockChangeType {
     OUTSOURCE_REPAIR_IN("委外维修入库"),
     /** 取消委外维修入库：撤销维修返回登记，把已入库成品扣回 */
     CANCEL_OUTSOURCE_REPAIR_IN("取消委外维修入库"),
+    /** 成品（维修退货）入委外仓：维修退货送修审核，以 PRODUCT_REPAIR 形态进加工厂委外仓（2026-09-25 P2-1） */
+    OUTSOURCE_REPAIR_STOCK_IN("成品维修退货入委外仓"),
+    /** 核销成品（维修退货）：维修返回登记扣减在厂行（−）/ 送修反审核恢复（+）时扣减（2026-09-25 P2-1）。方向由 change_quantity 符号区分 */
+    CANCEL_OUTSOURCE_REPAIR_STOCK_IN("核销成品维修退货"),
+    /** 维修用料出仓：维修返回登记按实际用料（可超 BOM）从委外仓扣物料（2026-09-25 P2-1） */
+    OUTSOURCE_REPAIR_MATERIAL("维修用料出仓"),
+    /** 维修用料恢复：撤销维修返回，等量回补委外仓物料（2026-09-25 P2-1） */
+    CANCEL_OUTSOURCE_REPAIR_MATERIAL("维修用料恢复"),
     /** 取消发料：收发单取消，恢复已发物料库存 */
     OUTSOURCE_CANCEL_DELIVERY("取消发料"),
     /** 编辑回滚-发料：编辑收发单后回滚已发物料 */
