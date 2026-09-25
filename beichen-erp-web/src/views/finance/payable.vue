@@ -97,31 +97,46 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
     <el-card shadow="never" class="table-card">
       <!-- 2026-09-23：详情改独立页 ⇒ 点整行 / 行内「详情」都跳转（与应收/账单页现状一致） -->
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1240px > 内容区 956px
-           ⇒ 横向滚动 284px。收窄为合计 940px（单据号/供应商保持 min-width，宽屏自动吃余量）。 -->
+           ⇒ 横向滚动 284px。收窄为合计 940px。
+           2026-09-26 B6（用户口径「数据显示完整 + 供应商/单据号可点」，实测驱动）：
+           ①供应商 min100→**128**（实测需 128，原 1/10 行被截断）并做成链接进供应商详情；
+           ②业务场景 88→**104**：内容是「来源单据类型」中文标签（实测需 118，最长「委外加工收货」6 字）
+              + 条件 tag「已转应收」⇒ 登记白名单 + tooltip；
+           ③单据号做成链接进应付详情（原先只能点整行/操作列）；
+           ④状态 tag 补 size="small"（原默认尺寸 tag 需 96px）⇒ 76→72；
+           ⑤为抵平：主体类型 76→72、应付金额 100→88、已付 92→84、未付 92→84、到期日 96→92。
+           合计 = 120+128+72+104+88+84+84+92+72+108 = **952** ✓ -->
       <el-table v-loading="loading" :data="data" border stripe @row-click="(row: any) => goDetail(row)">
-        <el-table-column prop="billNo" label="单据号" min-width="112" show-overflow-tooltip/>
-        <el-table-column label="供应商" min-width="100" show-overflow-tooltip><template #default="{row}">{{ row.supplierName || sName(row.supplierId) || '—' }}</template></el-table-column>
-        <el-table-column label="主体类型" width="76" align="center">
+        <el-table-column label="单据号" min-width="154" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.billNo }}</el-button></template>
+        </el-table-column>
+        <el-table-column label="供应商" min-width="128" show-overflow-tooltip>
+          <template #default="{row}">
+            <el-button v-if="row.supplierId" type="primary" link @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName || sName(row.supplierId) || '—' }}</el-button>
+            <span v-else>{{ row.supplierName || sName(row.supplierId) || '—' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="主体类型" width="70" align="center">
           <template #default="{row}">
             <el-tag v-if="row.supplierType" :type="TYPE_TAG[row.supplierType] || 'info'" size="small">{{ typeLabel(row.supplierType) }}</el-tag>
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="业务场景" width="88" show-overflow-tooltip>
+        <el-table-column label="业务场景" width="84" show-overflow-tooltip>
           <template #default="{row}">
             {{ sourceBillTypeLabel(row.sourceBillType) }}
             <el-tag v-if="row.transferredToReceivable" type="warning" size="small" style="margin-left:4px">已转应收</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="应付金额" width="100" align="right">
+        <el-table-column label="应付金额" width="86" align="right">
           <!-- 负数=退货/扣款冲减项，标红区分于正常货款 -->
           <template #default="{row}"><span :style="{ color: isDeduction(row) ? 'var(--app-color-danger)' : undefined }">{{ fmt(row.amount) }}</span></template>
         </el-table-column>
-        <el-table-column prop="paidAmount" label="已付" width="92" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
-        <el-table-column prop="unpaidAmount" label="未付" width="92" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
-        <el-table-column prop="dueDate" label="到期日" width="96" align="center"/>
-        <el-table-column label="状态" width="76" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{statusLabel(row.status)}}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="108" align="center" fixed="right">
+        <el-table-column prop="paidAmount" label="已付" width="82" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
+        <el-table-column prop="unpaidAmount" label="未付" width="82" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
+        <el-table-column prop="dueDate" label="到期日" width="92" align="center"/>
+        <el-table-column label="状态" width="70" align="center"><template #default="{row}"><el-tag :type="stType(row.status)" size="small">{{statusLabel(row.status)}}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="104" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
             <!-- 无货款可抵时，把这笔扣款/退货转为向对方收款 -->

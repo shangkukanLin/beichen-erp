@@ -144,26 +144,35 @@ function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/
     </el-card>
     <el-card shadow="never" class="table-card">
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1240px > 内容区 956px
-           ⇒ 横向滚动 284px。收窄为合计 944px（单号/往来单位/账户保持 min-width，宽屏自动吃余量）。 -->
+           ⇒ 横向滚动 284px。收窄为合计 944px。
+           2026-09-26 B6（用户口径「数据显示完整 + 单号可点」，实测驱动）：
+           ①单号 min112→**140**（实测需 138，原 10/10 行全被截断）并做成链接进收款单详情；
+           ②来源 104→**134**：来源单据号（XS- 销售单号，实测需 138，仅现金销售自动收款才有值）
+              ⇒ 登记白名单 + tooltip；
+           ③状态 tag 补 size="small"（与全站一致）⇒ 78→72；
+           ④为抵平：主体类型 80→72、往来单位 min104→92、账户 min96→84、金额 100→92。
+           合计 = 140+134+72+92+84+100+92+72+170 = **956** ✓（操作列 4 按钮保持 170，不裁切按钮） -->
       <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
-        <el-table-column prop="code" label="单号" min-width="112" show-overflow-tooltip/>
+        <el-table-column label="单号" min-width="140" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">{{ row.code }}</el-button></template>
+        </el-table-column>
         <!-- 来源单据（2026-09-18）：现金销售单由系统自动收款（立刻到账、已审核）时显示销售单号 -->
-        <el-table-column label="来源" width="104" show-overflow-tooltip>
+        <el-table-column label="来源" width="112" show-overflow-tooltip>
           <template #default="{row}">
             <span v-if="row.sourceBillNo">{{ row.sourceBillNo }}</span>
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="主体类型" width="80" align="center">
+        <el-table-column label="主体类型" width="72" align="center">
           <template #default="{row}">
             <el-tag :type="row.subjectType === SubjectType.SUPPLIER ? 'warning' : 'primary'" size="small">{{ SubjectTypeLabel[row.subjectType] || '客户' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="往来单位" min-width="104" show-overflow-tooltip><template #default="{row}">{{ subjectLabel(row) }}</template></el-table-column>
-        <el-table-column label="账户" min-width="96" show-overflow-tooltip><template #default="{row}">{{ aName(row.accountId) }}</template></el-table-column>
+        <el-table-column label="往来单位" min-width="114" show-overflow-tooltip><template #default="{row}">{{ subjectLabel(row) }}</template></el-table-column>
+        <el-table-column label="账户" min-width="84" show-overflow-tooltip><template #default="{row}">{{ aName(row.accountId) }}</template></el-table-column>
         <el-table-column prop="receiptDate" label="日期" width="100" align="center"/>
-        <el-table-column prop="amount" label="金额" width="100" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
-        <el-table-column label="状态" width="78" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
+        <el-table-column prop="amount" label="金额" width="92" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
+        <el-table-column label="状态" width="72" align="center"><template #default="{row}"><el-tag :type="stType(row.status)" size="small">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="170" align="center" fixed="right">
           <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button></template>
         </el-table-column>

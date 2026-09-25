@@ -81,13 +81,16 @@ onMounted(() => { loadData(); loadAccounts() })
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1010px > 内容区 956px
            ⇒ 横向滚动 54px。收窄为合计 876px（支出账户/备注保持 min-width，宽屏自动吃余量）。 -->
       <el-table v-loading="loading" :data="data" border stripe>
-        <el-table-column prop="expenseNo" label="费用单号" width="120" show-overflow-tooltip/>
+        <!-- 2026-09-26 B6：费用单号 120→**152**（EXP-+11 位，原 120 会截断）并做成链接进费用单详情；备注 min100→120 -->
+        <el-table-column label="费用单号" width="152" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.expenseNo }}</el-button></template>
+        </el-table-column>
         <el-table-column prop="expenseType" label="费用类型" width="96"><template #default="{row}"><el-tag size="small">{{ EXPENSE_TYPE_LABELS[row.expenseType] || row.expenseType }}</el-tag></template></el-table-column>
         <el-table-column prop="amount" label="金额" width="100" align="right" show-overflow-tooltip><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.amount) }}</span></template></el-table-column>
         <el-table-column label="费用日期" width="100"><template #default="{row}">{{ fmtDate(row.expenseDate) }}</template></el-table-column>
         <el-table-column prop="accountName" label="支出账户" min-width="110" show-overflow-tooltip/>
         <el-table-column label="状态" width="76" align="center"><template #default="{row}"><el-tag :type="DocStatusTag[row.status]" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="100" show-overflow-tooltip/>
+        <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip/>
         <!-- 2026-09-24（用户口径）：编辑与反审核都收进详情页（详情草稿态可就地改+存）⇒ 操作列 174→132。 -->
         <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{row}">

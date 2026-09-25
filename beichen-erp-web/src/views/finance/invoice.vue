@@ -16,6 +16,15 @@ import {
 // 发票类型存枚举 code，显示用 label 映射
 const INVOICE_KINDS = Object.keys(INVOICE_KIND_LABELS)
 
+/**
+ * 列表用**短名**（2026-09-26 B6）：枚举全称「增值税专用发票」7 字实测需 132px，
+ * 而本页 12 列已挤满 956px ⇒ 列表显示 专票/普票/电子专票/电子普票（需 ~74px，完整显示）；
+ * 登记/编辑弹窗与筛选项仍用全称（`INVOICE_KIND_LABELS`），信息不丢。
+ */
+const KIND_SHORT: Record<string, string> = {
+  special: '专票', normal: '普票', e_special: '电子专票', e_normal: '电子普票',
+}
+
 const query = reactive({ direction: '', status: '', keyword: '', dateRange: null as [string, string] | null })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
@@ -119,23 +128,32 @@ onMounted(() => { loadData() })
     </el-card>
     <el-card shadow="never" class="table-card">
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：12 列、原列宽合计 1415px > 内容区 971px
-           ⇒ 横向滚动 444px。全表收窄为合计 946px；金额/类型/单号列补 show-overflow-tooltip ⇒
-           窄列省略号 + 悬浮看全文，长数字不丢。 -->
+           ⇒ 横向滚动 444px。
+           2026-09-26 B6（用户口径「数据显示完整」，实测驱动）：
+           ①发票号码 96→**140**（实测需 140，原 4/4 行全被截断；带 tooltip 兜 20 位全电发票号）；
+           ②方向 56→**58**、状态 64→**70**：两列 tag **补 size="small"**（与全站一致；原默认尺寸 tag 比 small 宽 ~24px）；
+           ③发票类型 84→**78**：列表内改用**短名**（专票/普票/电子专票/电子普票，登记/详情弹窗仍用全称
+              「增值税专用发票」）⇒ 实测需 132 降到 ~74；
+           ④开票日期 84→**106**（实测需 106，原先全被截断）；
+           ⑤对方单位 min84→72（名称列，长度无上界 ⇒ 白名单 + tooltip）；
+           ⑥金额列按实测微调：不含税 82→76、税率 52→44（只显示 "13%"）、税额 80→74、价税合计 84→80、
+              关联单号 84→74、操作 96→84。
+           合计 = 140+58+78+106+72+76+44+74+80+74+70+84 = **956** ✓（本页 4 行无纵向滚动条） -->
       <el-table v-loading="loading" :data="data" border stripe>
-        <el-table-column prop="invoiceNo" label="发票号码" width="96" show-overflow-tooltip/>
-        <el-table-column label="方向" width="56" align="center">
+        <el-table-column prop="invoiceNo" label="发票号码" width="140" show-overflow-tooltip/>
+        <el-table-column label="方向" width="58" align="center">
           <template #default="{row}"><el-tag :type="row.direction==='SALE'?'success':'warning'" size="small">{{ DIRECTION_LABEL[row.direction] || row.direction }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="发票类型" width="84" show-overflow-tooltip><template #default="{row}">{{ INVOICE_KIND_LABELS[row.invoiceKind] || row.invoiceKind }}</template></el-table-column>
-        <el-table-column label="开票日期" width="84"><template #default="{row}">{{ fmtDate(row.invoiceDate) }}</template></el-table-column>
-        <el-table-column prop="partnerName" label="对方单位" min-width="84" show-overflow-tooltip/>
-        <el-table-column prop="amount" label="不含税金额" width="82" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
-        <el-table-column label="税率" width="52" align="right"><template #default="{row}">{{ Number(row.taxRate)||0 }}%</template></el-table-column>
-        <el-table-column label="税额" width="80" align="right" show-overflow-tooltip><template #default="{row}"><span style="color:var(--app-color-primary)">{{ fmt(row.taxAmount) }}</span></template></el-table-column>
-        <el-table-column prop="totalAmount" label="价税合计" width="84" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
-        <el-table-column prop="sourceBillCode" label="关联单号" width="84" show-overflow-tooltip/>
-        <el-table-column label="状态" width="64" align="center"><template #default="{row}"><el-tag :type="(STATUS_TAG[row.status]||'info') as any" size="small">{{ STATUS_LABEL[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="96" align="center" fixed="right">
+        <el-table-column label="发票类型" width="78" show-overflow-tooltip><template #default="{row}">{{ KIND_SHORT[row.invoiceKind] || INVOICE_KIND_LABELS[row.invoiceKind] || row.invoiceKind }}</template></el-table-column>
+        <el-table-column label="开票日期" width="106"><template #default="{row}">{{ fmtDate(row.invoiceDate) }}</template></el-table-column>
+        <el-table-column prop="partnerName" label="对方单位" min-width="56" show-overflow-tooltip/>
+        <el-table-column prop="amount" label="不含税金额" width="74" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
+        <el-table-column label="税率" width="44" align="right"><template #default="{row}">{{ Number(row.taxRate)||0 }}%</template></el-table-column>
+        <el-table-column label="税额" width="72" align="right" show-overflow-tooltip><template #default="{row}"><span style="color:var(--app-color-primary)">{{ fmt(row.taxAmount) }}</span></template></el-table-column>
+        <el-table-column prop="totalAmount" label="价税合计" width="78" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
+        <el-table-column prop="sourceBillCode" label="关联单号" width="74" show-overflow-tooltip/>
+        <el-table-column label="状态" width="70" align="center"><template #default="{row}"><el-tag :type="(STATUS_TAG[row.status]||'info') as any" size="small">{{ STATUS_LABEL[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="操作" width="106" align="center" fixed="right">
           <template #default="{row}">
             <template v-if="row.status==='REGISTERED'">
               <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>

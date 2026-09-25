@@ -338,7 +338,7 @@
   "btn_new_defect_return": "新增加工退货",
   "btn_new_repair_return": "新增",
   "btn_confirm_repair_return": "确认登记（成品入库）",
-  "col_allow_truncate": "产品,产品名称,物料,物料名称,项目名称,备注,退货/送修内容,出库源仓,换货概况,仓库,仓库名称,移出仓库,移入仓库,变动类型,所属供应商,报损明细",
+  "col_allow_truncate": "产品,产品名称,物料,物料名称,项目名称,备注,退货/送修内容,出库源仓,换货概况,仓库,仓库名称,移出仓库,移入仓库,变动类型,所属供应商,报损明细,对方单位,业务场景,来源",
   "txt_repair_done": "维修返回已登记",
   "lbl_charge_amount": "收费金额",
   "lbl_charge_flag": "工厂收费",

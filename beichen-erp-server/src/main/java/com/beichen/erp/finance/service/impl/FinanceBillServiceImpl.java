@@ -53,7 +53,11 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         res.setRecords(raw.getRecords().stream().map(b -> {
             Map<String, Object> m = new HashMap<>();
             m.put("id", b.getId()); m.put("billNo", b.getBillNo());
-            m.put("billType", b.getBillType()); m.put("partnerName", b.getPartnerName());
+            m.put("billType", b.getBillType());
+            // 2026-09-26 B6：补回往来单位 id —— 前端「往来单位」列要按账单类型分流到客户/供应商详情，
+            // 原先只回了 partnerName ⇒ 列不可点。
+            m.put("partnerId", b.getPartnerId());
+            m.put("partnerName", b.getPartnerName());
             m.put("periodStart", b.getPeriodStart()); m.put("periodEnd", b.getPeriodEnd());
             m.put("totalAmount", b.getTotalAmount()); m.put("paidAmount", b.getPaidAmount());
             m.put("unpaidAmount", b.getUnpaidAmount()); m.put("status", b.getStatus());

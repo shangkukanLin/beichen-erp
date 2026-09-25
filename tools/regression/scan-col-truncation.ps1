@@ -68,7 +68,18 @@ $routes = @(
   '/outsource/material-stock-log',
   '/outsource/material-stock-take',
   '/outsource/stock-loss',
-  '/outsource/other-io'
+  '/outsource/other-io',
+  # --- 2026-09-26 B6 财务 ---
+  '/finance/receivable',
+  '/finance/payable',
+  '/finance/receipt',
+  '/finance/payment',
+  '/finance/bill',
+  '/finance/cashflow',
+  '/finance/account',
+  '/finance/expense',
+  '/finance/invoice',
+  '/finance/payable-transfer'
 )
 if ($Only -ne '') { $routes = @($routes | Where-Object { $_ -match $Only }) }
 

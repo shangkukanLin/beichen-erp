@@ -129,14 +129,23 @@ onActivated(() => {
 
     <el-card shadow="never" class="table-card">
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1190px > 内容区 956px
-           ⇒ 横向滚动 234px。收窄为合计 928px（单号/往来单位保持 min-width，宽屏自动吃余量）。 -->
+           ⇒ 横向滚动 234px。收窄为合计 928px。
+           2026-09-26 B6（用户口径「数据显示完整 + 单号/往来单位可点」）：
+           ①转应收单号 min110→**152**（TR-+11 位）并做成链接进转应收单详情；
+           ②往来单位做成链接进供应商详情（行内有 supplierId 才可点，缺失时保持纯文本）；
+           合计 = 152+110+110+76+96+92+76+84+132 = **928** ✓ -->
       <el-table v-loading="loading" :data="rows" border stripe @row-click="goDetail">
-        <el-table-column prop="code" label="转应收单号" min-width="110" show-overflow-tooltip />
-        <el-table-column label="来源应付单号" min-width="110" show-overflow-tooltip>
+        <el-table-column label="转应收单号" min-width="152" show-overflow-tooltip>
+          <template #default="{ row }"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button></template>
+        </el-table-column>
+        <el-table-column label="来源应付单号" min-width="137" show-overflow-tooltip>
           <template #default="{ row }">{{ row.payableBillNo || '—' }}</template>
         </el-table-column>
         <el-table-column label="往来单位" min-width="110" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.supplierName || '—' }}</template>
+          <template #default="{ row }">
+            <el-button v-if="row.supplierId" type="primary" link @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName || '—' }}</el-button>
+            <span v-else>{{ row.supplierName || '—' }}</span>
+          </template>
         </el-table-column>
         <el-table-column label="主体类型" width="76" align="center">
           <template #default="{ row }">

@@ -93,6 +93,15 @@ async function handleGenerate() {
 
 // 详情已独立成页，列表不再用抽屉展示
 function handleDetail(row: FinanceBill) { router.push(`/finance/bill/detail/${row.id}`) }
+/**
+ * 往来单位 → 客户/供应商详情（2026-09-26 B6）：应收账单的往来单位是客户，应付账单是供应商
+ * （`partnerId` 即对应主数据 id，后端已随账单行回传）。
+ */
+function goPartner(row: FinanceBill) {
+  if (!row?.partnerId) return
+  if (row.billType === BillType.RECEIVABLE) router.push(`/inventory/customer/detail/${row.partnerId}`)
+  else router.push(`/supplier/detail/${row.partnerId}`)
+}
 // 2026-09-20（F7-160）：审核 / 反审核 / 作废 补二次确认 —— 与同单据的 bill/detail.vue 口径一致。
 // 列表里三个危险动作原先「点一下即执行」（审核/反审核会核销、冲销台账），误点代价高；
 // 写法照搬 bill/detail.vue：confirm 与请求各自 try/catch（用户点「取消」不算失败），提示语带单号便于多行操作时辨认。
@@ -129,11 +138,23 @@ async function handleCancel(row: FinanceBill) {
     </el-card>
     <el-card shadow="never" class="table-card">
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1240px > 内容区 971px
-           ⇒ 横向滚动 269px。收窄为合计 962px（账单号/往来单位保持 min-width，宽屏自动吃余量）。 -->
+           ⇒ 横向滚动 269px。收窄为合计 962px。
+           2026-09-26 B6（用户口径「数据显示完整 + 账单号/往来单位可点」，实测驱动）：
+           ①账单号 min100→**124** 并做成链接进账单详情（原先只能点整行/操作列）；
+           ②类型 60→**64**：tag **补 size="small"**（原默认尺寸 tag 实测需 88px，「应收/应付」2 字也被截断）；
+           ③往来单位做成链接：应收账单→客户详情、应付账单→供应商详情（按 billType 分流）；
+           合计 = 124+64+100+90+90+92+92+92+76+132 = **952** ✓ -->
       <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
-        <el-table-column prop="billNo" label="账单号" min-width="100" show-overflow-tooltip/>
-        <el-table-column label="类型" width="60" align="center"><template #default="{row}"><el-tag :type="row.billType===BillType.RECEIVABLE?undefined:'warning'">{{ BillTypeLabel[row.billType] || row.billType }}</el-tag></template></el-table-column>
-        <el-table-column prop="partnerName" label="往来单位" min-width="100" show-overflow-tooltip/>
+        <el-table-column label="账单号" min-width="124" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">{{ row.billNo }}</el-button></template>
+        </el-table-column>
+        <el-table-column label="类型" width="64" align="center"><template #default="{row}"><el-tag :type="row.billType===BillType.RECEIVABLE?undefined:'warning'" size="small">{{ BillTypeLabel[row.billType] || row.billType }}</el-tag></template></el-table-column>
+        <el-table-column label="往来单位" min-width="100" show-overflow-tooltip>
+          <template #default="{row}">
+            <el-button v-if="row.partnerId" type="primary" link @click.stop="goPartner(row)">{{ row.partnerName }}</el-button>
+            <span v-else>{{ row.partnerName }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="periodStart" label="账期起" width="90" align="center"/>
         <el-table-column prop="periodEnd" label="账期止" width="90" align="center"/>
         <el-table-column prop="totalAmount" label="总额" width="92" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>

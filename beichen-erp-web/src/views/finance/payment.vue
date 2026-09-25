@@ -112,8 +112,11 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
 
     <!-- Tab1 供应商汇总 -->
     <el-card v-if="activeTab==='supplier'" shadow="never">
+      <!-- 2026-09-26 B6：供应商做成链接进该供应商的应付/付款详情（原先只能点整行/操作列） -->
       <el-table v-loading="summaryLoading" :data="summaryData" border stripe @row-click="goSupplierDetail">
-        <el-table-column prop="supplierName" label="供应商" min-width="180" />
+        <el-table-column label="供应商" min-width="180" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="goSupplierDetail(row)">{{ row.supplierName || sName(row.supplierId) || '—' }}</el-button></template>
+        </el-table-column>
         <el-table-column label="主体类型" width="100" align="center">
           <template #default="{row}">
             <el-tag v-if="row.supplierType" :type="TYPE_TAG[row.supplierType] || 'info'" size="small">{{ typeLabel(row.supplierType) }}</el-tag>
@@ -153,21 +156,33 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
         </div>
       </el-card>
       <el-card shadow="never" class="table-card">
+        <!-- 2026-09-26 B6（顺带修既有缺陷）：本页签**原列宽合计 1110px > 内容区 956px ⇒ 横向滚动 154px**
+             （首屏默认在「供应商汇总」页签，此表未激活 ⇒ 历次横向滚动扫描都没扫到它）。
+             重排为合计 954px：单号 min150→146 + 可点进付款单详情（补 tooltip）、供应商 min140→124 + 可点、
+             主体类型 100→72、账户 min120→104（补 tooltip）、日期 110→100、金额 120→96、凭证 70→64、
+             状态 90→72（tag 补 size="small"）、操作 210→176（详情/审核/反审核/作废 4 按钮家规档）。 -->
         <el-table v-loading="loading" :data="data" border stripe @row-click="handleDetail">
-          <el-table-column prop="code" label="单号" min-width="150"/>
-          <el-table-column label="供应商" min-width="140"><template #default="{row}">{{ row.supplierName || sName(row.supplierId) || '—' }}</template></el-table-column>
-          <el-table-column label="主体类型" width="100" align="center">
+          <el-table-column label="单号" min-width="146" show-overflow-tooltip>
+            <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">{{ row.code }}</el-button></template>
+          </el-table-column>
+          <el-table-column label="供应商" min-width="124" show-overflow-tooltip>
+            <template #default="{row}">
+              <el-button v-if="row.supplierId" type="primary" link @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName || sName(row.supplierId) || '—' }}</el-button>
+              <span v-else>{{ row.supplierName || sName(row.supplierId) || '—' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="主体类型" width="72" align="center">
             <template #default="{row}">
               <el-tag v-if="row.supplierType" :type="TYPE_TAG[row.supplierType] || 'info'" size="small">{{ typeLabel(row.supplierType) }}</el-tag>
               <span v-else>—</span>
             </template>
           </el-table-column>
-          <el-table-column label="账户" min-width="120"><template #default="{row}">{{ aName(row.accountId) }}</template></el-table-column>
-          <el-table-column prop="paymentDate" label="日期" width="110" align="center"/>
-          <el-table-column prop="amount" label="金额" width="120" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
-          <el-table-column label="凭证" width="70" align="center"><template #default="{row}"><el-link v-if="row.attachUrl" type="primary" @click.stop="openAttach(row.attachUrl)">查看</el-link><span v-else style="color:#c0c4cc">—</span></template></el-table-column>
-          <el-table-column label="状态" width="90" align="center"><template #default="{row}"><el-tag :type="stType(row.status)">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
-          <el-table-column label="操作" width="210" align="center" fixed="right">
+          <el-table-column label="账户" min-width="104" show-overflow-tooltip><template #default="{row}">{{ aName(row.accountId) }}</template></el-table-column>
+          <el-table-column prop="paymentDate" label="日期" width="100" align="center"/>
+          <el-table-column prop="amount" label="金额" width="96" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
+          <el-table-column label="凭证" width="64" align="center"><template #default="{row}"><el-link v-if="row.attachUrl" type="primary" @click.stop="openAttach(row.attachUrl)">查看</el-link><span v-else style="color:#c0c4cc">—</span></template></el-table-column>
+          <el-table-column label="状态" width="72" align="center"><template #default="{row}"><el-tag :type="stType(row.status)" size="small">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
+          <el-table-column label="操作" width="176" align="center" fixed="right">
             <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button></template>
           </el-table-column>
         </el-table>

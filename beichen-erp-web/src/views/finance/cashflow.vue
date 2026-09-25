@@ -52,14 +52,18 @@ onMounted(() => { loadFlow(); loadAccounts() })
 
     <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="data" border stripe>
-        <el-table-column prop="flowNo" label="流水号" width="120"/>
-        <el-table-column label="时间" width="140"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
+        <!-- 2026-09-26 B6：时间 140→**96**（该列只显示日期，原 140 白占 44px）；
+             流水号 120→**140**（FL- 流水号更长，原易截断）；关联单据 min150→170（单号列）；
+             收入/支出 110→104、余额 105→100（金额实测余量充足）。
+             合计 = 140+96+120+90+104+104+100+170 = **924** ✓ -->
+        <el-table-column prop="flowNo" label="流水号" width="140"/>
+        <el-table-column label="时间" width="96"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
         <el-table-column prop="accountName" label="账户" min-width="120"/>
-        <el-table-column label="类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.flowType==='RECEIPT'||row.flowType==='OPENING'?'success':'danger'">{{flowTypeLabel(row.flowType)}}</el-tag></template></el-table-column>
-        <el-table-column label="收入" width="110" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{fmt(row.income)}}</span></template></el-table-column>
-        <el-table-column label="支出" width="110" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{fmt(row.expense)}}</span></template></el-table-column>
-        <el-table-column prop="balance" label="余额" width="105" align="right"><template #default="{row}">{{fmt(row.balance)}}</template></el-table-column>
-        <el-table-column prop="relatedBillNo" label="关联单据" min-width="150"/>
+        <el-table-column label="类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.flowType==='RECEIPT'||row.flowType==='OPENING'?'success':'danger'" size="small">{{flowTypeLabel(row.flowType)}}</el-tag></template></el-table-column>
+        <el-table-column label="收入" width="104" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{fmt(row.income)}}</span></template></el-table-column>
+        <el-table-column label="支出" width="104" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{fmt(row.expense)}}</span></template></el-table-column>
+        <el-table-column prop="balance" label="余额" width="100" align="right"><template #default="{row}">{{fmt(row.balance)}}</template></el-table-column>
+        <el-table-column prop="relatedBillNo" label="关联单据" min-width="170"/>
       </el-table>
       <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadFlow" @current-change="loadFlow"/></div>
     </el-card>
