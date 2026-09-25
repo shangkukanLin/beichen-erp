@@ -296,6 +296,7 @@ CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     c_qty DECIMAL(18,0) DEFAULT 0 COMMENT 'C规数量',
     defect_qty DECIMAL(18,0) DEFAULT 0 COMMENT '不良数量',
     source_type VARCHAR(20) DEFAULT 'DELIVERY' COMMENT '来源类型: DELIVERY普通交货/RETURN_DEFECT委外退货/AFTER_SALE收费售后',
+    code VARCHAR(50) DEFAULT NULL COMMENT '加工退货红冲单号（仅 DEFECT_RETURN 记录填写：关联加工单 GTH- / 无单 GTW-；普通交货为 NULL）',
     tracking_no VARCHAR(100) COMMENT '物流单号',
     remark VARCHAR(255) COMMENT '备注',
     attach_url VARCHAR(500) COMMENT '附件URL',

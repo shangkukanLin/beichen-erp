@@ -43,6 +43,12 @@ public class OutsourceOrderDelivery {
     /** 主键ID */
     @TableId(type = IdType.AUTO)
     private Long id;
+
+    /**
+     * 加工退货红冲单号（2026-09-25）：仅 DEFECT_RETURN 记录填写（关联加工单 GTH- / 无单 GTW-，建草稿即取号）；
+     * 普通交货/收货记录为 NULL（历史红冲记录也为 NULL，读侧兜底"加工退货#id"）。
+     */
+    private String code;
     /** 关联加工单ID */
     private Long orderId;
     /**

@@ -430,10 +430,13 @@ onMounted(() => { loadLedger() })
 
       <!-- ============ ① 加工退货台账：有单 + 无单一张表（「关联加工单」列区分） ============ -->
       <template v-if="activeTab === 'DEFECT'">
-        <!-- 列宽合计 926px（**留余量**）＜ 内容区（行数多时纵向滚动条约吃掉 15px：963→948），一行显示完、不横向滑动。
-             扣减仓库不单独占列，挂在「退货数量」的 title 上（该信息主要给查账用）。 -->
+        <!-- 列宽合计 936px（**留余量**）＜ 内容区（行数多时纵向滚动条约吃掉 15px：963→948），一行显示完、不横向滑动。
+             2026-09-25：加「退货单号」列（GTH-/GTW-），去掉「备注」列（详情可见）；扣减仓库挂「退货数量」title。 -->
         <el-table :data="ledger" border stripe v-loading="ledgerLoading" @row-click="openDetail">
           <el-table-column label="退货日期" width="96"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
+          <el-table-column label="退货单号" width="130">
+            <template #default="{ row }">{{ row.code || ('加工退货#' + row.id) }}</template>
+          </el-table-column>
           <el-table-column prop="factoryName" label="加工厂" width="100" show-overflow-tooltip />
           <!-- 「关联加工单」= 本表唯一的"有无单"区分：有单显示可点的加工单号，无单显示"未关联" -->
           <el-table-column label="关联加工单" width="110" show-overflow-tooltip>
@@ -452,7 +455,6 @@ onMounted(() => { loadLedger() })
           <el-table-column label="状态" width="78" align="center">
             <template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
           </el-table-column>
-          <el-table-column prop="remark" label="备注" min-width="110" show-overflow-tooltip />
           <!-- 动作集与顺序统一（与物料退货页一致）：详情 → 审核 → 反审核 → 删除。
                这些是**收货记录**（没有独立详情页）⇒ 详情走抽屉；单据型的维修退货页签则跳详情页。 -->
           <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 174→132（详情/审核/删除 3 个按钮）。 -->

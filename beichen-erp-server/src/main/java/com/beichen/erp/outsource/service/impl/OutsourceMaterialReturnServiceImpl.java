@@ -786,7 +786,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         // 2026-09-21（用户口径）：只能退给辅料商或供应商，不能退给供货商（成品商）
         assertReturnTargetAllowed(order.getSupplierId());
 
-        order.setCode(generateCode());
+        order.setCode(generateCode(order.getMaterialOrderId() != null));
         if (order.getReturnDate() == null) order.setReturnDate(LocalDate.now());
         order.setStatus(DocStatus.DRAFT.getCode());
         // 类型归一（空值/历史值 MATERIAL → REFUND 退货退款，2026-09-17）
@@ -1323,9 +1323,14 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         return bt != null ? bt.getTypeName() : "-";
     }
 
-    private String generateCode() {
+    /**
+     * 物料退货单取号（2026-09-25 起按**是否关联物料订单**区分前缀：关联 MRH- / 不关联 MRW-）。
+     * 存量已生成的 MR- 单号不变；两类各自独立取号序号。
+     */
+    private String generateCode(boolean hasOrder) {
         // F7-75③（2026-09-20）：统一走 BillNoSeq（原 `count(*) + 1` 在并发/有删除时序号不可靠，见成品退货单同处注释）
-        String prefix = BillPrefix.OUTSOURCE_MATERIAL_RETURN + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String prefix = (hasOrder ? BillPrefix.OUTSOURCE_MATERIAL_RETURN_HAS : BillPrefix.OUTSOURCE_MATERIAL_RETURN_NO)
+                + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         OutsourceMaterialReturn last = returnMapper.selectOne(new LambdaQueryWrapper<OutsourceMaterialReturn>()
                 .likeRight(OutsourceMaterialReturn::getCode, prefix).orderByDesc(OutsourceMaterialReturn::getCode).last("LIMIT 1"));
         int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;

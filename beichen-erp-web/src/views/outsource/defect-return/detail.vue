@@ -40,11 +40,12 @@ onMounted(load)
     <el-card shadow="never">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">加工退货详情 — {{ detail.orderCode || ('记录 #' + (detail.id ?? '')) }}</span>
+          <span style="font-weight:600">加工退货详情 — {{ detail.code || detail.legacyNo || ('记录 #' + (detail.id ?? '')) }}</span>
         </div>
       </template>
 
       <el-descriptions :column="3" border size="small">
+        <el-descriptions-item label="退货单号">{{ detail.code || ('加工退货#' + (detail.id ?? '-')) }}</el-descriptions-item>
         <el-descriptions-item label="记录ID">{{ detail.id ?? '-' }}</el-descriptions-item>
         <el-descriptions-item label="退货日期">{{ detail.deliveryDate || '-' }}</el-descriptions-item>
         <el-descriptions-item label="状态">

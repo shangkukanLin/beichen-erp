@@ -241,6 +241,17 @@ P3-1 复核有单加工退货 + 端到端实证（**重点断言"同一笔只冲
 - **实证**：物料 33×5 从仓 68 送修供应商 34（仓 66）→ 源仓 738/在厂 5；返回（含子物料 35×4）→ 在厂 0/源仓 743/料 −4/
   用料明细 1 行/应收 0/成本结转；撤销 → 回"已送修未返回"状态（成本漂移 0）；反审核 → 全库 14572 复原。
 
+## 10. 单号规范化 ✅（2026-09-25，用户要求"加工退货自动生成单号，不用数据库ID，有单/无单区分；物料退货同样"）
+- **红冲记录单号**（`outsource_order_delivery` 加 `code` 列，迁移 `sql/migration-delivery-code.sql`，UNIQUE KEY NULL 不冲突）：
+  - 关联加工单 **GTH-** / 无单 **GTW-**（`BillPrefix`），建**草稿**即取号（BillNoSeq 最大号+1）；
+  - `noOrderBillNo`/`redFlushBillNo`：code 优先，**存量无 code 旧记录兜底"加工退货#id"**（反审核流水单号与历史审核一致，对账不断链）；
+  - 有单红冲 applyDefectStock/revertDefectStock 流水 billNo 从加工单号改为红冲自有单号（不再与普通交货混号）。
+- **物料退货单前缀分流**（`generateCode(hasOrder)`）：关联物料订单 **MRH-** / 不关联 **MRW-**（存量 MR- 不变）。
+- **前端**：加工退货台账加"退货单号"列（旧记录显示 加工退货#id）、去"备注"列（预算 936px）；详情页页头/字段显示单号。
+- **实证**：无单 GTW-20260925001 / 有单 GTH-20260925001（草稿即有号、流水 related_bill_no 同号、有单不再混 WO-）；
+  物料 MRW-20260925002 / MRH-20260925001；存量旧红冲 197 反审核流水 billNo=加工退货#197（兜底 ✓）后再审核复原。
+  ⚠️ 探针踩坑：q.ps1 输出**首行是表头**，SqlText 解析须跳过首行；正则要含中文（"加工退货#197"）。
+
 ### P1-1 落地记录 ✅（2026-09-25，提交待填）
 - **改造**（`OutsourceOrderDeliveryServiceImpl`）：`applyDefectStockNoOrder`/`revertDefectStockNoOrder` 重写为跨仓转移 ——
   我方仓扣成品（MATERIAL，OUTSOURCE_DEFECT_RETURN，沿用原口径）＋ 委外仓入成品（**FORM_PRODUCT_DEFECT**，新流水 code

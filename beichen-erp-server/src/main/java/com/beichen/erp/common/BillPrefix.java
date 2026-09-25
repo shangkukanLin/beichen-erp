@@ -52,6 +52,14 @@ public final class BillPrefix {
     public static final String OUTSOURCE_RETURN_ORDER = "OR-";
     /** 委外加工返回单（P1-2 2026-09-25：修好送回——核销在厂成品+实际用料+赔料应收；ORB- 独立取号） */
     public static final String OUTSOURCE_RETURN_BACK = "ORB-";
+    /** 加工退货红冲·关联加工单（2026-09-25：红冲记录自动单号，与无单区分） */
+    public static final String OUTSOURCE_DEFECT_RETURN_HAS = "GTH-";
+    /** 加工退货红冲·不关联加工单（2026-09-25） */
+    public static final String OUTSOURCE_DEFECT_RETURN_NO = "GTW-";
+    /** 物料退货单·关联物料订单（2026-09-25：与不关联区分；存量 MR- 单号不变） */
+    public static final String OUTSOURCE_MATERIAL_RETURN_HAS = "MRH-";
+    /** 物料退货单·不关联物料订单（2026-09-25） */
+    public static final String OUTSOURCE_MATERIAL_RETURN_NO = "MRW-";
     /** 委外其他出入库 */
     public static final String OUTSOURCE_OTHER_IO = "OWO-";
     /** 移仓单 */

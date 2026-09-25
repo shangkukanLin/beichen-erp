@@ -4,6 +4,8 @@ import com.beichen.erp.config.UserContext;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.beichen.erp.common.BillNoSeq;
+import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.dev.entity.Bom;
@@ -55,6 +57,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -549,6 +552,8 @@ public class OutsourceOrderDeliveryServiceImpl
 
         // 校验通过：仅存草稿记录（isReverse=true），库存/BOM还料/应付在审核时由 applyDefectStock 统一落账
         OutsourceOrderDelivery delivery = new OutsourceOrderDelivery();
+        // 2026-09-25：红冲记录自动单号（关联加工单 GTH-），建草稿即取号（台账/流水不再用数据库ID）
+        delivery.setCode(generateReturnCode(true));
         delivery.setOrderId(orderId);
         // 2026-09-21：有单红冲也写加工厂（原先只有"无单"路径写 ⇒ 加工退货台账的「加工厂」列为空，用户实测反馈）。
         // 无副作用：全库无 SQL 用 outsource_order_delivery.factory_id 做筛选/归集（已核）；落账仍按加工单口径。
@@ -625,6 +630,8 @@ public class OutsourceOrderDeliveryServiceImpl
         resolveOutsourceWarehouseId(factoryId);
 
         OutsourceOrderDelivery d = new OutsourceOrderDelivery();
+        // 2026-09-25：红冲记录自动单号（无单 GTW-，与有单 GTH- 区分），建草稿即取号
+        d.setCode(generateReturnCode(false));
         d.setOrderId(null);            // ← 本意：不关联加工单
         d.setFactoryId(factoryId);     // 无单时靠它定位委外仓与应付对象
         d.setWarehouseId(warehouseId);
@@ -745,6 +752,8 @@ public class OutsourceOrderDeliveryServiceImpl
             Long fid = effectiveFactoryId(d, orderFactoryMap);
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", d.getId());
+            // 2026-09-25：红冲记录自有单号（GTH-/GTW-，建草稿即取号）；存量无 code 的旧记录为空（详情/流水兜底"加工退货#id"）
+            m.put("code", d.getCode());
             m.put("deliveryDate", d.getDeliveryDate());
             m.put("orderId", d.getOrderId());
             // 「关联加工单」列：有单给单号、无单为空（前端显示"未关联"）
@@ -798,6 +807,9 @@ public class OutsourceOrderDeliveryServiceImpl
 
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", d.getId());
+        // 2026-09-25：红冲记录自有单号（存量旧记录为空，前端显示"加工退货#id"兜底）
+        m.put("code", d.getCode());
+        m.put("legacyNo", "加工退货#" + d.getId());
         m.put("deliveryDate", d.getDeliveryDate());
         m.put("status", d.getStatus());
         m.put("createTime", d.getCreateTime());
@@ -925,9 +937,32 @@ public class OutsourceOrderDeliveryServiceImpl
                 "", delivery.getId(), qualityType, WarehouseStock.FORM_PRODUCT_DEFECT);
     }
 
-    /** 无单加工退货的库存流水/应付「相关单据号」：本身没有单号，用记录ID 便于追溯 */
+    /** 无单加工退货的库存流水/应付「相关单据号」：用红冲记录自己的单号（GTW-）；存量无 code 的旧记录兜底"加工退货#id" */
     private String noOrderBillNo(OutsourceOrderDelivery delivery) {
+        return redFlushBillNo(delivery);
+    }
+
+    /**
+     * 红冲记录的流水单号（2026-09-25）：优先取自动生成的 code（GTH-/GTW-）；
+     * 存量旧记录（无 code）兜底"加工退货#id"——保证旧单反审核时流水单号与历史审核完全一致（对账不断链）。
+     */
+    private String redFlushBillNo(OutsourceOrderDelivery delivery) {
+        if (delivery.getCode() != null && !delivery.getCode().isBlank()) return delivery.getCode();
         return "加工退货#" + delivery.getId();
+    }
+
+    /**
+     * 红冲记录取号（2026-09-25）：关联加工单 GTH- / 无单 GTW-，最大号 +1（BillNoSeq 统一口径，建草稿即取号）。
+     */
+    private String generateReturnCode(boolean hasOrder) {
+        String prefix = (hasOrder ? BillPrefix.OUTSOURCE_DEFECT_RETURN_HAS : BillPrefix.OUTSOURCE_DEFECT_RETURN_NO)
+                + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        OutsourceOrderDelivery last = baseMapper.selectOne(new LambdaQueryWrapper<OutsourceOrderDelivery>()
+                .likeRight(OutsourceOrderDelivery::getCode, prefix)
+                .orderByDesc(OutsourceOrderDelivery::getCode).last("LIMIT 1"));
+        int seq = last != null && last.getCode() != null
+                ? BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
+        return BillNoSeq.format(prefix, seq);
     }
 
     /** 校验退不良规格是否合法(A/B/C/DEFECT) */
@@ -955,11 +990,12 @@ public class OutsourceOrderDeliveryServiceImpl
         Long warehouseId = delivery.getWarehouseId();
         if (warehouseId == null) throw new BusinessException("加工退货记录缺少仓库");
 
-        // 1. 扣减成品库存（按产品主数据ID+规格落账）
+        // 1. 扣减成品库存（按产品主数据ID+规格落账）；流水单号用红冲记录自己的单号（GTH-，存量兜底#id）
         Long masterId = masterIdOf(delivery);
         String qualityType = delivery.getQualityType() != null ? delivery.getQualityType() : "A";
+        String billNo = redFlushBillNo(delivery);   // 2026-09-25：不再与普通交货混用加工单号
         stockService.changeStock(warehouseId, masterId, defectQty.negate(),
-                StockChangeType.OUTSOURCE_DEFECT_RETURN, order.getCode(), RelatedBillType.OUTSOURCE_DEFECT,
+                StockChangeType.OUTSOURCE_DEFECT_RETURN, billNo, RelatedBillType.OUTSOURCE_DEFECT,
                 "", order.getId(), qualityType);   // F7-65①（2026-09-20）：spec 按 WarehouseStockService 约定传 ""（原传 null）
         log.info("退不良扣成品: {} {}规 (仓库={}) {} -> {}", productName, qualityType, warehouseId, stockQtyOf(masterId, warehouseId, qualityType), stockQtyOf(masterId, warehouseId, qualityType).subtract(defectQty));
 
@@ -978,7 +1014,7 @@ public class OutsourceOrderDeliveryServiceImpl
 
             // 物料写入统一到 WarehouseStockService（架构债 A2）
             stockService.changeMaterialStockAllowNegative(whId, mat.materialId(), restoreQty,
-                    StockChangeType.OUTSOURCE_DEFECT_RETURN.getCode(), order.getCode(), RelatedBillType.OUTSOURCE_DEFECT,
+                    StockChangeType.OUTSOURCE_DEFECT_RETURN.getCode(), billNo, RelatedBillType.OUTSOURCE_DEFECT,
                     delivery.getId(), order.getId(), delivery.getId());
             log.info("退不良还料: {} +{} (仓库ID={})", mat.materialName(), restoreQty, whId);
         }
@@ -991,10 +1027,11 @@ public class OutsourceOrderDeliveryServiceImpl
         Long warehouseId = delivery.getWarehouseId();
         if (warehouseId == null) return;
 
-        // 1. 恢复成品库存（按产品主数据ID+规格落账）
+        // 1. 恢复成品库存（按产品主数据ID+规格落账）；流水单号与审核侧同源（红冲自有单号，存量兜底#id）
         String qualityType = delivery.getQualityType() != null ? delivery.getQualityType() : "A";
+        String billNo = redFlushBillNo(delivery);
         stockService.changeStock(warehouseId, masterIdOf(delivery), defectQty,
-                StockChangeType.OUTSOURCE_DEFECT_RETURN, order.getCode(), RelatedBillType.OUTSOURCE_DEFECT,
+                StockChangeType.OUTSOURCE_DEFECT_RETURN, billNo, RelatedBillType.OUTSOURCE_DEFECT,
                 "", order.getId(), qualityType);   // F7-65①（2026-09-20）：spec 按 WarehouseStockService 约定传 ""（原传 null）
         log.info("退不良反审核恢复成品: {} {}规 (仓库={}) +{}", productName, qualityType, warehouseId, defectQty);
 
@@ -1011,7 +1048,7 @@ public class OutsourceOrderDeliveryServiceImpl
             // `changeMaterialStockAllowNegative(+restoreQty)`，反审核必须能完全逆转它。
             // 库存写入统一到 WarehouseStockService（架构债 A2）
             stockService.changeMaterialStockAllowNegative(whId, mat.materialId(), restoreQty.negate(),
-                    StockChangeType.OUTSOURCE_DEFECT_RETURN_UN_AUDIT.getCode(), order.getCode(),
+                    StockChangeType.OUTSOURCE_DEFECT_RETURN_UN_AUDIT.getCode(), billNo,
                     RelatedBillType.OUTSOURCE_DEFECT, delivery.getId(), order.getId(), delivery.getId());
         }
     }
