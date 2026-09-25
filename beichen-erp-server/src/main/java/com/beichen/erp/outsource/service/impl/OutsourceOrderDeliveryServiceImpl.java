@@ -22,20 +22,15 @@ import com.beichen.erp.outsource.common.MaterialRequirementCalc;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.outsource.common.QualityType;
-import com.beichen.erp.outsource.entity.BomSnapshot;
-import com.beichen.erp.outsource.entity.BomSnapshotItem;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
 import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
-import com.beichen.erp.outsource.mapper.BomSnapshotItemMapper;
-import com.beichen.erp.outsource.mapper.BomSnapshotMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderDeliveryMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
-import com.beichen.erp.outsource.service.OutsourceMaterialPricingService;
 import com.beichen.erp.outsource.service.OutsourceOrderDeliveryService;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.supplier.common.SupplierTypeEnum;
@@ -95,11 +90,7 @@ public class OutsourceOrderDeliveryServiceImpl
     private final SupplierTypeRefMapper supplierTypeRefMapper;
     private final ProductService productService;
     private final com.beichen.erp.warehouse.service.CostService costService;
-    /** 不关联加工单的加工退货：还料依据取该产品的 BOM 快照（与独立退货单同口径） */
-    private final BomSnapshotMapper bomSnapshotMapper;
-    private final BomSnapshotItemMapper bomSnapshotItemMapper;
-    /** 还回物料计价（FIFO + 兜底链，F7-77 的唯一实现）—— 无单红冲按料价值冲减应付 */
-    private final OutsourceMaterialPricingService pricingService;
+    // 2026-09-25 P1-1：无单加工退货不再拆料还仓/按料价值冲应付，BOM 快照还料与 FIFO 计价依赖已随死代码移除
     /** 加工退货详情：按库存流水回溯「还回了哪些料」（related_delivery_id = 本记录） */
     private final WarehouseStockLogMapper stockLogMapper;
     /** 加工退货详情：本记录产生的应付冲减（source_id = 本记录、source_bill_type = OUTSOURCE_DELIVERY） */
@@ -567,12 +558,11 @@ public class OutsourceOrderDeliveryServiceImpl
     // ==================== 不关联加工单的加工退货（2026-09-21 用户口径） ====================
 
     /**
-     * 不关联加工单的加工退货：**本意就是"可以不关联加工单"**，其余业务与加工单收货详细页的「加工退货」
-     * （红冲收货）**完全一致** —— 同样在本表写一条负数记录（`delivery_type=DEFECT_RETURN`、
-     * `is_reverse=1`），审核时同样"扣成品库存 + BOM 料还回工厂委外仓 + 冲减应付"。
-     * <p>与有单红冲的三点差别（其余全同）：①`order_id` 为空，改由 `factory_id` 定位「工厂委外仓」与
-     * 「应付对象」；②还料依据由"该加工单产品的 BOM"改为"**该产品的最新 BOM 快照**"（无快照回退 dev_bom）；
-     * ③冲减金额按**还回物料的 FIFO 价值**（无加工单价可依，2026-09-21 用户选定口径 A）。</p>
+     * 不关联加工单的加工退货（P1-1 口径，2026-09-25 用户确认）：在本表写一条负数记录
+     * （`delivery_type=DEFECT_RETURN`、`is_reverse=1`），审核时把退回成品以
+     * **成品（加工退货）形态（stock_form=PRODUCT_DEFECT）转移进加工厂委外仓**；
+     * 不红冲收货、不分解 BOM 料、不动应付。修好送回时走 P1-2 返回单（核销在厂成品 + 实际用料 + 赔料应收）。
+     * <p>`order_id` 为空，`factory_id` 定位「工厂委外仓」；数量取绝对值落账。</p>
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -870,9 +860,10 @@ public class OutsourceOrderDeliveryServiceImpl
     }
 
     /**
-     * 无单加工退货审核：与有单红冲同口径，只是把"加工单"换成"工厂 + 产品 BOM 快照"。
-     * <p>① 扣所选规格的成品库存；② 按 BOM 快照拆料、料还回**该工厂的委外仓**；
-     * ③ 按**还回物料的 FIFO 价值**冲减应付（负数）。</p>
+     * 无单加工退货审核（2026-09-25 P1-1 口径，用户确认）：
+     * 退回成品以「成品（加工退货）」形态（stock_form=PRODUCT_DEFECT）转移进**加工厂委外仓**；
+     * **不分解料**（原"按最新 BOM 快照拆料还回"已删除——与退货时点无关，BOM 改过即拆错）、**不动应付**（原按还料 FIFO 价值的负应付已删除）。
+     * <p>腿① 我方仓扣成品（普通成品行，形态 MATERIAL，与现状一致）；腿② 委外仓入成品（PRODUCT_DEFECT 形态，可与同仓同品质的普通成品行并存不串行）。</p>
      */
     private void applyDefectStockNoOrder(OutsourceOrderDelivery delivery) {
         BigDecimal defectQty = delivery.getQuantity().abs();
@@ -884,36 +875,20 @@ public class OutsourceOrderDeliveryServiceImpl
         String qualityType = delivery.getQualityType() != null ? delivery.getQualityType() : "A";
         String billNo = noOrderBillNo(delivery);
 
-        // 1. 扣减成品库存（按产品主数据ID + 规格）
+        // 1. 我方仓扣减成品（转移出腿）
         stockService.changeStock(warehouseId, masterId, defectQty.negate(),
                 StockChangeType.OUTSOURCE_DEFECT_RETURN, billNo, RelatedBillType.OUTSOURCE_DEFECT,
                 "", null, qualityType);
 
-        // 2. BOM 快照拆料 → 还回工厂委外仓，并累计"料价值"
+        // 2. 委外仓入成品（成品（加工退货）形态，工厂责任在厂库存，可查询可盘点；P1-2 返回单核销）
         Long factoryWhId = resolveOutsourceWarehouseId(factoryId);
-        BigDecimal materialValue = BigDecimal.ZERO;
-        for (MaterialReq mat : loadMaterialsByProductSnapshot(masterId)) {
-            if (mat.materialId() == null) continue;
-            BigDecimal restoreQty = mat.perUnit().multiply(defectQty).setScale(0, RoundingMode.HALF_UP);
-            if (restoreQty.compareTo(BigDecimal.ZERO) == 0) continue;
-            stockService.changeMaterialStockAllowNegative(factoryWhId, mat.materialId(), restoreQty,
-                    StockChangeType.OUTSOURCE_DEFECT_RETURN.getCode(), billNo, RelatedBillType.OUTSOURCE_DEFECT,
-                    delivery.getId(), null, delivery.getId());
-            BigDecimal unit = pricingService.fifoPriceWithFallback(mat.materialId(), restoreQty);
-            materialValue = materialValue.add(unit.multiply(restoreQty));
-            log.info("无单加工退货还料: {} +{} (仓库ID={}) 单价={}", mat.materialName(), restoreQty, factoryWhId, unit);
-        }
-
-        // 3. 冲减应付（负数）：无加工单价可依 ⇒ 按还回物料的 FIFO 价值（用户 2026-09-21 选定口径 A）
-        if (materialValue.compareTo(BigDecimal.ZERO) > 0) {
-            payableHelper.createPayable(factoryId, SourceBillType.OUTSOURCE_DELIVERY.getCode(), billNo,
-                    delivery.getId(), materialValue.negate(),
-                    delivery.getDeliveryDate() != null ? delivery.getDeliveryDate() : LocalDate.now(),
-                    "加工退货（不关联加工单） - 还回料价值");
-        }
+        stockService.changeStock(factoryWhId, masterId, defectQty,
+                StockChangeType.OUTSOURCE_DEFECT_IN, billNo, RelatedBillType.OUTSOURCE_DEFECT,
+                "", delivery.getId(), qualityType, WarehouseStock.FORM_PRODUCT_DEFECT);
+        log.info("无单加工退货：成品转移进委外仓 仓={} masterId={} +{} 形态=PRODUCT_DEFECT 单据={}", factoryWhId, masterId, defectQty, billNo);
     }
 
-    /** 无单加工退货反审核：与审核**严格对称**（F7-64 纪律：等量逆回、允许负数，不夹零） */
+    /** 无单加工退货反审核：与审核**严格对称**（F7-64 纪律：等量逆回，不夹零）——核销委外仓成品行 + 恢复我方仓成品 */
     private void revertDefectStockNoOrder(OutsourceOrderDelivery delivery) {
         BigDecimal defectQty = delivery.getQuantity().abs();
         Long warehouseId = delivery.getWarehouseId();
@@ -924,60 +899,16 @@ public class OutsourceOrderDeliveryServiceImpl
         String qualityType = delivery.getQualityType() != null ? delivery.getQualityType() : "A";
         String billNo = noOrderBillNo(delivery);
 
-        // 1. 恢复成品库存
+        // 1. 我方仓恢复成品
         stockService.changeStock(warehouseId, masterId, defectQty,
                 StockChangeType.OUTSOURCE_DEFECT_RETURN, billNo, RelatedBillType.OUTSOURCE_DEFECT,
                 "", null, qualityType);
 
-        // 2. 扣回 BOM 还料（等量逆回，允许扣成负数）
+        // 2. 核销委外仓成品行（同形态 PRODUCT_DEFECT 精确逆回）
         Long factoryWhId = resolveOutsourceWarehouseId(factoryId);
-        for (MaterialReq mat : loadMaterialsByProductSnapshot(masterId)) {
-            if (mat.materialId() == null) continue;
-            BigDecimal restoreQty = mat.perUnit().multiply(defectQty).setScale(0, RoundingMode.HALF_UP);
-            if (restoreQty.compareTo(BigDecimal.ZERO) == 0) continue;
-            stockService.changeMaterialStockAllowNegative(factoryWhId, mat.materialId(), restoreQty.negate(),
-                    StockChangeType.OUTSOURCE_DEFECT_RETURN_UN_AUDIT.getCode(), billNo, RelatedBillType.OUTSOURCE_DEFECT,
-                    delivery.getId(), null, delivery.getId());
-        }
-        // 3. 应付冲销由审核入口统一调用 payableHelper.reversePayable(id, OUTSOURCE_DELIVERY) 完成
-    }
-
-    /**
-     * 按**产品最新 BOM 快照**取还料需求（不关联加工单时的还料依据）。
-     * <p>与独立退货单同口径（2026-09-17 用户定过"来源应是快照"）；跳过工厂包料（FACTORY）。
-     * 无快照时回退 dev_bom（与有单红冲在"订单无物料"时的回退同源）；两者都没有 ⇒ 只扣成品、不还料。</p>
-     */
-    private List<MaterialReq> loadMaterialsByProductSnapshot(Long masterId) {
-        List<MaterialReq> result = new ArrayList<>();
-        BomSnapshot snap = bomSnapshotMapper.selectOne(
-                new LambdaQueryWrapper<BomSnapshot>()
-                        .eq(BomSnapshot::getProductMasterId, masterId)
-                        .orderByDesc(BomSnapshot::getId)
-                        .last("LIMIT 1"));
-        if (snap != null) {
-            for (BomSnapshotItem it : bomSnapshotItemMapper.selectList(
-                    new LambdaQueryWrapper<BomSnapshotItem>().eq(BomSnapshotItem::getSnapshotId, snap.getId()))) {
-                if (it.getMaterialId() == null) continue;
-                if ("FACTORY".equals(it.getSupplyType())) continue;   // 工厂包料不还我方仓
-                result.add(new MaterialReq(it.getMaterialId(), getMaterialNameById(it.getMaterialId()),
-                        it.getQuantityPerSet() != null ? it.getQuantityPerSet() : BigDecimal.ZERO));
-            }
-            log.info("无单加工退货：按 BOM 快照(id={})取 {} 项还料物料 (masterId={})", snap.getId(), result.size(), masterId);
-            return result;
-        }
-        Product master = productService.getById(masterId);
-        Long projectId = master != null ? master.getProjectId() : null;
-        if (projectId == null) {
-            log.warn("无单加工退货：产品(masterId={})无 BOM 快照且无所属项目，本次只扣成品不还料", masterId);
-            return result;
-        }
-        for (Bom bom : bomMapper.selectList(new LambdaQueryWrapper<Bom>().eq(Bom::getProjectId, projectId))) {
-            if (bom.getOutsourceMaterialId() == null) continue;
-            result.add(new MaterialReq(bom.getOutsourceMaterialId(), getMaterialNameById(bom.getOutsourceMaterialId()),
-                    bom.getQuantity() != null ? bom.getQuantity() : BigDecimal.ZERO));
-        }
-        log.info("无单加工退货：按 dev_bom(projectId={})取 {} 项还料物料", projectId, result.size());
-        return result;
+        stockService.changeStock(factoryWhId, masterId, defectQty.negate(),
+                StockChangeType.CANCEL_OUTSOURCE_DEFECT_IN, billNo, RelatedBillType.OUTSOURCE_DEFECT,
+                "", delivery.getId(), qualityType, WarehouseStock.FORM_PRODUCT_DEFECT);
     }
 
     /** 无单加工退货的库存流水/应付「相关单据号」：本身没有单号，用记录ID 便于追溯 */

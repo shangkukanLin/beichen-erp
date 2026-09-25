@@ -196,13 +196,27 @@ UN-AUDIT 后 stock total=14572 ✅ 精确回基线 · log=2130
 
 ## 7. 分期（P0-3 起按此顺序）
 ```
-P0-2 库存表 + 流水表加 stock_form；两条唯一索引改造；WarehouseStockService/Mapper 咽喉方法传参；40+ 调用点逐个确认
-P0-3 委外仓只读展示（物料 / 成品（加工退货）/ 成品（维修退货）分开，可查询可盘点）
-P1-1 加工退货·无单：改成"成品转移进加工厂委外仓"（不红冲/不分解料/不动应付）
-P1-2 返回单（新）：核销在厂成品 + 实际用料多行（可超 BOM）+ 赔料应收 + FIFO 成本结转
+P0-2 库存表 + 流水表加 stock_form；两条唯一索引改造；WarehouseStockService/Mapper 咽喉方法传参；40+ 调用点逐个确认  ✅
+P0-3 委外仓只读展示（物料 / 成品（加工退货）/ 成品（维修退货）分开，可查询可盘点）+ 盘点不并表  ✅
+P1-1 加工退货·无单：改成"成品转移进加工厂委外仓"（不红冲/不分解料/不动应付）  ✅
+P1-2 返回单（新）：核销在厂成品 + 实际用料多行（可超 BOM）+ 赔料应收 + FIFO 成本结转  ⏳ 下一步
 P2-1 维修退货：送修=成品（维修退货）转移进委外仓；返回单扣料但无赔料应收
 P3-1 复核有单加工退货 + 端到端实证（**重点断言"同一笔只冲一次"**）
 ```
+
+### P1-1 落地记录 ✅（2026-09-25，提交待填）
+- **改造**（`OutsourceOrderDeliveryServiceImpl`）：`applyDefectStockNoOrder`/`revertDefectStockNoOrder` 重写为跨仓转移 ——
+  我方仓扣成品（MATERIAL，OUTSOURCE_DEFECT_RETURN，沿用原口径）＋ 委外仓入成品（**FORM_PRODUCT_DEFECT**，新流水 code
+  `OUTSOURCE_DEFECT_IN`/`CANCEL_OUTSOURCE_DEFECT_IN`）；**删除**"按产品最新 BOM 快照拆料还回"与"按还料 FIFO 价值生成负应付"
+  （`loadMaterialsByProductSnapshot` 死方法与 BomSnapshotMapper/BomSnapshotItemMapper/PricingService 依赖一并移除）。
+  有单红冲 `applyDefectStock`/`revertDefectStock` 未动。`unAudit` 的统一 `reversePayable` 空列表安全跳过（已核 PayableHelper:139-150）。
+- **前端**：`api/enums.ts` StockChangeType/Label 加 2 个新 code（"成品加工退货入委外仓"/"核销成品加工退货"）。
+- **实证**（探针成对验证）：无单退货（我方仓76/产品63 → 加工厂34委外仓66）审核：流水 `MATERIAL/-2/OUTSOURCE_DEFECT_RETURN`
+  ＋ `PRODUCT_DEFECT/+2/OUTSOURCE_DEFECT_IN`，**应付 0 行**；反审核：`MATERIAL/+2`＋`PRODUCT_DEFECT/-2`，委外仓行归零、我方仓 A 行 268 纹丝未动。
+  有单对照（样本 177）：反审核/再审核 (仓,产品) 合计 274→278→274、全库 14572 复原，新流水 MATERIAL ±4 成对 —— 未误伤。
+  全局 `warehouse_stock_log`：MATERIAL 2146 + PRODUCT_DEFECT 2（即 3917/3919 探针对），无杂形态。
+  ⚠️ 有单红冲样本 187 反审核被"应付已转应收"守卫挡下（既有正确保护，换样本 177 通过）。
+  ⚠️ 探针踩坑：PowerShell `$pid` 是只读自动变量，脚本参数勿用 `$pid`。
 
 ## 8. 验收铁律（每期都要做）
 - 端到端实证：建单 → 审核 → 查 `warehouse_stock`（按形态分行）/ 流水 / 应付应收 / 成本；反审核后**逐行回到原值**。
