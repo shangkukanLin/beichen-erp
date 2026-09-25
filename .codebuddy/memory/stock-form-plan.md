@@ -224,6 +224,23 @@ P3-1 复核有单加工退货 + 端到端实证（**重点断言"同一笔只冲
   - **实证**：FINISHED 单 59 创建被拦（含引导文案）；单 57 SQL 直插草稿审核被拦（绕过路径封死）；PRODUCING 单 58
     建/审/反审/删全链路不受影响（全库 14572 复原）；反审核拦截用订单 177 红冲样本实测（状态位临时切 FINISHED、断言后精确还原）。
 
+## 9. 物料侧形态化 ✅（2026-09-25，用户确认"物料的退货和维修也需要这么做"）
+- **口径**：维修退货（REPAIR）完整对齐成品 P2-1；退货退款（REFUND）**保持现状**（退款退货货不回，无"在厂"语义——用户确认口径）。
+- **新形态** `WarehouseStock.FORM_MATERIAL_REPAIR = "MATERIAL_REPAIR"`（物料送修在厂，唯一键已含形态列零 DDL）。
+- **送修审核/反审核**（`OutsourceMaterialReturnServiceImpl.audit/unAudit` REPAIR 分支）：源仓扣腿（MATERIAL_REPAIR_OUT）不动；
+  新增供应商委外仓转移腿（`MATERIAL_REPAIR_STOCK_IN`，供应商无委外仓显式报错）；反审核对称核销（存量旧单在厂行不存在→跳过+留痕）。
+- **维修返回登记/撤销**（`repairReturn`/`cancelRepairReturn`）：核销在厂行（`CANCEL_MATERIAL_REPAIR_STOCK_IN`，物料无品质维度
+  定位键唯一）+ 回我方仓腿保持 + **实际用料（子物料补料）多行**（body `materials[]`，可超 BOM/允许扣负，
+  `MATERIAL_REPAIR_COMPONENT`，子表 `outsource_material_return_repair_material` 含 FIFO 快照，迁移 `sql/migration-material-repair-material.sql`）
+  + Σ用料 FIFO 摊入回仓主物料（`applyMaterial`/撤销 `reverseByBill`，漂移 0）。**无赔料应收**。
+- **补料入库零开发**：业务流 = 先开「物料发料单」（我方物料仓 → 供应商委外仓，DELIVERY_OUT/IN 既有能力）再维修。
+- **供应商清算过滤**（`SupplierSettlementServiceImpl`）：清算行加 `stockForm=MATERIAL` 条件——送修在厂行不参与清算调回。
+- **前端**：`warehouse-detail.vue` 物料表加形态 tag 列 + StockFormLabel；`material-stock/detail.vue` 跨仓分布
+  加"送修在厂"列（后端 `material-stock/page` 聚合键升级为 仓+物料+形态，在厂行不混入良品/不良）；
+  `material-return/detail.vue` 登记弹窗加实际用料多行 + 记录卡用料列；enums.ts 四个新 code 映射。
+- **实证**：物料 33×5 从仓 68 送修供应商 34（仓 66）→ 源仓 738/在厂 5；返回（含子物料 35×4）→ 在厂 0/源仓 743/料 −4/
+  用料明细 1 行/应收 0/成本结转；撤销 → 回"已送修未返回"状态（成本漂移 0）；反审核 → 全库 14572 复原。
+
 ### P1-1 落地记录 ✅（2026-09-25，提交待填）
 - **改造**（`OutsourceOrderDeliveryServiceImpl`）：`applyDefectStockNoOrder`/`revertDefectStockNoOrder` 重写为跨仓转移 ——
   我方仓扣成品（MATERIAL，OUTSOURCE_DEFECT_RETURN，沿用原口径）＋ 委外仓入成品（**FORM_PRODUCT_DEFECT**，新流水 code

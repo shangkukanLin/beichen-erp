@@ -354,7 +354,7 @@ public class WarehouseStockController {
 
         List<WarehouseStock> all = stockMapper.selectList(qw);
 
-        // 聚合：键 = 仓库ID + 物料ID
+        // 聚合：键 = 仓库ID + 物料ID + 库存形态（2026-09-25 物料形态化：MATERIAL_REPAIR 在厂行不得混入良品/不良）
         Map<String, Map<String, Object>> agg = new LinkedHashMap<>();
         Set<Long> whIds = new HashSet<>();
         Set<Long> mIds = new HashSet<>();
@@ -364,16 +364,25 @@ public class WarehouseStockController {
             if (whId == null || mId == null) continue;
             whIds.add(whId);
             mIds.add(mId);
-            String key = whId + "_" + mId;
+            String form = s.getStockForm() != null && !s.getStockForm().isBlank()
+                    ? s.getStockForm() : WarehouseStock.FORM_MATERIAL;
+            String key = whId + "_" + mId + "_" + form;
             Map<String, Object> row = agg.computeIfAbsent(key, k -> {
                 Map<String, Object> m = new LinkedHashMap<>();
                 m.put("warehouseId", whId);
                 m.put("materialId", mId);
+                m.put("stockForm", form);
                 m.put("qtyGood", BigDecimal.ZERO);
                 m.put("qtyDefect", BigDecimal.ZERO);
+                m.put("qtyRepairOnSite", BigDecimal.ZERO);
                 return m;
             });
             BigDecimal q = s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
+            if (!WarehouseStock.FORM_MATERIAL.equals(form)) {
+                // 非常规形态（如 MATERIAL_REPAIR 送修在厂）：单独字段回传，不混入良品/不良
+                row.put("qtyRepairOnSite", ((BigDecimal) row.get("qtyRepairOnSite")).add(q));
+                continue;
+            }
             // 按物料品质枚举显式归类：**不可用 else 兜底**，否则未知/脏值会被静默算进良品
             String qt = s.getQualityType();
             if (QualityType.DEFECT.getCode().equals(qt)) {

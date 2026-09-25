@@ -11,6 +11,7 @@ const StockFormLabel: Record<string, string> = {
   MATERIAL: '物料',
   PRODUCT_DEFECT: '成品（加工退货）',
   PRODUCT_REPAIR: '成品（维修退货）',
+  MATERIAL_REPAIR: '物料（送修在厂）',
 }
 
 const route = useRoute()
@@ -161,6 +162,13 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
         <el-table-column prop="materialTypeName" label="物料类型" width="100" />
         <el-table-column prop="materialName" label="物料名称" min-width="160" show-overflow-tooltip />
         <el-table-column prop="unit" label="单位" width="70" align="center" />
+        <!-- 2026-09-25 物料形态化：送修在厂行（MATERIAL_REPAIR）与常规物料行并存，tag 区分 -->
+        <el-table-column label="形态" width="110" align="center">
+          <template #default="{row}">
+            <el-tag v-if="row.stockForm && row.stockForm !== 'MATERIAL'" type="warning" size="small">{{ StockFormLabel[row.stockForm] || row.stockForm }}</el-tag>
+            <span v-else style="color:var(--app-text-placeholder)">常规</span>
+          </template>
+        </el-table-column>
         <el-table-column label="质量类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.qualityType===QualityType.DEFECT?'danger':'success'" size="small">{{ QualityTypeLabel[row.qualityType] || '良品' }}</el-tag></template></el-table-column>
         <el-table-column label="库存数量" width="130" align="right">
           <template #default="{row}">

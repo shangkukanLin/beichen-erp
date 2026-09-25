@@ -162,6 +162,14 @@ public enum StockChangeType {
     MATERIAL_REPAIR_IN("委外物料维修入"),
     /** 取消委外物料维修入：撤销维修返回登记，把已入库物料扣回 */
     CANCEL_MATERIAL_REPAIR_IN("取消委外物料维修入"),
+    /** 物料（维修送修）入供应商仓：送修审核，以 MATERIAL_REPAIR 形态进供应商委外仓（2026-09-25 物料形态化） */
+    MATERIAL_REPAIR_STOCK_IN("物料维修送修入供应商仓"),
+    /** 核销物料（维修送修）：维修返回登记扣减在厂行（−）/ 送修反审核恢复（+）（2026-09-25 物料形态化） */
+    CANCEL_MATERIAL_REPAIR_STOCK_IN("核销物料维修送修"),
+    /** 维修补料耗用：维修返回登记按实际用料（可超 BOM）从供应商委外仓扣子物料（2026-09-25 物料形态化） */
+    MATERIAL_REPAIR_COMPONENT("维修补料耗用"),
+    /** 维修补料恢复：撤销维修返回，等量回补供应商委外仓子物料（2026-09-25 物料形态化） */
+    CANCEL_MATERIAL_REPAIR_COMPONENT("维修补料恢复"),
 
     // ===== 供应商清算 =====
     /** 清算退料入：供应商清算后退料入库 */

@@ -680,6 +680,22 @@ CREATE TABLE IF NOT EXISTS outsource_return_back_item (
     INDEX idx_return_back_id (return_back_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='加工返回单用料明细';
 
+-- 2026-09-25 物料形态化：维修返回的【实际用料（子物料）】明细（可超 BOM、允许扣负）。
+-- 送修 = 物料以 stock_form=MATERIAL_REPAIR 进供应商委外仓；返回登记 = 核销在厂行 + 回我方仓 + 按实际用料扣子物料
+-- + FIFO 结转成本到回仓主物料；**无赔料应收**（与成品维修同口径）。
+CREATE TABLE IF NOT EXISTS outsource_material_return_repair_material (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    repair_record_id BIGINT NOT NULL COMMENT '维修返回记录ID(outsource_material_return_repair.id)',
+    material_id BIGINT NOT NULL COMMENT '子物料ID(outsource_material.id，实际耗用的补料)',
+    material_name VARCHAR(100) COMMENT '子物料名称快照',
+    unit VARCHAR(20) COMMENT '单位',
+    quantity DECIMAL(18,0) NOT NULL COMMENT '实际耗用数量(可超BOM标准用量)',
+    unit_price DECIMAL(18,4) COMMENT 'FIFO单价快照(登记时)',
+    amount DECIMAL(18,2) COMMENT '金额=单价×数量快照(登记时)',
+    company_id BIGINT COMMENT '公司ID',
+    INDEX idx_repair_record_id (repair_record_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='物料维修返回实际用料明细';
+
 CREATE TABLE IF NOT EXISTS outsource_material_return (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     code VARCHAR(50) NOT NULL COMMENT '退货单号',

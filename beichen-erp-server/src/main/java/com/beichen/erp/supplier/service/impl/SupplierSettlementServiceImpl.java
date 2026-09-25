@@ -186,7 +186,10 @@ public class SupplierSettlementServiceImpl implements SupplierSettlementService 
             List<WarehouseStock> list = warehouseStockMapper.selectList(
                     new LambdaQueryWrapper<WarehouseStock>()
                             .eq(WarehouseStock::getWarehouseId, wh.getId())
-                            .gt(WarehouseStock::getQuantity, BigDecimal.ZERO));
+                            .gt(WarehouseStock::getQuantity, BigDecimal.ZERO)
+                            // 2026-09-25 物料形态化：只清常规 MATERIAL 行 —— 送修在厂（MATERIAL_REPAIR）等
+                            // 非常规形态行是"货在供应商手里未修完"的账，**不得**被清算调回我方仓
+                            .eq(WarehouseStock::getStockForm, WarehouseStock.FORM_MATERIAL));
             if (list.isEmpty()) continue;
 
             OutsourceDelivery delivery = new OutsourceDelivery();

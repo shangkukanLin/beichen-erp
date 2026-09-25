@@ -46,6 +46,13 @@
             <span v-else style="color:#999">0</span>
           </template>
         </el-table-column>
+        <!-- 2026-09-25 物料形态化：送修在厂行（MATERIAL_REPAIR）单独展示，不混入良品/不良 -->
+        <el-table-column label="送修在厂" width="110" align="right">
+          <template #default="{ row }">
+            <el-tag v-if="row.qtyRepairOnSite > 0" type="warning" size="small">{{ fmt(row.qtyRepairOnSite) }}</el-tag>
+            <span v-else style="color:#999">0</span>
+          </template>
+        </el-table-column>
         <el-table-column label="小计" width="110" align="right">
           <template #default="{ row }"><strong>{{ fmt(totalQty(row)) }}</strong></template>
         </el-table-column>
@@ -81,10 +88,10 @@ const tableLoading = ref(false)
 const summary = ref<any>(null)
 const rows = ref<any[]>([])
 
-// 数量一律整数（与成品库存分布详情一致）
+// 数量一律整数（与成品库存分布详情一致）；总库存含"送修在厂"（2026-09-25 物料形态化）
 function fmt(v?: number) { return v == null ? '0' : String(Math.round(Number(v))) }
 function totalQty(row: any) {
-  return (Number(row?.qtyGood) || 0) + (Number(row?.qtyDefect) || 0)
+  return (Number(row?.qtyGood) || 0) + (Number(row?.qtyDefect) || 0) + (Number(row?.qtyRepairOnSite) || 0)
 }
 function totalOf(row: any) { return row ? totalQty(row) : 0 }
 
@@ -113,15 +120,15 @@ function sumBy(key: string) {
 
 /**
  * 表格底部合计行：按列索引取值（品质列用自定义插槽，没有 prop，只能按固定列序映射）
- * 列序：0 仓库 / 1 良品 / 2 不良 / 3 小计 / 4 占比
+ * 列序：0 仓库 / 1 良品 / 2 不良 / 3 送修在厂 / 4 小计 / 5 占比
  */
 function summaries({ columns }: any) {
-  const keys = ['qtyGood', 'qtyDefect']
+  const keys = ['qtyGood', 'qtyDefect', 'qtyRepairOnSite']
   return columns.map((_c: any, i: number) => {
     if (i === 0) return '合计'
-    if (i >= 1 && i <= 2) return fmt(sumBy(keys[i - 1]))
-    if (i === 3) return fmt(rows.value.reduce((s, r) => s + totalQty(r), 0))
-    if (i === 4) return rows.value.length ? '100%' : ''
+    if (i >= 1 && i <= 3) return fmt(sumBy(keys[i - 1]))
+    if (i === 4) return fmt(rows.value.reduce((s, r) => s + totalQty(r), 0))
+    if (i === 5) return rows.value.length ? '100%' : ''
     return ''
   })
 }

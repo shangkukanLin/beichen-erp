@@ -23,6 +23,8 @@ public class WarehouseStock {
     public static final String FORM_PRODUCT_DEFECT = "PRODUCT_DEFECT";
     /** 成品（维修退货）：客户退回的售后品推给工厂维修 —— **我方责任**（不赔料；工厂可收维修费） */
     public static final String FORM_PRODUCT_REPAIR = "PRODUCT_REPAIR";
+    /** 物料（维修送修）：委外物料送供应商维修，修好前在厂可盘点 —— **我方责任**（无赔料应收，2026-09-25 物料形态化） */
+    public static final String FORM_MATERIAL_REPAIR = "MATERIAL_REPAIR";
 
     @TableId(type = IdType.AUTO)
     private Long id;
