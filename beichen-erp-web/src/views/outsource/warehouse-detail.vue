@@ -6,6 +6,13 @@ import * as XLSX from 'xlsx'
 import { QualityType, QualityTypeLabel } from '@/api/enums'
 import PageShell from '@/components/PageShell.vue'
 
+/** 库存形态（2026-09-25 P0-3）：与 /warehouse/stock/by-warehouse 返回的 stockForm 对应 */
+const StockFormLabel: Record<string, string> = {
+  MATERIAL: '物料',
+  PRODUCT_DEFECT: '成品（加工退货）',
+  PRODUCT_REPAIR: '成品（维修退货）',
+}
+
 const route = useRoute()
 const router = useRouter()
 const warehouseId = Number(route.params.id)
@@ -36,6 +43,11 @@ async function loadProjects() {
  * （`materialTypeSortOrder`，本次一并补齐），前端不再依赖可改的展示名、也无需额外请求类型字典。
  */
 const PRIORITY_SORT_ORDER_MAX = 2
+
+/** 退回成品（加工退货/维修退货）在厂库存（2026-09-25 P0-3 新增展示；当前委外仓尚无此类行，P1/P2 落地后出现） */
+const productStocks = computed(() =>
+  (materials.value as any[]).filter((m) => m.productId != null && m.stockForm && m.stockForm !== 'MATERIAL')
+)
 
 /**
  * 负库存项（2026-09-17 F3）：委外仓允许"缺料强制出库"（收货领料走 force 口径）会形成负库存，
@@ -164,6 +176,20 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
         </el-table-column>
       </el-table>
       <div v-if="sortedMaterials.length===0" style="text-align:center;color:var(--app-text-secondary);padding:24px">暂无关联物料</div>
+    </el-card>
+
+    <!-- 2026-09-25 P0-3：退回成品在厂库存（加工退货 / 维修退货 **分开展示**，两者责任方不同不可混）。
+         当前委外仓只有物料行（成品行 = 0），P1/P2 落地后这里才会出现数据 -->
+    <el-card v-if="productStocks.length" shadow="never" class="table-card" style="margin-top:12px">
+      <template #header><span style="font-weight:600">退回成品（在厂）</span></template>
+      <el-table :data="productStocks" border stripe size="small">
+        <el-table-column label="形态" width="150" align="center">
+          <template #default="{row}"><el-tag :type="row.stockForm==='PRODUCT_DEFECT'?'danger':'warning'" size="small">{{ StockFormLabel[row.stockForm] || row.stockForm }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="产品" min-width="160"><template #default="{row}">{{ row.productName || ('#' + row.productId) }}</template></el-table-column>
+        <el-table-column label="规格" width="90" align="center"><template #default="{row}">{{ row.qualityType || '-' }}</template></el-table-column>
+        <el-table-column label="数量" width="110" align="right"><template #default="{row}">{{ row.quantity }}</template></el-table-column>
+      </el-table>
     </el-card>
   </PageShell>
 </template>
