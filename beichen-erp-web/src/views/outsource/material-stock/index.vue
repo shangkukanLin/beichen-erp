@@ -41,13 +41,23 @@
         <el-table-column prop="materialTypeName" label="物料类型" min-width="104" show-overflow-tooltip>
           <template #default="{ row }">{{ row.materialTypeName || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="materialName" label="物料名称" min-width="150" show-overflow-tooltip />
+        <!-- 2026-09-26 B5b（用户口径「数据显示完整 + 物料/仓库可点」）：行粒度是「仓库 × 物料」，
+             两列都做成链接：物料 → 物料库存分布详情；仓库 → 仓库详情（按 warehouseCategory 分流委外/自有）。 -->
+        <el-table-column label="物料名称" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button v-if="row.materialId" type="primary" link @click.stop="router.push(`/outsource/material-stock/detail/${row.materialId}`)">{{ row.materialName }}</el-button>
+            <span v-else>{{ row.materialName || '—' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="unit" label="单位" min-width="70" align="center">
           <template #default="{ row }">{{ row.unit || '—' }}</template>
         </el-table-column>
         <!-- 2026-09-24（用户口径：不再做聚合数据）：行粒度改为「仓库 × 物料」⇒ 必须有仓库列 -->
         <el-table-column label="所在仓库" min-width="150" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.warehouseName || '—' }}</template>
+          <template #default="{ row }">
+            <el-button v-if="row.warehouseId" type="primary" link @click.stop="goWarehouse(row)">{{ row.warehouseName || '—' }}</el-button>
+            <span v-else>{{ row.warehouseName || '—' }}</span>
+          </template>
         </el-table-column>
         <!-- 品质数量用紧凑数字（非 tag）：两档 + 汇总列要在一屏内放得下，避免横向滚动 -->
         <el-table-column label="良品" min-width="86" align="right">
@@ -72,10 +82,22 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { WarehouseCategory, WarehouseType } from '@/api/enums'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+
+const router = useRouter()
+/**
+ * 仓库详情分流（2026-09-26 B5b）：本页行粒度是「仓库 × 物料」，仓库可能是委外仓或自有物料仓，
+ * 两者详情页不同。接口行里已带 warehouseCategory（后端为前端区分两类仓专门回传）⇒ 零额外请求。
+ */
+function goWarehouse(row: any) {
+  if (!row?.warehouseId) return
+  if (row.warehouseCategory === WarehouseCategory.OUTSOURCE) router.push(`/outsource/warehouse/detail/${row.warehouseId}`)
+  else router.push(`/inventory/warehouse/detail/${row.warehouseId}`)
+}
 // 导出的拼装逻辑抽在 ./export.ts（纯函数、无 XLSX/Vue 依赖）⇒ 可被 node 用例直测
 import { buildMaterialSheets } from './export'
 

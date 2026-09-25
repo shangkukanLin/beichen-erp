@@ -25,13 +25,16 @@
 
     <el-card shadow="never" class="table-card">
       <el-table v-loading="loading" :data="tableData" border stripe max-height="calc(100vh - 260px)">
-        <el-table-column prop="createTime" label="时间" width="160">
+        <!-- 2026-09-26 B5b（实测驱动，与成品侧「库存流水」同口径）：时间 160→**96**（该列只显示日期，
+             原 160 白占 64px）、变动类型 110→150（中文枚举实测需 192 ⇒ 白名单 + tooltip）、
+             关联单号 120→**166**（实测需 161）、仓库 120→**150**、数量列 84/92/92。 -->
+        <el-table-column prop="createTime" label="时间" width="96">
           <template #default="{ row }">{{ $fmtDate(row.createTime) }}</template>
         </el-table-column>
-        <el-table-column prop="changeType" label="变动类型" width="110" align="center">
+        <el-table-column label="变动类型" width="150" align="center" show-overflow-tooltip>
           <template #default="{ row }"><el-tag :type="logTagType(row.changeType)" size="small">{{ StockChangeTypeLabel[row.changeType] || row.changeType }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="关联单号" width="120">
+        <el-table-column label="关联单号" width="166" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link v-if="billLink(row.relatedBillType, row.relatedBillId)" type="primary" underline="never"
               @click="handleBillClick(row)">
@@ -40,10 +43,15 @@
             <span v-else>{{ row.relatedBillNo }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="物料名称" min-width="140">
-          <template #default="{ row }">{{ materialName(row) }}</template>
+        <!-- 2026-09-26 B5b：物料名称做成链接进物料库存分布详情（与成品侧「产品名称」对称） -->
+        <el-table-column label="物料名称" min-width="110" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button v-if="row.materialId" type="primary" link @click.stop="router.push(`/outsource/material-stock/detail/${row.materialId}`)">{{ materialName(row) }}</el-button>
+            <span v-else>{{ materialName(row) }}</span>
+          </template>
         </el-table-column>
-        <el-table-column label="仓库" width="120">
+        <!-- 仓库 120→150（委外仓名实测需 189，白名单 + tooltip）；点击按仓库类别分流（委外仓 / 自有物料仓） -->
+        <el-table-column label="仓库" width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <!-- 物料可能存放在委外仓（实测占大半），仓库名可点进仓库详情 -->
             <el-button v-if="row.warehouseId" type="primary" link @click.stop="goWarehouse(row.warehouseId)">
@@ -52,13 +60,13 @@
             <span v-else>{{ warehouseName(row.warehouseId) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="changeQuantity" label="变动数量" width="96" align="right">
+        <el-table-column prop="changeQuantity" label="变动数量" width="84" align="right">
           <template #default="{ row }">{{ fmt(row.changeQuantity) }}</template>
         </el-table-column>
-        <el-table-column prop="beforeQuantity" label="变动前库存" width="104" align="right">
+        <el-table-column prop="beforeQuantity" label="变动前库存" width="92" align="right">
           <template #default="{ row }">{{ fmt(row.beforeQuantity) }}</template>
         </el-table-column>
-        <el-table-column prop="afterQuantity" label="变动后库存" width="104" align="right">
+        <el-table-column prop="afterQuantity" label="变动后库存" width="92" align="right">
           <template #default="{ row }">{{ fmt(row.afterQuantity) }}</template>
         </el-table-column>
       </el-table>
@@ -257,7 +265,16 @@ function handleBillClick(row: any) {
     router.push({ path: route, query: { billId: String(billId), billType } })
   }
 }
-function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
+/**
+ * 仓库详情分流（2026-09-26 B5b 修复）：物料流水**大半发生在委外仓**，原实现一律跳 /inventory/warehouse/detail
+ * ⇒ 委外仓会落到"仓库不存在/空页"。改为按仓库类别分流（仓库列表本页已全量加载 => 零额外请求）。
+ */
+function goWarehouse(id?: number) {
+  if (id == null) return
+  const w = warehouseOptions.value.find((x: any) => x.id === id)
+  if (w?.warehouseCategory === WarehouseCategory.OUTSOURCE) router.push(`/outsource/warehouse/detail/${id}`)
+  else router.push(`/inventory/warehouse/detail/${id}`)
+}
 
 onMounted(async () => { await Promise.all([loadWarehouses(), loadMaterialMap()]); loadData() })
 </script>

@@ -90,13 +90,16 @@ onMounted(()=>{ loadWarehouses(); loadData() })
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1040px > 内容区 948px
            ⇒ 横向滚动 92px。收窄为合计 836px（仓库/物料明细/备注保持 min-width，宽屏自动吃余量）。 -->
       <el-table :data="list" border stripe v-loading="loading" @row-click="handleEdit">
-        <el-table-column prop="code" label="单号" width="120" show-overflow-tooltip/>
+        <!-- 2026-09-26 B5b：单号 120→**156**（OWO-+11 位，实测需 156，原先被截断）并做成链接进详情 -->
+        <el-table-column label="单号" width="156" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="handleEdit(row)">{{ row.code }}</el-button></template>
+        </el-table-column>
         <el-table-column label="仓库" min-width="120" show-overflow-tooltip><template #default="{row}"><el-button type="primary" link @click.stop="goWarehouseDetail(row.warehouseId)">{{ getWhName(row.warehouseId) }}</el-button></template></el-table-column>
         <el-table-column label="日期" width="100"><template #default="{row}">{{ $fmtDate(row.ioDate) }}</template></el-table-column>
         <el-table-column label="物料明细" min-width="140" show-overflow-tooltip>
           <template #default="{row}"><span v-if="row.itemSummary">{{row.itemSummary}}</span><span v-else style="color:var(--app-text-placeholder)">-</span></template>
         </el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="110" show-overflow-tooltip/>
+        <el-table-column prop="remark" label="备注" min-width="130" show-overflow-tooltip/>
         <el-table-column label="状态" width="76" align="center">
           <template #default="{row}">
             <el-tag v-if="row.status===DocStatus.DRAFT" :type="DocStatusTag[row.status]" size="small">{{ DocStatusLabel[row.status] }}</el-tag>

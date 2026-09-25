@@ -60,7 +60,15 @@ $routes = @(
   '/inventory/warehouse-move',
   '/inventory/stock-take',
   '/inventory/stock-loss',
-  '/inventory/material-move'
+  '/inventory/material-move',
+  # --- 2026-09-26 B5b 物料仓库 ---
+  '/outsource/warehouse',
+  '/outsource/material-warehouse',
+  '/outsource/material-stock',
+  '/outsource/material-stock-log',
+  '/outsource/material-stock-take',
+  '/outsource/stock-loss',
+  '/outsource/other-io'
 )
 if ($Only -ne '') { $routes = @($routes | Where-Object { $_ -match $Only }) }
 

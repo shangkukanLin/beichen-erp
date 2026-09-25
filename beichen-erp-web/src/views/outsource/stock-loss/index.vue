@@ -36,26 +36,35 @@
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1230px > 内容区 956px
            ⇒ 横向滚动 274px。收窄为合计 942px（报损单号/仓库/报损明细保持 min-width，宽屏自动吃余量）。 -->
       <el-table v-loading="loading" :data="rows" border stripe>
-        <el-table-column prop="code" label="报损单号" min-width="112" show-overflow-tooltip />
-        <el-table-column prop="warehouseName" label="仓库" min-width="100" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.warehouseName || '—' }}</template>
+        <el-table-column label="报损单号" width="152" show-overflow-tooltip>
+          <template #default="{ row }"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button></template>
         </el-table-column>
-        <el-table-column prop="lossDate" label="报损日期" width="96" />
-        <el-table-column label="报损原因" width="88" show-overflow-tooltip>
+        <!-- 2026-09-26 B5b（用户口径「数据显示完整 + 单号/仓库可点」）：
+             报损单号 min112→152 + 可点（WBS-+11 位原被截断）；仓库 min100→130 + 可点（**委外仓/自有物料仓分流**）；
+             报损明细 min124→130（明细汇总长度无上界 ⇒ 白名单 + tooltip）；日期 92、原因 80、金额 80、状态 72、审核人 70。
+             合计 = 152+130+92+80+130+80+72+70+132 = **938** ✓ -->
+        <el-table-column label="仓库" min-width="130" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-button v-if="row.warehouseId" type="primary" link @click.stop="goWarehouseDetail(row.warehouseId)">{{ row.warehouseName || '—' }}</el-button>
+            <span v-else>{{ row.warehouseName || '—' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="lossDate" label="报损日期" width="92" />
+        <el-table-column label="报损原因" width="80" show-overflow-tooltip>
           <template #default="{ row }">{{ LossReasonLabel[row.lossReason] || row.lossReason || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="itemSummary" label="报损明细" min-width="124" show-overflow-tooltip>
+        <el-table-column prop="itemSummary" label="报损明细" min-width="130" show-overflow-tooltip>
           <template #default="{ row }">{{ row.itemSummary || '—' }}</template>
         </el-table-column>
-        <el-table-column label="报损金额" width="96" align="right">
+        <el-table-column label="报损金额" width="80" align="right">
           <template #default="{ row }">{{ money(row.totalAmount) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="76" align="center">
+        <el-table-column label="状态" width="72" align="center">
           <template #default="{ row }">
             <el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="审核人" width="80" show-overflow-tooltip>
+        <el-table-column label="审核人" width="70" show-overflow-tooltip>
           <template #default="{ row }">{{ row.auditorName || '—' }}</template>
         </el-table-column>
         <!-- 2026-09-24（用户口径）：草稿态在**详情页**改+存（含明细增删）⇒ 列表去掉「编辑」入口；操作列 174→132。 -->
@@ -149,6 +158,24 @@ function onSizeChange(v: number) { page.pageSize = v; page.pageNum = 1; load() }
 
 function goAdd() { router.push('/outsource/stock-loss/add') }
 function goDetail(row: any) { router.push(`/outsource/stock-loss/detail/${row.id}`) }
+
+/**
+ * 仓库可点（2026-09-26 B5b）：物料报损的仓库可能是**委外仓**（物料在工厂处）或**自有物料仓**（辅料仓），
+ * 两者详情页不同 ⇒ 与物料退货/物料移仓同口径分流。挂载时拉一次仓库列表建 id→category 映射（1 次请求）。
+ */
+const warehouses = ref<any[]>([])
+async function loadWarehouses() {
+  try {
+    const r = await request.get<any, any>('/warehouse/page', { params: { pageSize: 500, warehouseName: '' } })
+    warehouses.value = r?.records || []
+  } catch { warehouses.value = [] }
+}
+function goWarehouseDetail(id?: number) {
+  if (id == null) return
+  const w = warehouses.value.find((x: any) => x.id === id)
+  if (w?.warehouseCategory === 'OUTSOURCE') router.push(`/outsource/warehouse/detail/${id}`)
+  else router.push(`/inventory/warehouse/detail/${id}`)
+}
 /* 2026-09-24（用户口径）：goEdit 已移除 —— 草稿态编辑统一在详情页内联完成（含明细增删），列表不再提供编辑入口。 */
 
 async function onAudit(row: any) {
@@ -184,7 +211,7 @@ async function onCancel(row: any) {
   } catch (e: any) { ElMessage.error(e?.message || '作废失败') }
 }
 
-onMounted(() => { loadReasons(); load() })
+onMounted(() => { loadReasons(); loadWarehouses(); load() })
 // 2026-09-24：本路由在 keep-alive 内 ⇒ 从详情页（草稿就地编辑）/新增页返回时 onMounted 不再触发、列表会停在旧数据。
 // 保存/审核/反审核/作废成功后置脏标志，回到列表才拉一次（保留查询条件与分页现场）。此前只有成品报损有此机制。
 onActivated(() => {

@@ -82,9 +82,20 @@ onMounted(() => { loadFactories(); loadData() })
       </el-tabs>
 
       <el-table v-if="activeTab==='active'" :data="activeData" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleDetail">
-        <el-table-column prop="factoryName" label="所属供应商" width="140" show-overflow-tooltip />
-        <el-table-column prop="warehouseName" label="仓库名称" min-width="140" />
-        <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
+        <!-- 2026-09-26 B5b（用户口径「数据显示完整 + 仓库/主体可点」，实测驱动）：
+             所属供应商 140→**160**（实测需 218 ⇒ 已登记白名单 + tooltip）并做成链接进供应商详情；
+             仓库名称 min140→**180**（委外仓名 = 主体名 +「委外仓」后缀，实测最长 274 ⇒ 白名单 + tooltip）
+             并做成链接进委外仓详情；地址 min150→140 抵平（合计 860 ≤ 948）。两张表（启用/停用）同步。 -->
+        <el-table-column label="所属供应商" width="160" show-overflow-tooltip>
+          <template #default="{row}">
+            <el-button v-if="row.factoryId" type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button>
+            <span v-else>{{ row.factoryName }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="仓库名称" min-width="180" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">{{ row.warehouseName }}</el-button></template>
+        </el-table-column>
+        <el-table-column prop="address" label="地址" min-width="140" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="80" />
         <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="操作" width="180" align="center">
@@ -93,9 +104,16 @@ onMounted(() => { loadFactories(); loadData() })
       </el-table>
 
       <el-table v-if="activeTab==='stopped'" :data="stoppedData" border stripe style="width:100%" @row-click="handleDetail">
-        <el-table-column prop="factoryName" label="所属供应商" width="140" show-overflow-tooltip />
-        <el-table-column prop="warehouseName" label="仓库名称" min-width="140" />
-        <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
+        <el-table-column label="所属供应商" width="160" show-overflow-tooltip>
+          <template #default="{row}">
+            <el-button v-if="row.factoryId" type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button>
+            <span v-else>{{ row.factoryName }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="仓库名称" min-width="180" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">{{ row.warehouseName }}</el-button></template>
+        </el-table-column>
+        <el-table-column prop="address" label="地址" min-width="140" show-overflow-tooltip />
         <el-table-column prop="contact" label="联系人" width="80" />
         <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="操作" width="180" align="center">

@@ -82,7 +82,10 @@ onMounted(() => loadData())
 
       <el-table v-if="activeTab==='active'" :data="activeData" border stripe v-loading="tableLoading" style="width:100%" @row-click="handleDetail">
         <el-table-column prop="code" label="仓库编码" width="160" />
-        <el-table-column prop="warehouseName" label="仓库名称" min-width="140" show-overflow-tooltip />
+        <!-- 2026-09-26 B5b：仓库名称做成链接进仓库详情（自有物料仓 ⇒ 固定走 /inventory/warehouse） -->
+        <el-table-column prop="warehouseName" label="仓库名称" min-width="140" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">{{ row.warehouseName }}</el-button></template>
+        </el-table-column>
         <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="manager" label="负责人" width="80" />
@@ -94,7 +97,10 @@ onMounted(() => loadData())
 
       <el-table v-if="activeTab==='stopped'" :data="stoppedData" border stripe style="width:100%" @row-click="handleDetail">
         <el-table-column prop="code" label="仓库编码" width="160" />
-        <el-table-column prop="warehouseName" label="仓库名称" min-width="140" show-overflow-tooltip />
+        <!-- 2026-09-26 B5b：仓库名称做成链接进仓库详情（自有物料仓 ⇒ 固定走 /inventory/warehouse） -->
+        <el-table-column prop="warehouseName" label="仓库名称" min-width="140" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">{{ row.warehouseName }}</el-button></template>
+        </el-table-column>
         <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
         <el-table-column prop="manager" label="负责人" width="80" />
