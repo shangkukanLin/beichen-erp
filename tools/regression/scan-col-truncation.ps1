@@ -110,7 +110,7 @@ $allowB64 = B64 ([string](ZH 'col_allow_truncate'))
 # Labels/samples come back BASE64: PowerShell reads our stdout as GBK, so raw Chinese would be mangled
 # before it reaches the JSON report. btns = # cells in that column already containing a button/link
 # (i.e. "this column is already clickable") -- useful when planning the click-through work.
-$js = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const B=s=>btoa(unescape(encodeURIComponent(s||'')));const AL=T('$allowB64').split(',').map(s=>s.trim()).filter(Boolean);const vis=e=>e.getClientRects().length>0;const out=[];const ts=[...document.querySelectorAll('.el-table')].filter(vis);ts.forEach((t,ti)=>{const hr=t.querySelector('.el-table__header tr:last-child');const ths=hr?[...hr.querySelectorAll('th')]:[];const rows=[...t.querySelectorAll('.el-table__body tbody tr')].filter(r=>r.getClientRects().length>0);const cols=ths.map((th,ci)=>{const lb=((th.querySelector('.cell')||th).innerText||'').trim();let clipped=0,wrap=0,btns=0,sample='',need=0;rows.forEach(r=>{const tds=r.querySelectorAll('td');if(ci>=tds.length)return;const td=tds[ci];const c=td.querySelector('.cell');if(!c)return;if(td.querySelector('.el-button,.el-link'))btns++;const sw=c.scrollWidth,cw=c.clientWidth;const txt=(c.innerText||'').trim();if(sw-cw>1){clipped++;if(sw>need){need=sw;sample=txt}}if(c.getBoundingClientRect().height>26)wrap++;});const w=th?Math.round(th.getBoundingClientRect().width):0;const hc=th?th.querySelector('.cell'):null;const hsw=hc?hc.scrollWidth:0,hcw=hc?hc.clientWidth:0;const hdrClip=(hc&&hsw-hcw>1)?1:0;return {label:B(lb),sample:B(sample.slice(0,28)),width:w,clipped:clipped,wrapped:wrap,btns:btns,need:need>0?need+18:0,hdrClip:hdrClip,hdrNeed:hdrClip?hsw+18:0,allowed:AL.indexOf(lb)>=0};});out.push({idx:ti,cols:ths.length,rows:rows.length,detail:cols});});return JSON.stringify(out)})()"
+$js = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const B=s=>btoa(unescape(encodeURIComponent(s||'')));const AL=T('$allowB64').split(',').map(s=>s.trim()).filter(Boolean);const vis=e=>e.getClientRects().length>0;const out=[];const ts=[...document.querySelectorAll('.el-table')].filter(vis);ts.forEach((t,ti)=>{const hr=t.querySelector('.el-table__header tr:last-child');const ths=hr?[...hr.querySelectorAll('th')]:[];const rows=[...t.querySelectorAll('.el-table__body tbody tr')].filter(r=>r.getClientRects().length>0);const cols=ths.map((th,ci)=>{const lb=((th.querySelector('.cell')||th).innerText||'').trim();let clipped=0,wrap=0,btns=0,sample='',need=0;rows.forEach(r=>{const tds=r.querySelectorAll('td');if(ci>=tds.length)return;const td=tds[ci];const c=td.querySelector('.cell');if(!c)return;if(td.querySelector('.el-button,.el-link'))btns++;const sw=c.scrollWidth,cw=c.clientWidth;const txt=(c.innerText||'').trim();if(sw-cw>0){clipped++;if(sw>need){need=sw;sample=txt}}if(c.getBoundingClientRect().height>26)wrap++;});const w=th?Math.round(th.getBoundingClientRect().width):0;const hc=th?th.querySelector('.cell'):null;let hsw=0,hcw=0,hdrClip=0,hdrText=0,hdrBox=0,hdrSlack=9999,hdrTight=0;if(hc){const cs=getComputedStyle(hc);hsw=hc.scrollWidth;hcw=hc.clientWidth;hdrClip=(hsw-hcw>0)?1:0;const lines=((hc.innerText||'').trim()).split(/\r?\n/);let tw=0;lines.forEach(L=>{const sp=document.createElement('span');sp.setAttribute('style','position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap;font:'+cs.font);sp.textContent=L;document.body.appendChild(sp);const rw=Math.ceil(sp.getBoundingClientRect().width);if(rw>tw){tw=rw}sp.remove()});hdrText=tw;hdrBox=Math.round(hcw-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight));hdrSlack=hdrBox-hdrText;hdrTight=(hdrSlack<2)?1:0}return {label:B(lb),sample:B(sample.slice(0,28)),width:w,clipped:clipped,wrapped:wrap,btns:btns,need:need>0?need+18:0,hdrClip:hdrClip,hdrNeed:hdrClip?hsw+18:0,hdrBox:hdrBox,hdrText:hdrText,hdrSlack:hdrSlack,hdrTight:hdrTight,allowed:AL.indexOf(lb)>=0};});out.push({idx:ti,cols:ths.length,rows:rows.length,detail:cols});});return JSON.stringify(out)})()"
 
 function Dec([string]$b) {
   if ([string]::IsNullOrEmpty($b)) { return '' }
@@ -146,21 +146,24 @@ foreach ($p in $routes) {
       # Clipped HEADER is the worst case (the column name itself unreadable): highest priority,
       # and it can NOT be whitelisted (a whitelist entry is about long cell content, never the label).
       if ([int]$c.hdrClip -gt 0) { $tag = 'HDRCLIP' }
+      elseif ([int]$c.hdrTight -gt 0) { $tag = 'HDRTIGHT' }
       elseif ([int]$c.wrapped -gt 0) { $tag = 'WRAPPED' }
       elseif ([int]$c.clipped -gt 0 -and -not $allowed) { $tag = 'CLIPPED' }
       $reportRows += [pscustomobject]@{
         page = $p; table = $t.idx; label = $label; width = [int]$c.width
         clipped = [int]$c.clipped; wrapped = [int]$c.wrapped; need = [int]$c.need
         hdrClip = [int]$c.hdrClip; hdrNeed = [int]$c.hdrNeed
+        hdrBox = [int]$c.hdrBox; hdrText = [int]$c.hdrText; hdrSlack = [int]$c.hdrSlack; hdrTight = [int]$c.hdrTight
         allowed = $allowed; btns = [int]$c.btns; sample = (Dec ([string]$c.sample)); rows = [int]$t.rows
       }
       if ($tag -ne '') {
-        $extra = if ([int]$c.hdrClip -gt 0) { ' hdrNeed=' + $c.hdrNeed } else { '' }
+        $extra = ' hdrText=' + $c.hdrText + ' hdrBox=' + $c.hdrBox + ' hdrSlack=' + $c.hdrSlack
         Write-Host ('    FAIL [' + $tag + '] ' + $p + ' table#' + $t.idx + ' col=' + $label + ' width=' + $c.width + ' clipped=' + $c.clipped + ' need=' + $c.need + $extra + ' rows=' + $t.rows)
-        $bad += [pscustomobject]@{ page = $p; table = $t.idx; label = $label; width = [int]$c.width; clipped = [int]$c.clipped; wrapped = [int]$c.wrapped; need = [int]$c.need; sample = [string]$c.sample }
+        $bad += [pscustomobject]@{ page = $p; table = $t.idx; label = $label; width = [int]$c.width; clipped = [int]$c.clipped; wrapped = [int]$c.wrapped; need = [int]$c.need; hdrText = [int]$c.hdrText; hdrBox = [int]$c.hdrBox; hdrSlack = [int]$c.hdrSlack; sample = [string]$c.sample }
       }
       $mark = ''
       if ([int]$c.hdrClip -gt 0) { $mark = $mark + '!HDR' }
+      if ([int]$c.hdrTight -gt 0) { $mark = $mark + '!TIGHT' + $c.hdrSlack }
       if ([int]$c.clipped -gt 0) { $mark = $mark + '!x' + $c.clipped }
       if ($allowed) { $mark = $mark + '*allow' }
       $note = $note + $label + '(' + $c.width + $mark + ') '

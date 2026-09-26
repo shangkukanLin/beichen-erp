@@ -182,7 +182,10 @@ function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="主体类型" width="72" align="center">
+        <!-- 2026-09-26 B6：表头「主体类型」4 字需 56px，列宽 72 时内容框仅 55px ⇒ 差 1px 被省略。
+             72→**76**（56 + 内边距 16 + 边框 1 + 3 余量）；为守住本页 956 的容器宽，从「金额」92→88 回收 4px
+             （金额正文最长 57px，88 仍宽敞）。 -->
+        <el-table-column label="主体类型" width="76" align="center">
           <template #default="{row}">
             <el-tag :type="row.subjectType === SubjectType.SUPPLIER ? 'warning' : 'primary'" size="small">{{ SubjectTypeLabel[row.subjectType] || '客户' }}</el-tag>
           </template>
@@ -190,7 +193,8 @@ function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/
         <el-table-column label="往来单位" min-width="114" show-overflow-tooltip><template #default="{row}">{{ subjectLabel(row) }}</template></el-table-column>
         <el-table-column label="账户" min-width="84" show-overflow-tooltip><template #default="{row}">{{ aName(row.accountId) }}</template></el-table-column>
         <el-table-column prop="receiptDate" label="日期" width="100" align="center"/>
-        <el-table-column prop="amount" label="金额" width="92" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
+        <!-- 2026-09-26 B6：92→88（让 4px 给「主体类型」的表头；金额正文最长 57px，88 内仍完整） -->
+        <el-table-column prop="amount" label="金额" width="88" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column label="状态" width="72" align="center"><template #default="{row}"><el-tag :type="stType(row.status)" size="small">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="170" align="center" fixed="right">
           <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button></template>

@@ -122,28 +122,35 @@ onActivated(() => { loadData() })
              最近成交 min82→**98**（日期：small 档需 ~99，原 10/10 行全被截断）；
              为抵平：金额列按可压缩余量收拢（销售额/退货额 82→78、净额/成本 70→78、利润 72→78、
              利润率 82→78、应收余额 92→78 ⇒ small 档 5 位金额需 ~79，正好放下），
-             占比 72→**56**、订单数 82→**56**（内容只需 ~45px，余量全部让给客户列）⇒ 声明合计 936 ✓ -->
-        <el-table-column label="销售额" min-width="72" align="right" sortable :sort-method="sortNum('amount')"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.amount) }}</span></template></el-table-column>
-        <el-table-column label="退货额" min-width="72" align="right" sortable :sort-method="sortNum('returnAmount')"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.returnAmount) }}</span></template></el-table-column>
-        <el-table-column label="净额" min-width="72" align="right" sortable :sort-method="sortNum('netAmount')"><template #default="{row}">{{ fmt(row.netAmount) }}</template></el-table-column>
+             占比 72→**56**、订单数 82→**56**（内容只需 ~45px，余量全部让给客户列）⇒ 声明合计 936 ✓
+             ⚠️ 上列数值已被下方 2026-09-26 B6 记录取代（当前现值以 B6 为准：声明合计 902）。 -->
+        <!-- 2026-09-26 B6（实测驱动）：本页金额列是**可排序**的，表头除文字外还常驻 14px 排序箭头 ⇒
+             表头真实需求 = 文字 + 17(内边距+边框) + 14(箭头)，正文需求 = 最长数字 + 17。
+             原 min-width 72 使「销售额/退货额/利润率」表头被省略（差 1px），且金额正文（最长 15520.00）也差 1px。
+             ⇒ 六列金额统一 72→**76**；被挤掉的宽度由同表「占比/订单/应收」76→**62**、「最近成交」98→**92**、
+             「操作」54→**48** 回收（这三处正文都远小于新值：占比「26.9%」、订单「22」、应收「120.00」）⇒
+             声明合计 902 ≤ 容器 948 ✓（全部 min-width，宽屏自动铺满）。 -->
+        <el-table-column label="销售额" min-width="76" align="right" sortable :sort-method="sortNum('amount')"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.amount) }}</span></template></el-table-column>
+        <el-table-column label="退货额" min-width="76" align="right" sortable :sort-method="sortNum('returnAmount')"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.returnAmount) }}</span></template></el-table-column>
+        <el-table-column label="净额" min-width="76" align="right" sortable :sort-method="sortNum('netAmount')"><template #default="{row}">{{ fmt(row.netAmount) }}</template></el-table-column>
         <!-- 成本按产品移动加权成本价估算（采购无法按客户归集），毛利=净额−成本 -->
-        <el-table-column label="成本" min-width="72" align="right" sortable :sort-method="sortNum('cost')"><template #default="{row}"><span style="color:var(--app-color-warning)">{{ fmt(row.cost) }}</span></template></el-table-column>
-        <el-table-column label="利润" min-width="72" align="right" sortable :sort-method="sortNum('profit')">
+        <el-table-column label="成本" min-width="70" align="right" sortable :sort-method="sortNum('cost')"><template #default="{row}"><span style="color:var(--app-color-warning)">{{ fmt(row.cost) }}</span></template></el-table-column>
+        <el-table-column label="利润" min-width="76" align="right" sortable :sort-method="sortNum('profit')">
           <template #default="{row}">
             <span :style="{color: Number(row.profit)>=0?'var(--app-color-success)':'var(--app-color-danger)', fontWeight:'600'}">{{ fmt(row.profit) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="利润率" min-width="72" align="right" sortable :sort-method="sortNum('profitRate')">
+        <el-table-column label="利润率" min-width="76" align="right" sortable :sort-method="sortNum('profitRate')">
           <template #default="{row}">
             <span :style="{color: Number(row.profitRate)>=0?'var(--app-color-success)':'var(--app-color-danger)'}">{{ fmt(row.profitRate) }}%</span>
           </template>
         </el-table-column>
         <!-- 占比列排序 = 按 amount 排（展示口径就是「该客户销售额 / 合计销售额」，两者同序） -->
-        <el-table-column label="占比" min-width="76" align="right" sortable :sort-method="sortNum('amount')"><template #default="{row}">{{ pct(Number(row.amount), Number(summary.totalAmount)) }}%</template></el-table-column>
-        <el-table-column label="订单" min-width="76" align="center" sortable :sort-method="sortNum('orderCount')"><template #default="{row}">{{ row.orderCount }}</template></el-table-column>
-        <el-table-column label="应收" min-width="76" align="right" sortable :sort-method="sortNum('unpaid')"><template #default="{row}"><span :style="{color: Number(row.unpaid)>0?'var(--app-color-warning)':'inherit'}">{{ fmt(row.unpaid) }}</span></template></el-table-column>
-        <el-table-column prop="lastDate" label="最近成交" min-width="98" align="center"/>
-        <el-table-column label="操作" min-width="54" align="center">
+        <el-table-column label="占比" min-width="62" align="right" sortable :sort-method="sortNum('amount')"><template #default="{row}">{{ pct(Number(row.amount), Number(summary.totalAmount)) }}%</template></el-table-column>
+        <el-table-column label="订单" min-width="62" align="center" sortable :sort-method="sortNum('orderCount')"><template #default="{row}">{{ row.orderCount }}</template></el-table-column>
+        <el-table-column label="应收" min-width="62" align="right" sortable :sort-method="sortNum('unpaid')"><template #default="{row}"><span :style="{color: Number(row.unpaid)>0?'var(--app-color-warning)':'inherit'}">{{ fmt(row.unpaid) }}</span></template></el-table-column>
+        <el-table-column prop="lastDate" label="最近成交" min-width="92" align="center"/>
+        <el-table-column label="操作" min-width="48" align="center">
           <template #default="{row}">
             <el-button link type="primary" @click="drill(row)">明细</el-button>
           </template>

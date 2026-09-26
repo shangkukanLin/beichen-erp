@@ -365,13 +365,17 @@ onActivated(() => {
                      ① 只显示单据号（去掉「销售退货单/销售换货单」类型标签）；
                      ② 单号可点击 → 进来源单据详情（换货单去换货详情、销售退货单去退货单详情，同详情页 goSource）。
                      列宽 116→150 让单号完整显示（去掉标签后仍有富余，不再被省略号截断）。 -->
-                <el-table-column label="来源单据" width="142" show-overflow-tooltip>
+                <!-- 2026-09-26 B6（实测）：本列正文是**链接按钮**（不是纯文本），最长单号「XTH-20260921022」实测
+                     131px ⇒ 需要 131 + 内边距 16 + 边框 1 + 2 余量 = **150**；原先 142 / 一度收 136 都会让 6 行被省略。
+                     同批把「单位」44→48、「可整理」60→62 补到安全值（此前差 1px / 余量 1px），
+                     宽度从同表富余列回收：来源日期 106→98、SKU 110→100、状态 72→68（三处正文分别只需 89/96/59）。 -->
+                <el-table-column label="来源单据" width="150" show-overflow-tooltip>
                   <template #default="{ row }">
                     <el-button v-if="row.sourceId" type="primary" link @click="goSource(row)">{{ row.sourceCode || '-' }}</el-button>
                     <span v-else>{{ row.sourceCode || '-' }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="来源日期" width="106">
+                <el-table-column label="来源日期" width="98">
                   <template #default="{ row }">{{ row.sourceDate || '-' }}</template>
                 </el-table-column>
                 <!-- 2026-09-26 B4：客户 84→118 并做成链接进客户详情（行自带 customerId） -->
@@ -381,13 +385,15 @@ onActivated(() => {
                     <span v-else>{{ row.customerName || '-' }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column prop="sku" label="SKU" width="110" show-overflow-tooltip />
+                <el-table-column prop="sku" label="SKU" width="100" show-overflow-tooltip />
                 <el-table-column prop="productName" label="产品" min-width="80" show-overflow-tooltip />
-                <el-table-column prop="unit" label="单位" width="44" />
+                <!-- 2026-09-26 B6：44→48（表头「单位」2 字需 28 + 内边距 16 + 边框 1 + 余量 3；44 时内容框仅 27px ⇒「单…」） -->
+                <el-table-column prop="unit" label="单位" width="48" />
                 <el-table-column label="待整理/已整理" width="110" align="center">
                   <template #default="{ row }">{{ row.remainQuantity ?? 0 }} / {{ row.sortedQuantity ?? 0 }}</template>
                 </el-table-column>
-                <el-table-column label="可整理" width="60" align="center">
+                <!-- 2026-09-26 B6：60→62（表头「可整理」3 字需 42 + 内边距 16 + 边框 1 + 余量 3） -->
+                <el-table-column label="可整理" width="62" align="center">
                   <template #default="{ row }">
                     <b :style="row.status === 'SHORTAGE' ? 'color:#f56c6c' : ''">{{ row.quantity ?? 0 }}</b>
                   </template>

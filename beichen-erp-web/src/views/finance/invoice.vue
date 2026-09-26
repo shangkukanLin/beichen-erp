@@ -150,10 +150,13 @@ onMounted(() => { loadData() })
         <el-table-column prop="partnerName" label="对方" min-width="62" show-overflow-tooltip/>
         <!-- 2026-09-26 B10：列名「不含税金额」5 字需 104px ⇒ 改短名「不含税」（3 字需 76）并把 74→76 -->
         <el-table-column prop="amount" label="不含税" width="76" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
-        <el-table-column label="税率" width="44" align="right"><template #default="{row}">{{ Number(row.taxRate)||0 }}%</template></el-table-column>
+        <!-- 2026-09-26 B6：表头「税率」2 字需 28px，列宽 44 时内容框仅 27px ⇒ 差 1px 被省略成「税…」。
+             44→**48**（28 + 内边距 16 + 边框 1 + 3 余量）；正文最长「13%」需 43px 也在 48 内 ✓。 -->
+        <el-table-column label="税率" width="48" align="right"><template #default="{row}">{{ Number(row.taxRate)||0 }}%</template></el-table-column>
         <el-table-column label="税额" width="72" align="right" show-overflow-tooltip><template #default="{row}"><span style="color:var(--app-color-primary)">{{ fmt(row.taxAmount) }}</span></template></el-table-column>
         <el-table-column prop="totalAmount" label="价税合计" width="78" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
-        <el-table-column prop="sourceBillCode" label="关联单号" width="74" show-overflow-tooltip/>
+        <!-- 2026-09-26 B6：表头「关联单号」4 字需 56px，列宽 74 时只剩 1px 余量（字体稍有差异即省略）⇒ 74→**76** -->
+        <el-table-column prop="sourceBillCode" label="关联单号" width="76" show-overflow-tooltip/>
         <el-table-column label="状态" width="70" align="center"><template #default="{row}"><el-tag :type="(STATUS_TAG[row.status]||'info') as any" size="small">{{ STATUS_LABEL[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="106" align="center" fixed="right">
           <template #default="{row}">

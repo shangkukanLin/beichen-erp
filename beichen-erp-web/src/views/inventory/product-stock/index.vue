@@ -35,15 +35,18 @@
         ②产品名称做成链接进产品详情（原先只能点整行/操作列）；
         ③为抵平把 SKU 95→88、产品名称 min125→116、待整理 74→72、总库存 74→72、安全库存 82→80、分布仓库 80→74
           ⇒ 声明合计 **938** ✓（容器约 948；全部 min-width ⇒ 宽屏自动铺满）。
+        ⚠️ 上列三处数值已被 2026-09-26 B6 记录更新（现值：SKU min98、品牌 min100、分布仓库 min82、声明合计 948 ≤ 容器 956）。
       -->
       <el-table v-loading="loading" :data="rows" border stripe @row-click="goDetail">
-        <el-table-column prop="sku" label="SKU" min-width="88" show-overflow-tooltip />
+        <!-- 2026-09-26 B6（实测）：SKU 是最长 10 位的业务编码（最长样本「SKU-000012」正文需 93px），
+             min88 会把 10 行 SKU 全部省略 ⇒ min88→**98**（93 + 内边距 16 + 边框 1 的最省值再留 2px 余量）。 -->
+        <el-table-column prop="sku" label="SKU" min-width="98" show-overflow-tooltip />
         <el-table-column label="产品名称" min-width="116" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goProduct(row)">{{ row.productName }}</el-button>
           </template>
         </el-table-column>
-        <el-table-column prop="brandName" label="品牌" min-width="108" show-overflow-tooltip>
+        <el-table-column prop="brandName" label="品牌" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">{{ row.brandName || '—' }}</template>
         </el-table-column>
         <!-- 品质数量列用紧凑数字（非 tag）：五档品质 + 汇总列要在一屏内放得下，避免横向滚动 -->
@@ -78,7 +81,9 @@
             <span v-else style="color:#999">未设置</span>
           </template>
         </el-table-column>
-        <el-table-column label="分布仓库" min-width="74" align="center">
+        <!-- 2026-09-26 B6：4 字表头需 56+16+1+2 = 75；74（或再分配后的 74）会让余量只剩 1px ⇒ min74→**82**，
+             宽度由「品牌」108→100 让出（品牌正文最长 73px，100 仍完整）。 -->
+        <el-table-column label="分布仓库" min-width="82" align="center">
           <template #default="{ row }">{{ row.warehouseCount ?? 0 }}</template>
         </el-table-column>
         <el-table-column label="操作" min-width="88" align="center" fixed="right">
