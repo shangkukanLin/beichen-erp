@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { SettlementStatus, SettlementStatusLabel, sourceBillTypeLabel, SourceBillTypeLabel, codeLabelOptions } from '@/api/enums'
+import { SettlementStatus, SettlementStatusLabel, sourceBillTypeShortLabel, SourceBillTypeLabel, codeLabelOptions } from '@/api/enums'
 import { getPayablePage, type FinancePayable } from '@/api/finance'
 import { TYPE_MAP, TYPE_TABS, TYPE_TAG } from '@/constants/supplier'
 import { ElMessage } from 'element-plus'
@@ -124,7 +124,10 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         </el-table-column>
         <el-table-column label="业务场景" width="84" show-overflow-tooltip>
           <template #default="{row}">
-            {{ sourceBillTypeLabel(row.sourceBillType) }}
+            <!-- 2026-09-26 B9：改用**列表短名**（≤4 字，如「委外收货/换货入库」）⇒ 8 字全称「委外加工退货收费」
+                 实测需 128px 装不下，短名 4 字只需 72px ⇒ **本列不再被省略号截断**；
+                 筛选下拉/导出/详情页仍用全称（SourceBillTypeLabel）。 -->
+            {{ sourceBillTypeShortLabel(row.sourceBillType) }}
             <el-tag v-if="row.transferredToReceivable" type="warning" size="small" style="margin-left:4px">已转应收</el-tag>
           </template>
         </el-table-column>

@@ -9,7 +9,23 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
 import { getReceiptPage, getReceiptItems, createReceipt, auditReceipt, cancelReceipt, unAuditReceipt, getReceiptUnpaidReceivables, type FinanceReceipt, type FinanceReceiptItem, type FinanceReceivable } from '@/api/finance'
-import { SubjectType, SubjectTypeLabel } from '@/api/enums'
+import { SubjectType, SubjectTypeLabel, SourceBillDetailRoute } from '@/api/enums'
+
+/**
+ * 来源单号可跳转的目标前缀（2026-09-26 B9）：缺类型映射或无 sourceId 时返回空 ⇒ 列内保持纯文本。
+ * 现金销售单自动收款（sourceBillType=SALE_ORDER）的 sourceId 即销售单 id ⇒ 可直达销售单详情。
+ */
+function sourceRoute(row: any): string {
+  const base = SourceBillDetailRoute[row?.sourceBillType]
+  return base && row?.sourceId != null ? base : ''
+}
+/** 来源单号 → 源单（有独立详情页直接进详情；无详情页的进列表并带 billId，与「库存流水」同口径） */
+function goSource(row: any) {
+  const base = sourceRoute(row)
+  if (!base) return
+  if (base.includes('/detail')) router.push(`${base}/${row.sourceId}`)
+  else router.push({ path: base, query: { billId: String(row.sourceId), billType: row.sourceBillType } })
+}
 
 const query = reactive({ customerId: '' as string|number, subjectType: '', status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
@@ -159,7 +175,10 @@ function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/
         <!-- 来源单据（2026-09-18）：现金销售单由系统自动收款（立刻到账、已审核）时显示销售单号 -->
         <el-table-column label="来源" width="112" show-overflow-tooltip>
           <template #default="{row}">
-            <span v-if="row.sourceBillNo">{{ row.sourceBillNo }}</span>
+            <!-- 2026-09-26 B9：来源做成链接进**源单详情**（与库存流水「关联单号」同口径）。
+                 本页 9 列全满，该列需 138px 而只有 112px ⇒ 可点后即便省略号也能一键打开原始单据。 -->
+            <el-button v-if="row.sourceBillNo && sourceRoute(row)" type="primary" link @click.stop="goSource(row)">{{ row.sourceBillNo }}</el-button>
+            <span v-else-if="row.sourceBillNo">{{ row.sourceBillNo }}</span>
             <span v-else>—</span>
           </template>
         </el-table-column>

@@ -381,6 +381,32 @@
 **验证**：`scan-col-truncation.ps1` 59 路由 **0 offender**（未登记白名单的列零截断）；
 `scan-table-overflow.ps1` 63 路由 **0 offender**（含 btnClip）；`web-check.ps1` 四守卫 PASS。
 
+## 5.10 B9 落地记录：两处「必须砍列才能救」的列（2026-09-26）
+
+B8 收尾时剩下 2 列「8~10 列全满、无安全余量、要完整只能砍列」的，B9 用**不砍列**的两条路子解决：
+
+**① `/finance/payable`「业务场景」84 → 完整（短名方案，同 B6 发票类型做法）**
+- 根因：内容是来源单据类型中文标签，最长「委外加工退货收费」**8 字实测需 128px**；本页 10 列全满无余量。
+- 做法：新增共享常量 **`SourceBillTypeShortLabel` + `sourceBillTypeShortLabel()`**（`@/api/enums`），
+  给出 **≤4 字** 短名（委外收货 / 物料收发 / 换货入库 / 销退收费 / 委退收费 / 转应收 …）；
+  **列表单元格**用短名，**筛选下拉、导出、详情页仍用全称** ⇒ 4 字只需 72px，本列不再截断。
+- 收益：白名单里的「业务场景」**已移除**（守卫恢复强制检查该列）；未删任何列、未压缩任何金额列。
+- 遗留：条件 tag「已转应收」(4 字) 仍内联在本列 ⇒ 极少数已转应收行会超宽（有 tooltip 兜底），不常见故不动。
+
+**② `/finance/receipt`「来源」112（需 138）→ 改成**可点源单**（零宽度成本方案）**
+- 根因：来源单据号（XS-…，14 位 = 138px）在本页 9 列全满下**无法加宽**（操作列 4 按钮已到 170 不能压）。
+- 做法：与「库存流水·关联单号」**同口径**做成链接 —— 有独立详情页直接进详情，无详情页的进列表并带 `?billId=`；
+  现金销售自动收款的 `sourceBillType=SALE_ORDER`、`sourceId`=销售单 id ⇒ 直达 `销售单详情`。
+- **顺带修掉一个既有缺陷（影响 4 处入口）**：公共映射 `SourceBillDetailRoute` 里
+  `SALE_ORDER: '/sale/order'`、`SALE_OUTBOUND: '/sale/outbound'` 指向**不存在的路径**，
+  而消费方（`payment-supplier.vue`、`supplier-settlement.vue` 的「来源单号」）按 `${base}/${id}` 拼接
+  ⇒ 点「来源单号」实际落 404。已改为 `/inventory/sale/detail`、`/sale/outbound/detail`（真实详情路由）。
+
+**验证**：`scan-col-truncation.ps1`（payable / receipt）**0 offender**（payable 业务场景已不在白名单内仍通过）；
+`scan-table-overflow.ps1` 两页 margin 0 / scroll 0 / btnClip 0；四守卫 PASS；无 lint；
+浏览器实测：付款「来源」行 `XS-20260919007` 点击 → **`/inventory/sale/detail/281`**；
+应付「业务场景」10 行 **0 截断**（显示「委外收货」）。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
@@ -393,4 +419,5 @@
 - [x] B6 财务（2026-09-26，10 页：单号/主体可点 + tag 缩 small + 列表短名；顺带修掉付款「付款记录」页签的横向滚动）
 - [x] B7 系统 + 分析（2026-09-26，3 页有改动 + 5 页 0 截断零改动；收尾批，全站 59 页守卫全绿）
 - [x] B8 白名单收尾（2026-09-26，9 页/11 列改到完整显示，消除约 72 处截断；余 22 列物理无法完整，逐类记录理由）
+- [x] B9 两处「需砍列」的收尾（2026-09-26，应付业务场景改短名、收款来源改可点源单；顺带修 SourceBillDetailRoute 失效路径）
 

@@ -394,6 +394,27 @@ export const SourceBillTypeLabel: Record<string, string> = {
 export function sourceBillTypeLabel(code?: string) { return code ? (SourceBillTypeLabel[code] || code) : '' }
 
 /**
+ * 来源单据类型 **列表短名**（2026-09-26 B9）：
+ * 应付列表的「业务场景」列只有 84px，而全称最长「委外加工退货收费」8 字实测需 128px ⇒ 列表列宽装不下。
+ * 这里给一份 **≤4 字** 的短名（销退收费/委退收费/换货入库…）供**列表单元格**使用；
+ * 筛选下拉、导出、详情页仍用全称 {@link SourceBillTypeLabel}，信息不丢。
+ * ⚠️ 新增来源类型时两处都要补（缺失时 `sourceBillTypeShortLabel` 回落全称）。
+ */
+export const SourceBillTypeShortLabel: Record<string, string> = {
+  SALE_ORDER: '销售单', SALE_OUTBOUND: '销售出库', SALE_RETURN: '销售退货',
+  SALE_RETURN_CHARGE: '销退收费', SALE_EXCHANGE_CHARGE: '销换收费',
+  PURCHASE_ORDER: '采购单', PURCHASE_INBOUND: '采购入库', PURCHASE_RETURN: '采购退货',
+  PURCHASE_RETURN_CHARGE: '采退付费', PURCHASE_EXCHANGE_RETURN: '换货退回',
+  PURCHASE_EXCHANGE_IN: '换货入库', PURCHASE_EXCHANGE_CHARGE: '换货付费',
+  OUTSOURCE_DELIVERY: '委外收货', OUTSOURCE_EXCESS_LOSS: '委外超损',
+  OUTSOURCE_MATERIAL_DELIVERY: '物料收发', OUTSOURCE_MATERIAL_RETURN: '物料退货',
+  OUTSOURCE_RETURN: '委外退料', OUTSOURCE_RETURN_CHARGE: '委退收费',
+  OUTSOURCE_REPAIR_CHARGE: '维修收费', OUTSOURCE_RETURN_BACK: '加工返回',
+  RETURN_SORT_LOSS: '退货折损', PAYABLE_TRANSFER: '转应收', ADVANCE_LEDGER: '预收预付'
+}
+export function sourceBillTypeShortLabel(code?: string) { return code ? (SourceBillTypeShortLabel[code] || sourceBillTypeLabel(code)) : '' }
+
+/**
  * 往来主体类型（对应后端 SubjectType 枚举）
  * 应收既有客户应收（销售业务），也有供应商应收（应付转应收：退货/超损扣款无货款可抵时向对方收款）
  */
@@ -457,8 +478,10 @@ export const SourceBillDetailRoute: Record<string, string> = {
   OUTSOURCE_RETURN: '/outsource/return-order/detail',
   OUTSOURCE_RETURN_CHARGE: '/outsource/return-order/detail',
   OUTSOURCE_REPAIR_CHARGE: '/outsource/return-order/detail',
-  SALE_ORDER: '/sale/order',
-  SALE_OUTBOUND: '/sale/outbound',
+  // 2026-09-26 B9 修复：这两个前缀原先指向**不存在的列表路径**（/sale/order、/sale/outbound），
+  // 消费方又按 `${base}/${id}` 拼 ⇒ 点「来源单号」实际落到 404。改为真正的详情路由。
+  SALE_ORDER: '/inventory/sale/detail',
+  SALE_OUTBOUND: '/sale/outbound/detail',
   SALE_RETURN: '/sale/return/detail',
   // F7-54（2026-09-19）：补 4 个跳转前缀 —— 缺键时 goSourceDetail 遇 !base 直接 return，
   // 表现为"来源单号"点不动（不是 404）。4 个路由均已在 router/index.ts 核实存在。
