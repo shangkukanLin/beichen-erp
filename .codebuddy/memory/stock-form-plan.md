@@ -300,6 +300,34 @@ P3-1 复核有单加工退货 + 端到端实证（**重点断言"同一笔只冲
   返回登记（B×2 + 料33×6/35×5）→ 在厂 0、B 行 2、料 −6/−5、明细 3 行、应收 0、成本 50.0643→50.164；
   撤销 → 逐行回原值；反审核 → 在厂清零/我方仓复原/应付冲销/全库 14572。全局流水形态：MATERIAL 2178 + PRODUCT_DEFECT 14 + PRODUCT_REPAIR 4（全为探针对，无杂形态）。
 
+### 加工退货详情页·口径分支修复 ✅（2026-09-27，用户报「GTW- 为什么没有还回物料明细」）
+
+**背景（用户困惑点）**：`/outsource/defect-return/detail/202` = GTW-20260927001（无单退货）实测
+`materials=[]`、`payableAmount=0`，用户以为漏了还料。
+
+**澄清（口径本就如此，非缺陷）**：无单加工退货（`GTW-`，2026-09-25 P1-1）审核只做两条腿 ——
+①我方仓扣成品（`OUTSOURCE_DEFECT_RETURN`，成品、materialId 为空）；②成品以 `PRODUCT_DEFECT` 形态转入
+加工厂委外仓（`OUTSOURCE_DEFECT_IN`）；**不拆 BOM、不动应付**。实测该单流水 4058/4059（−10 / +10，落委外仓 66）。
+料要等修好送回时开**加工返回单**（`ORB-`）按**实际用料**扣并生成赔料应收。
+
+**实修（只动展示，不动落账）**：
+- 后端 `defectReturnDetail` 增 `outsourceIn{warehouseId,warehouseName,quantity,stockForm}`（有单红冲没有这条腿 ⇒ 无记录不给字段）；
+- 前端 `defect-return/detail.vue`：
+  - 新增 `isNoOrderNew` 判定 —— **只看流水**（`!linked && materials 为空`），**不看 linked**：
+    存量「独立 DEFECT 单」（旧逻辑，会还料、无 PRODUCT_DEFECT 腿）不能被误判成新口径，否则会隐藏它真实的还料明细；
+  - 「② 还料」按口径分支：无单 → 「本单不还料（不拆 BOM）+ 成品挂委外仓 + 还料在返回单按实际用料」；
+  - 新增「转入的委外仓 / 形态 / 数量」小表（仅无单显示）；「③ 应付」无单显示"不产生应付"；
+  - 未落账 alert 文案同步分支。
+
+**⚠️ 踩坑（复用价值高）**：成品侧 `changeStock(...)` 的第 8 参是 **`relatedBillId`**，
+delivery id 落进 `related_bill_id`；**`related_delivery_id` 是物料流水专用列**（物料还料那条腿才用它）。
+第一版按 `related_delivery_id` 查委外仓入库腿 ⇒ 查不到、字段为空。判定成品腿一律用 `related_bill_id`。
+
+**验证**：三类记录 API 实测 —— 202（无单新口径）`materials 0 + outsourceIn 测试加工厂A1委外仓库/+10/PRODUCT_DEFECT`；
+197（存量无单，P1-1 后重审）同样有 `outsourceIn`；187（有单）`materials 3 + payable −80` 且**无** `outsourceIn`。
+浏览器实测两页渲染：无单页显示「本单不还料…」+ 委外仓表（+10/成品（加工退货））+「不产生应付」，有单页仍显示 3 行还料 + 应付 −80.00；
+新表表头余量全 ≥2px、表格宽=容器 948 无横向溢出；四守卫 PASS。
+
 ## 8. 验收铁律（每期都要做）
 - 端到端实证：建单 → 审核 → 查 `warehouse_stock`（按形态分行）/ 流水 / 应付应收 / 成本；反审核后**逐行回到原值**。
 - **同一笔业务只能冲一次**：把「有单加工退货」「无单加工退货」「独立 DEFECT 单」三条路径的账务结果对齐比对，防止重复冲账。

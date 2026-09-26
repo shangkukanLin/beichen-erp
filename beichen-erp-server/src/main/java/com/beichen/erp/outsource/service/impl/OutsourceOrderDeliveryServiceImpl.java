@@ -803,7 +803,10 @@ public class OutsourceOrderDeliveryServiceImpl
      * <ol>
      *   <li>扣减的成品：就是记录自身的 产品/规格/数量/扣减仓库（无需回溯）；</li>
      *   <li>还回工厂委外仓的物料：按库存流水回溯（`related_delivery_id = 本记录`、
-     *       `related_bill_type = OUTSOURCE_DEFECT`、只取审核动作 `OUTSOURCE_DEFECT_RETURN`）；</li>
+     *       `related_bill_type = OUTSOURCE_DEFECT`、只取审核动作 `OUTSOURCE_DEFECT_RETURN`）；
+     *       ——**仅无单退货（GTW-）会为空**：该口径不拆 BOM 还料（见 P1-1），料在「加工返回单」按实际用料处理；</li>
+     *   <li>{@code outsourceIn}：**无单退货**独有的「成品转移进委外仓」腿（`OUTSOURCE_DEFECT_IN`），
+     *       给出还入的委外仓 / 数量 / 形态；有单红冲没有这条腿 ⇒ 前端按字段有无显示；</li>
      *   <li>冲减的应付金额：`finance_payable` 里 `source_id = 本记录`、`source_bill_type = OUTSOURCE_DELIVERY`
      *       （负数=冲减应付）。</li>
      * </ol>
@@ -865,6 +868,24 @@ public class OutsourceOrderDeliveryServiceImpl
                 mm.put("warehouseId", log.getWarehouseId());
                 mm.put("warehouseName", warehouseNameOf(log.getWarehouseId()));
                 materials.add(mm);
+            }
+            // ②' 无单退货的「成品转移进委外仓」腿（2026-09-27 用户口径「详情要能看出成品/料到底落在哪个委外仓」）：
+            // 有单红冲**没有**这条腿（它只扣成品 + BOM 还料 + 冲应付）⇒ 查不到记录时前端不显示该行。
+            // ⚠️ 定位键用 **related_bill_id** 而不是 related_delivery_id：成品侧 changeStock 的第 8 参就是
+            //    relatedBillId（`related_delivery_id` 是**物料**流水专用列，物料还料那条腿才用它，见上面 ② 的查询）。
+            List<WarehouseStockLog> inLogs = stockLogMapper.selectList(new LambdaQueryWrapper<WarehouseStockLog>()
+                    .eq(WarehouseStockLog::getRelatedBillId, d.getId())
+                    .eq(WarehouseStockLog::getRelatedBillType, RelatedBillType.OUTSOURCE_DEFECT.getCode())
+                    .eq(WarehouseStockLog::getChangeType, StockChangeType.OUTSOURCE_DEFECT_IN.getCode())
+                    .orderByAsc(WarehouseStockLog::getId));
+            if (!inLogs.isEmpty()) {
+                WarehouseStockLog in = inLogs.get(0);
+                Map<String, Object> oi = new LinkedHashMap<>();
+                oi.put("warehouseId", in.getWarehouseId());
+                oi.put("warehouseName", warehouseNameOf(in.getWarehouseId()));
+                oi.put("quantity", in.getChangeQuantity());
+                oi.put("stockForm", in.getStockForm());
+                m.put("outsourceIn", oi);
             }
             // ③ 本记录产生的应付（负数=冲减）
             List<FinancePayable> payables = payableMapper.selectList(new LambdaQueryWrapper<FinancePayable>()
