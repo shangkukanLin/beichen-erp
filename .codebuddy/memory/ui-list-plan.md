@@ -482,6 +482,59 @@ B8 收尾时剩下 2 列「8~10 列全满、无安全余量、要完整只能砍
 - `scan-table-overflow.ps1`：58 表 **0 越界**；四守卫 PASS；
 - 浏览器**断言式**验证：6 个修复页逐表头断言 `内容框 − 文字宽 − 排序箭头 ≥ 2` → **ALL_HEADERS_OK**。
 
+## 5.13 B12：加工退货 / 物料退货 改**三级菜单 + 页签**（2026-09-27，用户口径）
+
+### 用户口径（原话要点 + 命名推荐已确认）
+「加工退货 / 物料退货 太复杂，改三级菜单」：加工退货下 3 个叶子（关联退货 / 未关联退货 / 维修退货），
+每个叶子带页签；「未关联退货」还要看得出**工厂把货还回来没有、还了多少**；页签名要专业一点。
+
+### 命名定稿（方案 A）
+- 加工退货（**目录**）→ **关联退货 / 无单退货 / 维修退货 / 加工返回单**
+- 物料退货（**目录**）→ **退料 / 维修退货**
+- 页签：**有效单据 | 已作废单据**（单据型）/ **待返回 | 已返回完 | 已作废**（返修型，默认待返回），标签后带**数量角标**
+- 列：`退货/已返回`（与维修退货既有「送修/已返回」同序同口径）；ORB 列表新增 `来源退货单`
+- 状态与进度**分开**：状态列恒显示 草稿/已审核/已作废，「已结案」作为附加 tag 并列（原先它替代"已审核"）
+
+### 数据模型/接口（本次唯一的结构改动）
+- `outsource_return_back` 加 **`source_delivery_id`**（来源无单加工退货记录）+ 索引；新库见 `schema.sql`，
+  老库走 `DataInitializer.migrateReturnBackSource()`（addColumnIfMissing，幂等）
+- ORB 创建/修改可传 `sourceDeliveryId`；**三重校验**：来源单必须存在 / 已审核 / 不关联加工单 / 同厂同产品同规格；
+  **按单防超返**（Σ已审核返回单 + 本次 ≤ 该单退货量）——创建时校验，**审核时再复核一次**
+  （堵住"多张草稿各自不超、审核后累计超"的窗口）
+- 台账 `return-defect/page` 新增：`status` 支持**逗号多值**、`returnProgress=PENDING|DONE`（SQL 子查询按来源单聚合，分页不下错）、
+  `factoryId/productId/qualityType`（供 ORB 绑定来源时定位）；行内新增 `returnedQty/unreturnedQty/returnProgress`
+- 加工退货新增 **`PUT /outsource/order-delivery/{id}/cancel`**（DRAFT→CANCELLED，取代草稿物理删除；DELETE 保留供脚本）
+- 维修退货/物料退货 `page` 新增 `statuses`（逗号多值）+ `progress=OPEN`（待返回**含草稿**）/`RETURNED`（已返回完）
+- ⚠️ 踩坑：**成品**流水的 delivery id 落在 `related_bill_id`（`related_delivery_id` 是**物料**流水专用列）
+
+### 前端实现（关键取舍）
+- **一个工作台组件被多个叶子共用**，按 `route.path` 判叶子（`views/outsource/return-order/index.vue` 的 `leaf`、
+  `views/outsource/material-return/index.vue` 的 `leaf`）——避免把 ~700 行已验证的列表/弹窗/动作复制 4 份；
+  筛选行随之大幅简化（「关联加工单 / 状态 / 返回进度」三个下拉全部由**叶子 + 页签**表达）
+- 页签角标用 `pageSize=1` 只读 `total`（零后端改动）
+- ORB 弹窗新增「来源退货单」下拉（必填；按 加工厂+产品+在厂规格 拉未返回完的来源单）
+
+### 菜单/权限（`DataInitializer`）
+- 新增目录 **419 加工退货** / **423 物料退货**；叶子 **420 无单退货 / 421 维修退货 / 422 加工返回单 / 424 维修退货(物料)**；
+  408/411 由 menu **改父级**（同步改名 关联退货 / 退料），route_path 不变 ⇒ 旧链接/脚本不废
+- 叶子 `perms` 必须"自带其 API 需要的码"（**目录 perms 会被 initMenuPerms 强制清空**）：
+  408/420 = `outsource:order-delivery`；421/422 = `outsource:return-order`；424 = `outsource:material-return`
+- 存量库按**旧叶子继承**补授（`sys_role_menu where menu_id=408 → 419~422`，`=411 → 423/424`），幂等
+- `SideMenu.vue` 补登记 `CircleClose / Refrigerator` 图标（种子早就写了这两个名字，映射表一直缺 ⇒ 一直退化成默认图标）
+
+### 验证
+- **API 实证**：ORB 绑定来源 202 后审核 → 台账 202 行 `returned=4 / unreturned=6 / PENDING` ✓；
+  超量创建被拦（核销超量）；按单复核拦"多草稿累计超"；来源不存在/规格不符/已关联加工单 均被拦；清理后回到 `returned=0`
+- **浏览器**：4+2 个叶子渲染正确（页签含角标、`退货/已返回` 列、ORB `来源退货单` 列）；**侧栏三级菜单正确展开**
+- 守卫：6 叶子 `scan-col-truncation` **0 offender**（顺带修 台账单号 130→158 装不下 GTW- 单号、白名单补 供应商/维修供应商）；
+  全站 `scan-table-overflow` **58 页 0 越界**；四守卫 PASS
+
+### 待办（机械同步，脚本层）
+`ui-e2e-16-workorder-repair-close.ps1`（点「维修退货」页签 → 改直达 `/outsource/return-order/repair`）、
+`ui-e2e-15-material-repair-closed-loop.ps1`、`ui-e2e-14-material-repair-return.ps1`、`ui-e2e-12-return-type.ps1`、
+`ui-e2e-p5b-material-return.ps1`、`ui-e2e-1-nav.ps1`；`ui-e2e-zh.json` 的页签文案键；
+`verify-delivery-menu.ps1` 的 ⑨b 段已同步（三级菜单断言）。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
@@ -497,4 +550,5 @@ B8 收尾时剩下 2 列「8~10 列全满、无安全余量、要完整只能砍
 - [x] B9 两处「需砍列」的收尾（2026-09-26，应付业务场景改短名、收款来源改可点源单；顺带修 SourceBillDetailRoute 失效路径）
 - [x] B10 表头被截修复 + 守卫补盲（2026-09-26，19 列表头修好；守卫新增 HDRCLIP 且不可白名单豁免）
 - [x] B11 表头「差 1px」全站排查（2026-09-26，58 页 11 处；守卫阈值收紧为 ≥1px + 新增 HDRTIGHT 余量判定；修正偏大 14px 的列宽档位家规）
+- [x] B12 加工退货/物料退货三级菜单 + 页签（2026-09-27，4+2 叶子；返回进度按来源单聚合 + 草稿作废 + 防超返；脚本层文案同步待办见 §5.13）
 

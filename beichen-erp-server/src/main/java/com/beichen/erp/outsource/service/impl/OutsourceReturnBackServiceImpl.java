@@ -87,12 +87,18 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
 
     @Override
     public Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long factoryId, String status) {
-        Page<OutsourceReturnBack> raw = backMapper.selectPage(new Page<>(pageNum, pageSize),
-                new LambdaQueryWrapper<OutsourceReturnBack>()
-                        .eq(code != null && !code.isBlank(), OutsourceReturnBack::getCode, code)
-                        .eq(factoryId != null, OutsourceReturnBack::getFactoryId, factoryId)
-                        .eq(status != null && !status.isBlank(), OutsourceReturnBack::getStatus, status)
-                        .orderByDesc(OutsourceReturnBack::getId));
+        LambdaQueryWrapper<OutsourceReturnBack> qw = new LambdaQueryWrapper<OutsourceReturnBack>()
+                .eq(code != null && !code.isBlank(), OutsourceReturnBack::getCode, code)
+                .eq(factoryId != null, OutsourceReturnBack::getFactoryId, factoryId);
+        // 2026-09-27 三级菜单：status 支持逗号分隔多值（「有效单据」= DRAFT,AUDITED；「已作废」= CANCELLED）
+        if (status != null && !status.isBlank()) {
+            List<String> sts = java.util.Arrays.stream(status.split(",")).map(String::trim)
+                    .filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toList());
+            if (sts.size() == 1) qw.eq(OutsourceReturnBack::getStatus, sts.get(0));
+            else if (!sts.isEmpty()) qw.in(OutsourceReturnBack::getStatus, sts);
+        }
+        qw.orderByDesc(OutsourceReturnBack::getId);
+        Page<OutsourceReturnBack> raw = backMapper.selectPage(new Page<>(pageNum, pageSize), qw);
         List<Map<String, Object>> rows = new ArrayList<>();
         for (OutsourceReturnBack b : raw.getRecords()) {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -102,6 +108,9 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
             m.put("factoryName", b.getFactoryName());
             m.put("productId", b.getProductId());
             m.put("productName", b.getProductName());
+            // 2026-09-27：来源无单加工退货单（存量未绑定的返回单为 null ⇒ 前端显示「未绑定」）
+            m.put("sourceDeliveryId", b.getSourceDeliveryId());
+            m.put("sourceCode", sourceCodeOf(b.getSourceDeliveryId()));
             m.put("quantity", b.getQuantity());
             m.put("defectQualityType", b.getDefectQualityType());
             m.put("returnQualityType", b.getReturnQualityType());
@@ -165,6 +174,7 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         u.setFactoryName(b.getFactoryName());
         u.setProductId(b.getProductId());
         u.setProductName(b.getProductName());
+        u.setSourceDeliveryId(b.getSourceDeliveryId());
         u.setQuantity(b.getQuantity());
         u.setDefectQualityType(b.getDefectQualityType());
         u.setReturnQualityType(b.getReturnQualityType());
@@ -219,6 +229,11 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         BigDecimal onSite = stockService.getQuantity(factoryWhId, b.getProductId(), defectQt, WarehouseStock.FORM_PRODUCT_DEFECT);
         if (onSite.compareTo(qty) < 0) {
             throw new BusinessException("在厂成品（加工退货）不足：当前 " + onSite + "，需核销 " + qty);
+        }
+        // 2026-09-27：审核时**再按来源单复核一次**（堵住"多张草稿各自不超、审核后累计超"的窗口；
+        // 草稿不参与聚合，只在审核动作上做最终判定；排除自身因为在 claim 后本单已是 AUDITED）
+        if (b.getSourceDeliveryId() != null) {
+            assertSourceReturnable(b.getSourceDeliveryId(), b.getFactoryId(), b.getProductId(), defectQt, qty, id);
         }
 
         // ① 核销在厂成品（PRODUCT_DEFECT 行）
@@ -357,6 +372,9 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         b.setFactoryName(factory.getName());
         b.setProductId(productId);
         b.setProductName(product.getName());
+        // 2026-09-27：可选绑定「来源无单加工退货单」——台账据此显示已返回/未返回、按单防超返
+        Long sourceDeliveryId = longOrNull(body.get("sourceDeliveryId"));
+        b.setSourceDeliveryId(sourceDeliveryId);
         b.setQuantity(qty);
         b.setDefectQualityType(defectQt);
         b.setReturnQualityType(returnQt);
@@ -368,7 +386,73 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
 
         // 防超核销：累计核销（已审核返回单）不得超过累计无单退货送修量
         assertNotOverReturned(factoryId, productId, defectQt, qty, null);
+        // 2026-09-27：绑定了来源单时，再按**单**防超返（同厂/同产品/同规格/已审核是前置条件）
+        if (sourceDeliveryId != null) {
+            assertSourceReturnable(sourceDeliveryId, factoryId, productId, defectQt, qty, null);
+        }
         return b;
+    }
+
+    /**
+     * 来源单校验 + **按单防超返**（2026-09-27）。
+     * <p>规则：来源单必须存在、已审核、是无单加工退货记录（{@code sourceType=RETURN_DEFECT} 且不关联加工单），
+     * 且与本次返回单**同加工厂 / 同产品 / 同退货规格**；然后
+     * {@code Σ(已审核返回单，按本来源单) + 本次 ≤ 该来源单退货量}。</p>
+     * <p>与 {@link #assertNotOverReturned}（"工厂+产品+规格"总额口径）并存：总额口径防跨单乱核销，
+     * 本方法让每张来源单自己也可追溯、可显示进度。</p>
+     */
+    private void assertSourceReturnable(Long sourceDeliveryId, Long factoryId, Long productId,
+                                        String defectQt, BigDecimal adding, Long excludeId) {
+        com.beichen.erp.outsource.entity.OutsourceOrderDelivery src = deliveryMapper.selectById(sourceDeliveryId);
+        if (src == null) throw new BusinessException("来源加工退货单不存在：ID=" + sourceDeliveryId);
+        String srcNo = src.getCode() != null ? src.getCode() : ("加工退货#" + src.getId());
+        if (!DocStatus.AUDITED.getCode().equals(src.getStatus())) {
+            throw new BusinessException("来源单 " + srcNo + " 尚未审核（只有已审核的加工退货才能登记返回）");
+        }
+        if (src.getOrderId() != null) {
+            throw new BusinessException("来源单 " + srcNo + " 已关联加工单（有单红冲不产生待返回，请选择无单加工退货单）");
+        }
+        if (!java.util.Objects.equals(src.getFactoryId(), factoryId)) {
+            throw new BusinessException("来源单 " + srcNo + " 的加工厂与本次不一致");
+        }
+        if (!java.util.Objects.equals(src.getProductMasterId(), productId)) {
+            throw new BusinessException("来源单 " + srcNo + " 的产品与本次不一致");
+        }
+        if (src.getQualityType() != null && !src.getQualityType().equals(defectQt)) {
+            throw new BusinessException("来源单 " + srcNo + " 的退货规格（" + src.getQualityType() + "）与本次（" + defectQt + "）不一致");
+        }
+        BigDecimal sent = src.getQuantity() != null ? src.getQuantity().abs() : BigDecimal.ZERO;
+        BigDecimal returned = BigDecimal.ZERO;
+        for (OutsourceReturnBack r : backMapper.selectList(new LambdaQueryWrapper<OutsourceReturnBack>()
+                .eq(OutsourceReturnBack::getSourceDeliveryId, sourceDeliveryId)
+                .eq(OutsourceReturnBack::getStatus, DocStatus.AUDITED.getCode())
+                .ne(excludeId != null, OutsourceReturnBack::getId, excludeId))) {
+            returned = returned.add(r.getQuantity() != null ? r.getQuantity() : BigDecimal.ZERO);
+        }
+        if (returned.add(adding).compareTo(sent) > 0) {
+            throw new BusinessException("来源单 " + srcNo + " 可返回量不足：退货 " + sent
+                    + "，已返回 " + returned + "，本次 " + adding);
+        }
+    }
+
+    /** 来源单号（列表展示用；存量未绑定/已删除来源单回落 "加工退货#id"） */
+    private String sourceCodeOf(Long sourceDeliveryId) {
+        if (sourceDeliveryId == null) return null;
+        com.beichen.erp.outsource.entity.OutsourceOrderDelivery d = deliveryMapper.selectById(sourceDeliveryId);
+        if (d == null) return "加工退货#" + sourceDeliveryId + "（已删除）";
+        return d.getCode() != null ? d.getCode() : ("加工退货#" + d.getId());
+    }
+
+    /** 可空 Long 解析（来源单等可选参数） */
+    private Long longOrNull(Object v) {
+        if (v == null) return null;
+        String s = v.toString().trim();
+        if (s.isEmpty()) return null;
+        try {
+            return Long.valueOf(s);
+        } catch (NumberFormatException e) {
+            throw new BusinessException("参数格式不正确：" + s);
+        }
     }
 
     /** 防超核销（修改场景排除自身）：Σ已审核返回单 + 本次 ≤ Σ已审核无单退货送修量 */

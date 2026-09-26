@@ -188,14 +188,19 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/delivery/add', redirect: '/inventory/material-move' },
       { path: 'outsource/delivery/detail/:id', name: 'OutsourceDeliveryDetail', component: () => import('@/views/outsource/delivery/detail.vue'), meta: { title: '物料收发单详情', requiresAuth: true, operate: true } },
       { path: 'outsource/material-history/:wid/:mid', name: 'OutsourceMaterialHistory', component: () => import('@/views/outsource/warehouse-material-history.vue'), meta: { title: '物料库存流水详情', requiresAuth: true, operate: true } },
-      // 委外加工退货
-      { path: 'outsource/return-order', name: 'OutsourceReturnOrder', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '委外加工退货', requiresAuth: true } },
+      // 委外加工退货（2026-09-27 三级菜单：拆成 4 个叶子，共用一个工作台组件 —— 组件按 path 判定叶子，
+      // 见 views/outsource/return-order/index.vue 的 leaf 注释；叶子菜单在 sys_menu 419 目录下）
+      { path: 'outsource/return-order', name: 'OutsourceReturnOrder', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '关联退货', requiresAuth: true } },
+      { path: 'outsource/return-order/unlinked', name: 'OutsourceReturnOrderUnlinked', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '无单退货', requiresAuth: true } },
+      { path: 'outsource/return-order/repair', name: 'OutsourceReturnOrderRepair', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '维修退货', requiresAuth: true } },
+      { path: 'outsource/return-back', name: 'OutsourceReturnBack', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '加工返回单', requiresAuth: true } },
       { path: 'outsource/return-order/add', name: 'OutsourceReturnOrderAdd', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '新增委外加工退货', requiresAuth: true, operate: true } },
       // E4：草稿编辑（复用新增页，仅 DRAFT 可编辑）
       { path: 'outsource/return-order/edit/:id', name: 'OutsourceReturnOrderEdit', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '编辑委外加工退货', requiresAuth: true, operate: true } },
       { path: 'outsource/return-order/detail/:id', name: 'OutsourceReturnOrderDetail', component: () => import('@/views/outsource/return-order/detail.vue'), meta: { title: '委外加工退货详情', requiresAuth: true, operate: true } },
-      // 委外物料退货
-      { path: 'outsource/material-return', name: 'OutsourceMaterialReturn', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '委外物料退货', requiresAuth: true } },
+      // 委外物料退货（2026-09-27 三级菜单：拆成 2 个叶子 —— 退料 / 维修退货，共用工作台组件，按 path 判叶子）
+      { path: 'outsource/material-return', name: 'OutsourceMaterialReturn', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '退料', requiresAuth: true } },
+      { path: 'outsource/material-return/repair', name: 'OutsourceMaterialReturnRepair', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '维修退货', requiresAuth: true } },
       { path: 'outsource/material-return/add', name: 'OutsourceMaterialReturnAdd', component: () => import('@/views/outsource/material-return/add.vue'), meta: { title: '新增委外物料退货', requiresAuth: true, operate: true } },
       { path: 'outsource/material-return/detail/:id', name: 'OutsourceMaterialReturnDetail', component: () => import('@/views/outsource/material-return/detail.vue'), meta: { title: '委外物料退货详情', requiresAuth: true, operate: true } },
       // D 档（2026-09-21）：草稿编辑（复用新增页，后端 PUT /{id} 仅允许草稿）—— 与加工退货页对称

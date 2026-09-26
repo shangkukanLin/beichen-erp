@@ -72,6 +72,7 @@ public class DataInitializer implements ApplicationRunner {
         migratePurchaseChargePerProduct();
         migrateSaleItemCharge();
         migrateReturnSortSorter();
+        migrateReturnBackSource();
         migrateMaterialMoveQuality();
         initSuperAdmin();
         initMaterialTypes();
@@ -299,15 +300,30 @@ public class DataInitializer implements ApplicationRunner {
             // 页面只列正在加工（PRODUCING）的加工单，点「交货」进详细页并自动弹出新增交货弹窗。
             // id 412 复用 2026-09-16 下线的「交货信息」总览页旧行（**必须同时从下方 visible=0 名单移除**）
             {412L, 4L, "成品收货", "menu", "/outsource/order/delivery", "OutsourceOrderDelivery", "Van", 2},
-            // 加工退货（2026-09-17 起排在物料类之前：加工退货 / 维修退货）
-            {408L, 4L, "加工退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "CircleClose", 3},
+            // 加工退货（2026-09-17 起排在物料类之前）。
+            // 2026-09-27 用户口径：二级改**目录** 419，把原「408 一个页面 3 页签」拆成 4 个三级叶子：
+            //  408 关联退货(GTH-) / 420 无单退货(GTW-) / 421 维修退货(REPAIR) / 422 加工返回单(ORB-)
+            //  ⚠️ 叶子 perms 必须"自带其 API 需要的码"（目录行的 perms 会被 initMenuPerms 强制清空）：
+            //    加工退货台账接口在 /api/outsource/order-delivery 前缀下（408/420），
+            //    维修退货单与加工返回单在 /api/outsource/return-order 前缀下（421/422）—— 见 ApiPermGuard.RULES。
+            //  ⚠️ 408/411 是**改父级**（4 → 419/423）而非新增行：syncMenus 的 upsert 会更新 parent_id，
+            //    存量库的角色授权因此不丢（新叶子用下方"从旧叶子继承"的幂等补授覆盖）。
+            {419L, 4L, "加工退货", "catalog", "", "", "CircleClose", 3},
+            {408L, 419L, "关联退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "Document", 1},
+            {420L, 419L, "无单退货", "menu", "/outsource/return-order/unlinked", "OutsourceReturnOrderUnlinked", "Files", 2},
+            {421L, 419L, "维修退货", "menu", "/outsource/return-order/repair", "OutsourceReturnOrderRepair", "Tools", 3},
+            {422L, 419L, "加工返回单", "menu", "/outsource/return-back", "OutsourceReturnBack", "Refresh", 4},
             {402L, 4L, "物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 4},
             // 物料收货（2026-09-16 用户要求）：原「物料订单详情 → 交货管理」页签**移出**独立成菜单页 ——
             // 页面只列收货中（RECEIVING）的物料订单，点「收料」进详细页并自动弹出收货弹窗。
             // 注意：**交货业务本身未改**（OrderDeliveryController / OutsourceOrderDeliveryService /
             // MaterialOrderController 的收料、退不良、库存、应付、BOM还料逻辑均未动）
             {415L, 4L, "物料收货", "menu", "/outsource/material-order/delivery", "OutsourceMaterialOrderDelivery", "Van", 5},
-            {411L, 4L, "物料退货", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Refrigerator", 6},
+            // 物料退货（2026-09-27 同口径）：二级改目录 423，把原「411 一个页面 2 页签」拆成 2 个三级叶子：
+            //  411 退料(REFUND) / 424 维修退货(REPAIR)；两者 API 都在 /api/outsource/material-return 前缀下 ⇒ perms 同码。
+            {423L, 4L, "物料退货", "catalog", "", "", "Refrigerator", 6},
+            {411L, 423L, "退料", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Document", 1},
+            {424L, 423L, "维修退货", "menu", "/outsource/material-return/repair", "OutsourceMaterialReturnRepair", "Tools", 2},
             // 409「供应商管理」已于 2026-09-17 按用户要求下线：它是委外加工侧的**重复入口**（与基础数据 106
             // 「供应商管理」同指 /supplier/manage，页面完全相同），基础数据里 106/107 两份都保留。
             // 与 104/405/302/303 同范式：下方统一置 visible=0（保留行与角色授权，便于回滚）。
@@ -659,8 +675,15 @@ public class DataInitializer implements ApplicationRunner {
                 // ===== 委外加工（目录 4）=====
                 {401L, "outsource:order"},
                 {402L, "outsource:material-order"},
-                {408L, "outsource:return-order"},
+                // 2026-09-27：408 改为三级「关联退货」——它的页面主体是**加工退货台账**
+                // （/api/outsource/order-delivery/return-defect/*）⇒ perms 换成台账接口的码；
+                // 原 outsource:return-order 归 421「维修退货」/422「加工返回单」使用（同码，职责更清楚）。
+                {408L, "outsource:order-delivery"},
                 {411L, "outsource:material-return"},
+                {420L, "outsource:order-delivery"},
+                {421L, "outsource:return-order"},
+                {422L, "outsource:return-order"},
+                {424L, "outsource:material-return"},
                 {412L, "outsource:order-delivery"},
                 {415L, "outsource:material-delivery"},
                 // ===== 进货业务（目录 5）=====
@@ -811,6 +834,8 @@ public class DataInitializer implements ApplicationRunner {
                 101L, 102L, 103L, 105L, 106L, 107L, 108L,
                 301L, 304L, 305L,
                 401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 411L, 412L, 413L, 414L, 415L,
+                // 2026-09-27 三级菜单：419 加工退货目录 + 420/421/422 叶子；423 物料退货目录 + 424 叶子
+                419L, 420L, 421L, 422L, 423L, 424L,
                 501L, 502L, 503L, 504L,
                 601L, 602L, 603L, 605L,
                 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L,
@@ -844,6 +869,9 @@ public class DataInitializer implements ApplicationRunner {
         assignRoleMenus("merchandiser", Arrays.asList(
                 1L, 2L, 4L, 5L, 6L, 7L, 11L,
                 401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 412L, 413L, 414L, 415L, 418L,
+                // 2026-09-27 三级菜单：跟单专员原有 408「加工退货」→ 补齐 419 目录 + 420/421/422 叶子
+                //（跟单专员本就没有 411「物料退货」，故不授 423/424）
+                419L, 420L, 421L, 422L,
                 101L, 105L, 107L, 108L, 502L, 504L, 602L, 702L, 705L, 707L));
         // 财务：财务管理（2 基础数据 = 101 产品管理的父目录）
         // 注：经营分析自 2026-09-15 起**仅管理者可见**，故不再授予 finance
@@ -897,6 +925,25 @@ public class DataInitializer implements ApplicationRunner {
             if (granted > 0) log.info("已补授 418「物料移仓」菜单给 {} 个角色", granted);
         } catch (Exception e) {
             log.warn("补授物料移仓菜单异常: {}", e.getMessage());
+        }
+
+        // 存量库幂等补授（2026-09-27）：加工退货/物料退货改三级菜单 —— 新增 419/420/421/422（加工侧）
+        // 与 423/424（物料侧）。assignRoleMenus 只在角色「尚无任何菜单」时写入 ⇒ 存量库必须单独补授，
+        // 否则已有角色只能看到目录、看不到叶子（buildTree 以已授权菜单为输入）。
+        // 授权范围**从原叶子继承**（最稳）：凡有 408 的角色 → 补 419/420/421/422；凡有 411 的角色 → 补 423/424。
+        try {
+            int granted = 0;
+            granted += jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT rm.role_id, m.id FROM sys_role_menu rm JOIN sys_menu m ON m.id IN (419, 420, 421, 422) " +
+                    "WHERE rm.menu_id = 408");
+            granted += jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT rm.role_id, m.id FROM sys_role_menu rm JOIN sys_menu m ON m.id IN (423, 424) " +
+                    "WHERE rm.menu_id = 411");
+            if (granted > 0) log.info("已按旧叶子继承补授三级菜单 {} 条（419~422 随 408 / 423~424 随 411）", granted);
+        } catch (Exception e) {
+            log.warn("补授三级退货菜单异常: {}", e.getMessage());
         }
 
         // 存量库幂等补授（2026-09-21）：416「物料库存情况」是新增菜单 —— assignRoleMenus 只在角色
@@ -1173,6 +1220,23 @@ public class DataInitializer implements ApplicationRunner {
      * <p>两列都只由服务端按当前登录用户写入（新建/批量生成草稿/编辑刷新为最后操作人；审核时为空则补写），
      * 因此历史单为空属正常，详情显示「—」。</p>
      */
+    /**
+     * 加工返回单补「来源无单加工退货记录」列（2026-09-27）。
+     * <p>用途：修好送回时把返回单绑定到具体那条无单退货单 ⇒ 退货台账才能显示「已返回/未返回」、
+     * 才能按「待返回/已返回完」分页签，并在创建时按单防超返（原先只能按工厂+产品+规格总额校验）。
+     * 新库由 schema.sql 直接建列；老库 ALTER（{@link #addColumnIfMissing}，重复启动无副作用）。</p>
+     */
+    private void migrateReturnBackSource() {
+        addColumnIfMissing("outsource_return_back",
+                "source_delivery_id BIGINT DEFAULT NULL COMMENT '来源无单加工退货记录ID(outsource_order_delivery.id)：已返回/未返回与防超返按它聚合（存量单为NULL）'");
+        try {
+            jdbcTemplate.execute("CREATE INDEX idx_source_delivery ON outsource_return_back (source_delivery_id)");
+            log.info("已为 outsource_return_back 增加索引 idx_source_delivery");
+        } catch (Exception e) {
+            log.debug("idx_source_delivery 已存在，跳过：{}", e.getMessage());
+        }
+    }
+
     private void migrateReturnSortSorter() {
         addColumnIfMissing("return_sort",
                 "sort_user_id BIGINT DEFAULT NULL COMMENT '整理人用户ID（服务端按当前登录用户写入）'");

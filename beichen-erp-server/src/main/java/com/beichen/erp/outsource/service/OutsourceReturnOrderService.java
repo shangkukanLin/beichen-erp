@@ -18,9 +18,11 @@ public interface OutsourceReturnOrderService {
 
     /**
      * 分页查询（returnType 为空 = 全部；DEFECT 加工退货 / REPAIR 维修退货）。
-     * @param progress 维修退货进度筛选：PENDING_RETURN 还有未返回 / CLOSED 已结案 / 空=全部
+     * @param progress 维修退货进度筛选：PENDING_RETURN 还有未返回 / RETURNED 已返回完 / CLOSED 已结案 / 空=全部
+     * @param statuses 状态多值（逗号分隔，2026-09-27 三级菜单）：DRAFT,AUDITED=有效单据 / CANCELLED=已作废；空=全部
      */
-    Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long factoryId, String returnType, String progress);
+    Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long factoryId, String returnType,
+                                   String progress, String statuses);
 
     /** 详情 */
     Map<String, Object> detail(Long id);

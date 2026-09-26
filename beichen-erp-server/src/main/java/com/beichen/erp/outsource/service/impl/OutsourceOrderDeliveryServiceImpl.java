@@ -3,6 +3,7 @@ package com.beichen.erp.outsource.service.impl;
 import com.beichen.erp.config.UserContext;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.beichen.erp.common.BillNoSeq;
 import com.beichen.erp.common.BillPrefix;
@@ -28,11 +29,13 @@ import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
 import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
+import com.beichen.erp.outsource.entity.OutsourceReturnBack;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderDeliveryMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderProductMapper;
+import com.beichen.erp.outsource.mapper.OutsourceReturnBackMapper;
 import com.beichen.erp.outsource.service.OutsourceOrderDeliveryService;
 import com.beichen.erp.outsource.service.OutsourceOrderService;
 import com.beichen.erp.supplier.common.SupplierTypeEnum;
@@ -59,6 +62,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -98,6 +102,8 @@ public class OutsourceOrderDeliveryServiceImpl
     private final WarehouseStockLogMapper stockLogMapper;
     /** 加工退货详情：本记录产生的应付冲减（source_id = 本记录、source_bill_type = OUTSOURCE_DELIVERY） */
     private final FinancePayableMapper payableMapper;
+    /** 加工退货台账「返回进度」（2026-09-27）：按来源退货单聚合已审核加工返回单数量 */
+    private final OutsourceReturnBackMapper returnBackMapper;
 
     /** 来源类型：不关联加工单的加工退货（与实体 sourceType 注释里的 RETURN_DEFECT 一致） */
     private static final String SOURCE_RETURN_DEFECT = "RETURN_DEFECT";
@@ -708,12 +714,33 @@ public class OutsourceOrderDeliveryServiceImpl
      * {@link #returnDefect}。</p>
      */
     @Override
-    public Map<String, Object> pageDefectReturns(Integer pageNo, Integer size, String linked, String status) {
+    public Map<String, Object> pageDefectReturns(Integer pageNo, Integer size, String linked, String status,
+                                                 Long factoryId, Long productId, String qualityType, String returnProgress) {
         LambdaQueryWrapper<OutsourceOrderDelivery> qw = new LambdaQueryWrapper<OutsourceOrderDelivery>()
                 .eq(OutsourceOrderDelivery::getDeliveryType, DeliveryType.DEFECT_RETURN.getCode());
         if ("WITH_ORDER".equalsIgnoreCase(linked)) qw.isNotNull(OutsourceOrderDelivery::getOrderId);
         else if ("WITHOUT_ORDER".equalsIgnoreCase(linked)) qw.isNull(OutsourceOrderDelivery::getOrderId);
-        if (status != null && !status.isBlank()) qw.eq(OutsourceOrderDelivery::getStatus, status);
+        // status 支持**逗号分隔**（2026-09-27 三级菜单口径）：
+        //  「有效单据」页签 = DRAFT,AUDITED（排除已作废）；「已作废」页签 = CANCELLED；不传 = 全部。
+        if (status != null && !status.isBlank()) {
+            List<String> sts = Arrays.stream(status.split(",")).map(String::trim)
+                    .filter(s -> !s.isEmpty()).collect(Collectors.toList());
+            if (sts.size() == 1) qw.eq(OutsourceOrderDelivery::getStatus, sts.get(0));
+            else if (sts.size() > 1) qw.in(OutsourceOrderDelivery::getStatus, sts);
+        }
+        // 返回进度页签（2026-09-27：「无单退货」的 待返回 / 已返回完）——直接下推到 SQL，保证分页正确：
+        // 已返回量 = Σ(已审核加工返回单，按来源退货单) ⇒ 与 PENDING/DONE 判定同源（见 RETURNED_QTY_SQL）。
+        if (returnProgress != null && !returnProgress.isBlank()) {
+            if ("DONE".equalsIgnoreCase(returnProgress)) {
+                qw.apply(RETURNED_QTY_SQL + " >= ABS(outsource_order_delivery.quantity)");
+            } else if ("PENDING".equalsIgnoreCase(returnProgress)) {
+                qw.apply(RETURNED_QTY_SQL + " < ABS(outsource_order_delivery.quantity)");
+            }
+        }
+        // 2026-09-27：加工返回单绑定来源单时用到的定位筛选（加工厂 + 产品 + 退货规格）
+        if (factoryId != null) qw.eq(OutsourceOrderDelivery::getFactoryId, factoryId);
+        if (productId != null) qw.eq(OutsourceOrderDelivery::getProductMasterId, productId);
+        if (qualityType != null && !qualityType.isBlank()) qw.eq(OutsourceOrderDelivery::getQualityType, qualityType);
         qw.orderByDesc(OutsourceOrderDelivery::getId);
 
         Page<OutsourceOrderDelivery> pageResult = baseMapper.selectPage(
@@ -758,6 +785,9 @@ public class OutsourceOrderDeliveryServiceImpl
         }
 
         List<Map<String, Object>> rows = new ArrayList<>();
+        // 2026-09-27：每行的「已返回 / 未返回」（按来源单聚合已审核返回单）——1 次批量查询，无 N+1
+        Map<Long, BigDecimal> returnedMap = returnedQtyBySource(
+                records.stream().map(OutsourceOrderDelivery::getId).filter(id -> id != null).collect(Collectors.toList()));
         for (OutsourceOrderDelivery d : records) {
             Product p = d.getProductMasterId() != null ? productMap.get(d.getProductMasterId()) : null;
             Long fid = effectiveFactoryId(d, orderFactoryMap);
@@ -779,6 +809,14 @@ public class OutsourceOrderDeliveryServiceImpl
             m.put("warehouseId", d.getWarehouseId());
             m.put("warehouseName", d.getWarehouseId() != null ? warehouseNameMap.get(d.getWarehouseId()) : "");
             m.put("status", d.getStatus());
+            // 2026-09-27「返回进度」列：已返回 / 未返回 / 进度标记（PENDING=未返回完 / DONE=已返回完）
+            BigDecimal sent = d.getQuantity() != null ? d.getQuantity().abs() : BigDecimal.ZERO;
+            BigDecimal returned = returnedMap.getOrDefault(d.getId(), BigDecimal.ZERO);
+            BigDecimal unreturned = sent.subtract(returned);
+            if (unreturned.compareTo(BigDecimal.ZERO) < 0) unreturned = BigDecimal.ZERO;
+            m.put("returnedQty", returned);
+            m.put("unreturnedQty", unreturned);
+            m.put("returnProgress", (sent.compareTo(BigDecimal.ZERO) > 0 && returned.compareTo(sent) >= 0) ? "DONE" : "PENDING");
             m.put("remark", d.getRemark());
             rows.add(m);
         }
@@ -792,6 +830,51 @@ public class OutsourceOrderDeliveryServiceImpl
      * 台账「加工厂」取有效值：记录自身 `factory_id` 优先（"无单"红冲写入），缺失时回退到**关联加工单的加工厂**
      * （"有单"红冲在 2026-09-21 前不写该列 ⇒ 不回退该列就会显示为空）。
      */
+    /**
+     * 加工退货草稿**作废**（2026-09-27 用户口径）—— 三级菜单「已作废」页签的数据来源。
+     * <p>取代"草稿物理删除"作为台账侧的标准动作：留痕、可查、可授权。已审核记录不在此列 ——
+     * 撤销已落账的红冲必须走**反审核**（等量逆回，账务严格对称）。</p>
+     * <p>⚠️ {@code deleteDelivery}（物理删除）保留，供历史脚本/兼容调用；页面不再暴露「删除」入口。</p>
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void cancelDefectReturn(Long id) {
+        OutsourceOrderDelivery d = baseMapper.selectById(id);
+        if (d == null || !DeliveryType.DEFECT_RETURN.getCode().equals(d.getDeliveryType()))
+            throw new BusinessException("加工退货记录不存在");
+        if (!DocStatusGuard.claim(baseMapper, OutsourceOrderDelivery::getId, id,
+                OutsourceOrderDelivery::getStatus, DocStatus.DRAFT.getCode(), DocStatus.CANCELLED.getCode())) {
+            throw new BusinessException("只有草稿状态可作废（已审核的请先反审核）");
+        }
+        log.info("加工退货草稿已作废：id={}, code={}", id, d.getCode());
+    }
+
+    /**
+     * 「已返回数量」子查询 SQL（2026-09-27）：按**来源退货单**聚合**已审核**加工返回单数量。
+     * <p>用于台账的「返回进度」列与「待返回 / 已返回完」页签 —— 下推到 SQL 里判定，
+     * 分页不会错位（若在内存里过滤，total 与页码都会失真）。</p>
+     */
+    private static final String RETURNED_QTY_SQL =
+            "(SELECT COALESCE(SUM(rb.quantity), 0) FROM outsource_return_back rb"
+                    + " WHERE rb.source_delivery_id = outsource_order_delivery.id AND rb.status = 'AUDITED')";
+
+    /** 批量取「来源退货单ID → 已返回数量」（只计已审核返回单；1 次查询，无 N+1） */
+    private Map<Long, BigDecimal> returnedQtyBySource(List<Long> sourceIds) {
+        Map<Long, BigDecimal> map = new HashMap<>();
+        if (sourceIds == null || sourceIds.isEmpty()) return map;
+        for (Map<String, Object> sm : returnBackMapper.selectMaps(new QueryWrapper<OutsourceReturnBack>()
+                .select("source_delivery_id AS sid", "COALESCE(SUM(quantity), 0) AS qty")
+                .in("source_delivery_id", sourceIds)
+                .eq("status", DocStatus.AUDITED.getCode())
+                .groupBy("source_delivery_id"))) {
+            Object sid = sm.get("sid") != null ? sm.get("sid") : sm.get("source_delivery_id");
+            Object qty = sm.get("qty") != null ? sm.get("qty") : sm.get("QTY");
+            if (sid == null) continue;
+            map.put(Long.valueOf(sid.toString()), qty == null ? BigDecimal.ZERO : new BigDecimal(qty.toString()));
+        }
+        return map;
+    }
+
     private Long effectiveFactoryId(OutsourceOrderDelivery d, Map<Long, Long> orderFactoryMap) {
         if (d.getFactoryId() != null) return d.getFactoryId();
         return d.getOrderId() != null ? orderFactoryMap.get(d.getOrderId()) : null;

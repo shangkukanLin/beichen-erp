@@ -50,8 +50,10 @@ public class OutsourceMaterialReturnController {
             @RequestParam(required = false) Long supplierId,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String returnType,
-            @RequestParam(required = false) String progress) {
-        return R.ok(returnService.page(pageNum, pageSize, code, supplierId, status, returnType, progress));
+            @RequestParam(required = false) String progress,
+            // 2026-09-27 三级菜单：状态多值（DRAFT,AUDITED=有效单据 / CANCELLED=已作废；空=全部）
+            @RequestParam(required = false) String statuses) {
+        return R.ok(returnService.page(pageNum, pageSize, code, supplierId, status, returnType, progress, statuses));
     }
 
     /** 详情 */

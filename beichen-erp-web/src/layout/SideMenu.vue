@@ -7,7 +7,9 @@ import {
   GoodsFilled, Box, Document, Switch, Timer, TakeawayBox, ShoppingCart,
   Download, Odometer, Sell, Upload, Wallet, CreditCard, Postcard,
   TrendCharts, UserFilled, Avatar, Menu, CollectionTag, Delete, DataBoard,
-  Refresh, Rank, Lock, DataLine, DataAnalysis, Stamp, DeleteFilled, Iphone
+  Refresh, Rank, Lock, DataLine, DataAnalysis, Stamp, DeleteFilled, Iphone,
+  // 2026-09-27：退货三级菜单要用的两个图标（原先菜单种子写了但映射表没登记 ⇒ 一直退化成默认图标）
+  CircleClose, Refrigerator
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { MenuType } from '@/api/enums'
@@ -17,7 +19,7 @@ const iconMap: Record<string, any> = {
   HomeFilled, Cpu, Shop, Setting, Goods, Money, Tools, Notebook, Tickets,
   Files, Connection, OfficeBuilding, GoodsFilled, Box, Document, Switch,
   Timer, TakeawayBox, ShoppingCart, Download, Odometer, Sell, Upload,
-  Wallet, CreditCard, Postcard, TrendCharts, UserFilled, Avatar, Menu,
+  Wallet, CreditCard, Postcard,   TrendCharts, UserFilled, Avatar, Menu, CircleClose, Refrigerator,
   CollectionTag, Delete, DataBoard, Refresh, Rank, Lock,
   DataLine, DataAnalysis, Stamp, DeleteFilled, Iphone
 }

@@ -46,8 +46,10 @@ public class ReturnOrderController {
             @RequestParam(required = false) String code,
             @RequestParam(required = false) Long factoryId,
             @RequestParam(required = false) String returnType,
-            @RequestParam(required = false) String progress) {
-        return R.ok(returnOrderService.page(pageNum, pageSize, code, factoryId, returnType, progress));
+            @RequestParam(required = false) String progress,
+            // 2026-09-27 三级菜单：状态多值（DRAFT,AUDITED=有效单据 / CANCELLED=已作废；空=全部）
+            @RequestParam(required = false) String statuses) {
+        return R.ok(returnOrderService.page(pageNum, pageSize, code, factoryId, returnType, progress, statuses));
     }
 
     @GetMapping("/{id}")

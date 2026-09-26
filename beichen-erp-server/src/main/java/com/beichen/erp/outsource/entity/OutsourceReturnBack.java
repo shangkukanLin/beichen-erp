@@ -34,6 +34,15 @@ public class OutsourceReturnBack {
     /** 产品名称快照 */
     private String productName;
 
+    /**
+     * 来源无单加工退货记录ID（{@code outsource_order_delivery.id}，2026-09-27 新增）。
+     * <p>用途：把"修好送回"绑定到**具体那条无单退货单**，从而在退货台账里显示
+     * 「已返回 / 未返回」与「待返回 / 已返回完」页签，并在创建时**按单防超返**
+     * （原先只能按"加工厂+产品+规格"总额校验，同一产品多张来源单分不开）。
+     * 存量返回单为 NULL（当时无此字段，无法追溯来源），页面显示"未绑定"。</p>
+     */
+    private Long sourceDeliveryId;
+
     /** 返回数量（核销在厂成品与回仓同量） */
     private BigDecimal quantity;
 

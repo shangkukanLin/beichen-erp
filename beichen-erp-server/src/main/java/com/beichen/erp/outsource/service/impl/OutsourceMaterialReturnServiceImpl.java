@@ -59,6 +59,10 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     private static final String PROGRESS_PENDING_RETURN = "PENDING_RETURN";
     /** 进度筛选：已结案 */
     private static final String PROGRESS_CLOSED = "CLOSED";
+    /** 进度筛选：**已返回完**（全部送回，含已结案；2026-09-27 三级菜单「已返回完」页签） */
+    private static final String PROGRESS_RETURNED = "RETURNED";
+    /** 进度筛选：**待返回（含草稿）**（2026-09-27）：草稿 ∪ (已审核且送修 &gt; 已返回)，口径同加工侧 OPEN */
+    private static final String PROGRESS_OPEN = "OPEN";
 
     private final OutsourceMaterialReturnMapper returnMapper;
     private final OutsourceMaterialReturnItemMapper itemMapper;
@@ -88,14 +92,21 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     private final com.beichen.erp.outsource.service.OutsourceMaterialPricingService pricingService;
 
     @Override
-    public Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long supplierId, String status, String returnType, String progress) {
+    public Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long supplierId, String status,
+                                          String returnType, String progress, String statuses) {
         LambdaQueryWrapper<OutsourceMaterialReturn> w = new LambdaQueryWrapper<OutsourceMaterialReturn>()
                 .eq(code != null && !code.isBlank(), OutsourceMaterialReturn::getCode, code)
                 .eq(supplierId != null, OutsourceMaterialReturn::getSupplierId, supplierId)
                 .eq(status != null && !status.isBlank(), OutsourceMaterialReturn::getStatus, status)
                 // 类型页签（2026-09-17）：退货退款 / 维修退货
-                .eq(returnType != null && !returnType.isBlank(), OutsourceMaterialReturn::getReturnType, returnType)
-                .orderByDesc(OutsourceMaterialReturn::getId);
+                .eq(returnType != null && !returnType.isBlank(), OutsourceMaterialReturn::getReturnType, returnType);
+        // 2026-09-27 三级菜单：状态多值（DRAFT,AUDITED=有效单据、CANCELLED=已作废）
+        if (statuses != null && !statuses.isBlank()) {
+            java.util.List<String> sts = java.util.Arrays.stream(statuses.split(",")).map(String::trim)
+                    .filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toList());
+            if (!sts.isEmpty()) w.in(OutsourceMaterialReturn::getStatus, sts);
+        }
+        w.orderByDesc(OutsourceMaterialReturn::getId);
         // 进度筛选（维修退货，2026-09-17）：
         //   PENDING_RETURN = 已审核、未结案，且「送修合计 > 已返回合计」（还有货在供应商处没回来）
         //   CLOSED         = 已结案（未返回清零并人工确认收尾）
@@ -106,6 +117,16 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                      + " > (SELECT IFNULL(SUM(r.quantity),0) FROM outsource_material_return_repair r WHERE r.return_order_id = outsource_material_return.id)");
         } else if (PROGRESS_CLOSED.equalsIgnoreCase(progress)) {
             w.eq(OutsourceMaterialReturn::getClosedFlag, 1);
+        } else if (PROGRESS_OPEN.equalsIgnoreCase(progress)) {
+            w.in(OutsourceMaterialReturn::getStatus, java.util.List.of(DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
+             .apply("(outsource_material_return.status = '" + DocStatus.DRAFT.getCode() + "'"
+                     + " OR (SELECT IFNULL(SUM(i.quantity),0) FROM outsource_material_return_item i WHERE i.return_order_id = outsource_material_return.id)"
+                     + " > (SELECT IFNULL(SUM(r.quantity),0) FROM outsource_material_return_repair r WHERE r.return_order_id = outsource_material_return.id))");
+        } else if (PROGRESS_RETURNED.equalsIgnoreCase(progress)) {
+            // 2026-09-27「已返回完」页签：已审核且全部送回（含已结案；与 PENDING_RETURN 互补）
+            w.eq(OutsourceMaterialReturn::getStatus, DocStatus.AUDITED.getCode())
+             .apply("(SELECT IFNULL(SUM(i.quantity),0) FROM outsource_material_return_item i WHERE i.return_order_id = outsource_material_return.id)"
+                     + " <= (SELECT IFNULL(SUM(r.quantity),0) FROM outsource_material_return_repair r WHERE r.return_order_id = outsource_material_return.id)");
         }
         Page<OutsourceMaterialReturn> raw = returnMapper.selectPage(new Page<>(pageNum, pageSize), w);
         List<OutsourceMaterialReturn> records = raw.getRecords();

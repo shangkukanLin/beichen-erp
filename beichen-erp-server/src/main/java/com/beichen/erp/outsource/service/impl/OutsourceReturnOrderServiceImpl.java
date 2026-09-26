@@ -58,6 +58,14 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     private static final String PROGRESS_PENDING_RETURN = "PENDING_RETURN";
     /** 维修退货进度筛选：已结案 */
     private static final String PROGRESS_CLOSED = "CLOSED";
+    /** 维修退货进度筛选：**已返回完**（全部送回，含已结案；2026-09-27 三级菜单「已返回完」页签） */
+    private static final String PROGRESS_RETURNED = "RETURNED";
+    /**
+     * 维修退货进度筛选：**待返回（含草稿）**（2026-09-27 三级菜单「待返回」页签）。
+     * <p>与 PENDING_RETURN 的差别：PENDING_RETURN 只认"已审核且未送完"，会漏掉**草稿**（还没送修的半成品单）
+     * ⇒ 页签口径下草稿会在三个页签里"消失"。OPEN = 草稿 ∪ (已审核且送修 &gt; 已返回)。</p>
+     */
+    private static final String PROGRESS_OPEN = "OPEN";
 
     private final ReturnOrderMapper returnOrderMapper;
     private final ReturnOrderItemMapper returnOrderItemMapper;
@@ -91,12 +99,20 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     private final CostService costService;
 
     @Override
-    public Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long factoryId, String returnType, String progress) {
+    public Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long factoryId, String returnType,
+                                          String progress, String statuses) {
         LambdaQueryWrapper<ReturnOrder> w = new LambdaQueryWrapper<ReturnOrder>()
             .eq(code != null && !code.isBlank(), ReturnOrder::getCode, code)
             .eq(factoryId != null, ReturnOrder::getFactoryId, factoryId)
-            .eq(returnType != null && !returnType.isBlank(), ReturnOrder::getReturnType, returnType)
-            .orderByDesc(ReturnOrder::getId);
+            .eq(returnType != null && !returnType.isBlank(), ReturnOrder::getReturnType, returnType);
+        // 2026-09-27：状态多值（与 MaterialOrderService 的 statuses 同一约定）——
+        // 三级菜单「有效单据」页签 = DRAFT,AUDITED（排除已作废）、「已作废」= CANCELLED
+        if (statuses != null && !statuses.isBlank()) {
+            List<String> sts = java.util.Arrays.stream(statuses.split(",")).map(String::trim)
+                    .filter(s -> !s.isEmpty()).collect(java.util.stream.Collectors.toList());
+            if (!sts.isEmpty()) w.in(ReturnOrder::getStatus, sts);
+        }
+        w.orderByDesc(ReturnOrder::getId);
         // 维修退货进度筛选（2026-09-17）：
         //   PENDING_RETURN = 维修退货、已审核、未结案，且「送修合计 > 已返回合计」（工厂还没把货送完）
         //   CLOSED         = 已结案（全部送回并人工确认收尾）
@@ -108,6 +124,18 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                      + " > (SELECT IFNULL(SUM(r.quantity),0) FROM outsource_return_order_repair r WHERE r.return_order_id = outsource_return_order.id)");
         } else if (PROGRESS_CLOSED.equalsIgnoreCase(progress)) {
             w.eq(ReturnOrder::getClosedFlag, 1);
+        } else if (PROGRESS_OPEN.equalsIgnoreCase(progress)) {
+            w.eq(ReturnOrder::getReturnType, OutsourceReturnType.REPAIR.getCode())
+             .in(ReturnOrder::getStatus, java.util.List.of(DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
+             .apply("(outsource_return_order.status = '" + DocStatus.DRAFT.getCode() + "'"
+                     + " OR (SELECT IFNULL(SUM(p.quantity),0) FROM outsource_return_order_product p WHERE p.return_order_id = outsource_return_order.id)"
+                     + " > (SELECT IFNULL(SUM(r.quantity),0) FROM outsource_return_order_repair r WHERE r.return_order_id = outsource_return_order.id))");
+        } else if (PROGRESS_RETURNED.equalsIgnoreCase(progress)) {
+            // 2026-09-27「已返回完」页签：已审核且**全部送回**（含已结案；与 PENDING_RETURN 互补）
+            w.eq(ReturnOrder::getReturnType, OutsourceReturnType.REPAIR.getCode())
+             .eq(ReturnOrder::getStatus, DocStatus.AUDITED.getCode())
+             .apply("(SELECT IFNULL(SUM(p.quantity),0) FROM outsource_return_order_product p WHERE p.return_order_id = outsource_return_order.id)"
+                     + " <= (SELECT IFNULL(SUM(r.quantity),0) FROM outsource_return_order_repair r WHERE r.return_order_id = outsource_return_order.id)");
         }
         Page<ReturnOrder> raw = returnOrderMapper.selectPage(new Page<>(pageNum, pageSize), w);
         // 维修返回量：一次性按本页单据汇总（列表展示"送修 N / 已返回 M"）

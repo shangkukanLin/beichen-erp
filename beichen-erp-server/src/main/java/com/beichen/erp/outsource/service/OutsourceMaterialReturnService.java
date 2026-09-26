@@ -20,9 +20,11 @@ public interface OutsourceMaterialReturnService {
 
     /**
      * 分页查询（returnType：REFUND 退货退款 / REPAIR 维修退货，空=全部）。
-     * @param progress 进度筛选（维修退货用）：PENDING_RETURN 还有未返回 / CLOSED 已结案 / 空=全部
+     * @param progress 进度筛选（维修退货用）：PENDING_RETURN 还有未返回 / RETURNED 已返回完 / CLOSED 已结案 / 空=全部
+     * @param statuses 状态多值（逗号分隔，2026-09-27 三级菜单）：DRAFT,AUDITED=有效单据 / CANCELLED=已作废；空=全部
      */
-    Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long supplierId, String status, String returnType, String progress);
+    Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long supplierId, String status,
+                                   String returnType, String progress, String statuses);
 
     /** 详情 */
     Map<String, Object> detail(Long id);

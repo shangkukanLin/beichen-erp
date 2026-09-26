@@ -89,9 +89,21 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
      * （有单显示加工单号 / 无单显示"未关联"），审核·反审核·删除沿用通用端点。
      *
      * @param linked ALL（默认，全部）/ WITH_ORDER（只看关联加工单）/ WITHOUT_ORDER（只看无单）
-     * @param status 单据状态筛选（DRAFT / AUDITED，可空）
+     * @param status 单据状态筛选：单值（DRAFT/AUDITED/CANCELLED）或**逗号分隔多值**
+     *               （2026-09-27 三级菜单口径：「有效单据」= DRAFT,AUDITED；「已作废」= CANCELLED），可空
+     * @param factoryId 加工厂筛选（2026-09-27：加工返回单绑定来源单时的定位用），可空
+     * @param productId 产品筛选（同上），可空
+     * @param qualityType 退货规格筛选（同上），可空
+     * @param returnProgress 返回进度（2026-09-27）：PENDING=未返回完 / DONE=已返回完（按来源单聚合已审核返回单），可空
      */
-    Map<String, Object> pageDefectReturns(Integer pageNo, Integer size, String linked, String status);
+    Map<String, Object> pageDefectReturns(Integer pageNo, Integer size, String linked, String status,
+                                          Long factoryId, Long productId, String qualityType, String returnProgress);
+
+    /**
+     * 加工退货草稿**作废**（2026-09-27 用户口径）：DRAFT → CANCELLED。
+     * <p>台账「已作废」页签的数据来源；已审核的撤销仍走 {@code unAudit}（账务等量逆回）。</p>
+     */
+    void cancelDefectReturn(Long id);
 
     /**
      * 加工退货**详情**（2026-09-21 用户口径「加工退货页面的列表也应该有详情」）：记录全字段

@@ -109,15 +109,33 @@ public class OrderDeliveryController {
     }
 
     /**
-     * **加工退货台账**（2026-09-21 用户口径）：有单 + 无单**一张表** ——「加工退货」菜单页
-     * 「加工退货」页签的数据源，用「关联加工单」列区分（有单显示加工单号、无单显示"未关联"）。
+     * **加工退货台账**（2026-09-21 用户口径）：有单 + 无单**一张表**，用「关联加工单」列区分。
+     * <p>2026-09-27 三级菜单：本端点被「关联退货」（linked=WITH_ORDER）与「无单退货」（linked=WITHOUT_ORDER）
+     * 两个页面共用；`status` 支持逗号分隔多值（有效单据 = DRAFT,AUDITED / 已作废 = CANCELLED），
+     * `returnProgress` 支持按来源单聚合的返回进度（PENDING/DONE）筛选。</p>
      */
     @GetMapping("/return-defect/page")
     public R<Map<String, Object>> defectReturnPage(@RequestParam(defaultValue = "1") Integer page,
                                                    @RequestParam(defaultValue = "10") Integer size,
                                                    @RequestParam(required = false) String linked,
-                                                   @RequestParam(required = false) String status) {
-        return R.ok(deliveryService.pageDefectReturns(page, size, linked, status));
+                                                   @RequestParam(required = false) String status,
+                                                   @RequestParam(required = false) Long factoryId,
+                                                   @RequestParam(required = false) Long productId,
+                                                   @RequestParam(required = false) String qualityType,
+                                                   @RequestParam(required = false) String returnProgress) {
+        return R.ok(deliveryService.pageDefectReturns(page, size, linked, status,
+                factoryId, productId, qualityType, returnProgress));
+    }
+
+    /**
+     * **作废加工退货草稿**（2026-09-27 用户口径）：DRAFT → CANCELLED，供台账「已作废」页签。
+     * <p>与「反审核」分工：草稿作废（留痕、可查）；已审核单据必须先反审核（账务等量逆回）。
+     * 原先页面用的是物理删除（{@code DELETE /{id}}，端点保留供历史脚本调用）。</p>
+     */
+    @PutMapping("/{id}/cancel")
+    public R<Void> cancelDefectReturn(@PathVariable Long id) {
+        deliveryService.cancelDefectReturn(id);
+        return R.ok();
     }
 
     /**

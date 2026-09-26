@@ -27,8 +27,8 @@
  * <p>📌 详情入口规则（与加工侧同一条家规）：**有独立详情页的单据 → 行点击 / 「详情」跳详情页**；
  * 只有「收货台账」那种没有独立页的记录才用抽屉。</p>
  */
-import { reactive, ref, onMounted, onActivated } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, reactive, ref, watch, onMounted, onActivated } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
@@ -37,22 +37,49 @@ import EntityLinks from '@/components/EntityLinks.vue'
 
 defineOptions({ name: 'OutsourceMaterialReturn' })
 
+const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const list = ref<any[]>([])
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
-const query = reactive({ code: '', supplierId: undefined as any, status: '', progress: '' })
-/** 类型页签（2026-09-17）：REFUND 物料退货（退回并冲减应付）/ REPAIR 维修退货（送修，修好登记返回入库） */
-const activeType = ref<string>(MaterialReturnType.REFUND)
+const query = reactive({ code: '', supplierId: undefined as any })
 
 /**
- * 页签文案（2026-09-21 术语统一）：①与菜单/页面同名（「物料退货」），与加工侧「加工退货 / 维修退货」同模式；
- * ②「维修退货」与加工侧、与单据类型 label 全链一个词（沿革 维修返还 → 定稿 **维修退货**）。
+ * 三级菜单叶子（2026-09-27 用户口径）：原「物料退货」一个页面 2 页签 → 拆成 2 个菜单叶子，
+ * **本组件被两个叶子共用**（按路由路径判定叶子，与加工侧同范式）：
+ *  REFUND 退料   /outsource/material-return        页签：有效单据 | 已作废单据
+ *  REPAIR 维修退货 /outsource/material-return/repair 页签：待返回 | 已返回完 | 已作废
  */
-const TAB_LABELS: Record<string, string> = {
-  [MaterialReturnType.REFUND]: '物料退货',
-  [MaterialReturnType.REPAIR]: '维修退货'
+type Leaf = 'REFUND' | 'REPAIR'
+const leaf = computed<Leaf>(() => (route.path.replace(/\/$/, '').endsWith('/repair') ? 'REPAIR' : 'REFUND'))
+/** 类型（后端 returnType）与叶子同值：REFUND=退料（冲减应付）/ REPAIR=维修退货（送修→返回→结案） */
+const activeType = computed(() => leaf.value)
+
+type TabKey = 'ACTIVE' | 'CANCELLED' | 'PENDING' | 'DONE'
+const TABS: Record<Leaf, Array<{ key: TabKey; label: string }>> = {
+  REFUND: [{ key: 'ACTIVE', label: '有效单据' }, { key: 'CANCELLED', label: '已作废单据' }],
+  // 「待返回」含草稿（未审核的送修单不能在任何页签里消失）；「已返回完」= 已审核且全部送回
+  REPAIR: [{ key: 'PENDING', label: '待返回' }, { key: 'DONE', label: '已返回完' }, { key: 'CANCELLED', label: '已作废' }]
 }
+const tabs = computed(() => TABS[leaf.value])
+const activeTab = ref<TabKey>('ACTIVE')
+/** 页签角标：各页签条数（pageSize=1 取 total，零后端改动） */
+const tabCounts = reactive<Record<string, number>>({})
+function countOf(key: TabKey) { return tabCounts[leaf.value + ':' + key] }
+/** 列表查询参数：叶子决定 returnType，页签决定 status / progress */
+function listParams(tab: TabKey, pageNum: number, pageSize: number) {
+  const p: any = {
+    pageNum, pageSize, returnType: leaf.value,
+    code: query.code || undefined, supplierId: query.supplierId || undefined
+  }
+  if (tab === 'CANCELLED') p.statuses = DocStatus.CANCELLED
+  else if (tab === 'ACTIVE') p.statuses = [DocStatus.DRAFT, DocStatus.AUDITED].join(',')
+  else if (tab === 'PENDING') p.progress = 'OPEN'
+  else if (tab === 'DONE') p.progress = 'RETURNED'
+  return p
+}
+
+/** 类型文案（2026-09-21 术语统一）：页签文案改由叶子 TABS 定义（2026-09-27 三级菜单） */
 
 /**
  * 退货对象（辅料商/供应商）实时查库。
@@ -62,7 +89,7 @@ const TAB_LABELS: Record<string, string> = {
 const fetchSuppliers = (kw: string) =>
   request.get('/supplier/page', { params: { pageSize: 500, name: kw, excludeSupplierType: 'product' } })
 
-const isRepairTab = () => activeType.value === MaterialReturnType.REPAIR
+const isRepairTab = () => leaf.value === 'REPAIR'
 
 /**
  * 出库源仓可点（2026-09-25 用户口径「仓库之类可以点进详情」）：源仓可能是**委外仓**（物料在工厂处）
@@ -86,24 +113,26 @@ function goWarehouseDetail(id: any) {
 async function loadData() {
   loading.value = true
   try {
-    // progress（维修退货）：PENDING_RETURN 还有未返回 / CLOSED 已结案（2026-09-17）
-    const r = await request.get<any, any>('/outsource/material-return/page', {
-      params: {
-        pageNum: pagination.pageNum, pageSize: pagination.pageSize,
-        code: query.code || undefined, supplierId: query.supplierId || undefined,
-        status: query.status || undefined, returnType: activeType.value,
-        progress: isRepairTab() ? (query.progress || undefined) : undefined
-      }
-    })
+    const r = await request.get<any, any>('/outsource/material-return/page',
+      { params: listParams(activeTab.value, pagination.pageNum, pagination.pageSize) })
     list.value = r?.records || []; pagination.total = Number(r?.total || 0)
   } catch (e: any) {
     ElMessage.error('加载物料退货失败：' + (e?.msg || e?.message || '未知错误'))
   } finally { loading.value = false }
 }
-/** 切类型页签：重置到第 1 页再查（返回进度筛选只在维修页签有效，切换时清空） */
-function handleTabChange() { pagination.pageNum = 1; query.progress = ''; loadData() }
+/** 切页签：重置到第 1 页再查（筛选条件已由 叶子+页签 表达） */
+function handleTabChange() { pagination.pageNum = 1; loadData() }
 function handleSearch() { pagination.pageNum = 1; loadData() }
-function handleReset() { query.code = ''; query.supplierId = undefined; query.status = ''; query.progress = ''; handleSearch() }
+function handleReset() { query.code = ''; query.supplierId = undefined; handleSearch() }
+/** 页签角标（2026-09-27）：各页签条数 —— 每页取 1 条只读 total */
+async function loadCounts() {
+  for (const t of tabs.value) {
+    try {
+      const r = await request.get<any, any>('/outsource/material-return/page', { params: listParams(t.key, 1, 1) })
+      tabCounts[leaf.value + ':' + t.key] = Number(r?.total || 0)
+    } catch { tabCounts[leaf.value + ':' + t.key] = 0 }
+  }
+}
 
 /** 结案（仅维修退货）：全部送修数量已返回（未返回=0）后确认收尾 */
 async function handleClose(row: any) {
@@ -147,14 +176,24 @@ function handleAdd(type?: string) { router.push(`/outsource/material-return/add?
    新增仍走 /outsource/material-return/add（可带 fromDelivery 等预填）。 */
 function goDetail(row: any) { router.push(`/outsource/material-return/detail/${row.id}`) }
 
+// 叶子切换（点左侧菜单 / 直达 URL）：页签回到该叶子的第一个并加载
+watch(leaf, (lv) => {
+  activeTab.value = TABS[lv][0].key
+  pagination.pageNum = 1
+  loadData(); loadCounts()
+})
+
 onActivated(() => {
   // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
   if (sessionStorage.getItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY) === '1') {
     sessionStorage.removeItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY)
-    loadData()
+    loadData(); loadCounts()
   }
 })
-onMounted(() => { loadData(); loadWarehouses() })
+onMounted(() => {
+  activeTab.value = TABS[leaf.value][0].key
+  loadData(); loadCounts(); loadWarehouses()
+})
 
 </script>
 
@@ -162,30 +201,26 @@ onMounted(() => { loadData(); loadWarehouses() })
   <!-- 一页一张卡片（家规）：页签 → 筛选行 → 表格 → 分页 -->
   <div class="page-list">
     <el-card shadow="never">
-      <!-- 页签：①物料退货（退回并冲减应付）②维修退货（送修 → 登记返回 → 结案） -->
-      <el-tabs v-model="activeType" style="margin-bottom:8px" @tab-change="handleTabChange">
-        <el-tab-pane :label="TAB_LABELS[MaterialReturnType.REFUND]" :name="MaterialReturnType.REFUND" />
-        <el-tab-pane :label="TAB_LABELS[MaterialReturnType.REPAIR]" :name="MaterialReturnType.REPAIR" />
+      <!-- 页签按叶子生成（2026-09-27 三级菜单）：退料 = 有效单据/已作废单据；维修退货 = 待返回/已返回完/已作废；
+           标签后带**数量角标**（页签条数）。 -->
+      <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
+        <el-tab-pane v-for="t in tabs" :key="t.key" :name="t.key">
+          <template #label>
+            <span>{{ t.label }}<span v-if="countOf(t.key)" style="margin-left:4px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ countOf(t.key) }}</span></span>
+          </template>
+        </el-tab-pane>
       </el-tabs>
 
-      <!-- 筛选行（与加工退货页同一布局）：左侧筛选 + 查询/重置，右侧新增按钮（随页签切换） -->
+      <!-- 筛选行（叶子化后简化）：状态/返回进度已由**页签**表达 ⇒ 只留单号 + 供应商（保留一个查询框） -->
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <span v-if="leaf === 'REFUND'" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">退回并冲减应付的退料单（MRW-/MRH-）</span>
+        <span v-else style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">送供应商维修的料（与工厂的「维修退货」同口径，两处各自成页）</span>
         <el-input v-model="query.code" placeholder="退货单号" clearable style="width:180px" @keyup.enter="handleSearch" />
         <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="供应商" style="width:170px" />
-        <el-select v-model="query.status" placeholder="状态" clearable style="width:130px">
-          <el-option label="草稿" :value="DocStatus.DRAFT" />
-          <el-option label="已审核" :value="DocStatus.AUDITED" />
-          <el-option label="已作废" :value="DocStatus.CANCELLED" />
-        </el-select>
-        <!-- 返回进度（仅维修退货）：跟踪"还有多少货在供应商处没回来" -->
-        <el-select v-if="isRepairTab()" v-model="query.progress" placeholder="返回进度" clearable style="width:130px">
-          <el-option label="待返回" value="PENDING_RETURN" />
-          <el-option label="已结案" value="CLOSED" />
-        </el-select>
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
         <div style="margin-left:auto;display:flex;gap:8px">
-          <el-button v-if="!isRepairTab()" type="success" :icon="'Plus'" @click="handleAdd(MaterialReturnType.REFUND)">新增</el-button>
+          <el-button v-if="leaf === 'REFUND'" type="success" :icon="'Plus'" @click="handleAdd(MaterialReturnType.REFUND)">新增</el-button>
           <el-button v-else type="success" :icon="'Plus'" @click="handleAdd(MaterialReturnType.REPAIR)">新增</el-button>
         </div>
       </div>
@@ -231,11 +266,12 @@ onMounted(() => { loadData(); loadWarehouses() })
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="74" align="center">
-          <!-- 维修退货已结案时显示「已结案」（替代"已审核"），未结案按原状态（与加工侧一致） -->
+        <!-- 2026-09-27：状态与进度**分开** —— 状态列恒显示单据状态；「已结案」作为附加标签并列。
+             宽度按叶子给：维修退货要放下两个 tag（122），退料叶子没有结案概念（74，保持原宽不破坏预算）。 -->
+        <el-table-column label="状态" :width="isRepairTab() ? 122 : 74" align="center">
           <template #default="{ row }">
-            <el-tag v-if="row.returnType === MaterialReturnType.REPAIR && row.closedFlag === 1" type="success" size="small">已结案</el-tag>
-            <el-tag v-else :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
+            <el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
+            <el-tag v-if="row.returnType === MaterialReturnType.REPAIR && row.closedFlag === 1" type="success" size="small" style="margin-left:4px">已结案</el-tag>
           </template>
         </el-table-column>
         <!-- 动作集与顺序统一（与加工侧一致）：详情 → 审核 → 反审核 → 作废 → 结案 → 撤销结案 -->
