@@ -223,7 +223,7 @@ onActivated(() => {
     <!-- 列表 -->
     <el-card shadow="never" class="table-card">
       <el-table v-loading="tableLoading" :data="tableData" border stripe row-key="id">
-        <el-table-column label="菜单名称" min-width="190" show-overflow-tooltip>
+        <el-table-column label="菜单名称" min-width="185" show-overflow-tooltip>
           <template #default="{ row }">
             <span :style="{ paddingLeft: row.level * 24 + 'px' }">
               <span v-if="row.level > 0" style="color: var(--app-text-placeholder); margin-right: 4px">├</span>
@@ -245,7 +245,7 @@ onActivated(() => {
             {{ row.routePath || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="icon" label="图标" width="150" show-overflow-tooltip>
+        <el-table-column prop="icon" label="图标" width="170" show-overflow-tooltip>
           <template #default="{ row }">
             <span>
               <el-icon><component :is="row.icon" /></el-icon>

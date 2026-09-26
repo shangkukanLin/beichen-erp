@@ -43,7 +43,7 @@
              报损单号 min112→152 + 可点（WBS-+11 位原被截断）；仓库 min100→130 + 可点（**委外仓/自有物料仓分流**）；
              报损明细 min124→130（明细汇总长度无上界 ⇒ 白名单 + tooltip）；日期 92、原因 80、金额 80、状态 72、审核人 70。
              合计 = 152+130+92+80+130+80+72+70+132 = **938** ✓ -->
-        <el-table-column label="仓库" min-width="130" show-overflow-tooltip>
+        <el-table-column label="仓库" min-width="189" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseId" type="primary" link @click.stop="goWarehouseDetail(row.warehouseId)">{{ row.warehouseName || '—' }}</el-button>
             <span v-else>{{ row.warehouseName || '—' }}</span>
@@ -53,7 +53,7 @@
         <el-table-column label="报损原因" width="80" show-overflow-tooltip>
           <template #default="{ row }">{{ LossReasonLabel[row.lossReason] || row.lossReason || '—' }}</template>
         </el-table-column>
-        <el-table-column prop="itemSummary" label="报损明细" min-width="130" show-overflow-tooltip>
+        <el-table-column prop="itemSummary" label="报损明细" min-width="71" show-overflow-tooltip>
           <template #default="{ row }">{{ row.itemSummary || '—' }}</template>
         </el-table-column>
         <el-table-column label="报损金额" width="80" align="right">

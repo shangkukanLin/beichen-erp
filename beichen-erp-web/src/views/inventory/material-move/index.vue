@@ -35,24 +35,26 @@
            ①单号 min120→**146 固定**并做成链接进详情；
            ②移出/移入仓库做成链接进**对应仓库详情**（委外仓/自有物料仓自动分流，见 goWarehouseDetail）；
            ③物料明细改 EntityLinks（物料可点，多值弹层逐项）。
-           声明合计 = 146+112+112+140+100+78+132 = **820** ✓ -->
+           2026-09-26 B8（白名单收尾）：移出/移入仓库 min112→**189**（委外仓名 = 主体名 +「委外仓库」后缀，
+             实测需 189 ⇒ 真实仓名完整显示）；物料明细 min140→120 抵平（多物料汇总本身无上界，仍白名单 + tooltip + 弹层）。
+           声明合计 = 146+189+189+120+100+78+132 = **954** ✓ -->
       <el-table v-loading="loading" :data="tableData" border stripe @row-click="handleDetail">
         <el-table-column label="单号" width="146" show-overflow-tooltip>
           <template #default="{ row }"><el-button type="primary" link @click.stop="handleDetail(row)">{{ row.code }}</el-button></template>
         </el-table-column>
-        <el-table-column label="移出仓库" min-width="112" show-overflow-tooltip>
+        <el-table-column label="移出仓库" min-width="189" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.fromWarehouseId" type="primary" link @click.stop="goWarehouseDetail(row.fromWarehouseId)">{{ warehouseName(row.fromWarehouseId) }}</el-button>
             <span v-else>{{ warehouseName(row.fromWarehouseId) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="移入仓库" min-width="112" show-overflow-tooltip>
+        <el-table-column label="移入仓库" min-width="189" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.toWarehouseId" type="primary" link @click.stop="goWarehouseDetail(row.toWarehouseId)">{{ warehouseName(row.toWarehouseId) }}</el-button>
             <span v-else>{{ warehouseName(row.toWarehouseId) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="物料明细" min-width="140" show-overflow-tooltip>
+        <el-table-column label="物料明细" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
             <EntityLinks :items="row.items" target="material" qty-key="quantity">
               <span>{{ row.itemsSummary || '-' }}</span>

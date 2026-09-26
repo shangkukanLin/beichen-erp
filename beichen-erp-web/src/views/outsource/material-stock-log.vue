@@ -44,14 +44,15 @@
           </template>
         </el-table-column>
         <!-- 2026-09-26 B5b：物料名称做成链接进物料库存分布详情（与成品侧「产品名称」对称） -->
-        <el-table-column label="物料名称" min-width="110" show-overflow-tooltip>
+        <el-table-column label="物料名称" min-width="102" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.materialId" type="primary" link @click.stop="router.push(`/outsource/material-stock/detail/${row.materialId}`)">{{ materialName(row) }}</el-button>
             <span v-else>{{ materialName(row) }}</span>
           </template>
         </el-table-column>
-        <!-- 仓库 120→150（委外仓名实测需 189，白名单 + tooltip）；点击按仓库类别分流（委外仓 / 自有物料仓） -->
-        <el-table-column label="仓库" width="150" show-overflow-tooltip>
+        <!-- 仓库 120→**189**（委外仓名实测需 189 ⇒ 完整显示）；点击按仓库类别分流（委外仓 / 自有物料仓）
+             2026-09-26 B8：为抵平把「物料名称」min110→71（物料名长度无上界 ⇒ 白名单 + tooltip，净减截断单元格） -->
+        <el-table-column label="仓库" width="174" show-overflow-tooltip>
           <template #default="{ row }">
             <!-- 物料可能存放在委外仓（实测占大半），仓库名可点进仓库详情 -->
             <el-button v-if="row.warehouseId" type="primary" link @click.stop="goWarehouse(row.warehouseId)">

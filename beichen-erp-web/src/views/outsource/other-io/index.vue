@@ -94,7 +94,7 @@ onMounted(()=>{ loadWarehouses(); loadData() })
         <el-table-column label="单号" width="156" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="handleEdit(row)">{{ row.code }}</el-button></template>
         </el-table-column>
-        <el-table-column label="仓库" min-width="120" show-overflow-tooltip><template #default="{row}"><el-button type="primary" link @click.stop="goWarehouseDetail(row.warehouseId)">{{ getWhName(row.warehouseId) }}</el-button></template></el-table-column>
+        <el-table-column label="仓库" min-width="189" show-overflow-tooltip><template #default="{row}"><el-button type="primary" link @click.stop="goWarehouseDetail(row.warehouseId)">{{ getWhName(row.warehouseId) }}</el-button></template></el-table-column>
         <el-table-column label="日期" width="100"><template #default="{row}">{{ $fmtDate(row.ioDate) }}</template></el-table-column>
         <el-table-column label="物料明细" min-width="140" show-overflow-tooltip>
           <template #default="{row}"><span v-if="row.itemSummary">{{row.itemSummary}}</span><span v-else style="color:var(--app-text-placeholder)">-</span></template>

@@ -200,31 +200,31 @@ onActivated(() => { loadData() })
            ⇒ 横向滚动 149px。收窄为合计 936px（本组件被 成品库存盘点 / 物料库存盘点 两页共用 ⇒ 一处修两页）。
            2026-09-26 B5a（用户口径「数据显示完整 + 单号/仓库可点」）：
            ①盘点单号 130→**146** 并做成链接（点开与「查看明细/录入实盘」同一出口，避免两套入口）；
-           ②仓库 min110→130 并做成链接进**对应仓库详情**（按 warehouseCategory 分流委外仓/自有仓）；
-           ③为抵平：盘点月份 90→80、盘点日期 100→96、明细行数 80→70、差异行数 80→70、差异合计 96→88。
-           合计 = 146+130+80+96+70+70+88+76+174 = **930** ✓ -->
+           ②仓库 min110→**189**（委外仓名实测需 189 ⇒ 完整显示）并做成链接进**对应仓库详情**（按 warehouseCategory 分流）；
+           ③为抵平：盘点月份 80→76、明细行数 70→62、差异行数 70→62、差异合计 88→76、状态 76→72。
+           合计 = 146+189+76+96+62+62+76+72+174 = **953** ✓ -->
       <el-table v-loading="loading" :data="data" border stripe>
         <el-table-column label="盘点单号" width="146" show-overflow-tooltip>
           <template #default="{ row }"><el-button type="primary" link @click.stop="openItems(row)">{{ row.takeNo }}</el-button></template>
         </el-table-column>
-        <el-table-column label="仓库" min-width="130" show-overflow-tooltip>
+        <el-table-column label="仓库" min-width="189" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseId" type="primary" link @click.stop="goWarehouseDetail(row.warehouseId)">{{ row.warehouseName }}</el-button>
             <span v-else>{{ row.warehouseName }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="period" label="盘点月份" width="80" align="center" />
+        <el-table-column prop="period" label="盘点月份" width="76" align="center" />
         <el-table-column label="盘点日期" width="96"><template #default="{row}">{{ fmtDate(row.takeDate) }}</template></el-table-column>
-        <el-table-column prop="itemCount" label="明细行数" width="70" align="right" />
-        <el-table-column label="差异行数" width="70" align="right">
+        <el-table-column prop="itemCount" label="明细行数" width="62" align="right" />
+        <el-table-column label="差异行数" width="62" align="right">
           <template #default="{row}">
             <span :style="{ color: row.diffCount ? 'var(--app-color-danger)' : '' }">{{ row.diffCount || 0 }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="差异合计" width="88" align="right">
+        <el-table-column label="差异合计" width="76" align="right">
           <template #default="{row}"><span :style="{ color: row.diffSum ? 'var(--app-color-danger)' : '' }">{{ fmt(row.diffSum) }}</span></template>
         </el-table-column>
-        <el-table-column label="状态" width="76" align="center">
+        <el-table-column label="状态" width="72" align="center">
           <template #default="{row}"><el-tag :type="(DocStatusTag[row.status] || 'info') as any" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
         <el-table-column label="操作" width="174" align="center" fixed="right">

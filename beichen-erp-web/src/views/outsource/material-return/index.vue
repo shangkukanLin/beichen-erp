@@ -202,10 +202,10 @@ onMounted(() => { loadData(); loadWarehouses() })
         <el-table-column :label="isRepairTab() ? '维修供应商' : '供应商'" width="134" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName }}</el-button></template>
         </el-table-column>
-        <el-table-column v-if="!isRepairTab()" label="出库源仓" width="150" show-overflow-tooltip>
+        <el-table-column v-if="!isRepairTab()" label="出库源仓" width="189" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="goWarehouseDetail(row.fromWarehouseId)">{{ row.warehouseName }}</el-button></template>
         </el-table-column>
-        <el-table-column label="退货/送修内容" min-width="110" show-overflow-tooltip>
+        <el-table-column label="退货/送修内容" min-width="71" show-overflow-tooltip>
           <!-- 物料退货显示"退货物料"、维修退货显示"送修物料"（同一列，明细在详情页）。
                2026-09-25：物料可点进「物料库存分布详情」（两个页签同源，后端新增 items[]） -->
           <template #default="{ row }">

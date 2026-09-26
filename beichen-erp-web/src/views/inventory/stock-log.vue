@@ -50,7 +50,10 @@
             <span v-else>{{ productName(row.productId) }}</span>
           </template>
         </el-table-column>
-        <!-- 仓库 110→150（委外仓名实测需 189，已登记白名单 + tooltip；可点进仓库详情） -->
+        <!-- 仓库 110→150（委外仓名实测需 189）：
+             2026-09-26 B8 复核——本页 8 列已满，仓库(需189) 与 产品名称(需126) 二者只能保一个：
+             实测「仓库 174 + 产品名称 102」会让 12 行产品名被截断（多过仓库原本的 8 行）⇒ **优先保短值列**：
+             产品名称 min110（6 字产品名完整）、仓库 150（10 字委外仓名走白名单 + tooltip + 可点进仓库详情）。 -->
         <el-table-column label="仓库" width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <el-button v-if="row.warehouseId" type="primary" link @click.stop="router.push(`/inventory/warehouse/detail/${row.warehouseId}`)">

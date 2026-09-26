@@ -110,18 +110,19 @@ onActivated(() => { loadData() })
         序号与账期列此前已按需求移除。此列若将来要恢复，请先确认表头仍能完整显示（verify-customer-sort 会拦）。
       -->
       <el-table :data="data.rows" border stripe size="small" max-height="420">
-        <el-table-column prop="customerName" label="客户" min-width="100" show-overflow-tooltip>
+        <el-table-column prop="customerName" label="客户" min-width="126" show-overflow-tooltip>
           <template #default="{ row }">
             <!-- 点客户名进单客户分析（看该客户的拿货/品牌/利润/退货全貌）。
                  不再显示「新增」标签：种子数据首单集中在同一天，全员标记反而像脏数据。 -->
             <el-link type="primary" underline="never" @click="router.push(`/analysis/customer/${row.customerId}`)">{{ row.customerName }}</el-link>
           </template>
         </el-table-column>
-        <!-- 2026-09-26 B7（实测驱动）：本表 12 列已挤满（声明合计 918 → 容器 948 全被弹性摊掉），
-             两个真被截断的列按需加宽：客户 min78→110（**链接 + 客户名**，实测需 123 ⇒ 已登记白名单 + tooltip）、
-             最近成交 min82→**106**（日期实测需 106，原 10/10 行全被截断）；
-             为抵平把金额列按可压缩余量收拢：销售额/退货额 82→78、净额/成本 70→66、利润 72→68、
-             利润率 82→78、占比 72→68、订单数 82→78、应收余额 92→86 ⇒ 声明合计 936 ✓ -->
+        <!-- 2026-09-26 B7/B8（实测驱动）：本表 12 列已挤满（声明合计 918 → 容器 948 全被弹性摊掉），
+             两个真被截断的列按需加宽：客户 min78→**126**（**链接 + 客户名**，实测需 123 ⇒ 完整显示）、
+             最近成交 min82→**98**（日期：small 档需 ~99，原 10/10 行全被截断）；
+             为抵平：金额列按可压缩余量收拢（销售额/退货额 82→78、净额/成本 70→78、利润 72→78、
+             利润率 82→78、应收余额 92→78 ⇒ small 档 5 位金额需 ~79，正好放下），
+             占比 72→**56**、订单数 82→**56**（内容只需 ~45px，余量全部让给客户列）⇒ 声明合计 936 ✓ -->
         <el-table-column label="销售额" min-width="78" align="right" sortable :sort-method="sortNum('amount')"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.amount) }}</span></template></el-table-column>
         <el-table-column label="退货额" min-width="78" align="right" sortable :sort-method="sortNum('returnAmount')"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.returnAmount) }}</span></template></el-table-column>
         <el-table-column label="净额" min-width="78" align="right" sortable :sort-method="sortNum('netAmount')"><template #default="{row}">{{ fmt(row.netAmount) }}</template></el-table-column>
@@ -138,8 +139,8 @@ onActivated(() => { loadData() })
           </template>
         </el-table-column>
         <!-- 占比列排序 = 按 amount 排（展示口径就是「该客户销售额 / 合计销售额」，两者同序） -->
-        <el-table-column label="占比" min-width="64" align="right" sortable :sort-method="sortNum('amount')"><template #default="{row}">{{ pct(Number(row.amount), Number(summary.totalAmount)) }}%</template></el-table-column>
-        <el-table-column label="订单数" min-width="72" align="center" sortable :sort-method="sortNum('orderCount')"><template #default="{row}">{{ row.orderCount }}</template></el-table-column>
+        <el-table-column label="占比" min-width="56" align="right" sortable :sort-method="sortNum('amount')"><template #default="{row}">{{ pct(Number(row.amount), Number(summary.totalAmount)) }}%</template></el-table-column>
+        <el-table-column label="订单数" min-width="56" align="center" sortable :sort-method="sortNum('orderCount')"><template #default="{row}">{{ row.orderCount }}</template></el-table-column>
         <el-table-column label="应收余额" min-width="78" align="right" sortable :sort-method="sortNum('unpaid')"><template #default="{row}"><span :style="{color: Number(row.unpaid)>0?'var(--app-color-warning)':'inherit'}">{{ fmt(row.unpaid) }}</span></template></el-table-column>
         <el-table-column prop="lastDate" label="最近成交" min-width="98" align="center"/>
         <el-table-column label="操作" min-width="54" align="center">
