@@ -116,7 +116,9 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
             <span v-else>{{ row.supplierName || sName(row.supplierId) || '—' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="主体类型" width="70" align="center">
+        <!-- 2026-09-26 B10：列名「主体类型」4 字实测需 90px（本列 70）⇒ 按家规改短名「类型」
+             （页签已按主体类型筛选、详情页也有全称，信息不丢）。 -->
+        <el-table-column label="类型" width="70" align="center">
           <template #default="{row}">
             <el-tag v-if="row.supplierType" :type="TYPE_TAG[row.supplierType] || 'info'" size="small">{{ typeLabel(row.supplierType) }}</el-tag>
             <span v-else>—</span>

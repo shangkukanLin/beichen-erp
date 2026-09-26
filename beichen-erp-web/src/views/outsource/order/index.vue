@@ -125,7 +125,9 @@ onMounted(() => {
         </el-table-column>
         <!-- 是否缺料（2026-09-17）：口径 = 剩余待收量对应的物料需求 > 该加工厂委外仓库存（与收货时的缺料拦截一致）；
              仅进行中（待审核/生产中）计算，已结单/已作废显示 — -->
-        <el-table-column label="是否缺料" width="62" align="center">
+        <!-- 2026-09-26 B10：62→**90** —— 4 字表头「是否缺料」实测需 90px，62 会把**列名**省略成「是否…」
+             （守卫此前只量 body 单元格、漏了表头，本批已补 HDRCLIP 检查）。本页余量 28px，正好够。 -->
+        <el-table-column label="是否缺料" width="90" align="center">
           <template #default="{row}">
             <span v-if="row.materialShortage === null || row.materialShortage === undefined">—</span>
             <el-tag v-else :type="row.materialShortage ? 'danger' : 'success'" size="small">{{ row.materialShortage ? '是' : '否' }}</el-tag>

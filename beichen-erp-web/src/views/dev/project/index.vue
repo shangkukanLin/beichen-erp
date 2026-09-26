@@ -150,9 +150,9 @@ onMounted(() => { loadData(); loadBrandOptions() })
         <el-table-column prop="brandName" label="品牌" width="108" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="70" show-overflow-tooltip />
         <el-table-column prop="touchSupplierName" label="触摸方案" min-width="70" show-overflow-tooltip />
-        <el-table-column prop="originalSize" label="原机尺寸" width="64" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机" width="64" show-overflow-tooltip />
         <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
-        <el-table-column prop="glassSize" label="改配尺寸" width="64" show-overflow-tooltip />
+        <el-table-column prop="glassSize" label="改配" width="64" show-overflow-tooltip />
         <el-table-column label="项目阶段" min-width="70" align="center">
           <template #default="{ row }">
             <el-tag type="warning" size="small">{{ getCurrentPhase(row) }}</el-tag>
@@ -184,9 +184,9 @@ onMounted(() => { loadData(); loadBrandOptions() })
         <el-table-column prop="brandName" label="品牌" width="108" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="70" show-overflow-tooltip />
         <el-table-column prop="touchSupplierName" label="触摸方案" min-width="70" show-overflow-tooltip />
-        <el-table-column prop="originalSize" label="原机尺寸" width="64" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机" width="64" show-overflow-tooltip />
         <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
-        <el-table-column prop="glassSize" label="改配尺寸" width="64" show-overflow-tooltip />
+        <el-table-column prop="glassSize" label="改配" width="64" show-overflow-tooltip />
         <el-table-column label="项目阶段" min-width="70" align="center">
           <template #default="{ row }">
             <el-tag type="warning" size="small">{{ getCurrentPhase(row) }}</el-tag>
@@ -218,9 +218,9 @@ onMounted(() => { loadData(); loadBrandOptions() })
         <el-table-column prop="brandName" label="品牌" width="108" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="70" show-overflow-tooltip />
         <el-table-column prop="touchSupplierName" label="触摸方案" min-width="70" show-overflow-tooltip />
-        <el-table-column prop="originalSize" label="原机尺寸" width="64" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机" width="64" show-overflow-tooltip />
         <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
-        <el-table-column prop="glassSize" label="改配尺寸" width="64" show-overflow-tooltip />
+        <el-table-column prop="glassSize" label="改配" width="64" show-overflow-tooltip />
         <el-table-column label="状态" width="75" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'success'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="85" align="center" fixed="right">
           <template #default="{row}">
@@ -239,9 +239,9 @@ onMounted(() => { loadData(); loadBrandOptions() })
         <el-table-column prop="brandName" label="品牌" width="108" show-overflow-tooltip />
         <el-table-column prop="displaySupplierName" label="显示方案" min-width="70" show-overflow-tooltip />
         <el-table-column prop="touchSupplierName" label="触摸方案" min-width="70" show-overflow-tooltip />
-        <el-table-column prop="originalSize" label="原机尺寸" width="64" show-overflow-tooltip />
+        <el-table-column prop="originalSize" label="原机" width="64" show-overflow-tooltip />
         <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
-        <el-table-column prop="glassSize" label="改配尺寸" width="64" show-overflow-tooltip />
+        <el-table-column prop="glassSize" label="改配" width="64" show-overflow-tooltip />
         <el-table-column label="状态" width="75" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'danger'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="115" align="center" fixed="right">
           <template #default="{row}">

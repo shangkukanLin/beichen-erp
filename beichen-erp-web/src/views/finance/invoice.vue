@@ -146,8 +146,10 @@ onMounted(() => { loadData() })
         </el-table-column>
         <el-table-column label="发票类型" width="78" show-overflow-tooltip><template #default="{row}">{{ KIND_SHORT[row.invoiceKind] || INVOICE_KIND_LABELS[row.invoiceKind] || row.invoiceKind }}</template></el-table-column>
         <el-table-column label="开票日期" width="106"><template #default="{row}">{{ fmtDate(row.invoiceDate) }}</template></el-table-column>
-        <el-table-column prop="partnerName" label="对方单位" min-width="56" show-overflow-tooltip/>
-        <el-table-column prop="amount" label="不含税金额" width="74" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
+        <!-- 2026-09-26 B10：列名「对方单位」4 字需 90px（本列 72）⇒ 改短名「对方」（方向列已标明是购买方/销售方） -->
+        <el-table-column prop="partnerName" label="对方" min-width="62" show-overflow-tooltip/>
+        <!-- 2026-09-26 B10：列名「不含税金额」5 字需 104px ⇒ 改短名「不含税」（3 字需 76）并把 74→76 -->
+        <el-table-column prop="amount" label="不含税" width="76" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column label="税率" width="44" align="right"><template #default="{row}">{{ Number(row.taxRate)||0 }}%</template></el-table-column>
         <el-table-column label="税额" width="72" align="right" show-overflow-tooltip><template #default="{row}"><span style="color:var(--app-color-primary)">{{ fmt(row.taxAmount) }}</span></template></el-table-column>
         <el-table-column prop="totalAmount" label="价税合计" width="78" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>

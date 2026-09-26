@@ -95,11 +95,13 @@ onActivated(loadData)
         </el-table-column>
         <!-- 2026-09-25（用户口径「数据显示完整 + 供应商可点」）：可点进供应商详情（行数据来自物料订单分页，
              已带 supplierId，无需改接口） -->
-        <el-table-column label="供应商/加工厂" min-width="100" show-overflow-tooltip>
+        <!-- 2026-09-26 B10：列名「供应商/加工厂」6 字 + 斜杠实测需 124px（本页给不出）⇒ 改标准短名「往来单位」
+             （表头需 90 ✓）；列内容（供应商名 + 链接）实测需 133 ⇒ min100→**134**，由「物料」min76→56 与「状态」82→68 抵平。 -->
+        <el-table-column label="往来单位" min-width="134" show-overflow-tooltip>
           <template #default="{ row }"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName }}</el-button></template>
         </el-table-column>
         <!-- 2026-09-25：物料可点进「物料库存分布详情」（单项直链 / 多项 Popover 逐项可点） -->
-        <el-table-column label="物料" min-width="80" show-overflow-tooltip>
+        <el-table-column label="物料" min-width="56" show-overflow-tooltip>
           <template #default="{ row }">
             <EntityLinks :items="itemsOf(row)" target="material" name-key="materialName" qty-key="orderQuantity">
               <span>{{ namesOf(row) }}</span>
@@ -115,10 +117,12 @@ onActivated(loadData)
             <span :style="{ color: (totalOf(row) - receivedOf(row)) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-warning)', fontWeight: 500 }">{{ totalOf(row) - receivedOf(row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="收货进度" width="64"><template #default="{ row }"><el-progress :percentage="progressOf(row)" :stroke-width="10" :color="progressOf(row) >= 100 ? 'var(--app-color-success)' : 'var(--app-color-primary)'" /></template></el-table-column>
+        <!-- 2026-09-26 B10：列名「收货进度」4 字需 90px ⇒ 改短名「进度」（需 62）；
+             省下的 28px 还给「状态」（68→96，状态 tag 实测需 96）。 -->
+        <el-table-column label="进度" width="62"><template #default="{ row }"><el-progress :percentage="progressOf(row)" :stroke-width="10" :color="progressOf(row) >= 100 ? 'var(--app-color-success)' : 'var(--app-color-primary)'" /></template></el-table-column>
         <el-table-column label="最近收货" width="96"><template #default="{ row }">{{ $fmtDate(row.lastDeliveryTime) }}</template></el-table-column>
         <el-table-column label="交期" width="96"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column label="状态" width="82" align="center"><template #default="{ row }"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="状态" width="96" align="center"><template #default="{ row }"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="118" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goReceive(row)">收货</el-button>

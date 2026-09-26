@@ -118,7 +118,7 @@ onActivated(() => {
            <el-table-column label="供应商" width="134" show-overflow-tooltip>
            <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName }}</el-button></template>
            </el-table-column>
-           <el-table-column label="物料名称" min-width="80" show-overflow-tooltip>
+           <el-table-column label="物料名称" min-width="90" show-overflow-tooltip>
           <!-- 2026-09-25：物料可点进「物料库存分布详情」（单项直链 / 多项 Popover 逐项可点；
                物料明细摘要（含已收）仍在悬浮 tooltip 里，无 id 时回退该 tooltip） -->
           <template #default="{row}">
@@ -132,7 +132,9 @@ onActivated(() => {
             </EntityLinks>
           </template>
         </el-table-column>
-        <el-table-column label="下单总数" width="52" align="center">
+        <!-- 2026-09-26 B10：表头修复 —— 「下单总数」4 字实测需 90px，原 52 把**列名**省略成「下单…」；
+             为抵平把「物料名称」min80→70（多物料汇总列：白名单 + tooltip + 明细可点）。 -->
+        <el-table-column label="下单总数" width="90" align="center">
           <template #default="{row}">{{ (row.items || []).reduce((s: number, it: any) => s + (it.orderQuantity || 0), 0) }}</template>
         </el-table-column>
         <el-table-column label="已收" width="44" align="center">
@@ -140,7 +142,7 @@ onActivated(() => {
         </el-table-column>
         <el-table-column label="最近收货" width="106" align="center" show-overflow-tooltip><template #default="{row}">{{ $fmtDate(row.lastDeliveryTime) || '-' }}</template></el-table-column>
         <el-table-column label="交期" width="80" align="center"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column label="状态" width="96" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status]||'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="状态" width="76" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status]||'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 206→200；2026-09-25 按 4 按钮家规档收到 176。 -->
         <el-table-column label="操作" width="176" align="center" fixed="right">
           <template #default="{row}">

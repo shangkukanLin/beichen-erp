@@ -114,7 +114,9 @@ onActivated(() => { loadData() })
             </EntityLinks>
           </template>
         </el-table-column>
-        <el-table-column label="下单/已收/剩余" width="110" align="center">
+        <!-- 2026-09-26 B10：表头修复 —— 「下单/已收/剩余」实测需 130px、110 会把列名省略；
+             为抵平把「产品」min90→70（多产品汇总，白名单 + tooltip）。 -->
+        <el-table-column label="下单/已收/剩余" width="130" align="center">
           <template #default="{ row }">
             <span>{{ row.totalQuantity }}</span>
             <span style="color:var(--app-text-placeholder)"> / </span>
@@ -123,7 +125,9 @@ onActivated(() => { loadData() })
             <span :style="{ color: Number(row.remainingQuantity) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-warning)', fontWeight: 500 }">{{ row.remainingQuantity }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="收货进度" width="70">
+        <!-- 2026-09-26 B10：列名「收货进度」4 字需 90px ⇒ 改短名「进度」（需 62）——本页 9 列全满，
+             省下的 28px 全部还给「产品」（min70→90）恢复其可读性。 -->
+        <el-table-column label="进度" width="62">
           <template #default="{ row }"><el-progress :percentage="progressOf(row)" :stroke-width="10" :color="progressOf(row) >= 100 ? 'var(--app-color-success)' : 'var(--app-color-primary)'" /></template>
         </el-table-column>
         <!-- 日期列统一 100：实测 "2026-09-25" 在 96px 以下会被截断（日期类不设 size="small"） -->

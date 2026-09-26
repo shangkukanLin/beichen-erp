@@ -215,8 +215,10 @@ onActivated(() => { loadData() })
         </el-table-column>
         <el-table-column prop="period" label="盘点月份" width="76" align="center" />
         <el-table-column label="盘点日期" width="96"><template #default="{row}">{{ fmtDate(row.takeDate) }}</template></el-table-column>
-        <el-table-column prop="itemCount" label="明细行数" width="62" align="right" />
-        <el-table-column label="差异行数" width="62" align="right">
+        <!-- 2026-09-26 B10：列名「明细行数」→「明细」（4 字表头需 90px，本页给不出；列内仍是行数） -->
+        <el-table-column prop="itemCount" label="明细" width="62" align="right" />
+        <!-- 2026-09-26 B10：列名「差异行数」→「差异」（同上） -->
+        <el-table-column label="差异" width="62" align="right">
           <template #default="{row}">
             <span :style="{ color: row.diffCount ? 'var(--app-color-danger)' : '' }">{{ row.diffCount || 0 }}</span>
           </template>

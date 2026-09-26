@@ -205,7 +205,9 @@ onMounted(() => { loadData(); loadWarehouses() })
         <el-table-column v-if="!isRepairTab()" label="出库源仓" width="189" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="goWarehouseDetail(row.fromWarehouseId)">{{ row.warehouseName }}</el-button></template>
         </el-table-column>
-        <el-table-column label="退货/送修内容" min-width="71" show-overflow-tooltip>
+        <!-- 2026-09-26 B10：原列名「退货/送修内容」7 字实测需 124px（本页给不出）⇒ 按家规改为短列名「明细」
+             （4 字以下才放得下；列内仍是可点的物料明细 + tooltip，信息不丢）。 -->
+        <el-table-column label="明细" min-width="71" show-overflow-tooltip>
           <!-- 物料退货显示"退货物料"、维修退货显示"送修物料"（同一列，明细在详情页）。
                2026-09-25：物料可点进「物料库存分布详情」（两个页签同源，后端新增 items[]） -->
           <template #default="{ row }">
@@ -214,7 +216,7 @@ onMounted(() => { loadData(); loadWarehouses() })
             </EntityLinks>
           </template>
         </el-table-column>
-        <el-table-column label="退货金额" width="70" align="right">
+        <el-table-column label="退货金额" width="90" align="right">
           <template #default="{ row }">{{ row.totalAmount != null ? Number(row.totalAmount).toFixed(2) : '-' }}</template>
         </el-table-column>
         <el-table-column label="退货日期" width="96" align="center">
