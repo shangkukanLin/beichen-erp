@@ -1,7 +1,16 @@
 ﻿# P4a (2026-09-18 full-flow E2E): material orders + material receipt through the frontend only.
 #   4 material orders (2 lines each: material TYPE + material + qty + price) -> audit (PENDING->RECEIVING)
 #   -> receive into our own material warehouse (自有物料一号仓) so that the material stock exists for issuing.
-# ALL DATA KEPT; rerunnable (skips creation when the orders already exist). ASCII ONLY.
+# ALL DATA KEPT; rerunnable. ASCII ONLY.
+#
+# 2026-09-28 重写（记忆 §5.27 存量失败）：**每个周期自建"目标单"，并且只处理自己建的这几张**。
+# 旧实现有两处硬伤 ⇒ 只能跑一次、第二次必红：
+#   ① `need = max(0, 8 - 已有数)` ⇒ 库里够 8 张就一张不建，随后对**所有 RECEIVING 单**逐张收货
+#      —— 里面混着早已收满的老单，再收被"超交"校验拒；
+#   ② 上一步的 0 行不是靠状态判断，而是靠**分页首页**找行（列表 10 行/页、按 id 倒序）
+#      —— 老单被挤到第 2 页 ⇒ 行找不到（现象恰是 "receipt row found for MWO-2026xxxx" 假红）。
+# 现在：`need = max(1, 8 - 已有数)`（库空时照旧建到 8 张，之后每周期至少 1 张），
+#   用 `id > 启动前最大 id` 精确圈定本周期目标单 ⇒ 状态判断 + 行必在首页（id 最大）⇒ 可重复跑。
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 EnsureLogin
 WatchErrors
@@ -27,7 +36,9 @@ function PickOptionEndsWith([string]$text, [int]$wait = 0) {
 
 $N = 8
 $moBefore = D (SqlOne 'SELECT COUNT(*) FROM outsource_material_order')
-$need = [int]([Math]::Max(0, $N - $moBefore))
+# 启动前的最大 id：本周期"目标单" = id 大于它的那些（自建自用，不受存量单状态/分页影响）
+$maxIdBefore = [int](SqlOne 'SELECT IFNULL(MAX(id),0) FROM outsource_material_order')
+$need = [int]([Math]::Max(1, $N - $moBefore))
 $whAux = ZH 'wh_auxA'
 $matBase = ZH 'val_material'
 $factoryBase = ZH 'val_factory'
@@ -40,7 +51,7 @@ $plan = @(
   @{ factory = 3; lines = @(@{ m = 1; q = 200; p = 10 }, @{ m = 2; q = 200; p = 8 }) },
   @{ factory = 4; lines = @(@{ m = 2; q = 200; p = 8 }, @{ m = 3; q = 200; p = 12 }) }
 )
-Write-Host ("[BASE] material_orders=$moBefore target=$N needCreate=$need auxWh=$whAux")
+Write-Host ("[BASE] material_orders=$moBefore maxIdBefore=$maxIdBefore target=$N needCreate=$need auxWh=$whAux")
 
 for ($i = 1; $i -le $need; $i++) {
   $pl = $plan[($i - 1) % $plan.Count]
@@ -80,8 +91,11 @@ for ($i = 1; $i -le $need; $i++) {
   Ok (($cnt -eq ($moBefore + $i))) ('material order #' + $i + ' created (db=' + $cnt + ')')
 }
 
-Step 'audit all DRAFT material orders (row located by code)'
-foreach ($c in (SqlList "SELECT code FROM outsource_material_order WHERE status='PENDING' ORDER BY id")) {
+Step 'audit the material orders created in THIS run (row located by code)'
+$targets = @(SqlList ("SELECT code FROM outsource_material_order WHERE id > " + $maxIdBefore + " ORDER BY id"))
+Write-Host ('[TARGETS] ' + ($targets -join ','))
+Ok ($targets.Count -ge 1) ('this run created its own target orders (' + $targets.Count + ')')
+foreach ($c in $targets) {
   Open '/outsource/material-order' 2400
   $idx = [int](FindRow $c)
   Ok ($idx -ge 0) ('material order row found: ' + $c)
@@ -97,8 +111,7 @@ foreach ($c in (SqlList "SELECT code FROM outsource_material_order WHERE status=
 }
 
 Step 'material receipt (full qty into our own material warehouse)'
-$receivable = @(SqlList "SELECT code FROM outsource_material_order WHERE status='RECEIVING' ORDER BY id")
-foreach ($c in $receivable) {
+foreach ($c in $targets) {
   Open '/outsource/material-order/delivery' 3000
   $idx = [int](FindRow $c)
   Ok ($idx -ge 0) ('receipt row found for ' + $c)
@@ -110,8 +123,12 @@ foreach ($c in $receivable) {
   Start-Sleep -Milliseconds 1400
   Write-Host ('  pick wh: ' + (PickOptionContains $whAux))
   Start-Sleep -Milliseconds 700
-  Write-Host ('  qty input: ' + (DialogSetInput 1 ('' + $qty)))
-  Start-Sleep -Milliseconds 700
+  # 2026-09-28 修复：收货弹窗是**每行物料一个「本次收货」输入**（并带「剩余可收」上限），
+  # 原实现 `DialogSetInput 1 $qty` 只填了**第 1 行**（并把"订单总量"塞给它）⇒ 多行订单只收到第一行的量
+  # （实测 300/500）。现按行把「剩余可收」（该行最后一列）填进本行输入 —— 与上限一致、多行都收满。
+  $fillJs = "(()=>{const vis=e=>e.getClientRects().length>0;const dlg=[...document.querySelectorAll('.el-dialog')].filter(vis).pop();if(!dlg)return 'NODLG';const rows=[...dlg.querySelectorAll('.el-table__body tbody tr')].filter(vis);const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;let n=0;for(const tr of rows){const tds=[...tr.querySelectorAll('td')];const rem=(tds.length?tds[tds.length-1].innerText:'').replace(/[^0-9.-]/g,'');const inp=tr.querySelector('input');if(!inp||rem==='')continue;set.call(inp,rem);inp.dispatchEvent(new Event('input',{bubbles:true}));inp.dispatchEvent(new Event('change',{bubbles:true}));inp.dispatchEvent(new Event('blur',{bubbles:true}));n++}return 'FILLED:'+n})()"
+  Write-Host ('  qty input (per row = 剩余可收): ' + (EvalJs $fillJs))
+  Start-Sleep -Milliseconds 900
   Write-Host ('  confirm: ' + (ClickDialogBtn 'btn_confirm_deliver'))
   Start-Sleep -Milliseconds 3000
   Write-Host ('  msg=' + (Txt '.el-message') + ' errs=' + (Errs))
@@ -131,7 +148,10 @@ $recvLogs = D (SqlOne ("SELECT COUNT(*) FROM warehouse_stock_log WHERE material_
 $recvQty = D (SqlOne ("SELECT COALESCE(SUM(received_quantity),0) FROM outsource_material_order_item"))
 Write-Host ("[DB] orders=$mo notPending=$moAud items=$items auxStock=$auxStock auxRows=$auxRows payable=$payable auxLogs=$recvLogs receivedQty=$recvQty")
 Ok (($mo -ge $N)) ('material orders >= ' + $N + ' (got ' + $mo + ')')
-Ok (($moAud -eq $mo)) 'no material order left PENDING'
+# 2026-09-28：原断言是**全局**"没有一张 PENDING"—— 自建目标单后，别的周期遗留的 PENDING 不该算到本次头上
+# ⇒ 改为只看本周期目标单（它们必须都已审核）。
+$tgtPending = D (SqlOne ("SELECT COUNT(*) FROM outsource_material_order WHERE id > " + $maxIdBefore + " AND status='PENDING'"))
+Ok (($tgtPending -eq 0)) 'material orders created in this run are all audited (none left PENDING)'
 # 4 legacy one-line orders + 4 new two-line orders = 12 lines expected
 Ok (($items -ge 12)) ('material order items >= 12 (got ' + $items + ')')
 Ok (($auxRows -ge 3)) ('own material warehouse holds >= 3 material rows (got ' + $auxRows + ')')

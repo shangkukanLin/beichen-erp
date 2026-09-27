@@ -46,8 +46,11 @@ $factoryId = [int]$fc[0]
 $factoryWh = [int]$fc[1]
 Write-Host ("FIXTURE: factory=$factoryId outsource-wh=$factoryWh")
 
-function StockQty([int]$wh, [string]$col, [int]$id, [string]$q) {
-  return (SqlOne "SELECT COALESCE(SUM(quantity),0) FROM warehouse_stock WHERE warehouse_id=$wh AND $col=$id AND quality_type='$q'")
+function StockQty([int]$wh, [string]$col, [int]$id, [string]$q, [string]$form = '') {
+  # 2026-09-28：stock_form 是 warehouse_stock 定位键的一部分 ⇒ 口径断言要能按形态取值
+  # （无单加工退货的腿②入的是 PRODUCT_DEFECT 形态的成品行，与同仓同品质的普通成品行并存）
+  $f = if ($form -ne '') { " AND stock_form='$form'" } else { '' }
+  return (SqlOne "SELECT COALESCE(SUM(quantity),0) FROM warehouse_stock WHERE warehouse_id=$wh AND $col=$id AND quality_type='$q'$f")
 }
 function PaySum([int]$sid) { return (SqlOne "SELECT COALESCE(SUM(amount),0) FROM finance_payable WHERE supplier_id=$sid AND status='UNSETTLED'") }
 
@@ -77,8 +80,9 @@ Ok ([string]$r[6] -eq 'RETURN_DEFECT') 'source_type=RETURN_DEFECT'
 Ok ([int]$r[7] -eq $factoryId) ('factory_id=' + $factoryId)
 Ok ([int]$r[8] -eq 1) 'is_reverse=1'
 
-Step 'audit -> stock / materials / payable'
+Step 'audit -> stock per the 2026-09-25 P1-1 rule (no material split, no payable)'
 $bOut = D (StockQty $whId 'product_id' $masterId 'A')
+$bDefectIn = D (StockQty $factoryWh 'product_id' $masterId 'A' 'PRODUCT_DEFECT')
 $bPay = D (PaySum $factoryId)
 $mats = @()
 foreach ($line in ((SqlRaw "SELECT outsource_material_id, quantity_per_set FROM bom_snapshot_item WHERE snapshot_id=$snapId ORDER BY id") -split "`n" | Select-Object -Skip 1)) {
@@ -87,32 +91,38 @@ foreach ($line in ((SqlRaw "SELECT outsource_material_id, quantity_per_set FROM 
 }
 $bMats = @()
 foreach ($m in $mats) { $bMats += [double](StockQty $factoryWh 'material_id' $m[0] 'GOOD') }
-Write-Host ('BASE: out=' + $bOut + ' payable=' + $bPay + ' materials=' + (($bMats | ForEach-Object { "$_" }) -join ','))
+Write-Host ('BASE: out=' + $bOut + ' defectInFactoryWh=' + $bDefectIn + ' payable=' + $bPay + ' materials=' + (($bMats | ForEach-Object { "$_" }) -join ','))
 
 $ra = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/$id/audit") -Method Put -Headers $h
 Ok ($ra.code -eq 200) ('audit: ' + $ra.code + ' ' + $ra.msg)
 Ok ((SqlOne "SELECT status FROM outsource_order_delivery WHERE id=$id") -eq 'AUDITED') 'status=AUDITED'
 $aOut = D (StockQty $whId 'product_id' $masterId 'A')
 Ok ($aOut -eq ($bOut - $qty)) ('finished goods -' + $qty + ' -> ' + $aOut)
+# 2026-09-28（同步 2026-09-25 P1-1 口径，用户确认）：无单加工退货**不分解料** ⇒ 工厂委外仓的**物料**行必须原封不动。
+# 原断言期望"每料 +qty×单位用量"（P1-1 之前的旧口径）⇒ 自 09-25 起长期假红，且下面 un-audit 的
+# "material rolled back" 因为前后都没动而**空跑通过**（这次一并改成"必须没动"的显式断言）。
 for ($i = 0; $i -lt $mats.Count; $i++) {
-  $gain = $qty * [double]$mats[$i][1]
   $got = [double](StockQty $factoryWh 'material_id' $mats[$i][0] 'GOOD')
-  Ok ([math]::Abs($got - ([double]$bMats[$i] + $gain)) -lt 0.001) ('factory material ' + $mats[$i][0] + ' +' + $gain + ' -> ' + $got)
+  Ok ([math]::Abs($got - [double]$bMats[$i]) -lt 0.001) ('factory material ' + $mats[$i][0] + ' untouched (no material split per P1-1) -> ' + $got)
 }
+# 现口径的落点是**成品**：退回成品以 PRODUCT_DEFECT 形态转入工厂委外仓（腿②，与同仓同品质普通行并存不串行）
+$aDefect = D (StockQty $factoryWh 'product_id' $masterId 'A' 'PRODUCT_DEFECT')
+Ok ($aDefect -eq ($bDefectIn + $qty)) ('factory outsource wh took the goods back as PRODUCT_DEFECT (+) ' + $qty + ' -> ' + $aDefect)
+# 不动应付（P1-1：原按还料 FIFO 价值的负应付已删除）⇒ 应付总额不变，且本记录不产生任何应付行
 $aPay = D (PaySum $factoryId)
-Ok ($aPay -lt $bPay) ('payable credited back: ' + $bPay + ' -> ' + $aPay)
-$pay = (SqlRaw "SELECT source_bill_type, source_id, amount, status FROM finance_payable WHERE source_id=$id AND source_bill_type='OUTSOURCE_DELIVERY' ORDER BY id DESC LIMIT 1") -split "`n"
-Write-Host ('PAYABLE: ' + $pay[1])
-Ok (([string]($pay[1]) -split "`t")[2] -ne '') 'a payable row is keyed to this record id'
+Ok ($aPay -eq $bPay) ('payable untouched by a no-order return (P1-1): ' + $bPay + ' -> ' + $aPay)
+$payRows = [int](SqlOne "SELECT COUNT(*) FROM finance_payable WHERE source_id=$id AND source_bill_type='OUTSOURCE_DELIVERY'")
+Ok ($payRows -eq 0) ('no payable row is keyed to a no-order return record (P1-1) -- found ' + $payRows)
 
-Step 'un-audit -> full rollback'
+Step 'un-audit -> strictly symmetric rollback (equal and opposite)'
 $ru = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/$id/un-audit") -Method Put -Headers $h
 Ok ($ru.code -eq 200) ('un-audit: ' + $ru.code + ' ' + $ru.msg)
 Ok ((D (StockQty $whId 'product_id' $masterId 'A')) -eq $bOut) 'finished goods rolled back'
+Ok ((D (StockQty $factoryWh 'product_id' $masterId 'A' 'PRODUCT_DEFECT')) -eq $bDefectIn) 'the PRODUCT_DEFECT row in the factory wh rolled back'
 for ($i = 0; $i -lt $mats.Count; $i++) {
-  Ok ([math]::Abs(([double](StockQty $factoryWh 'material_id' $mats[$i][0] 'GOOD')) - [double]$bMats[$i]) -lt 0.001) ('factory material ' + $mats[$i][0] + ' rolled back')
+  Ok ([math]::Abs(([double](StockQty $factoryWh 'material_id' $mats[$i][0] 'GOOD')) - [double]$bMats[$i]) -lt 0.001) ('factory material ' + $mats[$i][0] + ' still untouched (this leg no longer exists)')
 }
-Ok ((D (PaySum $factoryId)) -eq $bPay) 'payable rolled back'
+Ok ((D (PaySum $factoryId)) -eq $bPay) 'payable still untouched (nothing to roll back)'
 Ok ((SqlOne "SELECT status FROM outsource_order_delivery WHERE id=$id") -eq 'DRAFT') 'back to DRAFT'
 
 Step 'delete draft (keeps this probe repeatable)'

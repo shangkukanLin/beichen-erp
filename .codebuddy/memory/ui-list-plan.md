@@ -1114,6 +1114,68 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 - `ui-e2e-p4c-work-order`：同一根因（见 §5.26）。
 ⇒ 这两个脚本属**单次可跑**型：再跑之前需重置其目标单（或改为"每次自建新单"）。**未改**（超出本次范围）。
 
+## 5.28 p4a/p4c 改成"每周期自建目标单" + 文案键去重 + **修真实缺陷**（库存读漏 stock_form）（2026-09-28，用户「1.2都做」）
+
+### ① p4a / p4c 重写（治本：可重复跑）
+两个脚本的共同硬伤：`need = max(0, N - 已有数)` —— 库里够数就**一张不建**，随后对**所有处于该状态的单**操作：
+
+| 脚本 | 旧行为 | 症状 |
+|---|---|---|
+| `ui-e2e-p4a-material-in` | 对**所有 RECEIVING** 物料单逐张收货 | 老单早收满 → 再收被超交校验拒；且老单被**分页挤出首页**（列表 10 行/页、按 id 倒序）⇒ `receipt row found` 假红 |
+| `ui-e2e-p4c-work-order` | 对**所有 PRODUCING** 加工单各收 40+60 | 老单 100/100、50/50 已收满 → 超交被拒 ⇒ 8 条 `delivery draft row not found` |
+
+改法：`need = max(1, N - 已有数)`（库空时照旧建到 N 张，之后**每周期至少 1 张**）+ 用
+`id > 启动前最大 id` 精确圈定**本周期目标单**，审核/收货/交货**只对这几张**做 ⇒ 状态判断 + 行必在首页（id 最大）⇒ 可重复。
+
+顺带修掉 p4a 一个被掩盖的潜在缺陷：收货弹窗是**每行物料一个「本次收货」输入**（带「剩余可收」上限），
+旧代码 `DialogSetInput 1 $qty` 只填**第 1 行**并把"订单总量"塞进去 ⇒ 多行订单只收到第一行的量（实测 300/500）。
+现按行把该行最后一列（剩余可收）填进本行输入 ⇒ 多行都收满（实测 500/500）。
+
+p4c 的"全局不变量"也重做了：`委外仓库存 == Σ收发单发出 - Σ消耗` **结构性失效** ——
+委外仓库存的入账腿远不止收发单（实测 `OTHER_IN +10471`、`RETURN_IN +270`、`STOCK_TAKE_IN +484`…，
+收发单只剩 `DELIVERY_IN +2600`），且**物料收发单 2026-09-24 已下线**（发料改走物料移仓）⇒ issued 不再增长。
+改为**本轮差值**口径：`本轮委外仓库存下降 == 本轮 BOM 消耗`（实测 `900 == 900`，抗历史漂移）。
+
+### ② 文案键去重 + 新守卫
+删掉 `ui-e2e-zh.json` 的 **9 处重复键**（保留生效值）：`lbl_return_wh` 两处值不一致
+（"退回仓库" vs "退货仓库"，生效后者，`ui-e2e-p6d` 用的正是它 ⇒ 删前者）+ 8 处同名同值（删后者）。
+`web-check.ps1` 新增 **[文案键守卫]**：正则扫键名，重名即 FAIL（负例自测：注入 1 个重复键 → 检出 1 处 ✓；
+正例：真实文件 551 键 0 重复 ✓）。
+
+### ③ **修真实缺陷**：warehouse_stock 读查询漏 `stock_form`（用户侧现象＝"成品收货保存没反应"）
+- **现象**：成品收货弹窗选完产品/数量/仓库后点保存 → 提示
+  `系统异常: Expected one result (or null) to be returned by selectOne(), but found: 2`、草稿不落库 ⇒ **该加工厂完全无法收货**。
+- **根因**：`warehouse_stock` 的**唯一键含 stock_form**
+  （`uk_wh_material_company` = 仓+物料+形态+公司；`uk_wh_prod_quality_company` 同含形态；2026-09-25 P0-2 定调"形态是定位键的一部分"）。
+  实测仓库 66（测试加工厂A1委外仓）里物料 33/61 各有两行 GOOD：`MATERIAL`(230/220) + `MATERIAL_REPAIR`(0)。
+  `OutsourceOrderController.materialStock`（缺料检查）读库存时**漏了形态** ⇒ `selectOne` 查到 2 行 ⇒ 500。
+- **修法**（本次一并修同类 5 处，写侧不带形态时默认 `FORM_MATERIAL`，见 WarehouseStockService）：
+  1. `OutsourceOrderController.materialStock`（成品收货缺料检查）★根因处
+  2. `OutsourceOrderDeliveryServiceImpl` 交货缺料检查（1563 附近）
+  3. `OutsourceOrderDeliveryServiceImpl` 加工退货规格库存校验（593 附近；成品形态有 MATERIAL/PRODUCT_DEFECT/PRODUCT_REPAIR）
+  4. `MaterialOrderServiceImpl.getStock`（物料缺料）
+  5. `MaterialOrderServiceImpl.receive` 退不良库存校验
+  **未动（仅报告）**：`ReturnSortServiceImpl.availablePending`（售后仓 PENDING 成品，形态语义待定）——
+  同款写法；`WarehouseStockService.selectExist/selectMaterialExist` 已含形态 ✓。
+- **新守卫 `verify-outsource-stock-form.ps1`**（API 级，自建自清 fixture）：A 只有正常账时 200 且 `stockQuantity`==正常账；
+  B 人为注入同 (仓,物料,GOOD) 的 `MATERIAL_REPAIR`(0) 后仍 **200**（修复前必 500）；C 此时取值仍来自正常账（证明不会抓错行）；D 清理。
+  ⇒ **PASS FAIL=0**。
+
+### ④ 教训（都被守卫当场抓到，记牢）
+1. **ui-e2e-\*.ps1 加中文注释必须补 UTF-8 BOM**：我给 p4c 加中文注释后 [BOM守卫] 立刻 FAIL
+   （PS 5.1 会按 GBK 解码 ⇒ 中文会乱码、断言静默失效）。写盘：
+   `[IO.File]::WriteAllText($p,$t,(New-Object System.Text.UTF8Encoding($true)))`。
+2. **改文案键前先 grep 是否已存在**（重复键解析取后者）；已加守卫防再犯。
+3. **脚本"单次可跑" vs "自建型"**：凡"对某个状态的全部单据操作"的脚本，本质只能跑一次；
+   要么自建目标单，要么先重置——p4a/p4c 已改造成自建型。
+
+### ⑤ 顺手同步的旧口径断言：`verify-no-order-return.ps1`（存量红，非本次引入）
+- 它在**无单加工退货审核后**仍断言"每料 +qty×单位用量（还料）"与"应付被冲减" —— 那是 **2026-09-25 P1-1 之前**的口径。
+- 现口径（用户确认，见 `applyDefectStockNoOrder` 注释）：退回成品以 **PRODUCT_DEFECT 形态**转入工厂委外仓，
+  **不分解料**、**不动应付**。旧断言因此长期假红，且它的 un-audit "material rolled back" 因前后都没动而**空跑通过**。
+- 已改为：物料行**必须原封不动**（显式断言）+ 工厂委外仓 `PRODUCT_DEFECT` 行 **+qty**（真落点）+
+  应付不变且**本记录不产生任何应付行**（原"有应付行 keyed to 本记录"是空跑断言，已反转）⇒ **PASS**。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
@@ -1148,6 +1210,12 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
       顺带踩中并修掉 `watch()` 立即求值导致的 **TDZ 整页白屏**（新增 `verify-detail-render.ps1` 补盲，
       16: 70/0、15: 55/0、14: 46/0、五守卫 + 详情页渲染守卫全 PASS）
 - [x] B12 加工退货/物料退货三级菜单 + 页签（2026-09-27，4+2 叶子；返回进度按来源单聚合 + 草稿作废 + 防超返；脚本层文案同步待办见 §5.13）
+- [x] B28 p4a/p4c 改「每周期自建目标单」（可重复跑）+ 文案键去重与守卫 + **修真实缺陷**（库存读漏 stock_form）
+      （2026-09-28，用户「1.2都做」）：p4a 顺带修掉"收货只填第一行"的潜在缺陷；p4c 不变量改本轮差值口径；
+      9 处重复文案键清掉 + web-check 新增[文案键守卫]；**warehouse_stock 5 处读查询补 stock_form**
+      （根因＝成品收货 500「Expected one result ... but found: 2」⇒ 该加工厂完全无法收货）；
+      新守卫 verify-outsource-stock-form（正/负例）+ verify-no-order-return 旧口径断言同步
+      （详见 §5.28，含两条教训：ui-e2e 加中文必须补 BOM、改文案键前先 grep）
 - [x] B27 补「结单人」+ 修存量失败①（2026-09-27，用户「顺手修掉第 1 条，然后把结单人做了」）：
       物料侧新字段 `finisher_id/finisher_name`（schema.sql + DataInitializer 幂等补列；finish 盖章 / reopen 显式清空）、
       成品侧复用结单报表 auditor_name（批量回捞）；两页已结单页签「结单日期/时间」列第二行小字展示 +

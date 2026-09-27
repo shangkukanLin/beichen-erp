@@ -590,10 +590,13 @@ public class OutsourceOrderDeliveryServiceImpl
             throw new BusinessException("累计加工退货数量(" + returnedQty.add(defectQty) + ")不能超过已收数量(" + deliveredQty + ")");
 
         // 校验该规格仓库成品库存（按产品主数据ID+规格定位）
+        // 2026-09-28：成品行的形态同样分账（MATERIAL 正常 / PRODUCT_DEFECT 不良 / PRODUCT_REPAIR 维修）
+        // ⇒ 必须带 FORM_MATERIAL，否则同一产品同规格存在其它形态行时 selectOne 查到多行直接 500。
         WarehouseStock stock = stockMapper.selectOne(
                 new LambdaQueryWrapper<WarehouseStock>()
                         .eq(WarehouseStock::getWarehouseId, warehouseId)
                         .eq(WarehouseStock::getProductId, masterId)
+                        .eq(WarehouseStock::getStockForm, WarehouseStock.FORM_MATERIAL)
                         .eq(WarehouseStock::getQualityType, qualityType));
         BigDecimal stockQty = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
         if (stockQty.compareTo(defectQty) < 0)
@@ -1560,10 +1563,13 @@ public class OutsourceOrderDeliveryServiceImpl
             // F7-60（2026-09-20）：收敛到 MaterialRequirementCalc.need（全模块同一取整口径）
             BigDecimal needed = MaterialRequirementCalc.need(mat.perUnit(), deliveryQty);
 
+            // 2026-09-28：补 stock_form（同 OutsourceOrderController.materialStock 的修复）—— 委外仓同一物料
+            // 可能同时存在正常账(MATERIAL)与在厂维修账(MATERIAL_REPAIR)，漏形态会让 selectOne 查到 2 行直接 500。
             WarehouseStock stock = stockMapper.selectOne(
                     new LambdaQueryWrapper<WarehouseStock>()
                             .eq(WarehouseStock::getWarehouseId, whId)
                             .eq(WarehouseStock::getMaterialId, mat.materialId())
+                            .eq(WarehouseStock::getStockForm, WarehouseStock.FORM_MATERIAL)
                             .eq(WarehouseStock::getQualityType, QualityType.GOOD.getCode()));
             BigDecimal currentStock = stock != null && stock.getQuantity() != null ? stock.getQuantity() : BigDecimal.ZERO;
 

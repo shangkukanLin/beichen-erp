@@ -108,6 +108,27 @@ if ($lkBad.Count -gt 0) {
   Write-Output '[label-key守卫] PASS RemoteSelect 函数型 label-key 均已用 : 绑定（静态只允许真实字段名）'
 }
 
+# ===== 源头守卫（2026-09-28）：ui-e2e-zh.json 不得有**重复键** =====
+# 原因（当天实锤）：新增文案键时撞了既有键名（lbl_wh_name）⇒ 出现重复键，而 JSON 解析**取"后出现"的那条**
+# ⇒ 脚本拿到完全无关的中文（实测报 NOLABEL:所在仓库），现场提示离真因十万八千里、极易误判成"页面又改了"。
+# 约定：键名唯一；两个页面文案确实不同时，用**两个不同的键名**（如 lbl_wh_name="所在仓库" 与
+# lbl_warehouse_name="仓库名称"）。
+$zhPath = Join-Path $wsRoot 'ui-e2e-zh.json'
+$allZhKeys = @()
+$dupZhKeys = @()
+if (Test-Path $zhPath) {
+  $zhText = Get-Content $zhPath -Raw -Encoding UTF8
+  $allZhKeys = @([regex]::Matches($zhText, '(?m)^\s*"([^"]+)"\s*:') | ForEach-Object { $_.Groups[1].Value })
+  $dupZhKeys = @($allZhKeys | Group-Object | Where-Object { $_.Count -gt 1 } | ForEach-Object { $_.Name + ' x' + $_.Count })
+}
+if ($dupZhKeys.Count -gt 0) {
+  Write-Output ("[文案键守卫] FAIL ui-e2e-zh.json 存在重复键 " + $dupZhKeys.Count + " 个（JSON 解析取后者，脚本会拿到意外的中文）：")
+  $dupZhKeys | ForEach-Object { Write-Output ("  " + $_) }
+  $hygiene = 1
+} else {
+  Write-Output ('[文案键守卫] PASS ui-e2e-zh.json 无重复键（共 ' + $allZhKeys.Count + ' 键）')
+}
+
 Push-Location $root
 if ($Script -eq 'build') {
   & cmd /c "npm run build > `"$log`" 2>&1"

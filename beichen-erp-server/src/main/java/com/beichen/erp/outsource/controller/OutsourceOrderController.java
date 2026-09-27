@@ -247,10 +247,17 @@ public class OutsourceOrderController {
             // 查良品库存
             BigDecimal stock = BigDecimal.ZERO;
             if (whId != null && materialId != null) {
+                // 2026-09-28 修复（成品收货"保存无反应"的真因）：warehouse_stock 的**唯一键含 stock_form**
+                // （uk_wh_material_company = 仓 + 物料 + 形态 + 公司；见 2026-09-25 P0-2「形态是定位键的一部分」）。
+                // 这里原先漏了形态 ⇒ 同一物料在该委外仓既有正常账(MATERIAL)又有**在厂维修账**(MATERIAL_REPAIR)时，
+                // selectOne 查到 2 行 ⇒ TooManyResultsException ⇒ 本接口 500 ⇒ 前端"新增收货"保存时报
+                // "系统异常: Expected one result ... but found: 2"、草稿落不了库、整个成品收货对这类加工厂不可用。
+                // 缺料检查要的是**正常物料账**（写侧不带形态时默认 FORM_MATERIAL，见 WarehouseStockService）
                 WarehouseStock s = warehouseStockMapper.selectOne(
                     new LambdaQueryWrapper<WarehouseStock>()
                         .eq(WarehouseStock::getWarehouseId, whId)
                         .eq(WarehouseStock::getMaterialId, materialId)
+                        .eq(WarehouseStock::getStockForm, WarehouseStock.FORM_MATERIAL)
                         .eq(WarehouseStock::getQualityType, QualityType.GOOD.getCode()));
                 if (s != null && s.getQuantity() != null) stock = s.getQuantity();
             }

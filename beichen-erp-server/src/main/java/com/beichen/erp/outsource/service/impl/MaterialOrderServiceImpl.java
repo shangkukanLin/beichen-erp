@@ -464,13 +464,19 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         return sum;
     }
 
-    /** 获取某个仓库某个物料的良品库存 */
+    /**
+     * 获取某个仓库某个物料的**正常账**良品库存。
+     * <p>2026-09-28：补 stock_form —— warehouse_stock 的唯一键含形态（正常账 MATERIAL / 在厂维修账
+     * MATERIAL_REPAIR，见 2026-09-25 P0-2），漏形态时同一仓同一物料两笔账会让 selectOne 抛
+     * TooManyResultsException（成品收货已实锤此坑）。</p>
+     */
     private BigDecimal getStock(Long warehouseId, Long materialId) {
         if (warehouseId == null || materialId == null) return BigDecimal.ZERO;
         WarehouseStock s = warehouseStockMapper.selectOne(
             new LambdaQueryWrapper<WarehouseStock>()
                 .eq(WarehouseStock::getWarehouseId, warehouseId)
                 .eq(WarehouseStock::getMaterialId, materialId)
+                .eq(WarehouseStock::getStockForm, WarehouseStock.FORM_MATERIAL)
                 .eq(WarehouseStock::getQualityType, QualityType.GOOD.getCode()));
         return s != null && s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
     }
@@ -525,11 +531,13 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
                 throw new BusinessException(getMaterialNameById(orderItem.getMaterialId()) + " 可退数量不足");
 
             // 退不良（维修退货、折现退款均校验仓库库存是否足够，实际扣减推迟到审核）
+            // 2026-09-28：同样补 stock_form=MATERIAL（正常账）—— 口径见 getStock 的注释
             if (whId != null && orderItem.getMaterialId() != null) {
                 WarehouseStock s = warehouseStockMapper.selectOne(
                     new LambdaQueryWrapper<WarehouseStock>()
                         .eq(WarehouseStock::getWarehouseId, whId)
                         .eq(WarehouseStock::getMaterialId, orderItem.getMaterialId())
+                        .eq(WarehouseStock::getStockForm, WarehouseStock.FORM_MATERIAL)
                         .eq(WarehouseStock::getQualityType, QualityType.GOOD.getCode()));
                 BigDecimal stockQty = s != null && s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
                 if (stockQty.compareTo(qty) < 0)
