@@ -95,6 +95,12 @@ public class OutsourceOrderDelivery {
     private String deliveryType;
     /** 退不良规格(A/B/C/DEFECT)，普通交货为空 */
     private String qualityType;
+    /**
+     * BOM 快照ID（2026-09-27 用户口径）：**仅「不关联加工单的加工退货」使用** ——
+     * 建单时解析（优先"该产品在该工厂最近一次被加工单用过的快照"）或人工选定；
+     * 工厂修好送回时（加工返回单）据此限定「实际用料」的可选范围。
+     */
+    private Long bomSnapshotId;
     /** 物流单号（选填） */
     private String trackingNo;
     /** 备注 */

@@ -20,6 +20,7 @@ import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
+import com.beichen.erp.outsource.entity.BomSnapshotItem;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceReturnBack;
 import com.beichen.erp.outsource.entity.OutsourceReturnBackItem;
@@ -82,6 +83,10 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
     private final CostService costService;
     private final FinanceReceivableMapper receivableMapper;
     private final ReceivableHelper receivableHelper;
+    /** 2026-09-27（用户口径）：「实际用料」可选范围收口到来源无单退货单的 BOM 快照 —— 见 materialCandidates */
+    private final com.beichen.erp.outsource.mapper.BomSnapshotItemMapper bomSnapshotItemMapper;
+    /** 复用"最近一次被加工单用过的快照"解析（与无单退货建单同口径，单一实现） */
+    private final com.beichen.erp.outsource.service.OutsourceOrderDeliveryService deliveryService;
 
     // ==================== 查询 ====================
 
@@ -155,7 +160,13 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) b.setCompanyId(cid);
         backMapper.insert(b);
-        replaceItems(b.getId(), itemsOf(body), cid);
+        // 2026-09-27：可选池为空（来源单没绑 BOM 快照且该产品没有 BOM）⇒ 允许"只登记返回、不填用料"（用户确认：
+        // 不卡死流程）；池非空时沿用原口径 —— 必须至少一行实际用料。
+        List<Map<String, Object>> pool = candidatesOf(b.getSourceDeliveryId(), b.getFactoryId(), b.getProductId());
+        List<OutsourceReturnBackItem> items = itemsOf(body);
+        if (items.isEmpty() && !pool.isEmpty()) throw new BusinessException("用料明细不能为空（至少一行实际用料）");
+        assertMaterialsInPool(pool, items);
+        replaceItems(b.getId(), items, cid);
         log.info("加工返回单已保存(草稿): id={}, code={}, factoryId={}, productId={}, qty={}",
                 b.getId(), b.getCode(), b.getFactoryId(), b.getProductId(), b.getQuantity());
         return b;
@@ -184,7 +195,12 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         u.setRemark(b.getRemark());
         backMapper.updateById(u);
         Long cid = CompanyContext.get();
-        replaceItems(id, itemsOf(body), cid);
+        // 与 create 同口径（校验用**新值** b：来源单/工厂/产品可能都被改过）
+        List<Map<String, Object>> pool = candidatesOf(b.getSourceDeliveryId(), b.getFactoryId(), b.getProductId());
+        List<OutsourceReturnBackItem> items = itemsOf(body);
+        if (items.isEmpty() && !pool.isEmpty()) throw new BusinessException("用料明细不能为空（至少一行实际用料）");
+        assertMaterialsInPool(pool, items);
+        replaceItems(id, items, cid);
     }
 
     @Override
@@ -501,13 +517,85 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         }
     }
 
-    /** 解析明细行入参（materialId/quantity 必填且 >0；数量允许超 BOM，不做 BOM 比对） */
+    /**
+     * 加工返回单「实际用料」**候选集**（2026-09-27 用户口径）：只能从**来源无单加工退货单的 BOM 快照**里选。
+     * <p>解析顺序：① 来源单自带的 {@code bom_snapshot_id} → ② 现场兜底 = 该产品在该工厂
+     * 「最近一次被加工单用过的快照」（存量返回单没绑来源时走这条）→ ③ 都拿不到 ⇒ 空池
+     * （前端提示"未绑定来源/无 BOM ⇒ 没有可选的用料"，允许只登记返回、不填用料）。</p>
+     * <p>与提交校验**共用本方法**（前端限制 + 后端拦截成对）；不筛库存（数量仍可超 BOM）。</p>
+     */
+    @Override
+    public List<Map<String, Object>> materialCandidates(Long id) {
+        OutsourceReturnBack b = backMapper.selectById(id);
+        if (b == null) throw new BusinessException("返回单不存在");
+        return candidatesOf(b.getSourceDeliveryId(), b.getFactoryId(), b.getProductId());
+    }
+
+    @Override
+    public List<Map<String, Object>> materialCandidates(Long sourceDeliveryId, Long factoryId, Long productMasterId) {
+        return candidatesOf(sourceDeliveryId, factoryId, productMasterId);
+    }
+
+    /** 候选集实现：① 来源单快照 → ② 现场解析兜底 → ③ 空 */
+    private List<Map<String, Object>> candidatesOf(Long sourceDeliveryId, Long factoryId, Long productMasterId) {
+        Long snapId = null;
+        if (sourceDeliveryId != null) {
+            com.beichen.erp.outsource.entity.OutsourceOrderDelivery src = deliveryMapper.selectById(sourceDeliveryId);
+            if (src != null) snapId = src.getBomSnapshotId();
+        }
+        if (snapId == null) snapId = deliveryService.recentOrderSnapshotId(factoryId, productMasterId);
+        if (snapId == null) return new ArrayList<>();
+        final Long snapIdFinal = snapId;
+        // 与「维修返回」的用料候选同口径：按物料合并单套用量（同一物料可能拆多行）
+        Map<Long, Map<String, Object>> map = new LinkedHashMap<>();
+        for (BomSnapshotItem it : bomSnapshotItemMapper.selectList(
+                new LambdaQueryWrapper<BomSnapshotItem>().eq(BomSnapshotItem::getSnapshotId, snapIdFinal))) {
+            Long key = it.getMaterialId();
+            if (key == null) continue;
+            Map<String, Object> m = map.computeIfAbsent(key, k -> {
+                Map<String, Object> x = new LinkedHashMap<>();
+                OutsourceMaterial om = materialMapper.selectById(k);
+                x.put("materialId", k);
+                x.put("materialName", om != null ? om.getMaterialName() : ("#" + k));
+                x.put("unit", om != null ? om.getUnit() : it.getUnit());
+                x.put("perSetQuantity", BigDecimal.ZERO);
+                x.put("snapshotId", snapIdFinal);
+                return x;
+            });
+            BigDecimal per = it.getQuantityPerSet() != null ? it.getQuantityPerSet() : BigDecimal.ZERO;
+            m.put("perSetQuantity", ((BigDecimal) m.get("perSetQuantity")).add(per));
+        }
+        return new ArrayList<>(map.values());
+    }
+
+    /**
+     * 2026-09-27（用户口径）：实际用料的**可选范围**收口到来源单的 BOM 快照 ——
+     * 池外物料直接拒（数量仍可超：原"不做 BOM 比对"只针对数量）。
+     */
+    private void assertMaterialsInPool(List<Map<String, Object>> poolRows, List<OutsourceReturnBackItem> items) {
+        if (items == null || items.isEmpty()) return;
+        java.util.Set<Long> pool = new java.util.HashSet<>();
+        for (Map<String, Object> c : poolRows) pool.add((Long) c.get("materialId"));
+        for (OutsourceReturnBackItem it : items) {
+            if (it.getMaterialId() == null || pool.contains(it.getMaterialId())) continue;
+            OutsourceMaterial m = materialMapper.selectById(it.getMaterialId());
+            throw new BusinessException("实际用料只能从**该加工退货单的 BOM 快照**里选：「"
+                    + (m != null ? m.getMaterialName() : ("#" + it.getMaterialId())) + "」不在其中"
+                    + (pool.isEmpty()
+                        ? "（来源单未绑定 BOM 快照、或该产品没有 BOM ⇒ 本次只能不填用料）"
+                        : "（本单可选物料 " + pool.size() + " 个）"));
+        }
+    }
+
+    /** 解析明细行入参（materialId/quantity 必填且 >0；**数量**允许超 BOM，不做 BOM 比对 —— 范围由 assertMaterialsInPool 收口） */
     @SuppressWarnings("unchecked")
     private List<OutsourceReturnBackItem> itemsOf(Map<String, Object> body) {
         Object arr = body.get("items");
         List<OutsourceReturnBackItem> list = new ArrayList<>();
+        // 2026-09-27：空表不再在这里直接报错 —— 由调用方按"可选池是否为空"决定（池空时允许只登记返回、
+        // 不填用料；池非空仍要求至少一行，文案不变）。
         if (!(arr instanceof List<?> raw) || raw.isEmpty()) {
-            throw new BusinessException("用料明细不能为空（至少一行实际用料）");
+            return list;
         }
         for (Object o : raw) {
             Map<String, Object> row = (Map<String, Object>) o;

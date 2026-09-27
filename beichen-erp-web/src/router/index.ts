@@ -192,6 +192,8 @@ const routes: RouteRecordRaw[] = [
       // 见 views/outsource/return-order/index.vue 的 leaf 注释；叶子菜单在 sys_menu 419 目录下）
       { path: 'outsource/return-order', name: 'OutsourceReturnOrder', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '关联退货', requiresAuth: true } },
       { path: 'outsource/return-order/unlinked', name: 'OutsourceReturnOrderUnlinked', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '无单退货', requiresAuth: true } },
+      // 2026-09-27（用户口径）：新增无单加工退货**由弹窗改独立页面**（含 BOM 快照自动解析/可换版本）
+      { path: 'outsource/return-order/unlinked/add', name: 'OutsourceReturnOrderUnlinkedAdd', component: () => import('@/views/outsource/return-order/unlinked-add.vue'), meta: { title: '新增无单加工退货', requiresAuth: true, operate: true } },
       // 叶子名带对象前缀：加工侧/物料侧都有维修退货，同名会让顶部标签栏出现两个「维修退货」（不可区分）
       { path: 'outsource/return-order/repair', name: 'OutsourceReturnOrderRepair', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '成品维修退货', requiresAuth: true } },
       { path: 'outsource/return-back', name: 'OutsourceReturnBack', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '加工返回单', requiresAuth: true } },

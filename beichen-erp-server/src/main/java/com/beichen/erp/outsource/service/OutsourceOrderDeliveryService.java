@@ -71,9 +71,25 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
      * <p>无单时：`order_id`/`product_id` 留空，改由 `factory_id` 定位工厂委外仓与应付对象；
      * 还料依据 = 该产品的**最新 BOM 快照**（无快照回退 dev_bom）；冲减金额 = **还回物料的 FIFO 价值**。</p>
      *
-     * @param body factoryId / warehouseId / productMasterId / qualityType / quantity / remark
+     * @param body factoryId / warehouseId / productMasterId / qualityType / quantity / remark /
+     *             bomSnapshotId（2026-09-27 用户口径：可空——不传则自动解析"该产品在该工厂**最近一次被加工单用过的**
+     *             BOM 快照"，解析不到则留空；该快照只用于**返回时限定「实际用料」可选范围**，
+     *             不影响 P1-1 的"不拆料还料、不冲应付"口径）
      */
     void returnDefectNoOrder(Map<String, Object> body);
+
+    /**
+     * 「新增无单加工退货」页的 **BOM 快照候选**（2026-09-27 用户口径）：该产品在该工厂**用过的快照**
+     * （按最近使用的加工单倒序 ⇒ 第一项即默认值），带 bomVersion / kind / itemCount。
+     * <p>解析不到任何快照时返回空数组（页面提示"无 BOM：可建单，但返回时无法登记实际用料"）。</p>
+     */
+    List<Map<String, Object>> productSnapshotOptions(Long factoryId, Long productMasterId);
+
+    /**
+     * 「该产品在该工厂**最近一次被加工单用过的** BOM 快照」（2026-09-27 用户口径；取不到返回 null）。
+     * <p>无单退货建单默认解析用它；**加工返回单**在来源单没绑快照时也用它做现场兜底（同一份实现）。</p>
+     */
+    Long recentOrderSnapshotId(Long factoryId, Long productMasterId);
 
     /**
      * 无单加工退货列表（按ID倒序）。

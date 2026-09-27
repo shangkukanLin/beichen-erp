@@ -143,18 +143,13 @@ const detail = ref<any>({})
 /** 详情改独立页（2026-09-23 用户要求：抽屉改独立界面）：台账行点击 / 行内「详情」都跳详情页 */
 function openDetail(row: any) { if (row?.id != null) router.push(`/outsource/defect-return/detail/${row.id}`) }
 
-// ---------- 新增"无单"加工退货（不关联加工单；有单的退回请到该加工单的收货详细页） ----------
-const noOrderVisible = ref(false)
-const noOrderSaving = ref(false)
-/** 退货规格：与加工单收货详细页的退货弹窗同一口径（A/B/C/不良） */
+// ---------- 新增"无单"加工退货（2026-09-27 用户口径：弹窗改**独立页面** /outsource/return-order/unlinked/add；
+//   有单的退回请到该加工单的收货详细页）。BOM 快照的解析/选择也在那边做。 ----------
+/** 退货规格：与加工单收货详细页的退货弹窗同一口径（A/B/C/不良）；加工返回单的「回仓品质」也复用本表 */
 const NO_ORDER_SPECS = [
   { value: 'A', label: 'A规' }, { value: 'B', label: 'B规' },
   { value: 'C', label: 'C规' }, { value: 'DEFECT', label: '不良' }
 ]
-const noOrderForm = reactive({
-  factoryId: undefined as any, warehouseId: undefined as any, productMasterId: undefined as any,
-  qualityType: 'A' as string, quantity: '' as any, remark: ''
-})
 /**
  * 退货对象（= 还料与应付对象，无单时靠它定位工厂委外仓）。
  * <p>2026-09-21（用户口径）：**加工退货只能退给加工厂或供应商，不能退给供货商** ⇒
@@ -169,35 +164,8 @@ const fetchFinishedWarehouses = (kw: string) =>
 /** 产品主数据（无单时没有加工单产品行可选） */
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 500, keyword: kw } })
 
-function openNoOrder() {
-  Object.assign(noOrderForm, {
-    factoryId: undefined, warehouseId: undefined, productMasterId: undefined,
-    qualityType: 'A', quantity: '', remark: ''
-  })
-  noOrderVisible.value = true
-}
-
-async function submitNoOrder() {
-  if (!noOrderForm.factoryId) { ElMessage.warning('请选择加工厂'); return }
-  if (!noOrderForm.warehouseId) { ElMessage.warning('请选择扣减的成品仓库'); return }
-  if (!noOrderForm.productMasterId) { ElMessage.warning('请选择产品'); return }
-  const qty = Math.round(Number(noOrderForm.quantity) || 0)
-  if (!(qty > 0)) { ElMessage.warning('请输入退货数量'); return }
-  noOrderSaving.value = true
-  try {
-    await request.post('/outsource/order-delivery/return-defect-no-order', {
-      factoryId: noOrderForm.factoryId, warehouseId: noOrderForm.warehouseId,
-      productMasterId: noOrderForm.productMasterId, qualityType: noOrderForm.qualityType,
-      quantity: qty, remark: noOrderForm.remark
-    })
-    ElMessage.success('加工退货草稿已保存，请在下方列表审核')
-    noOrderVisible.value = false
-    // 新草稿落在「待返回」页签（该页签含草稿，见 TABS 注释）
-    activeTab.value = 'PENDING'
-    ledgerPage.pageNum = 1
-    await loadLedger(); await loadCounts()
-  } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { noOrderSaving.value = false }
-}
+/** 去独立新增页（BOM 快照的自动解析与换版本都在该页；保存后回到本叶子） */
+function openNoOrder() { router.push('/outsource/return-order/unlinked/add') }
 
 // ==================== ③ 加工返回单（P1-2 2026-09-25：修好送回——核销在厂成品+实际用料+赔料应收） ====================
 const backLoading = ref(false)
@@ -278,8 +246,38 @@ async function loadBackSources() {
     backSources.value = r?.records || []
   } catch (e: any) { ElMessage.error(e?.message || '加载来源退货单失败') } finally { backSourceLoading.value = false }
 }
-const fetchMaterials = (kw: string) =>
-  request.get('/outsource/material/page', { params: { pageNum: 1, pageSize: 500, materialName: kw } })
+// 2026-09-27（用户口径）：加工返回单的「实际用料」也只能从**来源无单退货单的 BOM 快照**里选
+// （来源单没绑快照时后端按"该产品在该工厂最近一次被加工单用过的快照"现场兜底；都拿不到 ⇒ 池为空、
+//  只能不填用料，不卡流程）。候选由后端 /return-back/{id}/material-candidates 给出，提交时同口径再校验。
+const backCandidates = ref<any[]>([])
+/**
+ * 拉候选：**新增/编辑都用同一个按参数端点**（新增时还没有单 ID ⇒ 只能带
+ * sourceDeliveryId（可空）+ factoryId + productId；后端解析口径与提交校验一致）。
+ */
+async function loadBackCandidates() {
+  backCandidates.value = []
+  if (!backForm.factoryId || !backForm.productId) return
+  try {
+    const r = await request.get<any, any>('/outsource/return-back/material-candidates', {
+      params: {
+        sourceDeliveryId: backForm.sourceDeliveryId || undefined,
+        factoryId: backForm.factoryId, productId: backForm.productId
+      }
+    })
+    backCandidates.value = r || []
+  } catch (e: any) { backCandidates.value = []; console.warn('加载实际用料候选失败', e?.message || e) }
+}
+/** 选料后默认数量 = 单套用量 × 本次返回数量（可改；数量仍可超 BOM） */
+function onPickBackMaterial(it: any) {
+  const c = backCandidates.value.find((x: any) => String(x.materialId) === String(it.materialId))
+  if (!c) return
+  const n = Math.round(Number(backForm.quantity) || 0)
+  it.quantity = Math.max(1, Math.round(Number(c.perSetQuantity || 0) * (n > 0 ? n : 1)))
+}
+/** 同一物料只允许一行 */
+function isBackMaterialPicked(mid: any, cur: any) {
+  return backForm.items.some((it: any) => it !== cur && String(it.materialId) === String(mid))
+}
 
 function openBackAdd() {
   backDialog.editId = null
@@ -287,8 +285,9 @@ function openBackAdd() {
   Object.assign(backForm, {
     factoryId: undefined, productId: undefined, quantity: '', defectQualityType: 'A',
     returnQualityType: 'A', inWarehouseId: undefined, sourceDeliveryId: undefined,
-    returnDate: '', remark: '', items: [{ materialId: undefined, quantity: undefined }]
+    returnDate: '', remark: '', items: []
   })
+  backCandidates.value = []
   backDialog.visible = true
 }
 function addBackItem() { backForm.items.push({ materialId: undefined, quantity: undefined }) }
@@ -305,7 +304,9 @@ async function submitBack() {
   const items = backForm.items
     .map(it => ({ materialId: it.materialId, quantity: Math.round(Number(it.quantity) || 0) }))
     .filter(it => it.materialId && it.quantity > 0)
-  if (!items.length) { ElMessage.warning('请至少填写一行有效用料（物料+数量）'); return }
+  // 2026-09-27：可选池为空（来源单没绑 BOM 快照且该产品没有 BOM）⇒ 允许只登记返回、不填用料（不卡流程）；
+  //   池非空时沿用原口径：至少一行有效用料。
+  if (!items.length && backCandidates.value.length > 0) { ElMessage.warning('请至少填写一行有效用料（物料+数量）'); return }
   backDialog.saving = true
   try {
     const body = {
@@ -349,6 +350,8 @@ async function editBack(row: any) {
     returnDate: h.returnDate || '', remark: h.remark || '',
     items: (its || []).map((it: any) => ({ materialId: it.materialId, quantity: Number(it.quantity) }))
   })
+  // 2026-09-27：编辑态也按同一口径拉候选（用于校验/展示可选范围；已存的用料行照常显示）
+  await loadBackCandidates()
   backDialog.visible = true
 }
 
@@ -740,35 +743,8 @@ onMounted(() => {
       </template>
     </el-card>
 
-    <!-- 新增无单加工退货弹窗：不关联加工单，靠"加工厂 + 产品 + 规格 + 数量"定位（后端按产品 BOM 快照还料） -->
-    <el-dialog v-model="noOrderVisible" title="新增无单加工退货" width="var(--app-dialog-sm)" :close-on-click-modal="false">
-      <el-form :model="noOrderForm" label-width="120px" size="small">
-        <el-form-item required label="加工厂">
-          <RemoteSelect v-model="noOrderForm.factoryId" :fetch="fetchFactories" :label-key="(row:any)=>row.name" style="width:100%" placeholder="加工厂（还料/应付对象）" />
-        </el-form-item>
-        <el-form-item required label="扣减成品仓">
-          <RemoteSelect v-model="noOrderForm.warehouseId" :fetch="fetchFinishedWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择扣减的成品仓库" />
-        </el-form-item>
-        <el-form-item required label="产品">
-          <RemoteSelect v-model="noOrderForm.productMasterId" :fetch="fetchProducts" :label-key="(row:any)=>row.name" style="width:100%" placeholder="选择产品" />
-        </el-form-item>
-        <el-form-item required label="退货规格">
-          <el-select v-model="noOrderForm.qualityType" style="width:100%">
-            <el-option v-for="o in NO_ORDER_SPECS" :key="o.value" :label="o.label" :value="o.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item required label="退货数量">
-          <el-input v-model="noOrderForm.quantity" type="number" placeholder="整数" @change="noOrderForm.quantity = Math.round(Number(noOrderForm.quantity) || 0)" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="noOrderForm.remark" placeholder="选填，如退回原因" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="noOrderVisible = false">取消</el-button>
-        <el-button type="primary" :loading="noOrderSaving" @click="submitNoOrder">保存草稿</el-button>
-      </template>
-    </el-dialog>
+    <!-- 2026-09-27（用户口径）：新增无单加工退货已从**弹窗改为独立页面**
+         `/outsource/return-order/unlinked/add`（含 BOM 快照自动解析 + 可换版本）—— 入口见本页「新增」按钮 -->
 
     <!-- 新增/编辑加工返回单弹窗（P1-2）：用料明细 = 实际耗用（可超 BOM），审核时按 FIFO 生成对工厂应收 -->
     <el-dialog v-model="backDialog.visible" :title="backDialog.editId ? '编辑加工返回单' : '新增加工返回单'"
@@ -778,13 +754,16 @@ onMounted(() => {
           <RemoteSelect v-model="backForm.factoryId" :fetch="fetchFactories" :label-key="(row:any)=>row.name" style="width:100%" placeholder="赔料应收对象" />
         </el-form-item>
         <el-form-item required label="产品">
-          <RemoteSelect v-model="backForm.productId" :fetch="fetchProducts" :label-key="(row:any)=>row.name" style="width:100%" placeholder="选择产品" />
+          <RemoteSelect v-model="backForm.productId" :fetch="fetchProducts" :label-key="(row:any)=>row.name" style="width:100%" placeholder="选择产品"
+            @update:model-value="loadBackCandidates" />
         </el-form-item>
-        <!-- 2026-09-27：来源退货单 —— 选完加工厂/产品后在厂规格，点开下拉拉取"未返回完"的无单加工退货单 -->
+        <!-- 2026-09-27：来源退货单 —— 选完加工厂/产品后在厂规格，点开下拉拉取"未返回完"的无单加工退货单；
+             选定后重拉「实际用料」候选（候选按来源单的 BOM 快照） -->
         <el-form-item required label="来源退货单">
           <el-select v-model="backForm.sourceDeliveryId" filterable clearable style="width:100%"
             :loading="backSourceLoading" placeholder="选择未返回完的无单加工退货单"
-            @visible-change="(v: boolean) => v && loadBackSources()">
+            @visible-change="(v: boolean) => v && loadBackSources()"
+            @update:model-value="loadBackCandidates">
             <el-option v-for="o in backSources" :key="o.id"
               :label="(o.code || ('加工退货#' + o.id)) + '（退货 ' + Math.abs(Number(o.quantity || 0)) + '，未返回 ' + o.unreturnedQty + '）'"
               :value="o.id" />
@@ -806,15 +785,33 @@ onMounted(() => {
             <el-option v-for="o in NO_ORDER_SPECS" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
-        <el-form-item required label="实际用料明细">
+        <!-- 2026-09-27（用户口径）：实际用料**只能从来源单的 BOM 快照里选**（数量仍可超 BOM）；
+             解析不到快照 ⇒ 池为空 ⇒ 允许"只登记返回、不填用料"（料款应收按 0），不卡流程 -->
+        <el-form-item :required="backCandidates.length > 0" label="实际用料明细">
           <div style="width:100%">
+            <el-alert v-if="backCandidates.length === 0" type="warning" :closable="false" show-icon style="margin-bottom:8px">
+              <template #title>
+                <span style="font-size:var(--app-font-xs);line-height:1.5">
+                  该来源单未绑定 BOM 快照、或该产品在该加工厂没有可用的 BOM ⇒ 没有可选的用料。
+                  本次可以<b>只登记返回、不填用料</b>（料款应收按 0）。
+                </span>
+              </template>
+            </el-alert>
+            <div v-else style="margin-bottom:8px;font-size:var(--app-font-xs);color:var(--app-text-secondary)">
+              只能从<b>该加工退货单的 BOM 快照</b>里选；选料后自动带出默认用量（可改），数量可超 BOM。
+            </div>
             <div v-for="(it, i) in backForm.items" :key="i" style="display:flex;gap:8px;margin-bottom:8px">
-              <RemoteSelect v-model="it.materialId" :fetch="fetchMaterials" :label-key="(row:any)=>row.materialName" style="flex:1" placeholder="委外物料" />
+              <el-select v-model="it.materialId" filterable clearable style="flex:1" placeholder="从 BOM 快照里选物料"
+                :disabled="backCandidates.length === 0" @change="onPickBackMaterial(it)">
+                <el-option v-for="c in backCandidates" :key="c.materialId" :value="c.materialId"
+                  :disabled="isBackMaterialPicked(c.materialId, it)"
+                  :label="(c.materialName || ('#' + c.materialId)) + (c.unit ? ('（' + c.unit + '）') : '') + ' · 单套用量 ' + c.perSetQuantity" />
+              </el-select>
               <el-input v-model="it.quantity" type="number" placeholder="用量(可超BOM)" style="width:150px"
                 @change="it.quantity = Math.round(Number(it.quantity) || 0)" />
               <el-button type="danger" link @click="removeBackItem(i)">删除</el-button>
             </div>
-            <el-button type="primary" link :icon="'Plus'" @click="addBackItem">添加用料行</el-button>
+            <el-button type="primary" link :icon="'Plus'" :disabled="backCandidates.length === 0" @click="addBackItem">添加用料行</el-button>
           </div>
         </el-form-item>
         <el-form-item label="返回日期">

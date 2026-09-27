@@ -289,6 +289,12 @@ CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     product_id BIGINT COMMENT '产品ID(关联outsource_order_product)',
     product_master_id BIGINT COMMENT '关联产品主数据ID(product.id)',
     quality_type VARCHAR(20) COMMENT '退不良规格(A/B/C/DEFECT)',
+    -- 2026-09-27 新增（用户口径）：仅「不关联加工单的加工退货」(source_type=RETURN_DEFECT) 使用 ——
+    -- 建单时解析/人工选定的 BOM 快照；返回时（加工返回单）据此限定「实际用料」的可选范围。
+    -- 存量库本表已存在（CREATE TABLE IF NOT EXISTS 不会改）⇒ 需手工执行：
+    --   ALTER TABLE outsource_order_delivery ADD COLUMN bom_snapshot_id BIGINT DEFAULT NULL
+    --     COMMENT 'BOM快照ID（仅无单加工退货使用：返回时限定实际用料范围）' AFTER quality_type;
+    bom_snapshot_id BIGINT DEFAULT NULL COMMENT 'BOM快照ID（无单加工退货用；返回时限定实际用料范围）',
     quantity DECIMAL(18,0) DEFAULT 0 COMMENT '数量',
     delivery_type VARCHAR(20) DEFAULT 'DELIVERY' COMMENT 'DELIVERY正常交货/DEFECT_RETURN退不良',
     a_qty DECIMAL(18,0) DEFAULT 0 COMMENT 'A规数量',

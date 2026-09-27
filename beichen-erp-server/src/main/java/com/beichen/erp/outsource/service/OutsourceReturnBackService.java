@@ -23,6 +23,20 @@ public interface OutsourceReturnBackService {
     /** 用料明细 */
     List<OutsourceReturnBackItem> getItems(Long id);
 
+    /**
+     * 「实际用料」**候选集**（2026-09-27 用户口径）：只能从来源无单加工退货单的 **BOM 快照**里选
+     * （来源单没绑快照时，现场按"该产品在该工厂最近一次被加工单用过的快照"兜底；都拿不到 ⇒ 空数组）。
+     * <p>同一份逻辑也用于提交时的**范围校验**（前端限制 + 后端拦截成对）。</p>
+     */
+    List<Map<String, Object>> materialCandidates(Long id);
+
+    /**
+     * 同上，但按**入参**给候选（2026-09-27）：**新增**返回单时还没有单 ID，前端只能带
+     * {@code sourceDeliveryId}（可空：存量/未绑来源）+ {@code factoryId} + {@code productId} 来取候选。
+     * <p>解析与校验口径完全一致（来源单快照 → 现场兜底 → 空）。</p>
+     */
+    List<Map<String, Object>> materialCandidates(Long sourceDeliveryId, Long factoryId, Long productMasterId);
+
     /** 新建草稿（body: factoryId/productId/quantity/defectQualityType/returnQualityType/inWarehouseId/returnDate/remark/items[]） */
     OutsourceReturnBack create(Map<String, Object> body);
 

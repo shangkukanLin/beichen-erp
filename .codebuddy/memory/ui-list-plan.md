@@ -635,6 +635,38 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 两边（5 字 / 6 字）均验证；临时建的 REPAIR 草稿已删除，未留数据。
 **经验**：新增 **默认字号**表单时，label ≥5 字就上 lg 档；`size="small"` 的表单 90px 够用。
 
+## 5.19 无单加工退货带上 BOM 快照 + 新增入口改独立页面（2026-09-27，用户口径）
+
+### 背景（关键前提）
+无单加工退货**不是一张退货单**，而是「成品收货台账」`outsource_order_delivery` 里一条
+`DEFECT_RETURN` 记录（没有产品明细子表、原先没有快照列）⇒ 想让"返回时按 BOM 选料"，
+只能**给该记录加一列**。它的"返回"是 `outsource_return_back`（加工返回单），
+已有 `source_delivery_id` 指回来源单 ✓ 落点齐全。
+
+### 用户确认的四条口径
+① 落库（含 1 列 DDL）；② 默认解析 = **该产品在该工厂「最近一次被加工单用过的快照」**（不是版本最大）；
+③ 返回单用料**硬限制**；④ 存量兜底 = 按产品+工厂**现场解析**（池空则允许留空，不卡流程）。
+
+### 实现
+- DDL：`outsource_order_delivery.bom_snapshot_id`（`schema.sql` 已同步；存量库手工 ALTER ✓ 文件头有约定）。
+- 建单 `returnDefectNoOrder`：入参可带 `bomSnapshotId`（人工换版本）→ 否则 `recentOrderSnapshotId(factoryId, productId)`
+  → 都拿不到则留空；台账/详情返回 `bomSnapshotId/bomVersion/bomKind`。
+- 快照候选端点：`GET /api/outsource/order-delivery/product-snapshot-options?factoryId=&productMasterId=`
+  （该产品在该工厂用过的快照，按最近使用的加工单倒序 ⇒ 第一项即默认）。
+- **加工返回单**：`GET /api/outsource/return-back/material-candidates?...`（另有 `/{id}/material-candidates`）
+  = 来源单快照 → 现场解析兜底 → 空；提交时 `assertMaterialsInPool` 硬校验；**池空时允许 items 为空**
+  （`itemsOf` 不再直接报"用料明细不能为空"，改由调用方按池判定），审核时料款应收按 0。
+- 前端：**新增无单加工退货由弹窗改独立页面** `/outsource/return-order/unlinked/add`
+  （`unlinked-add.vue`：选完加工厂+产品自动解析并展示「BOM 快照 vN（研发BOM，N 项料）」+ 可换版本；
+  无快照时黄条提示）；加工返回单弹窗用料改用候选下拉（占位用量=单套用量×返回数量、同一物料一行、空池黄条）；
+  台账详情显示「BOM 快照 vN / 未绑定」。
+- **不动**：P1-1「无单退货不拆料还料、不冲应付」✓（快照只用于返回时用料的**可选范围**）。
+
+### 验证
+`verify-no-order-back-material-scope.ps1`（新，纯 ASCII，自造自清）：建单不传快照 → 落库 = 选项端点第一项 ✓；
+显式传 → 原样落库 ✓；池外物料 → 500「只能从**该加工退货单的 BOM 快照**里选…（可选物料 3 个）」且零落库 ✓；
+池内物料 → 通过 ✓；清理无残留 ✓。`verify-delivery-menu.ps1` §⑨b-2 增加「新增 → 独立页面 + 含 BOM 快照字段 + 无弹窗」断言。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
@@ -654,5 +686,7 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
       `linked` 参数与加工侧同口径，两个扫描守卫的路由清单补齐全部叶子；nav 70 路由 0 bad、全站 63 表 0 offender
 - [x] B14 维修返回用料范围收口（2026-09-27，成品→BOM / 物料→子物料；两个候选端点 + 提交硬校验 + 前端分组下拉）+
       顺带修掉「在厂行只减不还」（撤销对称性，新增 verify-repair-cancel-onsite）
+- [x] B15 无单加工退货带 BOM 快照（+1 列 DDL）+ 新增入口改独立页面（2026-09-27；返回单用料范围硬限制、
+      存量现场兜底；新增 verify-no-order-back-material-scope；verify-delivery-menu 由 FAIL 修到 PASS）
 - [x] B12 加工退货/物料退货三级菜单 + 页签（2026-09-27，4+2 叶子；返回进度按来源单聚合 + 草稿作废 + 防超返；脚本层文案同步待办见 §5.13）
 

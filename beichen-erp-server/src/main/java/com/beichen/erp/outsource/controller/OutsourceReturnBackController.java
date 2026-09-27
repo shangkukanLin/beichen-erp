@@ -42,6 +42,27 @@ public class OutsourceReturnBackController {
         return R.ok(service.getItems(id));
     }
 
+    /**
+     * 「实际用料」候选集（2026-09-27 用户口径）：只能从来源无单加工退货单的 BOM 快照里选
+     * （来源单没绑快照时按"该产品在该工厂最近一次被加工单用过的快照"现场兜底；都拿不到则空数组）。
+     */
+    @GetMapping("/{id}/material-candidates")
+    public R<List<Map<String, Object>>> materialCandidates(@PathVariable Long id) {
+        return R.ok(service.materialCandidates(id));
+    }
+
+    /**
+     * 同上，但按入参（**新增**返回单时还没有单 ID）：`sourceDeliveryId`（可空）+ `factoryId` + `productId`。
+     * ⚠️ 必须放在 `/{id}` 之前语义上等价（本路径多一段，不会与 `/{id}` 冲突）。
+     */
+    @GetMapping("/material-candidates")
+    public R<List<Map<String, Object>>> materialCandidatesByParams(
+            @RequestParam(required = false) Long sourceDeliveryId,
+            @RequestParam(required = false) Long factoryId,
+            @RequestParam(required = false) Long productId) {
+        return R.ok(service.materialCandidates(sourceDeliveryId, factoryId, productId));
+    }
+
     @PostMapping
     public R<OutsourceReturnBack> create(@RequestBody Map<String, Object> body) {
         return R.ok(service.create(body));

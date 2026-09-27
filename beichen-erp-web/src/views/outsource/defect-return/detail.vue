@@ -83,6 +83,12 @@ onMounted(load)
           <span style="color:var(--app-color-danger);font-weight:500">{{ Math.abs(Number(detail.quantity || 0)) }}</span>
         </el-descriptions-item>
         <el-descriptions-item label="扣减仓库">{{ detail.warehouseName || '-' }}</el-descriptions-item>
+        <!-- 2026-09-27（用户口径）：无单退货建单时解析/选定的 BOM 快照 —— 工厂修好送回时
+             「加工返回单」按它限定可选的「实际用料」（无单红冲本身仍不拆料还料，见 P1-1） -->
+        <el-descriptions-item label="BOM 快照">
+          <span v-if="detail.bomSnapshotId">v{{ detail.bomVersion ?? '?' }}</span>
+          <span v-else style="color:var(--app-text-placeholder)">未绑定（返回单里将没有可选的用料）</span>
+        </el-descriptions-item>
         <el-descriptions-item label="建单时间">{{ detail.createTime ? String(detail.createTime).replace('T', ' ').slice(0, 19) : '-' }}</el-descriptions-item>
         <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项） -->
         <el-descriptions-item label="制单人">{{ detail.createByName || '—' }}</el-descriptions-item>

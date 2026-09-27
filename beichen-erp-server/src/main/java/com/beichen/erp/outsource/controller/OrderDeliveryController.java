@@ -100,6 +100,16 @@ public class OrderDeliveryController {
     }
 
     /**
+     * 「新增无单加工退货」页的 **BOM 快照候选**（2026-09-27 用户口径）：该产品在该工厂**用过**的快照
+     * （按最近使用的加工单倒序 ⇒ 第一项即默认），带版本/来源；解析不到则返回空数组。
+     */
+    @GetMapping("/product-snapshot-options")
+    public R<List<Map<String, Object>>> productSnapshotOptions(@RequestParam(required = false) Long factoryId,
+                                                               @RequestParam Long productMasterId) {
+        return R.ok(deliveryService.productSnapshotOptions(factoryId, productMasterId));
+    }
+
+    /**
      * 无单加工退货列表（**兼容保留**：2026-09-21 起前端已改用下面的台账端点
      * {@link #defectReturnPage} 把有单/无单展示在一张表；本端点供既有回归脚本与外部调用继续使用）。
      */

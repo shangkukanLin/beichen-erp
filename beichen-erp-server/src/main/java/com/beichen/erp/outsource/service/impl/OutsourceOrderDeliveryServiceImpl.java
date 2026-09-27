@@ -25,6 +25,7 @@ import com.beichen.erp.outsource.common.MaterialRequirementCalc;
 import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.outsource.common.QualityType;
+import com.beichen.erp.outsource.entity.BomSnapshot;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
@@ -104,6 +105,9 @@ public class OutsourceOrderDeliveryServiceImpl
     private final FinancePayableMapper payableMapper;
     /** 加工退货台账「返回进度」（2026-09-27）：按来源退货单聚合已审核加工返回单数量 */
     private final OutsourceReturnBackMapper returnBackMapper;
+    /** BOM 快照（2026-09-27）：无单加工退货建单时解析快照 + 台账/详情回显版本号 */
+    private final com.beichen.erp.outsource.mapper.BomSnapshotMapper bomSnapshotMapper;
+    private final com.beichen.erp.outsource.mapper.BomSnapshotItemMapper bomSnapshotItemMapper;
 
     /** 来源类型：不关联加工单的加工退货（与实体 sourceType 注释里的 RETURN_DEFECT 一致） */
     private static final String SOURCE_RETURN_DEFECT = "RETURN_DEFECT";
@@ -663,9 +667,84 @@ public class OutsourceOrderDeliveryServiceImpl
         d.setDeliveryDate(LocalDate.now());
         Object remark = body.get("remark");
         d.setRemark(remark != null && !remark.toString().isBlank() ? remark.toString() : "加工退货（不关联加工单）");
+        // 2026-09-27（用户口径）：无单退货没有加工单 ⇒ 把 **BOM 快照落到本记录**上，
+        //   工厂修好送回时（加工返回单）据此限定「实际用料」的可选范围。
+        //   解析顺序：① 前端指定（人工换版本）→ ② **该产品在该工厂最近一次被加工单用过的快照** → ③ 留空
+        //   （留空 = 返回时按"现场解析"兜底；仍解析不到 ⇒ 可选池为空 ⇒ 用料只能留空，不卡流程）。
+        Long bomSnapshotId = body.get("bomSnapshotId") != null && !body.get("bomSnapshotId").toString().isBlank()
+                ? Long.valueOf(body.get("bomSnapshotId").toString()) : null;
+        if (bomSnapshotId == null) bomSnapshotId = recentOrderSnapshotId(factoryId, masterId);
+        d.setBomSnapshotId(bomSnapshotId);
         baseMapper.insert(d);
-        log.info("无单加工退货已保存(草稿): id={}, factoryId={}, masterId={}, qualityType={}, qty={}",
-                d.getId(), factoryId, masterId, qualityType, defectQty);
+        log.info("无单加工退货已保存(草稿): id={}, factoryId={}, masterId={}, qualityType={}, qty={}, bomSnapshotId={}",
+                d.getId(), factoryId, masterId, qualityType, defectQty, bomSnapshotId);
+    }
+
+    /**
+     * 「该产品在该工厂**最近一次被加工单用过**的 BOM 快照」（2026-09-27 用户确认的口径）。
+     * <p>取不到（该产品没在这个工厂下过单/订单产品行没快照）返回 null，由调用方决定留空还是现场兜底。</p>
+     */
+    @Override
+    public Long recentOrderSnapshotId(Long factoryId, Long masterId) {
+        Map<Long, BomSnapshot> snaps = orderSnapshotsOf(factoryId, masterId);
+        if (snaps.isEmpty()) return null;
+        // orderSnapshotsOf 已按"最近使用的加工单"倒序 ⇒ 第一个即最近一次用过的快照
+        return snaps.keySet().iterator().next();
+    }
+
+    /**
+     * 该产品在该工厂**用过的 BOM 快照**（按最近使用的加工单倒序；LinkedHashMap 保序）：
+     * key=snapshotId, value=快照实体。用于 ① 建单默认解析 ② 前端「换版本」下拉。
+     */
+    private Map<Long, BomSnapshot> orderSnapshotsOf(Long factoryId, Long masterId) {
+        Map<Long, BomSnapshot> out = new LinkedHashMap<>();
+        if (masterId == null) return out;
+        List<OutsourceOrderProduct> rows = orderProductMapper.selectList(new LambdaQueryWrapper<OutsourceOrderProduct>()
+                // ⚠️ outsource_order_product.product_id 存的就是**产品主数据ID**（见实体注释），不是订单产品行ID
+                .eq(OutsourceOrderProduct::getProductId, masterId)
+                .isNotNull(OutsourceOrderProduct::getBomSnapshotId));
+        if (rows.isEmpty()) return out;
+        // 一次批量取订单（判工厂 + 按订单 id 倒序 = 最近一次）
+        java.util.Set<Long> orderIds = rows.stream().map(OutsourceOrderProduct::getOrderId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, OutsourceOrder> orderMap = orderIds.isEmpty() ? new LinkedHashMap<>()
+                : orderMapper.selectBatchIds(orderIds).stream()
+                        .collect(Collectors.toMap(OutsourceOrder::getId, o -> o, (a, b) -> a, LinkedHashMap::new));
+        List<OutsourceOrderProduct> sorted = new ArrayList<>(rows);
+        sorted.sort((a, b) -> {
+            OutsourceOrder oa = orderMap.get(a.getOrderId()), ob = orderMap.get(b.getOrderId());
+            long ia = oa != null ? oa.getId() : 0L, ib = ob != null ? ob.getId() : 0L;
+            return Long.compare(ib, ia);
+        });
+        for (OutsourceOrderProduct r : sorted) {
+            OutsourceOrder o = orderMap.get(r.getOrderId());
+            if (o == null) continue;
+            if (factoryId != null && !java.util.Objects.equals(o.getFactoryId(), factoryId)) continue;
+            if (r.getBomSnapshotId() == null || out.containsKey(r.getBomSnapshotId())) continue;
+            BomSnapshot s = bomSnapshotMapper.selectById(r.getBomSnapshotId());
+            if (s != null) out.put(r.getBomSnapshotId(), s);
+        }
+        return out;
+    }
+
+    /**
+     * 「新增无单加工退货」页的 BOM 快照候选（2026-09-27）：该产品在该工厂**用过的快照 + 版本/来源**，
+     * 按最近使用的加工单倒序 ⇒ 第一项即默认值（与建单解析同口径）。
+     */
+    @Override
+    public List<Map<String, Object>> productSnapshotOptions(Long factoryId, Long masterId) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map.Entry<Long, BomSnapshot> e : orderSnapshotsOf(factoryId, masterId).entrySet()) {
+            BomSnapshot s = e.getValue();
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("snapshotId", e.getKey());
+            m.put("bomVersion", s.getBomVersion());
+            m.put("kind", s.getKind());
+            m.put("itemCount", s.getItemCount());
+            m.put("productKey", s.getProductKey());
+            out.add(m);
+        }
+        return out;
     }
 
     /**
@@ -788,6 +867,12 @@ public class OutsourceOrderDeliveryServiceImpl
         // 2026-09-27：每行的「已返回 / 未返回」（按来源单聚合已审核返回单）——1 次批量查询，无 N+1
         Map<Long, BigDecimal> returnedMap = returnedQtyBySource(
                 records.stream().map(OutsourceOrderDelivery::getId).filter(id -> id != null).collect(Collectors.toList()));
+        // 2026-09-27：本页用到的 BOM 快照一次批量取（台账回显「BOM 快照 vN」；无 N+1）
+        java.util.Set<Long> pageSnapIds = records.stream().map(OutsourceOrderDelivery::getBomSnapshotId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, BomSnapshot> pageSnaps = pageSnapIds.isEmpty() ? new LinkedHashMap<>()
+                : bomSnapshotMapper.selectBatchIds(pageSnapIds).stream()
+                        .collect(Collectors.toMap(BomSnapshot::getId, s -> s, (a, b) -> a, LinkedHashMap::new));
         for (OutsourceOrderDelivery d : records) {
             Product p = d.getProductMasterId() != null ? productMap.get(d.getProductMasterId()) : null;
             Long fid = effectiveFactoryId(d, orderFactoryMap);
@@ -805,6 +890,13 @@ public class OutsourceOrderDeliveryServiceImpl
             m.put("productName", p != null ? p.getName() : "");
             m.put("sku", p != null ? p.getSku() : "");
             m.put("qualityType", d.getQualityType());
+            // 2026-09-27：无单退货的 BOM 快照（返回时「实际用料」范围的依据）——台账回显版本/来源
+            m.put("bomSnapshotId", d.getBomSnapshotId());
+            BomSnapshot rowSnap = d.getBomSnapshotId() != null ? pageSnaps.get(d.getBomSnapshotId()) : null;
+            if (rowSnap != null) {
+                m.put("bomVersion", rowSnap.getBomVersion());
+                m.put("bomKind", rowSnap.getKind());
+            }
             m.put("quantity", d.getQuantity());
             m.put("warehouseId", d.getWarehouseId());
             m.put("warehouseName", d.getWarehouseId() != null ? warehouseNameMap.get(d.getWarehouseId()) : "");
@@ -923,6 +1015,13 @@ public class OutsourceOrderDeliveryServiceImpl
         m.put("productName", p != null ? p.getName() : "");
         m.put("sku", p != null ? p.getSku() : "");
         m.put("qualityType", d.getQualityType());
+        // 2026-09-27：无单退货的 BOM 快照（返回时「实际用料」可选范围的依据；有单红冲没有快照 ⇒ 为空）
+        m.put("bomSnapshotId", d.getBomSnapshotId());
+        BomSnapshot dSnap = d.getBomSnapshotId() != null ? bomSnapshotMapper.selectById(d.getBomSnapshotId()) : null;
+        if (dSnap != null) {
+            m.put("bomVersion", dSnap.getBomVersion());
+            m.put("bomKind", dSnap.getKind());
+        }
         m.put("quantity", d.getQuantity());
         m.put("warehouseId", d.getWarehouseId());
         m.put("warehouseName", warehouseNameOf(d.getWarehouseId()));
