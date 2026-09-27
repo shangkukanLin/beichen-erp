@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.common.ExpenseSourceType;
+import com.beichen.erp.finance.common.ExpenseType;
 import com.beichen.erp.finance.entity.FinanceExpense;
 import com.beichen.erp.finance.service.FinanceExpenseService;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
@@ -87,7 +88,7 @@ public class OutsourceMaterialServiceImpl implements OutsourceMaterialService {
         if (remark.isBlank()) remark = "研发支出：" + material.getMaterialName();
 
         FinanceExpense e = new FinanceExpense();
-        e.setExpenseType(FinanceExpense.TYPE_RD);
+        e.setExpenseType(ExpenseType.RND.getCode());
         e.setAmount(amount);
         e.setAccountId(accountId);
         e.setExpenseDate(expenseDate);

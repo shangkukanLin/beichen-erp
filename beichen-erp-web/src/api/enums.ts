@@ -138,7 +138,8 @@ export const BillTypeLabel: Record<string, string> = {
  *
  * <p>2026-09-27 新增 <b>RND = 研发支出</b>（用户要求）：物料信息管理「新增物料」时可顺带登记一笔研发支出
  * （走 `POST /api/outsource/material/{id}/rd-expense`，落**草稿**费用单，审核后才扣款）。
- * 后端写入侧用常量 `FinanceExpense.TYPE_RD`，两处必须一致。</p>
+ * 后端写入侧用 `finance.common.ExpenseType.RND`，且**写入会被校验**（未知 code 直接拒绝、大小写归一化）；
+ * 本映射与后端枚举的常量名一致性由 `web-check.ps1` 的枚举守卫比对（漏加值 ⇒ 守卫 FAIL）。</p>
  */
 export const ExpenseTypeLabel: Record<string, string> = {
   OFFICE: '办公费', RENT: '房租水电', SALARY: '工资社保',

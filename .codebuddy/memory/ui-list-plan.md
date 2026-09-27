@@ -936,6 +936,28 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 ⚠️ **踩坑**：注释里写 `…/RND=研发支出**/OTHER` 时，`**/` 会**提前闭合 javadoc** ⇒ javac 报一大片"非法字符"（已修正；
   同类检查方式：`git diff -U0 -- 后端 | Select-String '\*\*/'`）。
 
+### 5.25b 两个后续落地（2026-09-27，用户「1和2一起做」）
+
+**① 后端费用类型枚举 + 枚举守卫覆盖**
+- 新增 `finance/common/ExpenseType`（8 值，code+label；`fromCode` **忽略大小写**、`normalize` 校验并返回规范 code）。
+- `FinanceExpenseServiceImpl.validate` 用 `normalize` **校验 + 归一化**：未知值拒绝（报错里列出全部合法 code），
+  历史/脚本里的小写值（`office`）被归一化成大写 —— 此前"只校验非空"，前端写错即脏数据（与 F7-53 同源）。
+  写入侧字面量收敛到 `ExpenseType.RND`，删除了本批临时加的 `FinanceExpense.TYPE_RD` 常量（`FinanceExpense` 只留注释指路）。
+- `web-check.ps1` 的 `$enumPairs` 增加 `ExpenseType ↔ ExpenseTypeLabel` ⇒ **前端漏加值即 FAIL**（PASS 文案已更新）。
+- `seed5_finance.ps1` 的费用类型由小写改为规范大写 code（配合新校验）。
+
+**② 物料列表加「登记研发支出」行操作（事后补登记）**
+- `views/outsource/material-info.vue`：操作列 130→**190px** 并加「研发支出」按钮 → 独立小弹窗
+  （物料名只读 + 金额默认带出单价 / 支出账户 / 费用日期 / 费用备注）→ 调**同一个**端点；
+  已登记过则后端幂等回原单，消息里给出原单号。
+- 守卫扩到 **29/0**：`verify-material-rd-expense-ui.ps1` 新增 E 段（行操作存在→弹窗→金额预填单价→账户下拉→提交→
+  草稿提示→DB 恰好一行→**二次登记仍一行**）；`verify-material-rd-expense.ps1` 扩到 **22/0**（新增 F 段：
+  未知类型被拒**且不落库** / 小写 `rnd` 被归一化为 `RND`）。
+- ⚠️ **踩坑（值得复用）**：`el-table-column fixed="right"` 时 Element Plus 把该列渲染在**独立覆盖表**里，
+  主表那一行**根本没有按钮** ⇒ 脚本必须"先在主表按物料名找到**行号**，再到覆盖表同序号行里找按钮"
+  （已抽成 `prelude` 里的 `rdBtnAt(name,btn)`）；直接 `querySelectorAll('.el-table__body tr')` 后 find 按钮必然失败。
+- 宽度回归：`scan-col-truncation` / `scan-table-overflow` 各 62 页 **0 offender**（加宽操作列未破坏"列表一行显示完"）。
+
 > ⚠️ **已知存量问题（非本次引入，2026-09-27 记录）**：`verify-api-perm-enforcement.ps1` 报 4 条 FAIL
 > （期望 62 个带码页菜单 / 14 个按钮码，实测 **70/17**；并列出 `outsource:order-delivery|material-return|return-order`
 > 的"重复码"—— 那是三级菜单改造里**有意**的同码复用）。本次未改任何菜单/权限行。待办：刷新该脚本的期望值
@@ -975,6 +997,9 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
       顺带踩中并修掉 `watch()` 立即求值导致的 **TDZ 整页白屏**（新增 `verify-detail-render.ps1` 补盲，
       16: 70/0、15: 55/0、14: 46/0、五守卫 + 详情页渲染守卫全 PASS）
 - [x] B12 加工退货/物料退货三级菜单 + 页签（2026-09-27，4+2 叶子；返回进度按来源单聚合 + 草稿作废 + 防超返；脚本层文案同步待办见 §5.13）
+- [x] B24 研发支出两个后续（2026-09-27，用户「1和2一起做」）：① 后端 `ExpenseType` 枚举 + 写入校验/归一化 +
+      枚举守卫覆盖（前端漏加值即 FAIL）；② 物料列表加「研发支出」行操作（事后补登记）+ 独立弹窗；
+      守卫扩到 22/0（类型校验）与 29/0（UI 行操作 + 幂等）；两张宽度扫描 0 offender（详见 §5.25b）
 - [x] B23 费用类型「研发支出」+ 新增物料时可选顺带登记（2026-09-27，用户需求，方案 A「推荐值全采纳」）：
       费用类型 +RND（前端映射，零后端改动）；`finance_expense` +来源三列（幂等补列已生效）+ 新端点
       `POST /api/outsource/material/{id}/rd-expense`（只落**草稿**，物料页用户无需财务权限）；

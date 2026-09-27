@@ -16,15 +16,6 @@ import java.time.LocalDateTime;
 @TableName("finance_expense")
 public class FinanceExpense {
 
-    /**
-     * 费用类型常量：**研发支出**（2026-09-27 新增）。
-     *
-     * <p>与前端 {@code api/enums.ts} 的 {@code ExpenseTypeLabel.RND = '研发支出'} 对应。后端历史上**没有**费用类型枚举
-     * （该列一直是"前端映射 + 后端只校验非空"），故这里用一个常量把跨模块写入（物料页「新增物料 → 同时登记研发支出」）
-     * 要写的值收敛到一处；若将来把费用类型收成后端枚举，本常量随之删除。</p>
-     */
-    public static final String TYPE_RD = "RND";
-
     /** 制单人（ID + 姓名快照）—— 2026-09-23 全站单据口径：详情页显示「制单人」，由 MetaObjectHandler 自动填充 */
     @TableField(fill = FieldFill.INSERT)
     private Long createBy;
@@ -45,9 +36,12 @@ public class FinanceExpense {
     private String expenseNo;
 
     /**
-     * 费用类型（**存 code**：OFFICE / RENT / SALARY / TRANSPORT / TRAVEL / ENTERTAIN / RND=研发支出 / OTHER）。
-     * <p>2026-09-27 订正：原注释写"中文字面量：办公费/…"，与实现不符 —— 明细页/筛选/列表都按
-     * {@code api/enums.ts} 的 {@code ExpenseTypeLabel} 把 code 映射成中文（实测现网存的是 OFFICE）。</p>
+     * 费用类型（**存 code**，取值见 {@code finance.common.ExpenseType}：OFFICE/RENT/SALARY/TRANSPORT/TRAVEL/
+     * ENTERTAIN/RND=研发支出/OTHER；中文名在前端 {@code api/enums.ts} 的 {@code ExpenseTypeLabel} 映射）。
+     *
+     * <p>2026-09-27：① 订正历史注释（原写"中文字面量：办公费/…"与实现不符，实测现网存的是 OFFICE）；
+     * ② 写入侧由 {@code FinanceExpenseServiceImpl.validate} 用 {@code ExpenseType.normalize} **校验并归一化**，
+     * 未知值直接拒绝（原先无校验，前端写错即脏数据）。</p>
      */
     private String expenseType;
 

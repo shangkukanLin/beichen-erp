@@ -132,6 +132,22 @@ if ($lg2.data.token) {
   Ok ($r6.code -ne 200) ('E: the same user is DENIED on /finance/expense (code=' + $r6.code + ') -- that is why the endpoint lives under the material prefix')
 }
 
+Step 'F) expense type is validated by the backend enum (unknown rejected, lowercase normalised)'
+$r7 = ApiPost '/finance/expense' $tok ('{"expenseType":"ABCDEFG","amount":1,"accountId":' + $accountId + '}')
+Info ('F unknown type -> code=' + $r7.code + ' msg=' + $r7.msg)
+Ok ($r7.code -ne 200) 'F: unknown expense type rejected (no dirty code can be stored any more)'
+Ok ((SqlOne "SELECT COUNT(*) FROM finance_expense WHERE expense_type='ABCDEFG'") -eq '0') 'F: nothing was written for the rejected type'
+$before = [int]$((SqlOne "SELECT COUNT(*) FROM finance_expense") -replace '^$', '0')
+$r8 = ApiPost '/finance/expense' $tok ('{"expenseType":"rnd","amount":1,"accountId":' + $accountId + '}')
+Ok ($r8.code -eq 200) 'F: lowercase "rnd" accepted (normalised -- historical/script values still work)'
+$normId = SqlOne "SELECT id FROM finance_expense ORDER BY id DESC LIMIT 1"
+if ($normId -ne '' -and [int]$normId -gt $before) {
+  $expIds += [string]$normId
+  Ok ((SqlOne ("SELECT expense_type FROM finance_expense WHERE id=" + $normId)) -eq 'RND') 'F: stored as the canonical code RND'
+} else {
+  Ok $false 'F: could not locate the row created with the lowercase type'
+}
+
 Step 'cleanup: fixture expenses + materials + temp role/user'
 foreach ($e in $expIds) { if ($e -and $e -ne '') { SqlExec ("DELETE FROM finance_expense WHERE id=" + $e + ";") } }
 foreach ($m in $matIds) { if ($m -and $m -ne '') { ApiDelete ("/outsource/material/" + $m) $tok | Out-Null; SqlExec ("DELETE FROM outsource_material WHERE id=" + $m + ";") } }

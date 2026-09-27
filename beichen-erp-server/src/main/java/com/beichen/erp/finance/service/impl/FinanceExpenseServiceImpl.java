@@ -9,6 +9,7 @@ import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.common.DocStatusGuard;
 import com.beichen.erp.finance.common.CashflowRelatedType;
 import com.beichen.erp.finance.common.CashflowType;
+import com.beichen.erp.finance.common.ExpenseType;
 import com.beichen.erp.finance.entity.FinanceAccount;
 import com.beichen.erp.finance.entity.FinanceCashflow;
 import com.beichen.erp.finance.entity.FinanceExpense;
@@ -181,6 +182,13 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
 
     private void validate(FinanceExpense expense) {
         if (expense.getExpenseType() == null || expense.getExpenseType().isBlank()) throw new BusinessException("费用类型不能为空");
+        // 2026-09-27：类型收敛到 ExpenseType 枚举 —— 校验 + 归一化大小写（历史/脚本里出现过小写 office），
+        // 未知值拒绝（此前无校验，前端写错即脏数据，清单页会显示英文 code，与 F7-53 同源）
+        try {
+            expense.setExpenseType(ExpenseType.normalize(expense.getExpenseType()));
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(ex.getMessage());
+        }
         if (expense.getAmount() == null || expense.getAmount().compareTo(BigDecimal.ZERO) <= 0) throw new BusinessException("费用金额必须大于 0");
         if (expense.getAccountId() == null) throw new BusinessException("支出账户不能为空");
         if (expense.getExpenseDate() == null) expense.setExpenseDate(LocalDate.now());

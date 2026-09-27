@@ -66,7 +66,10 @@ if ($bomBad.Count -gt 0) {
 $srvRoot = 'c:\Users\75629\CodeBuddy\20260710123705\beichen-erp\beichen-erp-server\src\main\java\com\beichen\erp'
 $enumPairs = @(
   @{ Name = 'SourceBillType';   Java = "$srvRoot\finance\common\SourceBillType.java";   TsMap = 'SourceBillTypeLabel' },
-  @{ Name = 'SettlementStatus'; Java = "$srvRoot\finance\common\SettlementStatus.java"; TsMap = 'SettlementStatusLabel' }
+  @{ Name = 'SettlementStatus'; Java = "$srvRoot\finance\common\SettlementStatus.java"; TsMap = 'SettlementStatusLabel' },
+  # 2026-09-27：费用类型也收成后端枚举（finance/common/ExpenseType，写入侧 validate 校验+归一化）
+  # ⇒ 纳入同一守卫：前端 ExpenseTypeLabel 漏加值即 FAIL（原先费用类型只有前端映射、后端无枚举可守）
+  @{ Name = 'ExpenseType';      Java = "$srvRoot\finance\common\ExpenseType.java";      TsMap = 'ExpenseTypeLabel' }
 )
 $enumMissing = @()
 $tsSrc = Get-Content (Join-Path $root 'src\api\enums.ts') -Raw -Encoding UTF8
@@ -87,7 +90,7 @@ if ($enumMissing.Count -gt 0) {
   $enumMissing | ForEach-Object { Write-Output ("  " + $_) }
   $hygiene = 1
 } else {
-  Write-Output '[枚举守卫] PASS 后端枚举常量与前端 Label 映射一致（SourceBillType / SettlementStatus）'
+  Write-Output '[枚举守卫] PASS 后端枚举常量与前端 Label 映射一致（SourceBillType / SettlementStatus / ExpenseType）'
 }
 
 # ===== 源头守卫（2026-09-27）：RemoteSelect 的**函数型** label-key 必须用 : 绑定 =====

@@ -3,7 +3,7 @@
 #
 #   A) the add-material dialog shows a "file an R&D expense" checkbox, and the amount/account fields stay hidden
 #      until it is ticked (the prompt must not clutter the normal flow);
-#   B) ticking it reveals 支出金额 / 支出账户 (+ date / remark), and the account dropdown is populated with a balance;
+#   B) ticking it reveals the amount / account fields (+ date / remark), and the account dropdown is populated with a balance;
 #   C) submitting files the material AND the DRAFT expense in one go: success message says "draft + audit to pay",
 #      and the DB holds exactly one RND row sourced from that material;
 #   D) no JS / API errors along the way.
@@ -26,9 +26,11 @@ $matName = 'RD-UI-' + (Get-Date).ToString('HHmmss')
 $bNew = B64 (ZH 'btn_new'); $bName = B64 (ZH 'lbl_material_name'); $bType = B64 (ZH 'lbl_material_type')
 $bCheck = B64 (ZH 'chk_material_rd'); $bAmount = B64 (ZH 'lbl_rd_amount'); $bAcct = B64 (ZH 'lbl_rd_account')
 $bOk = B64 (ZH 'btn_ok'); $bMsg = B64 (ZH 'msg_rd_draft')
+# E reuses the same label as the form item ("R&D expense") for the list row action button
+$bRdBtn = B64 (ZH 'lbl_material_rd')
 
 # shared JS prelude: decode labels, find a form item by label, set an input value the Vue way
-$pre = "const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const vis=e=>e.getClientRects().length>0;const dlg=()=>[...document.querySelectorAll('.el-dialog')].filter(vis).pop();const item=(root,lab)=>{for(const it of root.querySelectorAll('.el-form-item')){const l=it.querySelector('.el-form-item__label');if(l&&(l.innerText||'').replace(/[\s*:]/g,'')===lab)return it}return null};const setv=(el,v)=>{const p=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(p,'value').set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))};"
+$pre = "const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const vis=e=>e.getClientRects().length>0;const dlg=()=>[...document.querySelectorAll('.el-dialog')].filter(vis).pop();const item=(root,lab)=>{for(const it of root.querySelectorAll('.el-form-item')){const l=it.querySelector('.el-form-item__label');if(l&&(l.innerText||'').replace(/[\s*:]/g,'')===lab)return it}return null};const setv=(el,v)=>{const p=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(p,'value').set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))};const rdBtnAt=(name,btn)=>{const bodies=[...document.querySelectorAll('.el-table__body')].filter(vis);let idx=-1;for(const b of bodies){const rows=[...b.querySelectorAll('tr')].filter(vis);const i=rows.findIndex(tr=>(tr.innerText||'').includes(name));if(i>=0){idx=i;break}}if(idx<0)return 'NOROW';for(const b of bodies){const rows=[...b.querySelectorAll('tr')].filter(vis);if(rows.length<=idx)continue;const x=[...rows[idx].querySelectorAll('button')].filter(vis).find(y=>(y.innerText||'').trim()===btn);if(x)return x}return 'NOBTN'};"
 
 Write-Host '--- A) the dialog prompts for an R&D expense, fields stay hidden until ticked'
 Open '/outsource/material-info' 3500
@@ -80,6 +82,55 @@ Write-Host ('  expense row = ' + $row)
 Ok ($row -like ('DRAFT/RND/88.5*RD_MATERIAL/' + $matId)) 'C: one DRAFT RND expense sourced from that material'
 Ok ((SqlOne ("SELECT COUNT(*) FROM finance_expense WHERE source_bill_type='RD_MATERIAL' AND source_id=" + $matId)) -eq '1') 'C: exactly one expense row for the material'
 Ok ((Errs) -eq '[]') 'D: no JS/API errors during the flow'
+
+Write-Host '--- E) list row action: file it after the fact (the path for "forgot to tick it when creating")'
+# fixture through the API (no option ticked), then file it from the list row action
+$API = 'http://localhost:8080/api'
+function ApiPost([string]$path, [string]$token, [string]$json) {
+  $h = @{}
+  if ($token) { $h['Authorization'] = $token }
+  try { return Invoke-RestMethod -Uri ($API + $path) -Method Post -Headers $h -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json)) } catch { return $null }
+}
+$lg = ApiPost '/auth/login' '' '{"username":"lin","password":"123","companyId":1}'
+$tok = $lg.data.token
+$matTypeId = SqlOne 'SELECT id FROM material_type ORDER BY id LIMIT 1'
+$accId = SqlOne 'SELECT id FROM finance_account WHERE status=1 ORDER BY id LIMIT 1'
+$matB = 'RD-ROW-' + (Get-Date).ToString('HHmmss')
+$mb = ApiPost '/outsource/material' $tok ('{"materialName":"' + $matB + '","materialTypeId":' + $matTypeId + ',"unit":"PCS","price":66,"supplierIds":""}')
+$matBId = [string]$mb.data
+Ok ($matBId -ne '') ('E: fixture material created without the option (id=' + $matBId + ')')
+Open '/outsource/material-info' 3200   # reload: the new material sorts first (list is ordered by id desc)
+$r = (EvalJs "(()=>{$pre;const b=rdBtnAt('$matB',T('$bRdBtn'));if(typeof b==='string')return b;b.click();return 'OK'})()")
+Ok ($r -eq 'OK') ('E: the row action "register R&D expense" exists and opens its dialog (' + $r + ')')
+Start-Sleep -Milliseconds 1000
+$r = (EvalJs "(()=>{$pre;const d=dlg();if(!d)return 'NODLG';const it=item(d,T('$bAmount'));if(!it)return 'NOITEM_AMT';setv(it.querySelector('input'),'66');return 'OK'})()")
+Ok ($r -eq 'OK') 'E: amount pre-filled from the material price (and editable)'
+$r = (EvalJs "(()=>{$pre;const d=dlg();const it=item(d,T('$bAcct'));if(!it)return 'NOITEM_ACCT';const inp=it.querySelector('input');inp.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));inp.click();return 'OK'})()")
+Ok ($r -eq 'OK') 'E: account dropdown opened'
+Start-Sleep -Milliseconds 1100
+$r = (EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const opts=[...document.querySelectorAll('.el-select-dropdown__item')].filter(vis);if(!opts.length)return 'NOOPT';opts[0].click();return 'OK'})()")
+Ok ($r -eq 'OK') 'E: account picked'
+ClearErrs | Out-Null
+$r = (EvalJs "(()=>{$pre;const d=dlg();const bs=[...d.querySelectorAll('.el-dialog__footer button')].filter(vis).filter(b=>(b.innerText||'').trim()===T('$bOk'));if(!bs.length)return 'NOOK';bs[0].click();return 'OK'})()")
+Ok ($r -eq 'OK') 'E: submitted'
+Start-Sleep -Milliseconds 2200
+$msgOk = (EvalJs "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));return String((document.body.innerText||'').indexOf(T('$bMsg'))>=0)})()") -replace '"', ''
+Ok ($msgOk.Trim() -eq 'true') 'E: the same draft hint is shown'
+$row2 = SqlOne ("SELECT CONCAT(status,'/',expense_type,'/',amount,'/',IFNULL(source_id,0)) FROM finance_expense WHERE source_bill_type='RD_MATERIAL' AND source_id=" + $matBId + " ORDER BY id DESC LIMIT 1")
+Write-Host ('  row = ' + $row2)
+Ok ($row2 -like ('DRAFT/RND/66*' + $matBId)) 'E: one DRAFT RND expense sourced from that material'
+Ok ((Errs) -eq '[]') 'E: no JS/API errors during the row-action flow'
+# second click on the same row must be idempotent (backend returns the original doc, still one row)
+$r = (EvalJs "(()=>{$pre;const b=rdBtnAt('$matB',T('$bRdBtn'));if(typeof b==='string')return b;b.click();return 'OK'})()")
+Start-Sleep -Milliseconds 900
+$r = (EvalJs "(()=>{$pre;const d=dlg();const it=item(d,T('$bAcct'));if(!it)return 'NOITEM_ACCT';const inp=it.querySelector('input');inp.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));inp.click();return 'OK'})()")
+Start-Sleep -Milliseconds 1100
+$r = (EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const opts=[...document.querySelectorAll('.el-select-dropdown__item')].filter(vis);if(!opts.length)return 'NOOPT';opts[0].click();return 'OK'})()")
+$r = (EvalJs "(()=>{$pre;const d=dlg();const bs=[...d.querySelectorAll('.el-dialog__footer button')].filter(vis).filter(b=>(b.innerText||'').trim()===T('$bOk'));if(!bs.length)return 'NOOK';bs[0].click();return 'OK'})()")
+Start-Sleep -Milliseconds 2000
+Ok ((SqlOne ("SELECT COUNT(*) FROM finance_expense WHERE source_bill_type='RD_MATERIAL' AND source_id=" + $matBId)) -eq '1') 'E: re-filing the same material is idempotent (still one row)'
+SqlExec ("DELETE FROM finance_expense WHERE source_bill_type='RD_MATERIAL' AND source_id=" + $matBId + ";")
+SqlExec ("DELETE FROM outsource_material WHERE id=" + $matBId + ";")
 
 Write-Host '--- cleanup'
 SqlExec ("DELETE FROM finance_expense WHERE source_bill_type='RD_MATERIAL' AND source_id=" + $matId + ";")

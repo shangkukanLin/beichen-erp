@@ -37,7 +37,8 @@ Write-Output ('accounts=' + $accIds.Count)
 
 # 2) expenses (10) + audit
 $expOk = 0; $expFail = 0
-$expTypes = @('office', 'rent', 'salary', 'transport', 'travel', 'entertain', 'other')
+# 2026-09-27：费用类型自本批起由后端 ExpenseType 枚举校验（未知值拒绝、大小写归一化）⇒ 这里改为规范大写 code
+$expTypes = @('OFFICE', 'RENT', 'SALARY', 'TRANSPORT', 'TRAVEL', 'ENTERTAIN', 'RND', 'OTHER')
 for ($i = 1; $i -le 10; $i++) {
   $e = @{ expenseType = $expTypes[$i % $expTypes.Count]; amount = [math]::Round(($rnd.Next(10000, 800000) / 100), 2); expenseDate = '2026-08-27'; accountId = [int]$accIds[$i % $accIds.Count]; remark = 'seed expense'; status = 'DRAFT' }
   $r = Post '/api/finance/expense' $e
