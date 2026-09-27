@@ -221,11 +221,48 @@
       </el-tab-pane>
 
       <!-- 物料仓库（2026-09-16 新增 TAB，对应新的一级菜单「物料仓库」）：快捷入口自「委外加工」TAB 迁入，
-           顺序≈使用频率（查询在首位；侧栏本组顺序为 物料库存详情 → 物料库存盘点 → 物料报损 → 物料其他出入库 → 物料收发单）；
-           本模块暂无汇总统计卡片（如需物料仓库存量/待处理收发单等统计，另行补充）。
+           顺序≈使用频率（查询在首位；侧栏本组顺序为 物料库存详情 → 物料库存盘点 → 物料报损 → 物料其他出入库 → 物料收发单）。
            注：「委外仓库 / 自有物料仓」2026-09-22 起在侧栏归「基础数据」（仓库主数据），
-           但首页无「基础数据」TAB（主数据按使用场景分散在各 TAB），故这两颗按钮仍留在本 TAB -->
+           但首页无「基础数据」TAB（主数据按使用场景分散在各 TAB），故这两颗按钮仍留在本 TAB。
+
+           2026-09-27（用户实测：「首页的 TAB 物料仓库，怎么是空白的？」）：本 TAB 建时**只做了快捷入口容器、
+           零统计卡片**（原注释即"本模块暂无汇总统计卡片…另行补充"），其余 6 个 TAB 都以 4 张 stat-card 开场
+           ⇒ 对比之下它就是个空白页。现按「成品库存」TAB 的形态补齐：4 张卡片 + 各仓库物料库存分布表。
+           数据全部来自后端聚合 /dashboard/module-pages 的 materialWarehouse 块（读隔离口径，不前端直连物料各页接口），
+           口径（只算物料行 / 委外仓+自有物料仓 / 数量取良品）见 DashboardService.materialWarehouseStat 注释。 -->
       <el-tab-pane v-if="hasModule['materialWarehouse']" label="物料仓库" name="materialWarehouse">
+        <div class="stat-grid">
+          <div class="stat-card" :class="{clickable:mwCanStock}" @click="mwGotoStock">
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ fmtQty(mwItemCount) }}</div>
+            <div class="stat-label">库存品项数（良品）</div>
+          </div>
+          <div class="stat-card" :class="{clickable:mwCanStock}" @click="mwGotoStock">
+            <div class="stat-value" style="color:var(--app-color-success)">{{ fmtQty(mwGoodQty) }}</div>
+            <div class="stat-label">库存总数量（良品）</div>
+          </div>
+          <div class="stat-card" :class="{clickable:mwCanStock}" @click="mwGotoStock">
+            <div class="stat-value" style="color:var(--app-color-warning)">{{ fmtQty(mwOnSiteQty) }}</div>
+            <div class="stat-label">在厂维修物料</div>
+          </div>
+          <!-- 待处理单据：草稿态未审核（与 /dashboard/pending 的 counts 同口径）；不可点击 —— 三张单据三个入口，
+               点一颗会误指，故只在卡片内列明明细 -->
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--app-color-danger)">{{ fmtQty(mwPendingDocs.total) }}</div>
+            <div class="stat-label">待处理单据（草稿）</div>
+            <div class="stat-sub">移仓 {{ fmtQty(mwPendingDocs.materialMove) }} · 报损 {{ fmtQty(mwPendingDocs.stockLoss) }} · 其他出入库 {{ fmtQty(mwPendingDocs.otherIo) }}</div>
+          </div>
+        </div>
+        <el-card shadow="never" class="section-card" v-if="mwWhRows.length">
+          <template #header><span class="section-title">各仓库物料库存分布</span></template>
+          <el-table :data="mwWhRows" size="small" stripe>
+            <el-table-column prop="warehouseName" label="仓库" min-width="140" show-overflow-tooltip>
+              <template #default="{row}"><el-link type="primary" @click="goMaterialWarehouse(row)">{{ row.warehouseName }}</el-link></template>
+            </el-table-column>
+            <el-table-column prop="itemCount" label="物料数" width="90" align="center" />
+            <el-table-column label="库存量（良品）" width="130" align="right"><template #default="{row}">{{ fmtQty(row.goodQuantity) }}</template></el-table-column>
+            <el-table-column label="其中在厂维修" width="130" align="right"><template #default="{row}">{{ fmtQty(row.onSiteRepairQuantity) }}</template></el-table-column>
+          </el-table>
+        </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
           <!-- 2026-09-24（用户口径）：物料仓库子菜单重排为
@@ -492,7 +529,7 @@ import * as echarts from 'echarts'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { useUserStore } from '@/stores/user'
-import { ProjectStatus, PhaseStatus, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, accountTypeLabel } from '@/api/enums'
+import { ProjectStatus, PhaseStatus, OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, accountTypeLabel, WarehouseCategory } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { getDashboardPending, type DashboardPending } from '@/api/dashboard'
 import MemoPanel from '@/views/memo/index.vue'
@@ -816,6 +853,12 @@ const stockDefectQty = ref(0)
 const whStockRows = ref<any[]>([])
 const lowStockItems = ref<any[]>([])
 const financeAccounts = ref<any[]>([])
+// 物料仓库 TAB（2026-09-27 补齐）：全部来自 /dashboard/module-pages 的 materialWarehouse 块
+const mwItemCount = ref(0)
+const mwGoodQty = ref(0)
+const mwOnSiteQty = ref(0)
+const mwPendingDocs = ref<any>({ materialMove: 0, stockLoss: 0, otherIo: 0, total: 0 })
+const mwWhRows = ref<any[]>([])
 
 /**
  * 首页表格名称点击跳转（2026-09-14 新增）
@@ -826,6 +869,30 @@ const financeAccounts = ref<any[]>([])
  */
 function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
 function goProduct(id?: number) { if (id) router.push(`/inventory/product-stock/detail/${id}`) }
+
+/**
+ * 物料仓库 TAB（2026-09-27）。
+ *
+ * - `mwCanStock`：卡片是否可点（需「物料库存详情」权限；无权限时只读展示，避免点出 403 —— 本 TAB 也可能
+ *   只被授予"物料报损"等单页权限而整体可见）；
+ * - `goMaterialWarehouse`：分仓表的仓库名点击 —— **按仓库类别**选详情页：委外仓走
+ *   `/outsource/warehouse/detail/:id`（委外仓库详情），自有物料仓（辅料仓）走
+ *   `/inventory/warehouse/detail/:id`（仓库详情）。两页在路由表都标了 `operate: true`
+ *   ⇒ 不走菜单白名单，任何登录用户点击都不会被拦到 403。
+ */
+const mwCanStock = computed(() => !!hasMenu.value['OutsourceMaterialStock'])
+function mwGotoStock() { if (mwCanStock.value) router.push('/outsource/material-stock') }
+function goMaterialWarehouse(row: any) {
+  const id = Number(row?.warehouseId)
+  if (!id) return
+  router.push(String(row?.warehouseCategory) === WarehouseCategory.OUTSOURCE
+    ? `/outsource/warehouse/detail/${id}` : `/inventory/warehouse/detail/${id}`)
+}
+/**
+ * 数量格式化（整数）。**与成品库存卡片的 fmtN 不同**：库存量是件数，`fmtN` 会输出 "9,559.00"，
+ * 与物料库存详情/仓库详情页的口径（数量一律整数，2026-09-16）不一致，故本区块用整数展示。
+ */
+function fmtQty(v?: any) { return v == null ? '0' : Number(v).toLocaleString('zh-CN') }
 const healthInfo = computed(() => finSummary.value.health || {})
 const finCards = computed(() => {
   const c = finSummary.value.cur || {}
@@ -1038,6 +1105,20 @@ async function loadStats() {
     }
   } catch { /* ignore */}
   try {
+    // 物料仓库（2026-09-27）：卡片与分仓分布**只读后端聚合块**（aggRes 已在函数开头取回，零新增请求）。
+    // 块缺失 = 该用户无物料仓库任一页面码 ⇒ 保持 0/空表（后端按 perms 过滤，前端不自行猜权限）。
+    if (hasModule.materialWarehouse) {
+      const mw: any = aggRes?.materialWarehouse
+      if (mw) {
+        mwItemCount.value = Number(mw.itemCount) || 0
+        mwGoodQty.value = Number(mw.goodQuantity) || 0
+        mwOnSiteQty.value = Number(mw.onSiteRepairQuantity) || 0
+        mwPendingDocs.value = mw.pendingDocs || { materialMove: 0, stockLoss: 0, otherIo: 0, total: 0 }
+        mwWhRows.value = mw.warehouses || []
+      }
+    }
+  } catch { /* ignore */}
+  try {
     if (hasModule.finance) {
       const accRes = await request.get<any, any>('/finance/account/page', { params: { pageSize: 100 } }).catch(() => ({}))
       financeAccounts.value = accRes?.records || []
@@ -1073,6 +1154,8 @@ onUnmounted(() => { trendChart?.dispose(); trendChart = null })
 .stat-card.clickable:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
 .stat-value { font-size: var(--app-font-num); font-weight: 700; }
 .stat-label { font-size: var(--app-font-base); color: var(--app-text-secondary); margin-top: 4px; }
+/* 卡片副标题（2026-09-27 物料仓库「待处理单据」卡：三张单据的明细拆解） */
+.stat-sub { font-size: var(--app-font-xs); color: var(--app-text-secondary); margin-top: 2px; }
 
 /* 快捷入口固定在视口底部（方案 A · 2026-09-14）
    原理：真正的滚动容器是 Element Plus 的 .el-main(overflow:auto)，但 .el-tabs__content 自带 overflow:hidden，

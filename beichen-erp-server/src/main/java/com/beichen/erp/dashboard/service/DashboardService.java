@@ -2,8 +2,10 @@ package com.beichen.erp.dashboard.service;
 
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.inventory.service.StockTakeService;
+import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.common.WarehouseType;
+import com.beichen.erp.warehouse.entity.WarehouseStock;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -30,6 +32,21 @@ public class DashboardService {
 
     /** 售后仓待整理超期阈值（天），与 ReturnSortServiceImpl 保持一致 */
     private static final int STAY_ALERT_DAYS = 3;
+
+    /**
+     * 物料仓库（目录 11）各页面的权限码 —— 持有**任一**即返回 {@code materialWarehouse} 聚合块。
+     * <p>与前端 {@code hasModule.materialWarehouse} 的判据同源（物料移仓 / 物料库存详情 / 物料库存流水 /
+     * 物料库存盘点 / 物料报损 / 物料其他出入库 / 委外仓库管理 / 自有物料仓管理）。</p>
+     */
+    private static final List<String> MATERIAL_WAREHOUSE_PERMS = List.of(
+            "stock:material-move",             // 418 物料移仓
+            "outsource:material-stock",        // 416 物料库存详情
+            "outsource:material-stock-log",    // 417 物料库存流水
+            "outsource:material-stock-take",   // 414 物料库存盘点
+            "outsource:stock-loss",            // 413 物料报损
+            "outsource:other-io",              // 407 物料其他出入库
+            "outsource:warehouse",             // 404 委外仓库管理
+            "outsource:material-warehouse");   // 410 自有物料仓管理
 
     private final JdbcTemplate jdbcTemplate;
     private final StockTakeService stockTakeService;
@@ -108,10 +125,118 @@ public class DashboardService {
             if (perms.contains("analysis:customer")) {
                 res.put("customerAnalysis", customerAnalysisService.customer("month", null, null));
             }
+            // 物料仓库（2026-09-27）：该 TAB 原先**只有快捷入口、零统计卡片**（建 TAB 时的注释即
+            // "本模块暂无汇总统计卡片…另行补充"）⇒ 首页看起来是空白页。此处补物料库存卡片 + 分仓分布 +
+            // 物料侧三张单据的草稿数（口径见 materialWarehouseStat 注释）。
+            if (MATERIAL_WAREHOUSE_PERMS.stream().anyMatch(perms::contains)) {
+                res.put("materialWarehouse", materialWarehouseStat());
+            }
         } catch (Exception e) {
             log.warn("首页模块聚合失败: {}", e.getMessage());
         }
         return res;
+    }
+
+    // ==================== 物料仓库（首页「物料仓库」TAB，2026-09-27 补齐） ====================
+
+    /**
+     * 物料仓库 TAB 聚合：库存卡片（品项数 / 良品数量 / 在厂维修）+ 分仓分布 + 物料侧三张单据的草稿数。
+     *
+     * <p><b>口径（三条）</b>：</p>
+     * <ol>
+     *   <li><b>只算物料行</b>：{@code warehouse_stock.material_id IS NOT NULL}。**不能只按仓库或形态过滤** ——
+     *       成品行也落在同一张表且 {@code stock_form} 取默认值 {@code 'MATERIAL'}
+     *       （实测：自有成品仓 44 行成品行的 stock_form 就是 'MATERIAL'），只按仓库/形态过滤会把成品件数
+     *       算进物料库存。</li>
+     *   <li><b>仓库范围</b>：委外仓（{@code warehouse_category='OUTSOURCE'}）+ 自有物料仓
+     *       （{@code INVENTORY} 且 {@code warehouse_type='AUXILIARY'}）。**不按 {@code warehouse.status} 过滤**：
+     *       停用仓里压着的仍是真实库存，漏掉会让卡片比实物小。</li>
+     *   <li><b>数量 = 良品</b>（{@code quality_type='GOOD'}，物料品质只有 GOOD/DEFECT 两档）；
+     *       「在厂维修」= {@code MATERIAL_REPAIR} 形态，**不分品质**单独一项（在厂账按送修量记，
+     *       与物料库存是两笔账）。</li>
+     * </ol>
+     *
+     * <p>失败不抛：返回全 0 结构（首页其余区块不受影响），仅打 warn 日志。</p>
+     */
+    private Map<String, Object> materialWarehouseStat() {
+        Long cid = CompanyContext.get();
+        Map<String, Object> m = new LinkedHashMap<>();
+
+        // 物料仓范围 + 多租户（沿用本类惯例：JdbcTemplate 不过租户插件，必须手带 company_id）
+        List<Object> args = new ArrayList<>();
+        String scope = " FROM warehouse_stock ws JOIN warehouse w ON w.id = ws.warehouse_id "
+                + " WHERE ws.material_id IS NOT NULL "
+                + "   AND (w.warehouse_category = '" + WarehouseCategory.OUTSOURCE.getCode() + "'"
+                + "        OR (w.warehouse_category = '" + WarehouseCategory.INVENTORY.getCode() + "'"
+                + "            AND w.warehouse_type = '" + WarehouseType.AUXILIARY.getCode() + "')) ";
+        if (cid != null && cid > 0) { scope += " AND ws.company_id = ? "; args.add(cid); }
+
+        String formMat = WarehouseStock.FORM_MATERIAL;
+        String formRepair = WarehouseStock.FORM_MATERIAL_REPAIR;
+        String good = QualityType.GOOD.getCode();
+
+        try {
+            // 1) 汇总三项
+            String sumSql = "SELECT "
+                    + " COUNT(DISTINCT CASE WHEN ws.stock_form = '" + formMat + "' AND ws.quality_type = '" + good + "'"
+                    + "   AND ws.quantity <> 0 THEN ws.material_id END) AS itemCount, "
+                    + " IFNULL(SUM(CASE WHEN ws.stock_form = '" + formMat + "' AND ws.quality_type = '" + good + "'"
+                    + "   THEN ws.quantity ELSE 0 END), 0) AS goodQuantity, "
+                    + " IFNULL(SUM(CASE WHEN ws.stock_form = '" + formRepair + "'"
+                    + "   THEN ws.quantity ELSE 0 END), 0) AS onSiteRepairQuantity "
+                    + scope;
+            Map<String, Object> one = jdbcTemplate.queryForObject(sumSql, (rs, i) -> {
+                Map<String, Object> r = new LinkedHashMap<>();
+                r.put("itemCount", rs.getLong("itemCount"));
+                r.put("goodQuantity", rs.getBigDecimal("goodQuantity"));
+                r.put("onSiteRepairQuantity", rs.getBigDecimal("onSiteRepairQuantity"));
+                return r;
+            }, args.toArray());
+            if (one != null) m.putAll(one);
+
+            // 2) 分仓分布（只列有量的仓，按库存量倒序）
+            String whSql = "SELECT * FROM ( SELECT ws.warehouse_id AS warehouseId, w.warehouse_name AS warehouseName, "
+                    + " w.warehouse_category AS warehouseCategory, "
+                    + " COUNT(DISTINCT CASE WHEN ws.stock_form = '" + formMat + "' AND ws.quality_type = '" + good + "'"
+                    + "   AND ws.quantity <> 0 THEN ws.material_id END) AS itemCount, "
+                    + " IFNULL(SUM(CASE WHEN ws.stock_form = '" + formMat + "' AND ws.quality_type = '" + good + "'"
+                    + "   THEN ws.quantity ELSE 0 END), 0) AS goodQuantity, "
+                    + " IFNULL(SUM(CASE WHEN ws.stock_form = '" + formRepair + "'"
+                    + "   THEN ws.quantity ELSE 0 END), 0) AS onSiteRepairQuantity "
+                    + scope
+                    + " GROUP BY ws.warehouse_id, w.warehouse_name, w.warehouse_category ) t "
+                    + " WHERE t.goodQuantity <> 0 OR t.onSiteRepairQuantity <> 0 "
+                    + " ORDER BY t.goodQuantity DESC";
+            List<Map<String, Object>> whRows = jdbcTemplate.query(whSql, (rs, i) -> {
+                Map<String, Object> r = new LinkedHashMap<>();
+                r.put("warehouseId", rs.getLong("warehouseId"));
+                r.put("warehouseName", rs.getString("warehouseName"));
+                r.put("warehouseCategory", rs.getString("warehouseCategory"));
+                r.put("itemCount", rs.getLong("itemCount"));
+                r.put("goodQuantity", rs.getBigDecimal("goodQuantity"));
+                r.put("onSiteRepairQuantity", rs.getBigDecimal("onSiteRepairQuantity"));
+                return r;
+            }, args.toArray());
+            m.put("warehouses", whRows);
+        } catch (Exception e) {
+            log.warn("首页物料仓库库存聚合失败: {}", e.getMessage());
+            m.put("itemCount", 0L);
+            m.put("goodQuantity", BigDecimal.ZERO);
+            m.put("onSiteRepairQuantity", BigDecimal.ZERO);
+            m.put("warehouses", List.of());
+        }
+
+        // 3) 物料侧三张单据的草稿数（"待处理"= 草稿未审核；与 /dashboard/pending 的 counts 同口径）
+        Map<String, Object> docs = new LinkedHashMap<>();
+        long move = count("inventory_material_move", "DRAFT", cid);
+        long loss = count("outsource_stock_loss", "DRAFT", cid);
+        long io = count("outsource_other_io", "DRAFT", cid);
+        docs.put("materialMove", move);
+        docs.put("stockLoss", loss);
+        docs.put("otherIo", io);
+        docs.put("total", move + loss + io);
+        m.put("pendingDocs", docs);
+        return m;
     }
 
     /** 待办与预警汇总 */

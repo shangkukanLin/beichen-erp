@@ -780,6 +780,40 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 > 可选后续（用户没要求、本期未做）：① 若工厂也会把**有单**加工退货的货修好送回，需要一个新口径
 > （有单红冲不进在厂 ⇒ 无在厂行可核销）；② `outsource_return_back` 的草稿态字段/端点可再瘦身。
 
+## 5.21 首页「物料仓库」TAB 补齐统计卡片（2026-09-27，用户实测「怎么是空白的？」）
+
+**现象与定性**：不是回归、也不是渲染失败 —— 该 TAB 2026-09-16 新建时**只做了快捷入口容器、零统计卡片**
+（原代码注释即"本模块暂无汇总统计卡片（如需物料仓库存量/待处理收发单等统计，另行补充）"），
+其余 6 个 TAB 都以 `stat-grid` 4 张卡片开场 ⇒ 对比之下它就是个空白页。
+实测证据：面板 `innerText` 仅 59 字符（"快捷入口："+8 颗按钮），`htmlLen=1779`，零 `.stat-card`/`.el-card`。
+
+**修法**（口径按用户"按推荐做"确认）：
+- 后端 `DashboardService.materialWarehouseStat()`，挂在 `/dashboard/module-pages` 的 `materialWarehouse` 块，
+  **按 perms 过滤**（`MATERIAL_WAREHOUSE_PERMS` 8 个物料仓库页面码，任一命中才返回）；前端零新增请求。
+- 返回：`itemCount` / `goodQuantity` / `onSiteRepairQuantity` + `warehouses[]`（分仓：物料数/库存量/在厂）+
+  `pendingDocs{materialMove,stockLoss,otherIo,total}`。
+- 前端：4 张卡片（品项数 / 总数量 / 在厂维修 / 待处理单据[卡内列三单明细]）+ 「各仓库物料库存分布」表
+  （仓库名按**仓库类别**选详情页：委外仓 → `/outsource/warehouse/detail/:id`，自有物料仓 → `/inventory/warehouse/detail/:id`；
+  两页 `operate:true` 不会 403）。卡片点击前判 `hasMenu['OutsourceMaterialStock']`，避免小权限账号点出 403。
+
+**口径（三条，都写进代码注释）**：
+1. **只算物料行** `material_id IS NOT NULL` —— 委外仓/成品仓同一张表里也放成品行且 `stock_form` 就取默认值
+   `'MATERIAL'`（实测自有成品仓 44 行成品行如此）⇒ 只按仓库或形态过滤会把成品算进物料；
+2. **仓库范围** = 委外仓（`warehouse_category='OUTSOURCE'`）+ 自有物料仓（`INVENTORY` 且 `AUXILIARY`），
+   **不按 `warehouse.status` 过滤**（停用仓里压着的仍是真实库存）；
+3. **数量取良品**（`quality_type='GOOD'`）；「在厂维修」= `MATERIAL_REPAIR` 形态、不分品质单列（与物料库存是两笔账）。
+
+**验证**：dev 实测卡片 `7 / 9,559 / 0 / 待处理 1(移仓1,报损0,其他0)`，分仓 6 行（零量仓自动排除）
+与 SQL 逐项吻合；浏览器零 JS/API 错误；三处点击（卡片→物料库存详情 / 委外仓行 / 自有物料仓行）URL 与权限均正确。
+守卫：`ui-e2e-p14-dashboard-quicklinks.ps1` 新增 **Step 2** ——
+(a) **通用不变式**：7 个模块 TAB 每个 ≥1 张 `.stat-card`（专防"空白 TAB"复发）；
+(b) 物料 4 张卡标签齐备（新文案键）且值可解析为数字；(c) **汇总 == 明细**（分仓表逐行相加 == 卡片总量/在厂，
+两条独立 SQL，相等才说明口径没漂）。P14 由 15 项升到 **24 PASS / 0 FAIL**（含 6 行表数据校验）；
+另：`ui-e2e-1-nav`（70 路由 bad=0）、角色走查 15/0、五守卫 + TS PASS。
+
+> 现状已知（**本期按推荐未做**）：物料品质只有 GOOD/DEFECT，卡片与分仓表都取良品口径 ⇒ 物料**不良品件数**
+> 在首页无处体现（若需要，加一张卡 + `quality_type='DEFECT'` 聚合即可，改动量约 10 行）。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
@@ -814,4 +848,8 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
       顺带踩中并修掉 `watch()` 立即求值导致的 **TDZ 整页白屏**（新增 `verify-detail-render.ps1` 补盲，
       16: 70/0、15: 55/0、14: 46/0、五守卫 + 详情页渲染守卫全 PASS）
 - [x] B12 加工退货/物料退货三级菜单 + 页签（2026-09-27，4+2 叶子；返回进度按来源单聚合 + 草稿作废 + 防超返；脚本层文案同步待办见 §5.13）
+- [x] B19 首页「物料仓库」TAB 补齐统计卡片 + 分仓分布（2026-09-27，用户实测「怎么是空白的？」）：
+      后端 `materialWarehouse` 聚合块（按 8 个物料仓库页面码过滤）+ 4 卡 + 各仓库物料库存分布表；
+      **通用不变式守卫**「模块 TAB 不得零卡片」+ 汇总==明细断言（P14 15→24 项全过）；nav 70 路由 bad=0、
+      角色走查 15/0、五守卫 PASS（详见 §5.21）
 

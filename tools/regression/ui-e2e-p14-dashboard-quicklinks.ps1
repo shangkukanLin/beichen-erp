@@ -49,4 +49,54 @@ foreach ($p in $pairs) {
 }
 Write-Host ('  errs=' + (Errs))
 Ok ((Errs) -eq '[]') 'no JS/API errors on the dashboard'
+
+Step '2) no TAB may be card-less; material warehouse summary == per-warehouse breakdown'
+# 2026-09-27 (user report: the material-warehouse dashboard TAB is blank): that TAB shipped with quick links only and
+# zero stat cards, so next to the other TABs (all opening with a stat-card row) it looked like a blank page.
+# Three assertions keep it from coming back:
+#   a) GENERIC INVARIANT: each of the 7 module TABs has >= 1 .stat-card (memo / overview are not module TABs
+#      and deliberately use other shapes);
+#   b) the material TAB's 4 card labels are all present (labels via the zh json keys) and parse as numbers;
+#   c) SUMMARY == DETAIL: per-warehouse table columns add up to the summary cards (two independent SQL
+#      queries -- equality proves the scopes did not drift).
+$counts = (EvalJs "(function(){const ids=['dev','outsource','materialWarehouse','purchase','sale','stock','finance'];return ids.map(id=>{const p=document.querySelector('#pane-'+id);return id+'='+(p?p.querySelectorAll('.stat-card').length:-1)}).join('|')})()") -replace '"', ''
+$counts = $counts.Trim()
+Write-Host ('  stat-card counts: ' + $counts)
+foreach ($id in @('dev', 'outsource', 'materialWarehouse', 'purchase', 'sale', 'stock', 'finance')) {
+  $hit = @($counts -split '\|' | Where-Object { $_ -like "$id=*" })
+  $n = if ($hit.Count) { [int]($hit[0] -replace '^.*=', '') } else { -1 }
+  Ok ($n -ge 1) ("pane $id has stat cards (" + $n + ") -- 'blank TAB' regression guard")
+}
+
+$detail = (EvalJs "(function(){const p=document.querySelector('#pane-materialWarehouse');if(!p)return 'NOPANE';const T=e=>e?(e.textContent||'').trim():'';const cards=[...p.querySelectorAll('.stat-card')].map(c=>T(c.querySelector('.stat-label'))+'='+T(c.querySelector('.stat-value')));const head=T(p.querySelector('.el-card .section-title'));const tb=p.querySelector('.el-table');const rows=tb?[...tb.querySelectorAll('.el-table__body tr')].map(tr=>[...tr.querySelectorAll('td')].map(T).join('~')):[];return 'CARDS:'+cards.join('|')+'#HEAD:'+head+'#N:'+rows.length+'#'+rows.join('|')})()") -replace '"', ''
+$detail = $detail.Trim()
+Write-Host ('  material pane: ' + $detail)
+$cards = @()
+if ($detail -match 'CARDS:(.*?)#HEAD:') { $cards = @($Matches[1] -split '\|' | Where-Object { $_ -ne '' }) }
+$rowsCount = -1
+if ($detail -match '#N:(\d+)#') { $rowsCount = [int]$Matches[1] }
+$rows = @()
+if ($detail -match '#N:\d+#(.*)$' -and $Matches[1].Trim() -ne '') { $rows = @($Matches[1] -split '\|') }
+function CardVal([string]$label) {
+  $hit = @($cards | Where-Object { $_ -like "$label=*" })
+  if (-not $hit.Count) { return $null }
+  return [double](($hit[0] -replace '^.*=', '') -replace ',', '')
+}
+$exp = @{ items = (ZH 'card_mw_items'); good = (ZH 'card_mw_good'); onsite = (ZH 'card_mw_onsite'); pending = (ZH 'card_mw_pending') }
+foreach ($k in @('items', 'good', 'onsite', 'pending')) {
+  $v = CardVal $exp[$k]
+  Ok ($null -ne $v) ('material card present and numeric: ' + $k)
+}
+Ok ($detail -match ('#HEAD:' + [regex]::Escape((ZH 'section_mw_wh')))) 'per-warehouse table section rendered'
+Ok ($rowsCount -ge 1) ('per-warehouse table has rows (' + $rowsCount + ')')
+$sumGood = 0.0; $sumOnsite = 0.0
+foreach ($r in $rows) {
+  $c = @($r -split '~')
+  if ($c.Count -ge 4) { $sumGood += [double](($c[2] -replace ',', '')); $sumOnsite += [double](($c[3] -replace ',', '')) }
+}
+Write-Host ('  sum(qty)=' + $sumGood + ' card=' + (CardVal $exp.good) + ' | sum(onsite)=' + $sumOnsite + ' card=' + (CardVal $exp.onsite))
+Ok ($sumGood -eq (CardVal $exp.good)) 'material stock card == sum of per-warehouse table (same scope)'
+Ok ($sumOnsite -eq (CardVal $exp.onsite)) 'on-site repair card == sum of per-warehouse table (same scope)'
+Ok ((Errs) -eq '[]') 'still no JS/API errors after reading the material TAB'
+
 Summary 'dashboard quick links follow the current submenu order (P14)'
