@@ -214,7 +214,7 @@ onMounted(() => {
       <!-- 筛选行（叶子化后简化）：状态/返回进度已由**页签**表达 ⇒ 只留单号 + 供应商（保留一个查询框） -->
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
         <span v-if="leaf === 'REFUND'" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">退回并冲减应付的退料单（MRW-/MRH-）</span>
-        <span v-else style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">送供应商维修的料（与工厂的「维修退货」同口径，两处各自成页）</span>
+        <span v-else style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">送供应商维修的料（与加工侧的「成品维修退货」同口径，两处各自成页）</span>
         <el-input v-model="query.code" placeholder="退货单号" clearable style="width:180px" @keyup.enter="handleSearch" />
         <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="供应商" style="width:170px" />
         <el-button type="primary" @click="handleSearch">查询</el-button>

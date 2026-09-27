@@ -62,22 +62,24 @@ Write-Host ('FIXTURE wh=' + $whId + ' (' + $whName + ') material=' + $matId + ' 
 Ok (($whId -gt 0) -and ($matId -gt 0) -and ($supId -gt 0) -and ($whName -ne '') -and ($matName -ne '')) 'fixture derived (warehouse + material with GOOD stock + supplier)'
 
 # =====================================================================
-Step 'S1 material-return list: type tabs + repair entry'
+Step 'S1 material-return leaves: tabs + one entry per leaf'
+# 2026-09-27 三级菜单：物料退货 拆成两个**独立叶子**（退料 / 维修退货），新增入口随叶子切换。
 Open '/outsource/material-return' 3000
-Ok ((BodyHas (ZH 'tab_mr_refund')) -eq 'true') 'S1 tab REFUND present'
-Ok ((BodyHas (ZH 'tab_mr_repair')) -eq 'true') 'S1 tab REPAIR present'
-# 2026-09-24（UI 统一·用户口径）：两个入口文案都压成「新增」⇒ 不能再靠文案区分页签，
-#   改为断言「当前页签上恰好一个『新增』按钮」（两入口互斥 ⇒ REFUND 页签看不到维修入口）
+Ok ((BodyHas (ZH 'tab_leaf_effective')) -eq 'true') 'S1 退料 leaf has tab 有效单据'
+Ok ((BodyHas (ZH 'tab_leaf_void')) -eq 'true') 'S1 退料 leaf has tab 已作废单据'
+# 2026-09-24（UI 统一·用户口径）：两个入口文案都压成「新增」⇒ 不能靠文案区分叶子，
+#   改为断言「当前叶子上恰好一个『新增』按钮」（两入口互斥 ⇒ 退料叶子看不到维修入口）
 #   注：本脚本的 lib 没有 ReadJson，且中文一律走 B64（ASCII ONLY）⇒ 用 EvalJs + 'CNT=' 计数。
 $bNew = B64 (ZH 'btn_new_refund')
 $cntJs = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const t=T('$bNew');const vis=e=>e.getClientRects().length>0;return 'CNT='+[...document.querySelectorAll('button')].filter(e=>vis(e)&&(e.innerText||'').trim()===t).length})()"
 $n1 = EvalJs $cntJs
-Ok ($n1 -match 'CNT=1') ('S1 exactly one "new" button on REFUND tab (' + $n1 + ')')
-Write-Host ('S1 tab click: ' + (ClickText (ZH 'tab_mr_repair')))
-Start-Sleep -Milliseconds 1600
+Ok ($n1 -match 'CNT=1') ('S1 exactly one "new" button on the 退料 leaf (' + $n1 + ')')
+Open '/outsource/material-return/repair' 2600
+Ok ((BodyHas (ZH 'tab_leaf_pending')) -eq 'true') 'S1 维修退货 leaf has tab 待返回'
+Ok ((BodyHas (ZH 'tab_leaf_returned')) -eq 'true') 'S1 维修退货 leaf has tab 已返回完'
 $n2 = EvalJs $cntJs
-Ok ($n2 -match 'CNT=1') ('S1 exactly one "new" button on REPAIR tab (' + $n2 + ')')
-Ok ((Errs) -eq '[]') 'S1 no errors after switching tab'
+Ok ($n2 -match 'CNT=1') ('S1 exactly one "new" button on the 维修退货 leaf (' + $n2 + ')')
+Ok ((Errs) -eq '[]') 'S1 no errors after visiting both leaves'
 
 # =====================================================================
 Step 'S2 create REPAIR draft'

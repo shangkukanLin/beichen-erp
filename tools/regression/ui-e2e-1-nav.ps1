@@ -27,6 +27,9 @@ $routes = @(
   '/dev/project', '/dev/material', '/dev/screen-model',
   '/outsource/order', '/outsource/order/delivery', '/outsource/material-order', '/outsource/material-order/delivery',
   '/outsource/return-order', '/outsource/material-return', '/supplier/manage',
+  # 2026-09-27 三级菜单叶子（加工退货 4 叶子 + 物料退货 2 叶子）
+  '/outsource/return-order/unlinked', '/outsource/return-order/repair', '/outsource/return-back',
+  '/outsource/material-return/repair',
   '/inventory/purchase', '/inventory/purchase-return', '/inventory/purchase-exchange',
   '/inventory/sale', '/sale/return', '/sale/exchange', '/inventory/return-sort',
   '/inventory/product-stock', '/inventory/warehouse', '/inventory/stock-log',

@@ -311,7 +311,9 @@ public class DataInitializer implements ApplicationRunner {
             {419L, 4L, "加工退货", "catalog", "", "", "CircleClose", 3},
             {408L, 419L, "关联退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "Document", 1},
             {420L, 419L, "无单退货", "menu", "/outsource/return-order/unlinked", "OutsourceReturnOrderUnlinked", "Files", 2},
-            {421L, 419L, "维修退货", "menu", "/outsource/return-order/repair", "OutsourceReturnOrderRepair", "Tools", 3},
+            // 2026-09-27（由 ui-e2e-1-nav 的"标签栏不得同名"不变量抓出）：加工侧与物料侧都有维修退货 ⇒
+            // 两处同名会让顶部**标签栏出现两个「维修退货」**（用户无从区分）⇒ 各自带对象前缀去重。
+            {421L, 419L, "成品维修退货", "menu", "/outsource/return-order/repair", "OutsourceReturnOrderRepair", "Tools", 3},
             {422L, 419L, "加工返回单", "menu", "/outsource/return-back", "OutsourceReturnBack", "Refresh", 4},
             {402L, 4L, "物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 4},
             // 物料收货（2026-09-16 用户要求）：原「物料订单详情 → 交货管理」页签**移出**独立成菜单页 ——
@@ -323,7 +325,7 @@ public class DataInitializer implements ApplicationRunner {
             //  411 退料(REFUND) / 424 维修退货(REPAIR)；两者 API 都在 /api/outsource/material-return 前缀下 ⇒ perms 同码。
             {423L, 4L, "物料退货", "catalog", "", "", "Refrigerator", 6},
             {411L, 423L, "退料", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Document", 1},
-            {424L, 423L, "维修退货", "menu", "/outsource/material-return/repair", "OutsourceMaterialReturnRepair", "Tools", 2},
+            {424L, 423L, "物料维修退货", "menu", "/outsource/material-return/repair", "OutsourceMaterialReturnRepair", "Tools", 2},
             // 409「供应商管理」已于 2026-09-17 按用户要求下线：它是委外加工侧的**重复入口**（与基础数据 106
             // 「供应商管理」同指 /supplier/manage，页面完全相同），基础数据里 106/107 两份都保留。
             // 与 104/405/302/303 同范式：下方统一置 visible=0（保留行与角色授权，便于回滚）。

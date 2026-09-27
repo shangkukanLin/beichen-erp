@@ -1,4 +1,4 @@
-# UI E2E 15: material repair-return closed loop (2026-09-17). ASCII ONLY.
+﻿# UI E2E 15: material repair-return closed loop (2026-09-17). ASCII ONLY.
 #   S1 list: repair tab shows sent/returned + progress columns
 #   S2 add page: link a material order; unfinished order -> deduct-order hint
 #   S3 create draft -> DB keeps material_order_id, nothing deducted yet
@@ -67,24 +67,25 @@ Write-Host ('FIXTURE order=' + $orderId + ' (' + $orderCode + ') item=' + $itemI
 Ok (($orderId -gt 0) -and ($itemId -gt 0) -and ($matId -gt 0) -and ($whId -gt 0) -and ($supId -gt 0) -and ($whName -ne '') -and ($matName -ne '')) 'fixture derived (RECEIVING order + its item + material with GOOD stock + supplier)'
 
 # =====================================================================
-Step 'S1 repair list: sent/returned + progress columns'
-Open '/outsource/material-return' 3000
-Write-Host ('S1 tab: ' + (ClickText (ZH 'tab_mr_repair')))
-Start-Sleep -Milliseconds 1800
+Step 'S1 repair leaf: sent/returned column + progress tabs'
+# 2026-09-27 三级菜单：维修退货 已是**独立叶子** /outsource/material-return/repair（不再靠点页签切换）
+Open '/outsource/material-return/repair' 3000
 $r1 = Rows 0
 $head = ($r1.head -join '|')
 Write-Host ('S1 head=' + $head)
-Ok ($head -match [regex]::Escape((ZH 'txt_mr_sent_returned'))) 'S1 column "sent/returned" present on repair tab'
+Ok ($head -match [regex]::Escape((ZH 'txt_mr_sent_returned'))) 'S1 column "sent/returned" present on repair leaf'
 # 2026-09-21 (UI unification): the "return progress" COLUMN is gone (merged into sent/returned, and
-#   "closed" is shown inside the status column) => assert it disappeared from the header and now shows
-#   up in the FILTER row instead (an el-select placeholder is part of innerText).
+#   "closed" is shown inside the status column).
+# 2026-09-27: the progress FILTER (a select) is gone too -- the tabs carry it now.
 Ok (-not ($head -match [regex]::Escape((ZH 'txt_mr_progress')))) 'S1 column "progress" is gone (merged into sent/returned)'
-Ok ((BodyHas (ZH 'txt_mr_progress')) -eq 'true') 'S1 "progress" is now a filter on the repair tab'
+Ok ((BodyHas (ZH 'tab_leaf_pending')) -eq 'true') 'S1 tab 待返回 present (progress filter moved to tabs)'
+Ok ((BodyHas (ZH 'tab_leaf_returned')) -eq 'true') 'S1 tab 已返回完 present'
 Ok ((BodyHas (ZH 'col_return_amount')) -eq 'true') 'S1 the amount column is renamed to return-amount'
 Ok ((Errs) -eq '[]') 'S1 no errors'
 
 # =====================================================================
 Step 'S2 add page: link material order + hints'
+# S1 已停在维修退货叶子 ⇒ 该叶子的「新增」即维修退货入口（2026-09-27 起入口随叶子切换）
 Ok ((ClickBtn 'btn_new_mr_repair') -match 'OK') 'S2 click new repair-return'
 Start-Sleep -Milliseconds 3000
 Ok ((BodyHas (ZH 'lbl_mr_order')) -eq 'true') 'S2 field "link material order" present'

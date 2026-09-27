@@ -70,13 +70,11 @@ if ($need -gt 0) {
     $supName = $refundSup
     if ($i -eq 3) { $typeKey = 'btn_new_repair'; $supLbl = 'lbl_repair_supplier'; $typeName = 'REPAIR'; $supName = $repairSup }
     Step ('material return #' + $i + ' (' + $typeName + ')')
-    Open '/outsource/material-return' 3000
+    # 2026-09-27 三级菜单：退料 / 维修退货 已是**独立叶子** ⇒ 直接开对应叶子（新增入口随叶子切换）
+    $leafUrl = '/outsource/material-return'
+    if ($typeName -eq 'REPAIR') { $leafUrl = '/outsource/material-return/repair' }
+    Open $leafUrl 3000
     ClearErrs | Out-Null
-    # 2026-09-21（UI 统一）：新增按钮随页签切换 ⇒ REPAIR 必须先切到「维修退货」页签
-    if ($typeName -eq 'REPAIR') {
-      Write-Host ('  tab: ' + (ClickText (ZH 'tab_mr_repair')))
-      Start-Sleep -Milliseconds 1600
-    }
     Write-Host ('  open add page: ' + (ClickBtn $typeKey))
     Start-Sleep -Milliseconds 2400
     Write-Host ('  path=' + (EvalJs 'String(location.pathname)'))
@@ -105,14 +103,13 @@ if ($need -gt 0) {
 
 Step 'audit all DRAFT material returns (row located by code)'
 foreach ($c in (SqlList "SELECT code FROM outsource_material_return WHERE status='DRAFT' ORDER BY id")) {
-  # the list has REFUND / REPAIR tabs -> must switch to the tab that owns this document
+  # the two types live on two SEPARATE leaves now (2026-09-27) -> open the leaf that owns this document
+  #   （退料叶子默认页签「有效单据」= 草稿+已审核；维修退货叶子默认页签「待返回」含草稿 ⇒ DRAFT 都能看到）
   $rt = SqlOne ("SELECT return_type FROM outsource_material_return WHERE code='" + $c + "'")
-  $tabKey = 'tab_mr_refund'
-  if ($rt -eq 'REPAIR') { $tabKey = 'tab_mr_repair' }
-  Open '/outsource/material-return' 2800
-  ClickText (ZH $tabKey) | Out-Null
-  Start-Sleep -Milliseconds 1600
-  Write-Host ('[' + $c + '] type=' + $rt + ' tab=' + $tabKey)
+  $leafUrl = '/outsource/material-return'
+  if ($rt -eq 'REPAIR') { $leafUrl = '/outsource/material-return/repair' }
+  Open $leafUrl 2800
+  Write-Host ('[' + $c + '] type=' + $rt + ' leaf=' + $leafUrl)
   $idx = [int](FindRow $c)
   Ok ($idx -ge 0) ('material return row found: ' + $c)
   if ($idx -ge 0) {

@@ -100,22 +100,21 @@ Write-Host ('S0 defect stock wh' + $whId + '.p' + $prodId + '=' + (StockQty $whI
 Ok ((D (StockQty $whId 'product_id' $prodId 'DEFECT')) -eq ($defBefore + 1)) 'S0 seeded DEFECT stock +1'
 
 # =====================================================================
-Step 'S1 list tabs: column sets differ by type'
-Open '/outsource/return-order' 3000
-Write-Host ('S1 switch REPAIR: ' + (ClickTab (ZH 'val_repair_type')))
-Start-Sleep -Milliseconds 2000
+# 2026-09-27 三级菜单：维修退货 / 关联退货 已拆成**独立叶子**（不再是同页两个页签）
+#   ⇒ 断言改为分别直达两个叶子路由；页签现在是状态维度（待返回 | 已返回完 | 已作废），且标签带数量角标。
+Step 'S1 leaf pages: column sets differ by leaf'
+Open '/outsource/return-order/repair' 3000
 $h1 = ((Rows 0).head -join '|')
 Write-Host ('S1 repair head=' + $h1)
-Ok ($h1 -match [regex]::Escape((ZH 'txt_mr_sent_returned'))) 'S1 REPAIR tab has "sent/returned" column'
-Ok (-not ($h1 -match [regex]::Escape((ZH 'txt_ro_col_order')))) 'S1 REPAIR tab has NO linked-order column'
-# NOTE: click the TAB ELEMENT, not the text -- "加工退货" is also a left-menu item and ClickText would hit
-# the sidebar first (DOM order), leaving the tab un-switched.
-Write-Host ('S1 switch DEFECT: ' + (ClickTab (ZH 'val_defect_type')))
-Start-Sleep -Milliseconds 2000
+Ok ($h1 -match [regex]::Escape((ZH 'txt_mr_sent_returned'))) 'S1 REPAIR leaf has "sent/returned" column'
+Ok (-not ($h1 -match [regex]::Escape((ZH 'txt_ro_col_order')))) 'S1 REPAIR leaf has NO linked-order column'
+Ok ((BodyHas (ZH 'tab_leaf_pending')) -eq 'true') 'S1 REPAIR leaf has tab 待返回'
+Ok ((BodyHas (ZH 'tab_leaf_returned')) -eq 'true') 'S1 REPAIR leaf has tab 已返回完'
+Open '/outsource/return-order' 2600
 $h2 = ((Rows 0).head -join '|')
-Write-Host ('S1 defect head=' + $h2)
-Ok ($h2 -match [regex]::Escape((ZH 'txt_ro_col_order'))) 'S1 DEFECT tab keeps linked-order column'
-Ok (-not ($h2 -match [regex]::Escape((ZH 'txt_mr_sent_returned')))) 'S1 DEFECT tab has no sent/returned column'
+Write-Host ('S1 linked head=' + $h2)
+Ok ($h2 -match [regex]::Escape((ZH 'txt_ro_col_order'))) 'S1 linked leaf keeps linked-order column'
+Ok (-not ($h2 -match [regex]::Escape((ZH 'txt_mr_sent_returned')))) 'S1 linked leaf has no sent/returned column'
 
 # =====================================================================
 Step 'S2 create REPAIR order (sent 1) and audit'
@@ -123,8 +122,7 @@ $bDef = D (StockQty $whId 'product_id' $prodId 'DEFECT')
 $bPay = D (RepairPay $facId)
 Write-Host ('BASE defect=' + $bDef + ' repairPay=' + $bPay)
 Ok ((D $bDef) -ge 1) 'S2 precondition: DEFECT stock available'
-Write-Host ('S2 switch REPAIR: ' + (ClickTab (ZH 'val_repair_type')))
-Start-Sleep -Milliseconds 1800
+Open '/outsource/return-order/repair' 2800
 Ok ((ClickBtn 'btn_new_repair_return') -match 'OK') 'S2 click NEW REPAIR return'
 Start-Sleep -Milliseconds 3000
 Ok ((SelectLabelText 'lbl_factory' $facName) -match 'OK') ('S2 pick factory=' + $facName)
@@ -181,15 +179,18 @@ Ok ((HasBtn 'btn_mr_close') -eq 'true') 'S4 close button appears (unreturned = 0
 
 # =====================================================================
 Step 'S5 list row shows sent/returned'
-Open '/outsource/return-order' 2800
-Write-Host ('S5 switch REPAIR: ' + (ClickTab (ZH 'val_repair_type')))
-Start-Sleep -Milliseconds 2200
+# 2026-09-27：默认页签是「待返回」（未送完），本单在 S4 已全部送回 ⇒ 必须切到「已返回完」才看得到
+Open '/outsource/return-order/repair' 2800
+Write-Host ('S5 switch to 已返回完: ' + (ClickTabIdx 1))
+Start-Sleep -Milliseconds 2400
 $code = OrderField $rid 'code'
 $ri = [int](FindRow $code)
 Ok ($ri -ge 0) ('S5 found row index=' + $ri + ' code=' + $code)
-Write-Host ('S5 sent/ret=' + (CellText $ri 2) + ' status=' + (CellText $ri 6))
+Write-Host ('S5 sent/ret=' + (CellText $ri 2) + ' status=' + (CellText $ri 5))
 Ok ((CellText $ri 2) -match '^1\s*/\s*1') ('S5 sent/returned cell = ' + (CellText $ri 2))
-Ok ((CellText $ri 6) -notmatch [regex]::Escape((ZH 'txt_ro_closed'))) 'S5 status not closed yet'
+# 列序：退货单号|加工厂|送修/已返回|退货/送修内容|工厂收费|**状态**|操作 ⇒ 状态是第 5 列（0 基）；
+# 2026-09-27 修：原写 6 读到的其实是**操作列**（'详情/结案'），断言靠"结案≠已结案"侥幸通过。
+Ok ((CellText $ri 5) -notmatch [regex]::Escape((ZH 'txt_ro_closed'))) 'S5 status not closed yet'
 
 # =====================================================================
 Step 'S6 close'
@@ -204,29 +205,17 @@ Ok ((HasBtn 'btn_mr_reopen') -eq 'true') 'S6 reopen button present after close'
 Ok ((HasBtn 'btn_unaudit') -eq 'false') 'S6 un-audit hidden after close'
 
 # =====================================================================
-Step 'S7 list: closed status + progress filter'
-Open '/outsource/return-order' 2800
-Write-Host ('S7 switch REPAIR: ' + (ClickTab (ZH 'val_repair_type')))
-Start-Sleep -Milliseconds 2200
+Step 'S7 list: closed status + progress tabs'
+# 2026-09-27 三级菜单：「返回进度」下拉已由**页签**承担 ——
+#   默认「待返回」(progress=OPEN：草稿 ∪ 送修未送完) 不含已全部送回的单；全部送回的落「已返回完」(progress=RETURNED)。
+Open '/outsource/return-order/repair' 2800
+Ok ([int](FindRow $code) -lt 0) 'S7 closed doc not listed under the default tab (待返回)'
+Write-Host ('S7 switch to 已返回完: ' + (ClickTabIdx 1))
+Start-Sleep -Milliseconds 2400
 $ri7 = [int](FindRow $code)
-Ok ($ri7 -ge 0) 'S7 row found'
-Ok ((CellText $ri7 6) -match [regex]::Escape((ZH 'txt_ro_closed'))) ('S7 status cell = ' + (CellText $ri7 6))
+Ok ($ri7 -ge 0) 'S7 closed doc listed under tab 已返回完'
+Ok ((CellText $ri7 5) -match [regex]::Escape((ZH 'txt_ro_closed'))) ('S7 status cell = ' + (CellText $ri7 5))
 Ok ((ClickRowBtnContains $ri7 (ZH 'btn_mr_reopen')) -match 'OK') 'S7 reopen action shown in list row'
-# progress filter: PENDING_RETURN must not contain the closed doc, CLOSED must contain it
-Ok ((OpenSelectIdx 0) -match 'OK') 'S7 open progress filter'
-Start-Sleep -Milliseconds 1200
-Ok ((PickOptionContains (ZH 'opt_ro_pending')) -match 'OK') 'S7 filter = pending'
-# 2026-09-21: every filter row now carries a QUERY button (unified with the material-return page), so picking
-# an option alone no longer reloads -- the query click is required.
-Ok ((ClickBtn 'btn_query') -match 'OK') 'S7 click QUERY'
-Start-Sleep -Milliseconds 2400
-Ok ([int](FindRow $code) -lt 0) 'S7 closed doc not listed under "pending"'
-Ok ((OpenSelectIdx 0) -match 'OK') 'S7 open progress filter again'
-Start-Sleep -Milliseconds 1200
-Ok ((PickOptionContains (ZH 'txt_ro_closed')) -match 'OK') 'S7 filter = closed'
-Ok ((ClickBtn 'btn_query') -match 'OK') 'S7 click QUERY again'
-Start-Sleep -Milliseconds 2400
-Ok ([int](FindRow $code) -ge 0) 'S7 closed doc listed under "closed"'
 
 # =====================================================================
 Step 'S8 reopen'

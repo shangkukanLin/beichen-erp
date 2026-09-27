@@ -158,10 +158,9 @@ if ($defectRows -eq 0) {
 if ($facProdRows -eq 0) { $repNeed = 0 }
 for ($i = 1; $i -le $repNeed; $i++) {
   Write-Host ('--- repair return #' + $i)
-  Open '/outsource/return-order' 3000
+  # 2026-09-27 三级菜单：维修退货 已是独立叶子 /outsource/return-order/repair（不再点页签切换）
+  Open '/outsource/return-order/repair' 3000
   ClearErrs | Out-Null
-  Write-Host ('  tab: ' + (ClickText (ZH 'val_repair_type')))
-  Start-Sleep -Milliseconds 1600
   Write-Host ('  new: ' + (ClickBtn 'btn_new_repair_return'))
   Start-Sleep -Milliseconds 2600
   Write-Host ('  path=' + (EvalJs 'String(location.pathname)'))
@@ -201,9 +200,7 @@ for ($i = 1; $i -le $repNeed; $i++) {
   else { Write-Host ('  INFO I25: line product cell could not be filled -> doc not saved (see INFO block below)'); break }
 }
 foreach ($c in (SqlList "SELECT code FROM outsource_return_order WHERE return_type='REPAIR' AND status='DRAFT' ORDER BY id")) {
-  Open '/outsource/return-order' 2800
-  ClickText (ZH 'val_repair_type') | Out-Null
-  Start-Sleep -Milliseconds 1500
+  Open '/outsource/return-order/repair' 2800
   $idx = [int](FindRow $c)
   if ($idx -lt 0) { Write-Host ('  (skip) ' + $c + ' not found'); continue }
   ClickRowBtnContains $idx (ZH 'btn_audit') | Out-Null

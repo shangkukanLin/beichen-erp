@@ -529,11 +529,22 @@ B8 收尾时剩下 2 列「8~10 列全满、无安全余量、要完整只能砍
 - 守卫：6 叶子 `scan-col-truncation` **0 offender**（顺带修 台账单号 130→158 装不下 GTW- 单号、白名单补 供应商/维修供应商）；
   全站 `scan-table-overflow` **58 页 0 越界**；四守卫 PASS
 
-### 待办（机械同步，脚本层）
-`ui-e2e-16-workorder-repair-close.ps1`（点「维修退货」页签 → 改直达 `/outsource/return-order/repair`）、
-`ui-e2e-15-material-repair-closed-loop.ps1`、`ui-e2e-14-material-repair-return.ps1`、`ui-e2e-12-return-type.ps1`、
-`ui-e2e-p5b-material-return.ps1`、`ui-e2e-1-nav.ps1`；`ui-e2e-zh.json` 的页签文案键；
-`verify-delivery-menu.ps1` 的 ⑨b 段已同步（三级菜单断言）。
+### 脚本同步（2026-09-27 已完成，全绿）
+`ui-e2e-zh.json` 补页签键（`tab_leaf_effective/void/pending/returned`）；下列 UI 脚本把"开旧页面 + 点页签"改成
+**直达叶子 URL**（页签点击在带数量角标后不再可用，见下条踩坑）：
+`ui-e2e-16`（68/0，含 S5/S7 改用 `ClickTabIdx` 切「已返回完」）、`ui-e2e-15`（53/0）、`ui-e2e-14`（42/0，
+改为两个叶子各自断言页签 + 各 1 个「新增」）、`ui-e2e-p5b`（10/0）、`ui-e2e-p8a`（9/0）、
+`ui-e2e-1-nav`（新增 4 个叶子路由，`bad=0 total=69`）；`ui-e2e-12` 无需改（S1 早已 `if($false)`、S2 路由不变）；
+`ui-p5a` 已标 OBSOLETE BY DESIGN（早于本次失效，未动）。
+
+### 两条踩坑（复用价值高）
+1. **页签点击不能再用文本精确匹配**：`ClickTab` 是 `innerText === 文本`；本次给页签加了数量角标
+   （`待返回3`）⇒ 精确匹配必失败。**点页签一律用 `ClickTabIdx <0基序号>`**；断言用 `BodyHas`（子串）✓。
+2. **顶部标签栏不允许同名标签**（`ui-e2e-1-nav` 的 `dupTabBad` 不变量，本次抓到 47 页）：
+   加工侧与物料侧都有「维修退货」⇒ 标签栏出现两个同名标签（用户无法区分）⇒
+   两个叶子各自带对象前缀去重：**成品维修退货**（menu 421）/ **物料维修退货**（menu 424）
+   （菜单名与 `router meta.title` 都改，标签名取 `meta.title`）。
+   ⚠️ 新增三级菜单时**先想好叶子名全局唯一**，否则这条不变量会在 47 个页面上一起报红。
 
 ## 6. 进度
 
