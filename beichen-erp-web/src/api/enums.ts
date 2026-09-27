@@ -133,10 +133,17 @@ export const BillTypeLabel: Record<string, string> = {
   [BillType.PAYABLE]: '应付'
 }
 
-/** 费用类型：DB 存 code，显示映射（finance_expense.expense_type，费用管理页与利润明细页共用） */
+/**
+ * 费用类型：DB 存 code，显示映射（finance_expense.expense_type，费用管理页与利润明细页共用）。
+ *
+ * <p>2026-09-27 新增 <b>RND = 研发支出</b>（用户要求）：物料信息管理「新增物料」时可顺带登记一笔研发支出
+ * （走 `POST /api/outsource/material/{id}/rd-expense`，落**草稿**费用单，审核后才扣款）。
+ * 后端写入侧用常量 `FinanceExpense.TYPE_RD`，两处必须一致。</p>
+ */
 export const ExpenseTypeLabel: Record<string, string> = {
   OFFICE: '办公费', RENT: '房租水电', SALARY: '工资社保',
-  TRANSPORT: '运输费', TRAVEL: '差旅费', ENTERTAIN: '业务招待', OTHER: '其他'
+  TRANSPORT: '运输费', TRAVEL: '差旅费', ENTERTAIN: '业务招待',
+  RND: '研发支出', OTHER: '其他'
 }
 
 /** 账户类型：DB 存 code（finance_account.account_type），显示映射（账户管理页 / 首页财务 TAB / 经营分析-资金与往来 共用） */

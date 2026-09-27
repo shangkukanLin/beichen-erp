@@ -901,6 +901,46 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 **未受影响（有意保留）**：`经营分析` TAB 的**待办卡片**（如「待盘点物料仓」→ 物料库存盘点）不是"目录快捷入口"，
 而是**待办事项**，按 hasMenu 显隐且指向待办本身 ⇒ 保留（守卫只校验快捷入口按钮）。
 
+## 5.25 费用类型「研发支出」+ 新增物料时顺带登记（2026-09-27，用户需求；方案 A「推荐值全采纳」）
+
+**需求**：① 财务「费用管理」新增类型 **研发支出**；② 「物料信息管理」新增物料时**提示**用户要不要根据该物料新增研发支出。
+
+**方案 A（用户确认）**：在**物料前缀**下新增端点建一张**草稿**费用单 —— 一次提交、物料页用户无需财务权限、前端零跨页调用。
+
+**关键事实（决定改动面）**：
+- 费用类型 = **前端 code→标签映射**（`api/enums.ts` 的 `ExpenseTypeLabel`，DB 存 code；后端**无**费用类型枚举，
+  `validate()` 只校验非空）⇒ 加类型本身零后端改动；利润表/经营分析只按**费用总额**入账（不按类型分组）⇒ 分析口径不动。
+  ⚠️ 口径提醒（已告知用户）：研发支出是**当期费用**，审核后会推高「费用支出」并压低净利润；若要"资本化/单列不进损益"是另一套口径。
+- 权限：`/api/finance/expense` 需 `finance:expense|finance:cashflow`（只授物料页的用户会 403）⇒ 端点放
+  `POST /api/outsource/material/{id}/rd-expense`（命中 `writeRule("/api/outsource/material", …)`，即本页自己的页面码）；
+  且**只落草稿、钱只在费用管理审核时才动** ⇒ 不存在越权动钱。
+- 数据模型：`finance_expense` **+3 列** `source_bill_type / source_id / source_bill_no`（命名与 `finance_receivable` 一致）
+  + 索引 `idx_expense_source`；新库 `schema.sql` 建列，老库 `DataInitializer.migrateFinanceExpenseSource()` 幂等补列（**实测已生效**）。
+  新增枚举 `finance/common/ExpenseSourceType.RD_MATERIAL` —— **刻意不复用 `SourceBillType`**（那个管应收/应付的来源**单据**，
+  且有前端 Label 映射 + web-check 枚举守卫，混进来会让语义变脏）。费用类型字面量收敛到 `FinanceExpense.TYPE_RD = 'RND'`（前端同 code）。
+- 幂等：`FinanceExpenseService.findActiveBySource(type, id)`（**排除 CANCELLED**）；同一物料再登记直接回原单（`existing=true`）。
+
+**前端**：新增弹窗内勾选「同时登记一笔研发支出」（**仅新增显示**，编辑不动）→ 就地展开
+金额（默认带出物料单价，可改）/ 支出账户（资金账户主数据 + 余额）/ 费用日期 / 费用备注；与物料**一次提交**；
+失败弹「是否重试」（后端幂等兜底），提示文案明确"**草稿** + 需在费用管理审核后才扣款"。
+后端按顺序：物料 + 子物料组成保存成功后再登记费用 ⇒ 不会"费用建了物料没建"。
+
+**守卫（两个，自造自清）**：
+- `verify-material-rd-expense.ps1`（API+SQL，**20/0**）：草稿/RND/来源三列/账户余额不动（未审核）/**不勾选不得建单**（负例）/
+  幂等（第二次回原单且仍只一行）/金额≤0 与缺账户被拒（负例）/ **权限正反对照**（只授「物料信息管理」的临时用户建得成 200，
+  同一用户直连 `/finance/expense` 得 **403**）。
+- `verify-material-rd-expense-ui.ps1`（浏览器，**19/0**）：弹窗出现勾选框、**勾选前金额/账户字段是隐藏的**、勾选后展开、
+  账户下拉带余额、提交后页面出现"研发支出已存为草稿"提示、DB 里恰好一行 RND 且 source_id = 该物料。
+
+**顺手订正**：`FinanceExpense.expenseType` 注释原写"中文字面量：办公费/…"，实际存的是 code（实测现网 OFFICE）；`schema.sql` 同口径订正。
+⚠️ **踩坑**：注释里写 `…/RND=研发支出**/OTHER` 时，`**/` 会**提前闭合 javadoc** ⇒ javac 报一大片"非法字符"（已修正；
+  同类检查方式：`git diff -U0 -- 后端 | Select-String '\*\*/'`）。
+
+> ⚠️ **已知存量问题（非本次引入，2026-09-27 记录）**：`verify-api-perm-enforcement.ps1` 报 4 条 FAIL
+> （期望 62 个带码页菜单 / 14 个按钮码，实测 **70/17**；并列出 `outsource:order-delivery|material-return|return-order`
+> 的"重复码"—— 那是三级菜单改造里**有意**的同码复用）。本次未改任何菜单/权限行。待办：刷新该脚本的期望值
+> （更稳的做法是改为从 `sys_menu` 反推，而不是硬编码数字）。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
@@ -935,6 +975,10 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
       顺带踩中并修掉 `watch()` 立即求值导致的 **TDZ 整页白屏**（新增 `verify-detail-render.ps1` 补盲，
       16: 70/0、15: 55/0、14: 46/0、五守卫 + 详情页渲染守卫全 PASS）
 - [x] B12 加工退货/物料退货三级菜单 + 页签（2026-09-27，4+2 叶子；返回进度按来源单聚合 + 草稿作废 + 防超返；脚本层文案同步待办见 §5.13）
+- [x] B23 费用类型「研发支出」+ 新增物料时可选顺带登记（2026-09-27，用户需求，方案 A「推荐值全采纳」）：
+      费用类型 +RND（前端映射，零后端改动）；`finance_expense` +来源三列（幂等补列已生效）+ 新端点
+      `POST /api/outsource/material/{id}/rd-expense`（只落**草稿**，物料页用户无需财务权限）；
+      新增两个自造自清守卫（API 20/0 含权限正反对照；UI 19/0，含"未勾选不得建单/字段勾选后才显示"）（详见 §5.25）
 - [x] B22 快捷入口改「严格只有本目录子菜单」（2026-09-27，用户口径）：删 13 颗跨目录按钮 + 门控去夹带
       （purchase/sale/stock/materialWarehouse 只认本目录子菜单）+ 删死代码 hasPath/paths + menuNames 收敛为 45 键；
       守卫新增「按钮数==子菜单数 / 门控键⊆本目录 / menuNames 双向」三条不变式（46/0），p14 Step1 改严格相等（27/0）；

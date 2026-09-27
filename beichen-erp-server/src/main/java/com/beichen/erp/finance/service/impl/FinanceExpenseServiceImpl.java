@@ -60,6 +60,17 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
     public FinanceExpense getById(Long id) { return expenseMapper.selectById(id); }
 
     @Override
+    public FinanceExpense findActiveBySource(String sourceBillType, Long sourceId) {
+        if (sourceBillType == null || sourceId == null) return null;
+        return expenseMapper.selectOne(new LambdaQueryWrapper<FinanceExpense>()
+                .eq(FinanceExpense::getSourceBillType, sourceBillType)
+                .eq(FinanceExpense::getSourceId, sourceId)
+                .ne(FinanceExpense::getStatus, DocStatus.CANCELLED.getCode())
+                .orderByDesc(FinanceExpense::getId)
+                .last("LIMIT 1"));
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void create(FinanceExpense expense) {
         validate(expense);

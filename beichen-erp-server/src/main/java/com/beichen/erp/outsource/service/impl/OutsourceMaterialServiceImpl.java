@@ -3,6 +3,9 @@ package com.beichen.erp.outsource.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.common.ExpenseSourceType;
+import com.beichen.erp.finance.entity.FinanceExpense;
+import com.beichen.erp.finance.service.FinanceExpenseService;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
 import com.beichen.erp.outsource.entity.dto.SupplierMaterialDTO;
@@ -17,7 +20,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -36,6 +41,67 @@ public class OutsourceMaterialServiceImpl implements OutsourceMaterialService {
     private final OutsourceMaterialComponentMapper compMapper;
     private final SupplierMaterialService supplierMaterialService;
     private final JdbcTemplate jdbcTemplate;
+    /** 研发支出（费用单）落库复用财务侧现成能力：生成 FY 单号 / 置草稿 / 回填账户名 —— 见 createRdExpense */
+    private final FinanceExpenseService financeExpenseService;
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> createRdExpense(Long materialId, Map<String, Object> body) {
+        if (materialId == null) throw new BusinessException("物料ID不能为空");
+        OutsourceMaterial material = mapper.selectById(materialId);
+        if (material == null) throw new BusinessException("物料不存在：" + materialId);
+
+        Map<String, Object> res = new LinkedHashMap<>();
+        // 幂等：同一物料已有**未作废**的研发支出 ⇒ 回原单（作废后可重新登记）
+        FinanceExpense exists = financeExpenseService.findActiveBySource(
+                ExpenseSourceType.RD_MATERIAL.getCode(), materialId);
+        if (exists != null) {
+            log.info("物料 {} 已有未作废的研发支出 {}，本次不重复建单", materialId, exists.getExpenseNo());
+            res.put("expenseId", exists.getId());
+            res.put("expenseNo", exists.getExpenseNo());
+            res.put("existing", true);
+            return res;
+        }
+
+        // 金额 / 账户：与费用单 validate 同口径，但在这里给出可读报错（前端已校验，后端不信任前端）
+        Object amtObj = body == null ? null : body.get("amount");
+        String amt = amtObj == null ? "" : String.valueOf(amtObj).trim();
+        if (amt.isBlank()) throw new BusinessException("研发支出金额不能为空");
+        BigDecimal amount;
+        try { amount = new BigDecimal(amt); } catch (Exception ex) { throw new BusinessException("研发支出金额格式不正确：" + amt); }
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) throw new BusinessException("研发支出金额必须大于 0");
+
+        Object accObj = body.get("accountId");
+        String acc = accObj == null ? "" : String.valueOf(accObj).trim();
+        if (acc.isBlank()) throw new BusinessException("研发支出必须选择支出账户");
+        Long accountId;
+        try { accountId = Long.valueOf(acc); } catch (Exception ex) { throw new BusinessException("支出账户不正确：" + acc); }
+
+        String date = body.get("expenseDate") == null ? "" : String.valueOf(body.get("expenseDate")).trim();
+        LocalDate expenseDate = LocalDate.now();
+        if (!date.isBlank()) {
+            try { expenseDate = LocalDate.parse(date); }
+            catch (Exception ex) { throw new BusinessException("研发支出日期格式不正确（应为 yyyy-MM-dd）：" + date); }
+        }
+        String remark = body.get("remark") == null ? "" : String.valueOf(body.get("remark")).trim();
+        if (remark.isBlank()) remark = "研发支出：" + material.getMaterialName();
+
+        FinanceExpense e = new FinanceExpense();
+        e.setExpenseType(FinanceExpense.TYPE_RD);
+        e.setAmount(amount);
+        e.setAccountId(accountId);
+        e.setExpenseDate(expenseDate);
+        e.setRemark(remark);
+        e.setSourceBillType(ExpenseSourceType.RD_MATERIAL.getCode());
+        e.setSourceId(materialId);
+        // 复用费用单 create：校验金额/账户 → 回填账户名 → 生成 FY 单号 → 置 DRAFT → 落库（不回填则无法拿到单号）
+        financeExpenseService.create(e);
+
+        res.put("expenseId", e.getId());
+        res.put("expenseNo", e.getExpenseNo());
+        res.put("existing", false);
+        return res;
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)

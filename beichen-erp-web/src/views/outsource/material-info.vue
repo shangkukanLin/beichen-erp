@@ -3,9 +3,12 @@ import { reactive, ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { localDate } from '@/utils/date'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import EntityLinks from '@/components/EntityLinks.vue'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+// 资金账户（支出账户下拉）：属共享主数据（GET 放行），2026-09-27 研发支出登记用
+import { getAccountPage, type FinanceAccount } from '@/api/finance'
 
 // 2026-09-21：去掉「所属项目」筛选 —— 该字段已整字段下线（用户：这个字段没什么用）
 const query = reactive({ materialName: '' })
@@ -76,6 +79,24 @@ const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoadi
 const defForm = () => ({ id: undefined as any, materialName: '', materialTypeId: undefined as any, supplierIdArr: [] as number[], unit: 'PCS', price: undefined as any, remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
+// ==================== 研发支出（2026-09-27 用户口径：新增物料时提示"要不要根据物料新增研发支出"） ====================
+// 交互：新增弹窗内勾选 + 就地展开（一次提交，物料与费用一起保存）；**编辑时不显示**（只针对"新增物料"）。
+// 落库：勾选后调 POST /outsource/material/{id}/rd-expense → 后端复用费用单 create 落**草稿**（FY 单号、不扣款），
+// 资金在「财务管理 → 费用管理」审核时才动；同一物料已登记过则后端幂等回原单。
+// 金额：默认带出物料单价（可改，必填 >0）；账户：必填（下拉取资金账户主数据）。
+const rdForm = reactive({ enabled: false, amount: undefined as any, accountId: undefined as any, expenseDate: localDate(), remark: '' })
+const rdAccounts = ref<FinanceAccount[]>([])
+async function loadRdAccounts() {
+  try {
+    const r: any = await getAccountPage({ pageSize: 200 })
+    rdAccounts.value = (r?.records || []).filter((a: any) => a.status === 1)
+  } catch { rdAccounts.value = [] }
+}
+/** 勾选时默认带出物料单价（备注留空 ⇒ 由后端补「研发支出：物料名」，避免物料改名后备注过期） */
+function onRdToggle(v: any) {
+  if (v && rdForm.amount == null && form.price) rdForm.amount = form.price
+}
+
 // 子物料组成
 const bomRows = ref<any[]>([])
 /**
@@ -110,7 +131,14 @@ async function loadAllMaterials() {
   allMaterials.value = r?.records || r || []
 }
 
-function handleAdd() { Object.assign(form, defForm()); bomRows.value = []; bomLoaded.value = true; isEdit.value = false; dialogTitle.value = '新增物料'; dialogVisible.value = true; loadAllMaterials() }
+function handleAdd() {
+  Object.assign(form, defForm()); bomRows.value = []; bomLoaded.value = true; isEdit.value = false
+  dialogTitle.value = '新增物料'; dialogVisible.value = true
+  // 研发支出（仅新增）：每次打开都重置，并备好支出账户下拉
+  Object.assign(rdForm, { enabled: false, amount: undefined, accountId: undefined, expenseDate: localDate(), remark: '' })
+  loadRdAccounts()
+  loadAllMaterials()
+}
 async function handleEdit(row: any) {
   Object.assign(form, defForm(), row)
   // 2026-09-21：「所属项目」下线 ⇒ 不再回填 projectIdArr，也不再预取项目名（用于拼 projectName 的那段已删）
@@ -123,6 +151,11 @@ async function handleEdit(row: any) {
 async function handleSubmit() {
   if (!form.materialName) { ElMessage.warning('请输入物料名称'); return }
   if (!form.materialTypeId) { ElMessage.warning('请选择物料类型'); return }
+  // 2026-09-27：勾选「同时登记一笔研发支出」时的前端校验（后端同口径再校验一次）
+  if (!isEdit.value && rdForm.enabled) {
+    if (!rdForm.amount || Number(rdForm.amount) <= 0) { ElMessage.warning('研发支出金额必须大于 0'); return }
+    if (!rdForm.accountId) { ElMessage.warning('研发支出必须选择支出账户'); return }
+  }
   // 2026-09-21：「所属项目」下线 ⇒ 提交体不再拼 projectIds / projectName
   const sIds = form.supplierIdArr.join(',')
   const body = { ...form, supplierIds: sIds }
@@ -135,7 +168,37 @@ async function handleSubmit() {
     if (form.id && bomLoaded.value) { await saveComponents(form.id) }
     else if (form.id && !bomLoaded.value) { ElMessage.warning('子物料组成未加载成功，本次保存未修改子物料组成') }
     dialogVisible.value = false; loadData()
+    // 2026-09-27（用户需求）：新增物料后按需登记研发支出（**物料已建成**再登记，失败可重试；后端幂等）
+    if (!isEdit.value && rdForm.enabled && form.id) await createRdExpense(form.id)
   } finally { submitLoading.value = false }
+}
+
+/**
+ * 为该物料登记一笔「研发支出」**草稿**费用单（2026-09-27 用户需求）。
+ *
+ * <p>顺序：物料 + 子物料组成**已保存成功**后再调本接口 ⇒ 不会出现"费用建了、物料没建"；
+ * 反过来（物料建了、费用失败）由下方 confirm 重试兜底，且后端按 source 幂等，重试不会重复建单。
+ * 提示文案必须说清"草稿 + 审核后才扣款"，否则用户会以为钱已经付了。</p>
+ */
+async function createRdExpense(materialId: number) {
+  const payload = {
+    amount: rdForm.amount,
+    accountId: rdForm.accountId,
+    expenseDate: rdForm.expenseDate,
+    remark: rdForm.remark || ''
+  }
+  try {
+    const r: any = await request.post(`/outsource/material/${materialId}/rd-expense`, payload)
+    const no = r?.expenseNo ? `（单号 ${r.expenseNo}）` : ''
+    ElMessage.success(`${r?.existing ? '该物料已登记过研发支出' : '研发支出已存为草稿'}${no}，请在「财务管理 → 费用管理」审核后才扣款`)
+  } catch (e: any) {
+    let retry = false
+    try {
+      await ElMessageBox.confirm(`研发支出未登记成功：${e?.message || '未知错误'}。是否重试？`, '研发支出登记失败', { type: 'warning', confirmButtonText: '重试', cancelButtonText: '稍后处理' })
+      retry = true
+    } catch { retry = false }
+    if (retry) await createRdExpense(materialId)
+  }
 }
 async function handleDelete(row: any) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await request.delete(`/outsource/material/${row.id}`); ElMessage.success('已删除'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
@@ -223,6 +286,25 @@ onMounted(async () => {
         <el-form-item label="供应商"><RemoteSelect v-model="form.supplierIdArr" multiple :fetch="fetchSuppliers" placeholder="可多选" style="width:100%" @change="onSupplierChange"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
         <el-form-item label="单位"><el-input v-model="form.unit" /></el-form-item>
         <el-form-item label="单价"><el-input-number v-model="form.price" :precision="2" :min="0" controls-position="right" style="width:100%" placeholder="可选" /></el-form-item>
+
+        <!-- 2026-09-27（用户需求）：新增物料时提示"要不要根据物料新增研发支出"。
+             ① 仅**新增**显示（编辑不动）；② 勾选后就地展开，与物料**一次提交**；
+             ③ 落库是**草稿**费用单（类型=研发支出），资金要到「财务管理 → 费用管理」审核时才动。 -->
+        <el-form-item v-if="!isEdit" label="研发支出">
+          <el-checkbox v-model="rdForm.enabled" @change="onRdToggle">同时登记一笔研发支出</el-checkbox>
+          <div v-if="!rdForm.enabled" style="color:var(--app-text-secondary);font-size:var(--app-font-xs);line-height:1.5">勾选后填金额与支出账户，保存物料时一并登记一张「研发支出」草稿（审核后才扣款）</div>
+        </el-form-item>
+        <template v-if="!isEdit && rdForm.enabled">
+          <el-form-item required label="支出金额"><el-input-number v-model="rdForm.amount" :precision="2" :min="0.01" controls-position="right" style="width:100%" placeholder="默认取物料单价" /></el-form-item>
+          <el-form-item required label="支出账户">
+            <el-select v-model="rdForm.accountId" placeholder="请选择" style="width:100%">
+              <el-option v-for="a in rdAccounts" :key="a.id" :label="`${a.accountName}（余额 ${Number((a as any).balance ?? 0).toFixed(2)}）`" :value="a.id ?? ''" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="费用日期"><el-date-picker v-model="rdForm.expenseDate" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item>
+          <el-form-item label="费用备注"><el-input v-model="rdForm.remark" placeholder="留空自动填「研发支出：物料名」" /></el-form-item>
+        </template>
+
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
       </el-form>
 

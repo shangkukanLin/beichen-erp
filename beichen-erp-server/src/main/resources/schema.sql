@@ -1948,7 +1948,7 @@ CREATE TABLE IF NOT EXISTS finance_cashflow (
 CREATE TABLE IF NOT EXISTS finance_expense (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '费用单ID',
     expense_no VARCHAR(50) NOT NULL COMMENT '费用单号',
-    expense_type VARCHAR(50) COMMENT '费用类型: 办公费/房租水电/工资社保/运输费/差旅费/业务招待/其他',
+    expense_type VARCHAR(50) COMMENT '费用类型(存code): OFFICE/RENT/SALARY/TRANSPORT/TRAVEL/ENTERTAIN/RND=研发支出/OTHER',
     amount DECIMAL(18,4) NOT NULL COMMENT '费用金额',
     expense_date DATE COMMENT '费用日期（利润表按此归月）',
     account_id BIGINT COMMENT '支出账户ID',
@@ -1958,11 +1958,18 @@ CREATE TABLE IF NOT EXISTS finance_expense (
     company_id BIGINT COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    -- 2026-09-27：来源引用三列（命名与 finance_receivable 一致）—— 只给"由别的业务对象带出来的"费用单用，
+    -- 目前唯一来源：物料信息管理「新增物料 → 同时登记研发支出」(RD_MATERIAL + source_id=outsource_material.id)。
+    -- 作用：幂等（同一物料不重复建） + 可追溯。手工登记的费用单这三列为 NULL。
+    source_bill_type VARCHAR(30) DEFAULT NULL COMMENT '来源类型(存code): RD_MATERIAL=物料研发支出',
+    source_id BIGINT DEFAULT NULL COMMENT '来源对象ID(如 outsource_material.id)',
+    source_bill_no VARCHAR(50) DEFAULT NULL COMMENT '来源单号(费用单目前为空，保留与应收同构)',
     -- F7-39（2026-09-19）：费用单号补唯一约束（原先 expense_no 无任何索引，catch 兜底 seq=1 可静默重号）
     UNIQUE KEY uk_expense_no (expense_no),
     INDEX idx_expense_type (expense_type),
     INDEX idx_expense_date (expense_date),
     INDEX idx_status (status),
+    INDEX idx_expense_source (source_bill_type, source_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='费用登记表';
 

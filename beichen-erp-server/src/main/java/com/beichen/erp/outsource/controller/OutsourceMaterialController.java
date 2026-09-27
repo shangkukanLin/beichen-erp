@@ -82,6 +82,19 @@ public class OutsourceMaterialController {
         return R.ok(materialService.create(body));
     }
 
+    /**
+     * 为物料登记一笔「研发支出」**草稿**费用单（2026-09-27 用户需求：新增物料时提示"要不要根据物料新增研发支出"）。
+     *
+     * <p>由「新增物料」保存成功后调用（勾选时）；**只落草稿**，资金在「财务管理 → 费用管理」审核时才动。
+     * 幂等：同一物料已有未作废的研发支出 ⇒ 直接返回原单（{@code existing=true}），不重复建。
+     * 权限走本前缀（{@code outsource:material-info}），故物料页用户无需财务权限。</p>
+     */
+    @PostMapping("/{materialId}/rd-expense")
+    public R<Map<String, Object>> createRdExpense(@PathVariable Long materialId,
+                                                  @RequestBody(required = false) Map<String, Object> body) {
+        return R.ok(materialService.createRdExpense(materialId, body));
+    }
+
     @PutMapping
     public R<Void> update(@RequestBody Map<String, Object> body) {
         materialService.update(body);
