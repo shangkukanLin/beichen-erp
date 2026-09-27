@@ -63,23 +63,30 @@ Ok (($whId -gt 0) -and ($matId -gt 0) -and ($supId -gt 0) -and ($whName -ne '') 
 
 # =====================================================================
 Step 'S1 material-return leaves: tabs + one entry per leaf'
-# 2026-09-27 三级菜单：物料退货 拆成两个**独立叶子**（退料 / 维修退货），新增入口随叶子切换。
+# 2026-09-27 三级菜单：物料退货 拆成三个**独立叶子**（关联退料 / 无单退料 / 物料维修退货），新增入口随叶子切换；
+#   关联/无单两个叶子同 returnType=REFUND，靠 linked(WITH_ORDER/WITHOUT_ORDER) 区分 ⇒ 列集也不同。
 Open '/outsource/material-return' 3000
-Ok ((BodyHas (ZH 'tab_leaf_effective')) -eq 'true') 'S1 退料 leaf has tab 有效单据'
-Ok ((BodyHas (ZH 'tab_leaf_void')) -eq 'true') 'S1 退料 leaf has tab 已作废单据'
-# 2026-09-24（UI 统一·用户口径）：两个入口文案都压成「新增」⇒ 不能靠文案区分叶子，
-#   改为断言「当前叶子上恰好一个『新增』按钮」（两入口互斥 ⇒ 退料叶子看不到维修入口）
+Ok ((BodyHas (ZH 'tab_leaf_effective')) -eq 'true') 'S1 关联退料 leaf has tab 有效单据'
+Ok ((BodyHas (ZH 'tab_leaf_void')) -eq 'true') 'S1 关联退料 leaf has tab 已作废单据'
+Ok (((Rows 0).head -join '|') -match [regex]::Escape((ZH 'lbl_mr_order'))) 'S1 关联退料 leaf shows the linked-order column'
+# 2026-09-24（UI 统一·用户口径）：入口文案都压成「新增」⇒ 不能靠文案区分叶子，
+#   改为断言「当前叶子上恰好一个『新增』按钮」（三入口互斥 ⇒ 一个叶子只看到一个入口）
 #   注：本脚本的 lib 没有 ReadJson，且中文一律走 B64（ASCII ONLY）⇒ 用 EvalJs + 'CNT=' 计数。
 $bNew = B64 (ZH 'btn_new_refund')
 $cntJs = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const t=T('$bNew');const vis=e=>e.getClientRects().length>0;return 'CNT='+[...document.querySelectorAll('button')].filter(e=>vis(e)&&(e.innerText||'').trim()===t).length})()"
 $n1 = EvalJs $cntJs
-Ok ($n1 -match 'CNT=1') ('S1 exactly one "new" button on the 退料 leaf (' + $n1 + ')')
+Ok ($n1 -match 'CNT=1') ('S1 exactly one "new" button on the 关联退料 leaf (' + $n1 + ')')
+Open '/outsource/material-return/unlinked' 2600
+Ok ((BodyHas (ZH 'tab_leaf_effective')) -eq 'true') 'S1 无单退料 leaf has tab 有效单据'
+Ok (-not (((Rows 0).head -join '|') -match [regex]::Escape((ZH 'lbl_mr_order')))) 'S1 无单退料 leaf has NO linked-order column'
+$n2 = EvalJs $cntJs
+Ok ($n2 -match 'CNT=1') ('S1 exactly one "new" button on the 无单退料 leaf (' + $n2 + ')')
 Open '/outsource/material-return/repair' 2600
 Ok ((BodyHas (ZH 'tab_leaf_pending')) -eq 'true') 'S1 维修退货 leaf has tab 待返回'
 Ok ((BodyHas (ZH 'tab_leaf_returned')) -eq 'true') 'S1 维修退货 leaf has tab 已返回完'
-$n2 = EvalJs $cntJs
-Ok ($n2 -match 'CNT=1') ('S1 exactly one "new" button on the 维修退货 leaf (' + $n2 + ')')
-Ok ((Errs) -eq '[]') 'S1 no errors after visiting both leaves'
+$n3 = EvalJs $cntJs
+Ok ($n3 -match 'CNT=1') ('S1 exactly one "new" button on the 维修退货 leaf (' + $n3 + ')')
+Ok ((Errs) -eq '[]') 'S1 no errors after visiting the three leaves'
 
 # =====================================================================
 Step 'S2 create REPAIR draft'

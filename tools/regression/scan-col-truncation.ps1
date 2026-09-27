@@ -33,6 +33,7 @@ $routes = @(
   '/outsource/return-order/repair',
   '/outsource/return-back',
   '/outsource/material-return/repair',
+  '/outsource/material-return/unlinked',
   '/outsource/order/delivery',
   '/outsource/return-order',
   '/outsource/material-order',

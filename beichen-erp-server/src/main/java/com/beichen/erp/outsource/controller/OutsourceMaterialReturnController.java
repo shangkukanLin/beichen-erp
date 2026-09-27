@@ -52,8 +52,10 @@ public class OutsourceMaterialReturnController {
             @RequestParam(required = false) String returnType,
             @RequestParam(required = false) String progress,
             // 2026-09-27 三级菜单：状态多值（DRAFT,AUDITED=有效单据 / CANCELLED=已作废；空=全部）
-            @RequestParam(required = false) String statuses) {
-        return R.ok(returnService.page(pageNum, pageSize, code, supplierId, status, returnType, progress, statuses));
+            @RequestParam(required = false) String statuses,
+            // 2026-09-27 三级菜单（物料侧拆叶子）：WITH_ORDER=关联退料 / WITHOUT_ORDER=无单退料 / 空=全部
+            @RequestParam(required = false) String linked) {
+        return R.ok(returnService.page(pageNum, pageSize, code, supplierId, status, returnType, progress, statuses, linked));
     }
 
     /** 详情 */

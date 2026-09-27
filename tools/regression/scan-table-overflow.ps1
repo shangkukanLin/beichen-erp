@@ -36,7 +36,9 @@ $routes = @(
   '/supplier/manage', '/dev/material-type', '/outsource/material-info', '/template',
   '/dev/project', '/dev/material', '/dev/screen-model',
   '/outsource/order', '/outsource/order/delivery', '/outsource/material-order', '/outsource/material-order/delivery',
-  '/outsource/return-order', '/outsource/material-return',
+  # 2026-09-27 三级菜单叶子（原来只扫了两级页面）
+  '/outsource/return-order', '/outsource/return-order/unlinked', '/outsource/return-order/repair', '/outsource/return-back',
+  '/outsource/material-return', '/outsource/material-return/unlinked', '/outsource/material-return/repair',
   '/inventory/purchase', '/inventory/purchase-return', '/inventory/purchase-exchange',
   '/inventory/sale', '/sale/return', '/sale/exchange', '/inventory/return-sort',
   '/inventory/product-stock', '/inventory/warehouse', '/inventory/stock-log',

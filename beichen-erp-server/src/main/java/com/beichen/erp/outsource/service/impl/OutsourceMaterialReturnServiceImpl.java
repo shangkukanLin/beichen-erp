@@ -93,13 +93,17 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
 
     @Override
     public Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long supplierId, String status,
-                                          String returnType, String progress, String statuses) {
+                                          String returnType, String progress, String statuses, String linked) {
         LambdaQueryWrapper<OutsourceMaterialReturn> w = new LambdaQueryWrapper<OutsourceMaterialReturn>()
                 .eq(code != null && !code.isBlank(), OutsourceMaterialReturn::getCode, code)
                 .eq(supplierId != null, OutsourceMaterialReturn::getSupplierId, supplierId)
                 .eq(status != null && !status.isBlank(), OutsourceMaterialReturn::getStatus, status)
                 // 类型页签（2026-09-17）：退货退款 / 维修退货
                 .eq(returnType != null && !returnType.isBlank(), OutsourceMaterialReturn::getReturnType, returnType);
+        // 2026-09-27 三级菜单（物料侧拆叶子，与加工侧 linked 同口径）：
+        //   关联退料 = 由物料收货页发起、挂了物料订单（单号 MRH-）；无单退料 = 没挂订单（MRW-）。
+        if ("WITH_ORDER".equalsIgnoreCase(linked)) w.isNotNull(OutsourceMaterialReturn::getMaterialOrderId);
+        else if ("WITHOUT_ORDER".equalsIgnoreCase(linked)) w.isNull(OutsourceMaterialReturn::getMaterialOrderId);
         // 2026-09-27 三级菜单：状态多值（DRAFT,AUDITED=有效单据、CANCELLED=已作废）
         if (statuses != null && !statuses.isBlank()) {
             java.util.List<String> sts = java.util.Arrays.stream(statuses.split(",")).map(String::trim)

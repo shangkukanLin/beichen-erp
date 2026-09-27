@@ -70,8 +70,10 @@ if ($need -gt 0) {
     $supName = $refundSup
     if ($i -eq 3) { $typeKey = 'btn_new_repair'; $supLbl = 'lbl_repair_supplier'; $typeName = 'REPAIR'; $supName = $repairSup }
     Step ('material return #' + $i + ' (' + $typeName + ')')
-    # 2026-09-27 三级菜单：退料 / 维修退货 已是**独立叶子** ⇒ 直接开对应叶子（新增入口随叶子切换）
-    $leafUrl = '/outsource/material-return'
+    # 2026-09-27 三级菜单：物料退货 = 关联退料 / 无单退料 / 物料维修退货 三个**独立叶子**（入口随叶子切换）。
+    #   本脚本的 REFUND 单**不挂物料订单**（只选供应商 + 源仓 + 料）⇒ 落「无单退料」叶子；
+    #   REPAIR 走「物料维修退货」叶子。
+    $leafUrl = '/outsource/material-return/unlinked'
     if ($typeName -eq 'REPAIR') { $leafUrl = '/outsource/material-return/repair' }
     Open $leafUrl 3000
     ClearErrs | Out-Null
@@ -103,11 +105,12 @@ if ($need -gt 0) {
 
 Step 'audit all DRAFT material returns (row located by code)'
 foreach ($c in (SqlList "SELECT code FROM outsource_material_return WHERE status='DRAFT' ORDER BY id")) {
-  # the two types live on two SEPARATE leaves now (2026-09-27) -> open the leaf that owns this document
-  #   （退料叶子默认页签「有效单据」= 草稿+已审核；维修退货叶子默认页签「待返回」含草稿 ⇒ DRAFT 都能看到）
-  $rt = SqlOne ("SELECT return_type FROM outsource_material_return WHERE code='" + $c + "'")
+  # 2026-09-27 三级菜单：三个叶子各自成页 ⇒ 按单据自身的 type + 是否挂订单决定去哪个叶子找它
+  #   （三个叶子的默认页签都含草稿：「有效单据」=DRAFT+AUDITED；维修叶子「待返回」含草稿）
+  $rt = SqlOne ("SELECT CONCAT(return_type,'|',IFNULL(material_order_id,0)) FROM outsource_material_return WHERE code='" + $c + "'")
   $leafUrl = '/outsource/material-return'
-  if ($rt -eq 'REPAIR') { $leafUrl = '/outsource/material-return/repair' }
+  if ($rt -like 'REPAIR*') { $leafUrl = '/outsource/material-return/repair' }
+  elseif ($rt -like '*|0') { $leafUrl = '/outsource/material-return/unlinked' }
   Open $leafUrl 2800
   Write-Host ('[' + $c + '] type=' + $rt + ' leaf=' + $leafUrl)
   $idx = [int](FindRow $c)

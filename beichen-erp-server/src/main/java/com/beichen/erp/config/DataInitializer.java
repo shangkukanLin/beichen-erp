@@ -321,11 +321,15 @@ public class DataInitializer implements ApplicationRunner {
             // 注意：**交货业务本身未改**（OrderDeliveryController / OutsourceOrderDeliveryService /
             // MaterialOrderController 的收料、退不良、库存、应付、BOM还料逻辑均未动）
             {415L, 4L, "物料收货", "menu", "/outsource/material-order/delivery", "OutsourceMaterialOrderDelivery", "Van", 5},
-            // 物料退货（2026-09-27 同口径）：二级改目录 423，把原「411 一个页面 2 页签」拆成 2 个三级叶子：
-            //  411 退料(REFUND) / 424 维修退货(REPAIR)；两者 API 都在 /api/outsource/material-return 前缀下 ⇒ perms 同码。
+            // 物料退货（2026-09-27 用户口径「物料侧也按关联物料订单/未关联分叶子」）：二级改目录 423，
+            // 把原「411 一个页面 2 页签」拆成 **3 个**三级叶子：
+            //  411 关联退料(MRH-) / 425 无单退料(MRW-) / 424 物料维修退货(REPAIR)；
+            //  三者 API 都在 /api/outsource/material-return 前缀下 ⇒ perms 同码；
+            //  关联/无单两个叶子同 returnType=REFUND，靠 linked 参数区分（与加工侧 linked 同口径）。
             {423L, 4L, "物料退货", "catalog", "", "", "Refrigerator", 6},
-            {411L, 423L, "退料", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Document", 1},
-            {424L, 423L, "物料维修退货", "menu", "/outsource/material-return/repair", "OutsourceMaterialReturnRepair", "Tools", 2},
+            {411L, 423L, "关联退料", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Document", 1},
+            {425L, 423L, "无单退料", "menu", "/outsource/material-return/unlinked", "OutsourceMaterialReturnUnlinked", "Files", 2},
+            {424L, 423L, "物料维修退货", "menu", "/outsource/material-return/repair", "OutsourceMaterialReturnRepair", "Tools", 3},
             // 409「供应商管理」已于 2026-09-17 按用户要求下线：它是委外加工侧的**重复入口**（与基础数据 106
             // 「供应商管理」同指 /supplier/manage，页面完全相同），基础数据里 106/107 两份都保留。
             // 与 104/405/302/303 同范式：下方统一置 visible=0（保留行与角色授权，便于回滚）。
@@ -682,6 +686,7 @@ public class DataInitializer implements ApplicationRunner {
                 // 原 outsource:return-order 归 421「维修退货」/422「加工返回单」使用（同码，职责更清楚）。
                 {408L, "outsource:order-delivery"},
                 {411L, "outsource:material-return"},
+                {425L, "outsource:material-return"},
                 {420L, "outsource:order-delivery"},
                 {421L, "outsource:return-order"},
                 {422L, "outsource:return-order"},
@@ -836,8 +841,8 @@ public class DataInitializer implements ApplicationRunner {
                 101L, 102L, 103L, 105L, 106L, 107L, 108L,
                 301L, 304L, 305L,
                 401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 411L, 412L, 413L, 414L, 415L,
-                // 2026-09-27 三级菜单：419 加工退货目录 + 420/421/422 叶子；423 物料退货目录 + 424 叶子
-                419L, 420L, 421L, 422L, 423L, 424L,
+                // 2026-09-27 三级菜单：419 加工退货目录 + 420/421/422 叶子；423 物料退货目录 + 424/425 叶子
+                419L, 420L, 421L, 422L, 423L, 424L, 425L,
                 501L, 502L, 503L, 504L,
                 601L, 602L, 603L, 605L,
                 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L,
@@ -932,7 +937,7 @@ public class DataInitializer implements ApplicationRunner {
         // 存量库幂等补授（2026-09-27）：加工退货/物料退货改三级菜单 —— 新增 419/420/421/422（加工侧）
         // 与 423/424（物料侧）。assignRoleMenus 只在角色「尚无任何菜单」时写入 ⇒ 存量库必须单独补授，
         // 否则已有角色只能看到目录、看不到叶子（buildTree 以已授权菜单为输入）。
-        // 授权范围**从原叶子继承**（最稳）：凡有 408 的角色 → 补 419/420/421/422；凡有 411 的角色 → 补 423/424。
+        // 授权范围**从原叶子继承**（最稳）：凡有 408 的角色 → 补 419/420/421/422；凡有 411 的角色 → 补 423/424/425。
         try {
             int granted = 0;
             granted += jdbcTemplate.update(
@@ -941,9 +946,9 @@ public class DataInitializer implements ApplicationRunner {
                     "WHERE rm.menu_id = 408");
             granted += jdbcTemplate.update(
                     "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
-                    "SELECT rm.role_id, m.id FROM sys_role_menu rm JOIN sys_menu m ON m.id IN (423, 424) " +
+                    "SELECT rm.role_id, m.id FROM sys_role_menu rm JOIN sys_menu m ON m.id IN (423, 424, 425) " +
                     "WHERE rm.menu_id = 411");
-            if (granted > 0) log.info("已按旧叶子继承补授三级菜单 {} 条（419~422 随 408 / 423~424 随 411）", granted);
+            if (granted > 0) log.info("已按旧叶子继承补授三级菜单 {} 条（419~422 随 408 / 423~425 随 411）", granted);
         } catch (Exception e) {
             log.warn("补授三级退货菜单异常: {}", e.getMessage());
         }
