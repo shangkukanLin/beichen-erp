@@ -5,9 +5,13 @@
             顺序 = 目录 sort_order。仅两处例外，且都写进守卫的例外表里（不靠记忆）：
             · 「备忘录」TAB 不对应任何菜单（个人面板，接口走豁免前缀 /api/memo）；
             · 「基础数据 / 设置」两个目录没有 TAB（基础数据刻意不设 TAB：主数据按使用场景分散到各 TAB 的快捷入口）。
-         ② 每个 TAB 的**快捷入口首块 = 该目录的当前子菜单**：标签同名、顺序同 sort_order、逐项对得上（不是"大概齐"）。
-         ③ 额外入口只允许**跨目录的补充入口**（历史上都来自「基础数据」，因它没有 TAB），且必须是 `sys_menu` 里真实可见的菜单 ——
-            不许留死键、不许留改名残留（按钮标签必须等于某个可见菜单名）。
+         ② 每个 TAB 的快捷入口 = 该目录的**当前子菜单，且严格只有它们**：标签同名、顺序同 sort_order、逐项对得上，
+            不多不少。2026-09-27 用户口径「严格只有本目录子菜单」⇒ 跨目录入口（历史上来自「基础数据」的 13 颗，
+            如物料类型管理 / 加工合同模板 / 委外仓库管理 / 产品管理 / 客户管理…）**已全部移除**，
+            主数据统一从侧栏「基础数据」进入；各 TAB 的可见性门控（hasModule.*）也只认本目录子菜单
+            （否则只授主数据的角色会看到一个"没有任何按钮"的空白 TAB）。
+         ③ 由此 `menuNames` 白名单收敛为**本文件实际引用的键**：新增按钮必须同时登记（否则 hasMenu 恒 false、按钮永不渲染），
+            删除按钮必须同时删键（守卫双向断言，见 verify-dashboard-tab-menu.ps1）。
          ====================================================================================================================================================== -->
     <el-tabs v-model="activeTab" type="border-card" @tab-change="onTabChange">
       <!-- 备忘录（2026-09-15 用户要求：排在首位，并作为进首页的默认 TAB） -->
@@ -129,17 +133,12 @@
 
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序（2026-09-22 用户要求：**以当前子菜单排序为准**）：先「研发管理」本目录项（按目录序），
-               再跨目录项（本 TAB 两项都属「基础数据」⇒ 按基础数据序：6 物料类型管理 → 11 模版管理） -->
+          <!-- 严格 = **本目录子菜单**（2026-09-27 用户口径「严格只有本目录子菜单」）：「研发管理」3 项，按 sort 序逐项同序。
+               原「物料类型管理 / 阶段模板」两颗属「基础数据」⇒ 已移除；主数据统一走侧栏「基础数据」进入。
+               verify-dashboard-tab-menu.ps1 会断言"不得有任何跨目录按钮"。 -->
           <el-button v-if="hasMenu['DevProject']" type="primary" size="small" text @click="$router.push('/dev/project')">研发立项</el-button>
           <el-button v-if="hasMenu['DevMaterial']" type="primary" size="small" text @click="$router.push('/dev/material')">研发物料</el-button>
           <el-button v-if="hasMenu['DevScreenModel']" type="primary" size="small" text @click="$router.push('/dev/screen-model')">屏幕资料</el-button>
-          <!-- 按钮名与左侧菜单一致（「基础数据 → 物料类型管理」，2026-09-22 起随子菜单名对齐） -->
-          <el-button v-if="hasMenu['MaterialType']" type="primary" size="small" text @click="$router.push('/dev/material-type')">物料类型管理</el-button>
-          <!-- 阶段模板已并入「基础数据 → 模版管理」（2026-09-15）：按钮保留、深链到该页的「阶段模板管理」页签。
-               按钮名是**页内 tab 名**（不是菜单名）⇒ 标记 @deep-link，供 verify-dashboard-tab-menu.ps1 识别（它只放宽标签校验，
-               目标路由仍必须是真实可见菜单 /template）。 -->
-          <el-button v-if="hasMenu['TemplateManage']" type="primary" size="small" text @click="$router.push('/template?tab=phase')">阶段模板</el-button>
         </div>
       </el-tab-pane>
 
@@ -227,9 +226,9 @@
 
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序（2026-09-22 用户要求：**以当前子菜单排序为准**）：先「委外加工」本目录 6 项（按目录序：
-               加工订单 → 成品收货 → 加工退货 → 物料订单 → 物料收货 → 物料退货），再跨目录项（都属「基础数据」，
-               按基础数据序：4 供货商管理 → 7 物料信息管理 → 11 加工合同模板）
+          <!-- 严格 = **本目录子菜单**（2026-09-27 用户口径）：「委外加工」6 项，按 sort 序逐项同序
+               （加工订单 → 成品收货 → 加工退货 → 物料订单 → 物料收货 → 物料退货）。
+               原「供货商管理 / 物料信息管理 / 加工合同模板」3 颗属「基础数据」⇒ 已移除，主数据走侧栏进入。
                注：2026-09-16 「物料收发单 / 物料其他出入库 / 物料报损 / 委外仓库 / 自有物料仓」5 项
                已随新一级菜单「物料仓库」迁到独立的「物料仓库」TAB -->
           <el-button v-if="hasMenu['OutsourceOrder']" type="primary" size="small" text @click="$router.push('/outsource/order')">加工订单</el-button>
@@ -239,11 +238,6 @@
           <el-button v-if="hasMenu['OutsourceMaterialOrder']" type="primary" size="small" text @click="$router.push('/outsource/material-order')">物料订单</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialOrderDelivery']" type="primary" size="small" text @click="$router.push('/outsource/material-order/delivery')">物料收货</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialReturn']" type="primary" size="small" text @click="$router.push('/outsource/material-return')">物料退货</el-button>
-          <el-button v-if="hasMenu['OutsourceSupplierManage']" type="primary" size="small" text @click="$router.push('/outsource/supplier/manage')">供货商管理</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialInfo']" type="primary" size="small" text @click="$router.push('/outsource/material-info')">物料信息管理</el-button>
-          <!-- 加工合同模板已并入「基础数据 → 模版管理」（2026-09-15）：按钮保留、深链到该页的「加工合同模板」页签。
-               同上：按钮名是页内 tab 名 ⇒ 标记 @deep-link。 -->
-          <el-button v-if="hasMenu['TemplateManage']" type="primary" size="small" text @click="$router.push('/template?tab=contract')">加工合同模板</el-button>
         </div>
       </el-tab-pane>
 
@@ -304,15 +298,13 @@
         </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序（2026-09-22 用户要求：**以当前子菜单排序为准**）：先「进货业务」本目录 3 项
-               （成品采购单 → 采购退货单 → 采购换货单），再跨目录项（都属「基础数据」：3 供应商管理 → 4 供货商管理） -->
+          <!-- 严格 = **本目录子菜单**（2026-09-27 用户口径）：「进货业务」3 项，按 sort 序逐项同序
+               （成品采购单 → 采购退货单 → 采购换货单）。原「供应商管理 / 供货商管理」2 颗属「基础数据」⇒ 已移除。
+               采购换货单（504，2026-09-18 新增菜单）的 route_name 必须同时进下方 menuNames 白名单，
+               否则 hasMenu 恒为 false、按钮永不渲染。 -->
           <el-button v-if="hasMenu['InventoryPurchase']" type="primary" size="small" text @click="$router.push('/inventory/purchase')">成品采购单</el-button>
           <el-button v-if="hasMenu['InventoryPurchaseReturn']" type="primary" size="small" text @click="$router.push('/inventory/purchase-return')">采购退货单</el-button>
-          <!-- 采购换货单（504，2026-09-18 新增菜单）：以前漏了这颗快捷入口，2026-09-22 按子菜单补齐；
-               其 route_name 必须同时进下方 menuNames 白名单，否则 hasMenu 恒为 false、按钮永不渲染 -->
           <el-button v-if="hasMenu['InventoryPurchaseExchange']" type="primary" size="small" text @click="$router.push('/inventory/purchase-exchange')">采购换货单</el-button>
-          <el-button v-if="hasMenu['SupplierManage']" type="primary" size="small" text @click="$router.push('/supplier/manage')">供应商管理</el-button>
-          <el-button v-if="hasMenu['OutsourceSupplierManage']" type="primary" size="small" text @click="$router.push('/outsource/supplier/manage')">供货商管理</el-button>
         </div>
       </el-tab-pane>
 
@@ -344,13 +336,12 @@
         </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序（2026-09-22 用户要求：**以当前子菜单排序为准**）：先「销售业务」本目录 3 项
-               （销售单 → 销售退货单 → 销售换货单），再跨目录项（客户管理=基础数据 2；退货整理已归「成品库存」第 2 位） -->
+          <!-- 严格 = **本目录子菜单**（2026-09-27 用户口径）：「销售业务」3 项，按 sort 序逐项同序
+               （销售单 → 销售退货单 → 销售换货单）。原「客户管理」（基础数据）/「退货整理」（成品库存）2 颗已移除。
+               退货整理仍是成品库存第 2 项，在其 TAB 与本菜单处进入。 -->
           <el-button v-if="hasMenu['InventorySale']" type="primary" size="small" text @click="$router.push('/inventory/sale')">销售单</el-button>
           <el-button v-if="hasMenu['SaleReturn']" type="primary" size="small" text @click="$router.push('/sale/return')">销售退货单</el-button>
           <el-button v-if="hasMenu['SaleExchange']" type="primary" size="small" text @click="$router.push('/sale/exchange')">销售换货单</el-button>
-          <el-button v-if="hasMenu['InventoryCustomer']" type="primary" size="small" text @click="$router.push('/inventory/customer')">客户管理</el-button>
-          <el-button v-if="hasMenu['InventoryReturnSort']" type="primary" size="small" text @click="$router.push('/inventory/return-sort')">退货整理</el-button>
         </div>
       </el-tab-pane>
 
@@ -401,19 +392,16 @@
         </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 2026-09-24（用户口径）：物料仓库子菜单重排为
-               物料移仓 → 物料库存详情 → 物料库存流水 → 物料库存盘点 → 物料报损 → 物料其他出入库；
-               本 TAB 快捷入口**与侧栏严格同序**（与委外加工 TAB 同一口径） -->
+          <!-- 严格 = **本目录子菜单**（2026-09-27 用户口径；2026-09-24 子菜单重排为
+               物料移仓 → 物料库存详情 → 物料库存流水 → 物料库存盘点 → 物料报损 → 物料其他出入库，本块逐项同序）。
+               原「委外仓库管理 / 自有物料仓管理」2 颗属「基础数据」⇒ 已移除（它们与「成品仓库管理」共用
+               route_name "Warehouse"，此前只能按路径判权限；移除后 `hasPath` 一并删除）。 -->
           <el-button v-if="hasMenu['InventoryMaterialMove']" type="primary" size="small" text @click="$router.push('/inventory/material-move')">物料移仓</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialStock']" type="primary" size="small" text @click="$router.push('/outsource/material-stock')">物料库存详情</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialStockLog']" type="primary" size="small" text @click="$router.push('/outsource/material-stock-log')">物料库存流水</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialStockTake']" type="primary" size="small" text @click="$router.push('/outsource/material-stock-take')">物料库存盘点</el-button>
           <el-button v-if="hasMenu['OutsourceStockLoss']" type="primary" size="small" text @click="$router.push('/outsource/stock-loss')">物料报损</el-button>
           <el-button v-if="hasMenu['OutsourceOtherIo']" type="primary" size="small" text @click="$router.push('/outsource/other-io')">物料其他出入库</el-button>
-          <!-- 委外仓库管理：按**路由路径**判权限（与「成品仓库管理」共用 route_name "Warehouse" 会串号） -->
-          <!-- 文案与侧栏「基础数据」子菜单一致（2026-09-23 改名：委外仓库→委外仓库管理、自有物料仓→自有物料仓管理） -->
-          <el-button v-if="hasPath['/outsource/warehouse']" type="primary" size="small" text @click="$router.push('/outsource/warehouse')">委外仓库管理</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialWarehouse']" type="primary" size="small" text @click="$router.push('/outsource/material-warehouse')">自有物料仓管理</el-button>
         </div>
       </el-tab-pane>
 
@@ -470,10 +458,10 @@
         </el-card>
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
-          <!-- 顺序（2026-09-22 用户要求：**以当前子菜单排序为准**）：先「成品库存」本目录 8 项，严格按左侧栏顺序
-               （移仓单 → 退货整理 → 规格调整 → 成品库存详情 → 成品库存流水 → 库存盘点 → 成品其他出入库 → 成品报损），
-               再跨目录项（都属「基础数据」⇒ 按基础数据序：1 产品管理 → 8 成品仓库管理）。
-               按钮名与菜单一致（「成品库存流水」「成品其他出入库」，2026-09-22 起对齐）；
+          <!-- 严格 = **本目录子菜单**（2026-09-27 用户口径）：「成品库存」8 项，严格按左侧栏 sort 序
+               （移仓单 → 退货整理 → 规格调整 → 成品库存详情 → 成品库存流水 → 库存盘点 → 成品其他出入库 → 成品报损）。
+               原「产品管理 / 成品仓库管理」2 颗属「基础数据」⇒ 已移除（后者与「委外仓库管理」共用 route_name
+               "Warehouse"，此前只能按路径判权限；移除后 `hasPath` 一并删除）。
                注：①「成品库存」查询页 2026-09-18 下线（并入「成品库存详情」），快捷按钮一并移除
                    ②退货整理自 2026-09-18 起归「成品库存」菜单（其 707 原属销售业务），2026-09-22 起排第 2 位 -->
           <el-button v-if="hasMenu['InventoryWarehouseMove']" type="primary" size="small" text @click="$router.push('/inventory/warehouse-move')">移仓单</el-button>
@@ -484,10 +472,6 @@
           <el-button v-if="hasMenu['InventoryStockTake']" type="primary" size="small" text @click="$router.push('/inventory/stock-take')">库存盘点</el-button>
           <el-button v-if="hasMenu['InventoryOtherIo']" type="primary" size="small" text @click="$router.push('/inventory/other-io')">成品其他出入库</el-button>
           <el-button v-if="hasMenu['InventoryStockLoss']" type="primary" size="small" text @click="$router.push('/inventory/stock-loss')">成品报损</el-button>
-          <el-button v-if="hasMenu['ProductManage']" type="primary" size="small" text @click="$router.push('/product')">产品管理</el-button>
-          <!-- 成品仓库管理：改用**路由路径**判权限（与「委外仓库」共用 route_name "Warehouse" 会串号）；
-               2026-09-22 侧栏已把它归入「基础数据」，但首页无「基础数据」TAB ⇒ 按钮仍留在本 TAB -->
-          <el-button v-if="hasPath['/inventory/warehouse']" type="primary" size="small" text @click="$router.push('/inventory/warehouse')">成品仓库管理</el-button>
         </div>
       </el-tab-pane>
 
@@ -799,12 +783,9 @@ function onTabChange() {
 
 // 根据用户菜单权限判断可见模块
 const hasMenu = ref<Record<string, boolean>>({})
-/**
- * 按**路由路径**判权限（2026-09-14 新增）：`sys_menu` 里「委外仓库 `/outsource/warehouse`」与
- * 「成品仓库管理 `/inventory/warehouse`」**共用同一个 route_name「Warehouse」** → 按 routeName 判权限会**串号**
- * （用户有其中任一权限，两处快捷入口都会显示）。故这两处入口改用**路径**判断。
- */
-const hasPath = ref<Record<string, boolean>>({})
+// 2026-09-27（严格模式）：原 `hasPath`（按路由路径判权限）已随两颗仓库快捷入口一并删除 ——
+// 它只是为了区分共用 route_name「Warehouse」的「委外仓库管理 / 成品仓库管理」；两者属「基础数据」，
+// 首页不再提供跨目录入口 ⇒ 该绕行手段不再需要，`menuNames` 也已收敛为本文件实际引用的键（见守卫）。
 const hasModule = reactive({ dev: false, outsource: false, purchase: false, sale: false, stock: false, finance: false, materialWarehouse: false })
 
 // 统计卡片数据
@@ -941,43 +922,74 @@ const curMonth = localMonth()
 function checkUserMenus() {
   const menus = userStore.menus || []
   const names = new Set<string>()
-  const paths = new Set<string>()
   const collect = (list: any[]) => {
     if (!list) return
     list.forEach((m: any) => {
       if (m.routeName) names.add(m.routeName)
-      if (m.routePath) paths.add(m.routePath)
       if (m.children) collect(m.children)
     })
   }
   collect(menus)
 
-  // 共用 route_name「Warehouse」的两处仓库入口：改按**路径**判权限，避免串号（见 hasPath 注释）
-  // 注：必须在 hasModule 之前赋值 —— 「物料仓库」TAB 的可见性要用到 hasPath['/outsource/warehouse']
-  hasPath.value = {
-    '/outsource/warehouse': paths.has('/outsource/warehouse'),
-    '/inventory/warehouse': paths.has('/inventory/warehouse')
-  }
-
   // 可见模块判断（菜单推导）∩ 用户勾选（dashboardTabs；null=未配置=全部可见）
+  //
+  // ⚠️ 2026-09-27（严格模式，用户口径「严格只有本目录子菜单」）：门控里**只能出现本目录的子菜单**。
+  // 此前 purchase 夹带 SupplierManage/OutsourceSupplierManage、sale 夹带 InventoryCustomer、
+  // stock 夹带 Warehouse/ProductManage、materialWarehouse 夹带 OutsourceMaterialWarehouse
+  // —— 都是「基础数据」的页面 ⇒ 只被授主数据的角色也会看到该 TAB，而严格模式下该 TAB 内**一颗按钮都没有**（又是空白 TAB）。
+  // 现改为只认本目录子菜单；`verify-dashboard-tab-menu.ps1` 断言「门控键 ⊆ 该目录子菜单」，禁止再夹带。
+  // 同批删除：原 `hasPath`（按路由路径判权限）与它的 `paths` 集合 —— 它只是为「委外仓库管理 / 成品仓库管理」
+  // 两颗跨目录按钮绕开共用 route_name「Warehouse」串号用的，两颗按钮移除后已无用处。
   const tabs = userStore.dashboardTabs
   const tabAllowed = (key: string) => !tabs || tabs.includes(key)
   // 2026-09-16：BOM管理/图纸文档 菜单下线后，研发模块可见性只看「研发立项」
   hasModule.dev = names.has('DevProject') && tabAllowed('dev')
   hasModule.outsource = (names.has('OutsourceOrder') || names.has('OutsourceMaterialOrder')) && tabAllowed('outsource')
-  hasModule.purchase = (names.has('InventoryPurchase') || names.has('SupplierManage') || names.has('OutsourceSupplierManage')) && tabAllowed('purchase')
-  hasModule.sale = (names.has('InventorySale') || names.has('InventoryCustomer')) && tabAllowed('sale')
-  hasModule.stock = (names.has('InventoryProductStock') || names.has('Warehouse') || names.has('ProductManage')) && tabAllowed('stock')
+  hasModule.purchase = (names.has('InventoryPurchase') || names.has('InventoryPurchaseReturn')
+    || names.has('InventoryPurchaseExchange')) && tabAllowed('purchase')
+  hasModule.sale = (names.has('InventorySale') || names.has('SaleReturn')
+    || names.has('SaleExchange')) && tabAllowed('sale')
+  hasModule.stock = (names.has('InventoryWarehouseMove') || names.has('InventoryReturnSort')
+    || names.has('InventoryReclassify') || names.has('InventoryProductStock') || names.has('WarehouseStockLog')
+    || names.has('InventoryStockTake') || names.has('InventoryOtherIo') || names.has('InventoryStockLoss')) && tabAllowed('stock')
   hasModule.finance = (names.has('FinanceReceivable') || names.has('FinancePayable')) && tabAllowed('finance')
-  // 物料仓库（2026-09-16 新增 TAB，对应新的一级菜单「物料仓库」）：菜单含任一物料收发/仓储/报损页面即视为可见
-  hasModule.materialWarehouse = (names.has('InventoryMaterialMove') || names.has('OutsourceOtherIo')
-    || names.has('OutsourceStockLoss') || names.has('OutsourceMaterialWarehouse')
-    || hasPath.value['/outsource/warehouse']) && tabAllowed('materialWarehouse')
+  // 物料仓库（2026-09-16 新增 TAB，对应侧栏目录「物料仓库」）：该目录 6 个子菜单任一可见即显示
+  hasModule.materialWarehouse = (names.has('InventoryMaterialMove') || names.has('OutsourceMaterialStock')
+    || names.has('OutsourceMaterialStockLog') || names.has('OutsourceMaterialStockTake')
+    || names.has('OutsourceStockLoss') || names.has('OutsourceOtherIo')) && tabAllowed('materialWarehouse')
 
   // 快捷入口可见性（route_name 与 sys_menu 一致）
-  // 2026-09-14 按最新 sys_menu 重设：补齐缺失的 route_name（DevScreenModel / OutsourceStockLoss /
-  // InventoryProductStock / InventoryStockLoss / FinancePayableTransfer / AnalysisOverview），并移除**已不存在**的 FinanceAnalysis
-  const menuNames = ['Dashboard','DevProject','DevMaterial','DevScreenModel','MaterialType','TemplateManage','ProductManage','InventoryBrand','InventoryCustomer','SupplierManage','OutsourceSupplierManage','OutsourceOrder','OutsourceOrderDelivery','OutsourceMaterialOrder','OutsourceMaterialOrderDelivery','OutsourceMaterialInfo','OutsourceDelivery','OutsourceOtherIo','OutsourceReturnOrder','OutsourceMaterialReturn','OutsourceStockLoss','Warehouse','OutsourceMaterialWarehouse','OutsourceMaterialStock','OutsourceMaterialStockLog','OutsourceMaterialStockTake','InventoryPurchase','InventoryPurchaseReturn','InventoryPurchaseExchange','InventorySale','SaleReturn','SaleExchange','InventoryProductStock','WarehouseStockLog','InventoryOtherIo','InventoryReclassify','InventoryWarehouseMove','InventoryMaterialMove','InventoryStockTake','InventoryReturnSort','InventoryStockLoss','FinanceReceivable','FinancePayable','FinanceBill','FinanceCashflow','FinanceAccount','FinanceReceipt','FinancePayment','FinanceExpense','FinanceInvoice','FinancePayableTransfer','AnalysisOverview','AnalysisSale','AnalysisCustomer','AnalysisPurchase','AnalysisTax','AnalysisCash','SystemSmart','SystemUser','SystemSettings','SystemDataManage','SystemRole','SystemMenu','SystemClearData']
+  //
+  // ⚠️ 2026-09-27（严格模式）：本名单**收敛为本文件实际引用的键**，并与"每个 TAB 快捷入口 = 该目录子菜单"一一对应。
+  // 守卫 verify-dashboard-tab-menu.ps1 **双向断言**：模板里 hasMenu[...] 引用的键必须都在名单里（否则按钮永不渲染）、
+  // 名单里不得有死键（引用了才登记）。因此新增快捷入口必须同时登记，删除按钮必须同时删键。
+  // 本次删除的 19 个死键：跨目录按钮移除后不再引用的 MaterialType / TemplateManage / ProductManage / InventoryBrand /
+  // InventoryCustomer / SupplierManage / OutsourceSupplierManage / OutsourceMaterialInfo / OutsourceDelivery /
+  // Warehouse / OutsourceMaterialWarehouse，以及首页从无引用的 Dashboard 与 7 个 System* （SystemSmart/SystemUser/
+  // SystemSettings/SystemDataManage/SystemRole/SystemMenu/SystemClearData）。
+  // 注：`FinanceAnalysis` 只在注释里作为"历史死键"出现（见 loadOverview），不在名单内。
+  const menuNames = [
+    // 经营分析（目录 10）
+    'AnalysisOverview', 'AnalysisSale', 'AnalysisCustomer', 'AnalysisPurchase', 'AnalysisTax', 'AnalysisCash',
+    // 研发管理（目录 3）
+    'DevProject', 'DevMaterial', 'DevScreenModel',
+    // 委外加工（目录 4）
+    'OutsourceOrder', 'OutsourceOrderDelivery', 'OutsourceReturnOrder',
+    'OutsourceMaterialOrder', 'OutsourceMaterialOrderDelivery', 'OutsourceMaterialReturn',
+    // 物料仓库（目录 11）
+    'InventoryMaterialMove', 'OutsourceMaterialStock', 'OutsourceMaterialStockLog',
+    'OutsourceMaterialStockTake', 'OutsourceStockLoss', 'OutsourceOtherIo',
+    // 进货业务（目录 5）
+    'InventoryPurchase', 'InventoryPurchaseReturn', 'InventoryPurchaseExchange',
+    // 销售业务（目录 6）
+    'InventorySale', 'SaleReturn', 'SaleExchange',
+    // 成品库存（目录 7）
+    'InventoryWarehouseMove', 'InventoryReturnSort', 'InventoryReclassify', 'InventoryProductStock',
+    'WarehouseStockLog', 'InventoryStockTake', 'InventoryOtherIo', 'InventoryStockLoss',
+    // 财务管理（目录 8）
+    'FinanceReceipt', 'FinancePayment', 'FinanceBill', 'FinanceExpense', 'FinanceReceivable', 'FinancePayable',
+    'FinanceCashflow', 'FinanceAccount', 'FinanceInvoice', 'FinancePayableTransfer',
+  ]
   menuNames.forEach(n => { hasMenu.value[n] = names.has(n) })
   // 默认激活「备忘录」（2026-09-15 用户要求，原为「经营总览」；财务区块仍按 AnalysisOverview 权限显隐）
   activeTab.value = 'memo'

@@ -1,6 +1,7 @@
-# P14 (2026-09-22 user request): every dashboard TAB's quick links must LEAD with that catalog's own
-#   menus, in the SAME order as the current submenus (left sidebar order), and carry the same labels.
-#   Cross-catalog extras (master data surfaced by usage) come after that block -- not asserted here.
+# P14 (2026-09-22 user request, tightened 2026-09-27): every dashboard TAB's quick links must EQUAL that catalog's own
+#   menus -- same labels, same order as the current submenus (left sidebar order), and nothing else.
+#   2026-09-27 user: "strictly only this catalog's submenus" => the 13 cross-catalog extras were removed, so a tail is
+#   now a FAILURE rather than something to report.
 # Read-only, rerun-safe. ASCII ONLY (expectations come from the DB, so no Chinese literals are needed).
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 EnsureLogin
@@ -41,7 +42,8 @@ foreach ($p in $pairs) {
   Write-Host ('    expected head = ' + ($exp -join '|'))
   # NOTE: ui-e2e-lib's Ok takes (condition, message) -- unlike the older standalone verify-*.ps1 files,
   # which define their own one-arg local Ok. Passing just a message throws and silently yields a false PASS.
-  Ok (($n -gt 0) -and (($head -join '|') -eq ($exp -join '|'))) ($p.pane + ': quick links lead with catalog ' + $p.cat + ' in sidebar order (' + $n + ')')
+  # STRICT (2026-09-27): count must match too -- no cross-catalog extras are tolerated any more.
+  Ok (($n -gt 0) -and ($arr.Count -eq $n) -and (($head -join '|') -eq ($exp -join '|'))) ($p.pane + ': quick links == catalog ' + $p.cat + ' menus, same order, nothing extra (' + $n + ')')
   if ($n -gt 0 -and (($head -join '|') -ne ($exp -join '|'))) {
     Write-Host ('    MISMATCH expected [' + ($exp -join '|') + ']')
   }
