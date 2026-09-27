@@ -10,7 +10,7 @@
  * </ul>
  * <p><b>反结单（2026-09-27 用户口径「E 也要做」）</b>：物料订单原先结单即**终态**，结错了只能新建单。
  * 现走后端 `PUT /outsource/material-order/{id}/reopen`：曾被审核或已收过货 ⇒ 回「收货中」（可继续收货）；
- * 两者皆无（待审核直接结单的 API 路径）⇒ 回「待审核」。纯状态回退、清空结单时间，
+ * 两者皆无（待审核直接结单的 API 路径）⇒ 回「待审核」。纯状态回退、**清空结单时间与结单人**，
  * **无账务副作用**（结单本身不动库存/应付）。</p>
  *
  * <p>2026-09-21（用户口径「操作文案从收料/退料改成收货/退货」）：行内按钮「收料」→「**收货**」。</p>
@@ -71,7 +71,7 @@ function handleReset() { query.code = ''; handleQuery() }
 async function handleReopen(row: any) {
   try {
     await ElMessageBox.confirm(
-      `确认反结单？订单 ${row.code} 将回到「收货中」（可继续收货；若该单从未审核过则回「待审核」），结单时间清空。`,
+      `确认反结单？订单 ${row.code} 将回到「收货中」（可继续收货；若该单从未审核过则回「待审核」），结单时间与结单人清空。`,
       '反结单', { type: 'warning' })
   } catch { return }
   try {
@@ -146,7 +146,8 @@ onActivated(() => { loadData(); loadCounts() })
            合计 = 160+100+80+130+64+96+96+82+118 = **926** ✓
            2026-09-27（两个页签）：**收货中**页签 = 上表原样不动；**已结单**页签 = 「交期 96 / 状态 96」
            换成「结单时间 100」、操作 118→186（收货详细 + 退货 + 反结单，实测约 180）
-           ⇒ 固定列合计 = 160+130+62+96+100+186 = 734，加两个弹性列 min134+min56 = **924** ≤ 948 ✓ -->
+           ⇒ 固定列合计 = 160+130+62+96+100+186 = 734，加两个弹性列 min134+min56 = **924** ≤ 948 ✓
+           2026-09-27（补结单人）：结单时间列 100→**110**（第二行放结单人小字）⇒ 合计 **934** ≤ 948 ✓ -->
       <el-table :data="tableData" border stripe v-loading="loading" style="width:100%" @row-click="goDetail">
         <el-table-column label="订单号" width="160" show-overflow-tooltip>
           <template #default="{ row }">
@@ -184,7 +185,14 @@ onActivated(() => { loadData(); loadCounts() })
         <!-- 交期 / 状态：只在「收货中」显示（2026-09-27 页签化）—— 已结单页签里状态恒为「已结单」（冗余），
              交期让位给更有用的「结单时间」，保证列宽合计 ≤ 内容区（本项目"一行不横滑"家规）。 -->
         <el-table-column v-if="!isClosed()" label="交期" width="96"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column v-if="isClosed()" label="结单时间" width="100"><template #default="{ row }">{{ $fmtDate(row.finishTime) }}</template></el-table-column>
+        <!-- 结单时间 + 结单人（第二行小字）合并一列：本页 11 列已排满，"第二行小字"是本项目既有做法
+             （订单类型并入订单号）。结单人由 finish() 盖章、反结单清空；历史单显示 — -->
+        <el-table-column v-if="isClosed()" label="结单时间" width="110">
+          <template #default="{ row }">
+            <div>{{ $fmtDate(row.finishTime) }}</div>
+            <div style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ row.finisherName || '—' }}</div>
+          </template>
+        </el-table-column>
         <el-table-column v-if="!isClosed()" label="状态" width="96" align="center"><template #default="{ row }"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <!-- 操作：收货中 = 收货 + 退货（原口径）；已结单 = 收货详细 + 退货 + 反结单
              （已结单**不可收货**（后端明确拒绝）⇒ 不放「收货」；但退不良/物料退货后端仍允许 ⇒ 保留「退货」）。 -->

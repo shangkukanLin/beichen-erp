@@ -68,6 +68,7 @@ public class DataInitializer implements ApplicationRunner {
         migrateDashboardTabs();
         migrateUserMenuMode();
         initDocOperatorColumns();
+        migrateMaterialOrderFinisher();
         migratePurchaseExchangeCharge();
         migratePurchaseChargePerProduct();
         migrateSaleItemCharge();
@@ -648,6 +649,20 @@ public class DataInitializer implements ApplicationRunner {
             }
         }
         if (added > 0) log.info("已为 {} 处单据表补「制单人/审核人」列", added);
+    }
+
+    /**
+     * 物料订单补「结单人」（2026-09-27 用户口径「把结单人做了」）：结单是一次人工动作，要留痕"谁结的"。
+     *
+     * <p>与制单人/审核人同规格（ID + 姓名快照）：{@code finish()} 盖章、{@code reopen()} **清空**
+     * （口径与成品侧 {@code CloseReportServiceImpl.reopenClose} 一致 —— 反结单清空结单人，避免
+     * "已回收货中却还显示结单人"）。历史已结单的行保持 NULL，页面显示「—」。</p>
+     */
+    private void migrateMaterialOrderFinisher() {
+        addColumnIfMissing("outsource_material_order",
+                "finisher_id BIGINT NULL COMMENT '结单人ID（finish 时盖章，反结单清空）'");
+        addColumnIfMissing("outsource_material_order",
+                "finisher_name VARCHAR(50) NULL COMMENT '结单人姓名快照'");
     }
 
     /** 判断某表是否已有某列（幂等 DDL 用；启动阶段无租户上下文，多租户插件不会改写本查询） */

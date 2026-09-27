@@ -79,7 +79,8 @@ $madeCodes = @()
 function NewOrder([string]$tag, [string]$status, [string]$finish, [string]$auditor, [int]$received) {
   $code = 'MWO-VRO-' + $stamp + '-' + $tag
   $script:madeCodes += $code
-  SqlExec ("INSERT INTO outsource_material_order (code, supplier_id, order_type, status, remark, company_id, finish_time, auditor_id, auditor_name, deleted) VALUES ('" + $code + "', " + $supplierId + ", 'PURCHASE', '" + $status + "', 'verify-material-order-reopen fixture', 1, " + $finish + ", " + $auditor + ", " + $(if ($auditor -eq 'NULL') { 'NULL' } else { "'verify'" }) + ", 0);")
+  # 结单人（2026-09-27）：已结单的单都盖章「verify」，用于断言反结单会清空结单人
+  SqlExec ("INSERT INTO outsource_material_order (code, supplier_id, order_type, status, remark, company_id, finish_time, finisher_id, finisher_name, auditor_id, auditor_name, deleted) VALUES ('" + $code + "', " + $supplierId + ", 'PURCHASE', '" + $status + "', 'verify-material-order-reopen fixture', 1, " + $finish + ", 1, 'verify', " + $auditor + ", " + $(if ($auditor -eq 'NULL') { 'NULL' } else { "'verify'" }) + ", 0);")
   $oid = SqlOne ("SELECT id FROM outsource_material_order WHERE code='" + $code + "'")
   SqlExec ("INSERT INTO outsource_material_order_item (order_id, outsource_material_id, material_type_id, unit, order_quantity, received_quantity, company_id, deleted) VALUES (" + $oid + ", " + $matId + ", " + $matTypeId + ", 'PCS', 100, " + $received + ", 1, 0);")
   return $oid
@@ -94,6 +95,7 @@ $rA = ApiPut ("/outsource/material-order/" + $idA + "/reopen") $tok
 Ok ($rA.code -eq 200) ('A: reopen accepted (code=' + $rA.code + ')')
 Ok ((StateOf $idA) -like 'RECEIVING/*') ('A: status back to RECEIVING (' + (StateOf $idA) + ')')
 Ok ((SqlOne ("SELECT IFNULL(finish_time,'NULL') FROM outsource_material_order WHERE id=" + $idA)) -eq 'NULL') 'A: finish_time cleared (null is explicitly written, not silently skipped)'
+Ok ((SqlOne ("SELECT IFNULL(finisher_name,'NULL') FROM outsource_material_order WHERE id=" + $idA)) -eq 'NULL') 'A: 结单人 also cleared on reopen (no "back to RECEIVING but still shows who closed it")'
 
 Step 'B) FINISHED, audited but never received -> RECEIVING (must NOT silently un-audit)'
 $idB = NewOrder 'B' 'FINISHED' 'NOW()' '1' 0

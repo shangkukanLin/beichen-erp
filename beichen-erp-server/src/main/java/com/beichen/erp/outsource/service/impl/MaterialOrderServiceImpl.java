@@ -564,6 +564,9 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
                 MaterialOrder::getStatus, o.getStatus(), MaterialOrderStatus.FINISHED.getCode()))
             throw new BusinessException("订单状态已变化，请刷新后重试");
         MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.FINISHED.getCode()); upd.setFinishTime(LocalDateTime.now());
+        // 2026-09-27（用户口径「把结单人做了」）：结单是一次人工动作 ⇒ 盖章结单人（与审核时盖审核人同规格）
+        upd.setFinisherId(UserContext.getId());
+        upd.setFinisherName(UserContext.getName());
         orderMapper.updateById(upd);
     }
 
@@ -609,10 +612,14 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         if (!DocStatusGuard.claim(orderMapper, MaterialOrder::getId, id,
                 MaterialOrder::getStatus, MaterialOrderStatus.FINISHED.getCode(), target))
             throw new BusinessException("订单状态已变化，请刷新后重试");
-        // finish_time 必须**显式置 null**（MyBatis-Plus 的 updateById 会忽略 null ⇒ 清不掉）
+        // finish_time / 结单人 必须**显式置 null**（MyBatis-Plus 的 updateById 会忽略 null ⇒ 清不掉）
         orderMapper.update(null, new LambdaUpdateWrapper<MaterialOrder>()
                 .eq(MaterialOrder::getId, id)
-                .set(MaterialOrder::getFinishTime, null));
+                .set(MaterialOrder::getFinishTime, null)
+                // 结单人也一并清空：口径与成品侧反结单（reopenClose 清空报表结单人）一致，
+                // 不留"已回收货中却还显示结单人"的自相矛盾
+                .set(MaterialOrder::getFinisherId, null)
+                .set(MaterialOrder::getFinisherName, null));
         log.info("物料订单(ID={}) 已反结单，回到{}（曾被审核={}，有收货记录={}）", id, target, everAudited, hasReceipts);
     }
 
@@ -773,6 +780,9 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         m.put("deliveryDate", o.getDeliveryDate()); m.put("status", o.getStatus());
         m.put("remark", o.getRemark()); m.put("createTime", o.getCreateTime());
         m.put("finishTime", o.getFinishTime());
+        // 2026-09-27：结单人（「已结单」页签的「结单时间」列第二行小字 / 详情页「结单人」字段）
+        m.put("finisherId", o.getFinisherId());
+        m.put("finisherName", o.getFinisherName());
         m.put("attachUrl", o.getAttachUrl());
         if (o.getSupplierId() != null) { Supplier s = supplierMapper.selectById(o.getSupplierId()); m.put("supplierName", s != null ? s.getName() : ""); }
         if (o.getTargetWarehouseId() != null) {

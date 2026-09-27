@@ -41,6 +41,10 @@ public class MaterialOrder {
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
     private LocalDateTime finishTime;
+    /** 结单人（ID + 姓名快照）—— 2026-09-27 用户口径：结单要留痕"谁结的"；finish 盖章、reopen 清空 */
+    private Long finisherId;
+
+    private String finisherName;
     /** 逻辑删除标记：0未删除/1已删除 */
     private Integer deleted;
 

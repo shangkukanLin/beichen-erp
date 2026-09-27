@@ -139,7 +139,8 @@ onActivated(() => { loadData(); loadCounts() })
            合计 = 140+120+90+110+70+100+100+74+124 = **928** ✓
            2026-09-27（两个页签）：**收货中**页签 = 上表原样不动；**已结单**页签 = 「计划完成 100 / 状态 74」
            换成「结单日期 100」、操作 124→140（收货详细 + 结单报表两个 4 字按钮，实测需 ~136）
-           ⇒ 固定列合计 = 140+120+130+62+100+100+140 = 792，加弹性列「产品」min90 = **882** ≤ 948 ✓ -->
+           ⇒ 固定列合计 = 140+120+130+62+100+100+140 = 792，加弹性列「产品」min90 = **882** ≤ 948 ✓
+           2026-09-27（补结单人）：结单日期列 100→**110**（第二行放结单人小字，与物料侧同款）⇒ 合计 **892** ≤ 948 ✓ -->
       <el-table :data="tableData" border stripe v-loading="loading" style="width:100%" @row-click="goDetail">
         <el-table-column label="加工单号" width="140" show-overflow-tooltip>
           <template #default="{ row }"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button></template>
@@ -182,8 +183,14 @@ onActivated(() => { loadData(); loadCounts() })
         <el-table-column v-if="!isClosed()" label="计划完成" width="100">
           <template #default="{ row }">{{ $fmtDate(row.planEndDate) }}</template>
         </el-table-column>
-        <el-table-column v-if="isClosed()" label="结单日期" width="100">
-          <template #default="{ row }">{{ $fmtDate(row.actualEndDate) }}</template>
+        <!-- 结单日期 + 结单人（第二行小字）合并一列 —— 与物料收货列表的「订单类型并入订单号第二行」同款，
+             省下的列宽正好让出「结单人」而不破"一行不横滑"预算（列宽台账见上方注释）。
+             结单人取结单报表盖章人（close_report.auditor_name）；历史单/未盖章显示为 — -->
+        <el-table-column v-if="isClosed()" label="结单日期" width="110">
+          <template #default="{ row }">
+            <div>{{ $fmtDate(row.actualEndDate) }}</div>
+            <div style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ row.closeByName || '—' }}</div>
+          </template>
         </el-table-column>
         <el-table-column v-if="!isClosed()" label="状态" width="74" align="center">
           <template #default="{ row }"><el-tag :type="OutsourceOrderStatusTag[row.status] || 'info'" size="small">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag></template>

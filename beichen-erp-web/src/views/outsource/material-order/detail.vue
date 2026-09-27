@@ -14,7 +14,7 @@ import { useUnsavedGuard } from '@/composables/usePageBack'
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
 const loading = ref(true)
-const order = reactive({ id: 0, code: '', status: '', orderType: OrderType.PURCHASE as string, supplierId: undefined as any, supplierName: '', deliveryDate: '', createTime: '', finishTime: '', remark: '', attachUrl: '', targetWarehouseId: undefined as any, createByName: '', auditorName: '' })
+const order = reactive({ id: 0, code: '', status: '', orderType: OrderType.PURCHASE as string, supplierId: undefined as any, supplierName: '', deliveryDate: '', createTime: '', finishTime: '', finisherName: '', remark: '', attachUrl: '', targetWarehouseId: undefined as any, createByName: '', auditorName: '' })
 const items = ref<any[]>([])
 const activeTab = ref('detail')
 const saving = ref(false)
@@ -122,7 +122,7 @@ async function handleFinish() {
  * 与「结单」对称，纯状态回退（后端不动库存/应付）。
  */
 async function handleReopen() {
-  try { await ElMessageBox.confirm('确认反结单？订单将回到「收货中」（可继续收货；若该单从未审核过则回「待审核」），结单时间清空。', '反结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/reopen`); ElMessage.success('已反结单'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('确认反结单？订单将回到「收货中」（可继续收货；若该单从未审核过则回「待审核」），结单时间与结单人清空。', '反结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/reopen`); ElMessage.success('已反结单'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleCancel() {
   try { await ElMessageBox.confirm('确定作废？', '作废', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/cancel`); ElMessage.success('已作废'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
@@ -204,6 +204,8 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
             <!-- 下单日期（2026-09-25）：原列表列，因列表 10 列总宽超出容器、按下单日期最低价值移入详情页（信息不丢） -->
             <el-col :span="8"><el-form-item label="下单日期"><el-input :model-value="$fmtDate(order.createTime) || '-'" readonly class="readonly-input" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="结单时间"><el-input :model-value="$fmtDate(order.finishTime) || '-'" readonly class="readonly-input" /></el-form-item></el-col>
+            <!-- 结单人（2026-09-27 用户口径）：结单时盖章、反结单清空；历史已结单的单显示 — -->
+            <el-col :span="8"><el-form-item label="结单人"><el-input :model-value="order.finisherName || '—'" readonly class="readonly-input" /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="备注"><el-input v-model="order.remark" type="textarea" :rows="2" :disabled="order.status!==MaterialOrderStatus.PENDING" /></el-form-item></el-col>
           </el-row>
           <div style="display:flex;gap:8px;margin-top:12px">

@@ -1073,6 +1073,47 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 **已知未做**：「结单人」列 —— 物料侧历史数据**没有结单人**字段（`finish` 只写 `finish_time`），
 故本期两页只做「结单日期/时间」列（成品侧 `close_report.auditor_name` 其实有，要做需两侧口径先行）。
 
+## 5.27 补「结单人」+ 修 4a 存量失败（2026-09-27，用户口径「顺手修掉第 1 条，然后把结单人做了」）
+
+### ① 存量失败①修好：`ui-e2e-4a-material-order`
+根因两层，**第二层是关键教训**：
+- 表面：`/outsource/material-warehouse` 弹窗 label 是**「仓库名称」**，而脚本用的通用键 `lbl_name`="名称"
+  ⇒ `FillLabel` 返回 `NOLABEL:名称`、名字没填 → 后端回"请输入仓库名称" → 长期假红。
+- **真坑**：我第一版"加键 `lbl_wh_name`="仓库名称""**踩了重名** —— `lbl_wh_name` 早已存在且属于
+  **物料库存详情页的列头**（="所在仓库"）⇒ `ui-e2e-zh.json` 出现重复键，而 **JSON 解析取"后出现"的那条**
+  ⇒ 报 `NOLABEL:所在仓库`（离现场很远，极易误判成"页面改了"）。
+- 定稿：新增**全新键** `lbl_warehouse_name`="仓库名称"，4a 改用它 ⇒ **PASS 3/0**。
+- **教训（写 e2e 必做）**：改文案键前先 `grep` 该键是否已存在；`ui-e2e-zh.json` 现有 **9 处存量重复键**
+  （`lbl_return_wh`/`btn_new_account`/`btn_login`/`tab_bom_info`/`tab_mr_refund`/`tab_mr_repair`/
+  `lbl_return_target`/`lbl_src_wh_out`/`lbl_pay_reason`），其中 **`lbl_return_wh` 两处值不一致**
+  （"退回仓库" vs "退货仓库" ⇒ 生效"退货仓库"，`ui-e2e-p6d` 正是按后者用的）。**未清理**（超出本次范围，
+  但新增键务必避开这些名字；要清理得逐键核对生效值与被谁用）。
+
+### ② 结单人（两侧都做）
+- **物料侧（新字段）**：`outsource_material_order` 加 `finisher_id` / `finisher_name`
+  （新库走 `schema.sql`；存量库由 `DataInitializer.migrateMaterialOrderFinisher()` 幂等补列 ——
+  与 `create_by/auditor_id` 同款 `addColumnIfMissing`）。`finish()` 盖章 `UserContext`；
+  **`reopen()` 显式清空**（与 `finish_time` 同一个 `LambdaUpdateWrapper`，口径与成品侧 `reopenClose`
+  清空报表结单人一致，避免"已回收货中却还显示结单人"）；`buildOrderMap` 返回 `finisherId/finisherName`
+  ⇒ 列表与详情页都能拿。历史已结单的行 NULL ⇒ 页面显示「—」。
+- **成品侧（复用现成）**：结单人本来就在**结单报表**上（`close_report.auditor_name`，confirmClose 盖章、
+  reopenClose 清空）⇒ `pageOrders` 对 `status=FINISHED` 的页**批量回捞一次**（无 N+1）返回 `closeByName`。
+- **展示**：两页「已结单」页签的 **结单日期/结单时间列第二行小字**放结单人（与"订单类型并入订单号第二行"
+  同款做法）—— 这样只加 10px 列宽（100→110），仍守住"一行不横滑"预算（成品 892、物料 934 ≤ 948，
+  实测两页签 948/948 与 963/963）；物料订单**详情页**加「结单人」字段（与「结单时间」并列）。
+- **守卫**：`verify-material-order-reopen.ps1` fixture 带 `finisher_name='verify'`，A 断言反结单后**结单人也清空**；
+  `verify-delivery-menu.ps1` §⑩ fixture 同样盖章，并断言 ① 已结单页签**渲染出结单人**（第二行小字）
+  ② UI 反结单后结单人被清空。两守卫均 **PASS**。
+- ⚠️ 顺手修了本次自己引入的 TS 报错：`material-order/detail.vue` 的 `order` 是**显式类型字面量**，
+  加字段必须同时补进那个字面量（否则 `error TS2339: Property 'finisherName' does not exist`，
+  `web-check` 的 TS 段会红 —— 其余 5 个静态守卫仍全绿，容易只看守卫误判为通过）。
+
+### ③ 同批复核出的"重复跑必红"脚本（存量，非本次引入）
+- `ui-e2e-p4a-material-in`：目标单已被收满（300/300、300/300、200/200、300/300）⇒ 再造收货被**超交校验**拒
+  ⇒ 4 条 `receipt row found for MWO-...`。**会话开始时它 PASS、同会话第二次跑就红**（正是它自己把单喂满的）。
+- `ui-e2e-p4c-work-order`：同一根因（见 §5.26）。
+⇒ 这两个脚本属**单次可跑**型：再跑之前需重置其目标单（或改为"每次自建新单"）。**未改**（超出本次范围）。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
@@ -1107,6 +1148,11 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
       顺带踩中并修掉 `watch()` 立即求值导致的 **TDZ 整页白屏**（新增 `verify-detail-render.ps1` 补盲，
       16: 70/0、15: 55/0、14: 46/0、五守卫 + 详情页渲染守卫全 PASS）
 - [x] B12 加工退货/物料退货三级菜单 + 页签（2026-09-27，4+2 叶子；返回进度按来源单聚合 + 草稿作废 + 防超返；脚本层文案同步待办见 §5.13）
+- [x] B27 补「结单人」+ 修存量失败①（2026-09-27，用户「顺手修掉第 1 条，然后把结单人做了」）：
+      物料侧新字段 `finisher_id/finisher_name`（schema.sql + DataInitializer 幂等补列；finish 盖章 / reopen 显式清空）、
+      成品侧复用结单报表 auditor_name（批量回捞）；两页已结单页签「结单日期/时间」列第二行小字展示 +
+      物料订单详情加「结单人」字段；守卫断言"渲染 + 反结单清空"；4a 存量失败修好（新键 `lbl_warehouse_name`，
+      ⚠️ 踩过 JSON 重名坑：解析取后者）（详见 §5.27）
 - [x] B26 成品收货/物料收货 页签化（收货中｜已结单）+ 物料侧**反结单** + 状态文案统一「已结单」（2026-09-27，
       用户「先出方案」→「按推荐做，但是 E 也要做」）：成品接口 `status` 参数化（缺省 PRODUCING）+ 结单日期列；
       物料侧零后端改动；已结单页签只读（不放必被后端拒的「收货」）；E = `PUT .../reopen`（判据：曾审核或已收过货⇒收货中，

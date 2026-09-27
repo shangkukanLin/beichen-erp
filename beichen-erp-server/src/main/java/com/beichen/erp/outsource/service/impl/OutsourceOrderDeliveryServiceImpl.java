@@ -26,12 +26,14 @@ import com.beichen.erp.outsource.common.OutsourceOrderStatus;
 import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.outsource.common.QualityType;
 import com.beichen.erp.outsource.entity.BomSnapshot;
+import com.beichen.erp.outsource.entity.CloseReport;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceOrder;
 import com.beichen.erp.outsource.entity.OutsourceOrderDelivery;
 import com.beichen.erp.outsource.entity.OutsourceOrderMaterial;
 import com.beichen.erp.outsource.entity.OutsourceReturnBack;
 import com.beichen.erp.outsource.entity.OutsourceOrderProduct;
+import com.beichen.erp.outsource.mapper.CloseReportMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderDeliveryMapper;
 import com.beichen.erp.outsource.mapper.OutsourceOrderMapper;
@@ -108,6 +110,12 @@ public class OutsourceOrderDeliveryServiceImpl
     /** BOM 快照（2026-09-27）：无单加工退货建单时解析快照 + 台账/详情回显版本号 */
     private final com.beichen.erp.outsource.mapper.BomSnapshotMapper bomSnapshotMapper;
     private final com.beichen.erp.outsource.mapper.BomSnapshotItemMapper bomSnapshotItemMapper;
+    /**
+     * 结单人（2026-09-27 用户口径「把结单人做了」）：「成品收货 → 已结单」页签要显示"谁结的"。
+     * 加工单本身没有结单人字段 —— 结单 = 结单报表的一次审核动作，人在报表上
+     * （{@code close_report.auditor_name}，confirmClose 盖章、reopenClose 清空）⇒ 批量回捞，避免 N+1。
+     */
+    private final CloseReportMapper closeReportMapper;
 
     /** 来源类型：不关联加工单的加工退货（与实体 sourceType 注释里的 RETURN_DEFECT 一致） */
     private static final String SOURCE_RETURN_DEFECT = "RETURN_DEFECT";
@@ -193,6 +201,8 @@ public class OutsourceOrderDeliveryServiceImpl
         Map<Long, BigDecimal> deliveredMap = new HashMap<>();
         Map<Long, LocalDate> latestMap = new HashMap<>();
         Map<Long, String> nameMap = new HashMap<>();
+        // 结单人（2026-09-27）：只对「已结单」页签有意义 ⇒ 仅该状态批量回捞一次
+        Map<Long, String> closeByMap = new HashMap<>();
         Map<Long, String> skuMap = new HashMap<>();
         // 2026-09-25（用户口径「产品列可点进详情」）：逐项 {id,name,sku}，供前端渲染链接跳 /product/detail/:id
         Map<Long, List<Map<String, Object>>> productListMap = new HashMap<>();
@@ -232,6 +242,15 @@ public class OutsourceOrderDeliveryServiceImpl
             }
         }
 
+        // 结单人：结单报表上盖章的人（批量查，避免 N+1；报表不存在/未盖章时留空 ⇒ 前端显示 —）
+        if (!orderIds.isEmpty() && OutsourceOrderStatus.FINISHED.getCode().equals(st)) {
+            for (CloseReport r : closeReportMapper.selectList(
+                    new LambdaQueryWrapper<CloseReport>().in(CloseReport::getOrderId, orderIds))) {
+                if (r.getOrderId() != null && r.getAuditorName() != null && !r.getAuditorName().isBlank())
+                    closeByMap.put(r.getOrderId(), r.getAuditorName());
+            }
+        }
+
         // 加工厂名称（批量查，避免 N+1）
         Map<Long, String> factoryNameMap = new HashMap<>();
         List<Long> factoryIds = pageResult.getRecords().stream()
@@ -262,6 +281,8 @@ public class OutsourceOrderDeliveryServiceImpl
             // 2026-09-27：结单日期 = 加工单 actual_end_date（CloseReportServiceImpl.confirmClose 结单时写入）
             // —— 供「已结单」页签的「结单日期」列使用，与物料侧（material_order.finish_time）同口径
             m.put("actualEndDate", o.getActualEndDate());
+            // 结单人（同一列的第二行小字）：结单报表盖章人
+            m.put("closeByName", closeByMap.get(o.getId()));
             rows.add(m);
         }
 

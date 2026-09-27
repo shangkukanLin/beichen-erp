@@ -360,13 +360,16 @@ $roSup = SqlOne 'SELECT id FROM supplier ORDER BY id LIMIT 1'
 $roMat = SqlOne 'SELECT id FROM outsource_material ORDER BY id LIMIT 1'
 $roMt = SqlOne 'SELECT id FROM material_type ORDER BY id LIMIT 1'
 if ($roSup -ne '' -and $roMat -ne '' -and $roMt -ne '') {
-  SqlExec ("INSERT INTO outsource_material_order (code, supplier_id, order_type, status, remark, company_id, finish_time, auditor_id, auditor_name, deleted) VALUES ('" + $roCode + "', " + $roSup + ", 'PURCHASE', 'FINISHED', 'verify-delivery-menu reopen fixture', 1, NOW(), 1, 'verify', 0);")
+  # 结单人盖章 'verify' ⇒ 先断言它渲染在「结单时间」列，再断言反结单把它清空（2026-09-27 用户口径「把结单人做了」）
+  SqlExec ("INSERT INTO outsource_material_order (code, supplier_id, order_type, status, remark, company_id, finish_time, finisher_id, finisher_name, auditor_id, auditor_name, deleted) VALUES ('" + $roCode + "', " + $roSup + ", 'PURCHASE', 'FINISHED', 'verify-delivery-menu reopen fixture', 1, NOW(), 1, 'verify', 1, 'verify', 0);")
   $roId = SqlOne ("SELECT id FROM outsource_material_order WHERE code='" + $roCode + "'")
   SqlExec ("INSERT INTO outsource_material_order_item (order_id, outsource_material_id, material_type_id, unit, order_quantity, received_quantity, company_id, deleted) VALUES (" + $roId + ", " + $roMat + ", " + $roMt + ", 'PCS', 100, 0, 1, 0);")
   Write-Output ('reopen fixture: id=' + $roId + ' code=' + $roCode + '（已结单，无收货记录 ⇒ 反结单应回 收货中）')
   OpenFresh "$base/outsource/material-order/delivery"
   EvalJs "(()=>{const ts=[...document.querySelectorAll('.page-list .el-tabs__item')];const t=ts.find(x=>(x.innerText||'').indexOf('已结单')>=0);if(t)t.click();return 'ok'})()" | Out-Null
   Start-Sleep -Milliseconds 1600
+  $r10d = (EvalJs "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const tr=rows.find(x=>(x.innerText||'').indexOf('$roCode')>=0);if(!tr)return 'norow';return String((tr.innerText||'').indexOf('verify')>=0)})()") -replace '"', ''
+  if ($r10d.Trim() -eq 'true') { Ok '已结单页签的「结单时间」列渲染了结单人（第二行小字）' } else { Bad ('结单人未渲染：' + $r10d) }
   $r10a = (EvalJs "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const tr=rows.find(x=>(x.innerText||'').indexOf('$roCode')>=0);if(!tr)return 'norow';for(const b of tr.querySelectorAll('button')){if((b.innerText||'').trim()==='反结单'){b.click();return 'clicked'}}return 'nobtn'})()") -replace '"', ''
   $r10a = $r10a.Trim()
   if ($r10a -eq 'clicked') { Ok ('reopen fixture row found on the 已结单 TAB and 反结单 clicked (' + $r10a + ')') } else { Bad ('反结单 按钮未点到：' + $r10a) }
@@ -380,6 +383,8 @@ if ($roSup -ne '' -and $roMat -ne '' -and $roMt -ne '') {
   if ($roSt -eq 'RECEIVING') { Ok ('UI 反结单 put the order back to RECEIVING (got ' + $roSt + ')') } else { Bad ('UI 反结单 后状态应为 RECEIVING，实际 ' + $roSt) }
   $roFt = SqlOne ("SELECT IFNULL(finish_time,'NULL') FROM outsource_material_order WHERE id=" + $roId)
   if ($roFt -eq 'NULL') { Ok 'UI 反结单 cleared finish_time' } else { Bad ('UI 反结单 后 finish_time 未清空：' + $roFt) }
+  $roFn = SqlOne ("SELECT IFNULL(finisher_name,'NULL') FROM outsource_material_order WHERE id=" + $roId)
+  if ($roFn -eq 'NULL') { Ok 'UI 反结单 cleared 结单人（与成品侧反结单清空口径一致）' } else { Bad ('UI 反结单 后结单人未清空：' + $roFn) }
   $r10c = EvalJs "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')].map(x=>(x.innerText||'').replace(/\s+/g,' ').trim());return JSON.stringify({mine:rows.filter(x=>x.indexOf('$roCode')>=0).length,n:rows.length,rows:rows})})()" -replace '"', ''
   Write-Output ('  after-reopen table = ' + $r10c)
   if ($r10c -notmatch ("mine:1")) { Ok 'the reopened order left the 已结单 TAB (list refreshed)' } else { Bad '反结单 后该行仍在「已结单」页签（列表未刷新？）' }

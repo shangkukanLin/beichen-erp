@@ -10,7 +10,12 @@ Open '/outsource/material-warehouse' 2400
 ClearErrs | Out-Null
 Write-Host ('click new: ' + (ClickBtn 'btn_new'))
 Start-Sleep -Milliseconds 1200
-Write-Host ('fill name: ' + (FillLabel 'lbl_name' 'TEST-MAT-WH'))
+# 2026-09-27 修复（记忆 §5.26 存量失败①）：本页（自有物料仓管理）弹窗的标签是「仓库名称」，
+# 而通用键 lbl_name="名称" ⇒ FillLabel 找不到标签（NOLABEL:名称）、名字没填进去、后端回"请输入仓库名称"⇒ 长期假红。
+# 用本页专属键 lbl_warehouse_name="仓库名称"。
+# ⚠️ 不能复用 lbl_wh_name —— 那个键已属于「物料库存详情」的列头（="所在仓库"），
+#    重名会让 JSON 取到后出现的那条（实测直接踩坑：NOLABEL:所在仓库）。
+Write-Host ('fill name: ' + (FillLabel 'lbl_warehouse_name' 'TEST-MAT-WH'))
 Write-Host ('ok: ' + (ClickDialogBtn 'btn_ok'))
 Start-Sleep -Milliseconds 1800
 Write-Host ('msg=' + (Txt '.el-message'))
