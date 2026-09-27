@@ -120,6 +120,15 @@ public class ReturnOrderController {
         return R.ok(returnOrderService.returnPrefill(deliveryId, orderId));
     }
 
+    /**
+     * 登记维修返回的**实际用料候选集**（2026-09-27 用户口径）：只能从本单产品行的 BOM 快照里选，
+     * 前端下拉据此渲染（含来源产品与单套用量），提交时后端用同一份逻辑再校验一次。
+     */
+    @GetMapping("/{id}/repair-material-candidates")
+    public R<List<Map<String, Object>>> repairMaterialCandidates(@PathVariable Long id) {
+        return R.ok(returnOrderService.repairMaterialCandidates(id));
+    }
+
     /** 登记维修返回（维修退货单已审核后，工厂修好送回入库；登记即生效，不产生应付） */
     @PostMapping("/{id}/repair-return")
     public R<Void> repairReturn(@PathVariable Long id, @RequestBody Map<String, Object> body) {

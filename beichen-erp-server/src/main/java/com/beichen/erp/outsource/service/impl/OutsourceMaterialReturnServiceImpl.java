@@ -70,6 +70,8 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
     private final OutsourceMaterialReturnRepairMapper repairMapper;
     /** 维修返回实际用料（子物料补料）明细（2026-09-25 物料形态化） */
     private final OutsourceMaterialReturnRepairMaterialMapper repairMaterialMapper;
+    /** 物料子物料关系（维修退货「实际用料 = 送修物料的子物料」范围收口，2026-09-27 用户口径） */
+    private final com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper componentMapper;
     private final SupplierMapper supplierMapper;
     /** 2026-09-21（用户口径）：退货对象只能是辅料商/供应商，不能是供货商（成品商）⇒ 需要读类型关联 */
     private final SupplierTypeRefMapper supplierTypeRefMapper;
@@ -442,17 +444,25 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         }
         if (saved == 0) throw new BusinessException("请填写维修返回数量");
 
-        // P2-1 物料版：实际用料（子物料补料）多行——可超 BOM、允许扣负（供应商已实际耗用），按 FIFO 计价快照，
+        // P2-1 物料版：实际用料（子物料补料）多行——允许扣负（供应商已实际耗用），按 FIFO 计价快照，
         // Σ用料按返回量占比摊入回仓主物料（applyMaterial）；**无赔料应收**（与成品维修同口径）。
+        // 2026-09-27（用户口径）：**可选范围**收口到"送修物料的子物料"（数量仍可超 —— 原"可超 BOM"只针对数量）。
         if (supplierWhId != null && !savedRows.isEmpty()) {
             List<Map<String, Object>> mats = asListMap(body.get("materials"));
             if (!mats.isEmpty()) {
+                Set<Long> pool = new HashSet<>();
+                for (Map<String, Object> c : materialCandidatesOf(id)) pool.add((Long) c.get("materialId"));
                 BigDecimal totalMat = BigDecimal.ZERO;
                 Long anchorRecordId = savedRows.get(0).getId();
                 for (Map<String, Object> mat : mats) {
                     Long mid = toLong(mat.get("materialId"));
                     BigDecimal mq = toBigDecimal(mat.get("quantity"));
                     if (mid == null || mq == null || mq.compareTo(BigDecimal.ZERO) <= 0) continue;
+                    if (!pool.contains(mid))
+                        throw new BusinessException("实际用料只能从**送修物料的子物料**里选：「" + getMaterialName(mid)
+                                + "」不是本单送修物料的子物料"
+                                + (pool.isEmpty() ? "（本单送修物料都还没维护子物料，请先到「物料信息管理 → 子物料」维护）"
+                                                  : "（本单可选子物料 " + pool.size() + " 个）"));
                     warehouseStockService.changeMaterialStockAllowNegative(supplierWhId, mid, mq.negate(),
                             StockChangeType.MATERIAL_REPAIR_COMPONENT.getCode(), order.getCode(),
                             RelatedBillType.OUTSOURCE_MATERIAL_REPAIR, null, null, order.getId(),
@@ -486,6 +496,49 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                 }
             }
         }
+    }
+
+    /**
+     * 登记维修返回的**实际用料（补料）候选集**（2026-09-27 用户口径）：物料维修 ⇒ 用料只能从**送修物料自己的子物料**里选。
+     * <p>数据源 {@code outsource_material_component}（父 = 本单送修行物料）；同一子物料被多个父物料引用时合并用量，
+     * 并记下**来源物料**（前端按下拉分组显示）。不筛库存（沿用"可超用量、允许扣负"口径）。</p>
+     */
+    @Override
+    public List<Map<String, Object>> repairMaterialCandidates(Long id) {
+        OutsourceMaterialReturn o = returnMapper.selectById(id);
+        if (o == null) throw new BusinessException("退货单不存在");
+        return materialCandidatesOf(id);
+    }
+
+    /** 候选集实现（端点与提交范围校验**共用同一份逻辑**，避免"前端拦了后端没拦"） */
+    private List<Map<String, Object>> materialCandidatesOf(Long orderId) {
+        List<OutsourceMaterialReturnItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<OutsourceMaterialReturnItem>()
+                        .eq(OutsourceMaterialReturnItem::getReturnOrderId, orderId));
+        Map<Long, Map<String, Object>> map = new LinkedHashMap<>();
+        for (OutsourceMaterialReturnItem it : items) {
+            Long parentId = it.getMaterialId();
+            if (parentId == null) continue;
+            for (OutsourceMaterialComponent c : componentMapper.selectList(
+                    new LambdaQueryWrapper<OutsourceMaterialComponent>()
+                            .eq(OutsourceMaterialComponent::getParentMaterialId, parentId))) {
+                Long key = c.getChildMaterialId();
+                if (key == null) continue;
+                Map<String, Object> m = map.computeIfAbsent(key, k -> {
+                    Map<String, Object> x = new LinkedHashMap<>();
+                    x.put("materialId", k);
+                    x.put("materialName", getMaterialName(k));
+                    OutsourceMaterial om = outsourceMaterialMapper.selectById(k);
+                    x.put("unit", om != null ? om.getUnit() : null);
+                    x.put("quantity", BigDecimal.ZERO);
+                    x.put("fromMaterialId", parentId);
+                    x.put("fromMaterialName", getMaterialName(parentId));
+                    return x;
+                });
+                m.put("quantity", ((BigDecimal) m.get("quantity")).add(nz(c.getQuantity())));
+            }
+        }
+        return new ArrayList<>(map.values());
     }
 
     /**
@@ -669,16 +722,19 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                         .eq(OutsourceMaterialReturnRepairMaterial::getRepairRecordId, repairRecordId)
                         .orderByAsc(OutsourceMaterialReturnRepairMaterial::getId));
         Long supplierWhId = firstOutsourceWarehouseOf(order.getSupplierId());
+        // 2026-09-27 **修复（在厂行只减不还）**：恢复在厂 MATERIAL_REPAIR 行**与实际用料无关** ——
+        // 登记时 {@code allocateOnSiteRepair} 是**无条件**核销在厂行的（见 repairReturn），撤销必须无条件对回。
+        // 原实现把这行恢复关在 `if (!mats.isEmpty())` 里 ⇒ 没填实际用料的维修返回，撤销后在厂行**永久少记**，
+        // 该单后续「反审核」会以"在厂物料（维修送修）不足"被拒（实测：ui-e2e-15 S8 复现，2026-09-27）。
+        if (supplierWhId != null && row.getMaterialId() != null && row.getQuantity() != null
+                && row.getQuantity().compareTo(BigDecimal.ZERO) > 0) {
+            warehouseStockService.changeMaterialStock(supplierWhId, row.getMaterialId(), row.getQuantity(),
+                    StockChangeType.MATERIAL_REPAIR_STOCK_IN.getCode(), order.getCode(),
+                    RelatedBillType.OUTSOURCE_MATERIAL_REPAIR, null, null, order.getId(),
+                    WarehouseStock.FORM_MATERIAL_REPAIR);
+        }
         if (!mats.isEmpty()) {
             if (supplierWhId == null) throw new BusinessException("该供应商未配置委外仓库，无法撤销维修返回");
-            // 恢复在厂 MATERIAL_REPAIR 行（登记时核销了多少就恢复多少）
-            if (row.getMaterialId() != null && row.getQuantity() != null
-                    && row.getQuantity().compareTo(BigDecimal.ZERO) > 0) {
-                warehouseStockService.changeMaterialStock(supplierWhId, row.getMaterialId(), row.getQuantity(),
-                        StockChangeType.MATERIAL_REPAIR_STOCK_IN.getCode(), order.getCode(),
-                        RelatedBillType.OUTSOURCE_MATERIAL_REPAIR, null, null, order.getId(),
-                        WarehouseStock.FORM_MATERIAL_REPAIR);
-            }
             // 回补实际用料子物料
             for (OutsourceMaterialReturnRepairMaterial m : mats) {
                 warehouseStockService.changeMaterialStockAllowNegative(supplierWhId, m.getMaterialId(), m.getQuantity(),

@@ -830,16 +830,25 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         }
         if (saved == 0) throw new BusinessException("请填写维修返回数量");
 
-        // P2-1（2026-09-25）：实际用料多行（**可超 BOM**，不做 BOM 比对）从委外仓扣减（允许扣负——工厂已实际耗用）
+        // P2-1（2026-09-25）：实际用料多行从委外仓扣减（允许扣负——工厂已实际耗用）
         // + FIFO 计价快照 + 料款成本按行数量比例结转到回仓成品。**无赔料应收**（我方责任；charge* 维修费应付另行保持）。
+        // 2026-09-27（用户口径）：**可选范围**收口到本单产品行的 BOM（数量仍可超 BOM —— 原"可超 BOM、不做 BOM 比对"
+        // 只针对数量，本校验只管"是不是本单 BOM 里的料"）。
         if (factoryWhId != null) {
             List<Map<String, Object>> mats = asListMap(body.get("materials"));
             if (!mats.isEmpty()) {
+                Set<Long> pool = new HashSet<>();
+                for (Map<String, Object> c : materialCandidatesOf(id)) pool.add((Long) c.get("materialId"));
                 BigDecimal totalMat = BigDecimal.ZERO;
                 for (Map<String, Object> mat : mats) {
                     Long materialId = toLong(mat.get("materialId"));
                     BigDecimal mq = toBigDecimal(mat.get("quantity"));
                     if (materialId == null || mq == null || mq.compareTo(BigDecimal.ZERO) <= 0) continue;
+                    if (!pool.contains(materialId))
+                        throw new BusinessException("实际用料只能从本单产品的 BOM 里选：「"
+                                + getMaterialNameById(materialId) + "」不在本单 BOM 中"
+                                + (pool.isEmpty() ? "（本单产品行没有 BOM 快照，请先确认该产品的 BOM）"
+                                                  : "（本单 BOM 可选物料 " + pool.size() + " 个）"));
                     stockServiceChangeMaterial(factoryWhId, materialId, mq.negate(), order.getCode(), id);
                     BigDecimal unit = pricingService.fifoPriceWithFallback(materialId, mq);
                     BigDecimal amount = unit.multiply(mq).setScale(2, RoundingMode.HALF_UP);
@@ -1384,6 +1393,50 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
                 return x;
             });
             m.put("perSetQuantity", ((BigDecimal) m.get("perSetQuantity")).add(nz(it.getQuantityPerSet())));
+        }
+        return new ArrayList<>(map.values());
+    }
+
+    /**
+     * 登记维修返回的**实际用料候选集**（2026-09-27 用户口径）：成品维修 ⇒ 用料只能从本单产品行的 BOM 快照里选。
+     * <p>取**行上的** {@code bom_snapshot_id}（与"加工单当时按哪版 BOM 生产"同源，不用产品最新 BOM）；
+     * 同一物料被多个产品/多行引用时合并单套用量，并记下**来源产品**（前端按下拉分组显示）。</p>
+     * <p>候选集不筛库存（沿用"可超 BOM、允许扣负"口径）：只收口**可选范围**，不收口数量。</p>
+     */
+    @Override
+    public List<Map<String, Object>> repairMaterialCandidates(Long id) {
+        ReturnOrder o = returnOrderMapper.selectById(id);
+        if (o == null) throw new BusinessException("退货单不存在");
+        return materialCandidatesOf(id);
+    }
+
+    /** 候选集实现（端点与提交范围校验**共用同一份逻辑**，避免"前端拦了后端没拦"） */
+    private List<Map<String, Object>> materialCandidatesOf(Long orderId) {
+        List<OutsourceReturnOrderProduct> prods = returnProductMapper.selectList(
+                new LambdaQueryWrapper<OutsourceReturnOrderProduct>()
+                        .eq(OutsourceReturnOrderProduct::getReturnOrderId, orderId));
+        Map<Long, Map<String, Object>> map = new LinkedHashMap<>();
+        for (OutsourceReturnOrderProduct p : prods) {
+            if (p.getBomSnapshotId() == null) continue;
+            for (BomSnapshotItem it : bomSnapshotItemMapper.selectList(
+                    new LambdaQueryWrapper<BomSnapshotItem>().eq(BomSnapshotItem::getSnapshotId, p.getBomSnapshotId()))) {
+                Long key = it.getMaterialId();
+                if (key == null) continue;
+                Map<String, Object> m = map.computeIfAbsent(key, k -> {
+                    Map<String, Object> x = new LinkedHashMap<>();
+                    x.put("materialId", k);
+                    x.put("materialName", getMaterialNameById(k));
+                    x.put("materialTypeId", it.getMaterialTypeId());
+                    x.put("materialTypeName", getMaterialTypeNameById(it.getMaterialTypeId()));
+                    OutsourceMaterial om = outsourceMaterialMapper.selectById(k);
+                    x.put("unit", om != null ? om.getUnit() : it.getUnit());
+                    x.put("perSetQuantity", BigDecimal.ZERO);
+                    x.put("fromProductId", p.getProductId());
+                    x.put("fromProductName", p.getProductName());
+                    return x;
+                });
+                m.put("perSetQuantity", ((BigDecimal) m.get("perSetQuantity")).add(nz(it.getQuantityPerSet())));
+            }
         }
         return new ArrayList<>(map.values());
     }

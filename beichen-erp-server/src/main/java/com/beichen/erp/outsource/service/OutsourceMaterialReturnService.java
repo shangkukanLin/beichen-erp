@@ -49,6 +49,13 @@ public interface OutsourceMaterialReturnService {
      */
     void repairReturn(Long id, Map<String, Object> body);
 
+    /**
+     * 登记维修返回的**实际用料（补料）候选集**（2026-09-27 用户口径）：
+     * 物料维修 ⇒ 用料只能从**送修物料自己的子物料**（{@code outsource_material_component}）里选。
+     * <p>同一份逻辑供提交时的**范围校验**复用（前端限制 + 后端拦截成对）；不筛库存（数量仍可超）。</p>
+     */
+    List<Map<String, Object>> repairMaterialCandidates(Long id);
+
     /** 撤销维修返回（按记录ID：扣回已入库物料并删除该记录；关联订单已扣过的收料数同步回退） */
     void cancelRepairReturn(Long repairRecordId);
 

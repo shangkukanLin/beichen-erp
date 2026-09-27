@@ -70,10 +70,39 @@ const repairWarehouseId = ref<number>()
 const repairDate = ref(localDate())
 const repairRows = ref<any[]>([])
 // 2026-09-25 物料形态化：实际用料（子物料补料）多行——供应商维修主物料时实际耗用的子物料，
-// 登记时从该供应商委外仓按 FIFO 扣账（可超 BOM、允许扣负），成本结转到回仓主物料；无赔料应收
+// 登记时从该供应商委外仓按 FIFO 扣账（允许扣负），成本结转到回仓主物料；无赔料应收。
+// 2026-09-27（用户口径）：**可选范围**收口到"送修物料自己的子物料"（outsource_material_component）：
+// 候选由后端 /repair-material-candidates 一次给出（含来源物料 + 用量），提交时后端用**同一份逻辑**再校验；
+// **数量仍可超**（原"可超 BOM"只针对数量）。
 const repairMaterials = ref<Array<{ materialId: any, quantity: any }>>([])
-const fetchMaterialsForRepair = (kw: string) =>
-  request.get('/outsource/material/page', { params: { pageNum: 1, pageSize: 500, materialName: kw } })
+const repairCandidates = ref<any[]>([])
+/** 按**来源物料**分组 */
+const repairCandidateGroups = computed(() => {
+  const map = new Map<string, any>()
+  for (const c of repairCandidates.value) {
+    const label = `子物料·${c.fromMaterialName || ('#' + c.fromMaterialId)}`
+    if (!map.has(label)) map.set(label, { label, items: [] })
+    map.get(label).items.push(c)
+  }
+  return [...map.values()]
+})
+async function loadRepairCandidates() {
+  try {
+    repairCandidates.value = (await request.get<any, any>(`/outsource/material-return/${id}/repair-material-candidates`)) || []
+  } catch (e: any) { repairCandidates.value = []; console.warn('加载实际用料候选失败', e?.message || e) }
+}
+/** 选料后默认数量 = 子物料用量 × 该来源物料的本次返回数量（可改；不设上限） */
+function onPickRepairMaterial(m: any) {
+  const c = repairCandidates.value.find((x: any) => String(x.materialId) === String(m.materialId))
+  if (!c) return
+  const row = repairRows.value.find((r: any) => String(r.materialId) === String(c.fromMaterialId))
+  const n = row && Number(row.quantity) > 0 ? Number(row.quantity) : 1
+  m.quantity = Math.max(1, Math.round(Number(c.quantity || 0) * n))
+}
+/** 同一物料只允许一行 */
+function isRepairMaterialPicked(mid: any, cur: any) {
+  return repairMaterials.value.some((m: any) => m !== cur && String(m.materialId) === String(mid))
+}
 function addRepairMaterial() { repairMaterials.value.push({ materialId: undefined, quantity: undefined }) }
 function removeRepairMaterial(i: number) { repairMaterials.value.splice(i, 1) }
 
@@ -83,7 +112,7 @@ async function loadWarehouseOptions() {
 }
 
 /** 打开「登记维修返回」：按送修**物料**生成行，数量默认 = 送修 − 已返回（物料库存只有良品一档） */
-function openRepairReturn() {
+async function openRepairReturn() {
   const returned: Record<string, number> = {}
   for (const r of (detail.value.repairReturns || []) as any[]) {
     const k = String(r.materialId)
@@ -103,7 +132,9 @@ function openRepairReturn() {
   // 默认入库仓 = 该单出库源仓，可改（物料可能在委外仓或自有物料仓，故不限仓型）
   repairWarehouseId.value = detail.value.fromWarehouseId || undefined
   repairDate.value = localDate()
-  repairMaterials.value = [{ materialId: undefined, quantity: undefined }]
+  await loadRepairCandidates()
+  // 候选为空（送修物料没维护子物料）⇒ 不预置用料行，允许"只登记物料返回"
+  repairMaterials.value = repairCandidates.value.length > 0 ? [{ materialId: undefined, quantity: undefined }] : []
   repairVisible.value = true
 }
 
@@ -443,17 +474,33 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
           </template>
         </el-table-column>
       </el-table>
-      <!-- 2026-09-25 物料形态化：实际用料（子物料补料）——供应商维修实际耗用，登记时从其委外仓按 FIFO 扣账（可超 BOM），
-           成本结转到回仓主物料；补料到仓用「物料发料单」（我方物料仓 → 供应商委外仓），无赔料应收 -->
+      <!-- 2026-09-25 物料形态化：实际用料（子物料补料）——供应商维修实际耗用，登记时从其委外仓按 FIFO 扣账，
+           成本结转到回仓主物料；补料到仓用「物料发料单」（我方物料仓 → 供应商委外仓），无赔料应收。
+           2026-09-27（用户口径）：**只能从送修物料的子物料里选**（数量仍可超）。 -->
       <div style="margin-top:12px;font-weight:600;margin-bottom:6px">实际用料（子物料）
-        <span style="font-weight:400;font-size:var(--app-font-xs);color:var(--app-text-secondary)">（可超 BOM；从供应商委外仓扣账，无赔料应收。补料到仓请先开「物料发料单」）</span>
+        <span style="font-weight:400;font-size:var(--app-font-xs);color:var(--app-text-secondary)">（只能从送修物料的 <b>子物料</b> 里选；数量可超；从供应商委外仓扣账，无赔料应收。补料到仓请先开「物料发料单」）</span>
       </div>
+      <el-alert v-if="repairCandidates.length === 0" type="warning" :closable="false" show-icon style="margin-bottom:8px">
+        <template #title>
+          <span style="font-size:var(--app-font-xs);line-height:1.5">
+            本单送修物料还没有维护子物料 ⇒ 没有可选的补料。本次可以<b>只登记物料返回、不填用料</b>；
+            若确有补料，请先到「<b>物料信息管理 → 子物料</b>」维护该物料的子物料。
+          </span>
+        </template>
+      </el-alert>
       <div v-for="(m, i) in repairMaterials" :key="i" style="display:flex;gap:8px;margin-bottom:8px">
-        <RemoteSelect v-model="m.materialId" :fetch="fetchMaterialsForRepair" :label-key="(row:any)=>row.materialName" style="flex:1" placeholder="子物料" />
+        <el-select v-model="m.materialId" filterable clearable style="flex:1" placeholder="从送修物料的子物料里选"
+          :disabled="repairCandidates.length === 0" @change="onPickRepairMaterial(m)">
+          <el-option-group v-for="g in repairCandidateGroups" :key="g.label" :label="g.label">
+            <el-option v-for="c in g.items" :key="c.materialId" :value="c.materialId"
+              :disabled="isRepairMaterialPicked(c.materialId, m)"
+              :label="(c.materialName || ('#' + c.materialId)) + (c.unit ? ('（' + c.unit + '）') : '') + ' · 用量 ' + c.quantity" />
+          </el-option-group>
+        </el-select>
         <el-input v-model="m.quantity" type="number" placeholder="用量" style="width:150px" @change="m.quantity = Math.round(Number(m.quantity) || 0)" />
         <el-button type="danger" link @click="removeRepairMaterial(i)">删除</el-button>
       </div>
-      <el-button type="primary" link :icon="'Plus'" @click="addRepairMaterial">添加用料行</el-button>
+      <el-button type="primary" link :icon="'Plus'" :disabled="repairCandidates.length === 0" @click="addRepairMaterial">添加用料行</el-button>
       <template #footer>
         <el-button @click="repairVisible = false">取消</el-button>
         <el-button type="primary" :loading="repairSaving" @click="submitRepairReturn">确认登记（物料入库）</el-button>

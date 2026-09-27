@@ -58,6 +58,15 @@ public class OutsourceMaterialReturnController {
         return R.ok(returnService.page(pageNum, pageSize, code, supplierId, status, returnType, progress, statuses, linked));
     }
 
+    /**
+     * 登记维修返回的**实际用料（补料）候选集**（2026-09-27 用户口径）：只能从送修物料的**子物料**里选，
+     * 前端下拉据此渲染（含来源物料与用量），提交时后端用同一份逻辑再校验一次。
+     */
+    @GetMapping("/{id}/repair-material-candidates")
+    public R<List<Map<String, Object>>> repairMaterialCandidates(@PathVariable Long id) {
+        return R.ok(returnService.repairMaterialCandidates(id));
+    }
+
     /** 详情 */
     @GetMapping("/{id}")
     public R<Map<String, Object>> detail(@PathVariable Long id) {

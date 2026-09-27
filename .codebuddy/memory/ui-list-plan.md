@@ -593,6 +593,35 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 根目录那份的 `$wsRoot = $PSScriptRoot` ⇒ 扫的是工作区根，那里只有 48 个 ui-e2e 脚本（仓库内是 55 个）⇒
 **守卫会漏检**。⇒ **跑守卫一律用仓库内那份**；新守卫也只往仓库内那份加（否则不进版本控制）。
 
+## 5.16 维修返回「实际用料」范围收口（2026-09-27，用户口径）
+
+**用户要求**：登记维修退货时不能列出全部物料 —— **成品**要从**它的 BOM** 里选，**物料**要从**它的子物料**里选。
+**落地口径（已确认）**：硬限制 + 允许用料行留空；加工侧用**该产品行的 BOM 快照**（不用产品最新 BOM）；
+默认用量 = 用量 × 本次返回数量；**数量仍可超 BOM**（只收口"范围"，原"可超 BOM、不做比对"的数量口径不变）。
+
+| 侧 | 候选来源 | 端点 |
+|---|---|---|
+| 加工退货(REPAIR) 成品 | `outsource_return_order_product.bom_snapshot_id` → `bom_snapshot_item` | `GET /api/outsource/return-order/{id}/repair-material-candidates` |
+| 物料退货(REPAIR) 物料 | `outsource_material_component`（父=送修行物料） | `GET /api/outsource/material-return/{id}/repair-material-candidates` |
+
+- 候选**同一份逻辑**供端点与提交校验复用（`materialCandidatesOf`），落库校验不通过 → 明确报错（含物料名/原因/可选数）；
+- 前端两个弹窗：用料行改**本地候选下拉**（`el-option-group` 按来源分组：`BOM·产品X` / `子物料·物料Y`），
+  选料后默认数量 = 用量 × 该来源行的本次返回数量，同一物料只允许一行；池为空 → 警示「只登记返回、不填用料」+ 补救路径；
+- 实测（库内真数据）：加工侧 doc 265 → 3 个 BOM 候选；物料侧 doc 91 → 2 个子物料候选；
+- 守卫：`verify-repair-material-scope.ps1`（正例 + 负例：池外物料必被拒、且不产生任何库存/记录变动）**PASS**。
+
+## 5.17 ⚠️ 修掉「在厂行只减不还」（2026-09-27，本次验证时抓到）
+
+**现象**：`ui-e2e-15` S8 失败 —— 撤销维修返回后「反审核」被拒：`在厂物料（维修送修）不足：物料ID=61 当前在厂 1、需核销 3`。
+**根因**：`OutsourceMaterialReturnServiceImpl.cancelRepairReturn` 把「恢复在厂 `MATERIAL_REPAIR` 行」
+关在 `if (!mats.isEmpty())`（有实际用料）里，而登记侧 `allocateOnSiteRepair` 是**无条件**核销的
+⇒ **没填实际用料的维修返回，撤销后在厂行永久少记**，该单随后反审核必被拒（在厂账目 vs 单据永久不一致）。
+**加工侧无此问题**：它按 ALLOC 明细行恢复，而 `allocateOnSiteRepair` 每次都会写 ALLOC 行 ⇒ 不受 materials 影响。
+**修法**：把在厂行恢复移到 `if (!mats.isEmpty())` **之外**、无条件执行（`supplierWhId` 为 null 时跳过 ✓ 与登记同口径）。
+**验证**：新增 `verify-repair-cancel-onsite.ps1`（登记无用料 → 撤销 → 断言在厂行复原）**PASS**；
+`ui-e2e-15` 从 47/6 回到 **53/0** ✓；另修复 dev 库被漏减的在厂行（`warehouse_stock` id=244 手工修正），
+并把两次失败运行遗留的 AUDITED 单（110/111）反审核 + 作废收尾。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
@@ -610,5 +639,7 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 - [x] B11 表头「差 1px」全站排查（2026-09-26，58 页 11 处；守卫阈值收紧为 ≥1px + 新增 HDRTIGHT 余量判定；修正偏大 14px 的列宽档位家规）
 - [x] B13 物料侧按「关联物料订单 / 未关联」拆叶子（2026-09-27）→ 关联退料 / 无单退料 / 物料维修退货；
       `linked` 参数与加工侧同口径，两个扫描守卫的路由清单补齐全部叶子；nav 70 路由 0 bad、全站 63 表 0 offender
+- [x] B14 维修返回用料范围收口（2026-09-27，成品→BOM / 物料→子物料；两个候选端点 + 提交硬校验 + 前端分组下拉）+
+      顺带修掉「在厂行只减不还」（撤销对称性，新增 verify-repair-cancel-onsite）
 - [x] B12 加工退货/物料退货三级菜单 + 页签（2026-09-27，4+2 叶子；返回进度按来源单聚合 + 草稿作废 + 防超返；脚本层文案同步待办见 §5.13）
 

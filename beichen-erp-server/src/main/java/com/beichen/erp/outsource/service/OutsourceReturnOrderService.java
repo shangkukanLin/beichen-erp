@@ -55,6 +55,14 @@ public interface OutsourceReturnOrderService {
     List<Map<String, Object>> bomSnapshot(Long snapshotId);
 
     /**
+     * 登记维修返回的**实际用料候选集**（2026-09-27 用户口径）。
+     * <p>成品维修 ⇒ 用料**只能**从本单各产品行的 **BOM 快照**里选（用行上的 {@code bom_snapshot_id}，
+     * 与"加工单当时按哪版 BOM 生产"同源，不用产品最新 BOM）；同一物料被多处引用时合并单套用量。</p>
+     * <p>同一份逻辑供提交时的**范围校验**复用（前端限制 + 后端拦截成对）。</p>
+     */
+    List<Map<String, Object>> repairMaterialCandidates(Long id);
+
+    /**
      * 从「成品收货」发起退货时的预填数据（2026-09-17）。
      * @param deliveryId 交货记录ID（按记录退货，带出各规格「可退数量」）
      * @param orderId    加工单ID（列表行入口，仅带出工厂/出库仓/产品）
