@@ -297,6 +297,8 @@
   "tab_leaf_returned": "已返回完",
   "title_add_repair_order": "新增成品维修退货",
   "title_add_repair_material": "新增物料维修退货",
+  "tab_dash_analysis": "经营分析",
+  "tab_dash_analysis_old": "经营总览",
   "card_mw_items": "库存品项数（良品）",
   "card_mw_good": "库存总数量（良品）",
   "card_mw_onsite": "在厂维修物料",

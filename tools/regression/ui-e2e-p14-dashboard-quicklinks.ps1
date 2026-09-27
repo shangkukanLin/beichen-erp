@@ -99,4 +99,15 @@ Ok ($sumGood -eq (CardVal $exp.good)) 'material stock card == sum of per-warehou
 Ok ($sumOnsite -eq (CardVal $exp.onsite)) 'on-site repair card == sum of per-warehouse table (same scope)'
 Ok ((Errs) -eq '[]') 'still no JS/API errors after reading the material TAB'
 
+Step '3) the overview TAB is labelled after its menu'
+# 2026-09-27 (user request): the analysis TAB was labelled with its old name (see the *_old zh key) from when
+# it only held finance KPIs; it must carry the menu name (see the *_analysis zh key) instead.
+# Scoped to the dashboard TAB BAR on purpose: that menu name also exists in the sidebar as a catalog, so a
+# document-wide text search would pass even with the TAB still mislabelled.
+$tabs = (EvalJs "(function(){const h=document.querySelector('.dashboard > .el-tabs > .el-tabs__header');if(!h)return 'NOHEADER';return [...h.querySelectorAll('.el-tabs__item')].map(x=>(x.textContent||'').trim()).join('|')})()") -replace '"', ''
+$tabs = $tabs.Trim()
+Write-Host ('  dashboard tab bar: ' + $tabs)
+Ok ($tabs -like ('*' + (ZH 'tab_dash_analysis') + '*')) ('dashboard TAB labelled after its menu: ' + (ZH 'tab_dash_analysis'))
+Ok (-not ($tabs -like ('*' + (ZH 'tab_dash_analysis_old') + '*'))) ('old TAB label is gone: ' + (ZH 'tab_dash_analysis_old'))
+
 Summary 'dashboard quick links follow the current submenu order (P14)'

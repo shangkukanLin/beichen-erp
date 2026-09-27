@@ -207,7 +207,7 @@ ol {
 }
 
 /* ===================== KPI「悬停问号」公式说明（2026-09-15） ===================== */
-/* 使用方：首页「经营总览」dashboard/index.vue、经营分析「经营概览」analysis/overview.vue。
+/* 使用方：首页「经营分析」dashboard/index.vue、经营分析「经营概览」analysis/overview.vue。
    放在全局样式里，避免"只在某个页面 chunk 加载后才生效"导致另一页 tooltip 无样式。 */
 .kpi-help {
   margin-left: 4px;

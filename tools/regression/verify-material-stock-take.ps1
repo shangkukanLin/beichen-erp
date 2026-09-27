@@ -109,7 +109,7 @@ $tabBtns = Clean (EvalJs "[...document.querySelectorAll('#pane-materialWarehouse
 Write-Output ("物料仓库 TAB 快捷入口 = $tabBtns")
 if ($tabBtns -match '物料库存盘点') { Ok '首页物料仓库 TAB 含「物料库存盘点」入口' } else { Bad '首页物料仓库 TAB 缺少「物料库存盘点」入口' }
 $todo = Clean (EvalJs "[...document.querySelectorAll('.todo-card')].map(x=>x.innerText.replace(/\\s+/g,' ').trim()).join(' || ')")
-Write-Output ("经营总览 待办卡片 = $todo")
+Write-Output ("经营分析 待办卡片 = $todo")
 if ($todo -match '待盘点物料仓') { Ok '首页待办含「待盘点物料仓」（物料口径独立）' } else { Write-Host 'WARN 首页待办未出现「待盘点物料仓」（可能本月物料仓已全部盘点，非失败）' }
 
 # 2 成品页（仓名/期望值一律从 warehouse 表取）

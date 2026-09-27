@@ -3,13 +3,13 @@ import { ref, computed, onMounted, onActivated, onUnmounted, nextTick } from 'vu
 import * as echarts from 'echarts'
 import request from '@/utils/request'
 import StatRange from '@/components/StatRange.vue'
-// KPI 公式文案 + 净利率工具（2026-09-15 抽公共模块）：与首页「经营总览」共用一份
+// KPI 公式文案 + 净利率工具（2026-09-15 抽公共模块）：与首页「经营分析」共用一份
 import { KPI_FORMULA, YEAR_PREFIX, marginPct, fmtPct } from '@/utils/kpiFormula'
 
 /**
  * 经营概览（经营分析）：**统计区间** KPI + 本年累计 + 资金与往来健康度 + 区间趋势图。
  * 2026-09-15：接入统一「统计区间」组件；KPI 与趋势改为**所选区间**（数据源 /finance/analysis/overview-kpi，
- * 与首页「经营总览」完全同源、同口径）；健康度为**时点快照**，仍取 /finance/analysis/summary。
+ * 与首页「经营分析」完全同源、同口径）；健康度为**时点快照**，仍取 /finance/analysis/summary。
  * 2026-09-15（第二轮）：两排 KPI 各加第 5 张「净利率」= 净利润 ÷ 销售金额 × 100%（销售金额为 0 显示 "-"）；
  *   每张卡标签后加悬停问号显示计算公式；趋势图新增「净利率」折线并挂在**右侧独立 Y 轴**（百分比与金额量纲不同）。
  * 说明：区间可自定义后"环比"无统一定义，故按首页同样口径去掉了 ▲▼ 环比角标。
@@ -42,7 +42,7 @@ const rangePrefix = computed(() =>
   ov.value.range?.preset === 'custom' ? '所选区间' : (RANGE_LABELS[ov.value.range?.preset] || ''))
 
 // 悬停问号的公式文案 与 净利率工具函数（marginPct / fmtPct）已抽到公共模块
-// src/utils/kpiFormula.ts（2026-09-15，与首页「经营总览」共用一份，避免两页各自维护漏改）
+// src/utils/kpiFormula.ts（2026-09-15，与首页「经营分析」共用一份，避免两页各自维护漏改）
 
 const kpiCards = computed(() => {
   const k = ov.value.kpi || {}
@@ -85,7 +85,7 @@ const healthCards = computed(() => {
 })
 
 /**
- * 区间趋势图（与首页「经营总览」同一套口径与画法）：5 条 = 销售金额/采购支出/费用支出/净利润 + **净利率**；
+ * 区间趋势图（与首页「经营分析」同一套口径与画法）：5 条 = 销售金额/采购支出/费用支出/净利润 + **净利率**；
  * 粒度由后端决定（≤62 天按天、否则按月）；全为 0 时清图并显示占位。
  * 净利率是百分比、与金额量纲不同 → **单独一条右侧 Y 轴**（yAxisIndex:1）。
  */

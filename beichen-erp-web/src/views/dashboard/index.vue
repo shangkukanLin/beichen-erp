@@ -6,8 +6,9 @@
         <memo-panel />
       </el-tab-pane>
 
-      <!-- 经营总览（财务区块按 AnalysisOverview 菜单权限显隐） -->
-      <el-tab-pane label="经营总览" name="overview">
+      <!-- 经营分析（2026-09-27 用户要求：本 TAB 对应的菜单就是侧栏「经营分析」，故页签名与菜单名对齐；
+           原页签名为「经营总览」—— 那是它早先只放财务 KPI 时的称呼。财务区块仍按 AnalysisOverview 菜单权限显隐。 -->
+      <el-tab-pane label="经营分析" name="overview">
         <!-- 财务区块：仅「经营概览」（经营分析）菜单权限可见（数据安全） -->
         <!-- 2026-09-14 修死键：原 gate 用的 route_name「FinanceAnalysis」在最新菜单里**已不存在**
              （财务分析已拆成经营分析 AnalysisOverview/Profit/Cash/Tax/Sale/Customer），
@@ -540,13 +541,13 @@ const userStore = useUserStore()
 // 2026-09-15 用户要求：「备忘录」置于 TAB 首位，并作为进首页时的默认选中项（原为「经营总览」）
 const activeTab = ref('memo')
 
-// ==================== 经营总览 ====================
+// ==================== 经营分析（页签名，2026-09-27 由「经营总览」改） ====================
 const finSummary = ref<any>({})
 const pending = ref<DashboardPending>({})
 let trendChart: echarts.ECharts | null = null
 
 async function loadOverview() {
-  // 经营总览 KPI（第一排区间 4 指标 + 第二排固定本年）：不 await，与其余数据并行加载
+  // 经营分析 KPI（第一排区间 4 指标 + 第二排固定本年）：不 await，与其余数据并行加载
   loadOverviewKpi()
   // ⚠️ 2026-09-15 修死键：原为 hasMenu['FinanceAnalysis']，该 route_name 在最新菜单里**已不存在**
   // （模板里的同一处 2026-09-14 已修为 AnalysisOverview，但**这里的取数判断漏了**）→ 导致
@@ -561,7 +562,7 @@ async function loadOverview() {
 async function loadPending() { try { pending.value = await getDashboardPending() } catch {} }
 
 function fmtN(v?: any) { return v == null ? '0.00' : Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
-// ==================== 经营总览 KPI（2026-09-15 改造，用户确认口径） ====================
+// ==================== 经营分析 KPI（2026-09-15 改造，用户确认口径） ====================
 // 第一排 = **所选区间**的 4 个指标（销售金额 / 采购支出 / 费用支出 / 净利润）；
 // 第二排 = **固定本年**（1/1 ~ 今天）的同一批指标。
 // 数据源：后端 /finance/analysis/overview-kpi（与「经营分析 → 利润表」同一批按天聚合，口径完全一致）。
@@ -1180,7 +1181,7 @@ onUnmounted(() => { trendChart?.dispose(); trendChart = null })
 .section-card { margin-bottom: 16px; }
 .section-title { font-weight: 600; font-size: var(--app-font-base); }
 
-/* 经营总览 */
+/* 经营分析（页签名，2026-09-27 由「经营总览」改） */
 /* KPI 区间选择器（2026-09-15；选择器本体已收口到公共组件 StatRange） */
 .kpi-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
 .kpi-range { font-size: var(--app-font-base); color: var(--app-text-secondary); }

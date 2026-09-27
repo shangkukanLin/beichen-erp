@@ -2,7 +2,7 @@
  * 经营类 KPI 的「计算公式」文案（唯一来源，供卡片悬停问号展示）。
  *
  * 使用方：
- *   - 首页「经营总览」  `views/dashboard/index.vue`
+ *   - 首页「经营分析」  `views/dashboard/index.vue`
  *   - 经营分析「经营概览」 `views/analysis/overview.vue`
  *
  * ⚠️ 口径变更时**只改这里**，并以后端 `FinanceAnalysisServiceImpl` 的注释为准
