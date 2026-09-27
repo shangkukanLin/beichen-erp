@@ -197,7 +197,10 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/return-order/unlinked/add', name: 'OutsourceReturnOrderUnlinkedAdd', component: () => import('@/views/outsource/return-order/unlinked-add.vue'), meta: { title: '新增无单加工退货', requiresAuth: true, operate: true } },
       // 叶子名带对象前缀：加工侧/物料侧都有维修退货，同名会让顶部标签栏出现两个「维修退货」（不可区分）
       { path: 'outsource/return-order/repair', name: 'OutsourceReturnOrderRepair', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '成品维修退货', requiresAuth: true } },
-      { path: 'outsource/return-back', name: 'OutsourceReturnBack', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '加工返回单', requiresAuth: true } },
+      // 2026-09-27（用户口径「加工返回单多余了，和成品维修退货一样在详细里面登记返回就行」）：
+      // 该叶子已下线 —— 工厂把货修好送回改在**无单退货的记录详情页**点「登记返回」办。
+      // 旧地址保留为**重定向**（老书签/外部直链不会吃 403），与 dev/bom、outsource/delivery 同范式。
+      { path: 'outsource/return-back', redirect: '/outsource/return-order/unlinked' },
       { path: 'outsource/return-order/add', name: 'OutsourceReturnOrderAdd', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '新增委外加工退货', requiresAuth: true, operate: true } },
       // E4：草稿编辑（复用新增页，仅 DRAFT 可编辑）
       { path: 'outsource/return-order/edit/:id', name: 'OutsourceReturnOrderEdit', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '编辑委外加工退货', requiresAuth: true, operate: true } },

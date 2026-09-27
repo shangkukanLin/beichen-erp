@@ -302,11 +302,11 @@ public class DataInitializer implements ApplicationRunner {
             // id 412 复用 2026-09-16 下线的「交货信息」总览页旧行（**必须同时从下方 visible=0 名单移除**）
             {412L, 4L, "成品收货", "menu", "/outsource/order/delivery", "OutsourceOrderDelivery", "Van", 2},
             // 加工退货（2026-09-17 起排在物料类之前）。
-            // 2026-09-27 用户口径：二级改**目录** 419，把原「408 一个页面 3 页签」拆成 4 个三级叶子：
-            //  408 关联退货(GTH-) / 420 无单退货(GTW-) / 421 维修退货(REPAIR) / 422 加工返回单(ORB-)
+            // 2026-09-27 用户口径：二级改**目录** 419，把原「408 一个页面 3 页签」拆成 3 个三级叶子：
+            //  408 关联退货(GTH-) / 420 无单退货(GTW-) / 421 成品维修退货(REPAIR)
             //  ⚠️ 叶子 perms 必须"自带其 API 需要的码"（目录行的 perms 会被 initMenuPerms 强制清空）：
             //    加工退货台账接口在 /api/outsource/order-delivery 前缀下（408/420），
-            //    维修退货单与加工返回单在 /api/outsource/return-order 前缀下（421/422）—— 见 ApiPermGuard.RULES。
+            //    维修退货单在 /api/outsource/return-order 前缀下（421）—— 见 ApiPermGuard.RULES。
             //  ⚠️ 408/411 是**改父级**（4 → 419/423）而非新增行：syncMenus 的 upsert 会更新 parent_id，
             //    存量库的角色授权因此不丢（新叶子用下方"从旧叶子继承"的幂等补授覆盖）。
             {419L, 4L, "加工退货", "catalog", "", "", "CircleClose", 3},
@@ -315,7 +315,10 @@ public class DataInitializer implements ApplicationRunner {
             // 2026-09-27（由 ui-e2e-1-nav 的"标签栏不得同名"不变量抓出）：加工侧与物料侧都有维修退货 ⇒
             // 两处同名会让顶部**标签栏出现两个「维修退货」**（用户无从区分）⇒ 各自带对象前缀去重。
             {421L, 419L, "成品维修退货", "menu", "/outsource/return-order/repair", "OutsourceReturnOrderRepair", "Tools", 3},
-            {422L, 419L, "加工返回单", "menu", "/outsource/return-back", "OutsourceReturnBack", "Refresh", 4},
+            // 422「加工返回单」已于 2026-09-27 按用户要求下线（「多余了，改在详情里登记返回」）：
+            //   与 104/302/303/405/406/409/503/602/701 同范式 —— 不再 upsert（upsert 会把 visible 刷回 1），
+            //   改为在下方统一置 visible=0，**保留行与角色授权**便于回滚；
+            //   返回登记改在无单退货记录详情页（`/api/outsource/order-delivery/{id}/return-back`，登记即生效）。
             {402L, 4L, "物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 4},
             // 物料收货（2026-09-16 用户要求）：原「物料订单详情 → 交货管理」页签**移出**独立成菜单页 ——
             // 页面只列收货中（RECEIVING）的物料订单，点「收料」进详细页并自动弹出收货弹窗。
@@ -496,8 +499,8 @@ public class DataInitializer implements ApplicationRunner {
         try {
             // 注意：412 不在此列表 —— 2026-09-16 该 id 已被复用为「成品收货」菜单，
             // 若仍置 visible=0，会在上面的 upsert 之后把新菜单立刻隐藏（upsert 在前、置 0 在后）
-            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701, 406) AND visible = 1");
-            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 409 委外加工-供应商管理 / 602 销售业务-客户管理 / 503 进货业务-供货商管理 / 701 成品库存查询 / 406 物料收发单）", hidden);
+            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701, 406, 422) AND visible = 1");
+            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 409 委外加工-供应商管理 / 602 销售业务-客户管理 / 503 进货业务-供货商管理 / 701 成品库存查询 / 406 物料收发单 / 422 加工返回单）", hidden);
         } catch (Exception e) {
             log.warn("下线老菜单异常: {}", e.getMessage());
         }
@@ -690,7 +693,8 @@ public class DataInitializer implements ApplicationRunner {
                 {425L, "outsource:material-return"},
                 {420L, "outsource:order-delivery"},
                 {421L, "outsource:return-order"},
-                {422L, "outsource:return-order"},
+                // 422 已下线（visible=0）：不再写 perms —— 它原先的码与 421 相同，由 421 承担；
+                // 存量库该行的 perms 会残留但**不可见即不生效**（有效权限 = 可见菜单的 perms 集合）。
                 {424L, "outsource:material-return"},
                 {412L, "outsource:order-delivery"},
                 {415L, "outsource:material-delivery"},
@@ -842,8 +846,8 @@ public class DataInitializer implements ApplicationRunner {
                 101L, 102L, 103L, 105L, 106L, 107L, 108L,
                 301L, 304L, 305L,
                 401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 411L, 412L, 413L, 414L, 415L,
-                // 2026-09-27 三级菜单：419 加工退货目录 + 420/421/422 叶子；423 物料退货目录 + 424/425 叶子
-                419L, 420L, 421L, 422L, 423L, 424L, 425L,
+                // 2026-09-27 三级菜单：419 加工退货目录 + 420/421 叶子（422 加工返回单已下线）；423 物料退货目录 + 424/425 叶子
+                419L, 420L, 421L, 423L, 424L, 425L,
                 501L, 502L, 503L, 504L,
                 601L, 602L, 603L, 605L,
                 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L,
@@ -877,9 +881,9 @@ public class DataInitializer implements ApplicationRunner {
         assignRoleMenus("merchandiser", Arrays.asList(
                 1L, 2L, 4L, 5L, 6L, 7L, 11L,
                 401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 412L, 413L, 414L, 415L, 418L,
-                // 2026-09-27 三级菜单：跟单专员原有 408「加工退货」→ 补齐 419 目录 + 420/421/422 叶子
-                //（跟单专员本就没有 411「物料退货」，故不授 423/424）
-                419L, 420L, 421L, 422L,
+                // 2026-09-27 三级菜单：跟单专员原有 408「加工退货」→ 补齐 419 目录 + 420/421 叶子
+                //（422 加工返回单已下线；跟单专员本就没有 411「物料退货」，故不授 423/424）
+                419L, 420L, 421L,
                 101L, 105L, 107L, 108L, 502L, 504L, 602L, 702L, 705L, 707L));
         // 财务：财务管理（2 基础数据 = 101 产品管理的父目录）
         // 注：经营分析自 2026-09-15 起**仅管理者可见**，故不再授予 finance
@@ -938,18 +942,18 @@ public class DataInitializer implements ApplicationRunner {
         // 存量库幂等补授（2026-09-27）：加工退货/物料退货改三级菜单 —— 新增 419/420/421/422（加工侧）
         // 与 423/424（物料侧）。assignRoleMenus 只在角色「尚无任何菜单」时写入 ⇒ 存量库必须单独补授，
         // 否则已有角色只能看到目录、看不到叶子（buildTree 以已授权菜单为输入）。
-        // 授权范围**从原叶子继承**（最稳）：凡有 408 的角色 → 补 419/420/421/422；凡有 411 的角色 → 补 423/424/425。
+        // 授权范围**从原叶子继承**（最稳）：凡有 408 的角色 → 补 419/420/421；凡有 411 的角色 → 补 423/424/425。
         try {
             int granted = 0;
             granted += jdbcTemplate.update(
                     "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
-                    "SELECT rm.role_id, m.id FROM sys_role_menu rm JOIN sys_menu m ON m.id IN (419, 420, 421, 422) " +
+                    "SELECT rm.role_id, m.id FROM sys_role_menu rm JOIN sys_menu m ON m.id IN (419, 420, 421) " +
                     "WHERE rm.menu_id = 408");
             granted += jdbcTemplate.update(
                     "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
                     "SELECT rm.role_id, m.id FROM sys_role_menu rm JOIN sys_menu m ON m.id IN (423, 424, 425) " +
                     "WHERE rm.menu_id = 411");
-            if (granted > 0) log.info("已按旧叶子继承补授三级菜单 {} 条（419~422 随 408 / 423~425 随 411）", granted);
+            if (granted > 0) log.info("已按旧叶子继承补授三级菜单 {} 条（419~421 随 408 / 423~425 随 411）", granted);
         } catch (Exception e) {
             log.warn("补授三级退货菜单异常: {}", e.getMessage());
         }

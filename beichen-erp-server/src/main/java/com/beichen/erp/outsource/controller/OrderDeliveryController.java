@@ -22,6 +22,13 @@ public class OrderDeliveryController {
 
     private final OutsourceOrderDeliveryService deliveryService;
 
+    /**
+     * 2026-09-27（用户口径「加工返回单多余了，和成品维修退货一样在详情里登记返回就行」）：
+     * 返回登记的读写**挂在本前缀下**，权限随本页（`outsource:order-delivery`）——
+     * 否则只有台账页权限的角色点「登记返回」会被 ApiPermGuard 拦 403。
+     */
+    private final com.beichen.erp.outsource.service.OutsourceReturnBackService returnBackService;
+
     /** 获取某加工单的所有交货记录 */
     @GetMapping("/list/{orderId}")
     public R<List<OutsourceOrderDelivery>> listByOrder(@PathVariable Long orderId) {
@@ -164,6 +171,48 @@ public class OrderDeliveryController {
     @GetMapping("/{id}")
     public R<OutsourceOrderDelivery> getById(@PathVariable Long id) {
         return R.ok(deliveryService.getById(id));
+    }
+
+    // ==================== 加工返回（2026-09-27 用户口径）====================
+    // 「加工返回单」不再是独立单据/独立菜单叶子：改成在**无单加工退货详情页**登记返回，
+    // 交互与「成品维修退货」详情页的「登记维修返回」完全一致（登记即生效 + 逐条撤销 + 记录列表）。
+
+    /**
+     * **登记返回**：核销在厂成品（PRODUCT_DEFECT）+ 修好成品回我方仓 + 按实际用料扣委外仓料
+     * + 料款生成对加工厂的**赔料应收** + FIFO 成本结转。登记即生效（无草稿/审核两步）。
+     * <p>body: quantity / returnQualityType / inWarehouseId / returnDate / remark / items[]，其余
+     * （工厂/产品/在厂规格）由来源单自动带入并复核。</p>
+     */
+    @PostMapping("/{id}/return-back")
+    public R<com.beichen.erp.outsource.entity.OutsourceReturnBack> registerReturnBack(
+            @PathVariable Long id, @RequestBody Map<String, Object> body) {
+        return R.ok(returnBackService.register(id, body));
+    }
+
+    /** 撤销返回登记（库存/应收/成本对称逆回后删除该记录；与"登记维修返回"的逐条撤销同口径） */
+    @DeleteMapping("/return-back/{recordId}")
+    public R<Void> revokeReturnBack(@PathVariable Long recordId) {
+        returnBackService.revoke(recordId);
+        return R.ok();
+    }
+
+    /** 某无单加工退货单的返回记录（详情页「返回记录」表；已返回量 = Σ quantity） */
+    @GetMapping("/{id}/return-backs")
+    public R<List<Map<String, Object>>> returnBacks(@PathVariable Long id) {
+        return R.ok(returnBackService.listBySource(id));
+    }
+
+    /**
+     * 「实际用料」候选（按来源单 BOM 快照解析；池空 ⇒ 允许只登记返回、不填用料）—— 详情页登记弹窗用。
+     * <p>⚠️ 工厂/产品必须从来源单带出：候选解析的第二档兜底是「该产品在该工厂最近用过的快照」，
+     * 传 null 会直接落到空池（实测踩过：提交时报"用料明细不能为空"，而候选端点却返回空）。</p>
+     */
+    @GetMapping("/{id}/return-back-material-candidates")
+    public R<List<Map<String, Object>>> returnBackCandidates(@PathVariable Long id) {
+        OutsourceOrderDelivery src = deliveryService.getById(id);
+        return R.ok(returnBackService.materialCandidates(id,
+                src != null ? src.getFactoryId() : null,
+                src != null ? src.getProductMasterId() : null));
     }
 
     /**

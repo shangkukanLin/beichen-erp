@@ -28,10 +28,10 @@ WatchErrors
 $routes = @(
   # --- 2026-09-25 委外加工（样板批）---
   '/outsource/order',
-  # --- 2026-09-27 三级菜单：加工退货 4 叶子 + 物料退货 2 叶子（共用一个工作台组件，按 path 判叶子）---
+  # --- 2026-09-27 三级菜单：加工退货 3 叶子 + 物料退货 3 叶子（共用一个工作台组件，按 path 判叶子）---
+  #     （/outsource/return-back 加工返回单已下线，登记返回改在无单退货详情页）
   '/outsource/return-order/unlinked',
   '/outsource/return-order/repair',
-  '/outsource/return-back',
   '/outsource/material-return/repair',
   '/outsource/material-return/unlinked',
   '/outsource/order/delivery',

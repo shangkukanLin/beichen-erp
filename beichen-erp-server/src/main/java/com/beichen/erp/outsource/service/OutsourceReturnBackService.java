@@ -40,6 +40,22 @@ public interface OutsourceReturnBackService {
     /** 新建草稿（body: factoryId/productId/quantity/defectQualityType/returnQualityType/inWarehouseId/returnDate/remark/items[]） */
     OutsourceReturnBack create(Map<String, Object> body);
 
+    /**
+     * **登记返回**（2026-09-27 用户口径：加工返回单不再单独开单 ⇒ 改成在**无单加工退货详情页**登记）。
+     * <p>`create` + `audit` 合成一个事务：**登记即生效**（无草稿态、无二次审核）；来源单由路径决定并强制绑定
+     * （防止前端把返回登记到别的来源单上）。账务与老流程完全一致：核销在厂成品 + 修好成品回仓 + 实际用料扣料
+     * + 料款对加工厂的赔料应收 + FIFO 成本结转。</p>
+     *
+     * @return 生效后的返回记录（含单号 ORB-）
+     */
+    OutsourceReturnBack register(Long sourceDeliveryId, Map<String, Object> body);
+
+    /** 撤销登记（`unAudit` + `deleteDraft` 合成一个事务）：库存/应收/成本对称逆回后删除该记录 */
+    void revoke(Long id);
+
+    /** 某来源无单加工退货单的返回记录（详情页「返回记录」表 + 已返回/未返回进度） */
+    List<Map<String, Object>> listBySource(Long sourceDeliveryId);
+
     /** 修改草稿（整单替换明细） */
     void update(Long id, Map<String, Object> body);
 

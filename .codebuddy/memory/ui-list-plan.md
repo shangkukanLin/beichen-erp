@@ -741,6 +741,45 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 断言 `#app` 真的渲染（innerHTML > 1000，白屏是 0）**且**控制台无 `execution of setup function`。
 本次实测 PASS（并顺带断言了上面四类页头标题）。这类"整页白屏"以前对守卫完全隐形。
 
+## 5.20 「加工返回单」叶子下线 → 在无单退货详情页登记返回（2026-09-27，用户口径）
+
+**用户口径**：「加工退货的加工返回单多余了，和成品维修退货一样，在详细里面登记返回就行」。
+**结论**：A（`outsource_return_back`）与 B（`outsource_return_order_repair`）底层是**同范式两套实现**
+（核销在厂 + 回仓 + 实际用料 + FIFO 成本），A 只是多一条**对加工厂的赔料应收**（工厂责任）与
+**来源绑定**（`source_delivery_id` → 无单退货记录）。⇒ 不重写账务，只把**入口搬家 + 降级为登记记录**。
+
+### 落地（P1 入口搬家 / P2 下线叶子 / P3 脚本同步 一批完成）
+- **后端**（3 个原子端点，挂在 `/api/outsource/order-delivery` 前缀 ⇒ 权限随页面 `outsource:order-delivery`，
+  否则只有台账页权限的角色点「登记返回」会 403）：
+  `POST /{id}/return-back`（= create + audit 一个事务，**登记即生效**，来源单由路径强制绑定）、
+  `DELETE /return-back/{recordId}`（= unAudit + deleteDraft，逆回后删除）、
+  `GET /{id}/return-backs`（返回记录列表）、`GET /{id}/return-back-material-candidates`（用料候选）。
+  沿用 `OutsourceReturnBackService` 既有 `create/audit/unAudit/deleteDraft` + `rowOf()` 抽出行构造。
+- **前端**：`views/outsource/defect-return/detail.vue`（无单退货记录详情）加「登记返回」按钮 + 弹窗
+  （只读上下文 = 来源单/工厂/产品/在厂规格；表单 = 返回数量默认未返回量 / 回仓仓库 / 回仓品质默认沿用退货规格 /
+  实际用料候选 / 日期 / 备注）+「返回记录」表（逐条撤销）+ 顶部「返回进度 退货/已返回」——
+  与维修退货详情页的「登记维修返回」完全同构。`return-order/index.vue` 的 BACK 叶子整体删除
+  （列表/两个弹窗/~190 行脚本）、叶子类型去掉 `BACK`、台账文案改「在**本记录详情页**登记返回」。
+- **菜单/权限**：422「加工返回单」按本仓惯例**不再 upsert + 统一置 visible=0**（`DataInitializer` 的下线名单
+  与 admin/跟单专员授权、继承补授 SQL、perms 表全部去 422）；前端路由 `/outsource/return-back` →
+  **重定向** `/outsource/return-order/unlinked`（老书签不吃 403；页签身份随后者 ⇒ 不会产生同名重复页签）。
+- **数据**：`outsource_return_back` 表与 `/api/outsource/return-back/*` 端点**保留**（存量查询 + 回归脚本仍用）。
+
+### ⚠️ 顺带修掉一个**老缺陷**（登记即生效把它暴露了）
+`audit()` 里有一句**无条件**要求至少一行实际用料；而 `create()` 早已按「可选池为空 ⇒ 允许只登记返回、不填料」
+放过 ⇒ **空池草稿永远审核不了**（老流程是"保存草稿 + 去列表审核"两步，用户看到的是"审核失败"）。
+现 `audit()` 与 create/update 同口径（池非空才要求用料；池空则成本结转与料款自然按 0 走）。
+
+### 验证（全绿）
+`verify-return-back-in-detail.ps1`（新，自造自清：登记→在厂 −2 / 回仓 +2 / 赔料应收 UNSETTLED / 记录列表 +
+撤销后三腿还原、应收 CANCELLED 且金额清零、记录消失；负例：超返被拒 + 有单记录不能作来源）；
+`verify-detail-render.ps1` 纳入「加工退货详情」（新增的登记落点）；`verify-no-order-back-material-scope`、
+`verify-delivery-menu`、`ui-e2e-1-nav`（70 路由 bad=0 / dupTabBad=0，含旧地址重定向）、
+`ui-e2e-16` 70/0、`ui-e2e-15` 55/0、`ui-e2e-14` 46/0、五守卫 + 6 叶子列截断 0 offender。
+
+> 可选后续（用户没要求、本期未做）：① 若工厂也会把**有单**加工退货的货修好送回，需要一个新口径
+> （有单红冲不进在厂 ⇒ 无在厂行可核销）；② `outsource_return_back` 的草稿态字段/端点可再瘦身。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
@@ -765,6 +804,10 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 - [x] B16 在厂账对称性二修 + 存量对账（2026-09-27）：`onsite_leg` 打标（旧单撤销不再凭空 +qty，幂等补列）
       + 新增 `reconcile-repair-onsite.ps1`（只读报表 / `-Apply` 修正且留痕；dev 已清到 diffs=0）；
       守卫升级为双案例 + 负例对照（ui-e2e-15 53/0、ui-e2e-14 46/0、两个 verify 与五守卫全 PASS）
+- [x] B18「加工返回单」叶子下线 → 在无单退货详情页登记返回（2026-09-27，用户口径「多余了」）：
+      3 个原子端点（登记即生效/逐条撤销/返回记录）+ 详情页按钮/弹窗/进度；菜单 422 置 visible=0 + 路由重定向；
+      顺带修 `audit()` 无条件要求用料的老缺陷；新增 verify-return-back-in-detail；
+      16: 70/0、15: 55/0、14: 46/0、nav 70 路由 bad=0、守卫全 PASS（详见 §5.20）
 - [x] B17 维修退货页命名错位修复 + 页签名跟随类型（2026-09-27，用户实测：新增页/详情页叫"委外…退货"）：
       两张 add 页 onMounted 同步页签名、两张 detail 页按类型取页头/卡片头/页签名；**浏览器标签页标题**同口径
       （后缀收敛到 `@/utils/pageTitle.ts`，原先 5 处各拼一遍）⇒ 页头=页签=浏览器标题三处一致；

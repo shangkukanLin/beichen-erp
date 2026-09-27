@@ -27,7 +27,9 @@ $routes = @(
   '/dev/project', '/dev/material', '/dev/screen-model',
   '/outsource/order', '/outsource/order/delivery', '/outsource/material-order', '/outsource/material-order/delivery',
   '/outsource/return-order', '/outsource/material-return', '/supplier/manage',
-  # 2026-09-27 三级菜单叶子（加工退货 4 叶子 + 物料退货 3 叶子）
+  # 2026-09-27 三级菜单叶子（加工退货 3 叶子 + 物料退货 3 叶子）；
+  #   /outsource/return-back 已下线（2026-09-27 用户口径「加工返回单多余了」）⇒ 保留在此**专测旧地址重定向**
+  #   （重定向到 /outsource/return-order/unlinked，页签身份随后者 ⇒ 不会产生同名重复页签）
   '/outsource/return-order/unlinked', '/outsource/return-order/repair', '/outsource/return-back',
   '/outsource/material-return/unlinked', '/outsource/material-return/repair',
   '/inventory/purchase', '/inventory/purchase-return', '/inventory/purchase-exchange',

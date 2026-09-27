@@ -50,6 +50,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -105,34 +106,37 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         qw.orderByDesc(OutsourceReturnBack::getId);
         Page<OutsourceReturnBack> raw = backMapper.selectPage(new Page<>(pageNum, pageSize), qw);
         List<Map<String, Object>> rows = new ArrayList<>();
-        for (OutsourceReturnBack b : raw.getRecords()) {
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", b.getId());
-            m.put("code", b.getCode());
-            m.put("factoryId", b.getFactoryId());
-            m.put("factoryName", b.getFactoryName());
-            m.put("productId", b.getProductId());
-            m.put("productName", b.getProductName());
-            // 2026-09-27：来源无单加工退货单（存量未绑定的返回单为 null ⇒ 前端显示「未绑定」）
-            m.put("sourceDeliveryId", b.getSourceDeliveryId());
-            m.put("sourceCode", sourceCodeOf(b.getSourceDeliveryId()));
-            m.put("quantity", b.getQuantity());
-            m.put("defectQualityType", b.getDefectQualityType());
-            m.put("returnQualityType", b.getReturnQualityType());
-            m.put("inWarehouseId", b.getInWarehouseId());
-            m.put("inWarehouseName", warehouseNameOf(b.getInWarehouseId()));
-            m.put("outsourceWarehouseId", b.getOutsourceWarehouseId());
-            m.put("materialAmount", b.getMaterialAmount());
-            m.put("returnDate", b.getReturnDate());
-            m.put("status", b.getStatus());
-            m.put("auditorName", b.getAuditorName());
-            m.put("createByName", b.getCreateByName());
-            m.put("remark", b.getRemark());
-            rows.add(m);
-        }
+        for (OutsourceReturnBack b : raw.getRecords()) rows.add(rowOf(b));
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, raw.getTotal());
         result.setRecords(rows);
         return result;
+    }
+
+    /** 单行展示字段（列表与「来源单详情页的返回记录」共用，避免两处字段漂移） */
+    private Map<String, Object> rowOf(OutsourceReturnBack b) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", b.getId());
+        m.put("code", b.getCode());
+        m.put("factoryId", b.getFactoryId());
+        m.put("factoryName", b.getFactoryName());
+        m.put("productId", b.getProductId());
+        m.put("productName", b.getProductName());
+        // 2026-09-27：来源无单加工退货单（存量未绑定的返回单为 null ⇒ 前端显示「未绑定」）
+        m.put("sourceDeliveryId", b.getSourceDeliveryId());
+        m.put("sourceCode", sourceCodeOf(b.getSourceDeliveryId()));
+        m.put("quantity", b.getQuantity());
+        m.put("defectQualityType", b.getDefectQualityType());
+        m.put("returnQualityType", b.getReturnQualityType());
+        m.put("inWarehouseId", b.getInWarehouseId());
+        m.put("inWarehouseName", warehouseNameOf(b.getInWarehouseId()));
+        m.put("outsourceWarehouseId", b.getOutsourceWarehouseId());
+        m.put("materialAmount", b.getMaterialAmount());
+        m.put("returnDate", b.getReturnDate());
+        m.put("status", b.getStatus());
+        m.put("auditorName", b.getAuditorName());
+        m.put("createByName", b.getCreateByName());
+        m.put("remark", b.getRemark());
+        return m;
     }
 
     @Override
@@ -147,6 +151,51 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         return itemMapper.selectList(new LambdaQueryWrapper<OutsourceReturnBackItem>()
                 .eq(OutsourceReturnBackItem::getReturnBackId, id)
                 .orderByAsc(OutsourceReturnBackItem::getId));
+    }
+
+    // ==================== 登记 / 撤销（2026-09-27 用户口径：不再单独开「加工返回单」，改在无单退货详情页登记） ====================
+
+    /**
+     * 登记返回：`create` + `audit` 合成一个事务（**登记即生效**，与「成品维修退货」的登记维修返回同范式）。
+     * <p>来源单由**路径**决定并强制覆盖 body 里的同名字段 ⇒ 不可能把返回登记到别的来源单上。
+     * 校验（来源单必须已审核 / 无单 / 同厂同产品同规格 / 按单防超返）与账务全部复用既有实现，一行未改。</p>
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public OutsourceReturnBack register(Long sourceDeliveryId, Map<String, Object> body) {
+        if (sourceDeliveryId == null) throw new BusinessException("缺少来源无单加工退货单");
+        Map<String, Object> b = new HashMap<>();
+        if (body != null) b.putAll(body);
+        b.put("sourceDeliveryId", sourceDeliveryId);
+        OutsourceReturnBack rb = create(b);          // 校验：来源单/工厂/产品/规格/防超返 + 用料范围
+        audit(rb.getId());                           // 三腿落账：核销在厂 + 修好回仓 + 用料 + 赔料应收 + 成本结转
+        log.info("加工返回已登记(登记即生效): id={}, code={}, source={}", rb.getId(), rb.getCode(), sourceDeliveryId);
+        return getById(rb.getId());
+    }
+
+    /**
+     * 撤销登记：`unAudit`（三腿对称逆回 + 冲应收 + 成本反结转，成功后状态置回 DRAFT）+ `deleteDraft`（删除记录）。
+     * <p>两步同一事务：任一失败整体回滚，不会出现"库存回滚了记录还在"的中间态。</p>
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void revoke(Long id) {
+        getById(id);                                 // 不存在直接报错（避免静默成功）
+        unAudit(id);
+        deleteDraft(id);                             // unAudit 已把状态置回 DRAFT ⇒ deleteDraft 的"仅草稿"守卫可过
+        log.info("加工返回已撤销(逆回后删除): id={}", id);
+    }
+
+    @Override
+    public List<Map<String, Object>> listBySource(Long sourceDeliveryId) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        if (sourceDeliveryId == null) return rows;
+        for (OutsourceReturnBack b : backMapper.selectList(new LambdaQueryWrapper<OutsourceReturnBack>()
+                .eq(OutsourceReturnBack::getSourceDeliveryId, sourceDeliveryId)
+                .orderByDesc(OutsourceReturnBack::getId))) {
+            rows.add(rowOf(b));
+        }
+        return rows;
     }
 
     // ==================== 草稿 ====================
@@ -239,7 +288,11 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         String defectQt = nzQuality(b.getDefectQualityType());
         String returnQt = nzQuality(b.getReturnQualityType());
         List<OutsourceReturnBackItem> items = getItems(id);
-        if (items.isEmpty()) throw new BusinessException("用料明细不能为空（至少一行实际用料）");
+        // 2026-09-27（与 create/update 同口径，修一处**老缺陷**）：可选池为空（来源单没绑 BOM 快照 / 该产品没有 BOM）
+        // ⇒ 允许"只登记返回、不填用料"（④ 成本结转与料款会自然按 0 走）；池非空仍必须至少一行实际用料。
+        // 原先 audit 无条件要求用料 ⇒ create 放过的空池草稿**永远审核不了**（登记即生效后立刻暴露，实测命中）。
+        if (items.isEmpty() && !candidatesOf(b.getSourceDeliveryId(), b.getFactoryId(), b.getProductId()).isEmpty())
+            throw new BusinessException("用料明细不能为空（至少一行实际用料）");
 
         // 前置校验：在厂成品行（形态 PRODUCT_DEFECT）数量必须足够（审核间隙可能被其他单据扣走）
         BigDecimal onSite = stockService.getQuantity(factoryWhId, b.getProductId(), defectQt, WarehouseStock.FORM_PRODUCT_DEFECT);

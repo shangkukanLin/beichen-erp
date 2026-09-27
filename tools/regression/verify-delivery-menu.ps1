@@ -221,10 +221,12 @@ if ($d9) {
   else { Bad ('成品收货列表页操作不符（期望 收货+退货、无结单）：recv=' + $d9.recv + ' ret=' + $d9.ret + ' fin=' + $d9.fin) }
 }
 
-# ⑨b 加工退货 = **三级菜单 4 个叶子**（2026-09-27 用户口径：原「一页 3 页签」拆分）：
+# ⑨b 加工退货 = **三级菜单 3 个叶子**（2026-09-27 用户口径：原「一页 3 页签」拆分）：
 #     关联退货（GTH- 红冲台账，页签 有效单据｜已作废单据，**无新增入口** —— 退回在加工单收货详细页发起）
 #     无单退货（GTW- 台账，页签 待返回｜已返回完｜已作废，有「新增」，含「退货/已返回」进度列）
-#     维修退货 / 加工返回单（各自叶子，见 ui-e2e-16 / 后续脚本）
+#     成品维修退货（见 ui-e2e-16）
+#     ⚠️ 2026-09-27：「加工返回单」（原第 4 个叶子 422）已下线 —— 修好送回改在**无单退货记录详情页**登记返回
+#         （verify-return-back-in-detail.ps1 覆盖该链路）；旧地址 /outsource/return-back 重定向到无单退货
 #     业务口径（扣成品/还料/冲应付、可反审核、草稿作废）由 verify-no-order-return.ps1 覆盖（API 级）
 OpenFresh "$base/outsource/return-order"
 $d9b = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-table')].filter(x=>x.getClientRects().length>0)[0];const ths=t?[...t.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim()):[];const trs=t?[...t.querySelectorAll('.el-table__body tbody tr')]:[];const tr=trs.length?trs[0]:null;const ops=tr?[...tr.children][[...tr.children].length-1].innerText:'';const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim()),cols:ths,rows:trs.length,w:ths.includes('关联加工单'),qty:ths.includes('退货数量'),btn:b.filter(x=>x==='新增').length,det:b.includes('详情'),opsHasDet:(ops.indexOf('\u8BE6\u60C5')>=0)});})()" '关联退货叶子'

@@ -32,6 +32,8 @@ $cases = @(
   @{ note = 'outsource return-order DEFECT detail'; expect = '委外加工退货详情'; url = ('/outsource/return-order/detail/' + (SqlOne "SELECT id FROM outsource_return_order WHERE return_type='DEFECT' ORDER BY id DESC LIMIT 1")) },
   @{ note = 'material-return REPAIR detail'; expect = '物料维修退货详情'; url = ('/outsource/material-return/detail/' + (SqlOne "SELECT id FROM outsource_material_return WHERE return_type='REPAIR' ORDER BY id DESC LIMIT 1")) },
   @{ note = 'material-return REFUND detail'; expect = '委外物料退货详情'; url = ('/outsource/material-return/detail/' + (SqlOne "SELECT id FROM outsource_material_return WHERE return_type='REFUND' ORDER BY id DESC LIMIT 1")) },
+  # 2026-09-27：加工退货记录详情页现在承载「登记返回」（加工返回单叶子已下线）⇒ 必须纳入渲染守卫
+  @{ note = 'defect-return detail (登记返回 落点)'; expect = '加工退货详情'; url = ('/outsource/defect-return/detail/' + (SqlOne "SELECT id FROM outsource_order_delivery WHERE delivery_type='DEFECT_RETURN' ORDER BY id DESC LIMIT 1")) },
   @{ note = 'outsource order detail (untouched control)'; expect = '委外加工单详情'; url = ('/outsource/order/detail/' + (SqlOne "SELECT id FROM outsource_order ORDER BY id DESC LIMIT 1")) }
 )
 
