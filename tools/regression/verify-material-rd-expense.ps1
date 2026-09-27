@@ -1,12 +1,15 @@
 # verify-material-rd-expense.ps1 (2026-09-27, user request): the material page's "register an R&D expense" flow.
 #
-#   A) POST /api/outsource/material/{id}/rd-expense (amount + account) -> a DRAFT expense, type=RND,
-#      source=R&D_MATERIAL/materialId -- and the ACCOUNT BALANCE MUST NOT MOVE (money moves only when the
-#      expense is audited inside finance; the material page only files a draft).
+#   A) POST .../rd-expense with autoAudit=true (the "tick the box" path, 2026-09-27 user: "tick it -> auto-audit")
+#      -> an AUDITED expense (type=RND, source=RD_MATERIAL/materialId), an EXPENSE cashflow row written and the
+#      ACCOUNT BALANCE REDUCED by the amount.
+#   A2) the same call WITHOUT autoAudit (the list row action / after-the-fact path) -> still a DRAFT and the
+#      balance must NOT move (the two entry points deliberately differ: box ticked pays now, row action waits).
 #   B) NEGATIVE: a material created WITHOUT ticking the option must have NO R&D expense row
 #      (guards against a future "create it by default" regression).
-#   C) idempotent: calling again returns the SAME doc (existing=true) and does not create a second row.
-#   D) NEGATIVE: amount<=0 / missing account -> rejected, still exactly one row.
+#   C) idempotent: calling again returns the SAME doc (existing=true) and must NOT deduct a second time.
+#   D) NEGATIVE: amount<=0 / missing account / NOT ENOUGH BALANCE (the new failure mode auto-audit introduces)
+#      -> rejected, nothing left behind, balance untouched.
 #   E) PERMISSION (why the endpoint lives under the material prefix): a user whose ONLY menu is "material info"
 #      can call it (200), while the same user posting /api/finance/expense is denied (403).
 #
@@ -72,21 +75,35 @@ $stamp = (Get-Date).ToString('yyyyMMddHHmmss')
 $matIds = @()
 $expIds = @()
 
-Step 'A) ticked option -> DRAFT R&D expense, account balance untouched'
+Step 'A) ticked option (autoAudit=true) -> AUDITED R&D expense, account balance reduced'
 $bal0 = Balance $accountId
 $m1 = ApiPost '/outsource/material' $tok ('{"materialName":"RD-EXP-A-' + $stamp + '","materialTypeId":' + $matTypeId + ',"unit":"PCS","price":12.5,"supplierIds":""}')
 Ok ($m1.code -eq 200 -and $m1.data) ('fixture material A created (id=' + $m1.data + ')')
 if (-not $m1.data) { Write-Host 'RESULT FAIL verify-material-rd-expense (cannot create material)'; exit 1 }
 $matA = [string]$m1.data; $matIds += $matA
 
-$r1 = ApiPost ("/outsource/material/" + $matA + "/rd-expense") $tok ('{"amount":88.5,"accountId":' + $accountId + ',"expenseDate":"2026-09-27","remark":""}')
+$r1 = ApiPost ("/outsource/material/" + $matA + "/rd-expense") $tok ('{"amount":88.5,"accountId":' + $accountId + ',"expenseDate":"2026-09-27","remark":"","autoAudit":true}')
 Ok ($r1.code -eq 200 -and $r1.data.expenseId) ('A: rd-expense created (code=' + $r1.code + ', no=' + $r1.data.expenseNo + ')')
 $expIds += [string]$r1.data.expenseId
+Ok ($r1.data.audited -eq $true) 'A: response says audited=true (ticked path pays immediately)'
 $row = SqlRow ("SELECT status, expense_type, amount, IFNULL(source_bill_type,''), IFNULL(source_id,0), IFNULL(remark,'') FROM finance_expense WHERE id=" + $r1.data.expenseId)
 Info ('A row: ' + ($row -join ' | '))
-Ok ($row[0] -eq 'DRAFT' -and $row[1] -eq 'RND' -and [decimal]$row[2] -eq 88.5 -and $row[3] -eq 'RD_MATERIAL' -and [string]$row[4] -eq $matA) 'A: row = DRAFT / type RND / amount 88.5 / source RD_MATERIAL + materialId'
+Ok ($row[0] -eq 'AUDITED' -and $row[1] -eq 'RND' -and [decimal]$row[2] -eq 88.5 -and $row[3] -eq 'RD_MATERIAL' -and [string]$row[4] -eq $matA) 'A: row = AUDITED / type RND / amount 88.5 / source RD_MATERIAL + materialId'
 Ok (((SqlOne ("SELECT IFNULL(remark,'') FROM finance_expense WHERE id=" + $r1.data.expenseId)) -like ('*RD-EXP-A-' + $stamp + '*'))) 'A: remark defaults to include the material name'
-Ok ((Balance $accountId) -eq $bal0) ('A: account balance unchanged (' + $bal0 + ') -- money moves only on audit')
+$flow = SqlOne ("SELECT COUNT(*) FROM finance_cashflow WHERE related_bill_no='" + $r1.data.expenseNo + "' AND flow_type='EXPENSE'")
+Ok ($flow -eq '1') 'A: one EXPENSE cashflow row was written by the auto-audit'
+Ok ((Balance $accountId) -eq ($bal0 - 88.5)) ('A: balance reduced by the amount (' + $bal0 + ' -> ' + (Balance $accountId) + ')')
+
+Step 'A2) the row-action path (no autoAudit) still files a DRAFT and must not touch the balance'
+$balA2 = Balance $accountId
+$m3 = ApiPost '/outsource/material' $tok ('{"materialName":"RD-EXP-D-' + $stamp + '","materialTypeId":' + $matTypeId + ',"unit":"PCS","price":5,"supplierIds":""}')
+$matD = [string]$m3.data; $matIds += $matD
+Ok ($matD -ne '') ('fixture material D created (id=' + $matD + ')')
+$r0 = ApiPost ("/outsource/material/" + $matD + "/rd-expense") $tok ('{"amount":10,"accountId":' + $accountId + '}')
+Ok ($r0.code -eq 200 -and $r0.data.audited -eq $false) 'A2: response says audited=false'
+$expIds += [string]$r0.data.expenseId
+Ok ((SqlOne ("SELECT status FROM finance_expense WHERE id=" + $r0.data.expenseId)) -eq 'DRAFT') 'A2: row stays DRAFT (finance audits it later)'
+Ok ((Balance $accountId) -eq $balA2) 'A2: balance unchanged on the draft path'
 
 Step 'B) NEGATIVE: material created WITHOUT the option has no R&D expense'
 $m2 = ApiPost '/outsource/material' $tok ('{"materialName":"RD-EXP-B-' + $stamp + '","materialTypeId":' + $matTypeId + ',"unit":"PCS","price":3,"supplierIds":""}')
@@ -94,13 +111,16 @@ $matB = [string]$m2.data; $matIds += $matB
 Ok ($matB -ne '') ('fixture material B created (id=' + $matB + ')')
 Ok ((RdCount $matB) -eq 0) 'B: no expense row was created for the unticked material'
 
-Step 'C) idempotent: second call returns the same document'
-$r2 = ApiPost ("/outsource/material/" + $matA + "/rd-expense") $tok ('{"amount":999,"accountId":' + $accountId + '}')
+Step 'C) idempotent: a second ticked call returns the SAME doc and must not deduct again'
+$balC = Balance $accountId
+$r2 = ApiPost ("/outsource/material/" + $matA + "/rd-expense") $tok ('{"amount":999,"accountId":' + $accountId + ',"autoAudit":true}')
 Ok ($r2.code -eq 200 -and $r2.data.existing -eq $true) 'C: second call answered existing=true'
-Ok ([string]$r2.data.expenseNo -eq [string]$r1.data.expenseNo) 'C: same expense no returned'
+Ok ([string]$r2.data.expenseNo -eq [string]$r1.data.expenseNo) 'C: same expense no returned (the 999 amount is ignored)'
+Ok ($r2.data.audited -eq $true) 'C: still reported as audited'
 Ok ((RdCount $matA) -eq 1) 'C: still exactly one expense row for the material'
+Ok ((Balance $accountId) -eq $balC) 'C: no second deduction -- the repeat call left the balance alone'
 
-Step 'D) NEGATIVE: amount<=0 / missing account are rejected'
+Step 'D) NEGATIVE: amount<=0 / missing account / not enough balance are rejected'
 $r3 = ApiPost ("/outsource/material/" + $matA + "/rd-expense") $tok ('{"amount":0,"accountId":' + $accountId + '}')
 Info ('D amount=0 -> code=' + $r3.code + ' msg=' + $r3.msg)
 Ok ($r3.code -ne 200 -or $r3.data.existing -eq $true) 'D: amount=0 rejected (idempotent short-circuit also acceptable for an existing row)'
@@ -108,6 +128,13 @@ $r4 = ApiPost ("/outsource/material/" + $matB + "/rd-expense") $tok '{"amount":5
 Info ('D no account -> code=' + $r4.code + ' msg=' + $r4.msg)
 Ok ($r4.code -ne 200) 'D: missing account rejected'
 Ok ((RdCount $matB) -eq 0) 'D: still no expense row for material B'
+# the failure mode auto-audit introduces: the balance check now decides whether the material-page call succeeds
+$balD = Balance $accountId
+$r4b = ApiPost ("/outsource/material/" + $matB + "/rd-expense") $tok ('{"amount":99999999,"accountId":' + $accountId + ',"autoAudit":true}')
+Info ('D not enough balance -> code=' + $r4b.code + ' msg=' + $r4b.msg)
+Ok ($r4b.code -ne 200) 'D: auto-audit rejected when the balance cannot cover it'
+Ok ((RdCount $matB) -eq 0) 'D: nothing was left behind (create + audit rolled back together)'
+Ok ((Balance $accountId) -eq $balD) 'D: balance untouched by the failed auto-audit'
 
 Step 'E) PERMISSION: material-page user (no finance perms) can file it; the finance endpoint stays closed'
 $isoRole = 'perm_rd_iso'
@@ -125,8 +152,13 @@ $lg2 = Login $isoUser '123'
 Ok ($lg2.code -eq 200 -and $lg2.data.token) ('E: logged in as ' + $isoUser + ' (only menu = material info)')
 if ($lg2.data.token) {
   $isoTok = $lg2.data.token
-  $r5 = ApiPost ("/outsource/material/" + $matB + "/rd-expense") $isoTok ('{"amount":7.5,"accountId":' + $accountId + '}')
-  Ok ($r5.code -eq 200) ('E: material-page-only user CAN file the R&D expense (code=' + $r5.code + ')')
+  # fresh material C: the ticked path on a material-page-only account -- documents that the box (which now pays
+  # immediately) is NOT gated on any finance permission
+  $m4 = ApiPost '/outsource/material' $tok ('{"materialName":"RD-EXP-C-' + $stamp + '","materialTypeId":' + $matTypeId + ',"unit":"PCS","price":2,"supplierIds":""}')
+  $matC = [string]$m4.data; $matIds += $matC
+  Ok ($matC -ne '') ('fixture material C created (id=' + $matC + ')')
+  $r5 = ApiPost ("/outsource/material/" + $matC + "/rd-expense") $isoTok ('{"amount":7.5,"accountId":' + $accountId + ',"autoAudit":true}')
+  Ok ($r5.code -eq 200 -and $r5.data.audited -eq $true) ('E: material-page-only user CAN file it AND auto-audit it (code=' + $r5.code + ')')
   if ($r5.data.expenseId) { $expIds += [string]$r5.data.expenseId }
   $r6 = ApiPost '/finance/expense' $isoTok ('{"expenseType":"RND","amount":7.5,"accountId":' + $accountId + '}')
   Ok ($r6.code -ne 200) ('E: the same user is DENIED on /finance/expense (code=' + $r6.code + ') -- that is why the endpoint lives under the material prefix')
@@ -149,7 +181,13 @@ if ($normId -ne '' -and [int]$normId -gt $before) {
 }
 
 Step 'cleanup: fixture expenses + materials + temp role/user'
-foreach ($e in $expIds) { if ($e -and $e -ne '') { SqlExec ("DELETE FROM finance_expense WHERE id=" + $e + ";") } }
+foreach ($e in $expIds) {
+  if (-not $e -or $e -eq '') { continue }
+  # auto-audited fixture rows left an EXPENSE cashflow row behind (that row IS the balance) -> drop the flow first
+  $no = SqlOne ("SELECT IFNULL(expense_no,'') FROM finance_expense WHERE id=" + $e)
+  if ($no -ne '') { SqlExec ("DELETE FROM finance_cashflow WHERE related_bill_no='" + $no + "';") }
+  SqlExec ("DELETE FROM finance_expense WHERE id=" + $e + ";")
+}
 foreach ($m in $matIds) { if ($m -and $m -ne '') { ApiDelete ("/outsource/material/" + $m) $tok | Out-Null; SqlExec ("DELETE FROM outsource_material WHERE id=" + $m + ";") } }
 SqlExec ("DELETE FROM sys_user_role WHERE user_id IN (SELECT id FROM sys_user WHERE username='" + $isoUser + "');")
 SqlExec ("DELETE FROM sys_user WHERE username='" + $isoUser + "';")

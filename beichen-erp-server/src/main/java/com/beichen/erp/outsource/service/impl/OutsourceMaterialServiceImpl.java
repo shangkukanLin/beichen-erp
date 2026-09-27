@@ -1,6 +1,7 @@
 package com.beichen.erp.outsource.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.common.ExpenseSourceType;
@@ -52,15 +53,28 @@ public class OutsourceMaterialServiceImpl implements OutsourceMaterialService {
         OutsourceMaterial material = mapper.selectById(materialId);
         if (material == null) throw new BusinessException("物料不存在：" + materialId);
 
+        // 2026-09-27（用户口径「新增物料时勾选，需要自动审核」）：`autoAudit=true` ⇒ 建单后**立即审核** ——
+        // 当场写「费用支出」流水、扣支出账户余额（不再是草稿）。审核内含账户行锁 + 余额校验：
+        // 余额不足会抛错 ⇒ 本方法同事务**整体回滚**，不会留下"料建了、费用只落个草稿"的半成品。
+        boolean autoAudit = asBool(body == null ? null : body.get("autoAudit"));
         Map<String, Object> res = new LinkedHashMap<>();
         // 幂等：同一物料已有**未作废**的研发支出 ⇒ 回原单（作废后可重新登记）
         FinanceExpense exists = financeExpenseService.findActiveBySource(
                 ExpenseSourceType.RD_MATERIAL.getCode(), materialId);
         if (exists != null) {
-            log.info("物料 {} 已有未作废的研发支出 {}，本次不重复建单", materialId, exists.getExpenseNo());
+            boolean audited = DocStatus.AUDITED.getCode().equals(exists.getStatus());
+            // 勾选路径的语义是"登记即审核"：原单若还是草稿（例如先前用列表行操作补登记、尚未去财务审核）
+            // ⇒ 补审核，否则用户以为已扣款其实没扣。已审核的不再动账（幂等，绝不重复扣款）。
+            if (autoAudit && !audited) {
+                financeExpenseService.audit(exists.getId());
+                audited = true;
+                log.info("物料 {} 的研发支出 {} 原为草稿，本次按勾选口径补审核", materialId, exists.getExpenseNo());
+            }
             res.put("expenseId", exists.getId());
             res.put("expenseNo", exists.getExpenseNo());
             res.put("existing", true);
+            res.put("audited", audited);
+            log.info("物料 {} 已有未作废的研发支出 {}（状态 {}），本次不重复建单", materialId, exists.getExpenseNo(), exists.getStatus());
             return res;
         }
 
@@ -101,7 +115,24 @@ public class OutsourceMaterialServiceImpl implements OutsourceMaterialService {
         res.put("expenseId", e.getId());
         res.put("expenseNo", e.getExpenseNo());
         res.put("existing", false);
+        if (autoAudit) {
+            // 复用费用单 audit：原子抢状态 → 账户行锁 → 当前读余额校验 → 写「费用支出」流水 → 置 AUDITED。
+            // 失败（如余额不足）抛 BusinessException ⇒ 连同上面刚插入的草稿一起回滚（用户可换账户重试）。
+            financeExpenseService.audit(e.getId());
+            res.put("audited", true);
+        } else {
+            // 列表行操作「补登记」路径：仍落草稿，由财务在费用管理页审核（钱此时不动）
+            res.put("audited", false);
+        }
         return res;
+    }
+
+    /** body 里布尔值的容错解析（后端不信任前端：可能传 true / "true" / 1） */
+    private boolean asBool(Object v) {
+        if (v == null) return false;
+        if (v instanceof Boolean b) return b;
+        String s = String.valueOf(v).trim();
+        return "true".equalsIgnoreCase(s) || "1".equals(s);
     }
 
     @Override

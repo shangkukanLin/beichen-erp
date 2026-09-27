@@ -4,8 +4,9 @@
 #   A) the add-material dialog shows a "file an R&D expense" checkbox, and the amount/account fields stay hidden
 #      until it is ticked (the prompt must not clutter the normal flow);
 #   B) ticking it reveals the amount / account fields (+ date / remark), and the account dropdown is populated with a balance;
-#   C) submitting files the material AND the DRAFT expense in one go: success message says "draft + audit to pay",
-#      and the DB holds exactly one RND row sourced from that material;
+#   C) submitting files the material AND the expense in one go: the ticked box means AUTO-AUDIT (2026-09-27 user),
+#      so the success message says it was audited + paid, the DB holds exactly one AUDITED RND row sourced from
+#      that material, and the audit wrote the EXPENSE cashflow row (the balance);
 #   D) no JS / API errors along the way.
 #
 # Fixture is self-built / self-cleaned (temp material + its expense row), so the file is repeatable. PURE ASCII.
@@ -25,7 +26,7 @@ function SqlExec([string]$q) { & $MYSQL --default-character-set=utf8mb4 -uroot -
 $matName = 'RD-UI-' + (Get-Date).ToString('HHmmss')
 $bNew = B64 (ZH 'btn_new'); $bName = B64 (ZH 'lbl_material_name'); $bType = B64 (ZH 'lbl_material_type')
 $bCheck = B64 (ZH 'chk_material_rd'); $bAmount = B64 (ZH 'lbl_rd_amount'); $bAcct = B64 (ZH 'lbl_rd_account')
-$bOk = B64 (ZH 'btn_ok'); $bMsg = B64 (ZH 'msg_rd_draft')
+$bOk = B64 (ZH 'btn_ok'); $bMsg = B64 (ZH 'msg_rd_draft'); $bMsgAudited = B64 (ZH 'msg_rd_audited')
 # E reuses the same label as the form item ("R&D expense") for the list row action button
 $bRdBtn = B64 (ZH 'lbl_material_rd')
 
@@ -72,15 +73,18 @@ Ok ($r -eq 'OK') 'C: submitted'
 Start-Sleep -Milliseconds 2200
 # NOTE: assert on the whole page text instead of scraping the toast node -- join()/quoting of the toast node was
 # unreliable through the CLI pipe, while "is the hint on screen" is exactly what we care about.
-$msgOk = (EvalJs "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));return String((document.body.innerText||'').indexOf(T('$bMsg'))>=0)})()") -replace '"', ''
-Write-Host ('  draft hint on screen = ' + $msgOk.Trim())
-Ok ($msgOk.Trim() -eq 'true') 'C: success message says the expense is a DRAFT (audit before paying)'
+$msgOk = (EvalJs "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));return String((document.body.innerText||'').indexOf(T('$bMsgAudited'))>=0)})()") -replace '"', ''
+Write-Host ('  auto-audit hint on screen = ' + $msgOk.Trim())
+Ok ($msgOk.Trim() -eq 'true') 'C: success message says the expense was AUTO-AUDITED and paid'
 $matId = SqlOne "SELECT id FROM outsource_material WHERE material_name='$matName' ORDER BY id DESC LIMIT 1"
 Ok ($matId -ne '') ('C: material created (id=' + $matId + ')')
 $row = SqlOne ("SELECT CONCAT(status,'/',expense_type,'/',amount,'/',IFNULL(source_bill_type,''),'/',IFNULL(source_id,0)) FROM finance_expense WHERE source_bill_type='RD_MATERIAL' AND source_id=" + $matId + " ORDER BY id DESC LIMIT 1")
 Write-Host ('  expense row = ' + $row)
-Ok ($row -like ('DRAFT/RND/88.5*RD_MATERIAL/' + $matId)) 'C: one DRAFT RND expense sourced from that material'
+Ok ($row -like ('AUDITED/RND/88.5*RD_MATERIAL/' + $matId)) 'C: one AUDITED RND expense sourced from that material (ticked box pays immediately)'
 Ok ((SqlOne ("SELECT COUNT(*) FROM finance_expense WHERE source_bill_type='RD_MATERIAL' AND source_id=" + $matId)) -eq '1') 'C: exactly one expense row for the material'
+# the audit must have written the EXPENSE cashflow row -- that row is what actually reduces the account balance
+$expNo = SqlOne ("SELECT expense_no FROM finance_expense WHERE source_bill_type='RD_MATERIAL' AND source_id=" + $matId + " ORDER BY id DESC LIMIT 1")
+Ok ((SqlOne ("SELECT COUNT(*) FROM finance_cashflow WHERE related_bill_no='" + $expNo + "' AND flow_type='EXPENSE'")) -eq '1') 'C: the auto-audit wrote exactly one EXPENSE cashflow row'
 Ok ((Errs) -eq '[]') 'D: no JS/API errors during the flow'
 
 Write-Host '--- E) list row action: file it after the fact (the path for "forgot to tick it when creating")'
@@ -133,6 +137,8 @@ SqlExec ("DELETE FROM finance_expense WHERE source_bill_type='RD_MATERIAL' AND s
 SqlExec ("DELETE FROM outsource_material WHERE id=" + $matBId + ";")
 
 Write-Host '--- cleanup'
+# fixture C was auto-audited => it left an EXPENSE cashflow row (= the account balance) behind: drop flows first
+SqlExec ("DELETE FROM finance_cashflow WHERE related_bill_no='" + $expNo + "';")
 SqlExec ("DELETE FROM finance_expense WHERE source_bill_type='RD_MATERIAL' AND source_id=" + $matId + ";")
 SqlExec ("DELETE FROM outsource_material WHERE id=" + $matId + ";")
 Ok ((SqlOne ("SELECT COUNT(*) FROM outsource_material WHERE material_name='$matName'")) -eq '0') 'cleanup: fixture material removed'

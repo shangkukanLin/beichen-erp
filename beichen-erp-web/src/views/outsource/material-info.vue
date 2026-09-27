@@ -174,23 +174,32 @@ async function handleSubmit() {
 }
 
 /**
- * 为该物料登记一笔「研发支出」**草稿**费用单（2026-09-27 用户需求）。
+ * 为该物料登记一笔「研发支出」（2026-09-27 用户需求；同日追加：勾选路径**需要自动审核**）。
  *
  * <p>顺序：物料 + 子物料组成**已保存成功**后再调本接口 ⇒ 不会出现"费用建了、物料没建"；
- * 反过来（物料建了、费用失败）由下方 confirm 重试兜底，且后端按 source 幂等，重试不会重复建单。
- * 提示文案必须说清"草稿 + 审核后才扣款"，否则用户会以为钱已经付了。</p>
+ * 反过来（物料建了、费用失败）由下方 confirm 重试兜底，且后端按 source 幂等，重试不会重复扣款。</p>
+ *
+ * <p>`autoAudit: true` ⇒ 后端建单后立即审核：当场写「费用支出」资金流水并扣支出账户；
+ * **余额不足时后端整体回滚**（不留半成品），错误信息会带出当前余额，用户可换账户重试。
+ * 提示文案必须说清"已扣款"（或兜底时的"尚未审核"），否则用户对钱的状态会误判。</p>
  */
 async function createRdExpense(materialId: number) {
   const payload = {
     amount: rdForm.amount,
     accountId: rdForm.accountId,
     expenseDate: rdForm.expenseDate,
-    remark: rdForm.remark || ''
+    remark: rdForm.remark || '',
+    autoAudit: true
   }
   try {
     const r: any = await request.post(`/outsource/material/${materialId}/rd-expense`, payload)
     const no = r?.expenseNo ? `（单号 ${r.expenseNo}）` : ''
-    ElMessage.success(`${r?.existing ? '该物料已登记过研发支出' : '研发支出已存为草稿'}${no}，请在「财务管理 → 费用管理」审核后才扣款`)
+    if (r?.audited) {
+      ElMessage.success(`${r?.existing ? '该物料已登记过研发支出' : '研发支出已登记并自动审核'}${no}，已从支出账户扣款`)
+    } else {
+      // 兜底：勾选路径按口径一定要求审核，走到这里说明后端返回异常，明确提示"未扣款"避免误判
+      ElMessage.warning(`${r?.existing ? '该物料已登记过研发支出' : '研发支出已登记'}${no}，尚未扣款（请在「财务管理 → 费用管理」审核后扣款）`)
+    }
   } catch (e: any) {
     let retry = false
     try {
@@ -322,7 +331,7 @@ onMounted(async () => {
              ③ 落库是**草稿**费用单（类型=研发支出），资金要到「财务管理 → 费用管理」审核时才动。 -->
         <el-form-item v-if="!isEdit" label="研发支出">
           <el-checkbox v-model="rdForm.enabled" @change="onRdToggle">同时登记一笔研发支出</el-checkbox>
-          <div v-if="!rdForm.enabled" style="color:var(--app-text-secondary);font-size:var(--app-font-xs);line-height:1.5">勾选后填金额与支出账户，保存物料时一并登记一张「研发支出」草稿（审核后才扣款）</div>
+          <div v-if="!rdForm.enabled" style="color:var(--app-text-secondary);font-size:var(--app-font-xs);line-height:1.5">勾选后填金额与支出账户，保存物料时一并登记一张「研发支出」并<b>自动审核</b>（当场从该账户扣款；余额不足会提示，可换账户重试）</div>
         </el-form-item>
         <template v-if="!isEdit && rdForm.enabled">
           <el-form-item required label="支出金额"><el-input-number v-model="rdForm.amount" :precision="2" :min="0.01" controls-position="right" style="width:100%" placeholder="默认取物料单价" /></el-form-item>
