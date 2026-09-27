@@ -1,4 +1,4 @@
-# verify-material-order-reopen.ps1 (2026-09-27, user request "E 也要做"): 物料订单「反结单」能力。
+﻿# verify-material-order-reopen.ps1 (2026-09-27, user request "E 也要做"): 物料订单「反结单」能力。
 #
 # 背景：物料订单原先结单即**终态**（无 reopen），结错了只能新建单。本批新增
 #   PUT /api/outsource/material-order/{id}/reopen  ->  FINISHED => RECEIVING / PENDING，并清空 finish_time。

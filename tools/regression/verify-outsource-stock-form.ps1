@@ -1,4 +1,4 @@
-# verify-outsource-stock-form.ps1 (2026-09-28): 「库存读查询必须带 stock_form」的定向守卫。
+﻿# verify-outsource-stock-form.ps1 (2026-09-28): 「库存读查询必须带 stock_form」的定向守卫。
 #
 # 背景（当天实锤，用户侧现象＝"成品收货保存没反应"）：
 #   warehouse_stock 的**唯一键含 stock_form**
