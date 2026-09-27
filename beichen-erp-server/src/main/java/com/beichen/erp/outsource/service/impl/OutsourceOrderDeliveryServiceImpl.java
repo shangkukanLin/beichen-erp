@@ -165,17 +165,25 @@ public class OutsourceOrderDeliveryServiceImpl
     }
 
     /**
-     * 待交货订单列表（「成品收货」菜单页）：正在加工（PRODUCING）的加工单 + 交货进度聚合。
+     * 收货维度订单列表（「成品收货」页签）：加工单状态过滤 + 交货进度聚合。
      * <p>口径与 {@link #summary(Long)} 一致：已交数量只统计已审核（AUDITED）的交货记录（退不良为负数会自动扣减）；
      * 最近交货日期看全部交货记录（含草稿），与加工订单列表 latestDeliveryDate 口径保持一致。</p>
+     *
+     * <p>2026-09-27（用户口径「成品收货要有 收货中｜已结单 两个页签」）：`status` 参数化 ——
+     * 原先状态**写死 PRODUCING**，已结单的加工单在本页看不到；缺省仍 PRODUCING（老调用/老守卫行为不变），
+     * 已结单传 FINISHED。两条页签复用同一套聚合，只是状态不同。</p>
      */
     @Override
-    public Map<String, Object> pageProducingOrders(Integer pageNo, Integer size, String code) {
+    public Map<String, Object> pageOrders(Integer pageNo, Integer size, String code, String status) {
         Page<OutsourceOrder> pageParam = new Page<>(pageNo == null || pageNo < 1 ? 1 : pageNo,
                 size == null || size < 1 ? 10 : size);
+        // 白名单：只允许本页两个页签的状态，避免被传成任意状态（默认 PRODUCING = 原行为）
+        String st = (status != null && OutsourceOrderStatus.FINISHED.getCode().equals(status))
+                ? OutsourceOrderStatus.FINISHED.getCode()
+                : OutsourceOrderStatus.PRODUCING.getCode();
         Page<OutsourceOrder> pageResult = orderMapper.selectPage(pageParam,
                 new LambdaQueryWrapper<OutsourceOrder>()
-                        .eq(OutsourceOrder::getStatus, OutsourceOrderStatus.PRODUCING.getCode())
+                        .eq(OutsourceOrder::getStatus, st)
                         .like(code != null && !code.isBlank(), OutsourceOrder::getCode, code)
                         .orderByDesc(OutsourceOrder::getId));
 
@@ -251,6 +259,9 @@ public class OutsourceOrderDeliveryServiceImpl
             m.put("deliveredQuantity", delivered);
             m.put("remainingQuantity", total.subtract(delivered));
             m.put("latestDeliveryDate", latestMap.get(o.getId()));
+            // 2026-09-27：结单日期 = 加工单 actual_end_date（CloseReportServiceImpl.confirmClose 结单时写入）
+            // —— 供「已结单」页签的「结单日期」列使用，与物料侧（material_order.finish_time）同口径
+            m.put("actualEndDate", o.getActualEndDate());
             rows.add(m);
         }
 

@@ -13,8 +13,9 @@ public enum MaterialOrderStatus {
     PENDING("待审核"),
     /** 收货中：已审核，正在收货 */
     RECEIVING("收货中"),
-    /** 已完成：全部收货完成 */
-    FINISHED("已完成"),
+    /** 已结单：人工结单（2026-09-27 用户口径：状态文案由「已完成」统一为「已结单」；
+     * 2026-09-27 同批新增反结单能力，见 MaterialOrderService.reopen） */
+    FINISHED("已结单"),
     /** 已作废：订单被作废 */
     CANCELLED("已作废");
 

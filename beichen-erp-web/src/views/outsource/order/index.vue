@@ -81,7 +81,7 @@ onMounted(() => {
     <el-card shadow="never" class="table-card">
       <el-tabs v-model="activeTab" @tab-change="onTabChange">
         <el-tab-pane label="进行中" name="PENDING_PRODUCING" />
-        <el-tab-pane label="已完成" name="FINISHED" />
+        <el-tab-pane label="已结单" name="FINISHED" />
         <el-tab-pane label="已作废" name="CANCELLED" />
       </el-tabs>
 

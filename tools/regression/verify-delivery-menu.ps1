@@ -39,6 +39,13 @@ function OpenFresh($url) {
     agent-browser wait 3000
   }
 }
+function SqlOne([string]$q) {
+  $o = & $script:MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -e $q 2>$null
+  return ((@($o) | Select-Object -Skip 1) | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' } | Select-Object -First 1)
+}
+function SqlExec([string]$q) {
+  & $script:MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -e $q 2>$null | Out-Null
+}
 function ReadJson($js, $want) {
   $raw = (EvalJs $js).Replace('\"', '"')
   $m = [regex]::Match($raw, '\{.*\}')
@@ -73,10 +80,16 @@ OpenFresh "$base/outsource/order/delivery"
 $p2 = EvalJs "location.pathname"
 if ($p2 -match '/login' -or $p2 -match '403') { Bad ('/outsource/order/delivery 未正常进入，落在 ' + $p2) }
 else { Ok '/outsource/order/delivery 直达正常（非 403）' }
-$d2 = ReadJson "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const th=[...document.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim());const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({n:rows.length,prod:t.includes('生产中')==true,pending:t.includes('待审核')==true,prog:th.some(x=>x.indexOf('已收')>=0),cols:th,btn:t.includes('收货')==true,ret:b.some(x=>x==='退货'),cls:b.some(x=>x==='结单')});})()" '成品收货列表'
+$d2 = ReadJson "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const th=[...document.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim());const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({n:rows.length,prod:t.includes('生产中')==true,pending:t.includes('待审核')==true,prog:th.some(x=>x.indexOf('已收')>=0),cols:th,btn:t.includes('收货')==true,ret:b.some(x=>x==='退货'),cls:b.some(x=>x==='结单'),tabs:[...document.querySelectorAll('.page-list .el-tabs__item')].map(x=>x.innerText.trim())});})()" '成品收货列表'
 if ($d2) {
   Write-Output ('成品收货列表行数 = ' + $d2.n)
+  Write-Output ('成品收货 页签 = ' + ($d2.tabs -join ' | '))
   if ($d2.n -ge 1) { Ok ('列表有数据（' + $d2.n + ' 行）') } else { Bad '列表无数据（库中应有 1 张 PRODUCING 加工单）' }
+  # 2026-09-27（用户口径「成品收货应该有 收货中｜已结单 两个页签」）：页签存在且默认停「收货中」
+  $tabStr = ($d2.tabs -join ',')
+  if ($tabStr -match '收货中' -and $tabStr -match '已结单') { Ok '成品收货有两个页签：收货中｜已结单' }
+  else { Bad ('成品收货页签不符（期望 收货中/已结单）：' + $tabStr) }
+  if ($tabStr -match '^收货中') { Ok '默认页签 = 收货中（口径与"只列生产中"一致）' } else { Bad ('默认页签不是 收货中：' + $tabStr) }
   if ($d2.prog -and $d2.btn) { Ok '列表含「下单/已收/剩余」进度列与 收货 按钮' } else { Bad ('列表缺少进度列或 收货 按钮（当前列：' + ($d2.cols -join '/') + '）') }
   if ($d2.prod -and -not $d2.pending) { Ok '列表只含正在加工（生产中）的加工单' } else { Bad ('列表含非生产中订单：prod=' + $d2.prod + ' pending=' + $d2.pending) }
   # 2026-09-24（用户口径）：成品收货**列表**的行内操作是「收货 + 退货」，与物料收货列表口径一致；
@@ -142,10 +155,16 @@ OpenFresh "$base/outsource/material-order/delivery"
 $p6 = EvalJs "location.pathname"
 if ($p6 -match '/login' -or $p6 -match '403') { Bad ('/outsource/material-order/delivery 未正常进入，落在 ' + $p6) }
 else { Ok '/outsource/material-order/delivery 直达正常（非 403）' }
-$d6 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({title:(t.includes('物料收货（收货中的物料订单）')==true),err:(t.includes('加载待收货订单失败')==true),rows:document.querySelectorAll('.el-table__body tbody tr').length,oldrecv:(t.includes('收料')==true),btn:b.some(x=>x==='收料')});})()" '物料收货列表'
+$d6 = ReadJson "(()=>{const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({title:(t.includes('物料收货')==true),err:(t.includes('加载待收货订单失败')==true),rows:document.querySelectorAll('.el-table__body tbody tr').length,oldrecv:(t.includes('收料')==true),btn:b.some(x=>x==='收料'),tabs:[...document.querySelectorAll('.page-list .el-tabs__item')].map(x=>x.innerText.trim())});})()" '物料收货列表'
 if ($d6) {
+  # 2026-09-27：页签化后标题由「物料收货（收货中的物料订单）」简化为「物料收货」（状态由页签表达）
   if ($d6.title) { Ok '物料收货页标题渲染正常' } else { Bad '物料收货页标题未渲染（页面可能报错）' }
   if (-not $d6.err) { Ok '物料收货页无加载错误提示' } else { Bad '物料收货页出现「加载待收货订单失败」' }
+  $tabStr6 = ($d6.tabs -join ',')
+  Write-Output ('物料收货 页签 = ' + $tabStr6)
+  if ($tabStr6 -match '收货中' -and $tabStr6 -match '已结单') { Ok '物料收货有两个页签：收货中｜已结单' }
+  else { Bad ('物料收货页签不符（期望 收货中/已结单）：' + $tabStr6) }
+  if ($tabStr6 -match '^收货中') { Ok '默认页签 = 收货中（口径与"只列收货中"一致）' } else { Bad ('默认页签不是 收货中：' + $tabStr6) }
   Write-Output ('物料收货列表行数 = ' + $d6.rows + '（库中可能 0 行"收货中"订单 ⇒ 0 行属正常）')
   # 2026-09-21（用户口径「操作文案从收料/退料改成收货/退货」）：行内按钮「收料」必须已改为「收货」。
   # ⚠️ 库里可能没有"收货中"的物料订单（0 行 ⇒ 按钮不渲染）⇒ 这条是**负向守卫**（防改回去），0 行时天然通过。
@@ -168,12 +187,21 @@ if ($d7) {
 }
 
 # ⑧ 两个收货列表「一行显示完、不横向滑动」（2026-09-16 用户要求）
+#    2026-09-27（两个页签）：**两个页签各自都要测** —— 已结单页签的列集不同（加 结单日期/时间、操作列更宽），
+#    只测默认页签会把新页签的溢出漏掉（本页列宽合计常年贴着内容区 948px）。
 foreach ($u in @("$base/outsource/order/delivery", "$base/outsource/material-order/delivery")) {
   OpenFresh $u
-  $d8 = ReadJson "(()=>{const t=document.querySelector('.el-table');const ths=[...document.querySelectorAll('.el-table__header th')];const sum=ths.reduce((s,x)=>s+x.offsetWidth,0);const box=t?t.clientWidth:0;const sc=t?t.classList.contains('el-table--scrollable-x'):true;const w=document.querySelector('.el-table__body-wrapper .el-scrollbar__wrap');return JSON.stringify({sum:sum,box:box,sc:sc,wrapOver:(w?w.scrollWidth>w.clientWidth:true),cols:ths.length});})()" '表格宽度'
-  if ($d8) {
-    Write-Output ($u + ' 列数=' + $d8.cols + ' 列宽合计=' + $d8.sum + ' 容器=' + $d8.box)
-    if (-not $d8.sc -and -not $d8.wrapOver) { Ok ($u + ' 无横向滚动（一行显示完）') } else { Bad ($u + ' 出现横向滚动条') }
+  foreach ($tab in @('收货中', '已结单')) {
+    if ($tab -ne '收货中') {
+      $c8 = EvalJs "(()=>{const ts=[...document.querySelectorAll('.page-list .el-tabs__item')];const t=ts.find(x=>(x.innerText||'').indexOf('$tab')>=0);if(!t)return 'no-tab';t.click();return 'clicked'})()"
+      Write-Output ($u + ' 切页签 → ' + $tab + ' = ' + $c8)
+      Start-Sleep -Milliseconds 1500
+    }
+    $d8 = ReadJson "(()=>{const t=document.querySelector('.el-table');const ths=[...document.querySelectorAll('.el-table__header th')];const sum=ths.reduce((s,x)=>s+x.offsetWidth,0);const box=t?t.clientWidth:0;const sc=t?t.classList.contains('el-table--scrollable-x'):true;const w=document.querySelector('.el-table__body-wrapper .el-scrollbar__wrap');return JSON.stringify({sum:sum,box:box,sc:sc,wrapOver:(w?w.scrollWidth>w.clientWidth:true),cols:ths.length});})()" '表格宽度'
+    if ($d8) {
+      Write-Output ($u + ' [' + $tab + '] 列数=' + $d8.cols + ' 列宽合计=' + $d8.sum + ' 容器=' + $d8.box)
+      if (-not $d8.sc -and -not $d8.wrapOver) { Ok ($u + ' [' + $tab + '] 无横向滚动（一行显示完）') } else { Bad ($u + ' [' + $tab + '] 出现横向滚动条') }
+    }
   }
 }
 
@@ -219,6 +247,40 @@ if ($d9) {
   #   「结单」不再出现在列表里（它仍在成品收货详情页）⇒ 断言由「不得有退货」反转为「必须有收货+退货、不得有结单」
   if ($d9.recv -and $d9.ret -and (-not $d9.fin)) { Ok '成品收货列表页行内操作 = 「收货」+「退货」，且已无「结单」' }
   else { Bad ('成品收货列表页操作不符（期望 收货+退货、无结单）：recv=' + $d9.recv + ' ret=' + $d9.ret + ' fin=' + $d9.fin) }
+}
+
+# ⑨c 「已结单」页签（2026-09-27 用户口径「收货中｜已结单 两个页签」）：两个页面各切过去断言 ——
+#     ① 列里有「结单日期」（成品 = 加工单 actual_end_date，结单时写入）/「结单时间」（物料 = material_order.finish_time）；
+#     ② 行内**不得**出现「收货」按钮（后端明确拒绝：已结单不可再收货）——"点了必被拒的按钮不该出现"；
+#     ③ 行内必须有「收货详细」；成品还须有「结单报表」（**反结单在那一页**）、物料须有「反结单」（本批新增的能力）；
+#     ④ 列表条数与库中 FINISHED 单数一致（分页上限 10 ⇒ 取 min），证明页签真的按状态过滤而不是摆设。
+$closedCases = @(
+  @{ u = 'outsource/order/delivery';          name = '成品收货'; col = '结单日期'; extra = '结单报表'; sql = "SELECT COUNT(*) FROM outsource_order WHERE status='FINISHED'" },
+  @{ u = 'outsource/material-order/delivery'; name = '物料收货'; col = '结单时间'; extra = '反结单';   sql = "SELECT COUNT(*) FROM outsource_material_order WHERE status='FINISHED'" }
+)
+foreach ($cc in $closedCases) {
+  OpenFresh "$base/$($cc.u)"
+  $c9 = EvalJs "(()=>{const ts=[...document.querySelectorAll('.page-list .el-tabs__item')];const t=ts.find(x=>(x.innerText||'').indexOf('已结单')>=0);if(!t)return 'no-tab';t.click();return 'clicked'})()"
+  Write-Output ($cc.name + ' 切页签 → 已结单 = ' + $c9)
+  Start-Sleep -Milliseconds 1700
+  $d9c = ReadJson "(()=>{const t=document.querySelector('.el-table');const ths=t?[...t.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim()):[];const rows=t?[...t.querySelectorAll('.el-table__body tbody tr')]:[];const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({cols:ths,rows:rows.length,btn:b});})()" ($cc.name + ' 已结单页签')
+  if ($d9c) {
+    Write-Output ($cc.name + ' 已结单 列 = ' + ($d9c.cols -join '/') + ' ；行数 = ' + $d9c.rows)
+    if (($d9c.cols -join ',') -match [regex]::Escape($cc.col)) { Ok ($cc.name + ' 已结单页签有「' + $cc.col + '」列') }
+    else { Bad ($cc.name + ' 已结单页签缺「' + $cc.col + '」列：' + ($d9c.cols -join '/')) }
+    if ([int]$d9c.rows -ge 1) {
+      if ($d9c.btn -contains '收货详细') { Ok ($cc.name + ' 已结单行内 = 收货详细（只读查看）') }
+      else { Bad ($cc.name + ' 已结单行内缺「收货详细」') }
+      if ($d9c.btn -contains $cc.extra) { Ok ($cc.name + ' 已结单行内有「' + $cc.extra + '」') }
+      else { Bad ($cc.name + ' 已结单行内缺「' + $cc.extra + '」') }
+      if ($d9c.btn -notcontains '收货') { Ok ($cc.name + ' 已结单行内无「收货」（后端拒绝已结单收货，故不放）') }
+      else { Bad ($cc.name + ' 已结单行内仍出现「收货」按钮') }
+    } else { Write-Output ('（' + $cc.name + ' 已结单页签 0 行，跳过行内按钮断言）') }
+    $dbN = [int](SqlOne $cc.sql)
+    $exp = [Math]::Min($dbN, 10)
+    if ([int]$d9c.rows -eq $exp) { Ok ($cc.name + ' 已结单列表条数与库一致（库 ' + $dbN + ' 单，本页 ' + $d9c.rows + ' 行）') }
+    else { Bad ($cc.name + ' 已结单列表条数不符：库 ' + $dbN + '（本页应为 ' + $exp + '）vs 渲染 ' + $d9c.rows) }
+  }
 }
 
 # ⑨b 加工退货 = **三级菜单 3 个叶子**（2026-09-27 用户口径：原「一页 3 页签」拆分）：
@@ -288,5 +350,42 @@ if ($d10b) {
   if ($d10b.path -eq '/outsource/return-order/repair' -and [int]$d10b.repair -eq 1) { Ok '成品维修退货叶子有唯一「新增」入口' }
   else { Bad ('成品维修退货叶子不符（path=' + $d10b.path + ' 新增=' + $d10b.repair + '）') }
 }
+
+# ⑩ 「反结单」按钮端到端（2026-09-27 用户口径「E 也要做」）：造一张**已结单**的物料订单（SQL fixture），
+#    在 物料收货 → 已结单 页签点「反结单」→ 弹窗确认 → 断言：① 库里回到 RECEIVING（可继续收货）；② finish_time 清空；
+#    ③ 该行从「已结单」页签消失（列表刷新有效）。⚠️ 必须在临时单上做 —— 反结单会把单拉回收货中，
+#    动真实单会影响其它脚本的口径（API 侧的分支覆盖见 verify-material-order-reopen.ps1）。
+$roCode = 'MWO-VRO-UI-' + (Get-Date).ToString('HHmmss')
+$roSup = SqlOne 'SELECT id FROM supplier ORDER BY id LIMIT 1'
+$roMat = SqlOne 'SELECT id FROM outsource_material ORDER BY id LIMIT 1'
+$roMt = SqlOne 'SELECT id FROM material_type ORDER BY id LIMIT 1'
+if ($roSup -ne '' -and $roMat -ne '' -and $roMt -ne '') {
+  SqlExec ("INSERT INTO outsource_material_order (code, supplier_id, order_type, status, remark, company_id, finish_time, auditor_id, auditor_name, deleted) VALUES ('" + $roCode + "', " + $roSup + ", 'PURCHASE', 'FINISHED', 'verify-delivery-menu reopen fixture', 1, NOW(), 1, 'verify', 0);")
+  $roId = SqlOne ("SELECT id FROM outsource_material_order WHERE code='" + $roCode + "'")
+  SqlExec ("INSERT INTO outsource_material_order_item (order_id, outsource_material_id, material_type_id, unit, order_quantity, received_quantity, company_id, deleted) VALUES (" + $roId + ", " + $roMat + ", " + $roMt + ", 'PCS', 100, 0, 1, 0);")
+  Write-Output ('reopen fixture: id=' + $roId + ' code=' + $roCode + '（已结单，无收货记录 ⇒ 反结单应回 收货中）')
+  OpenFresh "$base/outsource/material-order/delivery"
+  EvalJs "(()=>{const ts=[...document.querySelectorAll('.page-list .el-tabs__item')];const t=ts.find(x=>(x.innerText||'').indexOf('已结单')>=0);if(t)t.click();return 'ok'})()" | Out-Null
+  Start-Sleep -Milliseconds 1600
+  $r10a = (EvalJs "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const tr=rows.find(x=>(x.innerText||'').indexOf('$roCode')>=0);if(!tr)return 'norow';for(const b of tr.querySelectorAll('button')){if((b.innerText||'').trim()==='反结单'){b.click();return 'clicked'}}return 'nobtn'})()") -replace '"', ''
+  $r10a = $r10a.Trim()
+  if ($r10a -eq 'clicked') { Ok ('reopen fixture row found on the 已结单 TAB and 反结单 clicked (' + $r10a + ')') } else { Bad ('反结单 按钮未点到：' + $r10a) }
+  Start-Sleep -Milliseconds 1200
+  $r10b = (EvalJs "(()=>{const bs=[...document.querySelectorAll('.el-message-box__btns button')];const t=bs.find(x=>(x.innerText||'').indexOf('确定')>=0);if(!t)return 'noconfirm';t.click();return 'confirmed'})()") -replace '"', ''
+  $r10b = $r10b.Trim()
+  if ($r10b -eq 'confirmed') { Ok ('confirm dialog accepted (' + $r10b + ')') } else { Bad ('确认弹窗未点到：' + $r10b) }
+  # 反结单后页面会重查列表（loadData + loadCounts 两个请求）—— 等足 3s，别用"刚好"的时间判列表没刷新
+  Start-Sleep -Milliseconds 3000
+  $roSt = SqlOne ("SELECT status FROM outsource_material_order WHERE id=" + $roId)
+  if ($roSt -eq 'RECEIVING') { Ok ('UI 反结单 put the order back to RECEIVING (got ' + $roSt + ')') } else { Bad ('UI 反结单 后状态应为 RECEIVING，实际 ' + $roSt) }
+  $roFt = SqlOne ("SELECT IFNULL(finish_time,'NULL') FROM outsource_material_order WHERE id=" + $roId)
+  if ($roFt -eq 'NULL') { Ok 'UI 反结单 cleared finish_time' } else { Bad ('UI 反结单 后 finish_time 未清空：' + $roFt) }
+  $r10c = EvalJs "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')].map(x=>(x.innerText||'').replace(/\s+/g,' ').trim());return JSON.stringify({mine:rows.filter(x=>x.indexOf('$roCode')>=0).length,n:rows.length,rows:rows})})()" -replace '"', ''
+  Write-Output ('  after-reopen table = ' + $r10c)
+  if ($r10c -notmatch ("mine:1")) { Ok 'the reopened order left the 已结单 TAB (list refreshed)' } else { Bad '反结单 后该行仍在「已结单」页签（列表未刷新？）' }
+  SqlExec ("DELETE FROM outsource_material_order_item WHERE order_id=" + $roId + ";")
+  SqlExec ("DELETE FROM outsource_material_order WHERE id=" + $roId + ";")
+  if ((SqlOne ("SELECT COUNT(*) FROM outsource_material_order WHERE code='" + $roCode + "'")) -eq '0') { Ok 'reopen fixture cleaned up' } else { Bad '反结单 fixture 未清理干净' }
+} else { Write-Output '（缺主数据，跳过 ⑩ 反结单端到端）' }
 
 if ($global:fail -eq 0) { Write-Output 'RESULT PASS 成品收货/物料收货独立菜单与一步收货均正常' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }

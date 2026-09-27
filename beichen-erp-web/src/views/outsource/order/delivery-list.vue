@@ -1,21 +1,27 @@
 <script setup lang="ts">
 /**
  * 成品收货（委外加工 → 成品收货）
- * <p>只看**正在加工**（PRODUCING）的加工单 —— 与后端「只有生产中的加工单可录入收货」口径一致。
- * 行内「收货」直接进入该单收货详细页并自动弹出新增收货弹窗；「收货详细」只看记录。</p>
+ *
+ * <p>2026-09-27（用户口径「成品收货应该有 收货中｜已结单 两个页签」）：本页由"只列生产中"改为**两个页签** ——</p>
+ * <ul>
+ *   <li><b>收货中</b>（默认）= PRODUCING：与后端「只有生产中的加工单可录入收货」口径一致。行内「收货」「退货」；</li>
+ *   <li><b>已结单</b> = FINISHED：**只读** —— 行内「收货详细」「结单报表」（反结单就在结单报表页里）。
+ *       已结单的加工单后端**禁止收货**（"只有生产中的加工单可录入收货"）、**禁止有单加工退货**
+ *       （P3-1：账务已清算，如需退货走「无单退货」）⇒ 这两个按钮**刻意不放**，否则点了必被拒。</li>
+ * </ul>
+ * <p>页签数量角标：用 `pageSize=1` 的轻量请求取 total（沿用加工退货页的既有做法，零后端改动）。
+ * 结单日期取加工单 `actual_end_date`（结单时写入），与物料侧 `finish_time` 同口径。</p>
+ *
  * <p>2026-09-21（用户口径）：本页**只做收货**，退回（红冲收货）不再出现在本页 ——
  * 有加工单的退回到该单收货详细页用「加工退货」，无单的退回到「加工退货」菜单页的「加工退货」页签
  * 用「新增无单加工退货」；两者最终都汇总到那张台账里（用「关联加工单」列区分）。
  * （原先挂在本页下方的「无单加工退货」区块已按该口径迁走。）</p>
- * <p>2026-09-21（用户口径「加工单详情页面的结单按钮放到成品收货里」）：行内新增「**结单**」入口
- * （跳结单报表页 `/outsource/order/close/:id`；结单本身要在那里"保存草稿 → 确认结单"）。
- * 剩余未收 > 0 时先二次确认 —— 后端不拦"未收满就结单"，而结单后本单变"已完成"、不能再收货（要改回得反结单）。</p>
  */
 import { reactive, ref, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/enums'
+import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/enums'
 import EntityLinks from '@/components/EntityLinks.vue'
 
 defineOptions({ name: 'OutsourceOrderDelivery' })
@@ -26,11 +32,22 @@ const tableData = ref<any[]>([])
 const query = reactive({ code: '' })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 
+/** 页签：收货中（默认，原口径）｜已结单 */
+type TabKey = 'PRODUCING' | 'FINISHED'
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'PRODUCING', label: '收货中' },
+  { key: 'FINISHED', label: '已结单' }
+]
+const activeTab = ref<TabKey>('PRODUCING')
+const isClosed = () => activeTab.value === 'FINISHED'
+/** 页签角标：各页签条数（pageSize=1 只取 total；不带单号筛选，表达"一共有多少单"） */
+const tabCounts = reactive<Record<string, number>>({})
+
 async function loadData() {
   loading.value = true
   try {
     const r = await request.get<any, any>('/outsource/order-delivery/order-page', {
-      params: { page: pagination.pageNum, size: pagination.pageSize, code: query.code || undefined }
+      params: { page: pagination.pageNum, size: pagination.pageSize, code: query.code || undefined, status: activeTab.value }
     })
     tableData.value = r?.records || []
     pagination.total = Number(r?.total || 0)
@@ -38,6 +55,18 @@ async function loadData() {
     ElMessage.error('加载待收货订单失败：' + (e?.msg || e?.message || '未知错误'))
   } finally { loading.value = false }
 }
+async function loadCounts() {
+  for (const t of TABS) {
+    try {
+      const r = await request.get<any, any>('/outsource/order-delivery/order-page', {
+        params: { page: 1, size: 1, status: t.key }
+      })
+      tabCounts[t.key] = Number(r?.total || 0)
+    } catch { /* 角标失败不影响列表 */ }
+  }
+}
+/** 切页签：重置分页 + 重查（两个页签共用同一接口，只换 status） */
+function handleTabChange() { pagination.pageNum = 1; loadData() }
 function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; handleQuery() }
 
@@ -66,14 +95,25 @@ function goDetail(row: any) { router.push(`/outsource/order/delivery/${row.id}`)
  * <p>⚠️ 「结单」不再出现在列表里 —— 它仍保留在成品收货**详情页**的「结单」按钮上。</p>
  */
 function goReturn(row: any) { router.push(`/outsource/order/delivery/return-defect/${row.id}`) }
+/** 已结单页签的行内入口（只读）：结单报表页 —— 反结单也在那一页 */
+function goCloseReport(row: any) { router.push(`/outsource/order/close/${row.id}`) }
 
-onActivated(() => { loadData() })
+onActivated(() => { loadData(); loadCounts() })
 </script>
 
 <template>
   <div class="page-list">
     <el-card shadow="never">
-      <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">成品收货（正在加工的加工单）</span></div></template>
+      <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">成品收货</span></div></template>
+      <!-- 页签（2026-09-27 用户口径）：收货中（默认）｜已结单；标签后带数量角标。
+           注：非活动页签的**列**在 DOM 中不存在（列由 v-if 控制），故"行内按钮"类断言不会被隐藏页签干扰。 -->
+      <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
+        <el-tab-pane v-for="t in TABS" :key="t.key" :name="t.key">
+          <template #label>
+            <span>{{ t.label }}<span v-if="tabCounts[t.key]" style="margin-left:4px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ tabCounts[t.key] }}</span></span>
+          </template>
+        </el-tab-pane>
+      </el-tabs>
       <el-form :inline="true" :model="query" style="margin-bottom:12px">
         <el-form-item label="单号"><el-input v-model="query.code" placeholder="加工单号" clearable style="width:200px" @keyup.enter="handleQuery" /></el-form-item>
         <el-form-item>
@@ -96,13 +136,16 @@ onActivated(() => { loadData() })
            2026-09-25（用户口径「列表数据显示完整 + 加工厂可点」）：加工厂 min90→120 固定（实测需 121）
            并做成链接进供应商详情；产品 min70→90（弹性列 + tooltip）；下单/已收/剩余 144→110、收货进度 92→70、
            状态 82→74、最近收货/计划完成 98→**100**（日期实测需 ~100，否则被截断）。
-           合计 = 140+120+90+110+70+100+100+74+124 = **928** ✓ -->
+           合计 = 140+120+90+110+70+100+100+74+124 = **928** ✓
+           2026-09-27（两个页签）：**收货中**页签 = 上表原样不动；**已结单**页签 = 「计划完成 100 / 状态 74」
+           换成「结单日期 100」、操作 124→140（收货详细 + 结单报表两个 4 字按钮，实测需 ~136）
+           ⇒ 固定列合计 = 140+120+130+62+100+100+140 = 792，加弹性列「产品」min90 = **882** ≤ 948 ✓ -->
       <el-table :data="tableData" border stripe v-loading="loading" style="width:100%" @row-click="goDetail">
         <el-table-column label="加工单号" width="140" show-overflow-tooltip>
           <template #default="{ row }"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button></template>
         </el-table-column>
         <!-- 2026-09-25（用户口径「数据显示完整 + 加工厂可点」）：可点进供应商详情（后端 row 已带 factoryId，
-             pageProducingOrders 一并返回，无需改接口）。 -->
+             pageOrders 一并返回，无需改接口）。 -->
         <el-table-column label="加工厂" width="120" show-overflow-tooltip>
           <template #default="{ row }"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
         </el-table-column>
@@ -134,19 +177,29 @@ onActivated(() => { loadData() })
         <el-table-column label="最近收货" width="100">
           <template #default="{ row }">{{ $fmtDate(row.latestDeliveryDate) }}</template>
         </el-table-column>
-        <el-table-column label="计划完成" width="100">
+        <!-- 计划完成 / 状态：只在「收货中」显示 —— 已结单页签里状态恒为「已结单」（显示即冗余），
+             计划完成也不如"结单日期"有用 ⇒ 让出宽度给 结单日期 + 只读操作列（列宽合计仍需 ≤ 内容区）。 -->
+        <el-table-column v-if="!isClosed()" label="计划完成" width="100">
           <template #default="{ row }">{{ $fmtDate(row.planEndDate) }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="74" align="center">
+        <el-table-column v-if="isClosed()" label="结单日期" width="100">
+          <template #default="{ row }">{{ $fmtDate(row.actualEndDate) }}</template>
+        </el-table-column>
+        <el-table-column v-if="!isClosed()" label="状态" width="74" align="center">
           <template #default="{ row }"><el-tag :type="OutsourceOrderStatusTag[row.status] || 'info'" size="small">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="124" align="center" fixed="right">
+        <!-- 操作：收货中 = 收货 + 退货（原口径）；已结单 = **只读**（收货详细 + 结单报表 —— 反结单在报表页）。
+             已结单的加工单后端禁止收货、禁止有单加工退货（账务已清算）⇒ 不放对应按钮，避免点了必被拒。 -->
+        <el-table-column v-if="!isClosed()" label="操作" width="124" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDelivery(row)">收货</el-button>
-            <!-- 2026-09-24（用户口径）：行内操作 = 收货 + 退货。
-                 退货跳「加工退货（拆分还料）」页（按本加工单还料/红冲收货）；
-                 结单入口不在列表里，它仍在成品收货详情页（原 2026-09-21「结单放列表」的口径已按本次要求撤销）。 -->
             <el-button type="warning" link @click.stop="goReturn(row)">退货</el-button>
+          </template>
+        </el-table-column>
+        <el-table-column v-else label="操作" width="140" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" link @click.stop="goDetail(row)">收货详细</el-button>
+            <el-button type="info" link @click.stop="goCloseReport(row)">结单报表</el-button>
           </template>
         </el-table-column>
       </el-table>

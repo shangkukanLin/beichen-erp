@@ -84,6 +84,17 @@ public class MaterialOrderController {
         return R.ok();
     }
 
+    /**
+     * 反结单（2026-09-27 用户口径「E 也要做」）：
+     * 已结单 → 收货中（曾被审核或已收过货）/ 待审核（两者皆无），并清空结单时间。
+     * <p>与 {@code /finish} 对称；纯状态回退、无账务副作用。</p>
+     */
+    @PutMapping("/{id}/reopen")
+    public R<Void> reopen(@PathVariable Long id) {
+        materialOrderService.reopen(id);
+        return R.ok();
+    }
+
     @PutMapping("/{id}/cancel")
     public R<Void> cancel(@PathVariable Long id) {
         materialOrderService.cancel(id);

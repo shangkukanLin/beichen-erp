@@ -31,15 +31,21 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
     Map<String, Object> summary(Long orderId);
 
     /**
-     * 待交货订单列表：正在加工（PRODUCING）的加工单 + 交货进度聚合。
-     * <p>供「成品收货」独立菜单页使用，口径与 {@link #summary(Long)} 一致（只统计已审核交货），
+     * 收货维度订单列表：「成品收货」页签用 —— 按加工单状态分页 + 交货进度聚合。
+     *
+     * <p>口径与 {@link #summary(Long)} 一致（已交只统计已审核交货，退不良为负数会自动扣减），
      * 一次分页查询即可，避免前端逐单调用 summary 造成 N+1 请求。</p>
+     *
+     * <p>2026-09-27（用户口径「成品收货要有 收货中｜已结单 两个页签」）：本方法由
+     * {@code pageProducingOrders} 改名并**新增 {@code status} 参数** ——
+     * 原先只查 PRODUCING（写死）⇒ 已结单的加工单在本页无处可看。缺省仍为 PRODUCING（向后兼容）。</p>
      *
      * @param pageNo 页码（从 1 开始）
      * @param size   每页条数
      * @param code   单号模糊筛选（可空）
+     * @param status 加工单状态：PRODUCING（收货中，缺省）/ FINISHED（已结单）；空则按 PRODUCING
      */
-    Map<String, Object> pageProducingOrders(Integer pageNo, Integer size, String code);
+    Map<String, Object> pageOrders(Integer pageNo, Integer size, String code, String status);
 
     /**
      * 新增交货记录（草稿态存盘，不落账）

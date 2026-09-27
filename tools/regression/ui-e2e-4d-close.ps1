@@ -31,7 +31,7 @@ function MatQty([int]$whId, [int]$matId) {
 }
 # Chinese words from code points (file stays ASCII-only)
 $CN_BACK_WH = [string][char]0x9000 + [string][char]0x56DE + [string][char]0x4ED3 + [string][char]0x5E93   # 退回仓库
-$CN_FINISHED = [string][char]0x5DF2 + [string][char]0x5B8C + [string][char]0x6210                             # 已完成（订单列表的状态文案）
+$CN_FINISHED = [string][char]0x5DF2 + [string][char]0x7ED3 + [string][char]0x5355                             # 已结单（2026-09-27 由「已完成」改：状态文案统一）
 
 $whMatName = ZH 'wh_auxA'
 $whMatId = [int](SqlOne "SELECT id FROM warehouse WHERE warehouse_name='" + $whMatName + "' LIMIT 1")

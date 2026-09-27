@@ -19,7 +19,7 @@ const activeTab = ref('进行中')
 // 状态 Tab 定义 - 进行中：待审核 + 收货中
 const STATUS_TABS = [
   { key: '进行中', label: '进行中', type: 'warning', statuses: [MaterialOrderStatus.PENDING, MaterialOrderStatus.RECEIVING] },
-  { key: '已完成', label: '已完成', type: 'success', statuses: [MaterialOrderStatus.FINISHED] },
+  { key: '已完成', label: '已结单', type: 'success', statuses: [MaterialOrderStatus.FINISHED] },
   { key: '已作废', label: '已作废', type: 'danger', statuses: [MaterialOrderStatus.CANCELLED] }
 ]
 const tabPanes = computed(() => STATUS_TABS.map(t => ({ tab: t.key, name: t.key })))

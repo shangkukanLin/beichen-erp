@@ -42,14 +42,18 @@ public class OrderDeliveryController {
     }
 
     /**
-     * 待交货订单列表（「成品收货」菜单页）：只返回正在加工（PRODUCING）的加工单，
-     * 每行带订单量/已交量/剩余量/最近交货日期，前端直接渲染列表即可。
+     * 收货维度订单列表（「成品收货」两个页签）：按加工单状态返回，
+     * 每行带订单量/已交量/剩余量/最近交货日期/结单日期，前端直接渲染列表即可。
+     *
+     * <p>2026-09-27（用户口径）：`status` 参数化 —— 收货中传 PRODUCING、已结单传 FINISHED；
+     * **不传则按 PRODUCING**（与 2026-09-16 上线时的行为完全一致，老调用/老守卫不受影响）。</p>
      */
     @GetMapping("/order-page")
-    public R<Map<String, Object>> producingOrders(@RequestParam(defaultValue = "1") Integer page,
-                                                  @RequestParam(defaultValue = "10") Integer size,
-                                                  @RequestParam(required = false) String code) {
-        return R.ok(deliveryService.pageProducingOrders(page, size, code));
+    public R<Map<String, Object>> orderPage(@RequestParam(defaultValue = "1") Integer page,
+                                            @RequestParam(defaultValue = "10") Integer size,
+                                            @RequestParam(required = false) String code,
+                                            @RequestParam(required = false) String status) {
+        return R.ok(deliveryService.pageOrders(page, size, code, status));
     }
 
     /** 新增交货记录 */

@@ -130,7 +130,7 @@ async function handleConfirm() {
     return
   }
   try {
-    await ElMessageBox.confirm('确认结单？结单后将自动生成退料单，加工单状态变为"已完成"。', '确认结单', { type: 'warning' })
+    await ElMessageBox.confirm('确认结单？结单后将自动生成退料单，加工单状态变为「已结单」。', '确认结单', { type: 'warning' })
   } catch { return }
   await doConfirm(false)
 }

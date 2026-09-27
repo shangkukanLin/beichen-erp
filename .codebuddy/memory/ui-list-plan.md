@@ -999,6 +999,80 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 > 的"重复码"—— 那是三级菜单改造里**有意**的同码复用）。本次未改任何菜单/权限行。待办：刷新该脚本的期望值
 > （更稳的做法是改为从 `sys_menu` 反推，而不是硬编码数字）。
 
+## 5.26 收货两页「收货中｜已结单」页签 + 物料侧反结单 + 状态文案「已结单」（2026-09-27，用户口径「先出方案」→「按推荐做，但是 E 也要做」）
+
+**需求**：成品收货 / 物料收货各拆两个 TAB：**收货中 / 已结单**；并按方案 E —— 给物料侧补**反结单**能力
+（原为终态，结错只能新建单）。
+
+**页签口径**（两页一致，默认停在「收货中」以保旧习惯/旧脚本）：
+
+| 页签 | 成品（`outsource_order.status`） | 物料（`outsource_material_order.status`） |
+|---|---|---|
+| 收货中 | `PRODUCING` | `RECEIVING` |
+| 已结单 | `FINISHED` | `FINISHED` |
+
+`PENDING`（待审核）/`CANCELLED`（作废）**不入本页**（与改前一致；待审核各自订单页办）。
+
+**实现**：
+- **后端（只有成品侧一处）**：`OutsourceOrderDeliveryService.pageProducingOrders(page,size,code)`
+  → 改名 **`pageOrders(page,size,code,status)`**：status 走**白名单**（只认 FINISHED，其余按 PRODUCING），
+  缺省 PRODUCING ⇒ 老调用/老守卫行为不变；行数据补 **`actualEndDate`**（结单日期 = 加工单 `actual_end_date`，
+  `CloseReportServiceImpl.confirmClose` 结单时写入，对称于物料侧 `finish_time`）。控制器 `GET /order-page` 加 `status`。
+- **物料侧零后端改动**：`/outsource/material-order/page` 本就支持 `status` 过滤，行数据（`buildOrderMap`）本就返回 `finishTime`。
+- **页签角标**：`pageSize=1` 取 total（沿用加工退货页既有做法，**零后端改动**）；不带单号筛选，表达"一共有多少单"。
+- **列/操作按页签切换，用 `v-if` 控制列** ⇒ 非活动页签的行内按钮**不在 DOM** ⇒ 现有"全页按钮文本"类断言不会被隐藏页签干扰。
+  - 收货中：原样不动（成品 收货+退货；物料 收货+退货）。
+  - 已结单：**只读** —— 成品 = 收货详细 + 结单报表（反结单在报表页）；物料 = 收货详细 + 退货 + 反结单。
+    两页都**刻意不放「收货」**（后端明确拒绝："订单已结单，不可再收货" / "只有生产中的加工单可录入收货"）；
+    成品侧也**不放「退货」**（P3-1：已结单禁止有单加工退货，要退走「无单退货」）；物料侧保留「退货」
+    （后端对已结单仍允许退不良/物料退货，且那按钮是供应商维度的物料退货单）。
+  - 已结单页签**隐藏冗余列**（状态恒为已结单；成品另隐计划完成、物料另隐交期）腾出宽度给「结单日期/时间」——
+    本项目"一行不横滑"家规：成品已结单 = 792 固定 + 产品 min90 = **882**；物料已结单 = 734 + 两端弹性 min190 = **924**
+    （实测两页签 948/948 与 963/963，零横向滚动）。
+- **E：物料侧反结单（新能力）** `PUT /api/outsource/material-order/{id}/reopen`：
+  - 回退判据 = **曾被审核（`auditor_id` 非空）或已收过货 ⇒ RECEIVING 收货中**；两者皆无 ⇒ **PENDING 待审核**。
+    ⚠️ **不能只看收货记录**：`unAudit` 不清审核人，且"审核了但一件没收到就结单"很常见（界面「结单」按钮就在收货中状态）
+    ⇒ 只看收货会把这类单**悄悄退回未审核**，而详情页「审核人」还留着旧值（自相矛盾）。
+  - `finish_time` 必须**显式 `set null`**（MyBatis-Plus 的 `updateById` 忽略 null ⇒ 清不掉）。
+  - **无账务副作用**（`finish` 只改状态+时间，不动库存/应付）—— 这正是它比成品侧反结单（要逆向退料/缺失/超损应付）简单得多的原因。
+  - UI 两个入口：物料收货**已结单页签行内「反结单」** + 物料订单**详情页**（页头操作区与卡内两组按钮各加一颗，仅 FINISHED 可见）。
+- **状态文案统一「已结单」**（用户裁量：与后端报错文案/`CloseReportStatus` 措辞一致）：后端 `OutsourceOrderStatus` /
+  `MaterialOrderStatus` 的 FINISHED label、前端 `enums.ts` 两处 Label、加工单/物料订单列表页签、供应商详情 radio
+  （值与文案同步改）、加工单结单确认文案、物料订单详情「订单完成时间」→「结单时间」、以及多处以"已完成"指代订单状态的注释/文案。
+  **保持不动**：`PhaseStatus.FINISHED`（项目阶段"已完成"，语义无关）。
+
+**守卫**：
+- `verify-delivery-menu.ps1`（本两页的专职守卫）改造并加码：§②/§⑥ 断言两个页签存在且默认「收货中」；
+  §⑧ 宽度扫描**覆盖两个页签**（已结单列集不同，只测默认页签会漏溢出）；新增 **§⑨c** 已结单页签断言
+  （有「结单日期/时间」列、行内必须有收货详细 + 结单报表/反结单、**不得有「收货」**、条数 == 库中 FINISHED 单数）；
+  新增 **§⑩ 反结单端到端**：SQL 造一张已结单 fixture → 在已结单页签点「反结单」→ 弹窗确认 →
+  断言库回 `RECEIVING`、`finish_time` 清空、该行从页签消失、并清理 fixture。
+- 新 **`verify-material-order-reopen.ps1`**（API 级，SQL fixture 自建自清）：A 已收货⇒RECEIVING；
+  **B 曾审核未收货⇒RECEIVING（关键回归）**；C 从未审核⇒PENDING；D 非已结单/不存在⇒拒绝且状态不变；
+  E 重复调用⇒拒绝；F 反结单后计入 RECEIVING 工作台。**全绿 FAIL=0**。
+- `ui-e2e-4d-close.ps1` 的 `CN_FINISHED` 码点改「已结单」；`ui-e2e-zh.json` `st_finished` 改值 +
+  新增 `btn_reopen`/`btn_close_report`/`btn_receive_detail`/`col_close_date`/`col_close_time`。
+
+**⚠️ 两条踩坑教训（写脚本必看）**：
+1. `verify-delivery-menu.ps1` 的 `Ok` **只收消息**（条件要自己 `if { Ok } else { Bad }`）—— 我起初按
+   `verify-material-*-expense` 的 `Ok(cond,msg)` 写法写 §⑩ ⇒ **断言假绿**（永远 PASS）。
+2. `EvalJs` 的返回值**带引号**（`"clicked"`）⇒ 比较前必须 `-replace '"',''` + `Trim()`；且"列表刷新"类断言
+   等待要给足（页签切换后要重查列表 + 角标两个请求，`3s` 稳妥）。
+
+**验证**：`verify-delivery-menu` PASS（含 §⑩ 端到端，实测行消失/库回 RECEIVING/时间清空/零报错）；
+`verify-material-order-reopen` PASS FAIL=0；nav **70 路由 bad=0**、角色走查 **15/0**、`ui-e2e-4c/p4a/11/4d`、
+`web-check`（五守卫 + TS + BOM）、`scan-table-overflow`、`scan-col-truncation`、`verify-font-scale` 全 PASS。
+
+**⚠️ 两条存量失败（本次未引入，已逐条定性，未修）**：
+1. `ui-e2e-4a-material-order`：「自有物料仓」弹窗 `material-warehouse.vue:116` 的 label 是**「仓库名称」**，
+   而 zh 键 `lbl_name`="名称" ⇒ `FillLabel` 报 `NOLABEL:名称`、名字没填进去 ⇒ 后端回"请输入仓库名称" ⇒ FAIL。
+   （修法：新增 `lbl_wh_name` 键并让脚本用它。）
+2. `ui-e2e-p4c-work-order`：目标 4 张 WO 单**计划量已被收满**（100/100、50/50，且各单无草稿）⇒ 再造 40+60 被
+   "超交"校验拒 ⇒ 8 条 `delivery draft row not found`。脚本假设"新单/未收满"，**重复跑必红**（需先重置这些单或改为造新单）。
+
+**已知未做**：「结单人」列 —— 物料侧历史数据**没有结单人**字段（`finish` 只写 `finish_time`），
+故本期两页只做「结单日期/时间」列（成品侧 `close_report.auditor_name` 其实有，要做需两侧口径先行）。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
@@ -1033,6 +1107,11 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
       顺带踩中并修掉 `watch()` 立即求值导致的 **TDZ 整页白屏**（新增 `verify-detail-render.ps1` 补盲，
       16: 70/0、15: 55/0、14: 46/0、五守卫 + 详情页渲染守卫全 PASS）
 - [x] B12 加工退货/物料退货三级菜单 + 页签（2026-09-27，4+2 叶子；返回进度按来源单聚合 + 草稿作废 + 防超返；脚本层文案同步待办见 §5.13）
+- [x] B26 成品收货/物料收货 页签化（收货中｜已结单）+ 物料侧**反结单** + 状态文案统一「已结单」（2026-09-27，
+      用户「先出方案」→「按推荐做，但是 E 也要做」）：成品接口 `status` 参数化（缺省 PRODUCING）+ 结单日期列；
+      物料侧零后端改动；已结单页签只读（不放必被后端拒的「收货」）；E = `PUT .../reopen`（判据：曾审核或已收过货⇒收货中，
+      否则⇒待审核；无账务副作用）；守卫 verify-delivery-menu 加 §⑨c/§⑩（反结单端到端）+ 新 verify-material-order-reopen
+      （详见 §5.26，含两条**未引入**的存量失败定性：4a 文案键不符 / p4c 单已收满）
 - [x] B25 勾选「研发支出」改为**自动审核** + **方案 A 权限闸门**（2026-09-27，用户口径"自动审核"→选 A）：端点加 `autoAudit` ——
       勾选路径建单即审核（写支出流水 + 扣账户，余额不足整体回滚零残留）；**须持 `finance:expense`/`finance:cashflow`
       否则降级草稿（`downgraded=true`）**；列表补登记仍草稿；幂等分支对草稿补审核、已审核不重复扣款；

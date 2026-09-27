@@ -43,6 +43,12 @@ public interface MaterialOrderService {
     /** 结单：标记已完成 */
     void finish(Long id);
 
+    /**
+     * 反结单（2026-09-27 新增）：已结单 → **收货中**（曾被审核或已收过货）/ **待审核**（两者皆无），
+     * 并清空结单时间。纯状态回退，无账务副作用（{@link #finish} 不动库存/应付）。
+     */
+    void reopen(Long id);
+
     /** 作废（有交货记录时禁止） */
     void cancel(Long id);
 

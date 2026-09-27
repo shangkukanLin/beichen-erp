@@ -3,6 +3,7 @@ package com.beichen.erp.outsource.service.impl;
 import com.beichen.erp.config.UserContext;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.DocStatus;
@@ -557,13 +558,62 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
         if (MaterialOrderStatus.CANCELLED.getCode().equals(o.getStatus())) throw new BusinessException("已作废的订单不可结单");
-        if (MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus())) throw new BusinessException("订单已完成");
+        if (MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus())) throw new BusinessException("订单已结单");
         // F7-46（2026-09-19）：按当前状态原子抢占 → FINISHED（动态 from：PENDING/RECEIVING 均可结单）
         if (!DocStatusGuard.claim(orderMapper, MaterialOrder::getId, id,
                 MaterialOrder::getStatus, o.getStatus(), MaterialOrderStatus.FINISHED.getCode()))
             throw new BusinessException("订单状态已变化，请刷新后重试");
         MaterialOrder upd = new MaterialOrder(); upd.setId(id); upd.setStatus(MaterialOrderStatus.FINISHED.getCode()); upd.setFinishTime(LocalDateTime.now());
         orderMapper.updateById(upd);
+    }
+
+    /**
+     * 反结单（2026-09-27 用户口径「E 也要做」：物料侧原先是**终态**，结错了只能新建单）。
+     *
+     * <p><b>回退到哪个状态 —— 按"是否曾被审核 / 是否收过货"推断，不新增字段</b>：</p>
+     * <ul>
+     *   <li><b>曾被审核</b>（{@code auditor_id} 非空）<b>或已有收货记录</b>（任一明细 {@code received_quantity > 0}）
+     *       ⇒ 回 <b>RECEIVING 收货中</b>：这正是"结单前"的状态（订单生命周期是线性的
+     *       PENDING --审核--> RECEIVING --结单--> FINISHED，界面上的「结单」也只在此状态出现），
+     *       反结单的意义就是回到能继续收货的位置；</li>
+     *   <li>以上都没有 ⇒ 回 <b>PENDING 待审核</b>：只有"待审核直接结单"（{@link #finish} 允许
+     *       PENDING→FINISHED，接口层可达、界面未开入口）才会出现 ⇒ 回到未审核，避免凭空造出
+     *       "从未审核却已是收货中"的单。</li>
+     * </ul>
+     * <p>⚠️ 判据不能只看收货记录：{@link #unAudit} **不清审核人**，且"审核了但一件没收到就结单"很常见
+     * （界面「结单」就在收货中状态）⇒ 只看收货会把这类单悄悄退回未审核，而详情页的「审核人」还留着旧值（自相矛盾）。</p>
+     *
+     * <p><b>无账务副作用</b>：{@link #finish} 只改状态 + 结单时间（不动库存、不生成应付），
+     * 故反结单是纯状态回退 + <b>清空 finish_time</b>（口径与各模块"反审核清空审核人"一致）。
+     * 对比成品侧的反结单（要逆向退料/缺失/超损应付）简单得多 —— 这是两侧不对称的根因。</p>
+     *
+     * <p><b>对关联单据的影响（已知、可接受）</b>：物料维修退货在"订单收货中"审核时会扣减该订单收料数
+     * （{@code OutsourceMaterialReturnServiceImpl}），反结单回"收货中"后该行为恢复 —— 与"订单又能继续收货"
+     * 是同一件事，正是反结单的预期语义。</p>
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void reopen(Long id) {
+        MaterialOrder o = orderMapper.selectById(id);
+        if (o == null) throw new BusinessException("订单不存在");
+        if (MaterialOrderStatus.CANCELLED.getCode().equals(o.getStatus())) throw new BusinessException("已作废的订单不可反结单");
+        if (!MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus())) throw new BusinessException("只有已结单的订单可以反结单");
+        List<MaterialOrderItem> items = itemMapper.selectList(
+                new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
+        boolean hasReceipts = items.stream().anyMatch(it ->
+                it.getReceivedQuantity() != null && it.getReceivedQuantity().compareTo(BigDecimal.ZERO) > 0);
+        boolean everAudited = o.getAuditorId() != null;
+        String target = (everAudited || hasReceipts)
+                ? MaterialOrderStatus.RECEIVING.getCode() : MaterialOrderStatus.PENDING.getCode();
+        // 原子抢占：FINISHED → 目标状态（并发/双击只有一次生效；状态已被别处改掉则失败）
+        if (!DocStatusGuard.claim(orderMapper, MaterialOrder::getId, id,
+                MaterialOrder::getStatus, MaterialOrderStatus.FINISHED.getCode(), target))
+            throw new BusinessException("订单状态已变化，请刷新后重试");
+        // finish_time 必须**显式置 null**（MyBatis-Plus 的 updateById 会忽略 null ⇒ 清不掉）
+        orderMapper.update(null, new LambdaUpdateWrapper<MaterialOrder>()
+                .eq(MaterialOrder::getId, id)
+                .set(MaterialOrder::getFinishTime, null));
+        log.info("物料订单(ID={}) 已反结单，回到{}（曾被审核={}，有收货记录={}）", id, target, everAudited, hasReceipts);
     }
 
     @Override

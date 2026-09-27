@@ -111,7 +111,7 @@ const FINISHED_STATUSES = [OutsourceOrderStatus.FINISHED, MaterialOrderStatus.FI
 const CANCELLED_STATUSES = [OutsourceOrderStatus.CANCELLED, MaterialOrderStatus.CANCELLED]
 const filteredOrders = computed(() => {
   const all = [...orders.value, ...materialOrders.value]
-  if (activeStatusTab.value === '已完成') return all.filter(o => FINISHED_STATUSES.includes(o.status))
+  if (activeStatusTab.value === '已结单') return all.filter(o => FINISHED_STATUSES.includes(o.status))
   if (activeStatusTab.value === '已取消') return all.filter(o => CANCELLED_STATUSES.includes(o.status))
   return all.filter(o => ACTIVE_STATUSES.includes(o.status))
 })
@@ -459,7 +459,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
           <div style="margin-bottom:12px">
             <el-radio-group v-model="activeStatusTab" size="small">
               <el-radio-button value="进行中">进行中</el-radio-button>
-              <el-radio-button value="已完成">已完成</el-radio-button>
+              <el-radio-button value="已结单">已结单</el-radio-button>
               <el-radio-button value="已取消">已取消</el-radio-button>
             </el-radio-group>
           </div>

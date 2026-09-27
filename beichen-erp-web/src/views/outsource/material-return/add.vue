@@ -61,7 +61,7 @@ const fetchSuppliers = (kw: string) =>
 // ===== 关联物料订单（维修退货闭环）=====
 /** 选中的物料订单行（含状态，用于提示"扣减订单收料 / 靠本单跟踪"两种收尾方式） */
 const pickedOrder = ref<any>(null)
-/** 该物料商的物料订单（收货中/已完成）：收货中的单审核会扣减收料数，已完成的靠本单跟踪 */
+/** 该物料商的物料订单（收货中/已结单）：收货中的单审核会扣减收料数，已结单的靠本单跟踪 */
 // 期 3（2026-09-19 读隔离）：改走本页前缀（原读 /outsource/material-order/page 需 outsource:material-order）
 const fetchMaterialOrders = (kw: string) => request.get('/outsource/material-return/material-orders', {
   params: {
@@ -76,12 +76,12 @@ function materialOrderLabel(o: any) {
   return st ? `${o.code}（${st}）` : `${o.code}`
 }
 const orderStatus = computed(() => pickedOrder.value?.status || '')
-/** 收尾方式提示：未完成=扣减订单收料（修好回补）；已完成/未关联=靠本单「送修/已返回」+ 结案跟踪 */
+/** 收尾方式提示：未结单=扣减订单收料（修好回补）；已结单/未关联=靠本单「送修/已返回」+ 结案跟踪 */
 const orderHint = computed(() => {
   if (!isRepair.value) return ''
   if (!form.materialOrderId || !pickedOrder.value) return '未关联物料订单：返回情况在本单「送修 / 已返回」中跟踪，全部返回后（未返回=0）可结案。'
   if (orderStatus.value === MaterialOrderStatus.RECEIVING) return '该订单未完成（收货中）：审核会把送修数量从该订单收料数中扣减（净收料 = 收料总数 − 送修数），供应商修好「登记维修返回」时自动回补，订单台账自动闭环。'
-  if (orderStatus.value === MaterialOrderStatus.FINISHED) return '该订单已完成：不扣减订单收料数，返回情况在本单「送修 / 已返回」中跟踪，全部返回后（未返回=0）可结案。'
+  if (orderStatus.value === MaterialOrderStatus.FINISHED) return '该订单已结单：不扣减订单收料数，返回情况在本单「送修 / 已返回」中跟踪，全部返回后（未返回=0）可结案。'
   return ''
 })
 /** 预填期间不因 supplierId 变化清空已带出的关联订单 */
@@ -279,7 +279,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
         <template #title>
           <span style="font-size:var(--app-font-xs);line-height:1.5">
             {{ isRepair
-              ? '维修退货：把物料送供应商维修 —— 审核只扣源仓、不冲减应付；供应商修好后在详情页「登记维修返回」把物料入回来（可分批、可撤销）。关联物料订单且订单未完成时，审核会同时扣减该订单收料数（修好返回自动回补）；订单已完成或不关联时，靠本单「送修 / 已返回」跟踪，全部返回后结案。'
+              ? '维修退货：把物料送供应商维修 —— 审核只扣源仓、不冲减应付；供应商修好后在详情页「登记维修返回」把物料入回来（可分批、可撤销）。关联物料订单且订单未结单时，审核会同时扣减该订单收料数（修好返回自动回补）；订单已结单或不关联时，靠本单「送修 / 已返回」跟踪，全部返回后结案。'
               : '退货退款：物料退回供应商 —— 审核扣源仓并生成负向应付（冲减应付账款）；供应商把货款退给我们后走付款/核销。' }}
           </span>
         </template>

@@ -60,7 +60,7 @@ watch(pageTitleText, (t) => { tabStore.updateTabTitle(route.path, t); applyPageT
  */
 const fetchSuppliers = (kw: string) =>
   request.get('/supplier/page', { params: { pageSize: 500, name: kw, excludeSupplierType: 'product' } })
-/** 该物料商的物料订单（收货中/已完成）：收货中的单审核会扣减收料数，已完成的靠本单跟踪 */
+/** 该物料商的物料订单（收货中/已结单）：收货中的单审核会扣减收料数，已结单的靠本单跟踪 */
 const fetchMaterialOrders = (kw: string) => request.get('/outsource/material-return/material-orders', {
   params: {
     pageSize: 500, code: kw || undefined,
@@ -263,7 +263,7 @@ async function handleUnAudit() {
   try { await request.put(`/outsource/material-return/${id}/un-audit`); ElMessage.success('已反审核'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 
-/** 结案（仅维修退货）：未返回=0 后收尾；场景②（订单已完成）/③（未关联）的跟踪终点 */
+/** 结案（仅维修退货）：未返回=0 后收尾；场景②（订单已结单）/③（未关联）的跟踪终点 */
 async function handleClose() {
   try { await ElMessageBox.confirm('确认结案？结案后不能再登记/撤销维修返回，也不能反审核（需先撤销结案）。', '确认结案', { type: 'warning' }) } catch { return }
   try { await request.put(`/outsource/material-return/${id}/close`); ElMessage.success('已结案'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '结案失败') }
@@ -360,13 +360,13 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
         <el-descriptions-item label="出库源仓">{{ detail.warehouseName || '-' }}</el-descriptions-item>
         <!-- 来源收料单：从「物料收货」按记录发起退货时才有（2026-09-17） -->
         <el-descriptions-item label="来源收料单">{{ detail.sourceDeliveryCode || (detail.sourceDeliveryId ? ('#' + detail.sourceDeliveryId) : '-') }}</el-descriptions-item>
-        <!-- 关联物料订单（2026-09-17 维修退货闭环）：订单未完成=已扣减其收料数（修好回补）；已完成/未关联=靠本单跟踪 -->
+        <!-- 关联物料订单（2026-09-17 维修退货闭环）：订单未结单=已扣减其收料数（修好回补）；已结单/未关联=靠本单跟踪 -->
         <el-descriptions-item v-if="isRepair" label="关联物料订单">
           <template v-if="detail.materialOrderId">
             <el-button type="primary" link @click="router.push(`/outsource/material-order/detail/${detail.materialOrderId}`)">{{ detail.materialOrderCode || ('#' + detail.materialOrderId) }}</el-button>
             <el-tag :type="MaterialOrderStatusTag[detail.materialOrderStatus] || 'info'" size="small" style="margin-left:6px">{{ MaterialOrderStatusLabel[detail.materialOrderStatus] || '-' }}</el-tag>
             <span v-if="detail.deductedFlag===1" style="margin-left:6px;color:var(--app-color-success);font-size:var(--app-font-xs)">已扣减该单收料数（修好返回自动回补）</span>
-            <span v-else style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">订单已完成，未扣减收料数</span>
+            <span v-else style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">订单已结单，未扣减收料数</span>
           </template>
           <span v-else style="color:var(--app-text-placeholder)">未关联（返回情况靠本单跟踪）</span>
         </el-descriptions-item>

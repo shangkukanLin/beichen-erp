@@ -39,7 +39,7 @@ export const OutsourceOrderStatus = {
 export const OutsourceOrderStatusLabel: Record<string, string> = {
   [OutsourceOrderStatus.PENDING]: '待审核',
   [OutsourceOrderStatus.PRODUCING]: '生产中',
-  [OutsourceOrderStatus.FINISHED]: '已完成',
+  [OutsourceOrderStatus.FINISHED]: '已结单',
   [OutsourceOrderStatus.CANCELLED]: '已作废'
 }
 
@@ -61,7 +61,7 @@ export const MaterialOrderStatus = {
 export const MaterialOrderStatusLabel: Record<string, string> = {
   [MaterialOrderStatus.PENDING]: '待审核',
   [MaterialOrderStatus.RECEIVING]: '收货中',
-  [MaterialOrderStatus.FINISHED]: '已完成',
+  [MaterialOrderStatus.FINISHED]: '已结单',
   [MaterialOrderStatus.CANCELLED]: '已作废'
 }
 

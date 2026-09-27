@@ -32,7 +32,7 @@ const deliveredQuantity = computed(() => items.value.reduce((s: number, it: any)
 const remainingQuantity = computed(() => totalQuantity.value - deliveredQuantity.value)
 const deliveryProgress = computed(() => totalQuantity.value ? Math.min(100, Math.round(deliveredQuantity.value / totalQuantity.value * 100)) : 0)
 
-/** 只有收货中的订单可新增收货（退不良在收货中/已完成都允许，与后端一致） */
+/** 只有收货中的订单可新增收货（退不良在收货中/已结单都允许，与后端一致） */
 const canReceive = computed(() => order.status === MaterialOrderStatus.RECEIVING)
 const canDefectReturn = computed(() => order.status === MaterialOrderStatus.RECEIVING || order.status === MaterialOrderStatus.FINISHED)
 
@@ -252,7 +252,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         <div style="display:flex;gap:8px">
           <el-button v-if="canReceive" type="primary" size="small" @click="openReceive">新增收货</el-button>
           <el-button v-if="canDefectReturn" type="warning" size="small" @click="openDefectReturn">退不良</el-button>
-          <!-- 退货：把已收物料退回物料商（走物料退货单）；不限于收货中，已完成也能退 -->
+          <!-- 退货：把已收物料退回物料商（走物料退货单）；不限于收货中，已结单也能退 -->
           <el-button type="warning" plain size="small" @click="goReturn()">退货</el-button>
         </div>
       </div>

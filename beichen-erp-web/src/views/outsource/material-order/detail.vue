@@ -115,7 +115,14 @@ async function handleUnAudit() {
   try { await ElMessageBox.confirm('确认反审核？将回到待审核状态', '反审核', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/un-audit`); ElMessage.success('已反审核'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleFinish() {
-  try { await ElMessageBox.confirm('结单后订单将标记为已完成，不可再修改。', '结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/finish`); ElMessage.success('已结单'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('结单后订单状态变为「已结单」，不可再收货。', '结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/finish`); ElMessage.success('已结单'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+}
+/**
+ * 反结单（2026-09-27 新增，用户口径「E 也要做」）：结错了的兜底 —— 已结单 → 收货中/待审核，清空结单时间。
+ * 与「结单」对称，纯状态回退（后端不动库存/应付）。
+ */
+async function handleReopen() {
+  try { await ElMessageBox.confirm('确认反结单？订单将回到「收货中」（可继续收货；若该单从未审核过则回「待审核」），结单时间清空。', '反结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/reopen`); ElMessage.success('已反结单'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleCancel() {
   try { await ElMessageBox.confirm('确定作废？', '作废', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/cancel`); ElMessage.success('已作废'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
@@ -166,6 +173,8 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
       <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">审核</el-button>
       <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
       <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleFinish">结单</el-button>
+      <!-- 反结单（2026-09-27 用户口径「E 也要做」）：与「结单」对称的兜底入口，仅已结单可见 -->
+      <el-button v-if="order.status===MaterialOrderStatus.FINISHED" type="warning" size="small" @click="handleReopen">反结单</el-button>
       <!-- 收料/退不良 2026-09-16 移出为独立菜单页「物料收货」，此处只留跳转入口 -->
       <el-button type="warning" size="small" @click="router.push(`/outsource/material-order/delivery/${id}`)">物料收货</el-button>
       <el-button v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">作废</el-button>
@@ -194,7 +203,7 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
             <el-col :span="8"><el-form-item label="审核人"><el-input :model-value="order.auditorName || '—'" readonly class="readonly-input" /></el-form-item></el-col>
             <!-- 下单日期（2026-09-25）：原列表列，因列表 10 列总宽超出容器、按下单日期最低价值移入详情页（信息不丢） -->
             <el-col :span="8"><el-form-item label="下单日期"><el-input :model-value="$fmtDate(order.createTime) || '-'" readonly class="readonly-input" /></el-form-item></el-col>
-            <el-col :span="8"><el-form-item label="订单完成时间"><el-input :model-value="$fmtDate(order.finishTime) || '-'" readonly class="readonly-input" /></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="结单时间"><el-input :model-value="$fmtDate(order.finishTime) || '-'" readonly class="readonly-input" /></el-form-item></el-col>
             <el-col :span="24"><el-form-item label="备注"><el-input v-model="order.remark" type="textarea" :rows="2" :disabled="order.status!==MaterialOrderStatus.PENDING" /></el-form-item></el-col>
           </el-row>
           <div style="display:flex;gap:8px;margin-top:12px">
@@ -203,6 +212,8 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
             <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">审核</el-button>
             <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
             <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleFinish">结单</el-button>
+            <!-- 反结单（2026-09-27 用户口径「E 也要做」）：与「结单」对称的兜底入口，仅已结单可见 -->
+            <el-button v-if="order.status===MaterialOrderStatus.FINISHED" type="warning" size="small" @click="handleReopen">反结单</el-button>
             <!-- 收料/退不良 2026-09-16 移出为独立菜单页「物料收货」，此处只留跳转入口 -->
             <el-button type="warning" size="small" @click="router.push(`/outsource/material-order/delivery/${id}`)">物料收货</el-button>
             <el-button v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">作废</el-button>
