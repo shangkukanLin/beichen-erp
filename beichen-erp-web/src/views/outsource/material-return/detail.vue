@@ -290,8 +290,10 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
         <span style="font-weight:600">委外物料退货详情</span>
       </template>
 
-      <!-- ============ 草稿：可编辑（字段/校验/payload 与 add.vue 一致） ============ -->
-      <el-form v-if="isDraft" :model="form" label-width="var(--app-label-width)">
+      <!-- ============ 草稿：可编辑（字段/校验/payload 与 add.vue 一致） ============
+           ⚠️ label-width 用 **lg 档**（2026-09-27）：本表单默认字号，「关联物料订单」6 字 = 84px + 冒号 > 90px
+           必然换行 ⇒ 104px 一行显示（与加工退货详情同口径）。 -->
+      <el-form v-if="isDraft" :model="form" label-width="var(--app-label-width-lg)">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="退货单号">{{ detail.code }}</el-form-item></el-col>
           <el-col :span="8"><el-form-item label="状态"><el-tag :type="DocStatusTag[detail.status] || 'info'" size="small">{{ DocStatusLabel[detail.status] || detail.status }}</el-tag></el-form-item></el-col>

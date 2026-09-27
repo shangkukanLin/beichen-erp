@@ -288,8 +288,10 @@ onActivated(loadData)
         <span style="font-weight:600">委外加工退货详情</span>
       </template>
 
-      <!-- ============ 草稿（维修退货）：可编辑（字段/校验/payload 与 add.vue 的 REPAIR 路径一致） ============ -->
-      <el-form v-if="showDraftForm" :model="form" label-width="var(--app-label-width)">
+      <!-- ============ 草稿（维修退货）：可编辑（字段/校验/payload 与 add.vue 的 REPAIR 路径一致） ============
+           ⚠️ label-width 用 **lg 档**（2026-09-27 用户实测）：本表单是默认字号，"送修出库仓" 5 字 + 必填星号
+           在 90px 下正好卡边缘，字体略宽就被挤成两行（"仓"掉到第二行）⇒ 104px 一行显示。 -->
+      <el-form v-if="showDraftForm" :model="form" label-width="var(--app-label-width-lg)">
         <el-row :gutter="16">
           <el-col :span="8"><el-form-item label="退货单号">{{ detail.code }}</el-form-item></el-col>
           <el-col :span="8"><el-form-item label="退货类型">
