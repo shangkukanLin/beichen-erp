@@ -8,6 +8,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
+import { applyPageTitle } from '@/utils/pageTitle'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
@@ -245,7 +246,9 @@ const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form }))
  */
 function syncTabTitle() {
   const kind = isRepair.value ? '物料维修退货' : '委外物料退货'
-  tabStore.updateTabTitle(route.path, (editId ? '编辑' : '新增') + kind)
+  const t = (editId ? '编辑' : '新增') + kind
+  tabStore.updateTabTitle(route.path, t)
+  applyPageTitle(t)   // 浏览器标签页标题同口径（后缀统一在 @/utils/pageTitle）
 }
 watch(isRepair, syncTabTitle)
 

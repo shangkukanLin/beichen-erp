@@ -3,6 +3,7 @@ import { ref, reactive, computed, watch, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageShell from '@/components/PageShell.vue'
 import { useTabStore } from '@/stores/tabs'
+import { applyPageTitle } from '@/utils/pageTitle'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { localDate } from '@/utils/date'
@@ -50,7 +51,7 @@ const form = reactive({
  *   ⚠️ ② 等数据回来才能定（isRepair 依赖 detail.returnType）⇒ 故意**不写 immediate**，避免"先错名再改对"的中间态。
  */
 const pageTitleText = computed(() => isRepair.value ? '物料维修退货详情' : '委外物料退货详情')
-watch(pageTitleText, (t) => tabStore.updateTabTitle(route.path, t))
+watch(pageTitleText, (t) => { tabStore.updateTabTitle(route.path, t); applyPageTitle(t) })
 
 /**
  * 退回对象 / 维修供应商 实时查库（Odoo 风格）。

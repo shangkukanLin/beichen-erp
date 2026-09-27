@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { applyPageTitle } from '@/utils/pageTitle'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -484,9 +485,8 @@ router.beforeEach((to, _from, next) => {
   const userStore = useUserStore()
   const isLogin = userStore.isLogin
 
-  if (to.meta.title) {
-    document.title = `${to.meta.title} - 北辰ERP管理系统`
-  }
+  // 2026-09-27：后缀由 @/utils/pageTitle 统一（原先这里自拼一次，另有 4 处页面各拼一次 ⇒ 易漂移）
+  if (to.meta.title) applyPageTitle(to.meta.title as string)
 
   if (to.meta.requiresAuth === false) {
     // 不需要鉴权的页面（如登录页），已登录则跳首页

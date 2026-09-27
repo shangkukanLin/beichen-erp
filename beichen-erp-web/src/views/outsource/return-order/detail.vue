@@ -8,6 +8,7 @@ import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_K
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useTabStore } from '@/stores/tabs'
+import { applyPageTitle } from '@/utils/pageTitle'
 
 /**
  * 委外加工退货详情（2026-09-24 用户口径：草稿态就地可编辑，列表不再给「编辑」）
@@ -57,7 +58,7 @@ const form = reactive({
  *      加载中沿用 meta 名（对 DEFECT 单本来就是对的），加载完对 REPAIR 单改成「成品维修退货详情」。
  */
 const pageTitleText = computed(() => isRepair.value ? '成品维修退货详情' : '委外加工退货详情')
-watch(pageTitleText, (t) => tabStore.updateTabTitle(route.path, t))
+watch(pageTitleText, (t) => { tabStore.updateTabTitle(route.path, t); applyPageTitle(t) })
 /** 送修产品行（可改数量与规格；数量改 0 = 本次不再送修该产品） */
 const editableProducts = ref<any[]>([])
 

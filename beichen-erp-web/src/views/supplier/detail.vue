@@ -4,6 +4,7 @@ import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+import { applyPageTitle } from '@/utils/pageTitle'
 import { productLabel } from '@/api/product'
 import { getProjectBom } from '@/api/system'
 import {
@@ -34,7 +35,8 @@ const TYPE_OPTIONS_CUSTOM = computed(() => isVendor.value
 function applyVendorTitle() {
   const title = isVendor.value ? '供货商详情' : '供应商详情'
   route.meta.title = title
-  document.title = `${title} - 北辰ERP管理系统`
+  // 2026-09-27：后缀统一走 @/utils/pageTitle（原先 5 处各拼一次）
+  applyPageTitle(title)
 }
 
 const form = reactive({

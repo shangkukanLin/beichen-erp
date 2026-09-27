@@ -130,6 +130,10 @@ Start-Sleep -Milliseconds 2200
 $addTab = EvalJs "(()=>{const a=document.querySelector('.tab-item.active .tab-label');return a?(a.innerText||'').trim():'NONE'})()"
 Write-Host ('S2 active tab=' + $addTab)
 Ok ($addTab -eq (ZH 'title_add_repair_order')) 'S2 add-page tab title = 新增成品维修退货'
+# 浏览器标签页标题同口径（后缀统一在 @/utils/pageTitle ⇒ 这里只断言前缀，不复制后缀）
+$addDoc = EvalJs "String(document.title)"
+Write-Host ('S2 doc title=' + $addDoc)
+Ok ($addDoc.StartsWith((ZH 'title_add_repair_order'))) 'S2 browser-tab title = 新增成品维修退货 + 固定后缀'
 Start-Sleep -Milliseconds 3000
 Ok ((SelectLabelText 'lbl_factory' $facName) -match 'OK') ('S2 pick factory=' + $facName)
 Start-Sleep -Milliseconds 1500

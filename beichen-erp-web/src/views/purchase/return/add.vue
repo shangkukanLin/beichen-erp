@@ -134,6 +134,7 @@ import { useUnsavedGuard } from '@/composables/usePageBack'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
 import request from '@/utils/request'
+import { applyPageTitle } from '@/utils/pageTitle'
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
 // 2026-09-20（F7-157）：原页内直接拼 request.get/post/put('/inventory/purchase-return...') 绕过 API 层
 //（同模块"部分走封装、部分直连"，且同一端点在本页与详情页各写一份字面量）⇒ 统一改用 @/api/purchase
@@ -409,11 +410,11 @@ onMounted(async () => {
   loadQualityTypes()
   if (fromOrder) {
     tabStore.updateTabTitle(route.fullPath, '从采购单开退货单')
-    document.title = '从采购单开退货单 - 北辰ERP管理系统'
+    applyPageTitle('从采购单开退货单')
     await loadFromPurchaseOrder(fromOrder)
   } else if (isEdit) {
     tabStore.updateTabTitle(route.fullPath, '编辑采购退货单')
-    document.title = '编辑采购退货单 - 北辰ERP管理系统'
+    applyPageTitle('编辑采购退货单')
     await loadReturnData()
   }
   window.addEventListener('refresh:dropdown-data', handleRefreshData)

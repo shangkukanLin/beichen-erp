@@ -85,6 +85,7 @@ import { useTabStore } from '@/stores/tabs'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import request from '@/utils/request'
+import { applyPageTitle } from '@/utils/pageTitle'
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
@@ -205,7 +206,7 @@ watch(() => route.query.id, (newId) => {
   resetForm()
   if (isEdit.value) {
     tabStore.updateTabTitle(route.fullPath, '编辑移仓单')
-    document.title = '编辑移仓单 - 北辰ERP管理系统'
+    applyPageTitle('编辑移仓单')
     loadMoveData()
   }
 })
@@ -250,7 +251,7 @@ onMounted(async () => {
   loadQualityTypes()
   if (isEdit.value) {
     tabStore.updateTabTitle(route.fullPath, '编辑移仓单')
-    document.title = '编辑移仓单 - 北辰ERP管理系统'
+    applyPageTitle('编辑移仓单')
     await loadMoveData()
   }
   window.addEventListener('refresh:dropdown-data', handleRefreshData)

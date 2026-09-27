@@ -726,6 +726,16 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 ⇒ 定位手法：`git stash push -- <两个文件>` 对照复测（不带改动时同一 URL 正常渲染 ⇒ 确定是自己改的），
 然后 `agent-browser errors / console` 看真实报错。
 
+### 浏览器标签页标题也跟随类型（同日，用户口径）
+后缀 ` - 北辰ERP管理系统` 原先 **5 处各写一遍**（router 守卫、供应商/供货商详情、采购退货新增 ×2、移仓新增 ×2），
+现收敛到 **`@/utils/pageTitle.ts`**：`APP_TITLE_SUFFIX` + `applyPageTitle(name)`（router 守卫与上述 4 处都改用它）。
+动态标题页在 `syncTabTitle()` / `watch(pageTitleText)` 里**并排调** `tabStore.updateTabTitle(...)` 与
+`applyPageTitle(...)` ⇒ **页头 = 顶部页签 = 浏览器标签页** 三处一致。
+`verify-detail-render.ps1` 已把三处都纳入断言（实测 `成品维修退货详情 - 北辰ERP管理系统` 等）。
+
+> ⚠️ 小坑：把一个**纯 ASCII 的 .ps1** 加入中文断言后，PowerShell 5.1 会按 ANSI 解析而**语法报错**
+> （`BOM守卫` 只扫 `ui-e2e-*.ps1`，`verify-*.ps1` 不在其内）⇒ 新增中文断言后要**手工补 UTF-8 BOM**。
+
 ### 新守卫 `verify-detail-render.ps1`（补"编译/HTTP 守卫"的盲区）
 5 个详情页（加工 REPAIR / 加工 DEFECT / 物料 REPAIR / 物料 REFUND / 加工单详情作对照，id 从库里取最新）：
 断言 `#app` 真的渲染（innerHTML > 1000，白屏是 0）**且**控制台无 `execution of setup function`。
@@ -756,8 +766,9 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
       + 新增 `reconcile-repair-onsite.ps1`（只读报表 / `-Apply` 修正且留痕；dev 已清到 diffs=0）；
       守卫升级为双案例 + 负例对照（ui-e2e-15 53/0、ui-e2e-14 46/0、两个 verify 与五守卫全 PASS）
 - [x] B17 维修退货页命名错位修复 + 页签名跟随类型（2026-09-27，用户实测：新增页/详情页叫"委外…退货"）：
-      两张 add 页 onMounted 同步页签名、两张 detail 页按类型取页头/卡片头/页签名；
+      两张 add 页 onMounted 同步页签名、两张 detail 页按类型取页头/卡片头/页签名；**浏览器标签页标题**同口径
+      （后缀收敛到 `@/utils/pageTitle.ts`，原先 5 处各拼一遍）⇒ 页头=页签=浏览器标题三处一致；
       顺带踩中并修掉 `watch()` 立即求值导致的 **TDZ 整页白屏**（新增 `verify-detail-render.ps1` 补盲，
-      16: 69/0、15: 54/0、14: 46/0、五守卫 + 详情页渲染守卫全 PASS）
+      16: 70/0、15: 55/0、14: 46/0、五守卫 + 详情页渲染守卫全 PASS）
 - [x] B12 加工退货/物料退货三级菜单 + 页签（2026-09-27，4+2 叶子；返回进度按来源单聚合 + 草稿作废 + 防超返；脚本层文案同步待办见 §5.13）
 
