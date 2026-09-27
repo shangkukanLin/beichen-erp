@@ -74,6 +74,7 @@ public class DataInitializer implements ApplicationRunner {
         migrateReturnSortSorter();
         migrateReturnBackSource();
         migrateMaterialMoveQuality();
+        migrateMaterialRepairOnsiteLeg();
         initSuperAdmin();
         initMaterialTypes();
         initPhaseTemplates();
@@ -1242,6 +1243,16 @@ public class DataInitializer implements ApplicationRunner {
         } catch (Exception e) {
             log.debug("idx_source_delivery 已存在，跳过：{}", e.getMessage());
         }
+    }
+
+    /**
+     * 存量库幂等迁移（2026-09-27）：物料维修返回记录增加 onsite_leg 列。
+     * <p>背景（在厂行对称性二修）：登记时若在厂行不存在（旧单）会**跳过**核销腿，撤销腿必须知道这一点，
+     * 否则旧单撤销会凭空给在厂行 +qty。默认 1 = 历史上绝大多数记录确实核销过在厂行（与新库 schema.sql 一致）。</p>
+     */
+    private void migrateMaterialRepairOnsiteLeg() {
+        addColumnIfMissing("outsource_material_return_repair",
+                "onsite_leg TINYINT DEFAULT 1 COMMENT '登记时是否核销在厂行：1=是(撤销需恢复) 0=旧单跳过(撤销不恢复)'");
     }
 
     private void migrateReturnSortSorter() {

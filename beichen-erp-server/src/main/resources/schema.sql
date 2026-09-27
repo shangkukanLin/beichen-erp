@@ -765,6 +765,9 @@ CREATE TABLE IF NOT EXISTS outsource_material_return_repair (
     material_name VARCHAR(100) COMMENT '物料名称快照',
     unit VARCHAR(20) COMMENT '单位',
     quantity DECIMAL(18,0) DEFAULT 0 COMMENT '本次返回数量',
+    -- 2026-09-27（对称性二修）：本条登记时是否真的核销了在厂行（0=旧单无在厂行被跳过）。
+    -- 撤销腿按本标记决定是否恢复在厂，避免旧单撤销凭空增加在厂。
+    onsite_leg TINYINT DEFAULT 1 COMMENT '登记时是否核销在厂行：1=是(撤销需恢复) 0=旧单跳过(撤销不恢复)',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

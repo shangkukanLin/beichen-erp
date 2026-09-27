@@ -421,6 +421,8 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                     StockChangeType.MATERIAL_REPAIR_IN.getCode(), order.getCode(),
                     RelatedBillType.OUTSOURCE_MATERIAL_REPAIR, null, null, order.getId());
 
+            // 2026-09-27（对称性二修）：记下本行插入记录的起点 —— 核销腿的结果要写到这些记录上
+            int rowsFrom = savedRows.size();
             // 关联订单未完成时回补收料数/冲减送修中（分摊到本单该物料对应的订单明细行；一般为一行）
             List<Object[]> credits = nzInt(order.getDeductedFlag()) == 1
                     ? creditBackToOrder(id, materialId, qty) : Collections.emptyList();
@@ -436,9 +438,19 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                 savedRows.add(insertRepairRow(id, repairDate, whId, materialId, line, qty.subtract(credited), null, cid));
                 saved++;
             }
-            // P2-1 物料版：核销在厂 MATERIAL_REPAIR 行（供应商委外仓），撤销时按记录对称恢复
+            // P2-1 物料版：核销在厂 MATERIAL_REPAIR 行（供应商委外仓），撤销时按记录对称恢复。
+            // ⚠️ 旧单（审核于形态化改造前）在厂行为 0 ⇒ 本腿被**跳过**：必须把「没核销」落到记录上
+            //    （onsite_leg=0），否则撤销腿会凭空给在厂行 +qty（2026-09-27 二修，反向漏记）。
+            boolean onsiteDeducted = false;
             if (supplierWhId != null) {
-                allocateOnSiteRepair(order, supplierWhId, materialId, qty, cid);
+                onsiteDeducted = allocateOnSiteRepair(order, supplierWhId, materialId, qty, cid);
+            }
+            if (!onsiteDeducted) {
+                for (int i = rowsFrom; i < savedRows.size(); i++) {
+                    OutsourceMaterialReturnRepair r = savedRows.get(i);
+                    r.setOnsiteLeg(0);
+                    repairMapper.updateById(r);
+                }
             }
             returned.put(materialId, already.add(qty)); // 同一请求内多行也要累计，避免叠加超退
         }
@@ -545,15 +557,19 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
      * P2-1 物料版：核销在厂物料（MATERIAL_REPAIR 行，定位键唯一 ⇒ 精确扣减）。
      * <p>⚠️ 存量兼容：旧单（改造前审核）从未入过厂 ⇒ 在厂行不存在时跳过核销腿并留痕（动作对称）；
      * 行存在但数量不足 = 真错账 ⇒ 硬报错。</p>
+     *
+     * @return **是否真的核销了**（true=扣减了在厂 / false=旧单无在厂行被跳过）。
+     *         调用方必须把返回值写到返回记录的 {@code onsite_leg} 上，撤销腿据此决定是否恢复在厂
+     *         （2026-09-27 二修：否则旧单撤销会凭空给在厂行 +qty）。
      */
-    private void allocateOnSiteRepair(OutsourceMaterialReturn order, Long supplierWhId,
-                                      Long materialId, BigDecimal qty, Long cid) {
+    private boolean allocateOnSiteRepair(OutsourceMaterialReturn order, Long supplierWhId,
+                                         Long materialId, BigDecimal qty, Long cid) {
         BigDecimal onSite = warehouseStockService.getMaterialQuantity(supplierWhId, materialId,
                 WarehouseStock.FORM_MATERIAL_REPAIR);
         if (onSite.compareTo(BigDecimal.ZERO) <= 0) {
             log.warn("维修返回：旧单（改造前审核）无在厂 MATERIAL_REPAIR 行，跳过核销腿 code={} materialId={} qty={}",
                     order.getCode(), materialId, qty);
-            return;
+            return false;
         }
         if (onSite.compareTo(qty) < 0)
             throw new BusinessException("在厂物料（维修送修）不足：当前 " + onSite + "、需核销 " + qty);
@@ -561,6 +577,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
                 StockChangeType.CANCEL_MATERIAL_REPAIR_STOCK_IN.getCode(), order.getCode(),
                 RelatedBillType.OUTSOURCE_MATERIAL_REPAIR, null, null, order.getId(),
                 WarehouseStock.FORM_MATERIAL_REPAIR);
+        return true;
     }
 
     /** 按供应商解析委外仓（首个 OUTSOURCE 仓；无仓返回 null，由调用方决定报错或跳过） */
@@ -586,6 +603,8 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         row.setQuantity(qty);
         row.setRemark((String) line.get("remark"));
         row.setMaterialOrderItemId(orderItemId);
+        // 2026-09-27 二修：默认「登记时核销过在厂」；核销腿被跳过的旧单由调用方改写为 0（见 repairReturn）
+        row.setOnsiteLeg(1);
         if (cid != null && cid > 0) row.setCompanyId(cid);
         repairMapper.insert(row);
         return row;
@@ -726,8 +745,10 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         // 登记时 {@code allocateOnSiteRepair} 是**无条件**核销在厂行的（见 repairReturn），撤销必须无条件对回。
         // 原实现把这行恢复关在 `if (!mats.isEmpty())` 里 ⇒ 没填实际用料的维修返回，撤销后在厂行**永久少记**，
         // 该单后续「反审核」会以"在厂物料（维修送修）不足"被拒（实测：ui-e2e-15 S8 复现，2026-09-27）。
-        if (supplierWhId != null && row.getMaterialId() != null && row.getQuantity() != null
-                && row.getQuantity().compareTo(BigDecimal.ZERO) > 0) {
+        // 2026-09-27 **二修（对称性补强）**：但**旧单**（审核于形态化改造前、在厂行不存在）登记时这条腿是被
+        // **跳过**的（登记时已在记录上打标 onsite_leg=0）⇒ 撤销也必须跳过，否则会给在厂行**凭空 +qty**。
+        if (nzInt(row.getOnsiteLeg()) != 0 && supplierWhId != null && row.getMaterialId() != null
+                && row.getQuantity() != null && row.getQuantity().compareTo(BigDecimal.ZERO) > 0) {
             warehouseStockService.changeMaterialStock(supplierWhId, row.getMaterialId(), row.getQuantity(),
                     StockChangeType.MATERIAL_REPAIR_STOCK_IN.getCode(), order.getCode(),
                     RelatedBillType.OUTSOURCE_MATERIAL_REPAIR, null, null, order.getId(),

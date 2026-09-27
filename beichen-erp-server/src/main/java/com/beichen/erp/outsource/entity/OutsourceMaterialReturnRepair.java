@@ -57,6 +57,15 @@ public class OutsourceMaterialReturnRepair {
     /** 本次返回数量 */
     private BigDecimal quantity;
 
+    /**
+     * 2026-09-27（对称性二修）：本条**登记时是否真的核销了在厂行**。
+     * <p>1=是（撤销时必须恢复在厂，见 cancelRepairReturn）；0=否 —— 只可能是「旧单」（审核于物料形态化
+     * 改造之前，从未入过厂）在厂行为 0 时登记，登记腿被 {@code allocateOnSiteRepair} 跳过。
+     * 撤销腿**必须按本标记**决定是否恢复：否则旧单撤销会凭空给在厂行 +qty（反向漏记）。
+     * 存量库由 DataInitializer 幂等补列，默认 1（历史上绝大多数记录确实核销过）。</p>
+     */
+    private Integer onsiteLeg;
+
     private String remark;
 
     /** 公司ID */
