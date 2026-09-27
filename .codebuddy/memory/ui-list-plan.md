@@ -587,6 +587,12 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 `web-check.ps1` 增加 **[label-key守卫]**：禁止 `\slabel-key="\(` —— 函数型 label-key 必须写成 `:label-key="..."`。
 负例实测：临时放入一个含该写法的 .vue ⇒ 守卫 FAIL 并点名「文件:行」✓；删除后 PASS ✓。
 
+### ⚠️ 工具脚本有**两份**（运维注意，本次踩到）
+`web-check.ps1` 同时存在于**工作区根**（`20260710123705\web-check.ps1`，**未纳入 git**，只有 3 个守卫）
+与 **`beichen-erp/tools/regression/web-check.ps1`**（**受版本控制**，有 5 个守卫：+枚举守卫 +本次 label-key 守卫）。
+根目录那份的 `$wsRoot = $PSScriptRoot` ⇒ 扫的是工作区根，那里只有 48 个 ui-e2e 脚本（仓库内是 55 个）⇒
+**守卫会漏检**。⇒ **跑守卫一律用仓库内那份**；新守卫也只往仓库内那份加（否则不进版本控制）。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）

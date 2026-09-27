@@ -90,6 +90,21 @@ if ($enumMissing.Count -gt 0) {
   Write-Output '[枚举守卫] PASS 后端枚举常量与前端 Label 映射一致（SourceBillType / SettlementStatus）'
 }
 
+# ===== 源头守卫（2026-09-27）：RemoteSelect 的**函数型** label-key 必须用 : 绑定 =====
+# 原因（用户实测，维修退货详情「送修出库仓」显示成 73）：写成 label-key="(row:any)=>row.warehouseName"
+# （漏了 :）时 Vue 把它当**静态字符串**传进去 ⇒ RemoteSelect.getLabel 取 row["(row:any)=>row.warehouseName"]
+# ⇒ undefined ⇒ el-option 没有 label ⇒ Element Plus 回退显示 **value** ⇒ 下拉与回显全变成 ID。
+# 正确写法：:label-key="(row:any)=>row.warehouseName"；静态字符串形式只允许真实字段名（如 label-key="name"）。
+$lkBad = @(Get-ChildItem -Path (Join-Path $root 'src') -Recurse -Filter *.vue -File |
+  Select-String -Pattern '\slabel-key="\(')
+if ($lkBad.Count -gt 0) {
+  Write-Output "[label-key守卫] FAIL 发现静态 label-key 里写函数 $($lkBad.Count) 处（函数必须写成 :label-key=\"...\"）："
+  $lkBad | ForEach-Object { Write-Output ("  " + $_.Path + ":" + $_.LineNumber + ": " + $_.Line.Trim()) }
+  $hygiene = 1
+} else {
+  Write-Output '[label-key守卫] PASS RemoteSelect 函数型 label-key 均已用 : 绑定（静态只允许真实字段名）'
+}
+
 Push-Location $root
 if ($Script -eq 'build') {
   & cmd /c "npm run build > `"$log`" 2>&1"
