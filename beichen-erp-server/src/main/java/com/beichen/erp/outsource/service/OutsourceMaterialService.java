@@ -41,7 +41,10 @@ public interface OutsourceMaterialService {
      * <p><b>审核口径（2026-09-27 用户要求「新增物料时勾选，需要自动审核」）</b>：</p>
      * <ul>
      *   <li>{@code autoAudit=true}（新增物料页勾选路径）⇒ 建单后**立即审核**：当场写「费用支出」资金流水、
-     *       扣支出账户余额。审核内含账户行锁 + 余额校验，**余额不足会抛错并整体回滚**（不会留下只落草稿的半成品）。</li>
+     *       扣支出账户余额。审核内含账户行锁 + 余额校验，**余额不足会抛错并整体回滚**（不会留下只落草稿的半成品）。
+     *       **前置闸门（方案 A）**：还须持费用审核权限（{@code finance:expense} 或 {@code finance:cashflow}，
+     *       与 {@code /api/finance/expense} 的收口号同源）；无该权限 ⇒ **降级为草稿**并在响应里带
+     *       {@code downgraded=true}（物料页用户通常没有这两个码，避免借物料页越权动钱）。</li>
      *   <li>{@code autoAudit=false}（列表行操作「补登记」路径）⇒ 只落**草稿**，由财务在「费用管理」审核（此时钱不动）。</li>
      * </ul>
      *
@@ -52,7 +55,7 @@ public interface OutsourceMaterialService {
      * @param materialId 物料 ID（须存在）
      * @param body       {@code amount} 必填 &gt;0；{@code accountId} 必填；{@code expenseDate}（空=今天）；
      *                   {@code remark}（空="研发支出：物料名"）；{@code autoAudit}（true=建单即审核并扣款）
-     * @return {@code {expenseId, expenseNo, existing, audited}}
+     * @return {@code {expenseId, expenseNo, existing, audited, downgraded?}}
      */
     Map<String, Object> createRdExpense(Long materialId, Map<String, Object> body);
 }

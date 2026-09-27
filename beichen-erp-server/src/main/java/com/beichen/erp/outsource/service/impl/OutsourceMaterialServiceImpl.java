@@ -1,5 +1,6 @@
 package com.beichen.erp.outsource.service.impl;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.config.CompanyContext;
@@ -56,8 +57,19 @@ public class OutsourceMaterialServiceImpl implements OutsourceMaterialService {
         // 2026-09-27（用户口径「新增物料时勾选，需要自动审核」）：`autoAudit=true` ⇒ 建单后**立即审核** ——
         // 当场写「费用支出」流水、扣支出账户余额（不再是草稿）。审核内含账户行锁 + 余额校验：
         // 余额不足会抛错 ⇒ 本方法同事务**整体回滚**，不会留下"料建了、费用只落个草稿"的半成品。
-        boolean autoAudit = asBool(body == null ? null : body.get("autoAudit"));
+        //
+        // 同日追加（用户选方案 A）：自动审核 = **动钱** ⇒ 还须持**费用审核权限**（与 /api/finance/expense
+        // 的收口号同源：finance:expense 或 finance:cashflow，见 ApiPermGuard）。物料页用户通常没有这两个码
+        // ⇒ **降级为草稿**（不越权动钱），由财务在费用管理审核；响应带 downgraded 让前端说清原因。
+        boolean wantAudit = asBool(body == null ? null : body.get("autoAudit"));
+        boolean canAudit = canAuditExpense();
+        boolean autoAudit = wantAudit && canAudit;
         Map<String, Object> res = new LinkedHashMap<>();
+        if (wantAudit && !canAudit) {
+            res.put("downgraded", true);
+            log.info("物料 {} 的研发支出要求自动审核，但当前用户无费用审核权限（finance:expense / finance:cashflow）⇒ 降级为草稿",
+                    materialId);
+        }
         // 幂等：同一物料已有**未作废**的研发支出 ⇒ 回原单（作废后可重新登记）
         FinanceExpense exists = financeExpenseService.findActiveBySource(
                 ExpenseSourceType.RD_MATERIAL.getCode(), materialId);
@@ -125,6 +137,21 @@ public class OutsourceMaterialServiceImpl implements OutsourceMaterialService {
             res.put("audited", false);
         }
         return res;
+    }
+
+    /**
+     * 当前用户是否持有**费用审核权限** —— 与 {@code /api/finance/expense} 的收口号同源
+     * （{@code finance:expense} 或 {@code finance:cashflow}，任一即可；见 ApiPermGuard 的
+     * {@code rule("/api/finance/expense", ...)}）⇒ **"能在费用管理页点审核的人"才允许自动审核**。
+     *
+     * <p>无登录上下文（内部调用/异步任务）按无权限处理：宁降级草稿，不越权动钱。</p>
+     */
+    private boolean canAuditExpense() {
+        try {
+            return StpUtil.hasPermission("finance:expense") || StpUtil.hasPermission("finance:cashflow");
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** body 里布尔值的容错解析（后端不信任前端：可能传 true / "true" / 1） */

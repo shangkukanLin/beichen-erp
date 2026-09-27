@@ -196,6 +196,9 @@ async function createRdExpense(materialId: number) {
     const no = r?.expenseNo ? `（单号 ${r.expenseNo}）` : ''
     if (r?.audited) {
       ElMessage.success(`${r?.existing ? '该物料已登记过研发支出' : '研发支出已登记并自动审核'}${no}，已从支出账户扣款`)
+    } else if (r?.downgraded) {
+      // 方案 A（2026-09-27 用户选定）：无「费用管理」审核权限的账号 ⇒ 后端降级为草稿（越权动钱的兜底）
+      ElMessage.warning(`${r?.existing ? '该物料已登记过研发支出' : '研发支出已存为草稿'}${no}：当前账号没有「费用管理」审核权限，已按草稿登记，待财务审核后扣款`)
     } else {
       // 兜底：勾选路径按口径一定要求审核，走到这里说明后端返回异常，明确提示"未扣款"避免误判
       ElMessage.warning(`${r?.existing ? '该物料已登记过研发支出' : '研发支出已登记'}${no}，尚未扣款（请在「财务管理 → 费用管理」审核后扣款）`)
@@ -331,7 +334,7 @@ onMounted(async () => {
              ③ 落库是**草稿**费用单（类型=研发支出），资金要到「财务管理 → 费用管理」审核时才动。 -->
         <el-form-item v-if="!isEdit" label="研发支出">
           <el-checkbox v-model="rdForm.enabled" @change="onRdToggle">同时登记一笔研发支出</el-checkbox>
-          <div v-if="!rdForm.enabled" style="color:var(--app-text-secondary);font-size:var(--app-font-xs);line-height:1.5">勾选后填金额与支出账户，保存物料时一并登记一张「研发支出」并<b>自动审核</b>（当场从该账户扣款；余额不足会提示，可换账户重试）</div>
+          <div v-if="!rdForm.enabled" style="color:var(--app-text-secondary);font-size:var(--app-font-xs);line-height:1.5">勾选后填金额与支出账户，保存物料时一并登记一张「研发支出」并<b>自动审核</b>（当场从该账户扣款；余额不足会提示，可换账户重试）。如当前账号没有「费用管理」审核权限，则自动登记为草稿，由财务审核后扣款。</div>
         </el-form-item>
         <template v-if="!isEdit && rdForm.enabled">
           <el-form-item required label="支出金额"><el-input-number v-model="rdForm.amount" :precision="2" :min="0.01" controls-position="right" style="width:100%" placeholder="默认取物料单价" /></el-form-item>

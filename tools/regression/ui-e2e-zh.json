@@ -160,6 +160,7 @@
   "lbl_rd_account": "支出账户",
   "msg_rd_draft": "研发支出已存为草稿",
   "msg_rd_audited": "研发支出已登记并自动审核",
+  "msg_rd_downgraded": "当前账号没有「费用管理」审核权限",
   "menu_material_stock": "物料库存详情",
   "menu_material_stock_log": "物料库存流水",
   "lbl_total_stock": "总库存",

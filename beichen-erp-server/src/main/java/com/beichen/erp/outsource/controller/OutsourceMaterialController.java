@@ -88,7 +88,9 @@ public class OutsourceMaterialController {
      * <p><b>审核口径</b>（用户 2026-09-27 追加要求「新增物料时勾选，需要自动审核」）：</p>
      * <ul>
      *   <li>{@code autoAudit=true}（新增物料页勾选）⇒ 建单后**立即审核**：当场写「费用支出」流水、扣账户余额；
-     *       余额不足则整体回滚（不留半成品），前端提示后可换账户重试。</li>
+     *       余额不足则整体回滚（不留半成品），前端提示后可换账户重试。
+     *       **方案 A 闸门**：须持费用审核权限（{@code finance:expense} / {@code finance:cashflow}），
+     *       否则降级为草稿（响应 {@code downgraded=true}）—— 物料页用户通常无此权限，不会借物料页动钱。</li>
      *   <li>{@code autoAudit=false}（列表行操作「补登记」）⇒ 落**草稿**，由财务在「费用管理」审核。</li>
      * </ul>
      *

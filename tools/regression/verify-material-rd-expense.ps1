@@ -10,8 +10,11 @@
 #   C) idempotent: calling again returns the SAME doc (existing=true) and must NOT deduct a second time.
 #   D) NEGATIVE: amount<=0 / missing account / NOT ENOUGH BALANCE (the new failure mode auto-audit introduces)
 #      -> rejected, nothing left behind, balance untouched.
-#   E) PERMISSION (why the endpoint lives under the material prefix): a user whose ONLY menu is "material info"
-#      can call it (200), while the same user posting /api/finance/expense is denied (403).
+#   E) GATE (option A, 2026-09-27): a user whose ONLY menu is "material info" can still call the endpoint (200)
+#      -- but the ticked box must be DOWNGRADED to a DRAFT and must NOT move money: auditing an expense needs
+#      finance:expense / finance:cashflow (the codes guarding /api/finance/expense), which that user lacks
+#      (posting /api/finance/expense as that user is 403). So the gate mirrors the finance endpoint.
+#   E2) GATE, positive side: an account holding finance:expense + material info pays immediately on the same call.
 #
 # Fixture is self-built / self-cleaned (temp material + temp role/user), so the file is repeatable. PURE ASCII.
 $ErrorActionPreference = 'Continue'
@@ -136,7 +139,7 @@ Ok ($r4b.code -ne 200) 'D: auto-audit rejected when the balance cannot cover it'
 Ok ((RdCount $matB) -eq 0) 'D: nothing was left behind (create + audit rolled back together)'
 Ok ((Balance $accountId) -eq $balD) 'D: balance untouched by the failed auto-audit'
 
-Step 'E) PERMISSION: material-page user (no finance perms) can file it; the finance endpoint stays closed'
+Step 'E) GATE (option A): a material-page user WITHOUT the finance perm gets a DRAFT, not a payment'
 $isoRole = 'perm_rd_iso'
 $isoUser = 'perm_rd_user'
 SqlExec ("INSERT INTO sys_role (role_name, role_code, status, remark, company_id) VALUES ('perm rd iso', '" + $isoRole + "', 1, 'temp verify-material-rd-expense role', 1);")
@@ -152,16 +155,48 @@ $lg2 = Login $isoUser '123'
 Ok ($lg2.code -eq 200 -and $lg2.data.token) ('E: logged in as ' + $isoUser + ' (only menu = material info)')
 if ($lg2.data.token) {
   $isoTok = $lg2.data.token
-  # fresh material C: the ticked path on a material-page-only account -- documents that the box (which now pays
-  # immediately) is NOT gated on any finance permission
+  # 2026-09-27 user picked option A: the box pays immediately ONLY for users who may audit expenses
+  # (finance:expense / finance:cashflow -- the codes guarding /api/finance/expense). A material-page-only
+  # account must NOT be able to move money through the material page: the call is downgraded to a DRAFT.
   $m4 = ApiPost '/outsource/material' $tok ('{"materialName":"RD-EXP-C-' + $stamp + '","materialTypeId":' + $matTypeId + ',"unit":"PCS","price":2,"supplierIds":""}')
   $matC = [string]$m4.data; $matIds += $matC
   Ok ($matC -ne '') ('fixture material C created (id=' + $matC + ')')
+  $balE = Balance $accountId
   $r5 = ApiPost ("/outsource/material/" + $matC + "/rd-expense") $isoTok ('{"amount":7.5,"accountId":' + $accountId + ',"autoAudit":true}')
-  Ok ($r5.code -eq 200 -and $r5.data.audited -eq $true) ('E: material-page-only user CAN file it AND auto-audit it (code=' + $r5.code + ')')
+  Info ('E downgraded -> code=' + $r5.code + ' audited=' + $r5.data.audited + ' downgraded=' + $r5.data.downgraded)
+  Ok ($r5.code -eq 200 -and $r5.data.audited -eq $false -and $r5.data.downgraded -eq $true) 'E: ticked box by a finance-less user is DOWNGRADED (audited=false, downgraded=true)'
   if ($r5.data.expenseId) { $expIds += [string]$r5.data.expenseId }
+  Ok ((SqlOne ("SELECT status FROM finance_expense WHERE id=" + $r5.data.expenseId)) -eq 'DRAFT') 'E: the row is a DRAFT -- no money moved for a user who cannot audit'
+  Ok ((Balance $accountId) -eq $balE) 'E: balance untouched by the downgraded call'
   $r6 = ApiPost '/finance/expense' $isoTok ('{"expenseType":"RND","amount":7.5,"accountId":' + $accountId + '}')
-  Ok ($r6.code -ne 200) ('E: the same user is DENIED on /finance/expense (code=' + $r6.code + ') -- that is why the endpoint lives under the material prefix')
+  Ok ($r6.code -ne 200) ('E: the same user is DENIED on /finance/expense (code=' + $r6.code + ') -- the gate mirrors that endpoint')
+}
+
+Step 'E2) GATE (option A): WITH finance:expense the very same call pays immediately'
+$finRole = 'perm_rd_fin'
+$finUser = 'perm_rd_user2'
+$finMenuId = SqlOne "SELECT id FROM sys_menu WHERE perms='finance:expense' ORDER BY id LIMIT 1"
+SqlExec ("INSERT INTO sys_role (role_name, role_code, status, remark, company_id) VALUES ('perm rd fin', '" + $finRole + "', 1, 'temp verify-material-rd-expense role 2', 1);")
+$finRid = SqlOne ("SELECT id FROM sys_role WHERE role_code='" + $finRole + "'")
+Ok ($finRid -ne '' -and $finMenuId -ne '') ('E2 prerequisites (roleId=' + $finRid + ', finance:expense menu=' + $finMenuId + ')')
+SqlExec ("DELETE FROM sys_role_menu WHERE role_id=" + $finRid + ";")
+SqlExec ("INSERT INTO sys_role_menu (role_id, menu_id) VALUES (" + $finRid + ", " + $matMenuId + "), (" + $finRid + ", " + $finMenuId + ");")
+ApiPost '/system/user' $tok ('{"username":"' + $finUser + '","password":"123","status":1}') | Out-Null
+$finUid = SqlOne ("SELECT id FROM sys_user WHERE username='" + $finUser + "'")
+if ($finUid -ne '') { SqlExec ("INSERT IGNORE INTO sys_user_role (user_id, role_id) VALUES (" + $finUid + ", " + $finRid + ");") }
+$lg3 = Login $finUser '123'
+Ok ($lg3.code -eq 200 -and $lg3.data.token) ('E2: logged in as ' + $finUser + ' (material info + finance:expense)')
+if ($lg3.data.token) {
+  $m5 = ApiPost '/outsource/material' $tok ('{"materialName":"RD-EXP-E-' + $stamp + '","materialTypeId":' + $matTypeId + ',"unit":"PCS","price":4,"supplierIds":""}')
+  $matE = [string]$m5.data; $matIds += $matE
+  Ok ($matE -ne '') ('fixture material E created (id=' + $matE + ')')
+  $balE2 = Balance $accountId
+  $r9 = ApiPost ("/outsource/material/" + $matE + "/rd-expense") $lg3.data.token ('{"amount":3.25,"accountId":' + $accountId + ',"autoAudit":true}')
+  Info ('E2 paid -> code=' + $r9.code + ' audited=' + $r9.data.audited)
+  Ok ($r9.code -eq 200 -and $r9.data.audited -eq $true) 'E2: with finance:expense the ticked box pays immediately'
+  if ($r9.data.expenseId) { $expIds += [string]$r9.data.expenseId }
+  Ok ((SqlOne ("SELECT status FROM finance_expense WHERE id=" + $r9.data.expenseId)) -eq 'AUDITED') 'E2: the row is AUDITED'
+  Ok ((Balance $accountId) -eq ($balE2 - 3.25)) 'E2: balance reduced by the amount (the gate lets the payment through)'
 }
 
 Step 'F) expense type is validated by the backend enum (unknown rejected, lowercase normalised)'
@@ -193,8 +228,12 @@ SqlExec ("DELETE FROM sys_user_role WHERE user_id IN (SELECT id FROM sys_user WH
 SqlExec ("DELETE FROM sys_user WHERE username='" + $isoUser + "';")
 SqlExec ("DELETE FROM sys_role_menu WHERE role_id=" + $isoRid + ";")
 SqlExec ("DELETE FROM sys_role WHERE role_code='" + $isoRole + "';")
+SqlExec ("DELETE FROM sys_user_role WHERE user_id IN (SELECT id FROM sys_user WHERE username='" + $finUser + "');")
+SqlExec ("DELETE FROM sys_user WHERE username='" + $finUser + "';")
+SqlExec ("DELETE FROM sys_role_menu WHERE role_id=" + $finRid + ";")
+SqlExec ("DELETE FROM sys_role WHERE role_code='" + $finRole + "';")
 $leftM = SqlOne ("SELECT COUNT(*) FROM outsource_material WHERE material_name LIKE 'RD-EXP-%'")
-$leftU = SqlOne ("SELECT COUNT(*) FROM sys_user WHERE username='" + $isoUser + "'")
+$leftU = SqlOne ("SELECT COUNT(*) FROM sys_user WHERE username='" + $isoUser + "' OR username='" + $finUser + "'")
 Ok ($leftM -eq '0' -and $leftU -eq '0') ('cleanup done (materials left=' + $leftM + ', user left=' + $leftU + ')')
 
 Write-Host ('RESULT ' + $(if ($script:fail -eq 0) { 'PASS' } else { 'FAIL' }) + ' verify-material-rd-expense  (FAIL=' + $script:fail + ')')
