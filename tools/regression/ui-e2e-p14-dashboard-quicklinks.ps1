@@ -99,15 +99,30 @@ Ok ($sumGood -eq (CardVal $exp.good)) 'material stock card == sum of per-warehou
 Ok ($sumOnsite -eq (CardVal $exp.onsite)) 'on-site repair card == sum of per-warehouse table (same scope)'
 Ok ((Errs) -eq '[]') 'still no JS/API errors after reading the material TAB'
 
-Step '3) the overview TAB is labelled after its menu'
-# 2026-09-27 (user request): the analysis TAB was labelled with its old name (see the *_old zh key) from when
-# it only held finance KPIs; it must carry the menu name (see the *_analysis zh key) instead.
-# Scoped to the dashboard TAB BAR on purpose: that menu name also exists in the sidebar as a catalog, so a
-# document-wide text search would pass even with the TAB still mislabelled.
+Step '3) the TAB bar mirrors the sidebar catalogs (same names, same order)'
+# 2026-09-27 (user request): every TAB stands for one sidebar catalog -- same name, same order. Expectations come from
+# sys_menu (catalogs in sidebar order) minus the catalogs that deliberately have no TAB; the memo panel (no menu at all)
+# is the first TAB. Scoped to the dashboard TAB BAR: those catalog names also exist in the sidebar, so a document-wide
+# text search would pass even with the TAB bar wrong.
+$catOut = @(& $MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -e "SELECT id, menu_name FROM sys_menu WHERE parent_id=0 AND menu_type='catalog' AND visible=1 AND status=1 ORDER BY sort_order" 2>$null)
+$catIds = @(); $catNames = @()
+foreach ($l in (@($catOut) | Select-Object -Skip 1 | Where-Object { ("$_").Trim() -ne '' })) {
+  $f = "$l" -split "`t"
+  $catIds += [int]$f[0]
+  $catNames += $f[1].Trim()
+}
+# catalogs that deliberately have no dashboard TAB (matched by id so this script stays ASCII-only)
+$NO_TAB_IDS = @(2, 9)   # 2 = master data (spread into each TAB's quick links instead), 9 = settings
+$expTabs = @()
+for ($i = 0; $i -lt $catIds.Count; $i++) { if ($NO_TAB_IDS -notcontains $catIds[$i]) { $expTabs += $catNames[$i] } }
 $tabs = (EvalJs "(function(){const h=document.querySelector('.dashboard > .el-tabs > .el-tabs__header');if(!h)return 'NOHEADER';return [...h.querySelectorAll('.el-tabs__item')].map(x=>(x.textContent||'').trim()).join('|')})()") -replace '"', ''
 $tabs = $tabs.Trim()
 Write-Host ('  dashboard tab bar: ' + $tabs)
-Ok ($tabs -like ('*' + (ZH 'tab_dash_analysis') + '*')) ('dashboard TAB labelled after its menu: ' + (ZH 'tab_dash_analysis'))
-Ok (-not ($tabs -like ('*' + (ZH 'tab_dash_analysis_old') + '*'))) ('old TAB label is gone: ' + (ZH 'tab_dash_analysis_old'))
+Write-Host ('  expected (catalogs, sidebar order): ' + ($expTabs -join '|'))
+$tabArr = @($tabs -split '\|' | Where-Object { $_ -ne '' })
+Ok ($tabArr.Count -gt 1) 'dashboard TAB bar is readable'
+Ok ($catNames -notcontains $tabArr[0]) ('first TAB is not a catalog: ' + $tabArr[0])
+$rest = @($tabArr | Select-Object -Skip 1)
+Ok (($rest -join '|') -eq ($expTabs -join '|')) 'each TAB carries its catalog name, in sidebar order'
 
 Summary 'dashboard quick links follow the current submenu order (P14)'
