@@ -823,9 +823,15 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 **改名口径（本次定的规矩，后续改名照此办理）**：
 - **现行命名**（"使用方/区块/样式" 等指代当前 TAB 的注释）→ 一律跟着改：本批同步了
   `styles/index.css`（kpi-help 使用方）、`utils/kpiFormula.ts`（使用方）、`analysis/overview.vue`（4 处"与首页…同源/共用"）、
-  `analysis/purchase.vue`（口径同源）与 `verify-material-stock-take.ps1` 的日志文案；
+  `analysis/purchase.vue`（口径同源）、`verify-material-stock-take.ps1` 的日志文案，以及**后端 4 文件 5 处**
+  （`DashboardController`、`FinanceAnalysisController`、`FinanceAnalysisService`、`FinanceAnalysisServiceImpl`
+  的"首页…KPI"注释 —— 教训：首轮只搜了 `beichen-erp-web/src` 与 `tools`，**漏了后端**；
+  查旧名残留务必用 `git --no-pager grep -n -- 旧名` 全仓扫一遍，它含隐藏目录且不受 glob 影响）；
 - **历史陈述**（"原为/原先是/导致…空白"）→ **保留**，不改写历史；改名点在注释里留一句
   "2026-09-27 由「经营总览」改"，保证 grep 旧名仍能定位到新名。
+- **两个 docs（审核报告 / 上线清单）按用户要求"一起改新名"**：23 处旧名全部替换为新名，
+  并在两份文档开头各留一句**命名变更注记**（写明"文中旧名已统一替换为新名，外观即当前页签名"），
+  避免日后把历史记录误读成"当时就叫这个名"。注记本身保留旧名 ⇒ 旧名仍可被 grep 到（共 2 处，均在注记里）。
 
 **守卫**：`ui-e2e-p14-dashboard-quicklinks.ps1` 新增 **Step 3** —— 断言**首页页签栏**含「经营分析」且**不再含**「经营总览」；
 **必须限定在 `.dashboard > .el-tabs > .el-tabs__header` 内**（侧栏也有「经营分析」目录，全文档搜文本会假通过）。
@@ -867,7 +873,8 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
       16: 70/0、15: 55/0、14: 46/0、五守卫 + 详情页渲染守卫全 PASS）
 - [x] B12 加工退货/物料退货三级菜单 + 页签（2026-09-27，4+2 叶子；返回进度按来源单聚合 + 草稿作废 + 防超返；脚本层文案同步待办见 §5.13）
 - [x] B20 首页 TAB「经营总览」改名「经营分析」（2026-09-27，用户口径：与侧栏菜单名对齐）：
-      页签 label 改名 + 现行命名注释同步（6 文件）、历史陈述保留；P14 新增 Step 3 断言页签栏含新名/无旧名
+      页签 label 改名 + 现行命名引用同步（前端 5 文件 / 脚本 2 / **后端 4 文件 5 处**）+
+      **两个 docs 共 23 处**（并各留"命名变更注记"），历史陈述保留；P14 新增 Step 3 断言页签栏含新名/无旧名
       （限定在首页 tabs header 内，避免被侧栏同名目录假通过）⇒ P14 26/0（详见 §5.22）
 - [x] B19 首页「物料仓库」TAB 补齐统计卡片 + 分仓分布（2026-09-27，用户实测「怎么是空白的？」）：
       后端 `materialWarehouse` 聚合块（按 8 个物料仓库页面码过滤）+ 4 卡 + 各仓库物料库存分布表；

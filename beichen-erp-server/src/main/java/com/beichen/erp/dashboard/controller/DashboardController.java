@@ -11,7 +11,7 @@ import java.util.Map;
 
 /**
  * 首页接口（待办与预警汇总）
- * <p>经营总览的财务数据直接复用 /api/finance/analysis/summary，由前端按菜单权限控制可见性。</p>
+ * <p>经营分析（页签名，2026-09-27 由「经营总览」改）的财务数据直接复用 /api/finance/analysis/summary，由前端按菜单权限控制可见性。</p>
  */
 @RestController
 @RequestMapping("/api/dashboard")
