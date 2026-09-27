@@ -273,7 +273,10 @@ onActivated(loadData)
           </el-col>
           <el-col :span="8">
             <el-form-item required label="送修出库仓">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="(row:any)=>row.warehouseName" placeholder="我方成品仓" style="width:100%" />
+              <!-- 2026-09-27 修复：原先漏了绑定冒号（label-key="(row:any)=>…" 是**静态字符串**），
+                   RemoteSelect 的 getLabel 会去取 row["(row:any)=>row.warehouseName"] ⇒ undefined ⇒
+                   下拉与回显全部退化成显示 **value（仓库 ID）**。必须写成 `:label-key="函数"`。 -->
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="我方成品仓" style="width:100%" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -312,6 +315,9 @@ onActivated(loadData)
         </el-descriptions-item>
         <!-- 来源收货记录：从「成品收货」按记录发起退货时才有（2026-09-17） -->
         <el-descriptions-item label="来源收货记录">{{ detail.sourceDeliveryId ? ('#' + detail.sourceDeliveryId) : '-' }}</el-descriptions-item>
+        <!-- 出库/扣减仓库（2026-09-27 补）：维修退货=送修出库仓；加工退货=扣减成品仓。
+             此前只读区**完全没有这一项**（只有草稿编辑态才有下拉），审核后就看不到从哪个仓出库了。 -->
+        <el-descriptions-item :label="isRepair ? '送修出库仓' : '扣减成品仓'">{{ detail.warehouseName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="退货日期">{{ $fmtDate(detail.returnDate) }}</el-descriptions-item>
         <el-descriptions-item label="送修/已返回" v-if="isRepair">
           {{ (detail.products || []).reduce((s: number, p: any) => s + (Number(p.quantity) || 0), 0) }} /

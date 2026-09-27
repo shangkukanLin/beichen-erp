@@ -226,6 +226,11 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         m.put("chargeAmount", o.getChargeAmount()); m.put("chargeReason", o.getChargeReason());
         // E4：编辑页需要回填「成品出库仓」与退货成品明细（原先只返回物料明细）
         m.put("warehouseId", o.getWarehouseId());
+        // 2026-09-27：详情页要**显示仓名**（此前只回 id ⇒ 页面只能显示数字，用户实测反馈）
+        if (o.getWarehouseId() != null) {
+            Warehouse wh = warehouseMapper.selectById(o.getWarehouseId());
+            m.put("warehouseName", wh != null ? wh.getWarehouseName() : "");
+        }
         // 维修返回记录（仅维修退货单会有；详情页展示"送修 N / 已返回 M"并可撤销）
         List<OutsourceReturnOrderRepair> repairs = repairMapper.selectList(
             new LambdaQueryWrapper<OutsourceReturnOrderRepair>().eq(OutsourceReturnOrderRepair::getReturnOrderId, id));

@@ -568,6 +568,25 @@ B8 收尾时剩下 2 列「8~10 列全满、无安全余量、要完整只能砍
 `ui-e2e-1-nav`（**70 路由 0 bad**，`dupTabBad=0`）、`ui-e2e-11`（36/0，从收货页发起关联退料 ✓ 证明关联叶子真链路）、
 两个扫描守卫的**路由清单补上全部叶子**（`scan-col-truncation` / `scan-table-overflow`，原来只扫两级页面）。
 
+## 5.15 维修退货详情「送修出库仓」显示成仓库 ID（2026-09-27，用户实测）
+
+### 根因（一行之差，属"静默降级"）
+`views/outsource/return-order/detail.vue` 写成 `label-key="(row:any)=>row.warehouseName"` —— **漏了绑定冒号**。
+Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` 取 `o["(row:any)=>row.warehouseName"]` = undefined
+⇒ `el-option` 没有 label ⇒ Element Plus 回退**显示 value**（下拉与回显全变成仓库 ID，实测显示 `73`）。
+全站扫描 `\slabel-key="\(`：**仅此 1 处**；其余静态 label-key 都是真实字段名（materialName / warehouseName / typeName / code）✓。
+
+### 三处一起补齐（前两处是根因，第三处是完整性）
+1. 改为 `:label-key="(row:any)=>row.warehouseName"`；
+2. 后端 `OutsourceReturnOrderServiceImpl.detail()` 补 `warehouseName`（此前只回 `warehouseId`；
+   **物料退货详情的 detail() 早就回了** —— 同类页面互为参照，缺字段一眼可查）；
+3. 只读区补一项：维修退货=「**送修出库仓**」/ 加工退货=「**扣减成品仓**」
+   （此前只读区**完全没有这一项**：只有草稿编辑态有下拉 ⇒ 审核后就看不到从哪个仓出库了）。
+
+### 新守卫（防复发，已负例验证）
+`web-check.ps1` 增加 **[label-key守卫]**：禁止 `\slabel-key="\(` —— 函数型 label-key 必须写成 `:label-key="..."`。
+负例实测：临时放入一个含该写法的 .vue ⇒ 守卫 FAIL 并点名「文件:行」✓；删除后 PASS ✓。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
