@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
-import { reactive, ref, computed, onMounted } from 'vue'
+import { reactive, ref, computed, watch, onMounted } from 'vue'
 import { OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeType, OutsourceChargeTypeLabel, OutsourceReturnType, OutsourceReturnTypeLabel, ProductQualityType, ProductQualityTypeLabel } from '@/api/enums'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -504,7 +504,22 @@ async function loadForEdit(id: number) {
   } catch (e: any) { ElMessage.error(e?.message || '加载退货单失败') } finally { loading.value = false }
 }
 
+/**
+ * 页签标题**跟随实际类型**（2026-09-27 用户实测）：
+ * 本页路由 `meta.title` 是「新增/编辑委外加工退货」—— 那是本页**早先主营加工退货**时定的名；
+ * 现在本页默认就是维修退货（见 form.returnType 注释：加工退货已统一到「成品收货」办理），
+ * 于是从「成品维修退货」叶子点「新增」，页签却写着"新增委外加工退货"（名不符实）。
+ * ⇒ 这里按 isRepair 把页签名改对；落库类型不变，只影响顶部页签显示；页内切类型时同步。
+ *    页签由 layout 在路由变化时按 meta.title 打开，本函数在其后（onMounted）覆盖。
+ */
+function syncTabTitle() {
+  const kind = isRepair.value ? '成品维修退货' : '委外加工退货'
+  tabStore.updateTabTitle(route.path, (editId ? '编辑' : '新增') + kind)
+}
+watch(isRepair, syncTabTitle)
+
 onMounted(async () => {
+  syncTabTitle()           // 先摆正页签名，再拉数据
   await loadFactories(); loadMaterialTypes()
   if (editId) await loadForEdit(editId)
   else await loadFromQuery()

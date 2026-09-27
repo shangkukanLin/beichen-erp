@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onActivated } from 'vue'
+import { ref, reactive, computed, watch, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PageShell from '@/components/PageShell.vue'
+import { useTabStore } from '@/stores/tabs'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { localDate } from '@/utils/date'
@@ -25,6 +26,7 @@ const id = route.params.id as string
 const detail = ref<any>({})
 const loading = ref(false)
 const saving = ref(false)
+const tabStore = useTabStore()
 
 /** 维修退货（2026-09-17）：审核=送修出库（不冲应付）；供应商修好后「登记维修返回」把物料入回来 */
 const isRepair = computed(() => (isDraft.value ? form.returnType : (detail.value.returnType || MaterialReturnType.REFUND)) === MaterialReturnType.REPAIR)
@@ -40,6 +42,15 @@ const form = reactive({
   /** 关联物料订单（维修退货闭环）：可清空；不选=不关联（靠本单「送修/已返回」跟踪） */
   materialOrderId: undefined as any
 })
+/**
+ * 页头标题 / 页签名**跟随实际类型**（2026-09-27 用户口径，与加工侧同改）：
+ * 路由 meta.title 是历史名「委外物料退货详情」（两种类型共用一个入口时的旧名）。
+ * ⚠️ ① 必须放在 `isDraft` / `form` **之后**：`watch(source, cb)` 在 setup 阶段会**立刻求值一次**初始值，
+ *      而 isRepair 依赖这两个常量 ⇒ 放前面会踩 TDZ 把整页打白（2026-09-27 实测），与加工侧同一坑。
+ *   ⚠️ ② 等数据回来才能定（isRepair 依赖 detail.returnType）⇒ 故意**不写 immediate**，避免"先错名再改对"的中间态。
+ */
+const pageTitleText = computed(() => isRepair.value ? '物料维修退货详情' : '委外物料退货详情')
+watch(pageTitleText, (t) => tabStore.updateTabTitle(route.path, t))
 
 /**
  * 退回对象 / 维修供应商 实时查库（Odoo 风格）。
@@ -272,8 +283,9 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
 </script>
 
 <template>
-  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作 -->
-  <PageShell :loading="loading" back-fallback="/outsource/material-return">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题 → 右端操作
+       （标题 2026-09-27 起按单据类型动态取：维修退货=物料维修退货详情 / 退货退款=委外物料退货详情） -->
+  <PageShell :loading="loading" :title="pageTitleText" back-fallback="/outsource/material-return">
     <template #actions>
       <!-- 草稿：保存(主) + 审核 + 作废（2026-09-24 用户口径：草稿态就地编辑，不再跳独立编辑页） -->
       <el-button type="primary" v-if="isDraft" :loading="saving" @click="doSave">保存</el-button>
@@ -287,7 +299,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
 
     <el-card shadow="never">
       <template #header>
-        <span style="font-weight:600">委外物料退货详情</span>
+        <span style="font-weight:600">{{ pageTitleText }}</span>
       </template>
 
       <!-- ============ 草稿：可编辑（字段/校验/payload 与 add.vue 一致） ============

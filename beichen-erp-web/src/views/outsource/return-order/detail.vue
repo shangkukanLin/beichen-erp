@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onActivated } from 'vue'
+import { ref, reactive, computed, watch, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { localDate } from '@/utils/date'
@@ -7,6 +7,7 @@ import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeType, OutsourceChargeTypeLabel, OutsourceReturnType, OutsourceReturnTypeLabel, OutsourceReturnTypeTag, ProductQualityType, ProductQualityTypeLabel } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
+import { useTabStore } from '@/stores/tabs'
 
 /**
  * 委外加工退货详情（2026-09-24 用户口径：草稿态就地可编辑，列表不再给「编辑」）
@@ -27,6 +28,7 @@ const id = route.params.id as string
 const detail = ref<any>({})
 const loading = ref(false)
 const saving = ref(false)
+const tabStore = useTabStore()
 
 /** 维修退货：不还料、必须收费；已审核（已送修）后可登记「维修返回」把修好的货入回来 */
 const isRepair = computed(() => (showDraftForm.value ? form.returnType : (detail.value.returnType || OutsourceReturnType.DEFECT)) === OutsourceReturnType.REPAIR)
@@ -45,6 +47,17 @@ const form = reactive({
   chargeAmount: 0 as number,
   chargeReason: ''
 })
+/**
+ * 页头标题 / 页签名**跟随实际类型**（2026-09-27 用户口径：这类页面此前一律叫"委外加工退货…"，名不符实）：
+ * 路由 meta.title 是历史名「委外加工退货详情」，而本页现在主营维修退货。
+ * ⚠️ ① 必须放在 `showDraftForm` / `form` **之后**：`watch(source, cb)` 会在 setup 阶段**立刻求值一次**初始值
+ *      （不是 immediate 才求值），而 isRepair 依赖这两个常量 ⇒ 放前面会踩"未初始化前访问"（TDZ）把整页打白
+ *      （2026-09-27 实测：deep-link 详情页整个应用白屏，控制台 `Unhandled error during execution of setup function`）。
+ *   ⚠️ ② 标题**必须等数据回来**才能定（isRepair 依赖 detail.returnType）⇒ 故意**不写 immediate**：
+ *      加载中沿用 meta 名（对 DEFECT 单本来就是对的），加载完对 REPAIR 单改成「成品维修退货详情」。
+ */
+const pageTitleText = computed(() => isRepair.value ? '成品维修退货详情' : '委外加工退货详情')
+watch(pageTitleText, (t) => tabStore.updateTabTitle(route.path, t))
 /** 送修产品行（可改数量与规格；数量改 0 = 本次不再送修该产品） */
 const editableProducts = ref<any[]>([])
 
@@ -268,8 +281,9 @@ onActivated(loadData)
 </script>
 
 <template>
-  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作 -->
-  <PageShell :loading="loading" back-fallback="/outsource/return-order">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题 → 右端操作
+       （标题 2026-09-27 起按单据类型动态取：维修退货=成品维修退货详情 / 加工退货=委外加工退货详情） -->
+  <PageShell :loading="loading" :title="pageTitleText" back-fallback="/outsource/return-order">
     <template #actions>
       <!-- 草稿（维修退货）：保存(主) + 审核 + 作废（2026-09-24 用户口径：草稿态就地编辑，不再跳独立编辑页） -->
       <el-button type="primary" v-if="showDraftForm" :loading="saving" @click="doSave">保存</el-button>
@@ -285,7 +299,7 @@ onActivated(loadData)
 
     <el-card shadow="never">
       <template #header>
-        <span style="font-weight:600">委外加工退货详情</span>
+        <span style="font-weight:600">{{ pageTitleText }}</span>
       </template>
 
       <!-- ============ 草稿（维修退货）：可编辑（字段/校验/payload 与 add.vue 的 REPAIR 路径一致） ============

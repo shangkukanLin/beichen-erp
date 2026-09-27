@@ -295,6 +295,8 @@
   "tab_leaf_void": "已作废单据",
   "tab_leaf_pending": "待返回",
   "tab_leaf_returned": "已返回完",
+  "title_add_repair_order": "新增成品维修退货",
+  "title_add_repair_material": "新增物料维修退货",
   "btn_new_mr_repair": "新增",
   "lbl_mr_type": "退货类型",
   "lbl_mr_repair_supplier": "维修供应商",

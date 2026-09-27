@@ -238,7 +238,19 @@ async function handleRefreshData() { await loadOptions() }
  */
 const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form }))
 
+/**
+ * 页签标题**跟随实际类型**（2026-09-27 用户实测，加工侧同口径修）：
+ * 路由 meta.title 是「新增/编辑委外物料退货」（两种类型共用一个入口时的旧名），从「物料维修退货」叶子
+ * 点「新增」时页签就名不符实 ⇒ 按 isRepair 改对页签名（只影响顶部页签显示，落库类型不变）。
+ */
+function syncTabTitle() {
+  const kind = isRepair.value ? '物料维修退货' : '委外物料退货'
+  tabStore.updateTabTitle(route.path, (editId ? '编辑' : '新增') + kind)
+}
+watch(isRepair, syncTabTitle)
+
 onMounted(async () => {
+  syncTabTitle()           // 先摆正页签名，再拉数据
   await loadOptions()      // 先备好仓库下拉，再按来源预填源仓（否则下拉只显示 ID）
   if (editId) await loadForEdit(editId)
   else await loadFromQuery()

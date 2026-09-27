@@ -124,6 +124,12 @@ Write-Host ('BASE defect=' + $bDef + ' repairPay=' + $bPay)
 Ok ((D $bDef) -ge 1) 'S2 precondition: DEFECT stock available'
 Open '/outsource/return-order/repair' 2800
 Ok ((ClickBtn 'btn_new_repair_return') -match 'OK') 'S2 click NEW REPAIR return'
+# 2026-09-27（用户实测）：页签标题必须跟随**实际类型** —— 该路由 meta.title 是历史名「新增委外加工退货」，
+# 但本页默认就是维修退货 ⇒ 页内 syncTabTitle() 会把页签名改成「新增成品维修退货」。
+Start-Sleep -Milliseconds 2200
+$addTab = EvalJs "(()=>{const a=document.querySelector('.tab-item.active .tab-label');return a?(a.innerText||'').trim():'NONE'})()"
+Write-Host ('S2 active tab=' + $addTab)
+Ok ($addTab -eq (ZH 'title_add_repair_order')) 'S2 add-page tab title = 新增成品维修退货'
 Start-Sleep -Milliseconds 3000
 Ok ((SelectLabelText 'lbl_factory' $facName) -match 'OK') ('S2 pick factory=' + $facName)
 Start-Sleep -Milliseconds 1500

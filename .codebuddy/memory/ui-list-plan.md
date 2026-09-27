@@ -696,6 +696,41 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 显式传 → 原样落库 ✓；池外物料 → 500「只能从**该加工退货单的 BOM 快照**里选…（可选物料 3 个）」且零落库 ✓；
 池内物料 → 通过 ✓；清理无残留 ✓。`verify-delivery-menu.ps1` §⑨b-2 增加「新增 → 独立页面 + 含 BOM 快照字段 + 无弹窗」断言。
 
+## 5.19 「维修退货」页命名错位 + 页签名跟随类型（2026-09-27，用户实测）
+
+**现象**：从「成品维修退货」叶子点「新增」，页签/页头却写着「新增委外加工退货」（名不符实）。
+**根因**：这些路由 `meta.title` 是**历史名**（本页早先主营加工退货）——`新增/编辑委外加工退货`、`委外加工退货详情`、
+`新增/编辑委外物料退货`、`委外物料退货详情`；而两张 add 页现在**默认就是维修退货**（加工侧 form.returnType
+注释写明「加工退货已统一到成品收货办理」）。
+**修法（页签标题跟随实际类型，不动落库类型）**：
+- add 页（`return-order/add.vue`、`material-return/add.vue`）：`syncTabTitle()` 在 `onMounted` 里把页签名改成
+  「新增成品维修退货 / 新增物料维修退货」（DEFECT/REFUND 仍用旧名），页内切类型时 `watch(isRepair)` 同步（layout
+  在路由变化时按 meta.title 打开页签，页面在其后覆盖）。
+- detail 页（两张）：`pageTitleText = isRepair ? '成品/物料维修退货详情' : '委外…退货详情'`，
+  同时用在 `PageShell :title`（页头）与卡片头，并在数据回来后 `watch` 同步页签名（**故意不写 immediate**：
+  加载中先沿用 meta 名，对 DEFECT/REFUND 单本来就是对的）。
+- 回归实测：加工 REPAIR=成品维修退货详情 / DEFECT=委外加工退货详情；物料 REPAIR=物料维修退货详情 /
+  REFUND=委外物料退货详情（页签 = 页头 = 卡片头三处一致）。
+
+### ⚠️⚠️ 踩坑（高复用价值，本次把自己打白了一次）：`watch()` 会**立刻求值**源，触发 TDZ 白屏
+
+`watch(pageTitleText, cb)` 在 **setup 阶段就会读一次** `pageTitleText.value`（**即使没有 `immediate`**）。
+`pageTitleText → isRepair → showDraftForm / form` 而这些 `const` 声明在**后面** ⇒
+`Cannot access 'showDraftForm' before initialization` ⇒ 整个应用白屏。**特征非常隐蔽**：
+- 模块 **HTTP 200、编译通过**（Vite 转换没问题）、**没有 vite error overlay**、路由也正常解析；
+- `document.querySelector('#app').innerHTML.length === 0`（整个布局都没了）；
+- 只有 `agent-browser console` 里能看到 `Unhandled error during execution of setup function`（`errors` 只给空 ✗）。
+
+⇒ 本仓库大量使用「computed 互相引用 + 声明顺序自由」的写法（懒求值通常没问题），**但只要被 `watch` 之类
+立即求值，就必须把声明顺序理顺**（放在被依赖常量之后，或改到 `onMounted` 里做）。
+⇒ 定位手法：`git stash push -- <两个文件>` 对照复测（不带改动时同一 URL 正常渲染 ⇒ 确定是自己改的），
+然后 `agent-browser errors / console` 看真实报错。
+
+### 新守卫 `verify-detail-render.ps1`（补"编译/HTTP 守卫"的盲区）
+5 个详情页（加工 REPAIR / 加工 DEFECT / 物料 REPAIR / 物料 REFUND / 加工单详情作对照，id 从库里取最新）：
+断言 `#app` 真的渲染（innerHTML > 1000，白屏是 0）**且**控制台无 `execution of setup function`。
+本次实测 PASS（并顺带断言了上面四类页头标题）。这类"整页白屏"以前对守卫完全隐形。
+
 ## 6. 进度
 
 - [x] 委外加工 6 页（2026-09-25，含 EntityLinks 组件与两个守卫，提交 `5644f4e`）
@@ -720,5 +755,9 @@ Vue 把箭头函数当**静态字符串**传给 RemoteSelect ⇒ `getLabel(o)` �
 - [x] B16 在厂账对称性二修 + 存量对账（2026-09-27）：`onsite_leg` 打标（旧单撤销不再凭空 +qty，幂等补列）
       + 新增 `reconcile-repair-onsite.ps1`（只读报表 / `-Apply` 修正且留痕；dev 已清到 diffs=0）；
       守卫升级为双案例 + 负例对照（ui-e2e-15 53/0、ui-e2e-14 46/0、两个 verify 与五守卫全 PASS）
+- [x] B17 维修退货页命名错位修复 + 页签名跟随类型（2026-09-27，用户实测：新增页/详情页叫"委外…退货"）：
+      两张 add 页 onMounted 同步页签名、两张 detail 页按类型取页头/卡片头/页签名；
+      顺带踩中并修掉 `watch()` 立即求值导致的 **TDZ 整页白屏**（新增 `verify-detail-render.ps1` 补盲，
+      16: 69/0、15: 54/0、14: 46/0、五守卫 + 详情页渲染守卫全 PASS）
 - [x] B12 加工退货/物料退货三级菜单 + 页签（2026-09-27，4+2 叶子；返回进度按来源单聚合 + 草稿作废 + 防超返；脚本层文案同步待办见 §5.13）
 

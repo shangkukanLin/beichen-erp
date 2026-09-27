@@ -87,6 +87,12 @@ Ok ((Errs) -eq '[]') 'S1 no errors'
 Step 'S2 add page: link material order + hints'
 # S1 已停在维修退货叶子 ⇒ 该叶子的「新增」即维修退货入口（2026-09-27 起入口随叶子切换）
 Ok ((ClickBtn 'btn_new_mr_repair') -match 'OK') 'S2 click new repair-return'
+# 2026-09-27（用户实测，与加工侧同口径）：页签名跟随实际类型 ⇒ 从「物料维修退货」叶子进的新增页应显示
+# 「新增物料维修退货」（路由 meta.title 是两类型共用时的旧名「新增委外物料退货」）。
+Start-Sleep -Milliseconds 2200
+$addTab = EvalJs "(()=>{const a=document.querySelector('.tab-item.active .tab-label');return a?(a.innerText||'').trim():'NONE'})()"
+Write-Host ('S2 active tab=' + $addTab)
+Ok ($addTab -eq (ZH 'title_add_repair_material')) 'S2 add-page tab title = 新增物料维修退货'
 Start-Sleep -Milliseconds 3000
 Ok ((BodyHas (ZH 'lbl_mr_order')) -eq 'true') 'S2 field "link material order" present'
 Ok ((SelectLabelText 'lbl_mr_repair_supplier' $supName) -match 'OK') ('S2 pick supplier=' + $supName)
