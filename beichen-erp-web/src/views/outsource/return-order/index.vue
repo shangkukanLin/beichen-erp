@@ -11,6 +11,13 @@
  * ＝售后品推给工厂维修（送修/返回/结案）。⚠️ 页签①与页面/菜单同名是有意的（用户口径「文案改成加工退货」）——
  * 本页按「退回加工厂」这一大类组织，两个页签是它的两种情形。</p>
  *
+ * <p>2026-09-28（用户口径「在关联退货页面上，也可以新增关联退货」）：**关联退货叶子也有「新增」** ——
+ * 点开只选「关联加工单」（生产中 + 净已收 > 0），确定后进既有「加工退货（拆分还料）」录入页
+ * （`/outsource/order/delivery/return-defect/{orderId}?from=return-order`，见 `openLinkedAdd`）。
+ * **刻意不复制录入表单**：写入端点/服务层校验/录入页全站只有一条路
+ * （`POST /outsource/order-delivery/return-defect/{orderId}`），否则同一业务两张表单、改规则要改两处；
+ * 返回/提交后的去向由该页按 `?from=return-order` 分支回本台账。</p>
+ *
  * <p>2026-09-21（用户口径「文案统一成加工退货」+「历史加工退货单不要了」）：动作名全链一个词（加工单
  * 收货详细页的按钮、后端提示语与备注快照同步改名；沿革 退不良 → 加工退货 → 不良退货 → **定稿加工退货**）；
  * 上一代独立加工退货单（`outsource_return_order` 的 DEFECT，已停止新增）**不再单独列页签** ——
@@ -38,7 +45,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import EntityLinks from '@/components/EntityLinks.vue'
-import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeTypeLabel, OutsourceReturnType, OutsourceReturnTypeLabel } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeTypeLabel, OutsourceOrderStatus, OutsourceReturnType, OutsourceReturnTypeLabel } from '@/api/enums'
 
 const route = useRoute()
 const router = useRouter()
@@ -167,6 +174,34 @@ const fetchProducts = (kw: string) => request.get('/product/page', { params: { p
 
 /** 去独立新增页（BOM 快照的自动解析与换版本都在该页；保存后回到本叶子） */
 function openNoOrder() { router.push('/outsource/return-order/unlinked/add') }
+
+// ---------- 新增"关联"加工退货（2026-09-28 用户口径：本页也可发起）----------
+// 表单不复制：只在本页选**关联加工单**，确定后进既有「加工退货（拆分还料）」录入页
+// （按产品行拆规格数量 + 选扣减成品仓），带 ?from=return-order 让该页返回/提交后回本台账。
+const linkedAddVisible = ref(false)
+const linkedOrderId = ref<any>(undefined)
+
+/**
+ * 可退货的加工单候选 = **生产中** + **净已收 > 0**。
+ * <p>`pageOrders` 的 deliveredQuantity 只累计**已审核**收货（负数加工退货自动抵扣）⇒ 它就是"净已收"：
+ * 为 0 的单退不了（服务层会以"不能超过已收数量"拒绝），故前端直接滤掉，不列无效项。
+ * 已结单（FINISHED）的单不进候选：后端 P3-1 口径禁止有单红冲（账务已清算），应在「无单退货」办理。</p>
+ */
+async function fetchReturnableOrders(kw: string) {
+  const r = await request.get<any, any>('/outsource/order-delivery/order-page',
+    { params: { pageSize: 500, status: OutsourceOrderStatus.PRODUCING, code: kw || undefined } })
+  return { records: (r?.records || []).filter((o: any) => Number(o.deliveredQuantity || 0) > 0) }
+}
+/** 候选标签：单号 + 已收/下单（已收=净已收，供用户判断还能退多少） */
+function orderLabel(o: any) {
+  return `${o.code}（已收 ${Number(o.deliveredQuantity || 0)} / 下单 ${Number(o.totalQuantity || 0)}）`
+}
+function openLinkedAdd() { linkedOrderId.value = undefined; linkedAddVisible.value = true }
+function confirmLinkedAdd() {
+  if (!linkedOrderId.value) { ElMessage.warning('请选择关联加工单'); return }
+  linkedAddVisible.value = false
+  router.push(`/outsource/order/delivery/return-defect/${linkedOrderId.value}?from=return-order`)
+}
 
 // ==================== ③ 加工返回单（**2026-09-27 已下线**） ====================
 // 用户口径「加工返回单多余了，和成品维修退货一样在详细里面登记返回就行」：
@@ -312,13 +347,15 @@ onMounted(() => {
            右侧新增按钮随叶子切换（一页一个新增入口）。 -->
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
         <span v-if="leaf === 'LINKED' || leaf === 'UNLINKED'" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">
-          {{ leaf === 'UNLINKED' ? '未关联加工单的加工退货台账（单号 GTW-）' : '关联加工单的加工退货台账（单号 GTH-，由加工单收货页发起）' }}
+          {{ leaf === 'UNLINKED' ? '未关联加工单的加工退货台账（单号 GTW-）' : '关联加工单的加工退货台账（单号 GTH-，本页可新增）' }}
         </span>
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleSearch">重置</el-button>
+        <!-- 新增按钮随叶子切换（一页一个新增入口，2026-09-28：关联退货叶子也补齐入口） -->
         <div style="margin-left:auto">
-          <el-button v-if="leaf === 'UNLINKED'" type="success" :icon="'Plus'" @click="openNoOrder">新增</el-button>
-          <el-button v-else-if="leaf === 'REPAIR'" type="success" :icon="'Plus'" @click="handleAdd(OutsourceReturnType.REPAIR)">新增</el-button>
+          <el-button v-if="leaf === 'LINKED'" type="success" :icon="'Plus'" @click="openLinkedAdd">新增</el-button>
+          <el-button v-else-if="leaf === 'UNLINKED'" type="success" :icon="'Plus'" @click="openNoOrder">新增</el-button>
+          <el-button v-else type="success" :icon="'Plus'" @click="handleAdd(OutsourceReturnType.REPAIR)">新增</el-button>
         </div>
       </div>
 
@@ -326,7 +363,7 @@ onMounted(() => {
       <el-alert v-if="leaf === 'LINKED'" type="info" :closable="false" show-icon style="margin-bottom:8px">
         <template #title>
           <span style="font-size:var(--app-font-xs);line-height:1.5">
-            关联加工单的加工退货（红冲）台账：由该加工单的<b>收货详细页</b>发起，审核后回退该单已收数量。
+            关联加工单的加工退货（红冲）台账：<b>本页「新增」</b>或该加工单的<b>收货详细页</b>发起，审核后回退该单已收数量。
             「已作废」= 草稿被作废的记录（留痕可查）；已审核的撤销走<b>反审核</b>。
           </span>
         </template>
@@ -505,6 +542,28 @@ onMounted(() => {
     <!-- 加工返回单叶子已下线（2026-09-27 用户口径）：登记/撤销在无单退货详情页 —— 见本文件头注释与
          views/outsource/defect-return/detail.vue 的「登记返回」弹窗（同名字段：回仓仓库/回仓品质/实际用料）。 -->
 
+    <!-- 新增关联加工退货（2026-09-28）：只选加工单，确定后进既有「加工退货（拆分还料）」录入页 ——
+         表单只有一条路（不复制），本弹窗只做"选单 + 跳转"两件事。 -->
+    <el-dialog v-model="linkedAddVisible" title="新增关联退货" width="520px" append-to-body>
+      <el-form label-width="var(--app-label-width-lg)" size="small">
+        <el-form-item required label="关联加工单">
+          <RemoteSelect v-model="linkedOrderId" :fetch="fetchReturnableOrders" :label-key="orderLabel" disable-cache
+            style="width:100%" placeholder="只列生产中的加工单（且已收 > 0）" />
+        </el-form-item>
+      </el-form>
+      <el-alert type="info" :closable="false" show-icon>
+        <template #title>
+          <span style="font-size:var(--app-font-xs);line-height:1.5">
+            确定后进入录入页，按该单的产品行拆退货数量与规格（A/B/C/不良）、选扣减的成品仓，保存的仍是加工退货草稿。
+            已结单的加工单账务已清算、不能有单红冲，如需退货请走<b>「无单退货」</b>。
+          </span>
+        </template>
+      </el-alert>
+      <template #footer>
+        <el-button @click="linkedAddVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmLinkedAdd">确定</el-button>
+      </template>
+    </el-dialog>
 
   </div>
 </template>

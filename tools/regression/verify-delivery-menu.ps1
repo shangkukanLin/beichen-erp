@@ -284,7 +284,9 @@ foreach ($cc in $closedCases) {
 }
 
 # ⑨b 加工退货 = **三级菜单 3 个叶子**（2026-09-27 用户口径：原「一页 3 页签」拆分）：
-#     关联退货（GTH- 红冲台账，页签 有效单据｜已作废单据，**无新增入口** —— 退回在加工单收货详细页发起）
+#     关联退货（GTH- 红冲台账，页签 有效单据｜已作废单据，**本页「新增」** —— 2026-09-28 用户口径
+#       「在关联退货页面上，也可以新增关联退货」：点「新增」弹窗只选「关联加工单」，
+#       确定后进既有「加工退货（拆分还料）」录入页（?from=return-order，表单不复制））
 #     无单退货（GTW- 台账，页签 待返回｜已返回完｜已作废，有「新增」，含「退货/已返回」进度列）
 #     成品维修退货（见 ui-e2e-16）
 #     ⚠️ 2026-09-27：「加工返回单」（原第 4 个叶子 422）已下线 —— 修好送回改在**无单退货记录详情页**登记返回
@@ -298,7 +300,18 @@ if ($d9b) {
   else { Bad ('关联退货台账列不符（缺 关联加工单 或 退货数量）：' + ($d9b.cols -join '/')) }
   if ((($d9b.tabs -join ',') -match '^有效单据') -and (($d9b.tabs -join ',') -match '已作废单据')) { Ok '关联退货页签 = 有效单据｜已作废单据' }
   else { Bad ('关联退货页签不符（期望 有效单据/已作废单据）：' + ($d9b.tabs -join '/')) }
-  if ([int]$d9b.btn -eq 0) { Ok '关联退货叶子无「新增」入口（有单退回在加工单收货详细页发起）' } else { Bad ('关联退货叶子不应有「新增」按钮：' + $d9b.btn) }
+  if ([int]$d9b.btn -eq 1) { Ok '关联退货叶子有唯一「新增」入口（2026-09-28：本页也可发起关联退货）' } else { Bad ('关联退货叶子「新增」按钮数应为 1：' + $d9b.btn) }
+  # 2026-09-28（用户口径）：本页「新增」= **选单弹窗 + 跳既有录入页**（不复制录入表单）⇒
+  #   断言：点开后仍在本叶子、出现弹窗、弹窗含「关联加工单」与「确定」。
+  $clickedL = EvalJs "(()=>{const b=[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length>0).find(x=>(x.innerText||'').trim()==='新增');if(!b)return 'no-btn';b.click();return 'clicked'})()"
+  Start-Sleep -Milliseconds 1200
+  $d9bAdd = ReadJson "(()=>{const vis=e=>e.getClientRects().length>0;const dlg=[...document.querySelectorAll('.el-dialog')].filter(vis);const labels=[...document.querySelectorAll('.el-dialog .el-form-item__label')].filter(vis).map(e=>(e.innerText||'').trim());const btns=[...document.querySelectorAll('.el-dialog .el-dialog__footer button')].filter(vis).map(e=>(e.innerText||'').trim());return JSON.stringify({p:location.pathname,dialogs:dlg.length,labels:labels,btns:btns});})()" '关联退货·新增弹窗'
+  Write-Output ('点击新增 = ' + $clickedL + ' ；路径 = ' + $d9bAdd.p + ' ；弹窗字段 = ' + ($d9bAdd.labels -join '/') + ' ；弹窗按钮 = ' + ($d9bAdd.btns -join '/'))
+  if ($d9bAdd.p -eq '/outsource/return-order' -and [int]$d9bAdd.dialogs -ge 1) { Ok '「新增」在本页弹窗（未离开关联退货叶子）' }
+  else { Bad ('「新增」未在本页弹出弹窗（path=' + $d9bAdd.p + ', dialogs=' + $d9bAdd.dialogs + '）') }
+  if (($d9bAdd.labels -join ',') -match '关联加工单') { Ok '弹窗含「关联加工单」字段（选完进既有录入页录入）' } else { Bad ('弹窗缺「关联加工单」字段：' + ($d9bAdd.labels -join '/')) }
+  if (($d9bAdd.btns -join ',') -match '确定') { Ok '弹窗有「确定」按钮（确认后跳录入页）' } else { Bad ('弹窗缺「确定」按钮：' + ($d9bAdd.btns -join '/')) }
+  # 注：弹窗不关也行 —— 紧随其后的 §⑨b-2 首行 OpenFresh 会整页重载（不会把遮罩带到「台账表宽度」断言）
   # 2026-09-21（用户口径「列表也应该有详情」）：台账行内必须有「详情」入口（空表则跳过，避免假 FAIL）
   if ($d9b.opsHasDet) { Ok '关联退货台账行内操作列有「详情」入口' }
   elseif ([int]$d9b.rows -eq 0) { Write-Output ('（台账暂无数据行，跳过「详情」入口断言；页面上有「详情」按钮=' + $d9b.det + '）') }
