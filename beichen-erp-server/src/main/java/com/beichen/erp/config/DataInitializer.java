@@ -76,6 +76,7 @@ public class DataInitializer implements ApplicationRunner {
         migrateReturnBackSource();
         migrateMaterialMoveQuality();
         migrateMaterialRepairOnsiteLeg();
+        migrateMaterialOrderReturnedQty();
         migrateFinanceExpenseSource();
         initSuperAdmin();
         initMaterialTypes();
@@ -335,7 +336,12 @@ public class DataInitializer implements ApplicationRunner {
             {423L, 4L, "物料退货", "catalog", "", "", "Refrigerator", 6},
             {411L, 423L, "关联退料", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Document", 1},
             {425L, 423L, "无单退料", "menu", "/outsource/material-return/unlinked", "OutsourceMaterialReturnUnlinked", "Files", 2},
-            {424L, 423L, "物料维修退货", "menu", "/outsource/material-return/repair", "OutsourceMaterialReturnRepair", "Tools", 3},
+            // 424「物料维修退货」叶子已于 2026-09-28 按用户要求下线（用户口径：「物料维修退料这个不需要了」）：
+            //   「维修返回」不再是独立叶子，而是**关联退料 / 无单退料两个叶子里都可选的一种类型**
+            //   （类型三态：订单退料 / 退货退款 / 维修返回，见 MaterialReturnType）。
+            //   与 422/406/701 同范式 —— 不再 upsert（upsert 会把 visible 刷回 1），
+            //   改在下方统一置 visible=0，**保留行与角色授权**便于回滚；
+            //   旧地址 /outsource/material-return/repair 在前端路由里重定向到「关联退料」，老书签不吃 403。
             // 409「供应商管理」已于 2026-09-17 按用户要求下线：它是委外加工侧的**重复入口**（与基础数据 106
             // 「供应商管理」同指 /supplier/manage，页面完全相同），基础数据里 106/107 两份都保留。
             // 与 104/405/302/303 同范式：下方统一置 visible=0（保留行与角色授权，便于回滚）。
@@ -501,8 +507,8 @@ public class DataInitializer implements ApplicationRunner {
         try {
             // 注意：412 不在此列表 —— 2026-09-16 该 id 已被复用为「成品收货」菜单，
             // 若仍置 visible=0，会在上面的 upsert 之后把新菜单立刻隐藏（upsert 在前、置 0 在后）
-            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701, 406, 422) AND visible = 1");
-            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 409 委外加工-供应商管理 / 602 销售业务-客户管理 / 503 进货业务-供货商管理 / 701 成品库存查询 / 406 物料收发单 / 422 加工返回单）", hidden);
+            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701, 406, 422, 424) AND visible = 1");
+            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 409 委外加工-供应商管理 / 602 销售业务-客户管理 / 503 进货业务-供货商管理 / 701 成品库存查询 / 406 物料收发单 / 422 加工返回单 / 424 物料维修退货叶子）", hidden);
         } catch (Exception e) {
             log.warn("下线老菜单异常: {}", e.getMessage());
         }
@@ -711,7 +717,8 @@ public class DataInitializer implements ApplicationRunner {
                 {421L, "outsource:return-order"},
                 // 422 已下线（visible=0）：不再写 perms —— 它原先的码与 421 相同，由 421 承担；
                 // 存量库该行的 perms 会残留但**不可见即不生效**（有效权限 = 可见菜单的 perms 集合）。
-                {424L, "outsource:material-return"},
+                // 424（物料维修退货叶子）已于 2026-09-28 下线（visible=0）：不再写 perms ——
+                // 它原先的码与 411/425 相同，由那两个叶子承担；存量库该行的 perms 残留但不可见即不生效。
                 {412L, "outsource:order-delivery"},
                 {415L, "outsource:material-delivery"},
                 // ===== 进货业务（目录 5）=====
@@ -967,9 +974,9 @@ public class DataInitializer implements ApplicationRunner {
                     "WHERE rm.menu_id = 408");
             granted += jdbcTemplate.update(
                     "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
-                    "SELECT rm.role_id, m.id FROM sys_role_menu rm JOIN sys_menu m ON m.id IN (423, 424, 425) " +
+                    "SELECT rm.role_id, m.id FROM sys_role_menu rm JOIN sys_menu m ON m.id IN (423, 425) " +
                     "WHERE rm.menu_id = 411");
-            if (granted > 0) log.info("已按旧叶子继承补授三级菜单 {} 条（419~421 随 408 / 423~425 随 411）", granted);
+            if (granted > 0) log.info("已按旧叶子继承补授三级菜单 {} 条（419~421 随 408 / 423+425 随 411）", granted);
         } catch (Exception e) {
             log.warn("补授三级退货菜单异常: {}", e.getMessage());
         }
@@ -1273,6 +1280,17 @@ public class DataInitializer implements ApplicationRunner {
     private void migrateMaterialRepairOnsiteLeg() {
         addColumnIfMissing("outsource_material_return_repair",
                 "onsite_leg TINYINT DEFAULT 1 COMMENT '登记时是否核销在厂行：1=是(撤销需恢复) 0=旧单跳过(撤销不恢复)'");
+    }
+
+    /**
+     * 存量库幂等迁移（2026-09-28）：物料订单明细增加 **order_returned_qty** 列。
+     * <p>背景：用户口径新增「订单退料」类型（关联订单 + 订单未结单）—— 审核扣源仓 + 扣该订单出货/收料数量，
+     * 且是**永久**扣减（不像"送修中"会回补），反审核加回。用途：可退 =
+     * 已收 − 已退不良 − 送修中 − 订单退料 − 本单之外已审核的退货退款。</p>
+     */
+    private void migrateMaterialOrderReturnedQty() {
+        addColumnIfMissing("outsource_material_order_item",
+                "order_returned_qty DECIMAL(18,0) DEFAULT 0 COMMENT '订单退料已退数量(2026-09-28)'");
     }
 
     /**

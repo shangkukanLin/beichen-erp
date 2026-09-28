@@ -205,11 +205,15 @@ const routes: RouteRecordRaw[] = [
       // E4：草稿编辑（复用新增页，仅 DRAFT 可编辑）
       { path: 'outsource/return-order/edit/:id', name: 'OutsourceReturnOrderEdit', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '编辑委外加工退货', requiresAuth: true, operate: true } },
       { path: 'outsource/return-order/detail/:id', name: 'OutsourceReturnOrderDetail', component: () => import('@/views/outsource/return-order/detail.vue'), meta: { title: '委外加工退货详情', requiresAuth: true, operate: true } },
-      // 委外物料退货（2026-09-27 三级菜单：拆成 3 个叶子 —— 关联退料 / 无单退料 / 物料维修退货，
-      //   共用工作台组件，按 path 判叶子；关联/无单同 returnType=REFUND，靠 linked 参数区分；菜单在 sys_menu 423 下）
+      // 委外物料退货（2026-09-27 三级菜单拆叶子 → **2026-09-28 收敛为 2 个叶子**：关联退料 / 无单退料，
+      //   共用工作台组件，按 path 判叶子，靠 linked 参数区分（WITH_ORDER / WITHOUT_ORDER）；
+      //   每个叶子内都可能有**三种类型**：订单退料 / 退货退款 / 维修返回（见 MaterialReturnType）；菜单在 sys_menu 423 下）
       { path: 'outsource/material-return', name: 'OutsourceMaterialReturn', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '关联退料', requiresAuth: true } },
       { path: 'outsource/material-return/unlinked', name: 'OutsourceMaterialReturnUnlinked', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '无单退料', requiresAuth: true } },
-      { path: 'outsource/material-return/repair', name: 'OutsourceMaterialReturnRepair', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '物料维修退货', requiresAuth: true } },
+      // 424「物料维修退货」叶子已下线（2026-09-28 用户口径「物料维修退料这个不需要了」）：
+      //   「维修返回」不再是独立叶子，而是上面两个叶子里都可选的一种**类型** ⇒
+      //   旧地址/老书签重定向到「关联退料」，不吃 403（菜单行同时置 visible=0 保号，可回滚）。
+      { path: 'outsource/material-return/repair', name: 'OutsourceMaterialReturnRepair', redirect: '/outsource/material-return' },
       { path: 'outsource/material-return/add', name: 'OutsourceMaterialReturnAdd', component: () => import('@/views/outsource/material-return/add.vue'), meta: { title: '新增委外物料退货', requiresAuth: true, operate: true } },
       { path: 'outsource/material-return/detail/:id', name: 'OutsourceMaterialReturnDetail', component: () => import('@/views/outsource/material-return/detail.vue'), meta: { title: '委外物料退货详情', requiresAuth: true, operate: true } },
       // D 档（2026-09-21）：草稿编辑（复用新增页，后端 PUT /{id} 仅允许草稿）—— 与加工退货页对称

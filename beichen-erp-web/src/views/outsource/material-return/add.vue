@@ -26,6 +26,17 @@ const prefillSupplierId = Number(route.query.supplierId) || 0
 /** ?returnType=REPAIR 直接从列表页签的「新增维修退货」进入（2026-09-17 两类型；术语 2026-09-21 统一为"维修退货"） */
 const prefillReturnType = String(route.query.returnType || '')
 /**
+ * 叶子意图（2026-09-28 用户口径「关联退料页面点新增，没有选择关联订单的选项」）：
+ * 关联退料与无单退料是**同一类型（REFUND）的两个叶子**、共用本页 ⇒ 由 `?linked=` 声明意图
+ * （`WITH_ORDER`=关联退料叶子 / `WITHOUT_ORDER`=无单退料叶子 / 空=维修叶子、物料收货发起、地址栏直达）。
+ * <p>用途：①是否渲染「关联物料订单」字段 ②该字段是否必填 ③页签/卡片标题 ④提交前的必填校验。</p>
+ */
+const prefillLinked = String(route.query.linked || '').toUpperCase()
+/** 从「关联退料」叶子进来：**必须**挂关联物料订单（不挂就会落进「无单退料」叶子，与入口不符） */
+const fromLinked = computed(() => prefillLinked === 'WITH_ORDER')
+/** 从「无单退料」叶子进来：明确不挂订单（字段不渲染，保持原口径） */
+const fromUnlinked = computed(() => prefillLinked === 'WITHOUT_ORDER')
+/**
  * 编辑草稿（D 档 2026-09-21，与加工退货页对称）：路由 `/outsource/material-return/edit/:id`，0 = 新增。
  * <p>后端 `PUT /api/outsource/material-return/{id}` 早已存在（仅 DRAFT 可编辑，明细整体替换，草稿不动库存/应付），
  * 本页只补前端回填与提交分支。</p>
@@ -36,14 +47,60 @@ const editing = ref(false)
 const editSourceDeliveryId = ref<number | null>(null)
 
 const form = reactive({
-  // 退货类型（2026-09-17；术语 2026-09-21 统一为"维修退货"）：REFUND 退货退款（冲减应付）/ REPAIR 维修退货（不冲应付，修好登记返回入库）
+  // 退货类型（2026-09-17 两态 → **2026-09-28 三态**，用户口径）：
+  // REFUND 退货退款（冲减应付）/ REPAIR 维修返回（不冲应付，修好登记返回入库）
+  // ⚠️ ORDER 订单退料不在本字段：它由「关联订单是否未结单」**自动判定并锁定**（见 effectiveType）
   returnType: (prefillReturnType === MaterialReturnType.REPAIR ? MaterialReturnType.REPAIR : MaterialReturnType.REFUND) as string,
   supplierId: undefined as any, fromWarehouseId: undefined as any, returnDate: localDate(), remark: '',
   // 关联物料订单（2026-09-17 维修退货闭环）：可清空；不选=不关联（靠本单「送修/已返回」跟踪）
   materialOrderId: undefined as any
 })
-/** 维修退货：不冲减应付；审核后在详情页登记「维修返回」把物料入回来 */
-const isRepair = computed(() => form.returnType === MaterialReturnType.REPAIR)
+/**
+ * 「关联物料订单」字段是否渲染（2026-09-28）：维修退货（原口径）＋ **关联退料叶子**，
+ * 外加"草稿已挂单"的情况（编辑/回填时看得见、可改可清，否则会看不到自己在挂哪个订单）。
+ * ⚠️ 无单退料叶子与物料收货发起的 REFUND **刻意不渲染** —— 它们的口径就是"不挂订单"
+ * （收货发起时后端按收料单的来源订单自动挂，无需人工选）。
+ */
+const showOrderPicker = computed(() => isRepair.value || fromLinked.value || form.materialOrderId != null)
+/**
+ * **类型提示（三态）**：与后端 `MaterialReturnType.checkOrderStatus` + `assertNotOverReturnable` 口径逐字对齐。
+ * <p>订单退料 = 扣源仓 + 扣该订单出货/收料数（永久）；退货退款 = 扣源仓 + 冲减应付（P2 起改为"对供应商的应收"）；
+ * 维修返回 = 扣源仓送修 → 回厂登记 → 全返回可结案。挂订单时审核都要过「不超可退」这道闸。</p>
+ */
+const typeHint = computed(() => {
+  if (isOrderReturn.value) {
+    return '该订单「未结单」⇒ 只能走「订单退料」：审核时扣源仓库存，并扣减该订单的出货/收料数量'
+      + '（永久扣减，反审核才加回）；不动账务、不跟踪返回。'
+  }
+  if (form.materialOrderId != null) {
+    return '该订单「已结单」⇒ 可走「退货退款」（物料回源仓 + 生成对供应商的应收）或「维修返回」（送修 → 回厂登记 → 可结案；填了维修费则生成应付）。'
+      + '审核按该订单的「可退」校验本单数量 —— 可退 = 该物料『已收 − 已退不良 − 送修中 − 订单退料 − 已退货退款』，超出会被拒。'
+  }
+  return ''
+})
+/**
+ * 卡片标题 = 页面名（2026-09-28 用户口径「按你的推荐」）：**卡片标题与页头完全相同**，与 `detail.vue` 同范式。
+ * <p>原先另有一套「xx信息」体例（关联退料信息 / 无单退料信息 / **维修退货信息**），第三支还缺「物料」二字，
+ * 与页头「新增物料维修退货」及叶子名「物料维修退货」都对不齐 ⇒ 收敛掉，模板直接用 `pageTitle`。</p>
+ */
+/**
+ * **页面名**（2026-09-28 用户口径「最上面标题和页面里的标题也要改」）：页头 / 顶部页签 / 浏览器标签页
+ * **三处同源** —— 与 `material-return/detail.vue` 同一范式（那条"三处一致"家规由
+ * `tools/regression/verify-detail-render.ps1` 守着）。⚠️ 页头原先吃路由 `meta.title`
+ * （两种类型共用时的历史名「新增委外物料退货」）⇒ 只有页签/浏览器标题跟了类型，页头没跟（用户实测报回）。
+ * <p>口径：REPAIR=物料维修退货｜REFUND+关联叶子=关联退料｜REFUND+无单叶子=无单退料｜
+ * 其余（收货发起/地址栏直达）=委外物料退货（历史兜底名）。</p>
+ */
+const pageTitle = computed(() => (editId ? '编辑' : '新增') + (isRepair.value ? '维修返回'
+  : fromLinked.value ? '关联退料' : fromUnlinked.value ? '无单退料' : '委外物料退货'))
+/**
+ * 返回 / 保存后的落点（2026-09-28 用户口径）：**必须回到"这张单会在哪个叶子出现"**。
+ * <p>从「无单退料」叶子进来（`?linked=WITHOUT_ORDER`）⇒ 回 `/outsource/material-return/unlinked`；
+ * 其余（关联退料叶子、维修叶子、物料收货发起、地址栏直达）保持回 `/outsource/material-return`（原行为）。</p>
+ * <p>⚠️ 未覆盖：维修叶子入口没带来源参数（`handleAdd(REPAIR)` 无 query）⇒ 它仍落在关联退料叶子；
+ * 如需一并分流，可让维修入口也带上来源标记。</p>
+ */
+const backFallback = computed(() => (fromUnlinked.value ? '/outsource/material-return/unlinked' : '/outsource/material-return'))
 const warehouseOptions = ref<any[]>([])
 const stockList = ref<any[]>([])
 const loading = ref(false)
@@ -76,13 +133,33 @@ function materialOrderLabel(o: any) {
   return st ? `${o.code}（${st}）` : `${o.code}`
 }
 const orderStatus = computed(() => pickedOrder.value?.status || '')
-/** 收尾方式提示：未结单=扣减订单收料（修好回补）；已结单/未关联=靠本单「送修/已返回」+ 结案跟踪 */
-const orderHint = computed(() => {
-  if (!isRepair.value) return ''
-  if (!form.materialOrderId || !pickedOrder.value) return '未关联物料订单：返回情况在本单「送修 / 已返回」中跟踪，全部返回后（未返回=0）可结案。'
-  if (orderStatus.value === MaterialOrderStatus.RECEIVING) return '该订单未完成（收货中）：审核会把送修数量从该订单收料数中扣减（净收料 = 收料总数 − 送修数），供应商修好「登记维修返回」时自动回补，订单台账自动闭环。'
-  if (orderStatus.value === MaterialOrderStatus.FINISHED) return '该订单已结单：不扣减订单收料数，返回情况在本单「送修 / 已返回」中跟踪，全部返回后（未返回=0）可结案。'
-  return ''
+// 注（2026-09-28）：原「收尾方式提示」（orderHint，仅维修退货）已被 typeHint 取代 ——
+// 三态下"扣不扣订单收料数"由**类型**决定（订单退料扣、其余不扣），不再是维修退货的订单状态分支。
+/**
+ * **类型三态自动判定**（2026-09-28 用户口径，后端 `MaterialReturnType.checkOrderStatus` 强校验同一口径）：
+ * <ul>
+ *   <li>关联订单 **未结单(RECEIVING)** ⇒ **订单退料**（唯一选项，自动锁定）—— 扣源仓 + 扣该订单出货/收料数量；</li>
+ *   <li>关联订单 **已结单(FINISHED)** ⇒ 用户选「退货退款 / 维修返回」；</li>
+ *   <li>**无单**（无单退料叶子，或收货发起未带出订单）⇒ 用户选「退货退款 / 维修返回」。</li>
+ * </ul>
+ * <p>⚠️ 订单状态来自 `pickedOrder`：手工选单由下拉带出，收货发起由 `return-prefill` 的
+ * `materialOrderStatus` 带出；状态未知时不锁定（按用户选择提交，后端审核时再兜底校验）。</p>
+ */
+const forcedOrderReturn = computed(() => form.materialOrderId != null && orderStatus.value === MaterialOrderStatus.RECEIVING)
+/** 本单最终类型（提交值 / 标题 / 提示语都以它为准） */
+const effectiveType = computed(() => (forcedOrderReturn.value ? MaterialReturnType.ORDER : form.returnType))
+/** 订单退料：只扣源仓 + 扣订单出货数，不动账务、不跟踪返回 */
+const isOrderReturn = computed(() => effectiveType.value === MaterialReturnType.ORDER)
+/** 维修返回：不冲减应付；审核后在详情页登记「维修返回」把物料入回来（全返回后可结案） */
+const isRepair = computed(() => effectiveType.value === MaterialReturnType.REPAIR)
+/**
+ * 「退货类型」下拉的绑定值（2026-09-28 三态）：**订单退料是判定出来的、不是选出来的** ——
+ * 关联订单未结单时 getter 固定返回 ORDER 且下拉禁用（下拉里动态多出「订单退料」这一项）；
+ * 其余情况就是用户的选择（退货退款 / 维修返回）。这样字段区不用新增控件，也不改变既有断言口径。
+ */
+const typeSelect = computed({
+  get: () => (forcedOrderReturn.value ? MaterialReturnType.ORDER : form.returnType),
+  set: (v: string) => { form.returnType = v }
 })
 /** 预填期间不因 supplierId 变化清空已带出的关联订单 */
 let prefilling = false
@@ -142,6 +219,10 @@ async function loadFromQuery() {
 
 async function handleSubmit() {
   if (!form.supplierId) { ElMessage.warning(isRepair.value ? '请选择维修供应商' : '请选择退回对象（物料商）'); return }
+  // 关联退料叶子新增 ⇒ 必须挂订单，否则会落进「无单退料」叶子，与用户点进来的入口不符
+  if (fromLinked.value && form.materialOrderId == null) {
+    ElMessage.warning('请选择关联物料订单（如确实不挂订单，请从「无单退料」叶子新增）'); return
+  }
   if (!form.fromWarehouseId) { ElMessage.warning('请选择出库源仓'); return }
   const items = stockList.value
     .filter((m: any) => Number(m.returnQuantity) > 0)
@@ -149,18 +230,21 @@ async function handleSubmit() {
       materialId: m.materialId, materialTypeId: m.materialTypeId, unit: m.unit,
       quantity: Number(m.returnQuantity), unitPrice: m.unitPrice || '', remark: ''
     }))
-  if (items.length === 0) { ElMessage.warning(isRepair.value ? '请输入送修数量' : '请输入退货数量'); return }
+  if (items.length === 0) { ElMessage.warning(isRepair.value ? '请输入送修数量' : (isOrderReturn.value ? '请输入退料数量' : '请输入退货数量')); return }
   submitting.value = true
   try {
     const payload = {
       supplierId: form.supplierId, fromWarehouseId: form.fromWarehouseId,
       returnDate: form.returnDate, remark: form.remark,
-      // 类型（2026-09-17）：REFUND 退货退款 / REPAIR 维修退货（原先写死 MATERIAL，业务从不读）
-      returnType: form.returnType, items,
+      // 类型（2026-09-28 三态）：ORDER 订单退料（关联未结单时自动判定）/ REFUND 退货退款 / REPAIR 维修返回
+      // —— 取 effectiveType（不是 form.returnType：订单退料是"判定出来的"，见 forcedOrderReturn）
+      returnType: effectiveType.value, items,
       // 来源收料单（从「物料收货」发起时落库，用于按记录算可退数量并追溯；编辑时保留原值）
       sourceDeliveryId: editId ? editSourceDeliveryId.value : (prefillDeliveryId || null),
-      // 关联物料订单（维修退货闭环，2026-09-17）：未选/清空=不关联
-      materialOrderId: isRepair.value ? (form.materialOrderId || null) : null
+      // 关联物料订单（2026-09-17 维修退货闭环；2026-09-28 起「关联退料」也用）：
+      // 未选/清空 = 不关联；**不再按 isRepair 强制 null** —— 否则关联退料叶子里选好的订单会被静默丢掉、
+      // 单据落成无单（MRW-）。未挂单时仍传 null，物料收货发起的场景由后端按收料单来源订单兜底派生（行为不变）。
+      materialOrderId: form.materialOrderId || null
     }
     // D 档（2026-09-21）：编辑草稿走 PUT（后端仅允许 DRAFT 编辑，明细整体替换；草稿不动库存/应付）
     if (editId) {
@@ -174,7 +258,7 @@ async function handleSubmit() {
     // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回列表
     markClean()
     tabStore.closeTabAndBack(window.location.hash.replace('#', ''))
-    router.replace('/outsource/material-return')
+    router.replace(backFallback.value)
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { submitting.value = false }
 }
 
@@ -245,12 +329,14 @@ const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form }))
  * 点「新增」时页签就名不符实 ⇒ 按 isRepair 改对页签名（只影响顶部页签显示，落库类型不变）。
  */
 function syncTabTitle() {
-  const kind = isRepair.value ? '物料维修退货' : '委外物料退货'
-  const t = (editId ? '编辑' : '新增') + kind
+  // 2026-09-28（用户实测）：页面名必须与**类型 + 入口叶子**一致 —— 关联退料/无单退料共用本页，
+  //   原先页头/页签一律叫「新增委外物料退货」；现在统一取 pageTitle（页头由模板 :title 绑定同一个值）。
+  const t = pageTitle.value
   tabStore.updateTabTitle(route.path, t)
   applyPageTitle(t)   // 浏览器标签页标题同口径（后缀统一在 @/utils/pageTitle）
 }
-watch(isRepair, syncTabTitle)
+// 页内切换「退货类型」时：页头（computed 自动跟）+ 页签 + 浏览器标题一起跟变
+watch(pageTitle, syncTabTitle)
 
 onMounted(async () => {
   syncTabTitle()           // 先摆正页签名，再拉数据
@@ -267,28 +353,32 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
 
 <template>
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（保存/保存草稿） -->
-  <PageShell back-fallback="/outsource/material-return">
+  <PageShell :title="pageTitle" :back-fallback="backFallback">
     <template #actions>
       <el-button type="primary" :loading="submitting" @click="handleSubmit">保存</el-button>
     </template>
 
     <el-card shadow="never">
-      <template #header><span style="font-weight:600">{{ editing ? (isRepair ? '编辑维修退货' : '编辑物料退货') : (isRepair ? '维修退货信息' : '退货信息') }}</span></template>
-      <!-- 类型说明整行展示（2026-09-17）：两类型的库存/应付/后续动作不同，写在字段区里会把同行字段挤窄 -->
+      <template #header><span style="font-weight:600">{{ pageTitle }}</span></template>
+      <!-- 类型说明整行展示（2026-09-17 立；**2026-09-28 改为三态**）：三类型的库存/账务/后续动作不同 -->
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px">
         <template #title>
           <span style="font-size:var(--app-font-xs);line-height:1.5">
-            {{ isRepair
-              ? '维修退货：把物料送供应商维修 —— 审核只扣源仓、不冲减应付；供应商修好后在详情页「登记维修返回」把物料入回来（可分批、可撤销）。关联物料订单且订单未结单时，审核会同时扣减该订单收料数（修好返回自动回补）；订单已结单或不关联时，靠本单「送修 / 已返回」跟踪，全部返回后结案。'
-              : '退货退款：物料退回供应商 —— 审核扣源仓并生成负向应付（冲减应付账款）；供应商把货款退给我们后走付款/核销。' }}
+            {{ isOrderReturn
+              ? '订单退料：关联订单「未结单」时的退料 —— 审核扣源仓库存，并扣减该订单的出货/收料数量（永久扣减，反审核才加回）；不动账务、不跟踪返回。'
+              : (isRepair
+                ? '维修返回：把物料送供应商维修 —— 审核只扣源仓；「填了维修费」则按明细金额生成对供应商的应付。供应商修好后在详情页「登记维修返回」把物料入回来（可分批、可撤销），全部返回后可结案。'
+                : '退货退款：物料退回供应商 —— 审核扣源仓并生成「对供应商的应收」；供应商把货款退给我们后走收款核销（收款单选该供应商即可核销这笔应收）。') }}
           </span>
         </template>
       </el-alert>
-      <el-form :model="form" label-width="var(--app-label-width)" size="small">
+      <el-form :model="form" label-width="var(--app-label-width-lg)" size="small">
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item required label="退货类型">
-              <el-select v-model="form.returnType" style="width:100%">
+              <!-- 三态（2026-09-28）：订单退料由「关联订单未结单」自动判定并锁定（禁用），其余可选 -->
+              <el-select v-model="typeSelect" style="width:100%" :disabled="forcedOrderReturn">
+                <el-option v-if="forcedOrderReturn" :label="MaterialReturnTypeLabel[MaterialReturnType.ORDER]" :value="MaterialReturnType.ORDER" />
                 <el-option :label="MaterialReturnTypeLabel[MaterialReturnType.REFUND]" :value="MaterialReturnType.REFUND" />
                 <el-option :label="MaterialReturnTypeLabel[MaterialReturnType.REPAIR]" :value="MaterialReturnType.REPAIR" />
               </el-select>
@@ -296,20 +386,22 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
           </el-col>
           <el-col :span="8"><el-form-item required :label="isRepair ? '维修供应商' : '退回对象'"><RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" :placeholder="isRepair ? '选择维修供应商' : '选择物料商'" style="width:100%" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item required label="出库源仓"><el-select v-model="form.fromWarehouseId" filterable clearable style="width:100%" placeholder="选择物料所在仓库" @change="onWarehouseChange"><el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
-          <!-- 关联物料订单（2026-09-17 维修退货闭环）：可清空=不关联；订单未完成时审核会扣减其收料数 -->
-          <el-col :span="8" v-if="isRepair">
-            <el-form-item label="关联物料订单">
+          <!-- 关联物料订单（2026-09-17 维修退货闭环；2026-09-28 起「关联退料」叶子也走这里）：
+               维修退货：可清空 = 不关联，订单未完成时审核会扣减其收料数；
+               关联退料：**必选**（不选会落成无单 MRW-），审核只按订单可退量校验、不扣收料数 —— 见 linkedHint -->
+          <el-col :span="8" v-if="showOrderPicker">
+            <el-form-item label="关联物料订单" :required="fromLinked">
               <RemoteSelect v-model="form.materialOrderId" :fetch="fetchMaterialOrders" :label-key="materialOrderLabel" :disabled="!form.supplierId"
-                :placeholder="form.supplierId ? '可不选（不关联）' : '请先选维修供应商'" style="width:100%" disable-cache filterable
+                :placeholder="!form.supplierId ? '请先选退回对象' : (fromLinked ? '必选（关联退料）' : '可不选（不关联）')" style="width:100%" disable-cache filterable
                 :preset="pickedOrder ? { id: pickedOrder.id, code: pickedOrder.code } : null" @pick="(opts: any[]) => pickedOrder = (opts && opts[0]) || null" />
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item :label="isRepair ? '送修日期' : '退货日期'"><el-input v-model="form.returnDate" type="date" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
-          <!-- 收尾方式提示：按关联订单状态说明"扣减订单收料"还是"靠本单跟踪" -->
-          <el-col :span="24" v-if="isRepair && orderHint">
-            <el-alert :type="orderStatus === MaterialOrderStatus.RECEIVING ? 'success' : 'warning'" :closable="false" show-icon style="margin-bottom:8px">
-              <template #title><span style="font-size:var(--app-font-xs);line-height:1.5">{{ orderHint }}</span></template>
+          <!-- 类型提示（三态，2026-09-28）：关联订单状态 ⇒ 类型锁定/可选，以及审核口径（见 typeHint） -->
+          <el-col :span="24" v-if="typeHint">
+            <el-alert :type="isOrderReturn ? 'success' : 'warning'" :closable="false" show-icon style="margin-bottom:8px">
+              <template #title><span style="font-size:var(--app-font-xs);line-height:1.5">{{ typeHint }}</span></template>
             </el-alert>
           </el-col>
         </el-row>
@@ -328,8 +420,9 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
         <el-table-column :label="isRepair ? '送修数量' : '退货数量'" width="120">
           <template #default="{row}"><el-input-number v-model="row.returnQuantity" size="small" :controls="false" :precision="0" :step="1" style="width:100%" placeholder="数量" /></template>
         </el-table-column>
-        <el-table-column label="单价（留空自动FIFO）" width="150">
-          <template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" placeholder="自动" /></template>
+        <!-- 单价口径按类型（P3 2026-09-28）：退货退款留空=FIFO 自动价；维修返回留空=**不收费 0**（填的是维修费） -->
+        <el-table-column :label="isRepair ? '维修费单价（留空=0）' : '单价（留空自动FIFO）'" width="150">
+          <template #default="{row}"><el-input v-model="row.unitPrice" size="small" type="number" :placeholder="isRepair ? '不收费' : '自动'" /></template>
         </el-table-column>
       </el-table>
     </el-card>

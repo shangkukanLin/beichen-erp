@@ -424,6 +424,9 @@ CREATE TABLE IF NOT EXISTS outsource_material_order_item (
     -- 订单未完成(RECEIVING)时，送修审核会同时扣减 received_quantity（净收料=已收−送修），
     -- 修好「登记维修返回」时回补；本列只用于在订单上区分"未收 / 送修中"。
     repair_returned_qty   DECIMAL(18,0) DEFAULT 0       COMMENT '送修中数量(维修返还已送修未返回)',
+    -- 2026-09-28：订单退料已退数量（订单退料审核永久扣 received_quantity 并记入本列，反审核加回）。
+    -- 用途：可退 = 已收 − 已退不良 − 送修中 − 订单退料 − 退款已退。
+    order_returned_qty    DECIMAL(18,0) DEFAULT 0       COMMENT '订单退料已退数量',
     unit_price            DECIMAL(18,4) DEFAULT 0       COMMENT '单价',
     amount                DECIMAL(18,4) DEFAULT 0       COMMENT '金额',
     remark                VARCHAR(255)                  COMMENT '备注',

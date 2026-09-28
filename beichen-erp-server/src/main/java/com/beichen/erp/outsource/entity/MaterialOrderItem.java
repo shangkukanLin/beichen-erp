@@ -25,6 +25,11 @@ public class MaterialOrderItem {
      * 修好「登记维修返回」时回补；本列用于在订单上区分"未收 / 送修中"。</p>
      */
     private BigDecimal repairReturnedQty;
+    /**
+     * 订单退料已退数量（2026-09-28 新增）：订单退料类型审核时**永久**扣减（不像送修会回补），
+     * 反审核加回。用于「可退」公式：可退 = 已收 − 已退不良 − 送修中 − 订单退料 − 退款已退。
+     */
+    private BigDecimal orderReturnedQty;
     private BigDecimal unitPrice;
     private BigDecimal amount;
     private String remark;

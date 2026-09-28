@@ -384,6 +384,8 @@ export const SourceBillTypeLabel: Record<string, string> = {
   OUTSOURCE_RETURN: '委外退料', OUTSOURCE_MATERIAL_RETURN: '委外物料退货',
   OUTSOURCE_RETURN_CHARGE: '委外加工退货收费',
   OUTSOURCE_REPAIR_CHARGE: '委外维修收费',
+  // P3（2026-09-28）：物料维修返回的维修费（正向应付，供应商向我方收取），与加工侧的「委外维修收费」分开
+  OUTSOURCE_MATERIAL_REPAIR_FEE: '委外物料维修费',
   OUTSOURCE_EXCESS_LOSS: '委外超损',
   OUTSOURCE_RETURN_BACK: '加工返回单',
   // F7-54（2026-09-19）：补齐 6 个后端已定义但前端漏映射的值 ——
@@ -418,6 +420,7 @@ export const SourceBillTypeShortLabel: Record<string, string> = {
   OUTSOURCE_MATERIAL_DELIVERY: '物料收发', OUTSOURCE_MATERIAL_RETURN: '物料退货',
   OUTSOURCE_RETURN: '委外退料', OUTSOURCE_RETURN_CHARGE: '委退收费',
   OUTSOURCE_REPAIR_CHARGE: '维修收费', OUTSOURCE_RETURN_BACK: '加工返回',
+  OUTSOURCE_MATERIAL_REPAIR_FEE: '物料维修费',
   RETURN_SORT_LOSS: '退货折损', PAYABLE_TRANSFER: '转应收', ADVANCE_LEDGER: '预收预付'
 }
 export function sourceBillTypeShortLabel(code?: string) { return code ? (SourceBillTypeShortLabel[code] || sourceBillTypeLabel(code)) : '' }
@@ -483,6 +486,8 @@ export const SourceBillDetailRoute: Record<string, string> = {
   OUTSOURCE_EXCESS_LOSS: '/outsource/order/detail',
   OUTSOURCE_MATERIAL_DELIVERY: '/outsource/delivery/detail',
   OUTSOURCE_MATERIAL_RETURN: '/outsource/material-return/detail',
+  // P3（2026-09-28）：物料维修费应付的来源是**物料维修返回单** ⇒ 链接到物料退货详情（不是加工退货详情）
+  OUTSOURCE_MATERIAL_REPAIR_FEE: '/outsource/material-return/detail',
   OUTSOURCE_RETURN: '/outsource/return-order/detail',
   OUTSOURCE_RETURN_CHARGE: '/outsource/return-order/detail',
   OUTSOURCE_REPAIR_CHARGE: '/outsource/return-order/detail',
@@ -729,27 +734,34 @@ export const DocStatusTag: Record<string, 'success' | 'warning' | 'info' | 'dang
 }
 
 /**
- * 委外物料退货类型（对应后端 MaterialReturnType 枚举，2026-09-17 定稿两类型，对齐加工退货）
- * - REFUND 退货退款：物料退给供应商，供应商把货款退给我们 → 审核扣源仓 + 负向应付
- * - REPAIR 维修退货：退给供应商维修，修好后把物料还给我们 → 审核扣源仓（不冲应付）+ 登记维修返回入库
- *   （术语 2026-09-21 统一：原「维修返还」→**维修退货**，与加工退货页的「维修退货」页签同词）
- * ⚠️ 历史值 MATERIAL 由后端归一成 REFUND，前端只需兜底显示
+ * 委外物料退货类型（对应后端 MaterialReturnType 枚举）
+ * <p>2026-09-17 定稿两类型 → <b>2026-09-28 按用户口径扩为三态</b>：</p>
+ * - `ORDER` **订单退料**：仅**关联订单且订单未结单**；审核 = 扣源仓 + 扣该订单出货/收料数量
+ *   （`order_returned_qty`，永久），不动账务、不跟踪返回
+ * - `REFUND` **退货退款**：无单，或关联**已结单**订单；审核 = 扣源仓 +（P2 起）生成**对供应商的应收**
+ * - `REPAIR` **维修返回**：无单，或关联**已结单**订单；审核 = 扣源仓送修 → 登记维修返回入库 → 可结案
+ *   （术语 2026-09-28 统一：原「维修退货」→**维修返回**，与用户口径同词）
+ * <p>⚠️ 类型与订单状态的绑定由后端强校验（`MaterialReturnType.checkOrderStatus`），前端只做体验层引导。
+ * 历史值 `MATERIAL` 由后端归一成 REFUND，前端只需兜底显示。</p>
  */
 export const MaterialReturnType = {
+  ORDER: 'ORDER',
   REFUND: 'REFUND',
   REPAIR: 'REPAIR'
 } as const
 
 export const MaterialReturnTypeLabel: Record<string, string> = {
+  [MaterialReturnType.ORDER]: '订单退料',
   [MaterialReturnType.REFUND]: '退货退款',
-  [MaterialReturnType.REPAIR]: '维修退货',
+  [MaterialReturnType.REPAIR]: '维修返回',
   // 历史值兜底（旧枚举"物料商退货"= 退货退款）
   MATERIAL: '退货退款'
 }
 
-export const MaterialReturnTypeTag: Record<string, 'warning' | 'primary'> = {
+export const MaterialReturnTypeTag: Record<string, 'warning' | 'primary' | 'success'> = {
+  [MaterialReturnType.ORDER]: 'primary',
   [MaterialReturnType.REFUND]: 'warning',
-  [MaterialReturnType.REPAIR]: 'primary'
+  [MaterialReturnType.REPAIR]: 'success'
 }
 
 /** 委外物料订单列表脏标志：详情/新增页数据变动后置位，列表页 onActivated 据此按需刷新 */

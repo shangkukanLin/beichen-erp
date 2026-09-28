@@ -1,6 +1,7 @@
 ﻿# P5b (2026-09-18 full-flow E2E): 物料退货 through the frontend only.
 #   2 x 退货退款(REFUND) + 1 x 维修返还(REPAIR), each 1 line from 自有物料一号仓 -> audit.
-#   asserts: stock out of the source warehouse, negative payable for REFUND (and NONE for REPAIR).
+#   asserts: stock out of the source warehouse, **receivable on the supplier side for REFUND**
+#   (P2 2026-09-28: 由"负向应付"改为"对供应商的应收") and NO payable for REPAIR without a repair fee.
 # ALL DATA KEPT; rerunnable. ASCII ONLY.
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 EnsureLogin
@@ -56,6 +57,12 @@ if ($refundSup -eq '') { $refundSup = (ZH 'val_factory') + '1' }
 if ($repairSup -eq '') { $repairSup = (ZH 'val_factory') + '1' }
 Write-Host ('[PARTNER] refundSup=' + $refundSup + ' repairSup=' + $repairSup)
 $before = D (SqlOne 'SELECT COUNT(*) FROM outsource_material_return')
+# P2（2026-09-28）：退货退款改写**对供应商的应收** ⇒ 断言只能用"本次增量"
+#   （库里还留着改造前的负向应付行与其它套件造的应收行，绝对值不可作为判据）。
+$rcvUnpaidBefore = D (SqlOne "SELECT COALESCE(SUM(unpaid_amount),0) FROM finance_receivable WHERE source_bill_type='OUTSOURCE_MATERIAL_RETURN'")
+$payOpenBefore = D (SqlOne "SELECT COUNT(*) FROM finance_payable WHERE source_bill_type='OUTSOURCE_MATERIAL_RETURN' AND status='UNSETTLED'")
+# P3（2026-09-28）：维修返回填了维修费 ⇒ 生成对供应商的应付；本脚本给维修返回行也填了单价(5) ⇒ 会落账
+$repairFeeAmtBefore = D (SqlOne "SELECT COALESCE(SUM(amount),0) FROM finance_payable WHERE source_bill_type LIKE 'OUTSOURCE_MATERIAL_REPAIR%' AND status='UNSETTLED'")
 # 2026-09-19 fix: the old script created documents only while fewer than 3 existed, yet still asserted
 # "aux stock decreased" - on a rerun (needCreate=0) no UI flow ran at all, so that assertion was a
 # permanent false red. No new documents in a rerun can only mean "stock must be unchanged".
@@ -74,12 +81,19 @@ if ($need -gt 0) {
     #   本脚本的 REFUND 单**不挂物料订单**（只选供应商 + 源仓 + 料）⇒ 落「无单退料」叶子；
     #   REPAIR 走「物料维修退货」叶子。
     $leafUrl = '/outsource/material-return/unlinked'
-    if ($typeName -eq 'REPAIR') { $leafUrl = '/outsource/material-return/repair' }
+    # 2026-09-28（三态）：维修返回不再是独立叶子（/repair 已重定向）⇒ 它在「无单退料」叶子的新增页里选类型；
+    #   本脚本的 REPAIR 单不挂订单 ⇒ 走无单叶子（关联叶子会强制要求选订单）。
+    if ($typeName -eq 'REPAIR') { $leafUrl = '/outsource/material-return/unlinked' }
     Open $leafUrl 3000
     ClearErrs | Out-Null
     Write-Host ('  open add page: ' + (ClickBtn $typeKey))
     Start-Sleep -Milliseconds 2400
     Write-Host ('  path=' + (EvalJs 'String(location.pathname)'))
+    if ($typeName -eq 'REPAIR') {
+      # 2026-09-28（三态）：先在本页把「退货类型」选成维修返回，供应商字段才切成「维修供应商」
+      Write-Host ('  pick type=REPAIR: ' + (SelectLabel 'lbl_mr_type' 'opt_type_repair'))
+      Start-Sleep -Milliseconds 1400
+    }
     $supPick = SelectLabelContains $supLbl $supName
     Write-Host ('  supplier (' + $supName + '): ' + $supPick)
     Ok ($supPick -match 'OK') ('return partner picked for ' + $typeName)
@@ -109,8 +123,9 @@ foreach ($c in (SqlList "SELECT code FROM outsource_material_return WHERE status
   #   （三个叶子的默认页签都含草稿：「有效单据」=DRAFT+AUDITED；维修叶子「待返回」含草稿）
   $rt = SqlOne ("SELECT CONCAT(return_type,'|',IFNULL(material_order_id,0)) FROM outsource_material_return WHERE code='" + $c + "'")
   $leafUrl = '/outsource/material-return'
-  if ($rt -like 'REPAIR*') { $leafUrl = '/outsource/material-return/repair' }
-  elseif ($rt -like '*|0') { $leafUrl = '/outsource/material-return/unlinked' }
+  # 2026-09-28（三态）：**类型不再决定叶子** —— 未挂订单(|0) 都在「无单退料」，挂了订单的在「关联退料」
+  #   （维修叶子已下线，旧地址 /repair 会重定向到关联叶子 ⇒ 未挂单的维修返回在那里找不到行）
+  if ($rt -like '*|0') { $leafUrl = '/outsource/material-return/unlinked' }
   Open $leafUrl 2800
   Write-Host ('[' + $c + '] type=' + $rt + ' leaf=' + $leafUrl)
   $idx = [int](FindRow $c)
@@ -134,9 +149,12 @@ $repairAud = D (SqlOne "SELECT COUNT(*) FROM outsource_material_return WHERE sta
 $auxAfter = D (SqlOne ("SELECT COALESCE(SUM(quantity),0) FROM warehouse_stock WHERE material_id IS NOT NULL AND warehouse_id=" + $auxId))
 $refundOut = D (SqlOne "SELECT COALESCE(SUM(-change_quantity),0) FROM warehouse_stock_log WHERE change_type='MATERIAL_RETURN_OUT'")
 $repairOut = D (SqlOne "SELECT COALESCE(SUM(-change_quantity),0) FROM warehouse_stock_log WHERE change_type='MATERIAL_REPAIR_OUT'")
-$refundPay = D (SqlOne "SELECT COALESCE(SUM(amount),0) FROM finance_payable WHERE source_bill_type='OUTSOURCE_MATERIAL_RETURN'")
-$repairPay = D (SqlOne "SELECT COUNT(*) FROM finance_payable WHERE source_bill_type LIKE 'OUTSOURCE_MATERIAL_REPAIR%'")
-Write-Host ("[DB] returns=$ret audited=$aud refund=$refundAud repair=$repairAud auxStock=$auxStockBefore->$auxAfter refundOut=$refundOut repairOut=$repairOut refundPayableSum=$refundPay repairPayableRows=$repairPay")
+# P2（2026-09-28）：退货退款的落账方向已改为应收（原来断言"负向应付"）—— 见脚本头注释。
+$refundRcv = D (SqlOne "SELECT COALESCE(SUM(unpaid_amount),0) FROM finance_receivable WHERE source_bill_type='OUTSOURCE_MATERIAL_RETURN'")
+$refundPayOpen = D (SqlOne "SELECT COUNT(*) FROM finance_payable WHERE source_bill_type='OUTSOURCE_MATERIAL_RETURN' AND status='UNSETTLED'")
+# P3（2026-09-28）：维修费应付只在"填了维修费"时产生 ⇒ 只看**未冲销**的金额（别的套件会故意造维修费单，如 ui-e2e-14）
+$repairFeeAmt = D (SqlOne "SELECT COALESCE(SUM(amount),0) FROM finance_payable WHERE source_bill_type LIKE 'OUTSOURCE_MATERIAL_REPAIR%' AND status='UNSETTLED'")
+Write-Host ("[DB] returns=$ret audited=$aud refund=$refundAud repair=$repairAud auxStock=$auxStockBefore->$auxAfter refundOut=$refundOut repairOut=$repairOut refundRcvUnpaid=$rcvUnpaidBefore->$refundRcv refundOpenPayables=$payOpenBefore->$refundPayOpen repairFeeOpen=$repairFeeAmtBefore->$repairFeeAmt")
 Ok (($ret -ge 3)) ('material returns >= 3 (got ' + $ret + ')')
 # 2026-09-21: the table may also hold **CANCELLED** historical documents (other suites cancel their own
 # drafts so they can re-run), so "everything is AUDITED" was wrong. What this sweep actually guarantees is
@@ -147,8 +165,18 @@ Ok (($refundAud -ge 2)) ('refund returns >= 2 (got ' + $refundAud + ')')
 Ok (($repairAud -ge 1)) ('repair returns >= 1 (got ' + $repairAud + ')')
 Ok (($refundOut -ge 100)) ('refund stock-out qty >= 100 (got ' + $refundOut + ')')
 Ok (($repairOut -ge 50)) ('repair stock-out qty >= 50 (got ' + $repairOut + ')')
-Ok (($refundPay -lt 0)) ('refund generated a negative payable (sum=' + $refundPay + ')')
-Ok (($repairPay -eq 0)) ('repair return generated NO payable (rows=' + $repairPay + ') — by design')
+# 与库存断言同范式：本次运行没建新单（needCreate=0 的幂等重跑）时，应收只能"不变"
+if ($need -gt 0) {
+  Ok (($refundRcv -gt $rcvUnpaidBefore)) ('refund generated receivables on the supplier side (unpaid ' + $rcvUnpaidBefore + ' -> ' + $refundRcv + ')')
+} else {
+  Ok (($refundRcv -eq $rcvUnpaidBefore)) ('rerun with needCreate=0: supplier receivables unchanged by design (' + $rcvUnpaidBefore + ' -> ' + $refundRcv + ')')
+}
+Ok (($refundPayOpen -eq $payOpenBefore)) ('refund no longer creates payables (open rows ' + $payOpenBefore + ' -> ' + $refundPayOpen + ')')
+if ($need -gt 0) {
+  Ok (($repairFeeAmt -gt $repairFeeAmtBefore)) ('repair fee (5/unit) generated a supplier payable (open amount ' + $repairFeeAmtBefore + ' -> ' + $repairFeeAmt + ') — P3')
+} else {
+  Ok (($repairFeeAmt -eq $repairFeeAmtBefore)) ('rerun with needCreate=0: repair-fee payables unchanged by design (' + $repairFeeAmtBefore + ' -> ' + $repairFeeAmt + ')')
+}
 if ($need -gt 0) {
   Ok (($auxAfter -lt $auxStockBefore)) ('own warehouse material decreased (' + $auxStockBefore + ' -> ' + $auxAfter + ')')
 } else {

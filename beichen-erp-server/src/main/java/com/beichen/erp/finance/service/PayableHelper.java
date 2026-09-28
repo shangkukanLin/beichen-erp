@@ -106,7 +106,8 @@ public class PayableHelper {
                      PURCHASE_EXCHANGE_RETURN, PURCHASE_EXCHANGE_IN -> { return "product"; }
                 case OUTSOURCE_DELIVERY, OUTSOURCE_EXCESS_LOSS, OUTSOURCE_RETURN, OUTSOURCE_RETURN_CHARGE,
                      OUTSOURCE_REPAIR_CHARGE -> { return "factory"; }
-                case OUTSOURCE_MATERIAL_DELIVERY, OUTSOURCE_MATERIAL_RETURN -> { return "material"; }
+                case OUTSOURCE_MATERIAL_DELIVERY, OUTSOURCE_MATERIAL_RETURN,
+                     OUTSOURCE_MATERIAL_REPAIR_FEE -> { return "material"; }
                 default -> { /* 其他场景走下面的兜底 */ }
             }
         }

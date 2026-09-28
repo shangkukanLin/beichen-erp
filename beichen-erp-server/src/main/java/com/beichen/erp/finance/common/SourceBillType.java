@@ -46,8 +46,25 @@ public enum SourceBillType {
     OUTSOURCE_RETURN_CHARGE("委外加工退货收费"),
     /** 委外维修收费（2026-09-17）：维修退货单送修时**加工厂向我方收取**的维修费，正向应付，单独分账便于对账 */
     OUTSOURCE_REPAIR_CHARGE("委外维修收费"),
-    /** 委外物料退货（退回物料商，负向应付冲减） */
+    /**
+     * 委外物料退货。
+     * <p><b>P2（2026-09-28）口径变更</b>：其中的**退货退款 REFUND** 审核由「负向应付冲减」改为生成
+     * **对供应商的应收**（物料退给供应商、供应商把货款退给我们 ⇒ 收款单按 subjectType=SUPPLIER 核销）。
+     * 订单退料（ORDER）仍不动账务；维修返回（REPAIR）的收费走
+     * {@link #OUTSOURCE_MATERIAL_REPAIR_FEE}。来源单号仍是物料退货单号，故本类型沿用。</p>
+     */
     OUTSOURCE_MATERIAL_RETURN("委外物料退货"),
+    /**
+     * 委外物料维修费（P3 2026-09-28 新增）：**物料维修返回**送修时供应商向我方收取的维修费 = **正向应付**。
+     * <p>与加工侧的 {@link #OUTSOURCE_REPAIR_CHARGE}（委外维修收费）分开记：往来主体不同
+     * （物料侧=辅料商/供应商，加工侧=加工厂）、来源单也不同（物料维修返回单 / 加工退货单），
+     * 分开后前端「来源单号」才能各自跳到正确详情页，也便于按业务对账。</p>
+     * <p>金额 = Σ 明细行金额（即各行「维修费单价 × 数量」）；为 0 时不落账。</p>
+     * <p>⚠️ 命名长度硬约束：{@code finance_payable/finance_receivable.source_bill_type} 是 <b>varchar(30)</b>
+     * ⇒ 枚举名（本值即落库 code）不得超过 30 字符，否则审核时报
+     * {@code Data too long for column 'source_bill_type'}（P3 曾用 32 字符的 ..._REPAIR_CHARGE 踩坑）。</p>
+     */
+    OUTSOURCE_MATERIAL_REPAIR_FEE("委外物料维修费"),
     /** 委外超损赔偿（结单超损总价生成负应付） */
     OUTSOURCE_EXCESS_LOSS("委外超损"),
     /** 加工返回单料款（P1-2 2026-09-25）：修好送回按实际用料 FIFO 生成**对加工厂**的应收（工厂赔料），subjectType=SUPPLIER */

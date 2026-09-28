@@ -9,18 +9,23 @@ import java.util.Map;
 
 /**
  * 委外物料退货单业务层
- * <p>两种类型（2026-09-17 定稿，见 {@link com.beichen.erp.outsource.common.MaterialReturnType}）：
- * <b>退货退款</b>=物料退回物料商并冲减应付；<b>维修退货</b>=退回物料商维修、修好后登记维修返回入库（不冲应付）。
+ * <p><b>三种类型（2026-09-28 用户口径定稿，见 {@link com.beichen.erp.outsource.common.MaterialReturnType}）</b>：
+ * <ul>
+ *   <li><b>订单退料 ORDER</b>：仅**关联订单且订单未结单**；审核 = 扣源仓 + 扣该订单出货/收料数量
+ *       （`order_returned_qty`，永久），不动账务、不跟踪返回；</li>
+ *   <li><b>退货退款 REFUND</b>：无单或关联**已结单**订单；审核 = 扣源仓（账务 P2 起为「对供应商的应收」）；</li>
+ *   <li><b>维修返回 REPAIR</b>：无单或关联**已结单**订单；审核 = 扣源仓 + 转入供应商委外仓，
+ *       修好后「登记维修返回」入库，可逐行撤销，全部返回后可结案。</li>
+ * </ul>
  * 草稿-审核-取消审核状态机。</p>
- * <p><b>维修退货闭环（2026-09-17 晚）</b>：按"关联物料订单 + 订单是否完成"分三种情况收尾 ——
- * ①订单未完成(RECEIVING)：审核扣减该订单收料数（净收料=收料总数−送修数），修好登记返回时回补，订单台账自动闭环；
- * ②订单已完成(FINISHED)：不动订单，靠本单「送修/已返回」+ 结案跟踪；③未关联订单：同②。</p>
+ * <p>❗**类型与订单状态的强绑定**由服务层强制（{@code MaterialReturnType.checkOrderStatus}），前端只是体验层：<br>
+ * 订单退料 ⇒ 订单必须 RECEIVING；退款/维修 关联订单时 ⇒ 订单必须 FINISHED（否则报错引导改类型）。</p>
  */
 public interface OutsourceMaterialReturnService {
 
     /**
-     * 分页查询（returnType：REFUND 退货退款 / REPAIR 维修退货，空=全部）。
-     * @param progress 进度筛选（维修退货用）：PENDING_RETURN 还有未返回 / RETURNED 已返回完 / CLOSED 已结案 / 空=全部
+     * 分页查询（returnType：ORDER 订单退料 / REFUND 退货退款 / REPAIR 维修返回，空=全部）。
+     * @param progress 进度筛选（维修返回用）：PENDING_RETURN 还有未返回 / RETURNED 已返回完 / CLOSED 已结案 / 空=全部
      * @param statuses 状态多值（逗号分隔，2026-09-27 三级菜单）：DRAFT,AUDITED=有效单据 / CANCELLED=已作废；空=全部
      * @param linked 是否关联物料订单（2026-09-27 三级菜单，与加工侧同口径）：
      *               WITH_ORDER=关联退料（MRH-）/ WITHOUT_ORDER=无单退料（MRW-）/ 空=不筛选
@@ -37,15 +42,16 @@ public interface OutsourceMaterialReturnService {
     /** 编辑草稿 */
     void update(Long id, OutsourceMaterialReturn order, List<Map<String, Object>> itemsRaw);
 
-    /** 审核：物料出源仓；退货退款另生成负向应付，维修退货不动应付 */
+    /** 审核：物料出源仓；订单退料另扣订单出货/收料数；退货退款另生成负向应付（P2 改应收）；维修返回不动账务 */
     void audit(Long id);
 
-    /** 取消审核：物料回源仓；退货退款另冲销应付（维修退货若已有返回记录则拦下） */
+    /** 取消审核：物料回源仓；订单退料回加订单收料数；退货退款另冲销应付（维修返回若已有返回记录则拦下） */
     void unAudit(Long id);
 
     /**
-     * 登记维修返回（维修退货单：审核送修后，供应商修好把物料送回来 → 入库）。
-     * <p>登记即生效：物料入指定仓（`MATERIAL_REPAIR_IN`），**不产生应付**；按物料核销不超过送修量。</p>
+     * 登记维修返回（维修返回单：审核送修后，供应商修好把物料送回来 → 入库）。
+     * <p>登记即生效：物料入指定仓（`MATERIAL_REPAIR_IN`）；可同时登记「实际用料」（我们提供给供应商的子物料）；
+     * 按物料核销不超过送修量。（收费/应付：P3 落地 —— 现价段登记返回不产生应付。）</p>
      */
     void repairReturn(Long id, Map<String, Object> body);
 
