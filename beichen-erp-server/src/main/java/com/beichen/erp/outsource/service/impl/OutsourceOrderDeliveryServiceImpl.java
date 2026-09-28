@@ -828,12 +828,15 @@ public class OutsourceOrderDeliveryServiceImpl
      * {@link #returnDefect}。</p>
      */
     @Override
-    public Map<String, Object> pageDefectReturns(Integer pageNo, Integer size, String linked, String status,
+    public Map<String, Object> pageDefectReturns(Integer pageNo, Integer size, String linked, String status, String code,
                                                  Long factoryId, Long productId, String qualityType, String returnProgress) {
         LambdaQueryWrapper<OutsourceOrderDelivery> qw = new LambdaQueryWrapper<OutsourceOrderDelivery>()
                 .eq(OutsourceOrderDelivery::getDeliveryType, DeliveryType.DEFECT_RETURN.getCode());
         if ("WITH_ORDER".equalsIgnoreCase(linked)) qw.isNotNull(OutsourceOrderDelivery::getOrderId);
         else if ("WITHOUT_ORDER".equalsIgnoreCase(linked)) qw.isNull(OutsourceOrderDelivery::getOrderId);
+        // 2026-09-28（用户口径「查询按钮前面没有输入框」）：筛选行加「单号」—— **模糊**匹配，
+        // 输入 GTH-/GTW- 片段即可命中（存量无 code 的旧记录不会命中，符合预期）。
+        if (code != null && !code.isBlank()) qw.like(OutsourceOrderDelivery::getCode, code.trim());
         // status 支持**逗号分隔**（2026-09-27 三级菜单口径）：
         //  「有效单据」页签 = DRAFT,AUDITED（排除已作废）；「已作废」页签 = CANCELLED；不传 = 全部。
         if (status != null && !status.isBlank()) {

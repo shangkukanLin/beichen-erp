@@ -140,11 +140,12 @@ public class OrderDeliveryController {
                                                    @RequestParam(defaultValue = "10") Integer size,
                                                    @RequestParam(required = false) String linked,
                                                    @RequestParam(required = false) String status,
+                                                   @RequestParam(required = false) String code,
                                                    @RequestParam(required = false) Long factoryId,
                                                    @RequestParam(required = false) Long productId,
                                                    @RequestParam(required = false) String qualityType,
                                                    @RequestParam(required = false) String returnProgress) {
-        return R.ok(deliveryService.pageDefectReturns(page, size, linked, status,
+        return R.ok(deliveryService.pageDefectReturns(page, size, linked, status, code,
                 factoryId, productId, qualityType, returnProgress));
     }
 

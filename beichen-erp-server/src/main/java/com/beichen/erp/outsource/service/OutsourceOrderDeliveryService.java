@@ -115,10 +115,11 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
      *               （2026-09-27 三级菜单口径：「有效单据」= DRAFT,AUDITED；「已作废」= CANCELLED），可空
      * @param factoryId 加工厂筛选（2026-09-27：加工返回单绑定来源单时的定位用），可空
      * @param productId 产品筛选（同上），可空
+     * @param code 退货单号**模糊**筛选（2026-09-28 用户口径：列表筛选行加「单号」输入框），可空
      * @param qualityType 退货规格筛选（同上），可空
      * @param returnProgress 返回进度（2026-09-27）：PENDING=未返回完 / DONE=已返回完（按来源单聚合已审核返回单），可空
      */
-    Map<String, Object> pageDefectReturns(Integer pageNo, Integer size, String linked, String status,
+    Map<String, Object> pageDefectReturns(Integer pageNo, Integer size, String linked, String status, String code,
                                           Long factoryId, Long productId, String qualityType, String returnProgress);
 
     /**

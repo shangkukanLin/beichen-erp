@@ -83,10 +83,28 @@ const activeTab = ref<TabKey>('ACTIVE')
 const tabCounts = reactive<Record<string, number>>({})
 function countOf(key: TabKey) { return tabCounts[leaf.value + ':' + key] }
 
-/** 台账（关联 / 无单）查询参数：叶子决定 linked，页签决定 status / returnProgress */
+/**
+ * 筛选行条件（2026-09-28 用户口径）：三个叶子共用「单号 + 加工厂」两个条件。
+ * <p>原先筛选行只有「查询 / 重置」两个按钮、**前面没有任何输入**（条件全由叶子 + 页签表达），
+ * 用户实测反馈"点查询不知道查什么" ⇒ 补：单号（**模糊**）+ 加工厂（远程下拉，
+ * 与「新增无单退货」同一口径 `excludeSupplierType=product`：只能退给加工厂/辅料商/方案商）。</p>
+ */
+const filters = reactive<{ code: string; factoryId: any }>({ code: '', factoryId: undefined })
+function clearFilters() { filters.code = ''; filters.factoryId = undefined }
+/** 单号占位提示：三个叶子的单号前缀不同（GTH- 关联 / GTW- 无单 / OR- 维修），动态提示避免"不知道该填什么" */
+const codePlaceholder = computed(() => {
+  if (leaf.value === 'LINKED') return '退货单号（GTH-）'
+  if (leaf.value === 'UNLINKED') return '退货单号（GTW-）'
+  return '退货单号（OR-）'
+})
+
+/** 台账（关联 / 无单）查询参数：叶子决定 linked，页签决定 status / returnProgress，筛选行决定 code / factoryId */
 function ledgerParams(tab: TabKey, pageNum: number, pageSize: number) {
   const active = [DocStatus.DRAFT, DocStatus.AUDITED].join(',')
-  const p: any = { page: pageNum, size: pageSize, linked: leaf.value === 'UNLINKED' ? 'WITHOUT_ORDER' : 'WITH_ORDER' }
+  const p: any = {
+    page: pageNum, size: pageSize, linked: leaf.value === 'UNLINKED' ? 'WITHOUT_ORDER' : 'WITH_ORDER',
+    code: filters.code || undefined, factoryId: filters.factoryId ?? undefined
+  }
   if (tab === 'CANCELLED') p.status = DocStatus.CANCELLED
   else if (tab === 'ACTIVE') p.status = active
   else if (tab === 'PENDING') { p.status = active; p.returnProgress = 'PENDING' }
@@ -218,7 +236,11 @@ const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 
 /** 维修退货查询参数：页签 → 进度（OPEN=待返回含草稿 / RETURNED=已返回完 / CANCELLED=已作废） */
 function repairParams(tab: TabKey, pageNum: number, pageSize: number) {
-  const p: any = { pageNum, pageSize, returnType: OutsourceReturnType.REPAIR }
+  // 筛选行条件（单号 / 加工厂）对维修退货叶子同样生效；后端 /outsource/return-order/page 本就有 code / factoryId
+  const p: any = {
+    pageNum, pageSize, returnType: OutsourceReturnType.REPAIR,
+    code: filters.code || undefined, factoryId: filters.factoryId ?? undefined
+  }
   if (tab === 'PENDING') p.progress = 'OPEN'
   else if (tab === 'DONE') p.progress = 'RETURNED'
   else if (tab === 'CANCELLED') p.statuses = DocStatus.CANCELLED
@@ -237,8 +259,10 @@ async function loadData() {
 
 /** 切页签：重置分页并只加载当前叶子的数据（筛选条件已由页签本身表达） */
 function handleTabChange() { resetPages(); loadCurrent() }
-/** 各叶子筛选行的「查询」 */
-function handleSearch() { resetPages(); loadCurrent() }
+/** 各叶子筛选行的「查询」：带条件重查，页签角标同步刷新（角标要反映筛选后的条数，否则与列表对不上） */
+function handleSearch() { resetPages(); loadCurrent(); loadCounts() }
+/** 筛选行「重置」（2026-09-28）：先清空条件再重查 —— 原先重置与查询同为一个动作，条件根本清不掉 */
+function handleReset() { clearFilters(); handleSearch() }
 function resetPages() { ledgerPage.pageNum = 1; pagination.pageNum = 1 }
 /** 当前叶子对应的列表加载（加工返回单叶子已下线 ⇒ 只剩台账与维修退货单两种） */
 function loadCurrent() {
@@ -343,14 +367,16 @@ onMounted(() => {
         </el-tab-pane>
       </el-tabs>
 
-      <!-- 筛选行（叶子化后大幅简化）：关联/无单退货的筛选条件已由**叶子 + 页签**表达，无需下拉。
-           右侧新增按钮随叶子切换（一页一个新增入口）。 -->
+      <!-- 筛选行（2026-09-28 用户口径「查询按钮前面都没有输入框和条件」）：补「单号（模糊）+ 加工厂（下拉）」，
+           三个叶子共用这一行（单号前缀不同 ⇒ placeholder 动态提示）；右侧新增按钮随叶子切换（一页一个新增入口）。
+           原「（单号 GTW-/GTH-）」文字说明已并入输入框 placeholder，筛选行更紧凑。 -->
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
-        <span v-if="leaf === 'LINKED' || leaf === 'UNLINKED'" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">
-          {{ leaf === 'UNLINKED' ? '未关联加工单的加工退货台账（单号 GTW-）' : '关联加工单的加工退货台账（单号 GTH-，本页可新增）' }}
-        </span>
+        <el-input v-model="filters.code" :placeholder="codePlaceholder" clearable
+          style="width:220px" @keyup.enter="handleSearch" />
+        <RemoteSelect v-model="filters.factoryId" :fetch="fetchFactories" value-key="id" label-key="name"
+          placeholder="加工厂" style="width:240px" disable-cache />
         <el-button type="primary" @click="handleSearch">查询</el-button>
-        <el-button @click="handleSearch">重置</el-button>
+        <el-button @click="handleReset">重置</el-button>
         <!-- 新增按钮随叶子切换（一页一个新增入口，2026-09-28：关联退货叶子也补齐入口） -->
         <div style="margin-left:auto">
           <el-button v-if="leaf === 'LINKED'" type="success" :icon="'Plus'" @click="openLinkedAdd">新增</el-button>

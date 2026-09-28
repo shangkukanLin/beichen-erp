@@ -102,7 +102,9 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
     public Page<Map<String, Object>> page(int pageNum, int pageSize, String code, Long factoryId, String returnType,
                                           String progress, String statuses) {
         LambdaQueryWrapper<ReturnOrder> w = new LambdaQueryWrapper<ReturnOrder>()
-            .eq(code != null && !code.isBlank(), ReturnOrder::getCode, code)
+            // 2026-09-28（用户口径）：列表筛选行「单号」用**模糊**匹配（输入 OR- 片段即可命中）；
+            // 传完整单号时行为与原先的精确匹配一致 ⇒ 兼容既有调用。
+            .like(code != null && !code.isBlank(), ReturnOrder::getCode, code == null ? null : code.trim())
             .eq(factoryId != null, ReturnOrder::getFactoryId, factoryId)
             .eq(returnType != null && !returnType.isBlank(), ReturnOrder::getReturnType, returnType);
         // 2026-09-27：状态多值（与 MaterialOrderService 的 statuses 同一约定）——
