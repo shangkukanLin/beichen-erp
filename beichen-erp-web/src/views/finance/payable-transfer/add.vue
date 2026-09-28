@@ -100,7 +100,8 @@ onMounted(async () => {
         </div>
       </template>
 
-      <el-form :model="form" label-width="var(--app-label-width)" class="form">
+      <!-- label 宽度用 **lg 档**（2026-09-28 用户实测）：「来源应付记录」6 字在默认档 90px 下会换行 -->
+      <el-form :model="form" label-width="var(--app-label-width-lg)" class="form">
         <el-form-item label="来源应付记录" required>
           <!-- 只列可转的记录：负数（退货/扣款冲减项）、未转出、未结清 -->
           <el-select v-model="form.payableId" placeholder="选择要转应收的应付记录" filterable :disabled="!!editId" style="width:420px">

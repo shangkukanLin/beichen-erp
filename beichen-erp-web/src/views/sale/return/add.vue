@@ -6,7 +6,8 @@
     </template>
 
     <el-card shadow="never">
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="var(--app-label-width)">
+      <!-- label 宽度用 **xl 档**（2026-09-28 全局扫描）：「收费合计（自动）」这类带全角括号的长标签实测需 124px -->
+      <el-form :model="form" :rules="rules" ref="formRef" label-width="var(--app-label-width-xl)">
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="客户" prop="customerId">

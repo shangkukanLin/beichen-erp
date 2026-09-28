@@ -6,7 +6,8 @@
     </template>
 
     <el-card shadow="never">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="var(--app-label-width)">
+      <!-- label 宽度用 **xl 档**（2026-09-28 全局扫描）：「付费合计（自动）」这类带全角括号的长标签实测需 124px -->
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="var(--app-label-width-xl)">
         <el-alert v-if="form.purchaseOrderCode" type="success" :closable="false" style="margin-bottom:12px"
           :title="`来源采购单：${form.purchaseOrderCode}（已自动带入采购明细，可修改）`" />
         <el-row :gutter="16">

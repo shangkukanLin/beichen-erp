@@ -6,7 +6,8 @@
     </template>
 
     <el-card shadow="never">
-      <el-form :model="form" label-width="var(--app-label-width)" ref="formRef">
+      <!-- label 宽度用 **lg 档**（2026-09-28 全局扫描）：本页含「退回出库仓」「换入入库仓」等 5 字+星号标签 -->
+      <el-form :model="form" label-width="var(--app-label-width-lg)" ref="formRef">
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="供货商" required>
@@ -163,14 +164,17 @@
            这里只留「合计（自动，只读）」+「整单说明」；是否付费由明细推导（合计 > 0 ⇒ 付费）。
            ⚠️ 方向：**我方付给供货商** ⇒ 审核生成一条正向应付（金额 = Σ明细，remark 逐产品）。 -->
       <el-row :gutter="16" style="margin-top:8px">
-        <el-col :span="6">
-          <el-form-item label="付费合计（自动）">
+        <!-- 2026-09-28 全局扫描：以下两个是**独立 el-form-item**（没有 el-form 包裹 ⇒ 被 page.css
+             的 90px 兜底规则压住），而「付费合计（自动）/付费说明（整单）」实测需 124px ⇒ 显式指定 xl 档；
+             合计列 6→8 是为它腾出内容宽度（label 变宽后 span=6 只剩约 100px） -->
+        <el-col :span="8">
+          <el-form-item label="付费合计（自动）" label-width="var(--app-label-width-xl)">
             <span style="font-weight:600;color:#e6a23c">{{ chargeTotal.toFixed(2) }}</span>
             <span style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">= Σ 明细行付费</span>
           </el-form-item>
         </el-col>
         <el-col :span="10">
-          <el-form-item label="付费说明（整单）">
+          <el-form-item label="付费说明（整单）" label-width="var(--app-label-width-xl)">
             <el-input v-model="form.chargeReason" placeholder="选填，如：换货服务费 / 补差价（落到该单付费台账备注）" />
           </el-form-item>
         </el-col>

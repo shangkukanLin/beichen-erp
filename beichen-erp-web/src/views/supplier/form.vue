@@ -93,8 +93,9 @@ onMounted(async () => { await load(); takeBaseline() })
         </div>
       </template>
 
-      <!-- label-width 110px：标签带模块前缀（供应商名称/供应商编码 5 字）+ 必填星号，100px 会压成两行 -->
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="var(--app-label-width)">
+      <!-- label 宽度用 **lg 档**（2026-09-28 用户实测复核）：标签带模块前缀（供应商名称/供应商编码 5 字）
+           + 必填星号 ⇒ 默认档 90px 会把末字挤到第二行（原注释写"110px 才够"，收口成令牌时漏改成 lg 档） -->
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="var(--app-label-width-lg)">
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="供应商编码">

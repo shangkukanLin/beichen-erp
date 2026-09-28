@@ -7,7 +7,8 @@
 
     <el-card shadow="never">
       <!-- 2026-09-20（F7-147）：本页没有 rules，校验靠 submit 里的逐项 if ⇒ 不再挂无用的 formRef -->
-      <el-form :model="form" label-width="var(--app-label-width)">
+      <!-- label 宽度用 **xl 档**（2026-09-28 全局扫描）：本页含「收费合计（自动）」这类带全角括号的长标签（实测需 124px） -->
+      <el-form :model="form" label-width="var(--app-label-width-xl)">
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="客户" required>

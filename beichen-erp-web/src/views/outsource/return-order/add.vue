@@ -554,9 +554,10 @@ async function loadMaterialTypes() {
           </span>
         </template>
       </el-alert>
-      <el-form :model="form" label-width="var(--app-label-width)" size="small">
+      <el-form :model="form" label-width="var(--app-label-width-lg)" size="small">
         <el-row :gutter="16">
-          <!-- 每行 3 个字段（span=8）：标签一律 4~5 字，label-width 给足 104px 不换行 -->
+          <!-- 每行 3 个字段（span=8）：含 5 字标签（送修出库仓/成品出库仓）⇒ 必须用 **lg 档 104px**；
+               ⚠️ 2026-09-28 用户实测：原先用默认档 90px，「仓」字被挤到第二行（size="small" 不改 label 字号，仍是 14px） -->
           <el-col :span="8">
             <!-- 2026-09-25（用户口径）：类型**锁定、不可更改**。本页（独立退货单）后端只接受维修退货
                  （OutsourceReturnOrderServiceImpl 会抛「本页只处理维修退货；退回加工厂请在「加工退货」页办理」）
