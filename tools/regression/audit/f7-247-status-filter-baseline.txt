@@ -1,0 +1,1 @@
+# F7-247 baseline (frozen 2026-09-30 02:35:13) # Each line = a finance-module statement that aggregates/filters by source_bill_type without a # status filter within +-3 lines. Review these once; new entries make the guard fail.
