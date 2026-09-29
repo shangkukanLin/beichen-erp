@@ -148,8 +148,10 @@ foreach ($isCash in @($true, $false)) {
   if ($code) { $created += $code }
 }
 
-# ---- audit the cash order -> auto draft receipt (existing rule must keep working)
-Step 'audit the two new orders (audit = stock out) and check the auto draft receipt'
+# ---- audit the cash order -> auto receipt, AUDITED on the spot (current caliber since 2026-09-18:
+#      现金 = 立刻到账、即结算 ⇒ the auto receipt is created AND audited by the sale audit itself.
+#      This assertion used to demand status='DRAFT' (the pre-upgrade caliber) and had been red ever since.)
+Step 'audit the two new orders (audit = stock out) and check the auto AUDITED receipt'
 foreach ($c in $created) {
   Open '/inventory/sale' 3000
   $idx = [int](FindRow $c)
@@ -163,9 +165,11 @@ foreach ($c in $created) {
   Ok (($st -eq 'AUDITED')) ('sale order ' + $c + ' audited')
 }
 $cashCode = SqlOne "SELECT code FROM sale_order WHERE settle_type='CASH' ORDER BY id DESC LIMIT 1"
-$autoRc = D (SqlOne ("SELECT COUNT(*) FROM finance_receipt WHERE source_bill_no='" + $cashCode + "' AND status='DRAFT'"))
-Write-Host ('[DB] cash order=' + $cashCode + ' autoDraftReceipts=' + $autoRc)
-Ok (($autoRc -ge 1)) ('cash order still auto-generates a DRAFT receipt (got ' + $autoRc + ')')
+$autoRc = D (SqlOne ("SELECT COUNT(*) FROM finance_receipt WHERE source_bill_no='" + $cashCode + "' AND status='AUDITED'"))
+$autoAny = D (SqlOne ("SELECT COUNT(*) FROM finance_receipt WHERE source_bill_no='" + $cashCode + "' AND status<>'CANCELLED'"))
+Write-Host ('[DB] cash order=' + $cashCode + ' autoAuditedReceipts=' + $autoRc + ' autoActiveReceipts=' + $autoAny)
+Ok (($autoRc -ge 1)) ('cash order auto-generates an AUDITED receipt (cash = settled immediately) (got ' + $autoRc + ')')
+Ok (($autoAny -eq 1)) ('exactly one active receipt per cash order (got ' + $autoAny + ')')
 
 # ---- term check across the list page (no 赊账 anywhere)
 Step 'term check: list page must show 现金 / 账期 and never 赊账'

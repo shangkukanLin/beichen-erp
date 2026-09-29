@@ -122,14 +122,16 @@ Write-Host ('  cashflow for the receipt: income=' + $income + ' expense=' + $rev
 Ok (($income -eq $expect)) ('cash inflow written immediately (' + $income + ' = ' + $expect + ')')
 
 Step '3) un-audit the sale order -> the auto receipt must be reversed and voided, receivable restored'
-Open '/inventory/sale' 3000
-$idx = [int](FindRow $code)
-if ($idx -ge 0) {
-  ClickRowBtnContains $idx (ZH 'btn_un_audit') | Out-Null
-  Start-Sleep -Milliseconds 1500
-  ConfirmBox 1200 | Out-Null
-  Start-Sleep -Milliseconds 3200
-}
+# 2026-09-24 user rule: 反审核/编辑都收进**详情页**（销售列表操作列只剩 详情/审核/作废）⇒ the guard must open the
+# detail page and click there. (Until 2026-09-29 this step still looked for a row button, got 'NOBTN', and the 6
+# consequent assertions went red -- a stale selector, not a product defect.)
+$oid = SqlOne ("SELECT COALESCE(MAX(id),0) FROM sale_order WHERE code='" + $code + "'")
+Open ('/inventory/sale/detail/' + $oid) 3000
+$clickR = ClickBtn 'btn_un_audit'
+Start-Sleep -Milliseconds 1200
+$confR = ConfirmBox 1200
+Write-Host ('  [ui] orderId=' + $oid + ' click=' + $clickR + ' confirm=' + $confR)
+Start-Sleep -Milliseconds 3200
 $st2 = SqlOne ("SELECT status FROM sale_order WHERE code='" + $code + "'")
 $rcStatus2 = ReceiptStatus $rcCode
 $paid2 = RecvPaid $code
@@ -170,14 +172,19 @@ $recvRows = D (SqlOne ("SELECT COUNT(*) FROM finance_receivable WHERE source_bil
 Ok (($recvRows -eq 1)) ('the sale order still has exactly ONE receivable row (got ' + $recvRows + ')')
 
 Step '5) global invariant: every AUDITED cash sale order must have a settled receivable'
-$bad = 0; $n = 0
-foreach ($c in (SqlLines "SELECT code FROM sale_order WHERE status='AUDITED' AND settle_type='CASH' ORDER BY id")) {
-  $n++
+# 2026-09-29 fix: the old check summed `unpaid_amount` by source_bill_no, which also picks up the
+# ADVANCE (over-collection, negative) rows => two legacy 9.19 fixtures showed unpaid=-100 / -10 even though
+# the order's own receivable was SETTLED. Assert the precise invariant instead: an AUDITED cash order must own
+# a SETTLED SALE_ORDER receivable (looked up by source_id, ignoring ADVANCE/CANCELLED rows).
+$n = 0; $bad = 0
+foreach ($c in (SqlLines "SELECT code FROM sale_order WHERE status='AUDITED' AND settle_type='CASH' ORDER BY id")) { $n++ }
+foreach ($c in (SqlLines "SELECT o.code FROM sale_order o WHERE o.status='AUDITED' AND o.settle_type='CASH' AND NOT EXISTS (SELECT 1 FROM finance_receivable r WHERE r.source_bill_type='SALE_ORDER' AND r.source_id=o.id AND r.status='SETTLED') ORDER BY o.id")) {
+  $bad++
   $u = RecvUnpaid $c
-  if ($u -ne 0) { $bad++; Write-Host ('  NOT SETTLED: ' + $c + ' unpaid=' + $u) }
+  Write-Host ('  NOT SETTLED: ' + $c + ' (sum unpaid incl. advance rows=' + $u + ')')
 }
-Write-Host ('[DB] audited cash orders=' + $n + ' with unpaid<>0: ' + $bad)
-Ok (($bad -eq 0)) ('all AUDITED cash orders are fully settled (checked ' + $n + ')')
+Write-Host ('[DB] audited cash orders=' + $n + ' without a SETTLED own receivable: ' + $bad)
+Ok (($bad -eq 0)) ('all AUDITED cash orders have a SETTLED receivable (checked ' + $n + ')')
 
 Write-Host ('errs=' + (Errs))
 Summary 'cash immediate settle'

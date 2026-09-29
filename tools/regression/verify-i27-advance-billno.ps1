@@ -30,7 +30,7 @@ function LastReceiptId { return [int](SqlOne 'SELECT COALESCE(MAX(id),0) FROM fi
 # F7-31 (2026-09-19): the receipt customer MUST be the receivable's OWN customer -- the service now
 # rejects settling another partner's receivable (it used to only compare subjectType). Derive it here
 # instead of passing a fixed pick, otherwise the numbering/open tests below can no longer audit.
-function PostReceipt([int]$recvId, [string]$recvBill, [int]$amt, [int]$acctId, [string]$tag) {
+function PostReceipt([int]$recvId, [string]$recvBill, [string]$amt, [int]$acctId, [string]$tag) {
   $custId = [int](SqlOne ("SELECT COALESCE(customer_id,0) FROM finance_receivable WHERE id=" + $recvId))
   $body = '{"subjectType":"CUSTOMER","customerId":' + $custId + ',"accountId":' + $acctId + ',"receiptDate":"2026-09-18","remark":"I27-VERIFY-' + $tag + '","items":[{"receivableId":' + $recvId + ',"receivableBillNo":"' + $recvBill + '","thisAmount":' + $amt + '}]}'
   return (ApiRaw 'Post' '/finance/receipt' $body)
@@ -45,8 +45,12 @@ $advBill = SqlOne ("SELECT bill_no FROM finance_receivable WHERE id=" + $advId)
 # payable-transfer) cannot be settled by a customer receipt any more (partner must match).
 $settledId = [int](SqlOne "SELECT id FROM finance_receivable WHERE subject_type='CUSTOMER' AND status='SETTLED' ORDER BY id DESC LIMIT 1")
 $settledBill = SqlOne ("SELECT bill_no FROM finance_receivable WHERE id=" + $settledId)
-$openId = [int](SqlOne "SELECT id FROM finance_receivable WHERE subject_type='CUSTOMER' AND status IN ('UNSETTLED','PARTIAL') AND unpaid_amount>=100 ORDER BY id LIMIT 1")
+# FIXTURE NOTE (2026-09-29): this used to demand `unpaid_amount >= 100`, but the live DB no longer has any open
+# customer receivable that large (the fixture data drifted), so the guard went red for a missing fixture instead of
+# a real defect. Use the LARGEST open receivable and settle exactly its unpaid amount (no accidental over-payment).
+$openId = [int](SqlOne "SELECT id FROM finance_receivable WHERE subject_type='CUSTOMER' AND status IN ('UNSETTLED','PARTIAL') AND IFNULL(unpaid_amount,0) > 0 ORDER BY unpaid_amount DESC, id LIMIT 1")
 $openBill = SqlOne ("SELECT bill_no FROM finance_receivable WHERE id=" + $openId)
+$openUnpaid = SqlOne ("SELECT IFNULL(unpaid_amount,0) FROM finance_receivable WHERE id=" + $openId)
 Write-Host ('[SEED] customer=' + $custId + ' account=' + $acctId + ' advance=' + $advId + '(' + $advBill + ') settled=' + $settledId + '(' + $settledBill + ') open=' + $openId + '(' + $openBill + ')')
 $suffixRows0 = D (SqlOne "SELECT COUNT(*) FROM finance_receivable WHERE bill_no LIKE '%-ADVANCE-ADVANCE%'")
 $advRows0 = D (SqlOne "SELECT COUNT(*) FROM finance_receivable WHERE status='ADVANCE'")
@@ -95,13 +99,13 @@ Ok (($suffixRows1 -eq $suffixRows0)) ('no NEW stacked-suffix row appeared (' + $
 
 Step '3) normal write-off against an OPEN receivable still works'
 $paid0 = D (SqlOne ("SELECT COALESCE(paid_amount,0) FROM finance_receivable WHERE id=" + $openId))
-$r3 = PostReceipt $openId $openBill 100 $acctId 'OPEN'
+$r3 = PostReceipt $openId $openBill $openUnpaid $acctId 'OPEN'
 $rid3 = LastReceiptId
 $null = ApiRaw 'Put' ('/finance/receipt/' + $rid3 + '/audit') $null
 $paid1 = D (SqlOne ("SELECT COALESCE(paid_amount,0) FROM finance_receivable WHERE id=" + $openId))
 $st3 = SqlOne ("SELECT status FROM finance_receipt WHERE id=" + $rid3)
-Write-Host ('  open receivable paid ' + $paid0 + ' -> ' + $paid1 + ' ; receipt status=' + $st3)
-Ok (($paid1 -eq ($paid0 + 100))) ('open receivable was settled by 100 (' + $paid0 + ' -> ' + $paid1 + ')')
+Write-Host ('  open receivable paid ' + $paid0 + ' -> ' + $paid1 + ' (settled ' + $openUnpaid + ') ; receipt status=' + $st3)
+Ok (($paid1 -eq ($paid0 + (D $openUnpaid)))) ('open receivable was settled by its own unpaid amount (' + $paid0 + ' -> ' + $paid1 + ')')
 Ok (($st3 -eq 'AUDITED')) ('receipt audited (status=' + $st3 + ')')
 
 Step '4) payable side: ADVANCE payable must be rejected too'
