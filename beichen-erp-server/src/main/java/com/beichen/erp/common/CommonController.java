@@ -66,7 +66,9 @@ public class CommonController {
                 new LambdaQueryWrapper<PurchaseOrder>().eq(PurchaseOrder::getCode, code));
             if (o != null) { result.put("type", "purchase"); result.put("id", o.getId()); return R.ok(result); }
         }
-        if (code.startsWith(BillPrefix.SALE_ORDER_LEGACY)) {
+        // P4（2026-09-30 未上线清理，用户口径「旧数据不需要兼容」）：原为 BillPrefix.SALE_ORDER_LEGACY("SO-")，
+        // 而那使得**现行的 XS- 销售单号反而解析不到**。历史前缀分支已删除，改用现行前缀。
+        if (code.startsWith(BillPrefix.SALE)) {
             SaleOrder o = saleOrderMapper.selectOne(
                 new LambdaQueryWrapper<SaleOrder>().eq(SaleOrder::getCode, code));
             if (o != null) { result.put("type", "sale"); result.put("id", o.getId()); return R.ok(result); }

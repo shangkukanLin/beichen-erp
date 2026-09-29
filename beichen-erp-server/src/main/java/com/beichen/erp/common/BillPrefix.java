@@ -19,7 +19,7 @@ public final class BillPrefix {
     /** 销售订单 */
     public static final String SALE = "XS-";
     /** 销售订单（历史前缀，CommonController 解析兜底） */
-    public static final String SALE_ORDER_LEGACY = "SO-";
+
     /** 销售出库 */
     public static final String SALE_OUTBOUND = "CK-";
     /** 销售退货 */
