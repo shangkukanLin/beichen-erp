@@ -206,12 +206,24 @@ public interface FinanceAnalysisMapper {
     @Select("SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, IFNULL(SUM(income), 0) AS income, IFNULL(SUM(expense), 0) AS expense FROM finance_cashflow GROUP BY d")
     List<Map<String, Object>> cashflowByDay();
 
-    /** 应收账龄分桶（未结清部分；none=无到期日） */
-    @Select("SELECT CASE WHEN due_date IS NULL THEN 'none' WHEN due_date >= CURDATE() THEN 'not_due' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 'd30' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) THEN 'd60' ELSE 'd60p' END AS bucket, IFNULL(SUM(unpaid_amount), 0) AS amt, COUNT(*) AS cnt FROM finance_receivable WHERE status IN ('UNSETTLED', 'PARTIAL') GROUP BY bucket")
+    /**
+     * 应收账龄分桶（未结清部分；none=无到期日）。
+     *
+     * <p><b>F7-256（2026-09-30 审核批 G）</b>：补 {@code IFNULL(amount,0) > 0} —— 与台账页
+     * {@code ReceivableQuery.unpaid():45-71}（`ne SETTLED/CANCELLED/ADVANCE` + `gt amount 0`）**同口径**。
+     * 原先只卡 status ⇒ 退货产生的负应收（实测 8 条 `SALE_RETURN`，Σ−24）会把账龄桶冲小，
+     * 导致"分析页 2482 vs 台账页 2506"两个数无法对账。</p>
+     */
+    @Select("SELECT CASE WHEN due_date IS NULL THEN 'none' WHEN due_date >= CURDATE() THEN 'not_due' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 'd30' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) THEN 'd60' ELSE 'd60p' END AS bucket, IFNULL(SUM(unpaid_amount), 0) AS amt, COUNT(*) AS cnt FROM finance_receivable WHERE status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(amount, 0) > 0 GROUP BY bucket")
     List<Map<String, Object>> receivableAging();
 
-    /** 应付账龄分桶（对称；2026-09-19 F7-34：剔除已转应收的冲减项，避免与应收双算） */
-    @Select("SELECT CASE WHEN due_date IS NULL THEN 'none' WHEN due_date >= CURDATE() THEN 'not_due' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 'd30' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) THEN 'd60' ELSE 'd60p' END AS bucket, IFNULL(SUM(unpaid_amount), 0) AS amt, COUNT(*) AS cnt FROM finance_payable WHERE status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(transferred_to_receivable, 0) <> 1 GROUP BY bucket")
+    /**
+     * 应付账龄分桶（对称；2026-09-19 F7-34：剔除已转应收的冲减项，避免与应收双算）。
+     *
+     * <p>F7-256（2026-09-30 批 G）：同样补 {@code IFNULL(amount,0) > 0}，与 {@code PayableQuery.supplierSummary}
+     * 的行筛（`IN(UNSETTLED,PARTIAL)` + `transferred<>1` + `amount>0`）对齐。</p>
+     */
+    @Select("SELECT CASE WHEN due_date IS NULL THEN 'none' WHEN due_date >= CURDATE() THEN 'not_due' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN 'd30' WHEN due_date >= DATE_SUB(CURDATE(), INTERVAL 60 DAY) THEN 'd60' ELSE 'd60p' END AS bucket, IFNULL(SUM(unpaid_amount), 0) AS amt, COUNT(*) AS cnt FROM finance_payable WHERE status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(transferred_to_receivable, 0) <> 1 AND IFNULL(amount, 0) > 0 GROUP BY bucket")
     List<Map<String, Object>> payableAging();
 
     /**
@@ -221,7 +233,7 @@ public interface FinanceAnalysisMapper {
      * 且与本页账龄分桶（只取 UNSETTLED/PARTIAL）不一致。
      * `total`/`paid` <b>保持全量</b>（含已结清）—— 它们是回款率的分母/分子，收紧会把已结清历史排除、把回款率算坏。</p>
      */
-    @Select("SELECT IFNULL(SUM(amount), 0) AS total, IFNULL(SUM(paid_amount), 0) AS paid, IFNULL(SUM(CASE WHEN status IN ('UNSETTLED', 'PARTIAL') THEN unpaid_amount ELSE 0 END), 0) AS unpaid FROM finance_receivable WHERE status != 'CANCELLED'")
+    @Select("SELECT IFNULL(SUM(amount), 0) AS total, IFNULL(SUM(paid_amount), 0) AS paid, IFNULL(SUM(CASE WHEN status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(amount, 0) > 0 THEN unpaid_amount ELSE 0 END), 0) AS unpaid FROM finance_receivable WHERE status != 'CANCELLED'")
     Map<String, Object> receivableSummary();
 
     /**
@@ -230,15 +242,18 @@ public interface FinanceAnalysisMapper {
      * 多付款形成的负数应付）剔除，与同页账龄分桶口径一致（实测修前 63,000 vs 分桶 65,090，差 2,090 即该台账）。
      * `total`/`paid` 保持全量（付款率的分母/分子）。</p>
      */
-    @Select("SELECT IFNULL(SUM(amount), 0) AS total, IFNULL(SUM(paid_amount), 0) AS paid, IFNULL(SUM(CASE WHEN status IN ('UNSETTLED', 'PARTIAL') THEN unpaid_amount ELSE 0 END), 0) AS unpaid FROM finance_payable WHERE status != 'CANCELLED' AND IFNULL(transferred_to_receivable, 0) <> 1")
+    @Select("SELECT IFNULL(SUM(amount), 0) AS total, IFNULL(SUM(paid_amount), 0) AS paid, IFNULL(SUM(CASE WHEN status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(amount, 0) > 0 THEN unpaid_amount ELSE 0 END), 0) AS unpaid FROM finance_payable WHERE status != 'CANCELLED' AND IFNULL(transferred_to_receivable, 0) <> 1")
     Map<String, Object> payableSummary();
 
-    /** TOP 客户欠款 */
-    @Select("SELECT customer_name AS name, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_receivable WHERE status IN ('UNSETTLED', 'PARTIAL') GROUP BY customer_name ORDER BY unpaid DESC LIMIT " + TOP_N)
+    /** TOP 客户欠款（F7-256：同样收口 `amount>0`，与账龄/未结清口径一致） */
+    @Select("SELECT customer_name AS name, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_receivable WHERE status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(amount, 0) > 0 GROUP BY customer_name ORDER BY unpaid DESC LIMIT " + TOP_N)
     List<Map<String, Object>> topCustomers();
 
-    /** TOP 供应商应付（2026-09-19 F7-34：剔除已转应收的冲减项，避免负值行挤占 TOP 榜并虚增总额） */
-    @Select("SELECT supplier_name AS name, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_payable WHERE status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(transferred_to_receivable, 0) <> 1 GROUP BY supplier_name ORDER BY unpaid DESC LIMIT " + TOP_N)
+    /**
+     * TOP 供应商应付（2026-09-19 F7-34：剔除已转应收的冲减项，避免负值行挤占 TOP 榜并虚增总额）。
+     * <p>F7-256（2026-09-30 批 G）：补 `amount>0` —— 与上面客户侧对称，堵住"负额行参与排序"。</p>
+     */
+    @Select("SELECT supplier_name AS name, IFNULL(SUM(unpaid_amount), 0) AS unpaid FROM finance_payable WHERE status IN ('UNSETTLED', 'PARTIAL') AND IFNULL(transferred_to_receivable, 0) <> 1 AND IFNULL(amount, 0) > 0 GROUP BY supplier_name ORDER BY unpaid DESC LIMIT " + TOP_N)
     List<Map<String, Object>> topSuppliers();
 
     /** 资金账户余额分布（余额=期初+收支流水累计） */

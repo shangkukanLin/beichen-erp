@@ -51,8 +51,14 @@ public class ApiPermGuard {
             "/api/company",              // 公司（超管，内部自校验）
             "/api/memo",                 // 个人备忘录
             "/api/dashboard",            // 首页门户接口
-            "/api/analysis",             // 经营分析（只读聚合）
-            "/api/finance/analysis",     // 财务分析聚合（门户 + 多个分析页共用）
+            // ⚠️ F7-255（2026-09-30 审核批 G，**P2**）：`/api/analysis`、`/api/finance/analysis`、
+            //    `/api/sale/analysis` 原先登记在本名单，理由写"只读聚合"。**实测**：低权账号（销售专员，
+            //    无任何 `analysis:*`/`finance:*`）直调 `/api/finance/analysis/summary`、`/finance/analysis/aging`、
+            //    `/sale/analysis` **全部 200 且返回营收/成本/毛利/账龄**，而同账号 `/finance/bill/page`、
+            //    `/finance/payable/page` 都是 403 —— 菜单侧 6 个 `analysis:*` 码只对侧栏可见性生效、
+            //    对接口毫无强制力（财务聚合 = 全公司经营信息，属越权读取）。
+            //    已移出本名单，按**页面码**在下方 RULES 逐路径收口（`/api/analysis` 为**空前缀**：
+            //    无任何控制器映射，移出后由默认拒绝兜底）。
             // ⚠️ F7-225（2026-09-29 审核批 B，**P0**）：`/api/supplier-settlement` **原先登记在本名单**
             //    （注释写"跨模块只读"），但该控制器含**两个写端点** —— `POST /{supplierId}/return-materials`
             //    （一键退料：把该供应商委外仓正库存全部退回我方仓）与 `POST /{supplierId}/finish`
@@ -60,10 +66,8 @@ public class ApiPermGuard {
             //    （实测：无任何供应商/委外权限的账号直调返回业务错误"供应商不存在"而非 403）。
             //    已移出本名单，改由下方 WRITE_RULES 收口（**读仍共享** —— 该看板财务侧也要读，收口读码会打断财务侧）。
             "/api/dev/file",             // 附件上传/下载（各页皆可上传）
-            // F7-106（2026-09-20）：销售分析（只读聚合，与 /api/analysis、/api/finance/analysis 同类）。
-            // 原先未登记 —— 因本类是"白名单式收口 + 无默认拒绝"，未登记前缀等于"登录即可"；
-            // 它只有 GET 聚合查询，故按只读聚合登记在 EXEMPT（比塞进 RULES 更贴合语义，避免误收口）。
-            "/api/sale/analysis",        // 销售分析（只读聚合）
+            // F7-106（2026-09-20）曾把销售分析登记在此（理由："只读聚合"）；F7-255（2026-09-30）已改为
+            // 按 `analysis:sale` 收口 —— 见上方 F7-255 注释与 RULES 中的分析段。
             "/api/system"                // 已由 @SaCheckRole(admin/super_admin) 保护，不重复收口
     );
 
@@ -95,6 +99,19 @@ public class ApiPermGuard {
      * 需要对应页面码。v1 曾把这些前缀整体豁免，等于任何登录用户都能改主数据，此处补齐。
      */
     private static final Map<String, String[]> WRITE_RULES = new LinkedHashMap<>();
+
+    /**
+     * **改类写**规则（F7-226，2026-09-29 审核批 C）：非 {@code POST} 的写请求（{@code PUT/PATCH/DELETE}）所需权限码。
+     *
+     * <p>为什么需要它：{@link #WRITE_RULES} **只按前缀**匹配，而"新增"与"修改"常常是**同一路径**（如
+     * {@code POST /api/finance/account} 建户 vs {@code PUT /api/finance/account} 改户）⇒ 按前缀下发就等于
+     * 把"修改"的权限一并送给了只需要"内联新增"的业务页。资金账户即典型：销售单/收付款/费用/流水页需要
+     * **内联新增**账户（`sale:order` 等码），却不该有权**改或停用任何账户**。</p>
+     *
+     * <p>语义：命中本表且方法是 {@code PUT/PATCH/DELETE} ⇒ 只认本表的码（更严）；{@code POST} 仍走
+     * {@link #WRITE_RULES}；读取仍按 {@link #WRITE_RULES} 命中即放行（口径不变）。</p>
+     */
+    private static final Map<String, String[]> STRICT_WRITE_RULES = new LinkedHashMap<>();
 
     /**
      * **用 POST 实现的只读批量查询**（前端按 id 数组批量取数）—— 按读取处理，否则会被
@@ -146,6 +163,11 @@ public class ApiPermGuard {
 
     private static void writeRule(String prefix, String... perms) {
         WRITE_RULES.put(prefix, perms);
+    }
+
+    /** 改类写（PUT/PATCH/DELETE）的专门码 —— 见 {@link #STRICT_WRITE_RULES} */
+    private static void strictWriteRule(String prefix, String... perms) {
+        STRICT_WRITE_RULES.put(prefix, perms);
     }
 
     static {
@@ -205,8 +227,28 @@ public class ApiPermGuard {
         // ===== 研发（三页共用同一控制器 ⇒ 任一码即可，避免互相打断）=====
         rule("/api/dev/purchase-item", "dev:material", "dev:project");
         rule("/api/dev/screen-model", "dev:screen-model");
+        // ===== 经营分析 / 财务分析（F7-255，2026-09-30 审核批 G）=====
+        // 口径与**前端页面码一一对应**（`DataInitializer:939-944` 的 1001~1007；页面菜单 perms 即接口码）：
+        // 概览页与首页门户共用 summary/overview-kpi ⇒ `analysis:overview`（前端也是 `hasMenu['AnalysisOverview']`
+        // 门控这两个请求，见 `dashboard/index.vue:570/658`）；资金往来页 = cash-trend/aging/subject ⇒ `analysis:cash`；
+        // 税务页 ⇒ `analysis:tax`；进货分析 + 供应商下钻 ⇒ `analysis:purchase`；销售分析（含明细下钻）⇒ `analysis:sale`。
+        // 逐路径登记（而非整段一个码）⇒ 持"税务"权的账号读不到"资金往来"，与侧栏可见性一致。
+        rule("/api/finance/analysis/summary", "analysis:overview");
+        rule("/api/finance/analysis/overview-kpi", "analysis:overview");
+        rule("/api/finance/analysis/cash-trend", "analysis:cash");
+        rule("/api/finance/analysis/aging", "analysis:cash");
+        rule("/api/finance/analysis/subject", "analysis:cash");
+        rule("/api/finance/analysis/tax", "analysis:tax");
+        rule("/api/finance/analysis/purchase-analysis", "analysis:purchase");
+        rule("/api/finance/analysis/purchase-supplier", "analysis:purchase");
+        // 利润表（`FinanceAnalysisController:33` `/profit`）：**启动自检在本次收口后立刻抓到它漏登记**
+        // （原先被 `/api/finance/analysis` 整段豁免，逐路径登记时漏了）⇒ 归入「经营概览」码；
+        // 前端当前无调用方，登记的目的正是避免"从整段豁免变成默认拒绝"的静默 403。
+        rule("/api/finance/analysis/profit", "analysis:overview");
         // ===== 客户分析 =====
         rule("/api/customer/analysis", "analysis:customer");
+        // ===== 销售分析（F7-106 原登记在 EXEMPT；F7-255 改为按码收口，含 /records 明细下钻）=====
+        rule("/api/sale/analysis", "analysis:sale");
 
         // ===== 基础数据写保护（GET 共享读取；写需对应页面码）=====
         writeRule("/api/product", "base:product");
@@ -232,6 +274,10 @@ public class ApiPermGuard {
         // 资金账户：账户管理页维护；收款/付款/资金流水/费用/销售单页内联新增
         writeRule("/api/finance/account", "finance:account", "finance:cashflow", "finance:expense",
                 "finance:payment", "finance:receipt", "sale:order");
+        // F7-226（2026-09-29 审核批 C）：**改户单独收口** —— 上面那张表是为"页内**内联新增**账户"下的，
+        // 但同一路径的 `PUT /api/finance/account`（改名/改开户行/**改状态=停用**）也被一并放行 ⇒
+        // 只持 `sale:order` 的用户可改任意资金账户。修改比新增敏感，收口到账户管理/资金流水两码。
+        strictWriteRule("/api/finance/account", "finance:account", "finance:cashflow");
 
         // ===== 按钮级动作码（方案 A 试点 4 个模块，与 DataInitializer.initButtonPerms 保持一致）=====
         actionRule("/api/inventory/purchase-exchange", "audit", "unaudit", "cancel");
@@ -323,6 +369,14 @@ public class ApiPermGuard {
                 return;
             }
         }
+        // F7-226：**改类写**优先于模块规则 —— PUT/PATCH/DELETE 走专属码（POST 仍走 WRITE_RULES）
+        if (!read && !"POST".equalsIgnoreCase(method)) {
+            String sp = longest(STRICT_WRITE_RULES, uri);
+            if (sp != null) {
+                StpUtil.checkPermissionOr(STRICT_WRITE_RULES.get(sp));
+                return;
+            }
+        }
         String rp = longest(RULES, uri);
         if (rp != null) {
             String[] pageCodes = RULES.get(rp);
@@ -371,6 +425,7 @@ public class ApiPermGuard {
         Set<String> all = new LinkedHashSet<>(EXEMPT);
         all.addAll(RULES.keySet());
         all.addAll(WRITE_RULES.keySet());
+        all.addAll(STRICT_WRITE_RULES.keySet());
         return all;
     }
 
@@ -381,6 +436,22 @@ public class ApiPermGuard {
      * 换句话说：本方法返回 {@code false} 的 URI，**2026-09-20 之前任何人都能访问**（仅需登录），
      * 现在则由默认拒绝（{@link #defaultDeny}）兜底成 403。</p>
      */
+    /**
+     * 该 URI 是否落在 **EXEMPT（完全豁免）** 名单内 —— 供 {@code ApiPermGuardSelfCheck} 做
+     * "**EXEMPT 前缀不得含写端点**"的启动期方法级断言（F7-225/F7-255 同族防线，2026-09-30 批 G）。
+     */
+    public static boolean isExempt(String uri) {
+        if (uri == null || uri.isEmpty()) {
+            return false;
+        }
+        for (String ex : EXEMPT) {
+            if (under(uri, ex)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean isRegistered(String uri) {
         if (uri == null || uri.isEmpty()) {
             return true;
@@ -395,6 +466,10 @@ public class ApiPermGuard {
                 return true;
             }
         }
-        return longest(RULES, uri) != null || longest(WRITE_RULES, uri) != null;
+        // F7-257（2026-09-30 审核批 G）：补 `STRICT_WRITE_RULES` —— `registeredPrefixes()`（自检用）含它，
+        // 而本方法原先漏了 ⇒ 两者口径不一致：只登记在改类写表里的前缀会被启动自检**误报"未收口"**。
+        return longest(RULES, uri) != null
+                || longest(WRITE_RULES, uri) != null
+                || longest(STRICT_WRITE_RULES, uri) != null;
     }
 }

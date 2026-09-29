@@ -1787,7 +1787,11 @@ CREATE TABLE IF NOT EXISTS finance_account (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_company_id (company_id),
-    INDEX idx_status (status)
+    INDEX idx_status (status),
+    -- D-14（2026-09-29 决策）：同公司内账户名唯一（含已停用：停用≠可复用名字）。
+    -- 历史重复名（6 个 FIN-ACC 夹具残留）由 tools/regression/audit/audit-20260929-fin-cleanup-fixtures.ps1
+    -- 的 -Apply -Sections 8 改名后建立该索引。
+    UNIQUE KEY uk_account_name (company_id, account_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='资金账户表';
 
 CREATE TABLE IF NOT EXISTS finance_receivable (
@@ -1811,7 +1815,7 @@ CREATE TABLE IF NOT EXISTS finance_receivable (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_bill_no (bill_no),
+    UNIQUE KEY uk_bill_no (company_id, bill_no), -- F7-258
     INDEX idx_customer_id (customer_id),
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_subject_type (subject_type),
@@ -1842,7 +1846,7 @@ CREATE TABLE IF NOT EXISTS finance_payable (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_bill_no (bill_no),
+    UNIQUE KEY uk_bill_no (company_id, bill_no), -- F7-258
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_supplier_type (supplier_type),
     INDEX idx_status (status),
@@ -1872,7 +1876,7 @@ CREATE TABLE IF NOT EXISTS finance_payable_transfer (
     company_id      BIGINT DEFAULT NULL    COMMENT '公司ID',
     create_time     DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_code (code),
+    UNIQUE KEY uk_code (company_id, code), -- F7-258
     INDEX idx_payable_id (payable_id),
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_status (status),
@@ -1902,7 +1906,7 @@ CREATE TABLE IF NOT EXISTS finance_receipt (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_code (code),
+    UNIQUE KEY uk_code (company_id, code), -- F7-258
     INDEX idx_customer_id (customer_id),
     INDEX idx_account_id (account_id),
     INDEX idx_source_bill (source_bill_type, source_id),
@@ -1959,7 +1963,7 @@ CREATE TABLE IF NOT EXISTS finance_payment (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_code (code),
+    UNIQUE KEY uk_code (company_id, code), -- F7-258
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_account_id (account_id),
     INDEX idx_status (status),
@@ -2022,7 +2026,7 @@ CREATE TABLE IF NOT EXISTS finance_cashflow (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     -- F7-39（2026-09-19）：流水号补唯一约束 —— 原先 flow_no **无任何索引**，
     -- 单号生成的 catch 兜底（seq=1）会静默重号，且无 DB 兜底。
-    UNIQUE KEY uk_flow_no (flow_no),
+    UNIQUE KEY uk_flow_no (company_id, flow_no), -- F7-258
     INDEX idx_account_id (account_id),
     INDEX idx_flow_type (flow_type),
     INDEX idx_company_id (company_id)
@@ -2051,7 +2055,7 @@ CREATE TABLE IF NOT EXISTS finance_expense (
     source_id BIGINT DEFAULT NULL COMMENT '来源对象ID(如 dev_purchase_item.id)',
     source_bill_no VARCHAR(50) DEFAULT NULL COMMENT '来源单号(费用单目前为空，保留与应收同构)',
     -- F7-39（2026-09-19）：费用单号补唯一约束（原先 expense_no 无任何索引，catch 兜底 seq=1 可静默重号）
-    UNIQUE KEY uk_expense_no (expense_no),
+    UNIQUE KEY uk_expense_no (company_id, expense_no), -- F7-258
     INDEX idx_expense_type (expense_type),
     INDEX idx_expense_date (expense_date),
     INDEX idx_status (status),
@@ -2076,8 +2080,12 @@ CREATE TABLE IF NOT EXISTS finance_invoice (
     remark VARCHAR(500) COMMENT '备注',
     status VARCHAR(20) DEFAULT 'REGISTERED' COMMENT '状态: REGISTERED=已登记 CANCELLED=已作废',
     company_id BIGINT COMMENT '公司ID',
+    -- F7-234（2026-09-29 决策 D-15）：**未作废发票号唯一**。生成列把"已作废"折叠成 NULL，唯一索引因此
+    -- 只约束 REGISTERED 行 —— 保留"作废后号码可重新登记"的原口径，同时把并发下的重号挡在数据库层。
+    active_invoice_no VARCHAR(50) GENERATED ALWAYS AS (IF(status = 'REGISTERED', invoice_no, NULL)) STORED COMMENT '未作废发票号(唯一索引载体)',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_invoice_active (company_id, active_invoice_no),
     INDEX idx_invoice_no (invoice_no),
     INDEX idx_direction (direction),
     INDEX idx_invoice_date (invoice_date),
@@ -2116,12 +2124,14 @@ CREATE TABLE IF NOT EXISTS finance_bill (
     total_amount DECIMAL(18,4) DEFAULT 0 COMMENT '应收/应付总额',
     paid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '已收/已付总额',
     unpaid_amount DECIMAL(18,4) DEFAULT 0 COMMENT '未收/未付总额',
-    status VARCHAR(20) DEFAULT 'UNSETTLED' COMMENT '状态: 未结清/已结清',
+    status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废（原注释"未结清/已结清"与实现不符，2026-09-29 批 D 修正）',
+    -- D-19（2026-09-29 批 D）：出账来源 —— 手工(MANUAL) / 自动任务(AUTO)，用于事后追溯
+    source VARCHAR(20) DEFAULT 'MANUAL' COMMENT '来源: MANUAL=手工 AUTO=自动任务',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_bill_no (bill_no),
+    UNIQUE KEY uk_bill_no (company_id, bill_no), -- F7-258
     INDEX idx_bill_type (bill_type),
     INDEX idx_partner_id (partner_id),
     INDEX idx_company_id (company_id)

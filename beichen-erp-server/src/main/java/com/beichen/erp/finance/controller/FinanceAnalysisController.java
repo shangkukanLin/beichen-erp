@@ -29,7 +29,15 @@ public class FinanceAnalysisController {
         return R.ok(service.summary());
     }
 
-    /** 利润表：months 快捷模式（默认 12），或 start/end 自定义日期区间（yyyy-MM-dd，优先生效） */
+    /**
+     * 利润表：months 快捷模式（默认 12），或 start/end 自定义日期区间（yyyy-MM-dd，优先生效）。
+     *
+     * <p><b>D-25 ③（2026-09-30 审核批 G 收尾）</b>：前端「经营分析 → 利润表」页已下线（路由无
+     * {@code AnalysisProfit}、菜单 1002 缺位、{@code api/enums.ts:1045} 已注明图标枚举随该页一并删除），
+     * 当前**无任何前端调用方**。**端点保留** —— 它是可复用的按天聚合（首页经营 KPI 与它同源），
+     * 删除会波及服务层与被复用的聚合口径；权限按 {@code analysis:overview} 收口（见
+     * {@code ApiPermGuard} 的 F7-255 段）。若后续确认永久不用，可连同 {@code service.profit} 一并删除。</p>
+     */
     @GetMapping("/profit")
     public R<Map<String, Object>> profit(@RequestParam(defaultValue = "12") int months,
             @RequestParam(required = false) String start,

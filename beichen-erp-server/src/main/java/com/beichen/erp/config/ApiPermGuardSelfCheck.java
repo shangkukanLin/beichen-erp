@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.servlet.mvc.condition.PathPatternsRequestCondition;
 import org.springframework.web.servlet.mvc.condition.PatternsRequestCondition;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
@@ -37,6 +38,15 @@ import java.util.TreeSet;
 @RequiredArgsConstructor
 public class ApiPermGuardSelfCheck implements ApplicationRunner {
 
+    /**
+     * F7-257（2026-09-30 审核批 G）：**EXEMPT 中确实需要写操作的**前缀白名单（其余前缀出现非 GET 端点即报 ERROR）。
+     * <p>逐条理由：`/api/auth`（登录/改密，未登录也要能 POST）· `/api/company`（超管公司 CRUD，控制器内自校验角色）·
+     * `/api/memo`（个人备忘录，按当前用户隔离）· `/api/dev/file`（各页附件上传/下载）·
+     * `/api/system`（已由 `@SaCheckRole(admin/super_admin)` 保护，见 EXEMPT 注释）。</p>
+     */
+    private static final Set<String> EXEMPT_WRITE_ALLOWED = Set.of(
+            "/api/auth", "/api/company", "/api/memo", "/api/dev/file", "/api/system");
+
     private final RequestMappingHandlerMapping handlerMapping;
 
     @Override
@@ -46,8 +56,11 @@ public class ApiPermGuardSelfCheck implements ApplicationRunner {
         // 去重后按字典序输出，便于人工核对与日志比对
         Set<String> unguarded = new TreeSet<>();
         Set<String> scanned = new LinkedHashSet<>();
+        // F7-257（2026-09-30 审核批 G）：**EXEMPT 前缀不得含写端点** —— 新增的第二类断言。
+        Set<String> exemptWrites = new TreeSet<>();
 
         for (RequestMappingInfo info : handlers.keySet()) {
+            Set<RequestMethod> methods = methodsOf(info);
             for (String pattern : patternsOf(info)) {
                 if (pattern == null || !pattern.startsWith("/api/")) {
                     continue;
@@ -57,7 +70,24 @@ public class ApiPermGuardSelfCheck implements ApplicationRunner {
                 if (!ApiPermGuard.isRegistered(pattern)) {
                     unguarded.add(pattern);
                 }
+                // 白名单里的**写**端点：F7-225（supplier-settlement 两处 POST 裸奔）/ F7-255（分析聚合越权可读）
+                // 都是这一类的先例。空 methods（= 任意方法）视为风险写法，同样登记。
+                if (ApiPermGuard.isExempt(pattern) && !EXEMPT_WRITE_ALLOWED.contains(exemptPrefixOf(pattern))) {
+                    if (methods.isEmpty() || methods.stream().anyMatch(m -> m != RequestMethod.GET)) {
+                        exemptWrites.add(pattern + "  [" + (methods.isEmpty() ? "ALL" : methods.toString()) + "]");
+                    }
+                }
             }
+        }
+
+        if (!exemptWrites.isEmpty()) {
+            log.error("[perm-selfcheck] EXEMPT 白名单里出现 {} 个**写**端点（白名单判定在 RULES/WRITE_RULES 之前 "
+                    + "⇒ 这些写操作对任何登录用户开放，参见 F7-225 / F7-255）：", exemptWrites.size());
+            for (String p : exemptWrites) {
+                log.error("[perm-selfcheck]   EXEMPT 含写 -> {}", p);
+            }
+            log.error("[perm-selfcheck] 处理方式：把该前缀移出 EXEMPT、按码登记到 RULES/WRITE_RULES；"
+                    + "若确属「登录即可」（如登录/改密/个人备忘录），加入 ApiPermGuardSelfCheck.EXEMPT_WRITE_ALLOWED 白名单并写明理由。");
         }
 
         if (unguarded.isEmpty()) {
@@ -73,6 +103,25 @@ public class ApiPermGuardSelfCheck implements ApplicationRunner {
         log.error("[perm-selfcheck] 处理方式：在 ApiPermGuard 的 EXEMPT / RULES / WRITE_RULES 中补登记"
                 + "（只读聚合可进 EXEMPT，模块接口进 RULES，基础数据进 WRITE_RULES）；"
                 + "补完重启应看到「收口一致性 OK」提示。");
+    }
+
+    /** 该端点绑定的 HTTP 方法（空集 = 未限定，即任意方法）。 */
+    private Set<RequestMethod> methodsOf(RequestMappingInfo info) {
+        try {
+            return info.getMethodsCondition().getMethods();
+        } catch (Exception ex) {
+            return Set.of();
+        }
+    }
+
+    /** 命中的 EXEMPT 前缀（用于查白名单）。 */
+    private String exemptPrefixOf(String pattern) {
+        for (String ex : ApiPermGuard.registeredPrefixes()) {
+            if (pattern.equals(ex) || pattern.startsWith(ex + "/")) {
+                return ex;
+            }
+        }
+        return pattern;
     }
 
     /** 兼容 Spring 的两套路径条件实现（PathPattern 优先，回退 Ant 风格）。 */
