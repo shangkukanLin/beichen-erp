@@ -38,7 +38,7 @@ $MYSQL = 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe'
 $env:MYSQL_PWD = 'root'
 $STAMP = Get-Date -Format 'yyyyMMdd-HHmmss'
 $BAK = Join-Path $env:TEMP ('audit-20260929-fin-cleanup-' + $STAMP + '.txt')
-$Only = if ($Sections) { @($Sections -split '\s*,\s*') } else { @('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16') }
+$Only = if ($Sections) { @($Sections -split '\s*,\s*') } else { @('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17') }
 function Want([string]$n) { return ($Only -contains $n) }
 function Act([string]$n, [scriptblock]$b) { if (Want $n) { & $b } }
 function S([string]$sql) {
@@ -384,6 +384,23 @@ WHERE NOT EXISTS (SELECT 1 FROM (SELECT * FROM sys_company) c WHERE c.id = m.com
   Act '16' {
     Q 'SELECT id, username, company_id, IFNULL(deleted,0) deleted FROM sys_user u WHERE NOT EXISTS (SELECT 1 FROM sys_company c WHERE c.id = u.company_id)'
     Write-Host 'orphan user attribution listed above (F8-09, read-only on purpose)'
+  }
+  # ---- D-1 (finance round, 2026-09-30 用户口径「不追溯，仅标注」）----
+  # 历史 18 张已审核报损（成品 15 / 委外 3）**不补建凭证**，只在备注留痕，供后续按需追溯。
+  # 说明：成品侧 id 8~21 中金额>0 的 8 张已在 §11 补建；本段只对**其余（含 0 元与更早）**做标注，
+  # 保证"哪张没进财务口径"一目了然。
+  Act '17' {
+    Run @'
+UPDATE inventory_stock_loss
+SET remark = CONCAT(IFNULL(remark,''), ' [D-1 历史已审核报损，20260930 口径：不追溯生成凭证]')
+WHERE status = 'AUDITED' AND IFNULL(remark,'') NOT LIKE '%D-1%'
+'@
+    Run @'
+UPDATE outsource_stock_loss
+SET remark = CONCAT(IFNULL(remark,''), ' [D-1 历史已审核报损，20260930 口径：不追溯生成凭证]')
+WHERE status = 'AUDITED' AND IFNULL(remark,'') NOT LIKE '%D-1%'
+'@
+    Write-Host 'historical audited stock-loss bills tagged as not-backfilled (D-1)'
   }
 }
 

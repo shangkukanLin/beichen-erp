@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
+import { clearCompanyData } from '@/api/system'
 
 const loading = ref(false)
 /** F8-17：清空预演（dryRun）—— 只读，不删数据 */
@@ -22,7 +22,7 @@ async function handleClear() {
   loading.value = true
   try {
     // F8-17：后端要求二次确认口令（前端口令只是第一道），并会先落一份回滚点（格式同「数据导出」）
-    const res: any = await request.post('/system/clear-company-data', null, { params: { confirm: CONFIRM_WORD } })
+    const res: any = await clearCompanyData({ confirm: CONFIRM_WORD })
     ElMessage.success(res?.tables ? `已清空 ${res.tables} 张表 / ${res.totalRows} 行数据，请刷新页面` : '数据已清空，请刷新页面')
     setTimeout(() => location.reload(), 1000)
   } catch (e: any) {
@@ -37,7 +37,7 @@ async function handleClear() {
 async function handleDryRun() {
   dryLoading.value = true
   try {
-    const res: any = await request.post('/system/clear-company-data', null, { params: { dryRun: true } })
+    const res: any = await clearCompanyData({ dryRun: true })
     const rows = Object.entries(res?.rows || {}).filter(([, n]) => Number(n) > 0)
     const detail = rows.map(([t, n]) => `${t}: ${n}`).join('、') || '（本公司当前无业务数据）'
     await ElMessageBox.alert(

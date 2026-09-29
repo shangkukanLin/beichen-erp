@@ -105,6 +105,8 @@ import { localDate } from '@/utils/date'
 import { ref, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+// F8-26（2026-09-30）：清空接口收进 API 层；导出/导入暂保留内联（blob / multipart + 预检确认流程）
+import { clearCompanyData } from '@/api/system'
 import { useUserStore } from '@/stores/user'
 
 // P2-34 口径（2026-09-12）：整库「数据导出/数据导入」为平台级能力，仅超级管理员可用；
@@ -231,7 +233,7 @@ async function handleClear() {
   clearLoading.value = true
   try {
     // F8-17：后端要求二次确认口令（前端口令只是第一道）
-    const res: any = await request.post('/system/clear-company-data', null, { params: { confirm: CLEAR_CONFIRM_WORD } })
+    const res: any = await clearCompanyData({ confirm: CLEAR_CONFIRM_WORD })
     ElMessage.success(res?.tables ? `已清空 ${res.tables} 张表 / ${res.totalRows} 行数据，请刷新页面` : '数据已清空，请刷新页面')
     setTimeout(() => location.reload(), 1000)
   } catch (e: any) {
@@ -244,7 +246,7 @@ const clearDryLoading = ref(false)
 async function handleClearDryRun() {
   clearDryLoading.value = true
   try {
-    const res: any = await request.post('/system/clear-company-data', null, { params: { dryRun: true } })
+    const res: any = await clearCompanyData({ dryRun: true })
     const rows = Object.entries(res?.rows || {}).filter(([, n]) => Number(n) > 0)
     const detail = rows.map(([t, n]) => `${t}: ${n}`).join('、') || '（本公司当前无业务数据）'
     await ElMessageBox.alert(

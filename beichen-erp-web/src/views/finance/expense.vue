@@ -53,7 +53,7 @@ async function save() {
   try { await createExpense(form); ElMessage.success('已新增'); dialog.value = false; loadData() } catch {}
 }
 async function audit(row: any) {
-  try { await ElMessageBox.confirm(`确认审核费用单 ${row.expenseNo}？审核后将从「${row.accountName}」扣款 ${row.amount} 元`, '审核确认', { type: 'warning' }) } catch { return }
+  try { await ElMessageBox.confirm(`确认审核费用单 ${row.expenseNo}？审核后将从「${row.accountName || '非资金（无账户）'}」${row.accountName ? '扣款' : '入账'} ${row.amount} 元`, '审核确认', { type: 'warning' }) } catch { return }
   try { await auditExpense(row.id); ElMessage.success('已审核'); loadData() } catch {}
 }
 /* 2026-09-24（用户口径）：反审核已移入详情页 —— 它会生成「费用冲正」流水把资金冲回账户（撤销类操作，
@@ -100,7 +100,14 @@ onMounted(() => { loadData(); loadAccounts() })
         <el-table-column prop="expenseType" label="费用类型" width="96"><template #default="{row}"><el-tag size="small">{{ EXPENSE_TYPE_LABELS[row.expenseType] || row.expenseType }}</el-tag></template></el-table-column>
         <el-table-column prop="amount" label="金额" width="100" align="right" show-overflow-tooltip><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.amount) }}</span></template></el-table-column>
         <el-table-column label="费用日期" width="100"><template #default="{row}">{{ fmtDate(row.expenseDate) }}</template></el-table-column>
-        <el-table-column prop="accountName" label="支出账户" min-width="110" show-overflow-tooltip/>
+        <el-table-column label="支出账户" min-width="110" show-overflow-tooltip>
+        <!-- D-3（2026-09-30 财务轮口径）：非资金费用（accountName 为空）不再显示空白，明确写"非资金（无账户）"，
+             避免被误读为"漏填账户"。 -->
+        <template #default="{ row }">
+          <span v-if="row.accountName">{{ row.accountName }}</span>
+          <span v-else style="color:var(--app-text-secondary)">非资金（无账户）</span>
+        </template>
+      </el-table-column>
         <el-table-column label="状态" width="76" align="center"><template #default="{row}"><el-tag :type="DocStatusTag[row.status]" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column prop="remark" label="备注" min-width="185" show-overflow-tooltip/>
         <!-- 2026-09-24（用户口径）：编辑与反审核都收进详情页（详情草稿态可就地改+存）⇒ 操作列 174→132。 -->
