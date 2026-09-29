@@ -36,7 +36,7 @@ Sec '1) F8-21: customized marker wiring (schema + entity + write path + sync log
 Ok ((SqlOne "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='beichen_erp' AND table_name='sys_menu' AND column_name='customized'") -eq '1') 'sys_menu.customized column exists in the live DB'
 Ok (Has (Join-Path $erp 'beichen-erp-server\src\main\resources\schema.sql') 'customized') 'schema.sql defines the customized column (fresh installs get it)'
 Ok (Has $di 'IF\(customized=1, menu_name') 'syncMenus honours customized=1 for menu_name (and friends)'
-Ok (Has $di 'addColumnIfMissing\("sys_menu", "customized') 'existing databases get the column via a startup migration'
+Ok (-not (Has $di 'addColumnIfMissing')) 'P1: DataInitializer performs no startup DDL (sys_menu.customized is declared in schema.sql)'
 Ok (Has $menuEntity 'private Integer customized') 'Menu entity exposes customized'
 Ok (Has $ms 'entity.setCustomized\(1\)') 'MenuServiceImpl.updateById stamps customized=1 on user edits'
 Ok (Has $ms 'entity.getCustomized\(\) == null') 'MenuServiceImpl.save stamps customized=1 for user-created menus'
@@ -46,10 +46,11 @@ Ok (Has $di '@jakarta\.annotation\.PostConstruct') 'DataInitializer runs from @P
 Ok (-not (Has $di 'implements ApplicationRunner')) 'no longer an ApplicationRunner (port was already open)'
 
 Sec '3) F8-24 / F8-25: honest class docs + fail-fast preflight'
-Ok ((Has $di 'migrate') -and (Has $di 'ALTER TABLE')) 'class javadoc/code states it DOES run migrations (DDL included)'
+Ok (-not (Has $di 'private\s+\w+\s+migrate[A-Z]')) 'P1: no migrate*() method remains (schema.sql is the single source of truth)'
+Ok (-not (Has $di 'migrate[A-Z]\w*\(\);')) 'P1: no migrate*() call line remains in init()'
 Ok (Has $di 'private void assertSchemaReady') 'assertSchemaReady() preflight exists'
 Ok (Has $di 'assertSchemaReady\(\);') 'preflight is actually called at startup'
-Ok (Has $di 'F8-24') 'the class javadoc carries the F8-24 correction marker (the old claim is now quoted as history)'
+Ok (Has $di 'P1') 'the class javadoc carries the P1 pre-launch cleanup note (migrations removed)'
 
 Sec '4) F8-23: every company has default business seeds'
 $cids = @(SqlOne "SELECT GROUP_CONCAT(id ORDER BY id) FROM sys_company") -split ','

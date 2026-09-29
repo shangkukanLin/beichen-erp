@@ -33,19 +33,18 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 数据初始化器：启动时自动初始化/升级系统基础数据。
+ * 数据初始化器（种子播种器）：启动时写入系统基础数据。
  *
- * <p><b>实际职责（F8-24 · 2026-09-30 设置模块批 E 修复：原注释与实现不符，原文称"本类不执行任何建表/加列/数据迁移"）</b>：
- * 本类除写入业务种子（角色/菜单/用户/物料类型/阶段模板/合同模板）外，还承担
- * **18 个 {@code migrate*()} 升级方法** —— 它们通过 {@code information_schema} 判断后做幂等
- * {@code ALTER TABLE ... ADD COLUMN}（补 {@code create_by}/{@code auditor_*}/{@code finisher_id} 等列）、
- * 补索引与一次性回填，是"schema.sql + 启动迁移"共同构成现网表结构的那一半。
- * 因此：**新增列/表时必须同时考虑这两条路径**（见报告 §4.6 的口径复核）。</p>
+ * <p><b>职责（P1 · 2026-09-30 未上线清理）</b>：本类**只做种子写入** —— 公司/角色/用户/菜单/权限码/
+ * 角色→菜单计划/物料类型/阶段模板/合同模板/屏幕资料，外加按公司补齐默认业务种子。
+ * 全部幂等（只增不改：用户改过的菜单/角色授权会被跳过）。</p>
  *
- * <p><b>执行时机（F8-20 · 同一轮修复）</b>：本方法由 {@code @PostConstruct} 触发，早于 Web 容器放行端口；
- * 原先用 {@code ApplicationRunner} 是"端口已开、迁移还在跑" ⇒ 期间到达的请求在事务里读表会撞 MySQL
- * <b>1412 Table definition has changed</b>（实测沙箱实例首个 dryRun 即失败）。改到 {@code @PostConstruct}
- * 后竞态从结构上消除。</p>
+ * <p><b>本类不再执行任何 DDL</b>：原 18 个 {@code migrate*()} 升级方法与 {@code initDocOperatorColumns()}
+ * 已删除 —— 项目尚未上线，不存在"老库需要就地升级"的场景；表结构**唯一来源是 {@code schema.sql}**
+ * （{@code CREATE TABLE IF NOT EXISTS}，启动自动执行，全新库一次即成）。缺表缺列的后果由
+ * {@link #assertSchemaReady()} 在初始化最前面直接报错，不再"悄悄补一列"。</p>
+ *
+ * <p><b>执行时机（F8-20）</b>：由 {@code @PostConstruct} 触发，早于 Web 容器放行端口；</p>
  */
 @Slf4j
 @Component
@@ -61,6 +60,28 @@ public class DataInitializer {
     private final PhaseTemplateMapper phaseTemplateMapper;
     private final ContractTemplateMapper contractTemplateMapper;
     private final JdbcTemplate jdbcTemplate;
+
+    /**
+     * P1（2026-09-30 未上线清理）：需要"操作人四列"的业务单据表 ——
+     * {@code create_by}/{@code create_by_name}（MetaObjectHandler 自动填充）与
+     * {@code auditor_id}/{@code auditor_name}（审核时盖章）。
+     *
+     * <p>这些列原先由已删除的启动期迁移 {@code initDocOperatorColumns()} 逐表 {@code ALTER} 补上；
+     * 现在它们由 {@code schema.sql} 声明，本常量仅供 {@link #assertSchemaReady()} 做启动断言 ——
+     * 任何一列缺失都直接让应用起不来（避免"能启动、写单据时才报 1054 未知列"）。</p>
+     */
+    private static final List<String> DOC_TABLES = List.of(
+            "purchase_order", "purchase_return", "purchase_exchange",
+            "sale_order", "sale_return", "sale_exchange",
+            "inventory_warehouse_move", "return_sort", "inventory_stock_take",
+            "inventory_stock_loss", "inventory_other_io", "product_reclassify",
+            "outsource_delivery", "outsource_stock_loss", "outsource_other_io",
+            "outsource_order", "outsource_material_order", "outsource_return_order",
+            "outsource_material_return", "outsource_order_delivery",
+            "outsource_return_order_repair", "outsource_material_return_repair",
+            "outsource_order_close_report", "dev_project",
+            "finance_receipt", "finance_payment", "finance_bill", "finance_expense",
+            "finance_invoice", "finance_payable_transfer", "finance_receivable", "finance_payable");
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     /** 默认口令哨兵：出现即启动告警，提醒"生产忘了注入 INIT_ADMIN_PASSWORD" */
@@ -83,7 +104,11 @@ public class DataInitializer {
                 {"sys_user", "username"}, {"sys_role_menu", "menu_id"}, {"sys_user_role", "user_id"},
                 {"sys_user_menu", "menu_id"}, {"sys_user_dashboard_tab", "user_id"},
                 {"material_type", "type_name"}, {"dev_phase_template", "product_status_sync"},
-                {"outsource_contract_template", "template_type"}, {"screen_model", "id"}
+                {"outsource_contract_template", "template_type"}, {"screen_model", "id"},
+                // P1（2026-09-30 未上线清理）：这两列原先由启动期 DDL 补（F8-21/F8-22），
+                // 现已并入 schema.sql 的 CREATE TABLE，这里只做断言，不再执行任何 DDL。
+                {"sys_menu", "customized"}, {"sys_role", "customized_menu"},
+                {"sys_role_menu_plan", "menu_id"}
         };
         List<String> missing = new java.util.ArrayList<>();
         for (String[] r : required) {
@@ -91,9 +116,23 @@ public class DataInitializer {
                 missing.add(r[0] + "." + r[1]);
             }
         }
+        // P1：单据类表的"操作人四列"（MetaObjectHandler 自动填充 create_by/create_by_name，
+        // 审核时盖章 auditor_id/auditor_name）。这 128 个列原先**全部**由启动期迁移补齐，
+        // 现由 schema.sql 声明；任何一列缺失都说明库结构落后于代码 ⇒ 必须让应用起不来。
+        String[][] opColumns = {
+                {"create_by", "BIGINT"}, {"create_by_name", "VARCHAR"}, {"auditor_id", "BIGINT"}, {"auditor_name", "VARCHAR"}
+        };
+        for (String t : DOC_TABLES) {
+            for (String[] c : opColumns) {
+                if (!columnExists(t, c[0])) {
+                    missing.add(t + "." + c[0]);
+                }
+            }
+        }
         if (!missing.isEmpty()) {
             throw new IllegalStateException("[启动初始化失败] 表/列缺失 " + missing.size() + " 项：" + missing
-                    + " —— 请确认 schema.sql 已随本版本更新（或先执行对应的 ALTER），否则初始化会中途失败");
+                    + " —— 本版本起不再执行启动期 DDL（未上线，见 docs/《数据库演化约定》）："
+                    + "请更新 schema.sql 后重建数据库（开发/测试库直接 drop + 重启即可）");
         }
     }
 
@@ -110,25 +149,6 @@ public class DataInitializer {
         syncMenus();
         initRoleMenuPlan();
         initRoleMenus();
-        migrateDashboardTabs();
-        migrateUserMenuMode();
-        initDocOperatorColumns();
-        migrateRepairReturnFee();
-        migrateMaterialRepairReturnStatus();
-        migrateReturnOrderRepairStatus();
-        migrateMaterialOrderFinisher();
-        migratePurchaseExchangeCharge();
-        migratePurchaseChargePerProduct();
-        migrateSaleItemCharge();
-        migrateReturnSortSorter();
-        migrateReturnBackSource();
-        migrateMaterialMoveQuality();
-        migrateMaterialRepairOnsiteLeg();
-        migrateMaterialOrderReturnedQty();
-        migrateOverReceipt();
-        migrateReturnBackPriceManual();
-        migrateFinanceExpenseSource();
-        migrateStockLossLiableParty();
         initSuperAdmin();
         initMaterialTypes();
         initPhaseTemplates();
@@ -567,10 +587,8 @@ public class DataInitializer {
             // 资金往来（2026-09-15 由「资金与往来」改名）：资金趋势 + 应收应付账龄 + 主体往来统计
             {1003L, 10L, "资金往来", "menu", "/analysis/cash", "AnalysisCash", "Wallet", 6},
         };
-        // F8-21（2026-09-30 设置模块批 E 修复）：确保 customized 列存在（与 schema.sql 同源，存量库靠这里补）
-        if (!columnExists("sys_menu", "customized")) {
-            addColumnIfMissing("sys_menu", "customized TINYINT DEFAULT 0 COMMENT '1=用户改过，启动同步不再覆盖'");
-        }
+        // P1（2026-09-30 未上线清理）：此处原来会"确保 customized 列存在"（F8-21 的存量库补列）——
+        // 该列已由 schema.sql 声明，启动期不再做 DDL（缺列由 assertSchemaReady() 直接报错）。
 
         // ON DUPLICATE KEY UPDATE 实现 upsert
         int processed = 0;
@@ -711,211 +729,11 @@ public class DataInitializer {
         initMenuPerms();
     }
 
-    /**
-     * F3-3（2026-09-18 接口级权限专项）：给**页面菜单**写接口权限码 {@code sys_menu.perms}（幂等）。
-     *
-     * <p>口径：权限码 = {@code 模块:资源}，与页面菜单一一对应（仅 {@code menu_type='menu'} 的行有值，
-     * 目录(catalog) 恒为 NULL）。用户的有效权限 = 其**可见菜单**的权限码集合，由
-     * {@code StpInterfaceImpl.getPermissionList} 提供给 {@code @SaCheckPermission} ⇒
-     * 与侧栏同源，保证"看得见的页面，接口一定调得通"。</p>
-     *
-     * <p>注意：**已下线菜单**（104/302/303/405/409/503/602/701，visible=0）不在此表 —— 权限码只授给
-     * 在用页面；其页面若仍被复用（如 301 研发立项复用 BomController），注解取**复用页**的码。</p>
-     */
-    /**
-     * 全站单据「制单人 / 审核人」列（2026-09-23 用户口径：所有单据生成的详情都要显示这两项）。
-     *
-     * <p>做法：所有单据主表幂等补列 —— {@code create_by}/{@code create_by_name}（制单人，由
-     * {@code MybatisPlusConfig} 的 MetaObjectHandler 自动填充，业务代码零改动）+ {@code auditor_id}/
-     * {@code auditor_name}（审核人，审核时盖章；无审核流程的单据留空）。</p>
-     *
-     * <p>MySQL 8 没有 {@code ADD COLUMN IF NOT EXISTS} ⇒ 先查 {@code information_schema} 判断列是否存在，
-     * 缺哪列补哪列 ⇒ 重复启动零写入。（启动阶段没有请求上下文 ⇒ companyId 为空 ⇒ 多租户插件不介入。）</p>
-     */
-    private void initDocOperatorColumns() {
-        String[] docTables = {
-                // 采购
-                "purchase_order", "purchase_return", "purchase_exchange",
-                // 销售
-                "sale_order", "sale_return", "sale_exchange",
-                // 成品库存
-                "inventory_warehouse_move", "return_sort", "inventory_stock_take",
-                "inventory_stock_loss", "inventory_other_io", "product_reclassify",
-                // 物料仓库
-                "outsource_delivery", "outsource_stock_loss", "outsource_other_io",
-                // 委外
-                "outsource_order", "outsource_material_order", "outsource_return_order",
-                "outsource_material_return", "outsource_order_delivery",
-                "outsource_return_order_repair", "outsource_material_return_repair",
-                // 结单报表（2026-09-23 排查补漏）：结单 = 该单的"审核"动作（confirmClose）⇒ 也要有制单人/审核人
-                "outsource_order_close_report",
-                // 研发立项（2026-09-23 用户要求纳入）：属项目主数据、**无审核流程** ⇒ 只填「制单人」；
-                // auditor_id/auditor_name 两列会一并建出但按口径始终留空（页面也不显示审核人）
-                "dev_project",
-                // 财务（台账 finance_receivable/payable 也记，便于追溯由哪张单触发）
-                "finance_receipt", "finance_payment", "finance_bill", "finance_expense",
-                "finance_invoice", "finance_payable_transfer",
-                "finance_receivable", "finance_payable",
-        };
-        int added = 0;
-        for (String t : docTables) {
-            try {
-                if (!columnExists(t, "create_by")) {
-                    jdbcTemplate.execute("ALTER TABLE " + t
-                            + " ADD COLUMN create_by BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',"
-                            + " ADD COLUMN create_by_name VARCHAR(50) NULL COMMENT '制单人姓名快照'");
-                    added++;
-                }
-                if (!columnExists(t, "auditor_id")) {
-                    jdbcTemplate.execute("ALTER TABLE " + t
-                            + " ADD COLUMN auditor_id BIGINT NULL COMMENT '审核人ID（审核时盖章）',"
-                            + " ADD COLUMN auditor_name VARCHAR(50) NULL COMMENT '审核人姓名快照'");
-                    added++;
-                }
-            } catch (Exception e) {
-                log.warn("补列失败 {}: {}", t, e.getMessage());
-            }
-        }
-        if (added > 0) log.info("已为 {} 处单据表补「制单人/审核人」列", added);
-    }
 
-    /**
-     * 报损单补「损失承担方」三列（2026-09-29 用户口径「报损需要走财务流程」）。
-     *
-     * <p>成品报损 {@code inventory_stock_loss} 与委外物料报损 {@code outsource_stock_loss} 各补三列：
-     * {@code liable_party}（INTERNAL=内部损失，默认 / SUPPLIER=供应商·加工厂承担）、
-     * {@code liable_supplier_id}、{@code liable_supplier_name}。</p>
-     *
-     * <p><b>存量行取默认 INTERNAL</b>：历史报损发生在本次改造前、库存流水已发生，按"内部损失"口径新起账，
-     * 不追溯生成凭证（是否补账由用户口径决定，见审核报告 F7-201）。</p>
-     *
-     * <p>与 {@link #initDocOperatorColumns()} 同规格：MySQL 8 无 {@code ADD COLUMN IF NOT EXISTS}
-     * ⇒ 先查列再补，重复启动零写入。</p>
-     */
-    private void migrateStockLossLiableParty() {
-        for (String t : new String[]{"inventory_stock_loss", "outsource_stock_loss"}) {
-            try {
-                if (!columnExists(t, "liable_party")) {
-                    jdbcTemplate.execute("ALTER TABLE " + t
-                            + " ADD COLUMN liable_party VARCHAR(20) DEFAULT 'INTERNAL' COMMENT '损失承担方: INTERNAL=内部损失 SUPPLIER=供应商/加工厂承担'"
-                            + ", ADD COLUMN liable_supplier_id BIGINT DEFAULT NULL COMMENT '承担方供应商ID(SUPPLIER 时必填)'"
-                            + ", ADD COLUMN liable_supplier_name VARCHAR(100) DEFAULT NULL COMMENT '承担方供应商名称(冗余留痕)'");
-                    log.info("已为 {} 补「损失承担方」三列（报损走财务流程）", t);
-                }
-            } catch (Exception e) {
-                log.warn("补列失败 {}: {}", t, e.getMessage());
-            }
-        }
-    }
 
-    /**
-     * 维修返回记录补「维修费单价 / 金额」两列（2026-09-28 用户口径「费用精确到产品里，在登记返回时填写」）。
-     *
-     * <p>原口径：维修费是维修退货单主表的**整单**字段（新增时填 → 送修审核时挂一条应付）；
-     * 现口径：按**返回产品行**在**登记维修返回**时填 —— 单价({@code repair_unit_price}) × 数量 =
-     * 金额({@code repair_amount})，登记即按行生成一条对加工厂的应付，撤销该行即冲销该条。</p>
-     *
-     * <p>与 {@link #initDocOperatorColumns()} 同规格：MySQL 8 无 {@code ADD COLUMN IF NOT EXISTS}
-     * ⇒ 先查列再补，重复启动零写入。存量返回记录两列取默认 0（= 该行未收维修费），
-     * 历史费用仍在主表 {@code charge_*} 字段上，不受影响。</p>
-     */
-    private void migrateRepairReturnFee() {
-        String t = "outsource_return_order_repair";
-        try {
-            if (!columnExists(t, "repair_unit_price")) {
-                jdbcTemplate.execute("ALTER TABLE " + t
-                        + " ADD COLUMN repair_unit_price DECIMAL(18,2) DEFAULT 0 NULL COMMENT '维修费单价(登记返回时按产品行填，留空=0)'"
-                        + ", ADD COLUMN repair_amount DECIMAL(18,2) DEFAULT 0 NULL COMMENT '维修费金额(=单价×数量，登记返回时生成应付)'");
-                log.info("已为 {} 补「维修费单价/金额」列（维修费下沉到登记返回的产品行）", t);
-            }
-        } catch (Exception e) {
-            log.warn("补列失败 {}: {}", t, e.getMessage());
-        }
-    }
 
-    /**
-     * 委外物料维修返回记录补「状态 + 审核时间」两列（2026-09-28 用户口径「加工**和物料**的登记返回都需要审核和反审核」）。
-     *
-     * <p>原口径：登记即生效（登记当场把物料入到指定仓 + 回补订单收料数 + 核销在厂行 + 扣子物料）；
-     * 现口径与本项目「加工返回」（{@code outsource_return_back}）对齐 —— 登记只建**草稿**（不动库存/账务），
-     * **审核**才落账，**反审核**对称逆回并留痕（记录回草稿），草稿可删除。</p>
-     *
-     * <p><b>存量回填 AUDITED（关键）</b>：历史行是"登记即生效"的、货早已入库 ⇒ 必须置为已审核，
-     * 否则会被当成未落账的草稿：已返回量少算、结案卡住、订单收料数/在厂行对不上。审核时间回填
-     * {@code create_time}（登记即生效 ⇒ 登记时刻即生效时刻），审核人保持 NULL（页面显示「—」）。</p>
-     *
-     * <p>⚠️ 列**先建为 DEFAULT NULL** 再回填（不能直接 {@code DEFAULT 'DRAFT'}）：MySQL 的 ADD COLUMN
-     * 会把默认值物化到存量行上 ⇒ 存量会读成"草稿"。回填完再把默认值改成 DRAFT（只改元数据，不动存量值），
-     * 与 {@code schema.sql}（新库直接建列）保持一致。</p>
-     */
-    private void migrateMaterialRepairReturnStatus() {
-        String t = "outsource_material_return_repair";
-        try {
-            if (!columnExists(t, "status")) {
-                jdbcTemplate.execute("ALTER TABLE " + t
-                        + " ADD COLUMN status VARCHAR(20) DEFAULT NULL COMMENT '状态: DRAFT=草稿(未落账) AUDITED=已审核(已落账)'"
-                        + ", ADD COLUMN audit_time DATETIME DEFAULT NULL COMMENT '审核时间(反审核清空)'"
-                        + ", ADD INDEX idx_status (status)");
-                log.info("已为 {} 补「状态/审核时间」列（登记返回改为草稿 + 审核）", t);
-            }
-            int back = jdbcTemplate.update("UPDATE " + t
-                    + " SET status='AUDITED', audit_time=IFNULL(audit_time, create_time) WHERE status IS NULL");
-            if (back > 0) log.info("{} 存量 {} 行回填为已审核（历史口径=登记即生效）", t, back);
-            jdbcTemplate.execute("ALTER TABLE " + t
-                    + " MODIFY COLUMN status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿(未落账) AUDITED=已审核(已落账)'");
-        } catch (Exception e) {
-            log.warn("补列/回填失败 {}: {}", t, e.getMessage());
-        }
-    }
 
-    /**
-     * 加工侧委外维修返回记录（成品）补「状态 + 审核时间」两列（2026-09-28 用户口径
-     * 「加工**和物料**的登记返回都需要审核和反审核」）。
-     *
-     * <p>与 {@link #migrateMaterialRepairReturnStatus()} **完全同构**（同一批口径、同一套回填理由）：
-     * 原为登记即生效（登记即成品入库 + 核销在厂 + 扣用料 + 按行挂维修费应付），现改为登记只建**草稿**
-     * （不动库存/账务；维修费单价仍在登记时填、金额按行快照落库），审核才落账、反审核对称逆回（含冲销应付）。</p>
-     *
-     * <p><b>存量回填 AUDITED</b>：历史行是"登记即生效"的（货已入库、应付已挂）⇒ 必须置为已审核，
-     * 否则会被当成未落账的草稿：已返回量少算、结案卡住、库存/账务对不上。审核时间回填 {@code create_time}，
-     * 审核人保持 NULL（页面显示「—」）。</p>
-     *
-     * <p>⚠️ 列**先建为 DEFAULT NULL** 再回填（不能直接 {@code DEFAULT 'DRAFT'}）：MySQL 的 ADD COLUMN
-     * 会把默认值物化到存量行上 ⇒ 存量会读成"草稿"。回填完再把默认值改成 DRAFT（只改元数据，不动存量值）。</p>
-     */
-    private void migrateReturnOrderRepairStatus() {
-        String t = "outsource_return_order_repair";
-        try {
-            if (!columnExists(t, "status")) {
-                jdbcTemplate.execute("ALTER TABLE " + t
-                        + " ADD COLUMN status VARCHAR(20) DEFAULT NULL COMMENT '状态: DRAFT=草稿(未落账) AUDITED=已审核(已落账)'"
-                        + ", ADD COLUMN audit_time DATETIME DEFAULT NULL COMMENT '审核时间(反审核清空)'"
-                        + ", ADD INDEX idx_status (status)");
-                log.info("已为 {} 补「状态/审核时间」列（加工侧登记返回改为草稿 + 审核）", t);
-            }
-            int back = jdbcTemplate.update("UPDATE " + t
-                    + " SET status='AUDITED', audit_time=IFNULL(audit_time, create_time) WHERE status IS NULL");
-            if (back > 0) log.info("{} 存量 {} 行回填为已审核（历史口径=登记即生效）", t, back);
-            jdbcTemplate.execute("ALTER TABLE " + t
-                    + " MODIFY COLUMN status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿(未落账) AUDITED=已审核(已落账)'");
-        } catch (Exception e) {
-            log.warn("补列/回填失败 {}: {}", t, e.getMessage());
-        }
-    }
 
-    /**
-     * 物料订单补「结单人」（2026-09-27 用户口径「把结单人做了」）：结单是一次人工动作，要留痕"谁结的"。
-     *
-     * <p>与制单人/审核人同规格（ID + 姓名快照）：{@code finish()} 盖章、{@code reopen()} **清空**
-     * （口径与成品侧 {@code CloseReportServiceImpl.reopenClose} 一致 —— 反结单清空结单人，避免
-     * "已回生产中却还显示结单人"）。历史已结单的行保持 NULL，页面显示「—」。</p>
-     */
-    private void migrateMaterialOrderFinisher() {
-        addColumnIfMissing("outsource_material_order",
-                "finisher_id BIGINT NULL COMMENT '结单人ID（finish 时盖章，反结单清空）'");
-        addColumnIfMissing("outsource_material_order",
-                "finisher_name VARCHAR(50) NULL COMMENT '结单人姓名快照'");
-    }
 
     /** 判断某表是否已有某列（幂等 DDL 用；启动阶段无租户上下文，多租户插件不会改写本查询） */
     private boolean columnExists(String table, String column) {
@@ -1351,259 +1169,20 @@ public class DataInitializer {
         }
     }
 
-    /**
-     * 存量用户首页 TAB 补齐（2026-09-16）：新增「物料仓库」TAB 后，**已显式配置过首页 TAB 的用户**
-     * （sys_user_dashboard_tab 有记录；无记录=全部可见，不受影响）默认看不到它 ——
-     * 这 5 个页面原本挂在「委外加工」TAB 下，故给配了 outsource 的用户补上 materialWarehouse。
-     * uk_user_tab(user_id, tab_key) 唯一键 + INSERT IGNORE → 幂等，重复启动无副作用。
-     */
-    private void migrateDashboardTabs() {
-        try {
-            int n = jdbcTemplate.update(
-                    "INSERT IGNORE INTO sys_user_dashboard_tab (user_id, tab_key, company_id) " +
-                    "SELECT user_id, 'materialWarehouse', company_id FROM sys_user_dashboard_tab WHERE tab_key = 'outsource'");
-            if (n > 0) log.info("已为 {} 位已配置首页 TAB 的用户补上「物料仓库」TAB", n);
-        } catch (Exception e) {
-            log.warn("补齐首页 TAB 异常: {}", e.getMessage());
-        }
-    }
 
-    /**
-     * 存量库幂等迁移（2026-09-18）：sys_user 增加 menu_mode 列（页面权限模式 ROLE/CUSTOM）。
-     * <p>新库由 schema.sql 直接建列；老库必须 ALTER —— MySQL 不支持 ADD COLUMN IF NOT EXISTS，
-     * 故用 try/catch 忽略「列已存在」错误，保证重复启动无副作用。</p>
-     */
-    private void migrateUserMenuMode() {
-        try {
-            jdbcTemplate.execute("ALTER TABLE sys_user ADD COLUMN menu_mode VARCHAR(10) DEFAULT 'ROLE' "
-                    + "COMMENT '页面权限模式: ROLE=跟随角色(默认) CUSTOM=以用户级菜单为准'");
-            log.info("已为 sys_user 增加 menu_mode 列（用户级页面权限模式）");
-        } catch (Exception e) {
-            log.debug("menu_mode 列已存在，跳过：{}", e.getMessage());
-        }
-    }
 
-    /**
-     * 存量库幂等迁移（2026-09-21）：purchase_exchange 增加「是否付费」4 列。
-     * <p>用户口径：采购换货单需要有「是否付费」，且方向是 <b>我们向供货商付费</b>
-     * （charge_flag=1 ⇒ 审核额外生成一条正向应付，source_bill_type=PURCHASE_EXCHANGE_CHARGE）。
-     * 新库由 schema.sql 直接建列；老库必须 ALTER —— MySQL 不支持 ADD COLUMN IF NOT EXISTS，
-     * 故逐列 try/catch，忽略「列已存在」错误，保证重复启动无副作用。</p>
-     */
-    /**
-     * 存量库幂等迁移（2026-09-24）：inventory_material_move_item 增加「品质分级」列。
-     *
-     * <p>用户口径：物料移仓明细要与成品移仓单一样带品质（A/B/C/DEFECT）。</p>
-     *
-     * <p><b>⚠️ 该字段只落单据、不参与库存</b>：物料库存（warehouse_stock 的物料维度）没有品质列，
-     * 物料侧一贯"不区分品质、按良品扣减" ⇒ 审核写入 changeMaterialStock 时不带品质。
-     * 本列用于"这单搬的是哪一档物料"的业务留痕与展示，不等于按品质分账。</p>
-     *
-     * <p>新库由 schema.sql 直接建列；老库必须 ALTER —— MySQL 不支持 ADD COLUMN IF NOT EXISTS，
-     * 故走 {@link #addColumnIfMissing} 逐列 try/catch。</p>
-     */
-    private void migrateMaterialMoveQuality() {
-        addColumnIfMissing("inventory_material_move_item",
-                "quality_type VARCHAR(10) DEFAULT 'A' COMMENT '品质等级: A/B/C/DEFECT（单据留痕，不参与库存）'");
-    }
 
-    private void migratePurchaseExchangeCharge() {
-        addColumnIfMissing("purchase_exchange",
-                "charge_flag TINYINT DEFAULT 0 COMMENT '是否付费: 0否 1是（我们向供货商付费）'");
-        addColumnIfMissing("purchase_exchange",
-                "charge_type VARCHAR(30) DEFAULT NULL COMMENT '付费类型: SERVICE/DIFF/FULL/OTHER'");
-        addColumnIfMissing("purchase_exchange",
-                "charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '付费金额（我方付给供货商）'");
-        addColumnIfMissing("purchase_exchange",
-                "charge_reason VARCHAR(255) DEFAULT NULL COMMENT '付费说明'");
-    }
 
-    /**
-     * 存量库幂等迁移（2026-09-21）：销售退货单 / 销售换货单的**逐产品收费**。
-     * <p>用户口径：「销售退货单和销售换货单应该都有付费，而且付费需要精确到产品上」⇒ 原本挂在单据上的
-     * charge_flag/charge_type/charge_amount 下沉到明细行，单据级改为 Σ(明细)（由服务层回写）。
-     * 新库由 schema.sql 直接建列；老库逐列 ALTER（{@link #addColumnIfMissing}，重复启动无副作用）。</p>
-     */
-    private void migrateSaleItemCharge() {
-        for (String t : new String[]{"sale_return_item", "sale_exchange_item"}) {
-            addColumnIfMissing(t, "charge_flag TINYINT DEFAULT 0 COMMENT '是否收费: 0否 1是(逐产品)'");
-            addColumnIfMissing(t, "charge_type VARCHAR(20) DEFAULT NULL COMMENT '收费类型: SERVICE/DIFF/FULL/OTHER'");
-            addColumnIfMissing(t, "charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '该产品收费金额(向客户收取)'");
-            addColumnIfMissing(t, "charge_reason VARCHAR(200) COMMENT '该产品收费说明'");
-        }
-        // 存量兜底：老数据把金额挂在**单据**上（当前库 0 行，生产可能有）⇒ 回填到该单**第一条明细**，
-        // 保证「Σ(明细) = 单据金额」恒等、台账金额不变。已是逐产品的单据不会被匹配到 ⇒ 幂等。
-        backfillFirstItemCharge("sale_return_item", "return_id", "sale_return");
-        backfillFirstItemCharge("sale_exchange_item", "exchange_id", "sale_exchange");
-    }
 
-    /** 把"单据级收费"回填到第一条明细（幂等：该单已有逐产品收费时跳过） */
-    private void backfillFirstItemCharge(String itemTable, String fk, String docTable) {
-        try {
-            List<Long> docIds = jdbcTemplate.queryForList(
-                    "SELECT d.id FROM " + docTable + " d WHERE IFNULL(d.charge_flag,0) = 1 AND IFNULL(d.charge_amount,0) > 0"
-                            + " AND NOT EXISTS (SELECT 1 FROM " + itemTable + " i WHERE i." + fk + " = d.id AND IFNULL(i.charge_amount,0) > 0)",
-                    Long.class);
-            int n = 0;
-            for (Long did : docIds) {
-                java.util.Map<String, Object> d = jdbcTemplate.queryForMap(
-                        "SELECT charge_type, charge_amount, charge_reason FROM " + docTable + " WHERE id = " + did);
-                Long itemId = jdbcTemplate.queryForObject(
-                        "SELECT MIN(id) FROM " + itemTable + " WHERE " + fk + " = " + did, Long.class);
-                if (itemId == null) continue;
-                jdbcTemplate.update("UPDATE " + itemTable + " SET charge_flag = 1, charge_type = ?, charge_amount = ?, charge_reason = ? WHERE id = ?",
-                        d.get("charge_type"), d.get("charge_amount"), d.get("charge_reason"), itemId);
-                n++;
-            }
-            if (n > 0) log.info("已把 {} 张单据的历史收费回填到 {} 的第一条明细", n, itemTable);
-        } catch (Exception e) {
-            log.debug("{} 历史收费回填跳过：{}", itemTable, e.getMessage());
-        }
-    }
 
-    /**
-     * 存量库幂等迁移（2026-09-21 第二轮）：采购侧「逐产品付费」—— 付费金额/类型**下沉到明细行**。
-     * <p>用户口径：采购退货单与采购换货单都要有「是否付费」，方向是 <b>我们付给供货商</b>（生成正向应付），
-     * 且必须**精确到产品**。单据级 charge_* 改为派生值（金额 = Σ 明细，类型各明细一致才回填）。</p>
-     * <p>本方法为 {@code purchase_return} / {@code purchase_return_item} / {@code purchase_exchange_item}
-     * 三张表补列；{@code purchase_exchange} 的 4 列已由 {@link #migratePurchaseExchangeCharge()} 补过。
-     * MySQL 不支持 ADD COLUMN IF NOT EXISTS ⇒ 逐列 try/catch（{@link #addColumnIfMissing}）。</p>
-     */
-    private void migratePurchaseChargePerProduct() {
-        // 采购退货单主表（新）：4 列，与 purchase_exchange 同型
-        addColumnIfMissing("purchase_return",
-                "charge_flag TINYINT DEFAULT 0 COMMENT '是否付费: 0否 1是（我们向供货商付费；派生自明细）'");
-        addColumnIfMissing("purchase_return",
-                "charge_type VARCHAR(30) DEFAULT NULL COMMENT '付费类型: SERVICE/DIFF/FULL/OTHER（各明细一致才回填）'");
-        addColumnIfMissing("purchase_return",
-                "charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '付费金额 = Σ 明细行付费'");
-        addColumnIfMissing("purchase_return",
-                "charge_reason VARCHAR(255) DEFAULT NULL COMMENT '付费说明（整单共用一句话）'");
-        // 采购退货单明细（新）：逐产品 4 列，镜像 sale_return_item
-        addColumnIfMissing("purchase_return_item",
-                "charge_flag TINYINT DEFAULT 0 COMMENT '是否付费: 0否 1是(逐产品)'");
-        addColumnIfMissing("purchase_return_item",
-                "charge_type VARCHAR(20) DEFAULT NULL COMMENT '付费类型: SERVICE/DIFF/FULL/OTHER'");
-        addColumnIfMissing("purchase_return_item",
-                "charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '该产品付费金额(我方付给供货商)'");
-        addColumnIfMissing("purchase_return_item",
-                "charge_reason VARCHAR(200) DEFAULT NULL COMMENT '该产品付费说明'");
-        // 采购换货单明细（新）：逐产品 4 列（主表 4 列早前已有）
-        addColumnIfMissing("purchase_exchange_item",
-                "charge_flag TINYINT DEFAULT 0 COMMENT '是否付费: 0否 1是(逐产品)'");
-        addColumnIfMissing("purchase_exchange_item",
-                "charge_type VARCHAR(20) DEFAULT NULL COMMENT '付费类型: SERVICE/DIFF/FULL/OTHER'");
-        addColumnIfMissing("purchase_exchange_item",
-                "charge_amount DECIMAL(18,2) DEFAULT 0 COMMENT '该产品付费金额(我方付给供货商)'");
-        addColumnIfMissing("purchase_exchange_item",
-                "charge_reason VARCHAR(200) DEFAULT NULL COMMENT '该产品付费说明'");
-    }
 
-    /**
-     * 退货整理「整理人」（2026-09-22 用户要求）：谁操作的就是谁整理的。
-     * <p>两列都只由服务端按当前登录用户写入（新建/批量生成草稿/编辑刷新为最后操作人；审核时为空则补写），
-     * 因此历史单为空属正常，详情显示「—」。</p>
-     */
-    /**
-     * 加工返回单补「来源无单加工退货记录」列（2026-09-27）。
-     * <p>用途：修好送回时把返回单绑定到具体那条无单退货单 ⇒ 退货台账才能显示「已返回/未返回」、
-     * 才能按「待返回/已返回完」分页签，并在创建时按单防超返（原先只能按工厂+产品+规格总额校验）。
-     * 新库由 schema.sql 直接建列；老库 ALTER（{@link #addColumnIfMissing}，重复启动无副作用）。</p>
-     */
-    private void migrateReturnBackSource() {
-        addColumnIfMissing("outsource_return_back",
-                "source_delivery_id BIGINT DEFAULT NULL COMMENT '来源无单加工退货记录ID(outsource_order_delivery.id)：已返回/未返回与防超返按它聚合（存量单为NULL）'");
-        try {
-            jdbcTemplate.execute("CREATE INDEX idx_source_delivery ON outsource_return_back (source_delivery_id)");
-            log.info("已为 outsource_return_back 增加索引 idx_source_delivery");
-        } catch (Exception e) {
-            log.debug("idx_source_delivery 已存在，跳过：{}", e.getMessage());
-        }
-    }
 
-    /**
-     * 存量库幂等迁移（2026-09-27）：物料维修返回记录增加 onsite_leg 列。
-     * <p>背景（在厂行对称性二修）：登记时若在厂行不存在（旧单）会**跳过**核销腿，撤销腿必须知道这一点，
-     * 否则旧单撤销会凭空给在厂行 +qty。默认 1 = 历史上绝大多数记录确实核销过在厂行（与新库 schema.sql 一致）。</p>
-     */
-    private void migrateMaterialRepairOnsiteLeg() {
-        addColumnIfMissing("outsource_material_return_repair",
-                "onsite_leg TINYINT DEFAULT 1 COMMENT '登记时是否核销在厂行：1=是(撤销需恢复) 0=旧单跳过(撤销不恢复)'");
-    }
 
-    /**
-     * 存量库幂等迁移（2026-09-28）：物料订单明细增加 **order_returned_qty** 列。
-     * <p>背景：用户口径新增「订单退料」类型（关联订单 + 订单未结单）—— 审核扣源仓 + 扣该订单出货/收料数量，
-     * 且是**永久**扣减（不像"送修中"会回补），反审核加回。用途：可退 =
-     * 已收 − 已退不良 − 送修中 − 订单退料 − 本单之外已审核的退货退款。</p>
-     */
-    private void migrateMaterialOrderReturnedQty() {
-        addColumnIfMissing("outsource_material_order_item",
-                "order_returned_qty DECIMAL(18,0) DEFAULT 0 COMMENT '订单退料已退数量(2026-09-28)'");
-    }
 
-    /**
-     * 存量库幂等迁移（2026-09-29）：两张**收货单据**表增加 {@code over_receipt} 列 ——
-     * 用户口径「加工订单和物料订单都可以超量收货」：超量不再硬拒，改为**录入时二次确认**后放行；
-     * 本列 = 该单的超收是否已确认（1=是 ⇒ 审核期不再复核数量上限，0/NULL=否）。
-     * <p>新库由 schema.sql 直接建列；老库 ALTER（{@link #addColumnIfMissing}，重复启动无副作用）；
-     * 存量单为 0 —— 未确认过的历史草稿审核时仍按原口径拦。</p>
-     */
-    private void migrateOverReceipt() {
-        addColumnIfMissing("outsource_order_delivery",
-                "over_receipt TINYINT DEFAULT 0 COMMENT '是否已确认超收: 1=录入时已二次确认(审核期不再复核数量上限) / 0=否'");
-        addColumnIfMissing("outsource_delivery",
-                "over_receipt TINYINT DEFAULT 0 COMMENT '是否已确认超收: 1=建单时已二次确认(审核期不再复核数量上限) / 0=否'");
-    }
 
-    /**
-     * 存量库幂等迁移（2026-09-29）：加工返回单用料明细增加 {@code price_manual} 列 ——
-     * 用户口径「登记返回时可以填写具体价格，默认 FIFO 可修改」：单价改在**登记时**快照
-     * （人工定价 或 登记时点的默认 FIFO 价），本列标记"该行是否人工定价"（仅留痕与提示用，不参与金额计算）。
-     * <p>新库由 schema.sql 直接建列；老库 ALTER（重复启动无副作用）。存量行置 0 —— 与"审核时现算 FIFO"
-     * 的历史行为一致（历史行的 unit_price 是审核时写入的 FIFO 价，不是人工价）。</p>
-     */
-    private void migrateReturnBackPriceManual() {
-        addColumnIfMissing("outsource_return_back_item",
-                "price_manual TINYINT DEFAULT 0 COMMENT '单价是否人工填写: 1=人工定价 / 0=默认(登记时点的FIFO快照)'");
-    }
 
-    /**
-     * 存量库幂等迁移（2026-09-27）：费用单增加**来源引用三列**（source_bill_type / source_id / source_bill_no）+ 索引。
-     *
-     * <p>背景：「研发物料 → 同时登记研发支出」需要回答"这笔费用是从哪个对象带出来的"，
-     * 用于 ① **幂等**（同一对象不重复建研发支出）② **可追溯**。命名与 finance_receivable 的来源三列一致。
-     * 新库由 schema.sql 直接建列；老库 ALTER（重复启动无副作用）；**历史费用单三列为 NULL**（视为手工登记）。</p>
-     */
-    private void migrateFinanceExpenseSource() {
-        addColumnIfMissing("finance_expense",
-                "source_bill_type VARCHAR(30) DEFAULT NULL COMMENT '来源类型(存code): RD_DEV_MATERIAL=研发物料研发支出；RD_MATERIAL=物料研发支出(历史)'");
-        addColumnIfMissing("finance_expense", "source_id BIGINT DEFAULT NULL COMMENT '来源对象ID(如 dev_purchase_item.id)'");
-        addColumnIfMissing("finance_expense", "source_bill_no VARCHAR(50) DEFAULT NULL COMMENT '来源单号'");
-        try {
-            jdbcTemplate.execute("CREATE INDEX idx_expense_source ON finance_expense (source_bill_type, source_id)");
-            log.info("已为 finance_expense 增加索引 idx_expense_source");
-        } catch (Exception e) {
-            log.debug("idx_expense_source 已存在，跳过：{}", e.getMessage());
-        }
-    }
 
-    private void migrateReturnSortSorter() {
-        addColumnIfMissing("return_sort",
-                "sort_user_id BIGINT DEFAULT NULL COMMENT '整理人用户ID（服务端按当前登录用户写入）'");
-        addColumnIfMissing("return_sort",
-                "sort_user_name VARCHAR(50) DEFAULT NULL COMMENT '整理人登录名（冗余，便于详情直接展示）'");
-    }
 
-    /** 幂等补列：列已存在时 MySQL 报错，捕获忽略即可（不依赖 MySQL 版本特性） */
-    private void addColumnIfMissing(String table, String columnDdl) {
-        try {
-            jdbcTemplate.execute("ALTER TABLE " + table + " ADD COLUMN " + columnDdl);
-            log.info("已为 {} 增加列：{}", table, columnDdl);
-        } catch (Exception e) {
-            log.debug("{}.{} 已存在，跳过：{}", table, columnDdl, e.getMessage());
-        }
-    }
 
     /** 为指定角色授权菜单（仅当角色尚无菜单权限时执行） */
     private void assignRoleMenus(String roleCode, List<Long> menuIds) {
@@ -1640,17 +1219,8 @@ public class DataInitializer {
      */
     private void initRoleMenuPlan() {
         try {
-            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_role_menu_plan ("
-                    + "id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',"
-                    + "role_code VARCHAR(50) NOT NULL COMMENT '角色码',"
-                    + "menu_id BIGINT NOT NULL COMMENT '菜单ID',"
-                    + "create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',"
-                    + "UNIQUE KEY uk_plan (role_code, menu_id)"
-                    + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色→菜单声明式计划'");
-            if (!columnExists("sys_role", "customized_menu")) {
-                addColumnIfMissing("sys_role",
-                        "customized_menu TINYINT DEFAULT 0 COMMENT '1=用户手工调过该角色菜单，启动重放跳过'");
-            }
+            // P1（2026-09-30 未上线清理）：sys_role_menu_plan 表与 sys_role.customized_menu 列**均已由
+            // schema.sql 声明**，启动期不再做任何 DDL —— 缺表缺列由 assertSchemaReady() 在初始化最前面直接报错。
             Integer cnt = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_role_menu_plan", Integer.class);
             if (cnt != null && cnt == 0) {
                 int snap = jdbcTemplate.update("INSERT IGNORE INTO sys_role_menu_plan (role_code, menu_id) "

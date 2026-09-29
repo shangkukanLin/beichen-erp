@@ -157,8 +157,8 @@ $mn = SqlOne 'SELECT menu_name FROM sys_menu WHERE id=908'
 Write-Host ('    sys_menu.id=908 name = ' + $mn)
 Ok ("$mn" -eq '清空本公司数据') 'menu 908 renamed to 清空本公司数据'
 Ok ([bool](Select-String -Path (Join-Path $erp 'beichen-erp-server\src\main\java\com\beichen\erp\config\DataInitializer.java') -Pattern '清空本公司数据')) 'DataInitializer seeds the clarified label'
-Ok ([bool](Select-String -Path $cd -Pattern 'params: \{ confirm: CONFIRM_WORD \}')) 'clear-data page sends confirm'
-Ok ([bool](Select-String -Path $dm -Pattern 'params: \{ confirm: CLEAR_CONFIRM_WORD \}')) 'data-manage page sends confirm'
+Ok ([bool](Select-String -Path $cd -Pattern 'clearCompanyData\(\{ confirm: CONFIRM_WORD \}\)')) 'clear-data page sends confirm (F8-26: via api/system.ts wrapper)'
+Ok ([bool](Select-String -Path $dm -Pattern 'clearCompanyData\(\{ confirm: CLEAR_CONFIRM_WORD \}\)')) 'data-manage page sends confirm (F8-26: via api/system.ts wrapper)'
 Ok ([bool](Select-String -Path $cd -Pattern 'dryRun: true')) 'clear-data page offers a dry run'
 Ok ([bool](Select-String -Path $dm -Pattern 'dryRun: true')) 'data-manage page offers a dry run'
 
