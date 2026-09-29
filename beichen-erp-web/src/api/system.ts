@@ -158,6 +158,30 @@ export function toggleUserStatus(id: number | string, status: number) {
   return request.put<void>(`/system/user/${id}/status`, { status })
 }
 
+/* ============================ 数据管理 / 清库（F8-26 整理 · 2026-09-30）============================
+   这四个端点原先由页面**内联**调用（data-manage / clear-data），不经过 API 层。
+   现已提供封装；`clearCompanyData` 已被两个页面采用。
+   导出/导入（blob 下载、multipart 上传 + "缺表二次确认"预检流程）暂保留页面内联写法，
+   待与预检流程一起复核后再切换（机械替换有回归风险）。 */
+export function clearCompanyData(params: Record<string, any> = {}) {
+  return request.post<any, any>('/system/clear-company-data', null, { params })
+}
+
+export function exportData() {
+  return request.get<any, any>('/system/export-data')
+}
+
+export function precheckImportData(form: FormData) {
+  return request.post<any, any>('/system/import-data/precheck', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+}
+
+export function importData(form: FormData, confirmMissingTables?: boolean) {
+  return request.post<any, any>('/system/import-data', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    params: confirmMissingTables ? { confirmMissingTables: true } : {}
+  })
+}
+
 /* ============================ 用户页面权限（用户管理「页面权限」弹窗） ============================ */
 
 export interface UserMenuPerm {
@@ -298,37 +322,13 @@ export interface SupplierProductDTO {
   remark?: string
 }
 
-export function getSupplierPage(params: SupplierQueryParams) {
-  return request.get<PageResult<SupplierVO>>('/supplier/page', { params })
-}
-
-export function getSupplier(id: number | string) {
-  return request.get<SupplierVO>(`/supplier/${id}`)
-}
-
-export function getSupplierProducts(id: number | string) {
-  return request.get<SupplierProductVO[]>(`/supplier/${id}/products`)
-}
-
-export function addSupplier(data: SupplierDTO) {
-  return request.post<void>('/supplier', data)
-}
-
-export function updateSupplier(data: SupplierDTO) {
-  return request.put<void>('/supplier', data)
-}
-
-export function deleteSupplier(id: number | string) {
-  return request.delete<void>(`/supplier/${id}`)
-}
-
-export function toggleSupplierStatus(id: number | string) {
-  return request.put<void>(`/supplier/${id}/status`)
-}
-
-export function saveSupplierProducts(id: number | string, products: SupplierProductDTO[]) {
-  return request.put<void>(`/supplier/${id}/products`, products)
-}
+/* 供应商接口的实现已迁至 `@/api/supplier`（F8-26 整理 · 2026-09-30：路径是 /supplier/**，
+   本就不属于"系统设置"）。这里保留 **re-export**，既有 `from '@/api/system'` 的页面无需改动；
+   类型定义暂留本文件。 */
+export {
+  getSupplierPage, getSupplier, getSupplierProducts, addSupplier,
+  updateSupplier, deleteSupplier, toggleSupplierStatus, saveSupplierProducts
+} from './supplier'
 
 /* ============================ 研发项目 API ============================ */
 
@@ -405,28 +405,12 @@ export interface DrawingVO {
   fileUrl?: string; fileSize?: number; version?: string; uploadUserId?: number; createTime?: string
 }
 
-export function getProjectPage(params: ProjectQueryParams) {
-  return request.get<PageResult<ProjectVO>>('/dev/project/page', { params })
-}
-export function getProject(id: number | string) { return request.get<ProjectVO>(`/dev/project/${id}`) }
-export function addProject(data: ProjectDTO, linkExistingProductId?: number | string) { return request.post<void>('/dev/project', data, { params: linkExistingProductId ? { linkExistingProductId } : {} }) }
-/** 产品名称查重（2026-09-21：端点随「总成名称 → 产品名称」改名 /check-assembly → /check-product-name） */
-export function checkProjectProductName(name: string) { return request.get<{ exists: boolean; productId?: number; productName?: string }>('/dev/project/check-product-name', { params: { name } }) }
-export function updateProject(data: ProjectDTO) { return request.put<void>('/dev/project', data) }
-export function deleteProject(id: number | string) { return request.delete<void>(`/dev/project/${id}`) }
-export function updateProjectStatus(id: number | string, status: string) { return request.put<void>(`/dev/project/${id}/status?status=${status}`) }
-
-export function getProjectBom(projectId: number | string) { return request.get<BomVO[]>(`/dev/project/${projectId}/bom`) }
-export function saveProjectBom(projectId: number | string, items: BomDTO[]) { return request.post<void>(`/dev/project/${projectId}/bom/batch`, items) }
-/** BOM 历史快照（2026-09-17）：下加工单时按「研发BOM版本 + 明细内容」生成/共享，仅在"有变化"时新增 */
-export function getProjectBomSnapshots(projectId: number | string) { return request.get<any[]>(`/dev/project/${projectId}/bom-snapshots`) }
-
-export function getProjectDrawings(projectId: number | string) { return request.get<DrawingVO[]>(`/dev/project/${projectId}/drawing`) }
-export function addProjectDrawing(projectId: number | string, data: DrawingVO) { return request.post<void>(`/dev/project/${projectId}/drawing`, data) }
-export function deleteProjectDrawing(projectId: number | string, id: number | string) { return request.delete<void>(`/dev/project/${projectId}/drawing/${id}`) }
-
-export function getProjectBugs(projectId: number | string) { return request.get<BugVO[]>(`/dev/project/${projectId}/bug`) }
-export function addProjectBug(projectId: number | string, data: BugDTO) { return request.post<void>(`/dev/project/${projectId}/bug`, data) }
-export function updateProjectBug(projectId: number | string, data: BugDTO) { return request.put<void>(`/dev/project/${projectId}/bug/${data.id}`, data) }
-export function deleteProjectBug(projectId: number | string, id: number | string) { return request.delete<void>(`/dev/project/${projectId}/bug/${id}`) }
+/* 研发项目接口的实现已迁至 `@/api/dev`（F8-26 整理 · 2026-09-30：路径是 /dev/project/**）。
+   这里保留 **re-export**，dev/project/* 等 10+ 个既有页面无需改动；类型定义暂留本文件。 */
+export {
+  getProjectPage, getProject, addProject, checkProjectProductName, updateProject,
+  deleteProject, updateProjectStatus, getProjectBom, saveProjectBom, getProjectBomSnapshots,
+  getProjectDrawings, addProjectDrawing, deleteProjectDrawing,
+  getProjectBugs, addProjectBug, updateProjectBug, deleteProjectBug
+} from './dev'
 
