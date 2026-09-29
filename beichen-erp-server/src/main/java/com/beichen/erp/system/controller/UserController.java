@@ -67,9 +67,21 @@ public class UserController {
         return R.ok();
     }
 
+    /**
+     * 启用/停用用户（F8-27，2026-09-30 本轮修复）：**接受可选的目标状态**。
+     * <p>界面 {@code user/index.vue} 会算出目标状态并调用 {@code toggleUserStatus(id, next)}，
+     * 而原实现**完全忽略请求体**、由服务端自行翻转 ⇒ 并发操作或重复点击时会出现"点了禁用却变成启用"
+     * 且不报错。现在传入 {@code {status}} 时按其执行；为空时兼容旧行为（翻转）。</p>
+     */
     @PutMapping("/{id}/status")
-    public R<Void> toggleStatus(@PathVariable Long id) {
-        userService.toggleStatus(id);
+    public R<Void> toggleStatus(@PathVariable Long id,
+                                @org.springframework.web.bind.annotation.RequestBody(required = false)
+                                java.util.Map<String, Object> body) {
+        Integer target = null;
+        if (body != null && body.get("status") != null) {
+            target = Integer.valueOf(String.valueOf(body.get("status")));
+        }
+        userService.toggleStatus(id, target);
         return R.ok();
     }
 

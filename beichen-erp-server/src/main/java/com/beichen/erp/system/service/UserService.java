@@ -43,7 +43,11 @@ public interface UserService extends IService<User> {
     /**
      * 切换启用/禁用状态
      */
-    void toggleStatus(Long id);
+    /**
+     * 启用/停用用户。F8-27（2026-09-30）：新增可选的目标状态 ——
+     * 界面传 {@code status}（1 启用 / 0 停用）时必须**按其执行**，为空时才退化为"翻转"（兼容旧调用）。
+     */
+    void toggleStatus(Long id, Integer status);
 
     /**
      * 查询用户首页业务 TAB 勾选（无记录=全部可见）

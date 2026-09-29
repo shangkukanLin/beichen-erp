@@ -24,6 +24,12 @@ public class Role {
 
     private String remark;
 
+    /**
+     * F8-22（2026-09-30，本轮修复）：1 = 该角色的菜单被用户在界面上手工调过
+     * ⇒ 启动期的「角色→菜单」声明式重放**跳过该角色**（不把用户收掉的菜单再加回来）。
+     */
+    private Integer customizedMenu;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 

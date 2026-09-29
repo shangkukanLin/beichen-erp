@@ -83,6 +83,18 @@ CREATE TABLE IF NOT EXISTS sys_role_menu (
     INDEX idx_menu_id (menu_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色菜单关联表';
 
+-- 角色→菜单**声明式计划**（F8-22，2026-09-30）：启动时按本表差集重放（INSERT IGNORE），
+-- 新菜单/新公司角色自动补齐，取代 DataInitializer 里 17 段手写补授块。
+-- 首次启动若本表为空，会用**当前已正确的授权**做一次快照（此后以本表为唯一声明处）。
+-- 用户手工调过菜单的角色（sys_role.customized_menu=1）会被跳过，不改动其授权。
+CREATE TABLE IF NOT EXISTS sys_role_menu_plan (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    role_code VARCHAR(50) NOT NULL COMMENT '角色码',
+    menu_id BIGINT NOT NULL COMMENT '菜单ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    UNIQUE KEY uk_plan (role_code, menu_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色→菜单声明式计划';
+
 -- 用户级页面权限（2026-09-18 新增）：仅当 sys_user.menu_mode = CUSTOM 时生效，
 -- 此时该用户的可见菜单**完全以本表为准**（可加可减，不再叠加角色菜单）；
 -- menu_mode = ROLE（默认）时本表应为空（保存"跟随角色"会清空），菜单取自角色。

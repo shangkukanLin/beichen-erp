@@ -108,6 +108,7 @@ public class DataInitializer {
         initCompany();
         initRoles();
         syncMenus();
+        initRoleMenuPlan();
         initRoleMenus();
         migrateDashboardTabs();
         migrateUserMenuMode();
@@ -1618,6 +1619,52 @@ public class DataInitializer {
         if (existingMenuIds == null || existingMenuIds.isEmpty()) {
             roleService.saveRoleMenus(role.getId(), menuIds);
             log.info("初始化 {} 菜单权限完成", roleCode);
+        }
+    }
+
+    /**
+     * F8-22（2026-09-30 设置模块批 E 发现 / 本轮修复）：**声明式「角色→菜单」计划 + 启动差集重放**。
+     *
+     * <p>背景：新增菜单原先只在"角色当前菜单为空"时才会补授（{@code assignRoleMenus}），存量角色靠
+     * {@code initRoleMenus()} 里**17 段手写 {@code INSERT IGNORE}** 逐次救火 ⇒ 加菜单忘补授就"上线了没人能进"。</p>
+     *
+     * <p>做法：表 {@code sys_role_menu_plan(role_code, menu_id)} 作为**唯一声明处** ——
+     * 首次启动时用**当前已正确的授权**灌一次快照（只在表空时执行，幂等），此后每次启动按差集重放：
+     * <pre>INSERT IGNORE INTO sys_role_menu SELECT r.id, p.menu_id FROM plan p JOIN sys_role r ON
+     * r.role_code = p.role_code WHERE IFNULL(r.customized_menu,0)=0 AND 菜单存在</pre>
+     * ⇒ 新增菜单、以及**新公司克隆出来的角色**都会自动补齐。</p>
+     *
+     * <p>与用户改动的边界（口径与 F8-21 一致）：{@code sys_role.customized_menu=1} 表示该角色的菜单被用户
+     * 在界面上手工调过（{@code RoleServiceImpl.saveRoleMenus} 打标）⇒ 重放**跳过该角色**，
+     * 绝不把用户刚收掉的菜单再加回来。</p>
+     */
+    private void initRoleMenuPlan() {
+        try {
+            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS sys_role_menu_plan ("
+                    + "id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',"
+                    + "role_code VARCHAR(50) NOT NULL COMMENT '角色码',"
+                    + "menu_id BIGINT NOT NULL COMMENT '菜单ID',"
+                    + "create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',"
+                    + "UNIQUE KEY uk_plan (role_code, menu_id)"
+                    + ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色→菜单声明式计划'");
+            if (!columnExists("sys_role", "customized_menu")) {
+                addColumnIfMissing("sys_role",
+                        "customized_menu TINYINT DEFAULT 0 COMMENT '1=用户手工调过该角色菜单，启动重放跳过'");
+            }
+            Integer cnt = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_role_menu_plan", Integer.class);
+            if (cnt != null && cnt == 0) {
+                int snap = jdbcTemplate.update("INSERT IGNORE INTO sys_role_menu_plan (role_code, menu_id) "
+                        + "SELECT r.role_code, rm.menu_id FROM sys_role_menu rm JOIN sys_role r ON r.id = rm.role_id");
+                log.info("[F8-22] 角色→菜单计划首次快照 {} 行（以当前授权为准，此后以本表为唯一声明处）", snap);
+            }
+            int added = jdbcTemplate.update("INSERT IGNORE INTO sys_role_menu (role_id, menu_id) "
+                    + "SELECT r.id, p.menu_id FROM sys_role_menu_plan p JOIN sys_role r ON r.role_code = p.role_code "
+                    + "WHERE IFNULL(r.customized_menu, 0) = 0 AND EXISTS (SELECT 1 FROM sys_menu m WHERE m.id = p.menu_id)");
+            if (added > 0) {
+                log.info("[F8-22] 按计划补齐角色菜单 {} 条（新菜单/新公司角色自动获得；用户调过的角色已跳过）", added);
+            }
+        } catch (Exception e) {
+            log.warn("[F8-22] 角色→菜单计划重放失败（下次启动重试）：{}", e.getMessage());
         }
     }
 

@@ -73,6 +73,12 @@ public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements Ro
         // 校验目标角色归属，防止给越权角色（含平台级内置角色/其他公司角色）授权菜单
         Role role = this.getById(roleId);
         assertOwned(role);
+        // F8-22（2026-09-30 本轮修复）：**打标"该角色的菜单被用户手工调过"** ⇒ 启动期的
+        // 「角色→菜单」声明式重放会跳过它，避免把用户刚收掉的菜单又加回去（口径与 F8-21 一致）。
+        Role stamp = new Role();
+        stamp.setId(roleId);
+        stamp.setCustomizedMenu(1);
+        this.updateById(stamp);
         // 删除旧关联
         roleMenuMapper.delete(new LambdaQueryWrapper<RoleMenu>()
                 .eq(RoleMenu::getRoleId, roleId));

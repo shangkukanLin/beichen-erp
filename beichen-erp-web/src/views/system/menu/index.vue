@@ -254,7 +254,15 @@ onActivated(() => {
           </template>
         </el-table-column>
         <!-- 2026-09-26 B7：类型/排序/状态/操作 按预算收拢（合计 = 190+76+249+150+62+72+136 = 935 ≤ 956） -->
-        <el-table-column prop="sortOrder" label="排序" width="62" align="center" />
+        <!-- F8-26（2026-09-30 本轮）：接口权限码**只读展示** —— 这些码由代码种子与 ApiPermGuard 共同维护，
+           界面不可编辑，避免"用户改了码、后端守卫却不认"造出新的悬空码。 -->
+      <el-table-column label="权限码" min-width="150" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span v-if="row.perms">{{ row.perms }}</span>
+          <span v-else style="color:var(--app-text-secondary)">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="sortOrder" label="排序" width="62" align="center" />
         <el-table-column label="状态" width="72" align="center">
           <template #default="{ row }">
             <el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>

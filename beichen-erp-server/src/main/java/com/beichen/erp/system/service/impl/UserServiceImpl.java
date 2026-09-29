@@ -313,7 +313,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
-    public void toggleStatus(Long id) {
+    public void toggleStatus(Long id, Integer status) {
         User user = baseMapper.selectById(id);
         if (user == null) {
             throw new BusinessException("用户不存在");
@@ -328,7 +328,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         User update = new User();
         update.setId(id);
-        update.setStatus(user.getStatus() != null && user.getStatus() == 1 ? 0 : 1);
+        // F8-27（2026-09-30 本轮修复）：**尊重前端传来的目标状态**。原实现无条件翻转
+        //（`status == 1 ? 0 : 1`），而界面 `user/index.vue` 是算出 next 后调 `toggleUserStatus(id, next)`
+        // ⇒ 并发操作或重复点击时会出现"点了禁用却变成启用"且不报错。status 为空时仍退化为翻转（兼容）。
+        int target = (status != null)
+                ? (status == 1 ? 1 : 0)
+                : (user.getStatus() != null && user.getStatus() == 1 ? 0 : 1);
+        update.setStatus(target);
         baseMapper.updateById(update);
     }
 
