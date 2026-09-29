@@ -3,6 +3,15 @@
 EnsureLogin
 WatchErrors
 function Step($n) { Write-Host ('--- STEP ' + $n) }
+# 2026-09-29：本支新增的"加工单反审核"步骤要按**单号**精确定位列表行（同产品名可能有多张单，
+# 用产品名 FindRow 会误点到别人的 fixture）⇒ 补一个只读 SqlOne（与其它守卫同款）。
+$script:MYSQL = 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe'
+function SqlOne([string]$q) {
+  $o = & $script:MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -N -B -e $q 2>$null
+  $v = (@($o) | Select-Object -First 1)
+  if ($null -eq $v) { return '' }
+  return ("$v").Trim()
+}
 
 Step 'create work order'
 Open '/outsource/order' 2600
@@ -158,5 +167,36 @@ Open '/inventory/stock' 2600
 $st = Rows 0
 $si = [int](FindRow (ZH 'val_proj'))
 Write-Host ('stock after defect audit=' + $(if ($si -ge 0) { ($st.rows[$si] -join ' | ') } else { 'NOT FOUND' }))
+
+# =====================================================================
+Step 'order-level un-audit from the 加工收退 list (cascades to the receipt records)'
+# 2026-09-29（user口径「加工收退列表页行内仍无「反审核」，这个要做」）：
+#   the PRODUCING rows now carry 反审核 = PUT /outsource/order/{id}/un-audit
+#     -> 加工单 back to 待审核 AND every AUDITED receipt of that order cascaded back to DRAFT
+#        (inventory / finished-goods ledger / payable rolled back) -- asserted on UI + DB here.
+$ORDCODE = SqlOne ('SELECT code FROM outsource_order WHERE id=' + $ORDID)
+Write-Host ('order code=' + $ORDCODE)
+Open '/outsource/order/delivery' 3400
+$lu = Rows 0
+$idxU = [int](FindRow $ORDCODE)
+Ok ($idxU -ge 0) 'the order is listed on the 生产中 tab'
+if ($idxU -ge 0) {
+  Write-Host ('row=' + ($lu.rows[$idxU] -join ' | '))
+  Ok ((ClickRowBtnContains $idxU (ZH 'btn_unaudit')) -match 'OK') 'clicked the row-level 反审核'
+  ConfirmBox 1600 | Out-Null
+  Start-Sleep -Milliseconds 3600
+  Write-Host ('msg=' + (Txt '.el-message') + ' errs=' + (Errs))
+  Ok ((SqlOne ('SELECT status FROM outsource_order WHERE id=' + $ORDID)) -eq 'PENDING') 'order back to PENDING (待审核)'
+  Ok ((SqlOne ('SELECT COUNT(*) FROM outsource_order_delivery WHERE order_id=' + $ORDID + " AND status='AUDITED'")) -eq '0') 'no AUDITED receipt left (cascade un-audited)'
+  Ok ([int](SqlOne ('SELECT COUNT(*) FROM outsource_order_delivery WHERE order_id=' + $ORDID + " AND status='DRAFT'")) -ge 1) 'the receipt(s) came back as DRAFT'
+  Open '/outsource/order/delivery' 3400
+  Ok ([int](FindRow $ORDCODE) -lt 0) 'the order left the 生产中 tab'
+  Open ('/outsource/order/delivery/' + $ORDID) 3200
+  $rr = Rows 0
+  $rrtxt = ($rr.rows | ForEach-Object { $_ -join ' ' }) -join ' '
+  Write-Host ('receipt records now: ' + $rrtxt)
+  Ok ($rrtxt -match (ZH 'st_draft')) 'the receive-record list shows it back as 草稿 (UI)'
+}
+
 Ok $true 'work order chain executed (see stock/payable lines above)'
 Summary 'work order chain'

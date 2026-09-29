@@ -81,7 +81,7 @@ OpenFresh "$base/outsource/order/delivery"
 $p2 = EvalJs "location.pathname"
 if ($p2 -match '/login' -or $p2 -match '403') { Bad ('/outsource/order/delivery 未正常进入，落在 ' + $p2) }
 else { Ok '/outsource/order/delivery 直达正常（非 403）' }
-$d2 = ReadJson "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const th=[...document.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim());const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({n:rows.length,prod:t.includes('生产中')==true,pending:t.includes('待审核')==true,prog:th.some(x=>x.indexOf('已收')>=0),cols:th,btn:t.includes('收货')==true,ret:b.some(x=>x==='退货'),cls:b.some(x=>x==='结单'),tabs:[...document.querySelectorAll('.page-list .el-tabs__item')].map(x=>x.innerText.trim())});})()" '成品收货列表'
+$d2 = ReadJson "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const th=[...document.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim());const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({n:rows.length,prod:t.includes('生产中')==true,pending:t.includes('待审核')==true,prog:th.some(x=>x.indexOf('已收')>=0),cols:th,btn:t.includes('收货')==true,ret:b.some(x=>x==='退货'),cls:b.some(x=>x==='结单'),unaudit:b.some(x=>x==='反审核'),tabs:[...document.querySelectorAll('.page-list .el-tabs__item')].map(x=>x.innerText.trim())});})()" '成品收货列表'
 if ($d2) {
   Write-Output ('加工收退列表行数 = ' + $d2.n)
   Write-Output ('加工收退 页签 = ' + ($d2.tabs -join ' | '))
@@ -98,6 +98,11 @@ if ($d2) {
   # ⚠️ 断言按**按钮**取值而不是 body 文本 —— 侧栏还有「委外加工退货」菜单，用文本判定必然假通过。
   if ($d2.ret) { Ok '列表页有「退货」入口（跳加工退货·拆分还料页）' } else { Bad '列表页缺少「退货」按钮' }
   if (-not $d2.cls) { Ok '列表行内已无「结单」入口（结单保留在成品收货详情页）' } else { Bad '列表行内仍出现「结单」按钮（应已移除）' }
+  # 2026-09-29（用户口径「加工收退列表页行内仍无「反审核」，这个要做」）：**生产中**行内必须有「反审核」
+  #   = 反审核该**加工单**（生产中 → 待审核），后端会级联反审核其已审核的收货记录（库存/成品流水/应付回滚）。
+  #   已结单页签刻意不放（DocStatusGuard 只允许 PRODUCING → PENDING；已结单要退回走「反结单」，在收退详情）。
+  #   注：本页操作列由 v-if 按页签切换、行数据也只含当前页签 ⇒ 全局按钮判定即"生产中那些行"。
+  if ($d2.unaudit) { Ok '生产中的行有「反审核」入口（反审核加工单，级联逆回收货记录）' } else { Bad '生产中行内缺少「反审核」按钮' }
 }
 
 # ③ 行内「收货」→ 自动弹出新增收货弹窗（一步收货）
