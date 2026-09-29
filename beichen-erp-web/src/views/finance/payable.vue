@@ -81,10 +81,13 @@ function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function typeLabel(code?: string) { return code ? (TYPE_MAP[code] || code) : '—' }
 /** 负数为退货/扣款类冲减项 */
 function isDeduction(row: any) { return Number(row.amount) < 0 }
-/** 只有未结清的冲减项才可以转应收向对方收款 */
-function canTransfer(row: any) {
-  return isDeduction(row) && row.status === SettlementStatus.UNSETTLED && !row.transferredToReceivable
-}
+/**
+ * 只有未结清的冲减项才可以转应收向对方收款。
+ * F7-223（2026-09-29 审核批 B）：判据改为读**后端唯一口径** —— `PayableQuery.isTransferable` 已把结果投影到
+ * 列表行的 `transferable` 字段；原先前端自己再写一遍（金额<0 + 未结清 + 未转），与"转应收候选/审核校验"
+ * 三处并行维护，任一处调整即漂移。
+ */
+function canTransfer(row: any) { return !!row.transferable }
 function goTransfer(row: any) {
   router.push(`/finance/payable-transfer/add?payableId=${row.id}`)
 }

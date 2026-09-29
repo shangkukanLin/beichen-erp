@@ -56,12 +56,30 @@ public class PayableQuery {
             m.put("unpaidAmount", r.getUnpaidAmount()); m.put("dueDate", r.getDueDate());
             m.put("status", r.getStatus()); m.put("remark", r.getRemark());
             m.put("transferredToReceivable", r.getTransferredToReceivable());
+            // F7-223（2026-09-29 审核批 B）：把"能否转应收"的**唯一判定**投影给列表 —— 前端「转应收」按钮
+            // 原先自己再写一遍（金额<0 + 未结清 + 未转），与转应收候选/后端校验三处并行维护易漂移。
+            m.put("transferable", isTransferable(r));
             m.put("createTime", r.getCreateTime());
             // 制单人（2026-09-23 用户口径：应付详情抽屉要显示制单人；本查询返回 Map 投影，不显式带上就永远为空）
             m.put("createByName", r.getCreateByName());
             return m;
         }).toList());
         return res;
+    }
+
+    /**
+     * 「能否转应收」的**唯一判定**（F7-223，2026-09-29 审核批 B）。
+     *
+     * <p>口径：金额为负（退货/扣款冲减项）+ 未结清 + 未转出。三处消费方都以此为准 ——
+     * ① 应付列表投影 {@link #page} 的 {@code transferable} 字段（前端「转应收」按钮）；
+     * ② 转应收候选 {@code PayableTransferServiceImpl.transferablePayables}（SQL 版同一口径，见其注释）；
+     * ③ 转应收单审核校验 {@code requireTransferable}（**强校验**，不可绕过的兜底）。</p>
+     */
+    public static boolean isTransferable(FinancePayable p) {
+        if (p == null) return false;
+        if (p.getAmount() == null || p.getAmount().compareTo(BigDecimal.ZERO) >= 0) return false;
+        if (!SettlementStatus.UNSETTLED.getCode().equals(p.getStatus())) return false;
+        return !Integer.valueOf(1).equals(p.getTransferredToReceivable());
     }
 
     /**

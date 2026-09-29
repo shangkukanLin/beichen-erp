@@ -25,7 +25,7 @@ public interface PayableTransferService {
      * 可转应收的应付列表：金额负数（退货/扣款冲减项）且未转出、未结清。
      * 供新增页下拉选择，避免用户选到不能转的记录。
      */
-    List<Map<String, Object>> transferablePayables(Long supplierId, String keyword);
+    List<Map<String, Object>> transferablePayables(Long supplierId, String keyword, Long payableId);
 
     void create(PayableTransfer transfer);
 

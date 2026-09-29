@@ -86,6 +86,14 @@ public class PayableHelper {
             payableMapper.insert(fp);
             return;
         }
+        // F7-224（2026-09-29 审核批 B）：复用既有行前必须过**与 reversePayable/deleteBySourceId 相同的两道护栏** ——
+        // 本方法会把 paid_amount 重置为 0、把 transferred_to_receivable 复位为 0，若被"已付款/已转应收"的台账
+        // 走到，就会抹掉付款进度、并让已转应收的应付**二次可转**（供应商应收悬空/双算）。
+        // 说明：现有调用方（采购单/采购退货/采购换货）都传**新生成的** YF- 单号 ⇒ 命中率极低，本护栏属**防御性**补强。
+        if (exist.getPaidAmount() != null && exist.getPaidAmount().compareTo(BigDecimal.ZERO) > 0)
+            throw new BusinessException("应付单「" + exist.getBillNo() + "」已有付款记录，不可重建来源台账（请先处理付款或反审核付款单）");
+        if (Integer.valueOf(1).equals(exist.getTransferredToReceivable()))
+            throw new BusinessException("应付单「" + exist.getBillNo() + "」已转应收，请先反审核对应的转应收单");
         payableMapper.update(null, new LambdaUpdateWrapper<FinancePayable>()
                 .eq(FinancePayable::getId, exist.getId())
                 .set(FinancePayable::getSupplierId, fp.getSupplierId())

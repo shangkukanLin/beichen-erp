@@ -8,6 +8,7 @@ import { sourceBillTypeLabel } from '@/api/enums'
 import { TYPE_MAP, TYPE_TAG } from '@/constants/supplier'
 import { PAYABLE_TRANSFER_DIRTY_KEY } from '@/api/enums'
 import PageShell from '@/components/PageShell.vue'
+import RemoteSelect from '@/components/RemoteSelect.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useTabStore } from '@/stores/tabs'
 
@@ -27,10 +28,29 @@ const form = reactive({
 const candidates = ref<any[]>([])
 const picked = computed(() => candidates.value.find(x => x.id === form.payableId) || null)
 
+/**
+ * F7-222（2026-09-29 审核批 B）：候选改为**按主体取** —— 后端 `/transferable` 现在
+ * 必须带 `supplierId` 或 `payableId` 才返回（原先无参直调会返回**全公司**可转应付，只读面过宽）。
+ * 页面因此先选供应商；从应付列表带 `?payableId=` 进来或编辑态回填时，只取那一条（读面同样收窄）。
+ */
+const supplierId = ref<number | undefined>()
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
+
 async function loadCandidates() {
-  try {
-    candidates.value = await request.get<any, any>('/finance/payable-transfer/transferable') || []
-  } catch { candidates.value = [] }
+  const params: any = {}
+  if (form.payableId) params.payableId = form.payableId
+  else if (supplierId.value) params.supplierId = supplierId.value
+  else { candidates.value = []; return }
+  try { candidates.value = await request.get<any, any>('/finance/payable-transfer/transferable', { params }) || [] }
+  catch { candidates.value = [] }
+  // 带参进来 / 编辑回填时，用候选行把供应商一起回显出来（用户不必再选一次）
+  if (!supplierId.value && candidates.value.length > 0) supplierId.value = candidates.value[0].supplierId
+}
+/** 换供应商 ⇒ 清掉已选记录并重取候选（候选已按供应商收口，跨供应商选择不再可能）；编辑态来源不可改，直接忽略 */
+function onSupplierChange() {
+  if (editId.value) return
+  form.payableId = undefined
+  loadCandidates()
 }
 
 async function loadDetail() {
@@ -78,9 +98,9 @@ const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form }))
 const tabStore = useTabStore()
 
 onMounted(async () => {
-  await loadCandidates()
-  if (editId.value) await loadDetail()
-  else if (presetPayableId.value) form.payableId = presetPayableId.value
+  // F7-222：取候选必须在"已知 payableId（编辑回填 / 列表带参）"之后 ⇒ 顺序固定为 回填 → 取候选
+  if (editId.value) { await loadDetail(); await loadCandidates() }
+  else if (presetPayableId.value) { form.payableId = presetPayableId.value; await loadCandidates() }
   // 初始化完成（含编辑回填 / 来源预选）⇒ 建立"未保存"基线
   takeBaseline()
 })
@@ -102,11 +122,17 @@ onMounted(async () => {
 
       <!-- label 宽度用 **lg 档**（2026-09-28 用户实测）：「来源应付记录」6 字在默认档 90px 下会换行 -->
       <el-form :model="form" label-width="var(--app-label-width-lg)" class="form">
+        <!-- F7-222：先选供应商 —— 后端候选已按主体收口，不再返回全公司可转应付 -->
+        <el-form-item label="供应商" required>
+          <RemoteSelect v-model="supplierId" :fetch="fetchSuppliers" :disabled="!!editId"
+            placeholder="先选择供应商" style="width:320px" @change="onSupplierChange" />
+        </el-form-item>
         <el-form-item label="来源应付记录" required>
           <!-- 只列可转的记录：负数（退货/扣款冲减项）、未转出、未结清 -->
-          <el-select v-model="form.payableId" placeholder="选择要转应收的应付记录" filterable :disabled="!!editId" style="width:420px">
+          <el-select v-model="form.payableId" :placeholder="(editId || presetPayableId || supplierId) ? '选择要转应收的应付记录' : '请先选择上方供应商'" filterable :disabled="!!editId" style="width:420px">
             <el-option v-for="c in candidates" :key="c.id" :label="`${c.billNo}｜${c.supplierName}｜${fmt(c.transferableAmount)}`" :value="c.id" />
           </el-select>
+          <span v-if="!editId && !presetPayableId && !supplierId" style="margin-left:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">该供应商没有可转的记录时，这里会为空</span>
         </el-form-item>
         <el-form-item label="转出日期">
           <el-date-picker v-model="form.transferDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width:200px" />

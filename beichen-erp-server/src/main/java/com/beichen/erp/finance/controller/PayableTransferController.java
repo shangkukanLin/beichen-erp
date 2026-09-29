@@ -41,11 +41,18 @@ public class PayableTransferController {
         return R.ok(service.getById(id));
     }
 
-    /** 可转应收的应付列表（负数、未转、未结清），供新增页下拉 */
+    /**
+     * 可转应收的应付列表（负数、未转、未结清），供新增页下拉。
+     *
+     * <p>F7-222（2026-09-29 审核批 B）：**必须带 {@code supplierId} 或 {@code payableId}** ——
+     * 无主体时返回空列表（原先会返回全公司可转应付，只读面过宽）。
+     * {@code payableId} 服务于"应付列表点「转应收」带参进来"或"编辑态回填"，只回那一条。</p>
+     */
     @GetMapping("/transferable")
     public R<List<Map<String, Object>>> transferable(@RequestParam(required = false) Long supplierId,
-                                                     @RequestParam(required = false) String keyword) {
-        return R.ok(service.transferablePayables(supplierId, keyword));
+                                                     @RequestParam(required = false) String keyword,
+                                                     @RequestParam(required = false) Long payableId) {
+        return R.ok(service.transferablePayables(supplierId, keyword, payableId));
     }
 
     /** 来源单据类型 **code 列表**（与台账存值一致；2026-09-14：「接口只回 code」，中文由前端 `SourceBillTypeLabel` 映射） */

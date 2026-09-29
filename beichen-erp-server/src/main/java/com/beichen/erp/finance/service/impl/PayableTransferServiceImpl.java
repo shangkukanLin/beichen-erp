@@ -79,12 +79,18 @@ public class PayableTransferServiceImpl implements PayableTransferService {
     public PayableTransfer getById(Long id) { return transferMapper.selectById(id); }
 
     @Override
-    public List<Map<String, Object>> transferablePayables(Long supplierId, String keyword) {
+    public List<Map<String, Object>> transferablePayables(Long supplierId, String keyword, Long payableId) {
+        // F7-222（2026-09-29 审核批 B）：**必须指定主体**（supplierId 或 payableId）才返回 ——
+        // 原先无 supplierId 时该条件被跳过 ⇒ 直调本端点可拿到**全公司**可转应付（只读面过宽）。
+        // payableId 分支服务于"应付列表点「转应收」带 ?payableId="与编辑态回填：只回那一条，读面同样收窄。
+        // 判定口径与 PayableQuery.isTransferable 一致（此处为同一谓词的 SQL 版）。
+        if (supplierId == null && payableId == null) return List.of();
         LambdaQueryWrapper<FinancePayable> w = new LambdaQueryWrapper<FinancePayable>()
                 // 只有负数（退货/扣款冲减项）才需要转应收；正数应付是货款，本来就要付给对方
                 .lt(FinancePayable::getAmount, BigDecimal.ZERO)
                 .eq(FinancePayable::getTransferredToReceivable, 0)
                 .eq(FinancePayable::getStatus, SettlementStatus.UNSETTLED.getCode())
+                .eq(payableId != null, FinancePayable::getId, payableId)
                 .eq(supplierId != null, FinancePayable::getSupplierId, supplierId)
                 .like(keyword != null && !keyword.isBlank(), FinancePayable::getBillNo, keyword)
                 .orderByDesc(FinancePayable::getId);
