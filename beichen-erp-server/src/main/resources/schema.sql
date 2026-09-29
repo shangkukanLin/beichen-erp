@@ -1881,10 +1881,10 @@ CREATE TABLE IF NOT EXISTS finance_receipt (
     subject_type VARCHAR(20) DEFAULT 'CUSTOMER' COMMENT '往来主体类型: CUSTOMER=客户 SUPPLIER=供应商',
     supplier_id BIGINT DEFAULT NULL COMMENT '供应商ID(subject_type=SUPPLIER 时有值)',
     supplier_name VARCHAR(100) DEFAULT NULL COMMENT '供应商名称(冗余留痕)',
-    account_id BIGINT COMMENT '收款账户ID',
+    account_id BIGINT COMMENT '收款账户ID（2026-09-29 多账户后=分款明细首行快照）',
     account_name VARCHAR(100) COMMENT '收款账户名称',
     receipt_date DATE COMMENT '收款日期',
-    amount DECIMAL(18,4) DEFAULT 0 COMMENT '收款金额',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '收款金额（= 分款明细 finance_receipt_account 金额合计）',
     status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: 草稿/已审核/已作废',
     -- 2026-09-18：来源单据（销售单现金结算时由「审核销售单」自动生成草稿收款单；
     -- 销售单反审核需按此精确定位并联动：草稿→自动作废、已审核→拦住提示先撤收款）
@@ -1916,6 +1916,24 @@ CREATE TABLE IF NOT EXISTS finance_receipt_item (
     INDEX idx_receivable_id (receivable_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收款核销明细表';
+
+-- 2026-09-29（用户口径「收款账户可以添加，比如 A 账户收款 50、B 账户收款 100」）：
+--   收款单**分款明细**：一个单可多账户收款，审核按行各写一条资金流水（account 余额由流水累计）、反审核按行冲正。
+--   主表 finance_receipt.amount = 本表金额合计；account_id/account_name = 首行快照（列表列/老读法/系统自动单兼容）。
+--   历史单已回填一条（单账户）行，故"分款表即权威"，审核/反审核不需要分支判断。
+CREATE TABLE IF NOT EXISTS finance_receipt_account (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '分款明细ID',
+    receipt_id BIGINT NOT NULL COMMENT '收款单ID',
+    account_id BIGINT NOT NULL COMMENT '收款账户ID',
+    account_name VARCHAR(100) COMMENT '账户名称(冗余留痕)',
+    amount DECIMAL(18,4) NOT NULL DEFAULT 0 COMMENT '该账户本次收款金额',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_rra_receipt (receipt_id),
+    INDEX idx_rra_account (account_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收款单分款明细表（一单多账户）';
 
 CREATE TABLE IF NOT EXISTS finance_payment (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '付款单ID',

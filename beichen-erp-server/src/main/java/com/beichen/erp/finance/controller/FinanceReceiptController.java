@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.finance.entity.FinanceReceivable;
 import com.beichen.erp.finance.entity.FinanceReceipt;
+import com.beichen.erp.finance.entity.FinanceReceiptAccount;
 import com.beichen.erp.finance.entity.FinanceReceiptItem;
 import com.beichen.erp.finance.service.FinanceReceiptService;
 import com.beichen.erp.finance.service.ReceivableQuery;
@@ -58,15 +59,49 @@ public class FinanceReceiptController {
         return R.ok(receivableQuery.unpaid(customerId, supplierId, subjectType));
     }
 
+    /**
+     * 主体欠款汇总（2026-09-29 用户口径）：新增收款页/详情页草稿态「选完客户/供应商后显示**到期欠款 + 总欠款**」。
+     * <p>口径（严格镜像应付侧的 {@code PayableQuery.supplierSummary}）：未结清 + 未收额&gt;0；
+     * 到期 = {@code due_date < 今天}（当天不算）；无到期日的单据不计入到期（另返回数量与金额供界面解释）。</p>
+     * <p>与 {@code /unpaid-receivables} 同一原因挂**本页前缀**：只要求 {@code finance:receipt}
+     * （挂 {@code /finance/receivable/*} 会要求 {@code finance:receivable}，只有收款权限的用户会 403）。</p>
+     */
+    @GetMapping("/party-summary")
+    public R<Map<String, Object>> partySummary(@RequestParam(required = false) Long customerId,
+                                               @RequestParam(required = false) Long supplierId,
+                                               @RequestParam(required = false) String subjectType) {
+        return R.ok(receivableQuery.partySummary(customerId, supplierId, subjectType));
+    }
+
     @GetMapping("/{id}")
     public R<FinanceReceipt> getById(@PathVariable Long id) { return R.ok(service.getById(id)); }
 
     @GetMapping("/{id}/items")
     public R<List<FinanceReceiptItem>> getItems(@PathVariable Long id) { return R.ok(service.getItems(id)); }
 
+    /** 分款明细（2026-09-29 多账户收款）：详情页「收款账户」卡片按行展示 */
+    @GetMapping("/{id}/accounts")
+    public R<List<FinanceReceiptAccount>> getAccounts(@PathVariable Long id) { return R.ok(service.getAccounts(id)); }
+
+    /**
+     * 建单：{@code body = {receipt:{…}, accounts:[{accountId,amount,remark}], items:[{receivableId,…}]}}。
+     * <p>2026-09-29：{@code accounts} 支撑**多账户分款**（A 50 + B 100）；{@code items} **可为空**
+     * （核销开关关闭 = 只记收款，未核销差额审核时落预收/预付台账）。
+     * 老 payload（只带 {@code receipt.accountId} + items）仍可用 —— 后端会归一化成一条分款行。</p>
+     */
     @PostMapping
     public R<Void> create(@RequestBody Map<String, Object> body) {
-        service.create(parseReceipt(body), parseItems(body));
+        service.create(parseReceipt(body), parseAccounts(body), parseItems(body));
+        return R.ok();
+    }
+
+    /**
+     * 草稿就地修改（2026-09-29 用户口径「加草稿可编辑」）：字段/校验与建单完全一致，
+     * 分款与核销明细整体替换；只允许 DRAFT（已审核要先反审核）。
+     */
+    @PutMapping("/{id}")
+    public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        service.update(id, parseReceipt(body), parseAccounts(body), parseItems(body));
         return R.ok();
     }
 
@@ -91,6 +126,27 @@ public class FinanceReceiptController {
             r.setReceiptDate(LocalDate.parse(d.get("receiptDate").toString()));
         r.setRemark((String) d.get("remark"));
         return r;
+    }
+
+    /**
+     * 分款明细（2026-09-29 多账户）：{@code accounts:[{accountId, amount, remark}]}。
+     * <p>为空 = 交给后端按单账户归一化（销售单现金结算的自动单 / 历史页面旧 payload）。</p>
+     */
+    @SuppressWarnings("unchecked")
+    private List<FinanceReceiptAccount> parseAccounts(Map<String, Object> body) {
+        List<FinanceReceiptAccount> list = new ArrayList<>();
+        Object obj = body.get("accounts");
+        if (obj instanceof List<?> raw) for (Object o : raw) if (o instanceof Map<?, ?> m) {
+            Map<String, Object> map = (Map<String, Object>) m;
+            FinanceReceiptAccount a = new FinanceReceiptAccount();
+            if (map.get("accountId") != null && !map.get("accountId").toString().isBlank())
+                a.setAccountId(Long.valueOf(map.get("accountId").toString()));
+            if (map.get("amount") != null && !map.get("amount").toString().isBlank())
+                a.setAmount(new BigDecimal(map.get("amount").toString()));
+            a.setRemark((String) map.get("remark"));
+            list.add(a);
+        }
+        return list;
     }
 
     @SuppressWarnings("unchecked")

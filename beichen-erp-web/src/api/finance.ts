@@ -12,9 +12,17 @@ export interface FinancePayable { id?: number; billNo?: string; supplierId?: num
 export interface FinanceCashflow { id?: number; flowNo?: string; accountId?: number; accountName?: string; flowType?: string; relatedBillNo?: string; income?: number; expense?: number; balance?: number; createTime?: string }
 
 export interface FinanceReceipt { id?: number; code?: string; customerId?: number; customerName?: string; subjectType?: string; supplierId?: number; supplierName?: string; accountId?: number; accountName?: string; receiptDate?: string; amount?: number; status?: string; remark?: string
+  /** 分款明细条数（2026-09-29 多账户；仅列表接口返回）：>1 时列表「账户」列显示「N 个账户」 */
+  accountCount?: number
   /** 制单人 / 审核人（2026-09-23 单据详情口径；收款单无审核流程 ⇒ 审核人通常为空） */
   createByName?: string; auditorName?: string }
 export interface FinanceReceiptItem { id?: number; receiptId?: number; receivableId?: number; receivableBillNo?: string; thisAmount?: number; remark?: string }
+/**
+ * 收款单**分款明细**（2026-09-29 多账户收款）：一行 = 一个账户本次收到的钱。
+ * <p>收款金额（主表 amount）= 各行 amount 合计；审核时按行各写一条资金流水（账户余额各自累计），
+ * 反审核按行各写一条冲正流水。</p>
+ */
+export interface FinanceReceiptAccount { id?: number; receiptId?: number; accountId?: number; accountName?: string; amount?: number; remark?: string }
 export interface FinancePayment { id?: number; code?: string; supplierId?: number; supplierName?: string; accountId?: number; accountName?: string; paymentDate?: string; amount?: number; status?: string; remark?: string; attachUrl?: string
   /** 制单人 / 审核人（2026-09-23 单据详情口径；付款单无审核流程 ⇒ 审核人通常为空） */
   createByName?: string; auditorName?: string }
@@ -60,6 +68,17 @@ export function getPaymentUnpaidPayables(supplierId: number) {
 export function getReceiptUnpaidReceivables(customerId?: number, supplierId?: number) {
   return request.get<FinanceReceivable[]>('/finance/receipt/unpaid-receivables', { params: { customerId, supplierId } })
 }
+/**
+ * 主体欠款汇总（2026-09-29）：新增收款页 / 详情页草稿态「选完客户/供应商后显示**到期欠款 + 总欠款**」。
+ * <p>口径（严格镜像应付侧 `PayableQuery.supplierSummary`）：未结清（UNSETTLED/PARTIAL）且 `amount > 0`
+ * —— 天然排除预收/预付台账 ADVANCE 与负数冲减行；**到期 = `due_date` < 今天**（当天到期不算）；
+ * **无到期日的单据不计入到期**（`noDueCount/noDueAmount` 供界面解释"为什么到期是 0"）。</p>
+ * <p>走收款页前缀（`/finance/receipt/party-summary`）⇒ 只要求 `finance:receipt`，避免跨模块 403。</p>
+ */
+export interface PartyDebtSummary { subjectType?: string; partyId?: number; unpaidAmount?: number; overdueAmount?: number; noDueAmount?: number; noDueCount?: number; billCount?: number; asOf?: string }
+export function getReceiptPartySummary(params: { subjectType?: string; customerId?: number; supplierId?: number }) {
+  return request.get<PartyDebtSummary>('/finance/receipt/party-summary', { params })
+}
 
 export function getCashflowPage(params: any) { return request.get<PageResult<FinanceCashflow>>('/finance/cashflow/page', { params }) }
 
@@ -83,7 +102,15 @@ export function cancelInvoice(id: number) { return request.post<void>(`/finance/
 
 export function getReceiptPage(params: any) { return request.get<PageResult<FinanceReceipt>>('/finance/receipt/page', { params }) }
 export function getReceiptItems(id: number) { return request.get<FinanceReceiptItem[]>(`/finance/receipt/${id}/items`) }
+/** 分款明细（2026-09-29 多账户）：详情页「收款账户」卡片 / 草稿态就地编辑都用它 */
+export function getReceiptAccounts(id: number) { return request.get<FinanceReceiptAccount[]>(`/finance/receipt/${id}/accounts`) }
+/**
+ * 建单：`{ receipt:{…}, accounts:[{accountId,amount,remark}], items:[{receivableId,thisAmount}] }`。
+ * <p>2026-09-29：`accounts` 支撑多账户分款；`items` 可为空（核销开关关闭 = 只记收款，未核销差额落预收台账）。</p>
+ */
 export function createReceipt(data: any) { return request.post<void>('/finance/receipt', data) }
+/** 草稿就地修改（2026-09-29 用户口径「加草稿可编辑」）：payload 与建单一致，分款/核销明细整体替换 */
+export function updateReceipt(id: number, data: any) { return request.put<void>(`/finance/receipt/${id}`, data) }
 export function auditReceipt(id: number) { return request.put<void>(`/finance/receipt/${id}/audit`) }
 export function cancelReceipt(id: number) { return request.put<void>(`/finance/receipt/${id}/cancel`) }
 export function unAuditReceipt(id: number) { return request.put<void>(`/finance/receipt/${id}/un-audit`) }

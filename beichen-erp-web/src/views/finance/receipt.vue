@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
-import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
@@ -8,7 +8,7 @@ import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
-import { getReceiptPage, getReceiptItems, createReceipt, auditReceipt, cancelReceipt, unAuditReceipt, getReceiptUnpaidReceivables, type FinanceReceipt, type FinanceReceiptItem, type FinanceReceivable } from '@/api/finance'
+import { getReceiptPage, auditReceipt, cancelReceipt, unAuditReceipt, type FinanceReceipt } from '@/api/finance'
 import { SubjectType, SubjectTypeLabel, SourceBillDetailRoute } from '@/api/enums'
 
 /**
@@ -73,59 +73,28 @@ function subjectLabel(row: any) {
     : (row.customerName || cName(row.customerId) || '—')
 }
 function aName(id?: number) { return accounts.value.find(x => x.id === id)?.accountName || '' }
+/**
+ * 「账户」列文案（2026-09-29 多账户收款）：
+ * <ul>
+ *   <li>单账户 ⇒ 账户名（历史 97 单与系统自动单都是这种）；</li>
+ *   <li>多账户 ⇒ <b>「N 个账户」</b>。⚠️ 本页 9 列合计已顶满 956px，本列只有 84px —— 实测「CASH-01 等 2 个」
+ *       需 ~127px、且没有任何列能挪出 43px（挪就会破"一行显示完 / 不许截断"的家规），
+ *       故列表只给「N」，**账户明细在详情页「收款账户（分款明细）」卡片**里逐行看（点整行即达）。</li>
+ * </ul>
+ */
+function accountText(row: any) {
+  const n = Number(row?.accountCount || 0)
+  if (n > 1) return `${n} 个账户`
+  return row?.accountName || aName(row?.accountId) || '—'
+}
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { return DocStatusTag[s || ''] || undefined }
 
-const dVisible = ref(false)
-const dTitle = ref('新增收款单')
-const dForm = reactive<FinanceReceipt>({ customerId: undefined, supplierId: undefined, subjectType: SubjectType.CUSTOMER as string, accountId: undefined, receiptDate: '', remark: '' })
-const dItems = ref<FinanceReceiptItem[]>([])
-const unpaid = ref<FinanceReceivable[]>([])
-const dLoading = ref(false)
-
-function resetD() { Object.assign(dForm, { id: undefined, customerId: undefined, supplierId: undefined, subjectType: SubjectType.CUSTOMER as string, accountId: undefined, receiptDate: '', remark: '' }); dItems.value = []; unpaid.value = [] }
-/** 2026-09-23 用户要求：新增收款由 850px 弹框改为独立页 */
+/** 2026-09-23 用户要求：新增收款由 850px 弹框改为独立页（弹框内的表单/校验/提交代码已随之删除） */
 function handleAdd() { router.push('/finance/receipt/add') }
-/** 弹窗内切换主体类型：清空往来单位与已选核销明细 */
-function onSubjectTypeChange() {
-  dForm.customerId = undefined
-  dForm.supplierId = undefined
-  dItems.value = []
-  unpaid.value = []
-}
-/**
- * 按主体类型拉取可核销的未结清应收。
- * 期 2（2026-09-19 读隔离）：改走收款页自身前缀（原读 /finance/receivable/unpaid 需 finance:receivable，
- * 只有 finance:receipt 的用户会 403 —— 接口级权限校准后新查出的真实缺口）。
- */
-async function loadUnpaid() {
-  try {
-    unpaid.value = dForm.subjectType === SubjectType.SUPPLIER
-      ? (await getReceiptUnpaidReceivables(undefined, dForm.supplierId as number)) || []
-      : (await getReceiptUnpaidReceivables(dForm.customerId as number)) || []
-  } catch { unpaid.value = [] }
-}
-function addItem() { dItems.value.push({ receivableId: undefined, receivableBillNo: '', thisAmount: 0, remark: '' }) }
-function removeItem(i: number) { dItems.value.splice(i, 1) }
-function onReceivableChange(val: number, row: FinanceReceiptItem) {
-  const r = unpaid.value.find(x => x.id === val)
-  if (r) { row.receivableId = r.id; row.receivableBillNo = r.billNo; row.thisAmount = r.unpaidAmount }
-}
-async function handleSubmit() {
-  if (dForm.subjectType === SubjectType.SUPPLIER && !dForm.supplierId) { ElMessage.warning('请选择供应商'); return }
-  if (dForm.subjectType !== SubjectType.SUPPLIER && !dForm.customerId) { ElMessage.warning('请选择客户'); return }
-  if (!dForm.accountId) { ElMessage.warning('请选择收款账户'); return }
-  if (dItems.value.length === 0) { ElMessage.warning('请添加核销明细'); return }
-  dLoading.value = true
-  try {
-    const payload = { receipt: { ...dForm }, items: dItems.value }
-    await createReceipt(payload); ElMessage.success('已保存')
-    dVisible.value = false; loadData()
-  } catch {} finally { dLoading.value = false }
-}
 async function handleAudit(row: FinanceReceipt) {
-  try { await ElMessageBox.confirm(`确认审核收款单「${row.code}」？将核销应收并更新账户余额`, '提示', { type: 'warning' })
-    await auditReceipt(row.id as number); ElMessage.success('已审核，已核销应收并更新资金'); loadData() } catch {}
+  try { await ElMessageBox.confirm(`确认审核收款单「${row.code}」？将核销应收（如有核销明细）、按各账户写资金流水；未核销差额作为预收挂账`, '提示', { type: 'warning' })
+    await auditReceipt(row.id as number); ElMessage.success('已审核：已核销应收、按账户写入资金流水'); loadData() } catch {}
 }
 async function handleCancel(row: FinanceReceipt) {
   try { await ElMessageBox.confirm(`确认作废收款单「${row.code}」？`, '提示', { type: 'warning' })
@@ -191,7 +160,9 @@ function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/
           </template>
         </el-table-column>
         <el-table-column label="往来单位" min-width="114" show-overflow-tooltip><template #default="{row}">{{ subjectLabel(row) }}</template></el-table-column>
-        <el-table-column label="账户" min-width="84" show-overflow-tooltip><template #default="{row}">{{ aName(row.accountId) }}</template></el-table-column>
+        <!-- 2026-09-29 多账户收款：单账户 = 账户名；多账户 =「N 个账户」（本列 84px 装不下「首行 等 N 个」，
+             全貌在详情页「收款账户（分款明细）」卡片）—— 判据见 script 里的 accountText -->
+        <el-table-column label="账户" min-width="84" show-overflow-tooltip><template #default="{row}">{{ accountText(row) }}</template></el-table-column>
         <el-table-column prop="receiptDate" label="日期" width="100" align="center"/>
         <!-- 2026-09-26 B6：92→88（让 4px 给「主体类型」的表头；金额正文最长 57px，88 内仍完整） -->
         <el-table-column prop="amount" label="金额" width="88" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>

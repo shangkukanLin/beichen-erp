@@ -34,9 +34,15 @@ public class FinanceReceipt {
     private Long supplierId;
     /** 供应商名称（冗余留痕） */
     private String supplierName;
+    /**
+     * 收款账户（2026-09-29 多账户改造后 = **分款明细首行**的快照）。
+     * <p>真正的收款分款在 {@code finance_receipt_account}（一个单可多账户收款）；本字段保留是为了
+     * 兼容列表「账户」列、老读法与销售单现金结算的自动单。</p>
+     */
     private Long accountId;
     private String accountName;
     private LocalDate receiptDate;
+    /** 收款总额 = 分款明细金额合计（多账户时 A 50 + B 100 = 150） */
     private BigDecimal amount;
     private String status;
     /**

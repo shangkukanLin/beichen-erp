@@ -83,6 +83,8 @@
   "btn_gen_bill": "生成账单",
   "btn_generate": "生成",
   "btn_add_writeoff": "添加核销项",
+  "btn_add_account": "添加账户",
+  "sw_write_off": "本次核销",
   "opt_drv": "驱动IC",
   "opt_mt_line": "排线",
   "mat_line_mf": "排线-MFTEST",
