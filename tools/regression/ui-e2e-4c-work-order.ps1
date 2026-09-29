@@ -90,6 +90,39 @@ $py = Rows 0
 foreach ($rw in $py.rows) { $line = ($rw -join ' '); if ($line -match 'MFTEST' -or $line -match (ZH 'val_factory')) { Write-Host ('payable=' + $line) } }
 Write-Host ('errs=' + (Errs))
 
+Step 'receipt record: un-audit then re-audit (restores the state the defect steps expect)'
+# 2026-09-29（用户口径「加工收退详情的收货记录也需要反审核功能」）：已审核行现在挂「反审核」
+#   （2026-09-24 曾把它移出操作列、而「收货记录详情页」是**只读**的 ⇒ 该动作在界面上等于消失；
+#     后端 PUT /outsource/order-delivery/{id}/un-audit 与前端 handleUnaudit 一直都在，只是没入口）。
+#   这里真点一次：反审核 ⇒ 记录回草稿、成品库存/应付对称逆回；随后**重新审核复原**，
+#   好让下面的加工退货步骤看到的仍是"已收 10 件"的同一状态。
+Open "/outsource/order/delivery/$ORDID" 3000
+$rUn = Rows 0
+$idxUn = [int](FindRow (ZH 'st_audited'))
+Ok ($idxUn -ge 0) 'un-audit step: the audited record row is present'
+Write-Host ('un-audit click: ' + (ClickRowBtnContains $idxUn (ZH 'btn_unaudit')))
+Write-Host ('confirm: ' + (ConfirmBox 1500))
+Start-Sleep -Milliseconds 3200
+Write-Host ('msg=' + (Txt '.el-message'))
+Open "/outsource/order/delivery/$ORDID" 3000
+$rU2 = Rows 0
+$rtextU2 = ($rU2.rows | ForEach-Object { $_ -join ' ' }) -join ' '
+Ok ($rtextU2 -match (ZH 'st_draft')) 'un-audit put the receipt record back to 草稿'
+Open '/inventory/stock' 2600
+$stU = Rows 0
+$siU = [int](FindRow (ZH 'val_proj'))
+Write-Host ('stock after un-audit=' + $(if ($siU -ge 0) { ($stU.rows[$siU] -join ' | ') } else { 'NOT FOUND' }))
+Open "/outsource/order/delivery/$ORDID" 3000
+$rRe = Rows 0
+$idxRe = [int](FindRow (ZH 'st_draft'))
+Write-Host ('re-audit click: ' + (ClickRowBtnContains $idxRe (ZH 'btn_audit')))
+Write-Host ('confirm: ' + (ConfirmBox 1500))
+Start-Sleep -Milliseconds 3200
+Open "/outsource/order/delivery/$ORDID" 3000
+$rRe2 = Rows 0
+$rtextRe2 = ($rRe2.rows | ForEach-Object { $_ -join ' ' }) -join ' '
+Ok ($rtextRe2 -match (ZH 'st_audited')) 're-audit restored the record to 已审核'
+
 Step 'defect return'
 Open "/outsource/order/delivery/$ORDID" 3000
 Write-Host ('defect btn: ' + (ClickBtn 'btn_mfg_return'))

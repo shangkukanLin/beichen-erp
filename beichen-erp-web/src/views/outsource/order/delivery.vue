@@ -5,6 +5,9 @@
  * 列表页带 ?add=1 进入时自动打开「新增收货」弹窗（一步收货）。</p>
  * <p>2026-09-21（用户口径）：加工单详情页上那个「成品收货」跳转按钮**已移除** ——
  * 收货统一从「委外加工 → 成品收货」菜单进（列表行内「收货」直达、行内「详情」看记录）。</p>
+ * <p>2026-09-29（用户口径「加工收退详情的收货记录也需要反审核功能」）：本页「收货记录」的**已审核行**
+ * 挂上「反审核」（`PUT /outsource/order-delivery/{id}/un-audit`，前端 handleUnaudit 原本已有、只是没入口）；
+ * 草稿行仍是 审核/编辑/删除（加工退货红冲为 作废）。记录详情页保持不变（只读）。</p>
  */
 import { localDate } from '@/utils/date'
 import { reactive, ref, computed, onActivated } from 'vue'
@@ -429,13 +432,26 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         </el-table-column>
         <el-table-column label="数量" width="64" align="right"><template #default="{ row }"><span :style="{ color: Number(row.quantity) < 0 ? 'var(--app-color-danger)' : '' }">{{ row.quantity }}</span></template></el-table-column>
         <el-table-column label="状态" width="60"><template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 160→168（草稿分支 4 个按钮）。 -->
+        <!--
+          操作列（按状态互斥；宽度 176 由**草稿分支**决定，故加"反审核"不动宽度）：
+          · 草稿（DRAFT）      = 详情 ｜ 审核 ｜ 编辑 ｜ 作废（加工退货红冲）或 删除（普通收货）= 4 个按钮；
+          · 已审核（AUDITED）  = 详情 ｜ **反审核**（2026-09-29 用户口径「加工收退详情的收货记录也需要反审核功能」）；
+          · 已作废（CANCELLED）= 详情。
+          沿革：2026-09-24 曾把「反审核」移出本列（当时标注为"移入详情页"），但**收货记录详情页
+          （/outsource/order/delivery/record/:id）是只读的**（只有一个"查看图片"）⇒ 该动作在界面上等于消失；
+          2026-09-29 按用户口径挂回已审核行。后端端点 `PUT /outsource/order-delivery/{id}/un-audit`
+          与前端 `handleUnaudit` 一直都存在（原先成了死代码）。已审核行只有 2 个按钮（详情 2 字 + 反审核 3 字），
+          窄于草稿行的 4 个按钮 ⇒ 列宽保持 176 不变。
+        -->
         <el-table-column label="操作" width="176" align="center" fixed="right">
           <template #default="{ row }">
             <!-- 详情：仓库/物流单号/备注/附件/SKU/等级明细/创建时间等明细字段都在**详情页**看
                  （2026-09-23 由抽屉改为独立页 /outsource/order/delivery/record/:id） -->
             <el-button type="primary" link size="small" @click="openDetail(row)">详情</el-button>
             <el-button type="success" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
+            <!-- 2026-09-29（用户口径）：已审核的收货记录可**反审核**（对称逆回：库存/应付/已收数量，
+                 后端按单据类型分派；见 DeliveryServiceImpl.unaudit）。草稿不走这里（它的动作是 审核/编辑/删除·作废）。 -->
+            <el-button type="danger" link size="small" v-if="row.status === DocStatus.AUDITED" @click="handleUnaudit(row)">反审核</el-button>
             <el-button type="primary" link size="small" v-if="row.status === DocStatus.DRAFT" @click="openEdit(row)">编辑</el-button>
             <!-- 2026-09-29（用户口径）：加工退货（红冲）草稿 = **作废**（留痕可查，与原台账一致）；
                  普通收货草稿仍是 **删除**（物理删草稿）⇒ 两分支互斥、按钮数不变（操作列宽 176 不动） -->

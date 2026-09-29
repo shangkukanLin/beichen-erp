@@ -134,7 +134,9 @@ if ($d4) {
 # ④b 「收货记录」行内动作（2026-09-29 用户口径）：**加工退货（红冲）草稿 = 「作废」**（留痕可查，
 #     与原「关联退货」台账的「已作废」同口径），普通收货草稿仍为「删除」（物理删草稿）。
 #     关联退货叶子下线后本表是有单加工退货**唯一的常驻入口** ⇒ 这个动作口径必须锁住。
-$d4b = ReadJson "(()=>{const vis=e=>e.getClientRects().length>0;const t=[...document.querySelectorAll('.el-table')].filter(vis).find(x=>[...x.querySelectorAll('.el-table__header th')].map(h=>(h.innerText||'').trim()).includes('收货日期'));const rows=t?[...t.querySelectorAll('.el-table__body tbody tr')]:[];let defectDraft=0,draftRecv=0,cancelOnDefect=0,delOnDefect=0,delOnRecv=0,cancelOnRecv=0;for(const tr of rows){const txt=[...tr.querySelectorAll('td')].map(td=>(td.innerText||'').trim());const bs=[...tr.querySelectorAll('button')].map(b=>(b.innerText||'').trim());const isDefect=txt.includes('加工退货');const isDraft=txt.includes('草稿');if(isDefect&&isDraft){defectDraft++;if(bs.includes('作废'))cancelOnDefect++;if(bs.includes('删除'))delOnDefect++}else if(isDraft&&txt.includes('收货')){draftRecv++;if(bs.includes('删除'))delOnRecv++;if(bs.includes('作废'))cancelOnRecv++}}return JSON.stringify({rows:rows.length,defectDraft:defectDraft,draftRecv:draftRecv,cancelOnDefect:cancelOnDefect,delOnDefect:delOnDefect,delOnRecv:delOnRecv,cancelOnRecv:cancelOnRecv});})()" '收货记录动作'
+#     2026-09-29 同日追加（用户口径「加工收退详情的收货记录也需要反审核功能」）：**已审核行 = 详情 ｜ 反审核**
+#     （记录详情页只读，故本表是唯一入口）；草稿行不得误加「反审核」。
+$d4b = ReadJson "(()=>{const vis=e=>e.getClientRects().length>0;const t=[...document.querySelectorAll('.el-table')].filter(vis).find(x=>[...x.querySelectorAll('.el-table__header th')].map(h=>(h.innerText||'').trim()).includes('收货日期'));const rows=t?[...t.querySelectorAll('.el-table__body tbody tr')]:[];let defectDraft=0,draftRecv=0,cancelOnDefect=0,delOnDefect=0,delOnRecv=0,cancelOnRecv=0,audited=0,unOnAudited=0,unOnDraft=0;for(const tr of rows){const txt=[...tr.querySelectorAll('td')].map(td=>(td.innerText||'').trim());const bs=[...tr.querySelectorAll('button')].map(b=>(b.innerText||'').trim());const isDefect=txt.includes('加工退货');const isDraft=txt.includes('草稿');const isAudited=txt.includes('已审核');if(isAudited){audited++;if(bs.includes('反审核'))unOnAudited++}if(isDraft&&bs.includes('反审核'))unOnDraft++;if(isDefect&&isDraft){defectDraft++;if(bs.includes('作废'))cancelOnDefect++;if(bs.includes('删除'))delOnDefect++}else if(isDraft&&txt.includes('收货')){draftRecv++;if(bs.includes('删除'))delOnRecv++;if(bs.includes('作废'))cancelOnRecv++}}return JSON.stringify({rows:rows.length,defectDraft:defectDraft,draftRecv:draftRecv,cancelOnDefect:cancelOnDefect,delOnDefect:delOnDefect,delOnRecv:delOnRecv,cancelOnRecv:cancelOnRecv,audited:audited,unOnAudited:unOnAudited,unOnDraft:unOnDraft});})()" '收货记录动作'
 if ($d4b) {
   Write-Output ('收货记录行数 = ' + $d4b.rows + ' ；红冲草稿 = ' + $d4b.defectDraft + '（带作废 ' + $d4b.cancelOnDefect + ' / 带删除 ' + $d4b.delOnDefect + '）；普通收货草稿 = ' + $d4b.draftRecv)
   if ([int]$d4b.defectDraft -gt 0) {
@@ -144,6 +146,15 @@ if ($d4b) {
   if ([int]$d4b.draftRecv -gt 0) {
     if ([int]$d4b.cancelOnRecv -eq 0) { Ok '普通收货草稿仍只有「删除」（未被误加「作废」）' } else { Bad ('普通收货草稿被误加「作废」：' + $d4b.cancelOnRecv) }
   } else { Write-Output '（本单没有普通收货草稿 ⇒ 跳过「删除」断言）' }
+  # 2026-09-29（用户口径「加工收退详情的收货记录也需要反审核功能」）：**已审核行**必须有「反审核」
+  #   （记录详情页 /outsource/order/delivery/record/:id 是**只读**的 ⇒ 本表是唯一入口）；
+  #   草稿行不得有（草稿的动作是 审核 / 编辑 / 删除·作废）。这条锁住 2026-09-24「反审核移出操作列」
+  #   造成的功能真空（后端端点与 handleUnaudit 一直存在，只是没有按钮）。
+  Write-Output ('已审核行 = ' + $d4b.audited + '（带反审核 ' + $d4b.unOnAudited + '）；草稿行被误加反审核 = ' + $d4b.unOnDraft)
+  if ([int]$d4b.audited -gt 0) {
+    if ([int]$d4b.unOnAudited -eq [int]$d4b.audited) { Ok ('每条已审核收货记录都有「反审核」（' + $d4b.unOnAudited + '/' + $d4b.audited + '）') } else { Bad ('部分已审核收货记录缺「反审核」：' + $d4b.unOnAudited + '/' + $d4b.audited) }
+  } else { Write-Output '（本单没有已审核收货记录 ⇒ 跳过「反审核」断言，避免假 FAIL）' }
+  if ([int]$d4b.unOnDraft -eq 0) { Ok '草稿行未被误加「反审核」（草稿走 审核/编辑/删除·作废）' } else { Bad ('草稿行被误加「反审核」：' + $d4b.unOnDraft) }
 }
 
 # ⑤ 加工单详情：页签已无「交货管理」，且**不再有**「成品收货」跳转按钮
