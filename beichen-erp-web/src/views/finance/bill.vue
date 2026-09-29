@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBillPage, generateBill, auditBill, unAuditBill, cancelBill, type FinanceBill } from '@/api/finance'
@@ -29,8 +29,36 @@ async function loadSuppliersOptions() {
   try { const r: any = await fetchSuppliers(''); suppliersOptions.value = r?.records || [] } catch { suppliersOptions.value = [] }
 }
 
-// 往来单位下拉：按当前单据类型切换查询客户/供应商
+/**
+ * **列表筛选**的往来单位下拉：按列表类型切换查客户/供应商。
+ * ⚠️「全部」类型下本下拉在模板里**禁用**：客户与供应商是两张表、**主键空间独立**，而后端只按
+ * `partner_id` 过滤 ⇒ 允许混筛就会串号（客户 5 号与供应商 5 号都会被算进去，返回的不是你要的那一家）。
+ * 想按往来单位筛选，请先选具体类型。
+ */
 const fetchPartner = (kw: string) => (query.billType === BillType.RECEIVABLE ? fetchCustomers(kw) : fetchSuppliers(kw))
+/** 切类型：切到「全部」时清空往来单位（免得带着一个只对某类型有意义的 partnerId 去混查） */
+function onQueryTypeChange() {
+  if (isAllTypes.value) query.partnerId = ''
+}
+
+/**
+ * 「已结算 / 未结算」两列的列名（2026-09-29 用户口径：「已收付/未收付」这种**合写词不合理** ——
+ * "已收就是已收、已付就是已付"）。账单要么应收要么应付，而本页类型是**必选**（默认应收、无"全部"）
+ * ⇒ 列名直接跟着选中的类型走：**应付=已付/未付，应收=已收/未收**。
+ * 与仓库既有措辞一致（应付侧 payable.vue 用「已付/未付」、应收侧 receivable.vue 用「已收/未收」）。
+ */
+// ⚠️ 必须 String(...) 包一层：query.billType 的初值是 as const 的 BillType.RECEIVABLE ⇒ TS 把它推断成
+// **字面量类型 "RECEIVABLE"**，直接与 PAYABLE 比较会被判为"两个类型没有交集"（TS2367）。
+const isPayable = computed(() => String(query.billType) === BillType.PAYABLE)
+/** 类型筛选没选具体类型 = 全部（2026-09-29 用户口径：类型下拉加「全部」选项） */
+const isAllTypes = computed(() => !query.billType)
+/**
+ * 两列金额的列名：应收=已收/未收、应付=已付/未付（用户口径：不要「已收付/未收付」这种合写词）；
+ * **全部** = 两种单据混排，任何单向词都会误导对方 ⇒ 用台账状态枚举的中性词「已结算/未结算」
+ * （与 `enums.ts` 的 `SettlementStatusLabel` 同一用词，不另造词）。
+ */
+const paidLabel = computed(() => (isAllTypes.value ? '已结算' : (isPayable.value ? '已付' : '已收')))
+const unpaidLabel = computed(() => (isAllTypes.value ? '未结算' : (isPayable.value ? '未付' : '未收')))
 
 async function loadData() {
   loading.value = true
@@ -61,8 +89,12 @@ onActivated(() => {
 function query_() { page.pageNum = 1; loadData() }
 function reset_() { query.partnerId = ''; page.pageNum = 1; loadData() }
 function partnerName(id?: number) {
-  if (query.billType === BillType.RECEIVABLE) return customersOptions.value.find(x => x.id === id)?.name || ''
-  return suppliersOptions.value.find(x => x.id === id)?.name || ''
+  // 无具体类型（全部）时两张表都找一遍，避免返回空名
+  const inCustomers = customersOptions.value.find(x => x.id === id)?.name || ''
+  const inSuppliers = suppliersOptions.value.find(x => x.id === id)?.name || ''
+  if (query.billType === BillType.RECEIVABLE) return inCustomers
+  if (query.billType === BillType.PAYABLE) return inSuppliers
+  return inCustomers || inSuppliers
 }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 
@@ -71,6 +103,14 @@ const genLoading = ref(false)
 const genDialog = ref(false)
 
 function onBillTypeChange() { genForm.partnerId = undefined; genForm.partnerName = '' }
+/**
+ * **生成弹框**的往来单位下拉：必须跟**弹框自己的类型**（`genForm.billType`）。
+ *
+ * <p>2026-09-29 修（既有 bug）：原先列表与弹框共用同一个 `fetchPartner`，而它读的是**列表筛选**的
+ * `query.billType` ⇒ 两边类型不一致时（例：列表在看应收、弹框选应付）弹框会列出**错误的主数据**
+ * （要选供应商却列了客户）⇒ 生成出来的账单会挂错往来单位。同一元凶：一个 fetch 被两处共用却只读一份状态。</p>
+ */
+const fetchGenPartner = (kw: string) => (genForm.billType === BillType.RECEIVABLE ? fetchCustomers(kw) : fetchSuppliers(kw))
 function onPartnerPick(rows: any[]) {
   genForm.partnerName = rows?.[0]?.name || ''
 }
@@ -126,8 +166,10 @@ async function handleCancel(row: FinanceBill) {
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
-      <el-form-item label="类型"><el-select v-model="query.billType" style="width:120px"><el-option :label="BillTypeLabel[BillType.RECEIVABLE]" :value="BillType.RECEIVABLE"/><el-option :label="BillTypeLabel[BillType.PAYABLE]" :value="BillType.PAYABLE"/></el-select></el-form-item>
-      <el-form-item label="往来单位"><RemoteSelect v-model="query.partnerId" :fetch="fetchPartner" placeholder="全部" style="width:160px" /></el-form-item>
+      <!-- 2026-09-29 用户口径：类型下拉加「全部」（空串 ⇒ 不传 billType ⇒ 后端返回应收+应付混排） -->
+      <el-form-item label="类型"><el-select v-model="query.billType" style="width:120px" @change="onQueryTypeChange"><el-option label="全部" value="" /><el-option :label="BillTypeLabel[BillType.RECEIVABLE]" :value="BillType.RECEIVABLE"/><el-option :label="BillTypeLabel[BillType.PAYABLE]" :value="BillType.PAYABLE"/></el-select></el-form-item>
+      <!-- 「全部」下禁用往来单位：客户/供应商 id 空间独立，混筛会串号（见 fetchPartner 注释） -->
+      <el-form-item label="往来单位"><RemoteSelect v-model="query.partnerId" :fetch="fetchPartner" :disabled="isAllTypes" :placeholder="isAllTypes ? '先选类型' : '全部'" style="width:160px" /></el-form-item>
       </el-form>
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="query_">查询</el-button>
@@ -158,8 +200,9 @@ async function handleCancel(row: FinanceBill) {
         <el-table-column prop="periodStart" label="账期起" width="90" align="center"/>
         <el-table-column prop="periodEnd" label="账期止" width="90" align="center"/>
         <el-table-column prop="totalAmount" label="总额" width="92" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
-        <el-table-column prop="paidAmount" label="已收付" width="92" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
-        <el-table-column prop="unpaidAmount" label="未收付" width="92" align="right" show-overflow-tooltip><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
+        <!-- 2026-09-29 用户口径：列名跟账单类型走（应付=已付/未付，应收=已收/未收），不用合写词 -->
+        <el-table-column prop="paidAmount" :label="paidLabel" width="92" align="right" show-overflow-tooltip><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
+        <el-table-column prop="unpaidAmount" :label="unpaidLabel" width="92" align="right" show-overflow-tooltip><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column label="状态" width="76" align="center"><template #default="{row}"><el-tag :type="StatusTag[row.status] || 'info'" size="small">{{ StatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 170→132（详情/审核/作废 3 个按钮）。 -->
       <el-table-column label="操作" width="132" align="center" fixed="right"><template #default="{row}">
@@ -174,7 +217,7 @@ async function handleCancel(row: FinanceBill) {
     <el-dialog v-model="genDialog" title="生成账单" width="var(--app-dialog-sm)">
       <el-form :model="genForm" label-width="90px">
         <el-form-item label="类型"><el-select v-model="genForm.billType" style="width:100%" @change="onBillTypeChange"><el-option :label="BillTypeLabel[BillType.RECEIVABLE]" :value="BillType.RECEIVABLE"/><el-option :label="BillTypeLabel[BillType.PAYABLE]" :value="BillType.PAYABLE"/></el-select></el-form-item>
-        <el-form-item label="往来单位"><RemoteSelect v-model="genForm.partnerId" :fetch="fetchPartner" placeholder="请选择" style="width:100%" @pick="onPartnerPick" /></el-form-item>
+        <el-form-item label="往来单位"><RemoteSelect v-model="genForm.partnerId" :fetch="fetchGenPartner" placeholder="请选择" style="width:100%" @pick="onPartnerPick" /></el-form-item>
         <el-form-item label="账期起"><el-date-picker v-model="genForm.periodStart" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>
         <el-form-item label="账期止"><el-date-picker v-model="genForm.periodEnd" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>
       </el-form>
