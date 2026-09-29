@@ -83,6 +83,7 @@ public class DataInitializer implements ApplicationRunner {
         migrateOverReceipt();
         migrateReturnBackPriceManual();
         migrateFinanceExpenseSource();
+        migrateStockLossLiableParty();
         initSuperAdmin();
         initMaterialTypes();
         initPhaseTemplates();
@@ -705,6 +706,35 @@ public class DataInitializer implements ApplicationRunner {
             }
         }
         if (added > 0) log.info("已为 {} 处单据表补「制单人/审核人」列", added);
+    }
+
+    /**
+     * 报损单补「损失承担方」三列（2026-09-29 用户口径「报损需要走财务流程」）。
+     *
+     * <p>成品报损 {@code inventory_stock_loss} 与委外物料报损 {@code outsource_stock_loss} 各补三列：
+     * {@code liable_party}（INTERNAL=内部损失，默认 / SUPPLIER=供应商·加工厂承担）、
+     * {@code liable_supplier_id}、{@code liable_supplier_name}。</p>
+     *
+     * <p><b>存量行取默认 INTERNAL</b>：历史报损发生在本次改造前、库存流水已发生，按"内部损失"口径新起账，
+     * 不追溯生成凭证（是否补账由用户口径决定，见审核报告 F7-201）。</p>
+     *
+     * <p>与 {@link #initDocOperatorColumns()} 同规格：MySQL 8 无 {@code ADD COLUMN IF NOT EXISTS}
+     * ⇒ 先查列再补，重复启动零写入。</p>
+     */
+    private void migrateStockLossLiableParty() {
+        for (String t : new String[]{"inventory_stock_loss", "outsource_stock_loss"}) {
+            try {
+                if (!columnExists(t, "liable_party")) {
+                    jdbcTemplate.execute("ALTER TABLE " + t
+                            + " ADD COLUMN liable_party VARCHAR(20) DEFAULT 'INTERNAL' COMMENT '损失承担方: INTERNAL=内部损失 SUPPLIER=供应商/加工厂承担'"
+                            + ", ADD COLUMN liable_supplier_id BIGINT DEFAULT NULL COMMENT '承担方供应商ID(SUPPLIER 时必填)'"
+                            + ", ADD COLUMN liable_supplier_name VARCHAR(100) DEFAULT NULL COMMENT '承担方供应商名称(冗余留痕)'");
+                    log.info("已为 {} 补「损失承担方」三列（报损走财务流程）", t);
+                }
+            } catch (Exception e) {
+                log.warn("补列失败 {}: {}", t, e.getMessage());
+            }
+        }
     }
 
     /**

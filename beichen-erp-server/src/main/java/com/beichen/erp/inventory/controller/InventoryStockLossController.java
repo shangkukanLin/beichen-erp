@@ -106,6 +106,13 @@ public class InventoryStockLossController {
         if (d.get("lossDate") != null && !d.get("lossDate").toString().isBlank()) {
             o.setLossDate(LocalDate.parse(d.get("lossDate").toString()));
         }
+        // 2026-09-29（用户口径「报损需要走财务流程」）：损失承担方 + 承担方供应商。
+        // ⚠️ 本方法是**白名单解析** —— 新增字段必须在此登记，否则前端传了也会被静默丢弃
+        //    （等于按默认「内部损失」落账，正是本次实证发现的缺陷）。
+        o.setLiableParty((String) d.get("liableParty"));
+        if (d.get("liableSupplierId") != null && !d.get("liableSupplierId").toString().isBlank()) {
+            o.setLiableSupplierId(Long.valueOf(d.get("liableSupplierId").toString()));
+        }
         return o;
     }
 

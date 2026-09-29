@@ -105,7 +105,18 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
         if (!DocStatusGuard.claim(expenseMapper, FinanceExpense::getId, id, FinanceExpense::getStatus,
                 DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
             throw new BusinessException("只有草稿状态可审核");
-        if (expense.getAccountId() == null) throw new BusinessException("支出账户不能为空");
+        // 2026-09-29（用户口径「报损需要走财务流程」）：**非资金费用**（无账户的损失费用，如报损损失）——
+        // 存货损失不发生现金流出 ⇒ 不校验余额、不写资金流水，仅置「已审核」；
+        // 金额由来源单据（报损单）在生成时决定，故这里没有金额可变项。
+        if (expense.getAccountId() == null) {
+            if (expense.getSourceBillType() == null || expense.getSourceBillType().isBlank())
+                throw new BusinessException("支出账户不能为空（手工登记的费用单必须指定账户）");
+            FinanceExpense u0 = new FinanceExpense();
+            u0.setId(id);
+            u0.setStatus(DocStatus.AUDITED.getCode());
+            expenseMapper.updateById(u0);
+            return;
+        }
         // F7-140（2026-09-20）：**账户行锁** —— 与付款侧同款问题：余额是 Σ 流水的派生值，
         // "读余额校验 → 写支出流水"两步不原子 ⇒ 并发两笔费用可双双通过校验、账户被透支（报告的 P3 残留）。
         Long lockCid = CompanyContext.get();
@@ -145,6 +156,14 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
         if (!DocStatusGuard.claim(expenseMapper, FinanceExpense::getId, id, FinanceExpense::getStatus,
                 DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
             throw new BusinessException("只有已审核的费用单可反审核");
+        // 2026-09-29：非资金费用（无账户）⇒ 没有流水可冲，直接回草稿（与审核分支严格对称）
+        if (expense.getAccountId() == null) {
+            FinanceExpense u0 = new FinanceExpense();
+            u0.setId(id);
+            u0.setStatus(DocStatus.DRAFT.getCode());
+            expenseMapper.updateById(u0);
+            return;
+        }
         // 写「费用冲正」流水把钱冲回账户（保留审计轨迹，不删除原流水），与收款单反审核模式对称
         FinanceCashflow cf = new FinanceCashflow();
         cf.setFlowNo(genFlowNo());
@@ -190,11 +209,19 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
             throw new BusinessException(ex.getMessage());
         }
         if (expense.getAmount() == null || expense.getAmount().compareTo(BigDecimal.ZERO) <= 0) throw new BusinessException("费用金额必须大于 0");
-        if (expense.getAccountId() == null) throw new BusinessException("支出账户不能为空");
+        // 2026-09-29（用户口径「报损需要走财务流程」）：**支出账户可为空** —— 但**仅限"由业务单据带出的
+        // 非资金损失费用"**（source_bill_type 非空，如报损损失 ExpenseType.LOSS：存货损失不发生现金流出
+        // ⇒ 不写资金流水、不扣账户）。手工登记的费用单仍必须指定账户，避免"凭空一笔费用"。
+        if (expense.getAccountId() == null
+                && (expense.getSourceBillType() == null || expense.getSourceBillType().isBlank())) {
+            throw new BusinessException("支出账户不能为空");
+        }
         if (expense.getExpenseDate() == null) expense.setExpenseDate(LocalDate.now());
     }
 
     private void fillAccountName(FinanceExpense expense) {
+        // 2026-09-29：无账户 = 非资金费用（报损损失等由业务单据带出的损失）⇒ 账户名一并留空
+        if (expense.getAccountId() == null) { expense.setAccountName(null); return; }
         FinanceAccount acc = accountMapper.selectById(expense.getAccountId());
         if (acc == null) throw new BusinessException("支出账户不存在");
         expense.setAccountName(acc.getAccountName());

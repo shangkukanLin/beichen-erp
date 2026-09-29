@@ -83,6 +83,17 @@ public enum SourceBillType {
     PAYABLE_TRANSFER("应付转应收"),
 
     /**
+     * 成品报损（2026-09-29 用户口径「报损需要走财务流程」）。
+     * <p>用途：① 承担方=供应商时，本条是 {@code finance_receivable}（对供应商索赔）的来源；
+     * ② 承担方=内部时，本条是 {@code finance_expense}（报损损失费用，无账户=非资金）的来源。
+     * 两者都以报损单号作为单号/来源单号，故**审核/反审核可幂等复用同一行**。</p>
+     */
+    INVENTORY_STOCK_LOSS("成品报损"),
+
+    /** 委外物料报损（与成品报损同口径，见 {@link #INVENTORY_STOCK_LOSS}） */
+    OUTSOURCE_STOCK_LOSS("委外物料报损"),
+
+    /**
      * F7-53（2026-09-19）：**预收/预付台账**的来源标记 —— 多收/多付产生的台账，其来源就是收款单/付款单。
      *
      * <p>修复前这两处写入的是 {@code SettlementStatus.ADVANCE.getCode()}（字面量 "ADVANCE"）—— **用错枚举填错字段**：

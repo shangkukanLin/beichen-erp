@@ -36,6 +36,23 @@ public class OutsourceStockLoss {
     /** 报损总金额（明细金额合计） */
     private BigDecimal totalAmount;
 
+    /**
+     * 损失承担方（2026-09-29 用户口径「报损需要走财务流程」，与成品报损同口径）：
+     * {@code INTERNAL}=内部损失（审核生成「报损损失」费用单，**无账户=非资金**）；
+     * {@code SUPPLIER}=供应商/加工厂承担（审核生成**对供应商的应收**索赔，反审核冲销）。
+     */
+    private String liableParty;
+
+    /** 承担方供应商/加工厂ID（liableParty=SUPPLIER 时必填） */
+    private Long liableSupplierId;
+
+    /** 承担方供应商/加工厂名称（冗余留痕） */
+    private String liableSupplierName;
+
+    /** 财务影响（非表字段，详情页展示） */
+    @TableField(exist = false)
+    private String financeInfo;
+
     /** 状态（DocStatus：DRAFT / AUDITED / CANCELLED） */
     private String status;
 

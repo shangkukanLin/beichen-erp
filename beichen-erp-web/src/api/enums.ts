@@ -151,7 +151,22 @@ export const BillTypeLabel: Record<string, string> = {
 export const ExpenseTypeLabel: Record<string, string> = {
   OFFICE: '办公费', RENT: '房租水电', SALARY: '工资社保',
   TRANSPORT: '运输费', TRAVEL: '差旅费', ENTERTAIN: '业务招待',
-  RND: '研发支出', OTHER: '其他'
+  RND: '研发支出', OTHER: '其他',
+  // 2026-09-29（用户口径「报损需要走财务流程」）：内部承担的报损审核后自动生成的损失费用
+  // （由报损单带出、**无账户=非资金**：不写资金流水、不扣账户）
+  LOSS: '报损损失'
+}
+
+/**
+ * 报损「损失承担方」（2026-09-29 用户口径「报损需要走财务流程」）：
+ * 决定报损单审核后的**财务落点** —— 内部损失⇒「报损损失」费用单（非资金）；
+ * 供应商/加工厂承担⇒对供应商的**应收**（索赔）。与后端 `StockLossAccountingHelper.PARTY_*` 一致。
+ */
+export const LiableParty = { INTERNAL: 'INTERNAL', SUPPLIER: 'SUPPLIER' } as const
+
+export const LiablePartyLabel: Record<string, string> = {
+  [LiableParty.INTERNAL]: '内部损失',
+  [LiableParty.SUPPLIER]: '供应商/加工厂承担'
 }
 
 /** 账户类型：DB 存 code（finance_account.account_type），显示映射（账户管理页 / 首页财务 TAB / 经营分析-资金与往来 共用） */
@@ -406,7 +421,11 @@ export const SourceBillTypeLabel: Record<string, string> = {
   SALE_EXCHANGE_CHARGE: '销售换货收费', SALE_RETURN_CHARGE: '销售退货收费',
   RETURN_SORT_LOSS: '退货整理折损', PAYABLE_TRANSFER: '应付转应收',
   // F7-53（2026-09-19）：预收/预付台账的来源标记（后端由 SettlementStatus.ADVANCE 归位而来）
-  ADVANCE_LEDGER: '预收/预付台账'
+  ADVANCE_LEDGER: '预收/预付台账',
+  // 2026-09-29（报损走财务流程）：两类报损单 —— 承担方=供应商时是**索赔应收**的来源；
+  // 承担方=内部时是**报损损失费用单**的来源（同一类型码两用，靠单据类型区分）
+  INVENTORY_STOCK_LOSS: '成品报损',
+  OUTSOURCE_STOCK_LOSS: '委外物料报损'
 }
 export function sourceBillTypeLabel(code?: string) { return code ? (SourceBillTypeLabel[code] || code) : '' }
 
@@ -428,7 +447,8 @@ export const SourceBillTypeShortLabel: Record<string, string> = {
   OUTSOURCE_RETURN: '委外退料', OUTSOURCE_RETURN_CHARGE: '委退收费',
   OUTSOURCE_REPAIR_CHARGE: '维修收费', OUTSOURCE_RETURN_BACK: '加工返回',
   OUTSOURCE_MATERIAL_REPAIR_FEE: '物料维修费',
-  RETURN_SORT_LOSS: '退货折损', PAYABLE_TRANSFER: '转应收', ADVANCE_LEDGER: '预收预付'
+  RETURN_SORT_LOSS: '退货折损', PAYABLE_TRANSFER: '转应收', ADVANCE_LEDGER: '预收预付',
+  INVENTORY_STOCK_LOSS: '成品报损', OUTSOURCE_STOCK_LOSS: '物料报损'
 }
 export function sourceBillTypeShortLabel(code?: string) { return code ? (SourceBillTypeShortLabel[code] || sourceBillTypeLabel(code)) : '' }
 

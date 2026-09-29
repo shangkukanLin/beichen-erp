@@ -13,6 +13,8 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.dev.entity.MaterialType;
 import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.common.SourceBillType;
+import com.beichen.erp.finance.service.StockLossAccountingHelper;
 import com.beichen.erp.inventory.common.LossReason;
 import com.beichen.erp.inventory.common.RelatedBillType;
 import com.beichen.erp.inventory.common.StockChangeType;
@@ -24,6 +26,8 @@ import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceStockLossItemMapper;
 import com.beichen.erp.outsource.mapper.OutsourceStockLossMapper;
 import com.beichen.erp.outsource.service.OutsourceStockLossService;
+import com.beichen.erp.supplier.entity.Supplier;
+import com.beichen.erp.supplier.mapper.SupplierMapper;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
@@ -56,6 +60,9 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
     private final MaterialTypeMapper materialTypeMapper;
     private final WarehouseMapper warehouseMapper;
     private final UserMapper userMapper;
+    /** 报损落账（2026-09-29 用户口径「报损需要走财务流程」）：内部损失⇒损失费用单；加工厂/供应商承担⇒对供应商应收（索赔） */
+    private final StockLossAccountingHelper stockLossAccounting;
+    private final SupplierMapper supplierMapper;
 
     @Override
     public Page<OutsourceStockLoss> page(String status, Long warehouseId, String lossReason, String keyword,
@@ -170,7 +177,12 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
     @Override
     public OutsourceStockLoss getById(Long id) {
         OutsourceStockLoss loss = lossMapper.selectById(id);
-        if (loss != null) fillView(loss);
+        if (loss != null) {
+            fillView(loss);
+            // 2026-09-29：详情页展示「财务影响」（这笔报损落到了哪张凭证；无凭证时 null）
+            loss.setFinanceInfo(stockLossAccounting.financeInfo(SourceBillType.OUTSOURCE_STOCK_LOSS.getCode(),
+                    loss.getId(), loss.getCode(), loss.getLiableParty()));
+        }
         return loss;
     }
 
@@ -200,6 +212,7 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) loss.setCompanyId(cid);
         loss.setTotalAmount(calcTotal(valid));
+        applyLiableParty(loss);   // 2026-09-29（报损走财务流程）：承担方校验 + 供应商快照
         lossMapper.insert(loss);
         saveItems(loss.getId(), valid, cid);
     }
@@ -219,7 +232,17 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
         loss.setWarehouseName(wh != null ? wh.getWarehouseName() : old.getWarehouseName());
         Long cid = CompanyContext.get();
         loss.setTotalAmount(calcTotal(valid));
+        // 2026-09-29：承担方 —— 请求未带（旧前端/脚本）时保留原值，避免编辑时被静默改回"内部损失"
+        if (loss.getLiableParty() == null || loss.getLiableParty().isBlank()) loss.setLiableParty(old.getLiableParty());
+        applyLiableParty(loss);
         lossMapper.updateById(loss);
+        // 承担方切回"内部损失"时必须**显式清空**承担方供应商（updateById 忽略 null 字段，否则旧供应商残留）
+        if (!StockLossAccountingHelper.PARTY_SUPPLIER.equals(loss.getLiableParty())) {
+            lossMapper.update(null, new LambdaUpdateWrapper<OutsourceStockLoss>()
+                    .eq(OutsourceStockLoss::getId, loss.getId())
+                    .set(OutsourceStockLoss::getLiableSupplierId, null)
+                    .set(OutsourceStockLoss::getLiableSupplierName, null));
+        }
 
         itemMapper.delete(new LambdaQueryWrapper<OutsourceStockLossItem>()
                 .eq(OutsourceStockLossItem::getLossId, loss.getId()));
@@ -252,6 +275,13 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
         if (items.isEmpty()) throw new BusinessException("报损单无明细，无法审核");
         checkStockBeforeLoss(loss, items);
         applyStock(loss, items);
+        // 2026-09-29（用户口径「报损需要走财务流程」）：按承担方落账 ——
+        //   内部损失 ⇒ 生成「报损损失」费用单（无账户=非资金）；
+        //   加工厂/供应商承担 ⇒ 生成对供应商的**应收**（索赔）。
+        // 金额 ≤0 不落账（仍照常扣库存）；幂等：helper 按来源复用同一行/同一张。
+        stockLossAccounting.post(SourceBillType.OUTSOURCE_STOCK_LOSS.getCode(), loss.getId(), loss.getCode(),
+                loss.getTotalAmount(), loss.getLiableParty(), loss.getLiableSupplierId(), loss.getLiableSupplierName(),
+                loss.getLossDate(), buildFinanceRemark(loss));
 
         OutsourceStockLoss u = new OutsourceStockLoss();
         u.setId(id); u.setStatus(DocStatus.AUDITED.getCode());
@@ -273,6 +303,8 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
         List<OutsourceStockLossItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<OutsourceStockLossItem>().eq(OutsourceStockLossItem::getLossId, id));
         revertStock(loss, items);
+        // 2026-09-29（报损走财务流程）：财务腿**对称冲销**（内部⇒费用单作废；外部⇒索赔应收冲回；不存在则跳过）
+        stockLossAccounting.reverse(SourceBillType.OUTSOURCE_STOCK_LOSS.getCode(), loss.getId(), loss.getCode());
 
         // 审核信息必须用 UpdateWrapper 显式置 null：updateById 会忽略 null 字段，
         // 否则反审核回草稿后仍显示审核人/审核时间（审计信息失真，与成品报损同源修复）。
@@ -346,6 +378,37 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
                     StockChangeType.CANCEL_LOSS_OUT.getCode(), loss.getCode(), RelatedBillType.OUTSOURCE_STOCK_LOSS,
                     null, null, loss.getId());
         }
+    }
+
+    /**
+     * 承担方校验 + 供应商快照（2026-09-29 用户口径「报损需要走财务流程」，与成品报损同口径）。
+     * <p>空值按「内部损失」归一；选「供应商/加工厂承担」时必须给出**存在**的供应商（委外料报废多由加工厂担责）。</p>
+     */
+    private void applyLiableParty(OutsourceStockLoss loss) {
+        if (!StockLossAccountingHelper.isValidParty(loss.getLiableParty()))
+            throw new BusinessException("损失承担方不合法：" + loss.getLiableParty());
+        String party = StockLossAccountingHelper.normalizeParty(loss.getLiableParty());
+        loss.setLiableParty(party);
+        if (StockLossAccountingHelper.PARTY_SUPPLIER.equals(party)) {
+            if (loss.getLiableSupplierId() == null)
+                throw new BusinessException("损失由供应商/加工厂承担时，必须选择承担方");
+            Supplier s = supplierMapper.selectById(loss.getLiableSupplierId());
+            if (s == null)
+                throw new BusinessException("承担方不存在（ID=" + loss.getLiableSupplierId() + "）");
+            loss.setLiableSupplierName(s.getName());
+        } else {
+            loss.setLiableSupplierId(null);
+            loss.setLiableSupplierName(null);
+        }
+    }
+
+    /** 财务凭证备注：写明来源报损单 + 原因 + 承担方，便于财务追溯（费用单与索赔应收共用） */
+    private String buildFinanceRemark(OutsourceStockLoss loss) {
+        LossReason r = LossReason.of(loss.getLossReason());
+        String party = StockLossAccountingHelper.PARTY_SUPPLIER.equals(loss.getLiableParty())
+                ? "承担方：" + (loss.getLiableSupplierName() != null ? loss.getLiableSupplierName() : "供应商")
+                : "承担方：内部损失";
+        return "报损单 " + loss.getCode() + "（" + (r != null ? r.getLabel() + "，" : "") + party + "）";
     }
 
     private List<OutsourceStockLossItem> validItems(List<OutsourceStockLossItem> items) {

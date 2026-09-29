@@ -1565,6 +1565,13 @@ CREATE TABLE IF NOT EXISTS inventory_stock_loss (
     loss_date      DATE                  COMMENT '报损日期',
     loss_reason    VARCHAR(30)           COMMENT '报损原因: DAMAGE=破损 EXPIRED=变质过期 LOST=丢失 QUALITY=质量不合格 OTHER=其他',
     total_amount   DECIMAL(18,2) DEFAULT 0 COMMENT '报损总金额(明细金额合计,冗余便于列表展示)',
+    -- 2026-09-29（用户口径「报损需要走财务流程」）：损失承担方决定**记账落点**（审核时执行、反审核对称冲销）：
+    --   INTERNAL ⇒ 生成「报损损失」费用单（finance_expense，**无账户=非资金**，不写资金流水、不扣账户）；
+    --   SUPPLIER ⇒ 生成**对供应商的应收**（finance_receivable，subject_type=SUPPLIER，索赔），反审核冲销该应收。
+    --   金额取 total_amount；为 0 时**不落账**（仍照常扣库存）。历史单默认 INTERNAL。
+    liable_party   VARCHAR(20) DEFAULT 'INTERNAL' COMMENT '损失承担方: INTERNAL=内部损失(默认) SUPPLIER=供应商/加工厂承担',
+    liable_supplier_id   BIGINT DEFAULT NULL COMMENT '承担方供应商ID(liable_party=SUPPLIER 时必填)',
+    liable_supplier_name VARCHAR(100) DEFAULT NULL COMMENT '承担方供应商名称(冗余留痕)',
     status         VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废',
     remark         VARCHAR(500)          COMMENT '备注',
     auditor_id     BIGINT                COMMENT '审核人ID',
@@ -2024,10 +2031,12 @@ CREATE TABLE IF NOT EXISTS finance_cashflow (
 CREATE TABLE IF NOT EXISTS finance_expense (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '费用单ID',
     expense_no VARCHAR(50) NOT NULL COMMENT '费用单号',
-    expense_type VARCHAR(50) COMMENT '费用类型(存code): OFFICE/RENT/SALARY/TRANSPORT/TRAVEL/ENTERTAIN/RND=研发支出/OTHER',
+    expense_type VARCHAR(50) COMMENT '费用类型(存code): OFFICE/RENT/SALARY/TRANSPORT/TRAVEL/ENTERTAIN/RND=研发支出/LOSS=报损损失/OTHER',
     amount DECIMAL(18,4) NOT NULL COMMENT '费用金额',
     expense_date DATE COMMENT '费用日期（利润表按此归月）',
-    account_id BIGINT COMMENT '支出账户ID',
+    -- 2026-09-29（报损走财务流程）：**空 = 非资金费用**（由业务单据带出的损失，如报损损失）
+    --   ⇒ 审核不写资金流水、不校验账户余额（存货损失无现金流出）；手工登记的费用单仍必填账户。
+    account_id BIGINT COMMENT '支出账户ID(空=非资金费用,如报损损失)',
     account_name VARCHAR(100) COMMENT '支出账户名称',
     remark VARCHAR(500) COMMENT '备注',
     status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT/AUDITED/CANCELLED',
@@ -2231,6 +2240,11 @@ CREATE TABLE IF NOT EXISTS outsource_stock_loss (
     loss_date      DATE                  COMMENT '报损日期',
     loss_reason    VARCHAR(30)           COMMENT '报损原因: DAMAGE=破损 EXPIRED=变质过期 LOST=丢失 QUALITY=质量不合格 OTHER=其他',
     total_amount   DECIMAL(18,2) DEFAULT 0 COMMENT '报损总金额(明细金额合计,冗余便于列表展示)',
+    -- 2026-09-29（用户口径「报损需要走财务流程」）：与成品报损同口径（见 inventory_stock_loss 注释）——
+    --   INTERNAL ⇒ 「报损损失」费用单（无账户=非资金）；SUPPLIER ⇒ 对**加工厂/供应商**的应收（索赔）。
+    liable_party   VARCHAR(20) DEFAULT 'INTERNAL' COMMENT '损失承担方: INTERNAL=内部损失(默认) SUPPLIER=供应商/加工厂承担',
+    liable_supplier_id   BIGINT DEFAULT NULL COMMENT '承担方供应商ID(liable_party=SUPPLIER 时必填)',
+    liable_supplier_name VARCHAR(100) DEFAULT NULL COMMENT '承担方供应商名称(冗余留痕)',
     status         VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废',
     remark         VARCHAR(500)          COMMENT '备注',
     auditor_id     BIGINT                COMMENT '审核人ID',

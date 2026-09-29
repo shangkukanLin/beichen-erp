@@ -35,6 +35,23 @@ public class InventoryStockLoss {
     /** 报损总金额（明细金额合计，冗余便于列表展示与统计） */
     private BigDecimal totalAmount;
 
+    /**
+     * 损失承担方（2026-09-29 用户口径「报损需要走财务流程」）：
+     * {@code INTERNAL}=内部损失（审核生成「报损损失」费用单，**无账户=非资金**）；
+     * {@code SUPPLIER}=供应商/加工厂承担（审核生成**对供应商的应收**索赔，反审核冲销）。
+     */
+    private String liableParty;
+
+    /** 承担方供应商ID（liableParty=SUPPLIER 时必填） */
+    private Long liableSupplierId;
+
+    /** 承担方供应商名称（冗余留痕） */
+    private String liableSupplierName;
+
+    /** 财务影响（非表字段，详情页展示：如「损失费用单 FY-… (已审核)」/「应收索赔 AR-… 未收」） */
+    @TableField(exist = false)
+    private String financeInfo;
+
     /** 状态（DocStatus：DRAFT 草稿 / AUDITED 已审核 / CANCELLED 已作废） */
     private String status;
 

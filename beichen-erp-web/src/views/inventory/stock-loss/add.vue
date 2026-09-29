@@ -20,6 +20,21 @@
             <el-option v-for="r in lossReasons" :key="r.code" :label="r.label" :value="r.code" />
           </el-select>
         </el-form-item>
+        <!-- 损失承担方（2026-09-29 用户口径「报损需要走财务流程」）：决定审核后的财务落点 -->
+        <el-form-item label="损失承担方">
+          <el-select v-model="form.liableParty" style="width:200px">
+            <el-option v-for="p in liableParties" :key="p.value" :label="p.label" :value="p.value" />
+          </el-select>
+          <span class="hint">
+            {{ form.liableParty === LiableParty.SUPPLIER
+              ? '审核后生成对供应商的应收（索赔），反审核冲回'
+              : '审核后生成「报损损失」费用单（非资金：不扣账户、不写资金流水）' }}
+          </span>
+        </el-form-item>
+        <el-form-item v-if="form.liableParty === LiableParty.SUPPLIER" label="承担方" required>
+          <RemoteSelect v-model="form.liableSupplierId" :fetch="fetchSuppliers"
+            :label-key="(row:any)=>row.name" placeholder="选择供应商/加工厂" style="width:220px" />
+        </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.remark" placeholder="选填" style="width:320px" />
         </el-form-item>
@@ -107,7 +122,7 @@ import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useTabStore } from '@/stores/tabs'
 import { getQualityTypes, type QualityOption } from '@/api/product'
-import { WarehouseCategory, WarehouseType, ProductQualityType, LossReasonLabel, codeLabelOptions, INVENTORY_STOCK_LOSS_DIRTY_KEY } from '@/api/enums'
+import { WarehouseCategory, WarehouseType, ProductQualityType, LossReasonLabel, LiableParty, LiablePartyLabel, codeLabelOptions, INVENTORY_STOCK_LOSS_DIRTY_KEY } from '@/api/enums'
 
 const route = useRoute()
 const router = useRouter()
@@ -122,16 +137,24 @@ const fetchWarehouses = (kw: string) =>
       return res
     })
 const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 100, keyword: kw } })
+/** 承担方下拉（承担方=供应商/加工厂承担时用）：复用往来单位主数据 */
+const fetchSuppliers = (kw: string) => request.get('/supplier/page', { params: { pageSize: 500, name: kw } })
 
 const qualityOptions = ref<QualityOption[]>([])
 const lossReasons = ref<any[]>([])
 const saving = ref(false)
+/** 损失承担方选项（2026-09-29 报损走财务流程） */
+const liableParties = computed(() => Object.entries(LiablePartyLabel).map(([value, label]) => ({ value, label })))
 
 const form = reactive({
   warehouseId: undefined as number | undefined,
   lossDate: localDate(),
   lossReason: undefined as string | undefined,
-  remark: ''
+  remark: '',
+  // 2026-09-29（用户口径「报损需要走财务流程」）：承担方决定审核后的**财务落点** ——
+  //   INTERNAL 内部损失 ⇒ 生成「报损损失」费用单（非资金）；SUPPLIER ⇒ 生成对供应商的应收（索赔）
+  liableParty: LiableParty.INTERNAL as string,
+  liableSupplierId: undefined as number | undefined
 })
 const items = ref<any[]>([])
 /**
@@ -203,6 +226,9 @@ async function loadDetail() {
     form.lossDate = io.lossDate
     form.lossReason = io.lossReason || undefined
     form.remark = io.remark || ''
+    // 2026-09-29：承担方回填（历史单无值 ⇒ 内部损失）
+    form.liableParty = io.liableParty || LiableParty.INTERNAL
+    form.liableSupplierId = io.liableSupplierId || undefined
     const its = await request.get<any, any>(`/inventory/stock-loss/${editId.value}/items`)
     items.value = (its || []).map((i: any) => ({
       productId: i.productId, sku: i.sku || '', productName: i.productName || '',
@@ -221,6 +247,10 @@ async function handleSubmit() {
   for (const it of valid) {
     if (overStock(it)) { ElMessage.warning('存在明细的报损数量超出可用库存，请调整'); return }
   }
+  // 2026-09-29（报损走财务流程）：承担方=供应商/加工厂时必须指定承担方（后端 applyLiableParty 同样校验）
+  if (form.liableParty === LiableParty.SUPPLIER && !form.liableSupplierId) {
+    ElMessage.warning('损失由供应商/加工厂承担时，请选择承担方'); return
+  }
   saving.value = true
   try {
     const payload = {
@@ -228,7 +258,9 @@ async function handleSubmit() {
         warehouseId: form.warehouseId,
         lossDate: form.lossDate,
         lossReason: form.lossReason,
-        remark: form.remark
+        remark: form.remark,
+        liableParty: form.liableParty,
+        liableSupplierId: form.liableParty === LiableParty.SUPPLIER ? form.liableSupplierId : null
       },
       items: valid.map((i: any) => ({
         productId: i.productId,
@@ -274,6 +306,7 @@ onMounted(async () => {
 .head-form { display: flex; flex-wrap: wrap; }
 .head-form :deep(.el-form-item) { margin-bottom: 8px; }
 .warn { color: #f56c6c; font-size: var(--app-font-xs); line-height: 16px; }
+.hint { color: var(--app-text-secondary); font-size: var(--app-font-xs); margin-left: 8px; }
 .footer { margin-top: 16px; display: flex; align-items: center; justify-content: space-between; }
 .total { font-size: var(--app-font-base); }
 .total strong { color: #f56c6c; font-size: var(--app-font-num-sm); }

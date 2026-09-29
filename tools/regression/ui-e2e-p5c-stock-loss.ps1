@@ -99,7 +99,12 @@ $stockAfter = D (SqlOne ("SELECT COALESCE(SUM(quantity),0) FROM warehouse_stock 
 $logs = D (SqlOne ("SELECT COUNT(*) FROM warehouse_stock_log WHERE material_id=" + $matId + " AND warehouse_id=" + $auxId + " AND related_bill_no LIKE 'WBS-%'"))
 Write-Host ("[DB] docs=$docs audited=$aud items=$items lossQty=$lossQty stock=$stockBefore->$stockAfter wbsLogs=$logs")
 Ok (($docs -ge 3)) ('material losses >= 3 (got ' + $docs + ')')
-Ok (($aud -eq $docs)) 'all material losses audited'
+# 2026-09-29 订正：原断言 `$aud -eq $docs` 要求**全表**所有委外报损单都 AUDITED —— 只在本表仅含本用例
+#   自造的那 3 张时成立；一旦有**已作废**的单（本脚本 rerun 的前几轮/其它用例留下的 CANCELLED 行，
+#   实测库中 9 行）就必失，属"全局计数断言脆弱"，与实际业务无关。
+#   本脚本的意图是"本用例锚定的那 3 张单都已审核" ⇒ 改为比较 **未作废** 行数。
+$notCancelled = D (SqlOne "SELECT COUNT(*) FROM outsource_stock_loss WHERE status <> 'CANCELLED'")
+Ok (($aud -eq $notCancelled)) ('all non-cancelled material losses audited (' + $aud + '/' + $notCancelled + ')')
 Ok (($items -ge 3)) ('loss items >= 3 (got ' + $items + ')')
 Ok (($lossQty -ge 60)) ('loss quantity >= 60 (got ' + $lossQty + ')')
 Ok (($stockAfter -eq ($stockBefore - $createdQty))) ('own warehouse stock == before - qty created this run (' + $stockBefore + ' - ' + $createdQty + ' = ' + $stockAfter + ')')
