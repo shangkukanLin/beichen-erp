@@ -12,9 +12,14 @@ spring:
     password: ${DB_PASSWORD}
   sql:
     init:
-      # 默认仍为 always（CREATE TABLE IF NOT EXISTS，幂等，保证首次部署可用）；
-      # 若要"结构变更受控发布"，注入 SQL_INIT_MODE=never
-      mode: ${SQL_INIT_MODE:always}
+      # 生产同样交给 Flyway（db/migration）；Spring 不再执行任何 schema 脚本
+      mode: never
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # 生产库若是"上线前就已存在"的库，需先基线；全新库直接执行 V1
+    baseline-on-migrate: true
+    baseline-version: 0
 
 logging:
   level:

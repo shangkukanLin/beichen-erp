@@ -35,7 +35,7 @@
 │       │   └── material/                     # 物料管理模块（CRUD 示例）
 │       └── resources/
 │           ├── application.yml               # 后端配置
-│           └── schema.sql                    # 建表脚本（启动自动执行）
+│           └── db/migration/V1__base.sql                    # 建表脚本（启动自动执行）
 │
 └── beichen-erp-web/              # 前端服务（Vue 3 + TypeScript + Vite）
     ├── package.json
@@ -85,7 +85,8 @@ docker compose up -d
 - MySQL：`localhost:3306`，root 密码 `root`，数据库 `beichen_erp`
 - Redis：`localhost:6379`
 
-> 数据库表会在后端首次启动时通过 `schema.sql` 自动创建（CREATE TABLE IF NOT EXISTS）。
+> 数据库表会在后端首次启动时通过 **Flyway** 自动创建，基线脚本为 `db/migration/V1__base.sql`（全 CREATE TABLE IF NOT EXISTS，幂等）。
+> 未上线期：改表结构就直接改这个基线脚本，然后**重建库**（`docs/数据库演化约定.md`）。
 
 ### 步骤 2：启动后端
 
@@ -161,7 +162,7 @@ pnpm dev
 1. **新增业务模块**：参照 `material` 模块的结构（entity → mapper → service → controller），复制即可创建 BOM、采购、委外、销售等模块。
 2. **新增前端页面**：在 `src/views/` 下新建页面，在 `src/router/index.ts` 注册路由，在 `src/api/` 下新增接口定义。
 3. **菜单扩展**：在 `src/layout/index.vue` 的侧边栏菜单中添加新菜单项。
-4. **数据库建表**：新增表结构写入 `schema.sql`（用 CREATE TABLE IF NOT EXISTS），重启后端自动建表。
+4. **数据库建表**：新增表结构写入 `db/migration/V1__base.sql`（用 CREATE TABLE IF NOT EXISTS，幂等）；由 Flyway 在启动时执行，重启后端自动建表（未上线期改基线后需重建库，见 `docs/数据库演化约定.md`）。
 
 ### 待建模块（按技术选型方案分三期推进）
 - 一期：BOM 管理、采购计划、仓储收发存、销售订单、基础财务

@@ -34,7 +34,7 @@ $o | Select-String -Pattern 'backup written|orphan material_type|deleted \(F8-23
 
 Sec '1) F8-21: customized marker wiring (schema + entity + write path + sync logic)'
 Ok ((SqlOne "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='beichen_erp' AND table_name='sys_menu' AND column_name='customized'") -eq '1') 'sys_menu.customized column exists in the live DB'
-Ok (Has (Join-Path $erp 'beichen-erp-server\src\main\resources\schema.sql') 'customized') 'schema.sql defines the customized column (fresh installs get it)'
+Ok (Has (Join-Path $erp 'beichen-erp-server\src\main\resources\db\migration\V1__base.sql') 'customized') 'V1__base.sql defines the customized column (fresh installs get it)'
 Ok (Has $di 'IF\(customized=1, menu_name') 'syncMenus honours customized=1 for menu_name (and friends)'
 Ok (-not (Has $di 'addColumnIfMissing')) 'P1: DataInitializer performs no startup DDL (sys_menu.customized is declared in schema.sql)'
 Ok (Has $menuEntity 'private Integer customized') 'Menu entity exposes customized'

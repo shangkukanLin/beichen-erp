@@ -62,6 +62,17 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Flyway：表结构演化的**唯一**机制（取代启动期 DDL；未上线期见 docs/数据库演化约定.md）
+             版本由 spring-boot-starter-parent 管理；Flyway 8.2+ 起 MySQL 支持拆到 flyway-mysql，必须先引 core -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>

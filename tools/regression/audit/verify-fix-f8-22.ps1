@@ -28,7 +28,7 @@ Write-Host '=== F8-22 fix verification (declarative role->menu plan) ==='
 Sec '1) plan table + marker column exist'
 Ok ((SqlOne "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='beichen_erp' AND table_name='sys_role_menu_plan'") -eq '1') 'sys_role_menu_plan table exists'
 Ok ((SqlOne "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='beichen_erp' AND table_name='sys_role' AND column_name='customized_menu'") -eq '1') 'sys_role.customized_menu column exists'
-Ok (Has (Join-Path $erp 'beichen-erp-server\src\main\resources\schema.sql') 'sys_role_menu_plan') 'schema.sql declares the plan table (fresh installs)'
+Ok (Has (Join-Path $erp 'beichen-erp-server\src\main\resources\db\migration\V1__base.sql') 'sys_role_menu_plan') 'V1__base.sql declares the plan table (fresh installs)'
 $planRows = SqlOne 'SELECT COUNT(*) FROM sys_role_menu_plan'
 Write-Host ('    plan rows = ' + $planRows)
 Ok ([int]$planRows -gt 0) 'plan was snapshotted on startup (non-empty)'

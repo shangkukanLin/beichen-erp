@@ -40,7 +40,7 @@ import java.util.Set;
  * 全部幂等（只增不改：用户改过的菜单/角色授权会被跳过）。</p>
  *
  * <p><b>本类不再执行任何 DDL</b>：原 18 个 {@code migrate*()} 升级方法与 {@code initDocOperatorColumns()}
- * 已删除 —— 项目尚未上线，不存在"老库需要就地升级"的场景；表结构**唯一来源是 {@code schema.sql}**
+ * 已删除 —— 项目尚未上线，不存在"老库需要就地升级"的场景；表结构**唯一来源是 {@code db/migration/V1__base.sql}**
  * （{@code CREATE TABLE IF NOT EXISTS}，启动自动执行，全新库一次即成）。缺表缺列的后果由
  * {@link #assertSchemaReady()} 在初始化最前面直接报错，不再"悄悄补一列"。</p>
  *
@@ -67,7 +67,7 @@ public class DataInitializer {
      * {@code auditor_id}/{@code auditor_name}（审核时盖章）。
      *
      * <p>这些列原先由已删除的启动期迁移 {@code initDocOperatorColumns()} 逐表 {@code ALTER} 补上；
-     * 现在它们由 {@code schema.sql} 声明，本常量仅供 {@link #assertSchemaReady()} 做启动断言 ——
+     * 现在它们由 {@code db/migration/V1__base.sql} 声明，本常量仅供 {@link #assertSchemaReady()} 做启动断言 ——
      * 任何一列缺失都直接让应用起不来（避免"能启动、写单据时才报 1054 未知列"）。</p>
      */
     private static final List<String> DOC_TABLES = List.of(
@@ -106,7 +106,7 @@ public class DataInitializer {
                 {"material_type", "type_name"}, {"dev_phase_template", "product_status_sync"},
                 {"outsource_contract_template", "template_type"}, {"screen_model", "id"},
                 // P1（2026-09-30 未上线清理）：这两列原先由启动期 DDL 补（F8-21/F8-22），
-                // 现已并入 schema.sql 的 CREATE TABLE，这里只做断言，不再执行任何 DDL。
+                // 现已并入 db/migration/V1__base.sql 的 CREATE TABLE，这里只做断言，不再执行任何 DDL。
                 {"sys_menu", "customized"}, {"sys_role", "customized_menu"},
                 {"sys_role_menu_plan", "menu_id"}
         };
@@ -118,7 +118,7 @@ public class DataInitializer {
         }
         // P1：单据类表的"操作人四列"（MetaObjectHandler 自动填充 create_by/create_by_name，
         // 审核时盖章 auditor_id/auditor_name）。这 128 个列原先**全部**由启动期迁移补齐，
-        // 现由 schema.sql 声明；任何一列缺失都说明库结构落后于代码 ⇒ 必须让应用起不来。
+        // 现由 db/migration/V1__base.sql 声明；任何一列缺失都说明库结构落后于代码 ⇒ 必须让应用起不来。
         String[][] opColumns = {
                 {"create_by", "BIGINT"}, {"create_by_name", "VARCHAR"}, {"auditor_id", "BIGINT"}, {"auditor_name", "VARCHAR"}
         };
@@ -132,7 +132,7 @@ public class DataInitializer {
         if (!missing.isEmpty()) {
             throw new IllegalStateException("[启动初始化失败] 表/列缺失 " + missing.size() + " 项：" + missing
                     + " —— 本版本起不再执行启动期 DDL（未上线，见 docs/《数据库演化约定》）："
-                    + "请更新 schema.sql 后重建数据库（开发/测试库直接 drop + 重启即可）");
+                    + "请更新 db/migration/V1__base.sql 后重建数据库（开发/测试库直接 drop + 重启即可）");
         }
     }
 
@@ -588,7 +588,7 @@ public class DataInitializer {
             {1003L, 10L, "资金往来", "menu", "/analysis/cash", "AnalysisCash", "Wallet", 6},
         };
         // P1（2026-09-30 未上线清理）：此处原来会"确保 customized 列存在"（F8-21 的存量库补列）——
-        // 该列已由 schema.sql 声明，启动期不再做 DDL（缺列由 assertSchemaReady() 直接报错）。
+        // 该列已由 db/migration/V1__base.sql 声明，启动期不再做 DDL（缺列由 assertSchemaReady() 直接报错）。
 
         // ON DUPLICATE KEY UPDATE 实现 upsert
         int processed = 0;
@@ -1220,7 +1220,7 @@ public class DataInitializer {
     private void initRoleMenuPlan() {
         try {
             // P1（2026-09-30 未上线清理）：sys_role_menu_plan 表与 sys_role.customized_menu 列**均已由
-            // schema.sql 声明**，启动期不再做任何 DDL —— 缺表缺列由 assertSchemaReady() 在初始化最前面直接报错。
+            // db/migration/V1__base.sql 声明**，启动期不再做任何 DDL —— 缺表缺列由 assertSchemaReady() 在初始化最前面直接报错。
             Integer cnt = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM sys_role_menu_plan", Integer.class);
             if (cnt != null && cnt == 0) {
                 int snap = jdbcTemplate.update("INSERT IGNORE INTO sys_role_menu_plan (role_code, menu_id) "

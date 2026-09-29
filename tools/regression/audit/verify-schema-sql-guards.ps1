@@ -10,7 +10,7 @@
 # Read-only. ASCII-only by design.
 $ErrorActionPreference = 'Continue'
 $repo = 'C:\Users\75629\CodeBuddy\20260710123705\beichen-erp'
-$schema = Join-Path $repo 'beichen-erp-server\src\main\resources\schema.sql'
+$schema = Join-Path $repo 'beichen-erp-server\src\main\resources\db\migration\V1__base.sql'
 $pass = 0; $fail = 0
 function Ok($c, $m) { if ($c) { $script:pass++; Write-Host ('  PASS  ' + $m) } else { $script:fail++; Write-Host ('  FAIL  ' + $m) } }
 function Sec($t) { Write-Host ''; Write-Host ('### ' + $t) }
