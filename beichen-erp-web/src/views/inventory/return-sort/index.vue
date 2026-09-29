@@ -18,15 +18,24 @@ import {
 const route = useRoute()
 const router = useRouter()
 
-// ==================== 页签（2026-09-19 退货整理页优化） ====================
+// ==================== 页签（2026-09-19 退货整理页优化；2026-09-28 加「已整理」） ====================
 /**
- * ① 待整理（默认）：跨**自有成品仓**看"哪些仓还有什么要整理"——三态 可整理/实物不足（账实不符）/
- *    已整理完（默认隐藏）。可勾选多个批次**批量生成整理草稿**；点行「整理」/「整理本仓」跳到独立开单页
+ * ① 待整理（默认）：跨**自有成品仓**看"哪些仓还有什么要整理"——两态 可整理/实物不足（账实不符）。
+ *    可勾选多个批次**批量生成整理草稿**；点行「整理」/「整理本仓」跳到独立开单页
  *    （/inventory/return-sort/add + query 预设，2026-09-22 由抽屉改为页面，与「编辑退货整理」共用 form.vue）。
- * ② 整理单：原有的整理单列表（查询 + 审核/反审核/删除）。
- * 页签同步到 URL（?tab=bills），可直接落到列表（回归脚本长期依赖列表页）。
+ * ② 已整理（2026-09-28 用户口径）：同一份跨仓总览里**已整理完**（`sortedQuantity >= quantity`）的批次，
+ *    **只读**（无勾选/无整理按钮——已无待整理量）。原先是待整理页里的「显示已整理完」开关，
+ *    现改为独立页签：待办与历史各自成页，待整理不再被历史淹没。
+ * ③ 整理单：原有的整理单列表（查询 + 审核/反审核/删除）。
+ * 页签同步到 URL（?tab=cleared / ?tab=bills），可直接落到目标页（回归脚本长期依赖列表页）。
  */
-const activeTab = ref<string>(route.query.tab === 'bills' ? 'bills' : 'pending')
+const TAB_KEYS = ['pending', 'cleared', 'bills'] as const
+function normTab(v: unknown): string { const s = String(v || ''); return (TAB_KEYS as readonly string[]).includes(s) ? s : 'pending' }
+const activeTab = ref<string>(normTab(route.query.tab))
+/** 当前是否停在「已整理」页签 —— 决定总览的取数口径（是否含已整理完的批次） */
+const isClearedTab = computed(() => activeTab.value === 'cleared')
+/** 是否停在某个**总览**页签（待整理/已整理共用同一份跨仓总览数据） */
+const isOverviewTab = computed(() => activeTab.value === 'pending' || activeTab.value === 'cleared')
 watch(activeTab, (v) => {
   if (String(route.query.tab || '') === v) return
   // 与模版页（views/template/index.vue）同一约定：**显式给 path**（只给 query 会丢 path）
@@ -34,7 +43,7 @@ watch(activeTab, (v) => {
 })
 // 反向同步：浏览器前进/后退、外部深链 `?tab=bills` 时把页签切回来
 watch(() => route.query.tab, (t) => {
-  const v = String(t || '') === 'bills' ? 'bills' : 'pending'
+  const v = normTab(t)
   if (v !== activeTab.value) activeTab.value = v
 })
 
@@ -139,11 +148,9 @@ function openFromStockLog() {
   if (row) openRow(row)
 }
 
-// ==================== 待整理总览（跨自有成品仓） ====================
+// ==================== 跨仓总览（待整理 / 已整理 两个页签共用同一份数据） ====================
 const pendingLoading = ref(false)
-/** 显示「已整理完」的历史批次（默认隐藏，否则历史会把待办淹没） */
-const includeCleared = ref(false)
-/** 只看超期（停留天数 > 阈值） */
+/** 只看超期（停留天数 > 阈值）—— 仅「待整理」页签有该开关（已整理完的批次不再谈超期） */
 const overdueOnly = ref(false)
 const overview = ref<any>({ warehouses: [], summary: {} })
 /** 展开的仓库分组（默认全展开；用 v-model 以便用户手动折叠） */
@@ -156,7 +163,9 @@ const stayAlertDays = computed(() => Number(overview.value?.stayAlertDays ?? 3))
 async function loadOverview() {
   pendingLoading.value = true
   try {
-    overview.value = (await getReturnSortPendingOverview({ includeCleared: includeCleared.value })) || { warehouses: [], summary: {} }
+    // 2026-09-28（用户口径：开关改页签）：待整理页只要**未整理完**的批次，已整理页要**含**已整理完的批次
+    // —— 是否返回已整理完的批次由后端 includeCleared 决定（服务端语义见 verify-return-sort-overview.ps1）。
+    overview.value = (await getReturnSortPendingOverview({ includeCleared: isClearedTab.value })) || { warehouses: [], summary: {} }
     selectedByWh.value = {}
     selVersion.value++
     // 默认展开所有有批次的仓（刷新后保持"一眼看全"）
@@ -167,23 +176,48 @@ async function loadOverview() {
   } finally { pendingLoading.value = false }
 }
 
-/** 分组视图：按「只看超期」过滤并丢掉空分组；各计数按**可见行**重算，避免过滤后数字对不上 */
+/** 页签切换 ⇒ 取数口径变了（是否含已整理完），重拉一次总览；整理单页签不触发 */
+watch(isClearedTab, () => { if (isOverviewTab.value) loadOverview() })
+
+/** 「待整理」分组视图：只留**未整理完**的批次，按「只看超期」过滤并丢掉空分组；各计数按**可见行**重算 */
 const groupsView = computed(() => {
   const list = overview.value?.warehouses || []
   return list.map((g: any) => {
-    const rows: ReturnSortPendingRow[] = (g.rows || []).filter((r: ReturnSortPendingRow) => !overdueOnly.value || r.overdue)
-    let sortableCount = 0, shortageCount = 0, clearedCount = 0, overdueCount = 0
+    const rows: ReturnSortPendingRow[] = (g.rows || [])
+      .filter((r: ReturnSortPendingRow) => r.status !== 'CLEARED')   // 双保险：该页签永不显示已整理完
+      .filter((r: ReturnSortPendingRow) => !overdueOnly.value || r.overdue)
+    let sortableCount = 0, shortageCount = 0, overdueCount = 0
     let sortableQuantity = 0, remainQuantity = 0
     for (const r of rows) {
       if (r.status === 'SORTABLE') { sortableCount++; sortableQuantity += Number(r.quantity || 0) }
       else if (r.status === 'SHORTAGE') shortageCount++
-      else clearedCount++
       if (r.overdue) overdueCount++
       remainQuantity += Number(r.remainQuantity || 0)
     }
-    return { ...g, rows, sortableCount, shortageCount, clearedCount, overdueCount, sortableQuantity, remainQuantity }
+    return { ...g, rows, sortableCount, shortageCount, overdueCount, sortableQuantity, remainQuantity }
   }).filter((g: any) => g.rows.length > 0)
 })
+
+/**
+ * 「已整理」分组视图（2026-09-28 用户口径）：同一份总览里**已整理完**的批次（`sortedQuantity >= quantity`），
+ * 分组与计数口径与待整理一致（按**可见行**重算），仅供只读展示。
+ */
+const groupsCleared = computed(() => {
+  const list = overview.value?.warehouses || []
+  return list.map((g: any) => {
+    const rows: ReturnSortPendingRow[] = (g.rows || []).filter((r: ReturnSortPendingRow) => r.status === 'CLEARED')
+    return {
+      ...g, rows,
+      clearedCount: rows.length,
+      sortedQuantity: rows.reduce((s: number, r: ReturnSortPendingRow) => s + Number(r.sortedQuantity || 0), 0),
+    }
+  }).filter((g: any) => g.rows.length > 0)
+})
+/** 已整理页签的汇总（页签头那行文字用它） */
+const clearedSummary = computed(() => ({
+  batchCount: groupsCleared.value.reduce((n: number, g: any) => n + g.clearedCount, 0),
+  sortedQuantity: groupsCleared.value.reduce((s: number, g: any) => s + g.sortedQuantity, 0),
+}))
 /** 是否已有任何分组（含被过滤掉的）—— 用于区分"本来就没有批次"与"被过滤空了" */
 const hasAnyGroup = computed(() => (overview.value?.warehouses || []).length > 0)
 /** 仓里有批次但被"只看超期"过滤空了 */
@@ -290,7 +324,7 @@ onActivated(() => {
 
         <div v-loading="pendingLoading">
           <div class="pending-bar">
-            <el-switch v-model="includeCleared" active-text="显示已整理完" @change="loadOverview" />
+            <!-- 2026-09-28（用户口径）：原「显示已整理完」开关**下线** —— 已整理完的批次改由「已整理」页签查看 -->
             <el-switch v-model="overdueOnly" active-text="只看超期" />
             <el-button :icon="'Refresh'" @click="loadOverview">刷新</el-button>
             <span class="pending-summary">
@@ -312,7 +346,7 @@ onActivated(() => {
 
           <el-alert v-if="!hasAnyGroup" type="success" :closable="false" show-icon
             title="暂无待整理批次：自有成品仓的待整理库存已全部整理。"
-            description="如需查看历史批次（已整理完），打开上面的「显示已整理完」开关。" />
+            description="已整理完的历史批次请切到「已整理」页签查看。" />
           <el-alert v-else-if="filteredEmpty" type="info" :closable="false" show-icon
             title="没有超期的待整理批次（已按「只看超期」过滤）。" />
 
@@ -322,7 +356,6 @@ onActivated(() => {
                 <span style="font-weight:600;margin-right:8px">{{ g.warehouseName }}</span>
                 <el-tag v-if="g.sortableCount > 0" type="success" size="small" style="margin-right:4px">可整理 {{ g.sortableCount }} 批 / {{ g.sortableQuantity }} 件</el-tag>
                 <el-tag v-if="g.shortageCount > 0" type="danger" size="small" style="margin-right:4px">实物不足 {{ g.shortageCount }} 批</el-tag>
-                <el-tag v-if="g.clearedCount > 0" type="info" size="small" style="margin-right:4px">已整理完 {{ g.clearedCount }} 批</el-tag>
                 <el-tag v-if="g.overdueCount > 0" type="warning" size="small" style="margin-right:4px">超期 {{ g.overdueCount }} 批</el-tag>
                 <span class="wh-extra">最早停留 {{ g.oldestStayDays }} 天 · 待整理合计 {{ g.remainQuantity }} 件</span>
               </template>
@@ -417,7 +450,64 @@ onActivated(() => {
         </div>
       </el-tab-pane>
 
-      <!-- ==================== ② 整理单列表 ==================== -->
+      <!-- ==================== ② 已整理（2026-09-28 用户口径：原「显示已整理完」开关改为独立页签） ====================
+           同一份跨仓总览，只取**已整理完**的批次（sortedQuantity >= quantity），**只读**：
+           已无待整理量 ⇒ 不给勾选/「整理」/批量开单（原开关态的开关已下线）。
+           列宽预算：150+98+118+100+48+110+94 = 718（固定）+ 产品 min200 = 918 ≤ 容器 1005 ⇒ 一行不横滑。 -->
+      <el-tab-pane name="cleared" lazy>
+        <template #label><span>已整理</span></template>
+        <div v-loading="pendingLoading">
+          <div class="pending-bar">
+            <el-button :icon="'Refresh'" @click="loadOverview">刷新</el-button>
+            <span class="pending-summary">
+              {{ groupsCleared.length }} 个仓 · {{ clearedSummary.batchCount }} 个批次已整理完 · 累计已整理
+              <b>{{ clearedSummary.sortedQuantity }}</b> 件
+            </span>
+          </div>
+
+          <el-alert v-if="groupsCleared.length === 0" type="info" :closable="false" show-icon
+            title="暂无已整理完的批次：自有成品仓还没有整批整理完的来源批次。" />
+
+          <el-collapse v-else v-model="activeGroups" style="margin-top:8px">
+            <el-collapse-item v-for="g in groupsCleared" :key="String(g.warehouseId)" :name="String(g.warehouseId)">
+              <template #title>
+                <span style="font-weight:600;margin-right:8px">{{ g.warehouseName }}</span>
+                <el-tag type="info" size="small" style="margin-right:4px">已整理完 {{ g.clearedCount }} 批</el-tag>
+                <span class="wh-extra">已整理合计 {{ g.sortedQuantity }} 件</span>
+              </template>
+
+              <el-table :data="g.rows" border size="small" row-key="pendingId" stripe>
+                <el-table-column label="来源单据" width="150" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <el-button v-if="row.sourceId" type="primary" link @click="goSource(row)">{{ row.sourceCode || '-' }}</el-button>
+                    <span v-else>{{ row.sourceCode || '-' }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="来源日期" width="98">
+                  <template #default="{ row }">{{ row.sourceDate || '-' }}</template>
+                </el-table-column>
+                <el-table-column label="客户" width="118" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <el-button v-if="row.customerId" type="primary" link @click.stop="goCustomer(row.customerId)">{{ row.customerName || '-' }}</el-button>
+                    <span v-else>{{ row.customerName || '-' }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="sku" label="SKU" width="100" show-overflow-tooltip />
+                <el-table-column prop="productName" label="产品" min-width="200" show-overflow-tooltip />
+                <el-table-column prop="unit" label="单位" width="48" />
+                <el-table-column label="已整理数量" width="110" align="center">
+                  <template #default="{ row }"><b>{{ row.sortedQuantity ?? 0 }}</b></template>
+                </el-table-column>
+                <el-table-column label="状态" width="94">
+                  <template #default="{ row }"><el-tag :type="statusMeta(row.status).type" size="small">{{ statusMeta(row.status).label }}</el-tag></template>
+                </el-table-column>
+              </el-table>
+            </el-collapse-item>
+          </el-collapse>
+        </div>
+      </el-tab-pane>
+
+      <!-- ==================== ③ 整理单列表 ==================== -->
       <el-tab-pane name="bills" lazy>
         <template #label><span>整理单</span></template>
 

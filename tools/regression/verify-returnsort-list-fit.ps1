@@ -1,11 +1,12 @@
 # 退货整理页表格宽度验证（2026-09-22 用户要求：列表/明细一行显示完，不要左右滑动）
-#   覆盖 4 处容器：①待整理（跨仓总览，12 列）②整理单（6 列）
-#                ③ 从列表跳入的开单页（form.vue：明细 11 列，2026-09-22 由抽屉改为独立页面）
-#                ④ 编辑退货整理页（同一 form.vue，明细 11 列）
+#   覆盖 5 处容器：①待整理（跨仓总览，12 列）②已整理（同一总览的已整理完批次，8 列；2026-09-28 新增页签）
+#                ③ 整理单（6 列）
+#                ④ 从列表跳入的开单页（form.vue：明细 11 列，2026-09-22 由抽屉改为独立页面）
+#                ⑤ 编辑退货整理页（同一 form.vue，明细 11 列）
 #   断言 ① 每张表的横向溢出 = 0（量真正的滚动容器 .el-table__body-wrapper .el-scrollbar__wrap，
 #           注意 Element Plus 2.x 外层 body-wrapper 的 scrollWidth 恒等于 clientWidth ⇒ 量它会得到假阴性）
 #        ② 列宽合计 <= 容器宽（结构上就不可能溢出）
-#        ③ 列数没被"为了不滚动而乱删列"：待整理 12 / 整理单 6 / 明细 11（来源日期+SKU+单位 是用户要求去掉的）
+#        ③ 列数没被"为了不滚动而乱删列"：待整理 12 / 已整理 8 / 整理单 6 / 明细 11（来源日期+SKU+单位 是用户要求去掉的）
 #        ④ 开单入口已从抽屉改为独立页面（URL 带 warehouseId/pendingIds 预设）
 #   ASCII ONLY：中文一律经 ui-e2e-zh.json 注入。
 $ErrorActionPreference = 'Continue'
@@ -78,6 +79,7 @@ $raw1 = (EvalJs2 $measure).Replace('\"', '"')
 $m1 = [regex]::Match($raw1, '\[.*\]')
 $t1 = @()
 if ($m1.Success) { $t1 = @($m1.Value | ConvertFrom-Json) }
+if (($t1.Count -eq 1) -and ($t1[0] -is [array])) { $t1 = @($t1[0]) }   # PS5.1：JSON 数组整体返回 ⇒ 展开一层（多仓分组有多张表）
 Write-Output ('  tables=' + $t1.Count + ' first=' + ($t1[0] | ConvertTo-Json -Compress))
 if ($t1.Count -ge 1) {
   $a = $t1[0]
@@ -90,14 +92,45 @@ if ($t1.Count -ge 1) {
   AssertHeaders 'TAB1 pending' $a
 } else { Bad ('cannot measure the pending table: ' + $raw1) }
 
-Write-Output '--- 2) TAB 2 bills: fits on one line, 6 columns kept'
-$click = "(()=>{const t=[...document.querySelectorAll('.el-tabs__item')][1];if(!t)return 'NOTAB';t.click();return 'CLICKED';})()"
+Write-Output '--- 2) cleared tab (2026-09-28 new): fits on one line, 8 columns kept'
+# 2026-09-28：页签由 2 个变 3 个（待整理｜已整理｜整理单）⇒ **不能再按下标点页签**，一律按文案点。
+$zCleared = B64 (ZH 'tab_rs_cleared')
+$clickC = "(()=>{const t=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const K=t('$zCleared');const vis=e=>e.getClientRects().length>0;const it=[...document.querySelectorAll('.el-tabs__item')].filter(e=>vis(e)&&(e.innerText||'').trim()===K)[0];if(!it)return 'NOTAB';it.click();return 'CLICKED';})()"
+Write-Output ('  switch tab: ' + (EvalJs2 $clickC))
+agent-browser wait 2800
+$rawC = (EvalJs2 $measure).Replace('\"', '"')
+$mC = [regex]::Match($rawC, '\[.*\]')
+$tC = @()
+if ($mC.Success) { $tC = @($mC.Value | ConvertFrom-Json) }
+# ⚠️ PS5.1：JSON 数组经管道是**整体一个对象**返回，@() 会再套一层 ⇒ 多张表时必须显式展开一层，
+#    否则 $tC[0] 拿到的是"整组数组"，$c.over 变成数组 ⇒ [int] 强转抛 ConvertToFinalInvalidCastException
+#    （单表时 [int]@(0) 恰好能过，所以这个坑只在多仓分组时才暴露，且**不会**让 RESULT 变 FAIL）。
+if (($tC.Count -eq 1) -and ($tC[0] -is [array])) { $tC = @($tC[0]) }
+Write-Output ('  tables=' + $tC.Count + ' first=' + ($tC[0] | ConvertTo-Json -Compress))
+if ($tC.Count -ge 1) {
+  # 每个仓分组一张表 ⇒ 逐张断言，不再只看第一张
+  for ($i = 0; $i -lt $tC.Count; $i++) {
+    $c = $tC[$i]; $tag = ('TAB2 cleared #' + ($i + 1))
+    if ([int]$c.over -le 2) { Ok ($tag + ': does not scroll horizontally (overflow=' + $c.over + 'px)') }
+    else { Bad ($tag + ': overflows by ' + $c.over + 'px') }
+    if ([int]$c.sumCols -le [int]$c.wrapW + 2) { Ok ($tag + ': column widths fit the container (' + $c.sumCols + ' <= ' + $c.wrapW + ')') }
+    else { Bad ($tag + ': columns wider than the container: ' + $c.sumCols + ' > ' + $c.wrapW) }
+    if ([int]$c.nCols -eq 8) { Ok ($tag + ': all 8 columns are still present') }
+    else { Bad ($tag + ': expected 8 columns, got ' + $c.nCols) }
+    AssertHeaders $tag $c
+  }
+} else { Bad ('cannot measure the cleared table: ' + $rawC) }
+
+Write-Output '--- 3) TAB 3 bills: fits on one line, 6 columns kept'
+$zBills = B64 (ZH 'tab_rs_bills')
+$click = "(()=>{const t=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const K=t('$zBills');const vis=e=>e.getClientRects().length>0;const it=[...document.querySelectorAll('.el-tabs__item')].filter(e=>vis(e)&&(e.innerText||'').trim()===K)[0];if(!it)return 'NOTAB';it.click();return 'CLICKED';})()"
 Write-Output ('  switch tab: ' + (EvalJs2 $click))
 agent-browser wait 2800
 $raw2 = (EvalJs2 $measure).Replace('\"', '"')
 $m2 = [regex]::Match($raw2, '\[.*\]')
 $t2 = @()
 if ($m2.Success) { $t2 = @($m2.Value | ConvertFrom-Json) }
+if (($t2.Count -eq 1) -and ($t2[0] -is [array])) { $t2 = @($t2[0]) }   # PS5.1：JSON 数组整体返回 ⇒ 展开一层（多仓分组有多张表）
 Write-Output ('  tables=' + $t2.Count + ' first=' + ($t2[0] | ConvertTo-Json -Compress))
 if ($t2.Count -ge 1) {
   $b = $t2[0]
@@ -107,11 +140,11 @@ if ($t2.Count -ge 1) {
   else { Bad ('columns wider than the container: ' + $b.sumCols + ' > ' + $b.wrapW) }
   if ([int]$b.nCols -eq 6) { Ok 'all 6 columns are still present' }
   else { Bad ('expected 6 columns, got ' + $b.nCols) }
-  AssertHeaders 'TAB2 bills' $b
+  AssertHeaders 'TAB3 bills' $b
 } else { Bad ('cannot measure the bills table: ' + $raw2) }
 
 # ---- 明细表（「整理待整理品」2026-09-22 由抽屉改为**独立页面**；与编辑页共用 form.vue）----
-Write-Output '--- 3) SORT FORM page (opened from the pending tab): item table fits one line'
+Write-Output '--- 4) SORT FORM page (opened from the pending tab): item table fits one line'
 # 点待整理表第一行的操作按钮（有该按钮的行就是 SORTABLE 行，避免依赖中文文案）⇒ 应跳到独立新增页并带 query 预设
 agent-browser open "$base/inventory/return-sort" | Out-Null
 agent-browser wait 3400
@@ -126,6 +159,7 @@ $rawD = (EvalJs2 $measure).Replace('\"', '"')
 $mD = [regex]::Match($rawD, '\[.*\]')
 $tD = @()
 if ($mD.Success) { $tD = @($mD.Value | ConvertFrom-Json) }
+if (($tD.Count -eq 1) -and ($tD[0] -is [array])) { $tD = @($tD[0]) }   # PS5.1：JSON 数组整体返回 ⇒ 展开一层（多仓分组有多张表）
 Write-Output ('  form tables=' + $tD.Count + ' first=' + ($tD[0] | ConvertTo-Json -Compress))
 if ($tD.Count -ge 1) {
   $d = $tD[0]
@@ -140,7 +174,7 @@ if ($tD.Count -ge 1) {
   AssertHeaders 'sort form items' $d
 } else { Bad ('cannot measure the sort form item table: ' + $rawD) }
 
-Write-Output '--- 4) EDIT page (same form.vue) also fits one line'
+Write-Output '--- 5) EDIT page (same form.vue) also fits one line'
 $draftId = SqlOne "SELECT id FROM return_sort WHERE status='DRAFT' ORDER BY id DESC LIMIT 1"
 Write-Output ('  draft id = ' + $draftId)
 if ([int]$draftId -gt 0) {
@@ -151,6 +185,7 @@ agent-browser open "$base/inventory/return-sort/detail/$draftId" | Out-Null
   $mE = [regex]::Match($rawE, '\[.*\]')
   $tE = @()
   if ($mE.Success) { $tE = @($mE.Value | ConvertFrom-Json) }
+  if (($tE.Count -eq 1) -and ($tE[0] -is [array])) { $tE = @($tE[0]) }   # PS5.1：JSON 数组整体返回 ⇒ 展开一层（多仓分组有多张表）
   Write-Output ('  edit page tables=' + $tE.Count + ' first=' + ($tE[0] | ConvertTo-Json -Compress))
   if ($tE.Count -ge 1) {
     $e = $tE[0]
@@ -162,4 +197,4 @@ agent-browser open "$base/inventory/return-sort/detail/$draftId" | Out-Null
   } else { Bad ('cannot measure the edit page table: ' + $rawE) }
 } else { Bad 'no DRAFT return-sort row to open the edit page with' }
 
-if ($fail -eq 0) { Write-Output 'RESULT PASS return-sort tables fit one line (2 list tabs + sort-form page + edit page, no horizontal scroll)' } else { Write-Output ('RESULT FAIL count ' + $fail); exit 1 }
+if ($fail -eq 0) { Write-Output 'RESULT PASS return-sort tables fit one line (3 list tabs + sort-form page + edit page, no horizontal scroll)' } else { Write-Output ('RESULT FAIL count ' + $fail); exit 1 }
