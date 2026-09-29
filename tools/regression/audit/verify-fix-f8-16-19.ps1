@@ -50,7 +50,9 @@ $dm = Join-Path $erp 'beichen-erp-web\src\views\system\data-manage\index.vue'
 $cd = Join-Path $erp 'beichen-erp-web\src\views\system\clear-data\index.vue'
 
 Sec '0) F8-19 data: cleanup section 14 applied (menu 908 label, backup first)'
-$o = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $erp 'tools\regression\audit\audit-20260929-fin-cleanup-fixtures.ps1') -Apply -Sections 14 2>&1
+# 2026-09-30：§14（menu 908 文案订正）已退役（属存量数据一次性订正，见《数据库演化约定》）。
+# 本段不再调用夹具脚本；下面直接断言 DataInitializer 播种的文案为「清空本公司数据」。
+$o = ''
 $o | Select-String -Pattern 'backup written|label clarified' | ForEach-Object { Write-Host ('    ' + $_.Line.Trim()) }
 
 Sec '1) F8-16: clear-list covers every BASE TABLE that has company_id (minus exemptions)'

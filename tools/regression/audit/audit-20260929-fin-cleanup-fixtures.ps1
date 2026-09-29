@@ -31,14 +31,18 @@ param(
   [switch]$RevertNegativeLedgers,
   # D-13 (2026-09-29): apply ONE section only, e.g. '-Apply -Sections 7' for the F7-227 opening-flow backfill.
   # Empty = every section. Sections: 1,2,3,4 = batch A fixtures; 5,6 = batch B; 7 = F7-227; 8 = D-14 duplicate names;
-  # 9 = F7-250 (cancel 0-yuan active claim receivables); 10 = F7-254 (tag pre-fix stock-loss bills).
+  # 9 = F7-250 (cancel 0-yuan active claim receivables); 10 = F7-254 (tag pre-fix stock-loss bills);
+  # 11,12,13 = fixture prep; 15,16 = F8-23/F8-09 corrections.
+  # 2026-09-30：§14（菜单文案订正）与 §17（历史报损 D-1 标注）已退役 —— 二者是"存量数据一次性订正"，
+  # 按《数据库演化约定》（未上线 ⇒ 旧数据不需要兼容）移出本夹具脚本，语句归档在
+  # tools/regression/retired/one-off-data-corrections-20260930.ps1。
   [string]$Sections = ''
 )
 $MYSQL = 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe'
 $env:MYSQL_PWD = 'root'
 $STAMP = Get-Date -Format 'yyyyMMdd-HHmmss'
 $BAK = Join-Path $env:TEMP ('audit-20260929-fin-cleanup-' + $STAMP + '.txt')
-$Only = if ($Sections) { @($Sections -split '\s*,\s*') } else { @('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17') }
+$Only = if ($Sections) { @($Sections -split '\s*,\s*') } else { @('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '15', '16') }
 function Want([string]$n) { return ($Only -contains $n) }
 function Act([string]$n, [scriptblock]$b) { if (Want $n) { & $b } }
 function S([string]$sql) {
@@ -354,18 +358,9 @@ SET ur.role_id = newr.id
 '@
     Write-Host 'roles cloned per company + user_role remapped (S-9②)'
   }
-  # ---- F8-19 (settings batch D, 2026-09-30): menu 908 label 清空数据 -> 清空本公司数据 ----
-  # DataInitializer only INSERTs missing menus, so existing installs keep the old label until this UPDATE runs.
-  # 理由：原名易被读成"清空（整个系统/数据库）"，而后端只清本公司业务数据（sys_* 系统表保留）；
-  #       菜单码 system:clear-data 因 /api/system 整段在 ApiPermGuard EXEMPT 里而**不用于接口收口**。
-  Act '14' {
-    Run @'
-UPDATE sys_menu
-SET menu_name = '清空本公司数据'
-WHERE id = 908 AND menu_name = '清空数据'
-'@
-    Write-Host 'menu 908 label clarified (F8-19)'
-  }
+  # ---- §14（2026-09-30 退役）：原"menu 908 文案订正"属一次性存量数据订正 ----
+  # 新库由 DataInitializer.syncMenus 直接播种「清空本公司数据」；语句已归档到
+  # tools/regression/retired/one-off-data-corrections-20260930.ps1（理由见《数据库演化约定》）。
   # ---- F8-23 (settings batch E fix): orphan tenant rows (company_id points at a deleted company) ----
   # 实测：material_type 有 company_id=3 的 9 行，而 sys_company 只有 1/2 两家 ⇒ 孤儿租户数据。
   # 回滚：无法用单条 SQL 复原（行已删）⇒ 依赖本脚本的备份文件（含 material_type 全量快照）。
@@ -387,21 +382,9 @@ WHERE NOT EXISTS (SELECT 1 FROM (SELECT * FROM sys_company) c WHERE c.id = m.com
   }
   # ---- D-1 (finance round, 2026-09-30 用户口径「不追溯，仅标注」）----
   # 历史 18 张已审核报损（成品 15 / 委外 3）**不补建凭证**，只在备注留痕，供后续按需追溯。
-  # 说明：成品侧 id 8~21 中金额>0 的 8 张已在 §11 补建；本段只对**其余（含 0 元与更早）**做标注，
-  # 保证"哪张没进财务口径"一目了然。
-  Act '17' {
-    Run @'
-UPDATE inventory_stock_loss
-SET remark = CONCAT(IFNULL(remark,''), ' [D-1 历史已审核报损，20260930 口径：不追溯生成凭证]')
-WHERE status = 'AUDITED' AND IFNULL(remark,'') NOT LIKE '%D-1%'
-'@
-    Run @'
-UPDATE outsource_stock_loss
-SET remark = CONCAT(IFNULL(remark,''), ' [D-1 历史已审核报损，20260930 口径：不追溯生成凭证]')
-WHERE status = 'AUDITED' AND IFNULL(remark,'') NOT LIKE '%D-1%'
-'@
-    Write-Host 'historical audited stock-loss bills tagged as not-backfilled (D-1)'
-  }
+  # ---- §17（2026-09-30 退役）：原"给历史已审核报损单打 D-1 标注"属一次性存量数据订正 ----
+  # D-1 口径（历史单据不追溯生成凭证）已记入财务审核报告；新库不存在"历史单据"，语句归档到
+  # tools/regression/retired/one-off-data-corrections-20260930.ps1。
 }
 
 # ---------- self check ----------
