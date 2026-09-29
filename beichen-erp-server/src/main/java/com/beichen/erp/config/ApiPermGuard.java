@@ -53,7 +53,12 @@ public class ApiPermGuard {
             "/api/dashboard",            // 首页门户接口
             "/api/analysis",             // 经营分析（只读聚合）
             "/api/finance/analysis",     // 财务分析聚合（门户 + 多个分析页共用）
-            "/api/supplier-settlement",  // 供应商结算（跨模块只读）
+            // ⚠️ F7-225（2026-09-29 审核批 B，**P0**）：`/api/supplier-settlement` **原先登记在本名单**
+            //    （注释写"跨模块只读"），但该控制器含**两个写端点** —— `POST /{supplierId}/return-materials`
+            //    （一键退料：把该供应商委外仓正库存全部退回我方仓）与 `POST /{supplierId}/finish`
+            //    （校验三项清零后停用供应商）。EXEMPT 判定在 RULES/WRITE_RULES 之前 ⇒ 两个写操作**完全裸奔**
+            //    （实测：无任何供应商/委外权限的账号直调返回业务错误"供应商不存在"而非 403）。
+            //    已移出本名单，改由下方 WRITE_RULES 收口（**读仍共享** —— 该看板财务侧也要读，收口读码会打断财务侧）。
             "/api/dev/file",             // 附件上传/下载（各页皆可上传）
             // F7-106（2026-09-20）：销售分析（只读聚合，与 /api/analysis、/api/finance/analysis 同类）。
             // 原先未登记 —— 因本类是"白名单式收口 + 无默认拒绝"，未登记前缀等于"登录即可"；
@@ -207,6 +212,10 @@ public class ApiPermGuard {
         writeRule("/api/product", "base:product");
         writeRule("/api/brand", "base:brand");
         writeRule("/api/supplier", "base:supplier", "outsource:supplier"); // 两页共用同一控制器
+        // F7-225（2026-09-29 审核批 B，**P0**）：供应商清算看板的两个**写**端点（一键退料 / 清算停用）
+        // 收口到与 `/api/supplier` 相同的两码任一；GET（清算汇总）保持"读共享"（默认未登记 = 登录即可，
+        // 财务"应付管理 → 按供应商汇总 → 清算"与供应商侧都要读）。
+        writeRule("/api/supplier-settlement", "base:supplier", "outsource:supplier");
         writeRule("/api/inventory/customer", "base:customer");
         // 委外仓库 / 自有物料仓两个页面也用同一控制器维护仓库（含委外仓库），三码任一即可
         writeRule("/api/warehouse", "stock:warehouse", "outsource:warehouse", "outsource:material-warehouse");

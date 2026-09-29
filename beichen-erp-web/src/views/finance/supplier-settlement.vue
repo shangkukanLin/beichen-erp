@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import { useUserStore } from '@/stores/user'
 import { sourceBillTypeLabel, SourceBillDetailRoute, SettlementStatus, SettlementStatusLabel, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, MaterialOrderStatusLabel, MaterialOrderStatusTag, OrderTypeLabel } from '@/api/enums'
 
 const route = useRoute(); const router = useRouter()
@@ -12,6 +13,14 @@ const loading = ref(false)
 const data = ref<any>({})
 const returnVisible = ref(false)
 const returnWarehouseId = ref<number>()
+/**
+ * F7-225（2026-09-29 审核批 B，**P0**）：退料 / 清算两个**写**动作与后端收口**同码** ——
+ * 后端 `ApiPermGuard.writeRule("/api/supplier-settlement", "base:supplier", "outsource:supplier")`（两码任一同 `writeRule("/api/supplier",…)`），
+ * 而 `v-perm` 只接受**单个**码（`directives/perm.ts`）⇒ 这里用 store 的 `hasPerm` 做"或"，
+ * 避免出现"看得见但必 403"的死按钮（本页读仍共享，故只隐藏写按钮、不隐藏页面）。
+ */
+const userStore = useUserStore()
+const canSettleWrite = computed(() => userStore.hasPerm('base:supplier') || userStore.hasPerm('outsource:supplier'))
 
 async function loadAll() {
   loading.value = true
@@ -156,7 +165,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
       <template #header>
         <div class="card-header">
           <span style="font-weight:600">③ 委外仓物料（我方还在他厂里的料）</span>
-          <el-button v-if="(data.stocks||[]).length>0" type="warning" size="small" @click="openReturn">一键退料</el-button>
+          <el-button v-if="(data.stocks||[]).length>0 && canSettleWrite" type="warning" size="small" @click="openReturn">一键退料</el-button>
         </div>
       </template>
       <el-table :data="data.stocks || []" border stripe max-height="260">
@@ -179,7 +188,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
         <div class="check-item"><el-tag :type="(data.stocks||[]).length===0?'success':'danger'" size="small">{{ (data.stocks||[]).length===0 ? '✓' : '✗' }}</el-tag> 委外仓物料已清零（{{ (data.stocks||[]).length }} 项）</div>
       </div>
       <div style="margin-top:16px;text-align:center">
-        <el-button type="danger" size="large" :disabled="!data.canSettle" :loading="finishing" @click="handleFinish">确认清算并停用供应商</el-button>
+        <el-button v-if="canSettleWrite" type="danger" size="large" :disabled="!data.canSettle" :loading="finishing" @click="handleFinish">确认清算并停用供应商</el-button>
         <div v-if="!data.canSettle" style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin-top:8px">请先处理以上待办事项，全部满足后才能清算</div>
       </div>
     </el-card>
