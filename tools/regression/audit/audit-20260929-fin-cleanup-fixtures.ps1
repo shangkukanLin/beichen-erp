@@ -1,4 +1,4 @@
-# F7-202 data cleanup: the 2026-09-18/19 audit-round fixtures still sitting in the live DB.
+﻿# F7-202 data cleanup: the 2026-09-18/19 audit-round fixtures still sitting in the live DB.
 # ASCII ONLY. DEFAULT IS A DRY RUN -- nothing is written unless you pass -Apply.
 #
 # Usage
@@ -38,7 +38,7 @@ $MYSQL = 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe'
 $env:MYSQL_PWD = 'root'
 $STAMP = Get-Date -Format 'yyyyMMdd-HHmmss'
 $BAK = Join-Path $env:TEMP ('audit-20260929-fin-cleanup-' + $STAMP + '.txt')
-$Only = if ($Sections) { @($Sections -split '\s*,\s*') } else { @('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12') }
+$Only = if ($Sections) { @($Sections -split '\s*,\s*') } else { @('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16') }
 function Want([string]$n) { return ($Only -contains $n) }
 function Act([string]$n, [scriptblock]$b) { if (Want $n) { & $b } }
 function S([string]$sql) {
@@ -120,6 +120,9 @@ Dump 'finance_settlement PAY rows' ('SELECT * FROM finance_settlement WHERE id I
 Dump 'finance_payable restored rows' ('SELECT * FROM finance_payable WHERE id IN (' + $NEG_LEDGER + ')')
 Dump 'finance_payable rows needing supplier_type' 'SELECT id, bill_no, status, source_bill_type, supplier_id, supplier_type FROM finance_payable WHERE status <> ''CANCELLED'' AND (supplier_type IS NULL OR supplier_type = '''')'
 Dump 'finance_cashflow OPENING rows' 'SELECT * FROM finance_cashflow WHERE flow_type = ''OPENING'''
+Dump 'sys_role (S-9② source of truth)' 'SELECT id, role_code, company_id, status FROM sys_role ORDER BY id'
+Dump 'sys_role_menu' 'SELECT * FROM sys_role_menu'
+Dump 'sys_user_role' 'SELECT * FROM sys_user_role'
 Dump 'finance_bill_item rows to resync (F7-240)' "SELECT i.* FROM finance_bill_item i JOIN finance_bill b ON b.id=i.bill_id JOIN finance_receivable r ON r.id=i.source_id WHERE b.bill_type='RECEIVABLE' AND b.status<>'CANCELLED' AND (ABS(IFNULL(i.paid_amount,0)-IFNULL(r.paid_amount,0))>0.005 OR ABS(IFNULL(i.unpaid_amount,0)-IFNULL(r.unpaid_amount,0))>0.005)"
 Dump 'finance_bill rows before recalc (F7-240)' 'SELECT id, bill_no, total_amount, paid_amount, unpaid_amount FROM finance_bill WHERE EXISTS (SELECT 1 FROM finance_bill_item i WHERE i.bill_id = finance_bill.id)'
 Write-Host ''
@@ -315,6 +318,72 @@ SET remark = CONCAT(IFNULL(remark,''), ' [F7-263 历史预收单号叠加残留�
 WHERE bill_no LIKE '%-ADVANCE-ADVANCE%' AND IFNULL(remark,'') NOT LIKE '%F7-263%'
 '@
     Write-Host 'legacy doubled-ADVANCE receivable numbers tagged (F7-263, numbers untouched)'
+  }
+  # ---- S-9② (settings batch C, 2026-09-30): roles per company ----
+  # 现网 7 个角色 company_id 全为 0（平台级）⇒ 三家公司的用户共用同一角色（改一次菜单跨公司生效）。
+  # 本段把平台模板角色**按公司克隆**，并把 sys_user_role 重映射到本公司副本；super_admin 保持平台级不动。
+  # 回滚：DELETE 出 company_id<>0 且 remark LIKE '%S-9②%' 的角色（含其 role_menu），并把 sys_user_role 指回平台角色
+  #       （备份文件含 sys_role / sys_role_menu / sys_user_role 三表全量快照）。
+  Act '13' {
+    Run @'
+INSERT INTO sys_role (role_name, role_code, status, remark, company_id, create_time, update_time)
+SELECT r.role_name, r.role_code, r.status, CONCAT(IFNULL(r.remark,''), ' [S-9② 按公司隔离副本]'), c.id, NOW(), NOW()
+FROM sys_role r
+JOIN (SELECT DISTINCT company_id AS id FROM sys_user
+      WHERE company_id IS NOT NULL AND company_id <> 0 AND IFNULL(deleted,0) = 0) c ON 1 = 1
+WHERE IFNULL(r.company_id, 0) = 0 AND r.role_code <> 'super_admin'
+  AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM sys_role) x
+                  WHERE x.company_id = c.id AND x.role_code = r.role_code)
+'@
+    Run @'
+INSERT INTO sys_role_menu (role_id, menu_id)
+SELECT n.id, rm.menu_id
+FROM sys_role n
+JOIN sys_role t ON IFNULL(t.company_id,0) = 0 AND t.role_code = n.role_code
+JOIN sys_role_menu rm ON rm.role_id = t.id
+WHERE n.company_id IS NOT NULL AND n.company_id <> 0
+  AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM sys_role_menu) y
+                  WHERE y.role_id = n.id AND y.menu_id = rm.menu_id)
+'@
+    Run @'
+UPDATE sys_user_role ur
+JOIN sys_role oldr ON oldr.id = ur.role_id AND IFNULL(oldr.company_id,0) = 0 AND oldr.role_code <> 'super_admin'
+JOIN sys_user u   ON u.id = ur.user_id AND IFNULL(u.company_id,0) <> 0
+JOIN sys_role newr ON newr.company_id = u.company_id AND newr.role_code = oldr.role_code
+SET ur.role_id = newr.id
+'@
+    Write-Host 'roles cloned per company + user_role remapped (S-9②)'
+  }
+  # ---- F8-19 (settings batch D, 2026-09-30): menu 908 label 清空数据 -> 清空本公司数据 ----
+  # DataInitializer only INSERTs missing menus, so existing installs keep the old label until this UPDATE runs.
+  # 理由：原名易被读成"清空（整个系统/数据库）"，而后端只清本公司业务数据（sys_* 系统表保留）；
+  #       菜单码 system:clear-data 因 /api/system 整段在 ApiPermGuard EXEMPT 里而**不用于接口收口**。
+  Act '14' {
+    Run @'
+UPDATE sys_menu
+SET menu_name = '清空本公司数据'
+WHERE id = 908 AND menu_name = '清空数据'
+'@
+    Write-Host 'menu 908 label clarified (F8-19)'
+  }
+  # ---- F8-23 (settings batch E fix): orphan tenant rows (company_id points at a deleted company) ----
+  # 实测：material_type 有 company_id=3 的 9 行，而 sys_company 只有 1/2 两家 ⇒ 孤儿租户数据。
+  # 回滚：无法用单条 SQL 复原（行已删）⇒ 依赖本脚本的备份文件（含 material_type 全量快照）。
+  Act '15' {
+    $orph = S 'SELECT COUNT(*) FROM material_type m WHERE NOT EXISTS (SELECT 1 FROM sys_company c WHERE c.id = m.company_id)'
+    Write-Host ('orphan material_type rows (company_id without a company): ' + $orph)
+    Run @'
+DELETE m FROM material_type m
+WHERE NOT EXISTS (SELECT 1 FROM (SELECT * FROM sys_company) c WHERE c.id = m.company_id)
+'@
+    Write-Host 'orphan material_type rows deleted (F8-23)'
+  }
+  # ---- F8-09 (settings batch B): orphan user attribution admin3 -> company 3 ----
+  # 口径（推荐项 B）：**只留痕、不擅自改归属**。注意 sys_user **没有 remark 列**
+  #（第一版 UPDATE remark 静默失败 ⇒ 改为**只读清单**，人工核查即可；改归属无业务收益，该行 deleted=1）。
+  Act '16' {
+    Q 'SELECT id, username, company_id, IFNULL(deleted,0) deleted FROM sys_user u WHERE NOT EXISTS (SELECT 1 FROM sys_company c WHERE c.id = u.company_id)'
+    Write-Host 'orphan user attribution listed above (F8-09, read-only on purpose)'
   }
 }
 
