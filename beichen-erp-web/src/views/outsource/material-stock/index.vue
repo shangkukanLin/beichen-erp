@@ -2,16 +2,23 @@
   <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
+        <!-- 2026-09-29（用户口径「物料/物料类型/所在仓库 三个搜索项要显示在一行，不要两行」）：
+             与「成品库存详情」同款（两页互为镜像）：查询条是全局 grid「1fr（表单）+ auto（按钮组）」，
+             实测视口 1262 时表单列只有 **614px**；原先 180/160/240 ⇒ 项宽 220+228+308（+每 item 32px
+             margin-right）= 884 > 614 ⇒ 「所在仓库」折到第二行。
+             现按本页 label 宽度（物料 2 字 / 物料类型 4 字 / 所在仓库 4 字）差异化收窄到 **135/120/135**：
+             项宽 ≈ 175+188+203 = 566 ＋ 2×12px gap = **590 ≤ 614**（余量 24）⇒ 三项锁死一行。
+             ⚠️ 改这三个宽度前请跑 verify-stock-querybar-oneline.ps1。 -->
         <el-form :inline="true" :model="query" class="query-form">
           <el-form-item label="物料">
-            <el-input v-model="query.materialName" placeholder="物料名称" clearable style="width:180px" @keyup.enter="doQuery" />
+            <el-input v-model="query.materialName" placeholder="物料名称" clearable style="width:135px" @keyup.enter="doQuery" />
           </el-form-item>
           <el-form-item label="物料类型">
-            <RemoteSelect v-model="query.materialTypeId" :fetch="fetchMaterialTypes" label-key="typeName" placeholder="全部" style="width:160px" />
+            <RemoteSelect v-model="query.materialTypeId" :fetch="fetchMaterialTypes" label-key="typeName" placeholder="全部" style="width:120px" />
           </el-form-item>
           <el-form-item label="所在仓库">
             <RemoteSelect v-model="query.warehouseIds" multiple collapse-tags collapse-tags-tooltip
-              :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:240px" />
+              :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:135px" />
           </el-form-item>
         </el-form>
         <div class="toolbar">
@@ -203,7 +210,13 @@ onMounted(load)
 
 <style scoped>
 /* 卡片内边距已统一到全局（styles/page.css 的 .table-card .el-card__body） */
-.query-form { align-items: center; }
+/* 2026-09-29（用户口径「三个搜索项要在一行」）：与「成品库存详情」同款（两页互为镜像）：
+   全局 .query-bar 的 grid 只分「表单 1fr / 按钮组 auto」两列，表单内部仍受 el-form--inline 的
+   inline-flex + 每 item 32px margin-right 与全局 `flex-wrap: nowrap` 支配 ⇒ 宽度不够就折行。
+   ⚠️ 本页选择器必须与全局 `.query-card .query-bar .query-form` 同权重以上（scoped 后 0,4,0）才盖得住 nowrap。 */
+.query-card .query-bar .query-form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+/* flex:0 0 auto ⇒ item 保持声明宽度**不被压缩**（否则会被 flex-shrink 悄悄压窄）；装不下时后面的项自然折行。 */
+.query-card .query-bar .query-form :deep(.el-form-item) { margin-right: 0; flex: 0 0 auto; }
 /* 分页样式已统一到全局（styles/page.css 的 .pagination） */
 /* 品质数量紧凑着色（对应 qtyClass）：替代 el-tag，省出横向空间 */
 .qty-good { color: #67c23a; font-weight: 600; }

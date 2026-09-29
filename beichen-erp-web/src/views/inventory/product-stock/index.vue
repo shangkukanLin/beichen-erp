@@ -2,16 +2,22 @@
   <div class="page-list">
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
+        <!-- 2026-09-29（用户口径「产品/品牌/所在仓库 三个搜索项要显示在一行，不要两行」）：
+             查询条是全局 grid「1fr（表单）+ auto（按钮组）」，实测视口 1262 时表单列只有 **614px**；
+             原先 180/160/240 ⇒ 项宽 220+200+308（+每个 item 32px margin-right）= 826 > 614 ⇒ 「所在仓库」折行。
+             现按实测收窄到 **145/125/145**（项宽 ≈ 185+165+213 = 563）＋ 2×12px gap = **587 ≤ 614**（余量 27）⇒
+             三项锁死一行；「仅看低于安全库存」勾选仍留在第二行（口径只要求三个搜索项一行）。
+             ⚠️ 改这三个宽度前请跑 verify-stock-querybar-oneline.ps1（它断言三项同一行且不溢出）。 -->
         <el-form :inline="true" :model="query" class="query-form">
           <el-form-item label="产品">
-            <el-input v-model="query.productName" placeholder="产品名称或 SKU" clearable style="width:180px" @keyup.enter="doQuery" />
+            <el-input v-model="query.productName" placeholder="产品名称或 SKU" clearable style="width:145px" @keyup.enter="doQuery" />
           </el-form-item>
           <el-form-item label="品牌">
-            <RemoteSelect v-model="query.brandId" :fetch="fetchBrands" label-key="brandName" placeholder="全部" style="width:160px" />
+            <RemoteSelect v-model="query.brandId" :fetch="fetchBrands" label-key="brandName" placeholder="全部" style="width:125px" />
           </el-form-item>
           <el-form-item label="所在仓库">
             <RemoteSelect v-model="query.warehouseIds" multiple collapse-tags collapse-tags-tooltip
-              :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:240px" />
+              :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:145px" />
           </el-form-item>
           <el-form-item label="">
             <el-checkbox v-model="query.onlyLowStock" label="仅看低于安全库存" />
@@ -228,7 +234,15 @@ onMounted(load)
 <style scoped>
 .page { display: flex; flex-direction: column; gap: 12px; }
 /* 卡片内边距已统一到全局（styles/page.css 的 .table-card .el-card__body） */
-.query-form { align-items: center; }
+/* 2026-09-29（用户口径「三个搜索项要在一行」）：全局 .query-bar 的 grid 只把「表单 1fr / 按钮组 auto」分两列，
+   表单内部仍是 el-form--inline 的 **inline-flex + 每个 item 32px margin-right** ⇒ 宽度一不够就折行
+   （实测：三项 563 + 3×32 = 659 > 表单列 614）。
+   ⚠️ 全局还写着 `.query-card .query-bar .query-form { flex-wrap: nowrap }`（0,3,0）⇒ 本页选择器**必须同权重以上**
+      （scoped 后是 0,4,0）才盖得住它；否则 display:flex 一旦生效、又不许换行 ⇒ 4 个 item 挤成一行**溢出** 119px。 */
+.query-card .query-bar .query-form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+/* flex:0 0 auto ⇒ item 保持声明宽度**不被压缩**（否则会被 flex-shrink 悄悄压成 131/111/103 这种"看不出来
+   但已经变窄"的状态）；装不下时让后面的勾选项自然折行。 */
+.query-card .query-bar .query-form :deep(.el-form-item) { margin-right: 0; flex: 0 0 auto; }
 /* 分页样式已统一到全局（styles/page.css 的 .pagination） */
 /* 整行可点：给出手型光标，操作列按钮不再额外高亮 */
 :deep(.el-table__row) { cursor: pointer; }
