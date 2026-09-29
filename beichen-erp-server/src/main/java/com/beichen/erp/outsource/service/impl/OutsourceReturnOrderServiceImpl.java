@@ -627,6 +627,11 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         // 4. 收费应付（正向）：**加工厂向我方收取**的费用（我方付加工厂）
         //    维修退货 → OUTSOURCE_REPAIR_CHARGE「委外维修收费」（单独分账，便于与加工退货对账）
         //    加工退货 → OUTSOURCE_RETURN_CHARGE（保留历史口径；新建时已禁止收费）
+        // ⚠️ F7-253（2026-09-30 审核批 F 复核）：**同一 `source_bill_type=OUTSOURCE_REPAIR_CHARGE` 下
+        //    `source_id` 有两种粒度** —— 本处是**整单**（`order.getId()`，chargeFlag 整单收费），
+        //    而 `applyRepairLegs`（见本文件"④ 维修费应付（按行）"）是**明细行**（`row.getId()`）。
+        //    两种口径各自自洽（冲销严格镜像同侧的 id：整单冲 `order.id`、按行冲 `row.id`），但**按
+        //    `source_id` 追溯报表时必须先判断粒度**。此处保留现状（改动会牵动冲销对称性），仅口径留痕。
         if (order.getChargeFlag() != null && order.getChargeFlag() == 1
                 && order.getChargeAmount() != null && order.getChargeAmount().compareTo(BigDecimal.ZERO) > 0) {
             String chargeType = repair ? SourceBillType.OUTSOURCE_REPAIR_CHARGE.getCode()
@@ -1774,7 +1779,7 @@ public class OutsourceReturnOrderServiceImpl implements OutsourceReturnOrderServ
         ReturnOrder last = returnOrderMapper.selectOne(new LambdaQueryWrapper<ReturnOrder>()
                 .likeRight(ReturnOrder::getCode, prefix).orderByDesc(ReturnOrder::getCode).last("LIMIT 1"));
         int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
-        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
+        return com.beichen.erp.common.BillNoSeq.formatUnique(prefix, seq, cand -> returnOrderMapper.selectCount(new LambdaQueryWrapper<ReturnOrder>().eq(ReturnOrder::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 
     /** 当前登录用户ID */

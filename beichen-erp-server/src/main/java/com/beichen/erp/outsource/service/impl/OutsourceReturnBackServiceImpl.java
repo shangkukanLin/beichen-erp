@@ -767,6 +767,11 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
 
     /** 幂等落应收台账（对加工厂，subjectType=SUPPLIER） */
     private void upsertReceivable(OutsourceReturnBack b, BigDecimal amount, boolean anyManual) {
+        // F7-250（2026-09-30 审核批 F 修复）：**金额 ≤ 0 不落账** —— 与同族
+        // `StockLossAccountingHelper.post(:92)`「金额 ≤ 0 直接返回不落账」同口径。
+        // 原先无论金额多少都插一行 ⇒ 库中留下 2 条 0 元**活跃**应收（ORB-20260929001/002），
+        // 在「未结清 / 账龄」里形成"金额 0 却不结清"的歧义行（对账无法解释）。
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) return;
         FinanceReceivable exist = receivableMapper.selectOne(new LambdaQueryWrapper<FinanceReceivable>()
                 .eq(FinanceReceivable::getBillNo, b.getCode()));
         FinanceReceivable fr = exist != null ? exist : new FinanceReceivable();
@@ -812,7 +817,7 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
                 .likeRight(OutsourceReturnBack::getCode, prefix)
                 .orderByDesc(OutsourceReturnBack::getCode).last("LIMIT 1"));
         int seq = last != null ? BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
-        return BillNoSeq.format(prefix, seq);
+        return BillNoSeq.formatUnique(prefix, seq, cand -> backMapper.selectCount(new LambdaQueryWrapper<OutsourceReturnBack>().eq(OutsourceReturnBack::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 
     private String warehouseNameOf(Long warehouseId) {

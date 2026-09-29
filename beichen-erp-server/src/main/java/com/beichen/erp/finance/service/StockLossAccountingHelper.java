@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.common.ExpenseType;
 import com.beichen.erp.finance.common.SettlementStatus;
 import com.beichen.erp.finance.common.SubjectType;
@@ -156,6 +157,14 @@ public class StockLossAccountingHelper {
                                        Long supplierId, String supplierName, LocalDate dueDate, String remark) {
         FinanceReceivable exist = receivableMapper.selectOne(new LambdaQueryWrapper<FinanceReceivable>()
                 .eq(FinanceReceivable::getBillNo, sourceBillNo).last("LIMIT 1"));
+        // F7-252（2026-09-30 审核批 F 修复，防御性）：复用既有行前校验"是否已有收款" —— 与
+        // `PayableHelper.saveByBillNo` 的 F7-224 两道护栏同族（那条防"重复付款"，这条防"重复收款"）。
+        // 当前**不可达**（反审核会先被 `ReceivableHelper.reverseReceivable` 的"已有收款不可冲回"拦住 ⇒
+        // 无法在已收款状态下走到重新落账），故属纵深防御；一旦上游护栏被改动，这里不会静默重置已收款台账。
+        if (exist != null && exist.getPaidAmount() != null
+                && exist.getPaidAmount().compareTo(BigDecimal.ZERO) > 0)
+            throw new BusinessException("索赔应收「" + exist.getBillNo()
+                    + "」已有收款记录，不可重建来源台账（请先处理收款或反审核收款单）");
         FinanceReceivable fr = exist != null ? exist : new FinanceReceivable();
         fr.setBillNo(sourceBillNo);
         fr.setSubjectType(SubjectType.SUPPLIER.getCode());
@@ -179,6 +188,9 @@ public class StockLossAccountingHelper {
     /** 内部承担 ⇒ **报损损失费用单**（非资金）：按来源幂等复用同一张，反审核作废后重审沿用同一单号 */
     private void upsertLossExpense(String sourceBillType, Long sourceId, String sourceBillNo, BigDecimal amount,
                                    LocalDate lossDate, String remark) {
+        // F7-250 姊妹护栏（2026-09-30 批 F 修复）：**金额 ≤ 0 不落账** —— 非资金费用同理不应产生 0 元凭证
+        //（`FinanceExpenseServiceImpl.validate` 本来也会拒 `amount<=0`，此处前置返回避免抛错打断整条审核链）。
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) return;
         FinanceExpense exist = latestExpenseBySource(sourceBillType, sourceId);
         if (exist != null) {
             if (DocStatus.AUDITED.getCode().equals(exist.getStatus())) return;   // 幂等：已审核不动
