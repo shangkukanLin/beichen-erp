@@ -153,7 +153,9 @@ $formPages = @(
   '/supplier/form/add?type=solution',
   '/inventory/purchase/add',
   '/finance/receipt/add',
-  ('/finance/payment/supplier/add?supplierId=' + $supId),
+  # 2026-09-29：新增付款改为统一独立页 `/finance/payment/add`（供应商页内选，`?supplierId=` 预填）；
+  #   旧地址 `/finance/payment/supplier/add` 仍可重定向到达。
+  ('/finance/payment/add?supplierId=' + $supId),
   ('/outsource/order/delivery/return-defect/' + $orderId)
 )
 foreach ($p in $formPages) {

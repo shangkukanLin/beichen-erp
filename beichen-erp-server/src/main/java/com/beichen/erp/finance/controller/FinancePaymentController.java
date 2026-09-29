@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.R;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.entity.FinancePayment;
+import com.beichen.erp.finance.entity.FinancePaymentAccount;
 import com.beichen.erp.finance.entity.FinancePaymentItem;
 import com.beichen.erp.finance.service.FinancePaymentService;
 import com.beichen.erp.finance.service.PayableQuery;
@@ -64,15 +65,47 @@ public class FinancePaymentController {
         return R.ok(payableQuery.unpaid(supplierId));
     }
 
+    /**
+     * 单供应商欠款汇总（2026-09-29 用户口径）：新增付款页「选完供应商后显示**到期欠款 + 总欠款**」。
+     * <p>口径（严格镜像应付侧 {@code PayableQuery.supplierSummary}）：未结清 + 未付额&gt;0
+     * ⇒ 天然排除预付台账（ADVANCE，负数）；到期 = {@code due_date < 今天}（当天不算）；
+     * 无到期日的单据不计入（另返回数量与金额供界面解释）。走付款页自身前缀 ⇒ 只要求 {@code finance:payment}。</p>
+     */
+    @GetMapping("/party-summary")
+    public R<Map<String, Object>> partySummary(@RequestParam(required = false) Long supplierId,
+                                               @RequestParam(required = false) String supplierType) {
+        return R.ok(payableQuery.partySummary(supplierId, supplierType));
+    }
+
     @GetMapping("/{id}")
     public R<FinancePayment> getById(@PathVariable Long id) { return R.ok(service.getById(id)); }
 
     @GetMapping("/{id}/items")
     public R<List<FinancePaymentItem>> getItems(@PathVariable Long id) { return R.ok(service.getItems(id)); }
 
+    /** 分款明细（2026-09-29 多账户付款）：详情页「付款账户」卡片按行展示 */
+    @GetMapping("/{id}/accounts")
+    public R<List<FinancePaymentAccount>> getAccounts(@PathVariable Long id) { return R.ok(service.getAccounts(id)); }
+
+    /**
+     * 建单：{@code body = {payment:{…}, accounts:[{accountId,amount,remark}], items:[{payableId,…}]}}。
+     * <p>2026-09-29：{@code accounts} 支撑**多账户分款**（A 50 + B 100）；{@code items} **可为空**
+     * （核销开关关闭 = 只记付款，未核销差额审核时落预付台账）。
+     * 老 payload（只带 {@code payment.accountId} + items）仍可用 —— 后端会归一化成一条分款行。</p>
+     */
     @PostMapping
     public R<Void> create(@RequestBody Map<String, Object> body) {
-        service.create(parsePayment(body), parseItems(body));
+        service.create(parsePayment(body), parseAccounts(body), parseItems(body));
+        return R.ok();
+    }
+
+    /**
+     * 草稿就地修改（2026-09-29 用户口径：付款侧与收款侧对称，家规「草稿在详情页改+存、列表不给编辑」）：
+     * 字段/校验与建单完全一致，分款与核销明细整体替换；只允许 DRAFT（已审核要先反审核）。
+     */
+    @PutMapping("/{id}")
+    public R<Void> update(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        service.update(id, parsePayment(body), parseAccounts(body), parseItems(body));
         return R.ok();
     }
 
@@ -106,6 +139,27 @@ public class FinancePaymentController {
         r.setRemark((String) d.get("remark"));
         r.setAttachUrl((String) d.get("attachUrl"));
         return r;
+    }
+
+    /**
+     * 分款明细（2026-09-29 多账户）：{@code accounts:[{accountId, amount, remark}]}。
+     * <p>为空 = 交给后端按单账户归一化（老页面旧 payload）。</p>
+     */
+    @SuppressWarnings("unchecked")
+    private List<FinancePaymentAccount> parseAccounts(Map<String, Object> body) {
+        List<FinancePaymentAccount> list = new ArrayList<>();
+        Object obj = body.get("accounts");
+        if (obj instanceof List<?> raw) for (Object o : raw) if (o instanceof Map<?, ?> m) {
+            Map<String, Object> map = (Map<String, Object>) m;
+            FinancePaymentAccount a = new FinancePaymentAccount();
+            if (map.get("accountId") != null && !map.get("accountId").toString().isBlank())
+                a.setAccountId(Long.valueOf(map.get("accountId").toString()));
+            if (map.get("amount") != null && !map.get("amount").toString().isBlank())
+                a.setAmount(new BigDecimal(map.get("amount").toString()));
+            a.setRemark((String) map.get("remark"));
+            list.add(a);
+        }
+        return list;
     }
 
     @SuppressWarnings("unchecked")

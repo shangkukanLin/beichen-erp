@@ -42,7 +42,32 @@ watch(activeType, () => { page.pageNum = 1; load() })
 
 /** 来源单据类型选项（2026-09-14：改由前端枚举映射生成；后端接口已只回 code） */
 function loadSourceBillTypes() { sourceBillTypeOptions.value = codeLabelOptions(SourceBillTypeLabel) }
-onMounted(() => { loadSuppliersOptions(); loadSourceBillTypes(); load() })
+
+// ========== 视图：按供应商汇总 / 应付台账（2026-09-29 用户口径「汇总要显示在**应付管理**里面」） ==========
+/**
+ * 视图切换：① <b>按供应商汇总</b> = 原「付款管理 → 供应商汇总」页签**整体搬来**（列与口径不变）；
+ * ② <b>应付台账</b> = 原页面（主体类型页签 + 查询 + 台账表）。
+ * <p>默认停在「按供应商汇总」—— 用户口径就是"汇总要显示在应付管理里"，进来先看到管理视角。</p>
+ */
+const view = ref<'summary' | 'ledger'>('summary')
+const summaryLoading = ref(false)
+const summaryData = ref<any[]>([])
+async function loadSummary() {
+  summaryLoading.value = true
+  try {
+    // 走应付页自身前缀（只要求 finance:payable）；与付款页 /finance/payment/payable-summary 同一实现（PayableQuery）
+    const r = await request.get<any, any>('/finance/payable/supplier-summary')
+    summaryData.value = r || []
+  } catch { summaryData.value = [] } finally { summaryLoading.value = false }
+}
+/**
+ * 汇总行「详情」→ 供应商应付工作台。
+ * <p>2026-09-29 用户口径：工作台随汇总一起从 <code>/finance/payment/supplier/:id</code> 搬到
+ * <code>/finance/payable/supplier/:id</code>（应付前缀 ⇒ 只被授予 finance:payable 的用户不会 403）。</p>
+ */
+function goSupplierDetail(row: any) { if (row?.supplierId != null) router.push(`/finance/payable/supplier/${row.supplierId}`) }
+
+onMounted(() => { loadSuppliersOptions(); loadSourceBillTypes(); load(); loadSummary() })
 
 function query_() { page.pageNum = 1; load() }
 function reset_() {
@@ -73,6 +98,15 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
 <template>
   <div class="page-list">
     <el-card shadow="never" class="query-card">
+      <!-- 视图切换（2026-09-29 用户口径「汇总要显示在**应付管理**里」）：
+           ①按供应商汇总 = 原「付款管理 → 供应商汇总」页签整体搬来（列/口径不变，「详情」进供应商应付工作台）
+           ②应付台账 = 原页面（主体类型页签 + 查询 + 台账表），一行未改
+           用 el-radio-group 做第一层切换，避免与台账内部的「主体类型」el-tabs 视觉混淆。 -->
+      <el-radio-group v-model="view" style="margin-bottom:12px">
+        <el-radio-button value="summary">按供应商汇总</el-radio-button>
+        <el-radio-button value="ledger">应付台账</el-radio-button>
+      </el-radio-group>
+      <template v-if="view === 'ledger'">
       <!-- 页签：按主体类型查看应付（全部/供货商/加工厂/辅料商/方案商），与供应商管理页交互一致 -->
       <el-tabs v-model="activeType">
         <el-tab-pane v-for="t in TYPE_TABS" :key="t.name" :label="t.label" :name="t.name" />
@@ -93,8 +127,36 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-button :icon="'Refresh'" @click="reset_">重置</el-button>
       </div>
       </div>
-    </el-card>
-    <el-card shadow="never" class="table-card">
+      </template>
+      </el-card>
+
+      <!-- 按供应商汇总（2026-09-29 用户口径：原「付款管理 → 供应商汇总」页签**整体搬来**，
+       列与口径未改：供应商/主体类型/应付总额/已付/未付/逾期金额 + 「详情」进供应商应付工作台。
+       本表合计 868px ≤ 948px ✓ 一行显示完；供应商是**合作方列**（家规：不得省略号）。
+       口径见 PayableQuery.supplierSummary（未结清 + 排除已转应收；逾期 = due_date < 今天） -->
+      <el-card v-if="view === 'summary'" shadow="never" class="table-card">
+      <el-table v-loading="summaryLoading" :data="summaryData" border stripe @row-click="goSupplierDetail">
+      <el-table-column label="供应商" min-width="180" show-overflow-tooltip>
+        <template #default="{row}"><el-button type="primary" link @click.stop="goSupplierDetail(row)">{{ row.supplierName || sName(row.supplierId) || '—' }}</el-button></template>
+      </el-table-column>
+      <el-table-column label="类型" width="96" align="center">
+        <template #default="{row}">
+          <el-tag v-if="row.supplierType" :type="TYPE_TAG[row.supplierType] || 'info'" size="small">{{ typeLabel(row.supplierType) }}</el-tag>
+          <span v-else>—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="应付总额" width="126" align="right"><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
+      <el-table-column label="已付" width="126" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.paidAmount) }}</span></template></el-table-column>
+      <el-table-column label="未付" width="126" align="right"><template #default="{row}"><span style="color:var(--app-color-warning);font-weight:600">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
+      <el-table-column label="逾期金额" width="130" align="right"><template #default="{row}"><span :style="{color: Number(row.overdueAmount)>0?'var(--app-color-danger)':'var(--app-text-secondary)', fontWeight: Number(row.overdueAmount)>0?600:400}">{{ fmt(row.overdueAmount) }}</span></template></el-table-column>
+      <el-table-column label="操作" width="84" align="center" fixed="right">
+        <template #default="{row}"><el-button type="primary" link @click.stop="goSupplierDetail(row)">详情</el-button></template>
+      </el-table-column>
+      </el-table>
+      <el-empty v-if="!summaryLoading && summaryData.length === 0" description="暂无应付数据" />
+      </el-card>
+
+      <el-card v-else shadow="never" class="table-card">
       <!-- 2026-09-23：详情改独立页 ⇒ 点整行 / 行内「详情」都跳转（与应收/账单页现状一致） -->
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1240px > 内容区 956px
            ⇒ 横向滚动 284px。收窄为合计 940px。

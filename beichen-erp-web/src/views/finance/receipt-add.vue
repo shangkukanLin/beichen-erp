@@ -9,7 +9,7 @@
 //      收款全额作为**预收/预付台账**（ADVANCE，我方欠客户）挂账；打开才选应收单据核销，
 //      且核销合计 ≤ 收款金额（差额同样落预收台账）。
 import { reactive, ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
@@ -17,6 +17,7 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 import { createReceipt, getReceiptUnpaidReceivables, getReceiptPartySummary, type FinanceReceipt, type FinanceReceiptAccount, type FinanceReceiptItem, type FinanceReceivable, type PartyDebtSummary } from '@/api/finance'
 import { SubjectType } from '@/api/enums'
 
+const route = useRoute()
 const router = useRouter()
 const accounts = ref<{id:number;accountName:string}[]>([])
 
@@ -123,7 +124,12 @@ async function submit() {
     router.push('/finance/receipt')
   } catch { /* 提示由拦截器统一给出 */ } finally { saving.value = false }
 }
-onMounted(loadAccounts)
+onMounted(async () => {
+  loadAccounts()
+  // 2026-09-29：兼容 `?customerId=` 预填（客户应收工作台「新增收款」直链过来）—— 与新增付款页对称
+  const q = Number(route.query.customerId)
+  if (q) { form.customerId = q; await onPartnerChange() }
+})
 </script>
 
 <template>

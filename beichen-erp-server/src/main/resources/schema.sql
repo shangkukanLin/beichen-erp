@@ -1942,10 +1942,10 @@ CREATE TABLE IF NOT EXISTS finance_payment (
     -- 主体类型在创建时按供应商标签/核销应付固化，列表可按类型筛选
     supplier_type VARCHAR(30) DEFAULT NULL COMMENT '往来主体类型: product/factory/material/solution',
     supplier_name VARCHAR(100) COMMENT '供应商名称',
-    account_id BIGINT COMMENT '付款账户ID',
+    account_id BIGINT COMMENT '付款账户ID（2026-09-29 多账户后=分款明细首行快照）',
     account_name VARCHAR(100) COMMENT '付款账户名称',
     payment_date DATE COMMENT '付款日期',
-    amount DECIMAL(18,4) DEFAULT 0 COMMENT '付款金额',
+    amount DECIMAL(18,4) DEFAULT 0 COMMENT '付款金额（= 分款明细 finance_payment_account 金额合计）',
     status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: 草稿/已审核/已作废',
     remark VARCHAR(500) COMMENT '备注',
     attach_url VARCHAR(500) DEFAULT NULL COMMENT '付款凭证',
@@ -1972,6 +1972,33 @@ CREATE TABLE IF NOT EXISTS finance_payment_item (
     INDEX idx_payable_id (payable_id),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='付款核销明细表';
+
+-- 2026-09-29（用户口径「付款侧与收款侧对称：账户可以添加 + 核销项做成开关」）：
+--   付款单**分款明细**：一个单可多账户付款（A 账户 50 + B 账户 100），审核按行各写一条资金流水
+--   （逐账户校验余额；account 余额由流水累计）、反审核按行冲正。
+--   主表 finance_payment.amount = 本表金额合计；account_id/account_name = 首行快照（列表列/老读法兼容）。
+--   与收款侧 finance_receipt_account 逐字对称。
+CREATE TABLE IF NOT EXISTS finance_payment_account (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '分款明细ID',
+    payment_id BIGINT NOT NULL COMMENT '付款单ID',
+    account_id BIGINT NOT NULL COMMENT '付款账户ID',
+    account_name VARCHAR(100) COMMENT '账户名称(冗余留痕)',
+    amount DECIMAL(18,4) NOT NULL DEFAULT 0 COMMENT '该账户本次付款金额',
+    remark VARCHAR(255) COMMENT '备注',
+    company_id BIGINT DEFAULT NULL COMMENT '公司ID',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_rpa_payment (payment_id),
+    INDEX idx_rpa_account (account_id),
+    INDEX idx_company_id (company_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='付款单分款明细表（一单多账户）';
+
+-- 历史付款单回填一条（单账户）分款行 —— 让"分款表即权威"对**老数据**也成立（审核/反审核只认本表）。
+-- 幂等：NOT EXISTS 保证只在"该单还没有分款行"时插入；schema.sql 每次启动都会执行（mode=always）。
+INSERT INTO finance_payment_account (payment_id, account_id, account_name, amount, remark, company_id)
+SELECT p.id, p.account_id, p.account_name, IFNULL(p.amount, 0), '历史单回填（单账户）', p.company_id
+FROM finance_payment p
+WHERE p.account_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM finance_payment_account a WHERE a.payment_id = p.id);
 
 CREATE TABLE IF NOT EXISTS finance_cashflow (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '资金流水ID',

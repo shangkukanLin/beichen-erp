@@ -40,7 +40,7 @@ async function goSourceDetail(row: any) {
   // 委外加工收货/超损的 sourceId 是收货记录/结单报表ID，需按单号反查加工单ID。
   // 2026-09-20（F7-161）：改用通用单号解析器 /common/resolve-code（跨模块单号跳转的标准做法，属豁免前缀），
   // 不再直读加工单页的 /outsource/order/page —— 后者需 outsource:order 权限，只有 finance:* 的用户点「来源单号」会 403。
-  // 与 payment-supplier.vue 的同名函数保持同一口径。
+  // 与 payable-supplier.vue（原 payment-supplier.vue，2026-09-29 搬到应付前缀）的同名函数保持同一口径。
   if (row.sourceBillType === 'OUTSOURCE_DELIVERY' || row.sourceBillType === 'OUTSOURCE_EXCESS_LOSS') {
     const r: any = await request.get('/common/resolve-code', { params: { code: row.sourceBillNo } })
     targetId = r?.type === 'order' ? r.id : undefined
@@ -108,7 +108,8 @@ onMounted(async () => { await loadAll(); refreshChecks() })
         <div class="card-header">
           <span style="font-weight:600">① 财务结算</span>
           <span>未付合计：<b style="color:var(--app-color-danger)">¥ {{ fmt(data.unpaidTotal) }}</b>
-            <el-button v-if="Number(data.unpaidTotal)>0" type="primary" size="small" style="margin-left:12px" @click="router.push(`/finance/payment/supplier/${supplierId}`)">去付款</el-button>
+            <!-- 2026-09-29：供应商应付工作台从 /finance/payment/supplier/:id 搬到应付前缀（旧地址仍可重定向） -->
+            <el-button v-if="Number(data.unpaidTotal)>0" type="primary" size="small" style="margin-left:12px" @click="router.push(`/finance/payable/supplier/${supplierId}`)">去付款</el-button>
           </span>
         </div>
       </template>

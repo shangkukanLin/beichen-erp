@@ -456,9 +456,20 @@ const routes: RouteRecordRaw[] = [
       { path: 'finance/payable-transfer/add', name: 'FinancePayableTransferAdd', component: () => import('@/views/finance/payable-transfer/add.vue'), meta: { title: '新增转应收单', requiresAuth: true, operate: true } },
       // 2026-09-24（用户口径）：`finance/payable-transfer/edit/:id` 已移除 —— 草稿态编辑统一在**详情页**内联完成。
       { path: 'finance/payable-transfer/detail/:id', name: 'FinancePayableTransferDetail', component: () => import('@/views/finance/payable-transfer/detail.vue'), meta: { title: '转应收单详情', requiresAuth: true, operate: true } },
-      // 新增付款独立成页（2026-09-23 原为 800px 弹框）；须放在 :id 之前以免 'add' 被当作 id
-      { path: 'finance/payment/supplier/add', name: 'FinancePaymentSupplierAdd', component: () => import('@/views/finance/payment-supplier-add.vue'), meta: { title: '新增付款', requiresAuth: true, operate: true } },
-      { path: 'finance/payment/supplier/:id', name: 'FinancePaymentSupplier', component: () => import('@/views/finance/payment-supplier.vue'), meta: { title: '供应商应付详情', requiresAuth: true, operate: true } },
+      // 新增付款独立成页（2026-09-29 用户口径「付款管理只显示付款记录 + 可以新增付款记录」）：
+      //   供应商**在页内选**（原页面必须先从某供应商的工作台进），兼容 `?supplierId=` 预填。
+      { path: 'finance/payment/add', name: 'FinancePaymentAdd', component: () => import('@/views/finance/payment-add.vue'), meta: { title: '新增付款单', requiresAuth: true, operate: true } },
+      // ⚠️ 旧地址兼容（2026-09-29，用户口径⑦）：原「供应商付款页」的「新增付款」入口保留为重定向，
+      //    带上 query（`?supplierId=`）以免直链/书签/回归脚本失效。
+      { path: 'finance/payment/supplier/add', redirect: (to: any) => ({ path: '/finance/payment/add', query: to.query }) },
+      // 供应商应付详情/工作台（2026-09-29 用户口径：**汇总搬到应付管理**，其「详情」入口随之挂到应付前缀
+      //   `/finance/payable/supplier/:id` —— 只被授予 finance:payable 的用户才不会 403；接口同步镜像，
+      //   见 FinancePayableController 的 `/payments`。原 `/finance/payment/supplier/:id` 保留为重定向。）
+      { path: 'finance/payable/supplier/:id', name: 'FinancePayableSupplier', component: () => import('@/views/finance/payable-supplier.vue'), meta: { title: '供应商应付详情', requiresAuth: true, operate: true } },
+      { path: 'finance/payment/supplier/:id', redirect: (to: any) => ({ path: `/finance/payable/supplier/${to.params.id}`, query: to.query }) },
+      // 客户应收详情/工作台（2026-09-29 用户口径：应收管理加「按客户汇总」，其「详情」进本页；
+      //   与供应商侧对称：汇总卡 + 应收明细 + 收款记录 + 新增收款入口）
+      { path: 'finance/receivable/customer/:id', name: 'FinanceReceivableCustomer', component: () => import('@/views/finance/receivable-customer.vue'), meta: { title: '客户应收详情', requiresAuth: true, operate: true } },
       { path: 'finance/supplier-settlement/:id', name: 'SupplierSettlement', component: () => import('@/views/finance/supplier-settlement.vue'), meta: { title: '清算看板', requiresAuth: true, operate: true } },
       // 占位路由：匹配菜单中有但尚未开发的路由
       {

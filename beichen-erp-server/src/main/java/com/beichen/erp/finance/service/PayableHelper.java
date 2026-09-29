@@ -26,6 +26,9 @@ public class PayableHelper {
     private final FinancePayableMapper payableMapper;
     private final SupplierMapper supplierMapper;
 
+    /** 台账单号列宽上限（与 `finance_payable.bill_no` 的 varchar(50) 一致；与 ReceivableHelper 同名常量对称） */
+    private static final int BILL_NO_MAX = 50;
+
     /**
      * 生成应付（amount 可为负数表示冲减）
      * @param sourceId 来源记录ID（交货/收货记录），用于后续编辑删除定位
@@ -213,6 +216,29 @@ public class PayableHelper {
      */
     public String newBillNo() {
         return generateBillNo();
+    }
+
+    /**
+     * 预付台账单号（2026-09-29；与 {@link ReceivableHelper#advanceBillNo} 逐字对称）。
+     *
+     * <p>用于「付款未核销差额 / 核销开关关闭」生成的负数应付（预付：我方多付，供应商欠我方）。
+     * 取「付款单号 + -ADVANCE」而不是每次新取 YF- 流水号，是为了让<b>反审核后重新审核复用同一行</b>
+     * （bill_no 唯一键）—— 否则每审一次就多留一条 CANCELLED 的预付行。</p>
+     *
+     * <p>两个护栏（I27 修复口径）：① <b>幂等归一化</b> —— 先把入参末尾所有 {@code -ADVANCE} 去掉再追加一次，
+     * 避免 {@code X-ADVANCE-ADVANCE-…} 越叠越长撑破 varchar(50)；② <b>超长护栏</b> —— 归一化后仍超列宽时
+     * 退化为稳定短号 {@code ADV-<hash>}（同一基础单号恒得同一值，重新审核仍复用同一行）。</p>
+     */
+    public static String advanceBillNo(String billNo) {
+        String base = billNo == null ? "" : billNo.trim();
+        String suffix = "-" + SettlementStatus.ADVANCE.getCode();
+        while (base.endsWith(suffix)) base = base.substring(0, base.length() - suffix.length());
+        if (base.isEmpty()) base = "AP";
+        String candidate = base + suffix;
+        if (candidate.length() > BILL_NO_MAX) {
+            candidate = "ADV-" + Integer.toHexString(base.hashCode() & 0x7fffffff).toUpperCase();
+        }
+        return candidate;
     }
 
     private String generateBillNo() {

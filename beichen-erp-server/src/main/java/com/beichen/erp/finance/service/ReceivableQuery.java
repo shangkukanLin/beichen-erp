@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -121,5 +122,61 @@ public class ReceivableQuery {
         res.put("noDueCount", noDueCount);
         res.put("billCount", rows.size());
         return res;
+    }
+
+    /**
+     * 按客户汇总应收（2026-09-29 用户口径「汇总要显示在**应收管理**里面」）。
+     *
+     * <p><b>口径逐条对齐应付侧的</b> {@link PayableQuery#supplierSummary()}（同一套"未结清/逾期"定义，
+     * 跨模块必须一致）：</p>
+     * <ul>
+     *   <li>范围：{@code subject_type = CUSTOMER}（本页汇总视图就是「按客户汇总」；供应商应收在台账页签里看）
+     *       + {@code status IN (UNSETTLED, PARTIAL)} + {@code amount > 0}
+     *       ⇒ 天然排除 ADVANCE 预收台账（负数）与冲减行；</li>
+     *   <li><b>逾期金额 = 未收额 &gt; 0 且 due_date &lt; 今天</b>（当天到期不算逾期）；</li>
+     *   <li>额外返回 {@code billCount}（未结清单据数）与 {@code noDueCount}（无到期日张数）——
+     *       实测客户侧台账**到期日普遍为空**，不区分会让"逾期恒 0"被当成算错。</li>
+     * </ul>
+     *
+     * <p>与 {@link #partySummary} 一样**在 Java 里按行累加**（不写聚合 SQL）：一个客户/供应商可能有成千上万条
+     * 台账，但更关键的是"口径只有一处"—— 聚合别名映射在本项目实测不可靠（见 partySummary 的注）。</p>
+     */
+    public List<Map<String, Object>> customerSummary() {
+        List<FinanceReceivable> all = receivableMapper.selectList(new LambdaQueryWrapper<FinanceReceivable>()
+                .eq(FinanceReceivable::getSubjectType, SubjectType.CUSTOMER.getCode())
+                .in(FinanceReceivable::getStatus, SettlementStatus.UNSETTLED.getCode(),
+                        SettlementStatus.PARTIAL.getCode())
+                .gt(FinanceReceivable::getAmount, BigDecimal.ZERO));
+        Map<Long, Map<String, Object>> map = new LinkedHashMap<>();
+        LocalDate today = LocalDate.now();
+        for (FinanceReceivable r : all) {
+            if (r.getCustomerId() == null) continue;
+            Map<String, Object> m = map.computeIfAbsent(r.getCustomerId(), k -> {
+                Map<String, Object> x = new LinkedHashMap<>();
+                x.put("customerId", k);
+                x.put("customerName", r.getCustomerName());
+                x.put("totalAmount", BigDecimal.ZERO);
+                x.put("paidAmount", BigDecimal.ZERO);
+                x.put("unpaidAmount", BigDecimal.ZERO);
+                x.put("overdueAmount", BigDecimal.ZERO);
+                x.put("billCount", 0);
+                x.put("noDueCount", 0);
+                return x;
+            });
+            BigDecimal amount = r.getAmount() != null ? r.getAmount() : BigDecimal.ZERO;
+            BigDecimal paid = r.getPaidAmount() != null ? r.getPaidAmount() : BigDecimal.ZERO;
+            BigDecimal unpaidAmt = r.getUnpaidAmount() != null ? r.getUnpaidAmount() : BigDecimal.ZERO;
+            m.put("totalAmount", ((BigDecimal) m.get("totalAmount")).add(amount));
+            m.put("paidAmount", ((BigDecimal) m.get("paidAmount")).add(paid));
+            m.put("unpaidAmount", ((BigDecimal) m.get("unpaidAmount")).add(unpaidAmt));
+            m.put("billCount", ((Integer) m.get("billCount")) + 1);
+            if (unpaidAmt.compareTo(BigDecimal.ZERO) > 0 && r.getDueDate() != null && r.getDueDate().isBefore(today))
+                m.put("overdueAmount", ((BigDecimal) m.get("overdueAmount")).add(unpaidAmt));
+            if (r.getDueDate() == null) m.put("noDueCount", ((Integer) m.get("noDueCount")) + 1);
+        }
+        List<Map<String, Object>> list = new ArrayList<>(map.values());
+        // 未收额倒序（与应付汇总一致）：欠得多的排前面
+        list.sort((a, b) -> ((BigDecimal) b.get("unpaidAmount")).compareTo((BigDecimal) a.get("unpaidAmount")));
+        return list;
     }
 }

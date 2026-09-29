@@ -128,4 +128,48 @@ public class PayableQuery {
         list.sort((a, b) -> ((BigDecimal) b.get("unpaidAmount")).compareTo((BigDecimal) a.get("unpaidAmount")));
         return list;
     }
+
+    /**
+     * 单供应商欠款汇总（2026-09-29）：新增付款页「选完供应商后显示**到期欠款 + 总欠款**」。
+     *
+     * <p><b>口径与 {@link #supplierSummary()} 同源</b>（都是"未结清 + 排除已转应收 + 排除负数/ADVANCE"），
+     * 只是范围收窄到**一个供应商**，并且补上"无到期日的单据"的计数与金额 —— 让界面能解释"为什么到期是 0"，
+     * 否则实测里"全部单据都没有到期日"的供应商会被误判成算错。</p>
+     *
+     * <p>到期口径与应收侧 {@code ReceivableQuery.partySummary} 逐字一致：
+     * <b>未付额 &gt; 0 且 due_date &lt; 今天</b>（当天到期不算逾期），无到期日不计入。</p>
+     *
+     * <p>与 {@link #unpaid(Long)} 复用同一实现（不另写聚合 SQL）：口径只有一处，日后不会与付款核销下拉分叉。</p>
+     */
+    public Map<String, Object> partySummary(Long supplierId, String supplierType) {
+        Map<String, Object> res = new LinkedHashMap<>();
+        res.put("partyId", supplierId);
+        res.put("supplierType", supplierType);
+        res.put("unpaidAmount", BigDecimal.ZERO);
+        res.put("overdueAmount", BigDecimal.ZERO);
+        res.put("noDueAmount", BigDecimal.ZERO);
+        res.put("noDueCount", 0);
+        res.put("billCount", 0);
+        res.put("asOf", LocalDate.now().toString());
+        if (supplierId == null) return res;   // 没选供应商 ⇒ 全 0（前端此时不展示汇总条）
+        List<FinancePayable> rows = unpaid(supplierId);
+        LocalDate today = LocalDate.now();
+        BigDecimal unpaidSum = BigDecimal.ZERO;
+        BigDecimal overdueSum = BigDecimal.ZERO;
+        BigDecimal noDueAmt = BigDecimal.ZERO;
+        int noDueCount = 0;
+        for (FinancePayable p : rows) {
+            BigDecimal u = p.getUnpaidAmount() != null ? p.getUnpaidAmount() : BigDecimal.ZERO;
+            unpaidSum = unpaidSum.add(u);
+            // 到期欠款 = 未付额 > 0 且 due_date < 今天（当天到期不算；无到期日不计入）—— 与应收侧逐字一致
+            if (u.signum() > 0 && p.getDueDate() != null && p.getDueDate().isBefore(today)) overdueSum = overdueSum.add(u);
+            if (p.getDueDate() == null) { noDueAmt = noDueAmt.add(u); noDueCount++; }
+        }
+        res.put("unpaidAmount", unpaidSum);
+        res.put("overdueAmount", overdueSum);
+        res.put("noDueAmount", noDueAmt);
+        res.put("noDueCount", noDueCount);
+        res.put("billCount", rows.size());
+        return res;
+    }
 }

@@ -1,31 +1,28 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
-import { getPaymentPage, getPaymentItems, auditPayment, cancelPayment, unAuditPayment, type FinancePayment, type FinancePaymentItem } from '@/api/finance'
+import { getPaymentPage, auditPayment, cancelPayment, unAuditPayment, type FinancePayment } from '@/api/finance'
 import { TYPE_MAP, TYPE_TAG, TYPE_OPTIONS } from '@/constants/supplier'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
+/**
+ * 付款管理（2026-09-29 用户口径「付款管理只显示**付款记录**就行，然后可以**新增付款记录**；
+ * 汇总要显示在**应付管理**和**应收管理**里面」）：
+ * <ul>
+ *   <li>原「供应商汇总」页签**整体搬到「应付管理」**（视图页签「按供应商汇总 / 应付台账」，
+ *       详情进 <code>/finance/payable/supplier/:id</code>）—— 汇总属"看账"，归应付管理；
+ *       本页是"付款作业台"，只做付款单与新增；</li>
+ *   <li>新增「新增付款」按钮 → 独立页 <code>/finance/payment/add</code>（供应商在页内选，
+ *       不再必须先进供应商工作台）；</li>
+ *   <li>列表「账户」列支持多账户（2026-09-29 付款侧与收款侧对称：一单可多账户分款）。</li>
+ * </ul>
+ */
 const router = useRouter()
-const activeTab = ref('supplier')
 
-// ========== Tab1 供应商汇总 ==========
-const summaryLoading = ref(false)
-const summaryData = ref<any[]>([])
-
-async function loadSummary() {
-  summaryLoading.value = true
-  try {
-    // 期 2（2026-09-19 读隔离）：应付汇总改走付款页自身前缀（原读 /finance/payable/supplier-summary 需 finance:payable）
-    const r = await request.get<any, any>('/finance/payment/payable-summary')
-    summaryData.value = r || []
-  } catch { summaryData.value = [] } finally { summaryLoading.value = false }
-}
-function goSupplierDetail(row: any) { router.push(`/finance/payment/supplier/${row.supplierId}`) }
-
-// ========== Tab2 付款记录 ==========
+// ========== 付款记录 ==========
 const query = reactive({ supplierId: '' as string|number, supplierType: '', status: '' })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
@@ -59,12 +56,27 @@ function reset_() { query.supplierId = ''; query.supplierType = ''; query.status
 function sName(id?: number) { return suppliersOptions.value.find(x => x.id === id)?.name || '' }
 function typeLabel(code?: string) { return code ? (TYPE_MAP[code] || code) : '—' }
 function aName(id?: number) { return accounts.value.find(x => x.id === id)?.accountName || '' }
+/**
+ * 「账户」列文案（2026-09-29 多账户付款）：
+ * <ul>
+ *   <li>单账户 ⇒ 账户名（历史单与老 payload 都是这种）；</li>
+ *   <li>多账户 ⇒ <b>「N 个账户」</b>。⚠️ 本列 104px 装不下「CASH-01 等 N 个」，
+ *       全貌在**付款单详情页「付款账户（分款明细）」卡片**里逐行看（点整行即达）。</li>
+ * </ul>
+ */
+function accountText(row: any) {
+  const n = Number(row?.accountCount || 0)
+  if (n > 1) return `${n} 个账户`
+  return row?.accountName || aName(row?.accountId) || '—'
+}
+/** 2026-09-29：新增付款改独立页（供应商在页内选，不再必须先进供应商工作台） */
+function handleAdd() { router.push('/finance/payment/add') }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { return DocStatusTag[s || ''] || undefined }
 
 async function handleAudit(row: FinancePayment) {
-  try { await ElMessageBox.confirm(`确认审核付款单「${row.code}」？将核销应付并扣减账户余额`, '提示', { type: 'warning' })
-    await auditPayment(row.id as number); ElMessage.success('已审核，已核销应付并更新资金'); loadData(); loadSummary() } catch {}
+  try { await ElMessageBox.confirm(`确认审核付款单「${row.code}」？将核销应付（如有核销明细）、按各账户扣减余额并写资金流水；未核销差额作为预付挂账`, '提示', { type: 'warning' })
+    await auditPayment(row.id as number); ElMessage.success('已审核：已核销应付、按账户写入资金流水'); loadData() } catch {}
 }
 async function handleCancel(row: FinancePayment) {
   try { await ElMessageBox.confirm(`确认作废付款单「${row.code}」？`, '提示', { type: 'warning' })
@@ -75,68 +87,17 @@ async function handleUnAudit(row: FinancePayment) {
     await unAuditPayment(row.id as number); ElMessage.success('已反审核'); loadData() } catch {}
 }
 
-// ========== 付款单详情 + 凭证 ==========
-const detailVisible = ref(false)
-const detail = ref<FinancePayment>({})
-const detailItems = ref<FinancePaymentItem[]>([])
-const attachSaving = ref(false)
-
-async function handleDetail(row: FinancePayment) {
-  detail.value = { ...row }
-  router.push(`/finance/payment/detail/${row.id}`)
-}
-async function handleUploadAttach(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0]
-  if (!file) return
-  attachSaving.value = true
-  try {
-    const fd = new FormData(); fd.append('file', file)
-    const url = await request.post<any, string>('/dev/file/upload', fd)
-    await request.put(`/finance/payment/${detail.value.id}/attach`, { attachUrl: url })
-    detail.value.attachUrl = url as unknown as string
-    ElMessage.success('凭证已上传'); loadData()
-  } catch (e: any) { ElMessage.error(e?.message || '上传失败') } finally { attachSaving.value = false }
-}
+/** 详情改独立页（2026-09-23 全站口径）：点整行 / 行内「详情」都跳付款单详情页（草稿可在详情页就地编辑） */
+function handleDetail(row: FinancePayment) { if (row?.id != null) router.push(`/finance/payment/detail/${row.id}`) }
 function openAttach(url: string) { window.open(url + '?inline=true') }
 
-onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadData() })
+onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadData() })
 
 </script>
 
 <template>
   <div class="page-list">
-    <el-tabs v-model="activeTab">
-      <el-tab-pane label="供应商汇总" name="supplier" />
-      <el-tab-pane label="付款记录" name="records" />
-    </el-tabs>
-
-    <!-- Tab1 供应商汇总 -->
-    <el-card v-if="activeTab==='supplier'" shadow="never">
-      <!-- 2026-09-26 B6：供应商做成链接进该供应商的应付/付款详情（原先只能点整行/操作列） -->
-      <el-table v-loading="summaryLoading" :data="summaryData" border stripe @row-click="goSupplierDetail">
-        <el-table-column label="供应商" min-width="180" show-overflow-tooltip>
-          <template #default="{row}"><el-button type="primary" link @click.stop="goSupplierDetail(row)">{{ row.supplierName || sName(row.supplierId) || '—' }}</el-button></template>
-        </el-table-column>
-        <el-table-column label="主体类型" width="100" align="center">
-          <template #default="{row}">
-            <el-tag v-if="row.supplierType" :type="TYPE_TAG[row.supplierType] || 'info'" size="small">{{ typeLabel(row.supplierType) }}</el-tag>
-            <span v-else>—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="应付总额" width="130" align="right"><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
-        <el-table-column label="已付" width="130" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.paidAmount) }}</span></template></el-table-column>
-        <el-table-column label="未付" width="130" align="right"><template #default="{row}"><span style="color:var(--app-color-warning);font-weight:600">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
-        <el-table-column label="逾期金额" width="130" align="right"><template #default="{row}"><span :style="{color: Number(row.overdueAmount)>0?'var(--app-color-danger)':'var(--app-text-secondary)', fontWeight: Number(row.overdueAmount)>0?600:400}">{{ fmt(row.overdueAmount) }}</span></template></el-table-column>
-        <el-table-column label="操作" width="100" align="center" fixed="right">
-          <template #default="{row}"><el-button type="primary" link @click.stop="goSupplierDetail(row)">详情</el-button></template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-if="!summaryLoading && summaryData.length===0" description="暂无应付数据" />
-    </el-card>
-
-    <!-- Tab2 付款记录 -->
-    <template v-if="activeTab==='records'">
-      <el-card shadow="never" class="query-card">
+    <el-card shadow="never" class="query-card">
         <div class="query-bar">
         <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="供应商"><RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" /></el-form-item>
@@ -152,6 +113,7 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="query_">查询</el-button>
           <el-button :icon="'Refresh'" @click="reset_">重置</el-button>
+          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增付款</el-button>
         </div>
         </div>
       </el-card>
@@ -171,13 +133,18 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
               <span v-else>{{ row.supplierName || sName(row.supplierId) || '—' }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="主体类型" width="72" align="center">
+          <!-- 2026-09-29：本页去掉「供应商汇总」页签后，本表成为**首屏表格** ⇒ 列截断扫描器终于扫到它，
+               并查出既有缺陷：列名「主体类型」4 字表头实测需 56px，本列 72px - 内边距只剩 55px ⇒ 差 1px 被裁。
+               按家规改短名「类型」（与应付台账页 B10 同一处理；页签/详情页仍有全称，信息不丢）。 -->
+          <el-table-column label="类型" width="72" align="center">
             <template #default="{row}">
               <el-tag v-if="row.supplierType" :type="TYPE_TAG[row.supplierType] || 'info'" size="small">{{ typeLabel(row.supplierType) }}</el-tag>
               <span v-else>—</span>
             </template>
           </el-table-column>
-          <el-table-column label="账户" min-width="104" show-overflow-tooltip><template #default="{row}">{{ aName(row.accountId) }}</template></el-table-column>
+          <!-- 2026-09-29 多账户付款：单账户 = 账户名；多账户 =「N 个账户」（本列 104px 装不下「首行 等 N 个」，
+             全貌在付款单详情页「付款账户（分款明细）」卡片）—— 判据见 script 里的 accountText -->
+        <el-table-column label="账户" min-width="104" show-overflow-tooltip><template #default="{row}">{{ accountText(row) }}</template></el-table-column>
           <el-table-column prop="paymentDate" label="日期" width="100" align="center"/>
           <el-table-column prop="amount" label="金额" width="96" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
           <el-table-column label="凭证" width="64" align="center"><template #default="{row}"><el-link v-if="row.attachUrl" type="primary" @click.stop="openAttach(row.attachUrl)">查看</el-link><span v-else style="color:#c0c4cc">—</span></template></el-table-column>
@@ -188,9 +155,6 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadSummary(); loadDat
         </el-table>
         <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>
       </el-card>
-    </template>
-
-    <!-- 付款单详情 -->
 
   </div>
 </template>

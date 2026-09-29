@@ -210,8 +210,17 @@ if ($isIsolated) {
     @{ n = 'outsource/other-io/detail'; m = '/outsource/other-io'; u = "/outsource/other-io/detail/$oioId"; a = @() },
     @{ n = 'outsource/material-order/delivery (receiving list)'; m = '/outsource/material-order/delivery'; u = '/outsource/material-order/delivery'; a = @() },
     @{ n = 'inventory/warehouse (stock-take column)'; m = '/inventory/warehouse'; u = '/inventory/warehouse'; a = @() },
-    @{ n = 'finance/payment (payable summary)'; m = '/finance/payment'; u = '/finance/payment'; a = @() },
-    @{ n = 'finance/payment/supplier (payables + unpaid)'; m = '/finance/payment'; u = "/finance/payment/supplier/$supId"; a = @('openAddPayment', 'addWriteoff') },
+    # 2026-09-29（用户口径「付款管理只显示付款记录 + 可以新增付款记录；汇总搬到应付管理」）：
+    #   付款页 = 单表格「付款记录」+ 工具栏「新增付款」；点它进统一新增页（页内选供应商/多账户/核销开关）
+    #   —— 只带 finance:payment 的角色跑这一页，正好验证"付款前缀下的接口一个都不 403"。
+    @{ n = 'finance/payment (payment records + add entry)'; m = '/finance/payment'; u = '/finance/payment'; a = @('openAddPayment') },
+    # 供应商应付工作台**搬到应付前缀**（`/finance/payable/supplier/:id`）：本项只授予 finance:payable，
+    # 用来钉住"镜像端点（/finance/payable/{supplier-summary,page,payments}）在应付权限下不 403"。
+    # ⚠️ 刻意不点「新增付款」：该按钮按权限显示（v-perm=finance:payment），本角色没有它 ⇒ 不出现是**预期**。
+    @{ n = 'finance/payable/supplier (payables + payments, payable-prefix mirror)'; m = '/finance/payable'; u = "/finance/payable/supplier/$supId"; a = @() },
+    # 客户应收工作台（2026-09-29 新增，与供应商侧对称）：只授予 finance:receivable，
+    # 钉住"应收前缀镜像端点（/finance/receivable/{customer-summary,page,receipts}）不 403"。
+    @{ n = 'finance/receivable/customer (receivables + receipts, receivable-prefix mirror)'; m = '/finance/receivable'; u = "/finance/receivable/customer/$custId"; a = @() },
     @{ n = 'finance/receipt (unpaid receivables)'; m = '/finance/receipt'; u = '/finance/receipt'; a = @('openAddReceipt', 'partner', 'addWriteoff') },
     @{ n = 'sale/order/detail (receipts/returns/exchanges)'; m = '/inventory/sale'; u = "/inventory/sale/detail/$soId"; a = @() },
     @{ n = 'purchase/order/detail (returns)'; m = '/inventory/purchase'; u = "/inventory/purchase/detail/$poId"; a = @() },

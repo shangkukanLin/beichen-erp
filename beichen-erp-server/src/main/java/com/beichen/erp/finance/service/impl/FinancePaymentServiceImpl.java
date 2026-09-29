@@ -18,6 +18,7 @@ import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.common.SettlementRecordStatus;
 import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinancePaymentService;
+import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,8 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
 
     private final FinancePaymentMapper paymentMapper;
     private final FinancePaymentItemMapper itemMapper;
+    /** 付款单分款明细（2026-09-29 多账户付款：一单可拆到多个账户，与收款侧 FinanceReceiptAccountMapper 对称） */
+    private final FinancePaymentAccountMapper paymentAccountMapper;
     private final FinancePayableMapper payableMapper;
     private final FinanceAccountMapper accountMapper;
     private final FinanceCashflowMapper cashflowMapper;
@@ -54,12 +57,23 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
                 .orderByDesc(FinancePayment::getId);
         Page<FinancePayment> raw = paymentMapper.selectPage(new Page<>(pageNum, pageSize), w);
         Page<Map<String, Object>> res = new Page<>(pageNum, pageSize, raw.getTotal());
+        // 分款明细条数（2026-09-29 多账户）：列表「账户」列据此显示「CASH-01」或「N 个账户」。
+        // 一次批量查询（避免 N+1），并且是**唯一**让列表知道"这单有几个账户"的途径（主表只留首行快照）。
+        Map<Long, Integer> accCount = new HashMap<>();
+        if (!raw.getRecords().isEmpty()) {
+            List<Long> ids = raw.getRecords().stream().map(FinancePayment::getId).toList();
+            for (FinancePaymentAccount a : paymentAccountMapper.selectList(
+                    new LambdaQueryWrapper<FinancePaymentAccount>().in(FinancePaymentAccount::getPaymentId, ids))) {
+                accCount.merge(a.getPaymentId(), 1, Integer::sum);
+            }
+        }
         res.setRecords(raw.getRecords().stream().map(p -> {
             Map<String, Object> m = new HashMap<>();
             m.put("id", p.getId()); m.put("code", p.getCode());
             m.put("supplierId", p.getSupplierId()); m.put("supplierName", p.getSupplierName());
             m.put("supplierType", p.getSupplierType());
             m.put("accountId", p.getAccountId()); m.put("accountName", p.getAccountName());
+            m.put("accountCount", accCount.getOrDefault(p.getId(), 0));
             m.put("paymentDate", p.getPaymentDate()); m.put("amount", p.getAmount());
             m.put("status", p.getStatus()); m.put("remark", p.getRemark());
             m.put("createTime", p.getCreateTime());
@@ -72,25 +86,142 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
     @Override public List<FinancePaymentItem> getItems(Long paymentId) {
         return itemMapper.selectList(new LambdaQueryWrapper<FinancePaymentItem>().eq(FinancePaymentItem::getPaymentId, paymentId));
     }
+    /** 分款明细（2026-09-29 多账户）：按 id 升序 —— 首行即主表 account_id/account_name 的快照来源 */
+    @Override public List<FinancePaymentAccount> getAccounts(Long paymentId) {
+        return paymentAccountMapper.selectList(new LambdaQueryWrapper<FinancePaymentAccount>()
+                .eq(FinancePaymentAccount::getPaymentId, paymentId).orderByAsc(FinancePaymentAccount::getId));
+    }
 
+    /**
+     * 建单（兼容旧签名）：老 payload（只带 {@code payment.accountId} + items）与内部调用走这里 ——
+     * {@code accounts} 缺省 ⇒ 由单账户字段 + 核销合计归一化成一条分款行，调用方无需改。
+     */
     @Override @Transactional(rollbackFor = Exception.class)
     public void create(FinancePayment payment, List<FinancePaymentItem> items) {
+        create(payment, null, items);
+    }
+
+    /**
+     * 建单（2026-09-29 用户口径：付款侧与收款侧对称 —— 一个付款单可**多账户分款** + **核销项做成开关**）。
+     *
+     * <ul>
+     *   <li><b>多账户分款</b>：{@code accounts} 每行 = 一个账户本次付出的钱（A 50 + B 100）；主表
+     *       {@code amount} = 分款合计，{@code account_id/account_name} = **首行**（列表列/老读法兼容）。</li>
+     *   <li><b>核销开关</b>：{@code items} 可为空（关闭 = 只记付款不核销）。但"多付出去的钱"不能悬空 ——
+     *       审核时按差额生成预付台账（见 {@link #createUnsettledAdvance}），否则就是 F7-37 修掉的
+     *       "钱出去、台账不动"错账。开关打开时每行仍必须关联应付台账（F7-37 口径不变）。</li>
+     *   <li><b>新增护栏</b>：核销合计 ≤ 付款合计（核销的是"本次付出去的钱"）。</li>
+     * </ul>
+     */
+    @Override @Transactional(rollbackFor = Exception.class)
+    public void create(FinancePayment payment, List<FinancePaymentAccount> accounts, List<FinancePaymentItem> items) {
         if (payment.getSupplierId() == null) throw new BusinessException("供应商不能为空");
-        if (payment.getAccountId() == null) throw new BusinessException("付款账户不能为空");
         Supplier s = supplierMapper.selectById(payment.getSupplierId());
         payment.setSupplierName(s != null ? s.getName() : "");
         // 主体类型固化：优先取供应商标签的第一个类型（与供应商详情展示一致），付款列表可按类型筛选
         if (payment.getSupplierType() == null || payment.getSupplierType().isBlank()) {
             payment.setSupplierType(resolveSupplierType(payment.getSupplierId()));
         }
-        FinanceAccount acc = accountMapper.selectById(payment.getAccountId());
-        payment.setAccountName(acc != null ? acc.getAccountName() : "");
         payment.setCode(gen(BillPrefix.PAYMENT, paymentMapper));
         payment.setStatus(DocStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
-        BigDecimal total = BigDecimal.ZERO;
         if (cid != null && cid > 0) payment.setCompanyId(cid);
         paymentMapper.insert(payment);
+        BigDecimal paid = saveAccounts(payment, accounts, items, cid);
+        BigDecimal settled = saveItems(payment, items, cid);
+        assertSettledWithinPaid(settled, paid);
+        writeMainTotals(payment.getId(), payment);
+    }
+
+    /**
+     * 草稿就地修改（2026-09-29 用户口径：付款侧与收款侧对称，「草稿在**详情页**改+存、列表不给编辑」）。
+     *
+     * <p>只允许 DRAFT（已审核要先反审核）；字段与校验、payload 与 create 完全一致；
+     * 分款与核销明细**整体替换**（先删后插，与收款单/物料售后详情页同范式）；单号不动。
+     * 付款凭证 {@code attach_url} 不在此处覆盖 —— 详情页有自己的上传入口（{@code PUT /{id}/attach}）。</p>
+     */
+    @Override @Transactional(rollbackFor = Exception.class)
+    public void update(Long id, FinancePayment form, List<FinancePaymentAccount> accounts, List<FinancePaymentItem> items) {
+        FinancePayment old = paymentMapper.selectById(id);
+        if (old == null) throw new BusinessException("付款单不存在");
+        if (!DocStatus.DRAFT.getCode().equals(old.getStatus()))
+            throw new BusinessException("只有草稿状态的付款单可修改（已审核请先反审核）");
+        Long supplierId = form.getSupplierId() != null ? form.getSupplierId() : old.getSupplierId();
+        Supplier s = supplierId != null ? supplierMapper.selectById(supplierId) : null;
+        String supplierName = s != null ? s.getName() : old.getSupplierName();
+        LocalDate payDate = form.getPaymentDate() != null ? form.getPaymentDate() : old.getPaymentDate();
+        // 用 update wrapper 显式 set（含 null）—— updateById 默认忽略 null，清空备注会写不进去
+        paymentMapper.update(null, new LambdaUpdateWrapper<FinancePayment>()
+                .eq(FinancePayment::getId, id)
+                .set(FinancePayment::getSupplierId, supplierId)
+                .set(FinancePayment::getSupplierName, supplierName)
+                .set(FinancePayment::getPaymentDate, payDate)
+                .set(FinancePayment::getRemark, form.getRemark()));
+        FinancePayment now = paymentMapper.selectById(id);
+        paymentAccountMapper.delete(new LambdaQueryWrapper<FinancePaymentAccount>()
+                .eq(FinancePaymentAccount::getPaymentId, id));
+        itemMapper.delete(new LambdaQueryWrapper<FinancePaymentItem>().eq(FinancePaymentItem::getPaymentId, id));
+        Long cid = now.getCompanyId();
+        BigDecimal paid = saveAccounts(now, accounts, items, cid);
+        BigDecimal settled = saveItems(now, items, cid);
+        assertSettledWithinPaid(settled, paid);
+        writeMainTotals(id, now);
+    }
+
+    /**
+     * 落分款明细并回写主表「付款金额 + 首行账户」，返回**付款合计**。
+     *
+     * <p><b>归一化</b>：{@code accounts} 为空但主表有 {@code accountId}（老 payload / 内部调用）
+     * ⇒ 用单账户 + 核销合计造一条分款行。这样"分款表即权威"没有例外，审核/反审核只看本表。</p>
+     *
+     * <p>校验：账户必选、同一账户不得重复行（合并为一行的口径）、金额必须 &gt; 0、账户必须存在。</p>
+     */
+    private BigDecimal saveAccounts(FinancePayment payment, List<FinancePaymentAccount> accounts,
+                                    List<FinancePaymentItem> items, Long cid) {
+        List<FinancePaymentAccount> rows = accounts == null ? new ArrayList<>() : new ArrayList<>(accounts);
+        if (rows.isEmpty()) {
+            if (payment.getAccountId() == null) throw new BusinessException("付款账户不能为空");
+            BigDecimal fallback = BigDecimal.ZERO;
+            for (FinancePaymentItem it : (items == null ? List.<FinancePaymentItem>of() : items))
+                fallback = fallback.add(it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO);
+            FinancePaymentAccount only = new FinancePaymentAccount();
+            only.setAccountId(payment.getAccountId());
+            only.setAmount(fallback);
+            only.setRemark("单账户（旧入口）");
+            rows.add(only);
+        }
+        BigDecimal total = BigDecimal.ZERO;
+        Set<Long> seen = new HashSet<>();
+        int rowNo = 0;
+        for (FinancePaymentAccount acc : rows) {
+            rowNo++;
+            if (acc.getAccountId() == null) throw new BusinessException("分款第 " + rowNo + " 行未选择付款账户");
+            if (!seen.add(acc.getAccountId()))
+                throw new BusinessException("分款第 " + rowNo + " 行的账户重复（同一账户请合并为一行）");
+            BigDecimal amt = acc.getAmount() != null ? acc.getAmount() : BigDecimal.ZERO;
+            if (amt.compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("分款第 " + rowNo + " 行金额必须大于 0");
+            FinanceAccount fa = accountMapper.selectById(acc.getAccountId());
+            if (fa == null) throw new BusinessException("分款第 " + rowNo + " 行账户不存在（ID=" + acc.getAccountId() + "）");
+            acc.setId(null); acc.setPaymentId(payment.getId()); acc.setAccountName(fa.getAccountName());
+            if (cid != null && cid > 0) acc.setCompanyId(cid);
+            paymentAccountMapper.insert(acc);
+            total = total.add(amt);
+        }
+        payment.setAmount(total);
+        payment.setAccountId(rows.get(0).getAccountId());
+        payment.setAccountName(rows.get(0).getAccountName());
+        return total;
+    }
+
+    /**
+     * 落核销明细（**可为空** = 核销开关关闭），返回**核销合计**。
+     * <p>行校验与 F7-33（非负）/F7-37（必须关联应付台账）一致 —— 开关只决定"要不要核销"，
+     * 一旦核销了某行，该行仍必须指向真实台账，否则钱付出而应付没减。</p>
+     */
+    private BigDecimal saveItems(FinancePayment payment, List<FinancePaymentItem> items, Long cid) {
+        BigDecimal total = BigDecimal.ZERO;
+        if (items == null) return total;
         int rowNo = 0;
         for (FinancePaymentItem it : items) {
             rowNo++;
@@ -106,7 +237,25 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             if (cid != null && cid > 0) it.setCompanyId(cid);
             itemMapper.insert(it);
         }
-        FinancePayment u = new FinancePayment(); u.setId(payment.getId()); u.setAmount(total); paymentMapper.updateById(u);
+        return total;
+    }
+
+    /** 新增护栏（2026-09-29）：核销合计不能超过付款合计 —— 核销的是"本次付出去的钱" */
+    private void assertSettledWithinPaid(BigDecimal settled, BigDecimal paid) {
+        if (settled.compareTo(paid) > 0)
+            throw new BusinessException("核销合计 " + settled.stripTrailingZeros().toPlainString()
+                    + " 不能超过付款合计 " + paid.stripTrailingZeros().toPlainString()
+                    + "（多出的部分请不要核销，它会作为预付/未核销余额挂账）");
+    }
+
+    /** 回写主表「付款金额 + 首行账户」（分款明细落库后调用） */
+    private void writeMainTotals(Long id, FinancePayment src) {
+        FinancePayment u = new FinancePayment();
+        u.setId(id);
+        u.setAmount(src.getAmount());
+        u.setAccountId(src.getAccountId());
+        u.setAccountName(src.getAccountName());
+        paymentMapper.updateById(u);
     }
 
     @Override
@@ -141,21 +290,28 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
                 DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode()))
             throw new BusinessException("只有草稿状态可审核");
         List<FinancePaymentItem> items = itemMapper.selectList(new LambdaQueryWrapper<FinancePaymentItem>().eq(FinancePaymentItem::getPaymentId, id));
+        // 2026-09-29 多账户（与收款侧对称）：分款明细即权威 —— 审核按行逐账户校验余额 + 逐账户写流水。
+        // 历史草稿（无分款行）由 accountsForAudit 按主表账户 + 金额兜底成一行，故下面没有分支判断。
+        List<FinancePaymentAccount> payAccounts = accountsForAudit(payment);
+        // 核销合计：用于算「未核销余额 = 付款总额 − 核销合计」（核销开关关闭 ⇒ 明细为空 ⇒ 全额未核销）
+        BigDecimal settledTotal = BigDecimal.ZERO;
         // F7-36（2026-09-19）：账户余额校验 —— 与费用单对齐（FinanceExpenseServiceImpl.audit:96-101）。
         // 修复前付款审核不校验余额、直接写支出流水（账户余额由流水实时累计）⇒ 账户可被透支（实测余额 200 付 500 成功）。
-        // 用 payment.amount（而非明细之和）是因为下方资金流水就按它入账，两者必须同源。
-        if (payment.getAccountId() == null) throw new BusinessException("付款账户不能为空");
         // F7-140（2026-09-20）：**账户行锁**。下面"读余额校验 → 写支出流水"是两步（余额是 Σ 流水的派生值），
         // 并发两笔付款会各自读到相同的旧余额、双双通过校验 ⇒ **账户被透支**（报告 §7 已把这处非原子性记为 P3 残留）。
         // 同一账户的审核串行化即可闭合；费用单（FinanceExpenseServiceImpl.audit）为同款写法，已一并加锁。
-        lockAccount(payment.getAccountId());
-        BigDecimal payAmount = payment.getAmount() != null ? payment.getAmount() : BigDecimal.ZERO;
-        // F7-140：用**当前读**取余额 —— 一致性读会读到事务开始时的旧快照，导致并发第二笔仍通过校验
-        Map<String, Object> balRow = accountMapper.sumBalanceForUpdate(payment.getAccountId());
-        BigDecimal accountBal = (balRow == null || balRow.get("balance") == null)
-                ? BigDecimal.ZERO : new BigDecimal(balRow.get("balance").toString());
-        if (accountBal.subtract(payAmount).compareTo(BigDecimal.ZERO) < 0)
-            throw new BusinessException("账户余额不足：当前余额 " + accountBal + "，付款 " + payAmount);
+        // 2026-09-29：校验口径由「payment.amount」细化到**逐账户**（A 付 50 + B 付 100 ⇒ 各自要够），
+        // 否则"总余额够、单账户不够"会被放过，写流水时该账户余额变负。
+        for (FinancePaymentAccount acc : payAccounts) {
+            lockAccount(acc.getAccountId());
+            BigDecimal need = acc.getAmount() != null ? acc.getAmount() : BigDecimal.ZERO;
+            // F7-140：用**当前读**取余额 —— 一致性读会读到事务开始时的旧快照，导致并发第二笔仍通过校验
+            Map<String, Object> balRow = accountMapper.sumBalanceForUpdate(acc.getAccountId());
+            BigDecimal accountBal = (balRow == null || balRow.get("balance") == null)
+                    ? BigDecimal.ZERO : new BigDecimal(balRow.get("balance").toString());
+            if (accountBal.subtract(need).compareTo(BigDecimal.ZERO) < 0)
+                throw new BusinessException("账户「" + acc.getAccountName() + "」余额不足：当前余额 " + accountBal + "，本次付款 " + need);
+        }
         // 核销应付：更新台账 + 写入核销流水（双向可追溯），超额部分生成负数应付（预付）
         int rowNo = 0;
         for (FinancePaymentItem it : items) {
@@ -180,6 +336,9 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             if (it.getThisAmount() != null && it.getThisAmount().compareTo(BigDecimal.ZERO) < 0)
                 throw new BusinessException("付款明细金额不能为负数");
             BigDecimal amt = it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO;
+            // 2026-09-29：核销合计按"本行核销额"累加（超额那一行也算核销掉了这么多钱 —— 超出未付的部分
+            // 由超额分支自己生成预付台账），故"未核销余额 = 付款总额 − Σ核销额"不会重复计预付。
+            settledTotal = settledTotal.add(amt);
             BigDecimal unpaid = p.getUnpaidAmount() != null ? p.getUnpaidAmount() : BigDecimal.ZERO;
             BigDecimal newUnpaid = unpaid.subtract(amt);
             if (newUnpaid.compareTo(BigDecimal.ZERO) < 0) {
@@ -257,17 +416,14 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         }
         // 账单联动：核销后反向更新账单明细已付金额（账单=结算快照，随核销进度同步）
         syncBillProgress(id);
-        // 写资金流水（账户余额由流水实时累计，不再维护余额快照）
-        FinanceCashflow cf = new FinanceCashflow();
-        cf.setFlowNo(gen(BillPrefix.CASHFLOW, cashflowMapper));
-        cf.setAccountId(payment.getAccountId());
-        cf.setAccountName(payment.getAccountName());
-        cf.setFlowType(CashflowType.PAYMENT.getCode());
-        cf.setRelatedBillNo(payment.getCode());
-        cf.setRelatedBillType(CashflowRelatedType.PAYMENT.getCode());
-        cf.setIncome(BigDecimal.ZERO);
-        cf.setExpense(payment.getAmount());
-        cashflowMapper.insert(cf);
+        // 写资金流水（账户余额由流水实时累计，不再维护余额快照）：2026-09-29 多账户 ⇒ **按分款明细逐条写**
+        //（A 付 50 + B 付 100 ⇒ 两条流水，各自账户余额 -50/-100 —— 一条汇总流水会让两个账户都对不上账）
+        for (FinancePaymentAccount acc : payAccounts)
+            writeFlow(acc.getAccountId(), acc.getAccountName(), acc.getAmount(), payment, CashflowType.PAYMENT, null);
+        // 未核销余额 → 预付台账（2026-09-29 用户口径②）：核销开关关闭 ⇒ 全额；部分核销 ⇒ 差额
+        BigDecimal paidSum = payment.getAmount() != null ? payment.getAmount() : BigDecimal.ZERO;
+        BigDecimal unsettled = paidSum.subtract(settledTotal);
+        if (unsettled.compareTo(BigDecimal.ZERO) > 0) createUnsettledAdvance(payment, unsettled);
         // 更新付款单状态
         FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.AUDITED.getCode()); paymentMapper.updateById(u);
     }
@@ -285,6 +441,88 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         Map<String, Object> row = map.get(accountId);
         if (row == null || row.get("balance") == null) return BigDecimal.ZERO;
         return new BigDecimal(row.get("balance").toString());
+    }
+
+    /**
+     * 审核/反审核用的分款行：历史草稿（无分款行）按主表账户 + 金额兜底成一行，
+     * 保证"**分款表即权威**"没有例外 —— 审核与反审核走同一份行，流水才能严格对称。
+     */
+    private List<FinancePaymentAccount> accountsForAudit(FinancePayment payment) {
+        List<FinancePaymentAccount> rows = getAccounts(payment.getId());
+        if (!rows.isEmpty()) return rows;
+        if (payment.getAccountId() == null) throw new BusinessException("付款账户不能为空");
+        FinancePaymentAccount only = new FinancePaymentAccount();
+        only.setPaymentId(payment.getId());
+        only.setAccountId(payment.getAccountId());
+        only.setAccountName(payment.getAccountName());
+        only.setAmount(payment.getAmount());
+        only.setRemark("单账户（历史草稿兜底）");
+        return List.of(only);
+    }
+
+    /**
+     * 写一条资金流水（付款出账 / 反审核冲正共用）。
+     * <p>2026-09-29 多账户改造把"一条汇总流水"改成"按分款逐条"后抽出的公共代码（与收款侧 writeFlow 对称）：
+     * 方向由 {@code type} 决定（PAYMENT=支出、PAYMENT_REVERSE=冲正收入），金额一律传正数。</p>
+     */
+    private void writeFlow(Long accountId, String accountName, BigDecimal amount, FinancePayment payment,
+                           CashflowType type, String remark) {
+        FinanceCashflow cf = new FinanceCashflow();
+        cf.setFlowNo(gen(BillPrefix.CASHFLOW, cashflowMapper));
+        cf.setAccountId(accountId);
+        cf.setAccountName(accountName);
+        cf.setFlowType(type.getCode());
+        cf.setRelatedBillNo(payment.getCode());
+        cf.setRelatedBillType(CashflowRelatedType.PAYMENT.getCode());
+        BigDecimal amt = amount != null ? amount : BigDecimal.ZERO;
+        if (CashflowType.PAYMENT_REVERSE == type) {
+            cf.setIncome(amt);
+            cf.setExpense(BigDecimal.ZERO);
+            if (remark != null) cf.setRemark(remark);
+        } else {
+            cf.setIncome(BigDecimal.ZERO);
+            cf.setExpense(amt);
+        }
+        cashflowMapper.insert(cf);
+    }
+
+    /**
+     * 未核销余额 → 预付台账（2026-09-29 用户口径②：「核销项做成开关」；与收款侧 createUnsettledAdvance 对称）。
+     *
+     * <p><b>为什么必须有这一步</b>：核销开关关闭（明细为空）或只核销了一部分时，"付出去的钱"与"已核销的钱"
+     * 之间会有差额。若只是记流水不动台账，就是 F7-37 修掉的错账（钱出去、应付没减）—— 所以差额必须落到
+     * 台账上：生成一条 <b>负数应付</b>（{@code status=ADVANCE}，即预付：我方多付，供应商欠我方），
+     * 后续可用它抵扣或走退款/冲销。</p>
+     *
+     * <p>单号取「付款单号 + -ADVANCE」（{@link PayableHelper#advanceBillNo}：归一化 + 超长护栏），
+     * 来源 {@code source_bill_type=ADVANCE_LEDGER + source_id=付款单id} ⇒ 反审核按此**精确冲销**
+     * （见 {@link #unAudit} 第 3 步）；重新审核复用同一 {@code bill_no} 行（唯一键），不重复建。</p>
+     */
+    private void createUnsettledAdvance(FinancePayment payment, BigDecimal unsettled) {
+        FinancePayable adv = new FinancePayable();
+        adv.setBillNo(PayableHelper.advanceBillNo(payment.getCode()));
+        adv.setSupplierId(payment.getSupplierId());
+        adv.setSupplierName(payment.getSupplierName());
+        // 主体类型随付款单固化（应付汇总/列表要按类型筛）
+        adv.setSupplierType(payment.getSupplierType());
+        adv.setSourceBillType(SourceBillType.ADVANCE_LEDGER.getCode());
+        adv.setSourceBillNo(payment.getCode());
+        adv.setSourceId(payment.getId());
+        adv.setAmount(unsettled.negate());
+        adv.setPaidAmount(BigDecimal.ZERO);
+        adv.setUnpaidAmount(unsettled.negate());
+        adv.setDueDate(payment.getPaymentDate());
+        adv.setStatus(SettlementStatus.ADVANCE.getCode());
+        adv.setTransferredToReceivable(0);
+        adv.setRemark("付款预付（未核销差额，供应商欠我方）");
+        FinancePayable exist = payableMapper.selectOne(new LambdaQueryWrapper<FinancePayable>()
+                .eq(FinancePayable::getBillNo, adv.getBillNo()).last("LIMIT 1"));
+        if (exist != null) {
+            adv.setId(exist.getId());
+            payableMapper.updateById(adv);
+        } else {
+            payableMapper.insert(adv);
+        }
     }
 
     /** 账单进度联动：按核销流水反查账单明细，同步已付金额并重算账单主表（只算有效核销） */
@@ -397,9 +635,15 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             settlementMapper.updateById(upSt);
         }
         // 3) 冲销本付款单产生的预付单（负数应付）：置 CANCELLED 留痕（重新审核复用同一行，故不删除）
+        // ⚠️ 2026-09-29 修复（与收款侧同一条潜伏缺陷）：预付行的来源类型写的是 SourceBillType.ADVANCE_LEDGER
+        //    （"ADVANCE_LEDGER"，F7-53 起），而这里原先过滤 SettlementStatus.ADVANCE.getCode()（"ADVANCE"）
+        //    ⇒ **永不命中**：反审核后预付台账不会被冲销（金额没清零、状态仍是 ADVANCE，账上凭空多出一笔
+        //    "供应商欠我方"）。现按 ADVANCE_LEDGER 查，并兼容早期写入 "ADVANCE" 的历史行。
+        //    （实测库中现无此类残留，属**未被触发**的潜伏缺陷，与本轮"未核销余额也走预付台账"同一条路径。）
         List<FinancePayable> advances = payableMapper.selectList(
                 new LambdaQueryWrapper<FinancePayable>()
-                        .eq(FinancePayable::getSourceBillType, SettlementStatus.ADVANCE.getCode())
+                        .in(FinancePayable::getSourceBillType,
+                                SourceBillType.ADVANCE_LEDGER.getCode(), SettlementStatus.ADVANCE.getCode())
                         .eq(FinancePayable::getSourceId, id));
         for (FinancePayable adv : advances) {
             // I29 口径（2026-09-18）：作废预付台账时**金额一并清零**（原金额记入备注留痕），
@@ -407,17 +651,10 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             payableHelper.cancelLedger(adv);
         }
         // 4) 写冲正资金流水（保留审计轨迹，不删除原流水；账户余额由流水实时累计）
-        FinanceCashflow cf = new FinanceCashflow();
-        cf.setFlowNo(gen(BillPrefix.CASHFLOW, cashflowMapper));
-        cf.setAccountId(payment.getAccountId());
-        cf.setAccountName(payment.getAccountName());
-        cf.setFlowType(CashflowType.PAYMENT_REVERSE.getCode());
-        cf.setRelatedBillNo(payment.getCode());
-        cf.setRelatedBillType(CashflowRelatedType.PAYMENT.getCode());
-        cf.setIncome(payment.getAmount());
-        cf.setExpense(BigDecimal.ZERO);
-        cf.setRemark("反审核冲正");
-        cashflowMapper.insert(cf);
+        //    2026-09-29 多账户：**按分款明细逐条冲正**，与审核时逐条入账严格对称（否则账户余额各差一截）
+        for (FinancePaymentAccount acc : accountsForAudit(payment))
+            writeFlow(acc.getAccountId(), acc.getAccountName(), acc.getAmount(), payment,
+                    CashflowType.PAYMENT_REVERSE, "反审核冲正");
         FinancePayment u = new FinancePayment(); u.setId(id); u.setStatus(DocStatus.DRAFT.getCode()); paymentMapper.updateById(u);
     }
 

@@ -23,10 +23,19 @@ export interface FinanceReceiptItem { id?: number; receiptId?: number; receivabl
  * 反审核按行各写一条冲正流水。</p>
  */
 export interface FinanceReceiptAccount { id?: number; receiptId?: number; accountId?: number; accountName?: string; amount?: number; remark?: string }
-export interface FinancePayment { id?: number; code?: string; supplierId?: number; supplierName?: string; accountId?: number; accountName?: string; paymentDate?: string; amount?: number; status?: string; remark?: string; attachUrl?: string
+export interface FinancePayment { id?: number; code?: string; supplierId?: number; supplierName?: string; supplierType?: string; accountId?: number; accountName?: string; paymentDate?: string; amount?: number; status?: string; remark?: string; attachUrl?: string
+  /** 分款明细条数（2026-09-29 多账户；仅列表接口返回）：>1 时列表「账户」列显示「N 个账户」 */
+  accountCount?: number
   /** 制单人 / 审核人（2026-09-23 单据详情口径；付款单无审核流程 ⇒ 审核人通常为空） */
   createByName?: string; auditorName?: string }
 export interface FinancePaymentItem { id?: number; paymentId?: number; payableId?: number; payableBillNo?: string; thisAmount?: number; remark?: string }
+/**
+ * 付款单**分款明细**（2026-09-29 多账户付款，与收款侧 FinanceReceiptAccount 对称）：
+ * 一行 = 一个账户本次付出的钱。
+ * <p>付款金额（主表 amount）= 各行 amount 合计；审核时按行各写一条资金流水（逐账户校验余额），
+ * 反审核按行各写一条冲正流水。</p>
+ */
+export interface FinancePaymentAccount { id?: number; paymentId?: number; accountId?: number; accountName?: string; amount?: number; remark?: string }
 export interface FinanceBill { id?: number; billNo?: string; billType?: string; partnerId?: number; partnerName?: string; periodStart?: string; periodEnd?: string; totalAmount?: number; paidAmount?: number; unpaidAmount?: number; status?: string
   /** 制单人 / 审核人（2026-09-23 单据详情口径；账单无审核流程 ⇒ 审核人通常为空） */
   createByName?: string; auditorName?: string }
@@ -79,6 +88,16 @@ export interface PartyDebtSummary { subjectType?: string; partyId?: number; unpa
 export function getReceiptPartySummary(params: { subjectType?: string; customerId?: number; supplierId?: number }) {
   return request.get<PartyDebtSummary>('/finance/receipt/party-summary', { params })
 }
+/**
+ * 单供应商欠款汇总（2026-09-29）：新增付款页「选完供应商后显示**到期欠款 + 总欠款**」。
+ * <p>口径与应付侧 `PayableQuery.supplierSummary`（唯一口径）同源：未结清 + 未付额>0 ⇒ 天然排除预付台账 ADVANCE；
+ * **到期 = `due_date` < 今天**（当天到期不算）；**无到期日的单据不计入**（`noDueCount/noDueAmount` 供界面解释）。</p>
+ * <p>走付款页前缀（`/finance/payment/party-summary`）⇒ 只要求 `finance:payment`，避免跨模块 403。</p>
+ */
+export interface PayableDebtSummary { partyId?: number; supplierType?: string; unpaidAmount?: number; overdueAmount?: number; noDueAmount?: number; noDueCount?: number; billCount?: number; asOf?: string }
+export function getPaymentPartySummary(params: { supplierId?: number; supplierType?: string }) {
+  return request.get<PayableDebtSummary>('/finance/payment/party-summary', { params })
+}
 
 export function getCashflowPage(params: any) { return request.get<PageResult<FinanceCashflow>>('/finance/cashflow/page', { params }) }
 
@@ -117,7 +136,15 @@ export function unAuditReceipt(id: number) { return request.put<void>(`/finance/
 
 export function getPaymentPage(params: any) { return request.get<PageResult<FinancePayment>>('/finance/payment/page', { params }) }
 export function getPaymentItems(id: number) { return request.get<FinancePaymentItem[]>(`/finance/payment/${id}/items`) }
+/** 分款明细（2026-09-29 多账户付款）：详情页「付款账户」卡片 / 草稿态就地编辑都用它 */
+export function getPaymentAccounts(id: number) { return request.get<FinancePaymentAccount[]>(`/finance/payment/${id}/accounts`) }
+/**
+ * 建单：`{ payment:{…}, accounts:[{accountId,amount,remark}], items:[{payableId,thisAmount}] }`。
+ * <p>2026-09-29：`accounts` 支撑多账户分款；`items` 可为空（核销开关关闭 = 只记付款，未核销差额落预付台账）。</p>
+ */
 export function createPayment(data: any) { return request.post<void>('/finance/payment', data) }
+/** 草稿就地修改（2026-09-29）：payload 与建单一致，分款/核销明细整体替换 */
+export function updatePayment(id: number, data: any) { return request.put<void>(`/finance/payment/${id}`, data) }
 export function auditPayment(id: number) { return request.put<void>(`/finance/payment/${id}/audit`) }
 export function cancelPayment(id: number) { return request.put<void>(`/finance/payment/${id}/cancel`) }
 export function unAuditPayment(id: number) { return request.put<void>(`/finance/payment/${id}/un-audit`) }

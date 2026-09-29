@@ -26,6 +26,13 @@ public class FinanceReceivableController {
 
     private final ReceivableQuery query;
     private final FinanceReceivableMapper receivableMapper;
+    /**
+     * 客户应收工作台要展示"该客户的收款记录"（2026-09-29）。
+     * <p>刻意**复用收款单服务的分页实现**（而不是另写一份查询）：口径只有一处，
+     * 与收款管理页看到的是同一份数据；本页接口只要求 {@code finance:receivable}（前缀最长匹配），
+     * 所以只被授予应收权限的用户也能看到自己客户的收款流水。</p>
+     */
+    private final com.beichen.erp.finance.service.FinanceReceiptService receiptService;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -75,5 +82,28 @@ public class FinanceReceivableController {
                                              @RequestParam(required = false) Long supplierId,
                                              @RequestParam(required = false) String subjectType) {
         return R.ok(query.unpaid(customerId, supplierId, subjectType));
+    }
+
+    /**
+     * 按客户汇总应收（2026-09-29 用户口径「汇总要显示在**应收管理**里面」）：
+     * 应收管理页视图页签「按客户汇总」用它（口径见 {@link ReceivableQuery#customerSummary}）——
+     * 与应付侧 {@code /supplier-summary} 逐条对称（同一套"未结清/逾期"定义）。
+     */
+    @GetMapping("/customer-summary")
+    public R<List<Map<String, Object>>> customerSummary() {
+        return R.ok(query.customerSummary());
+    }
+
+    /**
+     * 某客户的收款记录（2026-09-29 客户应收工作台「收款记录」表）。
+     * <p>走应收前缀而不是 {@code /finance/receipt/page}：只被授予 {@code finance:receivable} 的用户
+     * 也需要看到"这个客户收过哪些款"（同 {@code /unpaid} 的读隔离处理）。</p>
+     */
+    @GetMapping("/receipts")
+    public R<Page<Map<String, Object>>> receipts(@RequestParam Long customerId,
+                                                 @RequestParam(required = false) String status,
+                                                 @RequestParam(defaultValue = "1") int pageNum,
+                                                 @RequestParam(defaultValue = "100") int pageSize) {
+        return R.ok(receiptService.page(customerId, null, null, status, pageNum, pageSize));
     }
 }

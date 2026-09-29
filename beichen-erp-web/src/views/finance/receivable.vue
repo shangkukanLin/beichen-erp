@@ -37,7 +37,30 @@ async function load() {
     data.value = res?.records || []; page.total = res?.total || 0
   } catch { data.value = [] } finally { loading.value = false }
 }
-onMounted(() => { loadCustomersOptions(); loadSuppliersOptions(); load() })
+// ========== 视图：按客户汇总 / 应收台账（2026-09-29 用户口径「汇总要显示在**应收管理**里面」） ==========
+/**
+ * 视图切换：① <b>按客户汇总</b>（客户/应收总额/已收/未收/逾期金额/单据数 + 详情进客户应收工作台）；
+ * ② <b>应收台账</b> = 原页面（客户应收/供应商应收页签 + 查询 + 台账表），一行未改。
+ * <p>⚠️ 汇总**只含客户应收**（{@code subject_type=CUSTOMER}）：本视图就叫「按客户汇总」；
+ * 「供应商应收」（应付转应收产生的）在台账的第二个页签里看。</p>
+ * <p>逾期口径 = {@code due_date < 今天}（当天不算）、无到期日不计入 —— 实测客户侧到期日普遍为空，
+ * 故汇总表另给「未约定到期日张数」提示，避免"逾期恒 0"被当成算错。</p>
+ */
+const view = ref<'summary' | 'ledger'>('summary')
+const summaryLoading = ref(false)
+const summaryData = ref<any[]>([])
+async function loadSummary() {
+  summaryLoading.value = true
+  try {
+    // 走应收页自身前缀（只要求 finance:receivable）；口径见 ReceivableQuery.customerSummary
+    const r = await request.get<any, any>('/finance/receivable/customer-summary')
+    summaryData.value = r || []
+  } catch { summaryData.value = [] } finally { summaryLoading.value = false }
+}
+/** 汇总行「详情」→ 客户应收工作台（2026-09-29 新增，与「供应商应付工作台」对称） */
+function goCustomerDetail(row: any) { if (row?.customerId != null) router.push(`/finance/receivable/customer/${row.customerId}`) }
+
+onMounted(() => { loadCustomersOptions(); loadSuppliersOptions(); load(); loadSummary() })
 
 // 切页签：清空往来单位筛选回到第一页
 watch(activeSubject, () => {
@@ -65,6 +88,14 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
 <template>
   <div class="page-list">
     <el-card shadow="never" class="query-card">
+      <!-- 视图切换（2026-09-29 用户口径「汇总要显示在**应收管理**里」）：
+           ①按客户汇总（新）②应收台账 = 原页面（页签 + 查询 + 台账表），一行未改。
+           用 el-radio-group 做第一层切换，避免与台账内部的「客户/供应商应收」el-tabs 视觉混淆。 -->
+      <el-radio-group v-model="view" style="margin-bottom:12px">
+        <el-radio-button value="summary">按客户汇总</el-radio-button>
+        <el-radio-button value="ledger">应收台账</el-radio-button>
+      </el-radio-group>
+      <template v-if="view === 'ledger'">
       <!-- 页签：客户应收 / 供应商应收，切换即切换主体类型（与供应商/供货商管理页交互一致） -->
       <el-tabs v-model="activeSubject">
         <el-tab-pane label="客户应收" name="CUSTOMER" />
@@ -82,8 +113,42 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-button :icon="'Refresh'" @click="reset_">重置</el-button>
       </div>
       </div>
+      </template>
     </el-card>
-    <el-card shadow="never" class="table-card">
+
+    <!-- 按客户汇总（2026-09-29 用户口径「汇总要显示在应收管理里」）：
+         客户/应收总额/已收/未收/逾期金额/单据数 + 「详情」进客户应收工作台。
+         本表合计 870px ≤ 948px ✓ 一行显示完；客户是**合作方列**（家规：不得省略号）。
+         口径见 ReceivableQuery.customerSummary（未结清 + 排除预收台账 ADVANCE；逾期 = due_date < 今天）。 -->
+    <el-card v-if="view === 'summary'" shadow="never" class="table-card">
+      <el-table v-loading="summaryLoading" :data="summaryData" border stripe @row-click="goCustomerDetail">
+        <el-table-column label="客户" min-width="180" show-overflow-tooltip>
+          <template #default="{row}"><el-button type="primary" link @click.stop="goCustomerDetail(row)">{{ row.customerName || cName(row.customerId) || '—' }}</el-button></template>
+        </el-table-column>
+        <el-table-column label="应收总额" width="120" align="right"><template #default="{row}">{{ fmt(row.totalAmount) }}</template></el-table-column>
+        <el-table-column label="已收" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.paidAmount) }}</span></template></el-table-column>
+        <el-table-column label="未收" width="120" align="right"><template #default="{row}"><span style="color:var(--app-color-warning);font-weight:600">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
+        <el-table-column label="逾期金额" width="130" align="right"><template #default="{row}"><span :style="{color: Number(row.overdueAmount)>0?'var(--app-color-danger)':'var(--app-text-secondary)', fontWeight: Number(row.overdueAmount)>0?600:400}">{{ fmt(row.overdueAmount) }}</span></template></el-table-column>
+        <!-- 单据数 + 无到期日张数：实测客户侧台账到期日普遍为空 ⇒ 必须解释"为什么逾期是 0"（否则像算错） -->
+        <!-- 2026-09-29：90→**116**（实测「1」+「(1 无到期日)」需 111，90 会被省略号截断）；
+             腾挪来源：应收总额/已收/未收 各 126→120（金额正文最长 ~57px，120 内完整）。
+             合计 = 180+120+120+120+130+116+84 = 870 ≤ 948 ✓ -->
+        <el-table-column label="未结清单据" width="116" align="center">
+          <template #default="{row}">
+            <span>{{ row.billCount }}</span>
+            <el-tooltip v-if="Number(row.noDueCount) > 0" :content="`其中 ${row.noDueCount} 张未约定到期日，未计入逾期金额`" placement="top">
+              <span style="margin-left:4px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">({{ row.noDueCount }} 无到期日)</span>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="84" align="center" fixed="right">
+          <template #default="{row}"><el-button type="primary" link @click.stop="goCustomerDetail(row)">详情</el-button></template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!summaryLoading && summaryData.length === 0" description="暂无客户应收数据" />
+    </el-card>
+
+    <el-card v-else shadow="never" class="table-card">
       <!-- 2026-09-23：详情改独立页 ⇒ 点整行 / 行内「详情」都跳转（与账单页现状一致） -->
       <!-- 2026-09-24（用户规则：所有列表一行显示完、不左右滑动）：原列宽合计 1050px > 内容区 956px
            ⇒ 横向滚动 94px。收窄为合计 858px。
