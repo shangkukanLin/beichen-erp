@@ -227,18 +227,18 @@
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
           <!-- 严格 = **本目录子菜单**（2026-09-27 用户口径）：「委外加工」6 项，按 sort 序逐项同序
-               （加工订单 → 加工收退 → 加工退货 → 物料订单 → 物料收货 → 物料退货）。
+               （加工订单 → 加工收退 → 加工退货 → 物料订单 → 物料收退 → 物料退货）。
                原「供货商管理 / 物料信息管理 / 加工合同模板」3 颗属「基础数据」⇒ 已移除，主数据走侧栏进入。
                注：2026-09-16 「物料收发单 / 物料其他出入库 / 物料报损 / 委外仓库 / 自有物料仓」5 项
                已随新一级菜单「物料仓库」迁到独立的「物料仓库」TAB -->
           <el-button v-if="hasMenu['OutsourceOrder']" type="primary" size="small" text @click="$router.push('/outsource/order')">加工订单</el-button>
-          <!-- 加工收退 / 物料收货：2026-09-16 由订单详情页签移出成独立菜单页（顺序与左侧栏一致）；
-               2026-09-28 用户口径：「成品收货」文案改「加工收货」；**2026-09-29 再改「加工收退」**
+          <!-- 加工收退 / 物料收退：2026-09-16 由订单详情页签移出成独立菜单页（顺序与左侧栏一致）；
+               2026-09-28 用户口径：「成品收货」文案改「加工收货」；**2026-09-29 再改「加工收退」/「物料收退」**
                （该页既收货也退货 ⇒ 名字带上"退"；只改文案，功能不变） -->
           <el-button v-if="hasMenu['OutsourceOrderDelivery']" type="primary" size="small" text @click="$router.push('/outsource/order/delivery')">加工收退</el-button>
           <el-button v-if="hasMenu['OutsourceReturnOrder']" type="primary" size="small" text @click="$router.push('/outsource/return-order')">加工退货</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialOrder']" type="primary" size="small" text @click="$router.push('/outsource/material-order')">物料订单</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialOrderDelivery']" type="primary" size="small" text @click="$router.push('/outsource/material-order/delivery')">物料收货</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialOrderDelivery']" type="primary" size="small" text @click="$router.push('/outsource/material-order/delivery')">物料收退</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialReturn']" type="primary" size="small" text @click="$router.push('/outsource/material-return')">物料退货</el-button>
         </div>
       </el-tab-pane>

@@ -131,6 +131,13 @@ public class DeliveryController {
         Map<String, Object> m = new HashMap<>();
         m.put("id", d.getId()); m.put("code", d.getCode()); m.put("deliveryType", d.getDeliveryType());
         m.put("deliveryDate", d.getDeliveryDate()); m.put("status", d.getStatus());
+        // 2026-09-29（用户口径「物料收退详情的收货记录列表需要有详细，参考加工收退的收货记录详情」）：
+        // 单条记录接口补回**登记时间 / 制单人 / 审核人** —— 「收货记录详情」页与加工侧
+        // （/outsource/order/delivery/record/:id，2026-09-23 口径「单据详情显示制单人+审核人」）同口径，
+        // 前端无需再去翻列表取这两个字段。纯**新增键**，老消费方（物料收发单详情页）不受影响。
+        m.put("createTime", d.getCreateTime());
+        m.put("createByName", d.getCreateByName());
+        m.put("auditorName", d.getAuditorName());
         m.put("supplierDirect", d.getSupplierDirect()); m.put("logisticsCompany", d.getLogisticsCompany());
         m.put("logisticsNo", d.getLogisticsNo()); m.put("contact", d.getContact()); m.put("phone", d.getPhone());
         m.put("remark", d.getRemark()); m.put("attachUrl", d.getAttachUrl());

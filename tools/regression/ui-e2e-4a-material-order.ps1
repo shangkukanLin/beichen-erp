@@ -67,7 +67,7 @@ $r = Rows 0
 Write-Host ('row after audit=' + $(if ($r.n -gt 0) { ($r.rows[0] -join ' | ') } else { 'NONE' }))
 Ok (($r.rows[0] -join ' ') -match (ZH 'st_receiving')) 'material order is RECEIVING after audit'
 
-# ---------- 3. material receive via 物料收货 ----------
+# ---------- 3. material receive via 物料收退（原「物料收货」，2026-09-29 改名） ----------
 Step 'material receive'
 Open '/outsource/material-order/delivery' 2600
 $r = Rows 0

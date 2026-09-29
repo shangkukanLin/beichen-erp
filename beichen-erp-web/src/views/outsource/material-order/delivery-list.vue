@@ -1,24 +1,25 @@
 <script setup lang="ts">
 /**
- * 物料收货（委外加工 → 物料收货）
+ * 物料收退（委外加工 → 物料收退；**原名「物料收货」，2026-09-29 用户口径改名**）
  *
  * <p>2026-09-27（用户口径「物料收货应该有 收货中｜已结单 两个页签」）：本页由"只列收货中"改为**两个页签** ——</p>
  * <ul>
  *   <li><b>生产中</b>（默认）= RECEIVING（2026-09-28 用户口径：原「收货中」改文案）：与后端
  *       「只有生产中（RECEIVING）的订单可收货」口径一致。行内「收货」「退货」；</li>
- *   <li><b>已结单</b> = FINISHED：行内「收货详细」「反结单」（+「退货」，后端对已结单仍**允许**退不良/物料退货）。
- *       收货按钮刻意不放 —— 后端明确拒绝（"订单已结单，不可再收货"）；</li>
+ *   <li><b>已结单</b> = FINISHED：行内「收货详细」「退货」
+ *       （已结单**不可收货**（后端明确拒绝）⇒ 不放「收货」；退不良/物料退货后端仍允许 ⇒ 保留「退货」）。</li>
  * </ul>
- * <p><b>反结单（2026-09-27 用户口径「E 也要做」）</b>：物料订单原先结单即**终态**，结错了只能新建单。
- * 现走后端 `PUT /outsource/material-order/{id}/reopen`：曾被审核或已收过货 ⇒ 回「生产中」（可继续收货）；
- * 两者皆无（待审核直接结单的 API 路径）⇒ 回「待审核」。纯状态回退、**清空结单时间与结单人**，
- * **无账务副作用**（结单本身不动库存/应付）。</p>
+ * <p><b>2026-09-29（用户口径）</b>：本页改名为「物料收退」（与 412「加工收退」同范式），并把
+ * <b>结单 / 反结单统一收到「物料收退详情」</b>（`material-order/delivery.vue` 工具栏，含未收满二次确认）
+ * —— 本页行内原来的「反结单」与「物料订单详情」页的两个按钮都已撤掉，避免三处入口并存。
+ * 结单本身 = 物料订单状态置 FINISHED（后端 `PUT /{id}/finish`），纯状态变更、**无账务副作用**；
+ * 反结单 `PUT /{id}/reopen` 回「生产中」（曾被审核或已收过货）否则回「待审核」，并清空结单时间/结单人。</p>
  *
  * <p>2026-09-21（用户口径「操作文案从收料/退料改成收货/退货」）：行内按钮「收料」→「**收货**」。</p>
  */
 import { reactive, ref, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag } from '@/api/enums'
 import EntityLinks from '@/components/EntityLinks.vue'
@@ -68,21 +69,7 @@ async function loadCounts() {
 function handleTabChange() { pagination.pageNum = 1; loadData() }
 function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; handleQuery() }
-/** 反结单（仅已结单页签可见）：回到生产中/待审核，可继续收货 */
-async function handleReopen(row: any) {
-  try {
-    await ElMessageBox.confirm(
-      `确认反结单？订单 ${row.code} 将回到「生产中」（可继续收货；若该单从未审核过则回「待审核」），结单时间与结单人清空。`,
-      '反结单', { type: 'warning' })
-  } catch { return }
-  try {
-    await request.put(`/outsource/material-order/${row.id}/reopen`)
-    ElMessage.success('已反结单')
-    loadData(); loadCounts()
-  } catch (e: any) {
-    ElMessage.error('反结单失败：' + (e?.msg || e?.message || '未知错误'))
-  }
-}
+/** 2026-09-29（用户口径）：反结单**统一收到「物料收退详情」**（本页行内入口已撤，函数一并移除） */
 
 const itemsOf = (row: any) => (row?.items || []) as any[]
 const totalOf = (row: any) => itemsOf(row).reduce((s: number, it: any) => s + (Number(it.orderQuantity) || 0), 0)
@@ -114,7 +101,8 @@ onActivated(() => { loadData(); loadCounts() })
 <template>
   <div class="page-list">
     <el-card shadow="never">
-      <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">物料收货</span></div></template>
+      <!-- 卡片头文案（2026-09-29 用户口径：菜单/页面改名「物料收货」→「物料收退」） -->
+      <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">物料收退</span></div></template>
       <!-- 页签（2026-09-27 用户口径；2026-09-28 用户口径：文案「收货中」→「生产中」，只改文案）：生产中（默认）｜已结单；标签后带数量角标。
            非活动页签的**列**由 v-if 控制（DOM 中不存在）⇒ 行内按钮类断言不会被隐藏页签干扰。 -->
       <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
@@ -195,8 +183,9 @@ onActivated(() => { loadData(); loadCounts() })
           </template>
         </el-table-column>
         <el-table-column v-if="!isClosed()" label="状态" width="96" align="center"><template #default="{ row }"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <!-- 操作：生产中 = 收货 + 退货（原口径）；已结单 = 收货详细 + 退货 + 反结单
-             （已结单**不可收货**（后端明确拒绝）⇒ 不放「收货」；但退不良/物料退货后端仍允许 ⇒ 保留「退货」）。 -->
+        <!-- 操作：生产中 = 收货 + 退货；已结单 = 收货详细 + 退货
+             （已结单**不可收货**（后端明确拒绝）⇒ 不放「收货」；但退不良/物料退货后端仍允许 ⇒ 保留「退货」；
+              结单/反结单已按 2026-09-29 用户口径统一收到「物料收退详情」）。 -->
         <el-table-column v-if="!isClosed()" label="操作" width="118" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goReceive(row)">收货</el-button>
@@ -204,11 +193,11 @@ onActivated(() => { loadData(); loadCounts() })
             <el-button type="warning" link @click.stop="goReturn(row)">退货</el-button>
           </template>
         </el-table-column>
-        <el-table-column v-else label="操作" width="186" align="center" fixed="right">
+        <!-- 已结单：收货详细 + 退货（「反结单」2026-09-29 已统一收到「物料收退详情」⇒ 操作列 186 → 150） -->
+        <el-table-column v-else label="操作" width="150" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">收货详细</el-button>
             <el-button type="warning" link @click.stop="goReturn(row)">退货</el-button>
-            <el-button type="danger" link @click.stop="handleReopen(row)">反结单</el-button>
           </template>
         </el-table-column>
       </el-table>

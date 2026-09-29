@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { exportMaterialOrderPdf } from '@/api/contract-template'
 // 2026-09-16：收料/退不良相关枚举与状态（DeliveryType、DefectHandleType、QualityType、DocStatus 等）
-// 随「交货管理」页签移出到独立菜单页「物料收货」（views/outsource/material-order/delivery.vue），本页不再使用
+// 随「交货管理」页签移出到独立菜单页「物料收退」（原名「物料收货」，2026-09-29 改名；views/outsource/material-order/delivery.vue），本页不再使用
 import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, OrderType, OrderTypeLabel, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
@@ -75,7 +75,7 @@ async function handleDeleteAttach() {
 async function loadAll() {
   loading.value = true
   try {
-    // 收货记录（收料/退不良）已移到独立菜单页「物料收货」加载，本页不再拉 /deliveries
+    // 收货/退货记录已移到独立菜单页「物料收退」加载，本页不再拉 /deliveries
     const o = await request.get<any, any>(`/outsource/material-order/${id}`)
     if (o) {
       Object.assign(order, { id: o.id, code: o.code, status: o.status, orderType: o.orderType || OrderType.PURCHASE, supplierId: o.supplierId, supplierName: o.supplierName, deliveryDate: o.deliveryDate || '', finishTime: o.finishTime || '', remark: o.remark || '', attachUrl: o.attachUrl || '' })
@@ -114,16 +114,11 @@ async function handleConfirm() {
 async function handleUnAudit() {
   try { await ElMessageBox.confirm('确认反审核？将回到待审核状态', '反审核', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/un-audit`); ElMessage.success('已反审核'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
-async function handleFinish() {
-  try { await ElMessageBox.confirm('结单后订单状态变为「已结单」，不可再收货。', '结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/finish`); ElMessage.success('已结单'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
-}
 /**
- * 反结单（2026-09-27 新增，用户口径「E 也要做」）：结错了的兜底 —— 已结单 → 生产中/待审核，清空结单时间。
- * 与「结单」对称，纯状态回退（后端不动库存/应付）。
+ * 2026-09-29（用户口径「结单也收到收退详情」）：结单 / 反结单**统一收到「物料收退详情」**
+ * （`material-order/delivery.vue` 工具栏，按钮与二次确认都在那边），本页不再放这两个按钮 ——
+ * 原 handleFinish / handleReopen 一并移除，避免两处入口并存。
  */
-async function handleReopen() {
-  try { await ElMessageBox.confirm('确认反结单？订单将回到「生产中」（可继续收货；若该单从未审核过则回「待审核」），结单时间与结单人清空。', '反结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/reopen`); ElMessage.success('已反结单'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
-}
 async function handleCancel() {
   try { await ElMessageBox.confirm('确定作废？', '作废', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/cancel`); ElMessage.success('已作废'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
@@ -172,17 +167,15 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
       <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="order.status!==MaterialOrderStatus.PENDING">保存</el-button>
       <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">审核</el-button>
       <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
-      <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleFinish">结单</el-button>
-      <!-- 反结单（2026-09-27 用户口径「E 也要做」）：与「结单」对称的兜底入口，仅已结单可见 -->
-      <el-button v-if="order.status===MaterialOrderStatus.FINISHED" type="warning" size="small" @click="handleReopen">反结单</el-button>
-      <!-- 收料/退不良 2026-09-16 移出为独立菜单页「物料收货」，此处只留跳转入口 -->
-      <el-button type="warning" size="small" @click="router.push(`/outsource/material-order/delivery/${id}`)">物料收货</el-button>
+      <!-- 结单 / 反结单（2026-09-29 用户口径）：**统一收到「物料收退详情」**（本页不再放这两个按钮） -->
+      <!-- 收货/退货/结单 2026-09-16 移出为独立菜单页「物料收退」（原名「物料收货」），此处只留跳转入口 -->
+      <el-button type="warning" size="small" @click="router.push(`/outsource/material-order/delivery/${id}`)">物料收退</el-button>
       <el-button v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">作废</el-button>
     </template>
 
     <el-tabs v-model="activeTab" style="margin-bottom:12px">
       <el-tab-pane label="订单详情" name="detail" />
-      <!-- 「交货管理」页签已于 2026-09-16 移出为独立菜单页「物料收货」（下方按钮跳转） -->
+      <!-- 「交货管理」页签已于 2026-09-16 移出为独立菜单页「物料收退」（下方按钮跳转） -->
     </el-tabs>
 
     <!-- Tab 1: 订单详情 -->
@@ -213,11 +206,9 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
             <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="order.status!==MaterialOrderStatus.PENDING">保存</el-button>
             <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">审核</el-button>
             <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
-            <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleFinish">结单</el-button>
-            <!-- 反结单（2026-09-27 用户口径「E 也要做」）：与「结单」对称的兜底入口，仅已结单可见 -->
-            <el-button v-if="order.status===MaterialOrderStatus.FINISHED" type="warning" size="small" @click="handleReopen">反结单</el-button>
-            <!-- 收料/退不良 2026-09-16 移出为独立菜单页「物料收货」，此处只留跳转入口 -->
-            <el-button type="warning" size="small" @click="router.push(`/outsource/material-order/delivery/${id}`)">物料收货</el-button>
+            <!-- 结单 / 反结单（2026-09-29 用户口径）：**统一收到「物料收退详情」**（本页不再放这两个按钮） -->
+            <!-- 收货/退货/结单 2026-09-16 移出为独立菜单页「物料收退」（原名「物料收货」），此处只留跳转入口 -->
+            <el-button type="warning" size="small" @click="router.push(`/outsource/material-order/delivery/${id}`)">物料收退</el-button>
             <el-button v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">作废</el-button>
           </div>
         </el-form>

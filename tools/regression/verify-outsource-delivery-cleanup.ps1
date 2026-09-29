@@ -2,7 +2,7 @@
 # 断言：① 侧栏委外加工无「交货信息」，且子菜单 = sys_menu(parent_id=4, visible=1) 按 sort_order
 #       ② 旧地址 /outsource/delivery-info 重定向到 /outsource/order（不 403）
 #       ③ 仪表盘不再有「交货信息」快捷入口
-#       ④ 【关键回归】收货业务本身完好：两个收货页（成品收货 / 物料收货）均能直达且不 403
+#       ④ 【关键回归】收退业务本身完好：两个页面（加工收退 / 物料收退，原「成品收货 / 物料收货」）均能直达且不 403
 #          —— 2026-09-16 起「交货管理」已由订单详情页签移出为独立菜单页，
 #             页签级的深度断言改由 verify-delivery-menu.ps1 覆盖
 $ErrorActionPreference = 'Continue'
@@ -53,7 +53,7 @@ if ($d1) {
   Write-Output ('委外加工 子菜单 = ' + ($d1.c -join ' | '))
   if (($d1.c -join ',') -match '交货信息') { Bad '侧栏仍有「交货信息」' } else { Ok '侧栏已无「交货信息」' }
   # 2026-09-16：物料收发单/其他出入库/委外仓库/自有物料仓/物料报损 已迁入「物料仓库」目录；
-  # 2026-09-17 用户定稿：加工订单 → 成品收货 → 加工退货 → 物料订单 → 物料收货 → 物料退货（409 供应商管理下线）
+  # 2026-09-17 用户定稿的书写顺序（2026-09-29 两次改名后：加工收退 / 物料收退；409 供应商管理下线）
   # → 期望值一律取库，不再硬编码项数与顺序
   $expect = MenuNames 4
   Write-Output ('委外加工 DB 期望 = ' + ($expect -join ' | '))
@@ -84,4 +84,4 @@ foreach ($u in @("$base/outsource/order/delivery", "$base/outsource/material-ord
   else { Ok ($u + ' 直达正常（非 403）') }
 }
 
-if ($global:fail -eq 0) { Write-Output 'RESULT PASS 交货信息总览页已下线，收货业务（成品收货/物料收货 独立页）完好' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }
+if ($global:fail -eq 0) { Write-Output 'RESULT PASS 交货信息总览页已下线，收退业务（加工收退/物料收退 独立页）完好' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }

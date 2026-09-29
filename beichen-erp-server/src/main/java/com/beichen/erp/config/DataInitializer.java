@@ -304,7 +304,7 @@ public class DataInitializer implements ApplicationRunner {
             {305L, 3L, "屏幕资料", "menu", "/dev/screen-model", "DevScreenModel", "Iphone", 5},
             // 委外加工子菜单顺序（2026-09-17 用户定稿；2026-09-28 「成品收货」文案改「加工收货」；
             // 2026-09-29 再改「加工收退」——该页既有收货也有退货，用户口径如此）：
-            //   加工订单 → 加工收退 → 加工退货 → 物料订单 → 物料收货 → 物料退货。
+            //   加工订单 → 加工收退 → 加工退货 → 物料订单 → 物料收退 → 物料退货。
             // sort_order 即左侧栏显示顺序（MenuMapper.selectAllEnabled 按 sort_order 排序）；下方书写顺序与实际显示顺序一致，便于维护。
             {401L, 4L, "加工订单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1},
             // 加工收退（2026-09-16 立，原名「成品收货」；2026-09-28 文案改「加工收货」；
@@ -346,11 +346,16 @@ public class DataInitializer implements ApplicationRunner {
             //   改为在下方统一置 visible=0，**保留行与角色授权**便于回滚；
             //   返回登记改在「工厂售后」（原无单退货）记录详情页（`/api/outsource/order-delivery/{id}/return-back`，登记即生效）。
             {402L, 4L, "物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 4},
-            // 物料收货（2026-09-16 用户要求）：原「物料订单详情 → 交货管理」页签**移出**独立成菜单页 ——
-            // 页面只列生产中（RECEIVING）的物料订单，点「收料」进详细页并自动弹出收货弹窗。
-            // 注意：**交货业务本身未改**（OrderDeliveryController / OutsourceOrderDeliveryService /
-            // MaterialOrderController 的收料、退不良、库存、应付、BOM还料逻辑均未动）
-            {415L, 4L, "物料收货", "menu", "/outsource/material-order/delivery", "OutsourceMaterialOrderDelivery", "Van", 5},
+            // 物料收退（2026-09-16 立，原名「物料收货」；**2026-09-29 用户口径改「物料收退」** ——
+            // 与加工侧 412「加工收退」同范式：该页与详细页既有**收货**也有**退货**
+            // （详细页工具栏「物料退货」+ 收货记录行内「新增退货」，均为 RECEIVE_RETURN 草稿），故名字带上"退"；
+            // **只改文案，id/path/perms/组件均不变**，角色授权与旧书签都不受影响）：
+            // 原「物料订单详情 → 交货管理」页签**移出**独立成菜单页 —— 页面按「生产中｜已结单」两个页签列物料订单，
+            // 点「收货」进详细页（带 ?add=1 自动弹收货弹窗）；
+            // 详细页工具栏 = 新增收货 ｜ 物料退货 ｜ 结单（已结单时显示 反结单）。
+            // 注意：**收货/退货业务本身未改**（OrderDeliveryController / OutsourceOrderDeliveryService /
+            // MaterialOrderController 的收货、退货、库存、应付、BOM还料逻辑均未动）
+            {415L, 4L, "物料收退", "menu", "/outsource/material-order/delivery", "OutsourceMaterialOrderDelivery", "Van", 5},
             // 物料退货（2026-09-27 用户口径「物料侧也按关联物料订单/未关联分叶子」）：二级改目录 423，
             // 把原「411 一个页面 2 页签」拆成 **3 个**三级叶子：
             //  411 关联退料(MRH-) / 425 无单退料(MRW-) / 424 物料维修退货(REPAIR)；

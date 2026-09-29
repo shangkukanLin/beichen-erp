@@ -1,16 +1,35 @@
 <script setup lang="ts">
 /**
- * 物料收货 — 收货详细（委外加工 → 物料收货 → 点单号进入）
+ * 物料收退 — 收退详细（委外加工 → 物料收退 → 点单号进入；原名「物料收货」，2026-09-29 用户口径改名）
  * <p>2026-09-16：原「物料订单详情 → 交货管理」页签整块迁出至此（收货记录 RECEIVE + 退不良 DEFECT_RETURN、
  * 记录审核/反审核），详情页只保留一个跳转按钮。列表页带 ?add=1 进入时自动打开收货弹窗。</p>
- * <p><b>2026-09-29（用户口径）—— 本页交互重构：</b></p>
+ * <p>2026-09-29（用户口径「物料收退详情的收货记录列表需要有详细，参考加工收退的收货记录详情来做」）：
+ * 收货记录行内新增 <b>「详细」</b> ⇒ 只读独立页 `/outsource/material-order/delivery/record/:id`
+ * （与加工侧 `/outsource/order/delivery/record/:id` 同构：记录头 + 收货明细，含 登记时间/制单人/审核人）；
+ * 同行的 <b>「单号」链接也改指该页</b>（原先跳老的「物料收发单详情」`/outsource/delivery/detail/:id`
+ * —— 那是物料收发单时代的页面，库存流水那边**仍在用**，本页不再用）。</p>
+ * <p><b>2026-09-29（用户口径「物料收退详情里也要有物料退货和结单」）—— 工具栏动作：</b></p>
+ * <ul>
+ *   <li><b>物料退货</b>：把该订单**已收**的物料退回物料商（RECEIVE_RETURN 草稿，审核后 ① 扣退货仓库存
+ *       ② 冲减该订单已收数量 ③ 冲减应付）—— 落 {@code POST /outsource/material-order/{id}/return}，
+ *       按**订单明细**预填（默认范围 = 该单已收的量）。**本页退货的唯一入口**（见下方最终口径）；
+ *       入口**只按订单状态给**（生产中/已结单），不按"有没有可退量"隐藏（2026-09-29 用户口径「没必要隐藏」）。</li>
+ *   <li><b>结单 / 反结单</b>：结单 = 物料订单状态 → 已结单（后端 {@code PUT /{id}/finish}，纯状态变更、
+ *       **不要求收满、无账务副作用**，未收满时二次确认）；反结单 = 回到生产中/待审核
+ *       （{@code PUT /{id}/reopen}）。这两个入口原先在「物料订单详情」与收货列表行内，
+ *       2026-09-29 按用户口径**统一收到本页**。</li>
+ * </ul>
  * <ul>
  *   <li>原工具栏「退不良」+「退货」两个入口（都往**同一个退货仓**扣库存，被用户判为功能重复）**合并**为
  *       收货记录行内的 <b>「新增退货」</b>：落一张 {@code RECEIVE_RETURN} 草稿，审核后 ① 扣退货仓库存
  *       ② <b>冲减该订单已收数量</b>（{@code received_quantity}）③ 冲减应付；反审核原路回滚。</li>
- *   <li>收货记录行操作列 = <b>审核 ｜ 反审核 ｜ 新增退货</b>：原先「反审核」只在其它页面开放，现按口径挂到
- *       收货记录自己身上；行内那个跳「物料退货单」的「退货」按钮**已去掉**。</li>
- *   <li><b>取消自动审核</b>：新增收货 / 新增退货都只落草稿，必须人工点「审核」才动库存、应付与订单数量
+ *   <li><b>2026-09-29 最终口径（用户：「去掉行内新增退货」）</b>：行内「新增退货」**已去掉** ⇒ 退货统一走
+ *       工具栏「物料退货」（同一弹窗/同一端点，按订单明细发起，语义 = 退该单已收的货）。行内入口原先那个
+ *       「来源收货单」只是**前端显示**（后端 {@code returnMaterial} 只吃 {@code warehouseId + items}，
+ *       **不落来源单**），除了"可退上限收紧到该条记录"没有别的价值 ⇒ 不保留。</li>
+ *   <li>收货记录行操作列 = <b>审核 ｜ 反审核</b>：原先「反审核」只在其它页面开放，现按口径挂到收货记录
+ *       自己身上；行内那个跳「物料退货单」的「退货」按钮**已去掉**。</li>
+ *   <li><b>取消自动审核</b>：新增收货 / 物料退货都只落草稿，必须人工点「审核」才动库存、应付与订单数量
  *       （此前建单后前端自动调审核，界面上看不到「审核」按钮）。</li>
  * </ul>
  * <p>枚举 label（`RECEIVE`=收料、`DEFECT_RETURN`=退不良、`RECEIVE_RETURN`=退货）被**库存流水等页面共用**。</p>
@@ -41,6 +60,21 @@ const deliveryProgress = computed(() => totalQuantity.value ? Math.min(100, Math
 
 /** 只有生产中（RECEIVING）的订单可新增收货（退货在生产中/已结单都允许，与后端一致） */
 const canReceive = computed(() => order.status === MaterialOrderStatus.RECEIVING)
+/**
+ * 物料退货（2026-09-29 用户口径「物料收退详情里也要有物料退货」→ 同日追加「**没必要隐藏**」）：
+ * 只按**订单状态**给入口 —— 生产中 / 已结单都可退货（与后端 {@code returnMaterial} 的第一道校验同口径）。
+ * <p><b>不再</b>要求"某明细已收 > 0"：那条闸门会让**刚建、还没收过货**的单（实测：MWO-20260929002
+ * 生产中、已收 0）整页看不到入口。有没有可退的量交给**弹窗**（逐行显示 可退 = 已收量，可为 0）
+ * 与**后端**（可退 ≤ 已收量）判定，不由入口替用户决定。</p>
+ */
+const canReturn = computed(() => order.status === MaterialOrderStatus.RECEIVING || order.status === MaterialOrderStatus.FINISHED)
+/**
+ * 结单 / 反结单（2026-09-29 用户口径「统一收到收退详情」）：
+ * 与后端状态机一致 —— 待审核/生产中可结单（后端 {@code finish} **不校验收满**），已结单可反结单；
+ * 两者都是纯状态变更（不动库存/应付），结单后本页不可再收货（canReceive 只在生产中为真）。
+ */
+const canFinish = computed(() => order.status === MaterialOrderStatus.PENDING || order.status === MaterialOrderStatus.RECEIVING)
+const canReopen = computed(() => order.status === MaterialOrderStatus.FINISHED)
 
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
 
@@ -154,6 +188,13 @@ async function auditDelivery(row: any) {
   catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 /** 收货/退不良已审核单反审核（逆向回滚库存与应付） */
+/**
+ * 打开「收货记录详情」（2026-09-29 用户口径「物料收退详情的收货记录列表需要有详细，参考加工收退的
+ * 收货记录详情来做」）—— 只读独立页，与加工侧 `/outsource/order/delivery/record/:id` 同构。
+ */
+function openRecordDetail(row: any) {
+  if (row?.id != null) router.push(`/outsource/material-order/delivery/record/${row.id}`)
+}
 async function unauditDelivery(row: any) {
   try { await ElMessageBox.confirm('反审核将回滚库存并冲回应付，是否继续？', '反审核收货单', { type: 'warning' }) } catch { return }
   try { await request.put(`/outsource/material-order/delivery/${row.id}/un-audit`); ElMessage.success('已反审核'); await loadAll(); markOrderDirty() }
@@ -166,15 +207,14 @@ function isMaterialDelivery(row: any) {
     || row.deliveryType === DeliveryType.RECEIVE_RETURN
 }
 
-// ===== 新增退货弹窗（2026-09-29 用户口径：取代原工具栏「退不良」+「退货」两个入口）=====
-// 语义：把该收货记录收到的物料退回物料商 ⇒ 审核后 ① 从退货仓扣库存 ② **冲减该订单已收数量**
+// ===== 物料退货弹窗（2026-09-29 用户口径：取代原工具栏「退不良」+「退货」两个入口；
+//       同日最终口径「去掉行内新增退货」⇒ 本弹窗只由工具栏「物料退货」打开，按订单明细发起）=====
+// 语义：把该订单**已收**的物料退回物料商 ⇒ 审核后 ① 从退货仓扣库存 ② **冲减该订单已收数量**
 // （received_quantity，即"这些货回到未收"）③ 冲减应付（不再欠物料商这批货的钱）。
 // 建单只落**草稿**（与收货同口径：库存/数量/账在审核时才动），因此这里**不再自动审核**。
 const retVisible = ref(false); const retSaving = ref(false)
 const retItems = ref<any[]>([])
-/** 发起退货的那条收货记录（用于默认仓 = 该记录入库仓 + 明细范围） */
-const retRow = ref<any>(null)
-/** 退货仓库：默认 = 该条收货记录的入库仓（用户口径「默认该收货记录入库的仓库」，可改） */
+/** 退货仓库：默认 = 第一个可退仓（后端缺省也兜底取该物料商第一个委外仓），可改 */
 const retWarehouseId = ref<number>()
 const retWarehouseOptions = ref<any[]>([])
 
@@ -184,6 +224,12 @@ async function loadReturnWarehouses() {
     // 故不另开端点（若将来退货仓范围要放开，再拆独立端点）
     const r = await request.get<any, any>(`/outsource/material-order/${id}/defect-warehouses`)
     retWarehouseOptions.value = r || []
+    // 默认选第一个（与后端"缺省兜底取该物料商第一个委外仓"同口径），否则会被「请选择退货仓库」卡住
+    if (!retWarehouseId.value && retWarehouseOptions.value.length) {
+      const firstWhId = Number(retWarehouseOptions.value[0].id)
+      retWarehouseId.value = firstWhId
+      onRetWhChange(firstWhId)
+    }
   } catch { retWarehouseOptions.value = [] }
 }
 function onRetWhChange(whId: number) {
@@ -203,28 +249,23 @@ async function loadReturnStock(whId: number) {
   }
 }
 /**
- * 打开「新增退货」：范围 = **该条收货记录收到的明细**（退的就是这条记录收进来的货）；
- * 可退上限取「该记录收到量」与「订单明细当前已收量」的较小值 —— 后者正是后端建单/审核两道校验的口径。
+ * 打开「物料退货」弹窗（**本页唯一的退货入口**，2026-09-29 用户口径「物料收退详情里也要有物料退货」，
+ * 同日又定「去掉行内新增退货」「物料退货没必要隐藏」）：
+ * 范围 = **订单明细**（退的就是这张单已收的货），可退上限 = 该明细当前已收量
+ * —— 正是后端建单/审核两道校验的口径（`POST /{id}/return` → RECEIVE_RETURN 草稿 → 收货记录里审核）。
+ * <p>弹出时**列全部订单明细**（不再过滤掉"已收 = 0"的行）：未收过货的单也能打开弹窗，一眼看到
+ * 「可退 = 0」而不是一片空白 —— 与「订单状态给入口、可退量交弹窗/后端判定」同一条口径。</p>
  */
-function openReturn(row: any) {
-  retRow.value = row
-  const orderItemById: Record<number, any> = {}
-  for (const it of items.value) orderItemById[Number(it.id)] = it
-  retWarehouseId.value = row?.toWarehouseId || undefined
+function openReturn() {
+  retWarehouseId.value = undefined
   retWarehouseOptions.value = []
-  retItems.value = (row?.items || []).map((r: any) => {
-    const oi = orderItemById[Number(r.itemId)]
-    const recordQty = Number(r.quantity || 0)
-    const orderReceived = Number(oi?.receivedQuantity || 0)
-    return {
-      itemId: r.itemId, materialId: r.materialId, materialName: r.materialName,
-      available: Math.max(0, Math.min(recordQty, orderReceived)),
-      warehouseStock: undefined, stockLoading: false, quantity: undefined as any
-    }
-  })
+  retItems.value = items.value.map((it: any) => ({
+    itemId: it.id, materialId: it.materialId, materialName: it.materialName,
+    available: Math.max(0, Number(it.receivedQuantity || 0)),
+    warehouseStock: undefined, stockLoading: false, quantity: undefined as any
+  }))
   retVisible.value = true
   loadReturnWarehouses()
-  if (retWarehouseId.value) onRetWhChange(retWarehouseId.value)
 }
 async function handleReturn() {
   const data = retItems.value.filter((r: any) => r.quantity && Number(r.quantity) > 0)
@@ -240,6 +281,34 @@ async function handleReturn() {
     ElMessage.success('退货已存为草稿，请在收货记录里点「审核」后才会扣库存、冲减已收数量与应付')
     retVisible.value = false; await loadAll(); markOrderDirty()
   } catch (e: any) { ElMessage.error(e?.message || '退货失败') } finally { retSaving.value = false }
+}
+
+// ===== 结单 / 反结单（2026-09-29 用户口径：与「物料退货」一起挂到收退详情；原在物料订单详情页与收货列表行内）=====
+/**
+ * 结单：物料订单 → 已结单（`PUT /{id}/finish`）。
+ * <p>后端**不校验收满**（与加工侧"未收满也能结单"同口径），故这里在未收满时做**二次确认**提示；
+ * 结单是纯状态变更、无账务副作用，结单后本页不可再收货（`canReceive` 只在生产中为真）。</p>
+ */
+async function handleFinish() {
+  const short = deliveredQuantity.value < totalQuantity.value
+  const tip = short
+    ? `尚未收满（已收 ${deliveredQuantity.value} / 下单 ${totalQuantity.value}），结单后本页不可再收货 —— 确认结单？`
+    : '确认结单？结单后本页不可再收货。'
+  try { await ElMessageBox.confirm(tip, '确认结单', { type: 'warning' }) } catch { return }
+  try {
+    await request.put(`/outsource/material-order/${id}/finish`)
+    ElMessage.success('已结单'); markOrderDirty(); await loadAll()
+  } catch (e: any) { ElMessage.error(e?.message || '结单失败') }
+}
+/** 反结单：已结单 → 生产中/待审核（`PUT /{id}/reopen`）；清空结单时间与结单人，纯状态回退。 */
+async function handleReopen() {
+  try {
+    await ElMessageBox.confirm('确认反结单？订单将回到「生产中」（可继续收货；若该单从未审核过则回「待审核」），结单时间与结单人清空。', '反结单', { type: 'warning' })
+  } catch { return }
+  try {
+    await request.put(`/outsource/material-order/${id}/reopen`)
+    ElMessage.success('已反结单'); markOrderDirty(); await loadAll()
+  } catch (e: any) { ElMessage.error(e?.message || '反结单失败') }
 }
 
 /**
@@ -289,8 +358,15 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         <span style="font-weight:600">收货记录</span>
         <div style="display:flex;gap:8px">
           <el-button v-if="canReceive" type="primary" size="small" @click="openReceive">新增收货</el-button>
-          <!-- 2026-09-29（用户口径）：工具栏原「退不良」+「退货」两个入口**合并为收货记录行内的「新增退货」**
-               —— 两者都往同一个退货仓扣库存（库存方向/仓库重叠，用户判为功能重复），此处不再保留入口。 -->
+          <!-- 物料退货（2026-09-29 用户口径「物料收退详情里也要有物料退货」；同日最终口径把行内「新增退货」去掉
+               ⇒ **本按钮是全页唯一的退货入口**）：工具栏原「退不良」+「退货」两个入口（同一退货仓、被判功能重复）
+               **合并**为此按钮 —— 落 RECEIVE_RETURN 草稿，审核后 ① 扣退货仓库存 ② 冲减该订单已收数量 ③ 冲减应付；
+               按**订单明细**发起（可退 = 该明细已收量，与后端两道校验同口径）。 -->
+          <el-button v-if="canReturn" type="danger" size="small" @click="openReturn()">物料退货</el-button>
+          <!-- 结单 / 反结单（2026-09-29 用户口径「结单也收到收退详情」）：原在「物料订单详情」与收货列表行内，
+               现统一收到本页；后端结单不校验收满（未收满时二次确认），纯状态变更、无账务副作用。 -->
+          <el-button v-if="canFinish" type="warning" size="small" @click="handleFinish">结单</el-button>
+          <el-button v-if="canReopen" type="warning" size="small" @click="handleReopen">反结单</el-button>
         </div>
       </div>
       <el-table :data="deliveries" border stripe size="small">
@@ -308,13 +384,19 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         <!--
           列宽预算（2026-09-29 实测驱动；家规「列表一行显示完、不左右滑动」）：
           容器实测 948px。原列宽合计 **1048 > 948 ⇒ 本来就横滑 100px**（操作列只有 96 时也已溢 66px，
-          属既存债）；本次操作列要为「反审核 + 新增退货」加宽到 124，故按实测一并收紧其余列：
+          属既存债）；本次按实测一并收紧其余列（操作列同一天曾为「反审核 + 新增退货」加宽到 124，
+          最终口径去掉行内「新增退货」后**回退到 96**）：
           展开 48（框架固定）· 单号 150→**130**（最长 DEL-20260928008 = 15 字符 ≈ 105+内边距 16+边框 1）
           · 类型 70→**62** · 状态 80→**74**（表头 2 字 = 28+16+1，标签自适应）· 日期 110→**100**（10 字符 ≈ 86）
-          · 型号 min140→**120** · 数量 80→**74** · 仓库 120→**100** · 备注 min120→**100** · 操作 **124**
-          ⇒ 合计 **932 ≤ 948**（余量 16）。⚠️ 改列宽前请跑 ui-e2e-11（其 S2 会断言本表不横滑且表头不被裁）。
+          · 型号 min140→**120** · 数量 80→**74** · 仓库 120→**100** · 备注 min120→**100** · 操作 **110**
+          （2026-09-29：行内加「详细」⇒ 操作列 96→110）
+          ⇒ 合计 **918 ≤ 948**（余量 30）。⚠️ 改列宽前请跑 ui-e2e-11（其 S2 会断言本表不横滑且表头不被裁）。
         -->
-        <el-table-column label="单号" width="130"><template #default="{ row }"><a v-if="row.id != null" class="bill-link" @click="router.push(`/outsource/delivery/detail/${row.id}`)">{{ row.code }}</a><span v-else>{{ row.code }}</span></template></el-table-column>
+        <!-- 2026-09-29（用户口径：单号也指到新的收货记录详情）：原先跳老的「物料收发单详情」
+             （`/outsource/delivery/detail/:id` —— 那是**物料收发单**时代的页面，库存流水那边仍在用，
+             本页不再用）⇒ 本页两处入口（单号 + 行内「详细」）统一到同一个
+             `/outsource/material-order/delivery/record/:id`。 -->
+        <el-table-column label="单号" width="130"><template #default="{ row }"><a v-if="row.id != null" class="bill-link" @click="openRecordDetail(row)">{{ row.code }}</a><span v-else>{{ row.code }}</span></template></el-table-column>
         <el-table-column prop="deliveryType" label="类型" width="62"><template #default="{ row }"><el-tag :type="row.deliveryType === DeliveryType.RECEIVE ? 'success' : 'warning'" size="small">{{ DeliveryTypeLabel[row.deliveryType] || row.deliveryType }}</el-tag></template></el-table-column>
         <el-table-column label="状态" width="74"><template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="日期" width="100"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
@@ -322,19 +404,22 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         <el-table-column label="数量" width="74" align="right"><template #default="{ row }">{{ (row.items || []).reduce((s:number,i:any)=>s+(i.quantity||0),0) }}</template></el-table-column>
         <el-table-column prop="warehouseName" label="仓库" width="100" show-overflow-tooltip />
         <el-table-column prop="remark" label="备注" min-width="100" show-overflow-tooltip />
-        <!-- 2026-09-29（用户口径）：操作列 = 「审核 ｜ 反审核 ｜ 新增退货」——
+        <!-- 操作列（2026-09-29 用户口径）：「详细 ｜ 审核 ｜ 反审核」——
              ① 行内原「退货」（跳物料退货单）已去掉；② 「反审核」按口径挂到收货记录自己身上（原先只在别的页面）；
-             ③ 「新增退货」取代工具栏的「退不良 + 退货」两个入口。宽度 96→**124**：最长组合
-             「反审核 + 新增退货」= 3+4 字 ≈ 98px + 按钮间距/内边距 ≈ 124。 -->
-        <el-table-column label="操作" width="124" fixed="right">
+             ③ 行内「新增退货」**已去掉** ⇒ 退货统一走工具栏「物料退货」（同一弹窗/同一端点，按订单明细）；
+             ④ **新增「详细」**（用户口径「物料收退详情的收货记录列表需要有详细，参考加工收退的收货记录详情来做」）
+                —— 与加工侧一致挂在**每一行**（不分状态），跳只读独立页
+                `/outsource/material-order/delivery/record/:id`；原先"非物料收退类型"的占位 `-` 随之删除
+                （每条记录都看得到详细，占位已无意义）。
+             ⚠️ 本表有展开列（类型明细），故**不**像加工侧那样再做 `@row-click` 整行跳转（会与"点开明细"打架）。
+             列宽 96→**110**：最长组合 = 「详细 + 反审核」2+3 字 + 间距/内边距 ≈ 100。 -->
+        <el-table-column label="操作" width="110" fixed="right">
           <template #default="{ row }">
+            <el-button type="primary" link size="small" @click="openRecordDetail(row)">详细</el-button>
             <template v-if="isMaterialDelivery(row)">
               <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link size="small" @click="auditDelivery(row)">审核</el-button>
               <el-button v-else-if="row.status === DocStatus.AUDITED" type="warning" link size="small" @click="unauditDelivery(row)">反审核</el-button>
-              <!-- 新增退货：只对**已审核的收料单**开放（草稿尚未入库；退不良/退货记录本身不能再退） -->
-              <el-button v-if="row.status === DocStatus.AUDITED && row.deliveryType === DeliveryType.RECEIVE" type="primary" link size="small" @click="openReturn(row)">新增退货</el-button>
             </template>
-            <span v-else style="color:var(--app-text-placeholder);font-size:var(--app-font-xs)">-</span>
           </template>
         </el-table-column>
       </el-table>
@@ -372,13 +457,14 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
       <template #footer><el-button @click="recVisible = false">取消</el-button><el-button type="primary" :loading="recSaving" @click="handleReceive()">确认收货</el-button></template>
     </el-dialog>
 
-    <!-- 新增退货弹窗（2026-09-29 用户口径：取代原工具栏「退不良」+「退货」两个入口） -->
-    <el-dialog v-model="retVisible" title="新增退货" width="var(--app-dialog-md)" :close-on-click-modal="false">
+    <!-- 物料退货弹窗（2026-09-29 用户口径：取代原工具栏「退不良」+「退货」两个入口；
+         同日最终口径「去掉行内新增退货」⇒ 只有工具栏这一个入口，按订单明细发起） -->
+    <el-dialog v-model="retVisible" title="物料退货" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <div style="margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <span style="font-size:var(--app-font-base);color:var(--app-text-regular)">物料商：<b>{{ order.supplierName || '-' }}</b></span>
-        <span style="font-size:var(--app-font-base)">来源收货单：<b>{{ retRow?.code || '-' }}</b></span>
+        <span style="font-size:var(--app-font-base);color:var(--app-text-secondary)">范围：该订单已收的物料（按订单明细退货，可退 ≤ 已收量）</span>
       </div>
-      <div style="margin-bottom:8px"><el-select v-model="retWarehouseId" filterable style="width:100%" placeholder="选择退货仓库（默认＝该收货记录的入库仓）" @change="onRetWhChange"><el-option v-for="w in retWarehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></div>
+      <div style="margin-bottom:8px"><el-select v-model="retWarehouseId" filterable style="width:100%" placeholder="选择退货仓库（默认＝第一个可退仓，可改）" @change="onRetWhChange"><el-option v-for="w in retWarehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></div>
       <div style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid var(--app-color-warning);font-size:var(--app-font-xs);color:var(--app-color-warning)">保存为<b>草稿</b>：需在「收货记录」里点「审核」后才会 ① 从退货仓扣减库存 ② 冲减该订单已收数量 ③ 冲减应付（「反审核」原路回滚）。</div>
       <el-table :data="retItems" border size="small">
         <el-table-column prop="materialName" label="物料" min-width="140" />

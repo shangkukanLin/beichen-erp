@@ -103,7 +103,10 @@ $converted = @(
   @('finance_receipt',          '/finance/receipt/detail/'),
   @('finance_payment',          '/finance/payment/detail/'),
   @('outsource_order_delivery', '/outsource/order/delivery/record/'),
-  @('outsource_order_delivery', '/outsource/defect-return/detail/')
+  @('outsource_order_delivery', '/outsource/defect-return/detail/'),
+  # 2026-09-29（user口径「物料收退详情的收货记录列表需要有详细，参考加工收退的收货记录详情来做」）：
+  #   物料侧的收货记录详情（与上面那条加工侧同构）——新页同样要能按 id 回源并渲染「制单人」标签
+  @('outsource_delivery', '/outsource/material-order/delivery/record/')
 )
 foreach ($c in $converted) {
   $id = SqlOne ('SELECT id FROM ' + $c[0] + ' ORDER BY id DESC LIMIT 1')

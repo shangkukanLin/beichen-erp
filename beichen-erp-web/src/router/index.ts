@@ -269,11 +269,16 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/material-order/add', name: 'OutsourceMaterialOrderAdd', component: () => import('@/views/outsource/material-order/add.vue'), meta: { title: '新增物料订单', requiresAuth: true, operate: true } },
       { path: 'outsource/material-order/add/:id', name: 'OutsourceMaterialOrderEdit', component: () => import('@/views/outsource/material-order/add.vue'), meta: { title: '编辑物料订单', requiresAuth: true, operate: true } },
       { path: 'outsource/material-order/detail/:id', name: 'OutsourceMaterialOrderDetail', component: () => import('@/views/outsource/material-order/detail.vue'), meta: { title: '物料订单详情', requiresAuth: true, operate: true } },
-      // 物料收货（2026-09-16）：原「物料订单详情 → 交货管理」页签移出独立成菜单页；
-      // 列表只列生产中（RECEIVING）的物料订单，:id 页是该单的收料/退不良详细
-      { path: 'outsource/material-order/delivery', name: 'OutsourceMaterialOrderDelivery', component: () => import('@/views/outsource/material-order/delivery-list.vue'), meta: { title: '物料收货', requiresAuth: true } },
-      // 2026-09-24（用户口径）：同成品收货侧，:id 页标题改为「物料收货详情」（原先与列表页同名）
-      { path: 'outsource/material-order/delivery/:id', name: 'OutsourceMaterialOrderDeliveryDetail', component: () => import('@/views/outsource/material-order/delivery.vue'), meta: { title: '物料收货详情', requiresAuth: true, operate: true } },
+      // 物料收退（2026-09-16 立，原名「物料收货」；**2026-09-29 用户口径改「物料收退」**，与 412「加工收退」同范式）：原「物料订单详情 → 交货管理」页签移出独立成菜单页；
+      // 列表按「生产中｜已结单」两页签列物料订单；:id 页是该单的收退详细（收货 / 物料退货 / 结单）
+      { path: 'outsource/material-order/delivery', name: 'OutsourceMaterialOrderDelivery', component: () => import('@/views/outsource/material-order/delivery-list.vue'), meta: { title: '物料收退', requiresAuth: true } },
+      // 2026-09-24（用户口径）：同成品收货侧，:id 页标题改为「物料收退详情」（原先与列表页同名）
+      { path: 'outsource/material-order/delivery/:id', name: 'OutsourceMaterialOrderDeliveryDetail', component: () => import('@/views/outsource/material-order/delivery.vue'), meta: { title: '物料收退详情', requiresAuth: true, operate: true } },
+      // 收货记录详情（2026-09-29 用户口径「物料收退详情的收货记录列表需要有详细，参考加工收退的收货记录详情来做」）：
+      // 与加工侧 `/outsource/order/delivery/record/:id` 同构的**只读独立页**（收货记录行内「详细」进入）。
+      // ⚠️ 不能写成 `outsource/material-order/delivery/detail/:id` —— 该前缀已被「物料收退详情」的动态 `:id` 占用，
+      //    故与加工侧同款：静态段 `record` 排在前面（vue-router 也按静态段优先匹配）。
+      { path: 'outsource/material-order/delivery/record/:id', name: 'OutsourceMaterialDeliveryRecord', component: () => import('@/views/outsource/material-order/delivery-record.vue'), meta: { title: '收货记录详情', requiresAuth: true, operate: true } },
       // 交货信息 总览页 2026-09-16 按用户要求下线（页面已删）：收货记录改在
       // 「加工订单详情 → 交货管理」与「物料订单详情 → 交货管理」页签内查看。旧地址重定向，避免老书签吃 403
       { path: 'outsource/delivery-info', redirect: '/outsource/order' },
