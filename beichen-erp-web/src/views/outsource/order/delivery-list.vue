@@ -18,17 +18,18 @@
  * 用「新增工厂售后」（原「新增无单加工退货」）；两者最终都汇总到那张台账里（用「关联加工单」列区分）。
  * （原先挂在本页下方的「工厂售后」区块已按该口径迁走。）</p>
  *
- * <p>2026-09-29 追加（用户口径「加工收退列表页行内仍无「反审核」，这个要做」）：**生产中**页签行内新增
- * <b>「反审核」</b> ⇒ `PUT /outsource/order/{id}/un-audit`（加工单：生产中 → 待审核）。
- * ⚠️ 后端会**级联反审核该单所有已审核的收货记录**（逆向库存 / 成品流水 / 应付）⇒ 确认框写明后果；
- * 已结单页签**刻意不放**（后端只允许生产中反审核；已结单要退回用的是「反结单」，那条已按 2026-09-29
- * 口径统一到「加工收退详情」，不在列表里）。</p>
+ * <p>2026-09-29（用户口径「加工收退页面，列表的操作不需要有反审核」）：**列表行内不放「反审核」** ——
+ * 行内保持 <b>收货 ｜ 退货</b>（已结单页签 = 收货详细 ｜ 结单报表）。
+ * 反审核是**加工单级**动作（`PUT /outsource/order/{id}/un-audit`；后端会**级联反审核该单所有已审核的
+ * 收货记录** ⇒ 库存 / 成品流水 / 应付全部回滚），入口只在<b>「加工单详情」页头</b> —— 那是"改单据"的地方，
+ * 本页是收货工作台，不在这里改单据状态。</p>
+ * <p>（沿革：同日早些时候曾按「列表页行内仍无反审核，这个要做」把行内反审核挂上过，随后按本条口径撤掉。）</p>
  */
 import { reactive, ref, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
-import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, OUTSOURCE_ORDER_DIRTY_KEY } from '@/api/enums'
+import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag } from '@/api/enums'
 import EntityLinks from '@/components/EntityLinks.vue'
 
 defineOptions({ name: 'OutsourceOrderDelivery' })
@@ -106,27 +107,10 @@ function goReturn(row: any) { router.push(`/outsource/order/delivery/return-defe
 function goCloseReport(row: any) { router.push(`/outsource/order/close/${row.id}`) }
 
 /**
- * 加工单**反审核**（2026-09-29 用户口径「加工收退列表页行内仍无「反审核」，这个要做」）：
- * = `PUT /outsource/order/{id}/un-audit`（加工单：生产中 → 待审核），与「加工单详情」页头那个
- * 「反审核」是**同一个端点、同一个后果**，只是把入口搬到收货工作台（在这里收完货才发现要退回去时最顺手）。
- * <p>⚠️ 后果不小，必须在确认框里写明：后端会**级联反审核该单所有已审核的收货记录**
- * （`OutsourceOrderServiceImpl.unaudit` 逐个 {@code outsourceOrderDeliveryService.unaudit}）
- * ⇒ 库存 / 成品流水 / 应付全部回滚、收货记录回到草稿。</p>
- * <p>只挂在**生产中**页签：后端 {@code DocStatusGuard} 只允许 PRODUCING → PENDING（待审核/已结单都会被拒）。</p>
+ * ⚠️ 本页**没有** `handleUnaudit`（2026-09-29 用户口径「加工收退页面，列表的操作不需要有反审核」）：
+ * 加工单反审核 = 级联逆回该单所有已审核的收货记录（库存 / 成品流水 / 应付），入口保留在
+ * 「加工单详情」页头（`order/detail.vue`）；本页行内只做 收货 / 退货。
  */
-async function handleUnaudit(row: any) {
-  try {
-    await ElMessageBox.confirm(
-      `反审核加工单「${row.code}」后：其**已审核的收货记录会被一并反审核**（库存、成品流水、应付全部回滚），加工单回到「待审核」。确认继续？`,
-      '反审核', { type: 'warning', dangerouslyUseHTMLString: false })
-  } catch { return }
-  try {
-    await request.put(`/outsource/order/${row.id}/un-audit`)
-    ElMessage.success('已反审核：加工单回「待审核」，该单已审核的收货记录一并逆回')
-    sessionStorage.setItem(OUTSOURCE_ORDER_DIRTY_KEY, '1')   // 加工订单列表按需刷新
-    await loadData(); loadCounts()
-  } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
-}
 
 onActivated(() => { loadData(); loadCounts() })
 </script>
@@ -171,10 +155,12 @@ onActivated(() => { loadData(); loadCounts() })
            换成「结单日期 100」、操作 124→140（收货详细 + 结单报表两个 4 字按钮，实测需 ~136）
            ⇒ 固定列合计 = 140+120+130+62+100+100+140 = 792，加弹性列「产品」min90 = **882** ≤ 948 ✓
            2026-09-27（补结单人）：结单日期列 100→**110**（第二行放结单人小字，与物料侧同款）⇒ 合计 **892** ≤ 948 ✓
-           2026-09-29（用户口径「加工收退列表页行内仍无「反审核」，这个要做」）：**生产中**操作列 124→**140**
-           （收货 + 退货 + 反审核 三按钮，实测约需 138），腾出的宽度由「进度」62→**56** 与弹性列
-           「产品」min90→**80** 抵平 ⇒ 生产中固定列合计 = 140+120+130+56+100+100+74+140 = **860**，
-           加弹性列 min80 = **940** ≤ 948 ✓（已结单页签同样受益：产品 min80 ⇒ 合计 882 ≤ 948 ✓） -->
+           2026-09-29（用户口径「加工收退页面，列表的操作不需要有反审核」）：行内回到 **收货 ｜ 退货**
+           ⇒ 操作列 146→**124**，同批把「进度」56→**62**、弹性列「产品」min80→**90** 一起放回
+           ⇒ 生产中固定列合计 = 140+120+130+62+100+100+74+124 = **850**，加弹性列 min90 = **940** ≤ 948 ✓
+           （已结单页签 892 ≤ 948 ✓）。
+           📌 经验保留：**「按钮被切」要跑 `scan-table-overflow.ps1` 的 BTNCLIP 项** —— `verify-delivery-menu` ⑧
+           只查**横向滚动**，查不出被切的按钮（2026-09-29 那次行内加反审核，"按钮被切 5px"就是这个漏网项发现的）。 -->
       <el-table :data="tableData" border stripe v-loading="loading" style="width:100%" @row-click="goDetail">
         <el-table-column label="加工单号" width="140" show-overflow-tooltip>
           <template #default="{ row }"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.code }}</el-button></template>
@@ -184,7 +170,7 @@ onActivated(() => { loadData(); loadCounts() })
         <el-table-column label="加工厂" width="120" show-overflow-tooltip>
           <template #default="{ row }"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
         </el-table-column>
-        <el-table-column label="产品" min-width="80" show-overflow-tooltip>
+        <el-table-column label="产品" min-width="90" show-overflow-tooltip>
           <!-- 2026-09-25：产品可点进产品详情（单项直链 / 多项 Popover；无 id 时回退文本） -->
           <template #default="{ row }">
             <EntityLinks :items="row.products" target="product" sub-key="sku">
@@ -205,7 +191,7 @@ onActivated(() => { loadData(); loadCounts() })
         </el-table-column>
         <!-- 2026-09-26 B10：列名「收货进度」4 字需 90px ⇒ 改短名「进度」（需 62）——本页 9 列全满，
              省下的 28px 全部还给「产品」（min70→90）恢复其可读性。 -->
-        <el-table-column label="进度" width="56">
+        <el-table-column label="进度" width="62">
           <template #default="{ row }"><el-progress :percentage="progressOf(row)" :stroke-width="10" :color="progressOf(row) >= 100 ? 'var(--app-color-success)' : 'var(--app-color-primary)'" /></template>
         </el-table-column>
         <!-- 日期列统一 100：实测 "2026-09-25" 在 96px 以下会被截断（日期类不设 size="small"） -->
@@ -229,16 +215,14 @@ onActivated(() => { loadData(); loadCounts() })
         <el-table-column v-if="!isClosed()" label="状态" width="74" align="center">
           <template #default="{ row }"><el-tag :type="OutsourceOrderStatusTag[row.status] || 'info'" size="small">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <!-- 操作：生产中 = 收货 + 退货 + **反审核**；已结单 = **只读**（收货详细 + 结单报表 —— 反结单在报表页）。
-             已结单的加工单后端禁止收货、禁止有单加工退货（账务已清算）⇒ 不放对应按钮，避免点了必被拒；
-             「反审核」也只放生产中的行（后端 DocStatusGuard 只允许 PRODUCING → PENDING）。
-             2026-09-29（用户口径）：新增行内「反审核」= 反审核该**加工单**（级联反审核其已审核收货记录，
-             库存/成品流水/应付回滚）⇒ 见 handleUnaudit 的确认文案；列宽 124→140。 -->
-        <el-table-column v-if="!isClosed()" label="操作" width="140" align="center" fixed="right">
+        <!-- 操作：生产中 = **收货 ｜ 退货**；已结单 = **只读**（收货详细 + 结单报表 —— 反结单在报表页）。
+             已结单的加工单后端禁止收货、禁止有单加工退货（账务已清算）⇒ 不放对应按钮，避免点了必被拒。
+             ⚠️ 2026-09-29 用户口径「加工收退页面，列表的操作不需要有反审核」⇒ 行内**不放**「反审核」：
+             它是**加工单级**动作（会级联逆回该单所有已审核的收货记录），入口留在「加工单详情」页头。 -->
+        <el-table-column v-if="!isClosed()" label="操作" width="124" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDelivery(row)">收货</el-button>
             <el-button type="warning" link @click.stop="goReturn(row)">退货</el-button>
-            <el-button type="danger" link @click.stop="handleUnaudit(row)">反审核</el-button>
           </template>
         </el-table-column>
         <el-table-column v-else label="操作" width="140" align="center" fixed="right">

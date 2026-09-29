@@ -3,15 +3,6 @@
 EnsureLogin
 WatchErrors
 function Step($n) { Write-Host ('--- STEP ' + $n) }
-# 2026-09-29：本支新增的"加工单反审核"步骤要按**单号**精确定位列表行（同产品名可能有多张单，
-# 用产品名 FindRow 会误点到别人的 fixture）⇒ 补一个只读 SqlOne（与其它守卫同款）。
-$script:MYSQL = 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe'
-function SqlOne([string]$q) {
-  $o = & $script:MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -N -B -e $q 2>$null
-  $v = (@($o) | Select-Object -First 1)
-  if ($null -eq $v) { return '' }
-  return ("$v").Trim()
-}
 
 Step 'create work order'
 Open '/outsource/order' 2600
@@ -169,33 +160,24 @@ $si = [int](FindRow (ZH 'val_proj'))
 Write-Host ('stock after defect audit=' + $(if ($si -ge 0) { ($st.rows[$si] -join ' | ') } else { 'NOT FOUND' }))
 
 # =====================================================================
-Step 'order-level un-audit from the 加工收退 list (cascades to the receipt records)'
-# 2026-09-29（user口径「加工收退列表页行内仍无「反审核」，这个要做」）：
-#   the PRODUCING rows now carry 反审核 = PUT /outsource/order/{id}/un-audit
-#     -> 加工单 back to 待审核 AND every AUDITED receipt of that order cascaded back to DRAFT
-#        (inventory / finished-goods ledger / payable rolled back) -- asserted on UI + DB here.
-$ORDCODE = SqlOne ('SELECT code FROM outsource_order WHERE id=' + $ORDID)
-Write-Host ('order code=' + $ORDCODE)
+Step 'the 加工收退 list rows must NOT offer 反审核 (2026-09-29 user rule)'
+# 2026-09-29（user口径「加工收退页面，列表的操作不需要有反审核」）：列表行内保持 **收货 ｜ 退货**；
+#   反审核是**加工单级**动作（PUT /outsource/order/{id}/un-audit，后端会级联逆回该单所有已审核的收货记录：
+#   库存 / 成品流水 / 应付），入口只在「加工单详情」页头 —— 列表是收货工作台，不在那里改单据状态。
+#   （同日早些时候曾把行内反审核挂上过，本条口径把它撤掉；verify-delivery-menu ② 亦同步为负向断言。）
+$bU = B64 (ZH 'btn_unaudit')
+$bR = B64 (ZH 'btn_receive')
+$bG = B64 (ZH 'btn_return')
+$jsU = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const U=T('$bU'),R=T('$bR'),G=T('$bG');const vis=e=>e.getClientRects().length>0;const rows=[...document.querySelectorAll('.el-table__body tbody tr')].filter(vis);const has=(tr,t)=>[...tr.querySelectorAll('button')].some(b=>(b.innerText||'').trim()===t);return 'ROWS='+rows.length+';UN='+rows.filter(tr=>has(tr,U)).length+';RECV='+rows.filter(tr=>has(tr,R)).length+';RET='+rows.filter(tr=>has(tr,G)).length})()"
 Open '/outsource/order/delivery' 3400
-$lu = Rows 0
-$idxU = [int](FindRow $ORDCODE)
-Ok ($idxU -ge 0) 'the order is listed on the 生产中 tab'
-if ($idxU -ge 0) {
-  Write-Host ('row=' + ($lu.rows[$idxU] -join ' | '))
-  Ok ((ClickRowBtnContains $idxU (ZH 'btn_unaudit')) -match 'OK') 'clicked the row-level 反审核'
-  ConfirmBox 1600 | Out-Null
-  Start-Sleep -Milliseconds 3600
-  Write-Host ('msg=' + (Txt '.el-message') + ' errs=' + (Errs))
-  Ok ((SqlOne ('SELECT status FROM outsource_order WHERE id=' + $ORDID)) -eq 'PENDING') 'order back to PENDING (待审核)'
-  Ok ((SqlOne ('SELECT COUNT(*) FROM outsource_order_delivery WHERE order_id=' + $ORDID + " AND status='AUDITED'")) -eq '0') 'no AUDITED receipt left (cascade un-audited)'
-  Ok ([int](SqlOne ('SELECT COUNT(*) FROM outsource_order_delivery WHERE order_id=' + $ORDID + " AND status='DRAFT'")) -ge 1) 'the receipt(s) came back as DRAFT'
-  Open '/outsource/order/delivery' 3400
-  Ok ([int](FindRow $ORDCODE) -lt 0) 'the order left the 生产中 tab'
-  Open ('/outsource/order/delivery/' + $ORDID) 3200
-  $rr = Rows 0
-  $rrtxt = ($rr.rows | ForEach-Object { $_ -join ' ' }) -join ' '
-  Write-Host ('receipt records now: ' + $rrtxt)
-  Ok ($rrtxt -match (ZH 'st_draft')) 'the receive-record list shows it back as 草稿 (UI)'
+$sU = EvalJs $jsU
+Write-Host ('加工收退列表行内动作 = ' + $sU)
+Ok ($sU -match 'ROWS=[1-9]') ('the 生产中 list has rows (' + $sU + ')')
+if ($sU -match 'ROWS=(\d+)') {
+  $nRows = [int]$Matches[1]
+  Ok ($sU -match ';UN=0') 'no row offers 反审核 (un-audit lives in the 加工单详情 header)'
+  Ok ($sU -match (';RECV=' + $nRows)) 'every row still offers 收货'
+  Ok ($sU -match (';RET=' + $nRows)) 'every row still offers 退货'
 }
 
 Ok $true 'work order chain executed (see stock/payable lines above)'
