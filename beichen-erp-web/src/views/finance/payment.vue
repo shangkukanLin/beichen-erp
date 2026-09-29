@@ -74,17 +74,25 @@ function handleAdd() { router.push('/finance/payment/add') }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { return DocStatusTag[s || ''] || undefined }
 
+/**
+ * 行内危险动作（2026-09-29 审核批 B · F7-221，镜像批 A F7-209）：**确认框与接口调用分开 try** ——
+ * 原先两者在同一 try/catch 里，用户点「取消」也走 catch，与"接口失败"混同。现在照 payable-transfer/*
+ * 与 receipt.vue 的口径写：取消即 `return`，接口失败静默（提示由 request 拦截器统一弹出）。
+ */
 async function handleAudit(row: FinancePayment) {
-  try { await ElMessageBox.confirm(`确认审核付款单「${row.code}」？将核销应付（如有核销明细）、按各账户扣减余额并写资金流水；未核销差额作为预付挂账`, '提示', { type: 'warning' })
-    await auditPayment(row.id as number); ElMessage.success('已审核：已核销应付、按账户写入资金流水'); loadData() } catch {}
+  try { await ElMessageBox.confirm(`确认审核付款单「${row.code}」？将核销应付（如有核销明细）、按各账户扣减余额并写资金流水；未核销差额作为预付挂账`, '提示', { type: 'warning' }) } catch { return }
+  try { await auditPayment(row.id as number); ElMessage.success('已审核：已核销应付、按账户写入资金流水'); loadData() }
+  catch { /* 提示由拦截器统一给出 */ }
 }
 async function handleCancel(row: FinancePayment) {
-  try { await ElMessageBox.confirm(`确认作废付款单「${row.code}」？`, '提示', { type: 'warning' })
-    await cancelPayment(row.id as number); ElMessage.success('已作废'); loadData() } catch {}
+  try { await ElMessageBox.confirm(`确认作废付款单「${row.code}」？`, '提示', { type: 'warning' }) } catch { return }
+  try { await cancelPayment(row.id as number); ElMessage.success('已作废'); loadData() }
+  catch { /* 提示由拦截器统一给出 */ }
 }
 async function handleUnAudit(row: FinancePayment) {
-  try { await ElMessageBox.confirm(`确认反审核付款单「${row.code}」？将冲销核销与账户余额`, '提示', { type: 'warning' })
-    await unAuditPayment(row.id as number); ElMessage.success('已反审核'); loadData() } catch {}
+  try { await ElMessageBox.confirm(`确认反审核付款单「${row.code}」？将冲销核销与账户余额`, '提示', { type: 'warning' }) } catch { return }
+  try { await unAuditPayment(row.id as number); ElMessage.success('已反审核'); loadData() }
+  catch { /* 提示由拦截器统一给出 */ }
 }
 
 /** 详情改独立页（2026-09-23 全站口径）：点整行 / 行内「详情」都跳付款单详情页（草稿可在详情页就地编辑） */
@@ -113,7 +121,8 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadData() })
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="query_">查询</el-button>
           <el-button :icon="'Refresh'" @click="reset_">重置</el-button>
-          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增付款</el-button>
+          <!-- 2026-09-29 审核批 B · F7-220：入口按权限显示（后端前缀 /api/finance/payment ⇒ finance:payment） -->
+          <el-button type="success" :icon="'Plus'" v-perm="'finance:payment'" @click="handleAdd">新增付款</el-button>
         </div>
         </div>
       </el-card>
@@ -150,7 +159,8 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadData() })
           <el-table-column label="凭证" width="64" align="center"><template #default="{row}"><el-link v-if="row.attachUrl" type="primary" @click.stop="openAttach(row.attachUrl)">查看</el-link><span v-else style="color:#c0c4cc">—</span></template></el-table-column>
           <el-table-column label="状态" width="72" align="center"><template #default="{row}"><el-tag :type="stType(row.status)" size="small">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
           <el-table-column label="操作" width="176" align="center" fixed="right">
-            <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click.stop="handleCancel(row)">作废</el-button></template>
+            <!-- 2026-09-29 审核批 B · F7-220：三个危险动作按权限显示（与后端前缀守卫同码，避免"点必失败"的入口） -->
+            <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link v-perm="'finance:payment'" @click.stop="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link v-perm="'finance:payment'" @click.stop="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link v-perm="'finance:payment'" @click.stop="handleCancel(row)">作废</el-button></template>
           </el-table-column>
         </el-table>
         <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>

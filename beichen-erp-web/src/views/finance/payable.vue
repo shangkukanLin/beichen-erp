@@ -218,8 +218,10 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-table-column label="操作" width="104" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
-            <!-- 无货款可抵时，把这笔扣款/退货转为向对方收款 -->
-            <el-button v-if="canTransfer(row)" type="warning" link @click.stop="goTransfer(row)">转应收</el-button>
+            <!-- 无货款可抵时，把这笔扣款/退货转为向对方收款。
+                 2026-09-29 审核批 B · F7-220：按权限显示 —— 转应收的动作与跳转目标都属"应付转应收"模块
+                 （后端前缀 /api/finance/payable-transfer ⇒ finance:payable-transfer），本页自身只要求 finance:payable。 -->
+            <el-button v-if="canTransfer(row)" type="warning" link v-perm="'finance:payable-transfer'" @click.stop="goTransfer(row)">转应收</el-button>
           </template>
         </el-table-column>
       </el-table>

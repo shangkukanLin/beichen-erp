@@ -64,7 +64,10 @@ async function loadAll() {
     summary.value = (sumList || []).find((x: any) => x.supplierId === supplierId) || {}
     payables.value = pList?.records || []
     payments.value = payList?.records || []
-  } finally { loading.value = false }
+  } catch { summary.value = {}; payables.value = []; payments.value = [] }
+  // 2026-09-29 审核批 B · F7-221：原先只有 try/finally 没有 catch ⇒ `Promise.all` 任一端点失败会成为
+  // **未处理的 Promise rejection**（消息仍由拦截器弹出，但页面无兜底、状态半新半旧）。补显式兜底。
+  finally { loading.value = false }
 }
 
 /** 新增付款（按权限显示）：先在列表拦住"没有未结清应付"，避免进去才发现没法核销 */

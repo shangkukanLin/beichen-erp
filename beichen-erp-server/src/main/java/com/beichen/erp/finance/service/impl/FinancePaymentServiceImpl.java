@@ -150,11 +150,16 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         Supplier s = supplierId != null ? supplierMapper.selectById(supplierId) : null;
         String supplierName = s != null ? s.getName() : old.getSupplierName();
         LocalDate payDate = form.getPaymentDate() != null ? form.getPaymentDate() : old.getPaymentDate();
+        // F7-218（2026-09-29 审核批 B）：换供应商后必须**重算 supplier_type** —— 原先只 set supplierId/supplierName，
+        // 类型标签保持旧供应商的值 ⇒ 付款列表「主体类型」标签与按类型筛选、以及汇总的类型回填全部与实际不符。
+        // 口径与 create 一致：按 supplier_type_ref 字典序第一个标签固化。
+        String supplierType = supplierId != null ? resolveSupplierType(supplierId) : old.getSupplierType();
         // 用 update wrapper 显式 set（含 null）—— updateById 默认忽略 null，清空备注会写不进去
         paymentMapper.update(null, new LambdaUpdateWrapper<FinancePayment>()
                 .eq(FinancePayment::getId, id)
                 .set(FinancePayment::getSupplierId, supplierId)
                 .set(FinancePayment::getSupplierName, supplierName)
+                .set(FinancePayment::getSupplierType, supplierType)
                 .set(FinancePayment::getPaymentDate, payDate)
                 .set(FinancePayment::getRemark, form.getRemark()));
         FinancePayment now = paymentMapper.selectById(id);
@@ -184,6 +189,11 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             BigDecimal fallback = BigDecimal.ZERO;
             for (FinancePaymentItem it : (items == null ? List.<FinancePaymentItem>of() : items))
                 fallback = fallback.add(it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO);
+            // ⚠️ F7-213（2026-09-29 审核批 B，镜像收款侧 F7-205）：**没有分款行、也没有核销明细 ⇒ 金额只会是 0**。
+            //    建单接口从不接收 payload 的 amount（金额一律由分款明细推导），故这种请求先前会**静默落一张
+            //    0 元付款单**并可通过审核。这里显式拒绝。
+            if (fallback.compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("未填付款金额：请填写「付款账户 + 金额」，或在「本次核销」里选择核销明细（两者不能同时为空）");
             FinancePaymentAccount only = new FinancePaymentAccount();
             only.setAccountId(payment.getAccountId());
             only.setAmount(fallback);
@@ -203,6 +213,11 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
                 throw new BusinessException("分款第 " + rowNo + " 行金额必须大于 0");
             FinanceAccount fa = accountMapper.selectById(acc.getAccountId());
             if (fa == null) throw new BusinessException("分款第 " + rowNo + " 行账户不存在（ID=" + acc.getAccountId() + "）");
+            // ⚠️ F7-215（2026-09-29 审核批 B，镜像收款侧 F7-207）：**停用账户（status=0）不能付款** ——
+            //    付款是**出账**，比收款更该拦（对照现金销售结算 `SaleOrderServiceImpl.normalizeSettle:200-201` 已拦）。
+            //    status 为 null 的历史行不拦（保守：只拒绝显式停用）。
+            if (fa.getStatus() != null && fa.getStatus() == 0)
+                throw new BusinessException("分款第 " + rowNo + " 行账户「" + fa.getAccountName() + "」已停用，不能用于付款");
             acc.setId(null); acc.setPaymentId(payment.getId()); acc.setAccountName(fa.getAccountName());
             if (cid != null && cid > 0) acc.setCompanyId(cid);
             paymentAccountMapper.insert(acc);
@@ -226,8 +241,11 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         for (FinancePaymentItem it : items) {
             rowNo++;
             // F7-33（2026-09-19）：建单即拦负数金额（审核侧另有兜底，覆盖历史草稿）
-            if (it.getThisAmount() != null && it.getThisAmount().compareTo(BigDecimal.ZERO) < 0)
-                throw new BusinessException("付款明细金额不能为负数");
+            // ⚠️ F7-214（2026-09-29 审核批 B，镜像收款侧 F7-206）：**核销金额必须为正** —— 原先只拦负数，
+            //    0 金额行会写一条 0 元核销流水并走正常核销分支（台账 ±0），纯噪音。
+            //    口径：**新数据从严（建单/改单即拒）**；审核处只兜底历史草稿的**负数**，保留可审计性。
+            if (it.getThisAmount() == null || it.getThisAmount().compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("付款明细第 " + rowNo + " 行核销金额必须大于 0");
             // F7-37（2026-09-19）：明细必须关联应付台账 —— 缺台账的明细在审核时会被**静默跳过**，
             // 而资金流水仍按全额入账（钱付出、应付没减）。多付的部分走"对该应付**超额付款**"（自动生成预付台账）。
             if (it.getPayableId() == null)
@@ -293,6 +311,13 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         // 2026-09-29 多账户（与收款侧对称）：分款明细即权威 —— 审核按行逐账户校验余额 + 逐账户写流水。
         // 历史草稿（无分款行）由 accountsForAudit 按主表账户 + 金额兜底成一行，故下面没有分支判断。
         List<FinancePaymentAccount> payAccounts = accountsForAudit(payment);
+        // F7-219（2026-09-29 审核批 B）：审核前**复核「核销合计 ≤ 付款合计」** —— 该护栏原先只在 create/update
+        // 调用，历史草稿（或直调 API）可"核销额 > 付款额"：多核销应付且 `unsettled ≤ 0` ⇒ 既不生成预付台账、
+        // 资金流水又少于核销额（钱没付那么多、应付却核销了那么多）。此处按"明细声明额"先算一次再进循环。
+        BigDecimal declaredSettled = BigDecimal.ZERO;
+        for (FinancePaymentItem it : items)
+            declaredSettled = declaredSettled.add(it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO);
+        assertSettledWithinPaid(declaredSettled, payment.getAmount() != null ? payment.getAmount() : BigDecimal.ZERO);
         // 核销合计：用于算「未核销余额 = 付款总额 − 核销合计」（核销开关关闭 ⇒ 明细为空 ⇒ 全额未核销）
         BigDecimal settledTotal = BigDecimal.ZERO;
         // F7-36（2026-09-19）：账户余额校验 —— 与费用单对齐（FinanceExpenseServiceImpl.audit:96-101）。
@@ -353,17 +378,26 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
                         .set(FinancePayable::getUnpaidAmount, BigDecimal.ZERO)
                         .set(FinancePayable::getStatus, SettlementStatus.SETTLED.getCode()));
                 if (rows == 0) throw new BusinessException("应付台账已被其他单据核销，请刷新后重试");
-                // 生成负数应付（预付单），sourceBillType=ADVANCE + sourceId=原付款单id 用于反审核精确定位
-                // D5 口径（2026-09-12）：台账号走 YF- 流水号，不再拼接"付款单号-ADVANCE" —— 与 D1「应付台账号一律 YF-」统一；
-                // 与来源的关联由 source_bill_type/source_bill_no/source_id 承载（反审核按 source_id 精确冲回）
+                // 生成负数应付（预付单），sourceBillType=ADVANCE_LEDGER + sourceId=原付款单id 用于反审核精确定位
+                // ⚠️ F7-216（2026-09-29 审核批 B）：单号改为 `advanceBillNo(付款单号)`，与下方
+                //    createUnsettledAdvance（未核销差额）**及收款侧 F7-203 修复后的口径统一**。
+                //    原先此处走 `payableHelper.newBillNo()`（YF- 日流水，每次审核恒为新号）⇒ 紧接着按该号查
+                //    "是否已存在"**永远查不到** ⇒ 下面 existAdv 分支是死代码，"反审核后重审复用同一行"从不成立，
+                //    每轮反审核→重审都多留一条 CANCELLED 预付行。
+                //    （D5「台账号一律 YF-」自 2026-09-29 预收/预付台账落地起已对**预付行**让位：键必须稳定。）
                 FinancePayable advance = new FinancePayable();
-                advance.setBillNo(payableHelper.newBillNo());
+                advance.setBillNo(PayableHelper.advanceBillNo(payment.getCode()));
                 advance.setSupplierId(p.getSupplierId());
                 advance.setSupplierName(p.getSupplierName());
+                // 主体类型随付款单固化（与 createUnsettledAdvance 一致；应付列表/汇总要按类型筛）
+                advance.setSupplierType(payment.getSupplierType());
                 // F7-53（2026-09-19）：来源类型必须取 SourceBillType 的合法值（原写 SettlementStatus.ADVANCE）
                 advance.setSourceBillType(SourceBillType.ADVANCE_LEDGER.getCode());
-                advance.setSourceBillNo(p.getSourceBillNo());
+                // F7-216：来源单号 = **本付款单号**（原写"被核销应付的来源单"⇒ 应付列表「来源」列对两种预付
+                // 显示不同语义：一处是采购退货单号、一处是付款单号）
+                advance.setSourceBillNo(payment.getCode());
                 advance.setSourceId(id);
+                advance.setTransferredToReceivable(0);
                 advance.setAmount(over.negate());
                 advance.setPaidAmount(BigDecimal.ZERO);
                 advance.setUnpaidAmount(over.negate());
@@ -395,13 +429,19 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
                 // 正常核销：台账改为「原子增减 + SQL 内推导状态」（P2-29）——
                 // 增量更新天然可并发（不会互相覆盖）；MySQL 的 SET 从左到右求值，故 status 必须放在金额赋值之前（用更新前的金额判断）
                 String amtSql = amt.toPlainString();
+                // ⚠️ F7-212（2026-09-29 审核批 B）：**补 CAS 条件** —— 与上方超额分支（`:349-355`）及收款侧 F7-204 同一手法。
+                //    原先正常分支没有余额前置条件：两笔并发付款（**不同账户**、同一应付）各自 `unpaid -= amt`
+                //    ⇒ 未付额可转**负**、状态被写成 SETTLED，且**不会生成预付台账**（只有"读取时 newUnpaid<0"的
+                //    超额分支才生成）⇒ 钱付出去了、台账却没有任何"多付"的痕迹，无法自动对账。
                 int rows = payableMapper.update(null, new LambdaUpdateWrapper<FinancePayable>()
                         .eq(FinancePayable::getId, p.getId())
+                        .apply("IFNULL(unpaid_amount, 0) >= {0}", amt)
                         .setSql("status = CASE WHEN IFNULL(unpaid_amount, 0) - (" + amtSql + ") <= 0 THEN '"
                                 + SettlementStatus.SETTLED.getCode() + "' ELSE '" + SettlementStatus.PARTIAL.getCode() + "' END")
                         .setSql("paid_amount = IFNULL(paid_amount, 0) + (" + amtSql + ")")
                         .setSql("unpaid_amount = IFNULL(unpaid_amount, 0) - (" + amtSql + ")"));
-                if (rows == 0) throw new BusinessException("应付台账不存在，核销失败");
+                if (rows == 0) throw new BusinessException("应付台账「" + p.getBillNo()
+                        + "」的未付额已发生变化（可能被其它单据并发核销），请刷新后重试");
                 FinanceSettlement st = new FinanceSettlement();
                 st.setReceiptPaymentId(id);
                 st.setPayableReceivableId(it.getPayableId());

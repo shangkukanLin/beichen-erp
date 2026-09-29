@@ -101,11 +101,12 @@ onMounted(load)
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作 -->
   <PageShell :loading="loading" back-fallback="/finance/payable-transfer">
     <template #actions>
-      <!-- 草稿：保存(主) + 审核 + 作废（2026-09-24：草稿态就地编辑，不再跳独立编辑页） -->
-      <el-button v-if="isDraft" type="primary" :loading="saving" @click="onSave">保存</el-button>
-      <el-button v-if="isDraft" type="success" @click="onAudit">审核</el-button>
-      <el-button v-if="isAudited" type="warning" @click="onUnAudit">反审核</el-button>
-      <el-button v-if="isDraft" type="danger" @click="onCancel">作废</el-button>
+      <!-- 草稿：保存(主) + 审核 + 作废（2026-09-24：草稿态就地编辑，不再跳独立编辑页）
+           2026-09-29 审核批 B · F7-220：四个动作都按 finance:payable-transfer 显示（与后端前缀同码） -->
+      <el-button v-if="isDraft" type="primary" :loading="saving" v-perm="'finance:payable-transfer'" @click="onSave">保存</el-button>
+      <el-button v-if="isDraft" type="success" v-perm="'finance:payable-transfer'" @click="onAudit">审核</el-button>
+      <el-button v-if="isAudited" type="warning" v-perm="'finance:payable-transfer'" @click="onUnAudit">反审核</el-button>
+      <el-button v-if="isDraft" type="danger" v-perm="'finance:payable-transfer'" @click="onCancel">作废</el-button>
     </template>
 
     <el-card shadow="never">

@@ -9,6 +9,7 @@ import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.supplier.entity.Supplier;
+import com.beichen.erp.supplier.entity.SupplierTypeRef;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -25,6 +26,11 @@ public class PayableHelper {
 
     private final FinancePayableMapper payableMapper;
     private final SupplierMapper supplierMapper;
+    /**
+     * F7-217（2026-09-29 审核批 B）：主体类型兜底改查本表（原先读 {@code Supplier.typeCodes}，而该字段
+     * {@code @TableField(exist=false)}、经 {@code selectById} 加载恒为空 ⇒ 兜底失效）。
+     */
+    private final com.beichen.erp.supplier.mapper.SupplierTypeRefMapper typeRefMapper;
 
     /** 台账单号列宽上限（与 `finance_payable.bill_no` 的 varchar(50) 一致；与 ReceivableHelper 同名常量对称） */
     private static final int BILL_NO_MAX = 50;
@@ -114,8 +120,18 @@ public class PayableHelper {
                 default -> { /* 其他场景走下面的兜底 */ }
             }
         }
-        if (s != null && s.getTypeCodes() != null && !s.getTypeCodes().isEmpty()) return s.getTypeCodes().get(0);
-        return null;
+        // ⚠️ F7-217（2026-09-29 审核批 B）：原兜底读 `s.getTypeCodes()` —— 该字段是 `@TableField(exist = false)`
+        // （见 Supplier.java:33-35，`SupplierService` 亦注释"selectById 不会填充"）⇒ 经
+        // `supplierMapper.selectById` 加载的实体**该字段恒为空** ⇒ 场景未在 switch 中列出时（实测：
+        // PURCHASE_EXCHANGE_CHARGE / PURCHASE_RETURN_CHARGE）返回 null，库中 33 条在用台账因此缺 supplier_type
+        // （按类型筛选漏行、汇总类型回填失效）。
+        // 现与付款单侧 `FinancePaymentServiceImpl.resolveSupplierType` **同源**：查 supplier_type_ref，
+        // 取字典序第一个标签；无标签则返回 null（保持"查不到就是没有"的语义）。
+        if (s == null || s.getId() == null) return null;
+        List<SupplierTypeRef> refs = typeRefMapper.selectList(new LambdaQueryWrapper<SupplierTypeRef>()
+                .eq(SupplierTypeRef::getSupplierId, s.getId())
+                .orderByAsc(SupplierTypeRef::getTypeCode));
+        return refs.isEmpty() ? null : refs.get(0).getTypeCode();
     }
 
     /**

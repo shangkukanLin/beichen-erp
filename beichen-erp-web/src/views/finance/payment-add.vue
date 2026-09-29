@@ -97,6 +97,8 @@ async function submit() {
     if (useItems.length === 0) { ElMessage.warning('已打开「本次核销」：请添加核销明细（或关闭开关只记付款）'); return }
     for (let i = 0; i < useItems.length; i++) {
       if (!useItems[i].payableId) { ElMessage.warning(`核销明细第 ${i + 1} 行未选择应付单据`); return }
+      // 2026-09-29 审核批 B · F7-214：核销金额必须大于 0（后端 saveItems 同护栏；前端先拦，避免整单提交后才报错）
+      if (!(Number(useItems[i].thisAmount) > 0)) { ElMessage.warning(`核销明细第 ${i + 1} 行核销金额必须大于 0`); return }
     }
     if (settledTotal.value > paidTotal.value) {
       ElMessage.warning(`核销合计 ${fmt(settledTotal.value)} 不能超过付款合计 ${fmt(paidTotal.value)}`); return

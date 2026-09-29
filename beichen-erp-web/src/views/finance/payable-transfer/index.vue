@@ -169,8 +169,9 @@ onActivated(() => {
         <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="goDetail(row)">详情</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" link type="success" @click.stop="onAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" link type="danger" @click.stop="onCancel(row)">作废</el-button>
+            <!-- 2026-09-29 审核批 B · F7-220：危险动作按权限显示（后端前缀 /api/finance/payable-transfer ⇒ finance:payable-transfer） -->
+            <el-button v-if="row.status === DocStatus.DRAFT" link type="success" v-perm="'finance:payable-transfer'" @click.stop="onAudit(row)">审核</el-button>
+            <el-button v-if="row.status === DocStatus.DRAFT" link type="danger" v-perm="'finance:payable-transfer'" @click.stop="onCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>
