@@ -227,6 +227,11 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
             BigDecimal fallback = BigDecimal.ZERO;
             for (FinanceReceiptItem it : (items == null ? List.<FinanceReceiptItem>of() : items))
                 fallback = fallback.add(it.getThisAmount() != null ? it.getThisAmount() : BigDecimal.ZERO);
+            // ⚠️ F7-205（2026-09-29 审核批 A）：**没有分款行、也没有核销明细 ⇒ 金额只会是 0**。
+            //    建单接口从不接收 payload 的 amount（金额一律由分款明细推导），所以这种请求先前会**静默落一张
+            //    0 元收款单**并可通过审核（库中 id 38/39 即该路径的历史痕迹）。这里显式拒绝。
+            if (fallback.compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("未填收款金额：请填写「收款账户 + 金额」，或在「本次核销」里选择核销明细（两者不能同时为空）");
             FinanceReceiptAccount only = new FinanceReceiptAccount();
             only.setAccountId(receipt.getAccountId());
             only.setAmount(fallback);
@@ -246,6 +251,10 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
                 throw new BusinessException("分款第 " + rowNo + " 行金额必须大于 0");
             FinanceAccount fa = accountMapper.selectById(acc.getAccountId());
             if (fa == null) throw new BusinessException("分款第 " + rowNo + " 行账户不存在（ID=" + acc.getAccountId() + "）");
+            // F7-207（2026-09-29 审核批 A）：**停用账户（status=0）不能收款**。原先只校验"账户存在"，
+            // 停用账户照样能建单/审核入账。status 为 null 的历史行不拦（保守：只拒绝显式停用）。
+            if (fa.getStatus() != null && fa.getStatus() == 0)
+                throw new BusinessException("分款第 " + rowNo + " 行账户「" + fa.getAccountName() + "」已停用，不能用于收款");
             acc.setId(null); acc.setReceiptId(receipt.getId()); acc.setAccountName(fa.getAccountName());
             if (cid != null && cid > 0) acc.setCompanyId(cid);
             receiptAccountMapper.insert(acc);
@@ -268,8 +277,11 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         int rowNo = 0;
         for (FinanceReceiptItem it : items) {
             rowNo++;
-            if (it.getThisAmount() != null && it.getThisAmount().compareTo(BigDecimal.ZERO) < 0)
-                throw new BusinessException("收款明细金额不能为负数");
+            // F7-206（2026-09-29 审核批 A）：**核销金额必须为正** —— 原先只拦负数，0 金额行会写一条 0 元核销流水
+            // 并走正常核销分支（台账 ±0、状态被 CASE 重写），纯噪音。
+            // 口径：**新数据从严（建单/改单即拒）**；审核处（audit）只兜底历史草稿的**负数**，保留可审计性。
+            if (it.getThisAmount() == null || it.getThisAmount().compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("收款明细第 " + rowNo + " 行核销金额必须大于 0");
             if (it.getReceivableId() == null)
                 throw new BusinessException("收款明细第 " + rowNo + " 行未关联应收台账（不能只填金额，请从「未收款」里选择应收单）");
             it.setId(null); it.setReceiptId(receipt.getId());
@@ -387,10 +399,14 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
                         .set(FinanceReceivable::getUnpaidAmount, BigDecimal.ZERO)
                         .set(FinanceReceivable::getStatus, SettlementStatus.SETTLED.getCode()));
                 if (rows == 0) throw new BusinessException("应收台账已被其他单据核销，请刷新后重试");
-                // 生成负数应收（预收单），sourceBillType=ADVANCE + sourceId=原收款单id 用于反审核精确删除
+                // 生成负数应收（预收单），sourceBillType=ADVANCE_LEDGER + sourceId=本收款单id 用于反审核精确删除
                 FinanceReceivable advance = new FinanceReceivable();
                 // I27 修复：单号走归一化（去掉已有 -ADVANCE 后再追加一次 + 超长护栏），不再层层叠加
-                advance.setBillNo(ReceivableHelper.advanceBillNo(rec.getBillNo()));
+                // ⚠️ F7-203（2026-09-29 审核批 A）：单号必须按**收款单号**派生，**不能**按"被核销的应收单号"——
+                //    后者会让"同一应收被两张收款单超额核销"落到同一个 bill_no，后一张 updateById **覆盖**前一张
+                //    （预收金额少计、source_id 被改写 ⇒ 前一张反审核按 source_id 查不到预收行、冲销缺失）。
+                //    下方 createUnsettledAdvance（未核销差额）一直用收款单号 ⇒ 这里与之**统一键**。
+                advance.setBillNo(ReceivableHelper.advanceBillNo(receipt.getCode()));
                 advance.setCustomerId(rec.getCustomerId());
                 advance.setCustomerName(rec.getCustomerName());
                 // 预收继承主体类型与供应商信息（供应商收款多收时同样生成负数应收预收）
@@ -400,14 +416,19 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
                 // F7-53（2026-09-19）：来源类型必须取 SourceBillType 的合法值 —— 原写 SettlementStatus.ADVANCE
                 // （用错枚举填错字段）⇒ 前端映射查不到该值、列表"来源"列显示英文 "ADVANCE"。
                 advance.setSourceBillType(SourceBillType.ADVANCE_LEDGER.getCode());
-                advance.setSourceBillNo(rec.getSourceBillNo());
+                // F7-203：来源就是本收款单（与未核销差额分支一致）—— 预收的"出处"是这笔收款，
+                // 不是原应收的来源单；按 source_id 反审核冲销的形状保持不变。
+                advance.setSourceBillNo(receipt.getCode());
                 advance.setSourceId(id);
                 advance.setAmount(over.negate());
                 advance.setPaidAmount(BigDecimal.ZERO);
                 advance.setUnpaidAmount(over.negate());
                 advance.setDueDate(rec.getDueDate());
                 advance.setStatus(SettlementStatus.ADVANCE.getCode());
-                advance.setRemark("收款预收（多收，我方欠客户）");
+                // 方向词随主体走（与未核销差额分支同一口径）：客户多收=我方欠客户；供应商多收=供应商欠我方
+                advance.setRemark(SubjectType.SUPPLIER.getCode().equals(receipt.getSubjectType())
+                        ? "收款预收（多收，供应商欠我方）"
+                        : "收款预收（多收，我方欠客户）");
                 // 反审核只把预收单置 CANCELLED 留痕，重新审核时复用同一行（bill_no 唯一），避免撞唯一键
                 FinanceReceivable existAdv = receivableMapper.selectOne(
                         new LambdaQueryWrapper<FinanceReceivable>()
@@ -433,13 +454,19 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
                 // 正常核销：台账改为「原子增减 + SQL 内推导状态」（P2-29）——
                 // 增量更新天然可并发（不会互相覆盖）；MySQL 的 SET 从左到右求值，故 status 必须放在金额赋值之前（用更新前的金额判断）
                 String amtSql = amt.toPlainString();
+                // ⚠️ F7-204（2026-09-29 审核批 A）：**补 CAS 条件**。原先正常分支没有余额前置条件，两笔并发核销
+                //    同一应收时各自 `unpaid -= amt` ⇒ 未收额可转**负**、状态被写成 SETTLED，且**不会生成预收台账**
+                //    （只有"读取时 newUnpaid<0"的超额分支才生成）⇒ 与超额分支**同一现象两种结果**。
+                //    现在：读取时的未收额仍 ≥ 本次核销额才允许扣减（与超额分支的 CAS 同一手法），否则整单回滚重试。
                 int rows = receivableMapper.update(null, new LambdaUpdateWrapper<FinanceReceivable>()
                         .eq(FinanceReceivable::getId, rec.getId())
+                        .apply("IFNULL(unpaid_amount, 0) >= {0}", amt)
                         .setSql("status = CASE WHEN IFNULL(unpaid_amount, 0) - (" + amtSql + ") <= 0 THEN '"
                                 + SettlementStatus.SETTLED.getCode() + "' ELSE '" + SettlementStatus.PARTIAL.getCode() + "' END")
                         .setSql("paid_amount = IFNULL(paid_amount, 0) + (" + amtSql + ")")
                         .setSql("unpaid_amount = IFNULL(unpaid_amount, 0) - (" + amtSql + ")"));
-                if (rows == 0) throw new BusinessException("应收台账不存在，核销失败");
+                if (rows == 0) throw new BusinessException("应收台账「" + rec.getBillNo()
+                        + "」的未收额已发生变化（可能被其它单据并发核销），请刷新后重试");
                 FinanceSettlement st = new FinanceSettlement();
                 st.setReceiptPaymentId(id);
                 st.setPayableReceivableId(it.getReceivableId());

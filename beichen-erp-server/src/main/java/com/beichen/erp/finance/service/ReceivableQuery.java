@@ -44,6 +44,9 @@ public class ReceivableQuery {
      */
     public List<FinanceReceivable> unpaid(Long customerId, Long supplierId, String subjectType) {
         if (supplierId != null || (subjectType != null && "SUPPLIER".equalsIgnoreCase(subjectType))) {
+            // F7-208（2026-09-29 审核批 A）：供应商分支也必须**有主体**才查 —— 原先缺 supplierId 时该条件被跳过，
+            // 会返回**全公司**供应商应收（只读面过宽）。与下方客户分支 `customerId == null ⇒ List.of()` 对齐。
+            if (supplierId == null) return List.of();
             return receivableMapper.selectList(new LambdaQueryWrapper<FinanceReceivable>()
                     .eq(FinanceReceivable::getSubjectType, SubjectType.SUPPLIER.getCode())
                     .eq(supplierId != null, FinanceReceivable::getSupplierId, supplierId)
