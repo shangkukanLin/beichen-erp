@@ -279,7 +279,7 @@ onActivated(() => {
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
-          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+          <el-button v-perm="'system:role'" type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
         </div>
       </div>
     </el-card>
@@ -301,9 +301,9 @@ onActivated(() => {
         </el-table-column>
         <el-table-column label="操作" width="200" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleEdit(row as Role)">编辑</el-button>
-            <el-button type="warning" link @click="handleOpenPerm(row as Role)">分配权限</el-button>
-            <el-button type="danger" link @click="handleDelete(row as Role)">删除</el-button>
+            <el-button v-perm="'system:role'" type="primary" link @click="handleEdit(row as Role)">编辑</el-button>
+            <el-button v-perm="'system:role'" type="warning" link @click="handleOpenPerm(row as Role)">分配权限</el-button>
+            <el-button v-perm="'system:role'" type="danger" link @click="handleDelete(row as Role)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

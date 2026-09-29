@@ -197,6 +197,41 @@ public class MenuServiceImpl extends ServiceImpl<MenuMapper, Menu> implements Me
     }
 
     /**
+     * F8-21（2026-09-30 设置模块批 E 修复）：**界面上的菜单编辑一律打上 {@code customized=1}**。
+     *
+     * <p>根因回顾：{@code DataInitializer.syncMenus()} 每次启动用 {@code ON DUPLICATE KEY UPDATE}
+     * 无条件覆盖 {@code menu_name/parent_id/sort_order/visible/status} ⇒ 用户在「菜单管理」里的改名、
+     * 调序、隐藏、停用**下次重启即被打回种子值**（已 E2 实测）。现在的口径：</p>
+     * <ul>
+     *   <li>{@code customized=0}（从未被用户改过）⇒ 启动同步照旧覆盖展示字段（代码升级自动下发）；</li>
+     *   <li>{@code customized=1}（用户改过）⇒ 展示字段以用户为准，只有结构性字段
+     *       （menu_type/route_path/route_name/icon）仍随代码同步。</li>
+     * </ul>
+     * <p>用基类覆盖而不是改 Controller：写菜单的调用方可能不止一处，覆盖 {@code updateById/save}
+     * 能一次覆盖全部入口（当前唯一入口是 {@code PUT /api/system/menu}）。</p>
+     */
+    @Override
+    public boolean updateById(Menu entity) {
+        if (entity != null) {
+            entity.setCustomized(1);
+        }
+        return super.updateById(entity);
+    }
+
+    /**
+     * F8-21：用户**新建**的菜单同样标记 {@code customized=1}。
+     * <p>新建菜单的自增 id 目前不与种子 id 冲突，但种子里的按钮码（9101+）是预留区 ⇒ 标记后可确保
+     * 将来任何 id 撞上时也**不会**把用户自建的菜单覆盖掉。</p>
+     */
+    @Override
+    public boolean save(Menu entity) {
+        if (entity != null && entity.getCustomized() == null) {
+            entity.setCustomized(1);
+        }
+        return super.save(entity);
+    }
+
+    /**
      * 构建菜单树：按 parentId 分组，设置 children，返回 parentId=0 的一级菜单
      */
     private List<Menu> buildTree(List<Menu> menus) {

@@ -457,7 +457,7 @@ onActivated(() => {
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
           <el-button :icon="'Refresh'" @click="handleReset">重置</el-button>
-          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+          <el-button v-perm="'system:user'" type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
         </div>
       </div>
     </el-card>
@@ -514,7 +514,7 @@ onActivated(() => {
               placement="top"
             >
               <span>
-                <el-button
+                <el-button v-perm="'system:user'"
                   type="primary"
                   link
                   :disabled="!canEditPerm(row as UserVO)"
@@ -524,16 +524,16 @@ onActivated(() => {
                 </el-button>
               </span>
             </el-tooltip>
-            <el-button type="primary" link @click="handleEdit(row as UserVO)">编辑</el-button>
-            <el-button type="warning" link @click="handleOpenReset(row as UserVO)">重置密码</el-button>
-            <el-button
+            <el-button v-perm="'system:user'" type="primary" link @click="handleEdit(row as UserVO)">编辑</el-button>
+            <el-button v-perm="'system:user'" type="warning" link @click="handleOpenReset(row as UserVO)">重置密码</el-button>
+            <el-button v-perm="'system:user'"
               :type="(row as UserVO).status === 1 ? 'info' : 'success'"
               link
               @click="handleToggleStatus(row as UserVO)"
             >
               {{ (row as UserVO).status === 1 ? '禁用' : '启用' }}
             </el-button>
-            <el-button type="danger" link @click="handleDelete(row as UserVO)">删除</el-button>
+            <el-button v-perm="'system:user'" type="danger" link @click="handleDelete(row as UserVO)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

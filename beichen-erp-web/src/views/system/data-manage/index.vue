@@ -69,7 +69,7 @@
           </div>
         </el-card>
       </el-tab-pane>
-      <el-tab-pane label="清空数据" name="clear">
+      <el-tab-pane label="清空本公司数据" name="clear">
         <el-card shadow="never" style="max-width:500px">
           <template #header><span style="font-weight:600;color:var(--app-color-danger)">⚠ 危险操作</span></template>
           <p style="color:var(--app-text-secondary);margin-bottom:16px">
@@ -78,14 +78,22 @@
             财务（费用、发票、收付款、应收应付、应付转应收、账单、现金流）、备忘等。
           </p>
           <p style="color:var(--app-color-warning);margin-bottom:16px;font-size:var(--app-font-base)">
-            系统数据（公司、用户、角色、菜单）不受影响。操作后不可恢复，请谨慎执行。
+            系统数据（公司、用户、角色、菜单）不受影响；
+            <span style="color:var(--app-color-danger)">但本公司的系统参数与操作日志会一并清空</span>
+            （2026-09-30 口径）。操作后不可恢复，请谨慎执行。
           </p>
           <!-- 强确认：与上方「数据导入」同一口径 —— 危险动作必须手输口令，仅一个 confirm 弹窗不足以防误点 -->
           <div style="margin-bottom:12px">
             <span style="color:var(--app-color-danger)">请输入“{{ CLEAR_CONFIRM_WORD }}”以继续：</span>
             <el-input v-model="clearConfirmText" :placeholder="CLEAR_CONFIRM_WORD" size="small" style="margin-top:4px" />
           </div>
-          <el-button type="danger" :disabled="clearConfirmText !== CLEAR_CONFIRM_WORD" :loading="clearLoading" @click="handleClear">清空当前公司数据</el-button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <el-button :loading="clearDryLoading" @click="handleClearDryRun">预演（不删数据）</el-button>
+            <el-button v-perm="'system:data-manage'" type="danger" :disabled="clearConfirmText !== CLEAR_CONFIRM_WORD" :loading="clearLoading" @click="handleClear">清空当前公司数据</el-button>
+          </div>
+          <p style="color:var(--app-text-secondary);margin-top:10px;font-size:var(--app-font-xs)">
+            提示：清空前会在服务端自动生成「回滚点」备份（格式同「数据导出」，可用「数据导入」恢复）；「预演」不修改任何数据。
+          </p>
         </el-card>
       </el-tab-pane>
     </el-tabs>
@@ -216,17 +224,36 @@ async function handleClear() {
   if (clearConfirmText.value !== CLEAR_CONFIRM_WORD) { ElMessage.warning(`请输入“${CLEAR_CONFIRM_WORD}”以继续`); return }
   try {
     await ElMessageBox.confirm(
-      '此操作将清空当前公司下的所有业务数据。此操作不可恢复！',
-      '清空数据', { confirmButtonText: '确认清空', cancelButtonText: '取消', type: 'error' }
+      '此操作将清空当前公司下的所有业务数据。此操作不可恢复！（清空前服务端会自动生成一份回滚点备份）',
+      '清空本公司数据', { confirmButtonText: '确认清空', cancelButtonText: '取消', type: 'error' }
     )
   } catch { return }
   clearLoading.value = true
   try {
-    const res = await request.post('/system/clear-company-data')
-    ElMessage.success(res || '数据已清空，请刷新页面')
+    // F8-17：后端要求二次确认口令（前端口令只是第一道）
+    const res: any = await request.post('/system/clear-company-data', null, { params: { confirm: CLEAR_CONFIRM_WORD } })
+    ElMessage.success(res?.tables ? `已清空 ${res.tables} 张表 / ${res.totalRows} 行数据，请刷新页面` : '数据已清空，请刷新页面')
     setTimeout(() => location.reload(), 1000)
   } catch (e: any) {
     ElMessage.error('操作失败: ' + (e?.message || '未知错误'))
   } finally { clearLoading.value = false }
+}
+
+/** F8-17：清空预演（dryRun=true）—— 只读，不删数据 */
+const clearDryLoading = ref(false)
+async function handleClearDryRun() {
+  clearDryLoading.value = true
+  try {
+    const res: any = await request.post('/system/clear-company-data', null, { params: { dryRun: true } })
+    const rows = Object.entries(res?.rows || {}).filter(([, n]) => Number(n) > 0)
+    const detail = rows.map(([t, n]) => `${t}: ${n}`).join('、') || '（本公司当前无业务数据）'
+    await ElMessageBox.alert(
+      `将清空 ${res?.tables ?? '-'} 张表，共 ${res?.totalRows ?? 0} 行。\n\n` +
+      `有数据的表（${rows.length} 张）：${detail}\n\n回滚点：${res?.backup ?? '-'}`,
+      '预演结果（未删除任何数据）', { confirmButtonText: '知道了', type: 'info' }
+    )
+  } catch (e: any) {
+    ElMessage.error('预演失败: ' + (e?.message || '未知错误'))
+  } finally { clearDryLoading.value = false }
 }
 </script>

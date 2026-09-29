@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS sys_role (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_role_code (role_code),
+    -- S-9②（2026-09-30 设置模块审核批 C · 角色按公司隔离）：同公司内编码唯一（平台角色 company_id=0）
+    UNIQUE KEY uk_role_code (company_id, role_code),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色表';
 
@@ -63,6 +64,9 @@ CREATE TABLE IF NOT EXISTS sys_menu (
     sort_order INT DEFAULT 0 COMMENT '排序',
     visible TINYINT DEFAULT 1 COMMENT '0隐藏 1显示',
     status TINYINT DEFAULT 1 COMMENT '0禁用 1启用',
+    -- F8-21（2026-09-30 设置模块批 E 修复）：0=未改过（启动同步可覆盖显示字段）1=用户在「菜单管理」改过
+    -- （menu_name/sort_order/parent_id/visible/status 一律以用户为准，启动同步不再覆盖）
+    customized TINYINT DEFAULT 0 COMMENT '1=用户改过，启动同步不再覆盖',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

@@ -38,6 +38,13 @@ public class Menu {
 
     private Integer status;
 
+    /**
+     * F8-21（2026-09-30 设置模块批 E）：1 = 用户通过「菜单管理」改过（或自己新建的）菜单
+     * ⇒ {@code DataInitializer.syncMenus()} 启动同步**不再覆盖**该行的展示字段
+     * （menu_name / parent_id / sort_order / visible / status）。
+     */
+    private Integer customized;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 

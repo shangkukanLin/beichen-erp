@@ -70,7 +70,7 @@ onMounted(() => { loadCompany(); loadParams() })
           <el-form-item label="邮箱"><el-input v-model="companyForm.email" /></el-form-item>
           <el-form-item label="地址"><el-input v-model="companyForm.address" /></el-form-item>
           <el-form-item label="税号"><el-input v-model="companyForm.taxNo" /></el-form-item>
-          <el-form-item><el-button type="primary" :loading="companySaving" @click="saveCompany">保存</el-button></el-form-item>
+          <el-form-item><el-button v-perm="'system:settings'" type="primary" :loading="companySaving" @click="saveCompany">保存</el-button></el-form-item>
         </el-form>
       </el-tab-pane>
 
@@ -82,7 +82,7 @@ onMounted(() => { loadCompany(); loadParams() })
           </el-table-column>
           <el-table-column prop="remark" label="说明" width="150" />
         </el-table>
-        <el-button type="primary" :loading="paramsSaving" @click="saveParams" style="margin-top:12px">保存</el-button>
+        <el-button v-perm="'system:settings'" type="primary" :loading="paramsSaving" @click="saveParams" style="margin-top:12px">保存</el-button>
       </el-tab-pane>
 
       <el-tab-pane label="操作日志" name="logs">

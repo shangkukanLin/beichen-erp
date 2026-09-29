@@ -33,13 +33,24 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 数据初始化器：启动时自动初始化系统基础数据（角色、菜单、用户、物料类型、阶段模板、合同模板）。
- * <p>表结构统一由 schema.sql 维护，本类不执行任何建表/加列/数据迁移，仅写入业务初始化数据。</p>
+ * 数据初始化器：启动时自动初始化/升级系统基础数据。
+ *
+ * <p><b>实际职责（F8-24 · 2026-09-30 设置模块批 E 修复：原注释与实现不符，原文称"本类不执行任何建表/加列/数据迁移"）</b>：
+ * 本类除写入业务种子（角色/菜单/用户/物料类型/阶段模板/合同模板）外，还承担
+ * **18 个 {@code migrate*()} 升级方法** —— 它们通过 {@code information_schema} 判断后做幂等
+ * {@code ALTER TABLE ... ADD COLUMN}（补 {@code create_by}/{@code auditor_*}/{@code finisher_id} 等列）、
+ * 补索引与一次性回填，是"schema.sql + 启动迁移"共同构成现网表结构的那一半。
+ * 因此：**新增列/表时必须同时考虑这两条路径**（见报告 §4.6 的口径复核）。</p>
+ *
+ * <p><b>执行时机（F8-20 · 同一轮修复）</b>：本方法由 {@code @PostConstruct} 触发，早于 Web 容器放行端口；
+ * 原先用 {@code ApplicationRunner} 是"端口已开、迁移还在跑" ⇒ 期间到达的请求在事务里读表会撞 MySQL
+ * <b>1412 Table definition has changed</b>（实测沙箱实例首个 dryRun 即失败）。改到 {@code @PostConstruct}
+ * 后竞态从结构上消除。</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class DataInitializer implements ApplicationRunner {
+public class DataInitializer {
 
     private final UserMapper userMapper;
     private final RoleMapper roleMapper;
@@ -59,8 +70,41 @@ public class DataInitializer implements ApplicationRunner {
     @Value("${app.init.admin-password:123}")
     private String initAdminPassword;
 
-    @Override
-    public void run(ApplicationArguments args) {
+    /**
+     * 启动期**表/列预检**（F8-25 · 2026-09-30 设置模块批 E 修复）。
+     *
+     * <p>口径：迁移类方法失败只记日志继续（它们各自"判存在再改"、可重复跑）；**种子类失败必须让应用起不来**
+     * （半初始化状态更难排查）。为了把"某条 SQL 撞到缺表缺列"变成**一条能直接定位的启动失败信息**，
+     * 先在这里检查初始化/迁移要用到的表与关键列。</p>
+     */
+    private void assertSchemaReady() {
+        String[][] required = {
+                {"sys_company", "id"}, {"sys_role", "role_code"}, {"sys_menu", "route_name"},
+                {"sys_user", "username"}, {"sys_role_menu", "menu_id"}, {"sys_user_role", "user_id"},
+                {"sys_user_menu", "menu_id"}, {"sys_user_dashboard_tab", "user_id"},
+                {"material_type", "type_name"}, {"dev_phase_template", "product_status_sync"},
+                {"outsource_contract_template", "template_type"}, {"screen_model", "id"}
+        };
+        List<String> missing = new java.util.ArrayList<>();
+        for (String[] r : required) {
+            if (!columnExists(r[0], r[1])) {
+                missing.add(r[0] + "." + r[1]);
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw new IllegalStateException("[启动初始化失败] 表/列缺失 " + missing.size() + " 项：" + missing
+                    + " —— 请确认 schema.sql 已随本版本更新（或先执行对应的 ALTER），否则初始化会中途失败");
+        }
+    }
+
+    /**
+     * 启动初始化入口。F8-20（2026-09-30 批 E 修复）：由 {@code ApplicationRunner} 改为
+     * {@code @PostConstruct} ⇒ 在 Web 容器**放行端口之前**跑完整套种子 + 迁移，
+     * 从结构上消除"端口已开、DDL 还在跑 ⇒ 请求事务撞 MySQL 1412"的竞态。
+     */
+    @jakarta.annotation.PostConstruct
+    public void init() {
+        assertSchemaReady();
         initCompany();
         initRoles();
         syncMenus();
@@ -88,6 +132,7 @@ public class DataInitializer implements ApplicationRunner {
         initMaterialTypes();
         initPhaseTemplates();
         initContractTemplates();
+        backfillCompanyDefaults();
         initScreenModels();
     }
 
@@ -232,8 +277,13 @@ public class DataInitializer implements ApplicationRunner {
 
     /** 幂等授予：用户已持有该角色则跳过 */
     private void ensureUserRole(Long userId, String roleCode) {
-        Role role = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
-                .eq(Role::getRoleCode, roleCode));
+        // S-9②（2026-09-30 设置模块审核批 C）：角色改为**按公司隔离**后，同一 role_code 会有多行
+        // （平台模板 company_id=0 + 各公司副本）⇒ `selectOne` 会抛 TooManyResultsException（曾导致启动失败）。
+        // 统一取"**公司 ID 升序的第一行**" = 平台模板优先，行为确定且向后兼容。
+        Role role = roleMapper.selectList(new LambdaQueryWrapper<Role>()
+                        .eq(Role::getRoleCode, roleCode)
+                        .orderByAsc(Role::getCompanyId))
+                .stream().findFirst().orElse(null);
         if (role == null) return;
         Long count = userRoleMapper.selectCount(new LambdaQueryWrapper<UserRole>()
                 .eq(UserRole::getUserId, userId)
@@ -497,7 +547,11 @@ public class DataInitializer implements ApplicationRunner {
             {905L, 9L, "数据管理", "menu", "/system/data-manage", "SystemDataManage", "Folder", 5},
             {906L, 9L, "角色管理", "menu", "/system/role", "SystemRole", "Avatar", 6},
             {907L, 9L, "菜单管理", "menu", "/system/menu", "SystemMenu", "Menu", 7},
-            {908L, 9L, "清空数据", "menu", "/system/clear-data", "SystemClearData", "Delete", 8},
+            // F8-19（2026-09-30 审核批 D）：文案「清空数据」→「清空本公司数据」——原名易被读成
+            // "清空（整个系统/数据库）"，而后端只清**本公司业务数据**（sys_* 系统表保留）。
+            // 菜单码 system:clear-data 因 /api/system 整段在 ApiPermGuard 的 EXEMPT 里而**不用于接口收口**，
+            // 授权口径是角色（ClearController 类级 admin|super_admin；全库清空仅 super_admin）。
+            {908L, 9L, "清空本公司数据", "menu", "/system/clear-data", "SystemClearData", "Delete", 8},
             // ==================== 经营分析（目录 10）：原「财务分析」5 个 Tab 拆分 + 新增销售/客户分析 ====================
             // 顺序（2026-09-15 用户定稿「方案X」）：经营概览 → 销售分析 → 客户分析 → [进货分析(1007 待建)] → 税务分析 → 资金往来
             {1001L, 10L, "经营概览", "menu", "/analysis/overview", "AnalysisOverview", "DataLine", 1},
@@ -512,16 +566,32 @@ public class DataInitializer implements ApplicationRunner {
             // 资金往来（2026-09-15 由「资金与往来」改名）：资金趋势 + 应收应付账龄 + 主体往来统计
             {1003L, 10L, "资金往来", "menu", "/analysis/cash", "AnalysisCash", "Wallet", 6},
         };
+        // F8-21（2026-09-30 设置模块批 E 修复）：确保 customized 列存在（与 schema.sql 同源，存量库靠这里补）
+        if (!columnExists("sys_menu", "customized")) {
+            addColumnIfMissing("sys_menu", "customized TINYINT DEFAULT 0 COMMENT '1=用户改过，启动同步不再覆盖'");
+        }
+
         // ON DUPLICATE KEY UPDATE 实现 upsert
         int processed = 0;
         for (Object[] m : menus) {
             try {
+                // F8-21（2026-09-30 设置模块批 E 修复）：**用户改过的菜单不再被启动同步打回**。
+                // 原实现无条件 UPDATE parent_id/menu_name/sort_order/visible/status ⇒ "菜单管理"页的
+                // 编辑下次重启即失效（实测 908 改名+调序+隐藏后重启回到种子值）。
+                // 现在：结构性字段（menu_type/route_path/route_name/icon）仍随代码升级同步；
+                // 展示字段（parent_id/menu_name/sort_order/visible/status）只在 customized=0 时写入，
+                // customized=1（用户改过）一律以用户为准。
                 jdbcTemplate.update(
-                    "INSERT INTO sys_menu (id, parent_id, menu_name, menu_type, route_path, route_name, icon, sort_order, visible, status) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1) " +
-                    "ON DUPLICATE KEY UPDATE parent_id=VALUES(parent_id), menu_name=VALUES(menu_name), " +
+                    "INSERT INTO sys_menu (id, parent_id, menu_name, menu_type, route_path, route_name, icon, sort_order, visible, status, customized) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 0) " +
+                    "ON DUPLICATE KEY UPDATE " +
                     "menu_type=VALUES(menu_type), route_path=VALUES(route_path), route_name=VALUES(route_name), " +
-                    "icon=VALUES(icon), sort_order=VALUES(sort_order), visible=1, status=1",
+                    "icon=VALUES(icon), " +
+                    "parent_id=IF(customized=1, parent_id, VALUES(parent_id)), " +
+                    "menu_name=IF(customized=1, menu_name, VALUES(menu_name)), " +
+                    "sort_order=IF(customized=1, sort_order, VALUES(sort_order)), " +
+                    "visible=IF(customized=1, visible, 1), " +
+                    "status=IF(customized=1, status, 1)",
                     m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7]);
                 processed++;
             } catch (Exception e) {
@@ -1536,13 +1606,59 @@ public class DataInitializer implements ApplicationRunner {
 
     /** 为指定角色授权菜单（仅当角色尚无菜单权限时执行） */
     private void assignRoleMenus(String roleCode, List<Long> menuIds) {
-        Role role = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
-                .eq(Role::getRoleCode, roleCode));
+        // S-9②（2026-09-30 批 C）：同 role_code 多行（平台模板 + 各公司副本）⇒ 取"公司 ID 升序第一行"
+        // = **平台模板**优先；原 `selectOne` 在迁移后会抛 TooManyResultsException 并**导致启动失败**
+        // （实测：assignRoleMenus 第 1539 行，found: 3 —— admin 模板 + 公司 1/2 副本）。
+        Role role = roleMapper.selectList(new LambdaQueryWrapper<Role>()
+                        .eq(Role::getRoleCode, roleCode)
+                        .orderByAsc(Role::getCompanyId))
+                .stream().findFirst().orElse(null);
         if (role == null) return;
         List<Long> existingMenuIds = roleService.getMenuIdsByRoleId(role.getId());
         if (existingMenuIds == null || existingMenuIds.isEmpty()) {
             roleService.saveRoleMenus(role.getId(), menuIds);
             log.info("初始化 {} 菜单权限完成", roleCode);
+        }
+    }
+
+    /**
+     * F8-23（2026-09-30 设置模块批 E 修复）：**按公司补齐默认业务种子**（幂等、只增不改）。
+     *
+     * <p>原先 {@code initMaterialTypes} / {@code initPhaseTemplates} / {@code initContractTemplate}
+     * 一律硬编码 {@code company_id = 1L} ⇒ 第 2 家及以后的公司**没有任何阶段模板 / 合同模板**
+     * （实测：{@code dev_phase_template} 27 行、{@code outsource_contract_template} 2 行全为 company 1；
+     * 而 {@code sys_company} 有 2 家）⇒ 新公司在项目阶段/合同页看不到默认数据，只能手工建。</p>
+     *
+     * <p>做法：以**公司 1 的现网数据为模板**，为其余公司按"名称/类型"判缺后补齐
+     * （{@code NOT EXISTS} + 派生表快照，同一语句里读写的 MySQL 安全写法）。</p>
+     */
+    private void backfillCompanyDefaults() {
+        String[] sqls = {
+                "INSERT INTO material_type (type_name, sort_order, status, is_default, company_id) "
+                        + "SELECT m.type_name, m.sort_order, m.status, m.is_default, c.id FROM material_type m "
+                        + "JOIN sys_company c ON c.id <> 1 WHERE m.company_id = 1 AND NOT EXISTS ("
+                        + "SELECT 1 FROM (SELECT * FROM material_type) x WHERE x.company_id = c.id AND x.type_name = m.type_name)",
+                "INSERT INTO dev_phase_template (name, spec_type, default_days, sort_order, product_status_sync, remark, company_id) "
+                        + "SELECT t.name, t.spec_type, t.default_days, t.sort_order, t.product_status_sync, t.remark, c.id "
+                        + "FROM dev_phase_template t JOIN sys_company c ON c.id <> 1 WHERE t.company_id = 1 AND NOT EXISTS ("
+                        + "SELECT 1 FROM (SELECT * FROM dev_phase_template) x WHERE x.company_id = c.id "
+                        + "AND x.name = t.name AND IFNULL(x.spec_type, '') = IFNULL(t.spec_type, ''))",
+                "INSERT INTO outsource_contract_template (template_name, content, template_type, status, is_default, company_id, create_time, update_time) "
+                        + "SELECT t.template_name, t.content, t.template_type, t.status, t.is_default, c.id, NOW(), NOW() "
+                        + "FROM outsource_contract_template t JOIN sys_company c ON c.id <> 1 WHERE t.company_id = 1 AND NOT EXISTS ("
+                        + "SELECT 1 FROM (SELECT * FROM outsource_contract_template) x "
+                        + "WHERE x.company_id = c.id AND x.template_type = t.template_type)"
+        };
+        int total = 0;
+        for (String sql : sqls) {
+            try {
+                total += jdbcTemplate.update(sql);
+            } catch (Exception e) {
+                log.warn("[F8-23] 按公司补齐默认数据失败（跳过该表，下次启动重试）：{}", e.getMessage());
+            }
+        }
+        if (total > 0) {
+            log.info("[F8-23] 已为其它公司补齐默认数据 {} 行（物料类型 / 阶段模板 / 合同模板，幂等只增）", total);
         }
     }
 

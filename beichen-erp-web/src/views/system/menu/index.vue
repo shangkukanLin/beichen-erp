@@ -215,7 +215,7 @@ onActivated(() => {
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
         <div class="toolbar">
-          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+          <el-button v-perm="'system:menu'" type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
         </div>
       </div>
     </el-card>
@@ -262,8 +262,8 @@ onActivated(() => {
         </el-table-column>
         <el-table-column label="操作" width="140" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleEdit(row as FlatMenu)">编辑</el-button>
-            <el-button type="danger" link @click="handleDelete(row as FlatMenu)">删除</el-button>
+            <el-button v-perm="'system:menu'" type="primary" link @click="handleEdit(row as FlatMenu)">编辑</el-button>
+            <el-button v-perm="'system:menu'" type="danger" link @click="handleDelete(row as FlatMenu)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
