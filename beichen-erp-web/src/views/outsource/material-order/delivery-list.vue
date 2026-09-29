@@ -175,7 +175,7 @@ onActivated(() => { loadData(); loadCounts() })
             <span style="color:var(--app-text-placeholder)"> / </span>
             <span style="color:var(--app-color-success);font-weight:500">{{ receivedOf(row) }}</span>
             <span style="color:var(--app-text-placeholder)"> / </span>
-            <span :style="{ color: (totalOf(row) - receivedOf(row)) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-warning)', fontWeight: 500 }">{{ totalOf(row) - receivedOf(row) }}</span>
+            <span :style="{ color: (totalOf(row) - receivedOf(row)) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-warning)', fontWeight: 500 }">{{ Math.max(0, totalOf(row) - receivedOf(row)) }}</span>
           </template>
         </el-table-column>
         <!-- 2026-09-26 B10：列名「收货进度」4 字需 90px ⇒ 改短名「进度」（需 62）；

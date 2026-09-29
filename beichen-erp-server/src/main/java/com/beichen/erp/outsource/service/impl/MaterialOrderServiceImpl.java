@@ -219,6 +219,9 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     @Transactional(rollbackFor = Exception.class)
     public Object receive(Long id, Map<String, Object> body) {
         boolean force = Boolean.TRUE.equals(body.get("force"));
+        // 2026-09-29 用户口径「物料订单也可以超量收货」：true=用户已在二次确认里确认超收 ⇒
+        // 允许超过下单数量落库，并把 over_receipt 置 1（审核期第二道防线据此放行）。
+        boolean overReceipt = Boolean.TRUE.equals(body.get("overReceipt"));
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
         // 仅已审核(收货中)的订单可收货；待审核/已结单/已作废均禁止
@@ -296,6 +299,40 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             }
         }
 
+        // F7-66 第一道（2026-09-19）；2026-09-29 用户口径「物料订单也可以超量收货」：超收**不再硬拒** ——
+        // 未确认（overReceipt=false）时返回"待确认超收"响应，前端弹二次确认后带 overReceipt=true 重提；
+        // 确认后落库并把 over_receipt 置 1，审核期第二道（DeliveryServiceImpl.auditMaterialDelivery）放行。
+        // ⚠️ 必须在**插入单据头之前**判定并返回：本方法是 @Transactional 的，中途 return 会提交已插入的行
+        //    （缺料返回之所以安全，也正因为它发生在插入之前）。
+        List<Map<String, Object>> overs = new ArrayList<>();
+        boolean anyOver = false;
+        for (Map<String, Object> it : items) {
+            if (it.get("itemId") == null || it.get("quantity") == null) continue;
+            BigDecimal q;
+            try { q = new BigDecimal(it.get("quantity").toString()); } catch (Exception ignore) { continue; }
+            if (q.compareTo(BigDecimal.ZERO) <= 0) continue;
+            MaterialOrderItem oi = itemMapper.selectById(Long.valueOf(it.get("itemId").toString()));
+            if (oi == null) continue;
+            BigDecimal remain = receiveRemainQty(oi);
+            if (q.compareTo(remain) > 0) {
+                anyOver = true;
+                Map<String, Object> ov = new LinkedHashMap<>();
+                ov.put("materialName", getMaterialNameById(oi.getMaterialId()));
+                ov.put("ordered", plainQty(oi.getOrderQuantity()));
+                ov.put("received", plainQty(oi.getReceivedQuantity()));
+                ov.put("remain", plainQty(remain.max(BigDecimal.ZERO)));
+                ov.put("request", plainQty(q));
+                ov.put("over", plainQty(q.subtract(remain)));
+                overs.add(ov);
+            }
+        }
+        if (!overs.isEmpty() && !overReceipt) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("_over", true);
+            result.put("overs", overs);
+            return result;
+        }
+
         // F7-46（2026-09-19）：**秒级重复提交兜底**（前端暂无幂等键 —— 已核实 `requestId/uuid/nonce` 0 命中，
         // 故服务端兜底挡住"双击/网络重试"这一主场景）。`receive` 会 insert 一张收货草稿单，双击即两张相同草稿，
         // 各自审核 ⇒ **双倍入库 / 双倍应付 / 订单已收数量翻倍**。
@@ -355,6 +392,8 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         delivery.setSupplierDirect(1);
         delivery.setSupplierId(o.getSupplierId());
         delivery.setCode(generateDeliveryCode());
+        // 2026-09-29：本单含已确认的超收 ⇒ 落 over_receipt=1（审核期第二道防线据此放行；留痕可查）
+        if (anyOver && overReceipt) delivery.setOverReceipt(1);
         deliveryMapper.insert(delivery);
 
         // 3. 仅存盘收发明细，不触发库存与应付
@@ -375,7 +414,9 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             BigDecimal receivedQty = orderItem.getReceivedQuantity() != null ? orderItem.getReceivedQuantity() : BigDecimal.ZERO;
             BigDecimal onWayQty = pendingReceiveDraftQty(itemId);
             BigDecimal remainQty = orderedQty.subtract(receivedQty).subtract(onWayQty);
-            if (qty.compareTo(remainQty) > 0) {
+            // 2026-09-29：超收已确认（overReceipt=true）⇒ 放行；未确认时正常路径已在上面"超收预检"处返回
+            // 待确认响应，这里的抛错只作兜底（预检之后数据被并发改动的情形）。
+            if (qty.compareTo(remainQty) > 0 && !overReceipt) {
                 throw new BusinessException("收货数量超过该物料剩余可收量：物料「" + getMaterialNameById(orderItem.getMaterialId())
                         + "」下单 " + orderedQty.stripTrailingZeros().toPlainString()
                         + "、已收 " + receivedQty.stripTrailingZeros().toPlainString()
@@ -435,6 +476,22 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             if (h == null || h.compareTo(e.getValue()) != 0) return false;
         }
         return true;
+    }
+
+    /**
+     * 该订单明细行的**剩余可收** = 下单数 − 已收数 − 在途草稿数（F7-66 口径）。
+     * <p>2026-09-29（用户口径「物料订单也可以超量收货」）：本值不再"挡住"超收，而是作为
+     * **超收待确认**的判定基准与提示数字（前端「剩余可收」列也用它，负值按 0 展示）。</p>
+     */
+    private BigDecimal receiveRemainQty(MaterialOrderItem orderItem) {
+        BigDecimal ordered = orderItem.getOrderQuantity() != null ? orderItem.getOrderQuantity() : BigDecimal.ZERO;
+        BigDecimal received = orderItem.getReceivedQuantity() != null ? orderItem.getReceivedQuantity() : BigDecimal.ZERO;
+        return ordered.subtract(received).subtract(pendingReceiveDraftQty(orderItem.getId()));
+    }
+
+    /** 数量展示（去尾零，避免提示里出现 100.000000） */
+    private static String plainQty(BigDecimal v) {
+        return (v == null ? BigDecimal.ZERO : v).stripTrailingZeros().toPlainString();
     }
 
     /**

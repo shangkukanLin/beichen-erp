@@ -155,7 +155,7 @@ function handleDrop(e: DragEvent) { e.preventDefault(); const f = e.dataTransfer
 function handleFileSelect(e: Event) { const f = (e.target as HTMLInputElement).files?.[0]; if (f) uploadFile.value = f }
 function handleRemoveFile() { uploadFile.value = null }
 
-async function handleSubmit(forceDelivery = false) {
+async function handleSubmit(forceDelivery = false, overReceipt = false) {
   if (!form.productId) { ElMessage.warning('请选择产品名称'); return }
   if (totalGrade.value <= 0) { ElMessage.warning('请至少填写一个等级的数量'); return }
   if (!warehouseId.value) { ElMessage.warning('请选择收货仓库'); return }
@@ -173,12 +173,27 @@ async function handleSubmit(forceDelivery = false) {
       deliveryDate: form.deliveryDate, trackingNo: form.trackingNo, remark: form.remark,
       attachUrl: form.attachUrl, orderId, warehouseId: warehouseId.value || null
     }
-    const params = forceDelivery ? { params: { forceDelivery: true } } : {}
+    // 2026-09-29（用户口径「加工订单和物料订单都可以超量收货」）：超收需二次确认 ——
+    // overReceipt=true = 用户已确认"本次收货超出订单数量"，后端据此放行并落 over_receipt=1；
+    // 缺省时若超量，后端返回**待确认**响应（canProceed=false + overReceipt=true，不落库）。
+    const q: any = {}
+    if (forceDelivery) q.forceDelivery = true
+    if (overReceipt) q.overReceipt = true
+    const params = Object.keys(q).length ? { params: q } : {}
     let res: any
     if (isEdit.value && editId.value) {
       res = await request.put(`/outsource/order-delivery/${editId.value}`, body, params)
     } else {
       res = await request.post('/outsource/order-delivery', body, params)
+    }
+    // 超收待确认（2026-09-29）：确认后带 overReceipt=true 重提（后端才落库）
+    if (res && res.overReceipt) {
+      saving.value = false
+      try {
+        await ElMessageBox.confirm(res.message || '本次收货将超出订单数量，是否确认超收？', '超收确认',
+          { confirmButtonText: '确认超收', cancelButtonText: '取消', type: 'warning' })
+      } catch { return }
+      return handleSubmit(forceDelivery, true)
     }
     // 缺料：确认后强制出库（物料库存将变负）
     if (res && res.canProceed !== true) {
@@ -198,7 +213,7 @@ async function handleSubmit(forceDelivery = false) {
       try {
         await ElMessageBox.confirm(html, '缺料提示', { confirmButtonText: '确认强制出库', cancelButtonText: '取消', type: 'warning', dangerouslyUseHTMLString: true })
       } catch { return }
-      return handleSubmit(true)
+      return handleSubmit(true, overReceipt)
     }
     ElMessage.success(isEdit.value ? '收货记录已更新' : '收货记录已保存')
     dialogVisible.value = false
@@ -334,7 +349,9 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
     <el-row :gutter="12" style="margin-bottom:12px">
       <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">订单总量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0">{{ summary.totalQuantity || 0 }}</p></el-card></el-col>
       <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">已收数量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-success)">{{ summary.deliveredQuantity || 0 }}</p></el-card></el-col>
-      <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">剩余数量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-warning)">{{ summary.remainingQuantity || 0 }}</p></el-card></el-col>
+      <!-- 2026-09-29（用户口径「可以超量收货」+ 剩余封顶）：超收时剩余按 0 显示（不给负数），
+           超收本身只在「收货记录」明细里看得出来 -->
+      <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">剩余数量</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-warning)">{{ Math.max(0, Number(summary.remainingQuantity || 0)) }}</p></el-card></el-col>
       <el-col :span="6"><el-card shadow="never"><p style="color:var(--app-text-secondary);font-size:var(--app-font-xs);margin:0">收货进度</p><p style="font-size:var(--app-font-num);font-weight:600;margin:4px 0;color:var(--app-color-primary)">{{ progress }}%</p></el-card></el-col>
     </el-row>
 
@@ -349,7 +366,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
         <el-table-column prop="productName" label="产品名称" min-width="150" />
         <el-table-column prop="totalQuantity" label="订单数量" width="100" />
         <el-table-column label="已收数量" width="100"><template #default="{ row }"><span style="color:var(--app-color-success);font-weight:500">{{ row.deliveredQuantity }}</span></template></el-table-column>
-        <el-table-column label="剩余数量" width="100"><template #default="{ row }"><span :style="{ color: Number(row.remainingQuantity) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-warning)', fontWeight: '500' }">{{ row.remainingQuantity }}</span></template></el-table-column>
+        <el-table-column label="剩余数量" width="100"><template #default="{ row }"><span :style="{ color: Number(row.remainingQuantity) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-warning)', fontWeight: '500' }">{{ Math.max(0, Number(row.remainingQuantity || 0)) }}</span></template></el-table-column>
         <el-table-column label="进度" width="180"><template #default="{ row }"><el-progress :percentage="Number(row.totalQuantity) === 0 ? 0 : Math.min(100, Math.round(Number(row.deliveredQuantity) / Number(row.totalQuantity) * 100))" :stroke-width="12" :color="Number(row.remainingQuantity) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-primary)'" /></template></el-table-column>
       </el-table>
     </el-card>

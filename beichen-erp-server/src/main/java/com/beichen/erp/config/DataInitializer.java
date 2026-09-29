@@ -77,6 +77,7 @@ public class DataInitializer implements ApplicationRunner {
         migrateMaterialMoveQuality();
         migrateMaterialRepairOnsiteLeg();
         migrateMaterialOrderReturnedQty();
+        migrateOverReceipt();
         migrateFinanceExpenseSource();
         initSuperAdmin();
         initMaterialTypes();
@@ -1291,6 +1292,20 @@ public class DataInitializer implements ApplicationRunner {
     private void migrateMaterialOrderReturnedQty() {
         addColumnIfMissing("outsource_material_order_item",
                 "order_returned_qty DECIMAL(18,0) DEFAULT 0 COMMENT '订单退料已退数量(2026-09-28)'");
+    }
+
+    /**
+     * 存量库幂等迁移（2026-09-29）：两张**收货单据**表增加 {@code over_receipt} 列 ——
+     * 用户口径「加工订单和物料订单都可以超量收货」：超量不再硬拒，改为**录入时二次确认**后放行；
+     * 本列 = 该单的超收是否已确认（1=是 ⇒ 审核期不再复核数量上限，0/NULL=否）。
+     * <p>新库由 schema.sql 直接建列；老库 ALTER（{@link #addColumnIfMissing}，重复启动无副作用）；
+     * 存量单为 0 —— 未确认过的历史草稿审核时仍按原口径拦。</p>
+     */
+    private void migrateOverReceipt() {
+        addColumnIfMissing("outsource_order_delivery",
+                "over_receipt TINYINT DEFAULT 0 COMMENT '是否已确认超收: 1=录入时已二次确认(审核期不再复核数量上限) / 0=否'");
+        addColumnIfMissing("outsource_delivery",
+                "over_receipt TINYINT DEFAULT 0 COMMENT '是否已确认超收: 1=建单时已二次确认(审核期不再复核数量上限) / 0=否'");
     }
 
     /**

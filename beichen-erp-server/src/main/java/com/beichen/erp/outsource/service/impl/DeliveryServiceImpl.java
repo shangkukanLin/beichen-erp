@@ -263,7 +263,9 @@ public class DeliveryServiceImpl implements DeliveryService {
             // F7-66（2026-09-19）：落账前**第二道防线** —— 复核「已收 + 本次 ≤ 下单数」。
             // 第一道在 MaterialOrderServiceImpl.receive（建草稿时，含"在途草稿"额度占用）；
             // 本道兜住"历史草稿 / 直改库 / 并发叠加"等绕过第一道的情形。
-            if (isReceive) {
+            // 2026-09-29（用户口径「物料订单也可以超量收货」）：建单时已二次确认超收的整单
+            // （outsource_delivery.over_receipt=1）**放行**；未确认的行仍拦。
+            if (isReceive && !isOverReceiptConfirmed(delivery)) {
                 BigDecimal orderedQty = oi.getOrderQuantity() != null ? oi.getOrderQuantity() : BigDecimal.ZERO;
                 BigDecimal receivedQty = oi.getReceivedQuantity() != null ? oi.getReceivedQuantity() : BigDecimal.ZERO;
                 if (orderedQty.compareTo(BigDecimal.ZERO) > 0
@@ -299,6 +301,15 @@ public class DeliveryServiceImpl implements DeliveryService {
         up.setAuditorId(UserContext.getId());
         up.setAuditorName(UserContext.getName());
         deliveryMapper.updateById(up);
+    }
+
+    /**
+     * 收货单是否**已确认超收**（2026-09-29 用户口径「物料订单也可以超量收货」）：
+     * {@code over_receipt=1} 表示建单时用户已在二次确认里确认"本次收货超出下单数量"
+     * ⇒ 审核期的数量复核（F7-66 第二道防线）放行；未确认（0/NULL）仍拦。
+     */
+    private static boolean isOverReceiptConfirmed(OutsourceDelivery delivery) {
+        return delivery != null && delivery.getOverReceipt() != null && delivery.getOverReceipt() == 1;
     }
 
     @Override

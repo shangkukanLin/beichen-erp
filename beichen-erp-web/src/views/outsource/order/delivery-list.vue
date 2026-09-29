@@ -166,7 +166,7 @@ onActivated(() => { loadData(); loadCounts() })
             <span style="color:var(--app-text-placeholder)"> / </span>
             <span style="color:var(--app-color-success);font-weight:500">{{ row.deliveredQuantity }}</span>
             <span style="color:var(--app-text-placeholder)"> / </span>
-            <span :style="{ color: Number(row.remainingQuantity) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-warning)', fontWeight: 500 }">{{ row.remainingQuantity }}</span>
+            <span :style="{ color: Number(row.remainingQuantity) <= 0 ? 'var(--app-color-success)' : 'var(--app-color-warning)', fontWeight: 500 }">{{ Math.max(0, Number(row.remainingQuantity || 0)) }}</span>
           </template>
         </el-table-column>
         <!-- 2026-09-26 B10：列名「收货进度」4 字需 90px ⇒ 改短名「进度」（需 62）——本页 9 列全满，

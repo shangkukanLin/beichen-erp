@@ -308,6 +308,8 @@ CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     attach_url VARCHAR(500) COMMENT '附件URL',
     status VARCHAR(20) DEFAULT 'NORMAL' COMMENT '状态: NORMAL/REVERSED',
     is_reverse TINYINT DEFAULT 0 COMMENT '是否退不良红冲记录：1=退不良(数量为负) / 0=普通交货',
+    -- 2026-09-29 用户口径「加工订单和物料订单都可以超量收货」：录入时二次确认过的超收留痕
+    over_receipt TINYINT DEFAULT 0 COMMENT '是否已确认超收: 1=录入时已二次确认(审核期不再复核数量上限) / 0=否',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_order_id (order_id),
@@ -335,6 +337,8 @@ CREATE TABLE IF NOT EXISTS outsource_delivery (
     remark VARCHAR(500) COMMENT '备注',
     attach_url VARCHAR(500) COMMENT '附件URL',
     source_order_id BIGINT DEFAULT NULL COMMENT '来源订单ID(关联outsource_material_order.id，强关联回查)',
+    -- 2026-09-29 用户口径「物料订单也可以超量收货」：仅收货单(RECEIVE)使用，录入时二次确认过的超收留痕
+    over_receipt TINYINT DEFAULT 0 COMMENT '是否已确认超收: 1=建单时已二次确认(审核期不再复核数量上限) / 0=否',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

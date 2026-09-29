@@ -56,11 +56,17 @@ public class OrderDeliveryController {
         return R.ok(deliveryService.pageOrders(page, size, code, status));
     }
 
-    /** 新增交货记录 */
+    /**
+     * 新增交货记录。
+     * <p>{@code overReceipt=true}（2026-09-29 用户口径「加工订单和物料订单都可以超量收货」）表示
+     * 用户已在二次确认里确认"本次收货超出订单数量" ⇒ 允许落库并置 {@code over_receipt=1}；
+     * 缺省 false 时若超量，接口返回 {@code canProceed=false + overReceipt=true} 的**待确认**响应（不落库）。</p>
+     */
     @PostMapping
     public R<Map<String, Object>> create(@RequestBody Map<String, Object> body,
-                                         @RequestParam(defaultValue = "false") boolean forceDelivery) {
-        return R.ok(deliveryService.createDelivery(parseDelivery(body), forceDelivery));
+                                         @RequestParam(defaultValue = "false") boolean forceDelivery,
+                                         @RequestParam(defaultValue = "false") boolean overReceipt) {
+        return R.ok(deliveryService.createDelivery(parseDelivery(body), forceDelivery, overReceipt));
     }
 
     /** 审核交货记录 */
@@ -78,11 +84,12 @@ public class OrderDeliveryController {
         return R.ok();
     }
 
-    /** 修改交货记录 */
+    /** 修改交货记录（overReceipt 口径同新增） */
     @PutMapping("/{id}")
     public R<Map<String, Object>> update(@PathVariable Long id, @RequestBody Map<String, Object> body,
-                                         @RequestParam(defaultValue = "false") boolean forceDelivery) {
-        return R.ok(deliveryService.updateDelivery(id, parseDelivery(body), forceDelivery));
+                                         @RequestParam(defaultValue = "false") boolean forceDelivery,
+                                         @RequestParam(defaultValue = "false") boolean overReceipt) {
+        return R.ok(deliveryService.updateDelivery(id, parseDelivery(body), forceDelivery, overReceipt));
     }
 
     /** 删除交货记录 */

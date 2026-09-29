@@ -1,11 +1,23 @@
-# verify-fix-f7-66.ps1  (regression for the F7-66 fix: receiving must not exceed the ordered quantity)
+# verify-fix-f7-66.ps1  (regression for the F7-66 fix: the ordered-quantity guard on receiving)
 #
 # F7-66 (P0): MaterialOrderServiceImpl.receive() only filtered qty > 0 and
 # DeliveryServiceImpl.auditMaterialDelivery() accumulated unconditionally, so a user could receive
 # more than was ordered. Live data already showed 8 item rows with received_quantity >
-# order_quantity (1900 units / 18800 CNY of payables). The fix adds two independent guards:
+# order_quantity (1900 units / 18800 CNY of payables). The fix added two independent guards:
 #   1) receive():      qty <= order_quantity - received_quantity - in-flight DRAFT qty
 #   2) audit():        received + qty <= order_quantity   (second line of defence)
+#
+# 2026-09-29 USER口径 CHANGE: 「加工订单和物料订单都可以超量收货」-- over-receiving is now ALLOWED,
+# but only after an explicit confirmation. Both guards above became "confirmable":
+#   * unconfirmed over-receipt -> receive() returns {_over:true, overs:[...]} and persists NOTHING
+#     (the front end shows 确认超收 and resubmits with overReceipt=true);
+#   * confirmed   over-receipt (overReceipt=true) -> the draft is created with over_receipt=1, and the
+#     audit-time second line of defence (F7-66 #2) READS THAT FLAG and lets the row through;
+#   * rows WITHOUT the flag are still blocked exactly as before (covered by step D below).
+# Steps A/A2 (+ D for the unconfirmed side) below lock the new口径; see also
+# verify-order-receive-net-cap.ps1 B3/B4, which proves the audit gate is skipped for a flagged draft on
+# the 加工订单 side (its audit has a post-gate, side-effect-free rejection to key on).
+#
 # plus: F7-67 -- audit() now THROWS when the delivery item points at a missing order item row
 # (previously it silently `continue`d while still posting stock + payable).
 # plus: duplicate-submit guard now reports an error instead of silently reusing the draft row.
@@ -88,12 +100,34 @@ try {
   $payableBefore = [int](SqlOne "SELECT IFNULL(SUM(amount),0) FROM finance_payable WHERE source_bill_type='OUTSOURCE_MATERIAL_DELIVERY'")
   Write-Output ''
 
-  # ================= A) over-receipt must be rejected (first line of defence) =================
-  Write-Output '=== A) receive() -- qty above remaining must be rejected ==='
+  # ================= A) over-receipt must ASK FOR CONFIRMATION (first line of defence) =================
+  # 2026-09-29: qty > remaining no longer throws -- it returns the 待确认 payload and persists nothing.
+  Write-Output '=== A) receive() -- qty above remaining must ask for the over-receipt confirmation ==='
+  $draftsBefore = [int](SqlOne "SELECT COUNT(*) FROM outsource_delivery WHERE source_order_id=$moid")
   $rA = Api 'Post' "$BASE/outsource/material-order/$moid/receive" @{
     warehouseId = 74; force = $true; items = @(@{ itemId = $miid; quantity = 101 }) }
-  if ((CodeOf $rA) -ne '200') { Ok ("over-receipt 101 > ordered 100 rejected: " + (MsgOf $rA)) }
-  else { Bad "over-receipt ACCEPTED (returned id=" + [string]$rA.data + ") -- fix not effective" }
+  $draftsAfter = [int](SqlOne "SELECT COUNT(*) FROM outsource_delivery WHERE source_order_id=$moid")
+  if ((CodeOf $rA) -eq '200' -and $rA.data._over -eq $true -and $draftsAfter -eq $draftsBefore) {
+    $ov = ($rA.data.overs | ForEach-Object { 'over=' + $_.over + '(request ' + $_.request + ' remain ' + $_.remain + ')' }) -join ','
+    Ok ("over-receipt 101 > ordered 100 -> confirmation asked, nothing persisted: " + $ov)
+  }
+  else { Bad ("over-receipt did not ask for confirmation / leaked a draft: code=" + (CodeOf $rA) + " data=" + ($rA.data | ConvertTo-Json -Compress -Depth 6) + " drafts " + $draftsBefore + '->' + $draftsAfter) }
+
+  # A2) the SAME payload with overReceipt=true (the user confirmed) must be accepted and flagged
+  Write-Output ''
+  Write-Output '=== A2) receive() -- a CONFIRMED over-receipt is accepted and flagged over_receipt=1 ==='
+  $rA2 = Api 'Post' "$BASE/outsource/material-order/$moid/receive" @{
+    warehouseId = 74; force = $true; overReceipt = $true; items = @(@{ itemId = $miid; quantity = 101 }) }
+  if ((CodeOf $rA2) -eq '200' -and ([string]$rA2.data -match '^\d+$')) {
+    $ovrDraft = [int]$rA2.data
+    $flagA2 = SqlOne "SELECT CONCAT(status,'|',IFNULL(over_receipt,0),'|',IFNULL((SELECT SUM(quantity) FROM outsource_delivery_item WHERE delivery_id=$ovrDraft),0)) FROM outsource_delivery WHERE id=$ovrDraft"
+    if ($flagA2 -like 'DRAFT|1|101') { Ok ("confirmed over-receipt accepted + flagged: draft $ovrDraft " + $flagA2) }
+    else { Bad ("confirmed over-receipt draft not flagged/persisted as expected: " + $flagA2) }
+    # drop it again right away: it would occupy the in-flight quota used by the later steps
+    Sql "DELETE FROM outsource_delivery_item WHERE delivery_id=$ovrDraft" | Out-Null
+    Sql "DELETE FROM outsource_delivery WHERE id=$ovrDraft" | Out-Null
+  }
+  else { Bad ("confirmed over-receipt rejected: code=" + (CodeOf $rA2) + " data=" + ($rA2.data | ConvertTo-Json -Compress -Depth 6)) }
 
   # ================= B) exactly the remaining qty is allowed (positive control) =================
   Write-Output ''
@@ -105,16 +139,19 @@ try {
   $draftId = [int]$rB.data
   Ok ("draft persisted: " + (SqlOne "SELECT CONCAT(code,'|',status) FROM outsource_delivery WHERE id=$draftId"))
 
-  # ================= C) in-flight DRAFT must consume the quota =================
+  # ================= C) in-flight DRAFT must consume the remaining quota =================
   Write-Output ''
-  Write-Output '=== C) receive() -- in-flight DRAFT qty must block a second overlapping receipt ==='
+  Write-Output '=== C) receive() -- in-flight DRAFT qty counts into the remaining quota (second receipt asks to confirm) ==='
   $rC = Api 'Post' "$BASE/outsource/material-order/$moid/receive" @{
     warehouseId = 74; force = $true; items = @(@{ itemId = $miid; quantity = 1 }) }
-  if ((CodeOf $rC) -ne '200') {
-    if ((MsgOf $rC) -match '5 ' -or (MsgOf $rC) -match '草稿') { Ok ("second receipt blocked by duplicate guard: " + (MsgOf $rC)) }
-    else { Ok ("second receipt blocked (remaining consumed by DRAFT): " + (MsgOf $rC)) }
+  # 2026-09-29: an over-receipt asks for confirmation instead of failing => "the system noticed the overlap"
+  # is asserted as the 待确认 payload (i.e. the in-flight DRAFT did consume the remaining quota).
+  if ((CodeOf $rC) -eq '200' -and $rC.data._over -eq $true) {
+    Ok "second overlapping receipt asks to confirm the over-receipt -> in-flight DRAFT qty is counted"
+  } elseif ((CodeOf $rC) -ne '200' -and ((MsgOf $rC) -match '草稿')) {
+    Ok ("second receipt blocked by duplicate guard: " + (MsgOf $rC))
   } else {
-    Bad "second overlapping receipt ACCEPTED -- in-flight DRAFT qty is not counted"
+    Bad ("second overlapping receipt was accepted silently: code=" + (CodeOf $rC) + " data=" + ($rC.data | ConvertTo-Json -Compress -Depth 6))
   }
 
   # control: drop the draft, quota must be released again
@@ -155,12 +192,18 @@ try {
   }
   Sql "UPDATE outsource_delivery_item SET item_id=$miid WHERE delivery_id=$draftId2" | Out-Null
 
-  # ================= F) global invariant =================
+  # ================= F) invariants =================
   Write-Output ''
-  Write-Output '=== F) invariant: no order item may exceed its ordered quantity ==='
+  Write-Output '=== F) invariants (2026-09-29: over-receipt is ALLOWED, the old global invariant is retired) ==='
+  # 原来断言"全库 received_quantity <= order_quantity"。用户口径改成"二次确认后允许超收"后该断言**不再成立**
+  # （现网历史数据本身也有超收行）。
+
+  # 现在只报数，真正要守住的是"本探针行没有被本次运行动过"。
   $over = [int](SqlOne "SELECT COUNT(*) FROM outsource_material_order_item WHERE IFNULL(received_quantity,0) > IFNULL(order_quantity,0)")
-  if ($over -eq 0) { Ok 'invariant holds: received_quantity > order_quantity rows = 0' }
-  else { Bad "invariant violated: $over item row(s) still over-received (data correction pending?)" }
+  Info "live rows with received_quantity > order_quantity (allowed since 2026-09-29, needs confirmation) = $over"
+  $probeRecv = SqlOne "SELECT CONCAT(IFNULL(received_quantity,0),'/',IFNULL(order_quantity,0)) FROM outsource_material_order_item WHERE id=$miid"
+  if ($probeRecv -eq '0/100') { Ok "probe item row untouched by this run (received/ordered = $probeRecv)" }
+  else { Bad "probe item row drifted: received/ordered = $probeRecv (expected 0/100)" }
 }
 catch {
   # An abort means the assertions never ran -- that must NOT be reported as a pass

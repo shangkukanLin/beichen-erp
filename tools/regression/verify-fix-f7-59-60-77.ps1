@@ -101,9 +101,18 @@ if ($factoryId -and $master -and $finWh) {
   $body59 = @{ orderId = [long]$ordId; productId = [long]$rowB; productMasterId = [long]$master
                quantity = 80; aQty = 80; bQty = 0; cQty = 0; defectQty = 0; warehouseId = [long]$finWh }
   $r59 = Req 'PUT' ("/outsource/order-delivery/$dvEdit") $admin $body59
-  if ((BCode $r59) -eq 200) { Bad 'edit to 80 was ACCEPTED -> the historical 30 was not counted (F7-59 not fixed)' }
-  elseif ((BMsg $r59) -like '*超出订单数量*') { Ok ('rejected: ' + (BMsg $r59) + '  => history matched by master id (F7-59)') }
-  else { Bad ('rejected for another reason: ' + (BMsg $r59)) }
+  # 2026-09-29（用户口径「加工订单和物料订单都可以超量收货」）：超量不再抛错，改为返回"待确认超收"
+  #   {canProceed=false, overReceipt=true, message='累计收货量(...)超出订单数量(...)，是否确认超收？'}（不落库）。
+  # 回归力不变：若历史那 30 没被算进去（30+80=110 变成 80 <= 100），响应会是 canProceed=true（正常落库），
+  # 下面断言即失败 —— 仍然锁住 F7-59（历史按**产品主数据ID**匹配）。
+  $m59 = [string]$r59.data.message
+  if ((BCode $r59) -eq 200 -and $r59.data.overReceipt -eq $true -and ($m59 -like '*超出订单数量*')) {
+    Ok ('over-qty edit asks to confirm the over-receipt: ' + $m59 + '  => history matched by master id (F7-59)')
+  }
+  elseif ((BCode $r59) -eq 200 -and $r59.data.canProceed -eq $true) {
+    Bad 'edit to 80 was ACCEPTED without confirmation -> the historical 30 was not counted (F7-59 not fixed)'
+  }
+  else { Bad ('over-qty edit did not return the expected over-receipt confirmation: code=' + (BCode $r59) + ' data=' + ($r59.data | ConvertTo-Json -Compress -Depth 6)) }
   # positive control: a smaller value that fits must still be accepted (no over-blocking)
   $body59b = @{ orderId = [long]$ordId; productId = [long]$rowB; productMasterId = [long]$master
                 quantity = 50; aQty = 50; bQty = 0; cQty = 0; defectQty = 0; warehouseId = [long]$finWh }

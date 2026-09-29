@@ -100,14 +100,14 @@ public class OutsourceOrderDeliveryServiceImpl
     private final SupplierTypeRefMapper supplierTypeRefMapper;
     private final ProductService productService;
     private final com.beichen.erp.warehouse.service.CostService costService;
-    // 2026-09-25 P1-1：无单加工退货不再拆料还仓/按料价值冲应付，BOM 快照还料与 FIFO 计价依赖已随死代码移除
+    // 2026-09-25 P1-1：工厂售后（原无单加工退货）不再拆料还仓/按料价值冲应付，BOM 快照还料与 FIFO 计价依赖已随死代码移除
     /** 加工退货详情：按库存流水回溯「还回了哪些料」（related_delivery_id = 本记录） */
     private final WarehouseStockLogMapper stockLogMapper;
     /** 加工退货详情：本记录产生的应付冲减（source_id = 本记录、source_bill_type = OUTSOURCE_DELIVERY） */
     private final FinancePayableMapper payableMapper;
     /** 加工退货台账「返回进度」（2026-09-27）：按来源退货单聚合已审核加工返回单数量 */
     private final OutsourceReturnBackMapper returnBackMapper;
-    /** BOM 快照（2026-09-27）：无单加工退货建单时解析快照 + 台账/详情回显版本号 */
+    /** BOM 快照（2026-09-27）：工厂售后（原无单加工退货）建单时解析快照 + 台账/详情回显版本号 */
     private final com.beichen.erp.outsource.mapper.BomSnapshotMapper bomSnapshotMapper;
     private final com.beichen.erp.outsource.mapper.BomSnapshotItemMapper bomSnapshotItemMapper;
     /**
@@ -297,7 +297,7 @@ public class OutsourceOrderDeliveryServiceImpl
     /** 新增交货记录 */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Map<String, Object> createDelivery(OutsourceOrderDelivery delivery, boolean forceDelivery) {
+    public Map<String, Object> createDelivery(OutsourceOrderDelivery delivery, boolean forceDelivery, boolean overReceipt) {
         log.info("【调试】delivery: aQty={}, bQty={}, cQty={}, defectQty={}, quantity={}, productId={}",
                 delivery.getAQty(), delivery.getBQty(), delivery.getCQty(), delivery.getDefectQty(),
                 delivery.getQuantity(), delivery.getProductId());
@@ -327,8 +327,15 @@ public class OutsourceOrderDeliveryServiceImpl
                 delivery.getOrderId(), matchedProduct.getId(), masterId, matchedProduct.getProductName(),
                 delivery.getQuantity(), delivery.getWarehouseId(), forceDelivery);
 
-        // 数量上限校验放在缺料检查之前：forceDelivery 不得豁免数量超订单
-        assertDeliveryWithinOrderQty(delivery.getOrderId(), matchedProduct, delivery.getQuantity(), null);
+        // 数量口径校验放在缺料检查之前：forceDelivery（缺料强出）**不豁免**数量超订单。
+        // 2026-09-29（用户口径「加工订单和物料订单都可以超量收货」）：超收不再硬拒 ——
+        // 未确认（overReceipt=false）时返回**待确认**响应（沿用缺料确认那一套前端交互，不落库）；
+        // 确认后落库并把 over_receipt 置 1，审核期 assertNotOverPlanned 对已确认的行放行。
+        String overDetail = overOrderQtyDetail(delivery.getOrderId(), matchedProduct, delivery.getQuantity(), null);
+        if (overDetail != null) {
+            if (!overReceipt) return overReceiptResp(matchedProduct, overDetail);
+            delivery.setOverReceipt(1);
+        }
 
         // 加载物料需求
         List<MaterialReq> materialReqs = loadMaterialRequirements(matchedProduct);
@@ -376,15 +383,17 @@ public class OutsourceOrderDeliveryServiceImpl
         if (order == null && !Boolean.TRUE.equals(delivery.getIsReverse()))
             throw new BusinessException("收货记录缺少加工单，无法审核");
 
-        // F2-2（2026-09-18 审核修复）：普通交货复核「累计交货 ≤ 计划数量」（退不良为负数，天然不会超，不拦）
-        if (!Boolean.TRUE.equals(delivery.getIsReverse())) {
+        // F2-2（2026-09-18 审核修复）：普通交货复核「累计交货 ≤ 计划数量」（退不良为负数，天然不会超，不拦）。
+        // 2026-09-29（用户口径「加工订单和物料订单都可以超量收货」）：录入时已二次确认超收的行
+        // （over_receipt=1）**放行**；未确认的行仍拦 —— 本道继续兜住"直改库 / 并发叠加"。
+        if (!Boolean.TRUE.equals(delivery.getIsReverse()) && !isOverConfirmed(delivery.getOverReceipt())) {
             assertNotOverPlanned(order, delivery);
         }
 
         if (Boolean.TRUE.equals(delivery.getIsReverse())) {
             // P3-1 收敛（2026-09-25）：已结单的加工单禁止审核红冲（防"先建草稿、后结单、再审核"绕过创建拦截）
             if (order != null && OutsourceOrderStatus.FINISHED.getCode().equals(order.getStatus()))
-                throw new BusinessException("该加工单已结单，账务已清算；如需退货请走「无单加工退货」办理（不关联加工单）");
+                throw new BusinessException("该加工单已结单，账务已清算；如需退货请走「工厂售后（原无单加工退货）」办理（不关联加工单）");
             // P3-1（2026-09-25）：有单红冲**审核期**额度复核 —— 修复并发双草稿窗口（建草稿校验与审核落账
             // 之间无复核：两人并发建草稿可双双过审造成超退）。对加工单行 FOR UPDATE 串行化后，
             // 按**建草稿同一口径**（returnDefect :508-520）复核"累计退货 ≤ 已收（净额）"。无单红冲无聚合对象，不适用。
@@ -437,7 +446,7 @@ public class OutsourceOrderDeliveryServiceImpl
                 OutsourceOrderDelivery::getStatus, DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode())) {
             throw new BusinessException("仅已审核状态可以反审核");
         }
-        // 2026-09-21：与 audit 同口径 —— 无单加工退货没有 order，走无单逆向分支
+        // 2026-09-21：与 audit 同口径 —— 工厂售后（原无单加工退货）没有 order，走无单逆向分支
         OutsourceOrder order = delivery.getOrderId() == null ? null : orderService.getById(delivery.getOrderId());
         if (order == null && delivery.getOrderId() != null) throw new BusinessException("加工单不存在");
         if (order == null && !Boolean.TRUE.equals(delivery.getIsReverse()))
@@ -447,6 +456,14 @@ public class OutsourceOrderDeliveryServiceImpl
             // P3-1 收敛（2026-09-25）：已结单的加工单禁止反审核红冲（回滚会动到结单清算过的账）
             if (order != null && OutsourceOrderStatus.FINISHED.getCode().equals(order.getStatus()))
                 throw new BusinessException("该加工单已结单，不可反审核红冲");
+            // 2026-09-28（详情页补「反审核」的配套闸门，用户口径「加工退货详情需要有审核和反审核功能」）：
+            // **已登记「加工返回」就不能反审核** —— 工厂已把货送回时，在厂成品（PRODUCT_DEFECT）已被核销，
+            // 逆回会造成账实错位；且无单逆向走严格扣减、只报"库存不足"，文案含糊易误导。
+            // 口径：先逐条撤销返回，再反审核（与「维修返回」的撤销口径对称）。
+            BigDecimal returnedQty = returnedQtyBySource(java.util.List.of(id)).getOrDefault(id, BigDecimal.ZERO);
+            if (returnedQty.compareTo(BigDecimal.ZERO) > 0)
+                throw new BusinessException("该加工退货已有「加工返回」记录（已返回 "
+                        + returnedQty.stripTrailingZeros().toPlainString() + "），请先在详情页逐条撤销返回后再反审核");
             if (order == null) revertDefectStockNoOrder(delivery);
             else revertDefectStock(order, delivery);
         } else {
@@ -465,7 +482,7 @@ public class OutsourceOrderDeliveryServiceImpl
     /** 修改交货记录 — 仅草稿态可编辑，不触碰库存 */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Map<String, Object> updateDelivery(Long id, OutsourceOrderDelivery delivery, boolean forceDelivery) {
+    public Map<String, Object> updateDelivery(Long id, OutsourceOrderDelivery delivery, boolean forceDelivery, boolean overReceipt) {
         OutsourceOrderDelivery old = baseMapper.selectById(id);
         if (old == null) throw new BusinessException("收货记录不存在");
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) {
@@ -486,8 +503,12 @@ public class OutsourceOrderDeliveryServiceImpl
         delivery.setProductMasterId(orderService.resolveProductMasterId(matchedProduct));
         // F7-58（2026-09-20）：与新增**同一套**入参校验（数量 > 0 · 等级和 == 总量 · 仓库必填）
         validateDraftPayload(delivery);
-        // 数量上限校验（排除自身），口径同新增
-        assertDeliveryWithinOrderQty(old.getOrderId(), matchedProduct, delivery.getQuantity(), id);
+        // 数量口径（排除自身）同新增：超收需先二次确认（overReceipt=true），确认后落 over_receipt=1
+        String overDetail = overOrderQtyDetail(old.getOrderId(), matchedProduct, delivery.getQuantity(), id);
+        if (overDetail != null) {
+            if (!overReceipt) return overReceiptResp(matchedProduct, overDetail);
+            delivery.setOverReceipt(1);
+        }
 
         // 草稿态编辑不触碰库存，仅更新记录本身与审核状态（保持草稿）
         delivery.setId(id);
@@ -536,9 +557,9 @@ public class OutsourceOrderDeliveryServiceImpl
         OutsourceOrder order = orderService.getById(orderId);
         if (order == null) throw new BusinessException("加工单不存在");
         // P3-1 收敛（2026-09-25）：已结单（FINISHED）的加工单账务已清算，禁止再发起有单红冲
-        //（结单后再还料/冲应付会破坏清算结果）；结单后退货请走「无单加工退货」（不关联加工单，与清算账解耦）。
+        //（结单后再还料/冲应付会破坏清算结果）；结单后退货请走「工厂售后（原无单加工退货）」（不关联加工单，与清算账解耦）。
         if (OutsourceOrderStatus.FINISHED.getCode().equals(order.getStatus()))
-            throw new BusinessException("该加工单已结单，账务已清算；如需退货请走「无单加工退货」办理（不关联加工单）");
+            throw new BusinessException("该加工单已结单，账务已清算；如需退货请走「工厂售后（原无单加工退货）」办理（不关联加工单）");
         if (!OutsourceOrderStatus.PRODUCING.getCode().equals(order.getStatus()))
             throw new BusinessException("只有生产中的加工单可以做加工退货");
 
@@ -702,7 +723,7 @@ public class OutsourceOrderDeliveryServiceImpl
         d.setDeliveryDate(LocalDate.now());
         Object remark = body.get("remark");
         d.setRemark(remark != null && !remark.toString().isBlank() ? remark.toString() : "加工退货（不关联加工单）");
-        // 2026-09-27（用户口径）：无单退货没有加工单 ⇒ 把 **BOM 快照落到本记录**上，
+        // 2026-09-27（用户口径）：工厂售后没有加工单 ⇒ 把 **BOM 快照落到本记录**上，
         //   工厂修好送回时（加工返回单）据此限定「实际用料」的可选范围。
         //   解析顺序：① 前端指定（人工换版本）→ ② **该产品在该工厂最近一次被加工单用过的快照** → ③ 留空
         //   （留空 = 返回时按"现场解析"兜底；仍解析不到 ⇒ 可选池为空 ⇒ 用料只能留空，不卡流程）。
@@ -711,7 +732,7 @@ public class OutsourceOrderDeliveryServiceImpl
         if (bomSnapshotId == null) bomSnapshotId = recentOrderSnapshotId(factoryId, masterId);
         d.setBomSnapshotId(bomSnapshotId);
         baseMapper.insert(d);
-        log.info("无单加工退货已保存(草稿): id={}, factoryId={}, masterId={}, qualityType={}, qty={}, bomSnapshotId={}",
+        log.info("工厂售后（原无单加工退货）已保存(草稿): id={}, factoryId={}, masterId={}, qualityType={}, qty={}, bomSnapshotId={}",
                 d.getId(), factoryId, masterId, qualityType, defectQty, bomSnapshotId);
     }
 
@@ -763,7 +784,7 @@ public class OutsourceOrderDeliveryServiceImpl
     }
 
     /**
-     * 「新增无单加工退货」页的 BOM 快照候选（2026-09-27）：该产品在该工厂**用过的快照 + 版本/来源**，
+     * 「新增工厂售后（原无单加工退货）」页的 BOM 快照候选（2026-09-27）：该产品在该工厂**用过的快照 + 版本/来源**，
      * 按最近使用的加工单倒序 ⇒ 第一项即默认值（与建单解析同口径）。
      */
     @Override
@@ -783,7 +804,7 @@ public class OutsourceOrderDeliveryServiceImpl
     }
 
     /**
-     * 无单加工退货列表。
+     * 工厂售后（原无单加工退货）列表。
      * <p>⚠️ **兼容保留**：前端已改用 {@link #pageDefectReturns}（有单+无单一台台账）；
      * 本方法供既有回归脚本与外部调用继续使用。</p>
      */
@@ -845,7 +866,7 @@ public class OutsourceOrderDeliveryServiceImpl
             if (sts.size() == 1) qw.eq(OutsourceOrderDelivery::getStatus, sts.get(0));
             else if (sts.size() > 1) qw.in(OutsourceOrderDelivery::getStatus, sts);
         }
-        // 返回进度页签（2026-09-27：「无单退货」的 待返回 / 已返回完）——直接下推到 SQL，保证分页正确：
+        // 返回进度页签（2026-09-27：「工厂售后」的 待返回 / 已返回完）——直接下推到 SQL，保证分页正确：
         // 已返回量 = Σ(已审核加工返回单，按来源退货单) ⇒ 与 PENDING/DONE 判定同源（见 RETURNED_QTY_SQL）。
         if (returnProgress != null && !returnProgress.isBlank()) {
             if ("DONE".equalsIgnoreCase(returnProgress)) {
@@ -928,7 +949,7 @@ public class OutsourceOrderDeliveryServiceImpl
             m.put("productName", p != null ? p.getName() : "");
             m.put("sku", p != null ? p.getSku() : "");
             m.put("qualityType", d.getQualityType());
-            // 2026-09-27：无单退货的 BOM 快照（返回时「实际用料」范围的依据）——台账回显版本/来源
+            // 2026-09-27：工厂售后的 BOM 快照（返回时「实际用料」范围的依据）——台账回显版本/来源
             m.put("bomSnapshotId", d.getBomSnapshotId());
             BomSnapshot rowSnap = d.getBomSnapshotId() != null ? pageSnaps.get(d.getBomSnapshotId()) : null;
             if (rowSnap != null) {
@@ -1017,8 +1038,8 @@ public class OutsourceOrderDeliveryServiceImpl
      *   <li>扣减的成品：就是记录自身的 产品/规格/数量/扣减仓库（无需回溯）；</li>
      *   <li>还回工厂委外仓的物料：按库存流水回溯（`related_delivery_id = 本记录`、
      *       `related_bill_type = OUTSOURCE_DEFECT`、只取审核动作 `OUTSOURCE_DEFECT_RETURN`）；
-     *       ——**仅无单退货（GTW-）会为空**：该口径不拆 BOM 还料（见 P1-1），料在「加工返回单」按实际用料处理；</li>
-     *   <li>{@code outsourceIn}：**无单退货**独有的「成品转移进委外仓」腿（`OUTSOURCE_DEFECT_IN`），
+     *       ——**仅工厂售后（GTW-）会为空**：该口径不拆 BOM 还料（见 P1-1），料在「加工返回单」按实际用料处理；</li>
+     *   <li>{@code outsourceIn}：**工厂售后**独有的「成品转移进委外仓」腿（`OUTSOURCE_DEFECT_IN`），
      *       给出还入的委外仓 / 数量 / 形态；有单红冲没有这条腿 ⇒ 前端按字段有无显示；</li>
      *   <li>冲减的应付金额：`finance_payable` 里 `source_id = 本记录`、`source_bill_type = OUTSOURCE_DELIVERY`
      *       （负数=冲减应付）。</li>
@@ -1053,7 +1074,7 @@ public class OutsourceOrderDeliveryServiceImpl
         m.put("productName", p != null ? p.getName() : "");
         m.put("sku", p != null ? p.getSku() : "");
         m.put("qualityType", d.getQualityType());
-        // 2026-09-27：无单退货的 BOM 快照（返回时「实际用料」可选范围的依据；有单红冲没有快照 ⇒ 为空）
+        // 2026-09-27：工厂售后的 BOM 快照（返回时「实际用料」可选范围的依据；有单红冲没有快照 ⇒ 为空）
         m.put("bomSnapshotId", d.getBomSnapshotId());
         BomSnapshot dSnap = d.getBomSnapshotId() != null ? bomSnapshotMapper.selectById(d.getBomSnapshotId()) : null;
         if (dSnap != null) {
@@ -1089,7 +1110,7 @@ public class OutsourceOrderDeliveryServiceImpl
                 mm.put("warehouseName", warehouseNameOf(log.getWarehouseId()));
                 materials.add(mm);
             }
-            // ②' 无单退货的「成品转移进委外仓」腿（2026-09-27 用户口径「详情要能看出成品/料到底落在哪个委外仓」）：
+            // ②' 工厂售后的「成品转移进委外仓」腿（2026-09-27 用户口径「详情要能看出成品/料到底落在哪个委外仓」）：
             // 有单红冲**没有**这条腿（它只扣成品 + BOM 还料 + 冲应付）⇒ 查不到记录时前端不显示该行。
             // ⚠️ 定位键用 **related_bill_id** 而不是 related_delivery_id：成品侧 changeStock 的第 8 参就是
             //    relatedBillId（`related_delivery_id` 是**物料**流水专用列，物料还料那条腿才用它，见上面 ② 的查询）。
@@ -1138,7 +1159,7 @@ public class OutsourceOrderDeliveryServiceImpl
     }
 
     /**
-     * 无单加工退货审核（2026-09-25 P1-1 口径，用户确认）：
+     * 工厂售后（原无单加工退货）审核（2026-09-25 P1-1 口径，用户确认）：
      * 退回成品以「成品（加工退货）」形态（stock_form=PRODUCT_DEFECT）转移进**加工厂委外仓**；
      * **不分解料**（原"按最新 BOM 快照拆料还回"已删除——与退货时点无关，BOM 改过即拆错）、**不动应付**（原按还料 FIFO 价值的负应付已删除）。
      * <p>腿① 我方仓扣成品（普通成品行，形态 MATERIAL，与现状一致）；腿② 委外仓入成品（PRODUCT_DEFECT 形态，可与同仓同品质的普通成品行并存不串行）。</p>
@@ -1163,10 +1184,10 @@ public class OutsourceOrderDeliveryServiceImpl
         stockService.changeStock(factoryWhId, masterId, defectQty,
                 StockChangeType.OUTSOURCE_DEFECT_IN, billNo, RelatedBillType.OUTSOURCE_DEFECT,
                 "", delivery.getId(), qualityType, WarehouseStock.FORM_PRODUCT_DEFECT);
-        log.info("无单加工退货：成品转移进委外仓 仓={} masterId={} +{} 形态=PRODUCT_DEFECT 单据={}", factoryWhId, masterId, defectQty, billNo);
+        log.info("工厂售后（原无单加工退货）：成品转移进委外仓 仓={} masterId={} +{} 形态=PRODUCT_DEFECT 单据={}", factoryWhId, masterId, defectQty, billNo);
     }
 
-    /** 无单加工退货反审核：与审核**严格对称**（F7-64 纪律：等量逆回，不夹零）——核销委外仓成品行 + 恢复我方仓成品 */
+    /** 工厂售后（原无单加工退货）反审核：与审核**严格对称**（F7-64 纪律：等量逆回，不夹零）——核销委外仓成品行 + 恢复我方仓成品 */
     private void revertDefectStockNoOrder(OutsourceOrderDelivery delivery) {
         BigDecimal defectQty = delivery.getQuantity().abs();
         Long warehouseId = delivery.getWarehouseId();
@@ -1189,7 +1210,7 @@ public class OutsourceOrderDeliveryServiceImpl
                 "", delivery.getId(), qualityType, WarehouseStock.FORM_PRODUCT_DEFECT);
     }
 
-    /** 无单加工退货的库存流水/应付「相关单据号」：用红冲记录自己的单号（GTW-）；存量无 code 的旧记录兜底"加工退货#id" */
+    /** 工厂售后（原无单加工退货）的库存流水/应付「相关单据号」：用红冲记录自己的单号（GTW-）；存量无 code 的旧记录兜底"加工退货#id" */
     private String noOrderBillNo(OutsourceOrderDelivery delivery) {
         return redFlushBillNo(delivery);
     }
@@ -1712,11 +1733,22 @@ public class OutsourceOrderDeliveryServiceImpl
     }
 
     /**
-     * 校验「已交货 + 本次」不超过订单产品数量。
-     * <p>forceDelivery 只豁免"物料库存不足仍继续出库"，<b>不豁免数量上限</b>——
-     * 否则可以给 10 件的订单建 999 件的交货单，审核后凭空产出库存并多算加工费。</p>
-     * <p>统计口径与 {@link #summary(Long)} 一致：同订单+同产品、交货类型为普通交货、
-     * 未作废（含草稿，避免多张草稿叠加超量）；excludeId 供编辑场景排除自身。</p>
+     * 数量口径：返回「净已收 + 本次超出订单产品数量」的说明串；未超出返回 {@code null}。
+     * <p>forceDelivery 只豁免"物料库存不足仍继续出库"，<b>不豁免</b>数量口径。</p>
+     * <p><b>2026-09-29 用户口径「加工订单和物料订单都可以超量收货」</b>：本方法由原来的
+     * {@code assertDeliveryWithinOrderQty}（超量直接抛错）改为**只判定、不抛错** ——
+     * 调用方（create/update）拿到说明串后：未确认 ⇒ 返回"待确认超收"响应（前端二次确认，不落库）；
+     * 已确认（{@code overReceipt=true}）⇒ 落库并把 {@code over_receipt} 置 1。
+     * 审核期的 {@link #assertNotOverPlanned} 对已确认的行放行、未确认的行仍拦。</p>
+     * <p>统计口径与 {@link #summary(Long)} 一致：同订单+同产品、未作废（含草稿，避免多张草稿叠加超量）；
+     * excludeId 供编辑场景排除自身。</p>
+     * <p><b>2026-09-29（用户口径，加工单 WO-20260928010 实测报错）</b>：可收上限必须按<b>净已收</b>算 ——
+     * 退不良/退货的红冲行（{@code delivery_type=DEFECT_RETURN}、{@code quantity} 为负、{@code is_reverse=1}）
+     * 要把额度**还回去**。原实现只累加 {@code delivery_type=DELIVERY} 且 quantity&gt;0 的行 ⇒
+     * "收了 100 又退了 100"的单仍被认为已收满 100，第二批货永远收不进来
+     * （报「累计收货量(100 + 本次10 = 110)超出订单数量(100)」）。
+     * 该口径与 {@link #summary(Long)}（全量带符号求和，界面「已收/剩余」早就是净额）以及审核期
+     * {@link #assertNotOverPlanned}（同样是带符号求和）**三者一致**，本次只把建草稿这道补齐。</p>
      */
     /**
      * F7-58（2026-09-20）：**草稿写入口的共用入参校验** —— {@code createDelivery} 与 {@code updateDelivery}
@@ -1745,16 +1777,16 @@ public class OutsourceOrderDeliveryServiceImpl
             throw new BusinessException("入库仓库不能为空");
     }
 
-    private void assertDeliveryWithinOrderQty(Long orderId, OutsourceOrderProduct product,
-                                              BigDecimal qty, Long excludeId) {
+    private String overOrderQtyDetail(Long orderId, OutsourceOrderProduct product,
+                                      BigDecimal qty, Long excludeId) {
         BigDecimal orderQty = product.getQuantity() != null ? product.getQuantity() : BigDecimal.ZERO;
-        if (orderQty.compareTo(BigDecimal.ZERO) <= 0) return;
+        if (orderQty.compareTo(BigDecimal.ZERO) <= 0) return null;
         List<OutsourceOrderDelivery> list = baseMapper.selectList(
                 new LambdaQueryWrapper<OutsourceOrderDelivery>()
                         .eq(OutsourceOrderDelivery::getOrderId, orderId)
-                        .eq(OutsourceOrderDelivery::getDeliveryType, DeliveryType.DELIVERY.getCode())
                         .ne(OutsourceOrderDelivery::getStatus, DocStatus.CANCELLED.getCode()));
-        BigDecimal delivered = BigDecimal.ZERO;
+        BigDecimal delivered = BigDecimal.ZERO;   // 普通交货（正数）
+        BigDecimal returned = BigDecimal.ZERO;    // 退货/退不良红冲（负数量取其绝对值）
         for (OutsourceOrderDelivery d : list) {
             if (excludeId != null && excludeId.equals(d.getId())) continue;
             // F7-59（2026-09-20）：关联判定统一为 belongsToProduct（**产品主数据ID 优先、产品行ID 兜底**），
@@ -1762,15 +1794,48 @@ public class OutsourceOrderDeliveryServiceImpl
             // 原实现用 `.eq(productId, product.getId())`（**只按产品行ID**）⇒ 加工单编辑会重建产品行 ⇒
             // 历史交货记录的 product_id 是旧行ID ⇒ 累计已交量算不到 ⇒ **可重复交满/超交**。
             if (!belongsToProduct(d, product)) continue;
-            if (d.getQuantity() != null && d.getQuantity().signum() > 0) delivered = delivered.add(d.getQuantity());
+            BigDecimal q = d.getQuantity() != null ? d.getQuantity() : BigDecimal.ZERO;
+            // 2026-09-29：红冲行（quantity<0 或 is_reverse=1）算作"退货"，从额度里扣掉 ⇒ 上限按净额判。
+            if (q.signum() < 0 || Boolean.TRUE.equals(d.getIsReverse())) returned = returned.add(q.abs());
+            else delivered = delivered.add(q);
         }
+        BigDecimal net = delivered.subtract(returned);
         BigDecimal thisQty = qty != null ? qty : BigDecimal.ZERO;
-        BigDecimal total = delivered.add(thisQty);
-        if (total.compareTo(orderQty) > 0) {
-            throw new BusinessException("累计收货量(" + delivered.stripTrailingZeros().toPlainString()
-                    + " + 本次" + thisQty.stripTrailingZeros().toPlainString()
-                    + " = " + total.stripTrailingZeros().toPlainString()
-                    + ")超出订单数量(" + orderQty.stripTrailingZeros().toPlainString() + ")，请调整收货数量");
-        }
+        BigDecimal total = net.add(thisQty);
+        if (total.compareTo(orderQty) <= 0) return null;
+        // 说明里带上「已收 − 退货」的净额推导，用户一眼能看出额度为什么不是毛收货量；
+        // ⚠️ 必须保留「超出订单数量」字样 —— verify-fix-f7-59-60-77.ps1 / verify-order-receive-net-cap.ps1
+        //    按该子串判定"超量（现在=待确认超收）"。
+        String detail = returned.signum() > 0
+                ? (plainQty(delivered) + " − 退货" + plainQty(returned) + " = 净" + plainQty(net)
+                    + " + 本次" + plainQty(thisQty) + " = " + plainQty(total))
+                : (plainQty(net) + " + 本次" + plainQty(thisQty) + " = " + plainQty(total));
+        return "累计收货量(" + detail + ")超出订单数量(" + plainQty(orderQty) + ")";
+    }
+
+    /**
+     * 超收**待确认**响应（2026-09-29 用户口径「加工订单和物料订单都可以超量收货」）：
+     * 与缺料确认同一形状（{@code canProceed=false} + {@code message}），但用 {@code overReceipt=true}
+     * 标记"这是超量待确认"（前端据此弹「确认超收」，确认后带 {@code overReceipt=true} 重提）。
+     * <p>刻意不落库：未确认的超收单不该在库里留下痕迹（与 item/handler 一致）。</p>
+     */
+    private Map<String, Object> overReceiptResp(OutsourceOrderProduct product, String detail) {
+        String pn = product.getProductName() != null ? product.getProductName() : ("#" + product.getId());
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("canProceed", false);
+        resp.put("overReceipt", true);
+        resp.put("message", detail + "，是否确认超收？");
+        resp.put("productName", pn);
+        return resp;
+    }
+
+    /** 超收已确认？（over_receipt=1 表示录入时用户已二次确认超收 ⇒ 审核期不再复核数量口径） */
+    private static boolean isOverConfirmed(Integer flag) {
+        return flag != null && flag == 1;
+    }
+
+    /** 数量展示（去尾零，避免报错里出现 100.000000） */
+    private static String plainQty(BigDecimal v) {
+        return (v == null ? BigDecimal.ZERO : v).stripTrailingZeros().toPlainString();
     }
 }

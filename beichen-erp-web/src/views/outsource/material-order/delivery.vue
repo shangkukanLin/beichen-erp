@@ -29,7 +29,8 @@ const deliveries = ref<any[]>([])
 
 const totalQuantity = computed(() => items.value.reduce((s: number, it: any) => s + (Number(it.orderQuantity) || 0), 0))
 const deliveredQuantity = computed(() => items.value.reduce((s: number, it: any) => s + (Number(it.receivedQuantity) || 0) - (Number(it.defectReturnedQty) || 0), 0))
-const remainingQuantity = computed(() => totalQuantity.value - deliveredQuantity.value)
+/** 剩余数量（2026-09-29 用户口径「可以超量收货」+ 剩余封顶）：超收时按 0 显示，不给负数 */
+const remainingQuantity = computed(() => Math.max(0, totalQuantity.value - deliveredQuantity.value))
 const deliveryProgress = computed(() => totalQuantity.value ? Math.min(100, Math.round(deliveredQuantity.value / totalQuantity.value * 100)) : 0)
 
 /** 只有收货中的订单可新增收货（退不良在收货中/已结单都允许，与后端一致） */
@@ -70,20 +71,47 @@ function openReceive() {
   recItems.value = items.value.map((it: any) => ({
     itemId: it.id, materialName: it.materialName, orderQuantity: it.orderQuantity,
     receivedQuantity: it.receivedQuantity, defectReturnedQty: it.defectReturnedQty, quantity: undefined as any,
-    // F7-66（2026-09-19）：收货数量上限 = 下单数 − 已收数（服务端还会再扣掉"在途草稿"，此处仅作 UI 提示；
+    // 2026-09-29（用户口径「物料订单也可以超量收货」）：此值只作**提示**（不设输入上限）—— 服务端仍按
+    // 「下单数 − 已收数 − 在途草稿」判超量，但超量不再硬拒：返回待确认响应，用户二次确认后按实收落库。
+    // F7-66（2026-09-19）：剩余可收 = 下单数 − 已收数（服务端还会再扣掉"在途草稿"，此处仅作 UI 提示；
     // 精确拦截以服务端为准）。原先输入框无上限 ⇒ 正常操作即可超收。
     maxReceive: Math.max(0, Number(it.orderQuantity || 0) - Number(it.receivedQuantity || 0)),
     components: (it.components || []).map((c: any) => ({ childMaterialName: c.childMaterialName, childUnit: c.childUnit, stockQuantity: c.stockQuantity || 0, quantity: c.quantity || 1 }))
   }))
   recVisible.value = true
 }
-async function handleReceive(force?: boolean) {
+async function handleReceive(force?: boolean, overReceipt?: boolean) {
   if (!recWarehouseId.value) { ElMessage.warning('请选择收货仓库'); return }
   const data = recItems.value.filter((r: any) => r.quantity && Number(r.quantity) > 0)
   if (data.length === 0) { ElMessage.warning('请输入收货数量'); return }
   recSaving.value = true
   try {
-    const res = await request.post<any, any>(`/outsource/material-order/${id}/receive`, { warehouseId: recWarehouseId.value, items: data, force: force || false })
+    // 2026-09-29（用户口径「物料订单也可以超量收货」）：overReceipt=true = 用户已确认超收 ⇒ 后端放行并落标记
+    const res = await request.post<any, any>(`/outsource/material-order/${id}/receive`,
+      { warehouseId: recWarehouseId.value, items: data, force: force || false, overReceipt: overReceipt || false })
+    // 超收提示（2026-09-29）：与缺料提示同一套交互 —— 确认后带 overReceipt=true 重提，后端才建草稿
+    if (res && res._over) {
+      const overs = (res.overs || []) as any[]
+      let html = '<div style="margin-bottom:8px">以下物料本次收货数量将超出「下单数 − 已收」，是否确认超收？</div>'
+      html += '<table style="width:100%;border-collapse:collapse;font-size:var(--app-font-base)">'
+      html += '<tr style="background:var(--app-bg-hover)"><th style="padding:6px;border:1px solid var(--app-border-light);text-align:left">物料</th><th style="padding:6px;border:1px solid var(--app-border-light)">下单数</th><th style="padding:6px;border:1px solid var(--app-border-light)">已收</th><th style="padding:6px;border:1px solid var(--app-border-light)">剩余可收</th><th style="padding:6px;border:1px solid var(--app-border-light)">本次收货</th><th style="padding:6px;border:1px solid var(--app-border-light)">超出</th></tr>'
+      for (const o of overs) {
+        html += `<tr><td style="padding:6px;border:1px solid var(--app-border-light)">${o.materialName || ''}</td>`
+        html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center">${o.ordered || 0}</td>`
+        html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center">${o.received || 0}</td>`
+        html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center">${o.remain || 0}</td>`
+        html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-warning)">${o.request || 0}</td>`
+        html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-danger);font-weight:600">${o.over || 0}</td></tr>`
+      }
+      html += '</table>'
+      html += '<div style="margin-top:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">确认后按实收数量入库并生成应付（超收部分同样记账）</div>'
+      recSaving.value = false
+      try {
+        await ElMessageBox.confirm(html, '超收确认', { confirmButtonText: '确认超收', cancelButtonText: '取消', type: 'warning', dangerouslyUseHTMLString: true })
+      } catch { return }
+      handleReceive(force, true)
+      return
+    }
     // 缺料提示：确认后重新提交缺料收货
     if (res && res._shortage) {
       const shortages = (res.shortages || []) as any[]
@@ -102,7 +130,7 @@ async function handleReceive(force?: boolean) {
       try {
         await ElMessageBox.confirm(html, '缺料提示', { confirmButtonText: '确认缺料收货', cancelButtonText: '取消', type: 'warning', dangerouslyUseHTMLString: true })
       } catch { return }
-      handleReceive(true)
+      handleReceive(true, overReceipt)
       return
     }
     // 收货草稿创建成功后自动审核（审核才扣库存/生成应付），保持一步到位体验。
@@ -313,9 +341,11 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         </el-table-column>
         <el-table-column prop="materialName" label="物料" min-width="140" />
         <el-table-column label="已收" width="70" align="right"><template #default="{ row }">{{ (row.receivedQuantity || 0) - (row.defectReturnedQty || 0) }}</template></el-table-column>
-        <el-table-column label="本次收货" width="140"><template #default="{ row }"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" :max="row.maxReceive" style="width:100%" placeholder="数量" /></template></el-table-column>
+        <!-- 2026-09-29（用户口径「物料订单也可以超量收货」）：输入框**不再设上限**（原 :max="row.maxReceive"）；
+             超量改由提交后的「超收确认」二次确认把关（见 handleReceive），"剩余可收"仅作提示、超了标红。 -->
+        <el-table-column label="本次收货" width="140"><template #default="{ row }"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" style="width:100%" placeholder="数量" /></template></el-table-column>
         <el-table-column prop="orderQuantity" label="下单数" width="80" />
-        <el-table-column label="剩余可收" width="80" align="right"><template #default="{ row }">{{ row.maxReceive }}</template></el-table-column>
+        <el-table-column label="剩余可收" width="80" align="right"><template #default="{ row }"><span :style="{ color: Number(row.quantity || 0) > Number(row.maxReceive || 0) ? 'var(--app-color-danger)' : '' }">{{ row.maxReceive }}</span></template></el-table-column>
       </el-table>
       <template #footer><el-button @click="recVisible = false">取消</el-button><el-button type="primary" :loading="recSaving" @click="handleReceive()">确认收货</el-button></template>
     </el-dialog>

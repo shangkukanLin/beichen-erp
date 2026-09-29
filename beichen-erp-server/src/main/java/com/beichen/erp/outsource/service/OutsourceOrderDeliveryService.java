@@ -43,7 +43,7 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
      * @param pageNo 页码（从 1 开始）
      * @param size   每页条数
      * @param code   单号模糊筛选（可空）
-     * @param status 加工单状态：PRODUCING（收货中，缺省）/ FINISHED（已结单）；空则按 PRODUCING
+     * @param status 加工单状态：PRODUCING（生产中，缺省）/ FINISHED（已结单）；空则按 PRODUCING
      */
     Map<String, Object> pageOrders(Integer pageNo, Integer size, String code, String status);
 
@@ -51,8 +51,11 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
      * 新增交货记录（草稿态存盘，不落账）
      *
      * @param forceDelivery 缺料时是否强制继续（false 则返回缺料清单不落库）
+     * @param overReceipt   2026-09-29 用户口径「加工订单和物料订单都可以超量收货」：数量超订单时，
+     *                      false 返回"待确认超收"响应（不落库，前端弹二次确认）、
+     *                      true 表示用户已确认 ⇒ 落库并把 {@code over_receipt} 置 1（审核期不再复核数量）
      */
-    Map<String, Object> createDelivery(OutsourceOrderDelivery delivery, boolean forceDelivery);
+    Map<String, Object> createDelivery(OutsourceOrderDelivery delivery, boolean forceDelivery, boolean overReceipt);
 
     /** 审核：草稿态生效，扣减物料/成品入库/生成应付（退不良则为冲销） */
     void audit(Long id);
@@ -60,8 +63,8 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
     /** 反审核：已审核态回滚库存与应付，回到草稿 */
     void unaudit(Long id);
 
-    /** 修改交货记录（仅草稿态可编辑，不触碰库存） */
-    Map<String, Object> updateDelivery(Long id, OutsourceOrderDelivery delivery, boolean forceDelivery);
+    /** 修改交货记录（仅草稿态可编辑，不触碰库存）；overReceipt 口径同 {@link #createDelivery} */
+    Map<String, Object> updateDelivery(Long id, OutsourceOrderDelivery delivery, boolean forceDelivery, boolean overReceipt);
 
     /** 删除交货记录（仅草稿态可删除） */
     void deleteDelivery(Long id);
@@ -85,7 +88,7 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
     void returnDefectNoOrder(Map<String, Object> body);
 
     /**
-     * 「新增无单加工退货」页的 **BOM 快照候选**（2026-09-27 用户口径）：该产品在该工厂**用过的快照**
+     * 「新增工厂售后（原无单加工退货）」页的 **BOM 快照候选**（2026-09-27 用户口径）：该产品在该工厂**用过的快照**
      * （按最近使用的加工单倒序 ⇒ 第一项即默认值），带 bomVersion / kind / itemCount。
      * <p>解析不到任何快照时返回空数组（页面提示"无 BOM：可建单，但返回时无法登记实际用料"）。</p>
      */
@@ -98,7 +101,7 @@ public interface OutsourceOrderDeliveryService extends IService<OutsourceOrderDe
     Long recentOrderSnapshotId(Long factoryId, Long productMasterId);
 
     /**
-     * 无单加工退货列表（按ID倒序）。
+     * 工厂售后（原无单加工退货）列表（按ID倒序）。
      * <p>⚠️ **兼容保留**：2026-09-21 起前端改用 {@link #pageDefectReturns} 把有单/无单展示在一张台账；
      * 本方法供既有回归脚本与外部调用继续使用，新代码请用台账端点。</p>
      */

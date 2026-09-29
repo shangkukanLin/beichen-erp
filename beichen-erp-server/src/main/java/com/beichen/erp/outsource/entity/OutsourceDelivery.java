@@ -64,6 +64,12 @@ public class OutsourceDelivery {
     private String attachUrl;
     /** 来源订单ID（关联 outsource_material_order.id，强关联回查，替代 remark LIKE 弱关联） */
     private Long sourceOrderId;
+    /**
+     * 是否**已确认超收**（2026-09-29 用户口径「加工订单和物料订单都可以超量收货」，仅收货单 RECEIVE 用）：
+     * 1=建单时用户已二次确认"收货数量超过该物料下单数量"⇒ 审核期不再复核「已收 + 本次 ≤ 下单数」；
+     * 0/NULL=未确认（未确认的草稿审核仍会被拦）。纯粹留痕，不参与库存/应付计算。
+     */
+    private Integer overReceipt;
     /** 企业ID（多租户隔离，自动填充） */
     /** 制单人（ID + 姓名快照）—— 2026-09-23 全站单据口径：详情页显示「制单人」，由 MetaObjectHandler 自动填充 */
     @TableField(fill = FieldFill.INSERT)

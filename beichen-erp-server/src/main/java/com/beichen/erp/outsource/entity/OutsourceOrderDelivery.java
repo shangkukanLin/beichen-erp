@@ -111,6 +111,13 @@ public class OutsourceOrderDelivery {
     private String status;
     /** 是否退不良红冲记录：true=退不良(数量为负) / false=普通交货，不再占用 status 字段 */
     private Boolean isReverse;
+    /**
+     * 是否**已确认超收**（2026-09-29 用户口径「加工订单和物料订单都可以超量收货」）：
+     * 1=录入时用户在二次确认里确认了"本次收货超出订单数量"⇒ 审核期不再复核「累计收货 ≤ 计划数量」；
+     * 0/NULL=未确认（超量需先确认，未确认的草稿审核仍会被拦）。
+     * <p>纯**单据留痕**，不参与库存/应付计算（超收的数量本身就按实收落账）。</p>
+     */
+    private Integer overReceipt;
     /** 企业ID（多租户隔离，自动填充） */
     private Long companyId;
     /** 创建时间 */
