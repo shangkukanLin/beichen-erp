@@ -58,6 +58,14 @@ public class SystemController {
     @Autowired private DataSource dataSource;
 
     /**
+     * F8-05（2026-09-30 审核批 D 修复）：整库导入也是**不可逆路径**，除 log 文件外再落一条
+     * {@code sys_operation_log}（该表此前只有读、无写入方 ⇒ "操作日志"页永远为空）。
+     * 注意：整库导入会清空 sys_operation_log 本身（它是全库替换），故本次留痕只在**失败/中止**时可查，
+     * 成功场景以 log 文件与导入前回滚点为准 —— 口径已记入报告 F8-17。
+     */
+    @Autowired private com.beichen.erp.system.mapper.OperationLogMapper operationLogMapper;
+
+    /**
      * 必须用 **Spring 容器里配置好的 ObjectMapper**（含 JavaTimeModule 等模块）。
      * <p>⚠️ 不要 `new ObjectMapper()`：裸实例没有 JavaTimeModule，序列化 JDBC 取出的
      * {@code LocalDateTime/Timestamp} 会抛 InvalidDefinitionException（2026-09-18 实测，
@@ -259,6 +267,21 @@ public class SystemController {
                 StpUtil.getLoginIdDefaultNull(), CompanyContext.get(),
                 file != null ? file.getOriginalFilename() : null, file != null ? file.getSize() : 0L,
                 confirmMissingTables);
+        // F8-05（2026-09-30 批 D 修复）：除 log 文件外再落一条库内操作日志（"操作日志"页此前永远为空）
+        try {
+            com.beichen.erp.system.entity.OperationLog opLog = new com.beichen.erp.system.entity.OperationLog();
+            opLog.setUsername(String.valueOf(StpUtil.getLoginIdDefaultNull()));
+            opLog.setModule("系统");
+            opLog.setOperation("整库导入");
+            opLog.setTarget(file != null ? file.getOriginalFilename() : null);
+            opLog.setDetail("开始：confirmMissingTables=" + confirmMissingTables
+                    + "，companyId=" + CompanyContext.get());
+            opLog.setCompanyId(CompanyContext.get());
+            opLog.setCreateTime(LocalDateTime.now());
+            operationLogMapper.insert(opLog);
+        } catch (Exception ignore) {
+            log.warn("[审计] 写操作日志失败（不影响主流程）：{}", ignore.getMessage());
+        }
         try {
             // 解析 JSON（加固 #1：兼容 R 包装）
             Map<String, Object> parsed = parseBackup(file);
@@ -404,6 +427,20 @@ public class SystemController {
                 return json(R.ok(resp));
 
             } catch (Exception e) {
+                // F8-05：**失败**场景的库内留痕最有价值 —— 成功的整库导入会把 sys_operation_log 一并替换掉
+                try {
+                    com.beichen.erp.system.entity.OperationLog opLog = new com.beichen.erp.system.entity.OperationLog();
+                    opLog.setUsername(String.valueOf(StpUtil.getLoginIdDefaultNull()));
+                    opLog.setModule("系统");
+                    opLog.setOperation("整库导入");
+                    opLog.setDetail(("失败已回滚：" + e.getMessage()).substring(0,
+                            Math.min(1000, ("失败已回滚：" + e.getMessage()).length())));
+                    opLog.setCompanyId(CompanyContext.get());
+                    opLog.setCreateTime(LocalDateTime.now());
+                    operationLogMapper.insert(opLog);
+                } catch (Exception ignore) {
+                    log.warn("[审计] 写操作日志失败（不影响主流程）：{}", ignore.getMessage());
+                }
                 return json(R.fail("导入失败: " + e.getMessage()));
             }
 
