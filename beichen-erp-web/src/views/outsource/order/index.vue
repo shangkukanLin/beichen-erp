@@ -94,19 +94,32 @@ onMounted(() => {
              计划完成 96→84、是否缺料 80→62、状态 78→74；
            ④操作 170→**176**（详情|下载合同|作废 三按钮实测需 176，「下载合同」4 字比家规档 140 宽）；
            ⑤加工厂 min110→112、产品 min130→**104**（弹性列吃余量 + tooltip：多产品汇总长度无上界）。
-           合计 = 146+70+112+104+84+100+62+74+176 = **928** ✓（家规上限，弹性列在宽屏自动变宽）。 -->
+           合计 = 146+70+112+104+84+100+62+74+176 = **928** ✓（家规上限，弹性列在宽屏自动变宽）。
+           2026-09-29（用户口径「顺手修既有列截断」，实测驱动，`scan-col-truncation -Only /outsource/order`）：
+           ①**加工厂 min112→146**：它是**合作方列**（家规：不得被省略号截断），实测需 **141**
+             （样本「测试加工厂A98」；渲染成链接按钮，见下方 BTNCLIP 提醒）⇒ 加宽 34；
+           ②**是否缺料 62 的旧账**：B10 为 4 字表头把它放到 90（本页合计 956 = 内容区上限）⇒ 只能从别处挪；
+           ③腾挪（都不动家规禁截断的列）：单号 min146→**140**（14 字定长码实测自然宽 ~137）、
+             模式 70→**62**（2 字 tag 实测 ~56）、最近收货 100→**92**（10 字日期实测 ~88，与「到期日」同款）、
+             产品 min104→**92**（**白名单列**：多产品汇总无上界，靠 tooltip + 点进详情，允许省略号）；
+           ④合计 = 140+62+146+92+84+92+90+74+176 = **956**（= 内容区上限，与改前同，未新增横向滚动）。
+           📌 已知未动：**计划完成 84** —— 若以后真有人填计划完成日期，10 字日期需 ~88 会被截断；
+             实测库里 `outsource_order.plan_end_date` **28 行全为空**（该列一直显示「-」）⇒ 现在不占宽度，
+             等这条业务真用起来再加宽（或与「最近收货」对调）。 -->
       <el-table :data="tableData" border stripe v-loading="tableLoading" style="width:100%" @row-click="(row: any) => router.push(`/outsource/order/detail/${row.id}`)">
-        <el-table-column label="单号" width="146" show-overflow-tooltip>
+        <el-table-column label="单号" min-width="140" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/outsource/order/detail/${row.id}`)">{{ row.code }}</el-button></template>
         </el-table-column>
-        <el-table-column label="模式" width="70" align="center">
+        <el-table-column label="模式" width="62" align="center">
           <template #default="{row}"><el-tag :type="row.supplyMode==='FACTORY' ? 'warning' : 'info'" size="small">{{ row.supplyMode==='FACTORY' ? '包料' : '来料' }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="加工厂" min-width="112" show-overflow-tooltip>
+        <!-- 2026-09-29：合作方列（家规：不得截断），实测需 141 ⇒ min112→**146**（被截断的样本「测试加工厂A98」） -->
+        <el-table-column label="加工厂" min-width="146" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
         </el-table-column>
         <!-- 产品与 SKU 合并为**一行**（2026-09-16 用户要求：列表内容不要换行；多产品时悬浮看全文） -->
-        <el-table-column label="产品" min-width="104" show-overflow-tooltip>
+        <!-- 白名单列（`col_allow_truncate`）：多产品汇总长度无上界 ⇒ 允许省略号，靠 tooltip + 点进详情 -->
+        <el-table-column label="产品" min-width="92" show-overflow-tooltip>
           <template #default="{row}">
             <!-- 2026-09-25：产品可点进产品详情（单项直链 / 多项 Popover；无 id 时回退原文本） -->
             <EntityLinks :items="row.products" target="product" sub-key="sku">
@@ -120,7 +133,8 @@ onMounted(() => {
             <span :style="{ color: row.planEndDate && new Date(row.planEndDate) < new Date() && row.status !== OutsourceOrderStatus.FINISHED && row.status !== OutsourceOrderStatus.CANCELLED ? 'red' : '' }">{{ $fmtDate(row.planEndDate) || '-' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="最近收货" width="100" show-overflow-tooltip>
+        <!-- 2026-09-29：100→92（10 字日期实测 ~88，与「到期日」同款），腾给「加工厂」 -->
+        <el-table-column label="最近收货" width="92" show-overflow-tooltip>
           <template #default="{row}">{{ $fmtDate(row.latestDeliveryDate) || '-' }}</template>
         </el-table-column>
         <!-- 是否缺料（2026-09-17）：口径 = 剩余待收量对应的物料需求 > 该加工厂委外仓库存（与收货时的缺料拦截一致）；

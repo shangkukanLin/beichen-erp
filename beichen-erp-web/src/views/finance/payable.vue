@@ -105,12 +105,23 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
            ③单据号做成链接进应付详情（原先只能点整行/操作列）；
            ④状态 tag 补 size="small"（原默认尺寸 tag 需 96px）⇒ 76→72；
            ⑤为抵平：主体类型 76→72、应付金额 100→88、已付 92→84、未付 92→84、到期日 96→92。
-           合计 = 120+128+72+104+88+84+84+92+72+108 = **952** ✓ -->
+           合计 = 120+128+72+104+88+84+84+92+72+108 = **952** ✓
+           2026-09-29（用户口径「顺手修既有列截断」，实测驱动，`scan-col-truncation -Only /finance/payable`）：
+           ①**业务场景 84→110**：实测需 **104**（样本「物料维修费」——B9 立「列表短名 ≤4 字」时后加的
+             来源类型 `OUTSOURCE_MATERIAL_REPAIR_FEE` 短名是 5 字，5 字 tag/标签需 104 > 84 被截断）；
+           ②腾挪：单据号 min154→**140**（14 字码 `YF-20260929032` 实测自然宽 ~131）、
+             供应商 min128→**116**（**白名单列**：`col_allow_truncate`，链接 + tooltip，允许省略号）；
+           ③合计不变 952（弹性列在宽屏自动变宽）。
+           ⚠️ 已知未修（需口径决定，属**数据条件性**截断）：本列在
+             `row.transferredToReceivable` 为真时会**再加一个「已转应收」tag** ⇒ 该格需 ~128px；
+             实测库里有 **5 行**是这种（685 行里），本页扫描默认页签的前 10 行恰好没有 ⇒ 守卫看不见。
+             两种修法：把 tag 文案压成「已转」（2 字 ⇒ 该格 ~110，正好装下）／或把该 tag 从列表移到详情；
+             本批未动（改文案/去信息属产品口径，等用户定）。 -->
       <el-table v-loading="loading" :data="data" border stripe @row-click="(row: any) => goDetail(row)">
-        <el-table-column label="单据号" min-width="154" show-overflow-tooltip>
+        <el-table-column label="单据号" min-width="140" show-overflow-tooltip>
           <template #default="{row}"><el-button type="primary" link @click.stop="goDetail(row)">{{ row.billNo }}</el-button></template>
         </el-table-column>
-        <el-table-column label="供应商" min-width="128" show-overflow-tooltip>
+        <el-table-column label="供应商" min-width="116" show-overflow-tooltip>
           <template #default="{row}">
             <el-button v-if="row.supplierId" type="primary" link @click.stop="router.push(`/supplier/detail/${row.supplierId}`)">{{ row.supplierName || sName(row.supplierId) || '—' }}</el-button>
             <span v-else>{{ row.supplierName || sName(row.supplierId) || '—' }}</span>
@@ -124,7 +135,8 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column label="业务场景" width="84" show-overflow-tooltip>
+        <!-- 2026-09-29：84→**110**（实测需 104：「物料维修费」5 字短名；B9 的「≤4 字」口径漏了这个后加的类型） -->
+        <el-table-column label="业务场景" width="110" show-overflow-tooltip>
           <template #default="{row}">
             <!-- 2026-09-26 B9：改用**列表短名**（≤4 字，如「委外收货/换货入库」）⇒ 8 字全称「委外加工退货收费」
                  实测需 128px 装不下，短名 4 字只需 72px ⇒ **本列不再被省略号截断**；
