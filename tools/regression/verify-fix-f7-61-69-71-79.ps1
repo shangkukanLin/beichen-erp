@@ -110,7 +110,9 @@ $materialId = SqlOne "SELECT id FROM outsource_material ORDER BY id LIMIT 1"
 $whId       = SqlOne "SELECT id FROM warehouse WHERE status=1 ORDER BY id LIMIT 1"
 $moId = 0; $moiId = 0; $retRepairId = 0; $retRefundId = 0
 if ($supplierId -and $materialId -and $whId) {
-  SqlExec ("INSERT INTO outsource_material_order (code, status, supplier_id, order_type, company_id) VALUES ('VERIFY-B-MO', 'RECEIVING', $supplierId, 'OUTSOURCE', $CID)")
+  # 2026-09-28（三态口径）：退货退款必须挂**已结单**订单（未结单只能用「订单退料」）⇒ 夹具用 FINISHED，
+  #   否则 F7-71 的审核会先被"该物料订单未结单：请改用订单退料"拦下，测不到"不超可退数量"这道护栏。
+  SqlExec ("INSERT INTO outsource_material_order (code, status, supplier_id, order_type, company_id) VALUES ('VERIFY-B-MO', 'FINISHED', $supplierId, 'OUTSOURCE', $CID)")
   $moId = [int](SqlOne "SELECT id FROM outsource_material_order WHERE code='VERIFY-B-MO' ORDER BY id DESC LIMIT 1")
   # received=5, repairing=3  ->  returnable (for refund) = 5 - 0 - 3 - 0 = 2
   SqlExec ("INSERT INTO outsource_material_order_item (order_id, outsource_material_id, order_quantity, received_quantity, repair_returned_qty, unit_price, amount, company_id) VALUES ($moId, $materialId, 100, 5, 3, 1, 100, $CID)")
@@ -132,21 +134,32 @@ Write-Output '=== F7-69) repair-return credit-back (atomic) ==='
 if ($retRepairId -gt 0 -and $moiId -gt 0) {
   $body69 = @{ warehouseId = [long]$whId; items = @(@{ materialId = [long]$materialId; quantity = 2 }) }
   $r69 = Req 'POST' ("/outsource/material-return/$retRepairId/repair-return") $admin $body69
-  $diag = SqlOne "SELECT CONCAT(IFNULL(received_quantity,0),'/',IFNULL(repair_returned_qty,0)) FROM outsource_material_order_item WHERE id=$moiId"
-  Info ("after repair-return: received/repairing = " + $diag + "  (expected 7/1)")
   if ((BCode $r69) -ne 200) { Bad ('repair-return failed: ' + (BMsg $r69)) }
-  elseif ($diag -eq '7/1') { Ok 'credit-back applied correctly (+2 received, -2 repairing) via the atomic SQL path' }
-  else { Bad ('credit-back produced ' + $diag + ' (expected 7/1)') }
-
-  # roll back through the product's own cancel endpoint -> quantities must return to 5/3
+  # 2026-09-28（用户口径「登记返回需要审核和反审核」）：登记只建**草稿** ⇒ 回补订单收料数搬到**审核**，
+  # 断言相应拆成"草稿不动账 → 审核落账 → 反审核回滚 → 删草稿"四步（原子性断言不变）。
   $repRecId = SqlOne "SELECT id FROM outsource_material_return_repair WHERE return_order_id=$retRepairId ORDER BY id DESC LIMIT 1"
   if ($repRecId) {
-    $rc = Req 'DELETE' ("/outsource/material-return/repair-return/$repRecId") $admin $null
+    $diagDraft = SqlOne "SELECT CONCAT(IFNULL(received_quantity,0),'/',IFNULL(repair_returned_qty,0)) FROM outsource_material_order_item WHERE id=$moiId"
+    Info ("after register (draft): received/repairing = " + $diagDraft + "  (expected 5/3 - nothing applied yet)")
+    if ($diagDraft -eq '5/3') { Ok 'registration (draft) did NOT touch the order quantities' }
+    else { Bad ('a DRAFT moved the order quantities: ' + $diagDraft) }
+
+    $ra69 = Req 'PUT' ("/outsource/material-return/repair-return/$repRecId/audit") $admin $null
+    $diag = SqlOne "SELECT CONCAT(IFNULL(received_quantity,0),'/',IFNULL(repair_returned_qty,0)) FROM outsource_material_order_item WHERE id=$moiId"
+    Info ("after audit: received/repairing = " + $diag + "  (expected 7/1)  auditCode=" + (BCode $ra69))
+    if ((BCode $ra69) -eq 200 -and $diag -eq '7/1') { Ok 'credit-back applied correctly at AUDIT (+2 received, -2 repairing) via the atomic SQL path' }
+    else { Bad ('credit-back produced ' + $diag + ' (expected 7/1, audit code ' + (BCode $ra69) + ')') }
+
+    # roll back through the product's own un-audit endpoint -> quantities must return to 5/3, then drop the draft
+    $ru69 = Req 'PUT' ("/outsource/material-return/repair-return/$repRecId/un-audit") $admin $null
     $diag2 = SqlOne "SELECT CONCAT(IFNULL(received_quantity,0),'/',IFNULL(repair_returned_qty,0)) FROM outsource_material_order_item WHERE id=$moiId"
-    Info ("after cancel: received/repairing = " + $diag2 + "  (expected 5/3)")
-    if ((BCode $rc) -eq 200 -and $diag2 -eq '5/3') { Ok 'cancel rolled the credit-back back to 5/3 (fixture restored)' }
-    else { Bad ('cancel did not restore the fixture: code=' + (BCode $rc) + ' values=' + $diag2) }
-  } else { Bad 'repair record not found (cannot verify the cancel path)' }
+    Info ("after un-audit: received/repairing = " + $diag2 + "  (expected 5/3)  unAuditCode=" + (BCode $ru69))
+    if ((BCode $ru69) -eq 200 -and $diag2 -eq '5/3') { Ok 'un-audit rolled the credit-back back to 5/3 (fixture restored)' }
+    else { Bad ('un-audit did not restore the fixture: code=' + (BCode $ru69) + ' values=' + $diag2) }
+    $rc = Req 'DELETE' ("/outsource/material-return/repair-return/$repRecId") $admin $null
+    if ((BCode $rc) -eq 200) { Ok 'the draft was deleted (delete is draft-only, repeatable)' }
+    else { Bad ('deleting the draft failed: ' + (BMsg $rc)) }
+  } else { Bad 'repair record not found (cannot verify the audit path)' }
 } else { Skip 'no F7-69 fixture' }
 
 # ---------- F7-71 ----------

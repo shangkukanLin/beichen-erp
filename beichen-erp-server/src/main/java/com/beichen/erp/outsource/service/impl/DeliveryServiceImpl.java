@@ -191,10 +191,9 @@ public class DeliveryServiceImpl implements DeliveryService {
                 OutsourceDelivery::getStatus, DocStatus.DRAFT.getCode(), DocStatus.AUDITED.getCode())) {
             throw new BusinessException("仅草稿状态可以审核");
         }
-        // 仅处理委外物料订单的收货/退不良单
-        if (!DeliveryType.RECEIVE.getCode().equals(delivery.getDeliveryType())
-                && !DeliveryType.DEFECT_RETURN.getCode().equals(delivery.getDeliveryType())) {
-            throw new BusinessException("该单据非物料订单收货/退不良单，不可审核");
+        // 仅处理委外物料订单的收货 / 退不良 / 退货单（2026-09-29 新增 RECEIVE_RETURN）
+        if (!isMaterialDeliveryType(delivery.getDeliveryType())) {
+            throw new BusinessException("该单据非物料订单收货/退不良/退货单，不可审核");
         }
         Long orderId = delivery.getSourceOrderId();
         if (orderId == null) throw new BusinessException("收货单缺少关联物料订单");
@@ -206,8 +205,9 @@ public class DeliveryServiceImpl implements DeliveryService {
         List<OutsourceDeliveryItem> items = getItems(id);
         if (items.isEmpty()) throw new BusinessException("单据无明细，无法审核");
 
-        // 1. 库存变动：收货入库(+)、退不良出库(-)，均作用于目标仓库
+        // 1. 库存变动：收货入库(+)、退不良/退货出库(-)，均作用于目标仓库
         boolean isReceive = DeliveryType.RECEIVE.getCode().equals(delivery.getDeliveryType());
+        boolean isReceiveReturn = DeliveryType.RECEIVE_RETURN.getCode().equals(delivery.getDeliveryType());
         for (OutsourceDeliveryItem item : items) {
             if (item.getMaterialId() == null || item.getQuantity() == null) continue;
             String matName = getMaterialNameById(item.getMaterialId());
@@ -216,6 +216,11 @@ public class DeliveryServiceImpl implements DeliveryService {
                 // 收货入库：目标仓库良品 +qty，写外协库存流水
                 changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity(),
                         QualityType.GOOD.getCode(), StockChangeType.RECEIVE_IN.getCode(), delivery.getCode(), delivery.getId());
+            } else if (isReceiveReturn) {
+                // 退货（2026-09-29）：从退货仓扣减良品库存，退回物料商 —— 复用「委外物料退货出」变更类型
+                // （与独立「物料退货」单同口径，流水靠 relatedBillId/code 区分来源）
+                changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity().negate(),
+                        QualityType.GOOD.getCode(), StockChangeType.MATERIAL_RETURN_OUT.getCode(), delivery.getCode(), delivery.getId());
             } else {
                 // 退不良：维修退货、折现退款均扣减目标仓库良品库存
                 changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity().negate(),
@@ -228,7 +233,7 @@ public class DeliveryServiceImpl implements DeliveryService {
             deductComponents(order, items, delivery);
         }
 
-        // 3. 生成应付：收货为正应付；退不良-折现退款为负应付（冲减）；退不良-维修退货不涉及款项
+        // 3. 生成应付：收货为正应付；退货为负应付（整单冲减）；退不良-折现退款为负应付（冲减）；退不良-维修退货不涉及款项
         if (isReceive) {
             BigDecimal totalAmount = items.stream()
                     .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
@@ -236,6 +241,16 @@ public class DeliveryServiceImpl implements DeliveryService {
             if (totalAmount.compareTo(BigDecimal.ZERO) != 0) {
                 payableHelper.createPayable(order.getSupplierId(), SourceBillType.OUTSOURCE_MATERIAL_DELIVERY.getCode(),
                         delivery.getCode(), delivery.getId(), totalAmount, delivery.getDeliveryDate(), "委外物料订单收货");
+            }
+        } else if (isReceiveReturn) {
+            // 退货（2026-09-29 用户口径「冲减应付」）：整单按退货金额生成**负应付** —— 退回的这批货不再欠物料商钱；
+            // 反审核由下方统一的 payableHelper.reversePayable(本单据ID) 原路冲回（正/负应付都在它手上）
+            BigDecimal returnAmount = items.stream()
+                    .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (returnAmount.compareTo(BigDecimal.ZERO) != 0) {
+                payableHelper.createPayable(order.getSupplierId(), SourceBillType.OUTSOURCE_MATERIAL_DELIVERY.getCode(),
+                        delivery.getCode(), delivery.getId(), returnAmount.negate(), delivery.getDeliveryDate(), "委外物料订单退货");
             }
         } else {
             // 退不良：仅折现退款生成负应付冲减供应商应付
@@ -277,14 +292,29 @@ public class DeliveryServiceImpl implements DeliveryService {
                             + "；请调整收货数量或修改订单数量");
                 }
             }
+            // 退货（2026-09-29）：与收货的"不得超过下单数"对称的**第二道防线** —— 复核「已退 ≤ 已收」。
+            // 第一道在 MaterialOrderServiceImpl.returnMaterial（建草稿时按已收数量拦）；
+            // 本道兜住"两张退货草稿先后审核 / 直改库"等情形，不够退就整单回滚（不落半套账）。
+            if (isReceiveReturn) {
+                BigDecimal receivedQty = oi.getReceivedQuantity() != null ? oi.getReceivedQuantity() : BigDecimal.ZERO;
+                if (receivedQty.compareTo(item.getQuantity()) < 0) {
+                    throw new BusinessException("退货数量超过该物料已收数量：物料「" + getMaterialNameById(oi.getMaterialId())
+                            + "」已收 " + receivedQty.stripTrailingZeros().toPlainString()
+                            + "、本次退 " + item.getQuantity().stripTrailingZeros().toPlainString()
+                            + "（可能已被另一张退货单占用，请刷新后重试）");
+                }
+            }
             // F7-49（2026-09-19）：改为 **SQL 原子累加**（原为 Java 侧"读-改-写"：同一物料订单明细行被两张
             // 收料单并发审核时互相覆盖，数量少记一次且不报错）。数字取自 BigDecimal.toPlainString()。
+            // 2026-09-29：退货是**冲减**已收数量（received_quantity 减），故三态分支。
             String qtySql = item.getQuantity().toPlainString();
+            String qtySetSql;
+            if (isReceive) qtySetSql = "received_quantity = IFNULL(received_quantity, 0) + (" + qtySql + ")";
+            else if (isReceiveReturn) qtySetSql = "received_quantity = IFNULL(received_quantity, 0) - (" + qtySql + ")";
+            else qtySetSql = "defect_returned_qty = IFNULL(defect_returned_qty, 0) + (" + qtySql + ")";
             materialOrderItemMapper.update(null, new LambdaUpdateWrapper<MaterialOrderItem>()
                     .eq(MaterialOrderItem::getId, oi.getId())
-                    .setSql(isReceive
-                            ? "received_quantity = IFNULL(received_quantity, 0) + (" + qtySql + ")"
-                            : "defect_returned_qty = IFNULL(defect_returned_qty, 0) + (" + qtySql + ")"));
+                    .setSql(qtySetSql));
         }
         // 4.1 移动加权成本：收货入库按明细单价加权（退不良出库不影响成本）
         if (isReceive) {
@@ -317,9 +347,8 @@ public class DeliveryServiceImpl implements DeliveryService {
     public void unauditMaterialDelivery(Long id) {
         OutsourceDelivery delivery = deliveryMapper.selectById(id);
         if (delivery == null) throw new BusinessException("单据不存在");
-        if (!DeliveryType.RECEIVE.getCode().equals(delivery.getDeliveryType())
-                && !DeliveryType.DEFECT_RETURN.getCode().equals(delivery.getDeliveryType())) {
-            throw new BusinessException("该单据非物料订单收货/退不良单，不可反审核");
+        if (!isMaterialDeliveryType(delivery.getDeliveryType())) {
+            throw new BusinessException("该单据非物料订单收货/退不良/退货单，不可反审核");
         }
         // F7-45（2026-09-19）：原子抢占 AUDITED→DRAFT（原"先查后改"非原子）。
         // 本方法会逆向库存 + 冲回应付 + 回滚订单已收/退不良数量 + 回补 BOM 子料 + 冲销成本，
@@ -334,6 +363,7 @@ public class DeliveryServiceImpl implements DeliveryService {
 
         // 1. 逆向库存
         boolean isReceive = DeliveryType.RECEIVE.getCode().equals(delivery.getDeliveryType());
+        boolean isReceiveReturn = DeliveryType.RECEIVE_RETURN.getCode().equals(delivery.getDeliveryType());
         for (OutsourceDeliveryItem item : items) {
             if (item.getMaterialId() == null || item.getQuantity() == null) continue;
             String matName = getMaterialNameById(item.getMaterialId());
@@ -342,6 +372,10 @@ public class DeliveryServiceImpl implements DeliveryService {
                 // 反审核：回滚收货入库（目标仓库良品 -qty）
                 changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity().negate(),
                         QualityType.GOOD.getCode(), StockChangeType.CANCEL_RECEIVE_IN.getCode(), delivery.getCode(), delivery.getId());
+            } else if (isReceiveReturn) {
+                // 反审核：恢复退货扣减的库存（+qty）
+                changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity(),
+                        QualityType.GOOD.getCode(), StockChangeType.CANCEL_MATERIAL_RETURN_OUT.getCode(), delivery.getCode(), delivery.getId());
             } else {
                 // 反审核：恢复退不良扣减的库存（+qty，维修退货、折现退款均恢复）
                 changeOutsourceStock(delivery.getToWarehouseId(), item.getMaterialId(), item.getQuantity(),
@@ -359,19 +393,11 @@ public class DeliveryServiceImpl implements DeliveryService {
             costService.reverseByBill(StockChangeType.RECEIVE_IN.getCode(), id);
         }
 
-        // 3. 冲回应付（已付款的阻止）+ 回退供应商应付余额
-        // 收货：回滚正应付；退不良：仅折现退款回滚负应付（维修退货无应付）
-        BigDecimal reverseAmount;
-        if (isReceive) {
-            reverseAmount = items.stream()
-                    .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-        } else {
-            reverseAmount = items.stream()
-                    .filter(it -> DefectHandleType.CASH_REFUND.getCode().equals(it.getHandleType()))
-                    .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-        }
+        // 3. 冲回应付（已付款的阻止）+ 回退供应商应付余额 —— 统一**按本单据ID**冲回：收货的正应付、
+        //    退货/退不良-折现的负应付都挂在同一个来源（OUTSOURCE_MATERIAL_DELIVERY + 本单ID）上，
+        //    reversePayable 一并冲掉 ⇒ 三个分支共用，不按金额分支。
+        //    ⚠️ 2026-09-29 顺手清理：原先此处算过一个 `reverseAmount` 局部变量但**从未被读取**
+        //    （注释像在解释"按金额冲回"，实际只有 reversePayable 在起作用），易误导 ⇒ 删除该死变量。
         payableHelper.reversePayable(delivery.getId(), SourceBillType.OUTSOURCE_MATERIAL_DELIVERY.getCode());
 
         // 3. 回滚订单明细累计数量
@@ -380,12 +406,17 @@ public class DeliveryServiceImpl implements DeliveryService {
             MaterialOrderItem oi = materialOrderItemMapper.selectById(item.getItemId());
             if (oi == null) continue;
             // F7-49（2026-09-19）：SQL 原子扣减；GREATEST(...,0) 保留原 safeSubtract 的"结果不为负"语义
+            // 2026-09-29：与正向的三态分支**对称** —— 收货回滚已收（减）、退货回滚已收（**加回去**，因为审核时减了）、
+            // 退不良回滚 defect_returned_qty（减）。⚠️ 漏掉退货这一支会让「反审核」只回滚库存/应付、
+            // 不回滚已收数量（本守卫 ui-e2e-11 S2 实测抓到）。
             String qtySql = item.getQuantity().toPlainString();
+            String qtyUnsetSql;
+            if (isReceive) qtyUnsetSql = "received_quantity = GREATEST(IFNULL(received_quantity, 0) - (" + qtySql + "), 0)";
+            else if (isReceiveReturn) qtyUnsetSql = "received_quantity = IFNULL(received_quantity, 0) + (" + qtySql + ")";
+            else qtyUnsetSql = "defect_returned_qty = GREATEST(IFNULL(defect_returned_qty, 0) - (" + qtySql + "), 0)";
             materialOrderItemMapper.update(null, new LambdaUpdateWrapper<MaterialOrderItem>()
                     .eq(MaterialOrderItem::getId, oi.getId())
-                    .setSql(isReceive
-                            ? "received_quantity = GREATEST(IFNULL(received_quantity, 0) - (" + qtySql + "), 0)"
-                            : "defect_returned_qty = GREATEST(IFNULL(defect_returned_qty, 0) - (" + qtySql + "), 0)"));
+                    .setSql(qtyUnsetSql));
         }
         // 4. 单据回到草稿
         OutsourceDelivery up = new OutsourceDelivery();
@@ -395,7 +426,17 @@ public class DeliveryServiceImpl implements DeliveryService {
     }
 
     /**
-     * 变更外协库存并写流水日志，供物料订单收货/退不良使用。
+     * 是否为「物料订单收发货」单据类型（收货 / 退不良 / 退货，2026-09-29 加退货）——
+     * audit / unaudit 两个入口共用同一白名单，避免两处写法漂移（再加类型时只改这里）。
+     */
+    private boolean isMaterialDeliveryType(String deliveryType) {
+        return DeliveryType.RECEIVE.getCode().equals(deliveryType)
+                || DeliveryType.DEFECT_RETURN.getCode().equals(deliveryType)
+                || DeliveryType.RECEIVE_RETURN.getCode().equals(deliveryType);
+    }
+
+    /**
+     * 变更外协库存并写流水日志，供物料订单收货/退不良/退货使用。
      * <p>收敛为统一入口：委托 {@code updateStock} → {@link WarehouseStockService}（F1/F2：不再直写，且流水带单据号与单据ID）。</p>
      *
      * @param relatedBillId 关联单据ID（本收货/退不良记录ID）

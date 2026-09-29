@@ -102,7 +102,7 @@ const warehouses = ref<any[]>([])
 const orders = ref<any[]>([])
 const materialOrders = ref<any[]>([])
 const activeStatusTab = ref('进行中')
-// 进行中状态（存 code，比较也用 code）：加工单待审核/生产中 + 物料订单待确认/收货中
+// 进行中状态（存 code，比较也用 code）：加工单待审核/生产中 + 物料订单待审核/生产中（RECEIVING）
 const ACTIVE_STATUSES = [
   OutsourceOrderStatus.PENDING, OutsourceOrderStatus.PRODUCING,
   MaterialOrderStatus.PENDING, MaterialOrderStatus.RECEIVING

@@ -69,16 +69,25 @@ Write-Host ('FIXTURE order=' + $orderId + ' (' + $orderCode + ') item=' + $itemI
 Ok (($orderId -gt 0) -and ($itemId -gt 0) -and ($matId -gt 0) -and ($whId -gt 0) -and ($supId -gt 0) -and ($whName -ne '') -and ($matName -ne '')) 'fixture derived (RECEIVING order + its item + material with GOOD stock + supplier)'
 
 # =====================================================================
-Step 'S1 linked leaf: unified tabs + type column'
+Step 'S1 linked leaf: two-level tabs (type x status), type column gone'
+# 2026-09-28（用户口径「关联退料的列表也想用 TAB 分得细一些」）：**关联退料也改两级页签** ——
+#   一级=类型（订单退料 | 退货退款 | 维修返回）、二级=状态（草稿和已审核 | 已作废）⇒ 恰好 5 个 tab；
+#   类型上了页签 ⇒ **不再有「类型」列**；「送修/已返回」列只在维修返回页签出现（本页签 = 订单退料 ⇒ 不出现）。
 Open '/outsource/material-return' 3000
+$tabsJs = "(()=>{const vis=e=>e.getClientRects().length>0;const it=[...document.querySelectorAll('.el-tabs__item')].filter(vis);return String(it.length)+'||'+it.map(e=>(e.innerText||'').replace(/\s+/g,' ').trim()).join(' | ')})()"
+$tl = EvalJs $tabsJs
+Write-Host ('S1 tabs=' + $tl)
 $r1 = Rows 0
 $head = ($r1.head -join '|')
 Write-Host ('S1 head=' + $head)
-Ok ((BodyHas (ZH 'tab_leaf_effective')) -eq 'true') 'S1 tab 有效单据 present'
-Ok ((BodyHas (ZH 'tab_leaf_returned')) -eq 'true') 'S1 tab 已返回完 present'
-Ok ((BodyHas (ZH 'tab_leaf_void')) -eq 'true') 'S1 tab 已作废 present'
-Ok ($head -match [regex]::Escape((ZH 'col_mr_type'))) 'S1 type column present (types share a leaf now)'
-Ok ((BodyHas (ZH 'txt_mr_sent_returned')) -eq 'false') 'S1 dedicated sent/returned column is gone (merged into the type column)'
+Ok ($tl -match '^5\|\|') ('S1 linked leaf has 5 tabs = 3 types + 2 statuses (' + $tl + ')')
+Ok ($tl -match [regex]::Escape((ZH 'opt_type_order'))) 'S1 type tab 订单退料 present'
+Ok ($tl -match [regex]::Escape((ZH 'opt_type_refund'))) 'S1 type tab 退货退款 present'
+Ok ($tl -match [regex]::Escape((ZH 'opt_type_repair'))) 'S1 type tab 维修返回 present'
+Ok ($tl -match [regex]::Escape((ZH 'tab_unlinked_active'))) 'S1 status tab 草稿和已审核 present'
+Ok ($tl -match [regex]::Escape((ZH 'tab_leaf_void'))) 'S1 status tab 已作废 present'
+Ok (-not ($head -match [regex]::Escape((ZH 'col_mr_type')))) 'S1 no type column any more (the type is a tab)'
+Ok ((BodyHas (ZH 'txt_mr_sent_returned')) -eq 'false') 'S1 sent/returned column absent on the 订单退料 tab'
 Ok ((Errs) -eq '[]') 'S1 no errors'
 
 # =====================================================================

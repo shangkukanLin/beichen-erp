@@ -24,7 +24,22 @@ public enum DeliveryType {
      */
     RETURN("退料"),
     /** 退不良：退回不良品 */
-    DEFECT_RETURN("退不良");
+    DEFECT_RETURN("退不良"),
+    /**
+     * 退货：把**已收**物料退回物料商（2026-09-29 用户口径「收货记录里的退货」）。
+     *
+     * <p>与 {@link #DEFECT_RETURN} 的分工（两者都扣同一个退货仓的库存，此前被用户判为"功能重复"）：</p>
+     * <ul>
+     *   <li>退不良：数量记在 {@code outsource_material_order_item.defect_returned_qty}（净已收口径），
+     *       只有「折现退款」才动账（负应付）；</li>
+     *   <li>退货：**直接冲减该订单的已收数量**（{@code received_quantity}），并按退货金额生成**负应付**
+     *       （不再欠物料商这批货的钱）—— 冲减已收 = 这些货回到"未收"，订单可以重新收/重新下单数量口径一致。</li>
+     * </ul>
+     *
+     * <p>⚠️ 刻意**不复用**历史值 {@link #RETURN}（那是 2026-09-16 已下线的"退料"，且被成品交货表
+     * {@code outsource_order_delivery} 共用，语义不同）。</p>
+     */
+    RECEIVE_RETURN("退货");
 
     private final String label;
 

@@ -4,7 +4,7 @@
 #   PUT /api/outsource/material-order/{id}/reopen  ->  FINISHED => RECEIVING / PENDING，并清空 finish_time。
 #
 # 断言：
-#   A) 已结单 + 已收货（received>0）      => 回 RECEIVING 收货中，finish_time 清空（不是"只改状态"就算完）
+#   A) 已结单 + 已收货（received>0）      => 回 RECEIVING 生产中，finish_time 清空（不是"只改状态"就算完）
 #   B) 已结单 + 未收货但**曾审核**（auditor_id 非空）=> 仍回 RECEIVING  <-- 关键回归：
 #      判据不能只看收货记录（unAudit 不清审核人；"审核了但一件没收到就结单"很常见），
 #      否则会把这类单悄悄退回未审核，而详情页「审核人」还留着旧值（自相矛盾）。
@@ -133,7 +133,7 @@ Ok ((StateOf $idA) -like 'RECEIVING/*') 'E: state still RECEIVING after the refu
 
 Step 'F) the reopened order is back in the receiving worklist (page filter sees it)'
 $cnt = SqlOne ("SELECT COUNT(*) FROM outsource_material_order WHERE status='RECEIVING' AND id IN (" + $idA + "," + $idB + ")")
-Ok ($cnt -eq '2') 'F: both reopened orders now count as RECEIVING (they reappear on the 收货中 tab)'
+Ok ($cnt -eq '2') 'F: both reopened orders now count as RECEIVING (they reappear on the 生产中 tab)'
 
 Step 'cleanup: fixture orders + items'
 foreach ($c in $madeCodes) {

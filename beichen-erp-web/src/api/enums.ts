@@ -58,9 +58,11 @@ export const MaterialOrderStatus = {
   CANCELLED: 'CANCELLED'
 } as const
 
+/** 物料订单状态文案（2026-09-28 用户口径：RECEIVING 的文案由「收货中」改「生产中」——
+ *  与页签、与加工单侧状态命名（PRODUCING=生产中）统一；**只改文案**，code 仍是 RECEIVING，库中数据不动） */
 export const MaterialOrderStatusLabel: Record<string, string> = {
   [MaterialOrderStatus.PENDING]: '待审核',
-  [MaterialOrderStatus.RECEIVING]: '收货中',
+  [MaterialOrderStatus.RECEIVING]: '生产中',
   [MaterialOrderStatus.FINISHED]: '已结单',
   [MaterialOrderStatus.CANCELLED]: '已作废'
 }
@@ -111,7 +113,9 @@ export const DeliveryType = {
   RECEIVE: 'RECEIVE',
   TRANSFER: 'TRANSFER',
   RETURN: 'RETURN',
-  DEFECT_RETURN: 'DEFECT_RETURN'
+  DEFECT_RETURN: 'DEFECT_RETURN',
+  /** 退货（2026-09-29 用户口径）：把已收物料退回物料商 —— 扣退货仓库存 + 冲减订单已收数量 + 冲减应付 */
+  RECEIVE_RETURN: 'RECEIVE_RETURN'
 } as const
 
 export const DeliveryTypeLabel: Record<string, string> = {
@@ -119,7 +123,8 @@ export const DeliveryTypeLabel: Record<string, string> = {
   [DeliveryType.RECEIVE]: '收料',
   [DeliveryType.TRANSFER]: '调拨',
   [DeliveryType.RETURN]: '退料',
-  [DeliveryType.DEFECT_RETURN]: '退不良'
+  [DeliveryType.DEFECT_RETURN]: '退不良',
+  [DeliveryType.RECEIVE_RETURN]: '退货'
 }
 
 /** 财务账单类型（对应 BillType 枚举） */
@@ -136,8 +141,10 @@ export const BillTypeLabel: Record<string, string> = {
 /**
  * 费用类型：DB 存 code，显示映射（finance_expense.expense_type，费用管理页与利润明细页共用）。
  *
- * <p>2026-09-27 新增 <b>RND = 研发支出</b>（用户要求）：物料信息管理「新增物料」时可顺带登记一笔研发支出
- * （走 `POST /api/outsource/material/{id}/rd-expense`，落**草稿**费用单，审核后才扣款）。
+ * <p>2026-09-27 新增 <b>RND = 研发支出</b>（用户要求）：**研发物料**「新增物料」时可顺带登记一笔研发支出
+ * （走 `POST /api/dev/purchase-item/{id}/rd-expense`，勾选路径自动审核当场扣款、无费用审核权限则落**草稿**）。
+ * 2026-09-28（用户口径）：该功能属「研发管理 → 研发物料」，原挂在物料信息管理的入口与端点**已移除**
+ * （存量费用单的来源类型 `RD_MATERIAL` 保留，仅作历史追溯）。
  * 后端写入侧用 `finance.common.ExpenseType.RND`，且**写入会被校验**（未知 code 直接拒绝、大小写归一化）；
  * 本映射与后端枚举的常量名一致性由 `web-check.ps1` 的枚举守卫比对（漏加值 ⇒ 守卫 FAIL）。</p>
  */
@@ -801,7 +808,7 @@ export const StockChangeType = {
   OUTSOURCE_DEFECT_RETURN: 'OUTSOURCE_DEFECT_RETURN', OUTSOURCE_ROLLBACK: 'OUTSOURCE_ROLLBACK',
   OUTSOURCE_CONSUME: 'OUTSOURCE_CONSUME', CANCEL_OUTSOURCE_CONSUME: 'CANCEL_OUTSOURCE_CONSUME',
   OUTSOURCE_DEFECT_RETURN_UN_AUDIT: 'OUTSOURCE_DEFECT_RETURN_UN_AUDIT',
-  // 无单加工退货（2026-09-25 P1-1）：成品（加工退货）入委外仓 / 反审核核销
+  // 工厂售后（原无单加工退货；2026-09-25 P1-1）：成品（加工退货）入委外仓 / 反审核核销
   OUTSOURCE_DEFECT_IN: 'OUTSOURCE_DEFECT_IN', CANCEL_OUTSOURCE_DEFECT_IN: 'CANCEL_OUTSOURCE_DEFECT_IN',
   // 加工返回单（2026-09-25 P1-2）：核销在厂成品 / 修好回仓 / 实际用料出仓（及其反审核）
   OUTSOURCE_BACK_CONSUME: 'OUTSOURCE_BACK_CONSUME', CANCEL_OUTSOURCE_BACK_CONSUME: 'CANCEL_OUTSOURCE_BACK_CONSUME',
@@ -885,8 +892,9 @@ export const StockChangeTypeLabel: Record<string, string> = {
   [StockChangeType.CANCEL_OUTSOURCE_BACK_IN]: '修好成品扣回',
   [StockChangeType.OUTSOURCE_BACK_MATERIAL]: '返回单用料出仓',
   [StockChangeType.CANCEL_OUTSOURCE_BACK_MATERIAL]: '返回单用料恢复',
-  [StockChangeType.OUTSOURCE_REPAIR_STOCK_IN]: '成品维修退货入委外仓',
-  [StockChangeType.CANCEL_OUTSOURCE_REPAIR_STOCK_IN]: '核销成品维修退货',
+  // 2026-09-29 用户口径：加工侧「成品维修退货」叶子改文案「客户售后」⇒ 相关库存变动标签同步（物料侧另有自己的标签）
+  [StockChangeType.OUTSOURCE_REPAIR_STOCK_IN]: '客户售后入委外仓',
+  [StockChangeType.CANCEL_OUTSOURCE_REPAIR_STOCK_IN]: '核销客户售后',
   [StockChangeType.OUTSOURCE_REPAIR_MATERIAL]: '维修用料出仓',
   [StockChangeType.CANCEL_OUTSOURCE_REPAIR_MATERIAL]: '维修用料恢复',
   [StockChangeType.OUTSOURCE_REPAIR_OUT]: '委外维修出库',

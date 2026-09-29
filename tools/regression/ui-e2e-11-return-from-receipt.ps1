@@ -3,8 +3,11 @@
 #   A) material receipt LIST   (/outsource/material-order/delivery)
 #        row button -> /outsource/material-return/add?supplierId=<supplier of that order>
 #   B) material receipt DETAIL (/outsource/material-order/delivery/<materialOrderId>)
-#        receive-record button -> /outsource/material-return/add?sourceDeliveryId=<record id>
-#        then: prefill checks -> save draft -> audit (stock / payable) -> un-audit -> cancel
+#        !! 2026-09-29 REWRITE (user decision): the receive-record row no longer jumps to the material-return
+#           ORDER. It now offers 新增退货 ｜ 审核 ｜ 反审核, where 新增退货 = a RECEIVE_RETURN draft on THIS
+#           page: audit => source warehouse -qty + order received_quantity -qty + negative payable,
+#           un-audit => rolled back. (The 退不良 toolbar entry was merged into it: 两者扣同一个退货仓,
+#           judged as duplicated.) The old 退货-jump assertions live nowhere any more.
 #
 # !! 2026-09-21: the FINISHED-GOODS half of this file is GONE BY DESIGN.
 #    /outsource/order/delivery no longer offers a RETURN entry at all (user decision): every receipt
@@ -50,6 +53,8 @@ function U([string]$b64) {
 function D([string]$s) { if (-not $s) { return [decimal]0 }; return [decimal]$s }
 function StockQty([int]$wh, [string]$col, [int]$id) { return (SqlOne "SELECT COALESCE(SUM(quantity),0) FROM warehouse_stock WHERE warehouse_id=$wh AND $col=$id AND quality_type='GOOD'") }
 function PaySum([int]$sid) { return (SqlOne "SELECT COALESCE(SUM(amount),0) FROM finance_payable WHERE supplier_id=$sid AND status='UNSETTLED'") }
+# 2026-09-28（P2 口径）：退货退款审核改为生成**对供应商的应收**（不再是负向应付）⇒ 断言须同时看应收侧
+function RecvSum([int]$sid) { return (SqlOne "SELECT COALESCE(SUM(amount),0) FROM finance_receivable WHERE subject_type='SUPPLIER' AND supplier_id=$sid AND status='UNSETTLED'") }
 function MaxId([string]$tbl) { return (SqlOne "SELECT COALESCE(MAX(id),0) FROM $tbl") }
 function CurUrl() { return (EvalJs "location.href.replace(location.origin,'')") }
 function Step($n) { Write-Host ('--- STEP ' + $n) }
@@ -119,58 +124,95 @@ $pickSupName = U (SqlOne "SELECT TO_BASE64(name) FROM supplier WHERE id=$pickSup
 Ok ((BodyHas $pickSupName) -eq 'true') ('S1 supplier prefilled=' + $pickSupName)
 
 # =====================================================================
-Step 'S2 material receipt DETAIL receive-record row -> create / audit / un-audit / cancel'
-$bStock = StockQty $srcWh 'material_id' $matId
-$bPay   = PaySum $supId
-Info ("BASE warehouse$srcWh.material$matId=" + $bStock + " payable$supId=" + $bPay)
+# S2 (2026-09-29 REWRITE, user decision) -- the receive-record row now carries
+#     新增退货 ｜ 审核 ｜ 反审核   (the old row-level 退货 that jumped to the material-return ORDER is GONE,
+#     and the 退不良 toolbar entry went with it: both扣同一个退货仓库存, judged as duplicated functionality).
+#   New behaviour of 新增退货:
+#     create  -> a RECEIVE_RETURN **draft** in outsource_delivery -- NOTHING moves yet
+#     audit   -> source warehouse -qty  +  order item received_quantity -qty  +  negative payable
+#     un-audit-> everything rolled back (payable ledger cancelled & zeroed)
+#   The draft is deleted by this script afterwards (pure test artefact).
+# =====================================================================
+Step 'S2 receive-record row: 新增退货 -> draft -> audit (stock/qty/payable) -> un-audit -> delete'
+$bStock = D (StockQty $srcWh 'material_id' $matId)
+$bPay   = D (PaySum $supId)
+$ordItemId = [int](SqlOne ("SELECT item_id FROM outsource_delivery_item WHERE delivery_id=" + $delivId + " AND outsource_material_id=" + $matId + " LIMIT 1"))
+$bRecv  = D (SqlOne ("SELECT COALESCE(received_quantity,0) FROM outsource_material_order_item WHERE id=" + $ordItemId))
+$unitPrice = D (SqlOne ("SELECT COALESCE(unit_price,0) FROM outsource_material_order_item WHERE id=" + $ordItemId))
+Info ('BASE stock=' + $bStock + ' receivedQty=' + $bRecv + ' payable=' + $bPay + ' unitPrice=' + $unitPrice + ' orderItem=' + $ordItemId)
 
 Open ("/outsource/material-order/delivery/$moId") 3200
 $ri = [int](FindRow $delivCode)
 Ok ($ri -ge 0) ('S2 found the receive record row=' + $ri + ' code=' + $delivCode)
-Ok ((ClickRowBtn $ri 'btn_return') -match 'OK') 'S2 clicked the record-level RETURN'
-Start-Sleep -Milliseconds 3200
-$u = CurUrl
-Ok ($u -match ('sourceDeliveryId=' + $delivId)) ('S2 navigated with the source record url=' + $u)
-Ok ((BodyHas (ZH 'lbl_return_target')) -eq 'true') 'S2 return add page opened'
-Ok ((BodyHas $supName) -eq 'true') ('S2 supplier prefilled=' + $supName)
-Ok ((BodyHas $srcWhName) -eq 'true') ('S2 source warehouse prefilled=' + $srcWhName)
-Ok ((BodyHas $matName) -eq 'true') ('S2 only the materials of that record are listed=' + $matName)
-$qv = QtyCellVal (ZH 'lbl_qty_col_mr')
-Ok ($qv -eq ('val=' + $expQty)) ('S2 default qty = ' + $expQty + ' (min(returnable, source stock)), got ' + $qv)
+# the row must offer 新增退货 + 反审核 (AUDITED record) and must NOT offer the old 退货 any more
+$rowBtnsJs = "(()=>{const vis=e=>e.getClientRects().length>0;const trs=[...document.querySelectorAll('.el-table__body tbody tr')].filter(vis);const tr=trs[$ri];if(!tr)return JSON.stringify(['NOROW']);return JSON.stringify([...tr.querySelectorAll('button')].filter(vis).map(b=>(b.innerText||'').trim()))})()"
+$btns = @()
+try { $btns = @((EvalJs $rowBtnsJs) | ConvertFrom-Json) } catch { $btns = @() }
+# PS5.1：JSON 数组经管道整体返回、@() 会再套一层 ⇒ 显式展开（否则 $btns 只有一个元素 = 整个数组，
+# -contains 恒 false，断言假红）
+if (($btns.Count -eq 1) -and ($btns[0] -is [array])) { $btns = @($btns[0]) }
+Info ('row buttons = ' + ($btns -join ' | '))
+Ok ($btns -contains (ZH 'btn_new_return')) 'S2 the row offers 新增退货'
+Ok ($btns -contains (ZH 'btn_unaudit')) 'S2 the (AUDITED) row offers 反审核'
+Ok (-not ($btns -contains (ZH 'btn_return'))) 'S2 the old row-level 退货 entry is gone (no duplicate return path)'
 
-Ok ((ClickBtn 'btn_save_draft') -match 'OK') 'S2 clicked SAVE DRAFT'
-Start-Sleep -Milliseconds 3500
-$mrId = [int](MaxId 'outsource_material_return')
-Ok ($mrId -gt 0) ('S2 material return order created id=' + $mrId)
-$r = SqlRow ("SELECT status, supplier_id, from_warehouse_id, source_delivery_id, return_type, material_order_id FROM outsource_material_return WHERE id=$mrId")
-Ok (@($r).Count -ge 6) ('S2 row readable in DB (cols=' + @($r).Count + ')')
-Ok ([string]$r[0] -eq 'DRAFT') 'S2 status=DRAFT'
-Ok ([int]$r[1] -eq $supId) ('S2 supplier persisted=' + $supId)
-Ok ([int]$r[2] -eq $srcWh) ('S2 source warehouse persisted=' + $srcWh)
-Ok ([int]$r[3] -eq $delivId) ('S2 source_delivery_id persisted=' + $delivId)
-Ok ([string]$r[4] -eq 'REFUND') 'S2 default type = REFUND'
-Ok ([int]$r[5] -eq $moId) ('S2 linked material order persisted=' + $moId + ' (auto-carried from the record)')
+# 2026-09-29：收货记录表必须**一行显示完**（家规「列表一行显示完、不左右滑动」）。
+#   本次操作列 96→124（反审核 + 新增退货），实测发现该表**本来就横滑 100px**（sumCols 1048 > 容器 948）
+#   ⇒ 顺手按实测重排了列宽（合计 932 ≤ 948）。这里钉住它，避免以后再加按钮又横滑。
+$fitJs = "(()=>{const vis=e=>e.getClientRects().length>0;const t=[...document.querySelectorAll('.el-table')].filter(vis)[0];if(!t)return 'NOTABLE';const wrap=t.querySelector('.el-table__body-wrapper .el-scrollbar__wrap')||t.querySelector('.el-table__body-wrapper');const cols=[...t.querySelectorAll('.el-table__header col')].map(c=>Number(c.getAttribute('width')||0));const ths=[...t.querySelectorAll('.el-table__header th')];const clipped=ths.filter(th=>{const c=th.querySelector('.cell')||th;return c.scrollWidth>c.clientWidth+1}).length;return JSON.stringify({over:wrap?Math.round(wrap.scrollWidth-wrap.clientWidth):-1,sumCols:cols.reduce((a,b)=>a+b,0),wrapW:wrap?Math.round(wrap.clientWidth):0,clipped:clipped})})()"
+$fit = $null
+try { $fit = (EvalJs $fitJs) | ConvertFrom-Json } catch { $fit = $null }
+if ($null -ne $fit) {
+  Info ('record table over=' + $fit.over + ' sumCols=' + $fit.sumCols + ' wrapW=' + $fit.wrapW + ' clipped=' + $fit.clipped)
+  Ok ([int]$fit.over -le 2) ('S2 the receive-record table does not scroll horizontally (over=' + $fit.over + ')')
+  Ok ([int]$fit.sumCols -le ([int]$fit.wrapW + 2)) ('S2 its column widths fit the container (' + $fit.sumCols + ' <= ' + $fit.wrapW + ')')
+  Ok ([int]$fit.clipped -eq 0) 'S2 no header of that table is clipped'
+} else { Bad 'S2 could not measure the receive-record table' }
 
-Open ("/outsource/material-return/detail/$mrId") 2800
-Ok ((ClickBtn 'btn_audit') -match 'OK') 'S2 clicked AUDIT'
-ConfirmBox 1500 | Out-Null
-Start-Sleep -Milliseconds 3200
-Ok ((SqlOne "SELECT status FROM outsource_material_return WHERE id=$mrId") -eq 'AUDITED') 'S2 status=AUDITED'
-$afterStock = StockQty $srcWh 'material_id' $matId
-Ok ((D $afterStock) -eq ((D $bStock) - $expQty)) ('S2 after audit: source warehouse -' + $expQty + ' -> ' + $afterStock)
-Ok ((D (PaySum $supId)) -lt (D $bPay)) 'S2 after audit: payable reduced (negative entry)'
-
-Ok ((ClickBtn 'btn_unaudit') -match 'OK') 'S2 clicked UN-AUDIT'
-ConfirmBox 1500 | Out-Null
-Start-Sleep -Milliseconds 3200
-Ok ((D (StockQty $srcWh 'material_id' $matId)) -eq (D $bStock)) 'S2 after un-audit: source warehouse rolled back'
-Ok ((D (PaySum $supId)) -eq (D $bPay)) 'S2 after un-audit: payable rolled back'
-Ok ((SqlOne "SELECT status FROM outsource_material_return WHERE id=$mrId") -eq 'DRAFT') 'S2 after un-audit: back to DRAFT'
-
-Ok ((ClickBtn 'btn_cancel_doc') -match 'OK') 'S2 clicked CANCEL (frees the returnable qty so the file re-runs)'
-ConfirmBox 1500 | Out-Null
+Ok ((ClickRowBtn $ri 'btn_new_return') -match 'OK') 'S2 clicked 新增退货'
 Start-Sleep -Milliseconds 2200
-Ok ((SqlOne "SELECT status FROM outsource_material_return WHERE id=$mrId") -eq 'CANCELLED') 'S2 return order cancelled'
+Ok ((BodyHas $srcWhName) -eq 'true') ('S2 the dialog defaults to the record warehouse=' + $srcWhName)
+Ok ((BodyHas $matName) -eq 'true') ('S2 the dialog lists that record material=' + $matName)
+# set the return qty of the fixture material to 1 (native value + input/change so Vue's v-model picks it up)
+$zMat = B64 $matName
+$setQtyJs = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const K=T('$zMat');const vis=e=>e.getClientRects().length>0;const dlg=[...document.querySelectorAll('.el-dialog')].filter(vis)[0];if(!dlg)return 'NODLG';for(const tr of dlg.querySelectorAll('.el-table__body tbody tr')){if((tr.innerText||'').indexOf(K)>=0){const inp=tr.querySelector('input');if(!inp)return 'NOINPUT';const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;s.call(inp,'1');inp.dispatchEvent(new Event('input',{bubbles:true}));inp.dispatchEvent(new Event('change',{bubbles:true}));return 'OK'}}return 'NOROW'})()"
+Info ('set return qty = ' + (EvalJs $setQtyJs))
+Start-Sleep -Milliseconds 600
+Ok ((ClickDialogBtn 'btn_confirm_return') -match 'OK') 'S2 confirmed 新增退货'
+Start-Sleep -Milliseconds 2800
+$retId = [int](SqlOne "SELECT COALESCE(MAX(id),0) FROM outsource_delivery WHERE delivery_type='RECEIVE_RETURN'")
+Ok ($retId -gt 0) ('S2 a 退货 record was created id=' + $retId)
+$rr = SqlRow ("SELECT status, delivery_type, to_warehouse_id, source_order_id FROM outsource_delivery WHERE id=$retId")
+Ok ([string]$rr[0] -eq 'DRAFT') 'S2 the new 退货 record is a DRAFT (no auto-audit any more)'
+Ok ([string]$rr[1] -eq 'RECEIVE_RETURN') 'S2 delivery_type=RECEIVE_RETURN'
+Ok ([int]$rr[2] -eq $srcWh) ('S2 return warehouse = the record warehouse=' + $srcWh)
+Ok ([int]$rr[3] -eq $moId) ('S2 linked material order=' + $moId)
+Ok ((D (SqlOne "SELECT COALESCE(quantity,0) FROM outsource_delivery_item WHERE delivery_id=$retId")) -eq 1) 'S2 return qty persisted = 1'
+# a draft must NOT move anything (that is the whole point of "留住草稿，人工审核")
+Ok ((D (StockQty $srcWh 'material_id' $matId)) -eq $bStock) 'S2 draft: warehouse stock untouched'
+Ok ((D (SqlOne ("SELECT COALESCE(received_quantity,0) FROM outsource_material_order_item WHERE id=" + $ordItemId))) -eq $bRecv) 'S2 draft: order received qty untouched'
+Ok ((D (PaySum $supId)) -eq $bPay) 'S2 draft: payable untouched'
+
+Ok ((ClickRowBtnContains 0 (ZH 'btn_audit')) -match 'OK') 'S2 clicked 审核 on the new 退货 row'
+ConfirmBox 1500 | Out-Null
+Start-Sleep -Milliseconds 2800
+Ok ((SqlOne "SELECT status FROM outsource_delivery WHERE id=$retId") -eq 'AUDITED') 'S2 after audit: status=AUDITED'
+Ok ((D (StockQty $srcWh 'material_id' $matId)) -eq ($bStock - 1)) ('S2 after audit: warehouse stock -1 -> ' + (StockQty $srcWh 'material_id' $matId))
+Ok (((D (SqlOne ("SELECT COALESCE(received_quantity,0) FROM outsource_material_order_item WHERE id=" + $ordItemId))) -eq ($bRecv - 1))) ('S2 after audit: order received qty -1 -> ' + (SqlOne ("SELECT COALESCE(received_quantity,0) FROM outsource_material_order_item WHERE id=" + $ordItemId)))
+Ok ((D (PaySum $supId)) -eq ($bPay - $unitPrice)) ('S2 after audit: negative payable posted (-' + $unitPrice + ') -> ' + (PaySum $supId))
+
+Ok ((ClickRowBtnContains 0 (ZH 'btn_unaudit')) -match 'OK') 'S2 clicked 反审核 on the same row'
+ConfirmBox 1500 | Out-Null
+Start-Sleep -Milliseconds 2800
+Ok ((D (StockQty $srcWh 'material_id' $matId)) -eq $bStock) 'S2 after un-audit: warehouse stock rolled back'
+Ok ((D (SqlOne ("SELECT COALESCE(received_quantity,0) FROM outsource_material_order_item WHERE id=" + $ordItemId))) -eq $bRecv) 'S2 after un-audit: order received qty rolled back'
+Ok ((D (PaySum $supId)) -eq $bPay) 'S2 after un-audit: payable rolled back (ledger cancelled)'
+Ok ((SqlOne "SELECT status FROM outsource_delivery WHERE id=$retId") -eq 'DRAFT') 'S2 after un-audit: back to DRAFT'
+
+# cleanup: the 退货 draft is a pure test artefact (nothing left to roll back after un-audit)
+SqlRaw ("DELETE FROM outsource_delivery_item WHERE delivery_id=$retId") | Out-Null
+SqlRaw ("DELETE FROM outsource_delivery WHERE id=$retId") | Out-Null
+Ok ((SqlOne "SELECT COUNT(*) FROM outsource_delivery WHERE id=$retId") -eq '0') 'S2 cleanup: the test 退货 record was deleted'
 
 # =====================================================================
 Step 'S3 no page errors'

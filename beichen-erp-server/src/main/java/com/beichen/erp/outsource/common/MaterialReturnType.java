@@ -84,7 +84,7 @@ public enum MaterialReturnType {
         boolean finished = MaterialOrderStatus.FINISHED.getCode().equalsIgnoreCase(orderStatus);
         if (isOrderReturn(code)) {
             if (!hasOrder) return "订单退料必须关联物料订单（无单退料请选「退货退款」或「维修返回」）";
-            if (!receiving) return "该物料订单未处于「收货中」：订单退料仅适用于未结单订单，请改用「退货退款」或「维修返回」";
+            if (!receiving) return "该物料订单未处于「生产中」：订单退料仅适用于未结单订单，请改用「退货退款」或「维修返回」";
             return null;
         }
         if (hasOrder && !finished)

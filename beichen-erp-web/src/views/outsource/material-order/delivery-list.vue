@@ -4,12 +4,13 @@
  *
  * <p>2026-09-27（用户口径「物料收货应该有 收货中｜已结单 两个页签」）：本页由"只列收货中"改为**两个页签** ——</p>
  * <ul>
- *   <li><b>收货中</b>（默认）= RECEIVING：与后端「只有收货中的订单可收货」口径一致。行内「收货」「退货」；</li>
+ *   <li><b>生产中</b>（默认）= RECEIVING（2026-09-28 用户口径：原「收货中」改文案）：与后端
+ *       「只有生产中（RECEIVING）的订单可收货」口径一致。行内「收货」「退货」；</li>
  *   <li><b>已结单</b> = FINISHED：行内「收货详细」「反结单」（+「退货」，后端对已结单仍**允许**退不良/物料退货）。
  *       收货按钮刻意不放 —— 后端明确拒绝（"订单已结单，不可再收货"）；</li>
  * </ul>
  * <p><b>反结单（2026-09-27 用户口径「E 也要做」）</b>：物料订单原先结单即**终态**，结错了只能新建单。
- * 现走后端 `PUT /outsource/material-order/{id}/reopen`：曾被审核或已收过货 ⇒ 回「收货中」（可继续收货）；
+ * 现走后端 `PUT /outsource/material-order/{id}/reopen`：曾被审核或已收过货 ⇒ 回「生产中」（可继续收货）；
  * 两者皆无（待审核直接结单的 API 路径）⇒ 回「待审核」。纯状态回退、**清空结单时间与结单人**，
  * **无账务副作用**（结单本身不动库存/应付）。</p>
  *
@@ -30,10 +31,10 @@ const tableData = ref<any[]>([])
 const query = reactive({ code: '' })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 
-/** 页签：收货中（默认，原口径）｜已结单 */
+/** 页签：生产中（默认）｜已结单（2026-09-28 用户口径：原「收货中」改文案为「生产中」，**只改文案**） */
 type TabKey = 'RECEIVING' | 'FINISHED'
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'RECEIVING', label: '收货中' },
+  { key: 'RECEIVING', label: '生产中' },
   { key: 'FINISHED', label: '已结单' }
 ]
 const activeTab = ref<TabKey>('RECEIVING')
@@ -67,11 +68,11 @@ async function loadCounts() {
 function handleTabChange() { pagination.pageNum = 1; loadData() }
 function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; handleQuery() }
-/** 反结单（仅已结单页签可见）：回到收货中/待审核，可继续收货 */
+/** 反结单（仅已结单页签可见）：回到生产中/待审核，可继续收货 */
 async function handleReopen(row: any) {
   try {
     await ElMessageBox.confirm(
-      `确认反结单？订单 ${row.code} 将回到「收货中」（可继续收货；若该单从未审核过则回「待审核」），结单时间与结单人清空。`,
+      `确认反结单？订单 ${row.code} 将回到「生产中」（可继续收货；若该单从未审核过则回「待审核」），结单时间与结单人清空。`,
       '反结单', { type: 'warning' })
   } catch { return }
   try {
@@ -114,7 +115,7 @@ onActivated(() => { loadData(); loadCounts() })
   <div class="page-list">
     <el-card shadow="never">
       <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">物料收货</span></div></template>
-      <!-- 页签（2026-09-27 用户口径）：收货中（默认）｜已结单；标签后带数量角标。
+      <!-- 页签（2026-09-27 用户口径；2026-09-28 用户口径：文案「收货中」→「生产中」，只改文案）：生产中（默认）｜已结单；标签后带数量角标。
            非活动页签的**列**由 v-if 控制（DOM 中不存在）⇒ 行内按钮类断言不会被隐藏页签干扰。 -->
       <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
         <el-tab-pane v-for="t in TABS" :key="t.key" :name="t.key">
@@ -144,7 +145,7 @@ onActivated(() => { loadData(); loadCounts() })
            物料 min100→80（汇总列：弹性吃余量 + tooltip）；下单/已收/剩余 114→**130**（实测需 130，
            原先 114 被截断）、收货进度 80→64、状态 84→82、操作 134→118（收货|退货 两按钮）。
            合计 = 160+100+80+130+64+96+96+82+118 = **926** ✓
-           2026-09-27（两个页签）：**收货中**页签 = 上表原样不动；**已结单**页签 = 「交期 96 / 状态 96」
+           2026-09-27（两个页签）：**生产中**页签 = 上表原样不动；**已结单**页签 = 「交期 96 / 状态 96」
            换成「结单时间 100」、操作 118→186（收货详细 + 退货 + 反结单，实测约 180）
            ⇒ 固定列合计 = 160+130+62+96+100+186 = 734，加两个弹性列 min134+min56 = **924** ≤ 948 ✓
            2026-09-27（补结单人）：结单时间列 100→**110**（第二行放结单人小字）⇒ 合计 **934** ≤ 948 ✓ -->
@@ -182,7 +183,7 @@ onActivated(() => { loadData(); loadCounts() })
              省下的 28px 还给「状态」（68→96，状态 tag 实测需 96）。 -->
         <el-table-column label="进度" width="62"><template #default="{ row }"><el-progress :percentage="progressOf(row)" :stroke-width="10" :color="progressOf(row) >= 100 ? 'var(--app-color-success)' : 'var(--app-color-primary)'" /></template></el-table-column>
         <el-table-column label="最近收货" width="96"><template #default="{ row }">{{ $fmtDate(row.lastDeliveryTime) }}</template></el-table-column>
-        <!-- 交期 / 状态：只在「收货中」显示（2026-09-27 页签化）—— 已结单页签里状态恒为「已结单」（冗余），
+        <!-- 交期 / 状态：只在「生产中」显示（2026-09-27 页签化）—— 已结单页签里状态恒为「已结单」（冗余），
              交期让位给更有用的「结单时间」，保证列宽合计 ≤ 内容区（本项目"一行不横滑"家规）。 -->
         <el-table-column v-if="!isClosed()" label="交期" width="96"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <!-- 结单时间 + 结单人（第二行小字）合并一列：本页 11 列已排满，"第二行小字"是本项目既有做法
@@ -194,7 +195,7 @@ onActivated(() => { loadData(); loadCounts() })
           </template>
         </el-table-column>
         <el-table-column v-if="!isClosed()" label="状态" width="96" align="center"><template #default="{ row }"><el-tag :type="MaterialOrderStatusTag[row.status] || 'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <!-- 操作：收货中 = 收货 + 退货（原口径）；已结单 = 收货详细 + 退货 + 反结单
+        <!-- 操作：生产中 = 收货 + 退货（原口径）；已结单 = 收货详细 + 退货 + 反结单
              （已结单**不可收货**（后端明确拒绝）⇒ 不放「收货」；但退不良/物料退货后端仍允许 ⇒ 保留「退货」）。 -->
         <el-table-column v-if="!isClosed()" label="操作" width="118" align="center" fixed="right">
           <template #default="{ row }">

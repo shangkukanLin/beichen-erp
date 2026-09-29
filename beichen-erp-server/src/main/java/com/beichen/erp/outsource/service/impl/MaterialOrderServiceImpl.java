@@ -127,7 +127,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         MaterialOrder old = orderMapper.selectById(id);
         if (old == null) throw new BusinessException("订单不存在");
         // F7-127（2026-09-20）：**与 §23-F7-61 对齐的状态白名单** —— 只有待审核(PENDING)可整单编辑。
-        // 原实现只拦 CANCELLED ⇒ 收货中(RECEIVING)/已完成(FINISHED) 也能编辑（前端仅把明细列按 PENDING 限死，
+        // 原实现只拦 CANCELLED ⇒ 生产中(RECEIVING)/已完成(FINISHED) 也能编辑（前端仅把明细列按 PENDING 限死，
         // 交期与"保存"按钮没限）⇒ 而"下单数/单价"是收货单与应付的落账依据 ⇒ 改了即单实不符。
         if (!MaterialOrderStatus.PENDING.getCode().equals(old.getStatus()))
             throw new BusinessException("只有待审核的订单可以编辑（当前状态：" + old.getStatus()
@@ -189,7 +189,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         if (!DocStatusGuard.claim(orderMapper, MaterialOrder::getId, id,
                 MaterialOrder::getStatus, MaterialOrderStatus.PENDING.getCode(), MaterialOrderStatus.RECEIVING.getCode()))
             throw new BusinessException("只有待审核状态可审核");
-        // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：物料订单审核（待审核→收货中）补记录审核人
+        // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：物料订单审核（待审核→生产中）补记录审核人
         MaterialOrder upd = new MaterialOrder();
         upd.setId(id);
         upd.setStatus(MaterialOrderStatus.RECEIVING.getCode());
@@ -206,7 +206,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         // F7-46（2026-09-19）：原子抢占 RECEIVING→PENDING（原"先查后改"非原子）
         if (!DocStatusGuard.claim(orderMapper, MaterialOrder::getId, id,
                 MaterialOrder::getStatus, MaterialOrderStatus.RECEIVING.getCode(), MaterialOrderStatus.PENDING.getCode()))
-            throw new BusinessException("仅收货中状态可反审核");
+            throw new BusinessException("仅生产中状态可反审核");
         List<MaterialOrderItem> items = itemMapper.selectList(
             new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
         boolean hasDelivery = items.stream().anyMatch(it -> it.getReceivedQuantity() != null && it.getReceivedQuantity().compareTo(BigDecimal.ZERO) > 0);
@@ -224,7 +224,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         boolean overReceipt = Boolean.TRUE.equals(body.get("overReceipt"));
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        // 仅已审核(收货中)的订单可收货；待审核/已结单/已作废均禁止
+        // 仅已审核(生产中)的订单可收货；待审核/已结单/已作废均禁止
         if (MaterialOrderStatus.PENDING.getCode().equals(o.getStatus()))
             throw new BusinessException("订单尚未审核，请先审核订单再收货");
         if (MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus()))
@@ -437,7 +437,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             deliveryItemMapper.insert(di);
         }
 
-        // 订单进入收货中（仅标记，不等到全部收满）
+        // 订单进入生产中（仅标记，不等到全部收满）
         if (!MaterialOrderStatus.RECEIVING.getCode().equals(o.getStatus())
                 && !MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus())) {
             MaterialOrder upd = new MaterialOrder();
@@ -543,10 +543,10 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     public Object returnDefect(Long id, Map<String, Object> body) {
         MaterialOrder o = orderMapper.selectById(id);
         if (o == null) throw new BusinessException("订单不存在");
-        // 已审核(收货中)或已完成的订单可退不良；待审核/已作废禁止
+        // 已审核(生产中)或已完成的订单可退不良；待审核/已作废禁止
         if (!MaterialOrderStatus.RECEIVING.getCode().equals(o.getStatus())
                 && !MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus()))
-            throw new BusinessException("仅收货中或已完成的订单可退不良");
+            throw new BusinessException("仅生产中或已完成的订单可退不良");
 
         Long factoryId = o.getSupplierId();
         if (factoryId == null) throw new BusinessException("订单未关联供应商");
@@ -617,6 +617,95 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         return delivery.getId();
     }
 
+    /**
+     * 新增退货（2026-09-29 用户口径）：把该订单**已收**的物料退回物料商。
+     *
+     * <p>与 {@link #returnDefect} 并列的建单方法，差异只在"落什么账"：本方法落
+     * {@code DeliveryType.RECEIVE_RETURN} 草稿，审核时**冲减已收数量 + 负应付**（退不良则是
+     * {@code defect_returned_qty} + 仅折现退款动账）—— 详见 {@code DeliveryServiceImpl.auditMaterialDelivery}。</p>
+     *
+     * <p>建单**不动库存/数量/账**（与收货同口径：推迟到审核），所以草稿可以随便删/改主意；
+     * 三道校验（订单状态 / 可退数量 / 退货仓库存）都在这里先拦一道，审核时再复核一次。</p>
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Object returnMaterial(Long id, Map<String, Object> body) {
+        MaterialOrder o = orderMapper.selectById(id);
+        if (o == null) throw new BusinessException("订单不存在");
+        // 与退不良同口径：已审核(生产中)或已完成的订单可退货；待审核/已作废禁止
+        if (!MaterialOrderStatus.RECEIVING.getCode().equals(o.getStatus())
+                && !MaterialOrderStatus.FINISHED.getCode().equals(o.getStatus()))
+            throw new BusinessException("仅生产中或已完成的订单可退货");
+
+        Long factoryId = o.getSupplierId();
+        if (factoryId == null) throw new BusinessException("订单未关联供应商");
+
+        // 退货仓库：前端默认带该条收货记录的入库仓；缺省兜底取供应商第一个委外仓（与退不良同口径）
+        Long whId = body.get("warehouseId") != null ? Long.valueOf(body.get("warehouseId").toString()) : null;
+        if (whId == null) {
+            List<Warehouse> whs = warehouseMapper.selectList(
+                new LambdaQueryWrapper<Warehouse>().eq(Warehouse::getFactoryId, factoryId));
+            whId = whs.isEmpty() ? null : whs.get(0).getId();
+        }
+        if (whId == null) throw new BusinessException("请选择退货仓库");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> items = (List<Map<String, Object>>) body.get("items");
+        if (items == null || items.isEmpty()) throw new BusinessException("退货明细不能为空");
+
+        OutsourceDelivery delivery = new OutsourceDelivery();
+        delivery.setDeliveryType(DeliveryType.RECEIVE_RETURN.getCode());
+        delivery.setFactoryId(factoryId);
+        delivery.setToWarehouseId(whId);
+        delivery.setDeliveryDate(LocalDate.now());
+        delivery.setStatus(DocStatus.DRAFT.getCode());
+        delivery.setRemark("退货 - " + o.getCode());
+        delivery.setSourceOrderId(id);
+        delivery.setCode(generateDeliveryCode());
+        deliveryMapper.insert(delivery);
+
+        for (Map<String, Object> it : items) {
+            if (it.get("itemId") == null) { log.warn("退货明细缺少 itemId，已跳过: {}", it); continue; }
+            BigDecimal qty = new BigDecimal(it.get("quantity").toString());
+            if (qty.compareTo(BigDecimal.ZERO) <= 0) continue;
+            Long itemId = Long.valueOf(it.get("itemId").toString());
+            MaterialOrderItem orderItem = itemMapper.selectById(itemId);
+            if (orderItem == null) continue;
+
+            // 可退数量 = 该明细当前**已收数量**（退货审核会直接把它减掉 ⇒ 不能退超过已收的）
+            BigDecimal received = orderItem.getReceivedQuantity() != null ? orderItem.getReceivedQuantity() : BigDecimal.ZERO;
+            if (received.compareTo(qty) < 0)
+                throw new BusinessException(getMaterialNameById(orderItem.getMaterialId()) + " 可退数量不足（已收 "
+                        + received.stripTrailingZeros().toPlainString() + "，退 " + qty.stripTrailingZeros().toPlainString() + "）");
+
+            // 退货仓库存校验（同退不良：只认 stock_form=MATERIAL 的正常账 + 良品），实际扣减推迟到审核
+            if (orderItem.getMaterialId() != null) {
+                WarehouseStock s = warehouseStockMapper.selectOne(
+                    new LambdaQueryWrapper<WarehouseStock>()
+                        .eq(WarehouseStock::getWarehouseId, whId)
+                        .eq(WarehouseStock::getMaterialId, orderItem.getMaterialId())
+                        .eq(WarehouseStock::getStockForm, WarehouseStock.FORM_MATERIAL)
+                        .eq(WarehouseStock::getQualityType, QualityType.GOOD.getCode()));
+                BigDecimal stockQty = s != null && s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
+                if (stockQty.compareTo(qty) < 0)
+                    throw new BusinessException(getMaterialNameById(orderItem.getMaterialId()) + " 仓库库存不足(库存:" + stockQty + "，退:" + qty + ")");
+            }
+
+            // 退货是**良品**退回物料商（不良品走「退不良」）⇒ quality_type=GOOD、无处理方式
+            OutsourceDeliveryItem di = new OutsourceDeliveryItem();
+            di.setDeliveryId(delivery.getId());
+            di.setItemId(itemId);
+            di.setMaterialId(orderItem.getMaterialId());
+            di.setMaterialTypeId(orderItem.getMaterialTypeId());
+            di.setUnit(orderItem.getUnit());
+            di.setQuantity(qty);
+            di.setAmount(qty.multiply(orderItem.getUnitPrice() != null ? orderItem.getUnitPrice() : BigDecimal.ZERO));
+            di.setQualityType(QualityType.GOOD.getCode());
+            deliveryItemMapper.insert(di);
+        }
+        return delivery.getId();
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void finish(Long id) {
@@ -641,22 +730,22 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
      * <p><b>回退到哪个状态 —— 按"是否曾被审核 / 是否收过货"推断，不新增字段</b>：</p>
      * <ul>
      *   <li><b>曾被审核</b>（{@code auditor_id} 非空）<b>或已有收货记录</b>（任一明细 {@code received_quantity > 0}）
-     *       ⇒ 回 <b>RECEIVING 收货中</b>：这正是"结单前"的状态（订单生命周期是线性的
+     *       ⇒ 回 <b>RECEIVING 生产中</b>：这正是"结单前"的状态（订单生命周期是线性的
      *       PENDING --审核--> RECEIVING --结单--> FINISHED，界面上的「结单」也只在此状态出现），
      *       反结单的意义就是回到能继续收货的位置；</li>
      *   <li>以上都没有 ⇒ 回 <b>PENDING 待审核</b>：只有"待审核直接结单"（{@link #finish} 允许
      *       PENDING→FINISHED，接口层可达、界面未开入口）才会出现 ⇒ 回到未审核，避免凭空造出
-     *       "从未审核却已是收货中"的单。</li>
+     *       "从未审核却已是生产中"的单。</li>
      * </ul>
      * <p>⚠️ 判据不能只看收货记录：{@link #unAudit} **不清审核人**，且"审核了但一件没收到就结单"很常见
-     * （界面「结单」就在收货中状态）⇒ 只看收货会把这类单悄悄退回未审核，而详情页的「审核人」还留着旧值（自相矛盾）。</p>
+     * （界面「结单」就在生产中状态）⇒ 只看收货会把这类单悄悄退回未审核，而详情页的「审核人」还留着旧值（自相矛盾）。</p>
      *
      * <p><b>无账务副作用</b>：{@link #finish} 只改状态 + 结单时间（不动库存、不生成应付），
      * 故反结单是纯状态回退 + <b>清空 finish_time</b>（口径与各模块"反审核清空审核人"一致）。
      * 对比成品侧的反结单（要逆向退料/缺失/超损应付）简单得多 —— 这是两侧不对称的根因。</p>
      *
-     * <p><b>对关联单据的影响（已知、可接受）</b>：物料维修退货在"订单收货中"审核时会扣减该订单收料数
-     * （{@code OutsourceMaterialReturnServiceImpl}），反结单回"收货中"后该行为恢复 —— 与"订单又能继续收货"
+     * <p><b>对关联单据的影响（已知、可接受）</b>：物料维修退货在"订单生产中"审核时会扣减该订单收料数
+     * （{@code OutsourceMaterialReturnServiceImpl}），反结单回"生产中"后该行为恢复 —— 与"订单又能继续收货"
      * 是同一件事，正是反结单的预期语义。</p>
      */
     @Override
@@ -682,7 +771,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
                 .eq(MaterialOrder::getId, id)
                 .set(MaterialOrder::getFinishTime, null)
                 // 结单人也一并清空：口径与成品侧反结单（reopenClose 清空报表结单人）一致，
-                // 不留"已回收货中却还显示结单人"的自相矛盾
+                // 不留"已回生产中却还显示结单人"的自相矛盾
                 .set(MaterialOrder::getFinisherId, null)
                 .set(MaterialOrder::getFinisherName, null));
         log.info("物料订单(ID={}) 已反结单，回到{}（曾被审核={}，有收货记录={}）", id, target, everAudited, hasReceipts);
@@ -799,14 +888,14 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         // 原子删除（O-7）：带状态条件的删除 —— 仅「待审核 / 已作废」可删（单条 UPDATE/DELETE，affected=0 即状态不符）。
         // ⚠️ 已知取舍：本删除**只删主表**，其 `outsource_material_order_item` 明细会**残留**（历史实查孤儿=0，
         // 因现网订单状态均为 RECEIVING、从未触发过该入口）。
-        // 此前本入口**没有任何状态校验**（收货中/已完成的订单也能被"删除"），且"先查后删"非原子；
+        // 此前本入口**没有任何状态校验**（生产中/已完成的订单也能被"删除"），且"先查后删"非原子；
         // 现改为单条条件 UPDATE，affected=0 即状态不符或已被并发删除。
         int rows = orderMapper.delete(new LambdaQueryWrapper<MaterialOrder>()
                 .eq(MaterialOrder::getId, id)
                 .in(MaterialOrder::getStatus, MaterialOrderStatus.PENDING.getCode(), MaterialOrderStatus.CANCELLED.getCode()));
         if (rows == 0) {
             if (orderMapper.selectById(id) == null) throw new BusinessException("物料订单不存在");
-            throw new BusinessException("仅待审核或已作废的物料订单可删除，收货中/已完成请先作废");
+            throw new BusinessException("仅待审核或已作废的物料订单可删除，生产中/已完成请先作废");
         }
         itemMapper.delete(new LambdaQueryWrapper<MaterialOrderItem>().eq(MaterialOrderItem::getOrderId, id));
     }

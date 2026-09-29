@@ -86,6 +86,12 @@ if ($need -gt 0) {
     if ($typeName -eq 'REPAIR') { $leafUrl = '/outsource/material-return/unlinked' }
     Open $leafUrl 3000
     ClearErrs | Out-Null
+    # 2026-09-28（两级页签）：先切到「维修返回」类型页签 ⇒ 点「新增」时该类型随 URL 带进新增页
+    #   （下面仍会兜底在表单里选一次类型，两条路都覆盖）
+    if ($typeName -eq 'REPAIR') {
+      Write-Host ('  switch to the 维修返回 type tab: ' + (ClickTabIdx 1))
+      Start-Sleep -Milliseconds 2400
+    }
     Write-Host ('  open add page: ' + (ClickBtn $typeKey))
     Start-Sleep -Milliseconds 2400
     Write-Host ('  path=' + (EvalJs 'String(location.pathname)'))
@@ -128,6 +134,19 @@ foreach ($c in (SqlList "SELECT code FROM outsource_material_return WHERE status
   if ($rt -like '*|0') { $leafUrl = '/outsource/material-return/unlinked' }
   Open $leafUrl 2800
   Write-Host ('[' + $c + '] type=' + $rt + ' leaf=' + $leafUrl)
+  # 2026-09-28（两级页签）：**一级页签 = 类型**，默认停在第一个（关联=订单退料 / 无单=退货退款）
+  #   ⇒ 单据必须按自己的 return_type 点开对应的一级页签才出现在列表里
+  #   （标签自带数量角标 ⇒ 按**序号**点；序号表：关联 0=订单退料 1=退货退款 2=维修返回；无单 0=退货退款 1=维修返回）。
+  $typeIdx = -1
+  if ($leafUrl -like '*unlinked*') {
+    if ($rt -like 'REFUND*') { $typeIdx = 0 } elseif ($rt -like 'REPAIR*') { $typeIdx = 1 }
+  } else {
+    if ($rt -like 'ORDER*') { $typeIdx = 0 } elseif ($rt -like 'REFUND*') { $typeIdx = 1 } elseif ($rt -like 'REPAIR*') { $typeIdx = 2 }
+  }
+  if ($typeIdx -gt 0) {
+    Write-Host ('  switch to type tab #' + $typeIdx + ': ' + (ClickTabIdx $typeIdx))
+    Start-Sleep -Milliseconds 2400
+  }
   $idx = [int](FindRow $c)
   Ok ($idx -ge 0) ('material return row found: ' + $c)
   if ($idx -ge 0) {

@@ -31,7 +31,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, MaterialReturnType, MaterialReturnTypeLabel, MaterialReturnTypeTag } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, MaterialReturnType, MaterialReturnTypeLabel } from '@/api/enums'
 import EntityLinks from '@/components/EntityLinks.vue'
 
 defineOptions({ name: 'OutsourceMaterialReturn' })
@@ -48,18 +48,20 @@ const query = reactive({ code: '', supplierId: undefined as any })
  * **本组件被两个叶子共用**（按路由路径判定叶子，与加工侧同范式）：
  *  REFUND   关联退料   /outsource/material-return          挂了物料订单的退料（单号 MRH-）
  *  UNLINKED 无单退料   /outsource/material-return/unlinked 没挂物料订单的退料（单号 MRW-）
- * ⚠️ 两个叶子靠 `linked` 参数区分（WITH_ORDER / WITHOUT_ORDER，口径与加工侧 return-defect 的 linked 完全一致
- *    ⇒ 后端一个条件即可）。
+ * ⚠️ 两个叶子靠 `linked` 参数区分（WITH_ORDER / WITHOUT_ORDER，与加工侧 return-defect 的 linked 同一口径）。
  *
- * <p>🔖 **每个叶子内都可能有三种类型**（`returnType`，用户口径 2026-09-28，见 `MaterialReturnType`）：
- * `ORDER` 订单退料（仅关联未结单订单，扣源仓 + 扣订单出货/收料数）/
- * `REFUND` 退货退款 / `REPAIR` 维修返回（送修 → 登记返回 → 可结案）。
- * ⇒ 列表用「类型」列区分、动作按**行类型**显示（结案只对维修返回），查询**不按类型过滤**（同一叶子里三类型混排）。</p>
+ * <p>🔖 类型（`returnType`，三态，见 `MaterialReturnType`）：`ORDER` 订单退料 / `REFUND` 退货退款 / `REPAIR` 维修返回。</p>
  *
- * <p>📑 页签口径（两叶子统一）：**有效单据｜已返回完｜已作废** ——
- * 「有效单据」= 草稿 ∪ 已审核未返回完（后端 `progress=OPEN`；订单退料/退货退款天然落这里，它们没有"返回"概念）；
- * 「已返回完」= 已审核且送修全部送回（`progress=RETURNED`，含已结案）；
- * 「已作废」= 草稿被作废（`statuses=CANCELLED`）。三者互补且互斥，无遗漏。</p>
+ * <p>📑 **页签口径（两个叶子不同，2026-09-28 用户口径）**：</p>
+ * <ul>
+ *   <li>**两个叶子统一为两级页签**（2026-09-28 用户口径「无单退料…」→「关联退料的列表我也想用 TAB 分得细一些」）：
+ *       一级 = **类型** —— 关联退料 **订单退料 | 退货退款 | 维修返回**；无单退料 **退货退款 | 维修返回**
+ *       （订单退料必须挂订单 ⇒ 只可能出现在关联叶子）；
+ *       二级 = **状态** —— **草稿和已审核 | 已作废**（按单据状态，**不看返回进度**：送修全回/已结案的维修返回单
+ *       仍留在「草稿和已审核」里，进度看该行「送修/已返回」列）。</li>
+ *   <li>类型既已由一级页签表达 ⇒ **两个叶子都不再有「类型」列**（腾出的宽度给维修返回页签的「送修/已返回」列）；
+ *       「已返回完」页签按用户口径取消（进度改由行内「返 x/y」+「已结案」标签表达）。</li>
+ * </ul>
  */
 type Leaf = 'REFUND' | 'UNLINKED'
 const leaf = computed<Leaf>(() => {
@@ -67,35 +69,51 @@ const leaf = computed<Leaf>(() => {
   if (p.endsWith('/unlinked')) return 'UNLINKED'
   return 'REFUND'
 })
-/** 关联物料订单筛选：关联叶子=WITH_ORDER / 无单叶子=WITHOUT_ORDER（**不筛类型**：叶子内三类型混排） */
+/** 关联物料订单筛选：关联叶子=WITH_ORDER / 无单叶子=WITHOUT_ORDER */
 const linkedFilter = computed(() => (leaf.value === 'UNLINKED' ? 'WITHOUT_ORDER' : 'WITH_ORDER'))
+/** 是否「无单退料」叶子（决定一级类型页签是 2 项还是 3 项） */
+const isUnlinkedLeaf = computed(() => leaf.value === 'UNLINKED')
 
-type TabKey = 'ACTIVE' | 'RETURNED' | 'CANCELLED'
-const TABS: Record<Leaf, Array<{ key: TabKey; label: string }>> = {
-  REFUND: [{ key: 'ACTIVE', label: '有效单据' }, { key: 'RETURNED', label: '已返回完' }, { key: 'CANCELLED', label: '已作废' }],
-  // 无单退料与关联退料同构（叶子内都是三类型混排），页签一致
-  UNLINKED: [{ key: 'ACTIVE', label: '有效单据' }, { key: 'RETURNED', label: '已返回完' }, { key: 'CANCELLED', label: '已作废' }]
-}
-const tabs = computed(() => TABS[leaf.value])
+/** **二级**页签 key（状态维度）—— 两个叶子统一：草稿和已审核 | 已作废 */
+type TabKey = 'ACTIVE' | 'CANCELLED'
+const SUB_TABS: Array<{ key: TabKey; label: string }> = [
+  { key: 'ACTIVE', label: '草稿和已审核' }, { key: 'CANCELLED', label: '已作废' }
+]
+const tabs = SUB_TABS
+/**
+ * **一级**页签 = **类型**（两个叶子都有，2026-09-28 用户口径）：
+ * 关联退料 3 项（订单退料 | 退货退款 | 维修返回）/ 无单退料 2 项（订单退料必须挂订单 ⇒ 无单叶子里不可能有）。
+ * 标签取 `MaterialReturnTypeLabel`，与详情页/新增页逐字同词；顺序照枚举声明。
+ */
+const typeTabs = computed<Array<{ key: string; label: string }>>(() => {
+  const keys: string[] = isUnlinkedLeaf.value
+    ? [MaterialReturnType.REFUND, MaterialReturnType.REPAIR]
+    : [MaterialReturnType.ORDER, MaterialReturnType.REFUND, MaterialReturnType.REPAIR]
+  return keys.map(k => ({ key: k, label: MaterialReturnTypeLabel[k] }))
+})
+const activeType = ref<string>(MaterialReturnType.REFUND)
 const activeTab = ref<TabKey>('ACTIVE')
-/** 页签角标：各页签条数（pageSize=1 取 total，零后端改动） */
+/** 页签角标：各页签条数（pageSize=1 取 total，零后端改动）；key = 叶子:类型:二级页签 */
 const tabCounts = reactive<Record<string, number>>({})
-function countOf(key: TabKey) { return tabCounts[leaf.value + ':' + key] }
-/** 列表查询参数：叶子决定 linked（类型混排不筛），页签决定 progress / statuses */
-function listParams(tab: TabKey, pageNum: number, pageSize: number) {
-  const p: any = {
+function countKey(type: string, tab: TabKey) { return leaf.value + ':' + type + ':' + tab }
+function countOf(tab: TabKey) { return tabCounts[countKey(activeType.value, tab)] }
+/** 一级（类型）页签角标：该类型下「草稿和已审核」的条数（与二级页签共用同一份计数，不多发请求） */
+function countOfType(type: string) { return tabCounts[countKey(type, 'ACTIVE')] }
+/** 列表查询参数：叶子决定 linked；**类型**（一级页签）与**状态**（二级页签）分别落参 */
+function listParams(tab: TabKey, pageNum: number, pageSize: number, typeOverride?: string) {
+  return {
     pageNum, pageSize,
     // 2026-09-27：关联/无单两个叶子靠 linked 区分（后端 material_order_id 空/非空）
     linked: linkedFilter.value,
+    // 2026-09-28：**类型由一级页签决定**（两个叶子都筛 —— 类型上了页签，列表不再混排）
+    returnType: typeOverride ?? activeType.value,
+    // 二级页签 = **单据状态**（不看返回进度：「已返回完」页签已按用户口径取消）
+    statuses: tab === 'CANCELLED' ? DocStatus.CANCELLED : [DocStatus.DRAFT, DocStatus.AUDITED].join(','),
     code: query.code || undefined, supplierId: query.supplierId || undefined
   }
-  if (tab === 'CANCELLED') p.statuses = DocStatus.CANCELLED
-  else if (tab === 'ACTIVE') p.progress = 'OPEN'          // 草稿 ∪ 已审核未返回完
-  else if (tab === 'RETURNED') p.progress = 'RETURNED'    // 已审核且送修全部送回（含已结案）
-  return p
 }
 
-/** 类型文案（2026-09-21 术语统一）：页签文案改由叶子 TABS 定义（2026-09-27 三级菜单） */
+/** 页签文案（2026-09-21 术语统一；2026-09-28 两级 → 见 LINKED_TABS / UNLINKED_TABS / typeTabs） */
 
 /**
  * 退货对象（辅料商/供应商）实时查库。
@@ -113,6 +131,20 @@ const isLinkedTab = () => leaf.value === 'REFUND'
  */
 const isRepairRow = (row: any) => row?.returnType === MaterialReturnType.REPAIR
 const isOrderReturnRow = (row: any) => row?.returnType === MaterialReturnType.ORDER
+/**
+ * 「送修 / 已返回」列出现在**维修返回页签**（两个叶子都有，2026-09-28 两级页签）：
+ * 该页签全是维修返回单，返回进度用**独立列**显示（原先是挤在「类型」列里的小字，
+ * 类型上了页签后「类型」列已下线 ⇒ 进度必须有自己的列）。
+ */
+const showSentCol = computed(() => activeType.value === MaterialReturnType.REPAIR)
+/**
+ * 「新增」要预选的类型 = **当前一级页签的类型**（2026-09-28）：
+ * 唯一例外是「订单退料」—— 它由"所选订单是否**未结单**"自动判定并锁定，不能在 URL 里显式传 ORDER
+ * （见新增页 `forcedOrderReturn`）⇒ 该页签下退回默认的「退货退款」，选到未结单订单时会自动改成订单退料。
+ */
+const addPrefillType = computed(() => (activeType.value === MaterialReturnType.ORDER
+  ? MaterialReturnType.REFUND
+  : activeType.value))
 
 // 注（2026-09-28）：原「出库源仓」列与它的仓库详情跳转（goWarehouseDetail + 挂载时拉仓库列表）
 // 已随两叶子列重排移除 —— 类型列（含维修返回的"已返回数量"）优先级更高，源仓在**详情页**可见。
@@ -128,23 +160,32 @@ async function loadData() {
     ElMessage.error('加载物料退货失败：' + (e?.msg || e?.message || '未知错误'))
   } finally { loading.value = false }
 }
-/** 切页签：重置到第 1 页再查（筛选条件已由 叶子+页签 表达） */
+/** 切二级页签（状态）：重置到第 1 页再查（筛选条件已由 叶子+类型页签+状态页签 表达） */
 function handleTabChange() { pagination.pageNum = 1; loadData() }
+/** 切一级页签（类型，2026-09-28 无单叶子）：二级页签保持不变（如「已作废」下切类型仍看作废），重置页码再查 */
+function handleTypeChange() { pagination.pageNum = 1; loadData() }
 function handleSearch() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.supplierId = undefined; handleSearch() }
-/** 页签角标（2026-09-27）：各页签条数 —— 每页取 1 条只读 total */
+/**
+ * 页签角标（2026-09-27 立；2026-09-28 扩两级）：各页签条数 —— 每页取 1 条只读 total。
+ * 无单叶子：**类型 × 二级页签**四种组合都要取（一级类型页签的角标复用同类型 ACTIVE 的计数 ⇒ 不多发请求）。
+ */
 async function loadCounts() {
-  for (const t of tabs.value) {
-    try {
-      const r = await request.get<any, any>('/outsource/material-return/page', { params: listParams(t.key, 1, 1) })
-      tabCounts[leaf.value + ':' + t.key] = Number(r?.total || 0)
-    } catch { tabCounts[leaf.value + ':' + t.key] = 0 }
+  // 2026-09-28：两个叶子都是 **类型 × 二级页签** 的笛卡尔积（关联 3×2 / 无单 2×2）
+  for (const ty of typeTabs.value.map(t => t.key)) {
+    for (const t of tabs) {
+      const k = countKey(ty, t.key)
+      try {
+        const r = await request.get<any, any>('/outsource/material-return/page', { params: listParams(t.key, 1, 1, ty) })
+        tabCounts[k] = Number(r?.total || 0)
+      } catch { tabCounts[k] = 0 }
+    }
   }
 }
 
 /** 结案（仅维修退货）：全部送修数量已返回（未返回=0）后确认收尾 */
 async function handleClose(row: any) {
-  try { await ElMessageBox.confirm('确认结案？结案后不能再登记/撤销维修返回，也不能反审核（需先撤销结案）。', '确认结案', { type: 'warning' }) } catch { return }
+  try { await ElMessageBox.confirm('确认结案？结案后不能再登记/审核/反审核维修返回，也不能反审核本单（需先撤销结案）。', '确认结案', { type: 'warning' }) } catch { return }
   try { await request.put(`/outsource/material-return/${row.id}/close`); ElMessage.success('已结案'); loadData() } catch (e: any) { ElMessage.error(e?.message || '结案失败') }
 }
 async function handleReOpen(row: any) {
@@ -172,7 +213,7 @@ async function handleUnAudit(row: any) {
   const tip = isOrderReturnRow(row)
     ? '确认反审核？将物料回源仓，并把关联订单的出货/收料数量加回'
     : (isRepairRow(row)
-      ? '确认反审核？将送修物料回源仓（若有维修返回记录需先撤销；已生成的维修费应付会一并冲回）'
+      ? '确认反审核？将送修物料回源仓（若有已审核的维修返回记录需先「反审核」；已生成的维修费应付会一并冲回）'
       : '确认反审核？将物料回源仓并冲回对供应商的应收（已有收款需先退款）')
   try { await ElMessageBox.confirm(tip, '确认反审核', { type: 'warning' }) } catch { return }
   try { await request.put(`/outsource/material-return/${row.id}/un-audit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
@@ -198,9 +239,11 @@ function handleAdd(type?: string, linked?: string) {
    新增仍走 /outsource/material-return/add（可带 fromDelivery 等预填）。 */
 function goDetail(row: any) { router.push(`/outsource/material-return/detail/${row.id}`) }
 
-// 叶子切换（点左侧菜单 / 直达 URL）：页签回到该叶子的第一个并加载
-watch(leaf, (lv) => {
-  activeTab.value = TABS[lv][0].key
+// 叶子切换（点左侧菜单 / 直达 URL）：一级（类型）页签回到**该叶子的第一个**（关联=订单退料 / 无单=退货退款）、
+// 二级页签回到第一个并加载 —— ⚠️ 必须一起重置：两级页签是笛卡尔积，只重置一级会让二级停在上一叶子的选项上
+watch(leaf, () => {
+  activeType.value = typeTabs.value[0].key
+  activeTab.value = tabs[0].key
   pagination.pageNum = 1
   loadData(); loadCounts()
 })
@@ -213,7 +256,10 @@ onActivated(() => {
   }
 })
 onMounted(() => {
-  activeTab.value = TABS[leaf.value][0].key
+  // 一级页签默认 = 该叶子的第一个类型（关联退料=订单退料 / 无单退料=退货退款）：不设就会出现
+  // "高亮在"订单退料"、数据却按默认的"退货退款"查"的错位（v-model 值与页签列表不匹配时无页签高亮）
+  activeType.value = typeTabs.value[0].key
+  activeTab.value = tabs[0].key
   loadData(); loadCounts()
 })
 
@@ -223,9 +269,19 @@ onMounted(() => {
   <!-- 一页一张卡片（家规）：页签 → 筛选行 → 表格 → 分页 -->
   <div class="page-list">
     <el-card shadow="never">
-      <!-- 页签按叶子生成（2026-09-28 两叶子统一）：**有效单据 | 已返回完 | 已作废** ——
-           「有效单据」= 草稿 ∪ 已审核未返回完（订单退料/退货退款天然落这里）；「已返回完」= 维修返回全部送回；
-           标签后带**数量角标**（页签条数）。 -->
+      <!-- 一级页签（**两个叶子都有**，2026-09-28 用户口径）：**类型** ——
+           关联退料 = 订单退料 | 退货退款 | 维修返回（订单退料必须挂订单 ⇒ 只在这个叶子）；
+           无单退料 = 退货退款 | 维修返回。类型既已由本页签表达 ⇒ 列表**不再显示「类型」列**；
+           角标 = 该类型下「草稿和已审核」的条数。 -->
+      <el-tabs v-model="activeType" style="margin-bottom:0" @tab-change="handleTypeChange">
+        <el-tab-pane v-for="t in typeTabs" :key="t.key" :name="t.key">
+          <template #label>
+            <span>{{ t.label }}<span v-if="countOfType(t.key)" style="margin-left:4px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ countOfType(t.key) }}</span></span>
+          </template>
+        </el-tab-pane>
+      </el-tabs>
+      <!-- 二级页签（两个叶子统一，2026-09-28）：**草稿和已审核 | 已作废** —— 按**单据状态**分，不看返回进度
+           （送修全回/已结案的维修返回单仍留在「草稿和已审核」，进度看行内「送修/已返回」列）。标签后带**数量角标**。 -->
       <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
         <el-tab-pane v-for="t in tabs" :key="t.key" :name="t.key">
           <template #label>
@@ -234,8 +290,7 @@ onMounted(() => {
         </el-tab-pane>
       </el-tabs>
 
-      <!-- 筛选行（叶子化后简化）：关联/状态/进度已由**叶子 + 页签**表达 ⇒ 只留单号 + 供应商
-           （**不按类型筛**：叶子内三种类型混排，靠「类型」列区分） -->
+      <!-- 筛选行：叶子 → linked；一级页签 → **类型**；二级页签 → **状态** ⇒ 这里只留单号 + 供应商 -->
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
         <span v-if="leaf === 'REFUND'" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">挂了物料订单的退料单（MRH-，本页可新增，也可由该订单的收货页发起）</span>
         <span v-else style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">没挂物料订单的退料单（MRW-，手工发起）</span>
@@ -243,11 +298,11 @@ onMounted(() => {
         <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="供应商" style="width:170px" />
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
-        <!-- 新增入口随叶子切换（2026-09-28）：靠 `linked` 告诉新增页要不要挂「关联物料订单」（否则关联叶子必然录成"无单"）；
-             **类型**在新增页按"入口 + 订单状态"自动判定（未结单⇒订单退料；已结单⇒退货退款/维修返回） -->
+        <!-- 新增入口（2026-09-28 两级页签）：**在哪个类型页签点新增就把该类型带过去**（「维修返回」页签 ⇒ 直达
+             维修返回新增页）；「订单退料」页签不带类型（类型由"所选订单是否未结单"自动判定并锁定）；
+             `linked` 告诉新增页要不要挂「关联物料订单」（否则关联叶子会被录成"无单"）。 -->
         <div style="margin-left:auto;display:flex;gap:8px">
-          <el-button v-if="leaf === 'REFUND'" type="success" :icon="'Plus'" @click="handleAdd(MaterialReturnType.REFUND, 'WITH_ORDER')">新增</el-button>
-          <el-button v-else type="success" :icon="'Plus'" @click="handleAdd(MaterialReturnType.REFUND, 'WITHOUT_ORDER')">新增</el-button>
+          <el-button type="success" :icon="'Plus'" @click="handleAdd(addPrefillType, linkedFilter)">新增</el-button>
         </div>
       </div>
 
@@ -256,28 +311,31 @@ onMounted(() => {
         <template #title>
           <span style="font-size:var(--app-font-xs);line-height:1.5">
             挂了物料订单的退料（单号 MRH-）：<b>本页「新增」</b>（选关联物料订单）或在该物料订单的收货页发起。
-            按订单状态自动定类型 —— <b>订单未结单 ⇒ 订单退料</b>（扣源仓 + 扣该订单出货/收料数量，不动账务）；
-            <b>订单已结单 ⇒ 退货退款</b>（物料回源仓 + <b>生成对供应商的应收</b>，供应商退款后走收款核销）
-            <b>或维修返回</b>（送修 → 回厂登记 → 可结案；填了维修费则按明细生成对供应商的应付）。
-            没挂订单的退料在「无单退料」叶子。
+            上方按<b>类型</b>分三个页签，类型由"订单状态"在建单时定死 ——
+            <b>订单退料</b>（订单未结单：扣源仓 + 扣该订单出货/收料数量，不动账务）、
+            <b>退货退款</b>（订单已结单：物料回源仓 + <b>生成对供应商的应收</b>，供应商退款后走收款核销）、
+            <b>维修返回</b>（订单已结单：送修 → 回厂登记（先存草稿、审核后才入库） → 全返回可结案；填了维修费则按明细生成对供应商的应付）；
+            每个类型下再按状态分「草稿和已审核」与「已作废」。没挂订单的退料在「无单退料」叶子。
           </span>
         </template>
       </el-alert>
       <el-alert v-else type="info" :closable="false" show-icon style="margin-bottom:8px">
         <template #title>
           <span style="font-size:var(--app-font-xs);line-height:1.5">
-            没挂物料订单的退料（单号 MRW-）：<b>不挂订单</b>，可选<b>退货退款</b>（物料回源仓 + <b>生成对供应商的应收</b>）
-            或<b>维修返回</b>（送修 → 回厂登记 → 可结案；填了维修费则按明细生成对供应商的应付）。
-            确需挂订单请到<b>「关联退料」</b>叶子新增。
+            没挂物料订单的退料（单号 MRW-）：<b>不挂订单</b>。上方按<b>类型</b>分两个页签 ——
+            <b>退货退款</b>（物料回源仓 + <b>生成对供应商的应收</b>，供应商退款后走收款核销）与
+            <b>维修返回</b>（送修 → 回厂登记（先存草稿、审核后才入库） → 全返回可结案；填了维修费则按明细生成对供应商的应付）；
+            每个类型下再按状态分「草稿和已审核」与「已作废」。确需挂订单请到<b>「关联退料」</b>叶子新增。
           </span>
         </template>
       </el-alert>
       <!-- 列宽合计（家规：≤948 —— 纵向滚动条出现时内容区从 963 缩到约 948）：
-           2026-09-28 两叶子统一三类型后重排：**加「类型」列（118，兼显维修返回的"已返回/送修"小字）、
-           去掉「退货日期」（96，详情页可查）**，全叶子状态列统一 122（要放下「已结案」标签）：
-           关联退料 = 158+120+132(关联物料订单)+118+min71+90+122+132 = 943 ✓
-           无单退料 = 158+120+118+min150+90+122+132 = 890 ✓（无「关联物料订单」列 ⇒ 明细列放宽到 min150）
-           （公共列：单号 158 / 供应商 120 / 类型 118 / 金额 90 / 状态 122 / 操作 132。） -->
+           2026-09-28（两个叶子统一为「类型 × 状态」两级页签）：「类型」列**彻底下线**（类型上了页签）——
+           关联·订单退料 / 关联·退货退款 = 158+120+132(关联物料订单)+min240+90+74+132 = 946 ✓
+           关联·维修返回               = 158+120+132+116(送修/已返回)+min71+90+122+132 = 941 ✓
+           无单·退货退款               = 158+120+min240+90+74+132 = 814 ✓
+           无单·维修返回               = 158+120+116+min200+90+122+132 = 938 ✓（状态列放宽到 122 容纳「已结案」标签）
+           （公共列：单号 158 / 供应商 120 / 金额 90 / 操作 132。） -->
       <el-table :data="list" border stripe v-loading="loading" @row-click="goDetail">
         <!-- 2026-09-25（用户口径「数据显示完整 + 单号/仓库可点」）：退货单号 132→158（MRW-+11 位，实测需 157）
              并做成链接进详情。 -->
@@ -295,24 +353,21 @@ onMounted(() => {
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <!-- 类型（2026-09-28 三态）：叶子不再等于类型 ⇒ 必须用本列区分「订单退料 / 退货退款 / 维修返回」。
-             维修返回在**同一格**里补一行小字（用户口径「列表要显示已返回数量」）：
-             未返回完 = 橙色「返 3/5」，已全部返回 = 绿色「已返完」，已结案 = 绿 tag「已结案」（结案即全返回，二者互斥）。 -->
-        <el-table-column label="类型" width="130" show-overflow-tooltip>
+        <!-- 送修 / 已返回（**「维修返回」页签**，两个叶子都有，2026-09-28）：
+             该页签全是维修返回单 ⇒ 返回进度用**独立列**（橙=供应商还没送完、绿=已全部送回，悬停给未返回数）。
+             原「类型」列已随两级页签**下线**（类型由一级页签表达、列表不再混排）⇒ 进度必须有自己的列。 -->
+        <el-table-column v-if="showSentCol" label="送修/已返回" width="116" align="center" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-tag :type="MaterialReturnTypeTag[row.returnType] || 'info'" size="small">{{ MaterialReturnTypeLabel[row.returnType] || row.returnType }}</el-tag>
-            <span v-if="isRepairRow(row) && row.closedFlag === 1" style="margin-left:4px;color:var(--app-color-success);font-size:var(--app-font-xs);font-weight:500">已结案</span>
-            <span v-else-if="isRepairRow(row)"
-              :style="{ marginLeft: '4px', color: Number(row.unreturnedQty) > 0 ? 'var(--app-color-warning)' : 'var(--app-color-success)', fontSize: 'var(--app-font-xs)', fontWeight: 500 }"
-              :title="'送修 ' + (row.sentQty ?? 0) + ' / 已返回 ' + (row.returnedQty ?? 0) + (Number(row.unreturnedQty) > 0 ? ('（还有 ' + row.unreturnedQty + ' 件未返回）') : '（已全部返回）')">
-              返 {{ row.returnedQty ?? 0 }}/{{ row.sentQty ?? 0 }}
+            <span :style="{ color: Number(row.unreturnedQty) > 0 ? 'var(--app-color-warning)' : 'var(--app-color-success)', fontWeight: 500 }"
+              :title="Number(row.unreturnedQty) > 0 ? ('还有 ' + row.unreturnedQty + ' 件未返回') : '已全部返回'">
+              {{ row.sentQty ?? '-' }} / {{ row.returnedQty ?? 0 }}
             </span>
           </template>
         </el-table-column>
         <!-- 2026-09-26 B10：原列名「退货/送修内容」7 字实测需 124px（本页给不出）⇒ 按家规改为短列名「明细」
              （4 字以下才放得下；列内仍是可点的物料明细 + tooltip，信息不丢）。
              2026-09-25：物料可点进「物料库存分布详情」（后端 items[]）。 -->
-        <el-table-column label="明细" :min-width="isLinkedTab() ? 71 : 240" show-overflow-tooltip>
+        <el-table-column label="明细" :min-width="showSentCol ? (isLinkedTab() ? 71 : 200) : 240" show-overflow-tooltip>
           <template #default="{ row }">
             <EntityLinks :items="row.items" target="material" name-key="materialName" qty-key="quantity">
               <span>{{ row.itemSummary || '-' }}</span>
@@ -326,10 +381,12 @@ onMounted(() => {
             <span v-else>{{ row.totalAmount != null ? Number(row.totalAmount).toFixed(2) : '-' }}</span>
           </template>
         </el-table-column>
-        <!-- 状态：恒显示单据状态（「已结案」已并入「类型」列，故本列全叶子同宽 74） -->
-        <el-table-column label="状态" width="74" align="center">
+        <!-- 状态：恒显示单据状态。「已结案」是维修返回的收尾标记（结案即全部返回，二者互斥）⇒
+             在「维修返回」页签与本列并排显示（该页签状态列放宽到 122 才放得下两个 tag；其它页签 74 够用）。 -->
+        <el-table-column label="状态" :width="showSentCol ? 122 : 74" align="center">
           <template #default="{ row }">
             <el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
+            <el-tag v-if="showSentCol && row.closedFlag === 1" type="success" size="small" style="margin-left:4px">已结案</el-tag>
           </template>
         </el-table-column>
         <!-- 动作集与顺序统一（与加工侧一致）：详情 → 审核 → 反审核 → 作废 → 结案 → 撤销结案 -->

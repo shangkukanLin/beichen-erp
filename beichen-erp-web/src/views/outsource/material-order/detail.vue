@@ -109,7 +109,7 @@ async function handleSave() {
 }
 
 async function handleConfirm() {
-  try { await ElMessageBox.confirm('审核后进入收货中', '审核', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/audit`); ElMessage.success('已审核'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('审核后进入生产中', '审核', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/audit`); ElMessage.success('已审核'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleUnAudit() {
   try { await ElMessageBox.confirm('确认反审核？将回到待审核状态', '反审核', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/un-audit`); ElMessage.success('已反审核'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
@@ -118,11 +118,11 @@ async function handleFinish() {
   try { await ElMessageBox.confirm('结单后订单状态变为「已结单」，不可再收货。', '结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/finish`); ElMessage.success('已结单'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 /**
- * 反结单（2026-09-27 新增，用户口径「E 也要做」）：结错了的兜底 —— 已结单 → 收货中/待审核，清空结单时间。
+ * 反结单（2026-09-27 新增，用户口径「E 也要做」）：结错了的兜底 —— 已结单 → 生产中/待审核，清空结单时间。
  * 与「结单」对称，纯状态回退（后端不动库存/应付）。
  */
 async function handleReopen() {
-  try { await ElMessageBox.confirm('确认反结单？订单将回到「收货中」（可继续收货；若该单从未审核过则回「待审核」），结单时间与结单人清空。', '反结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/reopen`); ElMessage.success('已反结单'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('确认反结单？订单将回到「生产中」（可继续收货；若该单从未审核过则回「待审核」），结单时间与结单人清空。', '反结单', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/reopen`); ElMessage.success('已反结单'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleCancel() {
   try { await ElMessageBox.confirm('确定作废？', '作废', { type: 'warning' }); await request.put(`/outsource/material-order/${id}/cancel`); ElMessage.success('已作废'); loadAll(); markOrderDirty() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }

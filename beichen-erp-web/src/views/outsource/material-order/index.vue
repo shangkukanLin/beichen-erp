@@ -16,7 +16,7 @@ const tableData = ref<any[]>([])
 const loading = ref(false)
 const activeTab = ref('进行中')
 
-// 状态 Tab 定义 - 进行中：待审核 + 收货中
+// 状态 Tab 定义 - 进行中：待审核 + 生产中（RECEIVING，2026-09-28 文案由「收货中」改「生产中」）
 const STATUS_TABS = [
   { key: '进行中', label: '进行中', type: 'warning', statuses: [MaterialOrderStatus.PENDING, MaterialOrderStatus.RECEIVING] },
   { key: '已完成', label: '已结单', type: 'success', statuses: [MaterialOrderStatus.FINISHED] },
@@ -44,7 +44,7 @@ function handleReset() { query.code = ''; loadData() }
 function onTabChange() { pagination.pageNum = 1; loadData() }
 
 async function handleConfirm(row: any) {
-  try { await ElMessageBox.confirm('审核后将进入收货中状态', '审核订单', { type: 'warning' }); await request.put(`/outsource/material-order/${row.id}/audit`); ElMessage.success('已审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+  try { await ElMessageBox.confirm('审核后将进入生产中状态', '审核订单', { type: 'warning' }); await request.put(`/outsource/material-order/${row.id}/audit`); ElMessage.success('已审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 async function handleUnAudit(row: any) {
   try { await ElMessageBox.confirm('确认反审核？将回到待审核状态', '反审核', { type: 'warning' }); await request.put(`/outsource/material-order/${row.id}/un-audit`); ElMessage.success('已反审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }

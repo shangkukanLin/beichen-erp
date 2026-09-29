@@ -90,6 +90,21 @@ $r = Rows 0
 Write-Host ('delivery records=' + $r.n + ' head=' + ($r.head -join '|'))
 foreach ($rw in $r.rows) { Write-Host ('rec=' + ($rw -join ' | ')) }
 Write-Host ('page has 20: ' + (BodyHas '20'))
+
+# 2026-09-29（用户口径「取消自动审核，改为人工审核/反审核」）：收货只落草稿 ⇒ 必须在收货记录里点
+# 「审核」才扣库存、生成应付并回写已收数量，否则下面第 4 步的库存/应付断言全部会空跑。
+Step 'audit the receiving record manually (auto-audit was removed on 2026-09-29)'
+$dr = Rows 0
+Write-Host ('draft record row0=' + $(if ($dr.n -gt 0) { ($dr.rows[0] -join ' | ') } else { 'NONE' }))
+Ok (($dr.rows[0] -join ' ') -match (ZH 'st_draft')) 'the new receiving record is a DRAFT (no auto-audit any more)'
+Write-Host ('click record audit: ' + (ClickRowBtnContains 0 (ZH 'btn_audit')))
+Start-Sleep -Milliseconds 900
+Write-Host ('confirm: ' + (ConfirmBox 1500))
+Start-Sleep -Milliseconds 2600
+$dr2 = Rows 0
+Write-Host ('record after audit=' + $(if ($dr2.n -gt 0) { ($dr2.rows[0] -join ' | ') } else { 'NONE' }))
+Ok (($dr2.rows[0] -join ' ') -match (ZH 'st_audited')) 'the receiving record is AUDITED after the manual audit'
+
 Open '/outsource/material-order' 2400
 $mo = Rows 0
 Write-Host ('order after receive=' + $(if ($mo.n -gt 0) { ($mo.rows[0] -join ' | ') } else { 'NONE' }))

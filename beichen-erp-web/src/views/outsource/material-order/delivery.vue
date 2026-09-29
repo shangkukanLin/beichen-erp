@@ -2,19 +2,25 @@
 /**
  * 物料收货 — 收货详细（委外加工 → 物料收货 → 点单号进入）
  * <p>2026-09-16：原「物料订单详情 → 交货管理」页签整块迁出至此（收货记录 RECEIVE + 退不良 DEFECT_RETURN、
- * 记录审核/反审核），详情页只保留一个跳转按钮。列表页带 ?add=1 / ?defect=1 进入时自动打开对应弹窗。</p>
- * <p>2026-09-21（用户口径「操作文案从收料/退料改成收货/退货」）：本页新增弹窗早已叫「收货」；
- * 「退不良」弹窗里的「退料仓库 / 退料数量 / 确认退料」一并改为「**退货仓库 / 退货数量 / 确认退货**」，
- * 提示语同样。⚠️「退不良」是**独立动作**（维修退货/折现退款，写在本表的 DEFECT_RETURN 记录），
- * 与本页工具栏那个「退货」（走委外物料退货单 `outsource_material_return`）不是同一条路；
- * 枚举 label（`RECEIVE`=收料、`DEFECT_RETURN`=退不良）被**库存流水等页面共用**，故未动。</p>
+ * 记录审核/反审核），详情页只保留一个跳转按钮。列表页带 ?add=1 进入时自动打开收货弹窗。</p>
+ * <p><b>2026-09-29（用户口径）—— 本页交互重构：</b></p>
+ * <ul>
+ *   <li>原工具栏「退不良」+「退货」两个入口（都往**同一个退货仓**扣库存，被用户判为功能重复）**合并**为
+ *       收货记录行内的 <b>「新增退货」</b>：落一张 {@code RECEIVE_RETURN} 草稿，审核后 ① 扣退货仓库存
+ *       ② <b>冲减该订单已收数量</b>（{@code received_quantity}）③ 冲减应付；反审核原路回滚。</li>
+ *   <li>收货记录行操作列 = <b>审核 ｜ 反审核 ｜ 新增退货</b>：原先「反审核」只在其它页面开放，现按口径挂到
+ *       收货记录自己身上；行内那个跳「物料退货单」的「退货」按钮**已去掉**。</li>
+ *   <li><b>取消自动审核</b>：新增收货 / 新增退货都只落草稿，必须人工点「审核」才动库存、应付与订单数量
+ *       （此前建单后前端自动调审核，界面上看不到「审核」按钮）。</li>
+ * </ul>
+ * <p>枚举 label（`RECEIVE`=收料、`DEFECT_RETURN`=退不良、`RECEIVE_RETURN`=退货）被**库存流水等页面共用**。</p>
  */
 import { reactive, ref, computed, onActivated } from 'vue'
 import PageShell from '@/components/PageShell.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel, DefectHandleType, DefectHandleTypeLabel, OrderType, OrderTypeLabel, QualityType, QualityTypeLabel, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
+import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel, DefectHandleTypeLabel, OrderType, OrderTypeLabel, QualityType, QualityTypeLabel, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 
@@ -33,9 +39,8 @@ const deliveredQuantity = computed(() => items.value.reduce((s: number, it: any)
 const remainingQuantity = computed(() => Math.max(0, totalQuantity.value - deliveredQuantity.value))
 const deliveryProgress = computed(() => totalQuantity.value ? Math.min(100, Math.round(deliveredQuantity.value / totalQuantity.value * 100)) : 0)
 
-/** 只有收货中的订单可新增收货（退不良在收货中/已结单都允许，与后端一致） */
+/** 只有生产中（RECEIVING）的订单可新增收货（退货在生产中/已结单都允许，与后端一致） */
 const canReceive = computed(() => order.status === MaterialOrderStatus.RECEIVING)
-const canDefectReturn = computed(() => order.status === MaterialOrderStatus.RECEIVING || order.status === MaterialOrderStatus.FINISHED)
 
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
 
@@ -133,15 +138,11 @@ async function handleReceive(force?: boolean, overReceipt?: boolean) {
       handleReceive(true, overReceipt)
       return
     }
-    // 收货草稿创建成功后自动审核（审核才扣库存/生成应付），保持一步到位体验。
-    // 注意：本接口**成功时 data 直接是新建收货单ID（数字）**，缺料时才是 {_shortage,shortages} 对象 ——
-    // 故不能写 res?.id（对数字取属性恒 undefined，会静默跳过审核；2026-09-16 实测发现并修正）
-    const deliveryId = res && typeof res === 'object' ? (res.id ?? (res as any).data) : res
-    if (deliveryId) {
-      try { await request.put(`/outsource/material-order/delivery/${deliveryId}/audit`) }
-      catch (err: any) { ElMessage.warning('草稿已保存但审核失败：' + (err?.message || '')) }
-    }
-    ElMessage.success(force ? '缺料收货完成（子物料库存已为负数）' : '收货完成')
+    // 2026-09-29（用户口径「取消自动审核，改为人工审核/反审核」）：收货草稿建好后**不再自动审核** ——
+    // 库存/应付/订单已收数量都要在下面「收货记录」里点「审核」才动，故这里只提示去审核。
+    ElMessage.success(force
+      ? '缺料收货已存为草稿，请在收货记录里点「审核」后生效（审核时子物料库存将变为负数）'
+      : '收货已存为草稿，请在收货记录里点「审核」后才会扣库存、生成应付并回写已收数量')
     recVisible.value = false; await loadAll(); markOrderDirty()
   } catch (e: any) { ElMessage.error(e?.message || '收货失败') } finally { recSaving.value = false }
 }
@@ -158,93 +159,102 @@ async function unauditDelivery(row: any) {
   try { await request.put(`/outsource/material-order/delivery/${row.id}/un-audit`); ElMessage.success('已反审核'); await loadAll(); markOrderDirty() }
   catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
-/** 是否为可审核/反审核的物料订单收发明细（收货/退不良） */
+/** 是否为可审核/反审核的物料订单收发明细（收货 / 退不良 / 退货，2026-09-29 加退货） */
 function isMaterialDelivery(row: any) {
-  return row.deliveryType === DeliveryType.RECEIVE || row.deliveryType === DeliveryType.DEFECT_RETURN
+  return row.deliveryType === DeliveryType.RECEIVE
+    || row.deliveryType === DeliveryType.DEFECT_RETURN
+    || row.deliveryType === DeliveryType.RECEIVE_RETURN
 }
 
-/**
- * 退货（2026-09-17）：把已收的物料退回**物料商** —— 走**委外物料退货单**（独立单据：源仓扣减 + 冲减应付），
- * 与「退不良」（不良品维修退货/折现退款，写在本页收货记录里并影响净已收）是两件事。
- * 传收货记录时后端会按该单「已收 − 已退」算可退数量并预填供应商/源仓/物料。
- */
-function goReturn(row?: any) {
-  if (row?.id) router.push(`/outsource/material-return/add?sourceDeliveryId=${row.id}`)
-  else router.push(`/outsource/material-return/add?supplierId=${order.supplierId || ''}`)
-}
+// ===== 新增退货弹窗（2026-09-29 用户口径：取代原工具栏「退不良」+「退货」两个入口）=====
+// 语义：把该收货记录收到的物料退回物料商 ⇒ 审核后 ① 从退货仓扣库存 ② **冲减该订单已收数量**
+// （received_quantity，即"这些货回到未收"）③ 冲减应付（不再欠物料商这批货的钱）。
+// 建单只落**草稿**（与收货同口径：库存/数量/账在审核时才动），因此这里**不再自动审核**。
+const retVisible = ref(false); const retSaving = ref(false)
+const retItems = ref<any[]>([])
+/** 发起退货的那条收货记录（用于默认仓 = 该记录入库仓 + 明细范围） */
+const retRow = ref<any>(null)
+/** 退货仓库：默认 = 该条收货记录的入库仓（用户口径「默认该收货记录入库的仓库」，可改） */
+const retWarehouseId = ref<number>()
+const retWarehouseOptions = ref<any[]>([])
 
-// ===== 退不良弹窗 =====
-const defectVisible = ref(false); const defectSaving = ref(false)
-const defectItems = ref<any[]>([])
-const defectHandleType = ref<string>(DefectHandleType.REPAIR_RETURN)
-const defectWarehouseId = ref<number>()
-const defectWarehouseOptions = ref<any[]>([])
-
-async function loadDefectWarehouses() {
+async function loadReturnWarehouses() {
   try {
-    // 查询该物料订单发料到了哪些委外仓库
+    // 复用「退不良」的可退仓接口（= 该订单物料发到过/收过的委外仓）—— 两件事的仓范围完全相同，
+    // 故不另开端点（若将来退货仓范围要放开，再拆独立端点）
     const r = await request.get<any, any>(`/outsource/material-order/${id}/defect-warehouses`)
-    defectWarehouseOptions.value = r || []
-  } catch { defectWarehouseOptions.value = [] }
+    retWarehouseOptions.value = r || []
+  } catch { retWarehouseOptions.value = [] }
 }
-function onDefectWhChange(whId: number) {
-  defectWarehouseId.value = whId
-  for (const it of defectItems.value) { it.warehouseStock = undefined; it.stockLoading = true }
+function onRetWhChange(whId: number) {
+  retWarehouseId.value = whId
+  for (const it of retItems.value) { it.warehouseStock = undefined; it.stockLoading = true }
   if (!whId) return
-  loadDefectStock(whId)
+  loadReturnStock(whId)
 }
-async function loadDefectStock(whId: number) {
+async function loadReturnStock(whId: number) {
   try {
     const r = await request.get<any, any>('/warehouse/stock/by-warehouse/' + whId)
     const stockMap: Record<number, number> = {}
     if (Array.isArray(r)) for (const s of r) stockMap[s.materialId] = s.quantity || 0
-    for (const it of defectItems.value) { it.warehouseStock = stockMap[it.materialId] ?? 0; it.stockLoading = false }
+    for (const it of retItems.value) { it.warehouseStock = stockMap[it.materialId] ?? 0; it.stockLoading = false }
   } catch {
-    for (const it of defectItems.value) it.stockLoading = false
+    for (const it of retItems.value) it.stockLoading = false
   }
 }
-function openDefectReturn() {
-  defectHandleType.value = DefectHandleType.REPAIR_RETURN
-  defectWarehouseId.value = undefined; defectWarehouseOptions.value = []
-  defectItems.value = items.value.filter((it: any) => it.receivedQuantity > 0).map((it: any) => ({
-    itemId: it.id, materialId: it.materialId, materialName: it.materialName,
-    available: (it.receivedQuantity || 0) - (it.defectReturnedQty || 0),
-    warehouseStock: undefined, stockLoading: false, quantity: undefined as any
-  }))
-  defectVisible.value = true
-  loadDefectWarehouses()
-}
-async function handleDefectReturn() {
-  const data = defectItems.value.filter((r: any) => r.quantity && Number(r.quantity) > 0)
-  if (data.length === 0) { ElMessage.warning('请输入退货数量'); return }
-  if (!defectWarehouseId.value) { ElMessage.warning('请选择退货仓库'); return }
-  defectSaving.value = true
-  try {
-    const res = await request.post<any, any>(`/outsource/material-order/${id}/return-defect`, { handleType: defectHandleType.value, warehouseId: defectWarehouseId.value, items: data })
-    // 退不良草稿创建成功后自动审核（同 receive：成功时 data 直接是新建单据ID 数字）
-    const deliveryId = res && typeof res === 'object' ? (res.id ?? (res as any).data) : res
-    if (deliveryId) {
-      try { await request.put(`/outsource/material-order/delivery/${deliveryId}/audit`) }
-      catch (err: any) { ElMessage.warning('草稿已保存但审核失败：' + (err?.message || '')) }
+/**
+ * 打开「新增退货」：范围 = **该条收货记录收到的明细**（退的就是这条记录收进来的货）；
+ * 可退上限取「该记录收到量」与「订单明细当前已收量」的较小值 —— 后者正是后端建单/审核两道校验的口径。
+ */
+function openReturn(row: any) {
+  retRow.value = row
+  const orderItemById: Record<number, any> = {}
+  for (const it of items.value) orderItemById[Number(it.id)] = it
+  retWarehouseId.value = row?.toWarehouseId || undefined
+  retWarehouseOptions.value = []
+  retItems.value = (row?.items || []).map((r: any) => {
+    const oi = orderItemById[Number(r.itemId)]
+    const recordQty = Number(r.quantity || 0)
+    const orderReceived = Number(oi?.receivedQuantity || 0)
+    return {
+      itemId: r.itemId, materialId: r.materialId, materialName: r.materialName,
+      available: Math.max(0, Math.min(recordQty, orderReceived)),
+      warehouseStock: undefined, stockLoading: false, quantity: undefined as any
     }
-    ElMessage.success('退不良完成'); defectVisible.value = false; await loadAll(); markOrderDirty()
-  } catch (e: any) { ElMessage.error(e?.message || '退货失败') } finally { defectSaving.value = false }
+  })
+  retVisible.value = true
+  loadReturnWarehouses()
+  if (retWarehouseId.value) onRetWhChange(retWarehouseId.value)
+}
+async function handleReturn() {
+  const data = retItems.value.filter((r: any) => r.quantity && Number(r.quantity) > 0)
+  if (data.length === 0) { ElMessage.warning('请输入退货数量'); return }
+  if (!retWarehouseId.value) { ElMessage.warning('请选择退货仓库'); return }
+  retSaving.value = true
+  try {
+    await request.post<any, any>(`/outsource/material-order/${id}/return`, {
+      warehouseId: retWarehouseId.value,
+      items: data.map((r: any) => ({ itemId: r.itemId, quantity: r.quantity }))
+    })
+    // 与收货同口径：只落草稿 ⇒ 明确告知"还没扣库存/还没冲数量"，要在收货记录里审核
+    ElMessage.success('退货已存为草稿，请在收货记录里点「审核」后才会扣库存、冲减已收数量与应付')
+    retVisible.value = false; await loadAll(); markOrderDirty()
+  } catch (e: any) { ElMessage.error(e?.message || '退货失败') } finally { retSaving.value = false }
 }
 
 /**
- * 从「物料收货」列表带参（?add=1 / ?defect=1）进入时自动打开对应弹窗，一步完成收货。
+ * 从「物料收货」列表带参 `?add=1` 进入时自动打开收货弹窗，一步录入收货数量。
+ * <p>（2026-09-29：原 `?defect=1` 自动开「退不良」弹窗的分支随该入口一并删除 —— 全库已无生产者。）</p>
  * <p>幂等标记按 **route.fullPath** 记录（2026-09-17 修复）：layout 的 keep-alive key 是
  * `fullPath + '-' + tabSeq[path]`，同一 path 会复用实例 —— 若只用一个布尔标记，
  * 第二次带参进入就不会再弹（实测）。列表点击已带 `_t=<时间戳>`，故每次都是新 fullPath。</p>
  */
 let lastAutoOpenedPath = ''
 function maybeAutoOpen() {
-  const flag = route.query.add === '1' ? 'add' : (route.query.defect === '1' ? 'defect' : '')
-  if (!flag) return
+  if (route.query.add !== '1') return
   if (lastAutoOpenedPath === route.fullPath) return
   lastAutoOpenedPath = route.fullPath
-  if (flag === 'add') { if (canReceive.value) openReceive(); else ElMessage.warning('只有收货中的订单可新增收货') }
-  else { if (canDefectReturn.value) openDefectReturn(); else ElMessage.warning('当前状态不可退不良') }
+  if (canReceive.value) openReceive(); else ElMessage.warning('只有生产中的订单可新增收货')
 }
 
 onActivated(async () => { await loadAll(); await maybeAutoOpen() })
@@ -279,9 +289,8 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         <span style="font-weight:600">收货记录</span>
         <div style="display:flex;gap:8px">
           <el-button v-if="canReceive" type="primary" size="small" @click="openReceive">新增收货</el-button>
-          <el-button v-if="canDefectReturn" type="warning" size="small" @click="openDefectReturn">退不良</el-button>
-          <!-- 退货：把已收物料退回物料商（走物料退货单）；不限于收货中，已结单也能退 -->
-          <el-button type="warning" plain size="small" @click="goReturn()">退货</el-button>
+          <!-- 2026-09-29（用户口径）：工具栏原「退不良」+「退货」两个入口**合并为收货记录行内的「新增退货」**
+               —— 两者都往同一个退货仓扣库存（库存方向/仓库重叠，用户判为功能重复），此处不再保留入口。 -->
         </div>
       </div>
       <el-table :data="deliveries" border stripe size="small">
@@ -296,21 +305,34 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
             </el-table>
           </template>
         </el-table-column>
-        <el-table-column label="单号" width="150"><template #default="{ row }"><a v-if="row.id != null" class="bill-link" @click="router.push(`/outsource/delivery/detail/${row.id}`)">{{ row.code }}</a><span v-else>{{ row.code }}</span></template></el-table-column>
-        <el-table-column prop="deliveryType" label="类型" width="70"><template #default="{ row }"><el-tag :type="row.deliveryType === DeliveryType.RECEIVE ? 'success' : 'warning'" size="small">{{ DeliveryTypeLabel[row.deliveryType] || row.deliveryType }}</el-tag></template></el-table-column>
-        <el-table-column label="状态" width="80"><template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="日期" width="110"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column label="型号" min-width="140" show-overflow-tooltip><template #default="{ row }">{{ (row.items || []).map((i:any)=>i.materialName).join(' / ') }}</template></el-table-column>
-        <el-table-column label="数量" width="80" align="right"><template #default="{ row }">{{ (row.items || []).reduce((s:number,i:any)=>s+(i.quantity||0),0) }}</template></el-table-column>
-        <el-table-column prop="warehouseName" label="仓库" width="120" show-overflow-tooltip />
-        <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
-        <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 150→96（该列只剩 审核/退货 各 1 个按钮）。 -->
-        <el-table-column label="操作" width="96" fixed="right">
+        <!--
+          列宽预算（2026-09-29 实测驱动；家规「列表一行显示完、不左右滑动」）：
+          容器实测 948px。原列宽合计 **1048 > 948 ⇒ 本来就横滑 100px**（操作列只有 96 时也已溢 66px，
+          属既存债）；本次操作列要为「反审核 + 新增退货」加宽到 124，故按实测一并收紧其余列：
+          展开 48（框架固定）· 单号 150→**130**（最长 DEL-20260928008 = 15 字符 ≈ 105+内边距 16+边框 1）
+          · 类型 70→**62** · 状态 80→**74**（表头 2 字 = 28+16+1，标签自适应）· 日期 110→**100**（10 字符 ≈ 86）
+          · 型号 min140→**120** · 数量 80→**74** · 仓库 120→**100** · 备注 min120→**100** · 操作 **124**
+          ⇒ 合计 **932 ≤ 948**（余量 16）。⚠️ 改列宽前请跑 ui-e2e-11（其 S2 会断言本表不横滑且表头不被裁）。
+        -->
+        <el-table-column label="单号" width="130"><template #default="{ row }"><a v-if="row.id != null" class="bill-link" @click="router.push(`/outsource/delivery/detail/${row.id}`)">{{ row.code }}</a><span v-else>{{ row.code }}</span></template></el-table-column>
+        <el-table-column prop="deliveryType" label="类型" width="62"><template #default="{ row }"><el-tag :type="row.deliveryType === DeliveryType.RECEIVE ? 'success' : 'warning'" size="small">{{ DeliveryTypeLabel[row.deliveryType] || row.deliveryType }}</el-tag></template></el-table-column>
+        <el-table-column label="状态" width="74"><template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
+        <el-table-column label="日期" width="100"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
+        <el-table-column label="型号" min-width="120" show-overflow-tooltip><template #default="{ row }">{{ (row.items || []).map((i:any)=>i.materialName).join(' / ') }}</template></el-table-column>
+        <el-table-column label="数量" width="74" align="right"><template #default="{ row }">{{ (row.items || []).reduce((s:number,i:any)=>s+(i.quantity||0),0) }}</template></el-table-column>
+        <el-table-column prop="warehouseName" label="仓库" width="100" show-overflow-tooltip />
+        <el-table-column prop="remark" label="备注" min-width="100" show-overflow-tooltip />
+        <!-- 2026-09-29（用户口径）：操作列 = 「审核 ｜ 反审核 ｜ 新增退货」——
+             ① 行内原「退货」（跳物料退货单）已去掉；② 「反审核」按口径挂到收货记录自己身上（原先只在别的页面）；
+             ③ 「新增退货」取代工具栏的「退不良 + 退货」两个入口。宽度 96→**124**：最长组合
+             「反审核 + 新增退货」= 3+4 字 ≈ 98px + 按钮间距/内边距 ≈ 124。 -->
+        <el-table-column label="操作" width="124" fixed="right">
           <template #default="{ row }">
             <template v-if="isMaterialDelivery(row)">
               <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link size="small" @click="auditDelivery(row)">审核</el-button>
-              <!-- 退货：仅对已审核的**收料单**开放（退不良记录不再退货） -->
-              <el-button v-if="row.status === DocStatus.AUDITED && row.deliveryType === DeliveryType.RECEIVE" type="warning" link size="small" @click="goReturn(row)">退货</el-button>
+              <el-button v-else-if="row.status === DocStatus.AUDITED" type="warning" link size="small" @click="unauditDelivery(row)">反审核</el-button>
+              <!-- 新增退货：只对**已审核的收料单**开放（草稿尚未入库；退不良/退货记录本身不能再退） -->
+              <el-button v-if="row.status === DocStatus.AUDITED && row.deliveryType === DeliveryType.RECEIVE" type="primary" link size="small" @click="openReturn(row)">新增退货</el-button>
             </template>
             <span v-else style="color:var(--app-text-placeholder);font-size:var(--app-font-xs)">-</span>
           </template>
@@ -350,22 +372,21 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
       <template #footer><el-button @click="recVisible = false">取消</el-button><el-button type="primary" :loading="recSaving" @click="handleReceive()">确认收货</el-button></template>
     </el-dialog>
 
-    <!-- 退不良弹窗 -->
-    <el-dialog v-model="defectVisible" title="退不良品" width="var(--app-dialog-md)" :close-on-click-modal="false">
+    <!-- 新增退货弹窗（2026-09-29 用户口径：取代原工具栏「退不良」+「退货」两个入口） -->
+    <el-dialog v-model="retVisible" title="新增退货" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <div style="margin-bottom:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <span style="font-size:var(--app-font-base);color:var(--app-text-regular)">供应商：<b>{{ order.supplierName || '-' }}</b></span>
-        <span style="font-size:var(--app-font-base)">处理方式：</span>
-        <el-radio-group v-model="defectHandleType" size="small" @change="defectWarehouseId = undefined"><el-radio :value="DefectHandleType.REPAIR_RETURN">维修退货</el-radio><el-radio :value="DefectHandleType.CASH_REFUND">折现退款</el-radio></el-radio-group>
+        <span style="font-size:var(--app-font-base);color:var(--app-text-regular)">物料商：<b>{{ order.supplierName || '-' }}</b></span>
+        <span style="font-size:var(--app-font-base)">来源收货单：<b>{{ retRow?.code || '-' }}</b></span>
       </div>
-      <div style="margin-bottom:8px"><el-select v-model="defectWarehouseId" filterable style="width:100%" placeholder="选择退货仓库" @change="onDefectWhChange"><el-option v-for="w in defectWarehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></div>
-      <div v-if="defectHandleType === DefectHandleType.CASH_REFUND" style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid var(--app-color-warning);font-size:var(--app-font-xs);color:var(--app-color-warning)">折现退款将扣减退货仓库库存，并按退货金额自动冲减供应商应付。</div>
-      <el-table :data="defectItems" border size="small">
+      <div style="margin-bottom:8px"><el-select v-model="retWarehouseId" filterable style="width:100%" placeholder="选择退货仓库（默认＝该收货记录的入库仓）" @change="onRetWhChange"><el-option v-for="w in retWarehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></div>
+      <div style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid var(--app-color-warning);font-size:var(--app-font-xs);color:var(--app-color-warning)">保存为<b>草稿</b>：需在「收货记录」里点「审核」后才会 ① 从退货仓扣减库存 ② 冲减该订单已收数量 ③ 冲减应付（「反审核」原路回滚）。</div>
+      <el-table :data="retItems" border size="small">
         <el-table-column prop="materialName" label="物料" min-width="140" />
         <el-table-column prop="available" label="可退" width="70" />
         <el-table-column label="仓库库存" width="90" align="right"><template #default="{ row }"><span v-if="row.stockLoading">加载中...</span><span v-else-if="row.warehouseStock === undefined" style="color:var(--app-text-placeholder)">—</span><span v-else :style="{ color: row.warehouseStock < row.quantity ? 'var(--app-color-danger)' : 'var(--app-color-success)' }">{{ row.warehouseStock }}</span></template></el-table-column>
         <el-table-column label="退货数量" width="140"><template #default="{ row }"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" :max="row.available" style="width:100%" placeholder="数量" /></template></el-table-column>
       </el-table>
-      <template #footer><el-button @click="defectVisible = false">取消</el-button><el-button type="warning" :loading="defectSaving" @click="handleDefectReturn">确认退货</el-button></template>
+      <template #footer><el-button @click="retVisible = false">取消</el-button><el-button type="primary" :loading="retSaving" @click="handleReturn">确认退货</el-button></template>
     </el-dialog>
   </PageShell>
 </template>

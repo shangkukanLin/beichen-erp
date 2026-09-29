@@ -58,7 +58,7 @@ public class MaterialOrderController {
         return R.ok();
     }
 
-    /** 反审核：收货中且无交货记录时回到待审核（与作废逻辑一致，保护已产生库存/应付的单据） */
+    /** 反审核：生产中且无交货记录时回到待审核（与作废逻辑一致，保护已产生库存/应付的单据） */
     @PutMapping("/{id}/un-audit")
     public R<Void> unAudit(@PathVariable Long id) {
         materialOrderService.unAudit(id);
@@ -77,6 +77,21 @@ public class MaterialOrderController {
         return R.ok(materialOrderService.returnDefect(id, body));
     }
 
+    /**
+     * 新增退货（2026-09-29 用户口径）：把该订单**已收**的物料退回物料商。
+     *
+     * <p>只落一张 {@code RECEIVE_RETURN} **草稿**（不动库存/数量/账）—— 与收货同口径，须在「收货记录」里
+     * 点「审核」才：① 扣退货仓库存（{@code MATERIAL_RETURN_OUT}）② 冲减该订单已收数量
+     * ③ 生成负应付（不再欠物料商这批货的钱）；「反审核」原路回滚（见 DeliveryService）。</p>
+     *
+     * <p>入参：{@code warehouseId}（退货仓库，前端默认带该收货记录的入库仓）、
+     * {@code items:[{itemId, quantity}]}。</p>
+     */
+    @PostMapping("/{id}/return")
+    public R<?> returnMaterial(@PathVariable Long id, @RequestBody Map<String, Object> body) {
+        return R.ok(materialOrderService.returnMaterial(id, body));
+    }
+
     /** 结单：直接标记为已完成 */
     @PutMapping("/{id}/finish")
     public R<Void> finish(@PathVariable Long id) {
@@ -86,7 +101,7 @@ public class MaterialOrderController {
 
     /**
      * 反结单（2026-09-27 用户口径「E 也要做」）：
-     * 已结单 → 收货中（曾被审核或已收过货）/ 待审核（两者皆无），并清空结单时间。
+     * 已结单 → 生产中（曾被审核或已收过货）/ 待审核（两者皆无），并清空结单时间。
      * <p>与 {@code /finish} 对称；纯状态回退、无账务副作用。</p>
      */
     @PutMapping("/{id}/reopen")

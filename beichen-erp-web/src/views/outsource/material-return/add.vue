@@ -118,7 +118,7 @@ const fetchSuppliers = (kw: string) =>
 // ===== 关联物料订单（维修退货闭环）=====
 /** 选中的物料订单行（含状态，用于提示"扣减订单收料 / 靠本单跟踪"两种收尾方式） */
 const pickedOrder = ref<any>(null)
-/** 该物料商的物料订单（收货中/已结单）：收货中的单审核会扣减收料数，已结单的靠本单跟踪 */
+/** 该物料商的物料订单（生产中/已结单）：生产中的单审核会扣减收料数，已结单的靠本单跟踪 */
 // 期 3（2026-09-19 读隔离）：改走本页前缀（原读 /outsource/material-order/page 需 outsource:material-order）
 const fetchMaterialOrders = (kw: string) => request.get('/outsource/material-return/material-orders', {
   params: {
