@@ -356,20 +356,26 @@ public class DataInitializer implements ApplicationRunner {
             // 注意：**收货/退货业务本身未改**（OrderDeliveryController / OutsourceOrderDeliveryService /
             // MaterialOrderController 的收货、退货、库存、应付、BOM还料逻辑均未动）
             {415L, 4L, "物料收退", "menu", "/outsource/material-order/delivery", "OutsourceMaterialOrderDelivery", "Van", 5},
-            // 物料退货（2026-09-27 用户口径「物料侧也按关联物料订单/未关联分叶子」）：二级改目录 423，
-            // 把原「411 一个页面 2 页签」拆成 **3 个**三级叶子：
-            //  411 关联退料(MRH-) / 425 无单退料(MRW-) / 424 物料维修退货(REPAIR)；
-            //  三者 API 都在 /api/outsource/material-return 前缀下 ⇒ perms 同码；
-            //  关联/无单两个叶子同 returnType=REFUND，靠 linked 参数区分（与加工侧 linked 同口径）。
-            {423L, 4L, "物料退货", "catalog", "", "", "Refrigerator", 6},
-            {411L, 423L, "关联退料", "menu", "/outsource/material-return", "OutsourceMaterialReturn", "Document", 1},
-            {425L, 423L, "无单退料", "menu", "/outsource/material-return/unlinked", "OutsourceMaterialReturnUnlinked", "Files", 2},
-            // 424「物料维修退货」叶子已于 2026-09-28 按用户要求下线（用户口径：「物料维修退料这个不需要了」）：
-            //   「维修返回」不再是独立叶子，而是**关联退料 / 无单退料两个叶子里都可选的一种类型**
-            //   （类型三态：订单退料 / 退货退款 / 维修返回，见 MaterialReturnType）。
-            //   与 422/406/701 同范式 —— 不再 upsert（upsert 会把 visible 刷回 1），
+            // 物料售后（**2026-09-29 用户口径**「委外加工子菜单『物料退货』改名『物料售后』；关联退料不需要了，
+            //   以后关联退料在物料收退做；下面的子菜单改为 工厂维修 + 退货退款」）—— 与加工侧 419「加工售后」同范式：
+            //   目录 423 改名「物料售后」（id/type/sort 不变），两个叶子**按类型**分（不再是 关联/无单）：
+            //     424 工厂维修(REPAIR) `/outsource/material-return/repair`
+            //         —— 2026-09-28 曾下线（当时口径"维修返回只是一种类型"），本次按新口径**恢复为真叶子**
+            //            ⇒ 同时要从下方 visible=0 列表里移除本 id。
+            //     425 退货退款(REFUND) `/outsource/material-return/unlinked`
+            //         —— path 沿用（与加工侧「工厂售后」沿用 /unlinked 同款；改名只改文案，老链接不断）。
+            //   「关联退料」（挂在物料订单上的退料）2026-09-29 起**改在「物料收退」做**：收退详情页工具栏
+            //     「物料退货」→ 落 RECEIVE_RETURN 记录，审核后 冲减该单已收数量 + 冲减应付（用户口径
+            //     「关联退料需要冲减应付，然后减少该订单的收货数量」）⇒ 411 叶子下线。
+            //   两个叶子同 API 前缀 /api/outsource/material-return ⇒ perms 同码；列表口径写死
+            //   linked=WITHOUT_ORDER（关联单不再进本模块列表 —— 与加工侧一致，历史关联单仍可从库存流水/应收点进详情）。
+            {423L, 4L, "物料售后", "catalog", "", "", "Refrigerator", 6},
+            {424L, 423L, "工厂维修", "menu", "/outsource/material-return/repair", "OutsourceMaterialReturnRepair", "Tools", 1},
+            {425L, 423L, "退货退款", "menu", "/outsource/material-return/unlinked", "OutsourceMaterialReturnUnlinked", "Files", 2},
+            // 411「关联退料」已于 2026-09-29 下线（用户口径「关联退料不需要了，以后关联退料在物料收退做就行」）：
+            //   与加工侧 408「关联退货」同范式 —— 不再 upsert（upsert 会把 visible 刷回 1），
             //   改在下方统一置 visible=0，**保留行与角色授权**便于回滚；
-            //   旧地址 /outsource/material-return/repair 在前端路由里重定向到「关联退料」，老书签不吃 403。
+            //   旧地址 /outsource/material-return 在前端路由里重定向到「退货退款」，老书签不吃 403。
             // 409「供应商管理」已于 2026-09-17 按用户要求下线：它是委外加工侧的**重复入口**（与基础数据 106
             // 「供应商管理」同指 /supplier/manage，页面完全相同），基础数据里 106/107 两份都保留。
             // 与 104/405/302/303 同范式：下方统一置 visible=0（保留行与角色授权，便于回滚）。
@@ -542,8 +548,8 @@ public class DataInitializer implements ApplicationRunner {
         try {
             // 注意：412 不在此列表 —— 2026-09-16 该 id 已被复用为「成品收货」菜单，
             // 若仍置 visible=0，会在上面的 upsert 之后把新菜单立刻隐藏（upsert 在前、置 0 在后）
-            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701, 406, 408, 422, 424) AND visible = 1");
-            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 409 委外加工-供应商管理 / 602 销售业务-客户管理 / 503 进货业务-供货商管理 / 701 成品库存查询 / 406 物料收发单 / 408 关联退货叶子 / 422 加工返回单 / 424 物料维修退货叶子）", hidden);
+            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701, 406, 408, 411, 422) AND visible = 1");
+            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 409 委外加工-供应商管理 / 602 销售业务-客户管理 / 503 进货业务-供货商管理 / 701 成品库存查询 / 406 物料收发单 / 408 关联退货叶子 / 411 关联退料叶子 / 422 加工返回单）", hidden);
         } catch (Exception e) {
             log.warn("下线老菜单异常: {}", e.getMessage());
         }
@@ -849,7 +855,10 @@ public class DataInitializer implements ApplicationRunner {
                 // 2026-09-29：408「关联退货」叶子已下线（visible=0）⇒ 不再写 perms —— 它原先的码与
                 //   420「无单退货」/412「加工收货」相同（outsource:order-delivery），由那两行承担；
                 //   存量库该行的 perms 会残留但**不可见即不生效**（有效权限 = 可见菜单的 perms 集合）。
-                {411L, "outsource:material-return"},
+                // 2026-09-29：411「关联退料」已下线（visible=0）⇒ 不再写 perms（它的码与 424/425 相同，
+                //   由那两个叶子承担；存量库该行 perms 残留但**不可见即不生效**）；
+                //   424「工厂维修」本次按新口径**恢复为真叶子** ⇒ 重新写 perms。
+                {424L, "outsource:material-return"},
                 {425L, "outsource:material-return"},
                 {420L, "outsource:order-delivery"},
                 {421L, "outsource:return-order"},
@@ -1007,7 +1016,8 @@ public class DataInitializer implements ApplicationRunner {
                 101L, 102L, 103L, 105L, 106L, 107L, 108L,
                 301L, 304L, 305L,
                 401L, 402L, 403L, 404L, 406L, 407L, 408L, 409L, 410L, 411L, 412L, 413L, 414L, 415L,
-                // 2026-09-27 三级菜单：419 加工退货目录 + 420/421 叶子（422 加工返回单已下线）；423 物料退货目录 + 424/425 叶子
+                // 2026-09-27 三级菜单：419 加工售后目录 + 420/421 叶子（422 加工返回单已下线）；
+                // 2026-09-29：423 改名「物料售后」目录 + 424/425 叶子（411 关联退料已下线，保留授权便于回滚）
                 419L, 420L, 421L, 423L, 424L, 425L,
                 501L, 502L, 503L, 504L,
                 601L, 602L, 603L, 605L,
@@ -1112,9 +1122,9 @@ public class DataInitializer implements ApplicationRunner {
                     "WHERE rm.menu_id = 408");
             granted += jdbcTemplate.update(
                     "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
-                    "SELECT rm.role_id, m.id FROM sys_role_menu rm JOIN sys_menu m ON m.id IN (423, 425) " +
+                    "SELECT rm.role_id, m.id FROM sys_role_menu rm JOIN sys_menu m ON m.id IN (423, 424, 425) " +
                     "WHERE rm.menu_id = 411");
-            if (granted > 0) log.info("已按旧叶子继承补授三级菜单 {} 条（419~421 随 408 / 423+425 随 411）", granted);
+            if (granted > 0) log.info("已按旧叶子继承补授三级菜单 {} 条（419~421 随 408 / 423+424+425 随 411）", granted);
         } catch (Exception e) {
             log.warn("补授三级退货菜单异常: {}", e.getMessage());
         }

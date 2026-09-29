@@ -68,110 +68,81 @@ Write-Host ('FIXTURE wh=' + $whId + ' (' + $whName + ') material=' + $matId + ' 
 Ok (($whId -gt 0) -and ($matId -gt 0) -and ($supId -gt 0) -and ($whName -ne '') -and ($matName -ne '')) 'fixture derived (warehouse + material with GOOD stock + supplier)'
 
 # =====================================================================
-Step 'S1 material-return leaves: tabs + one entry per leaf'
-# 2026-09-27 三级菜单拆叶子 → **2026-09-28 收敛为两个叶子**（关联退料 / 无单退料；用户口径「物料维修退料这个不需要了」）：
-#   两叶子靠 linked(WITH_ORDER/WITHOUT_ORDER) 区分 ⇒ 列集不同；**每个叶子内混排三种类型**
-#   （订单退料 ORDER / 退货退款 REFUND / 维修返回 REPAIR）⇒ 类型由**一级页签**表达，列表不再有「类型」列。
-#   页签**两级**（2026-09-28 用户口径）：一级=类型（订单退料 | 退货退款 | 维修返回），二级=状态（草稿和已审核 | 已作废）
-#   —— 旧的「有效单据 / 已返回完」两枚页签已随该口径下线（进度改由行内「送修/已返回」列表达）。
+Step 'S1 物料售后 leaves: 工厂维修 / 退货退款 (2026-09-29 口径)'
+# 2026-09-29 用户口径「目录『物料退货』改名『物料售后』；关联退料不需要了（以后在物料收退做）；
+#   下面的子菜单改为 工厂维修 和 退货退款」⇒ 与加工侧 419「加工售后」同范式：
+#   · 旧「关联退料」叶子（`/outsource/material-return`）**下线**：菜单 visible=0 保号 + 前端**重定向**到退货退款；
+#   · 两个叶子**按类型**分（不再是 2026-09-28 的"关联/无单 + 类型页签"两级模型）：
+#       工厂维修 REPAIR `/repair`    页签 = **待返回 | 已返回完 | 已作废**（含「送修/已返回」列）
+#       退货退款 REFUND `/unlinked`  页签 = 草稿和已审核 | 已作废（无「关联物料订单」列、无「类型」列）
+# ① 旧根地址 = 重定向 ⇒ 落在「退货退款」叶子
 Open '/outsource/material-return' 3000
+Ok ((CurUrl) -match '/outsource/material-return/unlinked') ('S1 retired 关联退料 leaf redirects to 退货退款 url=' + (CurUrl))
 $lkTabsJs = "(()=>{const vis=e=>e.getClientRects().length>0;const it=[...document.querySelectorAll('.el-tabs__item')].filter(vis);return String(it.length)+'||'+it.map(e=>(e.innerText||'').replace(/\s+/g,' ').trim()).join(' | ')})()"
+$mrTabsJs = $lkTabsJs
 $lkTabs = EvalJs $lkTabsJs
-Write-Host ('S1 关联退料 tabs => ' + $lkTabs)
-Ok ($lkTabs -match '^5\|\|') ('S1 关联退料 leaf has exactly 5 tabs (3 types x 2 statuses) (' + $lkTabs + ')')
-Ok ($lkTabs -match [regex]::Escape((ZH 'opt_type_order'))) 'S1 type tab 订单退料 present'
-Ok ($lkTabs -match [regex]::Escape((ZH 'opt_type_refund'))) 'S1 type tab 退货退款 present'
-Ok ($lkTabs -match [regex]::Escape((ZH 'opt_type_repair'))) 'S1 type tab 维修返回 present'
-Ok ($lkTabs -match [regex]::Escape((ZH 'tab_unlinked_active'))) 'S1 status tab 草稿和已审核 present'
-Ok ($lkTabs -match [regex]::Escape((ZH 'tab_leaf_void'))) 'S1 status tab 已作废 present'
-Ok (-not ($lkTabs -match [regex]::Escape((ZH 'tab_leaf_effective')))) 'S1 the legacy 有效单据 tab is gone (superseded by the type tabs)'
-Ok (((Rows 0).head -join '|') -match [regex]::Escape((ZH 'lbl_mr_order'))) 'S1 关联退料 leaf shows the linked-order column'
+Write-Host ('S1 退货退款 tabs => ' + $lkTabs)
+Ok ($lkTabs -match '^2\|\|') ('S1 退货退款 leaf has exactly 2 tabs (status only) (' + $lkTabs + ')')
+Ok ($lkTabs -match [regex]::Escape((ZH 'tab_unlinked_active'))) 'S1 tab 草稿和已审核 present'
+Ok ($lkTabs -match [regex]::Escape((ZH 'tab_leaf_void'))) 'S1 tab 已作废 present'
+Ok ((-not ($lkTabs -match [regex]::Escape((ZH 'opt_type_refund')))) -and (-not ($lkTabs -match [regex]::Escape((ZH 'opt_type_repair'))))) 'S1 退货退款 leaf has NO type tab any more (the type is the leaf)'
+Ok (-not ($lkTabs -match [regex]::Escape((ZH 'tab_leaf_effective')))) 'S1 the legacy 有效单据 tab is gone'
+$hu = ((Rows 0).head -join '|')
+Ok (-not ($hu -match [regex]::Escape((ZH 'lbl_mr_order')))) 'S1 退货退款 leaf has NO linked-order column (关联退料已下线)'
 # 2026-09-24（UI 统一·用户口径）：入口文案都压成「新增」⇒ 不能靠文案区分叶子，
-#   改为断言「当前叶子上恰好一个『新增』按钮」（三入口互斥 ⇒ 一个叶子只看到一个入口）
+#   改为断言「当前叶子上恰好一个『新增』按钮」（一叶一入口）。
 #   注：本脚本的 lib 没有 ReadJson，且中文一律走 B64（ASCII ONLY）⇒ 用 EvalJs + 'CNT=' 计数。
 $bNew = B64 (ZH 'btn_new_refund')
 $cntJs = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const t=T('$bNew');const vis=e=>e.getClientRects().length>0;return 'CNT='+[...document.querySelectorAll('button')].filter(e=>vis(e)&&(e.innerText||'').trim()===t).length})()"
 $n1 = EvalJs $cntJs
-Ok ($n1 -match 'CNT=1') ('S1 exactly one "new" button on the 关联退料 leaf (' + $n1 + ')')
-# 2026-09-28（用户口径「关联退料页面点新增，却没有选择关联订单的选项」）：
-#   关联退料叶子的「新增」必须落到**同一新增页但挂单模式** ---- URL 带 linked=WITH_ORDER、
-#   页签=新增关联退料、渲染出「关联物料订单」字段且标了必填 *。
-Ok ((ClickBtn 'btn_new_refund') -match 'OK') 'S1 click "new" on the 关联退料 leaf'
+Ok ($n1 -match 'CNT=1') ('S1 exactly one "new" button on the 退货退款 leaf (' + $n1 + ')')
+Ok ((ClickBtn 'btn_new_refund') -match 'OK') 'S1 click "new" on the 退货退款 leaf'
 Start-Sleep -Milliseconds 2800
-Ok ((CurUrl) -match 'linked=WITH_ORDER') ('S1 linked entry url carries linked=WITH_ORDER url=' + (CurUrl))
-$tabL = EvalJs "(()=>{const a=document.querySelector('.tab-item.active .tab-label');return a?(a.innerText||'').trim():'NONE'})()"
-Ok ($tabL -eq (ZH 'title_add_linked_material')) ('S1 linked entry tab title = 新增关联退料 (' + $tabL + ')')
-Ok ((BodyHas (ZH 'lbl_mr_order')) -eq 'true') 'S1 linked entry renders the "link material order" field'
-$bOrd = B64 (ZH 'lbl_mr_order')
-$reqJs = "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const t=T('$bOrd');const vis=e=>e.getClientRects().length>0;const hit=[...document.querySelectorAll('.el-form-item.is-required')].filter(vis).some(e=>{const l=e.querySelector('.el-form-item__label');return l&&(l.innerText||'').trim().indexOf(t)>=0});return 'REQ='+hit})()"
-$r1 = EvalJs $reqJs
-Ok ($r1 -match 'REQ=true') ('S1 linked entry marks the order field required (' + $r1 + ')')
-# 对称：关联退料叶子进来的「返回」仍回**关联退料叶子**（backFallback 的默认分支）
-Ok ((ClickBtn 'btn_back') -match 'OK') 'S1 click BACK on the linked-entry add page'
-Start-Sleep -Milliseconds 2600
-Ok ((CurUrl) -match 'material-return$') ('S1 linked entry BACK stays on the linked leaf url=' + (CurUrl))
-# 2026-09-28（用户口径）：无单退料叶子改**两级页签** —— 一级=**类型**（退货退款 | 维修返回），
-#   二级=**草稿和已审核 | 已作废**；类型既然上了页签 ⇒ 该叶子**不再显示「类型」列**（关联叶子仍保留）。
-Open '/outsource/material-return/unlinked' 2800
-$mrTabsJs = "(()=>{const vis=e=>e.getClientRects().length>0;const it=[...document.querySelectorAll('.el-tabs__item')].filter(vis);return String(it.length)+'||'+it.map(e=>(e.innerText||'').replace(/\s+/g,' ').trim()).join(' | ')})()"
-$mrTabs = EvalJs $mrTabsJs
-Write-Host ('S1 无单退料 tabs => ' + $mrTabs)
-Ok ($mrTabs -match '^4\|\|') ('S1 无单退料 leaf has exactly 4 tabs (2 types x 2 statuses) (' + $mrTabs + ')')
-Ok ($mrTabs -match [regex]::Escape((ZH 'tab_type_refund'))) 'S1 type tab 退货退款 present'
-Ok ($mrTabs -match [regex]::Escape((ZH 'tab_type_repair'))) 'S1 type tab 维修返回 present'
-Ok ($mrTabs -match [regex]::Escape((ZH 'tab_unlinked_active'))) 'S1 status tab 草稿和已审核 present'
-Ok ($mrTabs -match [regex]::Escape((ZH 'tab_leaf_void'))) 'S1 status tab 已作废 present'
-$hu = ((Rows 0).head -join '|')
-Ok (-not ($hu -match [regex]::Escape((ZH 'lbl_mr_order')))) 'S1 无单退料 leaf has NO linked-order column'
-Ok (-not ($hu -match [regex]::Escape((ZH 'col_mr_type')))) 'S1 无单退料 leaf has NO type column (the type is a tab now)'
-$n2 = EvalJs $cntJs
-Ok ($n2 -match 'CNT=1') ('S1 exactly one "new" button on the 无单退料 leaf (' + $n2 + ')')
-# 2026-09-28：无单退料叶子的「新增」相反 ---- URL 带 linked=WITHOUT_ORDER、页签=新增无单退料、
-#   **不**渲染「关联物料订单」字段（该叶子的口径就是不挂订单）。
-Ok ((ClickBtn 'btn_new_refund') -match 'OK') 'S1 click "new" on the 无单退料 leaf'
-Start-Sleep -Milliseconds 2800
-Ok ((CurUrl) -match 'linked=WITHOUT_ORDER') ('S1 unlinked entry url carries linked=WITHOUT_ORDER url=' + (CurUrl))
+Ok ((CurUrl) -match 'returnType=REFUND') ('S1 refund entry url carries returnType=REFUND url=' + (CurUrl))
 $tabU = EvalJs "(()=>{const a=document.querySelector('.tab-item.active .tab-label');return a?(a.innerText||'').trim():'NONE'})()"
-Ok ($tabU -eq (ZH 'title_add_unlinked_material')) ('S1 unlinked entry tab title = 新增无单退料 (' + $tabU + ')')
-Ok ((BodyHas (ZH 'lbl_mr_order')) -eq 'false') 'S1 unlinked entry hides the "link material order" field'
-# 2026-09-28（用户口径）：从无单叶子进来，「返回」必须回**无单退料叶子**
-#   （原先 PageShell 的 back-fallback 写死 /outsource/material-return = 关联退料叶子，落错叶子）
-Ok ((ClickBtn 'btn_back') -match 'OK') 'S1 click BACK on the unlinked-entry add page'
+Ok ($tabU -eq (ZH 'title_add_unlinked_material')) ('S1 refund entry tab title = 新增退货退款 (' + $tabU + ')')
+Ok ((BodyHas (ZH 'lbl_mr_order')) -eq 'false') 'S1 refund entry hides the "link material order" field (关联退料已下线)'
+Ok ((ClickBtn 'btn_back') -match 'OK') 'S1 click BACK on the refund-entry add page'
 Start-Sleep -Milliseconds 2600
-Ok ((CurUrl) -match '/outsource/material-return/unlinked') ('S1 unlinked entry BACK returns to the unlinked leaf url=' + (CurUrl))
-# 2026-09-28：维修返回**不再是独立叶子**（用户口径「物料维修退料这个不需要了」）——
-#   旧地址 /outsource/material-return/repair 已下线（菜单 visible=0 保号 + 前端重定向）⇒ 断言重定向回关联退料叶子。
+Ok ((CurUrl) -match '/outsource/material-return/unlinked') ('S1 refund entry BACK returns to the 退货退款 leaf url=' + (CurUrl))
+# ② 工厂维修叶子：3 个页签（待返回 | 已返回完 | 已作废，2026-09-29 用户口径「需要补返回进度页签」）
+#   + 「送修/已返回」列；「新增」把类型（REPAIR）带进新增页。
 Open '/outsource/material-return/repair' 3000
-Ok ((CurUrl) -match '/outsource/material-return$') ('S1 retired repair leaf redirects to 关联退料 url=' + (CurUrl))
-# **关联退料**叶子（2026-09-28 用户口径）：同样改**两级页签** —— 一级=类型（订单退料|退货退款|维修返回）、
-#   二级=状态（草稿和已审核|已作废）⇒ 恰好 5 个 tab；类型上了页签 ⇒ **不再有「类型」列**。
-Open '/outsource/material-return' 2800
 $rlTabs = EvalJs $mrTabsJs
-Write-Host ('S1 关联退料 tabs => ' + $rlTabs)
-Ok ($rlTabs -match '^5\|\|') ('S1 关联退料 leaf has 5 tabs = 3 types + 2 statuses (' + $rlTabs + ')')
-Ok ($rlTabs -match [regex]::Escape((ZH 'opt_type_order'))) 'S1 type tab 订单退料 present'
-Ok ($rlTabs -match [regex]::Escape((ZH 'opt_type_refund'))) 'S1 type tab 退货退款 present'
-Ok ($rlTabs -match [regex]::Escape((ZH 'opt_type_repair'))) 'S1 type tab 维修返回 present'
-Ok ($rlTabs -match [regex]::Escape((ZH 'tab_unlinked_active'))) 'S1 status tab 草稿和已审核 present'
-Ok ($rlTabs -match [regex]::Escape((ZH 'tab_leaf_void'))) 'S1 status tab 已作废 present'
-Ok (-not (((Rows 0).head -join '|') -match [regex]::Escape((ZH 'col_mr_type')))) 'S1 no type column any more (the type is a tab)'
+Write-Host ('S1 工厂维修 tabs => ' + $rlTabs)
+Ok ($rlTabs -match '^3\|\|') ('S1 工厂维修 leaf has exactly 3 tabs (待返回 | 已返回完 | 已作废) (' + $rlTabs + ')')
+Ok ($rlTabs -match [regex]::Escape((ZH 'tab_leaf_pending'))) 'S1 tab 待返回 present'
+Ok ($rlTabs -match [regex]::Escape((ZH 'tab_leaf_returned'))) 'S1 tab 已返回完 present'
+Ok ($rlTabs -match [regex]::Escape((ZH 'tab_leaf_void'))) 'S1 tab 已作废 present'
+Ok (((Rows 0).head -join '|') -match [regex]::Escape((ZH 'lbl_mr_sent'))) 'S1 工厂维修 leaf shows the 送修/已返回 column'
+Ok (-not (((Rows 0).head -join '|') -match [regex]::Escape((ZH 'col_mr_type')))) 'S1 工厂维修 leaf has NO type column (the type is the leaf)'
+$n2 = EvalJs $cntJs
+Ok ($n2 -match 'CNT=1') ('S1 exactly one "new" button on the 工厂维修 leaf (' + $n2 + ')')
+Ok ((ClickBtn 'btn_new_refund') -match 'OK') 'S1 click "new" on the 工厂维修 leaf'
+Start-Sleep -Milliseconds 2800
+Ok ((CurUrl) -match 'returnType=REPAIR') ('S1 repair entry url carries returnType=REPAIR url=' + (CurUrl))
+$tabR = EvalJs "(()=>{const a=document.querySelector('.tab-item.active .tab-label');return a?(a.innerText||'').trim():'NONE'})()"
+Ok ($tabR -eq (ZH 'title_add_repair_material')) ('S1 repair entry tab title = 新增工厂维修 (' + $tabR + ')')
+Ok ((BodyHas (ZH 'lbl_mr_repair_supplier')) -eq 'true') 'S1 repair entry switches the supplier label to repair mode'
+# 2026-09-29 用户口径「物料售后的工厂维修，不需要关联订单」：维修入口**不得**再出现「关联物料订单」字段
+Ok ((BodyHas (ZH 'lbl_mr_order')) -eq 'false') 'S1 repair entry hides the link-order field (工厂维修不关联订单)'
+Ok ((ClickBtn 'btn_back') -match 'OK') 'S1 click BACK on the repair-entry add page'
+Start-Sleep -Milliseconds 2600
+Ok ((CurUrl) -match '/outsource/material-return/repair') ('S1 repair entry BACK returns to the 工厂维修 leaf url=' + (CurUrl))
 Ok ((Errs) -eq '[]') 'S1 no errors after visiting the leaves'
 
 # =====================================================================
-Step 'S2 create REPAIR draft (type picked in the form: no dedicated repair leaf any more)'
+Step 'S2 create REPAIR draft (entry from the 工厂维修 leaf carries returnType=REPAIR)'
 $bStock = D (StockQty $whId 'material_id' $matId 'GOOD')
 $bpay = PaySum $supId
 Write-Host ('BASE wh' + $whId + '.m' + $matId + '=' + $bStock + ' payable' + $supId + '=' + $bpay)
-# 2026-09-28（三态 + 两级页签）：维修返回没有独立叶子/独立入口 ⇒ ① 先在无单叶子切到「维修返回」**类型页签**
-#   （类型页签在第二个 tab 行之前 ⇒ 序号 1），② 点「新增」把该类型带进新增页；再兜底在表单里选一次类型。
-Open '/outsource/material-return/unlinked' 2800
-Ok ((ClickTabIdx 1) -match 'OK') 'S2 switch to the 维修返回 type tab'
-Start-Sleep -Milliseconds 2600
-Ok ((ClickBtn 'btn_new_refund') -match 'OK') 'S2 click "new" on the 无单退料 leaf'
+# 2026-09-29（叶子=类型）：工厂维修有**自己的叶子**（`/repair`）⇒ 直接进该叶子点「新增」，
+#   类型由入口带进新增页（returnType=REPAIR）；不再需要"切类型页签"那一步。
+Open '/outsource/material-return/repair' 2800
+Ok ((ClickBtn 'btn_new_refund') -match 'OK') 'S2 click "new" on the 工厂维修 leaf'
 Start-Sleep -Milliseconds 2800
-Ok ((CurUrl) -match 'linked=WITHOUT_ORDER') ('S2 url carries linked=WITHOUT_ORDER url=' + (CurUrl))
-Ok ((CurUrl) -match 'returnType=REPAIR') ('S2 the type tab intent is carried into the add page url=' + (CurUrl))
-Ok ((SelectLabel 'lbl_mr_type' 'opt_type_repair') -match 'OK') 'S2 pick type=维修返回'
+Ok ((CurUrl) -match 'returnType=REPAIR') ('S2 url carries returnType=REPAIR url=' + (CurUrl))
+Ok ((SelectLabel 'lbl_mr_type' 'opt_type_repair') -match 'OK') 'S2 pick type=工厂维修'
 Start-Sleep -Milliseconds 1500
 $tabR = EvalJs "(()=>{const a=document.querySelector('.tab-item.active .tab-label');return a?(a.innerText||'').trim():'NONE'})()"
 Ok ($tabR -eq (ZH 'title_add_repair_material')) ('S2 tab title follows the picked type = 新增维修返回 (' + $tabR + ')')
@@ -189,6 +160,8 @@ $rid = [int](MaxId 'outsource_material_return')
 Ok ($rid -gt 0) ('S2 created material return id=' + $rid)
 Ok ((SqlOne "SELECT return_type FROM outsource_material_return WHERE id=$rid") -eq 'REPAIR') 'S2 type=REPAIR persisted'
 Ok ((SqlOne "SELECT status FROM outsource_material_return WHERE id=$rid") -eq 'DRAFT') 'S2 status=DRAFT'
+# 2026-09-29 用户口径「工厂维修不需要关联订单」：新单不挂物料订单（字段已不渲染 ⇒ 落库必为 NULL）
+Ok ((SqlOne "SELECT COALESCE(material_order_id,0) FROM outsource_material_return WHERE id=$rid") -eq '0') 'S2 repair draft carries NO linked material order'
 # P3（2026-09-28）：维修返回的单价/金额落库 = 维修费（**不是** FIFO 货值）
 Ok ((D (SqlOne "SELECT COALESCE(unit_price,0) FROM outsource_material_return_item WHERE return_order_id=$rid ORDER BY id LIMIT 1")) -eq 5) 'S2 repair fee unit price = 5 persisted (P3)'
 Ok ((D (SqlOne "SELECT COALESCE(amount,0) FROM outsource_material_return_item WHERE return_order_id=$rid ORDER BY id LIMIT 1")) -eq 15) 'S2 repair fee amount = 3 x 5 = 15 persisted (P3)'
@@ -197,6 +170,8 @@ Ok ((D (SqlOne "SELECT COALESCE(amount,0) FROM outsource_material_return_item WH
 Step 'S3 audit: material out, payable untouched'
 Open ("/outsource/material-return/detail/$rid") 2800
 Ok ((BodyHas (ZH 'txt_repair_records')) -eq 'true') 'S3 repair-return card shown for REPAIR'
+# 2026-09-29 用户口径「工厂维修不需要关联订单」：详情页（草稿形态）同样不显示该字段
+Ok ((BodyHas (ZH 'lbl_mr_order')) -eq 'false') 'S3 repair detail (draft) hides the link-order field'
 # 注意：卡片空态提示文案里也含"登记维修返回"字样，故必须判断**按钮元素**是否存在，不能用 BodyHas
 $rrKey = B64 (ZH 'btn_repair_return')
 $hasRR = EvalJs "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const t=T('$rrKey');return String([...document.querySelectorAll('button')].filter(e=>e.getClientRects().length>0&&(e.innerText||'').trim()===t).length>0)})()"

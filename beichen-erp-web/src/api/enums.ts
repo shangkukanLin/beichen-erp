@@ -760,7 +760,8 @@ export const MaterialReturnType = {
 export const MaterialReturnTypeLabel: Record<string, string> = {
   [MaterialReturnType.ORDER]: '订单退料',
   [MaterialReturnType.REFUND]: '退货退款',
-  [MaterialReturnType.REPAIR]: '维修返回',
+  // 2026-09-29 用户口径：类型文案「维修返回」→「**工厂维修**」（与三级菜单/叶子逐字同名）
+  [MaterialReturnType.REPAIR]: '工厂维修',
   // 历史值兜底（旧枚举"物料商退货"= 退货退款）
   MATERIAL: '退货退款'
 }

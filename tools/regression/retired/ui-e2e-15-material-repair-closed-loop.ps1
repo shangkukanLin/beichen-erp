@@ -1,4 +1,22 @@
-﻿# UI E2E 15: ORDER material return closed loop (2026-09-28 three-type rework). ASCII ONLY.
+﻿# =====================================================================
+# ⚠️ RETIRED 2026-09-29（用户口径）：本支专测**「订单退料」(ORDER) 闭环** ——
+#   在「关联退料」叶子把一张**未结单(RECEIVING)** 的物料订单挂上 ⇒ 老口径自动锁定类型为「订单退料」
+#   ⇒ 审核扣源仓 + 扣该订单收货数量（deducted_flag 冻结）⇒ 反审核回滚。
+#
+#   2026-09-29 用户口径（本次改造）：
+#     · 「关联退料」叶子**下线**（菜单 411 visible=0 + 路由 /outsource/material-return 重定向到「退货退款」）；
+#       挂物料订单的退料改在**「物料收退」**做（该单收货详细页工具栏「物料退货」→ RECEIVE_RETURN：
+#       冲减该单已收数量 + 冲减应付）。
+#     · 「订单退料」(ORDER) **以后不再新建** ⇒ 老口径的"未结单订单自动锁 ORDER"已删除；新增页对
+#       未结单订单**直接拦下并引导**去「物料收退」（见 views/outsource/material-return/add.vue 的
+#       handleSubmit 拦截 + typeHint 提示）。
+#     · 历史 ORDER 单仍可打开/查看（不在本模块列表：口径 linked=WITHOUT_ORDER，仅从库存流水/应收点进详情）。
+#
+#   ⇒ 本支描述的链路已不存在（保留在 retired/ 作为"当时口径"的存档，不随代码演进维护）。
+#      新的叶子/页签口径由 ui-e2e-14-material-repair-return.ps1 覆盖（工厂维修 3 页签 / 退货退款 2 页签 /
+#      旧根地址重定向 / 每叶一个新增入口 / 新增页带 returnType）。
+# =====================================================================
+# UI E2E 15: ORDER material return closed loop (2026-09-28 three-type rework). ASCII ONLY.
 #   Replaces the old "repair return linked to an UNFINISHED order" scenario: that combination is now
 #   REJECTED by the backend (MaterialReturnType.checkOrderStatus) -- a RECEIVING order may only be used
 #   for 订单退料 (ORDER), while 退货退款/维修返回 may only link a FINISHED order (or no order at all).

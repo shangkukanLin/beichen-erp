@@ -15,6 +15,8 @@ import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_MATERIAL_RETURN_DIRT
  *
  * 结构对齐其它单据详情：`head` = 只读快照，`form`/`items` = 可编辑副本（仅草稿态）。
  * 草稿分支的字段、校验、payload 与 add.vue **完全一致**（类型 / 供应商 / 出库源仓 / 日期 / 备注 / 关联物料订单 + 明细数量·单价）。
+ * ⚠️ 「关联物料订单」只对**本单已挂订单**的历史单渲染（2026-09-29 用户口径「工厂维修不需要关联订单」）。
+ *
  *
  * ⚠️ 关键差异（比 add.vue 更保守，故意的）：add.vue 的编辑态是"按**源仓当前库存**重建明细行再回填"，
  * 它的注释已明确警告「源仓当前库存里已没有该物料的（例如被别的单占掉）也要带上，否则一保存就会把这行**静默删掉**」。
@@ -42,22 +44,28 @@ const form = reactive({
   fromWarehouseId: undefined as any,
   returnDate: localDate(),
   remark: '',
-  /** 关联物料订单（维修返回闭环）：可清空；不选=不关联（靠本单「送修/已返回」跟踪） */
+  /** 关联物料订单（仅历史关联单会有值；2026-09-29 起工厂维修不挂订单） */
   materialOrderId: undefined as any
 })
 /**
- * 页头标题 / 页签名 / 浏览器标题 / 卡片标题**四处同源**，跟随**类型**（2026-09-28 三态）。
- * <p>2026-09-27 立（跟类型）→ 2026-09-28 扩：维修返回=**维修返回详情** / 订单退料=**订单退料详情** /
- * 挂订单的退货退款=**关联退料详情** / 无单的退货退款=**无单退料详情**。</p>
+ * 页头标题 / 页签名 / 浏览器标题 / 卡片标题**四处同源**，跟随**类型**。
+ * <p>沿革：2026-09-27 立（跟类型）→ 2026-09-28 按"关联/无单"细分 4 种 → **2026-09-29 用户口径
+ * （目录改「物料售后」、叶子改 工厂维修/退货退款、单据名一起改）**：工厂维修=**工厂维修详情** /
+ * 退货退款=**退货退款详情**；历史「订单退料」单仍显示 **订单退料详情**（该类型不再新建）。</p>
  * <p>⚠️ ① 必须放在 `isDraft` / `form` / `detail` **之后**：`watch(source, cb)` 在 setup 阶段会**立刻求值一次**
  * 初始值，而 isRepair 依赖这些常量 ⇒ 放前面会踩 TDZ 把整页打白（2026-09-27 实测，与加工侧同一坑）。</p>
- * <p>⚠️ ② 判据用 **已保存的** `detail.materialOrderId`（不用 form）：草稿里改订单未保存时，标题不该先改名。</p>
  */
 const pageTitleText = computed(() => {
   if (isOrderReturn.value) return '订单退料详情'
-  if (isRepair.value) return '维修返回详情'
-  return detail.value.materialOrderId != null ? '关联退料详情' : '无单退料详情'
+  if (isRepair.value) return '工厂维修详情'
+  return '退货退款详情'
 })
+/**
+ * 返回落点（2026-09-29 叶子=类型）：**回这张单类型所在的叶子** ——
+ * 工厂维修 ⇒ `/outsource/material-return/repair`；退货退款 ⇒ `/outsource/material-return/unlinked`。
+ */
+const backFallback = computed(() => (isRepair.value
+  ? '/outsource/material-return/repair' : '/outsource/material-return/unlinked'))
 /** 同步顶部页签 + 浏览器标签页标题（页头/卡片由模板绑定同一个 computed） */
 function syncTitle() {
   tabStore.updateTabTitle(route.path, pageTitleText.value)
@@ -343,8 +351,9 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
 
 <template>
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题 → 右端操作
-       （标题按类型取四态：订单退料=订单退料详情 / 维修返回=维修返回详情 / 挂订单的退款=关联退料详情 / 无单退款=无单退料详情） -->
-  <PageShell :loading="loading" :title="pageTitleText" back-fallback="/outsource/material-return">
+       （2026-09-29 标题按类型：工厂维修=工厂维修详情 / 退货退款=退货退款详情 / 历史订单退料=订单退料详情；
+        返回落点回该类型所在的叶子） -->
+  <PageShell :loading="loading" :title="pageTitleText" :back-fallback="backFallback">
     <template #actions>
       <!-- 草稿：保存(主) + 审核 + 作废（2026-09-24 用户口径：草稿态就地编辑，不再跳独立编辑页） -->
       <el-button type="primary" v-if="isDraft" :loading="saving" @click="doSave">保存</el-button>
@@ -399,10 +408,11 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
               <el-input v-model="form.returnDate" type="date" />
             </el-form-item>
           </el-col>
-          <!-- 关联物料订单（维修返回闭环 2026-09-17；2026-09-28 起订单退料/关联退料也要看得见、留得住）：
-               与 add.vue 的 showOrderPicker 同一判据 —— 维修返回，或**本单已挂订单**（订单退料/关联退料）。
-               ⚠️ 无单退料的草稿不渲染该字段（它的口径就是不挂订单）。 -->
-          <el-col :span="8" v-if="isRepair || form.materialOrderId != null">
+          <!-- 关联物料订单（维修返回闭环 2026-09-17；2026-09-28 起历史订单退料/关联退料也要看得见、留得住；
+               2026-09-29 用户口径「工厂维修不需要关联订单」⇒ **工厂维修的草稿不再渲染本字段**）：
+               判据与 add.vue 的 showOrderPicker 一致 —— 只有**本单已挂订单**（历史关联单）才渲染。
+               ⚠️ 工厂维修 / 无单退料的草稿都不渲染（它们的口径就是不挂订单）。 -->
+          <el-col :span="8" v-if="form.materialOrderId != null">
             <el-form-item label="关联物料订单">
               <RemoteSelect v-model="form.materialOrderId" :fetch="fetchMaterialOrders" :label-key="materialOrderLabel"
                 :disabled="!form.supplierId" placeholder="可不选（不关联则靠本单跟踪）" style="width:100%" />
@@ -423,10 +433,11 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
         <el-descriptions-item label="出库源仓">{{ detail.warehouseName || '-' }}</el-descriptions-item>
         <!-- 来源收料单：从「物料收货」按记录发起退货时才有（2026-09-17） -->
         <el-descriptions-item label="来源收料单">{{ detail.sourceDeliveryCode || (detail.sourceDeliveryId ? ('#' + detail.sourceDeliveryId) : '-') }}</el-descriptions-item>
-        <!-- 关联物料订单（2026-09-17 维修返回闭环；2026-09-28 起订单退料/关联退料也在此显示）：
-             订单退料 = 已永久扣减该单出货/收料数（反审核才加回）；维修返回 = 已扣减（修好自动回补）；
-             已结单/未关联 = 未扣减，靠本单跟踪。 -->
-        <el-descriptions-item v-if="isRepair || detail.materialOrderId != null" label="关联物料订单">
+        <!-- 关联物料订单（2026-09-17 维修返回闭环；2026-09-28 起订单退料/关联退料也在此显示；
+             2026-09-29 用户口径「工厂维修不需要关联订单」⇒ 只有**本单真的挂了订单**才显示）：
+             订单退料 = 已永久扣减该单出货/收料数（反审核才加回）；历史维修返回 = 已扣减（修好自动回补）；
+             未挂订单 = 未扣减，靠本单跟踪。 -->
+        <el-descriptions-item v-if="detail.materialOrderId != null" label="关联物料订单">
           <template v-if="detail.materialOrderId">
             <el-button type="primary" link @click="router.push(`/outsource/material-order/detail/${detail.materialOrderId}`)">{{ detail.materialOrderCode || ('#' + detail.materialOrderId) }}</el-button>
             <el-tag :type="MaterialOrderStatusTag[detail.materialOrderStatus] || 'info'" size="small" style="margin-left:6px">{{ MaterialOrderStatusLabel[detail.materialOrderStatus] || '-' }}</el-tag>

@@ -217,19 +217,23 @@ const routes: RouteRecordRaw[] = [
       // E4：草稿编辑（复用新增页，仅 DRAFT 可编辑）
       { path: 'outsource/return-order/edit/:id', name: 'OutsourceReturnOrderEdit', component: () => import('@/views/outsource/return-order/add.vue'), meta: { title: '编辑客户售后', requiresAuth: true, operate: true } },
       { path: 'outsource/return-order/detail/:id', name: 'OutsourceReturnOrderDetail', component: () => import('@/views/outsource/return-order/detail.vue'), meta: { title: '客户售后详情', requiresAuth: true, operate: true } },
-      // 委外物料退货（2026-09-27 三级菜单拆叶子 → **2026-09-28 收敛为 2 个叶子**：关联退料 / 无单退料，
-      //   共用工作台组件，按 path 判叶子，靠 linked 参数区分（WITH_ORDER / WITHOUT_ORDER）；
-      //   每个叶子内都可能有**三种类型**：订单退料 / 退货退款 / 维修返回（见 MaterialReturnType）；菜单在 sys_menu 423 下）
-      { path: 'outsource/material-return', name: 'OutsourceMaterialReturn', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '关联退料', requiresAuth: true } },
-      { path: 'outsource/material-return/unlinked', name: 'OutsourceMaterialReturnUnlinked', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '无单退料', requiresAuth: true } },
-      // 424「物料维修退货」叶子已下线（2026-09-28 用户口径「物料维修退料这个不需要了」）：
-      //   「维修返回」不再是独立叶子，而是上面两个叶子里都可选的一种**类型** ⇒
-      //   旧地址/老书签重定向到「关联退料」，不吃 403（菜单行同时置 visible=0 保号，可回滚）。
-      { path: 'outsource/material-return/repair', name: 'OutsourceMaterialReturnRepair', redirect: '/outsource/material-return' },
-      { path: 'outsource/material-return/add', name: 'OutsourceMaterialReturnAdd', component: () => import('@/views/outsource/material-return/add.vue'), meta: { title: '新增委外物料退货', requiresAuth: true, operate: true } },
-      { path: 'outsource/material-return/detail/:id', name: 'OutsourceMaterialReturnDetail', component: () => import('@/views/outsource/material-return/detail.vue'), meta: { title: '委外物料退货详情', requiresAuth: true, operate: true } },
+      // 委外物料售后（沿革：2026-09-27 三级菜单拆叶子 → 2026-09-28 收敛为 2 叶子「关联退料/无单退料」→
+      //   **2026-09-29 用户口径**：目录 423 改名「物料售后」；「关联退料」整体下线（**改在「物料收退」做**：
+      //   收退详情页工具栏「物料退货」→ RECEIVE_RETURN 记录 = 冲减该单已收数量 + 冲减应付）；
+      //   剩余两个叶子改按**类型**分：**工厂维修**（REPAIR，`/repair`）/ **退货退款**（REFUND，`/unlinked`）。
+      //   两叶子共用工作台组件、按 path 判叶子（与加工侧 `/outsource/return-order` 同范式）；
+      //   列表口径写死 `linked=WITHOUT_ORDER`（关联单不再进本模块列表 —— 与加工侧一致，
+      //   历史关联单仍可从库存流水 / 应收台账点进详情）。菜单在 sys_menu 423 下）
+      { path: 'outsource/material-return', redirect: '/outsource/material-return/unlinked' },
+      { path: 'outsource/material-return/unlinked', name: 'OutsourceMaterialReturnUnlinked', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '退货退款', requiresAuth: true } },
+      // 424 于 2026-09-28 曾下线（当时口径「维修返回只是一种类型」）⇒ **2026-09-29 恢复为真叶子「工厂维修」**
+      //   （菜单行 424 同步：从 visible=0 列表移除 + 重新 upsert + 补 perms；旧 redirect 一并去掉）。
+      { path: 'outsource/material-return/repair', name: 'OutsourceMaterialReturnRepair', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '工厂维修', requiresAuth: true } },
+      // 新增/编辑/详情：单据本身（父级）也随目录改名 —— 「委外物料退货」⇒「物料售后」（页内 title 会按类型覆盖）
+      { path: 'outsource/material-return/add', name: 'OutsourceMaterialReturnAdd', component: () => import('@/views/outsource/material-return/add.vue'), meta: { title: '新增物料售后', requiresAuth: true, operate: true } },
+      { path: 'outsource/material-return/detail/:id', name: 'OutsourceMaterialReturnDetail', component: () => import('@/views/outsource/material-return/detail.vue'), meta: { title: '物料售后详情', requiresAuth: true, operate: true } },
       // D 档（2026-09-21）：草稿编辑（复用新增页，后端 PUT /{id} 仅允许草稿）—— 与加工退货页对称
-      { path: 'outsource/material-return/edit/:id', name: 'OutsourceMaterialReturnEdit', component: () => import('@/views/outsource/material-return/add.vue'), meta: { title: '编辑委外物料退货', requiresAuth: true, operate: true } },
+      { path: 'outsource/material-return/edit/:id', name: 'OutsourceMaterialReturnEdit', component: () => import('@/views/outsource/material-return/add.vue'), meta: { title: '编辑物料售后', requiresAuth: true, operate: true } },
       // 销售退货单（售后：只退不换，退回货品入成品仓、品质为「待整理」，后续由退货整理单分流）
       { path: 'sale/return', name: 'SaleReturn', component: () => import('@/views/sale/return/index.vue'), meta: { title: '销售退货单', requiresAuth: true } },
       { path: 'sale/return/add', name: 'SaleReturnAdd', component: () => import('@/views/sale/return/add.vue'), meta: { title: '新增销售退货单', requiresAuth: true, operate: true } },

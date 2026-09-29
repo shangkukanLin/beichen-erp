@@ -56,24 +56,34 @@ const form = reactive({
   materialOrderId: undefined as any
 })
 /**
- * 「关联物料订单」字段是否渲染（2026-09-28）：维修退货（原口径）＋ **关联退料叶子**，
- * 外加"草稿已挂单"的情况（编辑/回填时看得见、可改可清，否则会看不到自己在挂哪个订单）。
- * ⚠️ 无单退料叶子与物料收货发起的 REFUND **刻意不渲染** —— 它们的口径就是"不挂订单"
- * （收货发起时后端按收料单的来源订单自动挂，无需人工选）。
+ * 「关联物料订单」字段是否渲染（2026-09-29 用户口径「工厂维修**不需要**关联订单」）：
+ * <ul>
+ *   <li><b>工厂维修（REPAIR）不再渲染</b> —— 送修/返回靠本单「送修/已返回」+ 结案跟踪，不需要挂物料订单；
+ *       审核只出源仓（+ 维修费应付），登记维修返回把物料入回来，全程与订单无关；</li>
+ *   <li>关联退料叶子（历史，叶子已下线）仍渲染（必选）；</li>
+ *   <li>外加"草稿已挂单"的情况（历史关联单 / 物料收货带出来的订单）：编辑时看得见、可改可清
+ *       —— 否则会看不到自己在挂哪个订单，一保存还会把它悄悄留着。</li>
+ * </ul>
+ * ⚠️ 无单退料叶子与物料收货发起的 REFUND 刻意不渲染 —— 它们的口径就是"不挂订单"。
  */
-const showOrderPicker = computed(() => isRepair.value || fromLinked.value || form.materialOrderId != null)
+const showOrderPicker = computed(() => fromLinked.value || form.materialOrderId != null)
 /**
- * **类型提示（三态）**：与后端 `MaterialReturnType.checkOrderStatus` + `assertNotOverReturnable` 口径逐字对齐。
- * <p>订单退料 = 扣源仓 + 扣该订单出货/收料数（永久）；退货退款 = 扣源仓 + 冲减应付（P2 起改为"对供应商的应收"）；
- * 维修返回 = 扣源仓送修 → 回厂登记 → 全返回可结案。挂订单时审核都要过「不超可退」这道闸。</p>
+ * **类型提示**：与后端 `MaterialReturnType.checkOrderStatus` + `assertNotOverReturnable` 口径逐字对齐。
+ * <p>2026-09-29：订单退料不再新建（只在打开历史单时提示）；挂了"未结单"订单被明确拦下并引导去「物料收退」。
+ * 退货退款 = 扣源仓 + 生成对供应商的应收；工厂维修 = 扣源仓送修 → 回厂登记 → 全返回可结案。
+ * 挂订单时审核都要过「不超可退」这道闸。</p>
  */
 const typeHint = computed(() => {
   if (isOrderReturn.value) {
-    return '该订单「未结单」⇒ 只能走「订单退料」：审核时扣源仓库存，并扣减该订单的出货/收料数量'
+    return '这是历史「订单退料」单（2026-09-29 起不再新建）：审核时扣源仓库存，并扣减该订单的出货/收料数量'
       + '（永久扣减，反审核才加回）；不动账务、不跟踪返回。'
   }
+  if (form.materialOrderId != null && orderStatus.value === MaterialOrderStatus.RECEIVING) {
+    return '该物料订单「未结单」—— 2026-09-29 起「订单退料」不再新建 ⇒ 不能在这里退料。'
+      + '请到「物料收退」里该单的收货详细页点「物料退货」（按新口径：冲减该单已收数量 + 冲减应付）。'
+  }
   if (form.materialOrderId != null) {
-    return '该订单「已结单」⇒ 可走「退货退款」（物料回源仓 + 生成对供应商的应收）或「维修返回」（送修 → 回厂登记 → 可结案；填了维修费则生成应付）。'
+    return '该订单「已结单」⇒ 可走「退货退款」（物料回源仓 + 生成对供应商的应收）或「工厂维修」（送修 → 回厂登记 → 可结案；填了维修费则生成应付）。'
       + '审核按该订单的「可退」校验本单数量 —— 可退 = 该物料『已收 − 已退不良 − 送修中 − 订单退料 − 已退货退款』，超出会被拒。'
   }
   return ''
@@ -91,16 +101,16 @@ const typeHint = computed(() => {
  * <p>口径：REPAIR=物料维修退货｜REFUND+关联叶子=关联退料｜REFUND+无单叶子=无单退料｜
  * 其余（收货发起/地址栏直达）=委外物料退货（历史兜底名）。</p>
  */
-const pageTitle = computed(() => (editId ? '编辑' : '新增') + (isRepair.value ? '维修返回'
-  : fromLinked.value ? '关联退料' : fromUnlinked.value ? '无单退料' : '委外物料退货'))
+const pageTitle = computed(() => (editId ? '编辑' : '新增') + (isOrderReturn.value ? '订单退料'
+  : isRepair.value ? '工厂维修' : '退货退款'))
 /**
- * 返回 / 保存后的落点（2026-09-28 用户口径）：**必须回到"这张单会在哪个叶子出现"**。
- * <p>从「无单退料」叶子进来（`?linked=WITHOUT_ORDER`）⇒ 回 `/outsource/material-return/unlinked`；
- * 其余（关联退料叶子、维修叶子、物料收货发起、地址栏直达）保持回 `/outsource/material-return`（原行为）。</p>
- * <p>⚠️ 未覆盖：维修叶子入口没带来源参数（`handleAdd(REPAIR)` 无 query）⇒ 它仍落在关联退料叶子；
- * 如需一并分流，可让维修入口也带上来源标记。</p>
+ * 返回 / 保存后的落点（2026-09-29 叶子=类型）：**必须回到"这张单会在哪个叶子出现"** ——
+ * 工厂维修（REPAIR）⇒ `/outsource/material-return/repair`；退货退款 ⇒ `/outsource/material-return/unlinked`。
+ * <p>判据用 `form.returnType`（不是 `isRepair`）：本常量在 setup 早期即被 PageShell 取用，
+ * 用后声明的 computed 会踩 TDZ（与 detail.vue 那个坑同源，见其 pageTitleText 注释）。</p>
  */
-const backFallback = computed(() => (fromUnlinked.value ? '/outsource/material-return/unlinked' : '/outsource/material-return'))
+const backFallback = computed(() => (form.returnType === MaterialReturnType.REPAIR
+  ? '/outsource/material-return/repair' : '/outsource/material-return/unlinked'))
 const warehouseOptions = ref<any[]>([])
 const stockList = ref<any[]>([])
 const loading = ref(false)
@@ -136,31 +146,20 @@ const orderStatus = computed(() => pickedOrder.value?.status || '')
 // 注（2026-09-28）：原「收尾方式提示」（orderHint，仅维修退货）已被 typeHint 取代 ——
 // 三态下"扣不扣订单收料数"由**类型**决定（订单退料扣、其余不扣），不再是维修退货的订单状态分支。
 /**
- * **类型三态自动判定**（2026-09-28 用户口径，后端 `MaterialReturnType.checkOrderStatus` 强校验同一口径）：
- * <ul>
- *   <li>关联订单 **未结单(RECEIVING)** ⇒ **订单退料**（唯一选项，自动锁定）—— 扣源仓 + 扣该订单出货/收料数量；</li>
- *   <li>关联订单 **已结单(FINISHED)** ⇒ 用户选「退货退款 / 维修返回」；</li>
- *   <li>**无单**（无单退料叶子，或收货发起未带出订单）⇒ 用户选「退货退款 / 维修返回」。</li>
- * </ul>
- * <p>⚠️ 订单状态来自 `pickedOrder`：手工选单由下拉带出，收货发起由 `return-prefill` 的
- * `materialOrderStatus` 带出；状态未知时不锁定（按用户选择提交，后端审核时再兜底校验）。</p>
+ * **本单最终类型**（2026-09-29 用户口径「订单退料以后不再新建」）：就是 `form.returnType`
+ * （**退货退款 / 工厂维修**两态）。
+ * <p>⚠️ 原「关联订单未结单 ⇒ 自动锁定订单退料」的 `forcedOrderReturn` **已删除** —— 未结单的订单
+ * 不允许在本模块退料：提交被拦（见 `handleSubmit`），提示引导去「物料收退」的收货详细页点「物料退货」
+ * （按新口径：冲减该单已收数量 + 冲减应付）。历史 ORDER 单仍可打开/编辑（`form.returnType` 从单据
+ * 回填成 ORDER，`isOrderReturn` 照旧生效，动作与提示语都按它走）。</p>
  */
-const forcedOrderReturn = computed(() => form.materialOrderId != null && orderStatus.value === MaterialOrderStatus.RECEIVING)
-/** 本单最终类型（提交值 / 标题 / 提示语都以它为准） */
-const effectiveType = computed(() => (forcedOrderReturn.value ? MaterialReturnType.ORDER : form.returnType))
-/** 订单退料：只扣源仓 + 扣订单出货数，不动账务、不跟踪返回 */
+const effectiveType = computed(() => form.returnType)
+/** 历史「订单退料」单：只扣源仓 + 扣订单出货数，不动账务、不跟踪返回 */
 const isOrderReturn = computed(() => effectiveType.value === MaterialReturnType.ORDER)
-/** 维修返回：不冲减应付；审核后在详情页登记「维修返回」把物料入回来（全返回后可结案） */
+/** 工厂维修：不冲减应付；审核后在详情页登记「维修返回」把物料入回来（全返回后可结案） */
 const isRepair = computed(() => effectiveType.value === MaterialReturnType.REPAIR)
-/**
- * 「退货类型」下拉的绑定值（2026-09-28 三态）：**订单退料是判定出来的、不是选出来的** ——
- * 关联订单未结单时 getter 固定返回 ORDER 且下拉禁用（下拉里动态多出「订单退料」这一项）；
- * 其余情况就是用户的选择（退货退款 / 维修返回）。这样字段区不用新增控件，也不改变既有断言口径。
- */
-const typeSelect = computed({
-  get: () => (forcedOrderReturn.value ? MaterialReturnType.ORDER : form.returnType),
-  set: (v: string) => { form.returnType = v }
-})
+/** 「退货类型」下拉绑定（2026-09-29 只剩两态：退货退款 / 工厂维修；历史 ORDER 单回填后不再可改） */
+const typeSelect = computed({ get: () => form.returnType, set: (v: string) => { form.returnType = v } })
 /** 预填期间不因 supplierId 变化清空已带出的关联订单 */
 let prefilling = false
 watch(() => form.supplierId, (nv, ov) => {
@@ -223,6 +222,15 @@ async function handleSubmit() {
   if (fromLinked.value && form.materialOrderId == null) {
     ElMessage.warning('请选择关联物料订单（如确实不挂订单，请从「无单退料」叶子新增）'); return
   }
+  // 2026-09-29（用户口径「订单退料以后不再新建」）：挂了"未结单"订单不允许在本模块退料 ——
+  //   老口径会自动把它锁成「订单退料」，现改为**拦下并引导**：去「物料收退」该单的收货详细页点「物料退货」
+  //   （按新口径冲减该单已收数量 + 冲减应付）。历史 ORDER 单的编辑不受影响（effectiveType=ORDER）。
+  //   ⚠️ 本拦截**放在明细校验之前**：这是一条"选错了入口"的硬拦，不该等用户填完数量才报。
+  if (form.materialOrderId != null && orderStatus.value === MaterialOrderStatus.RECEIVING
+      && effectiveType.value !== MaterialReturnType.ORDER) {
+    ElMessage.error('该物料订单还没结单：「订单退料」已不再新建 —— 请到「物料收退」的收货详细页点「物料退货」')
+    return
+  }
   if (!form.fromWarehouseId) { ElMessage.warning('请选择出库源仓'); return }
   const items = stockList.value
     .filter((m: any) => Number(m.returnQuantity) > 0)
@@ -236,8 +244,8 @@ async function handleSubmit() {
     const payload = {
       supplierId: form.supplierId, fromWarehouseId: form.fromWarehouseId,
       returnDate: form.returnDate, remark: form.remark,
-      // 类型（2026-09-28 三态）：ORDER 订单退料（关联未结单时自动判定）/ REFUND 退货退款 / REPAIR 维修返回
-      // —— 取 effectiveType（不是 form.returnType：订单退料是"判定出来的"，见 forcedOrderReturn）
+      // 类型（2026-09-29 只剩两态）：REFUND 退货退款 / REPAIR 工厂维修；
+      // 历史「订单退料」单编辑时回填为 ORDER（不再新建，见 effectiveType 注释）
       returnType: effectiveType.value, items,
       // 来源收料单（从「物料收货」发起时落库，用于按记录算可退数量并追溯；编辑时保留原值）
       sourceDeliveryId: editId ? editSourceDeliveryId.value : (prefillDeliveryId || null),
@@ -376,9 +384,9 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item required label="退货类型">
-              <!-- 三态（2026-09-28）：订单退料由「关联订单未结单」自动判定并锁定（禁用），其余可选 -->
-              <el-select v-model="typeSelect" style="width:100%" :disabled="forcedOrderReturn">
-                <el-option v-if="forcedOrderReturn" :label="MaterialReturnTypeLabel[MaterialReturnType.ORDER]" :value="MaterialReturnType.ORDER" />
+              <!-- 2026-09-29：只剩两态（退货退款 / 工厂维修）—— 「订单退料」不再新建 ⇒ 下拉里不再出现该项
+                   （历史订单退料单打开编辑时值为 ORDER，仍会按该值显示/提交） -->
+              <el-select v-model="typeSelect" style="width:100%">
                 <el-option :label="MaterialReturnTypeLabel[MaterialReturnType.REFUND]" :value="MaterialReturnType.REFUND" />
                 <el-option :label="MaterialReturnTypeLabel[MaterialReturnType.REPAIR]" :value="MaterialReturnType.REPAIR" />
               </el-select>
@@ -386,9 +394,10 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
           </el-col>
           <el-col :span="8"><el-form-item required :label="isRepair ? '维修供应商' : '退回对象'"><RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" :placeholder="isRepair ? '选择维修供应商' : '选择物料商'" style="width:100%" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item required label="出库源仓"><el-select v-model="form.fromWarehouseId" filterable clearable style="width:100%" placeholder="选择物料所在仓库" @change="onWarehouseChange"><el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
-          <!-- 关联物料订单（2026-09-17 维修退货闭环；2026-09-28 起「关联退料」叶子也走这里）：
-               维修退货：可清空 = 不关联，订单未完成时审核会扣减其收料数；
-               关联退料：**必选**（不选会落成无单 MRW-），审核只按订单可退量校验、不扣收料数 —— 见 linkedHint -->
+          <!-- 关联物料订单（2026-09-17 维修退货闭环；2026-09-28 起「关联退料」叶子也走这里；
+               2026-09-29 用户口径「工厂维修不需要关联订单」⇒ **工厂维修不再渲染本字段**，仅剩：
+               关联退料（历史叶子）：**必选**（不选会落成无单 MRW-），审核只按订单可退量校验；
+               草稿已挂单（历史单）：看得见、可改可清 —— 见 showOrderPicker -->
           <el-col :span="8" v-if="showOrderPicker">
             <el-form-item label="关联物料订单" :required="fromLinked">
               <RemoteSelect v-model="form.materialOrderId" :fetch="fetchMaterialOrders" :label-key="materialOrderLabel" :disabled="!form.supplierId"
