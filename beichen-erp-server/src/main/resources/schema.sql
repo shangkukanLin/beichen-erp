@@ -792,14 +792,18 @@ CREATE TABLE IF NOT EXISTS outsource_material_return_repair (
     material_name VARCHAR(100) COMMENT '物料名称快照',
     unit VARCHAR(20) COMMENT '单位',
     quantity DECIMAL(18,0) DEFAULT 0 COMMENT '本次返回数量',
-    -- 2026-09-27（对称性二修）：本条登记时是否真的核销了在厂行（0=旧单无在厂行被跳过）。
-    -- 撤销腿按本标记决定是否恢复在厂，避免旧单撤销凭空增加在厂。
-    onsite_leg TINYINT DEFAULT 1 COMMENT '登记时是否核销在厂行：1=是(撤销需恢复) 0=旧单跳过(撤销不恢复)',
+    -- 2026-09-27（对称性二修）：本条**审核时**是否真的核销了在厂行（0=旧单无在厂行被跳过）。
+    -- 反审核腿按本标记决定是否恢复在厂，避免旧单反审核凭空增加在厂。
+    onsite_leg TINYINT DEFAULT 1 COMMENT '审核时是否核销在厂行：1=是(反审核需恢复) 0=旧单跳过(反审核不恢复)',
+    -- 2026-09-28（用户口径）：状态与审核时间（两态：草稿未落账 / 已审核已落账；不设作废——草稿直接删）
+    status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿(未落账) AUDITED=已审核(已落账)',
+    audit_time DATETIME DEFAULT NULL COMMENT '审核时间(反审核清空)',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_return_order_id (return_order_id),
     INDEX idx_material_id (material_id),
+    INDEX idx_status (status),
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外物料维修返回记录';
 
