@@ -1,10 +1,11 @@
 <script setup lang="ts">
 // 盘点明细（2026-09-23 用户要求：原 900px「盘点明细」弹框改为独立页面）
-// —— 表头字段（仓库/单号/状态/范围的）走 URL 查询参数（列表页自己知道），明细走接口 ⇒ 刷新/直链都可用。
+// —— 明细走接口；**2026-09-28 起表头也自己查一次主单**（见 loadItems），URL 查询参数只当首帧占位。
 //    可编辑仅限草稿（与弹框口径一致）；物料盘点不分品质、无 SKU。
 import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getStockTakeItems, saveStockTakeItems, type StockTakeItem } from '@/api/inventory'
+import { getStockTakeById, getStockTakeItems, saveStockTakeItems, type StockTakeItem } from '@/api/inventory'
+import { DocStatusLabel, DocStatusTag } from '@/api/enums'
 import { ElMessage } from 'element-plus'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
@@ -14,17 +15,30 @@ const router = useRouter()
 const loading = ref(false)
 const items = ref<StockTakeItem[]>([])
 /**
+ * 单据头（2026-09-28 用户口径「盘点明细页面需要显示盘点人、盘点时间等」）：
+ * 口径 = **盘点人取「制单人」**（盘点单就是"谁发起这次盘点"的产物，`create_by_name` 由服务端自动盖章）、
+ * **盘点时间取「创建时间」**（录单时刻，含时分秒）；审核人/审核时间同表已有 ⇒ 一并显示。
+ * ⚠️ 主单是在明细页里查的（不再只靠 query）⇒ 深链/刷新进来也有值；历史单据这几列为空 ⇒ 显示「—」。
+ */
+const doc = ref<any>({})
+/**
  * 未保存拦截（2026-09-23 统一模板）：盘点行可就地填实盘数量/备注 ⇒ 属"能改数据"，接守卫。
  * ⚠️ 必须写在 items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
  */
 const { takeBaseline } = useUnsavedGuard(() => ({ items: items.value }))
 
 const id = Number(route.params.id)
+// 表头取值：**主单优先、query 兜底**（首帧还没拿到主单时先按列表页塞进来的参数渲染，不闪空白）
 const isMaterial = computed(() => route.query.scope === 'MATERIAL')
-const status = computed(() => String(route.query.status || ''))
-const warehouseName = computed(() => String(route.query.warehouseName || '-'))
-const takeNo = computed(() => String(route.query.takeNo || ''))
+const status = computed(() => String(doc.value.status || route.query.status || ''))
+const warehouseName = computed(() => String(doc.value.warehouseName || route.query.warehouseName || '-'))
+const takeNo = computed(() => String(doc.value.takeNo || route.query.takeNo || ''))
 const editable = computed(() => status.value === 'DRAFT')
+/** 时间戳展示（含时分秒）：后端回 ISO（2026-09-28T16:10:03）⇒ 显示成 "2026-09-28 16:10:03"；空值 — */
+function fmtTime(v: any) {
+  const s = String(v == null ? '' : v)
+  return s ? s.replace('T', ' ').slice(0, 19) : '—'
+}
 
 function nameOf(it: StockTakeItem) { return it.productName || it.materialName || '' }
 /** 实时差异 = 实盘 − 账面 */
@@ -37,7 +51,15 @@ const diffRows = computed(() => items.value.filter(it => diffOf(it) !== 0))
 async function loadItems() {
   if (!id) return
   loading.value = true
-  try { items.value = await getStockTakeItems(id) } catch { items.value = [] } finally { loading.value = false }
+  try {
+    // 主单（单据信息块）+ 明细一起取；任一失败都不该让整页空白
+    const [head, lines] = await Promise.all([
+      getStockTakeById(id).catch(() => null),
+      getStockTakeItems(id).catch(() => [])
+    ])
+    if (head) doc.value = head
+    items.value = (lines || []) as StockTakeItem[]
+  } finally { loading.value = false }
 }
 async function saveItems() {
   try {
@@ -60,6 +82,23 @@ onMounted(async () => { await loadItems(); takeBaseline() })
 
     <el-card shadow="never">
       <!-- 卡片页头已删除：标题与单号交骨架，保存实盘上移 #actions -->
+
+      <!-- 单据信息（2026-09-28 用户口径「盘点明细页面需要显示盘点人、盘点时间等」，方案 A）：
+           **盘点人 = 制单人**（服务端自动盖章）、**盘点时间 = 创建时间**（录单时刻，含时分秒），
+           另补 审核人/审核时间（未审核显示 —）；状态标签此前完全没渲染，一并补上。
+           历史单据这几列是后补的（2026-09-23）⇒ 显示「—」属正常。 -->
+      <el-descriptions :column="3" border size="small" style="margin-bottom:12px">
+        <el-descriptions-item label="状态">
+          <el-tag :type="DocStatusTag[status] || 'info'" size="small">{{ DocStatusLabel[status] || status || '—' }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="盘点月份">{{ doc.period || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="盘点日期">{{ $fmtDate(doc.takeDate) || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="盘点人（制单人）">{{ doc.createByName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="盘点时间">{{ fmtTime(doc.createTime) }}</el-descriptions-item>
+        <el-descriptions-item label="审核人">{{ doc.auditorName || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="审核时间">{{ fmtTime(doc.auditTime) }}</el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ doc.remark || '—' }}</el-descriptions-item>
+      </el-descriptions>
 
       <div style="margin-bottom:8px;font-size:var(--app-font-base)">
         账面数量来自建单时快照；修改实盘数量后自动算差异。当前差异行：<b :style="{color: diffRows.length ? 'var(--app-color-danger)' : ''}">{{ diffRows.length }}</b>

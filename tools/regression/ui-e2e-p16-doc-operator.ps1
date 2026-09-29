@@ -118,13 +118,18 @@ foreach ($c in $converted) {
 
 Step '5) UI: the two converted large-content dialogs are reachable as standalone pages'
 # 2026-09-23: the two 900px content dialogs became standalone pages too (stock-take items editor,
-# read-only BOM snapshot). Those pages do not carry the operator labels, so only load-ability is checked.
+# read-only BOM snapshot).
+# 2026-09-28（用户口径「盘点明细页面需要显示盘点人、盘点时间等」，方案 A）：**盘点明细页新增了单据信息块** ——
+#   盘点人 = 制单人、盘点时间 = 创建时间，另含审核人/审核时间 ⇒ 这里从"只查能加载"升级为**断言标签真的渲染**。
 $takeId = SqlOne 'SELECT id FROM inventory_stock_take ORDER BY id DESC LIMIT 1'
 if ([string]::IsNullOrWhiteSpace($takeId)) { Write-Host 'SKIP stock-take detail: no rows' } else {
   Open ('/inventory/stock-take/detail/' + $takeId + '?scope=PRODUCT&status=DRAFT') 3500
   ClearErrs | Out-Null
   Start-Sleep -Milliseconds 1500
   Ok2 ((Errs) -eq '[]') ('stock-take detail #' + $takeId + ' loads with no JS/API errors')
+  Ok2 ((BodyHas (ZH 'lbl_take_user')) -eq 'true') ('stock-take detail #' + $takeId + ' shows the 盘点人（制单人） label')
+  Ok2 ((BodyHas (ZH 'lbl_take_time')) -eq 'true') ('stock-take detail #' + $takeId + ' shows the 盘点时间 label')
+  Ok2 ((BodyHas (ZH 'lbl_auditor')) -eq 'true') ('stock-take detail #' + $takeId + ' shows the 审核人 label')
 }
 $projId = SqlOne 'SELECT id FROM dev_project ORDER BY id DESC LIMIT 1'
 if ([string]::IsNullOrWhiteSpace($projId)) { Write-Host 'SKIP bom-snapshot: no rows' } else {
