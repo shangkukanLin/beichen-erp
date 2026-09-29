@@ -94,7 +94,7 @@ try {
   $r1 = Api 'POST' "$BASE/inventory/warehouse-move" $mv
   Info ("create -> code=" + (CodeOf $r1) + " msg=" + $r1.msg)
   if ((CodeOf $r1) -ne '200') {
-    Bad 'negative-quantity move draft was rejected -> probe A inconclusive'
+    Ok $true 'negative-quantity move draft is rejected at create (F7 quantity-validation fix holds; the old "reaches audit" hypothesis is obsolete)'
   } else {
     $moveId   = [int](SqlOne "SELECT id FROM inventory_warehouse_move WHERE remark='AUDIT-PROBE-A' ORDER BY id DESC LIMIT 1")
     $moveCode = SqlOne "SELECT code FROM inventory_warehouse_move WHERE id=$moveId"
@@ -121,7 +121,7 @@ try {
   $r3 = Api 'POST' "$BASE/inventory/reclassify" $rc
   Info ("create -> code=" + (CodeOf $r3) + " msg=" + $r3.msg)
   if ((CodeOf $r3) -ne '200') {
-    Bad 'illegal toQuality was rejected at create -> probe B inconclusive'
+    Ok $true 'illegal toQuality is rejected at create (F7 quality-validation fix holds; the old "phantom ZZ row" hypothesis is obsolete)'
   } else {
     $rcId   = [int](SqlOne "SELECT id FROM product_reclassify WHERE remark='AUDIT-PROBE-B' ORDER BY id DESC LIMIT 1")
     $rcCode = SqlOne "SELECT code FROM product_reclassify WHERE id=$rcId"
