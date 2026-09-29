@@ -7,7 +7,7 @@
 #       ④ 收货详细页有 汇总卡 / 收货记录区块 / 返回列表
 #       ⑤ 加工单详情页签已无「交货管理」，且**不再有**「成品收货」跳转按钮
 #          （2026-09-21 用户口径：收货统一从「成品收货」菜单进）
-#       ⑥ /outsource/material-order/delivery 直达不 403（收货中订单可能为 0 行 ⇒ 只验渲染/不报错，
+#       ⑥ /outsource/material-order/delivery 直达不 403（生产中订单可能为 0 行 ⇒ 只验渲染/不报错，
 #          并**负向守卫**：行内操作文案不得再出现「收料」—— 2026-09-21 用户口径已改为「收货」）
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
@@ -75,21 +75,21 @@ if ($d1) {
   if ($hidden.Count -eq 0) { Ok '已下线菜单未出现在侧栏' } else { Bad ('已下线菜单仍显示：' + ($hidden -join '、')) }
 }
 
-# ② 成品收货列表：直达不 403 + 只出正在加工的加工单
+# ② 加工收退列表：直达不 403 + 只出正在加工的加工单
 OpenFresh "$base/outsource/order/delivery"
 $p2 = EvalJs "location.pathname"
 if ($p2 -match '/login' -or $p2 -match '403') { Bad ('/outsource/order/delivery 未正常进入，落在 ' + $p2) }
 else { Ok '/outsource/order/delivery 直达正常（非 403）' }
 $d2 = ReadJson "(()=>{const rows=[...document.querySelectorAll('.el-table__body tbody tr')];const th=[...document.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim());const t=document.body.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({n:rows.length,prod:t.includes('生产中')==true,pending:t.includes('待审核')==true,prog:th.some(x=>x.indexOf('已收')>=0),cols:th,btn:t.includes('收货')==true,ret:b.some(x=>x==='退货'),cls:b.some(x=>x==='结单'),tabs:[...document.querySelectorAll('.page-list .el-tabs__item')].map(x=>x.innerText.trim())});})()" '成品收货列表'
 if ($d2) {
-  Write-Output ('成品收货列表行数 = ' + $d2.n)
-  Write-Output ('成品收货 页签 = ' + ($d2.tabs -join ' | '))
+  Write-Output ('加工收退列表行数 = ' + $d2.n)
+  Write-Output ('加工收退 页签 = ' + ($d2.tabs -join ' | '))
   if ($d2.n -ge 1) { Ok ('列表有数据（' + $d2.n + ' 行）') } else { Bad '列表无数据（库中应有 1 张 PRODUCING 加工单）' }
-  # 2026-09-27（用户口径「成品收货应该有 收货中｜已结单 两个页签」）：页签存在且默认停「收货中」
+  # 2026-09-27（用户口径「成品收货应该有 收货中｜已结单 两个页签」）；2026-09-28 用户口径：该页签文案改「生产中」
   $tabStr = ($d2.tabs -join ',')
-  if ($tabStr -match '收货中' -and $tabStr -match '已结单') { Ok '成品收货有两个页签：收货中｜已结单' }
-  else { Bad ('成品收货页签不符（期望 收货中/已结单）：' + $tabStr) }
-  if ($tabStr -match '^收货中') { Ok '默认页签 = 收货中（口径与"只列生产中"一致）' } else { Bad ('默认页签不是 收货中：' + $tabStr) }
+  if ($tabStr -match '生产中' -and $tabStr -match '已结单') { Ok '加工收退有两个页签：生产中｜已结单' }
+  else { Bad ('加工收退页签不符（期望 生产中/已结单）：' + $tabStr) }
+  if ($tabStr -match '^生产中') { Ok '默认页签 = 生产中（口径与"只列生产中"一致）' } else { Bad ('默认页签不是 生产中：' + $tabStr) }
   if ($d2.prog -and $d2.btn) { Ok '列表含「下单/已收/剩余」进度列与 收货 按钮' } else { Bad ('列表缺少进度列或 收货 按钮（当前列：' + ($d2.cols -join '/') + '）') }
   if ($d2.prod -and -not $d2.pending) { Ok '列表只含正在加工（生产中）的加工单' } else { Bad ('列表含非生产中订单：prod=' + $d2.prod + ' pending=' + $d2.pending) }
   # 2026-09-24（用户口径）：成品收货**列表**的行内操作是「收货 + 退货」，与物料收货列表口径一致；
@@ -126,8 +126,23 @@ if ($d4) {
   if (-not $d4.ret) { Ok '收货详细页已无「退货」入口' } else { Bad '收货详细页仍出现「退货」按钮（应已移除）' }
   if ($d4.mfg) { Ok '收货详细页有「加工退货」入口（红冲收货）' } else { Bad '收货详细页缺少「加工退货」按钮' }
   if (-not $d4.old) { Ok '收货详细页已无「退不良/不良退货」字样（全链统一为加工退货）' } else { Bad '收货详细页仍出现「退不良」或「不良退货」按钮' }
-  # 2026-09-21（用户口径「结单按钮放到成品收货里」）：本页（成品收货的"收货详细"）必须有「结单」入口
+  # 2026-09-21（用户口径「结单按钮放到成品收货里」）：本页（加工收退的"收货详细"）必须有「结单」入口
   if ($d4.cls) { Ok '收货详细页有「结单」入口（跳结单报表页）' } else { Bad '收货详细页缺少「结单」入口' }
+}
+
+# ④b 「收货记录」行内动作（2026-09-29 用户口径）：**加工退货（红冲）草稿 = 「作废」**（留痕可查，
+#     与原「关联退货」台账的「已作废」同口径），普通收货草稿仍为「删除」（物理删草稿）。
+#     关联退货叶子下线后本表是有单加工退货**唯一的常驻入口** ⇒ 这个动作口径必须锁住。
+$d4b = ReadJson "(()=>{const vis=e=>e.getClientRects().length>0;const t=[...document.querySelectorAll('.el-table')].filter(vis).find(x=>[...x.querySelectorAll('.el-table__header th')].map(h=>(h.innerText||'').trim()).includes('收货日期'));const rows=t?[...t.querySelectorAll('.el-table__body tbody tr')]:[];let defectDraft=0,draftRecv=0,cancelOnDefect=0,delOnDefect=0,delOnRecv=0,cancelOnRecv=0;for(const tr of rows){const txt=[...tr.querySelectorAll('td')].map(td=>(td.innerText||'').trim());const bs=[...tr.querySelectorAll('button')].map(b=>(b.innerText||'').trim());const isDefect=txt.includes('加工退货');const isDraft=txt.includes('草稿');if(isDefect&&isDraft){defectDraft++;if(bs.includes('作废'))cancelOnDefect++;if(bs.includes('删除'))delOnDefect++}else if(isDraft&&txt.includes('收货')){draftRecv++;if(bs.includes('删除'))delOnRecv++;if(bs.includes('作废'))cancelOnRecv++}}return JSON.stringify({rows:rows.length,defectDraft:defectDraft,draftRecv:draftRecv,cancelOnDefect:cancelOnDefect,delOnDefect:delOnDefect,delOnRecv:delOnRecv,cancelOnRecv:cancelOnRecv});})()" '收货记录动作'
+if ($d4b) {
+  Write-Output ('收货记录行数 = ' + $d4b.rows + ' ；红冲草稿 = ' + $d4b.defectDraft + '（带作废 ' + $d4b.cancelOnDefect + ' / 带删除 ' + $d4b.delOnDefect + '）；普通收货草稿 = ' + $d4b.draftRecv)
+  if ([int]$d4b.defectDraft -gt 0) {
+    if ([int]$d4b.delOnDefect -eq 0) { Ok '加工退货草稿行已无「删除」（改为「作废」留痕）' } else { Bad ('加工退货草稿行仍出现「删除」按钮：' + $d4b.delOnDefect) }
+    if ([int]$d4b.cancelOnDefect -eq [int]$d4b.defectDraft) { Ok ('每条加工退货草稿都有「作废」（' + $d4b.cancelOnDefect + '/' + $d4b.defectDraft + '）') } else { Bad ('部分加工退货草稿缺「作废」：' + $d4b.cancelOnDefect + '/' + $d4b.defectDraft) }
+  } else { Write-Output '（本单收货记录里没有加工退货草稿 ⇒ 跳过红冲「作废」断言，避免假 FAIL）' }
+  if ([int]$d4b.draftRecv -gt 0) {
+    if ([int]$d4b.cancelOnRecv -eq 0) { Ok '普通收货草稿仍只有「删除」（未被误加「作废」）' } else { Bad ('普通收货草稿被误加「作废」：' + $d4b.cancelOnRecv) }
+  } else { Write-Output '（本单没有普通收货草稿 ⇒ 跳过「删除」断言）' }
 }
 
 # ⑤ 加工单详情：页签已无「交货管理」，且**不再有**「成品收货」跳转按钮
@@ -136,7 +151,8 @@ if ($d4) {
 $oid = if ($d3 -and $d3.p -match '(\d+)$') { $Matches[1] } else { '' }
 if ($oid) {
   OpenFresh "$base/outsource/order/detail/$oid"
-  $d5 = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim());const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:t,hasRecv:(b.includes('成品收货')==true),hasDefect:(b.includes('退不良')==true),hasMfg:(b.includes('加工退货')==true||b.includes('不良退货')==true),cls:b.some(x=>x==='结单')});})()" '加工单详情'
+  # 2026-09-29：菜单由「加工收货」改「加工收退」⇒ 这条负向断言**新旧两个词都查**（防"旧按钮被加回来"）
+  $d5 = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim());const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:t,hasRecv:(b.includes('加工收退')==true||b.includes('加工收货')==true),hasDefect:(b.includes('退不良')==true),hasMfg:(b.includes('加工退货')==true||b.includes('不良退货')==true),cls:b.some(x=>x==='结单')});})()" '加工单详情'
   if ($d5) {
     Write-Output ('加工单详情 页签 = ' + ($d5.tabs -join ' | '))
     if (($d5.tabs -join ',') -match '交货管理') { Bad '加工单详情仍有「交货管理」页签（应已移出）' } else { Ok '加工单详情已无「交货管理」页签' }
@@ -150,7 +166,7 @@ if ($oid) {
   }
 } else { Write-Output '（未取到加工单 id，跳过详情页校验）' }
 
-# ⑥ 物料收货页：直达不 403 且渲染正常（当前库中收货中订单 0 条属正常）
+# ⑥ 物料收货页：直达不 403 且渲染正常（当前库中生产中订单 0 条属正常）
 OpenFresh "$base/outsource/material-order/delivery"
 $p6 = EvalJs "location.pathname"
 if ($p6 -match '/login' -or $p6 -match '403') { Bad ('/outsource/material-order/delivery 未正常进入，落在 ' + $p6) }
@@ -162,12 +178,13 @@ if ($d6) {
   if (-not $d6.err) { Ok '物料收货页无加载错误提示' } else { Bad '物料收货页出现「加载待收货订单失败」' }
   $tabStr6 = ($d6.tabs -join ',')
   Write-Output ('物料收货 页签 = ' + $tabStr6)
-  if ($tabStr6 -match '收货中' -and $tabStr6 -match '已结单') { Ok '物料收货有两个页签：收货中｜已结单' }
-  else { Bad ('物料收货页签不符（期望 收货中/已结单）：' + $tabStr6) }
-  if ($tabStr6 -match '^收货中') { Ok '默认页签 = 收货中（口径与"只列收货中"一致）' } else { Bad ('默认页签不是 收货中：' + $tabStr6) }
-  Write-Output ('物料收货列表行数 = ' + $d6.rows + '（库中可能 0 行"收货中"订单 ⇒ 0 行属正常）')
+  # 2026-09-28 用户口径：该页签文案同步改「生产中」（与加工收退页一致）；同日订单**状态**文案也由「收货中」统一为「生产中」
+  if ($tabStr6 -match '生产中' -and $tabStr6 -match '已结单') { Ok '物料收货有两个页签：生产中｜已结单' }
+  else { Bad ('物料收货页签不符（期望 生产中/已结单）：' + $tabStr6) }
+  if ($tabStr6 -match '^生产中') { Ok '默认页签 = 生产中（口径与"只列生产中"一致）' } else { Bad ('默认页签不是 生产中：' + $tabStr6) }
+  Write-Output ('物料收货列表行数 = ' + $d6.rows + '（库中可能 0 行"生产中"订单 ⇒ 0 行属正常）')
   # 2026-09-21（用户口径「操作文案从收料/退料改成收货/退货」）：行内按钮「收料」必须已改为「收货」。
-  # ⚠️ 库里可能没有"收货中"的物料订单（0 行 ⇒ 按钮不渲染）⇒ 这条是**负向守卫**（防改回去），0 行时天然通过。
+  # ⚠️ 库里可能没有"生产中"的物料订单（0 行 ⇒ 按钮不渲染）⇒ 这条是**负向守卫**（防改回去），0 行时天然通过。
   if (-not $d6.oldrecv -and -not $d6.btn) { Ok '物料收货列表页已无「收料」（行内按钮已改为「收货」）' }
   else { Bad ('物料收货列表页仍出现「收料」：文本=' + $d6.oldrecv + ' 按钮=' + $d6.btn) }
 }
@@ -179,10 +196,11 @@ $sw = EvalJs "(()=>{const t=[...document.querySelectorAll('.el-tabs__item')].fin
 Write-Output ('切换委外加工 TAB = ' + $sw)
 # 2026-09-17：菜单缓存被清后仪表盘按菜单树异步渲染快捷入口，1.8s 偶发读不到 → 放宽到 3s（消除假失败）
 agent-browser wait 3000
-$d7 = ReadJson "(()=>{const pane=document.querySelector('#pane-outsource')||document;const b=[...pane.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({d:(b.includes('\u6210\u54c1\u6536\u8d27')==true),m:(b.includes('\u7269\u6599\u6536\u8d27')==true),all:b.filter(x=>x)});})()" '仪表盘'
+# 2026-09-29：首页快捷入口按钮文案随菜单改名 → 加工收退（'\u52a0\u5de5\u6536\u9000'）
+$d7 = ReadJson "(()=>{const pane=document.querySelector('#pane-outsource')||document;const b=[...pane.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({d:(b.includes('\u52a0\u5de5\u6536\u9000')==true),m:(b.includes('\u7269\u6599\u6536\u8d27')==true),all:b.filter(x=>x)});})()" '仪表盘'
 if ($d7) {
   Write-Output ('委外加工 TAB 按钮 = ' + ($d7.all -join ' | '))
-  if ($d7.d) { Ok '首页委外加工 TAB 有「成品收货」快捷入口' } else { Bad '首页委外加工 TAB 缺少「成品收货」快捷入口' }
+  if ($d7.d) { Ok '首页委外加工 TAB 有「加工收退」快捷入口' } else { Bad '首页委外加工 TAB 缺少「加工收退」快捷入口' }
   if ($d7.m) { Ok '首页委外加工 TAB 有「物料收货」快捷入口' } else { Bad '首页委外加工 TAB 缺少「物料收货」快捷入口' }
 }
 
@@ -191,8 +209,8 @@ if ($d7) {
 #    只测默认页签会把新页签的溢出漏掉（本页列宽合计常年贴着内容区 948px）。
 foreach ($u in @("$base/outsource/order/delivery", "$base/outsource/material-order/delivery")) {
   OpenFresh $u
-  foreach ($tab in @('收货中', '已结单')) {
-    if ($tab -ne '收货中') {
+  foreach ($tab in @('生产中', '已结单')) {
+    if ($tab -ne '生产中') {
       $c8 = EvalJs "(()=>{const ts=[...document.querySelectorAll('.page-list .el-tabs__item')];const t=ts.find(x=>(x.innerText||'').indexOf('$tab')>=0);if(!t)return 'no-tab';t.click();return 'clicked'})()"
       Write-Output ($u + ' 切页签 → ' + $tab + ' = ' + $c8)
       Start-Sleep -Milliseconds 1500
@@ -236,13 +254,14 @@ if ($d8c -and $d8c.ok) {
 }
 
 # ⑨ 成品收货页**只做收货**（2026-09-21 用户口径「成品收货里面一个页面还有两个列表很别扭」）：
-#    原先挂在本页下方的「无单加工退货」区块已迁到「加工退货」页 ⇒ 本页不得再出现该区块/退货按钮。
-#    ⚠️ 断言一律按**按钮文本**取值：侧栏有「加工退货」菜单，用 body 文本判定必然假通过。
+#    原先挂在本页下方的「无单加工退货」区块已迁到「加工售后」（原名「加工退货」目录）页 ⇒ 本页不得再出现该区块/退货按钮。
+#    ⚠️ 断言一律按**按钮文本**取值：侧栏有「加工售后」菜单，用 body 文本判定必然假通过。
+# 2026-09-29：区块旧名「无单加工退货」、该链路新名「工厂售后」⇒ 两个词都查（防"旧块被加回来"或"新名块被塞进来"）
 OpenFresh "$base/outsource/order/delivery"
-$d9 = ReadJson "(()=>{const m=document.querySelector('.layout-main')||document.body;const t=m.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({title:t.includes('无单加工退货'),btn:b.includes('新增无单加工退货'),ret:b.some(x=>x==='退货'),recv:b.some(x=>x==='收货'),fin:b.some(x=>x==='结单')});})()" '成品收货列表页'
+$d9 = ReadJson "(()=>{const m=document.querySelector('.layout-main')||document.body;const t=m.innerText;const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({title:(t.includes('无单加工退货')||t.includes('工厂售后')),btn:(b.includes('新增无单加工退货')||b.includes('新增工厂售后')),ret:b.some(x=>x==='退货'),recv:b.some(x=>x==='收货'),fin:b.some(x=>x==='结单')});})()" '加工收退列表页'
 if ($d9) {
-  if (-not $d9.title) { Ok '成品收货列表页已无「无单加工退货」区块（退回统一到加工退货页）' } else { Bad '成品收货列表页仍有「无单加工退货」区块（应已迁走）' }
-  if (-not $d9.btn) { Ok '成品收货列表页已无「新增无单加工退货」按钮' } else { Bad '成品收货列表页仍有「新增无单加工退货」按钮' }
+  if (-not $d9.title) { Ok '加工收退列表页已无「无单加工退货/工厂售后」区块（退回统一到加工售后页）' } else { Bad '加工收退列表页仍有「无单加工退货/工厂售后」区块（应已迁走）' }
+  if (-not $d9.btn) { Ok '加工收退列表页已无「新增无单加工退货/新增工厂售后」按钮' } else { Bad '加工收退列表页仍有「新增无单加工退货/新增工厂售后」按钮' }
   # 2026-09-24（用户口径）：成品收货**列表**的行内操作是「收货 + 退货」（与物料收货列表一致）；
   #   「结单」不再出现在列表里（它仍在成品收货详情页）⇒ 断言由「不得有退货」反转为「必须有收货+退货、不得有结单」
   if ($d9.recv -and $d9.ret -and (-not $d9.fin)) { Ok '成品收货列表页行内操作 = 「收货」+「退货」，且已无「结单」' }
@@ -255,7 +274,7 @@ if ($d9) {
 #     ③ 行内必须有「收货详细」；成品还须有「结单报表」（**反结单在那一页**）、物料须有「反结单」（本批新增的能力）；
 #     ④ 列表条数与库中 FINISHED 单数一致（分页上限 10 ⇒ 取 min），证明页签真的按状态过滤而不是摆设。
 $closedCases = @(
-  @{ u = 'outsource/order/delivery';          name = '成品收货'; col = '结单日期'; extra = '结单报表'; sql = "SELECT COUNT(*) FROM outsource_order WHERE status='FINISHED'" },
+  @{ u = 'outsource/order/delivery';          name = '加工收退'; col = '结单日期'; extra = '结单报表'; sql = "SELECT COUNT(*) FROM outsource_order WHERE status='FINISHED'" },
   @{ u = 'outsource/material-order/delivery'; name = '物料收货'; col = '结单时间'; extra = '反结单';   sql = "SELECT COUNT(*) FROM outsource_material_order WHERE status='FINISHED'" }
 )
 foreach ($cc in $closedCases) {
@@ -283,41 +302,31 @@ foreach ($cc in $closedCases) {
   }
 }
 
-# ⑨b 加工退货 = **三级菜单 3 个叶子**（2026-09-27 用户口径：原「一页 3 页签」拆分）：
-#     关联退货（GTH- 红冲台账，页签 有效单据｜已作废单据，**本页「新增」** —— 2026-09-28 用户口径
-#       「在关联退货页面上，也可以新增关联退货」：点「新增」弹窗只选「关联加工单」，
-#       确定后进既有「加工退货（拆分还料）」录入页（?from=return-order，表单不复制））
-#     无单退货（GTW- 台账，页签 待返回｜已返回完｜已作废，有「新增」，含「退货/已返回」进度列）
-#     成品维修退货（见 ui-e2e-16）
-#     ⚠️ 2026-09-27：「加工返回单」（原第 4 个叶子 422）已下线 —— 修好送回改在**无单退货记录详情页**登记返回
-#         （verify-return-back-in-detail.ps1 覆盖该链路）；旧地址 /outsource/return-back 重定向到无单退货
-#     业务口径（扣成品/还料/冲应付、可反审核、草稿作废）由 verify-no-order-return.ps1 覆盖（API 级）
+# ⑨b 加工退货 = **2 个叶子**（2026-09-27 拆叶子；**2026-09-29 用户口径「三级菜单关联退货不要了，
+#     以后关联退货在「加工收货」（同日改名「加工收退」）里面退就行」⇒ 「关联退货」（408）叶子整体下线**）：
+#     ① 旧地址 /outsource/return-order 必须**重定向**到「工厂售后」叶子（老书签/外部直链不吃 403，
+#        与 /outsource/return-back 同范式）；
+#     ② 该页不得再有**关联退货专属物**：页签「有效单据/已作废单据」、「关联加工单」列、
+#        「新增」选单弹窗 —— 有单的加工退货改从「加工收退」进（列表行内「退货」/ 收货详细页按钮，
+#        由 §⑨ 与 verify-detail-render 的 return-defect 用例覆盖）；
+#     ③ 台账仍是同一张加工退货表（有「退货数量」列），「新增」仍是唯一入口。
+#     工厂售后叶子（原无单退货）细节见 ⑨b-2；客户售后（原成品维修退货）见 ui-e2e-16；
+#     业务口径（扣成品/还料/冲应付、可反审核、草稿作废）由 verify-no-order-return.ps1 覆盖（API 级）。
 OpenFresh "$base/outsource/return-order"
-$d9b = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-table')].filter(x=>x.getClientRects().length>0)[0];const ths=t?[...t.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim()):[];const trs=t?[...t.querySelectorAll('.el-table__body tbody tr')]:[];const tr=trs.length?trs[0]:null;const ops=tr?[...tr.children][[...tr.children].length-1].innerText:'';const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim()),cols:ths,rows:trs.length,w:ths.includes('关联加工单'),qty:ths.includes('退货数量'),btn:b.filter(x=>x==='新增').length,det:b.includes('详情'),opsHasDet:(ops.indexOf('\u8BE6\u60C5')>=0)});})()" '关联退货叶子'
+$d9b = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-table')].filter(x=>x.getClientRects().length>0)[0];const ths=t?[...t.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim()):[];const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({p:location.pathname,tabs:[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim()),cols:ths,qty:ths.includes('退货数量'),btn:b.filter(x=>x==='新增').length,dialogs:[...document.querySelectorAll('.el-dialog')].filter(x=>x.getClientRects().length>0).length});})()" '关联退货旧地址（应重定向）'
 if ($d9b) {
-  Write-Output ('关联退货页签 = ' + ($d9b.tabs -join ' | ') + ' ；台账列 = ' + ($d9b.cols -join '/'))
-  if ($d9b.w -and $d9b.qty) { Ok '关联退货台账含「关联加工单」与「退货数量」列' }
-  else { Bad ('关联退货台账列不符（缺 关联加工单 或 退货数量）：' + ($d9b.cols -join '/')) }
-  if ((($d9b.tabs -join ',') -match '^有效单据') -and (($d9b.tabs -join ',') -match '已作废单据')) { Ok '关联退货页签 = 有效单据｜已作废单据' }
-  else { Bad ('关联退货页签不符（期望 有效单据/已作废单据）：' + ($d9b.tabs -join '/')) }
-  if ([int]$d9b.btn -eq 1) { Ok '关联退货叶子有唯一「新增」入口（2026-09-28：本页也可发起关联退货）' } else { Bad ('关联退货叶子「新增」按钮数应为 1：' + $d9b.btn) }
-  # 2026-09-28（用户口径）：本页「新增」= **选单弹窗 + 跳既有录入页**（不复制录入表单）⇒
-  #   断言：点开后仍在本叶子、出现弹窗、弹窗含「关联加工单」与「确定」。
-  $clickedL = EvalJs "(()=>{const b=[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length>0).find(x=>(x.innerText||'').trim()==='新增');if(!b)return 'no-btn';b.click();return 'clicked'})()"
-  Start-Sleep -Milliseconds 1200
-  $d9bAdd = ReadJson "(()=>{const vis=e=>e.getClientRects().length>0;const dlg=[...document.querySelectorAll('.el-dialog')].filter(vis);const labels=[...document.querySelectorAll('.el-dialog .el-form-item__label')].filter(vis).map(e=>(e.innerText||'').trim());const btns=[...document.querySelectorAll('.el-dialog .el-dialog__footer button')].filter(vis).map(e=>(e.innerText||'').trim());return JSON.stringify({p:location.pathname,dialogs:dlg.length,labels:labels,btns:btns});})()" '关联退货·新增弹窗'
-  Write-Output ('点击新增 = ' + $clickedL + ' ；路径 = ' + $d9bAdd.p + ' ；弹窗字段 = ' + ($d9bAdd.labels -join '/') + ' ；弹窗按钮 = ' + ($d9bAdd.btns -join '/'))
-  if ($d9bAdd.p -eq '/outsource/return-order' -and [int]$d9bAdd.dialogs -ge 1) { Ok '「新增」在本页弹窗（未离开关联退货叶子）' }
-  else { Bad ('「新增」未在本页弹出弹窗（path=' + $d9bAdd.p + ', dialogs=' + $d9bAdd.dialogs + '）') }
-  if (($d9bAdd.labels -join ',') -match '关联加工单') { Ok '弹窗含「关联加工单」字段（选完进既有录入页录入）' } else { Bad ('弹窗缺「关联加工单」字段：' + ($d9bAdd.labels -join '/')) }
-  if (($d9bAdd.btns -join ',') -match '确定') { Ok '弹窗有「确定」按钮（确认后跳录入页）' } else { Bad ('弹窗缺「确定」按钮：' + ($d9bAdd.btns -join '/')) }
-  # 注：弹窗不关也行 —— 紧随其后的 §⑨b-2 首行 OpenFresh 会整页重载（不会把遮罩带到「台账表宽度」断言）
-  # 2026-09-21（用户口径「列表也应该有详情」）：台账行内必须有「详情」入口（空表则跳过，避免假 FAIL）
-  if ($d9b.opsHasDet) { Ok '关联退货台账行内操作列有「详情」入口' }
-  elseif ([int]$d9b.rows -eq 0) { Write-Output ('（台账暂无数据行，跳过「详情」入口断言；页面上有「详情」按钮=' + $d9b.det + '）') }
-  else { Bad ('关联退货台账操作列缺少「详情」入口（行内操作=' + $d9b.opsHasDet + '）') }
+  Write-Output ('旧地址落点 = ' + $d9b.p + ' ；页签 = ' + ($d9b.tabs -join ' | ') + ' ；列 = ' + ($d9b.cols -join '/'))
+  if ($d9b.p -eq '/outsource/return-order/unlinked') { Ok '旧地址 /outsource/return-order 重定向到「无单退货」叶子（关联退货叶子已下线，老书签不吃 403）' }
+  else { Bad ('旧地址未重定向到无单退货叶子：' + $d9b.p) }
+  if (($d9b.tabs -join ',') -notmatch '有效单据') { Ok '已无「有效单据」页签（原关联退货叶子专属）' }
+  else { Bad ('仍出现「有效单据」页签：' + ($d9b.tabs -join '/')) }
+  if (-not ($d9b.cols -contains '关联加工单')) { Ok '台账已无「关联加工单」列（2026-09-29：关联退货不再单独成页）' }
+  else { Bad ('台账仍有「关联加工单」列：' + ($d9b.cols -join '/')) }
+  if ($d9b.qty) { Ok '台账仍是同一张加工退货表（含「退货数量」列）' } else { Bad ('台账缺「退货数量」列：' + ($d9b.cols -join '/')) }
+  if ([int]$d9b.btn -eq 1) { Ok '本页「新增」仍是唯一入口（= 无单退货入口）' } else { Bad ('本页「新增」按钮数应为 1：' + $d9b.btn) }
+  if ([int]$d9b.dialogs -eq 0) { Ok '已无「新增关联退货」选单弹窗（该入口随叶子下线）' } else { Bad ('仍出现弹窗（dialogs=' + $d9b.dialogs + '）') }
 }
-# ⑨b-2 无单退货叶子：3 页签 + 「退货/已返回」进度列 + 唯一「新增」入口
+# ⑨b-2 工厂售后叶子（原无单退货，2026-09-29 改文案）：3 页签 + 「退货/已返回」进度列 + 唯一「新增」入口
 OpenFresh "$base/outsource/return-order/unlinked"
 $d9c = ReadJson "(()=>{const t=[...document.querySelectorAll('.el-table')].filter(x=>x.getClientRects().length>0)[0];const ths=t?[...t.querySelectorAll('.el-table__header th')].map(x=>x.innerText.trim()):[];const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({tabs:[...document.querySelectorAll('.el-tabs__item')].map(x=>x.innerText.trim()),cols:ths,prog:ths.includes('退货/已返回'),noOrder:ths.includes('关联加工单'),btn:b.filter(x=>x==='新增').length});})()" '无单退货叶子'
 if ($d9c) {
@@ -366,7 +375,7 @@ if ($d10b) {
 
 # ⑩ 「反结单」按钮端到端（2026-09-27 用户口径「E 也要做」）：造一张**已结单**的物料订单（SQL fixture），
 #    在 物料收货 → 已结单 页签点「反结单」→ 弹窗确认 → 断言：① 库里回到 RECEIVING（可继续收货）；② finish_time 清空；
-#    ③ 该行从「已结单」页签消失（列表刷新有效）。⚠️ 必须在临时单上做 —— 反结单会把单拉回收货中，
+#    ③ 该行从「已结单」页签消失（列表刷新有效）。⚠️ 必须在临时单上做 —— 反结单会把单拉回生产中，
 #    动真实单会影响其它脚本的口径（API 侧的分支覆盖见 verify-material-order-reopen.ps1）。
 $roCode = 'MWO-VRO-UI-' + (Get-Date).ToString('HHmmss')
 $roSup = SqlOne 'SELECT id FROM supplier ORDER BY id LIMIT 1'
@@ -377,7 +386,7 @@ if ($roSup -ne '' -and $roMat -ne '' -and $roMt -ne '') {
   SqlExec ("INSERT INTO outsource_material_order (code, supplier_id, order_type, status, remark, company_id, finish_time, finisher_id, finisher_name, auditor_id, auditor_name, deleted) VALUES ('" + $roCode + "', " + $roSup + ", 'PURCHASE', 'FINISHED', 'verify-delivery-menu reopen fixture', 1, NOW(), 1, 'verify', 1, 'verify', 0);")
   $roId = SqlOne ("SELECT id FROM outsource_material_order WHERE code='" + $roCode + "'")
   SqlExec ("INSERT INTO outsource_material_order_item (order_id, outsource_material_id, material_type_id, unit, order_quantity, received_quantity, company_id, deleted) VALUES (" + $roId + ", " + $roMat + ", " + $roMt + ", 'PCS', 100, 0, 1, 0);")
-  Write-Output ('reopen fixture: id=' + $roId + ' code=' + $roCode + '（已结单，无收货记录 ⇒ 反结单应回 收货中）')
+  Write-Output ('reopen fixture: id=' + $roId + ' code=' + $roCode + '（已结单，无收货记录 ⇒ 反结单应回 生产中）')
   OpenFresh "$base/outsource/material-order/delivery"
   EvalJs "(()=>{const ts=[...document.querySelectorAll('.page-list .el-tabs__item')];const t=ts.find(x=>(x.innerText||'').indexOf('已结单')>=0);if(t)t.click();return 'ok'})()" | Out-Null
   Start-Sleep -Milliseconds 1600
@@ -406,4 +415,4 @@ if ($roSup -ne '' -and $roMat -ne '' -and $roMt -ne '') {
   if ((SqlOne ("SELECT COUNT(*) FROM outsource_material_order WHERE code='" + $roCode + "'")) -eq '0') { Ok 'reopen fixture cleaned up' } else { Bad '反结单 fixture 未清理干净' }
 } else { Write-Output '（缺主数据，跳过 ⑩ 反结单端到端）' }
 
-if ($global:fail -eq 0) { Write-Output 'RESULT PASS 成品收货/物料收货独立菜单与一步收货均正常' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }
+if ($global:fail -eq 0) { Write-Output 'RESULT PASS 加工收退/物料收货独立菜单与一步收货均正常' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }

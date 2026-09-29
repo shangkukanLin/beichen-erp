@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * 成品收货 — 收货详细（委外加工 → 成品收货 → 点单号进入）
+ * 加工收退 — 收货详细（委外加工 → 加工收退 → 点单号进入；页名沿革 成品收货 → 加工收货 → **加工收退**）
  * <p>2026-09-16：原「加工订单详情 → 交货管理」页签整块迁出至此（含新增/编辑/删除/审核/反审核收货 + 加工退货）。
  * 列表页带 ?add=1 进入时自动打开「新增收货」弹窗（一步收货）。</p>
  * <p>2026-09-21（用户口径）：加工单详情页上那个「成品收货」跳转按钮**已移除** ——
@@ -228,6 +228,18 @@ async function handleDelete(row: any) {
   try { await request.delete(`/outsource/order-delivery/${row.id}`); ElMessage.success('已删除'); await loadData() }
   catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
+/**
+ * 加工退货（红冲）草稿**作废**（2026-09-29 用户口径）：关联退货叶子下线后，本页「收货记录」成了
+ * **有单加工退货**唯一的常驻入口 ⇒ 红冲草稿的动作由"物理删除"改为**作废**（DRAFT → CANCELLED，
+ * 留痕可查，与原台账「已作废」页签同口径）。后端 `PUT /outsource/order-delivery/{id}/cancel`
+ * 仅对 `delivery_type=DEFECT_RETURN` 的草稿生效。
+ * <p>普通收货草稿仍走「删除」（物理删草稿）—— 那条口径未改（见下方按钮分支）。</p>
+ */
+async function handleCancel(row: any) {
+  try { await ElMessageBox.confirm('确定作废该加工退货草稿吗？作废后记录保留为「已作废」（留痕可查），不可再审核。', '作废', { type: 'warning' }) } catch { return }
+  try { await request.put(`/outsource/order-delivery/${row.id}/cancel`); ElMessage.success('已作废'); await loadData() }
+  catch (e: any) { ElMessage.error(e?.message || '作废失败') }
+}
 async function handleAudit(row: any) {
   try { await ElMessageBox.confirm('确定审核该收货记录吗？审核后将扣减物料、成品入库并生成应付。', '审核', { type: 'warning' }) } catch { return }
   try { await request.put(`/outsource/order-delivery/${row.id}/audit`); ElMessage.success('已审核'); await loadData() }
@@ -290,7 +302,7 @@ async function handleDefectReturn() {
     for (const r of data) {
       await request.post(`/outsource/order-delivery/return-defect/${orderId}`, { productId: r.productId, qualityType: r.qualityType, quantity: r.quantity, warehouseId: defectWarehouseId.value })
     }
-    ElMessage.success('加工退货草稿已保存，请在收货记录中审核')
+    ElMessage.success('加工退货草稿已保存，请在退货详情页审核（也可在本页收货记录里审核）')
     defectVisible.value = false
     await loadData()
   } catch (e: any) { ElMessage.error(e?.message || '加工退货失败') } finally { defectSaving.value = false }
@@ -425,7 +437,10 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
             <el-button type="primary" link size="small" @click="openDetail(row)">详情</el-button>
             <el-button type="success" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
             <el-button type="primary" link size="small" v-if="row.status === DocStatus.DRAFT" @click="openEdit(row)">编辑</el-button>
-            <el-button type="danger" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleDelete(row)">删除</el-button>
+            <!-- 2026-09-29（用户口径）：加工退货（红冲）草稿 = **作废**（留痕可查，与原台账一致）；
+                 普通收货草稿仍是 **删除**（物理删草稿）⇒ 两分支互斥、按钮数不变（操作列宽 176 不动） -->
+            <el-button type="danger" link size="small" v-if="row.status === DocStatus.DRAFT && row.deliveryType === DeliveryType.DEFECT_RETURN" @click="handleCancel(row)">作废</el-button>
+            <el-button type="danger" link size="small" v-else-if="row.status === DocStatus.DRAFT" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>

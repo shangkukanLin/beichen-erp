@@ -12,14 +12,26 @@
  * （返回时按现场解析兜底；仍没有 ⇒ 用料只能留空，不卡流程）。
  */
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
+import { useTabStore } from '@/stores/tabs'
+import { applyPageTitle } from '@/utils/pageTitle'
 import { OUTSOURCE_RETURN_ORDER_DIRTY_KEY } from '@/api/enums'
 
+const route = useRoute()
 const router = useRouter()
+const tabStore = useTabStore()
+/**
+ * 页面名（2026-09-28 用户口径「加工退货子菜单列表的详情标题还有新增标题需要对齐」）：
+ * 与**叶子名**逐字对齐（关联退货 / 工厂售后 / 客户售后；2026-09-29 用户口径：原「无单退货」改「工厂售后」
+ * —— 该链路是**工厂责任**：工厂发来的货结单后才发现的问题，工厂负责修，修好送回时按用料 FIFO 生成对工厂的
+ * 赔料应收）⇒ 本页 =「新增工厂售后」。
+ * 页头（PageShell :title）/ 顶部页签 / 浏览器标签页 / 卡片标题**四处同源**（与物料侧同口径）。
+ */
+const PAGE_TITLE = '新增工厂售后'
 
 /** 退货规格：与加工单收货详细页的退货弹窗同一口径（A/B/C/不良） */
 const SPECS = [
@@ -91,24 +103,28 @@ async function submit() {
       // 可空：不传后端会再解析一次（同口径）；这里显式带上用户确认/自动带出的那一版
       bomSnapshotId: form.bomSnapshotId || undefined
     })
-    ElMessage.success('加工退货草稿已保存，请在「无单退货」列表审核')
+    ElMessage.success('加工退货草稿已保存，请在「工厂售后」列表审核')
     sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
     router.replace('/outsource/return-order/unlinked')
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
 function cancel() { router.back() }
-onMounted(() => { /* 地址栏直达也能用：无预填参数 */ })
+onMounted(() => {
+  /* 地址栏直达也能用：无预填参数。标题四处同源 —— 路由 meta 与页签里可能残留旧名（如「新增无单加工退货」）⇒ 显式同步一次 */
+  tabStore.updateTabTitle(route.path, PAGE_TITLE)
+  applyPageTitle(PAGE_TITLE)
+})
 </script>
 
 <template>
-  <PageShell :loading="false" back-fallback="/outsource/return-order/unlinked">
+  <PageShell :title="PAGE_TITLE" :loading="false" back-fallback="/outsource/return-order/unlinked">
     <template #actions>
       <el-button :loading="saving" type="primary" @click="submit">保存草稿</el-button>
       <el-button @click="cancel">取消</el-button>
     </template>
 
     <el-card shadow="never">
-      <template #header><span style="font-weight:600">新增无单加工退货</span></template>
+      <template #header><span style="font-weight:600">{{ PAGE_TITLE }}</span></template>
 
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px">
         <template #title>

@@ -3,11 +3,15 @@
 #       ② 物料仓库子菜单 = sys_menu(parent_id=11, visible=1) 按 sort_order（查询 + 作业单据）
 #          （2026-09-22 用户要求：委外仓库 / 自有物料仓 迁入「基础数据」⇒ 本组 7 项变 5 项；
 #           同日再新增「物料库存流水」(417) 插第 2 位 ⇒ 6 项。本脚本按库取基准，菜单再调无需改）
+#       ②b **用户点定的顺序按 id 钉死**（2026-09-29 新增）：② 只能证明"侧栏 == 库"，钉不住"库是不是用户要的顺序"。
+#          2026-09-29 用户口径「物料其他出入库放在物料报损前面」⇒ 413/407 对调（与成品侧
+#          verify-returnsort-menu-move.ps1 钉 '706,707,705,712,703,711,704,713' 同范式）。
 #       ③ 委外加工子菜单 = sys_menu(parent_id=4, visible=1) 按 sort_order
 #          （2026-09-17 用户定稿：加工订单 → 成品收货 → 加工退货 → 物料订单 → 物料收货 → 物料退货；供应商管理下线）
 #       ④ 5 个页面直达不 403（路由路径未变 → 白名单不受影响）
 #       ⑤ 委外仓库 / 自有物料仓 已归「基础数据」（2026-09-22 新增）
-# 说明：②③ 的期望值不再写死中文，而是**以库为准**与侧栏渲染比对 —— 菜单调整后本脚本无需再改。
+# 说明：②③ 的期望值不写死中文，而是**以库为准**与侧栏渲染比对（菜单改名无需改本脚本）；
+#       只有 ②b 这一条故意写死 id 顺序 —— 它锁的是**用户点定的排序口径**。
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $global:fail = 0
@@ -55,7 +59,11 @@ function ReadJsonLike($js, $want) {
   return ($m.Value | ConvertFrom-Json)
 }
 function SubMenu($catalog) {
-  $js = "(()=>{const s=[...document.querySelectorAll('.el-menu .el-sub-menu')].find(x=>(x.querySelector('.el-sub-menu__title')?.innerText||'').includes('$catalog'));return JSON.stringify({c:s?[...s.querySelectorAll(':scope > .el-menu > li')].map(li=>li.innerText.trim()):[]});})()"
+  # 2026-09-29 修复（**既存**缺陷，与本次菜单排序无关）：三级菜单（2026-09-27 起 419「加工退货」/ 423「物料退货」
+  #   是目录）在侧栏是**嵌套**渲染 —— 取 li.innerText 会把父项与子叶子拼成一串
+  #   （"加工退货关联退货无单退货成品维修退货"）⇒ 与库里父项名比对必然不等，③ 长期 FAIL、且掩盖真实回归。
+  #   改为只取**本项标题**：子菜单取 :scope > .el-sub-menu__title，普通项取自身；与 ① 一级菜单探针同口径（取首行）。
+  $js = "(()=>{const s=[...document.querySelectorAll('.el-menu .el-sub-menu')].find(x=>(x.querySelector('.el-sub-menu__title')?.innerText||'').includes('$catalog'));const txt=li=>{const t=li.querySelector(':scope > .el-sub-menu__title');return ((t||li).innerText||'').trim().split('\n')[0];};return JSON.stringify({c:s?[...s.querySelectorAll(':scope > .el-menu > li')].map(txt):[]});})()"
   $raw = (EvalJs $js).Replace('\"', '"')
   $m = [regex]::Match($raw, '\{.*\}')
   if (-not $m.Success) { Bad ("未读到侧栏 " + $catalog + "：" + $raw); return @() }
@@ -84,6 +92,13 @@ $expWh = MenuNames 11
 Write-Output ('物料仓库 子菜单 = ' + ($wh -join ' | '))
 Write-Output ('物料仓库 DB 期望 = ' + ($expWh -join ' | '))
 if (($wh -join '|') -eq ($expWh -join '|')) { Ok ('物料仓库顺序与库一致：' + ($wh -join ' → ')) } else { Bad ('物料仓库应为 ' + ($expWh -join '|') + '，实际 ' + ($wh -join '|')) }
+
+# ②b 2026-09-29 用户口径「物料其他出入库放在物料报损前面」：把用户点定的顺序按 id 钉死
+#     （只按库取基准只能证明"侧栏 == 库"，钉不住"库是不是用户要的顺序"）
+$dbIds = ((& $script:MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -N -B -e "SELECT id FROM sys_menu WHERE parent_id=11 AND visible=1 AND status=1 ORDER BY sort_order, id" 2>$null) | ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' }) -join ','
+Write-Output ('物料仓库 visible ids in order = ' + $dbIds)
+if ($dbIds -eq '418,416,417,414,407,413') { Ok 'DB sort_order = 物料移仓→库存详情→库存流水→库存盘点→物料其他出入库→物料报损（2026-09-29 用户口径）' }
+else { Bad ('DB sequence mismatch: ' + $dbIds + '（期望 418,416,417,414,407,413）') }
 
 # ⑤ 2026-09-22：委外仓库(404) / 自有物料仓(410) 由「物料仓库」迁入「基础数据」，两边都要验（防只改一半）
 #    2026-09-23 改名为「委外仓库管理 / 自有物料仓管理」⇒ 断言不写死中文：名字按 id 从库取、归属按 route_path 判
@@ -130,8 +145,12 @@ if ($d5json) {
   $btns = EvalJs "[...document.querySelectorAll('#pane-materialWarehouse button')].map(x=>x.innerText.trim()).filter(Boolean).join('|')"
   Write-Output ('物料仓库 TAB 按钮 = ' + $btns)
   $exp5 = $expWh   # 期望值 = 库里的物料仓库菜单（不再写死）
-  $miss5 = @($exp5 | Where-Object { $btns -notmatch [regex]::Escape($_) })
-  if ($miss5.Count -eq 0) { Ok ('物料仓库 TAB 快捷入口齐全（' + $exp5.Count + ' 项）') } else { Bad ('物料仓库 TAB 缺：' + ($miss5 -join '、')) }
+  # 2026-09-29：不止"齐全"，还要**逐项同序** —— 该块注释明确承诺"严格 = 本目录子菜单、本块逐项同序"，
+  #   但此前只断言存在 ⇒ 本次改 413/407 排序后首页仍留着旧顺序（已同步换位）。取全序列与库期望严格比对。
+  #   注意：agent-browser eval 回传的字符串自带双引号（原断言用 -notmatch 逐名匹配所以掩盖了这点）⇒ 先剥引号。
+  $got5 = @((($btns -replace '"', '').Trim()) -split '\|' | Where-Object { $_ -ne '' })
+  if (($got5 -join '|') -eq ($exp5 -join '|')) { Ok ('物料仓库 TAB 快捷入口与库期望逐项同序（' + $got5.Count + ' 项）') }
+  else { Bad ('物料仓库 TAB 顺序不符：实际 ' + ($got5 -join '|') + '，期望 ' + ($exp5 -join '|')) }
   # 切回「委外加工」TAB，确认「物料仓库」的项已不在该 pane 内（名单取库，不写死）
   EvalJs "(()=>{const h=[...document.querySelectorAll('.el-tabs__item')].find(x=>x.innerText.trim()==='委外加工');if(h)h.click();return 'ok';})()" | Out-Null
   agent-browser wait 2200

@@ -45,7 +45,7 @@ public class OrderDeliveryController {
      * 收货维度订单列表（「成品收货」两个页签）：按加工单状态返回，
      * 每行带订单量/已交量/剩余量/最近交货日期/结单日期，前端直接渲染列表即可。
      *
-     * <p>2026-09-27（用户口径）：`status` 参数化 —— 收货中传 PRODUCING、已结单传 FINISHED；
+     * <p>2026-09-27（用户口径）：`status` 参数化 —— 生产中（PRODUCING）传 PRODUCING、已结单传 FINISHED；
      * **不传则按 PRODUCING**（与 2026-09-16 上线时的行为完全一致，老调用/老守卫不受影响）。</p>
      */
     @GetMapping("/order-page")
@@ -108,7 +108,7 @@ public class OrderDeliveryController {
 
     /**
      * **不关联加工单的加工退货**（2026-09-21 用户口径：该入口的本意就是"可以不关联加工单"，
-     * 其余业务与有单红冲完全一致）—— 成品收货列表页「无单加工退货」区块的新增入口。
+     * 其余业务与有单红冲完全一致）—— 成品收货列表页「工厂售后（原无单加工退货）」区块的新增入口。
      * <p>草稿仍存本表，审核/反审核/删除沿用通用端点 {@code /{id}/audit}·{@code /{id}/un-audit}·{@code DELETE /{id}}。</p>
      */
     @PostMapping("/return-defect-no-order")
@@ -118,7 +118,7 @@ public class OrderDeliveryController {
     }
 
     /**
-     * 「新增无单加工退货」页的 **BOM 快照候选**（2026-09-27 用户口径）：该产品在该工厂**用过**的快照
+     * 「新增工厂售后（原无单加工退货）」页的 **BOM 快照候选**（2026-09-27 用户口径）：该产品在该工厂**用过**的快照
      * （按最近使用的加工单倒序 ⇒ 第一项即默认），带版本/来源；解析不到则返回空数组。
      */
     @GetMapping("/product-snapshot-options")
@@ -128,7 +128,7 @@ public class OrderDeliveryController {
     }
 
     /**
-     * 无单加工退货列表（**兼容保留**：2026-09-21 起前端已改用下面的台账端点
+     * 工厂售后（原无单加工退货）列表（**兼容保留**：2026-09-21 起前端已改用下面的台账端点
      * {@link #defectReturnPage} 把有单/无单展示在一张表；本端点供既有回归脚本与外部调用继续使用）。
      */
     @GetMapping("/return-defect-no-order/list")
@@ -186,12 +186,13 @@ public class OrderDeliveryController {
     }
 
     // ==================== 加工返回（2026-09-27 用户口径）====================
-    // 「加工返回单」不再是独立单据/独立菜单叶子：改成在**无单加工退货详情页**登记返回，
+    // 「加工返回单」不再是独立单据/独立菜单叶子：改成在**工厂售后（原无单加工退货）详情页**登记返回，
     // 交互与「成品维修退货」详情页的「登记维修返回」完全一致（登记即生效 + 逐条撤销 + 记录列表）。
 
     /**
-     * **登记返回**：核销在厂成品（PRODUCT_DEFECT）+ 修好成品回我方仓 + 按实际用料扣委外仓料
-     * + 料款生成对加工厂的**赔料应收** + FIFO 成本结转。登记即生效（无草稿/审核两步）。
+     * **登记返回**：首建**草稿**（2026-09-28 用户口径「登记返回需要审核和反审核」）—— 校验来源单/防超返/用料范围，
+     * **不动库存与账务**。审核（`PUT /return-back/{id}/audit`）才落账：核销在厂成品（PRODUCT_DEFECT）+
+     * 修好成品回我方仓 + 按实际用料扣委外仓料 + 料款生成对加工厂的**赔料应收** + FIFO 成本结转。
      * <p>body: quantity / returnQualityType / inWarehouseId / returnDate / remark / items[]，其余
      * （工厂/产品/在厂规格）由来源单自动带入并复核。</p>
      * <p><b>用料单价（2026-09-29 用户口径「登记返回时可以填写具体价格，默认 FIFO 可修改」）</b>：
@@ -204,14 +205,32 @@ public class OrderDeliveryController {
         return R.ok(returnBackService.register(id, body));
     }
 
-    /** 撤销返回登记（库存/应收/成本对称逆回后删除该记录；与"登记维修返回"的逐条撤销同口径） */
+    /**
+     * 删除返回**草稿**（2026-09-28 改口径：登记只建草稿）。
+     * <p>⚠️ 已审核的返回不能用本端点删除（会连逆回带删行、不留痕）—— 必须先 `PUT /return-back/{id}/un-audit`
+     * 反审核（对称逆回 + 留痕）再删。</p>
+     */
     @DeleteMapping("/return-back/{recordId}")
     public R<Void> revokeReturnBack(@PathVariable Long recordId) {
         returnBackService.revoke(recordId);
         return R.ok();
     }
 
-    /** 某无单加工退货单的返回记录（详情页「返回记录」表；已返回量 = Σ quantity） */
+    /** 返回记录**审核**（2026-09-28 用户口径「登记返回需要审核和反审核」）：三腿落账 + 赔料应收 + 成本结转 */
+    @PutMapping("/return-back/{recordId}/audit")
+    public R<Void> auditReturnBack(@PathVariable Long recordId) {
+        returnBackService.audit(recordId);
+        return R.ok();
+    }
+
+    /** 返回记录**反审核**：三腿对称逆回 + 冲应收 + 反结转，记录回草稿（**留痕**，区别于"删除草稿"） */
+    @PutMapping("/return-back/{recordId}/un-audit")
+    public R<Void> unAuditReturnBack(@PathVariable Long recordId) {
+        returnBackService.unAudit(recordId);
+        return R.ok();
+    }
+
+    /** 某工厂售后（原无单加工退货）单的返回记录（详情页「返回记录」表；已返回量 = Σ quantity） */
     @GetMapping("/{id}/return-backs")
     public R<List<Map<String, Object>>> returnBacks(@PathVariable Long id) {
         return R.ok(returnBackService.listBySource(id));

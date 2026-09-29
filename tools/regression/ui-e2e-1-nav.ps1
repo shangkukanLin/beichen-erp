@@ -30,6 +30,7 @@ $routes = @(
   # 2026-09-27 三级菜单叶子（加工退货 3 叶子 + 物料退货 3 叶子）；
   #   /outsource/return-back 已下线（2026-09-27 用户口径「加工返回单多余了」）⇒ 保留在此**专测旧地址重定向**
   #   （重定向到 /outsource/return-order/unlinked，页签身份随后者 ⇒ 不会产生同名重复页签）
+  # 2026-09-29：/outsource/return-order（关联退货叶子）同样已下线 ⇒ 也留在这里**专测重定向**（同落到 unlinked）
   '/outsource/return-order/unlinked', '/outsource/return-order/repair', '/outsource/return-back',
   '/outsource/material-return/unlinked', '/outsource/material-return/repair',
   '/inventory/purchase', '/inventory/purchase-return', '/inventory/purchase-exchange',

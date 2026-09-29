@@ -2,20 +2,40 @@
 // 加工退货记录详情（2026-09-23 用户要求：原「加工退货详情」580px 抽屉改为独立页面）
 // —— 按 id 回源 `/outsource/order-delivery/return-defect/{id}/detail`（含落账明细），
 //    台账行点击 / 行内「详情」按钮都跳到这里。
-import { computed, ref, reactive, onMounted } from 'vue'
+import { computed, ref, reactive, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY } from '@/api/enums'
 import request from '@/utils/request'
 import PageShell from '@/components/PageShell.vue'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import { useTabStore } from '@/stores/tabs'
+import { applyPageTitle } from '@/utils/pageTitle'
 
 const route = useRoute()
 const router = useRouter()
 const loading = ref(false)
 const detail = ref<any>({})
+const tabStore = useTabStore()
 
-/** 退货规格 code -> 中文（与列表、无单退货弹窗同一口径） */
+/**
+ * 页头 / 页签 / 浏览器标题 / 卡片标题**四处同源**（2026-09-28 用户口径「加工退货子菜单列表的详情标题需要对齐」）。
+ * <p>本页承载**两类红冲记录**（同一张表、同一个 delivery_type，只按**是否挂加工单**区分）⇒ 标题也随之分两态：
+ *  有单红冲（挂加工单 = 把该单已收的货退回工厂，从「加工收退」的收货详细页发起）=「**加工退货详情**」；
+ *  工厂售后（GTW-，不挂加工单 = 工厂责任的售后维修）=「**工厂售后详情**」。
+ * 2026-09-29 用户口径「需要统一」：有单那态原叫「关联退货详情」（2026-09-28 随已下线的「关联退货」叶子起的名），
+ *   现统一到**「加工退货」** —— 与录入页「加工退货（拆分还料）」、收货记录的类型标签「加工退货」/「加工退货规格」、
+ *   以及本页路由 `meta.title`（加工退货详情）四处一致。</p>
+ * <p>⚠️ 加载中（detail.id 还没回来）沿用路由 meta 名「加工退货详情」，数据回来后立刻改名 ——
+ * 与 `return-order/detail.vue` 同款"故意不写 immediate"：拿不到数据时宁可用兜底名，也不要闪一个可能错的名字。</p>
+ */
+const pageTitleText = computed(() => {
+  if (detail.value.id == null) return (route.meta.title as string) || '加工退货详情'
+  return detail.value.orderId != null ? '加工退货详情' : '工厂售后详情'
+})
+watch(pageTitleText, (t) => { tabStore.updateTabTitle(route.path, t); applyPageTitle(t) })
+
+/** 退货规格 code -> 中文（与列表、工厂售后弹窗同一口径） */
 function specText(q?: string) {
   if (q === 'A') return 'A规'
   if (q === 'B') return 'B规'
@@ -24,7 +44,7 @@ function specText(q?: string) {
   return q || '-'
 }
 /**
- * 库存形态（与 /outsource/warehouse-detail 同口径）：无单退货的成品以「成品（加工退货）」形态进加工厂委外仓。
+ * 库存形态（与 /outsource/warehouse-detail 同口径）：工厂售后的成品以「成品（加工退货）」形态进加工厂委外仓。
  */
 const StockFormLabel: Record<string, string> = {
   MATERIAL: '物料',
@@ -34,8 +54,8 @@ const StockFormLabel: Record<string, string> = {
 }
 
 /**
- * 是否为「无单退货·新口径」记录（2026-09-27 用户口径）——判定**只看实际流水**，不看 linked：
- * - 无单退货（GTW-，2026-09-25 P1-1 起）：不拆 BOM、不冲应付，只扣成品 + 把成品以 PRODUCT_DEFECT 转入委外仓
+ * 是否为「工厂售后·新口径」记录（2026-09-27 用户口径）——判定**只看实际流水**，不看 linked：
+ * - 工厂售后（GTW-，2026-09-25 P1-1 起）：不拆 BOM、不冲应付，只扣成品 + 把成品以 PRODUCT_DEFECT 转入委外仓
  *   ⇒ `materials` 为空、`outsourceIn` 有值；
  * - 存量「独立 DEFECT 单」（旧逻辑，已停止新增）：虽也不关联加工单，但会还料 + 负应付、且**没有** PRODUCT_DEFECT 转移腿
  *   ⇒ `materials` 非空 ⇒ 不能被误判成新口径（否则会隐藏它的真实还料明细）。
@@ -57,20 +77,29 @@ async function load() {
 /**
  * ==================== 加工返回登记（2026-09-27 用户口径） ====================
  * 「加工返回单」不再是独立单据/独立菜单叶子：工厂修好送回时，**就在本页**登记返回，
- * 交互与「成品维修退货」详情页的「登记维修返回」完全一致 —— 登记即生效、可逐条撤销、有返回记录列表。
- * 账务与老流程一字未改：核销在厂成品（PRODUCT_DEFECT）+ 修好成品回我方仓 + 按实际用料扣委外仓料
- * + 料款生成对加工厂的**赔料应收** + FIFO 成本结转。
+ * 交互与「客户售后」详情页的「登记维修返回」完全一致 —— 登记即生效、可逐条撤销、有返回记录列表。
+ * 账务：核销在厂成品（PRODUCT_DEFECT）+ 修好成品回我方仓 + 按实际用料扣委外仓料
+ * + 料款生成对加工厂的**赔料应收** + 成本结转。
+ * <p>2026-09-29 用户口径「送回时按实际用料 FIFO 生成对工厂的赔料应收，这个需要修改一下：登记返回的时候，
+ * 可以填写具体价格，默认 FIFO 可修改」⇒ **单价改在登记时定**：后端按登记时点的默认 FIFO 价预填，
+ * 用户可人工改写（`priceManual` 留痕），审核时用该**快照单价**算赔料应收；
+ * 而**成本结转仍按审核时点的 FIFO**（人工定价不污染库存成本，两笔钱在后端分开算）。</p>
  */
 const returns = ref<any[]>([])
 const returnsLoading = ref(false)
-/** 已返回量 = Σ 本来源单的返回记录（列表接口只返回本来源单） */
-const returnedQty = computed(() => returns.value.reduce((s: number, r: any) => s + Math.abs(Number(r.quantity || 0)), 0))
+/**
+ * 已审核的返回记录（2026-09-28 用户口径「登记返回需要审核和反审核」）。
+ * <p>登记只建**草稿**、审核才落账 ⇒ 已返回量/未返回量/「登记返回」入口都只认这些行。</p>
+ */
+const auditedReturns = computed(() => returns.value.filter((r: any) => r.status === DocStatus.AUDITED))
+/** 已返回量 = Σ 本来源单**已审核**的返回记录（列表接口只返回本来源单） */
+const returnedQty = computed(() => auditedReturns.value.reduce((s: number, r: any) => s + Math.abs(Number(r.quantity || 0)), 0))
 /** 退货总量（台账记录里数量是负数 ⇒ 取绝对值） */
 const sentQty = computed(() => Math.abs(Number(detail.value.quantity || 0)))
 /** 未返回量 */
 const unreturnedQty = computed(() => Math.max(0, sentQty.value - returnedQty.value))
 /**
- * 能否登记返回：仅「无单退货·新口径」（成品已以 PRODUCT_DEFECT 转入委外仓）+ 已审核 + 还有未返回。
+ * 能否登记返回：仅「工厂售后·新口径」（成品已以 PRODUCT_DEFECT 转入委外仓）+ 已审核 + 还有未返回。
  * 存量「独立 DEFECT 单」不进在厂 ⇒ 给它登记会撞「在厂成品不足」⇒ 直接不给入口。
  */
 const canReturn = computed(() => isNoOrderNew.value && detail.value.settled === true
@@ -83,7 +112,7 @@ async function loadReturns() {
   } catch { returns.value = [] } finally { returnsLoading.value = false }
 }
 
-/** 回仓品质可选档（与无单退货建单、加工返回弹窗同一口径） */
+/** 回仓品质可选档（与工厂售后建单、加工返回弹窗同一口径） */
 const specOptions = [
   { value: 'A', label: 'A规' }, { value: 'B', label: 'B规' },
   { value: 'C', label: 'C规' }, { value: 'DEFECT', label: '不良' }
@@ -184,41 +213,124 @@ async function submitReturn() {
       returnQualityType: returnForm.returnQualityType, inWarehouseId: returnForm.inWarehouseId,
       returnDate: returnForm.returnDate || undefined, remark: returnForm.remark, items
     })
-    ElMessage.success('已登记返回（已生效）')
+    ElMessage.success('返回草稿已保存，请在下方「返回记录」里审核（审核后才落账）')
     returnDlg.visible = false
     await Promise.all([load(), loadReturns()])
   } catch (e: any) { ElMessage.error(e?.message || '登记返回失败') } finally { returnDlg.saving = false }
 }
 
-/** 撤销返回：库存/应收/成本对称逆回后删除该记录（与「撤销维修返回」同口径） */
+/**
+ * ==================== 返回记录的 审核 / 反审核 / 删除（2026-09-28 用户口径） ====================
+ * 登记只建**草稿**（不动库存/账务）；审核才落账（核销在厂成品 + 成品回仓 + 按实际用料扣料 + 赔料应收 + 成本结转）；
+ * 反审核对称逆回并**留痕**（记录回草稿）；删除只对草稿开放。
+ */
+async function auditReturn(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确认审核返回「${row.code}」吗？审核后才会落账：核销在厂成品（加工厂委外仓）、修好成品回我方仓、按实际用料从委外仓扣料，`
+      + `并按登记时的用料单价（默认 FIFO、可人工定价）生成对加工厂的赔料应收（成品成本仍按 FIFO 结转）。`,
+      '确认审核', { type: 'warning' })
+  } catch { return }
+  try {
+    await request.put(`/outsource/order-delivery/return-back/${row.id}/audit`)
+    ElMessage.success('已审核')
+    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    await Promise.all([load(), loadReturns()])
+  } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
+}
+
+async function unAuditReturn(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确认反审核返回「${row.code}」吗？将对称逆回：恢复在厂成品、扣回已回仓成品、回补实际用料、冲销赔料应收并反结转成本；记录回到草稿（留痕可查）。`,
+      '确认反审核', { type: 'warning' })
+  } catch { return }
+  try {
+    await request.put(`/outsource/order-delivery/return-back/${row.id}/un-audit`)
+    ElMessage.success('已反审核')
+    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    await Promise.all([load(), loadReturns()])
+  } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
+}
+
+/** 删除返回**草稿**（仅草稿；已审核的必须先「反审核」） */
 async function revokeReturn(row: any) {
   try {
     await ElMessageBox.confirm(
-      `确认撤销返回「${row.code}」吗？将对称逆回：恢复在厂成品、扣回已回仓成品、回补实际用料、冲销赔料应收并反结转成本。`,
-      '撤销返回', { type: 'warning' })
+      `确认删除返回草稿「${row.code}」吗？该草稿尚未落账（未动库存/账务），删除后不可恢复。`,
+      '删除返回草稿', { type: 'warning' })
   } catch { return }
   try {
     await request.delete(`/outsource/order-delivery/return-back/${row.id}`)
-    ElMessage.success('已撤销')
+    ElMessage.success('已删除草稿')
     await Promise.all([load(), loadReturns()])
-  } catch (e: any) { ElMessage.error(e?.message || '撤销失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
+}
+
+/**
+ * ==================== 审核 / 反审核（2026-09-28 用户口径） ====================
+ * 「加工退货详情」本页只读，但审核与反审核要能在这里直接办（原先只能绕到成品收货详细页的「收货记录」表点审核）。
+ * 用**通用端点**（与收货记录列表、加工退货台账同一对）：
+ * `PUT /outsource/order-delivery/{id}/audit` · `/un-audit` —— 服务层按 isReverse 分派落账，页面不需要任何新端点。
+ * 提示语按**有单/无单**分两支（落账口径不同：有单还料 + 回退加工单已收 + 冲应付；无单只扣成品 + 转入厂委外仓）。
+ */
+async function handleAudit() {
+  const tip = detail.value.orderId
+    ? '确认审核该加工退货？审核后成品出库、按 BOM 还料，并把退回数量从该加工单的已收数量中回退、同时冲减应付。'
+    : '确认审核该加工退货？审核后成品出库，并以「成品（加工退货）」形态转入该加工厂委外仓（不还料、不冲应付）。'
+  try { await ElMessageBox.confirm(tip, '确认审核', { type: 'warning' }) } catch { return }
+  try {
+    await request.put(`/outsource/order-delivery/${route.params.id}/audit`)
+    ElMessage.success('已审核')
+    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    await load()
+  } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
+}
+
+/**
+ * 反审核（**不可逆**：恢复成品库存 / 扣回已还的料 / 冲回应付，单据回草稿）。
+ * <p>先挡「已登记返回」：工厂把货送回后在厂成品已被核销，逆回会造成账实错位 ⇒ 要求先逐条撤销返回。
+ * 这道闸后端也有（同批补的服务层校验），前端先拦只是为了给出可操作提示、不让人去撞"库存不足"。</p>
+ */
+async function handleUnAudit() {
+  if (auditedReturns.value.length > 0) {
+    ElMessage.warning(`该记录已有 ${auditedReturns.value.length} 条「已审核」的加工返回，请先在下方逐条反审核后再反审核本退货单`)
+    return
+  }
+  const tip = detail.value.orderId
+    ? '确认反审核？将恢复成品库存、扣回已还的料并冲销应付，单据回到草稿。'
+    : '确认反审核？将把在厂成品（加工退货）回退并恢复成品库存，单据回到草稿。'
+  try { await ElMessageBox.confirm(tip, '确认反审核', { type: 'warning' }) } catch { return }
+  try {
+    await request.put(`/outsource/order-delivery/${route.params.id}/un-audit`)
+    ElMessage.success('已反审核')
+    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    await Promise.all([load(), loadReturns()])
+  } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 
 onMounted(async () => { await load(); await loadReturns() })
 </script>
 
 <template>
-  <!-- 统一骨架（2026-09-23 全站定稿口径）：返回交骨架（原「返回」按钮已删）；本页只读无操作 -->
-  <PageShell :loading="loading" back-fallback="/outsource/return-order">
-    <!-- 2026-09-27 用户口径：工厂修好送回时**就在本页登记返回**（不再去「加工返回单」叶子开单） -->
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：返回交骨架（原「返回」按钮已删）。
+       本页动作（2026-09-27 / 2026-09-28 用户口径）：审核 · 反审核 ·（无单新口径）登记返回 -->
+  <PageShell :title="pageTitleText" :loading="loading" back-fallback="/outsource/return-order">
     <template #actions>
+      <!-- 审核 / 反审核（2026-09-28 用户口径「加工退货详情需要有审核和反审核功能」）：
+           与收货记录列表/加工退货台账同一对通用端点；条件与它们一致（草稿可审核、已审核可反审核） -->
+      <el-button v-if="detail.status===DocStatus.DRAFT" type="success" @click="handleAudit">审核</el-button>
+      <el-button v-if="detail.status===DocStatus.AUDITED" type="warning" @click="handleUnAudit">反审核</el-button>
+      <!-- 2026-09-27 用户口径：工厂修好送回时**就在本页登记返回**（不再去「加工返回单」叶子开单） -->
       <el-button v-if="canReturn" type="primary" @click="openReturn">登记返回</el-button>
     </template>
 
     <el-card shadow="never">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:600">加工退货详情 — {{ detail.code || detail.legacyNo || ('记录 #' + (detail.id ?? '')) }}</span>
+          <!-- 卡片标题与页头/页签/浏览器标题**逐字同名**（2026-09-28 家规：四处同源，守卫按等值断言）；
+               单据号在下方描述列表「退货单号」里可见，不再拼进标题，避免四处不一致 -->
+          <span style="font-weight:600">{{ pageTitleText }}</span>
         </div>
       </template>
 
@@ -240,7 +352,7 @@ onMounted(async () => { await load(); await loadReturns() })
         <el-descriptions-item label="退货数量">
           <span style="color:var(--app-color-danger);font-weight:500">{{ Math.abs(Number(detail.quantity || 0)) }}</span>
         </el-descriptions-item>
-        <!-- 返回进度（2026-09-27）：口径同台账「退货/已返回」列 —— 无单退货才有（有单红冲不进在厂，没有返回一说） -->
+        <!-- 返回进度（2026-09-27）：口径同台账「退货/已返回」列 —— 工厂售后才有（有单红冲不进在厂，没有返回一说） -->
         <el-descriptions-item v-if="isNoOrderNew && detail.settled" label="返回进度">
           <span :style="{ color: unreturnedQty > 0 ? 'var(--app-color-warning)' : 'var(--app-color-success)', fontWeight: 500 }">
             {{ sentQty }} / {{ returnedQty }}
@@ -250,7 +362,7 @@ onMounted(async () => { await load(); await loadReturns() })
           </span>
         </el-descriptions-item>
         <el-descriptions-item label="扣减仓库">{{ detail.warehouseName || '-' }}</el-descriptions-item>
-        <!-- 2026-09-27（用户口径）：无单退货建单时解析/选定的 BOM 快照 —— 工厂修好送回时
+        <!-- 2026-09-27（用户口径）：工厂售后建单时解析/选定的 BOM 快照 —— 工厂修好送回时
              「加工返回单」按它限定可选的「实际用料」（无单红冲本身仍不拆料还料，见 P1-1） -->
         <el-descriptions-item label="BOM 快照">
           <span v-if="detail.bomSnapshotId">v{{ detail.bomVersion ?? '?' }}</span>
@@ -266,8 +378,8 @@ onMounted(async () => { await load(); await loadReturns() })
 
     <el-card shadow="never">
       <template #header><span style="font-weight:600">落账明细</span></template>
-      <!-- 2026-09-27 用户口径（详情页文案按真实流水分支）：无单退货（GTW-）与有单红冲（GTH-）落账口径不同，
-           原先一律写「按 BOM 还料 + 冲减应付」⇒ 无单退货会显示根本不存在的动作（用户问到的困惑点）。
+      <!-- 2026-09-27 用户口径（详情页文案按真实流水分支）：工厂售后（GTW-）与有单红冲（GTH-）落账口径不同，
+           原先一律写「按 BOM 还料 + 冲减应付」⇒ 工厂售后会显示根本不存在的动作（用户问到的困惑点）。
            判定见 isNoOrderNew（只看流水，兼容存量的「独立 DEFECT 单」）。 -->
       <el-alert v-if="detail.id && !detail.settled" type="info" :closable="false" show-icon
         :title="isNoOrderNew
@@ -281,9 +393,9 @@ onMounted(async () => { await load(); await loadReturns() })
             ② 还料：按 BOM 还回工厂委外仓的物料如下<template v-if="detail.orderCode">，并回退该加工单的已收数量</template>。
           </template>
           <template v-else>
-            ② 还料：<b>本单不还料</b>（无单退货不拆 BOM —— 拆料与退货时点无关，BOM 改过即拆错）。
+            ② 还料：<b>本单不还料</b>（工厂售后不拆 BOM —— 拆料与退货时点无关，BOM 改过即拆错）。
             退回成品以「成品（加工退货）」形态挂在下方委外仓；工厂修好送回时在<b>本页「登记返回」</b>按
-            <b>实际用料</b>扣料，并生成对加工厂的赔料应收。
+            <b>实际用料</b>扣料，并生成对加工厂的赔料应收（<b>用料单价默认按 FIFO 带出，登记时可人工修改</b>）。
           </template>
         </p>
         <el-table v-if="(detail.materials || []).length" :data="detail.materials" border stripe size="small">
@@ -297,7 +409,7 @@ onMounted(async () => { await load(); await loadReturns() })
         <p v-if="!isNoOrderNew && !(detail.materials || []).length" style="margin:6px 0 0;color:var(--app-text-placeholder);font-size:var(--app-font-xs)">
           无还料记录（包工包料产品 / 该产品无 BOM 快照 ⇒ 只扣成品、不还料）
         </p>
-        <!-- 无单退货独有：成品落在哪个委外仓 + 什么形态（数据来自 OUTSOURCE_DEFECT_IN 流水） -->
+        <!-- 工厂售后独有：成品落在哪个委外仓 + 什么形态（数据来自 OUTSOURCE_DEFECT_IN 流水） -->
         <el-table v-if="detail.outsourceIn" :data="[detail.outsourceIn]" border stripe size="small" style="margin-top:8px">
           <el-table-column prop="warehouseName" label="转入的委外仓" min-width="150" show-overflow-tooltip />
           <el-table-column label="形态" width="150" align="center">
@@ -308,7 +420,7 @@ onMounted(async () => { await load(); await loadReturns() })
           </el-table-column>
         </el-table>
         <p v-else-if="isNoOrderNew" style="margin:6px 0 0;color:var(--app-text-placeholder);font-size:var(--app-font-xs)">
-          未查到委外仓入库流水（异常：无单退货审核后应有 PRODUCT_DEFECT 转移腿，请核对库存流水）
+          未查到委外仓入库流水（异常：工厂售后审核后应有 PRODUCT_DEFECT 转移腿，请核对库存流水）
         </p>
         <p style="margin:12px 0 0;line-height:1.6;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
           <template v-if="!isNoOrderNew">
@@ -327,36 +439,51 @@ onMounted(async () => { await load(); await loadReturns() })
     </el-card>
 
     <!-- ============ 返回记录（2026-09-27 用户口径：加工返回不再单独开单 —— 就在本页登记/撤销） ============
-         与「成品维修退货」详情页的「维修返回」记录同范式：登记即生效 + 逐条撤销（表内撤销走对称逆回后删除）。 -->
+         与「客户售后」详情页的「维修返回」记录同范式：登记即生效 + 逐条撤销（表内撤销走对称逆回后删除）。 -->
     <el-card v-if="isNoOrderNew && detail.settled" shadow="never">
       <template #header>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <span style="font-weight:600">返回记录</span>
           <span style="font-size:var(--app-font-xs);color:var(--app-text-secondary)">
-            工厂修好送回时点右上角「登记返回」；登记即生效（核销在厂 + 成品回仓 + 按实际用料扣料 + 赔料应收），错了可逐条撤销。
+            工厂修好送回时点右上角「登记返回」→ 存为<b>草稿</b>（不动库存/账务）→ 在本表点<b>审核</b>才落账
+            （核销在厂 + 成品回仓 + 按实际用料扣料 + 赔料应收）；草稿可删除、已审核可反审核。
           </span>
         </div>
       </template>
       <el-table :data="returns" border stripe size="small" v-loading="returnsLoading">
+        <!-- 2026-09-28（用户口径「登记返回需要审核和反审核」）：状态并进「返回单号」的第二行（tag），
+             不新开列以守住本页表格宽度预算；动作按状态渲染：草稿 → 审核 / 删除；已审核 → 反审核 -->
         <el-table-column label="返回单号" width="160" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.code }}</template>
+          <template #default="{ row }">
+            <div>{{ row.code }}</div>
+            <el-tag :type="DocStatusTag[row.status] || 'info'" size="small" style="margin-top:2px">
+              {{ DocStatusLabel[row.status] || row.status }}
+            </el-tag>
+          </template>
         </el-table-column>
         <el-table-column label="返回数量" width="90" align="right">
           <template #default="{ row }">{{ row.quantity }}</template>
         </el-table-column>
-        <el-table-column label="回仓品质" width="90" align="center">
+        <el-table-column label="回仓品质" width="80" align="center">
           <template #default="{ row }">{{ specText(row.returnQualityType) }}</template>
         </el-table-column>
-        <el-table-column prop="inWarehouseName" label="回仓仓库" min-width="140" show-overflow-tooltip />
-        <el-table-column label="实际用料料款" width="130" align="right">
+        <el-table-column prop="inWarehouseName" label="回仓仓库" min-width="130" show-overflow-tooltip />
+        <el-table-column label="实际用料料款" width="100" align="right">
           <template #default="{ row }">
-            <span :title="'FIFO 结转的料款 = 对加工厂的赔料应收'">{{ Number(row.materialAmount || 0).toFixed(2) }}</span>
+            <span :title="'赔料应收 = Σ(用料单价 × 用量)；单价默认按 FIFO 带出、可人工填写（草稿未落账为 0）'">{{ Number(row.materialAmount || 0).toFixed(2) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="returnDate" label="返回日期" width="110" />
+        <el-table-column prop="returnDate" label="返回日期" width="100" />
         <el-table-column prop="createByName" label="登记人" width="90" />
-        <el-table-column label="操作" width="80" align="center">
-          <template #default="{ row }"><el-button type="danger" link @click="revokeReturn(row)">撤销</el-button></template>
+        <el-table-column label="审核人" width="90" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.auditorName || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="150" align="center">
+          <template #default="{ row }">
+            <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="auditReturn(row)">审核</el-button>
+            <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click="unAuditReturn(row)">反审核</el-button>
+            <el-button v-if="row.status===DocStatus.DRAFT" type="danger" link @click="revokeReturn(row)">删除</el-button>
+          </template>
         </el-table-column>
         <template #empty>
           <span style="color:var(--app-text-placeholder)">尚未登记返回（工厂把货送回时点右上角「登记返回」）</span>
@@ -365,12 +492,14 @@ onMounted(async () => { await load(); await loadReturns() })
     </el-card>
 
     <!-- 登记返回弹窗：加工厂/产品/在厂规格由本记录带入（不可改，后端还会按来源单复核同厂同产品同规格） -->
-    <el-dialog v-model="returnDlg.visible" title="登记返回（登记即生效）" width="var(--app-dialog-md)" :close-on-click-modal="false">
+    <el-dialog v-model="returnDlg.visible" title="登记返回（先存草稿，审核后落账）" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px">
         <template #title>
           <span style="font-size:var(--app-font-xs);line-height:1.5">
-            登记即生效：<b>核销在厂成品</b>（加工厂委外仓的「成品（加工退货）」）→ <b>修好成品回我方仓</b> →
-            按<b>实际用料</b>从委外仓扣料 → 料款生成对加工厂的<b>赔料应收</b>。填错可回本页逐条撤销。
+            本页保存为<b>草稿</b>（不动库存与账务）；在下方「返回记录」里点<b>审核</b>才落账：
+            <b>核销在厂成品</b>（加工厂委外仓的「成品（加工退货）」）→ <b>修好成品回我方仓</b> →
+            按<b>实际用料</b>从委外仓扣料 → 料款生成对加工厂的<b>赔料应收</b>
+            （用料单价默认按 <b>FIFO</b> 带出、可人工修改，见下方用料明细）。草稿可删除、已审核可反审核。
           </span>
         </template>
       </el-alert>

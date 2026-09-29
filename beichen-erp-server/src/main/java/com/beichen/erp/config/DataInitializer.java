@@ -302,34 +302,52 @@ public class DataInitializer implements ApplicationRunner {
             {304L, 3L, "研发物料", "menu", "/dev/material", "DevMaterial", "Box", 4},
             // 屏幕资料：行业机型屏幕参数（折叠屏/直板 AMOLED），可增删改查；清空数据时不清理
             {305L, 3L, "屏幕资料", "menu", "/dev/screen-model", "DevScreenModel", "Iphone", 5},
-            // 委外加工子菜单顺序（2026-09-17 用户定稿）：加工订单 → 成品收货 → 加工退货 → 物料订单 → 物料收货 → 物料退货。
+            // 委外加工子菜单顺序（2026-09-17 用户定稿；2026-09-28 「成品收货」文案改「加工收货」；
+            // 2026-09-29 再改「加工收退」——该页既有收货也有退货，用户口径如此）：
+            //   加工订单 → 加工收退 → 加工退货 → 物料订单 → 物料收货 → 物料退货。
             // sort_order 即左侧栏显示顺序（MenuMapper.selectAllEnabled 按 sort_order 排序）；下方书写顺序与实际显示顺序一致，便于维护。
             {401L, 4L, "加工订单", "menu", "/outsource/order", "OutsourceOrder", "Document", 1},
-            // 成品收货（2026-09-16 用户要求）：原「加工订单详情 → 交货管理」页签**移出**独立成菜单页 ——
-            // 页面只列正在加工（PRODUCING）的加工单，点「交货」进详细页并自动弹出新增交货弹窗。
+            // 加工收退（2026-09-16 立，原名「成品收货」；2026-09-28 文案改「加工收货」；
+            // **2026-09-29 用户口径再改「加工收退」** —— 该页既有**收货**也有**退货**（行内「退货」= 加工退货红冲，
+            // 关联退货叶子下线后这里是唯一入口），故名字带上"退"；**只改文案，页面与功能不变**）：
+            // 原「加工订单详情 → 交货管理」页签**移出**独立成菜单页 —— 页面按「生产中｜已结单」两个页签列加工单，
+            // 点「收货」一步收货 / 行内「退货」发起加工退货 / 点单号进详细页。
             // id 412 复用 2026-09-16 下线的「交货信息」总览页旧行（**必须同时从下方 visible=0 名单移除**）
-            {412L, 4L, "成品收货", "menu", "/outsource/order/delivery", "OutsourceOrderDelivery", "Van", 2},
-            // 加工退货（2026-09-17 起排在物料类之前）。
-            // 2026-09-27 用户口径：二级改**目录** 419，把原「408 一个页面 3 页签」拆成 3 个三级叶子：
-            //  408 关联退货(GTH-) / 420 无单退货(GTW-) / 421 成品维修退货(REPAIR)
+            {412L, 4L, "加工收退", "menu", "/outsource/order/delivery", "OutsourceOrderDelivery", "Van", 2},
+            // 加工售后（2026-09-17 立，原名「加工退货」目录；**2026-09-29 用户口径改名「加工售后」** ——
+            // 目录下恰好是"工厂责任/我方责任"两种售后，与"收退"里的加工退货（有单红冲）不是一回事）。
+            // 2026-09-27 用户口径：二级改**目录** 419，把原「一个页面 3 页签」拆成 3 个三级叶子；
+            // 2026-09-29 用户口径「三级菜单关联退货不要了，以后关联退货在加工收货里面退就行」
+            //   ⇒ 「关联退货」（408）叶子**整体下线**（不再 upsert，改为在下方统一置 visible=0 保号、
+            //     保留行与角色授权便于回滚，与 422/424 同范式）；现在目录 419 下只有 2 个叶子：
+            //     **420 工厂售后(GTW-) / 421 客户售后(REPAIR)**，两条链路的钱/料方向相反（已核对代码）：
+            //       · 工厂售后（原「无单退货」）= **工厂责任**：工厂发来的货、结单后才发现的问题 ⇒
+            //         工厂负责维修；修好送回（加工返回单）时按实际用料 FIFO 生成**对工厂的赔料应收**
+            //         （source_bill_type=OUTSOURCE_RETURN_BACK），我方不付钱。
+            //       · 客户售后（原「成品维修退货」）= **我方责任**：客户退回的售后品 ⇒ 工厂帮我们修，
+            //         我方付**维修费应付**（OUTSOURCE_REPAIR_CHARGE）；维修用料扣工厂委外仓、FIFO 摊入
+            //         我方回仓成品成本（料算我们的，**不**向工厂收料款）。
+            //   有单（关联）的加工退货仍从「加工收退」进：列表行内「退货」/ 收货详细页「加工退货」按钮
+            //   → 既有录入页 `/outsource/order/delivery/return-defect/{orderId}`；前端旧地址
+            //   `/outsource/return-order` 已改为重定向到「工厂售后」（老书签不吃 403）。
             //  ⚠️ 叶子 perms 必须"自带其 API 需要的码"（目录行的 perms 会被 initMenuPerms 强制清空）：
-            //    加工退货台账接口在 /api/outsource/order-delivery 前缀下（408/420），
-            //    维修退货单在 /api/outsource/return-order 前缀下（421）—— 见 ApiPermGuard.RULES。
-            //  ⚠️ 408/411 是**改父级**（4 → 419/423）而非新增行：syncMenus 的 upsert 会更新 parent_id，
+            //    工厂售后台账接口在 /api/outsource/order-delivery 前缀下（420；412 加工收退同码），
+            //    客户售后单在 /api/outsource/return-order 前缀下（421）—— 见 ApiPermGuard.RULES。
+            //  ⚠️ 411 是**改父级**（4 → 423）而非新增行：syncMenus 的 upsert 会更新 parent_id，
             //    存量库的角色授权因此不丢（新叶子用下方"从旧叶子继承"的幂等补授覆盖）。
-            {419L, 4L, "加工退货", "catalog", "", "", "CircleClose", 3},
-            {408L, 419L, "关联退货", "menu", "/outsource/return-order", "OutsourceReturnOrder", "Document", 1},
-            {420L, 419L, "无单退货", "menu", "/outsource/return-order/unlinked", "OutsourceReturnOrderUnlinked", "Files", 2},
+            {419L, 4L, "加工售后", "catalog", "", "", "CircleClose", 3},
+            {420L, 419L, "工厂售后", "menu", "/outsource/return-order/unlinked", "OutsourceReturnOrderUnlinked", "Files", 2},
             // 2026-09-27（由 ui-e2e-1-nav 的"标签栏不得同名"不变量抓出）：加工侧与物料侧都有维修退货 ⇒
-            // 两处同名会让顶部**标签栏出现两个「维修退货」**（用户无从区分）⇒ 各自带对象前缀去重。
-            {421L, 419L, "成品维修退货", "menu", "/outsource/return-order/repair", "OutsourceReturnOrderRepair", "Tools", 3},
+            // 两处同名会让顶部**标签栏出现两个「维修退货」**（用户无从区分）⇒ 各自带对象前缀去重；
+            // 2026-09-29 用户口径：加工侧叶子改「客户售后」（物料侧那条仍是物料维修返回，不受影响）。
+            {421L, 419L, "客户售后", "menu", "/outsource/return-order/repair", "OutsourceReturnOrderRepair", "Tools", 3},
             // 422「加工返回单」已于 2026-09-27 按用户要求下线（「多余了，改在详情里登记返回」）：
             //   与 104/302/303/405/406/409/503/602/701 同范式 —— 不再 upsert（upsert 会把 visible 刷回 1），
             //   改为在下方统一置 visible=0，**保留行与角色授权**便于回滚；
-            //   返回登记改在无单退货记录详情页（`/api/outsource/order-delivery/{id}/return-back`，登记即生效）。
+            //   返回登记改在「工厂售后」（原无单退货）记录详情页（`/api/outsource/order-delivery/{id}/return-back`，登记即生效）。
             {402L, 4L, "物料订单", "menu", "/outsource/material-order", "OutsourceMaterialOrder", "ShoppingCart", 4},
             // 物料收货（2026-09-16 用户要求）：原「物料订单详情 → 交货管理」页签**移出**独立成菜单页 ——
-            // 页面只列收货中（RECEIVING）的物料订单，点「收料」进详细页并自动弹出收货弹窗。
+            // 页面只列生产中（RECEIVING）的物料订单，点「收料」进详细页并自动弹出收货弹窗。
             // 注意：**交货业务本身未改**（OrderDeliveryController / OutsourceOrderDeliveryService /
             // MaterialOrderController 的收料、退不良、库存、应付、BOM还料逻辑均未动）
             {415L, 4L, "物料收货", "menu", "/outsource/material-order/delivery", "OutsourceMaterialOrderDelivery", "Van", 5},
@@ -355,8 +373,13 @@ public class DataInitializer implements ApplicationRunner {
             // 已于 2026-09-16 按用户要求迁入新目录「物料仓库」(11)——**路由路径全部不变**，故不涉白名单/重定向
             // 405「加工合同模板」已并入 108「模版管理」（基础数据，2026-09-15），不再在此 upsert
             // 物料仓库（11，2026-09-16 新增；同日按用户要求重排为「仓库 → 盘点 → 单据」；
-            // 2026-09-22 用户要求把「委外仓库 / 自有物料仓」迁入「基础数据」⇒ 本目录只剩"查询 + 作业单据"5 项）：
-            // 物料库存详情 → 物料库存盘点 → 物料报损 → 物料其他出入库 → 物料收发单
+            // 2026-09-22 把「委外仓库 / 自有物料仓」迁入「基础数据」、同日新增「物料库存流水」(417)、
+            // 2026-09-24 新增「物料移仓」(418) 顶第 1 位；2026-09-29 用户口径：**物料其他出入库排到物料报损前面**）：
+            // 物料移仓 → 物料库存详情 → 物料库存流水 → 物料库存盘点 → 物料其他出入库 → 物料报损
+            // （2026-09-29 只对调 413/407 的 sort_order —— 与 2026-09-22 成品侧 704/713 对调同范式：
+            //  id / perms / 路由 / 授权一律不动（不动前端白名单）；左侧栏顺序 = sort_order
+            //  （MenuMapper.selectAllEnabled），改完要看效果需清前端 localStorage 的菜单缓存，用例里的 OpenFresh 已清；
+            //  钉死本顺序的断言见 tools/regression/verify-material-warehouse-menu.ps1 的 ②b）
             // 物料库存详情（2026-09-21 新增；2026-09-22 由「物料库存情况」改名，仅展示名）：
             // 镜像成品侧「成品库存详情」（712），只是统计物料而非成品 ——
             // 列表按物料跨仓汇总（良品/不良两档，物料走 QualityType，没有成品的 A/B/C/待整理/安全库存），
@@ -371,9 +394,11 @@ public class DataInitializer implements ApplicationRunner {
             // 本页只盘物料仓（委外仓 + 自有物料仓），成品页只盘成品类仓库；
             // 且本页**接口级限「跟单专员」**（见 StockTakeServiceImpl.assertRoleForScope，管理员兜底）
             {414L, 11L, "物料库存盘点", "menu", "/outsource/material-stock-take", "OutsourceMaterialStockTake", "DocumentChecked", 4},
+            // 物料其他出入库（2026-09-29 用户口径「物料其他出入库放在物料报损前面」⇒ 与 413 对调 sort_order：5←6）
+            {407L, 11L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 5},
             // 物料报损：与成品报损独立成表（主体为 outsource_material，物料库存不区分品质，固定按良品扣减）
-            {413L, 11L, "物料报损", "menu", "/outsource/stock-loss", "OutsourceStockLoss", "DeleteFilled", 5},
-            {407L, 11L, "物料其他出入库", "menu", "/outsource/other-io", "OutsourceOtherIo", "Files", 6},
+            // （2026-09-29 用户口径：让位给「物料其他出入库」⇒ sort_order 6←5）
+            {413L, 11L, "物料报损", "menu", "/outsource/stock-loss", "OutsourceStockLoss", "DeleteFilled", 6},
             // 406「物料收发单」已于 2026-09-24 按用户要求下线（「不要了，改用物料移仓代替」）：
             //   与 104/302/303/405/409/503/602/701 同范式 —— 不再 upsert（upsert 会把 visible 强制刷回 1），
             //   改为在下方统一置 visible=0；**保留行与角色授权**，故 outsource:delivery 权限码仍授予原三角色，
@@ -512,8 +537,8 @@ public class DataInitializer implements ApplicationRunner {
         try {
             // 注意：412 不在此列表 —— 2026-09-16 该 id 已被复用为「成品收货」菜单，
             // 若仍置 visible=0，会在上面的 upsert 之后把新菜单立刻隐藏（upsert 在前、置 0 在后）
-            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701, 406, 422, 424) AND visible = 1");
-            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 409 委外加工-供应商管理 / 602 销售业务-客户管理 / 503 进货业务-供货商管理 / 701 成品库存查询 / 406 物料收发单 / 422 加工返回单 / 424 物料维修退货叶子）", hidden);
+            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701, 406, 408, 422, 424) AND visible = 1");
+            if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 409 委外加工-供应商管理 / 602 销售业务-客户管理 / 503 进货业务-供货商管理 / 701 成品库存查询 / 406 物料收发单 / 408 关联退货叶子 / 422 加工返回单 / 424 物料维修退货叶子）", hidden);
         } catch (Exception e) {
             log.warn("下线老菜单异常: {}", e.getMessage());
         }
@@ -524,6 +549,15 @@ public class DataInitializer implements ApplicationRunner {
             jdbcTemplate.update("UPDATE sys_menu SET sort_order = 99 WHERE id = 701 AND sort_order <> 99");
         } catch (Exception e) {
             log.warn("调整 701 排序位异常: {}", e.getMessage());
+        }
+
+        // 406「物料收发单」2026-09-24 已下线（visible=0），但它的历史 sort_order=6 与 **413 物料报损**
+        // （2026-09-29 用户口径：407 物料其他出入库提到 413 前面 ⇒ 407→5 / 413→6）并列 —— 同 701/707 先例，
+        // 把隐藏行的排序位腾到 99：幂等（仅在不等时更新），**保留行与角色授权**，将来回滚启用也不会顺序歧义。
+        try {
+            jdbcTemplate.update("UPDATE sys_menu SET sort_order = 99 WHERE id = 406 AND sort_order <> 99");
+        } catch (Exception e) {
+            log.warn("调整 406 排序位异常: {}", e.getMessage());
         }
 
         // 2026-09-21（用户口径）：子菜单「销售退单」改名「销售退货单」—— 与采购侧「采购退货单」、
@@ -663,11 +697,106 @@ public class DataInitializer implements ApplicationRunner {
     }
 
     /**
+     * 维修返回记录补「维修费单价 / 金额」两列（2026-09-28 用户口径「费用精确到产品里，在登记返回时填写」）。
+     *
+     * <p>原口径：维修费是维修退货单主表的**整单**字段（新增时填 → 送修审核时挂一条应付）；
+     * 现口径：按**返回产品行**在**登记维修返回**时填 —— 单价({@code repair_unit_price}) × 数量 =
+     * 金额({@code repair_amount})，登记即按行生成一条对加工厂的应付，撤销该行即冲销该条。</p>
+     *
+     * <p>与 {@link #initDocOperatorColumns()} 同规格：MySQL 8 无 {@code ADD COLUMN IF NOT EXISTS}
+     * ⇒ 先查列再补，重复启动零写入。存量返回记录两列取默认 0（= 该行未收维修费），
+     * 历史费用仍在主表 {@code charge_*} 字段上，不受影响。</p>
+     */
+    private void migrateRepairReturnFee() {
+        String t = "outsource_return_order_repair";
+        try {
+            if (!columnExists(t, "repair_unit_price")) {
+                jdbcTemplate.execute("ALTER TABLE " + t
+                        + " ADD COLUMN repair_unit_price DECIMAL(18,2) DEFAULT 0 NULL COMMENT '维修费单价(登记返回时按产品行填，留空=0)'"
+                        + ", ADD COLUMN repair_amount DECIMAL(18,2) DEFAULT 0 NULL COMMENT '维修费金额(=单价×数量，登记返回时生成应付)'");
+                log.info("已为 {} 补「维修费单价/金额」列（维修费下沉到登记返回的产品行）", t);
+            }
+        } catch (Exception e) {
+            log.warn("补列失败 {}: {}", t, e.getMessage());
+        }
+    }
+
+    /**
+     * 委外物料维修返回记录补「状态 + 审核时间」两列（2026-09-28 用户口径「加工**和物料**的登记返回都需要审核和反审核」）。
+     *
+     * <p>原口径：登记即生效（登记当场把物料入到指定仓 + 回补订单收料数 + 核销在厂行 + 扣子物料）；
+     * 现口径与本项目「加工返回」（{@code outsource_return_back}）对齐 —— 登记只建**草稿**（不动库存/账务），
+     * **审核**才落账，**反审核**对称逆回并留痕（记录回草稿），草稿可删除。</p>
+     *
+     * <p><b>存量回填 AUDITED（关键）</b>：历史行是"登记即生效"的、货早已入库 ⇒ 必须置为已审核，
+     * 否则会被当成未落账的草稿：已返回量少算、结案卡住、订单收料数/在厂行对不上。审核时间回填
+     * {@code create_time}（登记即生效 ⇒ 登记时刻即生效时刻），审核人保持 NULL（页面显示「—」）。</p>
+     *
+     * <p>⚠️ 列**先建为 DEFAULT NULL** 再回填（不能直接 {@code DEFAULT 'DRAFT'}）：MySQL 的 ADD COLUMN
+     * 会把默认值物化到存量行上 ⇒ 存量会读成"草稿"。回填完再把默认值改成 DRAFT（只改元数据，不动存量值），
+     * 与 {@code schema.sql}（新库直接建列）保持一致。</p>
+     */
+    private void migrateMaterialRepairReturnStatus() {
+        String t = "outsource_material_return_repair";
+        try {
+            if (!columnExists(t, "status")) {
+                jdbcTemplate.execute("ALTER TABLE " + t
+                        + " ADD COLUMN status VARCHAR(20) DEFAULT NULL COMMENT '状态: DRAFT=草稿(未落账) AUDITED=已审核(已落账)'"
+                        + ", ADD COLUMN audit_time DATETIME DEFAULT NULL COMMENT '审核时间(反审核清空)'"
+                        + ", ADD INDEX idx_status (status)");
+                log.info("已为 {} 补「状态/审核时间」列（登记返回改为草稿 + 审核）", t);
+            }
+            int back = jdbcTemplate.update("UPDATE " + t
+                    + " SET status='AUDITED', audit_time=IFNULL(audit_time, create_time) WHERE status IS NULL");
+            if (back > 0) log.info("{} 存量 {} 行回填为已审核（历史口径=登记即生效）", t, back);
+            jdbcTemplate.execute("ALTER TABLE " + t
+                    + " MODIFY COLUMN status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿(未落账) AUDITED=已审核(已落账)'");
+        } catch (Exception e) {
+            log.warn("补列/回填失败 {}: {}", t, e.getMessage());
+        }
+    }
+
+    /**
+     * 加工侧委外维修返回记录（成品）补「状态 + 审核时间」两列（2026-09-28 用户口径
+     * 「加工**和物料**的登记返回都需要审核和反审核」）。
+     *
+     * <p>与 {@link #migrateMaterialRepairReturnStatus()} **完全同构**（同一批口径、同一套回填理由）：
+     * 原为登记即生效（登记即成品入库 + 核销在厂 + 扣用料 + 按行挂维修费应付），现改为登记只建**草稿**
+     * （不动库存/账务；维修费单价仍在登记时填、金额按行快照落库），审核才落账、反审核对称逆回（含冲销应付）。</p>
+     *
+     * <p><b>存量回填 AUDITED</b>：历史行是"登记即生效"的（货已入库、应付已挂）⇒ 必须置为已审核，
+     * 否则会被当成未落账的草稿：已返回量少算、结案卡住、库存/账务对不上。审核时间回填 {@code create_time}，
+     * 审核人保持 NULL（页面显示「—」）。</p>
+     *
+     * <p>⚠️ 列**先建为 DEFAULT NULL** 再回填（不能直接 {@code DEFAULT 'DRAFT'}）：MySQL 的 ADD COLUMN
+     * 会把默认值物化到存量行上 ⇒ 存量会读成"草稿"。回填完再把默认值改成 DRAFT（只改元数据，不动存量值）。</p>
+     */
+    private void migrateReturnOrderRepairStatus() {
+        String t = "outsource_return_order_repair";
+        try {
+            if (!columnExists(t, "status")) {
+                jdbcTemplate.execute("ALTER TABLE " + t
+                        + " ADD COLUMN status VARCHAR(20) DEFAULT NULL COMMENT '状态: DRAFT=草稿(未落账) AUDITED=已审核(已落账)'"
+                        + ", ADD COLUMN audit_time DATETIME DEFAULT NULL COMMENT '审核时间(反审核清空)'"
+                        + ", ADD INDEX idx_status (status)");
+                log.info("已为 {} 补「状态/审核时间」列（加工侧登记返回改为草稿 + 审核）", t);
+            }
+            int back = jdbcTemplate.update("UPDATE " + t
+                    + " SET status='AUDITED', audit_time=IFNULL(audit_time, create_time) WHERE status IS NULL");
+            if (back > 0) log.info("{} 存量 {} 行回填为已审核（历史口径=登记即生效）", t, back);
+            jdbcTemplate.execute("ALTER TABLE " + t
+                    + " MODIFY COLUMN status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿(未落账) AUDITED=已审核(已落账)'");
+        } catch (Exception e) {
+            log.warn("补列/回填失败 {}: {}", t, e.getMessage());
+        }
+    }
+
+    /**
      * 物料订单补「结单人」（2026-09-27 用户口径「把结单人做了」）：结单是一次人工动作，要留痕"谁结的"。
      *
      * <p>与制单人/审核人同规格（ID + 姓名快照）：{@code finish()} 盖章、{@code reopen()} **清空**
      * （口径与成品侧 {@code CloseReportServiceImpl.reopenClose} 一致 —— 反结单清空结单人，避免
-     * "已回收货中却还显示结单人"）。历史已结单的行保持 NULL，页面显示「—」。</p>
+     * "已回生产中却还显示结单人"）。历史已结单的行保持 NULL，页面显示「—」。</p>
      */
     private void migrateMaterialOrderFinisher() {
         addColumnIfMissing("outsource_material_order",

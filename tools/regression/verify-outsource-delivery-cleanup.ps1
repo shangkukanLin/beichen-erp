@@ -44,7 +44,11 @@ function ReadJson($js, $want) {
 
 # ① 侧栏「委外加工」
 OpenFresh "$base/outsource/order"
-$d1 = ReadJson "(()=>{const s=[...document.querySelectorAll('.el-menu .el-sub-menu')].find(x=>(x.querySelector('.el-sub-menu__title')?.innerText||'').includes('委外加工'));return JSON.stringify({c:s?[...s.querySelectorAll(':scope > .el-menu > li')].map(li=>li.innerText.trim()):[]});})()" '侧栏'
+# 2026-09-29 修复（**既存**缺陷，与菜单排序无关）：三级菜单（2026-09-27 起 419「加工退货」/ 423「物料退货」
+#   是目录）在侧栏**嵌套**渲染 ⇒ 取 li.innerText 会把父项与子叶子拼成一串（"加工退货关联退货无单退货成品维修退货"），
+#   与库里的父项名比对必然判定"缺失"。改为只取**本项标题**（子菜单取 :scope > .el-sub-menu__title）；与
+#   verify-material-warehouse-menu.ps1 的 SubMenu() 同口径。
+$d1 = ReadJson "(()=>{const s=[...document.querySelectorAll('.el-menu .el-sub-menu')].find(x=>(x.querySelector('.el-sub-menu__title')?.innerText||'').includes('委外加工'));const txt=li=>{const t=li.querySelector(':scope > .el-sub-menu__title');return ((t||li).innerText||'').trim().split('\n')[0];};return JSON.stringify({c:s?[...s.querySelectorAll(':scope > .el-menu > li')].map(txt):[]});})()" '侧栏'
 if ($d1) {
   Write-Output ('委外加工 子菜单 = ' + ($d1.c -join ' | '))
   if (($d1.c -join ',') -match '交货信息') { Bad '侧栏仍有「交货信息」' } else { Ok '侧栏已无「交货信息」' }

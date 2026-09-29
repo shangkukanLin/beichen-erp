@@ -4,18 +4,19 @@
  *
  * <p>2026-09-27（用户口径「成品收货应该有 收货中｜已结单 两个页签」）：本页由"只列生产中"改为**两个页签** ——</p>
  * <ul>
- *   <li><b>收货中</b>（默认）= PRODUCING：与后端「只有生产中的加工单可录入收货」口径一致。行内「收货」「退货」；</li>
+ *   <li><b>生产中</b>（默认）= PRODUCING（2026-09-28 用户口径：原「收货中」改文案）：与后端
+ *       「只有生产中的加工单可录入收货」口径一致。行内「收货」「退货」；</li>
  *   <li><b>已结单</b> = FINISHED：**只读** —— 行内「收货详细」「结单报表」（反结单就在结单报表页里）。
  *       已结单的加工单后端**禁止收货**（"只有生产中的加工单可录入收货"）、**禁止有单加工退货**
- *       （P3-1：账务已清算，如需退货走「无单退货」）⇒ 这两个按钮**刻意不放**，否则点了必被拒。</li>
+ *       （P3-1：账务已清算，如需退货走「工厂售后」）⇒ 这两个按钮**刻意不放**，否则点了必被拒。</li>
  * </ul>
  * <p>页签数量角标：用 `pageSize=1` 的轻量请求取 total（沿用加工退货页的既有做法，零后端改动）。
  * 结单日期取加工单 `actual_end_date`（结单时写入），与物料侧 `finish_time` 同口径。</p>
  *
  * <p>2026-09-21（用户口径）：本页**只做收货**，退回（红冲收货）不再出现在本页 ——
  * 有加工单的退回到该单收货详细页用「加工退货」，无单的退回到「加工退货」菜单页的「加工退货」页签
- * 用「新增无单加工退货」；两者最终都汇总到那张台账里（用「关联加工单」列区分）。
- * （原先挂在本页下方的「无单加工退货」区块已按该口径迁走。）</p>
+ * 用「新增工厂售后」（原「新增无单加工退货」）；两者最终都汇总到那张台账里（用「关联加工单」列区分）。
+ * （原先挂在本页下方的「工厂售后」区块已按该口径迁走。）</p>
  */
 import { reactive, ref, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
@@ -32,10 +33,10 @@ const tableData = ref<any[]>([])
 const query = reactive({ code: '' })
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 
-/** 页签：收货中（默认，原口径）｜已结单 */
+/** 页签：生产中（默认）｜已结单（2026-09-28 用户口径：原「收货中」改文案为「生产中」，**只改文案**） */
 type TabKey = 'PRODUCING' | 'FINISHED'
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'PRODUCING', label: '收货中' },
+  { key: 'PRODUCING', label: '生产中' },
   { key: 'FINISHED', label: '已结单' }
 ]
 const activeTab = ref<TabKey>('PRODUCING')
@@ -104,8 +105,8 @@ onActivated(() => { loadData(); loadCounts() })
 <template>
   <div class="page-list">
     <el-card shadow="never">
-      <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">成品收货</span></div></template>
-      <!-- 页签（2026-09-27 用户口径）：收货中（默认）｜已结单；标签后带数量角标。
+      <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">加工收退</span></div></template>
+      <!-- 页签（2026-09-27 用户口径；2026-09-28 用户口径：文案「收货中」→「生产中」，只改文案）：生产中（默认）｜已结单；标签后带数量角标。
            注：非活动页签的**列**在 DOM 中不存在（列由 v-if 控制），故"行内按钮"类断言不会被隐藏页签干扰。 -->
       <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
         <el-tab-pane v-for="t in TABS" :key="t.key" :name="t.key">
@@ -137,7 +138,7 @@ onActivated(() => { loadData(); loadCounts() })
            并做成链接进供应商详情；产品 min70→90（弹性列 + tooltip）；下单/已收/剩余 144→110、收货进度 92→70、
            状态 82→74、最近收货/计划完成 98→**100**（日期实测需 ~100，否则被截断）。
            合计 = 140+120+90+110+70+100+100+74+124 = **928** ✓
-           2026-09-27（两个页签）：**收货中**页签 = 上表原样不动；**已结单**页签 = 「计划完成 100 / 状态 74」
+           2026-09-27（两个页签）：**生产中**页签 = 上表原样不动；**已结单**页签 = 「计划完成 100 / 状态 74」
            换成「结单日期 100」、操作 124→140（收货详细 + 结单报表两个 4 字按钮，实测需 ~136）
            ⇒ 固定列合计 = 140+120+130+62+100+100+140 = 792，加弹性列「产品」min90 = **882** ≤ 948 ✓
            2026-09-27（补结单人）：结单日期列 100→**110**（第二行放结单人小字，与物料侧同款）⇒ 合计 **892** ≤ 948 ✓ -->
@@ -178,7 +179,7 @@ onActivated(() => { loadData(); loadCounts() })
         <el-table-column label="最近收货" width="100">
           <template #default="{ row }">{{ $fmtDate(row.latestDeliveryDate) }}</template>
         </el-table-column>
-        <!-- 计划完成 / 状态：只在「收货中」显示 —— 已结单页签里状态恒为「已结单」（显示即冗余），
+        <!-- 计划完成 / 状态：只在「生产中」显示 —— 已结单页签里状态恒为「已结单」（显示即冗余），
              计划完成也不如"结单日期"有用 ⇒ 让出宽度给 结单日期 + 只读操作列（列宽合计仍需 ≤ 内容区）。 -->
         <el-table-column v-if="!isClosed()" label="计划完成" width="100">
           <template #default="{ row }">{{ $fmtDate(row.planEndDate) }}</template>
@@ -195,7 +196,7 @@ onActivated(() => { loadData(); loadCounts() })
         <el-table-column v-if="!isClosed()" label="状态" width="74" align="center">
           <template #default="{ row }"><el-tag :type="OutsourceOrderStatusTag[row.status] || 'info'" size="small">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <!-- 操作：收货中 = 收货 + 退货（原口径）；已结单 = **只读**（收货详细 + 结单报表 —— 反结单在报表页）。
+        <!-- 操作：生产中 = 收货 + 退货（原口径）；已结单 = **只读**（收货详细 + 结单报表 —— 反结单在报表页）。
              已结单的加工单后端禁止收货、禁止有单加工退货（账务已清算）⇒ 不放对应按钮，避免点了必被拒。 -->
         <el-table-column v-if="!isClosed()" label="操作" width="124" align="center" fixed="right">
           <template #default="{ row }">

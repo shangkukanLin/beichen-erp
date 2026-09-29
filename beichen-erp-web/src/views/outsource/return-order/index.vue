@@ -1,22 +1,24 @@
 <script setup lang="ts">
 /**
- * 委外加工退货（页面 = 加工退货；两个页签 = 加工退货 / 维修退货）
+ * 委外加工售后（2026-09-29 用户口径：目录「加工售后」＝下辖 **2 个三级叶子**，按路由路径判定叶子）：
+ *  **工厂售后**（原「无单退货」，GTW-）= **工厂责任** —— 工厂发来的货、结单后才发现的问题 ⇒ 工厂负责维修，
+ *  修好送回时按实际用料 FIFO 生成**对工厂的赔料应收**（source_bill_type=OUTSOURCE_RETURN_BACK），我方不付钱；
+ *  **客户售后**（原「成品维修退货」，REPAIR）= **我方责任** —— 客户退回给我们的售后品 ⇒ 工厂帮我们修，
+ *  我方按行付**维修费应付**（OUTSOURCE_REPAIR_CHARGE），维修用料扣工厂委外仓并 FIFO 摊入我方回仓成品成本。
+ * （两条链路的钱/料方向「恰好相反」，2026-09-29 已按代码逐条核对后才改名。）
  *
- * <p>2026-09-21（用户口径）：**「加工退货」页签改成一张台账表** —— 有单（挂加工单、在该单收货详细页
- * 发起）与无单（本页发起）**同表同字段**，只用「关联加工单」列区分（有单显示加工单号、无单显示"未关联"）。
- * 它们本来就是同一条负数收货记录（`delivery_type=DEFECT_RETURN`、`is_reverse=1`），审核/反审核/删除
- * 也走同一套端点，所以合并成一张表不需要任何"按来源分派动作"的分支。</p>
+ * <p><b>2026-09-29（用户口径「三级菜单关联退货不要了，以后关联退货在加工收货里面退就行」）</b>：
+ * 「关联退货」叶子（408，`/outsource/return-order`）**整体下线** —— 菜单行置 visible=0 保号，
+ * 旧地址重定向到「工厂售后」（原无单退货；老书签不吃 403，与 `/outsource/return-back` 同范式）。
+ * 同时删掉本页仅为该叶子存在的三样东西：①页签「有效单据｜已作废单据」②叶子级「新增」选单弹窗
+ * （2026-09-28 加的 `openLinkedAdd`）③`linked=WITH_ORDER` 取数口径。</p>
+ * <p><b>有单（关联）的加工退货现在只有一条路</b>：在「加工收退」（原名「加工收货」，同日按用户口径改名）里退 —— 列表行内「退货」
+ * 或收货详细页的「加工退货」按钮 → 既有录入页 `/outsource/order/delivery/return-defect/{orderId}`
+ * （按该单产品行拆规格数量 + 选扣减成品仓），审核/反审核照旧（该单的收货记录表里就能审）。
+ * 因此本页不再需要 `?from=return-order` 这个返回口径，录入页也已同步删除该分支。</p>
  *
- * <p>两个页签：①**加工退货**＝红冲收货台账（有单+无单，本页可新增"无单"那条）②**维修退货**
- * ＝售后品推给工厂维修（送修/返回/结案）。⚠️ 页签①与页面/菜单同名是有意的（用户口径「文案改成加工退货」）——
- * 本页按「退回加工厂」这一大类组织，两个页签是它的两种情形。</p>
- *
- * <p>2026-09-28（用户口径「在关联退货页面上，也可以新增关联退货」）：**关联退货叶子也有「新增」** ——
- * 点开只选「关联加工单」（生产中 + 净已收 > 0），确定后进既有「加工退货（拆分还料）」录入页
- * （`/outsource/order/delivery/return-defect/{orderId}?from=return-order`，见 `openLinkedAdd`）。
- * **刻意不复制录入表单**：写入端点/服务层校验/录入页全站只有一条路
- * （`POST /outsource/order-delivery/return-defect/{orderId}`），否则同一业务两张表单、改规则要改两处；
- * 返回/提交后的去向由该页按 `?from=return-order` 分支回本台账。</p>
+ * <p>2026-09-21（用户口径）：**加工退货 = 一张台账表**（原「有单/无单两个页签」合一）。它们本来就是同一条
+ * 负数收货记录（`delivery_type=DEFECT_RETURN`、`is_reverse=1`），审核/反审核/作废走同一套端点。</p>
  *
  * <p>2026-09-21（用户口径「文案统一成加工退货」+「历史加工退货单不要了」）：动作名全链一个词（加工单
  * 收货详细页的按钮、后端提示语与备注快照同步改名；沿革 退不良 → 加工退货 → 不良退货 → **定稿加工退货**）；
@@ -45,40 +47,39 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import EntityLinks from '@/components/EntityLinks.vue'
-import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeTypeLabel, OutsourceOrderStatus, OutsourceReturnType, OutsourceReturnTypeLabel } from '@/api/enums'
+import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeTypeLabel, OutsourceReturnType, OutsourceReturnTypeLabel } from '@/api/enums'
 
 const route = useRoute()
 const router = useRouter()
 
 /**
- * 三级菜单叶子（2026-09-27 用户口径）：原「加工退货」一个页面 3 页签 → 拆成 **3 个**菜单叶子。
- * **本工作台组件被 3 个叶子共用**，按路由路径判定当前叶子 —— 避免把 ~700 行已验证的列表/动作复制 3 份。
- *  LINKED   关联退货     /outsource/return-order          页签：有效单据 | 已作废单据
- *  UNLINKED 无单退货     /outsource/return-order/unlinked 页签：待返回 | 已返回完 | 已作废
- *  REPAIR   成品维修退货 /outsource/return-order/repair   页签：待返回 | 已返回完 | 已作废
+ * 三级菜单叶子：本工作台组件被 **2 个叶子**共用，按路由路径判定当前叶子 —— 避免把 ~700 行已验证的
+ * 列表/动作复制 2 份。
+ *  UNLINKED 工厂售后     /outsource/return-order/unlinked 页签：待返回 | 已返回完 | 已作废
+ *  REPAIR   客户售后     /outsource/return-order/repair   页签：待返回 | 已返回完 | 已作废
+ * ⚠️ 2026-09-29 用户口径「关联退货不要了，以后在加工收货（收退）里面退」：**LINKED 关联退货叶子已下线**
+ *    （菜单 408 置 visible=0，旧地址 `/outsource/return-order` 在前端路由重定向到「工厂售后」）。
  * ⚠️ 2026-09-27 用户口径「加工返回单多余了」：「加工返回单」叶子已**下线** —— 工厂把货修好送回不再单独开单，
- *    改在**无单退货的记录详情页**点「登记返回」（`views/outsource/defect-return/detail.vue`），
- *    与「成品维修退货」详情页的「登记维修返回」同范式（登记即生效 + 逐条撤销）。
- *    旧地址 `/outsource/return-back` 在前端路由里重定向到「无单退货」，老书签不吃 403。
+ *    改在**工厂售后的记录详情页**点「登记返回」（`views/outsource/defect-return/detail.vue`），
+ *    与「客户售后」详情页的「登记维修返回」同范式（登记即生效 + 逐条撤销）。
+ *    旧地址 `/outsource/return-back` 在前端路由里重定向到「工厂售后」，老书签不吃 403。
  */
-type Leaf = 'LINKED' | 'UNLINKED' | 'REPAIR'
+type Leaf = 'UNLINKED' | 'REPAIR'
 const leaf = computed<Leaf>(() => {
   const p = route.path.replace(/\/$/, '')
-  if (p.endsWith('/unlinked')) return 'UNLINKED'
   if (p.endsWith('/repair')) return 'REPAIR'
-  return 'LINKED'
+  return 'UNLINKED'
 })
 
-/** 页签 key：ACTIVE=有效单据（草稿+已审核）CANCELLED=已作废 PENDING=待返回 DONE=已返回完 */
-type TabKey = 'ACTIVE' | 'CANCELLED' | 'PENDING' | 'DONE'
+/** 页签 key：CANCELLED=已作废 PENDING=待返回 DONE=已返回完（原 LINKED 叶子的 ACTIVE「有效单据」已随叶子下线） */
+type TabKey = 'CANCELLED' | 'PENDING' | 'DONE'
 const TABS: Record<Leaf, Array<{ key: TabKey; label: string }>> = {
-  LINKED: [{ key: 'ACTIVE', label: '有效单据' }, { key: 'CANCELLED', label: '已作废单据' }],
   // 「待返回」含**草稿**（还没送修/还没审核的单不能在任何页签里消失）；「已返回完」= 已审核且全部送回
   UNLINKED: [{ key: 'PENDING', label: '待返回' }, { key: 'DONE', label: '已返回完' }, { key: 'CANCELLED', label: '已作废' }],
   REPAIR: [{ key: 'PENDING', label: '待返回' }, { key: 'DONE', label: '已返回完' }, { key: 'CANCELLED', label: '已作废' }]
 }
 const tabs = computed(() => TABS[leaf.value])
-const activeTab = ref<TabKey>('ACTIVE')
+const activeTab = ref<TabKey>('PENDING')
 /** 页签角标：各页签条数（用 pageSize=1 的轻量请求取 total —— 零后端改动） */
 const tabCounts = reactive<Record<string, number>>({})
 function countOf(key: TabKey) { return tabCounts[leaf.value + ':' + key] }
@@ -87,26 +88,24 @@ function countOf(key: TabKey) { return tabCounts[leaf.value + ':' + key] }
  * 筛选行条件（2026-09-28 用户口径）：三个叶子共用「单号 + 加工厂」两个条件。
  * <p>原先筛选行只有「查询 / 重置」两个按钮、**前面没有任何输入**（条件全由叶子 + 页签表达），
  * 用户实测反馈"点查询不知道查什么" ⇒ 补：单号（**模糊**）+ 加工厂（远程下拉，
- * 与「新增无单退货」同一口径 `excludeSupplierType=product`：只能退给加工厂/辅料商/方案商）。</p>
+ * 与「新增工厂售后」同一口径 `excludeSupplierType=product`：只能退给加工厂/辅料商/方案商）。</p>
  */
 const filters = reactive<{ code: string; factoryId: any }>({ code: '', factoryId: undefined })
 function clearFilters() { filters.code = ''; filters.factoryId = undefined }
-/** 单号占位提示：三个叶子的单号前缀不同（GTH- 关联 / GTW- 无单 / OR- 维修），动态提示避免"不知道该填什么" */
+/** 单号占位提示：两个叶子单号前缀不同（GTW- 无单 / OR- 维修），动态提示避免"不知道该填什么" */
 const codePlaceholder = computed(() => {
-  if (leaf.value === 'LINKED') return '退货单号（GTH-）'
   if (leaf.value === 'UNLINKED') return '退货单号（GTW-）'
   return '退货单号（OR-）'
 })
 
-/** 台账（关联 / 无单）查询参数：叶子决定 linked，页签决定 status / returnProgress，筛选行决定 code / factoryId */
+/** 台账（**只有无单**，2026-09-29 关联叶子下线）查询参数：页签决定 status / returnProgress，筛选行决定 code / factoryId */
 function ledgerParams(tab: TabKey, pageNum: number, pageSize: number) {
   const active = [DocStatus.DRAFT, DocStatus.AUDITED].join(',')
   const p: any = {
-    page: pageNum, size: pageSize, linked: leaf.value === 'UNLINKED' ? 'WITHOUT_ORDER' : 'WITH_ORDER',
+    page: pageNum, size: pageSize, linked: 'WITHOUT_ORDER',
     code: filters.code || undefined, factoryId: filters.factoryId ?? undefined
   }
   if (tab === 'CANCELLED') p.status = DocStatus.CANCELLED
-  else if (tab === 'ACTIVE') p.status = active
   else if (tab === 'PENDING') { p.status = active; p.returnProgress = 'PENDING' }
   else if (tab === 'DONE') p.returnProgress = 'DONE'
   return p
@@ -193,38 +192,14 @@ const fetchProducts = (kw: string) => request.get('/product/page', { params: { p
 /** 去独立新增页（BOM 快照的自动解析与换版本都在该页；保存后回到本叶子） */
 function openNoOrder() { router.push('/outsource/return-order/unlinked/add') }
 
-// ---------- 新增"关联"加工退货（2026-09-28 用户口径：本页也可发起）----------
-// 表单不复制：只在本页选**关联加工单**，确定后进既有「加工退货（拆分还料）」录入页
-// （按产品行拆规格数量 + 选扣减成品仓），带 ?from=return-order 让该页返回/提交后回本台账。
-const linkedAddVisible = ref(false)
-const linkedOrderId = ref<any>(undefined)
-
-/**
- * 可退货的加工单候选 = **生产中** + **净已收 > 0**。
- * <p>`pageOrders` 的 deliveredQuantity 只累计**已审核**收货（负数加工退货自动抵扣）⇒ 它就是"净已收"：
- * 为 0 的单退不了（服务层会以"不能超过已收数量"拒绝），故前端直接滤掉，不列无效项。
- * 已结单（FINISHED）的单不进候选：后端 P3-1 口径禁止有单红冲（账务已清算），应在「无单退货」办理。</p>
- */
-async function fetchReturnableOrders(kw: string) {
-  const r = await request.get<any, any>('/outsource/order-delivery/order-page',
-    { params: { pageSize: 500, status: OutsourceOrderStatus.PRODUCING, code: kw || undefined } })
-  return { records: (r?.records || []).filter((o: any) => Number(o.deliveredQuantity || 0) > 0) }
-}
-/** 候选标签：单号 + 已收/下单（已收=净已收，供用户判断还能退多少） */
-function orderLabel(o: any) {
-  return `${o.code}（已收 ${Number(o.deliveredQuantity || 0)} / 下单 ${Number(o.totalQuantity || 0)}）`
-}
-function openLinkedAdd() { linkedOrderId.value = undefined; linkedAddVisible.value = true }
-function confirmLinkedAdd() {
-  if (!linkedOrderId.value) { ElMessage.warning('请选择关联加工单'); return }
-  linkedAddVisible.value = false
-  router.push(`/outsource/order/delivery/return-defect/${linkedOrderId.value}?from=return-order`)
-}
+// ---------- 新增"关联"加工退货（2026-09-28 加，**2026-09-29 已删**）----------
+// 用户口径「三级菜单关联退货不要了，以后关联退货在加工收货里面退就行」⇒ 本页不再有"选加工单"入口，
+// 有单的加工退货统一在「加工收退」（列表行内「退货」/ 收货详细页「加工退货」按钮）发起。
 
 // ==================== ③ 加工返回单（**2026-09-27 已下线**） ====================
 // 用户口径「加工返回单多余了，和成品维修退货一样在详细里面登记返回就行」：
 //   · 前端入口与列表/弹窗已整体删除（本文件不再有 BACK 叶子）；
-//   · 登记/撤销改在**无单退货记录详情页**：`views/outsource/defect-return/detail.vue`
+//   · 登记/撤销改在**工厂售后记录详情页**（原无单退货）：`views/outsource/defect-return/detail.vue`
 //     → `POST/DELETE /api/outsource/order-delivery/{id}/return-back`（登记即生效，逐条撤销）；
 //   · 后端表 `outsource_return_back` 与 `/api/outsource/return-back/*` 端点**保留**（存量查询/回归脚本仍用），
 //     只是前端不再有独立单据入口。
@@ -324,13 +299,14 @@ function handleAdd(type: string) { router.push(`/outsource/return-order/add?retu
 /** E4：草稿可编辑（后端 PUT /outsource/return-order/{id}，仅 DRAFT） */
 /* 2026-09-24（用户口径）：列表不再提供「编辑」 —— 草稿态统一在详情页内联改+存（handleEdit 已移除），
    且详情页只对**维修退货（REPAIR）**开放就地编辑（加工退货的退货物料按 BOM 快照联动派生，搬进详情会规则分叉）。 */
-/** 加工单号 → 该加工单详情（有单的加工退货由它承载数量回退） */
-function goOrder(row: any) { if (row.orderId) router.push(`/outsource/order/detail/${row.orderId}`) }
+/** 加工单号 → 该加工单详情（有单的加工退货由它承载数量回退）。
+ *  2026-09-29：本页台账的「关联加工单」列已随关联退货叶子删除 ⇒ 该跳转在本页不再有入口
+ *  （有单的退货记录在「加工收退」里看，那边单号列可点）。 */
 function goReturnDetail(row: any) { router.push(`/outsource/return-order/detail/${row.id}`) }
 
 function reloadCurrent() { loadCurrent(); loadCounts() }
 
-// 叶子切换（点左侧菜单 / 直达 URL）：页签回到该叶子的第一个（「有效单据」或「待返回」）并加载
+// 叶子切换（点左侧菜单 / 直达 URL）：页签回到该叶子的第一个（「待返回」）并加载
 watch(leaf, (lv) => {
   activeTab.value = TABS[lv][0].key
   resetPages()
@@ -379,26 +355,19 @@ onMounted(() => {
         <el-button @click="handleReset">重置</el-button>
         <!-- 新增按钮随叶子切换（一页一个新增入口，2026-09-28：关联退货叶子也补齐入口） -->
         <div style="margin-left:auto">
-          <el-button v-if="leaf === 'LINKED'" type="success" :icon="'Plus'" @click="openLinkedAdd">新增</el-button>
-          <el-button v-else-if="leaf === 'UNLINKED'" type="success" :icon="'Plus'" @click="openNoOrder">新增</el-button>
+          <el-button v-if="leaf === 'UNLINKED'" type="success" :icon="'Plus'" @click="openNoOrder">新增</el-button>
           <el-button v-else type="success" :icon="'Plus'" @click="handleAdd(OutsourceReturnType.REPAIR)">新增</el-button>
         </div>
       </div>
 
-      <!-- 业务提示（按叶子）：说清"这一页在干什么 + 单从哪来 + 后续在哪办" -->
-      <el-alert v-if="leaf === 'LINKED'" type="info" :closable="false" show-icon style="margin-bottom:8px">
+      <!-- 业务提示（按叶子）：说清"这一页在干什么 + 单从哪来 + 后续在哪办"（2026-09-29 按用户口径：
+           叶子名与两行的业务语义对齐 —— 工厂售后=工厂责任（赔料应收）/ 客户售后=我方责任（我方付维修费）） -->
+      <el-alert v-if="leaf === 'UNLINKED'" type="info" :closable="false" show-icon style="margin-bottom:8px">
         <template #title>
           <span style="font-size:var(--app-font-xs);line-height:1.5">
-            关联加工单的加工退货（红冲）台账：<b>本页「新增」</b>或该加工单的<b>收货详细页</b>发起，审核后回退该单已收数量。
-            「已作废」= 草稿被作废的记录（留痕可查）；已审核的撤销走<b>反审核</b>。
-          </span>
-        </template>
-      </el-alert>
-      <el-alert v-else-if="leaf === 'UNLINKED'" type="info" :closable="false" show-icon style="margin-bottom:8px">
-        <template #title>
-          <span style="font-size:var(--app-font-xs);line-height:1.5">
-            不挂加工单的加工退货：退回成品、等工厂修好送回时在<b>本记录的详情页</b>点「登记返回」办回
-            （2026-09-27 起不再单独开「加工返回单」）。
+            <b>工厂售后（工厂责任）</b>：工厂发来的货、结单后才发现的问题 ⇒ 退回成品、由工厂负责维修；
+            工厂修好送回时在<b>本记录的详情页</b>点「登记返回」（2026-09-27 起不再单独开「加工返回单」），
+            送回时按实际用料计价生成<b>对工厂的赔料应收</b>（单价默认 FIFO、登记时可人工修改）。
             <b>「待返回」含草稿</b>（未审核也算未返回）；全部送回后落进「已返回完」。
           </span>
         </template>
@@ -406,39 +375,31 @@ onMounted(() => {
       <el-alert v-else type="info" :closable="false" show-icon style="margin-bottom:8px">
         <template #title>
           <span style="font-size:var(--app-font-xs);line-height:1.5">
-            售后品推给工厂维修：送修出库 → 工厂送回时在详情页「登记维修返回」→ 全部送回后可<b>结案</b>。
+            <b>客户售后（我方责任）</b>：我们卖给客户、客户退回给我们的售后品 ⇒ 工厂帮我们维修：
+            送修出库 → 工厂送回时在详情页「登记维修返回」→ 全部送回后可<b>结案</b>；
+            我方按行付<b>维修费应付</b>，维修用料计入我方成品成本。
             「待返回」含草稿；「已作废」= 草稿被作废的单。
           </span>
         </template>
       </el-alert>
 
-      <!-- ============ ① 加工退货台账：**关联退货 / 无单退货** 两个叶子共用本表 ============
+      <!-- ============ ① 加工退货台账：**只有无单**（2026-09-29 关联退货叶子下线；有单的在「加工收退」里退）= ============
            2026-09-27 三级菜单：叶子决定 linked（不再用下拉），页签决定状态 / 返回进度。
-           列宽：关联叶子 = 130+140+160+min130+64+84+78+132 = 918 ✓
-                 无单叶子 = 130+140+min130+64+84+132(返回进度)+78+132 = 890 ✓（都 ≤948 容器） -->
-      <template v-if="leaf === 'LINKED' || leaf === 'UNLINKED'">
-        <!-- 列宽合计 888px（**留余量**）＜ 内容区（行数多时纵向滚动条约吃掉 15px：963→948），一行显示完、不横向滑动。
-             2026-09-25：加「退货单号」列（GTH-/GTW-），去掉「备注」列（详情可见）；扣减仓库挂「退货数量」title。
+           列宽：无单叶子 = 158+140+min130+64+84+116(返回进度)+78+132 = 902 ✓（≤948 容器） -->
+      <template v-if="leaf === 'UNLINKED'">
+        <!-- 列宽合计 902px（**留余量**）＜ 内容区（行数多时纵向滚动条约吃掉 15px：963→948），一行显示完、不横向滑动。
+             2026-09-25：加「退货单号」列（GTW-），去掉「备注」列（详情可见）；扣减仓库挂「退货数量」title。
              2026-09-25（用户口径）：①去掉「退货日期」列（日期在详情页可见，列表不用重复占宽）；
-             ②三个页签「加工厂」统一 140、「产品」统一 min130；「关联加工单」+20px（110→130）。
-             2026-09-25（用户口径「数据显示完整 + 单号/加工厂可点」）：「关联加工单」130→**160**（WO- 单号实测需 161）；
-             退货单号做成链接进详情（本页签详情 = 红冲台账独立页）、加工厂做成链接进供应商详情（后端行已带 factoryId）。 -->
+             ②「加工厂」统一 140、「产品」统一 min130；退货单号做成链接进详情、加工厂做成链接进供应商详情。
+             2026-09-29：「关联加工单」列随关联退货叶子一起**删除**（本页只有无单，该列恒为"未关联"）。 -->
         <el-table :data="ledger" border stripe v-loading="ledgerLoading" @row-click="openDetail">
-          <!-- 2026-09-27（实测）：单号 130→**158** —— GTH-/GTW- + 11 位（15 字）实测需 ~151px，
-               13 0 会把 GTW-20260927001 截断（该数据 2026-09-27 才出现，此前扫描未覆盖）。
-               关联叶子合计 = 158+140+160+min130+64+84+78+132 = 946 ≤ 948 ✓ -->
+          <!-- 2026-09-27（实测）：单号 130→**158** —— GTW- + 11 位（15 字）实测需 ~151px，
+               130 会把 GTW-20260927001 截断（该数据 2026-09-27 才出现，此前扫描未覆盖）。 -->
           <el-table-column label="退货单号" width="158" show-overflow-tooltip>
             <template #default="{ row }"><el-button type="primary" link @click.stop="openDetail(row)">{{ row.code || ('加工退货#' + row.id) }}</el-button></template>
           </el-table-column>
           <el-table-column label="加工厂" width="140" show-overflow-tooltip>
             <template #default="{ row }"><el-button type="primary" link @click.stop="router.push(`/supplier/detail/${row.factoryId}`)">{{ row.factoryName }}</el-button></template>
-          </el-table-column>
-          <!-- 「关联加工单」只在关联退货叶子出现（无单叶子恒为"未关联" ⇒ 该列无信息量，让宽给「返回进度」） -->
-          <el-table-column v-if="leaf === 'LINKED'" label="关联加工单" width="160" show-overflow-tooltip>
-            <template #default="{ row }">
-              <el-button v-if="row.orderCode" type="primary" link @click.stop="goOrder(row)">{{ row.orderCode }}</el-button>
-              <span v-else style="color:var(--app-text-placeholder)">未关联</span>
-            </template>
           </el-table-column>
           <!-- 2026-09-25：产品可点进产品详情（台账行自带 productMasterId = product.id） -->
           <el-table-column label="产品" min-width="130" show-overflow-tooltip>
@@ -486,7 +447,7 @@ onMounted(() => {
       </template>
 
       <!-- ============ ③ 加工返回单叶子已下线（2026-09-27 用户口径）============
-           工厂把货修好送回不再单独开单 ⇒ 登记入口搬到「无单退货」记录详情页
+           工厂把货修好送回不再单独开单 ⇒ 登记入口搬到「工厂售后」记录详情页
            （views/outsource/defect-return/detail.vue：登记返回 / 返回记录 / 逐条撤销）。 -->
 
       <!-- ============ ② 独立退货单：维修退货（送修 / 返回 / 结案） ============ -->
@@ -521,14 +482,17 @@ onMounted(() => {
               </EntityLinks>
             </template>
           </el-table-column>
-          <!-- 收费方向：加工厂向我方收取（我方付加工厂，审核后生成正向应付） -->
-          <el-table-column label="工厂收费" width="100" align="center">
+          <!-- 2026-09-28（用户口径）：维修费改为**按返回产品行**在「登记维修返回」时收 ⇒ 本列显示该单
+               已登记返回的维修费合计（后端 repairFee = Σ 各返回行的 repair_amount，已挂对加工厂的应付）。
+               存量老单若仍带整单收费（历史口径 charge_flag=1）照旧显示，便于新旧对照。 -->
+          <el-table-column label="维修费" width="100" align="right">
             <template #default="{ row }">
-              <el-tag v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0" type="warning" size="small"
-                :title="'加工厂向我方收取：' + (OutsourceChargeTypeLabel[String(row.chargeType)] || '')">
+              <span v-if="Number(row.repairFee) > 0" style="color:var(--app-color-warning);font-weight:500">{{ Number(row.repairFee).toFixed(2) }}</span>
+              <el-tag v-else-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0" type="warning" size="small"
+                :title="'加工厂向我方收取（历史整单口径）：' + (OutsourceChargeTypeLabel[String(row.chargeType)] || '')">
                 {{ Number(row.chargeAmount).toFixed(2) }}
               </el-tag>
-              <span v-else style="color:#c0c4cc">不收费</span>
+              <span v-else style="color:var(--app-text-placeholder)">—</span>
             </template>
           </el-table-column>
           <!-- 2026-09-27：状态与进度**分开** —— 状态列恒显示单据状态（草稿/已审核/已作废），
@@ -563,33 +527,13 @@ onMounted(() => {
     </el-card>
 
     <!-- 2026-09-27（用户口径）：新增无单加工退货已从**弹窗改为独立页面**
-         `/outsource/return-order/unlinked/add`（含 BOM 快照自动解析 + 可换版本）—— 入口见本页「新增」按钮 -->
+         `/outsource/return-order/unlinked/add`（含 BOM 快照自动解析 + 可换版本）—— 入口见本页「新增」按钮；
+         2026-09-29：叶子改文案「工厂售后」⇒ 该入口即「新增工厂售后」 -->
 
-    <!-- 加工返回单叶子已下线（2026-09-27 用户口径）：登记/撤销在无单退货详情页 —— 见本文件头注释与
+    <!-- 加工返回单叶子已下线（2026-09-27 用户口径）：登记/撤销在工厂售后详情页 —— 见本文件头注释与
          views/outsource/defect-return/detail.vue 的「登记返回」弹窗（同名字段：回仓仓库/回仓品质/实际用料）。 -->
 
-    <!-- 新增关联加工退货（2026-09-28）：只选加工单，确定后进既有「加工退货（拆分还料）」录入页 ——
-         表单只有一条路（不复制），本弹窗只做"选单 + 跳转"两件事。 -->
-    <el-dialog v-model="linkedAddVisible" title="新增关联退货" width="520px" append-to-body>
-      <el-form label-width="var(--app-label-width-lg)" size="small">
-        <el-form-item required label="关联加工单">
-          <RemoteSelect v-model="linkedOrderId" :fetch="fetchReturnableOrders" :label-key="orderLabel" disable-cache
-            style="width:100%" placeholder="只列生产中的加工单（且已收 > 0）" />
-        </el-form-item>
-      </el-form>
-      <el-alert type="info" :closable="false" show-icon>
-        <template #title>
-          <span style="font-size:var(--app-font-xs);line-height:1.5">
-            确定后进入录入页，按该单的产品行拆退货数量与规格（A/B/C/不良）、选扣减的成品仓，保存的仍是加工退货草稿。
-            已结单的加工单账务已清算、不能有单红冲，如需退货请走<b>「无单退货」</b>。
-          </span>
-        </template>
-      </el-alert>
-      <template #footer>
-        <el-button @click="linkedAddVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmLinkedAdd">确定</el-button>
-      </template>
-    </el-dialog>
+    <!-- 「新增关联退货」选单弹窗已于 2026-09-29 随关联退货叶子一起删除（改在「加工收退」里退） -->
 
   </div>
 </template>

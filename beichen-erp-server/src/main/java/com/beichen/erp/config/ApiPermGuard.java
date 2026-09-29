@@ -180,7 +180,7 @@ public class ApiPermGuard {
         rule("/api/outsource/delivery", "outsource:delivery", "outsource:material-delivery", "stock:material-move");
         rule("/api/outsource/material-return", "outsource:material-return");
         rule("/api/outsource/return-order", "outsource:return-order");
-        // 加工返回单（2026-09-25 P1-2）：页签挂在「加工退货」页面内 ⇒ 复用 outsource:return-order 码
+        // 加工返回单（2026-09-25 P1-2）：页签挂在「加工售后」（原「加工退货」目录）页面内 ⇒ 复用 outsource:return-order 码
         rule("/api/outsource/return-back", "outsource:return-order");
         rule("/api/outsource/material-info", "outsource:material-info");
         rule("/api/outsource/other-io", "outsource:other-io");

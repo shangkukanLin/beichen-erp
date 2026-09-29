@@ -28,7 +28,9 @@ function SqlOne([string]$q) {
 EnsureLogin | Out-Null
 
 $cases = @(
-  @{ note = 'outsource return-order REPAIR detail'; expect = '成品维修退货详情'; url = ('/outsource/return-order/detail/' + (SqlOne "SELECT id FROM outsource_return_order WHERE return_type='REPAIR' ORDER BY id DESC LIMIT 1")) },
+  # 2026-09-29 用户口径：加工侧叶子改文案「成品维修退货」→「客户售后」、「无单退货」→「工厂售后」
+  #   ⇒ 本页两态标题同步（REPAIR = 客户售后详情 / DEFECT 存量单 = 委外加工退货详情）
+  @{ note = 'outsource return-order REPAIR detail'; expect = '客户售后详情'; url = ('/outsource/return-order/detail/' + (SqlOne "SELECT id FROM outsource_return_order WHERE return_type='REPAIR' ORDER BY id DESC LIMIT 1")) },
   @{ note = 'outsource return-order DEFECT detail'; expect = '委外加工退货详情'; url = ('/outsource/return-order/detail/' + (SqlOne "SELECT id FROM outsource_return_order WHERE return_type='DEFECT' ORDER BY id DESC LIMIT 1")) },
   # 2026-09-28 三态：维修返回详情（术语由「物料维修退货」统一为「维修返回」）+ **新增订单退料详情**
   @{ note = 'material-return REPAIR detail'; expect = '维修返回详情'; card = $true; url = ('/outsource/material-return/detail/' + (SqlOne "SELECT id FROM outsource_material_return WHERE return_type='REPAIR' ORDER BY id DESC LIMIT 1")) },
@@ -37,18 +39,32 @@ $cases = @(
   #   挂订单(MRH-)=关联退料详情 / 无单(MRW-)=无单退料详情 ⇒ 用例由 1 条拆成 2 条（原先共用旧名「委外物料退货详情」）。
   @{ note = 'material-return REFUND detail (linked to order)'; expect = '关联退料详情'; card = $true; url = ('/outsource/material-return/detail/' + (SqlOne "SELECT id FROM outsource_material_return WHERE return_type='REFUND' AND material_order_id IS NOT NULL ORDER BY id DESC LIMIT 1")) },
   @{ note = 'material-return REFUND detail (no order)'; expect = '无单退料详情'; card = $true; url = ('/outsource/material-return/detail/' + (SqlOne "SELECT id FROM outsource_material_return WHERE return_type='REFUND' AND material_order_id IS NULL ORDER BY id DESC LIMIT 1")) },
-  # 2026-09-27：加工退货记录详情页现在承载「登记返回」（加工返回单叶子已下线）⇒ 必须纳入渲染守卫
-  @{ note = 'defect-return detail (登记返回 落点)'; expect = '加工退货详情'; url = ('/outsource/defect-return/detail/' + (SqlOne "SELECT id FROM outsource_order_delivery WHERE delivery_type='DEFECT_RETURN' ORDER BY id DESC LIMIT 1")) },
+  # 2026-09-27：加工退货记录详情页现在承载「登记返回」（加工返回单叶子已下线）+「审核/反审核」⇒ 必须纳入渲染守卫
+  # 2026-09-28（用户口径「加工退货子菜单列表的详情标题需要对齐」）：本页被 **有单红冲 / 工厂售后** 两类记录共用 ⇒
+  #   标题按**是否挂加工单**分两态。
+  # 2026-09-29（用户口径「无单退货」→「工厂售后」+ 「有单红冲术语需要统一」）：
+  #   无单那态 =「工厂售后详情」；有单那态由「关联退货详情」**统一为「加工退货详情」** —— 与录入页
+  #   「加工退货（拆分还料）」、收货记录类型标签「加工退货」、本页路由 meta.title 四处一致。
+  @{ note = 'defect-return detail (linked to a work order)'; expect = '加工退货详情'; card = $true; url = ('/outsource/defect-return/detail/' + (SqlOne "SELECT id FROM outsource_order_delivery WHERE delivery_type='DEFECT_RETURN' AND order_id IS NOT NULL ORDER BY id DESC LIMIT 1")) },
+  @{ note = 'defect-return detail (no work order)'; expect = '工厂售后详情'; card = $true; url = ('/outsource/defect-return/detail/' + (SqlOne "SELECT id FROM outsource_order_delivery WHERE delivery_type='DEFECT_RETURN' AND order_id IS NULL ORDER BY id DESC LIMIT 1")) },
   @{ note = 'outsource order detail (untouched control)'; expect = '委外加工单详情'; url = ('/outsource/order/detail/' + (SqlOne "SELECT id FROM outsource_order ORDER BY id DESC LIMIT 1")) },
   # 2026-09-28（用户口径「页头标题也要跟随类型/入口」）：**新增页**同样受"三处一致"家规约束 ——
-  #   物料退货新增页由**两个叶子**共用（关联退料 / 无单退料；2026-09-28 起维修返回不再独占叶子），
-  #   加工退货（拆分还料）页被两个入口共用（成品收货 = meta.title，关联退货台账 = ?from=return-order）。
-  #   原先页头吃 meta.title ⇒ 只有页签跟了（用户实测报回）。
+  #   物料退货新增页由**两个叶子**共用（关联退料 / 无单退料；2026-09-28 起维修返回不再独占叶子）；
+  #   加工退货（拆分还料）页原被两个入口共用（加工收退 = meta.title，关联退货台账 = ?from=return-order），
+  #   **2026-09-29「关联退货」叶子下线后只剩「加工收退」一个入口** ⇒ 恒为 meta.title（from 分态已删）。
   @{ note = 'material-return add (linked leaf)'; expect = '新增关联退料'; card = $true; url = '/outsource/material-return/add?returnType=REFUND&linked=WITH_ORDER' },
   @{ note = 'material-return add (unlinked leaf)'; expect = '新增无单退料'; card = $true; url = '/outsource/material-return/add?returnType=REFUND&linked=WITHOUT_ORDER' },
   # 兜底分支（无叶子参数 + 类型=维修返回：老书签/深链）⇒ 标题跟类型 = 新增维修返回
   @{ note = 'material-return add (repair type, no leaf)'; expect = '新增维修返回'; card = $true; url = '/outsource/material-return/add?returnType=REPAIR' },
-  @{ note = 'return-defect add (from ledger)'; expect = '新增关联加工退货'; card = $true; url = ('/outsource/order/delivery/return-defect/' + (SqlOne "SELECT id FROM outsource_order ORDER BY id DESC LIMIT 1") + '?from=return-order') },
+  # 2026-09-28（用户口径「成品维修退货的新增应该是『新增成品维修退货』，而不是『新增委外加工退货』」）：
+  #   本页页头原先直接吃路由 meta.title（历史名）⇒ 页签/浏览器标题改了、页头没改 ⇒ 三处不一致，这里一并纳入守卫。
+  #   （卡片标题本页是分区名「退货信息」，非页面名 ⇒ 不做 card 断言。）
+  @{ note = 'return-order add (repair)'; expect = '新增客户售后'; url = '/outsource/return-order/add?returnType=REPAIR' },
+  # 2026-09-29：「关联退货」叶子下线 ⇒ 原 `return-defect add (from ledger)`（?from=return-order → 新增关联退货）
+  #   用例已**删除** —— 该入口与 ?from 分态标题都不存在了；本页现在只有下面那条 meta.title 用例。
+  # 2026-09-28（同上口径）+ 2026-09-29（用户口径改名）：工厂售后叶子的新增页标题与叶子名对齐 =「新增工厂售后」
+  #   （沿革：新增无单加工退货 → 新增无单退货 → **新增工厂售后**）
+  @{ note = 'unlinked defect-return add'; expect = '新增工厂售后'; card = $true; url = '/outsource/return-order/unlinked/add' },
   # 对照：成品收货入口不带 from ⇒ 四处仍是路由 meta.title（守住"不被顺手改掉"）
   @{ note = 'return-defect add (from receipt, meta.title control)'; expect = '加工退货（拆分还料）'; card = $true; url = ('/outsource/order/delivery/return-defect/' + (SqlOne "SELECT id FROM outsource_order ORDER BY id DESC LIMIT 1")) }
 )

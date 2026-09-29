@@ -37,7 +37,8 @@ $routes = @(
   '/dev/project', '/dev/material', '/dev/screen-model',
   '/outsource/order', '/outsource/order/delivery', '/outsource/material-order', '/outsource/material-order/delivery',
   # 2026-09-27 三级菜单叶子（原来只扫了两级页面）；/outsource/return-back 已下线（重定向口径另由 nav 脚本覆盖）
-  '/outsource/return-order', '/outsource/return-order/unlinked', '/outsource/return-order/repair',
+  # 2026-09-29：/outsource/return-order（关联退货叶子）已下线 ⇒ 从本清单移除（它现在重定向到下面的 unlinked 叶子）
+  '/outsource/return-order/unlinked', '/outsource/return-order/repair',
   '/outsource/material-return', '/outsource/material-return/unlinked', '/outsource/material-return/repair',
   '/inventory/purchase', '/inventory/purchase-return', '/inventory/purchase-exchange',
   '/inventory/sale', '/sale/return', '/sale/exchange', '/inventory/return-sort',

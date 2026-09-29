@@ -3,10 +3,11 @@
 // —— 从「成品收货」页进入（orderId 走路径），按订单产品行逐规格拆数量、选扣减的成品仓，
 //    逐规格保存为加工退货草稿（审核时统一落账），与弹框口径完全一致。
 //
-// 2026-09-28（用户口径「在关联退货页面上，也可以新增关联退货」）：本页**被两个入口共用** ——
-//   ①「成品收货」列表/详情（不带 query，行为一字不变）；
-//   ②「关联退货」台账（`?from=return-order`，见 return-order/index.vue 的 openLinkedAdd）：
-//      该入口只负责选加工单，录入仍走本页（表单只有一条路，不复制）⇒ 返回/提交后按 from 回台账。
+// 2026-09-29（用户口径「三级菜单关联退货不要了，以后关联退货在加工收货里面退就行」）：
+//   本页现在**只有一个入口** —— 「加工收退」（原名「加工收货」，同日按用户口径改名）：
+//   列表行内「退货」/ 收货详细页的「加工退货」按钮。
+//   原先并列的第二个入口「关联退货」台账（`?from=return-order`）随该叶子一起下线，
+//   故本页的 `from=return-order` 分态（标题/返回去向/成功提示/脏标志）已整体删除。
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -16,20 +17,18 @@ import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useTabStore } from '@/stores/tabs'
 import { applyPageTitle } from '@/utils/pageTitle'
-import { OUTSOURCE_RETURN_ORDER_DIRTY_KEY } from '@/api/enums'
 
 const route = useRoute()
 const router = useRouter()
 const tabStore = useTabStore()
 const orderId = Number(route.params.orderId)
-/** 来源=关联退货台账（`?from=return-order`）：返回与提交后都回台账，并置脏标志让它刷新 */
-const fromLedger = computed(() => String(route.query.from || '') === 'return-order')
 /**
- * 页面名（2026-09-28 用户口径：「页头标题也要跟随」——与物料侧同改）：**页头 / 顶部页签 / 浏览器标签页三处同源**。
- * <p>成品收货入口（不带 `from`）保持路由 `meta.title`「加工退货（拆分还料）」不变（原行为、既有断言依赖）；
- * 关联退货台账入口（`?from=return-order`）统一为「新增关联加工退货」。</p>
+ * 页面名（口径不变）：**页头 / 顶部页签 / 浏览器标签页三处同源**，恒取路由 `meta.title`
+ * 「加工退货（拆分还料）」。
+ * <p>2026-09-29：「关联退货」台账入口（`?from=return-order`）随该叶子下线 ⇒ 标题不再分态
+ * （原分态标题「新增关联退货」已删）。</p>
  */
-const pageTitle = computed(() => (fromLedger.value ? '新增关联加工退货' : (route.meta.title as string) || ''))
+const pageTitle = computed(() => (route.meta.title as string) || '')
 
 const loading = ref(false)
 const saving = ref(false)
@@ -41,8 +40,8 @@ const fetchWarehouses = (kw: string) =>
   request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: 'INVENTORY', warehouseType: 'FINISHED' } })
 
 const emptyStock = () => ({ a: 0, b: 0, c: 0, defect: 0 })
-/** 返回去向按来源分流：台账入口回「关联退货」，成品收货入口回该单收货详细（原口径） */
-const backPath = () => fromLedger.value ? '/outsource/return-order' : `/outsource/order/delivery/${orderId}`
+/** 返回去向：回该加工单的收货详细页（本页唯一入口 = 加工收退，2026-09-29 取消按来源分流） */
+const backPath = () => `/outsource/order/delivery/${orderId}`
 
 async function loadProducts() {
   loading.value = true
@@ -96,13 +95,9 @@ async function submit() {
     for (const r of data) {
       await request.post(`/outsource/order-delivery/return-defect/${orderId}`, { productId: r.productId, qualityType: r.qualityType, quantity: r.quantity, warehouseId: warehouseId.value })
     }
-    ElMessage.success(fromLedger.value
-      ? '加工退货草稿已保存，请在「关联退货」列表审核'
-      : '加工退货草稿已保存，请在收货记录中审核')
+    ElMessage.success('加工退货草稿已保存，请在退货详情页审核（也可在本页收货记录里审核）')
     // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签并回原页
     markClean()
-    // 台账入口：置脏标志让「关联退货」列表在 onActivated 时自动刷新（与新增无单退货同范式）
-    if (fromLedger.value) sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
     tabStore.closeTabAndBack(route.path)
     router.push(backPath())
   } catch (e: any) { ElMessage.error(e?.message || '加工退货失败') } finally { saving.value = false }
@@ -119,7 +114,7 @@ onMounted(() => {
 
 <template>
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（确认加工退货） -->
-  <PageShell :title="pageTitle" :loading="loading" :back-fallback="fromLedger ? '/outsource/return-order' : '/outsource/order/delivery'">
+  <PageShell :title="pageTitle" :loading="loading" back-fallback="/outsource/order/delivery">
     <template #actions>
       <el-button type="warning" :loading="saving" @click="submit">确认加工退货</el-button>
     </template>
