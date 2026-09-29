@@ -170,8 +170,6 @@ export interface SaleReturn {
   returnDate?: string
   status?: number
   totalAmount?: number
-  /** ⚠️ 已停用（2026-09-21 用户口径：现在没有折损收款了）：字段保留仅为兼容旧数据/旧接口，界面不再展示、也不再生效 */
-  lossAmount?: number
   /** 是否收费：0否 1是（收费则审核生成一条正向应收，单号后缀 -FEE） */
   chargeFlag?: number
   chargeType?: string
