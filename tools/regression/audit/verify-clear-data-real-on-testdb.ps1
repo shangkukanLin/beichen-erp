@@ -316,6 +316,17 @@ Ok ($lSib -eq $beforeSib['sys_operation_log']) 'the sibling''s operation-log row
 # ---------------------------------------------------------------- Phase 6 (opt-in): end to end
 if ($WithApp) {
     Sec ('9) end to end: second instance on port ' + $Port + ' pointed at the sandbox (8080 is left alone)')
+    # ================= 失效即拒绝（fail-closed）=================
+    # 2026-09-30 事故复盘：审计表显示当天 02:00/02:18/02:30/02:51 各有一次**真实清空**打到开发库
+    # （`sys_operation_log` 记「清空公司数据」：表数=100、行数=8664）。本脚本是唯一会带 confirm 调清空接口的
+    # 地方，最可能是**其早期版本**（$base/$jdbc 尚未收紧）所致。此处补三道硬闸：任何一条不满足就**直接终止**，
+    # 绝不允许"真实清空"落到非沙箱实例上。
+    if ($Port -eq 8080) { throw 'REFUSE: -Port 8080 is the development instance; real clear must target a sandbox port' }
+    if ($Port -eq 80) { throw 'REFUSE: -Port 80 is not a sandbox port' }
+    if ($DENY -contains $Sandbox.ToLower()) { throw ('REFUSE: sandbox "' + $Sandbox + '" is a protected database') }
+    if ($jdbc -notmatch [regex]::Escape($Sandbox)) { throw 'REFUSE: sandbox jdbc url does not reference the sandbox database' }
+    if ($base -notmatch (':' + $Port + '/')) { throw 'REFUSE: API base does not target the sandbox instance port' }
+    Write-Host ('    fail-closed checks OK: port=' + $Port + ' (not 8080) · sandbox=' + $Sandbox + ' referenced by jdbc · base=' + $base)
     # Phase 1 已经真删过一遍 ⇒ 公司 1 现在是空的。端到端要测"清空一个**有数据**的公司"，
     # 先按同一口径重新播一份（表已空，带显式 id 插入不会撞主键）。
     Run 'SET FOREIGN_KEY_CHECKS = 0' $Sandbox | Out-Null
@@ -397,7 +408,10 @@ if ($WithApp) {
             Ok ([int]$dry.data.tables -ge 100) ('dryRun reports the full wipe scope = ' + $dry.data.tables + ' tables')
         }
 
-        $real = ApiPost $tok ('/system/clear-company-data?confirm=' + [uri]::EscapeDataString('清空数据')) '{}'
+        # ⚠️ 真实清空（不可逆）：执行前再确认一次目标就是本脚本自己起的沙箱实例（端口与沙箱库都不可指向开发环境）
+    if ($Port -eq 8080 -or ($jdbc -notmatch [regex]::Escape($Sandbox))) { throw 'REFUSE: refusing to send the real clear (target is not the sandbox instance)' }
+    Write-Host ('    >>> REAL CLEAR on sandbox instance ' + $base + ' (db=' + $Sandbox + ')')
+    $real = ApiPost $tok ('/system/clear-company-data?confirm=' + [uri]::EscapeDataString('清空数据')) '{}'
         Info ('real clear -> code=' + $real.code + ' msg=' + $real.msg + ' rows=' + $real.data.totalRows)
         Ok ([int]$real.code -eq 200) 'real clear accepted with the confirm word (sandbox only)'
 
