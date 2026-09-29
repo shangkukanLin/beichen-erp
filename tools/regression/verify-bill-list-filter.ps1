@@ -1,6 +1,7 @@
 # Guard (2026-09-29, permanent) for the finance BILL LIST rules:
-#   A) the type filter offers an "all" option, and "all" really queries BOTH kinds -- proven by comparing the
-#      pager total against the DB count for each filter state (not by eyeballing a page of rows).
+#   A) the type filter offers an "all" option AND the DEFAULT is "all" (user rule 2026-09-29), and every filter
+#      state really queries what it says -- proven by comparing the pager total against the DB count for each
+#      state (not by eyeballing a page of rows).
 #   B) the two amount columns follow the selected type (user rule: what was received is "received" and what was
 #      paid is "paid" -- a blended wording like "paid/received" must NOT be used). Checked through ZH keys:
 #      the receivable pair, the payable pair, and (for the all state) the neutral ledger pair.
@@ -79,16 +80,25 @@ Ok ($opts -match [regex]::Escape($allOpt)) ('type filter offers the all option (
 Ok (($opts -match [regex]::Escape($recvOpt)) -and ($opts -match [regex]::Escape($payOpt))) 'type filter still offers both concrete types'
 Ok ((([regex]::Matches($opts, '","').Count) + 1) -ge 3) 'type filter has >= 3 options'
 
-Write-Host '--- B1) default (receivable) state ---'
+Write-Host '--- B1) DEFAULT state must be all (2026-09-29 user rule: default = all) ---'
 $heads = Heads
-Write-Host ('  headers: ' + $heads)
 $tot = PagerTotal
-Write-Host ('  pager total: ' + $tot)
-Ok (($heads -match [regex]::Escape($recvPaid)) -and ($heads -match [regex]::Escape($recvUnpaid))) 'receivable list uses its own wording (paid/received)'
+$dis = PartnerDisabled
+Write-Host ('  headers: ' + $heads + ' | pager total: ' + $tot + ' | partner filter: ' + $dis)
+Ok (($heads -match [regex]::Escape($allPaid)) -and ($heads -match [regex]::Escape($allUnpaid))) 'default (= all) list uses the neutral wording'
 Ok (-not ($heads -match [regex]::Escape($forbidden))) ('no combined wording on the page (' + $forbidden + ')')
+Ok ($tot -eq $nAll) ('default filter returns EVERY bill (' + $tot + ' == ' + $nAll + ')')
+Ok ($dis -match 'INPUTDISABLED') 'partner filter is disabled in the default (all) state (no cross-id mixing)'
+
+Write-Host '--- B2) receivable state ---'
+ApplyType $recvOpt
+$heads = Heads
+$tot = PagerTotal
+Write-Host ('  headers: ' + $heads + ' | pager total: ' + $tot)
+Ok (($heads -match [regex]::Escape($recvPaid)) -and ($heads -match [regex]::Escape($recvUnpaid))) 'receivable list uses its own wording (received)'
 Ok ($tot -eq $nRecv) ('receivable filter returns exactly the receivable bills (' + $tot + ' == ' + $nRecv + ')')
 
-Write-Host '--- B2) payable state ---'
+Write-Host '--- B3) payable state ---'
 ApplyType $payOpt
 $heads = Heads
 $tot = PagerTotal
@@ -96,15 +106,13 @@ Write-Host ('  headers: ' + $heads + ' | pager total: ' + $tot)
 Ok (($heads -match [regex]::Escape($payPaid)) -and ($heads -match [regex]::Escape($payUnpaid))) 'payable list uses its own wording (paid/payable)'
 Ok ($tot -eq $nPay) ('payable filter returns exactly the payable bills (' + $tot + ' == ' + $nPay + ')')
 
-Write-Host '--- B3) all state ---'
+Write-Host '--- B4) switching back to all ---'
 ApplyType $allOpt
-$heads = Heads
 $tot = PagerTotal
 $dis = PartnerDisabled
-Write-Host ('  headers: ' + $heads + ' | pager total: ' + $tot + ' | partner filter: ' + $dis)
-Ok (($heads -match [regex]::Escape($allPaid)) -and ($heads -match [regex]::Escape($allUnpaid))) 'all state uses the neutral wording'
-Ok ($tot -eq $nAll) ('all filter returns EVERY bill (' + $tot + ' == ' + $nAll + ')')
-Ok ($dis -match 'INPUTDISABLED') 'partner filter is disabled while the type filter is all (no cross-id mixing)'
+Write-Host ('  pager total: ' + $tot + ' | partner filter: ' + $dis)
+Ok ($tot -eq $nAll) ('switching back to all returns every bill again (' + $tot + ' == ' + $nAll + ')')
+Ok ($dis -match 'INPUTDISABLED') 'partner filter is disabled again after switching back to all'
 
 Write-Host ('errs=' + (Errs))
 Ok ((Errs) -eq '[]') 'bill list recorded no JS/API errors'

@@ -13,7 +13,10 @@ const StatusLabel: Record<string, string> = DocStatusLabel
 const StatusTag: Record<string, 'info' | 'success' | 'warning' | 'danger' | 'primary'> = DocStatusTag
 
 const router = useRouter()
-const query = reactive({ billType: BillType.RECEIVABLE, partnerId: '' as string|number })
+// 2026-09-29 用户口径：类型**默认「全部」**（空串 = 不传 billType ⇒ 应收+应付混排）。
+// ⚠️ 显式 `as string`：若写成 `BillType.RECEIVABLE`（as const 字面量）会被 TS 推断成字面量类型，
+// 之后与 PAYABLE 比较会被判"类型无交集"（TS2367）；这里给宽类型，也便于"重置"回写空串。
+const query = reactive({ billType: '' as string, partnerId: '' as string|number })
 const page = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const loading = ref(false)
 const data = ref<FinanceBill[]>([])
@@ -87,7 +90,12 @@ onActivated(() => {
 })
 
 function query_() { page.pageNum = 1; loadData() }
-function reset_() { query.partnerId = ''; page.pageNum = 1; loadData() }
+/**
+ * 重置 = 回到**默认查询**：类型回「全部」（空串）、清往来单位。
+ * 2026-09-29：原先只清往来单位（因为当时类型是必选、没有"默认值"概念）；现在类型有默认「全部」，
+ * 不一起回位就会出现"重置后类型还停在应付"的不一致。
+ */
+function reset_() { query.billType = ''; query.partnerId = ''; page.pageNum = 1; loadData() }
 function partnerName(id?: number) {
   // 无具体类型（全部）时两张表都找一遍，避免返回空名
   const inCustomers = customersOptions.value.find(x => x.id === id)?.name || ''
