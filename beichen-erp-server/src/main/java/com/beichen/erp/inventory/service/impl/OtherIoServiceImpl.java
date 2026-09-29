@@ -284,9 +284,9 @@ public class OtherIoServiceImpl implements OtherIoService {
         for (InventoryOtherIoItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             BigDecimal delta = in ? q : q.negate();
-            Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
-            stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
-                    delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),
+            // P4（2026-09-30）：改调主重载（productId 直接作第 2 参），不再为旧签名重载查询产品名。
+            stockService.changeStock(io.getWarehouseId(), it.getProductId(),
+                    delta, type, io.getCode(), RelatedBillType.OTHER_IO,
                     "", io.getId(), it.getQualityType());
             // 其他入库单无单价：成本为空时用最近进价兜底，避免"有库存无成本"
             if (in) costService.fillProductCostIfEmpty(it.getProductId());
@@ -301,9 +301,9 @@ public class OtherIoServiceImpl implements OtherIoService {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
             // 逆向：入库变成扣回，出库变成加回
             BigDecimal delta = in ? q.negate() : q;
-            Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
-            stockService.changeStock(io.getWarehouseId(), prod != null ? prod.getName() : "",
-                    delta, type, io.getCode(), RelatedBillType.OTHER_IO, it.getProductId(),
+            // P4（2026-09-30）：改调主重载（同上）
+            stockService.changeStock(io.getWarehouseId(), it.getProductId(),
+                    delta, type, io.getCode(), RelatedBillType.OTHER_IO,
                     "", io.getId(), it.getQualityType());
         }
     }

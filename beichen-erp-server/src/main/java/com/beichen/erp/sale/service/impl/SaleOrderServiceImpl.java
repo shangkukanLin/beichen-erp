@@ -423,11 +423,11 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         //    - 按明细品质逐行扣减，写库存流水（SALE_OUT / 关联单=销售单），不足由 stockService 抛精确异常
         //    - 成本口径不变：利润表成本 B = 净销售数量 × 移动加权成本价，故此处不写成本批次
         for (SaleOrderItem it : items) {
-            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+            // P4（2026-09-30）：改调主重载（productId 直接作第 2 参），不再为旧签名重载查询产品名。
             stockService.changeStock(order.getWarehouseId(),
-                    product != null ? product.getName() : "",
+                    it.getProductId(),
                     it.getQuantity().negate(), StockChangeType.SALE_OUT, order.getCode(),
-                    RelatedBillType.SALE_ORDER, it.getProductId(), "", order.getId(), it.getQualityType());
+                    RelatedBillType.SALE_ORDER, "", order.getId(), it.getQualityType());
         }
 
         // 2) 生成应收台账
@@ -484,11 +484,11 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         for (SaleOrderItem it : items) {
             if (it.getProductId() == null || it.getQuantity() == null
                     || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Product product = productMapper.selectById(it.getProductId());
+            // P4（2026-09-30）：改调主重载（productId 直接作第 2 参）
             stockService.changeStock(order.getWarehouseId(),
-                    product != null ? product.getName() : "",
+                    it.getProductId(),
                     it.getQuantity(), StockChangeType.SALE_OUT_UN_AUDIT, order.getCode(),
-                    RelatedBillType.SALE_ORDER, it.getProductId(), "", order.getId(), it.getQualityType());
+                    RelatedBillType.SALE_ORDER, "", order.getId(), it.getQualityType());
         }
         // 1.5) 现金结算自动生成的收款单（2026-09-18；现金 = 立刻到账后的反审核口径）：
         //      本销售单的**自动收款单**一律自动冲正 —— 已审核 → 先反审核（冲正资金流水 + 应收回退）

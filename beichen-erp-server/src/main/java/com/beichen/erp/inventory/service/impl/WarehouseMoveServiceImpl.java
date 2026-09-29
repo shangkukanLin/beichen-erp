@@ -191,16 +191,12 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
         assertItems(items);
         for (InventoryWarehouseMoveItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
-            // 查询产品名称用于库存流水
-            String productName = "";
-            if (it.getProductId() != null) {
-                Product product = productMapper.selectById(it.getProductId());
-                productName = product != null ? product.getName() : "";
-            }
-            stockService.changeStock(move.getFromWarehouseId(), productName, q.negate(),
-                    StockChangeType.MOVE_OUT, move.getCode(), RelatedBillType.WAREHOUSE_MOVE, it.getProductId(), "", move.getId(), it.getQualityType());
-            stockService.changeStock(move.getToWarehouseId(), productName, q,
-                    StockChangeType.MOVE_IN, move.getCode(), RelatedBillType.WAREHOUSE_MOVE, it.getProductId(), "", move.getId(), it.getQualityType());
+            // P4（2026-09-30 未上线清理）：改调主重载（productId 直接作第 2 参）。
+            // 原先为了给"旧签名兼容重载"准备产品名，每次都要多查一次产品表；主重载本就不接收产品名 ⇒ 去掉该查询。
+            stockService.changeStock(move.getFromWarehouseId(), it.getProductId(), q.negate(),
+                    StockChangeType.MOVE_OUT, move.getCode(), RelatedBillType.WAREHOUSE_MOVE, "", move.getId(), it.getQualityType());
+            stockService.changeStock(move.getToWarehouseId(), it.getProductId(), q,
+                    StockChangeType.MOVE_IN, move.getCode(), RelatedBillType.WAREHOUSE_MOVE, "", move.getId(), it.getQualityType());
             // 移仓不改变加权价（总量不变），但目标仓新出现的库存若产品无成本，用最近进价兜底
             costService.fillProductCostIfEmpty(it.getProductId());
         }
@@ -227,19 +223,15 @@ public class WarehouseMoveServiceImpl implements WarehouseMoveService {
                 new LambdaQueryWrapper<InventoryWarehouseMoveItem>().eq(InventoryWarehouseMoveItem::getMoveId, id));
         for (InventoryWarehouseMoveItem it : items) {
             BigDecimal q = it.getQuantity() != null ? it.getQuantity() : BigDecimal.ZERO;
-            String productName = "";
-            if (it.getProductId() != null) {
-                Product product = productMapper.selectById(it.getProductId());
-                productName = product != null ? product.getName() : "";
-            }
             // 反审核：退回移出仓、从移入仓扣回
             // 【C2 口径 · 2026-09-12 定稿：刻意复用，不再改动】MOVE_IN/MOVE_OUT 表意的是"某仓库存进/出"（方向），
             // 不是"审核/反审核"（动作）；动作由 related_bill_type 区分：审核=WAREHOUSE_MOVE、反审核=WAREHOUSE_MOVE_UN_AUDIT，
             // 故四行流水两两可辨。不新增 MOVE_UN_AUDIT_* 的原因：历史流水无法回填新 code，新老并存反而更难核对。
-            stockService.changeStock(move.getFromWarehouseId(), productName, q,
-                    StockChangeType.MOVE_IN, move.getCode(), RelatedBillType.WAREHOUSE_MOVE_UN_AUDIT, it.getProductId(), "", move.getId(), it.getQualityType());
-            stockService.changeStock(move.getToWarehouseId(), productName, q.negate(),
-                    StockChangeType.MOVE_OUT, move.getCode(), RelatedBillType.WAREHOUSE_MOVE_UN_AUDIT, it.getProductId(), "", move.getId(), it.getQualityType());
+            // P4（2026-09-30）：改调主重载（productId 直接作第 2 参），不再为旧签名重载查询产品名。
+            stockService.changeStock(move.getFromWarehouseId(), it.getProductId(), q,
+                    StockChangeType.MOVE_IN, move.getCode(), RelatedBillType.WAREHOUSE_MOVE_UN_AUDIT, "", move.getId(), it.getQualityType());
+            stockService.changeStock(move.getToWarehouseId(), it.getProductId(), q.negate(),
+                    StockChangeType.MOVE_OUT, move.getCode(), RelatedBillType.WAREHOUSE_MOVE_UN_AUDIT, "", move.getId(), it.getQualityType());
         }
         // 状态已由 DocStatusGuard 在该方法开头原子置为 DRAFT
     }

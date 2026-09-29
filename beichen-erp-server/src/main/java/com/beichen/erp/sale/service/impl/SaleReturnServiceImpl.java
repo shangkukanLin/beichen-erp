@@ -512,12 +512,12 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             // 与上面的"曾售出"合起来即为「产品已建档 + 卖过」双底线；与 SaleOrderServiceImpl.audit 口径对齐。
             if (it.getProductId() == null || product == null)
                 throw new BusinessException("产品不存在：ID=" + it.getProductId() + "（明细行ID=" + it.getId() + "）");
+            // P4（2026-09-30）：改调主重载（productId 直接作第 2 参）—— 原先那段"优先用明细冗余产品名"的取值
+            // 只是为了喂给旧签名重载的第 2 个形参，而该形参在主重载里并不存在（流水备注按 productId 现取）。
             stockService.changeStock(order.getWarehouseId(),
-                    // 流水留痕：与反审核保持一致，优先用明细冗余的产品名
-                    it.getProductName() != null && !it.getProductName().isBlank() ? it.getProductName()
-                            : (product != null ? product.getName() : ""),
+                    it.getProductId(),
                     it.getQuantity(),
-                    StockChangeType.SALE_RETURN_IN, order.getCode(), RelatedBillType.SALE_RETURN, it.getProductId(),
+                    StockChangeType.SALE_RETURN_IN, order.getCode(), RelatedBillType.SALE_RETURN,
                     "", order.getId(), it.getQualityType() != null ? it.getQualityType() : ProductQualityType.PENDING.getCode());
         }
         // 追溯联动：登记售后待整理批次，供退货整理单消费（退货单与换货单统一入口）
@@ -573,13 +573,11 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         Map<Long, Product> pMap = productMap(items);
         for (SaleReturnItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Product product = pMap.get(it.getProductId());
+            // P4（2026-09-30）：改调主重载（productId 直接作第 2 参）—— 原先那段"优先用明细冗余产品名"只为喂旧重载的第 2 形参
             stockService.changeStock(order.getWarehouseId(),
-                    // 流水留痕：优先用明细冗余的产品名，避免产品改名后历史流水备注跟着变
-                    it.getProductName() != null && !it.getProductName().isBlank() ? it.getProductName()
-                            : (product != null ? product.getName() : ""),
+                    it.getProductId(),
                     it.getQuantity().negate(),
-                    StockChangeType.SALE_RETURN_UN_AUDIT, order.getCode(), RelatedBillType.SALE_RETURN, it.getProductId(),
+                    StockChangeType.SALE_RETURN_UN_AUDIT, order.getCode(), RelatedBillType.SALE_RETURN,
                     "", order.getId(), it.getQualityType() != null ? it.getQualityType() : ProductQualityType.PENDING.getCode());
         }
         // 追溯联动：撤销本单登记的待整理批次（护栏已确保未被整理，可安全删除）

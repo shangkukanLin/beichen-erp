@@ -178,16 +178,17 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         // 执行库存变更：from_quality 扣减，to_quality 增加
         for (InventoryProductReclassifyItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+            // P4（2026-09-30 未上线清理）：改调主重载（productId 直接作第 2 参）。
+            // 原先走"旧签名兼容重载"只为把产品名塞进第 2 个形参，而主重载里并无"产品名"形参，该实参被丢弃。
             // 扣减原品质
-            stockService.changeStock(rc.getWarehouseId(), prod != null ? prod.getName() : "",
+            stockService.changeStock(rc.getWarehouseId(), it.getProductId(),
                     it.getQuantity().negate(), StockChangeType.RECLASSIFY_OUT, rc.getCode(),
-                    RelatedBillType.PRODUCT_RECLASSIFY, it.getProductId(),
+                    RelatedBillType.PRODUCT_RECLASSIFY,
                     "", rc.getId(), it.getFromQuality());
             // 增加目标品质
-            stockService.changeStock(rc.getWarehouseId(), prod != null ? prod.getName() : "",
+            stockService.changeStock(rc.getWarehouseId(), it.getProductId(),
                     it.getQuantity(), StockChangeType.RECLASSIFY_IN, rc.getCode(),
-                    RelatedBillType.PRODUCT_RECLASSIFY, it.getProductId(),
+                    RelatedBillType.PRODUCT_RECLASSIFY,
                     "", rc.getId(), it.getToQuality());
         }
         // 2026-09-23（用户口径：单据详情显示「制单人 + 审核人」）：补记录审核人（原先审核后不留审核信息；
@@ -286,16 +287,16 @@ public class ReclassifyServiceImpl implements ReclassifyService {
         // 逆向操作：恢复 from_quality，冲回 to_quality
         for (InventoryProductReclassifyItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Product prod = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+            // P4：改调主重载（同审核侧）
             // 恢复原品质
-            stockService.changeStock(rc.getWarehouseId(), prod != null ? prod.getName() : "",
+            stockService.changeStock(rc.getWarehouseId(), it.getProductId(),
                     it.getQuantity(), StockChangeType.CANCEL_RECLASSIFY_OUT, rc.getCode(),
-                    RelatedBillType.PRODUCT_RECLASSIFY, it.getProductId(),
+                    RelatedBillType.PRODUCT_RECLASSIFY,
                     "", rc.getId(), it.getFromQuality());
             // 冲回目标品质
-            stockService.changeStock(rc.getWarehouseId(), prod != null ? prod.getName() : "",
+            stockService.changeStock(rc.getWarehouseId(), it.getProductId(),
                     it.getQuantity().negate(), StockChangeType.CANCEL_RECLASSIFY_IN, rc.getCode(),
-                    RelatedBillType.PRODUCT_RECLASSIFY, it.getProductId(),
+                    RelatedBillType.PRODUCT_RECLASSIFY,
                     "", rc.getId(), it.getToQuality());
         }
         InventoryProductReclassify u = new InventoryProductReclassify(); u.setId(id); u.setStatus(DocStatus.CANCELLED.getCode());

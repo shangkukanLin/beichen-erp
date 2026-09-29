@@ -46,20 +46,14 @@ public class WarehouseStockService {
     }
 
     /**
-     * 旧签名兼容重载；⚠️ `spec` 为历史遗留参数（方法体内从未使用），产品规格已于 2026-09-15 全站下线，
-     * 调用方传 `""`。
-     * <p>F7-65①（2026-09-20）：标记 {@code @Deprecated} —— 本重载把第二个形参当 {@code productName} 但内部
-     * **只透传 `spec`**（productName 完全丢弃），语义容易误用；新代码请直接用
-     * {@link #changeStock(Long, Long, BigDecimal, StockChangeType, String, RelatedBillType, String, Long, String)}
-     * 并传 {@code spec=""}。</p>
+     * P4（2026-09-30 未上线清理，用户口径「旧数据不需要兼容」）：此处原有一个
+     * {@code @Deprecated} 的**旧签名兼容重载** {@code changeStock(Long, String productName, ...)} ——
+     * 它把第二个形参当产品名接收、内部却**只透传 `spec`**（产品名整个丢弃），语义容易误用。
+     * 16 处调用点已全部改为直接调下面的主重载（productId 作第 2 参）⇒ 该重载删除。
+     *
+     * <p>遗留项：主重载里的 {@code spec} 形参自"产品规格下线"后**从未被使用**（调用方一律传 {@code ""}），
+     * 保留只是为了不动 50+ 处调用点；如需彻底瘦身可单独排期（纯机械改动）。</p>
      */
-    @Deprecated
-    @Transactional
-    public void changeStock(Long warehouseId, String productName, BigDecimal quantity,
-                            StockChangeType type, String relatedBillNo, RelatedBillType relatedBillType,
-                            Long productId, String spec, Long relatedBillId, String qualityType) {
-        changeStock(warehouseId, productId, quantity, type, relatedBillNo, relatedBillType, spec, relatedBillId, qualityType);
-    }
 
     /**
      * 通用库存变更：按 (warehouseId, productId, qualityType) 定位唯一库存行。

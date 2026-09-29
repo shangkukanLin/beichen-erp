@@ -228,11 +228,11 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         // 1) 库存联动：退货出库减库存
         for (PurchaseReturnItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+            // P4（2026-09-30）：改调主重载（productId 直接作第 2 参），不再为旧签名重载查询产品名。
             stockService.changeStock(order.getWarehouseId(),
-                    product != null ? product.getName() : "",
+                    it.getProductId(),
                     it.getQuantity().negate(),
-                    StockChangeType.RETURN_OUT, order.getCode(), RelatedBillType.PURCHASE_RETURN, it.getProductId(),
+                    StockChangeType.RETURN_OUT, order.getCode(), RelatedBillType.PURCHASE_RETURN,
                     "", order.getId(), it.getQualityType());
         }
         // 1.5) 重算金额（兜底存量数据：totalAmount 按明细 数量×单价 重新计算，应付随之正确）
@@ -330,11 +330,11 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
                 new LambdaQueryWrapper<PurchaseReturnItem>().eq(PurchaseReturnItem::getReturnId, id));
         for (PurchaseReturnItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
-            Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
+            // P4（2026-09-30）：改调主重载（productId 直接作第 2 参）
             stockService.changeStock(order.getWarehouseId(),
-                    product != null ? product.getName() : "",
+                    it.getProductId(),
                     it.getQuantity(),
-                    StockChangeType.RETURN_UN_AUDIT, order.getCode(), RelatedBillType.PURCHASE_RETURN, it.getProductId(),
+                    StockChangeType.RETURN_UN_AUDIT, order.getCode(), RelatedBillType.PURCHASE_RETURN,
                     "", order.getId(), it.getQualityType());
         }
         // 3) 冲销应付台账：置「已作废」并保留审计，不再物理删除（与委外交货反审核一致）
