@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS sys_role (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     -- S-9②（2026-09-30 设置模块审核批 C · 角色按公司隔离）：同公司内编码唯一（平台角色 company_id=0）
     UNIQUE KEY uk_role_code (company_id, role_code),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `customized_menu` TINYINT DEFAULT 0 COMMENT '1=用户手工调过该角色菜单，启动重放跳过'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色表';
 
 CREATE TABLE IF NOT EXISTS sys_user_role (
@@ -224,7 +225,11 @@ CREATE TABLE IF NOT EXISTS outsource_order (
     INDEX idx_factory_id (factory_id),
     INDEX idx_company_id (company_id),
     INDEX idx_status (status),
-    INDEX idx_code (code)
+    INDEX idx_code (code),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协订单表';
 
 CREATE TABLE IF NOT EXISTS outsource_order_product (
@@ -330,7 +335,11 @@ CREATE TABLE IF NOT EXISTS outsource_order_delivery (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_order_id (order_id),
     INDEX idx_warehouse_id (warehouse_id),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协订单发货记录表';
 
 CREATE TABLE IF NOT EXISTS outsource_delivery (
@@ -363,7 +372,11 @@ CREATE TABLE IF NOT EXISTS outsource_delivery (
     INDEX idx_factory_id (factory_id),
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协发货单表';
 
 CREATE TABLE IF NOT EXISTS outsource_delivery_item (
@@ -428,7 +441,11 @@ CREATE TABLE IF NOT EXISTS outsource_material_order (
     UNIQUE KEY uk_code (code),
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外物料订单主表';
 
 CREATE TABLE IF NOT EXISTS outsource_material_order_item (
@@ -538,7 +555,11 @@ CREATE TABLE IF NOT EXISTS outsource_order_close_report (
     company_id BIGINT DEFAULT NULL COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_order_id (order_id)
+    UNIQUE KEY uk_order_id (order_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='结单报表主表';
 
 CREATE TABLE IF NOT EXISTS outsource_order_close_report_item (
@@ -595,7 +616,9 @@ CREATE TABLE IF NOT EXISTS outsource_return_order (
     UNIQUE KEY uk_code (code),
     INDEX idx_factory_id (factory_id),
     INDEX idx_order_id (order_id),
-    INDEX idx_source_delivery_id (source_delivery_id)
+    INDEX idx_source_delivery_id (source_delivery_id),
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外退货单';
 
 CREATE TABLE IF NOT EXISTS outsource_return_order_item (
@@ -651,7 +674,11 @@ CREATE TABLE IF NOT EXISTS outsource_return_order_repair (
     company_id BIGINT COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_return_order_id (return_order_id),
-    INDEX idx_status (status)
+    INDEX idx_status (status),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外维修返回记录';
 
 -- 2026-09-25 P2-1：维修返回明细（在厂核销 + 实际用料）。
@@ -771,7 +798,9 @@ CREATE TABLE IF NOT EXISTS outsource_material_return (
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_from_warehouse_id (from_warehouse_id),
     INDEX idx_source_delivery_id (source_delivery_id),
-    INDEX idx_material_order_id (material_order_id)
+    INDEX idx_material_order_id (material_order_id),
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外物料退货单';
 
 CREATE TABLE IF NOT EXISTS outsource_material_return_item (
@@ -820,7 +849,11 @@ CREATE TABLE IF NOT EXISTS outsource_material_return_repair (
     INDEX idx_return_order_id (return_order_id),
     INDEX idx_material_id (material_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外物料维修返回记录';
 
 CREATE TABLE IF NOT EXISTS outsource_contract_template (
@@ -881,7 +914,11 @@ CREATE TABLE IF NOT EXISTS dev_project (
     UNIQUE KEY uk_code (code),
     INDEX idx_status (status),
     INDEX idx_project_leader_id (project_leader_id),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='研发项目表';
 
 CREATE TABLE IF NOT EXISTS dev_project_phase (
@@ -1105,7 +1142,9 @@ CREATE TABLE IF NOT EXISTS purchase_order (
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购订单表';
 
 CREATE TABLE IF NOT EXISTS purchase_order_item (
@@ -1153,7 +1192,9 @@ CREATE TABLE IF NOT EXISTS purchase_return (
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购退货单主表';
 
 CREATE TABLE IF NOT EXISTS purchase_return_item (
@@ -1215,7 +1256,9 @@ CREATE TABLE IF NOT EXISTS purchase_exchange (
     UNIQUE KEY uk_code (code),
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购换货单主表';
 
 CREATE TABLE IF NOT EXISTS purchase_exchange_item (
@@ -1274,7 +1317,11 @@ CREATE TABLE IF NOT EXISTS sale_order (
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_settle_account_id (settle_account_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售单表';
 
 CREATE TABLE IF NOT EXISTS sale_order_item (
@@ -1359,7 +1406,9 @@ CREATE TABLE IF NOT EXISTS sale_return (
     INDEX idx_customer_id (customer_id),
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售退货单主表';
 
 CREATE TABLE IF NOT EXISTS sale_return_item (
@@ -1410,7 +1459,9 @@ CREATE TABLE IF NOT EXISTS inventory_stock_take (
     INDEX idx_warehouse (warehouse_id),
     INDEX idx_period (period),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存盘点单主表';
 
 CREATE TABLE IF NOT EXISTS inventory_stock_take_item (
@@ -1448,7 +1499,11 @@ CREATE TABLE IF NOT EXISTS inventory_warehouse_move (
     INDEX idx_from_warehouse_id (from_warehouse_id),
     INDEX idx_to_warehouse_id (to_warehouse_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品移仓单主表';
 
 -- ==================== 成品移仓单明细表 ====================
@@ -1554,7 +1609,11 @@ CREATE TABLE IF NOT EXISTS inventory_other_io (
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_io_type (io_type),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='其他出入库单表';
 
 CREATE TABLE IF NOT EXISTS inventory_other_io_item (
@@ -1600,7 +1659,9 @@ CREATE TABLE IF NOT EXISTS inventory_stock_loss (
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_status (status),
     INDEX idx_loss_reason (loss_reason),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品报损单主表';
 
 CREATE TABLE IF NOT EXISTS inventory_stock_loss_item (
@@ -1639,7 +1700,9 @@ CREATE TABLE IF NOT EXISTS product_reclassify (
     UNIQUE KEY uk_code (code),
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='品质重分类主表';
 
 CREATE TABLE IF NOT EXISTS product_reclassify_item (
@@ -1678,7 +1741,11 @@ CREATE TABLE IF NOT EXISTS return_sort (
     UNIQUE KEY uk_code (code),
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='退货整理主表';
 
 CREATE TABLE IF NOT EXISTS return_sort_item (
@@ -1756,7 +1823,9 @@ CREATE TABLE IF NOT EXISTS sale_exchange (
     create_time           DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_sale_order_id (sale_order_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='销售换货单';
 
 -- 销售换货明细（退回侧 + 换出侧：只支持同品换货，换出产品固定为退回产品）
@@ -1837,7 +1906,11 @@ CREATE TABLE IF NOT EXISTS finance_receivable (
     INDEX idx_subject_type (subject_type),
     INDEX idx_status (status),
     INDEX idx_source_bill_no (source_bill_no),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应收台账表';
 
 CREATE TABLE IF NOT EXISTS finance_payable (
@@ -1867,7 +1940,11 @@ CREATE TABLE IF NOT EXISTS finance_payable (
     INDEX idx_supplier_type (supplier_type),
     INDEX idx_status (status),
     INDEX idx_source_bill_no (source_bill_no),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应付台账表';
 
 -- ==================== 应付转应收单 ====================
@@ -1896,7 +1973,9 @@ CREATE TABLE IF NOT EXISTS finance_payable_transfer (
     INDEX idx_payable_id (payable_id),
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='应付转应收单';
 
 CREATE TABLE IF NOT EXISTS finance_receipt (
@@ -1927,7 +2006,11 @@ CREATE TABLE IF NOT EXISTS finance_receipt (
     INDEX idx_account_id (account_id),
     INDEX idx_source_bill (source_bill_type, source_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收款单表';
 
 CREATE TABLE IF NOT EXISTS finance_receipt_item (
@@ -1983,7 +2066,11 @@ CREATE TABLE IF NOT EXISTS finance_payment (
     INDEX idx_supplier_id (supplier_id),
     INDEX idx_account_id (account_id),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='付款单表';
 
 CREATE TABLE IF NOT EXISTS finance_payment_item (
@@ -2076,7 +2163,11 @@ CREATE TABLE IF NOT EXISTS finance_expense (
     INDEX idx_expense_date (expense_date),
     INDEX idx_status (status),
     INDEX idx_expense_source (source_bill_type, source_id),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='费用登记表';
 
 -- ==================== 发票登记表（税务口径：销项/进项） ====================
@@ -2106,7 +2197,11 @@ CREATE TABLE IF NOT EXISTS finance_invoice (
     INDEX idx_direction (direction),
     INDEX idx_invoice_date (invoice_date),
     INDEX idx_status (status),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='发票登记表';
 
 -- ==================== 入库批次成本记录（移动加权平均成本回滚依据） ====================
@@ -2150,7 +2245,11 @@ CREATE TABLE IF NOT EXISTS finance_bill (
     UNIQUE KEY uk_bill_no (company_id, bill_no), -- F7-258
     INDEX idx_bill_type (bill_type),
     INDEX idx_partner_id (partner_id),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='账单表';
 
 CREATE TABLE IF NOT EXISTS finance_bill_item (
@@ -2239,7 +2338,11 @@ CREATE TABLE IF NOT EXISTS outsource_other_io (
     company_id  BIGINT DEFAULT NULL                 COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `auditor_id` BIGINT NULL COMMENT '审核人ID（审核时盖章）',
+  `auditor_name` VARCHAR(50) NULL COMMENT '审核人姓名快照',
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外协其他出入库主表';
 
 CREATE TABLE IF NOT EXISTS outsource_other_io_item (
@@ -2283,7 +2386,9 @@ CREATE TABLE IF NOT EXISTS outsource_stock_loss (
     INDEX idx_warehouse_id (warehouse_id),
     INDEX idx_status (status),
     INDEX idx_loss_reason (loss_reason),
-    INDEX idx_company_id (company_id)
+    INDEX idx_company_id (company_id),
+  `create_by` BIGINT NULL COMMENT '制单人ID（MetaObjectHandler 自动填充）',
+  `create_by_name` VARCHAR(50) NULL COMMENT '制单人姓名快照'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外物料报损单主表';
 
 CREATE TABLE IF NOT EXISTS outsource_stock_loss_item (
